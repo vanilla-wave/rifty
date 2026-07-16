@@ -163,6 +163,14 @@ function previewMessage(projectToken: OwnerProjectToken) {
   };
 }
 
+function vfsMessage(projectToken: OwnerProjectToken) {
+  return {
+    type: 'workbench:project-vfs' as const,
+    projectToken,
+    frame: { type: 'workbench:project-vfs-snapshot-request' as const },
+  };
+}
+
 describe('Workbench owner controller', () => {
   it('revalidates exact wire bytes at owner ingress and recovers after a failed open', async () => {
     const h = harness();
@@ -213,7 +221,7 @@ describe('Workbench owner controller', () => {
     });
   });
 
-  it('is the sole token gate and wrapper for both PTY and preview frames', async () => {
+  it('is the sole token gate and wrapper for PTY, preview, and Project VFS frames', async () => {
     const h = harness();
     await h.controller.handle({
       type: 'workbench:open-project',
@@ -225,6 +233,7 @@ describe('Workbench owner controller', () => {
 
     await h.controller.handle(ptyMessage(token));
     await h.controller.handle(previewMessage(token));
+    await h.controller.handle(vfsMessage(token));
     expect(runtime.runtime.handleFrame).toHaveBeenNthCalledWith(1, {
       type: 'pty',
       frame: { type: 'pty:open', sid: 'terminal-1' },
@@ -233,10 +242,23 @@ describe('Workbench owner controller', () => {
       type: 'preview',
       frame: { type: 'pty:preview-req' },
     });
+    expect(runtime.runtime.handleFrame).toHaveBeenNthCalledWith(3, {
+      type: 'vfs',
+      frame: { type: 'workbench:project-vfs-snapshot-request' },
+    });
 
     runtime.input.emit({ type: 'pty', frame: { type: 'pty:ready', sid: 'terminal-1' } });
     runtime.input.emit({ type: 'preview', frame: { type: 'pty:preview', ports: [] } });
-    expect(h.sent.slice(-2)).toEqual([
+    runtime.input.emit({
+      type: 'vfs',
+      frame: {
+        type: 'workbench:project-vfs-read-file-result',
+        requestId: 'read-failed',
+        ok: false,
+        error: { name: 'Error', message: 'read failed' },
+      },
+    });
+    expect(h.sent.slice(-3)).toEqual([
       {
         type: 'workbench:project-pty',
         projectToken: token,
@@ -247,13 +269,28 @@ describe('Workbench owner controller', () => {
         projectToken: token,
         frame: { type: 'pty:preview', ports: [] },
       },
+      {
+        type: 'workbench:project-vfs',
+        projectToken: token,
+        frame: {
+          type: 'workbench:project-vfs-read-file-result',
+          requestId: 'read-failed',
+          ok: false,
+          error: { name: 'Error', message: 'read failed' },
+        },
+      },
     ]);
 
     const wrong = createOwnerProjectToken(() => 'wrong-owner-project');
     await h.controller.handle(ptyMessage(wrong, 'wrong-token-terminal'));
     await h.controller.handle(previewMessage(wrong));
-    expect(runtime.runtime.handleFrame).toHaveBeenCalledTimes(2);
-    expect(h.sent.slice(-2)).toEqual([
+    await h.controller.handle(vfsMessage(wrong));
+    expect(runtime.runtime.handleFrame).toHaveBeenCalledTimes(3);
+    expect(h.sent.slice(-3)).toEqual([
+      {
+        type: 'workbench:failure',
+        error: { name: 'Error', message: 'Workbench project token is not active' },
+      },
       {
         type: 'workbench:failure',
         error: { name: 'Error', message: 'Workbench project token is not active' },
@@ -321,6 +358,7 @@ describe('Workbench owner controller', () => {
     const next = h.opened(1);
     expect(next.projectToken).toBe('fresh-token');
     await h.controller.handle(ptyMessage(staleToken, 'stale-generation'));
+    await h.controller.handle(vfsMessage(staleToken));
     expect(h.runtime(1).runtime.handleFrame).not.toHaveBeenCalled();
     expect(h.sent.at(-1)).toEqual({
       type: 'workbench:failure',

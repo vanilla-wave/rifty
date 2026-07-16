@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Terminal Git publishes semantic replacement candidates.** Restore/checkout
+  path forms name exact mapped paths; repo-wide worktree commands pair ordinary
+  `.git` writes with a repo replacement candidate, and the full prepared plan is
+  revalidated inside the mutation FIFO before execution.
 - **Explicit empty quoted words survive into argv.** Bare `''` and `""` now
   produce one empty argument each while unquoted empty variable expansions are
   still elided and `*''` remains glob-eligible. This keeps quoted Node CLI and
@@ -73,7 +77,7 @@
 
 ### Added
 
-- **Host-owned VFS mutation guard (ADR-0260).** `ShellOptions.mutationGuard`
+- **Host-owned VFS mutation guard (ADR-0276).** `ShellOptions.mutationGuard`
   batches each logical `rm`/`mv`/`cp`/`mkdir`/`touch`, stdout redirect, and git
   mutation through the shared `@riftydev/vfs` intent contract before bytes
   change. Git publishes exact worktree paths where known, root-wide intents for

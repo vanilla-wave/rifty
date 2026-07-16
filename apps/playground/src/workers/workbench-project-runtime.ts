@@ -39,6 +39,10 @@ export interface WorkbenchProjectRuntimeOptions {
   readonly nodeEntryWorkerUrl: string;
   readonly devServerWorkerUrl: string;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
+  /** Project VFS owns package FIFO, semantic evidence, and reply publication. */
+  readonly mutationGuard: VfsMutationGuard;
+  /** Owner-applied VFS state must precede every observable PTY completion. */
+  readonly publicationBarrier: () => Promise<void>;
   /** Raw project-local PTY frames; lifetime owner wraps tokens outside this module. */
   readonly send: (frame: OwnerToPageFrame) => void;
 }
@@ -168,10 +172,7 @@ export function createWorkbenchProjectRuntime(
       cwd: reachableCwd(options.authority, seed?.cwd, projectRoot),
       env: { ...(seed?.env ?? {}) },
       execBin: executeInstalledBin,
-      mutationGuard: ((intents, apply) =>
-        options.packageState.mutations.guardedMutation(intents, async () =>
-          apply(),
-        )) satisfies VfsMutationGuard,
+      mutationGuard: options.mutationGuard,
       assertPortablePaths: (paths) => options.authority.assertPortablePaths(paths),
     });
     const npm = options.packageState.createNpmCommand(async (name, command, ctx) => {
@@ -236,6 +237,7 @@ export function createWorkbenchProjectRuntime(
   const ptyServer = createPtyServer({
     send: options.send,
     makeShell,
+    beforeExit: options.publicationBarrier,
     onPreviewReq: () => previews.publish(),
     onDevServerReq: () => previews.publishDev(),
     onDevConfig: () =>

@@ -7,7 +7,6 @@ import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { syncMirror } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
-import { applyPackageAwareVfsMutations } from '../glue/package-mutation-executor.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
@@ -29,6 +28,7 @@ import {
   type OwnerVfsAuthority,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import { createWorkbenchOwnerChildVfsMutationGuard } from './workbench-owner-child-vfs.ts';
 import {
   type WorkbenchOwnerProjectRuntime,
   type WorkbenchOwnerProjectRuntimeOutput,
@@ -36,8 +36,10 @@ import {
 } from './workbench-owner-controller.ts';
 import { installWorkbenchOwnerStorage } from './workbench-owner-storage.ts';
 import { workbenchPackageConfig } from './workbench-package-config.ts';
+import { createWorkbenchProjectComposition } from './workbench-project-composition.ts';
 import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
 import { createWorkbenchProjectStore } from './workbench-project-store.ts';
+import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -162,9 +164,12 @@ async function bootstrap(): Promise<void> {
   if (config === null) return;
 
   const storage = await installWorkbenchOwnerStorage(config.storage.persistence);
-  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(syncMirror(), {
-    initialRoots: ['/', '/.rifty'],
-  });
+  const { authority, appliedMutations, installStampClaims } = createOwnerVfsAuthorityComposition(
+    syncMirror(),
+    {
+      initialRoots: ['/', '/.rifty'],
+    },
+  );
   setSyncMirror(authority, { async: new SyncMirrorVfs() });
 
   const nodeWorkerRuntimeEnv = installNodeWorkerRuntimeConfig({
@@ -203,55 +208,95 @@ async function bootstrap(): Promise<void> {
   const materializer = withOwnerClose(coreMaterializer, () => packageState.quiesce(), authority);
 
   let activeProjectRoot: string | null = null;
+  let activeProjectVfs: ReturnType<typeof createWorkbenchProjectVfs> | null = null;
+  let rejectOwnerLifetime = (error: Error): void => {
+    throw error;
+  };
   installOwnerSyncRuntimeHandlers(
     getKernelDispatcher(),
     () => authority,
-    (intents, apply) => {
-      const root = activeProjectRoot;
-      if (root === null) {
-        throw new Error('ClosedHandleError: no active Workbench project owns child VFS writes');
-      }
-      return applyPackageAwareVfsMutations(packageState.mutations, root, intents, apply);
-    },
+    createWorkbenchOwnerChildVfsMutationGuard({
+      activeProject: () =>
+        activeProjectRoot === null || activeProjectVfs === null
+          ? null
+          : { root: activeProjectRoot, vfs: activeProjectVfs },
+    }),
   );
 
   const controller = createWorkbenchOwnerController({
     materializer,
     send: (message) => sendOwnerMessage(ipc, message),
-    createProject(input) {
+    async createProject(input) {
       const projectRoot = input.materialized.projectRoot;
       if (activeProjectRoot !== null) {
         throw new Error('Workbench owner already has an active project runtime');
       }
       activeProjectRoot = projectRoot;
       let runtime: ReturnType<typeof createWorkbenchProjectRuntime>;
+      let projectVfs: ReturnType<typeof createWorkbenchProjectVfs>;
       try {
-        runtime = createWorkbenchProjectRuntime({
-          projectRoot,
-          packageConfig: workbenchPackageConfig(input.definition, projectRoot),
-          authority,
-          packageState,
-          nodeEntryWorkerUrl: config.deployment.workers.node,
-          devServerWorkerUrl: config.deployment.workers.devServer,
-          nodeWorkerRuntimeEnv,
-          send(frame) {
-            const output: WorkbenchOwnerProjectRuntimeOutput =
-              frame.type === 'pty:preview' ? { type: 'preview', frame } : { type: 'pty', frame };
-            input.emit(output);
-          },
+        const composition = await createWorkbenchProjectComposition({
+          createVfs: () =>
+            createWorkbenchProjectVfs({
+              projectRoot,
+              authority,
+              appliedMutations,
+              packageMutations: packageState.mutations,
+              durability: storage.durability,
+              emit: (frame) => input.emit({ type: 'vfs', frame }),
+              fatal: (error) => rejectOwnerLifetime(error),
+            }),
+          createRuntime: (vfs) =>
+            createWorkbenchProjectRuntime({
+              projectRoot,
+              packageConfig: workbenchPackageConfig(input.definition, projectRoot),
+              authority,
+              packageState,
+              nodeEntryWorkerUrl: config.deployment.workers.node,
+              devServerWorkerUrl: config.deployment.workers.devServer,
+              nodeWorkerRuntimeEnv,
+              mutationGuard: vfs.mutationGuard,
+              publicationBarrier: vfs.publicationBarrier,
+              send(frame) {
+                const output: WorkbenchOwnerProjectRuntimeOutput =
+                  frame.type === 'pty:preview'
+                    ? { type: 'preview', frame }
+                    : { type: 'pty', frame };
+                input.emit(output);
+              },
+            }),
         });
+        runtime = composition.runtime;
+        projectVfs = composition.vfs;
       } catch (error) {
         activeProjectRoot = null;
         throw error;
       }
+      activeProjectVfs = projectVfs;
       return Object.freeze({
-        handleFrame: (message: Parameters<WorkbenchOwnerProjectRuntime['handleFrame']>[0]) =>
-          runtime.handlePtyFrame(message.frame),
+        handleFrame(message: Parameters<WorkbenchOwnerProjectRuntime['handleFrame']>[0]) {
+          return message.type === 'vfs'
+            ? projectVfs.handleFrame(message.frame)
+            : runtime.handlePtyFrame(message.frame);
+        },
         async close() {
+          const failures: unknown[] = [];
           try {
             await runtime.close();
+          } catch (error) {
+            failures.push(error);
+          }
+          try {
+            await projectVfs.close();
+          } catch (error) {
+            failures.push(error);
           } finally {
+            if (activeProjectVfs === projectVfs) activeProjectVfs = null;
             if (activeProjectRoot === projectRoot) activeProjectRoot = null;
+          }
+          if (failures.length === 1) throw failures[0];
+          if (failures.length > 1) {
+            throw new AggregateError(failures, 'Workbench project runtime and VFS close failed');
           }
         },
       });
@@ -259,6 +304,7 @@ async function bootstrap(): Promise<void> {
   });
 
   const fatal = new Promise<never>((_resolve, reject) => {
+    rejectOwnerLifetime = reject;
     dispatch = (message) => {
       void controller.handle(message).catch(reject);
     };

@@ -4,6 +4,7 @@ import {
   NODE_ENTRY_BOOTSTRAP_PROTOCOL,
   type NodeEntryBootstrapPayload,
 } from '@riftydev/runtime-js/builtins/node-entry-url';
+import type { VfsMutationGuard } from '@riftydev/vfs';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
@@ -211,6 +212,7 @@ function boundaryWorker(): BoundaryWorker {
 function harness(
   onSend?: (frame: OwnerToPageFrame, runtime: () => WorkbenchProjectRuntime) => void,
   activePackageConfig: OwnerPackageConfig = packageConfig,
+  publicationBarrier: () => Promise<void> = async () => {},
 ) {
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
@@ -254,6 +256,14 @@ function harness(
   });
   const frames: OwnerToPageFrame[] = [];
   const runtimeRef: { current?: WorkbenchProjectRuntime } = {};
+  const mutationGuard: VfsMutationGuard = (intents, apply) =>
+    packageState.mutations.guardedMutation(intents, async () => {
+      try {
+        return await apply();
+      } finally {
+        await publicationBarrier();
+      }
+    });
   const runtimeOptions = {
     projectRoot: ROOT,
     packageConfig: activePackageConfig,
@@ -262,6 +272,8 @@ function harness(
     nodeEntryWorkerUrl: NODE_ENTRY_WORKER_URL,
     devServerWorkerUrl: DEV_SERVER_WORKER_URL,
     nodeWorkerRuntimeEnv,
+    mutationGuard,
+    publicationBarrier,
     send: (frame: OwnerToPageFrame) => {
       frames.push(frame);
       onSend?.(frame, () => {
@@ -701,6 +713,85 @@ describe('Workbench project runtime', () => {
     await h.runtime.close();
   });
 
+  it('publishes a real Shell rename before its matching PTY exit', async () => {
+    const timeline: string[] = [];
+    const h = harness(
+      (frame) => {
+        if (frame.type === 'pty:exit' && frame.rid === 'run-mv') timeline.push('exit');
+      },
+      packageConfig,
+      async () => {
+        timeline.push('barrier');
+      },
+    );
+    const source = `${ROOT}/before.txt`;
+    const target = `${ROOT}/after.txt`;
+    const bytes = new TextEncoder().encode('moved by shell');
+    h.authority.writeFileSync(source, bytes);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-mv' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-mv',
+      rid: 'run-mv',
+      line: 'mv before.txt after.txt',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    expect(h.authority.existsSync(source)).toBe(false);
+    expect(h.authority.readFileBytesSync(target)).toEqual(bytes);
+    expect(timeline).toEqual(['barrier', 'barrier', 'exit']);
+    await h.runtime.close();
+  });
+
+  it('joins the beforeExit barrier for a Shell command with no mutation', async () => {
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const timeline: string[] = [];
+    const h = harness(
+      (frame) => {
+        if (frame.type === 'pty:exit' && frame.rid === 'run-echo') timeline.push('exit');
+      },
+      packageConfig,
+      async () => {
+        timeline.push('barrier-entered');
+        entered.resolve(undefined);
+        await release.promise;
+        timeline.push('barrier-settled');
+      },
+    );
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-echo' });
+    const run = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-echo',
+        rid: 'run-echo',
+        line: 'echo no mutation',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    await expect(
+      settledOr(
+        entered.promise.then(() => 'entered'),
+        'not-entered',
+      ),
+    ).resolves.toBe('entered');
+
+    try {
+      expect(timeline).toEqual(['barrier-entered']);
+      await expect(settledOr(run, 'pending')).resolves.toBe('pending');
+    } finally {
+      release.resolve(undefined);
+    }
+    await expect(run).resolves.toBeUndefined();
+    expect(timeline).toEqual(['barrier-entered', 'barrier-settled', 'exit']);
+    await h.runtime.close();
+  });
+
   it('rejects legacy project reconfiguration instead of acknowledging a fake switch', async () => {
     const h = harness();
 
@@ -786,6 +877,8 @@ describe('Workbench project runtime', () => {
         nodeEntryWorkerUrl: 'https://example.test/node-entry.js',
         devServerWorkerUrl: 'https://example.test/dev-server.js',
         nodeWorkerRuntimeEnv: {},
+        mutationGuard: async (_intents, apply) => await apply(),
+        publicationBarrier: async () => {},
         send: () => {},
       }),
     ).toThrow(/project root/i);

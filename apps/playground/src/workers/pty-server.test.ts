@@ -1483,6 +1483,131 @@ describe('pty-server', () => {
     expect(out).toEqual([{ type: 'pty:dev-config-ready', id: 'dc1' }]);
   });
 
+  describe('beforeExit state-publication barrier', () => {
+    it('keeps the run active and emits its exit only after the published-state marker', async () => {
+      const barrier = deferred();
+      const entered = deferred();
+      const out: OwnerToPageFrame[] = [];
+      const timeline: string[] = [];
+      const server = createPtyServer({
+        send: (frame) => {
+          out.push(frame);
+          if (frame.type === 'pty:exit') timeline.push(`exit:${frame.rid}`);
+        },
+        makeShell: () => new Shell({ cwd: '/', env: {} }),
+        beforeExit: async () => {
+          timeline.push('barrier-entered');
+          entered.resolve();
+          await barrier.promise;
+          timeline.push('state-published');
+        },
+      });
+      server.handleFrame({ type: 'pty:open', sid: 's1' });
+      const first = Promise.resolve(
+        server.handleFrame({
+          type: 'pty:exec',
+          sid: 's1',
+          rid: 'r1',
+          line: 'echo first',
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      await entered.promise;
+
+      expect(server.activeAdmission('s1')).toEqual({ ptySid: 's1', ptyRid: 'r1' });
+      await expect(
+        settledOr(
+          first.then(() => 'settled'),
+          'pending',
+        ),
+      ).resolves.toBe('pending');
+      expect(out.some((frame) => frame.type === 'pty:exit' && frame.rid === 'r1')).toBe(false);
+
+      await server.handleFrame({
+        type: 'pty:exec',
+        sid: 's1',
+        rid: 'r2',
+        line: 'echo second',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+      expect(server.activeAdmission('s1')).toEqual({ ptySid: 's1', ptyRid: 'r1' });
+      expect(out).toContainEqual(
+        expect.objectContaining({
+          type: 'pty:exit',
+          sid: 's1',
+          rid: 'r2',
+          error: expect.stringMatching(/ProjectBusyError.*r1/),
+        }),
+      );
+      expect(timeline).toEqual(['barrier-entered', 'exit:r2']);
+
+      barrier.resolve();
+      await expect(first).resolves.toBeUndefined();
+      expect(timeline).toEqual(['barrier-entered', 'exit:r2', 'state-published', 'exit:r1']);
+      expect(server.activeAdmission('s1')).toBeNull();
+    });
+
+    it('rejects the exec and releases the run without an exit when publication fails', async () => {
+      const entered = deferred();
+      let rejectBarrier!: (reason: Error) => void;
+      const barrier = new Promise<void>((_resolve, reject) => {
+        rejectBarrier = reject;
+      });
+      const out: OwnerToPageFrame[] = [];
+      let barrierCalls = 0;
+      const server = createPtyServer({
+        send: (frame) => out.push(frame),
+        makeShell: () => new Shell({ cwd: '/', env: {} }),
+        beforeExit: () => {
+          barrierCalls += 1;
+          if (barrierCalls !== 1) return;
+          entered.resolve();
+          return barrier;
+        },
+      });
+      server.handleFrame({ type: 'pty:open', sid: 's1' });
+      const first = Promise.resolve(
+        server.handleFrame({
+          type: 'pty:exec',
+          sid: 's1',
+          rid: 'r1',
+          line: 'echo first',
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      await entered.promise;
+
+      const failure = new Error('project state publication failed');
+      rejectBarrier(failure);
+      await expect(first).rejects.toBe(failure);
+      expect(server.activeAdmission('s1')).toBeNull();
+      expect(out.some((frame) => frame.type === 'pty:exit' && frame.rid === 'r1')).toBe(false);
+
+      await expect(
+        Promise.resolve(
+          server.handleFrame({
+            type: 'pty:exec',
+            sid: 's1',
+            rid: 'r2',
+            line: 'echo recovered',
+            cols: 80,
+            rows: 24,
+            isTTY: true,
+          }),
+        ),
+      ).resolves.toBeUndefined();
+      expect(out).toContainEqual(
+        expect.objectContaining({ type: 'pty:exit', sid: 's1', rid: 'r2', code: 0 }),
+      );
+    });
+  });
+
   describe('beforeRun gate (deps restore overlaps the echoed command)', () => {
     const dec = new TextDecoder();
     const enc = new TextEncoder();

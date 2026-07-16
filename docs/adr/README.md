@@ -16,7 +16,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0072 | OPFS sync content cache + async write-through |
 | 0090 | VFS sync `copyFileSync`/`cpSync`/`renameSync` primitives for shell `cp`/`mv` |
 | 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
-| 0260 | Host-injected VFS mutation intents |
+| 0276 | Semantic VFS replacements use applied owner evidence |
 
 ### kernel
 
@@ -245,6 +245,9 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | # | Title |
 |---|---|
 | 0263 | Workbench Playground companion subpath |
+| 0273 | Workbench files and documents handle contract |
+| 0274 | Session-scoped opaque Workbench file versions |
+| 0275 | Owner-applied project mutation stream |
 
 ## Superseded (removed)
 
@@ -267,6 +270,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0224 | 0263 | sealed root retained; finite Playground companion owns first-party plans/tools without exposing the owner |
 | 0241 | 0261 | exact request/artifact identity and snapshot migration grafted |
 | 0231 | 0267 | host bootstrap leaves guest `process.env`; recursive-worker context grafted |
+| 0260 | 0276 | shared guard law retained; closed vocabulary gains applied-evidence semantic replacement |
 
 ## Corrections (active)
 
@@ -275,6 +279,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |

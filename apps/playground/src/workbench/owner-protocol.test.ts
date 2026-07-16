@@ -402,6 +402,470 @@ describe('Workbench owner protocol', () => {
     ).toThrow(TypeError);
   });
 
+  it('round-trips exact token-wrapped project VFS control, reads, and snapshots', () => {
+    const request = {
+      type: 'rifty:owner-vfs-commit',
+      request: {
+        kind: 'write',
+        operationId: 'host-vfs:1',
+        path: '/.rifty/workbench/projects/p-1/src/main.ts',
+        data: new Uint8Array([1, 2, 3]),
+        expectedVersion: 'v1',
+      },
+    } as const;
+    const terminal = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: 'host-vfs:1',
+      ok: true,
+      ack: {
+        operationId: 'host-vfs:1',
+        ownerEpoch: 'owner-1',
+        treeRevision: 2,
+        versions: [{ path: '/.rifty/workbench/projects/p-1/src/main.ts', version: 'v2' }],
+      },
+    } as const;
+    const nack = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: 'host-vfs:2',
+      ok: false,
+      error: { kind: 'error', name: 'Error', message: 'commit rejected' },
+    } as const;
+    const appliedNack = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: 'host-vfs:3',
+      ok: false,
+      error: { kind: 'error', name: 'Error', message: 'snapshot publish failed' },
+      applied: {
+        operationId: 'host-vfs:3',
+        ownerEpoch: 'owner-1',
+        treeRevision: 3,
+        versions: [{ path: '/.rifty/workbench/projects/p-1/src/main.ts', version: 'v3' }],
+      },
+    } as const;
+    const conflictNack = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: 'host-vfs:4',
+      ok: false,
+      error: {
+        kind: 'version-conflict',
+        name: 'VfsVersionConflictError',
+        message: 'version conflict',
+        path: '/.rifty/workbench/projects/p-1/src/main.ts',
+        expectedVersion: 'v1',
+        actualVersion: 'v2',
+        actualEntry: {
+          path: '/.rifty/workbench/projects/p-1/src/main.ts',
+          kind: 'file',
+          size: 3,
+          content: new Uint8Array([1, 2, 3]),
+          version: 'v2',
+        },
+        ownerEpoch: 'owner-1',
+        treeRevision: 2,
+      },
+    } as const;
+    const reuseNack = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: 'host-vfs:5',
+      ok: false,
+      error: {
+        kind: 'operation-id-reuse',
+        name: 'OperationIdReuseError',
+        message: 'operation id reused',
+        operationId: 'host-vfs:5',
+      },
+    } as const;
+    const snapshot = {
+      type: 'snapshot',
+      root: '/.rifty/workbench/projects/p-1',
+      ownerEpoch: 'owner-1',
+      treeRevision: 2,
+      nodeModulesPresent: false,
+      entries: [
+        {
+          path: '/.rifty/workbench/projects/p-1/src/main.ts',
+          kind: 'file',
+          size: 3,
+          version: 'v2',
+          content: new Uint8Array([1, 2, 3]),
+        },
+      ],
+    } as const;
+    const state = {
+      type: 'workbench:project-vfs-state',
+      fromTreeRevision: 0,
+      mutations: [
+        {
+          kind: 'rename',
+          treeRevision: 1,
+          sourcePath: '/.rifty/workbench/projects/p-1/src/old.ts',
+          targetPath: '/.rifty/workbench/projects/p-1/src/main.ts',
+        },
+        {
+          kind: 'remove',
+          treeRevision: 2,
+          path: '/.rifty/workbench/projects/p-1/src/gone.ts',
+          recursive: false,
+        },
+        {
+          kind: 'reset',
+          treeRevision: 3,
+          rootPath: '/.rifty/workbench/projects/p-1',
+        },
+      ],
+      frame: { ...snapshot, treeRevision: 3 },
+    } as const;
+    const fatal = {
+      type: 'workbench:project-vfs-fatal',
+      error: { name: 'Error', message: 'project state delivery failed' },
+    } as const;
+    const pageFrames = [
+      request,
+      {
+        type: 'rifty:owner-vfs-commit',
+        request: {
+          kind: 'mkdir',
+          operationId: 'host-vfs:mkdir',
+          path: '/.rifty/workbench/projects/p-1/assets',
+          expectedVersion: null,
+        },
+      },
+      {
+        type: 'rifty:owner-vfs-commit',
+        request: {
+          kind: 'remove',
+          operationId: 'host-vfs:remove',
+          path: '/.rifty/workbench/projects/p-1/dist',
+          expectedVersion: 'dist-v1',
+          recursive: true,
+        },
+      },
+      {
+        type: 'rifty:owner-vfs-commit',
+        request: {
+          kind: 'rename',
+          operationId: 'host-vfs:rename',
+          sourcePath: '/.rifty/workbench/projects/p-1/src/main.ts',
+          targetPath: '/.rifty/workbench/projects/p-1/src/target.ts',
+          expectedSourceVersion: 'v1',
+          expectedTargetVersion: 'target-v1',
+        },
+      },
+      { type: 'rifty:owner-vfs-commit-received', terminal },
+      { type: 'rifty:owner-vfs-commit-received', terminal: nack },
+      { type: 'rifty:owner-vfs-commit-received', terminal: appliedNack },
+      { type: 'rifty:owner-vfs-commit-received', terminal: conflictNack },
+      { type: 'rifty:owner-vfs-commit-received', terminal: reuseNack },
+      { type: 'rifty:owner-vfs-commit-cleanup', terminal },
+      { type: 'rifty:owner-vfs-commit-cleanup', terminal: nack },
+      { type: 'rifty:owner-vfs-commit-cleanup', terminal: appliedNack },
+      { type: 'rifty:owner-vfs-commit-cleanup', terminal: conflictNack },
+      { type: 'rifty:owner-vfs-commit-cleanup', terminal: reuseNack },
+      {
+        type: 'rifty:owner-vfs-durability',
+        barrierId: 'barrier-1',
+        ownerEpoch: 'owner-1',
+        treeRevision: 2,
+      },
+      { type: 'workbench:project-vfs-snapshot-request' },
+      {
+        type: 'workbench:project-vfs-read-file',
+        requestId: 'read-1',
+        path: '/.rifty/workbench/projects/p-1/src/main.ts',
+      },
+      {
+        type: 'workbench:project-vfs-read-directory',
+        requestId: 'read-2',
+        path: '/.rifty/workbench/projects/p-1/src',
+      },
+    ] as const;
+    const ownerFrames = [
+      terminal,
+      nack,
+      appliedNack,
+      conflictNack,
+      reuseNack,
+      { type: 'rifty:owner-vfs-commit-released', terminal },
+      { type: 'rifty:owner-vfs-commit-released', terminal: nack },
+      { type: 'rifty:owner-vfs-commit-released', terminal: appliedNack },
+      { type: 'rifty:owner-vfs-commit-cleaned', terminal },
+      { type: 'rifty:owner-vfs-commit-cleaned', terminal: nack },
+      { type: 'rifty:owner-vfs-commit-cleaned', terminal: appliedNack },
+      {
+        type: 'rifty:owner-vfs-durability-ack',
+        barrierId: 'barrier-1',
+        ok: true,
+        receipt: {
+          ownerEpoch: 'owner-1',
+          treeRevision: 2,
+          durability: 'durable',
+        },
+      },
+      {
+        type: 'rifty:owner-vfs-durability-ack',
+        barrierId: 'barrier-2',
+        ok: false,
+        error: { kind: 'error', name: 'Error', message: 'flush failed' },
+      },
+      { type: 'workbench:project-vfs-snapshot', frame: snapshot },
+      state,
+      fatal,
+      {
+        type: 'workbench:project-vfs-read-file-result',
+        requestId: 'read-1',
+        ok: true,
+        ownerEpoch: 'owner-1',
+        treeRevision: 2,
+        entry: {
+          path: '/.rifty/workbench/projects/p-1/src/main.ts',
+          kind: 'file',
+          size: 3,
+          content: new Uint8Array([1, 2, 3]),
+          version: 'v2',
+        },
+      },
+      {
+        type: 'workbench:project-vfs-read-directory-result',
+        requestId: 'read-2',
+        ok: true,
+        ownerEpoch: 'owner-1',
+        treeRevision: 2,
+        entries: [
+          {
+            path: '/.rifty/workbench/projects/p-1/src/main.ts',
+            kind: 'file',
+            size: 3,
+            version: 'v2',
+          },
+        ],
+      },
+      {
+        type: 'workbench:project-vfs-read-file-result',
+        requestId: 'read-3',
+        ok: false,
+        error: { name: 'Error', message: 'read failed' },
+      },
+      {
+        type: 'workbench:project-vfs-read-directory-result',
+        requestId: 'read-4',
+        ok: false,
+        error: { name: 'Error', message: 'readdir failed' },
+      },
+    ] as const;
+
+    for (const frame of pageFrames) {
+      expect(pageMessage({ type: 'workbench:project-vfs', projectToken: TOKEN, frame })).toEqual({
+        type: 'workbench:project-vfs',
+        projectToken: TOKEN,
+        frame,
+      });
+      expect(() =>
+        pageMessage({
+          type: 'workbench:project-vfs',
+          projectToken: TOKEN,
+          frame: { ...frame, extra: true },
+        }),
+      ).toThrow(TypeError);
+    }
+    for (const frame of ownerFrames) {
+      expect(ownerMessage({ type: 'workbench:project-vfs', projectToken: TOKEN, frame })).toEqual({
+        type: 'workbench:project-vfs',
+        projectToken: TOKEN,
+        frame,
+      });
+      expect(() =>
+        ownerMessage({
+          type: 'workbench:project-vfs',
+          projectToken: TOKEN,
+          frame: { ...frame, extra: true },
+        }),
+      ).toThrow(TypeError);
+    }
+
+    expect(() =>
+      pageMessage({ type: 'workbench:project-vfs', projectToken: '', frame: request }),
+    ).toThrow(TypeError);
+    expect(() =>
+      ownerMessage({ type: 'workbench:project-vfs', projectToken: '', frame: terminal }),
+    ).toThrow(TypeError);
+
+    for (const frame of pageFrames) {
+      if (frame.type !== 'rifty:owner-vfs-commit') continue;
+      expect(() =>
+        pageMessage({
+          type: 'workbench:project-vfs',
+          projectToken: TOKEN,
+          frame: { ...frame, request: { ...frame.request, extra: true } },
+        }),
+      ).toThrow(TypeError);
+    }
+
+    const nestedPageExtras = [
+      {
+        type: 'rifty:owner-vfs-commit-received',
+        terminal: { ...terminal, ack: { ...terminal.ack, extra: true } },
+      },
+      {
+        type: 'rifty:owner-vfs-commit-cleanup',
+        terminal: {
+          ...terminal,
+          ack: {
+            ...terminal.ack,
+            versions: [{ ...terminal.ack.versions[0], extra: true }],
+          },
+        },
+      },
+    ] as const;
+    for (const frame of nestedPageExtras) {
+      expect(() =>
+        pageMessage({ type: 'workbench:project-vfs', projectToken: TOKEN, frame }),
+      ).toThrow(TypeError);
+    }
+
+    const nestedOwnerExtras = [
+      { ...terminal, ack: { ...terminal.ack, extra: true } },
+      {
+        ...terminal,
+        ack: {
+          ...terminal.ack,
+          versions: [{ ...terminal.ack.versions[0], extra: true }],
+        },
+      },
+      {
+        type: 'workbench:project-vfs-snapshot',
+        frame: {
+          ...snapshot,
+          entries: [{ ...snapshot.entries[0], extra: true }],
+        },
+      },
+      {
+        type: 'workbench:project-vfs-snapshot',
+        frame: { ...snapshot, extra: true },
+      },
+      { ...state, extra: true },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[0], extra: true }, ...state.mutations.slice(1)],
+      },
+      { ...fatal, error: { ...fatal.error, extra: true } },
+      {
+        type: 'workbench:project-vfs-read-file-result',
+        requestId: 'read-extra',
+        ok: true,
+        ownerEpoch: 'owner-1',
+        treeRevision: 2,
+        entry: {
+          path: '/.rifty/workbench/projects/p-1/src/main.ts',
+          kind: 'file',
+          size: 3,
+          content: new Uint8Array([1, 2, 3]),
+          version: 'v2',
+          extra: true,
+        },
+      },
+      {
+        ...nack,
+        error: { ...nack.error, extra: true },
+      },
+      {
+        ...conflictNack,
+        error: {
+          ...conflictNack.error,
+          actualEntry: { ...conflictNack.error.actualEntry, extra: true },
+        },
+      },
+      {
+        type: 'rifty:owner-vfs-durability-ack',
+        barrierId: 'barrier-extra',
+        ok: true,
+        receipt: {
+          ownerEpoch: 'owner-1',
+          treeRevision: 2,
+          durability: 'durable',
+          extra: true,
+        },
+      },
+      {
+        type: 'workbench:project-vfs-read-directory-result',
+        requestId: 'read-dir-extra',
+        ok: true,
+        ownerEpoch: 'owner-1',
+        treeRevision: 2,
+        entries: [
+          {
+            path: '/.rifty/workbench/projects/p-1/src/main.ts',
+            kind: 'file',
+            size: 3,
+            version: 'v2',
+            extra: true,
+          },
+        ],
+      },
+      {
+        type: 'workbench:project-vfs-read-file-result',
+        requestId: 'read-failure-extra',
+        ok: false,
+        error: { name: 'Error', message: 'read failed', extra: true },
+      },
+    ] as const;
+    for (const frame of nestedOwnerExtras) {
+      expect(() =>
+        ownerMessage({ type: 'workbench:project-vfs', projectToken: TOKEN, frame }),
+      ).toThrow(TypeError);
+    }
+
+    expect(() =>
+      ownerMessage({
+        type: 'workbench:project-vfs',
+        projectToken: TOKEN,
+        frame: {
+          ...state,
+          mutations: [state.mutations[0], { ...state.mutations[1], treeRevision: 1 }],
+        },
+      }),
+    ).not.toThrow();
+
+    const invalidStates = [
+      { ...state, fromTreeRevision: -1 },
+      { ...state, fromTreeRevision: 1 },
+      {
+        ...state,
+        mutations: [
+          { ...state.mutations[0], treeRevision: 2 },
+          { ...state.mutations[1], treeRevision: 1 },
+        ],
+      },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[0], treeRevision: 4 }],
+      },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[0], sourcePath: 'relative.ts' }],
+      },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[1], recursive: 'yes' }],
+      },
+      {
+        ...state,
+        mutations: [{ ...state.mutations[2], rootPath: 'relative' }],
+      },
+      {
+        ...state,
+        fromTreeRevision: 2,
+        mutations: [],
+        frame: { ...state.frame, treeRevision: 1 },
+      },
+      { ...fatal, error: { ...fatal.error, name: '' } },
+    ] as const;
+    for (const frame of invalidStates) {
+      expect(() =>
+        ownerMessage({ type: 'workbench:project-vfs', projectToken: TOKEN, frame }),
+      ).toThrow(TypeError);
+    }
+  });
+
   // Fault class: corrupt-input. Every sibling message variant goes through the
   // same exact-key boundary, so an additive forged field cannot drift by case.
   it.each([
@@ -409,6 +873,11 @@ describe('Workbench owner protocol', () => {
     { type: 'workbench:open-project', opId: 'open-1', definition: definitionWire() },
     { type: 'workbench:project-pty', projectToken: TOKEN, frame: PAGE_PTY_FRAMES[0] },
     { type: 'workbench:project-preview', projectToken: TOKEN, frame: { type: 'pty:preview-req' } },
+    {
+      type: 'workbench:project-vfs',
+      projectToken: TOKEN,
+      frame: { type: 'workbench:project-vfs-snapshot-request' },
+    },
     { type: 'workbench:close-project', opId: 'close-1', projectToken: TOKEN },
     { type: 'workbench:delete-project', opId: 'delete-1', id: 'project-a' },
     { type: 'workbench:shutdown' },
@@ -429,6 +898,16 @@ describe('Workbench owner protocol', () => {
       type: 'workbench:project-preview',
       projectToken: TOKEN,
       frame: { type: 'pty:preview', ports: [] },
+    },
+    {
+      type: 'workbench:project-vfs',
+      projectToken: TOKEN,
+      frame: {
+        type: 'workbench:project-vfs-read-file-result',
+        requestId: 'read-failed',
+        ok: false,
+        error: { name: 'Error', message: 'read failed' },
+      },
     },
     { type: 'workbench:project-closed', opId: 'close-1', projectToken: TOKEN },
     { type: 'workbench:project-deleted', opId: 'delete-1', id: 'project-a' },

@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test';
 import { gotoHarness } from './fixtures.ts';
 
 const RETAINED_BYTES = 'retained-through-project-switch';
+const INITIAL_HMR_MARKER = 'workbench-public-files-v1';
+const UPDATED_HMR_MARKER = 'workbench-public-files-v2';
+const HMR_EVENT_TYPE = 'rifty:workbench-public-hmr';
 
 test('public Workbench keeps one ephemeral owner across exact Vite A to B to A lifecycle', async ({
   page,
@@ -67,9 +70,85 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
     globalThis.Worker = ObservedWorker;
   }, workerAssets.kernel);
 
-  const result = await page.evaluate(async (retainedBytes) => {
+  const evaluationInput = JSON.stringify({
+    retainedBytes: RETAINED_BYTES,
+    initialHmrMarker: INITIAL_HMR_MARKER,
+    updatedHmrMarker: UPDATED_HMR_MARKER,
+    hmrEventType: HMR_EVENT_TYPE,
+  });
+  const result = await page.evaluate(async (serializedInput) => {
+    const { retainedBytes, initialHmrMarker, updatedHmrMarker, hmrEventType } = JSON.parse(
+      serializedInput,
+    ) as {
+      readonly retainedBytes: string;
+      readonly initialHmrMarker: string;
+      readonly updatedHmrMarker: string;
+      readonly hmrEventType: string;
+    };
     type Exit = { readonly code: number | null; readonly signal: string | null };
     type Preview = { readonly port: number; readonly url: string };
+    type ProjectFileEntry = {
+      readonly path: string;
+      readonly kind: 'file' | 'dir';
+      readonly size: number;
+      readonly version: string;
+    };
+    type ProjectFiles = {
+      readFile(path: string): Promise<{
+        readonly path: string;
+        readonly bytes: Uint8Array;
+        readonly version: string;
+      }>;
+      readdir(path: string): Promise<readonly ProjectFileEntry[]>;
+      writeFile(
+        path: string,
+        data: Uint8Array,
+        options: { readonly expectedVersion: string | null },
+      ): Promise<{ readonly path: string; readonly version: string }>;
+      rename(
+        sourcePath: string,
+        targetPath: string,
+        options: {
+          readonly expectedSourceVersion: string;
+          readonly expectedTargetVersion: string | null;
+        },
+      ): Promise<{ readonly path: string; readonly version: string }>;
+      remove(
+        path: string,
+        options: { readonly expectedVersion: string; readonly recursive?: boolean },
+      ): Promise<void>;
+      snapshot(): { readonly entries: readonly ProjectFileEntry[] };
+    };
+    type PublicFileConflictError = Error & {
+      readonly path: string;
+      readonly expectedVersion: string | null;
+      readonly actualVersion: string | null;
+      readonly actualEntry: ProjectFileEntry | null;
+      readonly actualBytes: Uint8Array | null;
+    };
+    type PublicProjectFileOperationError = Error & {
+      readonly operation: string;
+      readonly path: string;
+      readonly mutationOutcome: 'applied' | 'unknown' | null;
+    };
+    type ProjectDocument = {
+      snapshot(): {
+        readonly bytes: Uint8Array;
+        readonly version: string | null;
+        readonly dirty: boolean;
+        readonly conflict: {
+          readonly actualVersion: string | null;
+          readonly actualEntry: ProjectFileEntry | null;
+          readonly actualBytes: Uint8Array | null;
+        } | null;
+      };
+      replace(data: string | Uint8Array): void;
+      save(): Promise<void>;
+      close(options?: { readonly dirty: 'save' | 'discard' }): Promise<void>;
+    };
+    type ProjectDocuments = {
+      open(path: string): Promise<ProjectDocument>;
+    };
     type TerminalRun = {
       readonly ready: Promise<void>;
       readonly exited: Promise<Exit>;
@@ -88,6 +167,8 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
       close(): Promise<Exit>;
     };
     type Project = {
+      readonly files: ProjectFiles;
+      readonly documents: ProjectDocuments;
       run(): ProjectRun;
       readonly terminals: { open(): Terminal };
       close(): Promise<void>;
@@ -104,6 +185,18 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
       close(): Promise<void>;
     };
     type PublicEntry = {
+      readonly FileConflictError: new (details: {
+        readonly path: string;
+        readonly expectedVersion: string | null;
+        readonly actualVersion: string | null;
+        readonly actualEntry: ProjectFileEntry | null;
+        readonly actualBytes: Uint8Array | null;
+      }) => PublicFileConflictError;
+      readonly ProjectFileOperationError: new (details: {
+        readonly operation: string;
+        readonly path: string;
+        readonly mutationOutcome: 'applied' | 'unknown' | null;
+      }) => PublicProjectFileOperationError;
       openWorkbench(options: {
         readonly deployment: {
           readonly workers: {
@@ -123,6 +216,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
         vite(options: {
           readonly id: string;
           readonly files: Readonly<Record<string, string | Uint8Array>>;
+          readonly viteVersion?: string;
         }): unknown;
       };
     };
@@ -161,6 +255,20 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
         );
       });
 
+    const waitUntil = async (
+      predicate: () => boolean,
+      label: string,
+      timeoutMs: number,
+    ): Promise<void> => {
+      const deadline = performance.now() + timeoutMs;
+      while (!predicate()) {
+        if (performance.now() >= deadline) {
+          throw new Error(`${label} timed out after ${timeoutMs}ms`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    };
+
     const responseText = async (url: string, label: string) => {
       const response = await withTimeout(
         fetch(url, { cache: 'no-store' }),
@@ -174,6 +282,18 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
         body,
       };
     };
+
+    const hmrSource = (marker: string): string => `
+const generationKey = '__riftyWorkbenchPublicHmrGeneration';
+const generation = (globalThis[generationKey] ?? 0) + 1;
+globalThis[generationKey] = generation;
+const marker = ${JSON.stringify(marker)};
+const app = document.getElementById('app');
+if (!app) throw new Error('Missing #app root');
+app.textContent = marker;
+parent.postMessage({ type: ${JSON.stringify(hmrEventType)}, marker, generation }, '*');
+if (import.meta.hot) import.meta.hot.accept();
+`;
 
     const runTerminal = async (project: Project, line: string, label: string) => {
       const terminal = project.terminals.open();
@@ -287,6 +407,28 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
       import('/src/browser-unit/workbench-vite-host-assets.ts'),
     ]);
     const publicEntry = publicEntryModule as unknown as PublicEntry;
+    const expectFileConflict = async (
+      operation: Promise<unknown>,
+    ): Promise<PublicFileConflictError> => {
+      try {
+        await operation;
+      } catch (error) {
+        if (error instanceof publicEntry.FileConflictError) return error;
+        throw error;
+      }
+      throw new Error('Expected FileConflictError');
+    };
+    const expectFileOperationError = async (
+      operation: Promise<unknown>,
+    ): Promise<PublicProjectFileOperationError> => {
+      try {
+        await operation;
+      } catch (error) {
+        if (error instanceof publicEntry.ProjectFileOperationError) return error;
+        throw error;
+      }
+      throw new Error('Expected ProjectFileOperationError');
+    };
     const hostAssets = (hostAssetsModule as { readonly workbenchViteHostAssets: HostAssets })
       .workbenchViteHostAssets;
     const ownerWorkerUrl = new URL(hostAssets.workers.owner, location.href);
@@ -299,8 +441,11 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
     const defineProjectA = () =>
       publicEntry.projects.vite({
         id: 'browser-unit-workbench-owner-a',
+        viteVersion: '7.3.6',
         files: {
-          '/index.html': '<!doctype html><h1>workbench-owner-a</h1>',
+          '/index.html':
+            '<!doctype html><h1 hidden>workbench-owner-a</h1><div id="app"></div><script type="module" src="/src/main.js"></script>',
+          '/src/main.js': hmrSource(initialHmrMarker),
         },
       });
     const definitionA = defineProjectA();
@@ -317,6 +462,27 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
     ).__workbenchOwnerCarrierProbe;
     let workbench: Workbench | null = null;
     let activeProject: Project | null = null;
+    let activeDocument: ProjectDocument | null = null;
+    let previewFrame: HTMLIFrameElement | null = null;
+    const hmrEvents: { readonly marker: string; readonly generation: number }[] = [];
+    const onHmrMessage = (event: MessageEvent<unknown>): void => {
+      if (previewFrame === null || event.source !== previewFrame.contentWindow) return;
+      const data = event.data;
+      if (
+        typeof data !== 'object' ||
+        data === null ||
+        !('type' in data) ||
+        data.type !== hmrEventType ||
+        !('marker' in data) ||
+        typeof data.marker !== 'string' ||
+        !('generation' in data) ||
+        !Number.isSafeInteger(data.generation)
+      ) {
+        return;
+      }
+      hmrEvents.push({ marker: data.marker, generation: data.generation as number });
+    };
+    globalThis.addEventListener('message', onHmrMessage);
     const recordCleanup = async (label: string, operation: () => Promise<unknown>) => {
       try {
         await operation();
@@ -356,6 +522,206 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
         new URL('@vite/client', previewARoot).href,
         'project A guest Vite client',
       );
+
+      previewFrame = document.createElement('iframe');
+      previewFrame.src = previewARoot.href;
+      document.body.append(previewFrame);
+      await waitUntil(
+        () =>
+          hmrEvents.some((event) => event.marker === initialHmrMarker && event.generation === 1),
+        'project A initial HMR module',
+        30_000,
+      );
+
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+      const describeConflict = (error: PublicFileConflictError) => ({
+        name: error.name,
+        path: error.path,
+        expectedVersion: error.expectedVersion,
+        actualVersion: error.actualVersion,
+        actualEntry: error.actualEntry,
+        actualBytes: error.actualBytes === null ? null : decoder.decode(error.actualBytes),
+      });
+      const createdPath = '/src/public-files-probe.txt';
+      const renamedPath = '/src/public-files-probe-renamed.txt';
+      const created = await projectA.files.writeFile(createdPath, encoder.encode('created'), {
+        expectedVersion: null,
+      });
+      const createdRead = await projectA.files.readFile(createdPath);
+      const createdReflected = projectA.files
+        .snapshot()
+        .entries.some((entry) => entry.path === createdPath && entry.version === created.version);
+      const createConflict = await expectFileConflict(
+        projectA.files.writeFile(createdPath, encoder.encode('blocked'), {
+          expectedVersion: null,
+        }),
+      );
+      const updated = await projectA.files.writeFile(createdPath, encoder.encode('current'), {
+        expectedVersion: created.version,
+      });
+      const staleConflict = await expectFileConflict(
+        projectA.files.writeFile(createdPath, encoder.encode('stale!!'), {
+          expectedVersion: created.version,
+        }),
+      );
+      const conflictRead = await projectA.files.readFile(createdPath);
+      const targetCreated = await projectA.files.writeFile(renamedPath, encoder.encode('target!'), {
+        expectedVersion: null,
+      });
+      const renameSourceConflict = await expectFileConflict(
+        projectA.files.rename(createdPath, renamedPath, {
+          expectedSourceVersion: created.version,
+          expectedTargetVersion: targetCreated.version,
+        }),
+      );
+      const renameTargetConflict = await expectFileConflict(
+        projectA.files.rename(createdPath, renamedPath, {
+          expectedSourceVersion: updated.version,
+          expectedTargetVersion: null,
+        }),
+      );
+      const renamed = await projectA.files.rename(createdPath, renamedPath, {
+        expectedSourceVersion: updated.version,
+        expectedTargetVersion: targetCreated.version,
+      });
+      const renamedRead = await projectA.files.readFile(renamedPath);
+      const sourceReadFailure = await expectFileOperationError(
+        projectA.files.readFile(createdPath),
+      );
+      const renamedDirectory = await projectA.files.readdir('/src');
+      const renamedSnapshot = projectA.files.snapshot();
+      const renamedReflected =
+        renamedDirectory.some(
+          (entry) => entry.path === renamedPath && entry.version === renamed.version,
+        ) &&
+        renamedSnapshot.entries.some(
+          (entry) => entry.path === renamedPath && entry.version === renamed.version,
+        );
+      const sourceAbsentAfterRename =
+        !renamedDirectory.some((entry) => entry.path === createdPath) &&
+        !renamedSnapshot.entries.some((entry) => entry.path === createdPath);
+      const removeConflict = await expectFileConflict(
+        projectA.files.remove(renamedPath, { expectedVersion: targetCreated.version }),
+      );
+      const removeConflictRead = await projectA.files.readFile(renamedPath);
+      await projectA.files.remove(renamedPath, { expectedVersion: renamed.version });
+      const removedReflected =
+        !(await projectA.files.readdir('/src')).some((entry) => entry.path === renamedPath) &&
+        !projectA.files.snapshot().entries.some((entry) => entry.path === renamedPath);
+      const fileCrud = {
+        created: {
+          path: created.path,
+          version: created.version,
+          readVersion: createdRead.version,
+          bytes: decoder.decode(createdRead.bytes),
+          reflected: createdReflected,
+        },
+        createConflict: describeConflict(createConflict),
+        updated: {
+          version: updated.version,
+          preservedVersion: conflictRead.version,
+          preservedBytes: decoder.decode(conflictRead.bytes),
+        },
+        staleConflict: describeConflict(staleConflict),
+        targetCreated: { version: targetCreated.version },
+        renameSourceConflict: describeConflict(renameSourceConflict),
+        renameTargetConflict: describeConflict(renameTargetConflict),
+        renamed: {
+          path: renamed.path,
+          version: renamed.version,
+          readVersion: renamedRead.version,
+          bytes: decoder.decode(renamedRead.bytes),
+          reflected: renamedReflected,
+          sourceAbsent: sourceAbsentAfterRename,
+          sourceReadFailure: {
+            name: sourceReadFailure.name,
+            operation: sourceReadFailure.operation,
+            path: sourceReadFailure.path,
+            mutationOutcome: sourceReadFailure.mutationOutcome,
+          },
+        },
+        removeConflict: {
+          ...describeConflict(removeConflict),
+          preservedVersion: removeConflictRead.version,
+          preservedBytes: decoder.decode(removeConflictRead.bytes),
+        },
+        removed: removedReflected,
+      };
+
+      const conflictingDocument = await projectA.documents.open('/src/main.js');
+      activeDocument = conflictingDocument;
+      const openedDocument = conflictingDocument.snapshot();
+      if (openedDocument.version === null) throw new Error('opened document version missing');
+      const updatedSource = hmrSource(updatedHmrMarker);
+      conflictingDocument.replace(updatedSource);
+      const remoteSource = hmrSource('workbench-public-conflict-remote');
+      const remoteWrite = await projectA.files.writeFile(
+        '/src/main.js',
+        encoder.encode(remoteSource),
+        { expectedVersion: openedDocument.version },
+      );
+      const documentConflict = await expectFileConflict(conflictingDocument.save());
+      const conflictedDocument = conflictingDocument.snapshot();
+      await conflictingDocument.close({ dirty: 'discard' });
+      activeDocument = null;
+
+      const projectDocument = await projectA.documents.open('/src/main.js');
+      activeDocument = projectDocument;
+      const reopenedDocument = projectDocument.snapshot();
+      projectDocument.replace(updatedSource);
+      const dirtyBeforeSave = projectDocument.snapshot().dirty;
+      await projectDocument.save();
+      const savedDocument = projectDocument.snapshot();
+      const reflectedDocument = await projectA.files.readFile('/src/main.js');
+      const reflectedSnapshotVersion = projectA.files
+        .snapshot()
+        .entries.find((entry) => entry.path === '/src/main.js')?.version;
+      await waitUntil(
+        () => hmrEvents.some((event) => event.marker === updatedHmrMarker && event.generation >= 2),
+        'project A public document HMR update',
+        30_000,
+      );
+      const hmrUpdate = hmrEvents.findLast(
+        (event) => event.marker === updatedHmrMarker && event.generation >= 2,
+      );
+      await projectDocument.close();
+      activeDocument = null;
+      const documentEdit = {
+        opened: {
+          version: openedDocument.version,
+          bytes: decoder.decode(openedDocument.bytes),
+        },
+        remote: { version: remoteWrite.version },
+        conflict: {
+          ...describeConflict(documentConflict),
+          localBytes: decoder.decode(conflictedDocument.bytes),
+          localVersion: conflictedDocument.version,
+          dirty: conflictedDocument.dirty,
+          snapshotActualVersion: conflictedDocument.conflict?.actualVersion ?? null,
+          snapshotActualEntry: conflictedDocument.conflict?.actualEntry ?? null,
+          snapshotActualBytes:
+            conflictedDocument.conflict?.actualBytes === null ||
+            conflictedDocument.conflict?.actualBytes === undefined
+              ? null
+              : decoder.decode(conflictedDocument.conflict.actualBytes),
+        },
+        reopened: {
+          version: reopenedDocument.version,
+          bytes: decoder.decode(reopenedDocument.bytes),
+        },
+        dirtyBeforeSave,
+        saved: { version: savedDocument.version, dirty: savedDocument.dirty },
+        reflected: {
+          version: reflectedDocument.version,
+          snapshotVersion: reflectedSnapshotVersion ?? null,
+          bytes: decoder.decode(reflectedDocument.bytes),
+        },
+        hmrUpdate,
+      };
+      previewFrame.remove();
+      previewFrame = null;
+
       const write = await runTerminal(
         projectA,
         `printf %s ${retainedBytes} > retained.txt`,
@@ -448,10 +814,22 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
           html: reopenedHtmlA,
           close: reopenedCloseA,
         },
+        fileCrud,
+        documentEdit,
         write,
         retained,
       };
     } catch (error) {
+      if (activeDocument !== null) {
+        const document = activeDocument;
+        await recordCleanup('active document discard', () =>
+          withTimeout(
+            document.close({ dirty: 'discard' }),
+            'active document cleanup discard',
+            30_000,
+          ),
+        );
+      }
       if (activeProject !== null) {
         await recordCleanup('active project close', () =>
           withTimeout(activeProject!.close(), 'active project cleanup close', 30_000),
@@ -465,10 +843,12 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
       const cleanup = cleanupErrors.length === 0 ? '' : `; cleanup: ${cleanupErrors.join('; ')}`;
       throw new Error(`${error instanceof Error ? error.message : String(error)}${cleanup}`);
     } finally {
+      previewFrame?.remove();
+      globalThis.removeEventListener('message', onHmrMessage);
       baseElement.remove();
       ownerCarrierProbe.restore();
     }
-  }, RETAINED_BYTES);
+  }, evaluationInput);
 
   expect(result.storage).toEqual({
     policy: 'ephemeral',
@@ -487,6 +867,144 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
   expect(result.reopenedPreviewA.html).toMatchObject({ status: 200 });
   expect(result.reopenedPreviewA.html.contentType).toContain('text/html');
   expect(result.reopenedPreviewA.html.body).toContain('workbench-owner-a');
+  const sourcePath = '/src/public-files-probe.txt';
+  const targetPath = '/src/public-files-probe-renamed.txt';
+  expect(result.fileCrud.created).toMatchObject({
+    path: sourcePath,
+    bytes: 'created',
+    reflected: true,
+  });
+  expect(result.fileCrud.created.readVersion).toBe(result.fileCrud.created.version);
+  expect(result.fileCrud.createConflict).toEqual({
+    name: 'FileConflictError',
+    path: sourcePath,
+    expectedVersion: null,
+    actualVersion: result.fileCrud.created.version,
+    actualEntry: {
+      path: sourcePath,
+      kind: 'file',
+      size: 7,
+      version: result.fileCrud.created.version,
+    },
+    actualBytes: 'created',
+  });
+  expect(result.fileCrud.updated).toEqual({
+    version: result.fileCrud.staleConflict.actualVersion,
+    preservedVersion: result.fileCrud.staleConflict.actualVersion,
+    preservedBytes: 'current',
+  });
+  expect(result.fileCrud.staleConflict).toEqual({
+    name: 'FileConflictError',
+    path: sourcePath,
+    expectedVersion: result.fileCrud.created.version,
+    actualVersion: result.fileCrud.updated.version,
+    actualEntry: {
+      path: sourcePath,
+      kind: 'file',
+      size: 7,
+      version: result.fileCrud.updated.version,
+    },
+    actualBytes: 'current',
+  });
+  expect(result.fileCrud.renameSourceConflict).toEqual({
+    name: 'FileConflictError',
+    path: sourcePath,
+    expectedVersion: result.fileCrud.created.version,
+    actualVersion: result.fileCrud.updated.version,
+    actualEntry: {
+      path: sourcePath,
+      kind: 'file',
+      size: 7,
+      version: result.fileCrud.updated.version,
+    },
+    actualBytes: 'current',
+  });
+  expect(result.fileCrud.renameTargetConflict).toEqual({
+    name: 'FileConflictError',
+    path: targetPath,
+    expectedVersion: null,
+    actualVersion: result.fileCrud.targetCreated.version,
+    actualEntry: {
+      path: targetPath,
+      kind: 'file',
+      size: 7,
+      version: result.fileCrud.targetCreated.version,
+    },
+    actualBytes: 'target!',
+  });
+  expect(result.fileCrud.renamed).toEqual({
+    path: targetPath,
+    version: result.fileCrud.renamed.version,
+    readVersion: result.fileCrud.renamed.version,
+    bytes: 'current',
+    reflected: true,
+    sourceAbsent: true,
+    sourceReadFailure: {
+      name: 'ProjectFileOperationError',
+      operation: 'readFile',
+      path: sourcePath,
+      mutationOutcome: null,
+    },
+  });
+  expect(result.fileCrud.removeConflict).toEqual({
+    name: 'FileConflictError',
+    path: targetPath,
+    expectedVersion: result.fileCrud.targetCreated.version,
+    actualVersion: result.fileCrud.renamed.version,
+    actualEntry: {
+      path: targetPath,
+      kind: 'file',
+      size: 7,
+      version: result.fileCrud.renamed.version,
+    },
+    actualBytes: 'current',
+    preservedVersion: result.fileCrud.renamed.version,
+    preservedBytes: 'current',
+  });
+  expect(result.fileCrud.removed).toBe(true);
+
+  expect(result.documentEdit.opened.bytes).toContain(INITIAL_HMR_MARKER);
+  expect(result.documentEdit.opened.version).not.toBeNull();
+  expect(result.documentEdit.conflict).toMatchObject({
+    name: 'FileConflictError',
+    path: '/src/main.js',
+    expectedVersion: result.documentEdit.opened.version,
+    actualVersion: result.documentEdit.remote.version,
+    actualEntry: {
+      path: '/src/main.js',
+      kind: 'file',
+      version: result.documentEdit.remote.version,
+    },
+    localVersion: result.documentEdit.opened.version,
+    dirty: true,
+    snapshotActualVersion: result.documentEdit.remote.version,
+    snapshotActualEntry: {
+      path: '/src/main.js',
+      kind: 'file',
+      version: result.documentEdit.remote.version,
+    },
+  });
+  expect(result.documentEdit.conflict.actualBytes).toContain('workbench-public-conflict-remote');
+  expect(result.documentEdit.conflict.localBytes).toContain(UPDATED_HMR_MARKER);
+  expect(result.documentEdit.conflict.snapshotActualBytes).toContain(
+    'workbench-public-conflict-remote',
+  );
+  expect(result.documentEdit.conflict.actualEntry?.size).toBe(
+    new TextEncoder().encode(result.documentEdit.conflict.actualBytes ?? '').byteLength,
+  );
+  expect(result.documentEdit.reopened.version).toBe(result.documentEdit.remote.version);
+  expect(result.documentEdit.reopened.bytes).toContain('workbench-public-conflict-remote');
+  expect(result.documentEdit.dirtyBeforeSave).toBe(true);
+  expect(result.documentEdit.saved.dirty).toBe(false);
+  expect(result.documentEdit.saved.version).not.toBeNull();
+  expect(result.documentEdit.saved.version).not.toBe(result.documentEdit.reopened.version);
+  expect(result.documentEdit.reflected).toMatchObject({
+    version: result.documentEdit.saved.version,
+    snapshotVersion: result.documentEdit.saved.version,
+  });
+  expect(result.documentEdit.reflected.bytes).toContain(UPDATED_HMR_MARKER);
+  expect(result.documentEdit.hmrUpdate).toMatchObject({ marker: UPDATED_HMR_MARKER });
+  expect(result.documentEdit.hmrUpdate?.generation).toBeGreaterThanOrEqual(2);
   expect(result.previewB.port).toBe(result.previewA.port);
   expect(result.reopenedPreviewA.port).toBe(result.previewA.port);
   for (const closed of [result.previewA.close, result.reopenedPreviewA.close]) {

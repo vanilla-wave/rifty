@@ -1,5 +1,5 @@
 import type { VfsMutationGuard, VfsMutationIntent } from '@riftydev/vfs';
-import { asyncVfs } from '@riftydev/vfs';
+import { asyncVfs, normalizePath } from '@riftydev/vfs';
 import {
   MemoryFsSync,
   installMemoryFs,
@@ -251,6 +251,199 @@ describe('Shell VFS mutation guard', () => {
     expect(await vfs.exists('/repo/package.next.json')).toBe(true);
   });
 
+  it('guards git restore with the exact mapped replacement path', async () => {
+    installMemoryFs();
+    const vfs = asyncVfs();
+    if (!vfs) throw new Error('no async VFS');
+    await vfs.mkdir('/repo/src', { recursive: true });
+    await vfs.writeFile('/repo/src/a.ts', 'export const value = 1;\n');
+    const setup = new Shell({ cwd: '/repo', env: GIT_ENV });
+    expect((await setup.run('git init')).exitCode).toBe(0);
+    expect((await setup.run('git add src/a.ts')).exitCode).toBe(0);
+    expect((await setup.run('git commit -m initial')).exitCode).toBe(0);
+
+    const batches: VfsMutationIntent[][] = [];
+    const reject: VfsMutationGuard = async (intents) => {
+      batches.push([...intents]);
+      throw new Error('guarded for classification');
+    };
+
+    const result = await guardedShell(reject, '/repo', GIT_ENV).run('git restore src/a.ts');
+
+    expect(result.exitCode).toBe(1);
+    expect(batches).toEqual([
+      [
+        { kind: 'write', path: '/repo/.git' },
+        { kind: 'replace', path: '/repo/src/a.ts' },
+      ],
+    ]);
+  });
+
+  it('guards checkout-path from a nested cwd with the exact mapped replacement path', async () => {
+    installMemoryFs();
+    const vfs = asyncVfs();
+    if (!vfs) throw new Error('no async VFS');
+    await vfs.mkdir('/repo/src', { recursive: true });
+    await vfs.writeFile('/repo/src/a.ts', 'export const value = 1;\n');
+    const setup = new Shell({ cwd: '/repo', env: GIT_ENV });
+    expect((await setup.run('git init')).exitCode).toBe(0);
+    expect((await setup.run('git add src/a.ts')).exitCode).toBe(0);
+    expect((await setup.run('git commit -m initial')).exitCode).toBe(0);
+
+    const batches: VfsMutationIntent[][] = [];
+    const reject: VfsMutationGuard = async (intents) => {
+      batches.push([...intents]);
+      throw new Error('guarded for classification');
+    };
+
+    const result = await guardedShell(reject, '/repo/src', GIT_ENV).run('git checkout -- a.ts');
+
+    expect(result.exitCode).toBe(1);
+    expect(batches).toEqual([
+      [
+        { kind: 'write', path: '/repo/.git' },
+        { kind: 'replace', path: '/repo/src/a.ts' },
+      ],
+    ]);
+  });
+
+  it.each(['git checkout feature', 'git switch feature', 'git reset --hard'])(
+    'guards repo-wide %s with ordinary metadata plus a replacement candidate',
+    async (command) => {
+      installMemoryFs();
+      const vfs = asyncVfs();
+      if (!vfs) throw new Error('no async VFS');
+      await vfs.mkdir('/repo', { recursive: true });
+      await vfs.writeFile('/repo/a.ts', 'main\n');
+      const setup = new Shell({ cwd: '/repo', env: GIT_ENV });
+      expect((await setup.run('git init')).exitCode).toBe(0);
+      expect((await setup.run('git add a.ts')).exitCode).toBe(0);
+      expect((await setup.run('git commit -m main')).exitCode).toBe(0);
+      expect((await setup.run('git checkout -b feature')).exitCode).toBe(0);
+      expect((await setup.run('git checkout main')).exitCode).toBe(0);
+
+      const batches: VfsMutationIntent[][] = [];
+      const reject: VfsMutationGuard = async (intents) => {
+        batches.push([...intents]);
+        throw new Error('guarded for classification');
+      };
+
+      expect((await guardedShell(reject, '/repo', GIT_ENV).run(command)).exitCode).toBe(1);
+      expect(batches).toEqual([
+        [
+          { kind: 'write', path: '/repo/.git' },
+          { kind: 'replace', path: '/repo' },
+        ],
+      ]);
+    },
+  );
+
+  it('aborts when checkout path-vs-ref meaning changes while its mutation plan waits', async () => {
+    installMemoryFs();
+    const vfs = asyncVfs();
+    if (!vfs) throw new Error('no async VFS');
+    await vfs.mkdir('/repo', { recursive: true });
+    await vfs.writeFile('/repo/feature', 'tracked path\n');
+    const setup = new Shell({ cwd: '/repo', env: GIT_ENV });
+    expect((await setup.run('git init')).exitCode).toBe(0);
+    expect((await setup.run('git add feature')).exitCode).toBe(0);
+    expect((await setup.run('git commit -m initial')).exitCode).toBe(0);
+
+    let entered!: () => void;
+    const guardEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const parked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const batches: VfsMutationIntent[][] = [];
+    const guard: VfsMutationGuard = async (intents, apply) => {
+      batches.push([...intents]);
+      entered();
+      await parked;
+      return await apply();
+    };
+    const pending = guardedShell(guard, '/repo', GIT_ENV).run('git checkout feature');
+    await guardEntered;
+
+    expect((await setup.run('git checkout -b feature')).exitCode).toBe(0);
+    expect((await setup.run('git checkout main')).exitCode).toBe(0);
+    release();
+
+    const result = await pending;
+    expect(result.exitCode).toBe(128);
+    expect(result.stderr).toContain('mutation plan changed while waiting for mutation guard');
+    expect(batches).toEqual([
+      [
+        { kind: 'write', path: '/repo/.git' },
+        { kind: 'replace', path: '/repo/feature' },
+      ],
+    ]);
+  });
+
+  it('keeps a prepared checkout miss non-mutating if the name becomes a branch before dispatch', async () => {
+    installMemoryFs();
+    const vfs = asyncVfs();
+    if (!vfs) throw new Error('no async VFS');
+    await vfs.mkdir('/repo', { recursive: true });
+    await vfs.writeFile('/repo/a.ts', 'main\n');
+    const setup = new Shell({ cwd: '/repo', env: GIT_ENV });
+    expect((await setup.run('git init')).exitCode).toBe(0);
+    expect((await setup.run('git add a.ts')).exitCode).toBe(0);
+    expect((await setup.run('git commit -m main')).exitCode).toBe(0);
+    const mainOid = await vfs.readFile('/repo/.git/refs/heads/main');
+
+    const originalExists = vfs.exists.bind(vfs);
+    let rootDiscoveries = 0;
+    vfs.exists = async (path) => {
+      if (normalizePath(path) === '/repo/.git/HEAD' && ++rootDiscoveries === 2) {
+        await vfs.writeFile('/repo/.git/refs/heads/feature', mainOid);
+      }
+      return await originalExists(path);
+    };
+    const batches: VfsMutationIntent[][] = [];
+    const result = await (async () => {
+      try {
+        return await guardedShell(recordingGuard(batches), '/repo', GIT_ENV).run(
+          'git checkout feature',
+        );
+      } finally {
+        vfs.exists = originalExists;
+      }
+    })();
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("pathspec 'feature' did not match");
+    expect(batches).toEqual([]);
+    expect(await vfs.readFileText('/repo/.git/HEAD')).toBe('ref: refs/heads/main\n');
+  });
+
+  it('renders corrupt checkout planning state as fatal with and without a mutation guard', async () => {
+    installMemoryFs();
+    const vfs = asyncVfs();
+    if (!vfs) throw new Error('no async VFS');
+    await vfs.mkdir('/repo', { recursive: true });
+    await vfs.writeFile('/repo/a.ts', 'main\n');
+    const setup = new Shell({ cwd: '/repo', env: GIT_ENV });
+    expect((await setup.run('git init')).exitCode).toBe(0);
+    expect((await setup.run('git add a.ts')).exitCode).toBe(0);
+    expect((await setup.run('git commit -m main')).exitCode).toBe(0);
+    await vfs.writeFile('/repo/.git/index', new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
+
+    const direct = await setup.run('git checkout missing');
+    expect(direct.exitCode).toBe(128);
+    expect(direct.stderr).toMatch(/^fatal: /);
+
+    const batches: VfsMutationIntent[][] = [];
+    const guarded = await guardedShell(recordingGuard(batches), '/repo', GIT_ENV).run(
+      'git checkout missing',
+    );
+    expect(guarded.exitCode).toBe(128);
+    expect(guarded.stderr).toMatch(/^fatal: /);
+    expect(batches).toEqual([]);
+  });
+
   it('guards nested-repo metadata writers narrowly while leaving reads unguarded', async () => {
     installMemoryFs();
     const vfs = asyncVfs();
@@ -353,6 +546,8 @@ describe('Shell VFS mutation guard', () => {
     expect((await setup.run('git init')).exitCode).toBe(0);
     expect((await setup.run('git add package.json')).exitCode).toBe(0);
     expect((await setup.run('git commit -m initial')).exitCode).toBe(0);
+    expect((await setup.run('git checkout -b feature')).exitCode).toBe(0);
+    expect((await setup.run('git checkout main')).exitCode).toBe(0);
 
     const batches: VfsMutationIntent[][] = [];
     const reject: VfsMutationGuard = async (intents) => {
@@ -360,24 +555,38 @@ describe('Shell VFS mutation guard', () => {
       throw new Error('guarded for classification');
     };
     const shell = guardedShell(reject, '/repo', GIT_ENV);
-    for (const command of [
-      'git checkout feature',
-      'git switch feature',
-      'git restore package.json',
-      'git reset --hard',
-      'git merge feature',
-      'git cherry-pick HEAD',
-      'git revert HEAD',
-      'git apply change.patch',
-      'git stash push',
-      'git stash save work',
-      'git stash pop',
-      'git stash apply',
-      'git pull origin main',
-    ]) {
+    const repoReplacement: VfsMutationIntent[][] = [
+      [
+        { kind: 'write', path: '/repo/.git' },
+        { kind: 'replace', path: '/repo' },
+      ],
+    ];
+    for (const [command, expected] of [
+      ['git checkout feature', repoReplacement],
+      ['git switch feature', repoReplacement],
+      [
+        'git restore package.json',
+        [
+          [
+            { kind: 'write', path: '/repo/.git' },
+            { kind: 'replace', path: '/repo/package.json' },
+          ],
+        ],
+      ],
+      ['git reset --hard', repoReplacement],
+      ['git merge feature', repoReplacement],
+      ['git cherry-pick HEAD', repoReplacement],
+      ['git revert HEAD', repoReplacement],
+      ['git apply change.patch', repoReplacement],
+      ['git stash push', repoReplacement],
+      ['git stash save work', repoReplacement],
+      ['git stash pop', repoReplacement],
+      ['git stash apply', repoReplacement],
+      ['git pull origin main', repoReplacement],
+    ] as const) {
       batches.length = 0;
       expect((await shell.run(command)).exitCode, command).toBe(1);
-      expect(batches, command).toEqual([[{ kind: 'write', path: '/repo' }]]);
+      expect(batches, command).toEqual(expected);
     }
 
     batches.length = 0;
@@ -415,7 +624,12 @@ describe('Shell VFS mutation guard', () => {
     expect(refused.exitCode).toBe(1);
     expect(refused.stderr).toContain('stamp revoke failed');
     expect(dec.decode(await vfs.readFile('/repo/package.json'))).toBe('{"branch":"main"}\n');
-    expect(rejected).toEqual([[{ kind: 'write', path: '/repo' }]]);
+    expect(rejected).toEqual([
+      [
+        { kind: 'write', path: '/repo/.git' },
+        { kind: 'replace', path: '/repo' },
+      ],
+    ]);
 
     const applied: VfsMutationIntent[][] = [];
     const switched = await guardedShell(recordingGuard(applied), '/repo', GIT_ENV).run(
@@ -423,7 +637,12 @@ describe('Shell VFS mutation guard', () => {
     );
     expect(switched.exitCode).toBe(0);
     expect(dec.decode(await vfs.readFile('/repo/package.json'))).toBe('{"branch":"feature"}\n');
-    expect(applied).toEqual([[{ kind: 'write', path: '/repo' }]]);
+    expect(applied).toEqual([
+      [
+        { kind: 'write', path: '/repo/.git' },
+        { kind: 'replace', path: '/repo' },
+      ],
+    ]);
   });
 
   it('aborts when a nearer repository becomes governing while a git mutation is parked', async () => {

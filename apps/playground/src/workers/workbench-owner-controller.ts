@@ -27,6 +27,10 @@ type ProjectPreviewInput = Extract<
   PageToWorkbenchOwnerMessage,
   { readonly type: 'workbench:project-preview' }
 >['frame'];
+type ProjectVfsInput = Extract<
+  PageToWorkbenchOwnerMessage,
+  { readonly type: 'workbench:project-vfs' }
+>['frame'];
 type ProjectPtyOutput = Extract<
   WorkbenchOwnerToPageMessage,
   { readonly type: 'workbench:project-pty' }
@@ -35,16 +39,22 @@ type ProjectPreviewOutput = Extract<
   WorkbenchOwnerToPageMessage,
   { readonly type: 'workbench:project-preview' }
 >['frame'];
+type ProjectVfsOutput = Extract<
+  WorkbenchOwnerToPageMessage,
+  { readonly type: 'workbench:project-vfs' }
+>['frame'];
 
 /** Token-free project ingress. The controller is the sole correlation authority. */
 export type WorkbenchOwnerProjectRuntimeFrame =
   | { readonly type: 'pty'; readonly frame: ProjectPtyInput }
-  | { readonly type: 'preview'; readonly frame: ProjectPreviewInput };
+  | { readonly type: 'preview'; readonly frame: ProjectPreviewInput }
+  | { readonly type: 'vfs'; readonly frame: ProjectVfsInput };
 
 /** Token-free project egress. The controller adds its current owner-minted token. */
 export type WorkbenchOwnerProjectRuntimeOutput =
   | { readonly type: 'pty'; readonly frame: ProjectPtyOutput }
-  | { readonly type: 'preview'; readonly frame: ProjectPreviewOutput };
+  | { readonly type: 'preview'; readonly frame: ProjectPreviewOutput }
+  | { readonly type: 'vfs'; readonly frame: ProjectVfsOutput };
 
 export interface WorkbenchOwnerProjectRuntime {
   handleFrame(frame: WorkbenchOwnerProjectRuntimeFrame): void | Promise<void>;
@@ -96,7 +106,9 @@ type DeleteMessage = Extract<
 >;
 type ProjectInputMessage = Extract<
   PageToWorkbenchOwnerMessage,
-  { readonly type: 'workbench:project-pty' | 'workbench:project-preview' }
+  {
+    readonly type: 'workbench:project-pty' | 'workbench:project-preview' | 'workbench:project-vfs';
+  }
 >;
 
 /**
@@ -188,11 +200,15 @@ export function createWorkbenchOwnerController(
       });
       return;
     }
-    send({
-      type: 'workbench:project-preview',
-      projectToken: project.token,
-      frame: output.frame,
-    });
+    if (output.type === 'preview') {
+      send({
+        type: 'workbench:project-preview',
+        projectToken: project.token,
+        frame: output.frame,
+      });
+      return;
+    }
+    send({ type: 'workbench:project-vfs', projectToken: project.token, frame: output.frame });
   };
 
   const performOpen = async (message: OpenMessage): Promise<void> => {
@@ -294,11 +310,13 @@ export function createWorkbenchOwnerController(
     project: ActiveProject,
   ): Promise<void> => {
     try {
-      await project.runtime.handleFrame(
-        message.type === 'workbench:project-pty'
-          ? { type: 'pty', frame: message.frame }
-          : { type: 'preview', frame: message.frame },
-      );
+      if (message.type === 'workbench:project-pty') {
+        await project.runtime.handleFrame({ type: 'pty', frame: message.frame });
+      } else if (message.type === 'workbench:project-preview') {
+        await project.runtime.handleFrame({ type: 'preview', frame: message.frame });
+      } else {
+        await project.runtime.handleFrame({ type: 'vfs', frame: message.frame });
+      }
     } catch (error) {
       sendFailure(error);
     }

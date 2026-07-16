@@ -7,7 +7,7 @@
 - Owner `fs.*` sync-RPC handlers now publish every write, mkdir, remove,
   metadata update, rename, and copy through the optional shared VFS mutation
   guard; async guards defer the reply while unguarded calls stay synchronous
-  (ADR-0260).
+  (ADR-0276).
 - **Flowing process stdin and Node TTY resize (ADR-0225/0230).** Seeded
   `process.stdin` now has real pause/resume, split-UTF-8 decoding, explicit
   ordered EOF/end, and stream-returning `setEncoding`. TTY stdout/stderr expose

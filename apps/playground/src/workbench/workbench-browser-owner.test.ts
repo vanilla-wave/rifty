@@ -2,7 +2,12 @@ import { EventEmitter } from 'node:events';
 import type { WorkerProcessHandle } from '@riftydev/kernel';
 import { SW_FRAME_VERSION, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 import { describe, expect, it, vi } from 'vitest';
-import { ProjectDefinitionMismatchError } from './errors.ts';
+import type { VfsSnapshotEntry } from '../glue/vfs-snapshot-port.ts';
+import {
+  DirtyProjectDocumentError,
+  ProjectDefinitionMismatchError,
+  ProjectFileOperationError,
+} from './errors.ts';
 import type { PageToWorkbenchOwnerMessage } from './owner-protocol.ts';
 import {
   defineNodeCliProject,
@@ -27,6 +32,7 @@ const input: WorkbenchOwnerStartInput = Object.freeze({
   packageAcquisition: Object.freeze({ registryUrl: '/npm-registry' }),
   storage: Object.freeze({ persistence: 'ephemeral' as const }),
 });
+const encoder = new TextEncoder();
 
 class FakeOwnerWorker extends EventEmitter {
   readonly kind = 'worker' as const;
@@ -130,6 +136,54 @@ function sentOf<T extends PageToWorkbenchOwnerMessage['type']>(
   );
 }
 
+async function acceptOpenedProject(
+  worker: FakeOwnerWorker,
+  openRequest: Extract<PageToWorkbenchOwnerMessage, { readonly type: 'workbench:open-project' }>,
+  projectToken: string,
+  projectRoot: string,
+  entries: readonly VfsSnapshotEntry[] = [],
+): Promise<void> {
+  worker.emit('message', {
+    type: 'workbench:project-opened',
+    opId: openRequest.opId,
+    projectToken,
+    projectRoot,
+  });
+  await acceptProjectSnapshot(worker, projectToken, projectRoot, entries);
+}
+
+async function acceptProjectSnapshot(
+  worker: FakeOwnerWorker,
+  projectToken: string,
+  projectRoot: string,
+  entries: readonly VfsSnapshotEntry[] = [],
+): Promise<void> {
+  await settleMicrotasks();
+  const snapshotRequest = sentOf(worker, 'workbench:project-vfs').find(
+    (message) => message.frame.type === 'workbench:project-vfs-snapshot-request',
+  );
+  expect(snapshotRequest).toEqual({
+    type: 'workbench:project-vfs',
+    projectToken,
+    frame: { type: 'workbench:project-vfs-snapshot-request' },
+  });
+  worker.emit('message', {
+    type: 'workbench:project-vfs',
+    projectToken,
+    frame: {
+      type: 'workbench:project-vfs-snapshot',
+      frame: {
+        type: 'snapshot',
+        root: projectRoot,
+        ownerEpoch: `epoch:${projectToken}`,
+        treeRevision: 1,
+        entries,
+        nodeModulesPresent: false,
+      },
+    },
+  });
+}
+
 describe('browser Workbench owner transport', () => {
   it('spawns one run-to-completion owner with no config or binding in process env', () => {
     expect(workbenchOwnerSpawnSpec(input)).toEqual({
@@ -167,6 +221,10 @@ describe('browser Workbench owner transport', () => {
       projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
     );
     const opening = raw.openProject(definition);
+    let openingSettled = false;
+    void opening.then(() => {
+      openingSettled = true;
+    });
     const openRequest = sentOf(worker, 'workbench:open-project')[0];
     if (openRequest === undefined) throw new Error('missing open request');
     worker.emit('message', {
@@ -175,6 +233,12 @@ describe('browser Workbench owner transport', () => {
       projectToken: 'owner-token-a',
       projectRoot: '/owner-born/project-a',
     });
+    await settleMicrotasks();
+    expect(openingSettled).toBe(false);
+    expect(
+      sentOf(worker, 'workbench:project-pty').some((message) => message.frame.type === 'pty:open'),
+    ).toBe(false);
+    await acceptProjectSnapshot(worker, 'owner-token-a', '/owner-born/project-a');
 
     const project = await opening;
     const openPty = sentOf(worker, 'workbench:project-pty').find(
@@ -232,6 +296,283 @@ describe('browser Workbench owner transport', () => {
     expect(worker.killedWith).toBeNull();
   });
 
+  it('disconnects a lost admitted write after close-project ACK instead of waiting for timeout', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    const root = '/owner-born/project-a';
+    const opening = raw.openProject(
+      inspectProjectDefinition(
+        projects.vite({ id: 'project-a', files: { '/src/main.ts': 'initial' } }),
+      ),
+    );
+    const openRequest = sentOf(worker, 'workbench:open-project')[0];
+    if (openRequest === undefined) throw new Error('missing open request');
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', root, [
+      { path: `${root}/src`, kind: 'dir', size: 0, version: 'dir-v1' },
+      {
+        path: `${root}/src/main.ts`,
+        kind: 'file',
+        size: 7,
+        content: encoder.encode('initial'),
+        version: 'file-v1',
+      },
+    ]);
+    const project = await opening;
+    const openPty = sentOf(worker, 'workbench:project-pty').find(
+      (message) => message.frame.type === 'pty:open',
+    );
+    if (openPty?.frame.type !== 'pty:open') throw new Error('missing PTY open');
+    worker.emit('message', {
+      type: 'workbench:project-pty',
+      projectToken: 'owner-token-a',
+      frame: { type: 'pty:ready', sid: openPty.frame.sid },
+    });
+
+    const expectedVersion = project.files
+      .snapshot()
+      .entries.find((entry) => entry.path === '/src/main.ts')?.version;
+    if (expectedVersion === undefined) throw new Error('initial file version missing');
+    const writing = project.files.writeFile('/src/main.ts', encoder.encode('next'), {
+      expectedVersion,
+    });
+    const commit = sentOf(worker, 'workbench:project-vfs').find(
+      (message) => message.frame.type === 'rifty:owner-vfs-commit',
+    );
+    expect(commit?.frame.type).toBe('rifty:owner-vfs-commit');
+
+    const closing = project.close();
+    await settleMicrotasks();
+    const closePty = sentOf(worker, 'workbench:project-pty').find(
+      (message) => message.frame.type === 'pty:close',
+    );
+    const closeProject = sentOf(worker, 'workbench:close-project')[0];
+    expect(closePty?.frame.type).toBe('pty:close');
+    expect(closeProject).toBeDefined();
+    if (closePty?.frame.type !== 'pty:close' || closeProject === undefined) {
+      throw new Error('missing project close frames');
+    }
+    expect(worker.sent.indexOf(closePty)).toBeLessThan(worker.sent.indexOf(closeProject));
+
+    worker.emit('message', {
+      type: 'workbench:project-pty',
+      projectToken: 'owner-token-a',
+      frame: {
+        type: 'pty:close-ack',
+        sid: closePty.frame.sid,
+        opId: closePty.frame.opId,
+        ok: true,
+      },
+    });
+    worker.emit('message', {
+      type: 'workbench:project-closed',
+      opId: closeProject.opId,
+      projectToken: 'owner-token-a',
+    });
+    await expect(writing).rejects.toBeInstanceOf(ProjectFileOperationError);
+    await expect(closing).resolves.toBeUndefined();
+
+    raw.close();
+    worker.emit('exit', 0, null);
+    await raw.closed;
+  });
+
+  it('keeps the project token and real files usable after dirty close preflight rejects', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    const root = '/owner-born/project-a';
+    const ownerEpoch = 'epoch:owner-token-a';
+    const bytes = encoder.encode('initial');
+    const opening = raw.openProject(
+      inspectProjectDefinition(
+        projects.vite({ id: 'project-a', files: { '/src/main.ts': 'initial' } }),
+      ),
+    );
+    const openRequest = sentOf(worker, 'workbench:open-project')[0];
+    if (openRequest === undefined) throw new Error('missing open request');
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', root, [
+      { path: `${root}/src`, kind: 'dir', size: 0, version: 'dir-v1' },
+      {
+        path: `${root}/src/main.ts`,
+        kind: 'file',
+        size: bytes.byteLength,
+        content: bytes,
+        version: 'file-v1',
+      },
+    ]);
+    const project = await opening;
+    const openPty = sentOf(worker, 'workbench:project-pty').find(
+      (message) => message.frame.type === 'pty:open',
+    );
+    if (openPty?.frame.type !== 'pty:open') throw new Error('missing PTY open');
+    worker.emit('message', {
+      type: 'workbench:project-pty',
+      projectToken: 'owner-token-a',
+      frame: { type: 'pty:ready', sid: openPty.frame.sid },
+    });
+
+    const openingDocument = project.documents.open('/src/main.ts');
+    const documentRead = sentOf(worker, 'workbench:project-vfs').find(
+      (message) => message.frame.type === 'workbench:project-vfs-read-file',
+    );
+    if (documentRead?.frame.type !== 'workbench:project-vfs-read-file') {
+      throw new Error('missing document read');
+    }
+    worker.emit('message', {
+      type: 'workbench:project-vfs',
+      projectToken: 'owner-token-a',
+      frame: {
+        type: 'workbench:project-vfs-read-file-result',
+        requestId: documentRead.frame.requestId,
+        ok: true,
+        ownerEpoch,
+        treeRevision: 1,
+        entry: {
+          path: `${root}/src/main.ts`,
+          kind: 'file',
+          size: bytes.byteLength,
+          content: bytes,
+          version: 'file-v1',
+        },
+      },
+    });
+    const document = await openingDocument;
+    const publicVersion = document.snapshot().version;
+    if (publicVersion === null) throw new Error('document version missing');
+    expect(publicVersion).not.toBe('file-v1');
+    expect(publicVersion).not.toContain(ownerEpoch);
+    document.replace('dirty');
+
+    const dirtyClose = project.close();
+    await expect(dirtyClose).rejects.toBeInstanceOf(DirtyProjectDocumentError);
+    expect(sentOf(worker, 'workbench:close-project')).toEqual([]);
+    expect(
+      sentOf(worker, 'workbench:project-pty').some((message) => message.frame.type === 'pty:close'),
+    ).toBe(false);
+
+    const reading = project.files.readFile('/src/main.ts');
+    const fileReads = sentOf(worker, 'workbench:project-vfs').filter(
+      (message) => message.frame.type === 'workbench:project-vfs-read-file',
+    );
+    const fileRead = fileReads.at(-1);
+    if (fileRead?.frame.type !== 'workbench:project-vfs-read-file') {
+      throw new Error('missing post-preflight file read');
+    }
+    worker.emit('message', {
+      type: 'workbench:project-vfs',
+      projectToken: 'owner-token-a',
+      frame: {
+        type: 'workbench:project-vfs-read-file-result',
+        requestId: fileRead.frame.requestId,
+        ok: true,
+        ownerEpoch,
+        treeRevision: 1,
+        entry: {
+          path: `${root}/src/main.ts`,
+          kind: 'file',
+          size: bytes.byteLength,
+          content: bytes,
+          version: 'file-v1',
+        },
+      },
+    });
+    await expect(reading).resolves.toEqual({
+      path: '/src/main.ts',
+      bytes,
+      version: publicVersion,
+    });
+
+    await document.close({ dirty: 'discard' });
+    const closing = project.close();
+    const closePty = sentOf(worker, 'workbench:project-pty').find(
+      (message) => message.frame.type === 'pty:close',
+    );
+    const closeProject = sentOf(worker, 'workbench:close-project')[0];
+    if (closePty?.frame.type !== 'pty:close' || closeProject === undefined) {
+      throw new Error('missing retry close frames');
+    }
+    expect(worker.sent.indexOf(closePty)).toBeLessThan(worker.sent.indexOf(closeProject));
+    worker.emit('message', {
+      type: 'workbench:project-pty',
+      projectToken: 'owner-token-a',
+      frame: {
+        type: 'pty:close-ack',
+        sid: closePty.frame.sid,
+        opId: closePty.frame.opId,
+        ok: true,
+      },
+    });
+    worker.emit('message', {
+      type: 'workbench:project-closed',
+      opId: closeProject.opId,
+      projectToken: 'owner-token-a',
+    });
+    await closing;
+
+    raw.close();
+    worker.emit('exit', 0, null);
+    await raw.closed;
+  });
+
+  it('fails the owner and clears content when VFS data crosses a retired token', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    const root = '/owner-born/project-a';
+    const opening = raw.openProject(
+      inspectProjectDefinition(projects.vite({ id: 'project-a', files: { '/index.html': 'A' } })),
+    );
+    const openRequest = sentOf(worker, 'workbench:open-project')[0];
+    if (openRequest === undefined) throw new Error('missing open request');
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', root, [
+      {
+        path: `${root}/index.html`,
+        kind: 'file',
+        size: 1,
+        content: encoder.encode('A'),
+        version: 'file-v1',
+      },
+    ]);
+    const project = await opening;
+    expect(project.files.snapshot().entries).toHaveLength(1);
+
+    worker.emit('message', {
+      type: 'workbench:project-vfs',
+      projectToken: 'retired-token',
+      frame: {
+        type: 'workbench:project-vfs-snapshot',
+        frame: {
+          type: 'snapshot',
+          root,
+          ownerEpoch: 'retired-owner',
+          treeRevision: 2,
+          entries: [],
+          nodeModulesPresent: false,
+        },
+      },
+    });
+
+    expect(worker.killedWith).toBe('SIGTERM');
+    expect(project.files.snapshot().entries).toEqual([]);
+    await expect(raw.closed).rejects.toThrow('VFS data for a retired project');
+  });
+
   it('observable-order fault: close fences a mounted route even when teardown throws after GOODBYE', async () => {
     const worker = new FakeOwnerWorker();
     const serviceWorker = new ControlledServiceWorkerContainer();
@@ -259,12 +600,7 @@ describe('browser Workbench owner transport', () => {
     );
     const openRequest = sentOf(worker, 'workbench:open-project')[0];
     if (openRequest === undefined) throw new Error('missing open request');
-    worker.emit('message', {
-      type: 'workbench:project-opened',
-      opId: openRequest.opId,
-      projectToken: 'owner-token-a',
-      projectRoot: '/owner-born/project-a',
-    });
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', '/owner-born/project-a');
     const project = await opening;
     const openPty = sentOf(worker, 'workbench:project-pty').find(
       (message) => message.frame.type === 'pty:open',
@@ -311,7 +647,6 @@ describe('browser Workbench owner transport', () => {
     expect(serviceWorker.controller.messages).toHaveLength(1);
     serviceWorker.pong(0);
     await expect(run.ready).resolves.toEqual({
-      ownerToken: 'owner-token-a',
       port: 5173,
       url: '/preview/5173/',
     });
@@ -454,12 +789,12 @@ describe('browser Workbench owner transport', () => {
       const openRequest = sentOf(worker, 'workbench:open-project')[0];
       if (openRequest === undefined) throw new Error('missing Node open request');
       const projectToken = `owner-token-node-${String(index)}`;
-      worker.emit('message', {
-        type: 'workbench:project-opened',
-        opId: openRequest.opId,
+      await acceptOpenedProject(
+        worker,
+        openRequest,
         projectToken,
-        projectRoot: `/owner-born/node-${String(index)}`,
-      });
+        `/owner-born/node-${String(index)}`,
+      );
       const project = await opening;
       const openPty = sentOf(worker, 'workbench:project-pty').find(
         (message) => message.frame.type === 'pty:open',

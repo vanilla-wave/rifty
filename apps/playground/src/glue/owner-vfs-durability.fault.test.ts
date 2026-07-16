@@ -12,6 +12,7 @@ import type {
   OwnerVfsDurabilityReceipt,
   OwnerVfsRevisionFrame,
 } from './owner-vfs-protocol.ts';
+import { VfsCommitAppliedError } from './owner-vfs-protocol.ts';
 import { SnapshotFs } from './snapshot-fs.ts';
 import { type VfsCommitOwner, createVfsCommitCoordinator } from './vfs-commit-coordinator.ts';
 import { collectSnapshot } from './vfs-snapshot-port.ts';
@@ -157,9 +158,12 @@ describe('owner VFS durability integrated faults', () => {
 
     await vi.advanceTimersByTimeAsync(OPFS_PERSIST_WATCHDOG_MS);
     const rejected = await outcome;
-    expect(rejected).toMatchObject({
-      ok: false,
-      error: {
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) throw new Error('expected durability rejection');
+    expect(rejected.error).toBeInstanceOf(VfsCommitAppliedError);
+    expect(rejected.error).toMatchObject({
+      applied: { ownerEpoch: 'owner-opfs', treeRevision: 1 },
+      cause: {
         name: 'PersistFailureError',
         message: expect.stringContaining('did not settle'),
       },
@@ -196,9 +200,13 @@ describe('owner VFS durability integrated faults', () => {
         (error: unknown) => ({ ok: false as const, error }),
       );
 
-    expect(await outcome).toMatchObject({
-      ok: false,
-      error: {
+    const rejected = await outcome;
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) throw new Error('expected durability rejection');
+    expect(rejected.error).toBeInstanceOf(VfsCommitAppliedError);
+    expect(rejected.error).toMatchObject({
+      applied: { ownerEpoch: 'owner-opfs', treeRevision: 1 },
+      cause: {
         name: 'PersistFailureError',
         message: expect.stringContaining('quota denied'),
       },

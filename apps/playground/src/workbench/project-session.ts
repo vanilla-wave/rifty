@@ -1,5 +1,8 @@
 import type { ProcessExit } from '@riftydev/shell';
 import { ClosedHandleError, ProjectBusyError, ProjectRunExitedBeforeReadyError } from './errors.ts';
+import type { ProjectContentController } from './project-content.ts';
+import type { ProjectDocuments } from './project-documents.ts';
+import type { ProjectFiles } from './project-files.ts';
 import type { ProjectTerminal, ProjectTerminalRun } from './project-terminal.ts';
 export {
   ClosedHandleError,
@@ -27,17 +30,22 @@ export interface ProjectRun<TReady> {
 }
 
 export interface ProjectSession<TReady> {
+  readonly files: ProjectFiles;
+  readonly documents: ProjectDocuments;
   run(): ProjectRun<TReady>;
   readonly terminals: { open(): ProjectTerminal };
   close(): Promise<void>;
 }
 
 export function createProjectSession<TReady>(_options: {
+  readonly content: ProjectContentController;
   readonly runtime: ProjectRuntime<TReady>;
   readonly terminal: ProjectTerminal;
   readonly createTerminal: () => ProjectTerminal;
+  /** Physical owner teardown, admitted only after synchronous content preflight. */
+  readonly closeOwner?: () => Promise<void>;
 }): ProjectSession<TReady> {
-  const { runtime, terminal, createTerminal } = _options;
+  const { content, runtime, terminal, createTerminal, closeOwner } = _options;
   const terminals: ProjectTerminal[] = [terminal];
   let runClaimed = false;
   let activeRun: ProjectRun<TReady> | null = null;
@@ -68,6 +76,9 @@ export function createProjectSession<TReady>(_options: {
   };
 
   const session: ProjectSession<TReady> = {
+    files: content.files,
+    documents: content.documents,
+
     run() {
       assertOpen();
       if (runClaimed) throw new ProjectBusyError('Project session');
@@ -147,6 +158,16 @@ export function createProjectSession<TReady>(_options: {
       if (closePromise !== null) return closePromise;
       const closeOutcome = deferred<void>();
       closePromise = closeOutcome.promise;
+      try {
+        content.preflightClose();
+      } catch (error) {
+        closeOutcome.reject(errorFrom(error));
+        void closeOutcome.promise.catch(() => {
+          if (!closing && closePromise === closeOutcome.promise) closePromise = null;
+        });
+        return closeOutcome.promise;
+      }
+
       closing = true;
       void (async () => {
         const operations: Promise<unknown>[] = [];
@@ -157,10 +178,17 @@ export function createProjectSession<TReady>(_options: {
             return Promise.reject(errorFrom(error));
           }
         };
+        // Start every admitted teardown synchronously after preflight. A lost
+        // handed-off VFS terminal needs owner-close/disconnect to settle; it
+        // cannot be awaited before physical owner teardown starts.
+        operations.push(start(() => content.close()));
         for (const owned of terminals) {
           operations.push(start(() => owned.close()));
         }
         operations.push(start(() => runtime.close()));
+        // Terminal close frames are synchronously enqueued before the owner
+        // token is retired. Dirty preflight never reaches this hook.
+        if (closeOwner !== undefined) operations.push(start(closeOwner));
         const results = await Promise.allSettled(operations);
         const errors = results.flatMap((result) =>
           result.status === 'rejected' ? [errorFrom(result.reason)] : [],

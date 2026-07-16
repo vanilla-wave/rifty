@@ -307,7 +307,9 @@ export function assertPortableVfsMutationIntents(
 
 function mutationScanPaths(intent: VfsMutationIntent): readonly string[] {
   if ('path' in intent) {
-    return intent.kind === 'rm' || intent.kind === 'write' ? [intent.path] : [];
+    return intent.kind === 'rm' || intent.kind === 'write' || intent.kind === 'replace'
+      ? [intent.path]
+      : [];
   }
   return intent.kind === 'copy' ? [intent.targetPath] : [intent.sourcePath, intent.targetPath];
 }
@@ -404,6 +406,8 @@ export function discoverPackageAcquisitionGuardTransitions(
 
 export function applyPackageAwareVfsMutations<T>(
   mutations: PackageMutationExecutor,
+  // TODO(backlog: distribution/workbench-guest-vfs-namespace): enforce the
+  // decided guest root across reads, cwd, Shell, child RPC, and WASI together.
   _root: string,
   intents: readonly VfsMutationIntent[],
   apply: () => T | Promise<T>,

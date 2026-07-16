@@ -1,4 +1,10 @@
-import { type FsSync, OpfsFsSync, asyncVfs, syncMirror } from '@riftydev/vfs';
+import {
+  type FsSync,
+  OpfsFsSync,
+  type VfsMutationIntent,
+  asyncVfs,
+  syncMirror,
+} from '@riftydev/vfs';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installStampPath } from '../glue/install-stamp.ts';
@@ -479,6 +485,371 @@ describe.each(backends)('%s owner VFS revision authority', (_name, makeFs) => {
     expect(removed.versions).toEqual([{ path: '/dir/moved.txt', version: null }]);
     expect(authority.versionOf('/dir/moved.txt')).toBeNull();
     expect(authority.versionOf('/dir')).not.toBe(dirVersion);
+  });
+});
+
+describe('owner VFS applied mutation journal', () => {
+  it('owns one immutable cursor and wakes or rejects its waiter on publication or close', async () => {
+    const { authority, appliedMutations } = createOwnerVfsAuthorityComposition(new MemoryFsSync(), {
+      ownerEpoch: 'cursor-owner',
+    });
+    const cursor = appliedMutations.openCursor();
+
+    expect('recordOrdinaryRevision' in appliedMutations).toBe(false);
+    expect(() => appliedMutations.openCursor()).toThrow(/cursor.*open/i);
+    const publication = cursor.wait();
+    authority.writeFileSync('/value.txt', encoder.encode('value'));
+    await expect(publication).resolves.toBeUndefined();
+
+    const records = cursor.peek();
+    expect(Object.isFrozen(records)).toBe(true);
+    expect(Object.isFrozen(records[0])).toBe(true);
+    expect(Object.isFrozen(records[0]?.mutations)).toBe(true);
+    cursor.acknowledge(1);
+
+    const closed = cursor.wait();
+    cursor.close();
+    await expect(closed).rejects.toThrow(/cursor.*closed/i);
+
+    const replacement = appliedMutations.openCursor();
+    expect(replacement.peek()).toEqual([]);
+    replacement.close();
+  });
+
+  it('records a non-structural write revision for Files reflection', () => {
+    const { authority, appliedMutations } = createOwnerVfsAuthorityComposition(new MemoryFsSync(), {
+      ownerEpoch: 'write-owner',
+    });
+    const cursor = appliedMutations.openCursor();
+
+    try {
+      authority.writeFileSync('/terminal.txt', encoder.encode('from terminal'));
+
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'write-owner',
+          treeRevision: 1,
+          mutations: [],
+        },
+      ]);
+      cursor.acknowledge(1);
+      expect(cursor.peek()).toEqual([]);
+    } finally {
+      cursor.close();
+    }
+  });
+
+  it('records exact post-apply rename/remove facts and no additional fact for no-op or replay', () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/source', { recursive: false });
+    fs.writeFileSync('/source/nested.txt', encoder.encode('moved'));
+    fs.mkdirSync('/remove', { recursive: false });
+    fs.writeFileSync('/remove/nested.txt', encoder.encode('removed'));
+    fs.writeFileSync('/same.txt', encoder.encode('same'));
+    fs.writeFileSync('/replay.txt', encoder.encode('replay'));
+    const { authority, appliedMutations } = createOwnerVfsAuthorityComposition(fs, {
+      ownerEpoch: 'applied-owner',
+    });
+    const cursor = appliedMutations.openCursor();
+
+    try {
+      authority.renameSync('/source', '/moved');
+
+      expect(authority.existsSync('/source')).toBe(false);
+      expect(authority.readFileBytesSync('/moved/nested.txt')).toEqual(encoder.encode('moved'));
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'applied-owner',
+          treeRevision: 1,
+          mutations: [{ kind: 'rename', sourcePath: '/source', targetPath: '/moved' }],
+        },
+      ]);
+      cursor.acknowledge(1);
+
+      authority.rmSync('/remove', { recursive: true });
+
+      expect(authority.existsSync('/remove')).toBe(false);
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'applied-owner',
+          treeRevision: 2,
+          mutations: [{ kind: 'remove', path: '/remove', recursive: true }],
+        },
+      ]);
+      cursor.acknowledge(2);
+
+      authority.renameSync('/same.txt', '/same.txt');
+      authority.rmSync('/missing', { force: true });
+      expect(authority.treeRevision).toBe(2);
+      expect(cursor.peek()).toEqual([]);
+
+      const replayVersion = version(authority, '/replay.txt');
+      const request = {
+        kind: 'rename' as const,
+        operationId: 'journal-replay',
+        sourcePath: '/replay.txt',
+        targetPath: '/replayed.txt',
+        expectedSourceVersion: replayVersion,
+        expectedTargetVersion: null,
+      };
+      const first = authority.applyHostCommit(request);
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'applied-owner',
+          treeRevision: 3,
+          mutations: [
+            {
+              kind: 'rename',
+              sourcePath: '/replay.txt',
+              targetPath: '/replayed.txt',
+            },
+          ],
+        },
+      ]);
+      cursor.acknowledge(3);
+
+      expect(authority.applyHostCommit(request)).toEqual(first);
+      expect(authority.treeRevision).toBe(3);
+      expect(cursor.peek()).toEqual([]);
+    } finally {
+      cursor.close();
+    }
+  });
+
+  it('derives remove recursion from the removed entry instead of the request flag', () => {
+    const fs = new MemoryFsSync();
+    fs.writeFileSync('/file.txt', encoder.encode('file'));
+    fs.mkdirSync('/empty', { recursive: false });
+    const { authority, appliedMutations } = createOwnerVfsAuthorityComposition(fs, {
+      ownerEpoch: 'remove-shape-owner',
+    });
+    const cursor = appliedMutations.openCursor();
+
+    try {
+      authority.rmSync('/file.txt', { recursive: true });
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'remove-shape-owner',
+          treeRevision: 1,
+          mutations: [{ kind: 'remove', path: '/file.txt', recursive: false }],
+        },
+      ]);
+      cursor.acknowledge(1);
+
+      authority.rmSync('/empty', { recursive: false });
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'remove-shape-owner',
+          treeRevision: 2,
+          mutations: [{ kind: 'remove', path: '/empty', recursive: true }],
+        },
+      ]);
+    } finally {
+      cursor.close();
+    }
+  });
+
+  it('coalesces reset scopes, including claim-only, no-op, overlap, and partial failure', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/project/node_modules', { recursive: true });
+    const { authority, installStampClaims, appliedMutations } = createOwnerVfsAuthorityComposition(
+      fs,
+      { ownerEpoch: 'reset-owner' },
+    );
+    const cursor = appliedMutations.openCursor();
+    const claim = encoder.encode('claim');
+
+    try {
+      await expect(
+        appliedMutations.withStructuralReset('project', () => undefined),
+      ).rejects.toThrow(/absolute/);
+      await expect(
+        appliedMutations.withStructuralReset('/project/.', () => undefined),
+      ).rejects.toThrow(/canonical/);
+
+      installStampClaims.write('/project', claim, { mkdirTree: false });
+      expect(cursor.peek()).toEqual([
+        { ownerEpoch: 'reset-owner', treeRevision: 1, mutations: [] },
+      ]);
+      cursor.acknowledge(1);
+
+      const resetPublication = cursor.wait();
+      await expect(
+        appliedMutations.withStructuralReset('/project', async () => {
+          authority.writeFileSync('/project/a.txt', encoder.encode('a'));
+          authority.writeFileSync('/project/b.txt', encoder.encode('b'));
+          expect(cursor.peek()).toEqual([]);
+          return 'applied';
+        }),
+      ).resolves.toBe('applied');
+      await expect(resetPublication).resolves.toBeUndefined();
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'reset-owner',
+          treeRevision: 3,
+          mutations: [{ kind: 'reset', rootPath: '/project' }],
+        },
+      ]);
+      cursor.acknowledge(3);
+
+      await appliedMutations.withStructuralReset('/project', () => {
+        installStampClaims.write('/project', claim, { mkdirTree: false });
+      });
+      expect(cursor.peek()).toEqual([
+        { ownerEpoch: 'reset-owner', treeRevision: 4, mutations: [] },
+      ]);
+      cursor.acknowledge(4);
+
+      await appliedMutations.withStructuralReset('/project', () => undefined);
+      expect(cursor.peek()).toEqual([]);
+
+      const partial = new Error('partial reset failed');
+      await expect(
+        appliedMutations.withStructuralReset('/project', () => {
+          authority.writeFileSync('/project/partial.txt', encoder.encode('partial'));
+          throw partial;
+        }),
+      ).rejects.toBe(partial);
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'reset-owner',
+          treeRevision: 5,
+          mutations: [{ kind: 'reset', rootPath: '/project' }],
+        },
+      ]);
+      cursor.acknowledge(5);
+
+      await appliedMutations.withStructuralReset('/project', async () => {
+        await expect(
+          appliedMutations.withStructuralReset('/project', () => undefined),
+        ).rejects.toThrow(/reset.*active/i);
+      });
+      expect(cursor.peek()).toEqual([]);
+    } finally {
+      cursor.close();
+    }
+  });
+
+  it('derives semantic resets only from exact applied content-write evidence', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/project/.git', { recursive: true });
+    const { authority, installStampClaims, appliedMutations } = createOwnerVfsAuthorityComposition(
+      fs,
+      { ownerEpoch: 'semantic-reset-owner' },
+    );
+    const cursor = appliedMutations.openCursor();
+    const intents = [
+      { kind: 'replace', path: '/project' },
+      { kind: 'write', path: '/project/.git' },
+      { kind: 'write', path: '/project/src/ordinary.ts' },
+    ] satisfies readonly VfsMutationIntent[];
+
+    try {
+      await appliedMutations.withSemanticReplacements(intents, async () => {
+        authority.writeFileSync('/project/.git/index', encoder.encode('metadata'));
+        authority.mkdirSync('/project/src', { recursive: true });
+        authority.writeFileSync('/project/src/replaced.ts', encoder.encode('first'));
+        authority.writeFileSync('/project/src/replaced.ts', encoder.encode('second'));
+        authority.writeFileSync('/project/src/ordinary.ts', encoder.encode('ordinary'));
+        expect(cursor.peek()).toEqual([]);
+      });
+
+      expect(cursor.peek()).toEqual([
+        { ownerEpoch: 'semantic-reset-owner', treeRevision: 1, mutations: [] },
+        { ownerEpoch: 'semantic-reset-owner', treeRevision: 2, mutations: [] },
+        { ownerEpoch: 'semantic-reset-owner', treeRevision: 3, mutations: [] },
+        {
+          ownerEpoch: 'semantic-reset-owner',
+          treeRevision: 4,
+          mutations: [{ kind: 'reset', rootPath: '/project/src/replaced.ts' }],
+        },
+        { ownerEpoch: 'semantic-reset-owner', treeRevision: 5, mutations: [] },
+      ]);
+      cursor.acknowledge(authority.treeRevision);
+
+      const beforeClaim = authority.treeRevision;
+      await appliedMutations.withSemanticReplacements(intents, () => {
+        installStampClaims.write('/project', encoder.encode('claim'), { mkdirTree: true });
+      });
+      expect(authority.treeRevision).toBeGreaterThan(beforeClaim);
+      expect(cursor.peek()).toEqual([
+        { ownerEpoch: 'semantic-reset-owner', treeRevision: 6, mutations: [] },
+        { ownerEpoch: 'semantic-reset-owner', treeRevision: 7, mutations: [] },
+      ]);
+      cursor.acknowledge(authority.treeRevision);
+
+      const partial = new Error('semantic replacement partially failed');
+      await expect(
+        appliedMutations.withSemanticReplacements(intents, () => {
+          authority.writeFileSync('/project/src/partial.ts', encoder.encode('partial'));
+          throw partial;
+        }),
+      ).rejects.toBe(partial);
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'semantic-reset-owner',
+          treeRevision: authority.treeRevision,
+          mutations: [{ kind: 'reset', rootPath: '/project/src/partial.ts' }],
+        },
+      ]);
+      cursor.acknowledge(authority.treeRevision);
+
+      await expect(
+        appliedMutations.withSemanticReplacements(
+          [
+            { kind: 'write', path: '/project/src/conflict.ts' },
+            { kind: 'replace', path: '/project/src/conflict.ts' },
+          ],
+          () => {
+            throw new Error('must not apply an ambiguous semantic scope');
+          },
+        ),
+      ).rejects.toThrow(/conflicting.*semantic/i);
+      expect(cursor.peek()).toEqual([]);
+    } finally {
+      cursor.close();
+    }
+  });
+
+  it('keeps each buffered structural fact on its exact applied revision', async () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/project', { recursive: true });
+    fs.writeFileSync('/project/source.ts', encoder.encode('source'));
+    const { authority, appliedMutations } = createOwnerVfsAuthorityComposition(fs, {
+      ownerEpoch: 'semantic-revision-owner',
+    });
+    const cursor = appliedMutations.openCursor();
+
+    try {
+      await appliedMutations.withSemanticReplacements(
+        [{ kind: 'replace', path: '/project' }],
+        () => {
+          authority.renameSync('/project/source.ts', '/project/target.ts');
+          authority.writeFileSync('/project/target.ts', encoder.encode('replaced'));
+        },
+      );
+
+      expect(cursor.peek()).toEqual([
+        {
+          ownerEpoch: 'semantic-revision-owner',
+          treeRevision: 1,
+          mutations: [
+            {
+              kind: 'rename',
+              sourcePath: '/project/source.ts',
+              targetPath: '/project/target.ts',
+            },
+          ],
+        },
+        {
+          ownerEpoch: 'semantic-revision-owner',
+          treeRevision: 2,
+          mutations: [{ kind: 'reset', rootPath: '/project/target.ts' }],
+        },
+      ]);
+    } finally {
+      cursor.close();
+    }
   });
 });
 
