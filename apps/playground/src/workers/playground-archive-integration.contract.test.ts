@@ -622,6 +622,7 @@ const DURABILITY_FAULTS = Object.freeze([
 }[]);
 
 const SUCCESS_SENTINEL_ORDINAL = 100_000;
+const DURABILITY_SWEEP_TIMEOUT_MS = 30_000;
 
 async function recoverRecordedDurabilityBoundary(input: {
   readonly crashTree: ExactTree;
@@ -809,5 +810,6 @@ describe('Playground archive owner/session integration', () => {
       expect(recordedCrashBoundaries).toBeGreaterThanOrEqual(primitiveCount);
       expect(recoveredPreStates).toBeGreaterThan(0);
     },
+    DURABILITY_SWEEP_TIMEOUT_MS,
   );
 });
