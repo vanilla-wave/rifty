@@ -28,7 +28,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
 | 0045 | Worker-process IPC — fork-mode `send` / `'message'` / `disconnect` over a parent↔child MessagePort |
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
-| 0266 | Opaque named capability ports on Worker bootstrap |
+| 0266 | Opaque named capability ports on Worker entries |
 
 ### runtime-js
 
@@ -328,9 +328,8 @@ superseded.
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |
 | 0188 bridge-backed dual esbuild entries | 0226 / note 2026-07-13 | one install-time CJS overlay reads the exact Worker-owned runtime slot; other 0188 installer/shim/provenance clauses stand |
 | 0237 non-undefined runtime signal clause | 0239 / note 2026-07-12 | falsy signal is absent; invalid signal errors preserve Node acquisition order; valid supported signal stays a pre-lock loud gap |
-| 0231 esbuild asset-URL bootstrap clause | 0249 / note 2026-07-15 | `RIFTY_ESBUILD_WASM_URL` is removed; verified bytes arrive through ADR-0266's explicit capability port; kernel/node/SQLite bootstrap config stands |
-| 0261 install-claim schema + full esbuild-policy identity clauses | 0249 / note 2026-07-15 | v4 adds exact lockfile digest; asset-only pin fields no longer invalidate the dependency tree; owner/root/non-transferability/durability rules stand |
-| 0263 host-resolved esbuild WASM + sealed-root surface clauses | 0249 / note 2026-07-15 | `deployment.wasm` retains host-owned SQLite only; Workbench adds semantic runtime-asset inspect/clear and open progress without exposing owner protocols |
+| 0261 install-claim schema + asset-policy identity/promotion clauses | 0249 / note 2026-07-15 | v4 adds exact lockfile digest; asset-only pins do not invalidate the tree; post-tree asset failure promotes only after finalization |
+| 0263 host-resolved esbuild WASM + sealed-root/open-options clauses | 0249 / note 2026-07-15 | final join retains only host-owned SQLite; root progress options compose with companion terminal state and ADR-0278 cold timing |
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
 | 0097 synthetic upstream URL example | 0189 / note 2026-07-04 | preview-frame port context unchanged; `routePreview` forwards `localhost:<port>` upstream URLs |

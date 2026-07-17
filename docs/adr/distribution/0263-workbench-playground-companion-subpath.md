@@ -64,11 +64,27 @@ decisions unchanged.
   remain explicit unverified gaps.
 
 Correction 2026-07-15 (ADR-0249): host-resolved WASM means host-owned SQLite,
-not npm-derived runtime assets. `WorkbenchDeployment.wasm` retains `sqlite`
-and drops `esbuild`; the owner obtains esbuild from the verified npm pipeline.
-The sealed root also exposes semantic `runtimeAssets.inspect()/clear()` and
-optional typed runtime-asset progress on `openProject`; manager/storage/protocol
-internals remain non-public.
+not npm-derived runtime assets. The final runtime-assets join drops `esbuild`
+from `WorkbenchDeployment.wasm` after controller extraction; the owner obtains
+it through the verified npm pipeline. The sealed root adds semantic
+`runtimeAssets.inspect()/clear()` and:
+
+```ts
+interface WorkbenchProjectOpenOptions {
+  readonly onRuntimeAssetProgress?: (progress: RuntimeAssetProgress) => void
+}
+
+interface PlaygroundProjectOpenOptions
+  extends WorkbenchProjectOpenOptions {
+  readonly initialTerminalState?: ProjectTerminalSnapshot
+}
+```
+
+The companion forwards both fields. Generic open and companion trusted/snapshot
+open may report assets before project-opened. ADR-0278 cold install/fallback
+still happens visibly in first `session.run()`; its terminal owns asset progress
+and the open callback is not retained. Manager/storage/protocol internals remain
+non-public.
 
 The companion exposes one composition entry and clone-safe neutral plans:
 
@@ -201,7 +217,7 @@ provenance. Arbitrary host snapshot URLs are never root configuration.
   dimensions, child, stop, close, and exit. Controls are owner-ACKed; siblings
   survive individual terminal close.
 - Logical Node IPC disconnect never closes physical process control; resize and
-  termination remain live until exit under ADR-0225/0230/0231.
+  termination remain live until exit under ADR-0225/0230/0267.
 - The owner PreviewRegistry is the sole producer of LIVE state. Workbench never
   synthesizes readiness.
 - Companion tools consume these same authorities; none owns a mirror, raw

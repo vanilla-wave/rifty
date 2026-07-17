@@ -3,10 +3,13 @@
 Status: Accepted
 Date: 2026-07
 
-> Corrected 2026-07-15 (ADR-0249): the install claim advances v3 to v4 with
-> exact `lockfileSha256`; `installArtifactIdentity` excludes asset-only esbuild
-> policy fields. Owner/root/non-transferability/promotion/durability rules below
-> stand.
+> Corrected 2026-07-15 (ADR-0249): install claims advance v3 to v4.
+> `lockfileSha256` is exactly 64 lowercase hex digits over stored
+> `package-lock.json` bytes; promotion/trust re-read those bytes and v1-v3 miss.
+> `installArtifactIdentity` excludes asset-only policy. A post-tree asset failure
+> may schedule ordinary v4 promotion only after tree finalization succeeds, then
+> rethrows without asset readiness. Other owner/root/non-transferability/
+> durability rules below stand.
 
 > TL;DR: one owner authority publishes a root-bound v3 install claim only after
 > proving the guarded dependency tree; claim metadata never transfers with project
