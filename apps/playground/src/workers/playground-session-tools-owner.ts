@@ -20,7 +20,10 @@ import {
 import { formatProjectPersistenceFailure } from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
 import type { OwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
-import { createOwnerPlaygroundArchive } from './playground-archive-integration.ts';
+import {
+  createOwnerPlaygroundArchive,
+  runPlaygroundArchivePublicOperation,
+} from './playground-archive-integration.ts';
 import { type TsLspChildHandle, createTsLspOwnerRelay } from './ts-lsp-owner-relay.ts';
 import type { WorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
@@ -264,17 +267,18 @@ export async function createOwnerPlaygroundSessionTools(
       }
       case 'archive:export':
         return Object.freeze({ type: 'archive:export', archiveJson: await archive.export() });
-      case 'archive:import': {
-        const priorTreeRevision = options.owner.authority.treeRevision;
-        await archive.import(operation.archiveJson, () => {});
-        if (options.owner.authority.treeRevision > priorTreeRevision) {
-          await options.recordMutation?.('archive', options.owner.authority.treeRevision);
-        }
-        await options.projectVfs.publicationBarrier();
-        await scm.refresh();
-        publishScm();
-        return Object.freeze({ type: 'archive:import', revision: revision() });
-      }
+      case 'archive:import':
+        return runPlaygroundArchivePublicOperation(options.projectRoot, async () => {
+          const priorTreeRevision = options.owner.authority.treeRevision;
+          await archive.import(operation.archiveJson, () => {});
+          if (options.owner.authority.treeRevision > priorTreeRevision) {
+            await options.recordMutation?.('archive', options.owner.authority.treeRevision);
+          }
+          await options.projectVfs.publicationBarrier();
+          await scm.refresh();
+          publishScm();
+          return Object.freeze({ type: 'archive:import', revision: revision() });
+        });
       case 'durability:flush':
         await flushDurability();
         return Object.freeze({ type: 'durability:void' });

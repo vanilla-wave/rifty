@@ -47,6 +47,8 @@ const ARCHIVE_TRANSACTION_STAGE = `${ARCHIVE_TRANSACTION_ROOT}/stage`;
 const ARCHIVE_TRANSACTION_PHASE = `${ARCHIVE_TRANSACTION_ROOT}/phase`;
 const FOREIGN_OWNER_PATH = '/.rifty/workbench/v1/projects/project-b/tree/private.ts';
 const SAME_PREFIX_FOREIGN_OWNER_PATH = `${PROJECT_ROOT}-backup/private.ts`;
+const COLON_PREFIX_FOREIGN_OWNER_PATH = `${PROJECT_ROOT}:backup/private.ts`;
+const SPACE_PREFIX_FOREIGN_OWNER_PATH = `${PROJECT_ROOT} backup/private.ts`;
 const PACKAGE_JSON = '{"name":"project-a","version":"1.0.0","dependencies":{"kleur":"4.1.5"}}\n';
 const ORIGINAL_SOURCE = 'export const value = "original";\n';
 const IMPORTED_SOURCE = 'export const value = "imported";\n';
@@ -552,7 +554,7 @@ type PrivatePathErrorBoundary = (typeof PRIVATE_PATH_ERROR_BOUNDARIES)[number];
 
 function privatePathBoundaryError(boundary: PrivatePathErrorBoundary): Error {
   return new Error(
-    `${boundary} failed at ${PROJECT_ROOT}/src/main.ts via ${ARCHIVE_TRANSACTION_ROOT}; foreign ${FOREIGN_OWNER_PATH}; prefix ${SAME_PREFIX_FOREIGN_OWNER_PATH}`,
+    `${boundary} failed at ${PROJECT_ROOT}/src/main.ts via ${ARCHIVE_TRANSACTION_ROOT}; foreign ${FOREIGN_OWNER_PATH}; prefixes ${SAME_PREFIX_FOREIGN_OWNER_PATH}, ${COLON_PREFIX_FOREIGN_OWNER_PATH}, ${SPACE_PREFIX_FOREIGN_OWNER_PATH}`,
   );
 }
 
@@ -944,6 +946,8 @@ describe('Playground archive owner/session integration', () => {
       expect(detail).not.toContain(ARCHIVE_TRANSACTION_ROOT);
       expect(detail).not.toContain(FOREIGN_OWNER_PATH);
       expect(detail).not.toContain('/-backup/private.ts');
+      expect(detail).not.toContain('/:backup/private.ts');
+      expect(detail).not.toContain('/ backup/private.ts');
     },
   );
 

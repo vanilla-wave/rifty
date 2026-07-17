@@ -302,6 +302,37 @@ describe('owner-resident Playground session tools', () => {
       'archive',
     ]);
 
+    // Fault class: provenance-lie. Post-import reflection belongs to the same
+    // public archive boundary as replacement and durability settlement.
+    recordMutation.mockRejectedValueOnce(
+      new Error(`archive reflection failed at ${PROJECT_ROOT}-backup/private.ts`),
+    );
+    await service.handle({
+      type: 'workbench:playground-session-tools-request',
+      requestId: 'owner-archive-reflection-failed',
+      operation: {
+        type: 'archive:import',
+        archiveJson: archive({
+          'package.json': PACKAGE_JSON,
+          'src/imported.ts': 'export const imported = true;\n',
+        }),
+      },
+    });
+    const reflectionFailure = frames.find(
+      (frame) =>
+        frame.type === 'workbench:playground-session-tools-response' &&
+        frame.requestId === 'owner-archive-reflection-failed',
+    );
+    if (
+      reflectionFailure?.type !== 'workbench:playground-session-tools-response' ||
+      reflectionFailure.response.ok
+    ) {
+      throw new Error('expected failed archive reflection response');
+    }
+    expect(reflectionFailure.response.error.message).not.toContain(PROJECT_ROOT);
+    expect(reflectionFailure.response.error.message).not.toContain('/-backup/private.ts');
+    expect(reflectionFailure.response.error.message).toContain('[outside active project]');
+
     let releaseDurability!: () => void;
     const durabilityPending = new Promise<void>((resolve) => {
       releaseDurability = resolve;

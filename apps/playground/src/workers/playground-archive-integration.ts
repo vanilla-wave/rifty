@@ -8,10 +8,7 @@ import {
 } from '../workbench/internal/playground-archive.ts';
 import type { PlaygroundArchive, PlaygroundScm } from '../workbench/playground.ts';
 import type { ProjectContentController } from '../workbench/project-content.ts';
-import {
-  formatProjectPersistenceFailure,
-  projectPathOrOutside,
-} from '../workbench/project-file-boundary.ts';
+import { formatProjectPersistenceFailure } from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
 import type { OwnerVfsAuthority, OwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import type { WorkbenchProjectVfs } from './workbench-project-vfs.ts';
@@ -65,27 +62,19 @@ function errorFrom(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function rootedPathPattern(root: string): RegExp {
-  return new RegExp(`${escapeRegExp(root)}(?:/[^\\s"'<>;,):}\\]]+)*(?=$|[\\s"'<>;,):}\\]])`, 'g');
-}
-
 function publicArchiveMessage(
   projectRoot: string,
   paths: ArchiveTransactionPaths,
   message: string,
 ): string {
-  const withoutTransaction = message.replace(
-    rootedPathPattern(paths.root),
-    '[outside active project]',
-  );
-  const projectRooted = withoutTransaction.replace(rootedPathPattern(projectRoot), (ownerPath) =>
-    projectPathOrOutside(projectRoot, ownerPath),
-  );
-  return projectRooted.replace(/\/\.rifty(?:\/[^\s"'<>;,)}\]]+)*/g, '[outside active project]');
+  const firstPrivatePath = [projectRoot, paths.root, '/.rifty']
+    .map((marker) => message.indexOf(marker))
+    .filter((index) => index >= 0)
+    .reduce((first, index) => Math.min(first, index), Number.POSITIVE_INFINITY);
+  if (!Number.isFinite(firstPrivatePath)) return message;
+  // Error text has no path grammar: every printable character except NUL is
+  // legal in a Unix filename. Keep the diagnostic prefix, redact the rest.
+  return `${message.slice(0, firstPrivatePath)}[outside active project]`;
 }
 
 function publicArchiveError(
@@ -135,6 +124,14 @@ async function publicArchiveBoundary<T>(
   } catch (error) {
     throw publicArchiveError(projectRoot, paths, error);
   }
+}
+
+/** Keep owner paths private across the complete public archive command. */
+export function runPlaygroundArchivePublicOperation<T>(
+  projectRoot: string,
+  operation: () => Promise<T> | T,
+): Promise<T> {
+  return publicArchiveBoundary(projectRoot, transactionPaths(projectRoot), operation);
 }
 
 async function requireDurable(authority: OwnerVfsAuthority, projectRoot: string): Promise<void> {
