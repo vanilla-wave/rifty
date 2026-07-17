@@ -2,6 +2,7 @@ import { publishKernelEntryBootstrap } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+  type NodeEntryLaunch,
   type NodeEntryTerminalBootstrap,
   buildConfiguredNodeEntryWorkerEntry,
   buildNodeEntryWorkerEntry,
@@ -31,6 +32,7 @@ const PROGRAM_LAUNCH = {
 };
 
 const HOST_RUNTIME = { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' };
+const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 
 describe('node-entry host bootstrap config', () => {
   afterEach(() => {
@@ -80,6 +82,111 @@ describe('node-entry host bootstrap config', () => {
         },
       },
     });
+  });
+
+  it.each([
+    {
+      kind: 'program',
+      launch: {
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        nodeServe: false,
+        remoteFsRoot: REMOTE_FS_ROOT,
+      } satisfies NodeEntryLaunch,
+    },
+    {
+      kind: 'worker-thread',
+      launch: {
+        kind: 'worker-thread',
+        remoteFs: true,
+        remoteFsRoot: REMOTE_FS_ROOT,
+        threadId: 7,
+      } satisfies NodeEntryLaunch,
+    },
+  ])('carries a validated private remote-FS root on a $kind launch', ({ launch }) => {
+    const entry = buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, launch);
+
+    expect(entry.bootstrap?.payload).toMatchObject({
+      launch: { remoteFsRoot: REMOTE_FS_ROOT },
+    });
+  });
+
+  it('inherits the private remote-FS root into recursively configured entries', () => {
+    publishKernelEntryBootstrap({
+      protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+      payload: {
+        hostRuntime: HOST_RUNTIME,
+        launch: {
+          kind: 'program',
+          bin: false,
+          remoteFs: true,
+          remoteFsRoot: REMOTE_FS_ROOT,
+          nodeServe: true,
+        },
+      },
+    });
+    configureNodeEntryWorker('https://host.test/node.js', HOST_RUNTIME);
+
+    const nestedLaunches: NodeEntryLaunch[] = [
+      { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
+      { kind: 'worker-thread', remoteFs: true, threadId: 11 },
+    ];
+    for (const nestedLaunch of nestedLaunches) {
+      expect(buildConfiguredNodeEntryWorkerEntry(nestedLaunch)).toMatchObject({
+        bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT } } },
+      });
+    }
+  });
+
+  it.each(['relative/root', '/not/normalized/../root', '/', ''])(
+    'rejects invalid private remote-FS root %j',
+    (remoteFsRoot) => {
+      expect(() =>
+        buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+          ...PROGRAM_LAUNCH,
+          remoteFsRoot,
+        }),
+      ).toThrow(/remoteFsRoot.*absolute normalized.*non-root/i);
+    },
+  );
+
+  it('rejects a private root on a launch that did not request remote FS', () => {
+    expect(() =>
+      buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+        kind: 'program',
+        bin: false,
+        remoteFs: false,
+        remoteFsRoot: REMOTE_FS_ROOT,
+        nodeServe: false,
+      }),
+    ).toThrow(/remoteFsRoot.*requires.*remoteFs.*true/i);
+  });
+
+  it('rejects a nested launch that tries to replace the inherited private root', () => {
+    publishKernelEntryBootstrap({
+      protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+      payload: {
+        hostRuntime: HOST_RUNTIME,
+        launch: {
+          kind: 'program',
+          bin: false,
+          remoteFs: true,
+          remoteFsRoot: REMOTE_FS_ROOT,
+          nodeServe: true,
+        },
+      },
+    });
+    configureNodeEntryWorker('https://host.test/node.js', HOST_RUNTIME);
+
+    expect(() =>
+      buildConfiguredNodeEntryWorkerEntry({
+        kind: 'worker-thread',
+        remoteFs: true,
+        remoteFsRoot: '/.rifty/workbench/v1/projects/project-b/tree',
+        threadId: 12,
+      }),
+    ).toThrow(/cannot replace.*remoteFsRoot/i);
   });
 
   it('keeps the previous URL and host snapshot paired when replacement validation fails', () => {

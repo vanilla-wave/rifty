@@ -52,6 +52,8 @@ export interface BinSpawnRequest {
   readonly rows?: number;
   /** Host-minted preview correlation; never part of guest `process.env`. */
   readonly previewScope?: string;
+  /** Host-only physical root behind the child process's public `/` namespace. */
+  readonly remoteFsRoot?: string;
 }
 
 export interface BinExecutorDeps {

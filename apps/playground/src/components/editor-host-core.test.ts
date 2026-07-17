@@ -232,6 +232,18 @@ afterEach(() => {
 });
 
 describe('editor-host-core initial tabs', () => {
+  it('hydrates initial tabs before registration-time user opens are drained', () => {
+    const h = createHarness({
+      files: { '/p/initial.ts': 'initial', '/p/user-picked.ts': 'picked' },
+    });
+    h.setInitialFiles(['/p/initial.ts']);
+
+    h.core.registerHydratedApi((api) => api.openFile('/p/user-picked.ts'));
+
+    expect(h.core.tabs().map((tab) => tab.id)).toEqual(['/p/initial.ts', '/p/user-picked.ts']);
+    expect(h.core.activeId()).toBe('/p/user-picked.ts');
+  });
+
   it('openInitialFiles replaces the tab set with ordinary file tabs (root-relative titles, first active)', () => {
     const h = createHarness({ files: { '/p/a.ts': 'aaa', '/p/src/b.css': 'bbb' } });
     h.core.api.openInitialFiles(['/p/a.ts', '/p/src/b.css']);
@@ -276,6 +288,24 @@ describe('editor-host-core initial tabs', () => {
     h.setInitialFiles(['/p/c.ts']); // App reset writes the signal too…
     h.core.handleInitialFilesChanged(); // …and its echoed effect run must not dispose+reopen
     expect(h.core.modelForPath('/p/c.ts')).toBe(model);
+  });
+
+  it('admits only model-backed initial tabs and keeps an available sibling active while an earlier file awaits its frame', () => {
+    const h = createHarness({ files: { '/p/second.ts': 'second' } });
+    h.setInitialFiles(['/p/late.ts', '/p/second.ts']);
+
+    h.core.handleInitialFilesChanged();
+
+    expect(h.core.tabs().map((tab) => tab.id)).toEqual(['/p/second.ts']);
+    expect(h.core.activeId()).toBe('/p/second.ts');
+    expect(h.core.modelForPath('/p/late.ts')).toBeUndefined();
+
+    h.vfs.seed('/p/late.ts', 'late');
+    h.vfs.publishFrame();
+
+    expect(h.core.tabs().map((tab) => tab.id)).toEqual(['/p/second.ts', '/p/late.ts']);
+    expect(mustModel(h.core, '/p/late.ts').getValue()).toBe('late');
+    expect(h.core.activeId()).toBe('/p/second.ts');
   });
 });
 
@@ -345,6 +375,18 @@ describe('editor-host-core openFile classification', () => {
     expect(mustModel(h.core, '/p/seeded.ts').getValue()).toBe('seeded content');
     h.core.syncActiveEditor();
     expect(h.surface.editorOptions().readOnly).toBe(false); // editable, never view-only
+  });
+
+  it('an explicit open awaiting a frame still activates when it lands', () => {
+    const h = createHarness({ files: { '/p/current.ts': 'current' } });
+    h.core.api.openFile('/p/current.ts');
+    h.core.api.openFile('/p/requested.ts');
+
+    h.vfs.seed('/p/requested.ts', 'requested');
+    h.vfs.publishFrame();
+
+    expect(h.core.activeId()).toBe('/p/requested.ts');
+    expect(mustModel(h.core, '/p/requested.ts').getValue()).toBe('requested');
   });
 
   it('with no snapshot frames to wait for, a missing file surfaces the read error loudly', () => {
@@ -621,6 +663,102 @@ describe('editor-host-core debounced owner writes', () => {
     mustModel(h.core, '/p/a.ts').setValue('v1');
     await vi.advanceTimersByTimeAsync(300);
     expect(h.errors).toContain('owner store rejected the write');
+  });
+
+  it('retries a dirty generation whose debounced owner publish failed', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let attempt = 0;
+    const h = createHarness({
+      files: { '/p/a.ts': 'v0' },
+      onFileWritten: async () => {
+        attempt += 1;
+        if (attempt === 1) throw new Error('first owner publish failed');
+      },
+    });
+    h.core.api.openFile('/p/a.ts');
+    mustModel(h.core, '/p/a.ts').setValue('v1');
+
+    await vi.advanceTimersByTimeAsync(300);
+    expect(h.errors).toContain('first owner publish failed');
+    expect(h.core.tabs().find((tab) => tab.id === '/p/a.ts')?.dirty).toBe(true);
+
+    await h.core.api.flushPendingWrites();
+    expect(h.written).toEqual([
+      { path: '/p/a.ts', content: 'v1' },
+      { path: '/p/a.ts', content: 'v1' },
+    ]);
+    expect(h.core.tabs().find((tab) => tab.id === '/p/a.ts')?.dirty).toBe(false);
+  });
+
+  // Fault classes: concurrent-same-key + provenance-lie. Completion owns the
+  // admitted model generation, never whichever text happens to be current later.
+  it('keeps v2 dirty when v1 settles, then retries v2 after its first publish fails', async () => {
+    const v1 = deferred<void>();
+    const firstV2 = deferred<void>();
+    let v2Attempts = 0;
+    const h = createHarness({
+      files: { '/p/a.ts': 'v0' },
+      onFileWritten: (_path, content) => {
+        if (content === 'v1') return v1.promise;
+        v2Attempts += 1;
+        return v2Attempts === 1 ? firstV2.promise : undefined;
+      },
+    });
+    h.core.api.openFile('/p/a.ts');
+    const model = mustModel(h.core, '/p/a.ts');
+    model.setValue('v1');
+    const firstFlush = h.core.api.flushPendingWrites().then(
+      () => ({ status: 'resolved' as const }),
+      (error: unknown) => ({ status: 'rejected' as const, error }),
+    );
+    await vi.waitFor(() => expect(h.written).toEqual([{ path: '/p/a.ts', content: 'v1' }]));
+
+    model.setValue('v2');
+    v1.resolve();
+    await vi.waitFor(() =>
+      expect(h.written).toEqual([
+        { path: '/p/a.ts', content: 'v1' },
+        { path: '/p/a.ts', content: 'v2' },
+      ]),
+    );
+    expect(h.core.tabs().find((tab) => tab.id === '/p/a.ts')?.dirty).toBe(true);
+
+    firstV2.reject(new Error('v2 owner publish failed'));
+    const outcome = await firstFlush;
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: expect.objectContaining({ message: 'v2 owner publish failed' }),
+    });
+    expect(h.core.tabs().find((tab) => tab.id === '/p/a.ts')?.dirty).toBe(true);
+
+    await h.core.api.flushPendingWrites();
+    expect(h.written.map(({ content }) => content)).toEqual(['v1', 'v2', 'v2']);
+    expect(h.core.tabs().find((tab) => tab.id === '/p/a.ts')?.dirty).toBe(false);
+  });
+
+  it('never retries read-only or externally closed models', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const editable = createHarness({
+      files: { '/p/a.ts': 'v0' },
+      onFileWritten: async () => {
+        throw new Error('owner publish failed before close');
+      },
+    });
+    editable.core.api.openFile('/p/a.ts');
+    mustModel(editable.core, '/p/a.ts').setValue('v1');
+    await vi.advanceTimersByTimeAsync(300);
+    editable.core.api.closePath('/p/a.ts');
+    await editable.core.api.flushPendingWrites();
+    expect(editable.written).toEqual([{ path: '/p/a.ts', content: 'v1' }]);
+
+    const readOnly = createHarness({
+      readNodeModulesFile: () => Promise.resolve({ size: 3, content: enc.encode('lib') }),
+    });
+    readOnly.core.api.openFile('/p/node_modules/pkg/index.js');
+    await settle();
+    mustModel(readOnly.core, '/p/node_modules/pkg/index.js').setValue('programmatic change');
+    await readOnly.core.api.flushPendingWrites();
+    expect(readOnly.written).toEqual([]);
   });
 });
 

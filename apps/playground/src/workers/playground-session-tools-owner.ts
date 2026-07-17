@@ -34,6 +34,8 @@ export interface CreateOwnerPlaygroundSessionToolsOptions {
   readonly tsWorkerUrl: string;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   readonly send: (frame: OwnerPlaygroundSessionToolsFrame) => boolean | undefined;
+  /** Background SCM refresh failure ends the owner; stale status cannot stay live. */
+  readonly fatal: (error: Error) => void;
   /** Exact companion catalog reflection; absent for non-companion fixtures. */
   readonly recordMutation?: (kind: 'scm' | 'archive', treeRevision: number) => Promise<void>;
   readonly log: (line: string) => void;
@@ -49,13 +51,37 @@ export interface OwnerPlaygroundSessionTools {
 
 function persistenceFailure(
   report: Awaited<ReturnType<OwnerVfsAuthorityComposition['authority']['flush']>>,
+  operation: 'SCM' | 'save',
+  projectRoot: string,
 ): Error | null {
-  if (report === undefined || report.failures.length === 0) return null;
+  if (report === undefined || report.total === 0) return null;
+  const sample = report.failures
+    .map((failure) => {
+      const path =
+        failure.path === projectRoot
+          ? '/'
+          : failure.path.startsWith(`${projectRoot}/`)
+            ? failure.path.slice(projectRoot.length)
+            : '[outside active project]';
+      const message = failure.message.replaceAll(failure.path, path).replaceAll(projectRoot, '');
+      return `${failure.op} ${path}: ${message}`;
+    })
+    .join('; ');
   return new Error(
-    `Playground SCM persistence failed: ${report.failures
-      .map((failure) => `${failure.op} ${failure.path}: ${failure.message}`)
-      .join('; ')}`,
+    `Playground ${operation} persistence failed with ${String(report.total)} unhealed persistence failure(s)${sample.length > 0 ? `: ${sample}` : ''}`,
   );
+}
+
+function errorFrom(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function scmSnapshotSignature(snapshot: ReturnType<typeof inspectPlaygroundScmSnapshot>): string {
+  return JSON.stringify([
+    snapshot.branch ?? null,
+    snapshot.history.map((entry) => entry.oid),
+    snapshot.changes.map((change) => [change.path, change.code, change.area]),
+  ]);
 }
 
 /** One owner-side authority for the finite TS/SCM/archive session companion. */
@@ -109,6 +135,11 @@ export async function createOwnerPlaygroundSessionTools(
   let accepting = true;
   let tail: Promise<void> = Promise.resolve();
   let closePromise: Promise<void> | null = null;
+  let requestedScmRevision = options.owner.authority.treeRevision;
+  let reflectedScmRevision = requestedScmRevision;
+  let publishedScmSignature = scmSnapshotSignature(initialScmSnapshot);
+  let automaticRefreshQueued = false;
+  let backgroundFailure: Error | null = null;
 
   const revision = () =>
     Object.freeze({
@@ -116,24 +147,96 @@ export async function createOwnerPlaygroundSessionTools(
       treeRevision: options.owner.authority.treeRevision,
     });
 
-  const publishScm = (): void => {
+  const publishScm = (force = true): void => {
+    const signature = scmSnapshotSignature(latestScmSnapshot);
+    if (!force && signature === publishedScmSignature) return;
     emit({
       type: 'workbench:playground-session-tools-scm-snapshot',
       snapshot: latestScmSnapshot,
     });
+    publishedScmSignature = signature;
   };
 
   const settleScmMutation = async (): Promise<void> => {
-    const failed = persistenceFailure(await options.owner.authority.flush());
+    const failed = persistenceFailure(
+      await options.owner.authority.flush(),
+      'SCM',
+      options.projectRoot,
+    );
     if (failed !== null) throw failed;
     await options.projectVfs.publicationBarrier();
   };
 
-  const refreshScm = async (): Promise<ReturnType<typeof inspectPlaygroundScmSnapshot>> => {
-    await scm.refresh();
-    publishScm();
+  const flushDurability = async (): Promise<void> => {
+    await options.projectVfs.publicationBarrier();
+    const failed = persistenceFailure(
+      await options.owner.authority.flush(),
+      'save',
+      options.projectRoot,
+    );
+    if (failed !== null) throw failed;
+  };
+
+  const refreshScm = async (
+    force = true,
+  ): Promise<ReturnType<typeof inspectPlaygroundScmSnapshot>> => {
+    while (true) {
+      let targetRevision = requestedScmRevision;
+      await options.projectVfs.readConsistent(async () => {
+        targetRevision = requestedScmRevision;
+        await scm.refresh();
+      });
+      if (targetRevision !== requestedScmRevision) continue;
+      reflectedScmRevision = Math.max(reflectedScmRevision, targetRevision);
+      publishScm(force);
+      break;
+    }
     return latestScmSnapshot;
   };
+
+  const failBackgroundRefresh = (error: unknown): void => {
+    if (backgroundFailure !== null) return;
+    backgroundFailure = errorFrom(error);
+    accepting = false;
+    try {
+      options.fatal(backgroundFailure);
+    } catch {
+      // Owner termination already received the exact refresh failure.
+    }
+  };
+
+  const refreshPublishedRevisions = async (): Promise<void> => {
+    while (accepting && reflectedScmRevision < requestedScmRevision) {
+      await refreshScm(false);
+    }
+  };
+
+  const queueAutomaticRefresh = (): void => {
+    if (!accepting || automaticRefreshQueued) return;
+    automaticRefreshQueued = true;
+    const operation = tail.then(refreshPublishedRevisions);
+    tail = operation.then(
+      () => {
+        automaticRefreshQueued = false;
+        if (accepting && reflectedScmRevision < requestedScmRevision) {
+          queueAutomaticRefresh();
+        }
+      },
+      (error: unknown) => {
+        automaticRefreshQueued = false;
+        failBackgroundRefresh(error);
+      },
+    );
+  };
+
+  const noteProjectPublication = (treeRevision: number): void => {
+    if (!accepting || treeRevision <= requestedScmRevision) return;
+    requestedScmRevision = treeRevision;
+    queueAutomaticRefresh();
+  };
+
+  const unsubscribeProjectPublications =
+    options.projectVfs.subscribePublications(noteProjectPublication);
 
   const mutateScm = async <T>(operation: () => Promise<T>): Promise<T> => {
     const priorTreeRevision = options.owner.authority.treeRevision;
@@ -180,6 +283,9 @@ export async function createOwnerPlaygroundSessionTools(
         publishScm();
         return Object.freeze({ type: 'archive:import', revision: revision() });
       }
+      case 'durability:flush':
+        await flushDurability();
+        return Object.freeze({ type: 'durability:void' });
     }
   };
 
@@ -207,6 +313,12 @@ export async function createOwnerPlaygroundSessionTools(
     accepting = false;
     closePromise = (async () => {
       const failures: unknown[] = [];
+      if (backgroundFailure !== null) failures.push(backgroundFailure);
+      try {
+        unsubscribeProjectPublications();
+      } catch (error) {
+        failures.push(error);
+      }
       try {
         await prior;
       } catch (error) {

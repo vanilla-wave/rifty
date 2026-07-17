@@ -1,9 +1,9 @@
 /**
  * `git` builtin — a thin CLI over the {@link makeGit} facade (`@riftydev/git`),
- * bound to the ambient async VFS (`asyncVfs()`), so it operates on the SAME tree
- * the shell + runtime see. LOCAL porcelain + network verbs (clone/fetch/pull/
- * push) over smart-HTTP; unsupported transports, the browser cross-origin wall,
- * and real network errors all surface as a loud exit-128, never a fake success.
+ * bound to the shell's injected filesystem or the ambient async VFS fallback.
+ * LOCAL porcelain + network verbs (clone/fetch/pull/push) use smart-HTTP;
+ * unsupported transports, the browser cross-origin wall, and real network
+ * errors all surface as a loud exit-128, never a fake success.
  *
  * `status --porcelain` maps isomorphic-git's 3-char statusMatrix code
  * (`${head}${workdir}${stage}`) to git's two-column `XY` porcelain-v1 output.
@@ -44,9 +44,15 @@ import { doConfig } from './_git-config.ts';
 import { type PreparedRestorePlan, doRestore, prepareRestore } from './_git-restore.ts';
 import { doSwitch } from './_git-switch.ts';
 import { hasGlobMeta } from './_glob.ts';
+import { syncVfs } from './_sync-vfs.ts';
 
-/** The ambient async VFS the `git` builtin binds to (never undefined past the guard). */
+/** Async VFS used by the `git` builtin (never undefined past the guard). */
 type Vfs = NonNullable<ReturnType<typeof asyncVfs>>;
+
+/** Injected sync namespace wins; legacy callers retain the paired ambient async VFS. */
+function commandVfs(ctx: CommandContext): Vfs | null {
+  return ctx.fileSystem ? syncVfs(ctx.fileSystem) : asyncVfs();
+}
 
 /**
  * The facade returned by {@link makeGit}. Its named interface (`Git`) is not on
@@ -331,6 +337,7 @@ function makeRepoPathspecMapper(root: string, cwd: string): PathspecMapper {
           ? normalizePath(pathspec)
           : normalizePath(joinPath(repoCwd, pathspec));
     if (absolute === repoRoot) return '.';
+    if (repoRoot === '/') return absolute.slice(1);
     if (absolute.startsWith(`${repoRoot}/`)) return absolute.slice(repoRoot.length + 1);
     throw new OutsideRepoPathspecError(pathspec, repoRoot);
   };
@@ -1856,6 +1863,7 @@ function repoRelativeCwd(root: string, cwd: string): string {
   const normalizedRoot = normalizePath(root);
   const normalizedCwd = normalizePath(cwd);
   if (normalizedCwd === normalizedRoot) return '';
+  if (normalizedRoot === '/') return normalizedCwd.slice(1);
   return normalizedCwd.startsWith(`${normalizedRoot}/`)
     ? normalizedCwd.slice(normalizedRoot.length + 1)
     : '';
@@ -2896,7 +2904,7 @@ async function runGit(
   if (ctx.signal?.aborted) return 130;
 
   const sub = args[0];
-  const vfs = asyncVfs();
+  const vfs = commandVfs(ctx);
   if (!vfs) {
     ctx.stderr.write('git: no filesystem\n');
     return 128;
@@ -3024,7 +3032,7 @@ function sameGitMutationPlan(a: GitMutationPlan, b: GitMutationPlan | null): boo
 export const git: ShellCommand = async (args, ctx) => {
   if (ctx.signal?.aborted) return runGit(args, ctx);
   if (!ctx.mutationGuard) return runGit(args, ctx);
-  const vfs = asyncVfs();
+  const vfs = commandVfs(ctx);
   if (!vfs) return runGit(args, ctx);
   const plan = await gitMutationPlan(args, ctx, vfs);
   if (plan === null) return runGit(args, ctx);

@@ -163,6 +163,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
 | 0243 | Visible Vite config ownership via durable root-local seed claim |
 | 0261 | Root-bound serialized install trust claims and non-transferable claim ingress |
+| 0281 | Cmd+S is a workspace durability barrier |
 
 ### toolchain-build
 
@@ -249,6 +250,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0274 | Session-scoped opaque Workbench file versions |
 | 0275 | Owner-applied project mutation stream |
 | 0278 | Playground companion terminal state and preview registry |
+| 0279 | Compact staged Playground catalog transactions |
+| 0280 | Project-rooted terminal execution namespace |
 
 ## Superseded (removed)
 

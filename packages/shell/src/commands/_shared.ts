@@ -3,8 +3,20 @@
  * Text{En,De}coder instances. Kept allocation-free across commands.
  */
 
-import { type VfsError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
-import type { StdinReader } from '../types.ts';
+import {
+  type FsSync,
+  type VfsError,
+  isAbsolute,
+  joinPath,
+  normalizePath,
+  syncMirror,
+} from '@riftydev/vfs';
+import type { CommandContext, StdinReader } from '../types.ts';
+
+/** Resolve a command's instance-local namespace, preserving direct builtin callers. */
+export function commandFileSystem(ctx: Pick<CommandContext, 'fileSystem'>): FsSync {
+  return ctx.fileSystem ?? syncMirror();
+}
 
 /** Absolutize `p` against `cwd` (no-op if already absolute) and normalize. */
 export function resolve(cwd: string, p: string): string {

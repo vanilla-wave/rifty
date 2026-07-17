@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ProjectFileEntry } from '../workbench/errors.ts';
+import type { PlaygroundScm, PlaygroundScmChange } from '../workbench/playground.ts';
 import type { ProjectDocument, ProjectDocuments } from '../workbench/project-documents.ts';
 import type {
   ProjectFileRead,
@@ -10,6 +11,8 @@ import {
   createPlaygroundDocumentWriter,
   createPlaygroundFileMutations,
   createPlaygroundProjectMirror,
+  readPlaygroundEditorRemoteFile,
+  readPlaygroundGitOriginalText,
 } from './playground-project-view.ts';
 
 const encoder = new TextEncoder();
@@ -119,6 +122,77 @@ function filesHarness(initial: {
 }
 
 describe('Playground logical project view', () => {
+  it('reads the HEAD baseline through the staged SCM change and clean mirror', async () => {
+    const staged = Object.freeze({
+      path: '/README.md',
+      code: 'MM',
+      area: 'staged' as const,
+    });
+    const working = Object.freeze({
+      path: '/README.md',
+      code: 'MM',
+      area: 'working' as const,
+    });
+    const changes: readonly PlaygroundScmChange[] = Object.freeze([working, staged]);
+    const diff = vi.fn(async (change: PlaygroundScmChange) =>
+      change.area === 'staged'
+        ? Object.freeze({
+            original: Object.freeze({ source: 'head' as const, bytes: encoder.encode('head\n') }),
+            modified: Object.freeze({ source: 'index' as const, bytes: encoder.encode('index\n') }),
+          })
+        : Object.freeze({
+            original: Object.freeze({ source: 'index' as const, bytes: encoder.encode('index\n') }),
+            modified: Object.freeze({
+              source: 'working' as const,
+              bytes: encoder.encode('work\n'),
+            }),
+          }),
+    );
+    const scm = {
+      snapshot: () => Object.freeze({ history: Object.freeze([]), changes }),
+      diff,
+    } satisfies Pick<PlaygroundScm, 'snapshot' | 'diff'>;
+    const mirror = {
+      ensureFile: vi.fn(async () => encoder.encode('clean\n')),
+    };
+
+    await expect(
+      readPlaygroundGitOriginalText(scm, mirror, { path: '/README.md', ref: 'HEAD' }),
+    ).resolves.toBe('head\n');
+    await expect(
+      readPlaygroundGitOriginalText(scm, mirror, { path: '/clean.js', ref: 'HEAD' }),
+    ).resolves.toBe('clean\n');
+    expect(diff).toHaveBeenCalledTimes(1);
+    expect(diff).toHaveBeenCalledWith(staged);
+    expect(mirror.ensureFile).toHaveBeenCalledWith('/clean.js');
+  });
+
+  it('bounds excluded editor reads before transferring file bytes', async () => {
+    const small = new Uint8Array([0, 1, 2, 3]);
+    const readFile = vi.fn(async (path: string): Promise<ProjectFileRead> => {
+      if (path !== '/node_modules/pkg/index.d.ts') throw new Error(`unexpected read ${path}`);
+      return Object.freeze({ path, bytes: small.slice(), version: 'small-v1' });
+    });
+    const readdir = vi.fn(async (path: string): Promise<readonly ProjectFileEntry[]> => {
+      if (path === '/node_modules/pkg') {
+        return Object.freeze([
+          entry('/node_modules/pkg/index.d.ts', 'file', 'small-v1', small.byteLength),
+          entry('/node_modules/pkg/large.d.ts', 'file', 'large-v1', 128 * 1024 + 1),
+        ]);
+      }
+      throw new Error(`unexpected readdir ${path}`);
+    });
+    const files = { readFile, readdir } satisfies Pick<ProjectFiles, 'readFile' | 'readdir'>;
+
+    await expect(
+      readPlaygroundEditorRemoteFile(files, '/node_modules/pkg/index.d.ts'),
+    ).resolves.toEqual({ size: 4, content: small });
+    await expect(
+      readPlaygroundEditorRemoteFile(files, '/node_modules/pkg/large.d.ts'),
+    ).resolves.toEqual({ size: 128 * 1024 + 1, content: null });
+    expect(readFile).toHaveBeenCalledTimes(1);
+  });
+
   it('renders only logical / paths and admits editable bytes after an exact-version read', async () => {
     const h = filesHarness({
       entries: [entry('/src', 'dir', 'v1'), entry('/src/main.ts', 'file', 'v2', 18)],
@@ -180,6 +254,35 @@ describe('Playground logical project view', () => {
     });
     mirror.dispose();
   });
+
+  it.each(['rename', 'delete'] as const)(
+    '%s samples its source version after the editor-write preflight',
+    async (operation) => {
+      const h = filesHarness({
+        entries: [entry('/src', 'dir', 'v1'), entry('/src/a.js', 'file', 'v1', 1)],
+        bytes: { '/src/a.js': 'a' },
+      });
+      const mirror = createPlaygroundProjectMirror(h.files);
+      const beforeMutation = vi.fn(async () => {
+        h.publish([entry('/src', 'dir', 'v1'), entry('/src/a.js', 'file', 'v2', 1)]);
+      });
+      const mutations = createPlaygroundFileMutations(h.files, mirror, beforeMutation);
+
+      if (operation === 'rename') {
+        await mutations.renamePath('/src/a.js', '/src/b.js');
+        expect(h.files.rename).toHaveBeenCalledWith('/src/a.js', '/src/b.js', {
+          expectedSourceVersion: 'v2',
+          expectedTargetVersion: null,
+        });
+      } else {
+        await mutations.deletePath('/src/a.js');
+        expect(h.files.remove).toHaveBeenCalledWith('/src/a.js', {
+          expectedVersion: 'v2',
+        });
+      }
+      mirror.dispose();
+    },
+  );
 });
 
 describe('Playground editor Documents binding', () => {

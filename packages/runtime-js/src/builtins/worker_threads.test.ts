@@ -46,6 +46,7 @@ type NodeEntryUrlContract = typeof nodeEntryUrl & {
 
 const { resetNodeEntryWorkerUrl, setNodeEntryWorkerUrl } = nodeEntryUrl;
 const configureNodeEntryWorker = (nodeEntryUrl as NodeEntryUrlContract).configureNodeEntryWorker;
+const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 
 beforeEach(() => {
   _resetFallbackWarnState();
@@ -291,6 +292,60 @@ globalThis.onmessage = ({ data }) => {
           },
         ),
       );
+      await worker.terminate();
+    });
+  });
+
+  it('inherits the parent remote-FS root while the worker process spec stays public', async () => {
+    let capturedSpec: SpawnWorkerSpec | undefined;
+    const fakeHandle = makeFakeWorkerHandle([]);
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((_command, spec) => {
+      capturedSpec = spec;
+      return fakeHandle;
+    });
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js',
+    });
+    const parentEntry = buildNodeEntryWorkerEntry(
+      'https://rifty.test/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+      {
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        remoteFsRoot: REMOTE_FS_ROOT,
+        nodeServe: true,
+      },
+    );
+    publishKernelEntryBootstrap(parentEntry.bootstrap ?? null);
+    const parent = new NodeProcess();
+    setProcessCwd('/');
+
+    await withProcessGlobal(parent, async () => {
+      const worker = new Worker('/src/worker.mjs');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(capturedSpec).toMatchObject({
+        argv: ['rifty', '/src/worker.mjs'],
+        cwd: '/',
+        entry: {
+          bootstrap: {
+            payload: {
+              launch: { kind: 'worker-thread', remoteFsRoot: REMOTE_FS_ROOT },
+            },
+          },
+        },
+      });
+      expect(
+        JSON.stringify({
+          argv: capturedSpec?.argv,
+          cwd: capturedSpec?.cwd,
+          env: capturedSpec?.env,
+        }),
+      ).not.toContain(REMOTE_FS_ROOT);
       await worker.terminate();
     });
   });

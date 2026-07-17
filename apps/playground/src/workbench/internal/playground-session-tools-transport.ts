@@ -48,6 +48,7 @@ export type PlaygroundSessionToolOperation =
   | { readonly type: 'scm:commit'; readonly message: string }
   | { readonly type: 'archive:export' }
   | { readonly type: 'archive:import'; readonly archiveJson: string }
+  | { readonly type: 'durability:flush' }
   | { readonly type: 'close' };
 
 export type PlaygroundSessionToolResult =
@@ -58,6 +59,7 @@ export type PlaygroundSessionToolResult =
   | { readonly type: 'scm:commit'; readonly oid: string }
   | { readonly type: 'archive:export'; readonly archiveJson: string }
   | { readonly type: 'archive:import'; readonly revision: ProjectDocumentsRevision }
+  | { readonly type: 'durability:void' }
   | { readonly type: 'closed' };
 
 export type PlaygroundSessionToolResponse =
@@ -557,6 +559,7 @@ function cloneOperation(value: unknown): PlaygroundSessionToolOperation {
   switch (type) {
     case 'scm:refresh':
     case 'archive:export':
+    case 'durability:flush':
     case 'close':
       exact(record, ['type'], 'session tools operation');
       return Object.freeze({ type });
@@ -610,6 +613,7 @@ function cloneResult(value: unknown): PlaygroundSessionToolResult {
         diff: cloneScmDiff(field(record, 'diff', 'session tools SCM diff')),
       });
     case 'scm:void':
+    case 'durability:void':
     case 'closed':
       exact(record, ['type'], 'session tools result');
       return Object.freeze({ type });
@@ -722,6 +726,29 @@ interface PendingRequest {
   readonly timer: ReturnType<typeof setTimeout>;
 }
 
+const browserTypeScriptReinitializers = new WeakMap<object, () => Promise<void>>();
+const browserSessionDurabilityFlushers = new WeakMap<object, () => Promise<void>>();
+
+/** Package-private App seam: rebuild the captured project without exposing init(root). */
+export function reinitializeBrowserPlaygroundTypeScript(
+  typescript: PlaygroundTypeScript,
+): Promise<void> {
+  const reinitialize = browserTypeScriptReinitializers.get(typescript as object);
+  return reinitialize === undefined
+    ? Promise.reject(new TypeError('Unknown browser Playground TypeScript tool'))
+    : reinitialize();
+}
+
+/** Package-private App seam: settle the captured owner without widening session tools. */
+export function flushBrowserPlaygroundSessionDurability(
+  tools: PlaygroundSessionTools,
+): Promise<void> {
+  const flush = browserSessionDurabilityFlushers.get(tools as object);
+  return flush === undefined
+    ? Promise.reject(new TypeError('Unknown browser Playground session tools'))
+    : flush();
+}
+
 export interface BrowserPlaygroundSessionToolsOptions {
   readonly projectRoot: string;
   readonly documents: Pick<ProjectDocumentsController, 'awaitOwnerByteAdmission' | 'invalidate'>;
@@ -762,7 +789,7 @@ export function createBrowserPlaygroundSessionTools(
   let transportFailure: Error | null = null;
   let closePromise: Promise<void> | null = null;
   let requestSequence = 0;
-  let tsStarted = false;
+  let tsInitialized = false;
   let tsInit: Promise<void> | null = null;
   let disposeTsClient = (): void => {};
 
@@ -955,13 +982,17 @@ export function createBrowserPlaygroundSessionTools(
     { timeoutMs: options.tsRequestTimeoutMs },
   );
   disposeTsClient = () => tsClient.dispose();
-  const ensureTs = (): Promise<void> => {
-    if (tsInit === null) {
-      tsStarted = true;
-      tsInit = tsClient.init(options.projectRoot);
-    }
-    return tsInit;
+  const initializeTs = (): Promise<void> => {
+    const prior = tsInit;
+    const initialized = (prior === null ? Promise.resolve() : prior.catch(() => {}))
+      .then(() => tsClient.init(options.projectRoot))
+      .then(() => {
+        tsInitialized = true;
+      });
+    tsInit = initialized;
+    return initialized;
   };
+  const ensureTs = (): Promise<void> => tsInit ?? initializeTs();
   const adaptedTypeScript = createPlaygroundTypeScriptAdapter({
     projectRoot: options.projectRoot,
     client: tsClient,
@@ -987,6 +1018,7 @@ export function createBrowserPlaygroundSessionTools(
       });
   }
   const typescript = Object.freeze(wrappedTsMethods) as unknown as PlaygroundTypeScript;
+  browserTypeScriptReinitializers.set(typescript as object, () => admit(initializeTs));
 
   const scm: PlaygroundScm = Object.freeze({
     snapshot() {
@@ -1019,17 +1051,19 @@ export function createBrowserPlaygroundSessionTools(
     },
   });
   const tools: PlaygroundSessionTools = Object.freeze({ typescript, scm, archive, previews });
+  browserSessionDurabilityFlushers.set(tools as object, () =>
+    admit(async () => {
+      resultType(await request({ type: 'durability:flush' }), 'durability:void');
+    }),
+  );
 
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise;
     accepting = false;
     closePromise = (async () => {
       const failures: unknown[] = [];
-      const draining = await Promise.allSettled([...admitted]);
-      for (const outcome of draining) {
-        if (outcome.status === 'rejected') failures.push(outcome.reason);
-      }
-      if (tsStarted) {
+      await Promise.allSettled([...admitted]);
+      if (tsInitialized) {
         try {
           await tsClient.disposeLanguageService();
         } catch (error) {

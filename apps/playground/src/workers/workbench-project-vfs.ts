@@ -55,6 +55,8 @@ export interface WorkbenchProjectVfsOptions {
 export interface WorkbenchProjectVfs {
   handleFrame(frame: PageProjectVfsFrame): void | Promise<void>;
   publishSnapshot(): void;
+  /** Observe the one state-publication chokepoint; no private journal cursor escapes. */
+  subscribePublications(listener: (treeRevision: number) => void): () => void;
   /** Package FIFO + applied semantic evidence + publication before settlement. */
   readonly mutationGuard: VfsMutationGuard;
   /** Owner-private transaction: an explicitly recoverable failure advances no page state. */
@@ -73,6 +75,8 @@ export interface WorkbenchProjectVfs {
   ): Promise<T>;
   /** Join publication of every owner revision already applied at call time. */
   publicationBarrier(): Promise<void>;
+  /** Join admitted writes, then hold the owner writer FIFO for one consistent read. */
+  readConsistent<T>(read: () => T | Promise<T>): Promise<T>;
   close(): Promise<void>;
 }
 
@@ -261,9 +265,25 @@ export function createWorkbenchProjectVfs(
   let resolvePublicationIdle: (() => void) | null = null;
   let fatalError: Error | null = null;
   let pump: Promise<void> | null = null;
+  const publicationListeners = new Set<(treeRevision: number) => void>();
 
   const assertAccepting = (): void => {
     if (!accepting) throw new ClosedHandleError('Workbench Project VFS');
+  };
+
+  const notifyPublication = (treeRevision: number): void => {
+    const failures: unknown[] = [];
+    for (const listener of [...publicationListeners]) {
+      try {
+        listener(treeRevision);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Workbench Project VFS publication listeners failed');
+    }
   };
 
   const emitInitialSnapshot = (): void => {
@@ -295,6 +315,7 @@ export function createWorkbenchProjectVfs(
     });
     cursor.acknowledge(frame.treeRevision);
     publishedRevision = frame.treeRevision;
+    notifyPublication(frame.treeRevision);
   };
 
   const failOwner = (error: Error): void => {
@@ -356,6 +377,17 @@ export function createWorkbenchProjectVfs(
       assertAccepting();
     }
     await publishThroughCurrent(false);
+  };
+
+  const readConsistent = async <T>(read: () => T | Promise<T>): Promise<T> => {
+    assertAccepting();
+    if (typeof read !== 'function')
+      throw new TypeError('Project VFS consistent read must be a function');
+    await publicationBarrier();
+    return activePackageMutations.guardedMutation([], async () => {
+      assertAccepting();
+      return read();
+    });
   };
 
   const startPublicationAdmission = (): void => {
@@ -760,13 +792,23 @@ export function createWorkbenchProjectVfs(
       publishSnapshot();
       startPump();
     },
+    subscribePublications(listener: (treeRevision: number) => void) {
+      assertAccepting();
+      if (typeof listener !== 'function') {
+        throw new TypeError('Project VFS publication listener must be a function');
+      }
+      publicationListeners.add(listener);
+      return () => publicationListeners.delete(listener);
+    },
     mutationGuard,
     recoverableMutation,
     recoverableProjectReplace,
     publicationBarrier,
+    readConsistent,
     close() {
       if (closePromise !== null) return closePromise;
       accepting = false;
+      publicationListeners.clear();
       const admitted = [...pending, awaitPublicationIdle()];
       closePromise = Promise.allSettled(admitted).then(async (results) => {
         cursor.close();

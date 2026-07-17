@@ -1,7 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, basename, guardVfsMutations, syncMirror } from '@riftydev/vfs';
+import { type FsSync, VfsError, basename, guardVfsMutations } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { resolve, strerror } from './_shared.ts';
+import { commandFileSystem, resolve, strerror } from './_shared.ts';
 
 interface Opts {
   recursive: boolean; // -r / -R
@@ -46,8 +46,13 @@ function parse(args: string[]): { opts: Opts; operands: string[] } {
 }
 
 /** Copy one src → dst (resolved). Returns 0 on success, 1 (with stderr) on a VfsError. */
-function copyOne(src: string, dst: string, opts: Opts, stderr: { write(s: string): void }): number {
-  const fs = syncMirror();
+function copyOne(
+  fs: FsSync,
+  src: string,
+  dst: string,
+  opts: Opts,
+  stderr: { write(s: string): void },
+): number {
   if (opts.noClobber && fs.existsSync(dst)) return 0; // skip, not an error
   try {
     if (opts.recursive) {
@@ -91,7 +96,7 @@ export const cp: ShellCommand = async (args, ctx) => {
     return 1;
   }
 
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   // length >= 2 verified above, so pop() yields the dest and leaves >=1 source.
   const dest = operands[operands.length - 1] as string;
   const sources = operands.slice(0, -1);
@@ -117,7 +122,7 @@ export const cp: ShellCommand = async (args, ctx) => {
     () => {
       let exit = 0;
       for (const { sourcePath, targetPath } of copies) {
-        const code = copyOne(sourcePath, targetPath, opts, ctx.stderr);
+        const code = copyOne(fs, sourcePath, targetPath, opts, ctx.stderr);
         if (code === 0 && opts.verbose) {
           ctx.stdout.write(`'${sourcePath}' -> '${targetPath}'\n`);
         }

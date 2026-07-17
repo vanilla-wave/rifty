@@ -14,6 +14,18 @@ describe('editor op queue', () => {
     expect(queue.size()).toBe(0);
   });
 
+  it('retains a queued user open while the same context awaits editor registration', () => {
+    const queue = createEditorOpQueue<{ openFile: (path: string) => void }>();
+    const api = { openFile: vi.fn() };
+
+    queue.runOrQueue(undefined, true, 'root:a', (editor) => editor.openFile('/a/persist.txt'));
+    queue.discardStale(true, 'root:a');
+    queue.flush(api, 'root:a');
+
+    expect(api.openFile).toHaveBeenCalledWith('/a/persist.txt');
+    expect(queue.size()).toBe(0);
+  });
+
   it('drops queued editor ops when the editor context changes before registerApi', () => {
     const queue = createEditorOpQueue<{ openFile: (path: string) => void }>();
     const api = { openFile: vi.fn() };

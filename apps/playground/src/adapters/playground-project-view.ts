@@ -1,7 +1,9 @@
 import { type VfsDirent, dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
 import type { FileExplorerMutations } from '../components/FileExplorer.tsx';
-import type { FsOpsTarget } from '../glue/fs-ops.ts';
+import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
+import { NODE_MODULES_MAX_CONTENT_BYTES } from '../glue/node-modules-port.ts';
 import type { ProjectFileEntry } from '../workbench/errors.ts';
+import type { PlaygroundScm } from '../workbench/playground.ts';
 import type { ProjectDocument, ProjectDocuments } from '../workbench/project-documents.ts';
 import type { ProjectFiles, ProjectFilesSnapshot } from '../workbench/project-files.ts';
 
@@ -24,6 +26,16 @@ export interface PlaygroundDocumentWriter {
   closeAll(): Promise<void>;
 }
 
+export interface PlaygroundEditorRemoteFile {
+  readonly size: number;
+  readonly content: Uint8Array | null;
+}
+
+export interface PlaygroundGitOriginalTextInput {
+  readonly path: string;
+  readonly ref: string;
+}
+
 function projectPath(value: string): string {
   if (!isAbsolute(value) || value.includes('\0') || normalizePath(value) !== value) {
     throw new TypeError(`Invalid logical project path ${JSON.stringify(value)}`);
@@ -39,6 +51,15 @@ function readOnly(op: string, path: string): never {
   throw new Error(`${op}: ${JSON.stringify(path)} is an owner-authoritative read view`);
 }
 
+function decodeProjectText(label: string, bytes: Uint8Array): string {
+  if (looksBinary(bytes)) throw new Error(`${label} is binary; text diff is unavailable`);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error(`${label} is not valid UTF-8; text diff is unavailable`);
+  }
+}
+
 function parentPaths(path: string): readonly string[] {
   const result: string[] = [];
   let parent = dirname(path);
@@ -47,6 +68,52 @@ function parentPaths(path: string): readonly string[] {
     parent = dirname(parent);
   }
   return result.reverse();
+}
+
+/** Lazy excluded-tree read for EditorHost; metadata prevents known oversized transfers. */
+export async function readPlaygroundEditorRemoteFile(
+  files: Pick<ProjectFiles, 'readFile' | 'readdir'>,
+  path: string,
+): Promise<PlaygroundEditorRemoteFile> {
+  const logical = projectPath(path);
+  const entry = (await files.readdir(dirname(logical))).find(
+    (candidate) => candidate.path === logical,
+  );
+  if (entry?.kind !== 'file') throw new Error(`ENOENT: no such project file ${logical}`);
+  if (entry.size > NODE_MODULES_MAX_CONTENT_BYTES) {
+    return Object.freeze({ size: entry.size, content: null });
+  }
+  const read = await files.readFile(logical);
+  const size = read.bytes.byteLength;
+  if (size > NODE_MODULES_MAX_CONTENT_BYTES) {
+    return Object.freeze({ size, content: null });
+  }
+  if (read.version === entry.version && size !== entry.size) {
+    throw new Error(`Project file ${logical} size changed without a version change`);
+  }
+  return Object.freeze({ size, content: read.bytes.slice() });
+}
+
+/** HEAD text for editor dirty gutters; staged wins so MM compares against HEAD, not index. */
+export async function readPlaygroundGitOriginalText(
+  scm: Pick<PlaygroundScm, 'snapshot' | 'diff'>,
+  mirror: Pick<PlaygroundProjectMirror, 'ensureFile'>,
+  input: PlaygroundGitOriginalTextInput,
+): Promise<string> {
+  if (input.ref !== 'HEAD') throw new Error(`Unsupported Git original ref ${input.ref}`);
+  const path = projectPath(input.path);
+  const changes = scm.snapshot().changes.filter((change) => change.path === path);
+  const change =
+    changes.find((candidate) => candidate.area === 'staged') ??
+    changes.find((candidate) => candidate.area === 'working');
+  if (change === undefined) {
+    return decodeProjectText(`HEAD:${path}`, await mirror.ensureFile(path));
+  }
+  const original = (await scm.diff(change)).original;
+  if (original.source !== 'head' && original.source !== 'empty') {
+    throw new Error(`SCM ${change.area} diff for ${path} did not expose its HEAD baseline`);
+  }
+  return decodeProjectText(`HEAD:${path}`, original.bytes);
 }
 
 /** Sync read view for existing UI components; bytes enter only after an exact public read. */
@@ -259,8 +326,9 @@ export function createPlaygroundFileMutations(
     },
 
     async deletePath(path) {
-      const source = requiredEntry(mirror, path);
-      await beforeMutation([source.path]);
+      const logical = projectPath(path);
+      await beforeMutation([logical]);
+      const source = requiredEntry(mirror, logical);
       await files.remove(source.path, {
         expectedVersion: source.version,
         ...(source.kind === 'dir' ? { recursive: true } : {}),
@@ -268,9 +336,10 @@ export function createPlaygroundFileMutations(
     },
 
     async renamePath(from, to) {
-      const source = requiredEntry(mirror, from);
+      const sourcePath = projectPath(from);
       const target = projectPath(to);
-      await beforeMutation([source.path, target]);
+      await beforeMutation([sourcePath, target]);
+      const source = requiredEntry(mirror, sourcePath);
       await files.rename(source.path, target, {
         expectedSourceVersion: source.version,
         expectedTargetVersion: mirror.version(target),

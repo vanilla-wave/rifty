@@ -8,8 +8,7 @@
  * `which` is a factory: it needs the shell's command-presence probe to answer
  * "is NAME a command?" without a reverse import (mirrors `cd`'s `setCwd`).
  *
- * File ops go through the VFS sync mirror so the shell sees the same tree as
- * `node:fs` inside the runtime.
+ * File ops use `ctx.fileSystem`, falling back to the ambient VFS sync mirror.
  */
 
 import { basename } from './commands/basename.ts';

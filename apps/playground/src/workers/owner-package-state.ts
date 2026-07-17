@@ -61,6 +61,7 @@ export type OwnerPackageMutationKind = 'dependency' | 'package-manifest' | 'pack
 
 export interface OwnerNpmCommandOptions {
   readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
+  readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
 }
 
 export interface OwnerPackageConfig {
@@ -68,6 +69,8 @@ export interface OwnerPackageConfig {
   readonly templateId: string;
   readonly slug: string;
   readonly fromScratch: boolean;
+  /** Explicit baseline files restored after package acquisition replaces node_modules. */
+  readonly templateNodeModulesFiles?: Readonly<Record<string, string | Uint8Array>>;
 }
 
 export interface FirstMaterializationOwnerPackageConfig extends OwnerPackageConfig {
@@ -156,6 +159,11 @@ function equalOptionalBytes(left: Uint8Array | null, right: Uint8Array | null): 
 
 export function createOwnerPackageState(options: OwnerPackageStateOptions): OwnerPackageState {
   const configs = new Map<string, OwnerPackageConfig>();
+
+  const templateNodeModulesFiles = (
+    config: OwnerPackageConfig,
+  ): Readonly<Record<string, string | Uint8Array>> =>
+    config.templateNodeModulesFiles ?? config.cfg.seedFiles;
   let configured = options.initial;
   let activeProject = options.initial ? packageProject(options.initial) : null;
   let activeTemplateId: string | null = null;
@@ -312,7 +320,11 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             packages: payload.packages,
             apply: async () => {
               prepared.apply();
-              seedTemplateNodeModulesFiles(options.fsSync, config.cfg.root, config.cfg.seedFiles);
+              seedTemplateNodeModulesFiles(
+                options.fsSync,
+                config.cfg.root,
+                templateNodeModulesFiles(config),
+              );
               await finalizePackageInstallFiles({ root: project.root });
             },
           } as const;
@@ -404,7 +416,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                       seedTemplateNodeModulesFiles(
                         options.fsSync,
                         config.cfg.root,
-                        config.cfg.seedFiles,
+                        templateNodeModulesFiles(config),
                       ),
                   }
                 : {}),
@@ -454,12 +466,16 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     await mutations.guardedMutation(
       () => intents,
       async () =>
-        seedTemplateNodeModulesFiles(options.fsSync, config.cfg.root, config.cfg.seedFiles),
+        seedTemplateNodeModulesFiles(
+          options.fsSync,
+          config.cfg.root,
+          templateNodeModulesFiles(config),
+        ),
       async () => {
         intents = templateNodeModulesSeedMutationIntents(
           options.fsSync,
           config.cfg.root,
-          config.cfg.seedFiles,
+          templateNodeModulesFiles(config),
         );
         return intents.length === 0 ? { status: 'noop', value: undefined } : { status: 'ready' };
       },
@@ -612,12 +628,16 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         ...baseNpmDeps,
         packageAcquisitionAuthority: packages,
         runScript,
+        ...(commandOptions.mapInvocationContext === undefined
+          ? {}
+          : { mapInvocationContext: commandOptions.mapInvocationContext }),
       });
       return async (args, context) => {
         const config = configured;
+        const reflectionContext = commandOptions.mapInvocationContext?.(context) ?? context;
         if (
           config === undefined ||
-          normalizePath(context.cwd) !== normalizePath(config.cfg.root) ||
+          normalizePath(reflectionContext.cwd) !== normalizePath(config.cfg.root) ||
           commandOptions.recordMutation === undefined
         ) {
           return command(args, context);

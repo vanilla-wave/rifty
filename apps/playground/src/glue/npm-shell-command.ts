@@ -85,6 +85,8 @@ export interface NpmShellCommandDeps {
   readonly install?: InstallFn;
   /** Host-owned all-target namespace preflight, before the installer links bytes. */
   readonly assertPortablePaths?: InstallOptions['assertPortablePaths'];
+  /** Translate a fully parsed terminal invocation into the owner's storage namespace. */
+  readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
   /** Pre-install tree preparation (e.g. the from-scratch clean-start
    *  clear/reseed) — runs INSIDE the owner acquisition FIFO, before any
    *  read or mutation of this install: a preparation that deletes/reseeds the
@@ -231,7 +233,8 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
   return async (rawArgs, rawContext) => {
     const invocation = npmPrefixInvocation(rawArgs, rawContext);
     if (invocation === null) return 1;
-    const { args, context: ctx } = invocation;
+    const { args } = invocation;
+    const ctx = deps.mapInvocationContext?.(invocation.context) ?? invocation.context;
     const sub = args[0];
     // Bare `npm` and the help flags print the command list (one per line), but
     // keep npm's observable usage-exit contract: these forms return 1.

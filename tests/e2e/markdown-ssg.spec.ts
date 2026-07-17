@@ -23,11 +23,11 @@ test.describe('Markdown SSG template through the SW preview bridge', () => {
 
     await expectTerminalContains(
       page,
-      '[real-vite/worker] starting server /scratch/src/main.js on port 3333',
+      '[real-vite/worker] starting server /src/main.js on port 3333',
       150_000,
     );
     await expectTerminalContains(page, 'npm: + marked@', 120_000);
-    await expectTerminalContains(page, '[ssg] built intro.html from content/intro.md', 60_000);
+    await expectTerminalContains(page, '[ssg] built intro.html from /content/intro.md', 60_000);
     await expectTerminalContains(page, 'markdown ssg listening on port 3333', 60_000);
 
     const home = await page.evaluate(async (port: number) => {
@@ -57,7 +57,7 @@ test.describe('Markdown SSG template through the SW preview bridge', () => {
     });
     await expect(frame.getByRole('link', { name: 'Build inside the browser' })).toBeVisible();
 
-    await expectTerminalContains(page, '[ssg] GET /intro.html -> dist/intro.html', 10_000);
+    await expectTerminalContains(page, '[ssg] GET /intro.html -> /dist/intro.html', 10_000);
     problems.assertNoViteImportErrors();
   });
 });

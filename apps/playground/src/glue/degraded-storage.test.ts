@@ -5,6 +5,7 @@ import {
   saveAffordance,
   statusStorageChip,
   storageModeFromBoot,
+  workspaceSaveMessage,
 } from './degraded-storage.ts';
 
 function boot(over: Partial<BootResult> & { backend: 'opfs' | 'memory' }): BootResult {
@@ -79,6 +80,16 @@ describe('saveAffordance — fidelity: memory save is EPHEMERAL, never a durable
     const a = saveAffordance('memory');
     expect(a.ephemeral).toBe(true);
     expect(a.label).not.toBe('Saved');
+  });
+});
+
+describe('workspaceSaveMessage — truthful Cmd/Ctrl+S acknowledgement', () => {
+  it('names memory-backed saves as session-only and ephemeral', () => {
+    expect(workspaceSaveMessage('memory')).toBe('Saved for this session · EPHEMERAL');
+  });
+
+  it('uses the durable Saved acknowledgement only for OPFS', () => {
+    expect(workspaceSaveMessage('opfs')).toBe('Saved');
   });
 });
 

@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+  DirtyProjectDocumentError,
+  ProjectDocumentSaveInProgressError,
+} from '../workbench/errors.ts';
 import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectPlan,
@@ -192,6 +196,12 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
     async openProject<TReady>(definition: ProjectDefinition<TReady>, options?: unknown) {
       const projectPlan = definitions.get(definition as object);
       if (projectPlan === undefined) throw new Error('unknown definition');
+      const active = state.catalog.active;
+      const matchesActive =
+        projectPlan.id === 'scratch'
+          ? active?.kind === 'scratch'
+          : active?.kind === 'project' && active.id === projectPlan.id;
+      if (!matchesActive) throw new Error(`cannot open inactive project ${projectPlan.id}`);
       openOptions.push(options);
       events.push(`session:open:${projectPlan.id}`);
       const session = {
@@ -283,17 +293,54 @@ describe('Playground App semantic runtime', () => {
     ]);
   });
 
-  it('does not mutate the catalog when dirty-session close rejects', async () => {
+  it('resets an inactive project and restores the catalog-active session', async () => {
     const h = harness();
-    const context = await h.runtime.createScratch(plan('scratch'));
+    await h.runtime.createScratch(plan('scratch'));
+    await h.runtime.saveScratch(plan('project-a'), 'Project A');
+    await h.runtime.createScratch(plan('scratch', 'starter-b'));
     h.events.splice(0);
-    h.failNextClose = new Error('dirty document');
 
-    await expect(h.runtime.createScratch(plan('scratch', 'starter-b'))).rejects.toThrow(
-      'dirty document',
-    );
+    const restored = await h.runtime.reset(plan('project-a'));
 
-    expect(h.runtime.current()).toBe(context);
+    expect(restored?.plan).toEqual(plan('scratch', 'starter-b'));
+    expect(h.runtime.current()).toBe(restored);
+    expect(h.events).toEqual([
+      'define:project-a',
+      'session:close:scratch',
+      'catalog:reset:project-a',
+      'session:open:scratch',
+      'tools:scratch',
+    ]);
+  });
+
+  it.each([
+    new DirtyProjectDocumentError('/src/main.ts'),
+    new ProjectDocumentSaveInProgressError('/src/main.ts'),
+  ])(
+    'does not mutate the catalog when retryable close preflight rejects with %s',
+    async (error) => {
+      const h = harness();
+      const context = await h.runtime.createScratch(plan('scratch'));
+      h.events.splice(0);
+      h.failNextClose = error;
+
+      await expect(h.runtime.createScratch(plan('scratch', 'starter-b'))).rejects.toBe(error);
+
+      expect(h.runtime.current()).toBe(context);
+      expect(h.events).toEqual(['define:scratch', 'session:close:scratch']);
+    },
+  );
+
+  it('retires the active context when admitted session teardown fails terminally', async () => {
+    const h = harness();
+    await h.runtime.createScratch(plan('scratch'));
+    h.events.splice(0);
+    const failure = new Error('terminal close failed');
+    h.failNextClose = failure;
+
+    await expect(h.runtime.createScratch(plan('scratch', 'starter-b'))).rejects.toBe(failure);
+
+    expect(h.runtime.current()).toBeNull();
     expect(h.events).toEqual(['define:scratch', 'session:close:scratch']);
   });
 

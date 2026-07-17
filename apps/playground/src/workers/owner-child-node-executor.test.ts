@@ -13,6 +13,7 @@ const NODE_WORKER_RUNTIME_ENV = {
   RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
   RIFTY_ESBUILD_WASM_URL: 'blob:esbuild-wasm',
 };
+const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 
 function fakeHandle() {
   const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
@@ -111,6 +112,32 @@ describe('owner-child-node-executor', () => {
     expect(spec.env).toEqual(env);
   });
 
+  it('carries a private FS root out of band while process argv/cwd stay public', () => {
+    const spec = buildNodeChildSpawnSpec(
+      '/src/server.js',
+      ['--port', '3000'],
+      { USER_VALUE: 'kept' },
+      '/',
+      'URL',
+      NODE_WORKER_RUNTIME_ENV,
+      false,
+      80,
+      24,
+      undefined,
+      REMOTE_FS_ROOT,
+    );
+
+    expect(spec.entry).toMatchObject({
+      bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT } } },
+    });
+    expect(spec.argv).toEqual(['rifty', '/src/server.js', '--port', '3000']);
+    expect(spec.cwd).toBe('/');
+    expect(spec.env).toEqual({ USER_VALUE: 'kept' });
+    expect(JSON.stringify({ argv: spec.argv, cwd: spec.cwd, env: spec.env })).not.toContain(
+      REMOTE_FS_ROOT,
+    );
+  });
+
   it('threads the actor-minted preview scope into the node-entry launch', async () => {
     const fake = fakeHandle();
     const spawn = vi.fn(() => fake.h);
@@ -118,6 +145,7 @@ describe('owner-child-node-executor', () => {
     const p = exec('/w/server.js', [], makeCtx({ env: { USER_FLAG: 'kept' } }), {
       sid: 's1',
       previewScope: 'owner-preview',
+      remoteFsRoot: REMOTE_FS_ROOT,
       onListening: () => {},
       onExit: () => {},
     });
@@ -129,7 +157,10 @@ describe('owner-child-node-executor', () => {
         entry: expect.objectContaining({
           bootstrap: expect.objectContaining({
             payload: expect.objectContaining({
-              launch: expect.objectContaining({ previewScope: 'owner-preview' }),
+              launch: expect.objectContaining({
+                previewScope: 'owner-preview',
+                remoteFsRoot: REMOTE_FS_ROOT,
+              }),
             }),
           }),
         }),

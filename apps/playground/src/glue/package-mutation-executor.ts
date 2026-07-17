@@ -411,8 +411,7 @@ export function discoverPackageAcquisitionGuardTransitions(
 
 export function applyPackageAwareVfsMutations<T>(
   mutations: PackageMutationExecutor,
-  // TODO(backlog: distribution/workbench-guest-vfs-namespace): enforce the
-  // decided guest root across reads, cwd, Shell, child RPC, and WASI together.
+  // Legacy bootstrap compatibility; Workbench maps paths before this adapter.
   _root: string,
   intents: readonly VfsMutationIntent[],
   apply: () => T | Promise<T>,

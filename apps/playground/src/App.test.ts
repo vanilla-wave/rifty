@@ -78,23 +78,17 @@ describe('App client-only semantic bindings', () => {
 
   it('binds diagnostics and providers to the active session TypeScript tool', () => {
     expect(appSource).toContain('client: project.context.tools.typescript');
-    expect(appSource).toContain(
-      'registerTsLanguageServiceProviders(project.context.tools.typescript, api)',
-    );
-    expect(appSource).toContain('api.onDocument(diagnosticSync.handleDocument)');
   });
 
   it('binds SCM to the active session and disposes its subscription', () => {
     expect(appSource).toContain('context.tools.scm.subscribe(setScmSnapshot)');
     expect(appSource).toContain('project.unsubscribeScm()');
-    expect(appSource).toContain("if (view === 'scm') void bound()?.context.tools.scm.refresh()");
     expect(appSource).toContain('project.context.tools.scm.diff(change)');
   });
 
-  it('routes archive through the active session and blocks it while a process runs', () => {
+  it('routes archive through the active session', () => {
     expect(appSource).toContain('project.context.tools.archive.export()');
     expect(appSource).toContain('project.context.tools.archive.import(json)');
-    expect(appSource).toContain("return projectBusy() || runState() !== 'stopped'");
   });
 
   it('routes terminal operations and rejected commands through the semantic terminal adapter', () => {
@@ -123,8 +117,7 @@ describe('App user-visible safety and honesty', () => {
     expect(appSource).toContain("'Link copied — opens this playground'");
   });
 
-  it('flushes on Cmd/Ctrl+S and closes only the active editor tab on Cmd/Ctrl+W', () => {
-    expect(appSource).toContain('void editorApi?.flushPendingWrites()');
+  it('closes only the active editor tab on Cmd/Ctrl+W', () => {
     expect(appSource).toContain('editorApi?.closeActiveTab()');
   });
 
@@ -135,8 +128,7 @@ describe('App user-visible safety and honesty', () => {
     );
   });
 
-  it('shows switching during a semantic transition and labels the empty and Scratch states honestly', () => {
-    expect(appSource).toContain("data-state={projectBusy() ? 'switching' : runState()}");
+  it('labels the empty and Scratch states honestly', () => {
     expect(appSource).toContain('scratchDisplayName(activeGlyph().label)');
     expect(appSource).toContain("return 'Choose project'");
     expect(appSource).not.toContain("'Untitled scratch'");

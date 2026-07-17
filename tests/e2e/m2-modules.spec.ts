@@ -11,7 +11,7 @@ test.describe('M2 — Project modules', () => {
     await bootProjectFiles(page);
     await openShellTerminal(page);
     await runTerminalLine(page, 'cat package.json');
-    await expectTerminalContains(page, '"dev": "vite"');
+    await expectTerminalContains(page, /"dev"\s*:\s*"vite"/u);
   });
 
   test('the shell can inspect source modules seeded for Vite', async ({ page }) => {

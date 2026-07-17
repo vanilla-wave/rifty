@@ -36,6 +36,8 @@ const CAPTURED_URL_CONTEXT = Object.freeze({
   clientUrl: 'https://playground.invalid/app/index.html',
 });
 const EDITED_AT = '2026-07-16T12:00:00.000Z';
+const CATALOG_FILE = '/.rifty/workbench/playground/catalog.json';
+const CATALOG_TRANSACTION_FILE = '/.rifty/workbench/playground/transaction.json';
 
 type OpenedProject = Awaited<ReturnType<PlaygroundProjectAuthority['openProject']>>;
 
@@ -975,6 +977,169 @@ describe('Playground catalog single owner and busy gate', () => {
 });
 
 describe('Playground catalog crash recovery', () => {
+  it('removes an orphan staged-transaction tree when no journal owns it', async () => {
+    const fs = new MemoryFsSync();
+    const orphan = '/.rifty/workbench/playground/catalog-transactions/orphan/0-project/after';
+    fs.mkdirSync(orphan, { recursive: true });
+    fs.writeFileSync(`${orphan}/orphan.txt`, encoder.encode('orphan'));
+
+    const h = await harness(fs);
+
+    expect(h.catalog.snapshot()).toEqual(EMPTY);
+    expect(h.fs.existsSync('/.rifty/workbench/playground/catalog-transactions')).toBe(false);
+    await h.owner.close();
+  });
+
+  it.each([
+    { phase: 'apply' as const, expected: 'before' as const },
+    { phase: 'commit' as const, expected: 'after' as const },
+  ])('recovers a durable v1 inline-tree $phase leftover to exact $expected state', async (row) => {
+    const fs = new MemoryFsSync();
+    const scratchContainer = '/.rifty/workbench/v1/projects/scratch';
+    const legacyBytes = encoder.encode('legacy inline transaction bytes');
+    fs.mkdirSync(`${scratchContainer}/tree`, { recursive: true });
+    fs.writeFileSync(`${scratchContainer}/tree/partial.txt`, encoder.encode('partial'));
+    fs.mkdirSync('/.rifty/workbench/playground', { recursive: true });
+    fs.writeFileSync(
+      CATALOG_TRANSACTION_FILE,
+      encoder.encode(
+        JSON.stringify({
+          version: 1,
+          kind: 'catalog-mutation',
+          phase: row.phase,
+          beforeCatalog: null,
+          afterCatalog: {
+            version: 1,
+            active: { kind: 'scratch' },
+            scratch: {
+              starterId: 'starter-a',
+              dirty: false,
+              editedAt: EDITED_AT,
+              adoption: {
+                kind: 'adopted',
+                definitionIdentity: 'legacy-definition',
+                baselineFingerprint: 'legacy-baseline',
+              },
+            },
+            projects: [],
+          },
+          roots: [
+            {
+              path: scratchContainer,
+              before: null,
+              after: {
+                directories: ['', 'tree'],
+                files: [{ path: 'tree/legacy.txt', bytes: [...legacyBytes] }],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const h = await harness(fs);
+
+    expect(h.fs.existsSync(CATALOG_TRANSACTION_FILE)).toBe(false);
+    if (row.expected === 'before') {
+      expect(h.catalog.snapshot()).toEqual(EMPTY);
+      expect(h.fs.existsSync(scratchContainer)).toBe(false);
+    } else {
+      expect(h.catalog.snapshot()).toEqual({
+        active: { kind: 'scratch' },
+        scratch: { starterId: 'starter-a', dirty: false, editedAt: EDITED_AT },
+        projects: [],
+      });
+      expect(h.fs.readFileBytesSync(`${scratchContainer}/tree/legacy.txt`)).toEqual(legacyBytes);
+      expect(h.fs.existsSync(`${scratchContainer}/tree/partial.txt`)).toBe(false);
+    }
+    await h.owner.close();
+  });
+
+  it('keeps transaction metadata bounded while Save preserves a large dependency tree', async () => {
+    const fs = new DurableOwnerFs();
+    const h = await harness(fs);
+    await h.catalog.createScratch({ definition: definition('scratch') });
+    const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
+    const dependencyPath = `${scratchRoot}/node_modules/large/index.js`;
+    const dependencyBytes = new Uint8Array(512 * 1024).fill(0xab);
+    h.authority.mkdirSync(dependencyPath.slice(0, dependencyPath.lastIndexOf('/')), {
+      recursive: true,
+    });
+    h.authority.writeFileSync(dependencyPath, dependencyBytes);
+    h.installStampClaims.write(scratchRoot, encoder.encode('root-bound claim'), {
+      mkdirTree: true,
+    });
+    const setupFlush = await h.authority.flush();
+    expect(setupFlush?.total ?? 0).toBe(0);
+
+    fs.armPersistFailure(Number.MAX_SAFE_INTEGER, 'quota-report');
+    await h.catalog.saveScratch({
+      id: 'project-a',
+      name: 'Project A',
+      definition: definition('project-a'),
+    });
+    fs.disarmPersistFailure();
+
+    const transactionSizes = fs.durabilityBoundaries.flatMap((boundary) => {
+      const bytes = boundary.durableState.files[CATALOG_TRANSACTION_FILE];
+      return bytes === undefined ? [] : [bytes.byteLength];
+    });
+    const dependencyCopyCounts = fs.durabilityBoundaries.map(
+      (boundary) =>
+        Object.keys(boundary.durableState.files).filter((path) =>
+          path.endsWith('/node_modules/large/index.js'),
+        ).length,
+    );
+    expect(transactionSizes.length).toBeGreaterThan(0);
+    expect(Math.max(...transactionSizes)).toBeLessThan(64 * 1024);
+    expect(Math.max(...dependencyCopyCounts)).toBeLessThanOrEqual(2);
+    const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    expect(h.fs.readFileBytesSync(`${projectRoot}/node_modules/large/index.js`)).toEqual(
+      dependencyBytes,
+    );
+    expect(h.installStampClaims.read(projectRoot)).toBeNull();
+    expect(h.fs.existsSync('/.rifty/workbench/v1/projects/scratch')).toBe(false);
+    await h.owner.close();
+  });
+
+  it.each(boundedExistingTreeMutationCases())(
+    '$name keeps transaction metadata bounded for a large existing tree',
+    async (testCase) => {
+      const fs = new DurableOwnerFs();
+      const h = await harness(fs);
+      const root = await testCase.prepare(h);
+      const existingPath = `${root}/large-existing.bin`;
+      const existingBytes = new Uint8Array(512 * 1024).fill(0xcd);
+      const claimBytes = encoder.encode(`${testCase.name} root-bound claim`);
+      h.authority.writeFileSync(existingPath, existingBytes);
+      h.installStampClaims.write(root, claimBytes, { mkdirTree: true });
+      const setupFlush = await h.authority.flush();
+      expect(setupFlush?.total ?? 0).toBe(0);
+      expect(h.fs.readFileBytesSync(existingPath)).toEqual(existingBytes);
+      expect(h.installStampClaims.read(root)).toEqual(claimBytes);
+
+      fs.armPersistFailure(Number.MAX_SAFE_INTEGER, 'quota-report');
+      const outcome = await testCase.mutate(h);
+      fs.disarmPersistFailure();
+
+      const transactionSizes = fs.durabilityBoundaries.flatMap((boundary) => {
+        const bytes = boundary.durableState.files[CATALOG_TRANSACTION_FILE];
+        return bytes === undefined ? [] : [bytes.byteLength];
+      });
+      expect(transactionSizes.length).toBeGreaterThan(0);
+      expect(Math.max(...transactionSizes)).toBeLessThan(64 * 1024);
+      expect(outcome).toEqual(testCase.expectedCatalog);
+      expect(h.catalog.snapshot()).toBe(outcome);
+      if (testCase.expectedFiles === null) {
+        expect(h.fs.existsSync(root.slice(0, -'/tree'.length))).toBe(false);
+      } else {
+        expect(treeFiles(h.fs, root)).toEqual(testCase.expectedFiles);
+      }
+      expect(h.installStampClaims.read(root)).toBeNull();
+      await h.owner.close();
+    },
+  );
+
   it.each(catalogMutationCases())(
     '$name survives every $fault persisted primitive, hard restart, retry, and second restart',
     async (testCase) => {
@@ -1000,6 +1165,7 @@ describe('Playground catalog crash recovery', () => {
 
       let exhausted = false;
       let rejectedFaults = 0;
+      let recoveredCommittedFaults = 0;
       let sawInteriorPartialPersistence = false;
       let recoveredPreStates = 0;
       let recoveredPostStates = 0;
@@ -1047,7 +1213,42 @@ describe('Playground catalog crash recovery', () => {
           sawInteriorPartialPersistence = true;
         }
 
-        expect(outcome.kind).toBe('rejected');
+        if (outcome.kind === 'resolved') {
+          const injectedBoundary = fs.durabilityBoundaries.find((boundary) =>
+            boundary.trace.some((entry) => entry.outcome === 'injected-failure'),
+          );
+          expect(injectedBoundary).toBeDefined();
+          expect(injectedBoundary?.durableState.files[CATALOG_FILE]).toEqual(
+            expectedPost.tree.files[CATALOG_FILE],
+          );
+          recoveredCommittedFaults += 1;
+          expectCatalogState(h, fs, expectedPost);
+          expect(observed).toEqual([expectedPre.catalog, expectedPost.catalog]);
+          const recoveryCounts = await expectEveryCatalogCrashBoundary(
+            testCase,
+            fs.durabilityBoundaries,
+            expectedPre,
+            expectedPost,
+          );
+          recoveredPreStates += recoveryCounts.pre;
+          recoveredPostStates += recoveryCounts.post;
+          await expectHardRestartState(fs, expectedPost);
+          unsubscribe();
+          continue;
+        }
+
+        const faultTrace = fs.trace
+          .slice(Math.max(0, injectedIndex - 2), injectedIndex + 4)
+          .map((entry) => ({
+            ordinal: entry.ordinal,
+            kind: entry.primitive.kind,
+            path: entry.primitive.path,
+            outcome: entry.outcome,
+          }));
+        expect(
+          outcome.kind,
+          `${testCase.name} resolved after injected ordinal ${String(failAt)}; trace=${JSON.stringify(faultTrace)}`,
+        ).toBe('rejected');
         if (outcome.kind !== 'rejected') {
           unsubscribe();
           throw new Error(
@@ -1104,6 +1305,7 @@ describe('Playground catalog crash recovery', () => {
 
       expect(exhausted).toBe(true);
       expect(rejectedFaults).toBeGreaterThan(0);
+      expect(recoveredCommittedFaults).toBeGreaterThan(0);
       expect(sawInteriorPartialPersistence).toBe(true);
       expect(recoveredPreStates).toBeGreaterThan(0);
       expect(recoveredPostStates).toBeGreaterThan(0);
@@ -1123,6 +1325,87 @@ interface ExactCatalogState {
   readonly tree: ExactFsTree;
 }
 
+interface BoundedExistingTreeMutationCase {
+  readonly name: string;
+  prepare(harness: CatalogHarness): Promise<string>;
+  mutate(harness: CatalogHarness): Promise<PlaygroundCatalogSnapshot>;
+  readonly expectedCatalog: PlaygroundCatalogSnapshot;
+  readonly expectedFiles: Readonly<Record<string, readonly number[]>> | null;
+}
+
+function boundedExistingTreeMutationCases(): readonly BoundedExistingTreeMutationCase[] {
+  const replacement = 'replacement baseline\n';
+  const replacementFiles = Object.freeze({
+    '/package.json': Object.freeze([...encoder.encode('{"devDependencies":{"vite":"8.0.0"}}\n')]),
+    '/replacement.txt': Object.freeze([...encoder.encode(replacement)]),
+  });
+  const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+  const prepareProject = async (h: CatalogHarness): Promise<string> => {
+    await h.catalog.createScratch({ definition: definition('scratch') });
+    await h.catalog.saveScratch({
+      id: 'project-a',
+      name: 'Project A',
+      definition: definition('project-a'),
+    });
+    return projectRoot;
+  };
+  const projectB = () =>
+    definition('project-a', 'starter-b', {
+      files: { '/replacement.txt': replacement },
+    });
+
+  return Object.freeze([
+    Object.freeze({
+      name: 'createScratch reseed',
+      prepare: async (h: CatalogHarness) => {
+        await h.catalog.createScratch({ definition: definition('scratch') });
+        return '/.rifty/workbench/v1/projects/scratch/tree';
+      },
+      mutate: (h: CatalogHarness) =>
+        h.catalog.createScratch({
+          definition: definition('scratch', 'starter-b', {
+            files: { '/replacement.txt': replacement },
+          }),
+        }),
+      expectedCatalog: freezeExpected<PlaygroundCatalogSnapshot>({
+        active: { kind: 'scratch' },
+        scratch: { starterId: 'starter-b', dirty: false, editedAt: EDITED_AT },
+        projects: [],
+      }),
+      expectedFiles: replacementFiles,
+    }),
+    Object.freeze({
+      name: 'reset',
+      prepare: prepareProject,
+      mutate: (h: CatalogHarness) =>
+        h.catalog.reset({
+          target: { kind: 'project', id: 'project-a' },
+          definition: projectB(),
+        }),
+      expectedCatalog: freezeExpected<PlaygroundCatalogSnapshot>({
+        active: { kind: 'project', id: 'project-a' },
+        scratch: null,
+        projects: [
+          {
+            id: 'project-a',
+            name: 'Project A',
+            starterId: 'starter-b',
+            editedAt: EDITED_AT,
+          },
+        ],
+      }),
+      expectedFiles: replacementFiles,
+    }),
+    Object.freeze({
+      name: 'delete',
+      prepare: prepareProject,
+      mutate: (h: CatalogHarness) => h.catalog.delete('project-a'),
+      expectedCatalog: EMPTY,
+      expectedFiles: null,
+    }),
+  ]);
+}
+
 function catalogMutationCases(): readonly CatalogMutationCase[] {
   const operations = Object.freeze([
     {
@@ -1134,6 +1417,22 @@ function catalogMutationCases(): readonly CatalogMutationCase[] {
       name: 'saveScratch',
       prepare: async (h: CatalogHarness) => {
         await h.catalog.createScratch({ definition: definition('scratch') });
+        const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
+        const dependency = `${scratchRoot}/node_modules/pkg/index.js`;
+        const privateMetadata = `${scratchRoot}/.rifty/session.json`;
+        h.authority.mkdirSync(dependency.slice(0, dependency.lastIndexOf('/')), {
+          recursive: true,
+        });
+        h.authority.writeFileSync(dependency, encoder.encode('ordinary dependency bytes'));
+        h.authority.mkdirSync(privateMetadata.slice(0, privateMetadata.lastIndexOf('/')), {
+          recursive: true,
+        });
+        h.authority.writeFileSync(privateMetadata, encoder.encode('private tree metadata'));
+        h.installStampClaims.write(scratchRoot, encoder.encode('root-bound claim'), {
+          mkdirTree: true,
+        });
+        const setupFlush = await h.authority.flush();
+        expect(setupFlush?.total ?? 0).toBe(0);
       },
       mutate: (h: CatalogHarness) =>
         h.catalog.saveScratch({

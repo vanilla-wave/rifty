@@ -211,7 +211,7 @@ function isTemplateNodeModulesFile(root: string, path: string): boolean {
 export function templateNodeModulesSeedMutationIntents(
   fsSync: Pick<WorkspaceArchiveFs, 'existsSync'>,
   root: string,
-  seedFiles: Readonly<Record<string, string>>,
+  seedFiles: Readonly<Record<string, string | Uint8Array>>,
 ): readonly VfsMutationIntent[] {
   return [...new Set(Object.keys(seedFiles).map((path) => normalizePath(path)))]
     .filter((path) => isTemplateNodeModulesFile(root, path) && !fsSync.existsSync(path))
@@ -223,7 +223,7 @@ export function templateNodeModulesSeedMutationIntents(
 export function seedTemplateNodeModulesFiles(
   fsSync: WorkspaceArchiveFs,
   root: string,
-  seedFiles: Readonly<Record<string, string>>,
+  seedFiles: Readonly<Record<string, string | Uint8Array>>,
 ): void {
   const encoder = new TextEncoder();
   for (const [path, content] of Object.entries(seedFiles)) {
@@ -231,7 +231,10 @@ export function seedTemplateNodeModulesFiles(
     if (!isTemplateNodeModulesFile(root, normalized)) continue;
     fsSync.mkdirSync(dirname(normalized), { recursive: true });
     if (!fsSync.existsSync(normalized)) {
-      fsSync.writeFileSync(normalized, encoder.encode(content));
+      fsSync.writeFileSync(
+        normalized,
+        typeof content === 'string' ? encoder.encode(content) : content.slice(),
+      );
     }
   }
 }

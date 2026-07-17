@@ -124,6 +124,42 @@ describe('Playground semantic terminal UI adapter', () => {
     await ui.dispose();
   });
 
+  it('brackets a finite CLI lifecycle around the exact project output', async () => {
+    const primary = terminalHarness();
+    const exited = deferred<ProcessExit>();
+    const projectRun = {
+      terminal: primary.terminal,
+      ready: Promise.resolve(),
+      exited: exited.promise,
+      stop: primary.run.stop,
+      close: primary.run.close,
+    } satisfies ProjectRun<unknown>;
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(() => projectRun),
+      terminals: { open: vi.fn() },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+
+    const started = ui.startProject('CLI report scratch', {
+      kind: 'node-cli',
+      displayName: 'CLI report',
+    });
+    primary.emit('[cli] package report\n');
+    const output: string[] = [];
+    ui.attach(started.id, (chunk) => output.push(chunk));
+    expect(output.join('')).toBe('cli: running CLI report\n[cli] package report\n');
+
+    exited.resolve({ code: 0, signal: null });
+    await started.exited;
+    expect(output.join('')).toBe(
+      'cli: running CLI report\n[cli] package report\n[cli] completed with exit code 0\n',
+    );
+    await ui.dispose();
+  });
+
   it('delegates primary stop to the exact ProjectRun without terminal-id reconstruction', async () => {
     const primary = terminalHarness();
     const exactExit = { code: null, signal: 'SIGINT' } as ProcessExit;
@@ -190,6 +226,49 @@ describe('Playground semantic terminal UI adapter', () => {
     expect(interactive.terminal.write).toHaveBeenCalledWith('answer\n');
     expect(interactive.run.stop).toHaveBeenCalledTimes(1);
     expect(interactive.run.close).toHaveBeenCalledTimes(1);
+    await ui.dispose();
+  });
+
+  it('selects the previous surviving session after active close and retains active on sibling close', async () => {
+    const primary = terminalHarness();
+    const second = terminalHarness();
+    const third = terminalHarness();
+    const sibling = terminalHarness();
+    const projectRun = {
+      terminal: primary.terminal,
+      ready: Promise.resolve(),
+      exited: new Promise<ProcessExit>(() => {}),
+      stop: primary.run.stop,
+      close: primary.run.close,
+    } satisfies ProjectRun<unknown>;
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(() => projectRun),
+      terminals: {
+        open: vi
+          .fn<() => ProjectTerminal>()
+          .mockReturnValueOnce(second.terminal)
+          .mockReturnValueOnce(third.terminal)
+          .mockReturnValueOnce(sibling.terminal),
+      },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+
+    const first = ui.startProject('Project');
+    const previous = ui.createSession('Previous');
+    const active = ui.createSession('Active');
+    expect(ui.sessions().map(({ id }) => id)).toEqual([first.id, previous.id, active.id]);
+    expect(ui.activeSessionId()).toBe(active.id);
+
+    await ui.closeSession(active.id);
+    expect(ui.activeSessionId()).toBe(previous.id);
+
+    const nonActive = ui.createSession('Non-active');
+    ui.select(previous.id);
+    await ui.closeSession(nonActive.id);
+    expect(ui.activeSessionId()).toBe(previous.id);
     await ui.dispose();
   });
 });

@@ -1,40 +1,39 @@
 import { readFile } from 'node:fs/promises';
 import { type Page, expect, test } from '@playwright/test';
-import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
 import {
+  type TerminalSessionTarget,
+  expectViteDevServerReady,
+  insertTerminalLineSettled,
   openShellTerminal,
   pickStarter,
-  runTerminalLineSettled,
   terminalBuffer,
 } from './helpers/playground.ts';
 
 const OWNER_DURABLE_TIMEOUT = 90_000;
-type ProjectIndexSnapshot = {
-  activeId: string;
-  scratch: { starter: string; dirty: boolean } | null;
-  projects: { id: string; name: string }[];
-};
-
-async function readProjectIndex(page: Page): Promise<ProjectIndexSnapshot | null> {
-  return readWorkspaceJson<ProjectIndexSnapshot>(page, '/.rifty-project-index.json');
-}
 
 async function openProjects(page: Page): Promise<void> {
-  await page.click('[data-action="open-launcher"]');
+  const trigger = page.locator('[data-action="open-launcher"]');
+  await expect(trigger).toBeEnabled({ timeout: OWNER_DURABLE_TIMEOUT });
+  await trigger.click();
   await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 5_000 });
   await page.getByRole('button', { name: /^Projects/ }).click();
 }
 
-async function projectIdForName(page: Page, name: string): Promise<string> {
-  const readId = async (): Promise<string> => {
-    const index = await readProjectIndex(page);
-    return index?.projects.find((p) => p.name === name)?.id ?? '';
-  };
-  await expect.poll(readId, { timeout: OWNER_DURABLE_TIMEOUT }).not.toBe('');
-  return readId();
+function projectCard(page: Page, name: string) {
+  return page
+    .locator('.rf-pcard')
+    .filter({ has: page.getByText(name, { exact: true }) })
+    .first();
 }
 
-async function saveScratchAs(page: Page, name: string): Promise<string> {
+function editorTab(page: Page, name: string) {
+  return page
+    .locator('[role="tablist"][aria-label="Open editors"] [role="tab"]')
+    .filter({ has: page.getByText(name, { exact: true }) })
+    .first();
+}
+
+async function saveScratchAs(page: Page, name: string): Promise<void> {
   await openProjects(page);
   await page.click('[data-action="save-scratch"]');
   const dialog = page.locator('.rf-dialog[role="dialog"]');
@@ -42,13 +41,32 @@ async function saveScratchAs(page: Page, name: string): Promise<string> {
   await dialog.locator('input.rf-dialog__input').fill(name);
   await dialog.getByRole('button', { name: 'Save project' }).click();
   await expect(dialog).toHaveCount(0, { timeout: OWNER_DURABLE_TIMEOUT });
-  const id = await projectIdForName(page, name);
+  const card = projectCard(page, name);
+  await expect(card).toBeVisible({ timeout: OWNER_DURABLE_TIMEOUT });
+  await expect(card).toHaveAttribute('data-active', 'true');
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
   await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(name, {
     timeout: OWNER_DURABLE_TIMEOUT,
   });
-  return id;
+}
+
+async function runShellLine(
+  page: Page,
+  shell: TerminalSessionTarget,
+  line: string,
+  timeout = 60_000,
+): Promise<void> {
+  await insertTerminalLineSettled(page, line, timeout, shell);
+}
+
+async function expectShellContains(
+  page: Page,
+  shell: TerminalSessionTarget,
+  text: string,
+  timeout = 15_000,
+): Promise<void> {
+  await expect.poll(() => terminalBuffer(page, shell), { timeout }).toContain(text);
 }
 
 async function bootScmFileManager(page: Page): Promise<void> {
@@ -57,9 +75,7 @@ async function bootScmFileManager(page: Page): Promise<void> {
   });
   await page.goto('/');
   await pickStarter(page, 'project-files');
-  await expect
-    .poll(() => terminalBuffer(page), { timeout: OWNER_DURABLE_TIMEOUT })
-    .toMatch(/VITE v.*ready/u);
+  await expectViteDevServerReady(page, 5174, OWNER_DURABLE_TIMEOUT);
 }
 
 function explorerRow(page: Page, name: string, kind?: 'file' | 'dir') {
@@ -253,9 +269,9 @@ test.describe('GIT file manager', () => {
 
     await bootScmFileManager(page);
     const projectName = `Menu placement ${Date.now().toString(36)}`;
-    const projectId = await saveScratchAs(page, projectName);
+    await saveScratchAs(page, projectName);
     await openProjects(page);
-    const card = page.locator(`[data-project="${projectId}"]`);
+    const card = projectCard(page, projectName);
     await card.getByRole('button', { name: 'Project actions' }).click();
     const projectMenu = card.locator('.rf-rowmenu');
     await expect(projectMenu).toBeVisible();
@@ -299,14 +315,13 @@ test.describe('GIT file manager', () => {
 
     await bootScmFileManager(page);
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(
-      page,
-      `echo scm-e2e-${Date.now().toString(36)} >> README.md`,
-      60_000,
-    );
+    const shell = await openShellTerminal(page);
+    await runShellLine(page, shell, `echo scm-e2e-${Date.now().toString(36)} >> README.md`);
 
-    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Files', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     const readmeRow = page.locator('.rf-row[role="treeitem"]', { hasText: 'README.md' }).first();
     await expect(readmeRow).toBeVisible({ timeout: 30_000 });
     await expect(readmeRow).toHaveAttribute('data-git', 'modified', { timeout: 30_000 });
@@ -318,7 +333,7 @@ test.describe('GIT file manager', () => {
       contentType: 'image/png',
     });
 
-    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT', exact: true }).click({ timeout: 10_000 });
     await expect(page.getByLabel('Git', { exact: true })).toBeVisible({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'README.md' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
@@ -363,15 +378,13 @@ test.describe('GIT file manager', () => {
     await page.locator('.rf-row__input').press('Enter');
     await expect(explorerRow(page, dir, 'dir')).toBeVisible({ timeout: 30_000 });
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(
+    const shell = await openShellTerminal(page);
+    await runShellLine(
       page,
+      shell,
       `test -f src/${file} && test -d src/${dir} && echo context-crud-ok-${seq}`,
-      60_000,
     );
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 15_000 })
-      .toContain(`context-crud-ok-${seq}`);
+    await expectShellContains(page, shell, `context-crud-ok-${seq}`);
   });
 
   test('GIT stage uses the latest pending editor bytes', async ({ page, browserName }) => {
@@ -402,7 +415,7 @@ test.describe('GIT file manager', () => {
     await page.keyboard.insertText(`${marker}\n`);
     await expect(editor.locator('.view-lines').first()).toContainText(marker);
 
-    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT', exact: true }).click({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'README.md' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await scmRow.getByLabel('Stage README.md').click();
@@ -412,9 +425,9 @@ test.describe('GIT file manager', () => {
       timeout: 30_000,
     });
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(page, `git diff --cached -- README.md | grep ${marker}`, 60_000);
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain(marker);
+    const shell = await openShellTerminal(page);
+    await runShellLine(page, shell, `git diff --cached -- README.md | grep ${marker}`);
+    await expectShellContains(page, shell, marker);
 
     const message = `scm-stage-commit-${Date.now().toString(36)}`;
     await page.getByLabel('Commit message').fill(message);
@@ -422,8 +435,8 @@ test.describe('GIT file manager', () => {
     await expect(page.locator('.rf-scm__commit', { hasText: message })).toBeVisible({
       timeout: 30_000,
     });
-    await runTerminalLineSettled(page, `git log --oneline -1 | grep ${message}`, 60_000);
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain(message);
+    await runShellLine(page, shell, `git log --oneline -1 | grep ${message}`);
+    await expectShellContains(page, shell, message);
   });
 
   test('clipboard duplicate and cut-paste mutate the owner tree', async ({ page, browserName }) => {
@@ -454,15 +467,13 @@ test.describe('GIT file manager', () => {
       await destRow.click({ force: true });
     await expect(explorerRow(page, file, 'file')).toBeVisible({ timeout: 30_000 });
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(
+    const shell = await openShellTerminal(page);
+    await runShellLine(
       page,
+      shell,
       `test -f src/${copy} && test -f src/${dest}/${file} && test ! -e src/${file} && echo clipboard-ok-${seq}`,
-      60_000,
     );
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 15_000 })
-      .toContain(`clipboard-ok-${seq}`);
+    await expectShellContains(page, shell, `clipboard-ok-${seq}`);
   });
 
   test('OS upload, single-file download, and drag-move use owner bytes', async ({
@@ -492,21 +503,19 @@ test.describe('GIT file manager', () => {
     expect(await readFile(downloadedPath!, 'utf8')).toBe(content);
 
     await createExplorerEntry(page, 'src', 'folder', dest);
-    await dropExplorerPathOnDir(page, `/scratch/src/${file}`, dest);
+    await dropExplorerPathOnDir(page, `/src/${file}`, dest);
     const destRow = explorerRow(page, dest, 'dir');
     if ((await destRow.getAttribute('aria-expanded')) !== 'true')
       await destRow.click({ force: true });
     await expect(explorerRow(page, file, 'file')).toBeVisible({ timeout: 30_000 });
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(
+    const shell = await openShellTerminal(page);
+    await runShellLine(
       page,
+      shell,
       `test ! -e src/${file} && grep uploaded-owner-bytes-${seq} src/${dest}/${file} && echo upload-move-ok-${seq}`,
-      60_000,
     );
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 15_000 })
-      .toContain(`upload-move-ok-${seq}`);
+    await expectShellContains(page, shell, `upload-move-ok-${seq}`);
   });
 
   test('GIT splits staged and worktree rows for MM and AD states', async ({
@@ -517,17 +526,17 @@ test.describe('GIT file manager', () => {
     test.setTimeout(180_000);
 
     await bootScmFileManager(page);
-    await openShellTerminal(page);
+    const shell = await openShellTerminal(page);
 
     const seq = Date.now().toString(36);
     const stagedDelete = `staged-delete-${seq}.txt`;
-    await runTerminalLineSettled(
+    await runShellLine(
       page,
+      shell,
       `printf '\\nmm-staged-${seq}\\n' >> README.md && printf 'ad-${seq}\\n' > ${stagedDelete}`,
-      60_000,
     );
 
-    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT', exact: true }).click({ timeout: 10_000 });
     await expect(page.getByLabel('Git', { exact: true })).toBeVisible({ timeout: 10_000 });
     const stagedGroup = page.locator('.rf-scm__group').nth(0);
     const changesGroup = page.locator('.rf-scm__group').nth(1);
@@ -546,10 +555,10 @@ test.describe('GIT file manager', () => {
       timeout: 30_000,
     });
 
-    await runTerminalLineSettled(
+    await runShellLine(
       page,
+      shell,
       `printf 'mm-worktree-${seq}\\n' >> README.md && rm ${stagedDelete}`,
-      60_000,
     );
 
     const stagedReadme = stagedGroup.locator('.rf-scm__row', { hasText: 'README.md' }).first();
@@ -598,7 +607,7 @@ test.describe('GIT file manager', () => {
       },
     );
 
-    await setOpenEditorValue(page, `/scratch/src/${oldName}`, `edited-before-rename-${seq}\n`);
+    await setOpenEditorValue(page, `/src/${oldName}`, `edited-before-rename-${seq}\n`);
     await oldRow.focus();
     await page.keyboard.press('F2');
     await page.locator('.rf-row__input').fill(newName);
@@ -617,17 +626,15 @@ test.describe('GIT file manager', () => {
       },
     );
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(
+    const shell = await openShellTerminal(page);
+    await runShellLine(
       page,
+      shell,
       `test ! -e src/${oldName} && grep edited-before-rename-${seq} src/${newName} && echo rename-ok-${seq}`,
-      60_000,
     );
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 15_000 })
-      .toContain(`rename-ok-${seq}`);
+    await expectShellContains(page, shell, `rename-ok-${seq}`);
 
-    await setOpenEditorValue(page, `/scratch/src/${newName}`, `edited-before-delete-${seq}\n`);
+    await setOpenEditorValue(page, `/src/${newName}`, `edited-before-delete-${seq}\n`);
     page.once('dialog', (dialog) => void dialog.accept());
     await newRow.focus();
     await page.keyboard.press('Delete');
@@ -635,13 +642,11 @@ test.describe('GIT file manager', () => {
       page.locator('.rf-row[role="treeitem"][data-kind="file"]', { hasText: newName }),
     ).toHaveCount(0, { timeout: 30_000 });
     await page.waitForTimeout(700);
-    await runTerminalLineSettled(page, `test ! -e src/${newName} && echo delete-ok-${seq}`, 60_000);
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 15_000 })
-      .toContain(`delete-ok-${seq}`);
+    await runShellLine(page, shell, `test ! -e src/${newName} && echo delete-ok-${seq}`);
+    await expectShellContains(page, shell, `delete-ok-${seq}`);
   });
 
-  test('renaming an open entry file does not silently recreate src/main.js', async ({
+  test('renaming an open entry file survives Save without silently recreating src/main.js', async ({
     page,
     browserName,
   }) => {
@@ -653,7 +658,7 @@ test.describe('GIT file manager', () => {
 
     const seq = Date.now().toString(36);
     const renamed = `main-renamed-${seq}.js`;
-    await setOpenEditorValue(page, '/scratch/src/main.js', `console.log("entry-before-${seq}");\n`);
+    await setOpenEditorValue(page, '/src/main.js', `console.log("entry-before-${seq}");\n`);
     const mainRow = explorerRow(page, 'main.js', 'file');
     await expect(mainRow).toBeVisible({ timeout: 30_000 });
     await mainRow.focus();
@@ -663,59 +668,43 @@ test.describe('GIT file manager', () => {
     await expect(explorerRow(page, renamed, 'file')).toBeVisible({ timeout: 30_000 });
 
     await expect(
-      trySetOpenEditorValue(
-        page,
-        '/scratch/src/main.js',
-        `console.log("should-not-recreate-${seq}");\n`,
-      ),
+      trySetOpenEditorValue(page, '/src/main.js', `console.log("should-not-recreate-${seq}");\n`),
     ).resolves.toBe(false);
     await setOpenEditorValue(
       page,
-      `/scratch/src/${renamed}`,
+      `/src/${renamed}`,
       `console.log("entry-after-rename-${seq}");\n`,
     );
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(
+    const shell = await openShellTerminal(page);
+    await runShellLine(
       page,
-      `node -e "const fs=require('fs'); if (fs.existsSync('src/main.js')) process.exit(1); const text=fs.readFileSync('src/${renamed}','utf8'); if (!text.includes('entry-after-rename-${seq}')) process.exit(2); if (text.includes('should-not-recreate-${seq}')) process.exit(3); console.log('entry-rename-ok-${seq}')"`,
-      60_000,
+      shell,
+      `test ! -e src/main.js && grep entry-after-rename-${seq} src/${renamed} && echo entry-rename-ok-${seq}`,
     );
-    await expect
-      .poll(() => terminalBuffer(page), { timeout: 15_000 })
-      .toContain(`entry-rename-ok-${seq}`);
+    await expectShellContains(page, shell, `entry-rename-ok-${seq}`);
 
     const projectName = `Program Mirror Reset ${seq}`;
-    const projectId = await saveScratchAs(page, projectName);
-    await expect
-      .poll(
-        async () => {
-          const index = await readProjectIndex(page);
-          return index?.activeId ?? '';
-        },
-        { timeout: OWNER_DURABLE_TIMEOUT },
-      )
-      .toBe(projectId);
+    await saveScratchAs(page, projectName);
 
     const resetMarker = `program-root-reset-${seq}`;
-    await page.getByRole('tab', { name: 'src/main.js' }).click();
-    const editor = page.locator('[data-testid="editor"]');
-    const editorInput = editor.locator('textarea.inputarea').first();
-    const editorLines = editor.locator('.view-lines').first();
-    await editor
-      .locator('.view-line')
-      .first()
-      .click({ position: { x: 0, y: 8 } });
-    await editorInput.click({ force: true });
-    await expect(editorInput).toBeFocused();
-    await page.keyboard.press('Home');
-    await page.keyboard.insertText(`// ${resetMarker}\n`);
-    await expect(editorLines).toContainText(resetMarker);
-    await expect
-      .poll(() => readWorkspaceText(page, `/projects/${projectId}/src/main.js`), {
-        timeout: OWNER_DURABLE_TIMEOUT,
-      })
-      .toContain(resetMarker);
+    await expect(editorTab(page, 'main.js')).toHaveCount(0);
+    await expect(
+      trySetOpenEditorValue(page, '/src/main.js', `console.log("${resetMarker}");\n`),
+    ).resolves.toBe(false);
+    await openSrcFolder(page);
+    await explorerRow(page, renamed, 'file').click();
+    await expect(editorTab(page, renamed)).toHaveAttribute('aria-selected', 'true', {
+      timeout: 30_000,
+    });
+    await setOpenEditorValue(page, `/src/${renamed}`, `console.log("${resetMarker}");\n`);
+    const savedProjectShell = await openShellTerminal(page);
+    await runShellLine(
+      page,
+      savedProjectShell,
+      `test ! -e src/main.js && grep ${resetMarker} src/${renamed}`,
+    );
+    await expectShellContains(page, savedProjectShell, resetMarker);
   });
 
   test('editor writes appear in GIT and mark changed editor lines', async ({
@@ -751,11 +740,14 @@ test.describe('GIT file manager', () => {
     await expect(editorLines).toContainText(marker);
     await expect(page.locator('.rf-dirty-gutter--added').first()).toBeVisible({ timeout: 30_000 });
 
-    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Files', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await expect(readmeRow).toHaveAttribute('data-git', 'modified', { timeout: 30_000 });
     await expect(readmeRow.locator('.rf-row__gitbadge')).toHaveText('M');
 
-    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT', exact: true }).click({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'README.md' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await expect(scmRow).toHaveAttribute('data-code', 'M');
@@ -763,9 +755,9 @@ test.describe('GIT file manager', () => {
     await page.getByRole('tab', { name: 'README.md' }).click();
     await expect(page.locator('.rf-dirty-gutter').first()).toBeVisible({ timeout: 30_000 });
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(page, `grep ${marker} README.md`, 60_000);
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain(marker);
+    const shell = await openShellTerminal(page);
+    await runShellLine(page, shell, `grep ${marker} README.md`);
+    await expectShellContains(page, shell, marker);
   });
 
   test('entry file editor writes appear in GIT and mark changed lines', async ({
@@ -776,11 +768,9 @@ test.describe('GIT file manager', () => {
     test.setTimeout(180_000);
 
     await bootScmFileManager(page);
-    await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-      { timeout: 30_000 },
-    );
+    await expect(editorTab(page, 'main.js')).toHaveAttribute('aria-selected', 'true', {
+      timeout: 30_000,
+    });
 
     const marker = `git-entry-${Date.now().toString(36)}`;
     const editor = page.locator('[data-testid="editor"]');
@@ -797,7 +787,10 @@ test.describe('GIT file manager', () => {
     await expect(editorLines).toContainText(marker);
     await expect(page.locator('.rf-dirty-gutter--added').first()).toBeVisible({ timeout: 30_000 });
 
-    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Files', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     const srcRow = page
       .locator('.rf-row[role="treeitem"][data-kind="dir"]', { hasText: 'src' })
       .first();
@@ -811,17 +804,17 @@ test.describe('GIT file manager', () => {
     await expect(mainRow).toHaveAttribute('data-git', 'modified', { timeout: 30_000 });
     await expect(mainRow.locator('.rf-row__gitbadge')).toHaveText('M');
 
-    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT', exact: true }).click({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'src/main.js' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await expect(scmRow).toHaveAttribute('data-code', 'M');
 
-    await page.getByRole('tab', { name: 'src/main.js' }).click();
+    await editorTab(page, 'main.js').click();
     await expect(page.locator('.rf-dirty-gutter').first()).toBeVisible({ timeout: 30_000 });
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(page, `grep ${marker} src/main.js`, 60_000);
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain(marker);
+    const shell = await openShellTerminal(page);
+    await runShellLine(page, shell, `grep ${marker} src/main.js`);
+    await expectShellContains(page, shell, marker);
   });
 
   test('main.js can close, reopen from Files, and appear in GIT after edits', async ({
@@ -832,21 +825,19 @@ test.describe('GIT file manager', () => {
     test.setTimeout(180_000);
 
     await bootScmFileManager(page);
-    await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-      { timeout: 30_000 },
-    );
+    await expect(editorTab(page, 'main.js')).toHaveAttribute('aria-selected', 'true', {
+      timeout: 30_000,
+    });
 
-    await page.getByLabel('Close src/main.js').click();
-    await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveCount(0);
+    await page.getByLabel('Close main.js').click();
+    await expect(editorTab(page, 'main.js')).toHaveCount(0);
     await expect(
-      trySetOpenEditorValue(page, '/scratch/src/main.js', 'console.log("hidden write");\n'),
+      trySetOpenEditorValue(page, '/src/main.js', 'console.log("hidden write");\n'),
     ).resolves.toBe(false);
 
     await openSrcFolder(page);
     await explorerRow(page, 'main.js', 'file').click();
-    const mainTab = page.getByRole('tab', { name: 'src/main.js' });
+    const mainTab = editorTab(page, 'main.js');
     await expect(mainTab).toHaveAttribute('aria-selected', 'true', { timeout: 30_000 });
 
     const marker = `git-main-reopen-${Date.now().toString(36)}`;
@@ -861,17 +852,17 @@ test.describe('GIT file manager', () => {
     await page.keyboard.press('Home');
     await page.keyboard.insertText(`// ${marker}\n`);
     await expect(editor.locator('.view-lines').first()).toContainText(marker);
-    await expect(page.locator('.rf-tab', { hasText: 'src/main.js' })).toHaveAttribute(
-      'data-dirty',
+    await expect(mainTab).toHaveAttribute('data-dirty', 'true');
+
+    await expect(page.getByRole('tab', { name: 'Files', exact: true })).toHaveAttribute(
+      'aria-selected',
       'true',
     );
-
-    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
     const mainRow = explorerRow(page, 'main.js', 'file');
     await expect(mainRow).toHaveAttribute('data-git', 'modified', { timeout: 30_000 });
     await expect(mainRow.locator('.rf-row__gitbadge')).toHaveText('M');
 
-    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT', exact: true }).click({ timeout: 10_000 });
     await expect(page.getByLabel('Git', { exact: true })).toBeVisible({ timeout: 10_000 });
     const gitRow = page.locator('.rf-scm__row', { hasText: 'src/main.js' }).first();
     await expect(gitRow).toBeVisible({ timeout: 30_000 });
@@ -886,13 +877,11 @@ test.describe('GIT file manager', () => {
     test.setTimeout(180_000);
 
     await bootScmFileManager(page);
-    await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-      { timeout: 30_000 },
-    );
+    await expect(editorTab(page, 'main.js')).toHaveAttribute('aria-selected', 'true', {
+      timeout: 30_000,
+    });
 
-    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT', exact: true }).click({ timeout: 10_000 });
     await expect(page.getByLabel('Git', { exact: true })).toBeVisible({ timeout: 10_000 });
 
     const marker = `git-open-${Date.now().toString(36)}`;
@@ -914,7 +903,7 @@ test.describe('GIT file manager', () => {
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await expect(scmRow).toHaveAttribute('data-code', 'M');
 
-    await page.getByRole('tab', { name: 'Files' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'Files', exact: true }).click({ timeout: 10_000 });
     const srcRow = page
       .locator('.rf-row[role="treeitem"][data-kind="dir"]', { hasText: 'src' })
       .first();
@@ -946,19 +935,17 @@ test.describe('GIT file manager', () => {
       'Node worker map',
       { timeout: OWNER_DURABLE_TIMEOUT },
     );
-    await expect(page.getByRole('tab', { name: 'src/main.js' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-      { timeout: 30_000 },
-    );
+    await expect(editorTab(page, 'main.js')).toHaveAttribute('aria-selected', 'true', {
+      timeout: 30_000,
+    });
     await expect(editorLines).toContainText("const notesUrl = new URL('src/runtime-notes.js'", {
       timeout: 30_000,
     });
     await expect(editorLines).not.toContainText("import project from './project.json'");
 
-    await openShellTerminal(page);
-    await runTerminalLineSettled(page, `grep "const notesUrl" src/main.js`, 60_000);
-    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('const notesUrl');
+    const shell = await openShellTerminal(page);
+    await runShellLine(page, shell, `grep "const notesUrl" src/main.js`);
+    await expectShellContains(page, shell, 'const notesUrl');
   });
 
   test('saved project entry-file edits appear in GIT and Files under the project root', async ({
@@ -971,16 +958,7 @@ test.describe('GIT file manager', () => {
     await bootScmFileManager(page);
 
     const projectName = `GIT Project ${Date.now().toString(36)}`;
-    const projectId = await saveScratchAs(page, projectName);
-    await expect
-      .poll(
-        async () => {
-          const index = await readProjectIndex(page);
-          return index?.activeId ?? '';
-        },
-        { timeout: OWNER_DURABLE_TIMEOUT },
-      )
-      .toBe(projectId);
+    await saveScratchAs(page, projectName);
     await openSrcFolder(page, OWNER_DURABLE_TIMEOUT);
     const activeSavedMainRow = explorerRow(page, 'main.js', 'file');
     await expect(activeSavedMainRow).toBeVisible({ timeout: OWNER_DURABLE_TIMEOUT });
@@ -1003,12 +981,12 @@ test.describe('GIT file manager', () => {
     await expect(editorLines).toContainText(marker);
     await expect(page.locator('.rf-dirty-gutter--added').first()).toBeVisible({ timeout: 30_000 });
 
-    await page.getByRole('tab', { name: 'GIT' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'GIT', exact: true }).click({ timeout: 10_000 });
     const scmRow = page.locator('.rf-scm__row', { hasText: 'src/main.js' }).first();
     await expect(scmRow).toBeVisible({ timeout: 30_000 });
     await expect(scmRow).toHaveAttribute('data-code', 'M');
 
-    await page.getByRole('tab', { name: 'Files' }).click({ timeout: 10_000 });
+    await page.getByRole('tab', { name: 'Files', exact: true }).click({ timeout: 10_000 });
     const srcRow = page
       .locator('.rf-row[role="treeitem"][data-kind="dir"]', { hasText: 'src' })
       .first();

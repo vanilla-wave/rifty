@@ -12,6 +12,7 @@ const NODE_WORKER_RUNTIME_ENV = {
   RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
   RIFTY_ESBUILD_WASM_URL: 'blob:esbuild-wasm',
 };
+const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 
 describe('buildChildSpawnSpec', () => {
   it('keeps guest env exact and carries server-capable bin metadata beside the entry', () => {
@@ -61,6 +62,29 @@ describe('buildChildSpawnSpec', () => {
     expect(spec.cwd).toBe('/workspace');
     expect(spec.env).toEqual(req.env);
     expect(spec.serve).toBe(true);
+  });
+
+  it('carries a private FS root out of band while bin argv/cwd stay public', () => {
+    const req: BinSpawnRequest = {
+      shimPath: '/node_modules/.bin/cowsay',
+      args: ['hello'],
+      env: { USER_VALUE: 'kept' },
+      cwd: '/',
+      isTTY: false,
+      remoteFsRoot: REMOTE_FS_ROOT,
+    };
+
+    const spec = buildChildSpawnSpec(req, 'blob:node-entry-url', NODE_WORKER_RUNTIME_ENV);
+
+    expect(spec.entry).toMatchObject({
+      bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT } } },
+    });
+    expect(spec.argv).toEqual(['rifty', '/node_modules/.bin/cowsay', 'hello']);
+    expect(spec.cwd).toBe('/');
+    expect(spec.env).toEqual({ USER_VALUE: 'kept' });
+    expect(JSON.stringify({ argv: spec.argv, cwd: spec.cwd, env: spec.env })).not.toContain(
+      REMOTE_FS_ROOT,
+    );
   });
 });
 

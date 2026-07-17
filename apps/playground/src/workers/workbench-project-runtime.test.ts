@@ -329,8 +329,8 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
 
     expect(worker.command()).toBe('dev-server');
     expect(worker.spec()).toMatchObject({
-      cwd: ROOT,
-      argv: ['rifty', `${ROOT}/src/server.mjs`],
+      cwd: '/',
+      argv: ['rifty', '/src/server.mjs'],
       env: {
         USER_FLAG: 'preserved',
         RIFTY_PREVIEW_SCOPE: 'guest-forged-scope',
@@ -345,7 +345,12 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
           protocol: 'rifty.dev-server/v1',
           payload: {
             nodeWorkerRuntime: NODE_WORKER_RUNTIME_CONFIG,
-            cfg: nodeServerPackageConfig.cfg,
+            cfg: {
+              ...nodeServerPackageConfig.cfg,
+              root: '/',
+              entryPath: '/src/server.mjs',
+            },
+            remoteFsRoot: ROOT,
             previewScope: expect.any(String),
             terminal: {
               stdinIsTTY: false,
@@ -450,8 +455,8 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
 
     expect(worker.command()).toBe('node');
     expect(worker.spec()).toMatchObject({
-      cwd: ROOT,
-      argv: ['rifty', `${ROOT}/src/cli.mjs`, '', 'two words'],
+      cwd: '/',
+      argv: ['rifty', '/src/cli.mjs', '', 'two words'],
       env: { USER_FLAG: 'preserved' },
       serve: true,
       entry: {
@@ -465,6 +470,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
               kind: 'program',
               bin: false,
               remoteFs: true,
+              remoteFsRoot: ROOT,
               nodeServe: true,
               previewScope: expect.any(String),
               terminal: {
@@ -538,7 +544,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
 });
 
 describe('Workbench project runtime', () => {
-  it('uses owner-rooted Shells and actor-minted preview provenance despite forged guest env', async () => {
+  it('uses project-rooted Shells and actor-minted preview provenance despite forged guest env', async () => {
     const worker = boundaryWorker();
     const h = harness();
     h.runtime.handlePtyFrame({
@@ -567,8 +573,8 @@ describe('Workbench project runtime', () => {
     await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
 
     expect(worker.spec()).toMatchObject({
-      cwd: ROOT,
-      argv: ['rifty', `${ROOT}/node_modules/.bin/vite`, '--port', '5173'],
+      cwd: '/',
+      argv: ['rifty', '/node_modules/.bin/vite', '--port', '5173'],
       env: expect.objectContaining({
         USER_FLAG: 'preserved',
         RIFTY_PREVIEW_SCOPE: 'scope-forged',
@@ -587,6 +593,7 @@ describe('Workbench project runtime', () => {
               kind: 'program',
               bin: true,
               remoteFs: true,
+              remoteFsRoot: ROOT,
               nodeServe: true,
               terminal: {
                 stdinIsTTY: false,
@@ -656,6 +663,42 @@ describe('Workbench project runtime', () => {
     await running;
   });
 
+  it('exposes one project-rooted terminal namespace without leaking the owner root', async () => {
+    const h = harness();
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-namespace' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-namespace',
+      rid: 'run-namespace',
+      line: 'pwd; cd /; pwd; realpath /src/main.js; cat /src/main.js',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const chunks = h.frames.filter(
+      (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+        frame.type === 'pty:chunk' && frame.rid === 'run-namespace',
+    );
+    const stdout = chunks
+      .filter((frame) => frame.stream === 'stdout')
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    const stderr = chunks
+      .filter((frame) => frame.stream === 'stderr')
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+
+    expect(stdout).toBe('/\n/\n/src/main.js\nexport {};\n');
+    expect(stderr).toBe('');
+    expect(`${stdout}${stderr}`).not.toContain(ROOT);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-namespace', code: 0 }),
+    );
+    await h.runtime.close();
+  });
+
   it('runs npm lifecycle bodies through a nested real Shell rooted in the project', async () => {
     const h = harness();
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-npm' });
@@ -677,7 +720,8 @@ describe('Workbench project runtime', () => {
       )
       .map((frame) => new TextDecoder().decode(frame.data))
       .join('');
-    expect(output).toContain(`${ROOT}\n`);
+    expect(output).toBe('/\n');
+    expect(output).not.toContain(ROOT);
     expect(h.frames).toContainEqual(
       expect.objectContaining({
         type: 'pty:exit',
@@ -698,7 +742,10 @@ describe('Workbench project runtime', () => {
 
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-npm-mutations' });
 
-    expect(createNpmCommand).toHaveBeenCalledWith(expect.any(Function), { recordMutation });
+    expect(createNpmCommand).toHaveBeenCalledWith(expect.any(Function), {
+      recordMutation,
+      mapInvocationContext: expect.any(Function),
+    });
     await h.runtime.close();
   });
 

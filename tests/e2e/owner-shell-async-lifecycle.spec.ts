@@ -76,14 +76,11 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
     // Write p1.js: schedules a setTimeout that writes a file AND logs after top-level.
     await runTerminalLine(
       page,
-      'echo \'import fs from "node:fs"; setTimeout(function(){ fs.writeFileSync("/workspace/p1.txt","P1DISK"); console.log("P1CB_DONE"); }, 0);\' > /workspace/p1.js',
+      'echo \'import fs from "node:fs"; setTimeout(function(){ fs.writeFileSync("p1.txt","P1DISK"); console.log("P1CB_DONE"); }, 0);\' > p1.js',
     );
 
     // Write the .bin shim (linker format: import() from the shim's dir).
-    await runTerminalLine(
-      page,
-      'echo \'import("../../p1.js");\' > /workspace/node_modules/.bin/p1',
-    );
+    await runTerminalLine(page, 'echo \'import("../../p1.js");\' > node_modules/.bin/p1');
 
     // Run p1 — the setTimeout callback must fire before the child is reaped.
     await runTerminalLine(page, 'p1');
@@ -94,7 +91,7 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
     // THE DECISIVE SIGNAL: run a second command promptly. Pre-fix the shell is
     // busy for ~30s (drain cap hang); post-fix the shell is free immediately.
     // 8s timeout is generous — a drained child returns the prompt in <1s.
-    await runTerminalLine(page, 'cat /workspace/p1.txt');
+    await runTerminalLine(page, 'cat p1.txt');
     await expectTerminalContains(page, 'P1DISK', 8_000);
 
     // No cap-exceeded message anywhere in the buffer.
@@ -116,14 +113,11 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
     // Write p2.js: fires an unhandled rejection inside a setTimeout.
     await runTerminalLine(
       page,
-      'echo \'setTimeout(function(){ Promise.reject(new Error("ASYNCBOOM")); }, 0);\' > /workspace/p2.js',
+      'echo \'setTimeout(function(){ Promise.reject(new Error("ASYNCBOOM")); }, 0);\' > p2.js',
     );
 
     // Write the .bin shim.
-    await runTerminalLine(
-      page,
-      'echo \'import("../../p2.js");\' > /workspace/node_modules/.bin/p2',
-    );
+    await runTerminalLine(page, 'echo \'import("../../p2.js");\' > node_modules/.bin/p2');
 
     // Run p2 — the rejection must surface in the terminal (not silent exit 0).
     await runTerminalLine(page, 'p2');

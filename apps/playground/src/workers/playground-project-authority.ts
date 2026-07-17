@@ -33,6 +33,7 @@ const PLAYGROUND_ROOT = '/.rifty/workbench/playground';
 const CATALOG_FILE = `${PLAYGROUND_ROOT}/catalog.json`;
 const MIGRATION_JOURNAL_FILE = `${PLAYGROUND_ROOT}/migration-journal.json`;
 const TRANSACTION_FILE = `${PLAYGROUND_ROOT}/transaction.json`;
+const CATALOG_TRANSACTIONS_ROOT = `${PLAYGROUND_ROOT}/catalog-transactions`;
 const MIGRATION_INTENTS_ROOT = `${PLAYGROUND_ROOT}/migration-intents`;
 const PROMOTION_MARKER = 'migration-promotion.json';
 const LEGACY_INDEX_NAME = '.rifty-project-index.json';
@@ -114,7 +115,7 @@ interface TransactionRoot {
   readonly after: TreeImage | null;
 }
 
-interface CatalogMutationTransaction {
+interface InlineCatalogMutationTransaction {
   readonly version: 1;
   readonly kind: 'catalog-mutation';
   readonly phase: 'apply' | 'commit';
@@ -122,6 +123,31 @@ interface CatalogMutationTransaction {
   readonly afterCatalog: StoredCatalog;
   readonly roots: readonly TransactionRoot[];
 }
+
+type StagedCatalogMutation =
+  | {
+      readonly role: 'create' | 'replace' | 'remove';
+      readonly id: string;
+    }
+  | {
+      readonly role: 'convert-scratch';
+      readonly id: string;
+      readonly definitionIdentity: string;
+    };
+
+interface StagedCatalogMutationTransaction {
+  readonly version: 2;
+  readonly kind: 'catalog-mutation';
+  readonly txId: string;
+  readonly phase: 'prepared' | 'catalog-committed';
+  readonly beforeCatalog: StoredCatalog | null;
+  readonly afterCatalog: StoredCatalog;
+  readonly mutations: readonly StagedCatalogMutation[];
+}
+
+type CatalogMutationTransaction =
+  | InlineCatalogMutationTransaction
+  | StagedCatalogMutationTransaction;
 
 interface LegacyPublicationTransaction {
   readonly version: 1;
@@ -131,6 +157,22 @@ interface LegacyPublicationTransaction {
 }
 
 type DurableTransaction = CatalogMutationTransaction | LegacyPublicationTransaction;
+
+type CatalogMutationPlan =
+  | {
+      readonly role: 'create' | 'replace';
+      readonly id: string;
+      readonly after: TreeImage;
+    }
+  | {
+      readonly role: 'remove';
+      readonly id: string;
+    }
+  | {
+      readonly role: 'convert-scratch';
+      readonly id: string;
+      readonly definitionIdentity: string;
+    };
 
 interface LegacyIndexScratch {
   readonly starter: string;
@@ -293,6 +335,24 @@ function stageContainer(id: string, stageId: string): string {
   return `${STAGES_ROOT}/${projectStorageSegment(id)}/${stageId}`;
 }
 
+function catalogTransactionRoot(txId: string): string {
+  return `${CATALOG_TRANSACTIONS_ROOT}/${validateStageId(txId)}`;
+}
+
+function catalogMutationStage(
+  transaction: StagedCatalogMutationTransaction,
+  index: number,
+  kind: 'before' | 'after',
+): string {
+  const mutation = transaction.mutations[index];
+  if (mutation === undefined) throw new TypeError(`Catalog mutation ${String(index)} is absent`);
+  return `${catalogTransactionRoot(transaction.txId)}/${String(index)}-${projectStorageSegment(mutation.id)}/${kind}`;
+}
+
+function catalogTransactionPreparedMarker(transaction: StagedCatalogMutationTransaction): string {
+  return `${catalogTransactionRoot(transaction.txId)}/prepared.json`;
+}
+
 function migrationCopyIntent(id: string): string {
   return `${MIGRATION_INTENTS_ROOT}/${projectStorageSegment(id)}.copy`;
 }
@@ -401,6 +461,11 @@ function claimRootForRelative(root: string, relative: string): string {
   return dirname(dirname(absolute));
 }
 
+function isInstallClaimRelative(relative: string): boolean {
+  const segments = relative.split('/');
+  return segments.at(-1) === INSTALL_CLAIM_NAME && segments.at(-2) === 'node_modules';
+}
+
 function removeClaims(
   authority: OwnerVfsAuthority,
   claims: InstallStampClaimIo,
@@ -412,7 +477,12 @@ function removeClaims(
     for (const child of authority.readdirSync(directory)) {
       const path = `${directory}/${child.name}`;
       if (child.isDirectory) walk(path);
-      else if (child.name === INSTALL_CLAIM_NAME) claimRoots.push(dirname(directory));
+      else if (
+        child.name === INSTALL_CLAIM_NAME &&
+        directory.split('/').at(-1) === 'node_modules'
+      ) {
+        claimRoots.push(dirname(directory));
+      }
     }
   };
   walk(root);
@@ -444,7 +514,7 @@ function applyTree(
   for (const file of image.files) {
     const target = `${root}/${file.path}`;
     const bytes = new Uint8Array(file.bytes);
-    if (file.path.split('/').at(-1) === INSTALL_CLAIM_NAME) {
+    if (isInstallClaimRelative(file.path)) {
       claims.write(claimRootForRelative(root, file.path), bytes, { mkdirTree: true });
     } else {
       authority.mkdirSync(dirname(target), { recursive: true });
@@ -453,27 +523,12 @@ function applyTree(
   }
 }
 
-function scratchSaveTree(
-  authority: OwnerVfsAuthority,
-  id: string,
-  definitionIdentity: string,
-): TreeImage {
-  const source = captureTree(authority, projectContainer('scratch'), (relative, kind) => {
-    if (relative === 'definition.json') return false;
-    if (relative === 'tree/.rifty' || relative.startsWith('tree/.rifty/')) return false;
-    if (kind === 'file' && relative.split('/').at(-1) === INSTALL_CLAIM_NAME) return false;
-    return relative === 'tree' || relative.startsWith('tree/');
-  });
-  if (source === null) throw new TypeError('Scratch project tree is missing');
-  return metadataImage(id, definitionIdentity, source);
-}
-
 function legacyTree(authority: OwnerVfsAuthority, sourceRoot: string): TreeImage {
   const source = captureTree(authority, sourceRoot, (relative, kind) => {
     const segments = relative.split('/');
     if (segments[0] === '.rifty') return false;
     if (segments.includes('node_modules')) return false;
-    if (kind === 'file' && segments.at(-1) === INSTALL_CLAIM_NAME) return false;
+    if (kind === 'file' && isInstallClaimRelative(relative)) return false;
     return true;
   });
   if (source === null) throw new TypeError(`Legacy migration source is missing: ${sourceRoot}`);
@@ -886,6 +941,29 @@ function parseImage(value: unknown, label: string): TreeImage | null {
   return Object.freeze({ directories: Object.freeze(directories), files: Object.freeze(files) });
 }
 
+function parseStagedCatalogMutation(value: unknown, index: number): StagedCatalogMutation {
+  const label = `staged catalog mutation ${String(index)}`;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  const role = (value as Readonly<Record<string, unknown>>).role;
+  if (role === 'create' || role === 'replace' || role === 'remove') {
+    const record = exactObject(value, ['role', 'id'], label);
+    return Object.freeze({ role, id: nonEmpty(record.id, `${label}.id`) });
+  }
+  if (role === 'convert-scratch') {
+    const record = exactObject(value, ['role', 'id', 'definitionIdentity'], label);
+    const id = nonEmpty(record.id, `${label}.id`);
+    if (id === 'scratch') throw new TypeError(`${label}.id is reserved`);
+    return Object.freeze({
+      role,
+      id,
+      definitionIdentity: nonEmpty(record.definitionIdentity, `${label}.definitionIdentity`),
+    });
+  }
+  throw new TypeError(`${label}.role is invalid`);
+}
+
 function parseTransaction(value: unknown): DurableTransaction {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new TypeError('Playground transaction is invalid');
@@ -906,12 +984,44 @@ function parseTransaction(value: unknown): DurableTransaction {
     });
   }
   if (kind === 'catalog-mutation') {
+    const version = (value as Readonly<Record<string, unknown>>).version;
+    if (version === 2) {
+      const record = exactObject(
+        value,
+        ['version', 'kind', 'txId', 'phase', 'beforeCatalog', 'afterCatalog', 'mutations'],
+        'staged catalog mutation transaction',
+      );
+      if (record.phase !== 'prepared' && record.phase !== 'catalog-committed') {
+        throw new TypeError('staged catalog mutation transaction phase is invalid');
+      }
+      if (!Array.isArray(record.mutations)) {
+        throw new TypeError('staged catalog mutations is invalid');
+      }
+      const mutations = record.mutations.map(parseStagedCatalogMutation);
+      const ownedIds = new Set<string>();
+      for (const mutation of mutations) {
+        if (ownedIds.has(mutation.id)) {
+          throw new TypeError(`staged catalog mutation id is duplicated: ${mutation.id}`);
+        }
+        ownedIds.add(mutation.id);
+      }
+      return Object.freeze({
+        version: 2,
+        kind,
+        txId: validateStageId(nonEmpty(record.txId, 'staged catalog transaction id')),
+        phase: record.phase,
+        beforeCatalog:
+          record.beforeCatalog === null ? null : parseStoredCatalog(record.beforeCatalog),
+        afterCatalog: parseStoredCatalog(record.afterCatalog),
+        mutations: Object.freeze(mutations),
+      });
+    }
     const record = exactObject(
       value,
       ['version', 'kind', 'phase', 'beforeCatalog', 'afterCatalog', 'roots'],
       'catalog mutation transaction',
     );
-    if (record.version !== 1 || (record.phase !== 'apply' && record.phase !== 'commit')) {
+    if (version !== 1 || (record.phase !== 'apply' && record.phase !== 'commit')) {
       throw new TypeError('catalog mutation transaction header is invalid');
     }
     if (!Array.isArray(record.roots)) throw new TypeError('catalog mutation roots is invalid');
@@ -978,34 +1088,389 @@ async function applyTreeDurably(
 ): Promise<void> {
   if (authority.statSyncOrNull(root) !== null) {
     removeManagedTree(authority, claims, root);
-    await flushRequired(authority);
   }
-  if (image === null) return;
-  authority.mkdirSync(root, { recursive: true });
-  await flushRequired(authority);
-  for (const relative of image.directories) {
-    if (relative === '') continue;
+  if (image === null) {
+    await flushRequired(authority);
+    return;
+  }
+  const orderedImageDirectories = [...image.directories]
+    .filter((relative) => relative !== '')
+    .sort((left, right) => pathDepth(right) - pathDepth(left) || compareCodeUnits(left, right));
+  for (const relative of orderedImageDirectories) {
     const directory = `${root}/${relative}`;
     if (!isDirectory(authority, directory)) {
       authority.mkdirSync(directory, { recursive: true });
-      await flushRequired(authority);
     }
   }
+  if (!isDirectory(authority, root)) authority.mkdirSync(root, { recursive: true });
+  await flushRequired(authority);
   for (const file of image.files) {
     const target = `${root}/${file.path}`;
     const bytes = new Uint8Array(file.bytes);
-    if (file.path.split('/').at(-1) === INSTALL_CLAIM_NAME) {
+    if (isInstallClaimRelative(file.path)) {
       claims.write(claimRootForRelative(root, file.path), bytes, { mkdirTree: true });
     } else {
       authority.writeFileSync(target, bytes);
     }
-    await flushRequired(authority);
+  }
+  if (image.files.length > 0) await flushRequired(authority);
+}
+
+async function removeManagedTreeDurably(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  root: string,
+): Promise<void> {
+  if (authority.statSyncOrNull(root) === null) return;
+  removeManagedTree(authority, claims, root);
+  await flushRequired(authority);
+}
+
+function tombstoneManagedTree(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  root: string,
+): void {
+  if (authority.statSyncOrNull(root) === null) {
+    authority.mkdirSync(root, { recursive: true });
+  }
+  removeManagedTree(authority, claims, root);
+}
+
+interface ManagedCopyPlanFile {
+  readonly sourcePath: string;
+  readonly relative: string;
+  readonly claim: boolean;
+}
+
+interface ManagedCopyPlan {
+  readonly sourceRoot: string;
+  readonly targetRoot: string;
+  readonly directories: readonly string[];
+  readonly files: readonly ManagedCopyPlanFile[];
+}
+
+function planManagedTreeCopy(
+  authority: OwnerVfsAuthority,
+  sourceRoot: string,
+  targetRoot: string,
+  options: {
+    readonly copyClaims: boolean;
+    readonly include?: (relativePath: string, kind: 'file' | 'directory') => boolean;
+  },
+): ManagedCopyPlan {
+  const source = authority.statSyncOrNull(sourceRoot);
+  if (source === null || !source.isDirectory) {
+    throw new TypeError(`Managed copy source is not a directory: ${sourceRoot}`);
+  }
+  if (authority.statSyncOrNull(targetRoot) !== null) {
+    throw new TypeError(`Managed copy target already exists: ${targetRoot}`);
+  }
+  const include = options.include ?? (() => true);
+  const directories: string[] = [];
+  const files: ManagedCopyPlanFile[] = [];
+  const walk = (sourceDirectory: string, relativeDirectory: string): void => {
+    const children = [...authority.readdirSync(sourceDirectory)].sort((left, right) =>
+      compareCodeUnits(left.name, right.name),
+    );
+    for (const child of children) {
+      const sourcePath = `${sourceDirectory}/${child.name}`;
+      const relative = relativeDirectory === '' ? child.name : `${relativeDirectory}/${child.name}`;
+      if (child.isDirectory) {
+        if (!include(relative, 'directory')) continue;
+        directories.push(relative);
+        walk(sourcePath, relative);
+        continue;
+      }
+      if (!include(relative, 'file')) continue;
+      if (isInstallClaimRelative(relative)) {
+        if (!options.copyClaims) continue;
+        files.push(Object.freeze({ sourcePath, relative, claim: true }));
+      } else {
+        files.push(Object.freeze({ sourcePath, relative, claim: false }));
+      }
+    }
+  };
+  walk(sourceRoot, '');
+  return Object.freeze({
+    sourceRoot,
+    targetRoot,
+    directories: Object.freeze(directories),
+    files: Object.freeze(files),
+  });
+}
+
+function applyManagedCopyDirectories(authority: OwnerVfsAuthority, plan: ManagedCopyPlan): void {
+  for (const relative of [...plan.directories].sort(
+    (left, right) => pathDepth(right) - pathDepth(left) || compareCodeUnits(left, right),
+  )) {
+    const target = `${plan.targetRoot}/${relative}`;
+    if (!isDirectory(authority, target)) authority.mkdirSync(target, { recursive: true });
+  }
+  if (!isDirectory(authority, plan.targetRoot)) {
+    authority.mkdirSync(plan.targetRoot, { recursive: true });
   }
 }
 
-function cleanupEmptyManagedParents(authority: OwnerVfsAuthority): boolean {
+function applyManagedCopyFiles(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  plan: ManagedCopyPlan,
+): void {
+  for (const file of plan.files) {
+    if (file.claim) {
+      const sourceClaimRoot = claimRootForRelative(plan.sourceRoot, file.relative);
+      const claim = claims.read(sourceClaimRoot);
+      if (claim === null) {
+        throw new TypeError(`Managed install claim disappeared: ${sourceClaimRoot}`);
+      }
+      claims.write(claimRootForRelative(plan.targetRoot, file.relative), claim, {
+        mkdirTree: true,
+      });
+    } else {
+      authority.copyFileSync(file.sourcePath, `${plan.targetRoot}/${file.relative}`);
+    }
+  }
+}
+
+function copyManagedTree(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  sourceRoot: string,
+  targetRoot: string,
+  options: {
+    readonly copyClaims: boolean;
+    readonly include?: (relativePath: string, kind: 'file' | 'directory') => boolean;
+  },
+): void {
+  const plan = planManagedTreeCopy(authority, sourceRoot, targetRoot, options);
+  applyManagedCopyDirectories(authority, plan);
+  applyManagedCopyFiles(authority, claims, plan);
+}
+
+async function copyManagedTreeDurably(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  sourceRoot: string,
+  targetRoot: string,
+  options: {
+    readonly copyClaims: boolean;
+    readonly include?: (relativePath: string, kind: 'file' | 'directory') => boolean;
+  },
+): Promise<void> {
+  const plan = planManagedTreeCopy(authority, sourceRoot, targetRoot, options);
+  applyManagedCopyDirectories(authority, plan);
+  await flushRequired(authority);
+  applyManagedCopyFiles(authority, claims, plan);
+  if (plan.files.length > 0) await flushRequired(authority);
+}
+
+function stagedMutationFromPlan(plan: CatalogMutationPlan): StagedCatalogMutation {
+  return plan.role === 'convert-scratch'
+    ? Object.freeze({
+        role: plan.role,
+        id: plan.id,
+        definitionIdentity: plan.definitionIdentity,
+      })
+    : Object.freeze({ role: plan.role, id: plan.id });
+}
+
+function assertCatalogMutationPreconditions(
+  authority: OwnerVfsAuthority,
+  plans: readonly CatalogMutationPlan[],
+): void {
+  const ids = new Set<string>();
+  for (const plan of plans) {
+    if (ids.has(plan.id)) throw new TypeError(`Catalog mutation id is duplicated: ${plan.id}`);
+    ids.add(plan.id);
+    const target = authority.statSyncOrNull(projectContainer(plan.id));
+    if (plan.role === 'create' || plan.role === 'convert-scratch') {
+      if (target !== null)
+        throw new TypeError(`Catalog mutation target already exists: ${plan.id}`);
+    } else if (target === null || !target.isDirectory) {
+      throw new TypeError(`Catalog mutation target is missing: ${plan.id}`);
+    }
+    if (plan.role === 'convert-scratch') {
+      const scratch = authority.statSyncOrNull(projectContainer('scratch'));
+      if (scratch === null || !scratch.isDirectory) {
+        throw new TypeError('Scratch project tree is missing');
+      }
+    }
+  }
+}
+
+async function prepareStagedCatalogMutation(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  transaction: StagedCatalogMutationTransaction,
+  plans: readonly CatalogMutationPlan[],
+): Promise<void> {
+  if (plans.length !== transaction.mutations.length) {
+    throw new TypeError('Catalog transaction plan disagrees with its journal');
+  }
+  for (const [index, plan] of plans.entries()) {
+    const recorded = transaction.mutations[index];
+    if (
+      recorded === undefined ||
+      recorded.role !== plan.role ||
+      recorded.id !== plan.id ||
+      (recorded.role === 'convert-scratch' &&
+        plan.role === 'convert-scratch' &&
+        recorded.definitionIdentity !== plan.definitionIdentity)
+    ) {
+      throw new TypeError(`Catalog transaction mutation ${String(index)} disagrees with its plan`);
+    }
+    if (plan.role === 'replace' || plan.role === 'remove') {
+      await copyManagedTreeDurably(
+        authority,
+        claims,
+        projectContainer(plan.id),
+        catalogMutationStage(transaction, index, 'before'),
+        { copyClaims: true },
+      );
+    }
+    if (plan.role === 'create' || plan.role === 'replace') {
+      await applyTreeDurably(
+        authority,
+        claims,
+        catalogMutationStage(transaction, index, 'after'),
+        plan.after,
+      );
+    }
+    if (plan.role === 'convert-scratch') {
+      await copyManagedTreeDurably(
+        authority,
+        claims,
+        projectContainer('scratch'),
+        projectContainer(plan.id),
+        {
+          copyClaims: false,
+          include: (relative, kind) => {
+            if (relative === 'definition.json') return false;
+            if (relative === 'tree/.rifty' || relative.startsWith('tree/.rifty/')) return false;
+            if (kind === 'file' && isInstallClaimRelative(relative)) return false;
+            return relative === 'tree' || relative.startsWith('tree/');
+          },
+        },
+      );
+      await durableWriteJson(authority, `${projectContainer(plan.id)}/definition.json`, {
+        version: 1,
+        projectKey: projectStorageSegment(plan.id),
+        definitionIdentity: plan.definitionIdentity,
+      });
+    }
+  }
+  if (plans.length > 0) {
+    await durableWriteJson(authority, catalogTransactionPreparedMarker(transaction), {
+      version: 1,
+      txId: transaction.txId,
+    });
+  }
+}
+
+async function applyStagedCatalogMutation(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  transaction: StagedCatalogMutationTransaction,
+): Promise<void> {
+  for (const [index, mutation] of transaction.mutations.entries()) {
+    if (mutation.role === 'convert-scratch') continue;
+    const target = projectContainer(mutation.id);
+    await removeManagedTreeDurably(authority, claims, target);
+    if (mutation.role !== 'remove') {
+      await copyManagedTreeDurably(
+        authority,
+        claims,
+        catalogMutationStage(transaction, index, 'after'),
+        target,
+        { copyClaims: true },
+      );
+    }
+  }
+}
+
+async function rollbackStagedCatalogMutation(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  transaction: StagedCatalogMutationTransaction,
+): Promise<void> {
+  const prepared =
+    transaction.mutations.length === 0 ||
+    isFile(authority, catalogTransactionPreparedMarker(transaction));
+  for (const [index, mutation] of transaction.mutations.entries()) {
+    if (mutation.role === 'convert-scratch') {
+      const target = projectContainer(mutation.id);
+      if (authority.statSyncOrNull(target) !== null) {
+        removeManagedTree(authority, claims, target);
+      }
+      continue;
+    }
+    if (!prepared) continue;
+    const target = projectContainer(mutation.id);
+    if (authority.statSyncOrNull(target) !== null) {
+      removeManagedTree(authority, claims, target);
+    }
+    if (mutation.role === 'replace' || mutation.role === 'remove') {
+      copyManagedTree(
+        authority,
+        claims,
+        catalogMutationStage(transaction, index, 'before'),
+        target,
+        { copyClaims: true },
+      );
+    }
+  }
+  if (transaction.beforeCatalog === null) authority.rmSync(CATALOG_FILE, { force: true });
+  else writeJson(authority, CATALOG_FILE, transaction.beforeCatalog);
+  const stageRoot = catalogTransactionRoot(transaction.txId);
+  if (authority.statSyncOrNull(stageRoot) !== null) {
+    removeManagedTree(authority, claims, stageRoot);
+  }
+  authority.rmSync(TRANSACTION_FILE, { force: true });
+  if (
+    transaction.beforeCatalog === null &&
+    authority.statSyncOrNull(MIGRATION_JOURNAL_FILE) === null &&
+    isDirectory(authority, PLAYGROUND_ROOT)
+  ) {
+    removeManagedTree(authority, claims, PLAYGROUND_ROOT);
+  }
+  cleanupEmptyManagedParents(authority);
+  await flushRequired(authority);
+}
+
+async function finishStagedCatalogMutation(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  transaction: StagedCatalogMutationTransaction,
+): Promise<void> {
+  writeJson(authority, TRANSACTION_FILE, {
+    ...transaction,
+    phase: 'catalog-committed',
+  });
+  for (const mutation of transaction.mutations) {
+    if (mutation.role === 'convert-scratch') {
+      tombstoneManagedTree(authority, claims, projectContainer('scratch'));
+    }
+  }
+  tombstoneManagedTree(authority, claims, catalogTransactionRoot(transaction.txId));
+  cleanupEmptyManagedParents(authority, true);
+  await flushRequired(authority);
+  await durableRemove(authority, TRANSACTION_FILE);
+}
+
+function cleanupEmptyManagedParents(
+  authority: OwnerVfsAuthority,
+  tombstoneAbsent = false,
+): boolean {
   let removed = false;
+  const tombstoneRoots = new Set([
+    CATALOG_TRANSACTIONS_ROOT,
+    STAGES_ROOT,
+    PROJECTS_ROOT,
+    WORKBENCH_ROOT,
+  ]);
   for (const path of [
+    CATALOG_TRANSACTIONS_ROOT,
     STAGES_ROOT,
     PROJECTS_ROOT,
     WORKBENCH_ROOT,
@@ -1013,6 +1478,12 @@ function cleanupEmptyManagedParents(authority: OwnerVfsAuthority): boolean {
     '/.rifty/workbench',
     '/.rifty',
   ]) {
+    if (tombstoneAbsent && tombstoneRoots.has(path) && authority.statSyncOrNull(path) === null) {
+      authority.mkdirSync(path, { recursive: true });
+      authority.rmSync(path, { recursive: true, force: true });
+      removed = true;
+      continue;
+    }
     if (isDirectory(authority, path) && authority.readdirSync(path).length === 0) {
       authority.rmSync(path, { recursive: true, force: true });
       removed = true;
@@ -1441,10 +1912,10 @@ function serializedCatalogMatches(authority: OwnerVfsAuthority, catalog: StoredC
   return bytesEqual(authority.readFileBytesSync(CATALOG_FILE), jsonBytes(catalog));
 }
 
-async function recoverCatalogTransaction(
+async function recoverInlineCatalogTransaction(
   authority: OwnerVfsAuthority,
   claims: InstallStampClaimIo,
-  transaction: CatalogMutationTransaction,
+  transaction: InlineCatalogMutationTransaction,
   force?: 'before' | 'after',
 ): Promise<void> {
   const useAfter =
@@ -1470,27 +1941,67 @@ async function recoverCatalogTransaction(
   await flushRequired(authority);
 }
 
+async function recoverStagedCatalogTransaction(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+  transaction: StagedCatalogMutationTransaction,
+  force?: 'before' | 'after',
+): Promise<void> {
+  const useAfter =
+    force === 'after' ||
+    (force !== 'before' &&
+      (transaction.phase === 'catalog-committed' ||
+        serializedCatalogMatches(authority, transaction.afterCatalog)));
+  if (!useAfter) {
+    await rollbackStagedCatalogMutation(authority, claims, transaction);
+    return;
+  }
+  if (!serializedCatalogMatches(authority, transaction.afterCatalog)) {
+    await durableWriteJson(authority, CATALOG_FILE, transaction.afterCatalog);
+  }
+  const committed = Object.freeze({ ...transaction, phase: 'catalog-committed' as const });
+  await finishStagedCatalogMutation(authority, claims, committed);
+}
+
+async function cleanupOrphanCatalogTransactionStages(
+  authority: OwnerVfsAuthority,
+  claims: InstallStampClaimIo,
+): Promise<void> {
+  if (authority.statSyncOrNull(CATALOG_TRANSACTIONS_ROOT) === null) return;
+  await removeManagedTreeDurably(authority, claims, CATALOG_TRANSACTIONS_ROOT);
+  if (cleanupEmptyManagedParents(authority)) await flushRequired(authority);
+}
+
 async function recoverStartupTransaction(
   authority: OwnerVfsAuthority,
   claims: InstallStampClaimIo,
 ): Promise<void> {
-  if (!isFile(authority, TRANSACTION_FILE)) return;
+  if (!isFile(authority, TRANSACTION_FILE)) {
+    await cleanupOrphanCatalogTransactionStages(authority, claims);
+    return;
+  }
   let transaction: DurableTransaction;
   try {
     transaction = parseTransaction(readJson(authority, TRANSACTION_FILE, 'Playground transaction'));
   } catch {
     authority.rmSync(TRANSACTION_FILE, { force: true });
     if (!isFile(authority, CATALOG_FILE) && !isFile(authority, MIGRATION_JOURNAL_FILE)) {
-      authority.rmSync(PLAYGROUND_ROOT, { recursive: true, force: true });
+      removeManagedTree(authority, claims, PLAYGROUND_ROOT);
       cleanupEmptyManagedParents(authority);
     }
     await flushRequired(authority);
+    await cleanupOrphanCatalogTransactionStages(authority, claims);
     return;
   }
   if (transaction.kind === 'legacy-publication') {
     await completeLegacyPublication(authority, transaction, false);
+  } else if (transaction.version === 1) {
+    await recoverInlineCatalogTransaction(authority, claims, transaction);
   } else {
-    await recoverCatalogTransaction(authority, claims, transaction);
+    await recoverStagedCatalogTransaction(authority, claims, transaction);
+  }
+  if (!isFile(authority, TRANSACTION_FILE)) {
+    await cleanupOrphanCatalogTransactionStages(authority, claims);
   }
 }
 
@@ -1639,6 +2150,7 @@ export async function createPlaygroundProjectAuthority(
   let closed = false;
   let closing = false;
   let closePromise: Promise<void> | null = null;
+  let pendingCatalogCleanup: StagedCatalogMutationTransaction | null = null;
   let live: {
     readonly id: string;
     readonly opened: OpenedPlaygroundProject;
@@ -1687,47 +2199,75 @@ export async function createPlaygroundProjectAuthority(
 
   const runCatalogMutation = async (
     next: StoredCatalog,
-    roots: readonly { readonly path: string; readonly after: TreeImage | null }[],
+    plans: readonly CatalogMutationPlan[],
   ): Promise<PlaygroundCatalogSnapshot> => {
+    if (pendingCatalogCleanup !== null) {
+      await recoverStagedCatalogTransaction(
+        authority,
+        installStampClaims,
+        pendingCatalogCleanup,
+        'after',
+      );
+      pendingCatalogCleanup = null;
+    }
     const before = stored;
-    const transaction: CatalogMutationTransaction = Object.freeze({
-      version: 1,
+    assertCatalogMutationPreconditions(authority, plans);
+    const transaction: StagedCatalogMutationTransaction = Object.freeze({
+      version: 2,
       kind: 'catalog-mutation',
-      phase: 'apply',
+      txId: validateStageId(options.createStageId()),
+      phase: 'prepared',
       beforeCatalog: persistedCatalog ? before : null,
       afterCatalog: next,
-      roots: Object.freeze(
-        roots.map((root) =>
-          Object.freeze({
-            path: root.path,
-            before: captureTree(authority, root.path),
-            after: root.after,
-          }),
-        ),
-      ),
+      mutations: Object.freeze(plans.map(stagedMutationFromPlan)),
     });
+    let committed = false;
     try {
       await durableWriteJson(authority, TRANSACTION_FILE, transaction);
-      for (const root of transaction.roots) {
-        await applyTreeDurably(authority, installStampClaims, root.path, root.after);
-      }
+      await prepareStagedCatalogMutation(authority, installStampClaims, transaction, plans);
+      await applyStagedCatalogMutation(authority, installStampClaims, transaction);
       await durableWriteJson(authority, CATALOG_FILE, next);
+      committed = true;
       await durableWriteJson(
         authority,
         TRANSACTION_FILE,
-        Object.freeze({ ...transaction, phase: 'commit' }),
+        Object.freeze({ ...transaction, phase: 'catalog-committed' }),
       );
-      await durableRemove(authority, TRANSACTION_FILE);
+      await finishStagedCatalogMutation(authority, installStampClaims, transaction);
     } catch (error) {
-      try {
-        await recoverCatalogTransaction(authority, installStampClaims, transaction, 'before');
-      } catch (rollbackError) {
-        throw new AggregateError(
-          [error, rollbackError],
-          error instanceof Error ? error.message : 'Playground catalog persistence failed',
-        );
+      if (committed) {
+        const committedTransaction = Object.freeze({
+          ...transaction,
+          phase: 'catalog-committed' as const,
+        });
+        try {
+          await recoverStagedCatalogTransaction(
+            authority,
+            installStampClaims,
+            committedTransaction,
+            'after',
+          );
+        } catch {
+          // Catalog durability is the commit point; the compact journal retains
+          // enough proof for startup to finish post-commit garbage collection.
+          pendingCatalogCleanup = committedTransaction;
+        }
+      } else {
+        try {
+          await recoverStagedCatalogTransaction(
+            authority,
+            installStampClaims,
+            transaction,
+            'before',
+          );
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            error instanceof Error ? error.message : 'Playground catalog persistence failed',
+          );
+        }
+        throw error;
       }
-      throw error;
     }
     stored = next;
     persistedCatalog = true;
@@ -1849,7 +2389,7 @@ export async function createPlaygroundProjectAuthority(
         active,
         projects: Object.freeze(projects),
       });
-      return runCatalogMutation(next, [{ path: projectContainer(id), after: null }]);
+      return runCatalogMutation(next, [{ role: 'remove', id }]);
     });
 
   const authorityApi: PlaygroundProjectAuthority = Object.freeze({
@@ -1888,7 +2428,11 @@ export async function createPlaygroundProjectAuthority(
           }),
         });
         return runCatalogMutation(next, [
-          { path: projectContainer('scratch'), after: definitionTree('scratch', definition) },
+          {
+            role: existing === null ? 'create' : 'replace',
+            id: 'scratch',
+            after: definitionTree('scratch', definition),
+          },
         ]);
       });
     },
@@ -1907,7 +2451,6 @@ export async function createPlaygroundProjectAuthority(
         if (definition.id !== id) throw projectDefinitionMismatch(id);
         if (!baselineMatches(stored.scratch, definition)) throw projectDefinitionMismatch(id);
         const editedAt = now();
-        const targetImage = scratchSaveTree(authority, id, definition.identity);
         const nextProject: StoredProject = Object.freeze({
           id,
           name,
@@ -1921,8 +2464,7 @@ export async function createPlaygroundProjectAuthority(
           projects: Object.freeze([...stored.projects, nextProject]),
         });
         return runCatalogMutation(next, [
-          { path: projectContainer(id), after: targetImage },
-          { path: projectContainer('scratch'), after: null },
+          { role: 'convert-scratch', id, definitionIdentity: definition.identity },
         ]);
       });
     },
@@ -1993,7 +2535,7 @@ export async function createPlaygroundProjectAuthority(
           next = changedCatalog(stored, { projects: Object.freeze(projects) });
         }
         return runCatalogMutation(next, [
-          { path: projectContainer(id), after: definitionTree(id, definition) },
+          { role: 'replace', id, after: definitionTree(id, definition) },
         ]);
       });
     },

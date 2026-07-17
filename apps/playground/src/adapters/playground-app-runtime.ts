@@ -1,4 +1,4 @@
-import { ClosedHandleError } from '../workbench/errors.ts';
+import { ClosedHandleError, isRetryableProjectClosePreflightError } from '../workbench/errors.ts';
 import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectPlan,
@@ -28,7 +28,7 @@ export interface PlaygroundAppRuntime {
   ): Promise<PlaygroundAppProjectContext>;
   saveScratch(plan: PlaygroundProjectPlan, name: string): Promise<PlaygroundAppProjectContext>;
   activate(plan: PlaygroundProjectPlan): Promise<PlaygroundAppProjectContext>;
-  reset(plan: PlaygroundProjectPlan): Promise<PlaygroundAppProjectContext>;
+  reset(plan: PlaygroundProjectPlan): Promise<PlaygroundAppProjectContext | null>;
   rename(id: string, name: string): Promise<PlaygroundAppProjectContext | null>;
   delete(id: string): Promise<PlaygroundAppProjectContext | null>;
   closeCurrent(): Promise<void>;
@@ -124,7 +124,12 @@ export function createPlaygroundAppRuntime(
   const closeActive = async (): Promise<PlaygroundAppProjectContext | null> => {
     const prior = active;
     if (prior === null) return null;
-    await prior.session.close();
+    try {
+      await prior.session.close();
+    } catch (error) {
+      if (!isRetryableProjectClosePreflightError(error) && active === prior) active = null;
+      throw error;
+    }
     if (active === prior) active = null;
     return prior;
   };
@@ -219,9 +224,21 @@ export function createPlaygroundAppRuntime(
     },
 
     reset(plan) {
-      return defineTransition(plan, (definition) =>
-        catalog.reset({ target: planRef(plan), definition }),
-      );
+      return enqueue(async () => {
+        const definition = workbench.playground.define(plan);
+        const prior = await closeActive();
+        let next: PlaygroundCatalogSnapshot;
+        try {
+          next = await catalog.reset({ target: planRef(plan), definition });
+        } catch (error) {
+          return restoreAfterMutationFailure(prior, error);
+        }
+        if (activeMatches(next, plan)) return openDefinition(plan, definition);
+        if (prior !== null && activeMatches(next, prior.plan)) {
+          return openDefinition(prior.plan, prior.definition);
+        }
+        return null;
+      });
     },
 
     rename: (id, name) =>

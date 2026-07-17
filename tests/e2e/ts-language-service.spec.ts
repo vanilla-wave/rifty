@@ -1,6 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
-import { readWorkspaceText } from './helpers/opfs.ts';
 import {
+  type TerminalTarget,
   expectViteDevServerReady,
   insertTerminalLineSettled,
   openShellTerminal,
@@ -55,6 +55,11 @@ function parentDir(path: string): string {
   return slash <= 0 ? '/' : path.slice(0, slash);
 }
 
+function projectPath(root: string, relative: string): string {
+  const suffix = relative.replace(/^\/+/, '');
+  return root === '/' ? `/${suffix}` : `${root}/${suffix}`;
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -63,7 +68,7 @@ async function runOwnerShell(
   page: Page,
   command: string,
   timeout = 15_000,
-  slot: 'active' | number = 'active',
+  slot: TerminalTarget = 'active',
 ): Promise<void> {
   const seq = ++ownerShellSeq;
   const marker = `__rifty_e2e_shell_done_${seq}__`;
@@ -496,7 +501,7 @@ async function writeOwnerFile(
   page: Page,
   path: string,
   content: string,
-  slot: 'active' | number = 'active',
+  slot: TerminalTarget = 'active',
 ): Promise<void> {
   const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "'\\''");
   await insertTerminalLineSettled(
@@ -630,7 +635,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // SECOND idle shell on the same persistent owner for file commands.
     await waitForTypeScriptStarterDevServer(page);
     const root = await activeRootFromHint(page);
-    const tsPath = `${root}/src/lsp-check.ts`;
+    const tsPath = projectPath(root, 'src/lsp-check.ts');
     const shellSlot = await openShellTerminal(page);
 
     // Create an EMPTY .ts file in the owner store (the SSoT the LS reads) via a
@@ -639,7 +644,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // exit, so the palette then lists it.
     await runOwnerShell(
       page,
-      `mkdir -p ${parentDir(tsPath)} && printf '' > ${tsPath} && ls ${root}/src`,
+      `mkdir -p ${parentDir(tsPath)} && printf '' > ${tsPath} && ls ${projectPath(root, 'src')}`,
       15_000,
       shellSlot,
     );
@@ -699,6 +704,34 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
       .poll(() => page.locator('[data-testid="problem-row"]').count(), { timeout: 30_000 })
       .toBe(0);
   });
+
+  test('workspace TypeScript init failure is visible and clears after recovery', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(180_000);
+    await page.goto('/');
+    await pickTypeScriptStarter(page);
+    await waitForTypeScriptStarterDevServer(page);
+
+    const root = await activeRootFromHint(page);
+    const typescriptDir = projectPath(root, 'node_modules/typescript');
+    const hiddenTypeScriptDir = `${typescriptDir}.rifty-e2e-hidden`;
+    const shellSlot = await openShellTerminal(page);
+    await runOwnerShell(page, `mv ${typescriptDir} ${hiddenTypeScriptDir}`, 30_000, shellSlot);
+
+    expect(await tsReinit(page)).toBe(false);
+    await page.locator('[data-testid="problems-tab"]').click();
+    const initFailure = page.locator('[data-testid="problem-row"]', {
+      hasText: 'TypeScript is not installed in this project',
+    });
+    await expect(initFailure).toContainText('tsconfig.json:1:1', { timeout: 30_000 });
+
+    await runOwnerShell(page, `mv ${hiddenTypeScriptDir} ${typescriptDir}`, 30_000, shellSlot);
+    expect(await tsReinit(page)).toBe(true);
+    await expect(initFailure).toHaveCount(0, { timeout: 30_000 });
+  });
 });
 
 test.describe('rifty TS language service: TypeScript starter wiring', () => {
@@ -717,9 +750,9 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
       'TypeScript language surface',
     );
     const root = await activeRootFromHint(page);
-    const mainTs = `${root}/src/main.ts`;
-    const formatTs = `${root}/src/format.ts`;
-    const exampleTypesDts = `${root}/node_modules/@rifty/example-types/index.d.ts`;
+    const mainTs = projectPath(root, 'src/main.ts');
+    const formatTs = projectPath(root, 'src/format.ts');
+    const exampleTypesDts = projectPath(root, 'node_modules/@rifty/example-types/index.d.ts');
     const editor = page.locator('[data-testid="editor"]');
     const input = editor.locator('textarea.inputarea').first();
     const editorLines = editor.locator('.view-lines').first();
@@ -783,9 +816,6 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
       ].join('\n'),
     );
     await expect
-      .poll(() => readWorkspaceText(page, mainTs), { timeout: 30_000 })
-      .toContain('rifty-ts-main-ts-hot');
-    await expect
       .poll(() => fetchPreviewText(page, 5174, '/src/main.ts', { cacheBust: false }), {
         timeout: 60_000,
         intervals: [500, 1_000, 2_000],
@@ -830,7 +860,7 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
       'TypeScript language surface',
     );
     const root = await activeRootFromHint(page);
-    const mainTs = `${root}/src/main.ts`;
+    const mainTs = projectPath(root, 'src/main.ts');
     const before = await terminalBuffer(page);
     for (let i = 0; i < 12; i += 1) {
       await setModelValueEventually(
@@ -883,11 +913,11 @@ function dependencyProjectPaths(root: string): {
   depTs: string;
   depDts: string;
 } {
-  const projectDir = `${root}/src`;
+  const projectDir = projectPath(root, 'src');
   return {
     usesDep: `${projectDir}/uses-dep.ts`,
     depTs: `${projectDir}/dep.ts`,
-    depDts: `${root}/node_modules/cool-dep/index.d.ts`,
+    depDts: projectPath(root, 'node_modules/cool-dep/index.d.ts'),
   };
 }
 const usesDepResolvedSource = [
@@ -933,7 +963,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  - `uses-dep.ts` importing both.
     await writeOwnerFile(
       page,
-      `${root}/tsconfig.json`,
+      projectPath(root, 'tsconfig.json'),
       [
         '{',
         '  "compilerOptions": {',
@@ -951,7 +981,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     );
     await writeOwnerFile(
       page,
-      `${root}/node_modules/cool-dep/package.json`,
+      projectPath(root, 'node_modules/cool-dep/package.json'),
       ['{', '  "name": "cool-dep",', '  "types": "index.d.ts"', '}', ''].join('\n'),
       shellSlot,
     );
@@ -988,7 +1018,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
     //  L6 `const d = cool.value;`          completion switches this to `cool.`
     await writeOwnerFile(page, usesDep, usesDepResolvedSource, shellSlot);
-    await runOwnerShell(page, `cat ${depDts} && ls ${root}/src`, 15_000, shellSlot);
+    await runOwnerShell(page, `cat ${depDts} && ls ${projectPath(root, 'src')}`, 15_000, shellSlot);
     await expect
       .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
       .toContain('coolValue');
@@ -1119,7 +1149,7 @@ function referencesProjectPaths(root: string): {
   greeterTs: string;
   appTs: string;
 } {
-  const projectDir = `${root}/src`;
+  const projectDir = projectPath(root, 'src');
   return {
     greeterTs: `${projectDir}/greeter.ts`,
     appTs: `${projectDir}/app.ts`,
@@ -1148,7 +1178,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     // which sees neither file, could never surface.
     await writeOwnerFile(
       page,
-      `${root}/tsconfig.json`,
+      projectPath(root, 'tsconfig.json'),
       [
         '{',
         '  "compilerOptions": {',
@@ -1193,7 +1223,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
       ].join('\n'),
       shellSlot,
     );
-    await runOwnerShell(page, `ls ${root}/src`, 15_000, shellSlot);
+    await runOwnerShell(page, `ls ${projectPath(root, 'src')}`, 15_000, shellSlot);
     await expect
       .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
       .toContain('app.ts');
@@ -1307,7 +1337,7 @@ function codeActionProjectPaths(root: string): {
   organizeTs: string;
   formatTs: string;
 } {
-  const fixDir = `${root}/src`;
+  const fixDir = projectPath(root, 'src');
   return {
     fixGreeter: `${fixDir}/greeter.ts`,
     fixApp: `${fixDir}/app.ts`,
@@ -1340,7 +1370,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     //  - format.ts with deliberately bad spacing.
     await writeOwnerFile(
       page,
-      `${root}/tsconfig.json`,
+      projectPath(root, 'tsconfig.json'),
       [
         '{',
         '  "compilerOptions": {',
@@ -1397,7 +1427,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       ['export const sum=(a:number,b:number)=>a+b;', 'export const v=sum(1,2);', ''].join('\n'),
       shellSlot,
     );
-    await runOwnerShell(page, `ls ${root}/src`, 15_000, shellSlot);
+    await runOwnerShell(page, `ls ${projectPath(root, 'src')}`, 15_000, shellSlot);
     await expect
       .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
       .toContain('app.ts');

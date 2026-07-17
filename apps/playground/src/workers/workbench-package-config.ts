@@ -17,6 +17,11 @@ export type FirstMaterializationProjectDefinition<TReady = unknown> =
     readonly port?: number;
   };
 
+export interface WorkbenchPackageConfigOptions {
+  /** Exact current owner-tree manifest; definitions describe only the immutable baseline. */
+  readonly packageJsonBytes: Uint8Array;
+}
+
 function firstMaterializationMetadata(definition: InspectedProjectDefinition): {
   readonly templateId: string;
   readonly firstMaterialization: ProjectFirstMaterialization;
@@ -91,14 +96,11 @@ function stringMap(value: unknown, field: string): Readonly<Record<string, strin
   return Object.freeze(result);
 }
 
-function manifestFrom(definition: InspectedProjectDefinition): {
+function manifestFrom(options: WorkbenchPackageConfigOptions): {
   readonly text: string;
   readonly value: Record<string, unknown>;
 } {
-  const bytes = definition.files['/package.json'];
-  if (bytes === undefined) {
-    throw new TypeError('Workbench definition is missing normalized /package.json');
-  }
+  const bytes = options.packageJsonBytes;
   let text: string;
   let value: unknown;
   try {
@@ -115,18 +117,33 @@ function manifestFrom(definition: InspectedProjectDefinition): {
   return { text, value: value as Record<string, unknown> };
 }
 
+function templateNodeModulesFiles(
+  definition: InspectedProjectDefinition,
+  projectRoot: string,
+): Readonly<Record<string, Uint8Array>> {
+  const files: Record<string, Uint8Array> = {};
+  for (const [path, bytes] of Object.entries(definition.files)) {
+    if (!path.startsWith('/node_modules/')) continue;
+    defineOwnEnumerableProperty(files, `${projectRoot}${path}`, bytes.slice());
+  }
+  return Object.freeze(files);
+}
+
 /** Exact package-authority view of one owner-revalidated Workbench definition. */
 export function workbenchPackageConfig(
   definition: FirstMaterializationProjectDefinition,
   projectRoot: string,
+  options: WorkbenchPackageConfigOptions,
 ): FirstMaterializationOwnerPackageConfig;
 export function workbenchPackageConfig(
   definition: InspectedProjectDefinition,
   projectRoot: string,
+  options: WorkbenchPackageConfigOptions,
 ): OwnerPackageConfig;
 export function workbenchPackageConfig(
   definition: InspectedProjectDefinition,
   projectRoot: string,
+  options: WorkbenchPackageConfigOptions,
 ): OwnerPackageConfig | FirstMaterializationOwnerPackageConfig {
   if (
     !isAbsolute(projectRoot) ||
@@ -135,7 +152,7 @@ export function workbenchPackageConfig(
   ) {
     throw new TypeError('Workbench package root must be an absolute normalized owner path');
   }
-  const manifest = manifestFrom(definition);
+  const manifest = manifestFrom(options);
   const metadata = firstMaterializationMetadata(definition);
   const name =
     typeof manifest.value.name === 'string' && manifest.value.name.length > 0
@@ -181,7 +198,8 @@ export function workbenchPackageConfig(
     cfg,
     templateId: metadata?.templateId ?? definition.id,
     slug: definition.storageSegment,
-    fromScratch: true,
+    fromScratch: metadata === null || metadata.firstMaterialization.kind === 'install',
+    templateNodeModulesFiles: templateNodeModulesFiles(definition, projectRoot),
     ...(metadata ? { firstMaterialization: metadata.firstMaterialization } : {}),
   });
 }
@@ -190,8 +208,9 @@ export function workbenchPackageConfig(
 export function workbenchFirstMaterializationPackageConfig(
   definition: InspectedProjectDefinition,
   projectRoot: string,
+  options: WorkbenchPackageConfigOptions,
 ): FirstMaterializationOwnerPackageConfig {
-  const config = workbenchPackageConfig(definition, projectRoot);
+  const config = workbenchPackageConfig(definition, projectRoot, options);
   if (!Object.hasOwn(config, 'firstMaterialization')) {
     throw new TypeError('Playground definition is missing first-materialization metadata');
   }

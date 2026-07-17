@@ -13,6 +13,7 @@ export interface DevServerChildConfig {
   readonly nodeWorkerRuntime: NodeWorkerRuntimeConfig;
   readonly cfg: NodeServerPackageConfig;
   readonly terminal: NodeEntryTerminalBootstrap;
+  readonly remoteFsRoot?: string;
   readonly previewScope?: string;
 }
 
@@ -48,7 +49,7 @@ function nonEmptyString(value: unknown, field: string): string {
 
 function projectRoot(value: unknown): string {
   const root = nonEmptyString(value, 'dev-server bootstrap cfg.root');
-  if (!isAbsolute(root) || root === '/' || normalizePath(root) !== root) {
+  if (!isAbsolute(root) || normalizePath(root) !== root) {
     throw new TypeError(
       'dev-server bootstrap cfg.root must be an absolute normalized project root',
     );
@@ -58,7 +59,9 @@ function projectRoot(value: unknown): string {
 
 function projectPath(value: unknown, root: string, field: string): string {
   const path = nonEmptyString(value, field);
-  if (!isAbsolute(path) || normalizePath(path) !== path || !path.startsWith(`${root}/`)) {
+  const insideRoot =
+    root === '/' ? path !== '/' && path.startsWith('/') : path.startsWith(`${root}/`);
+  if (!isAbsolute(path) || normalizePath(path) !== path || !insideRoot) {
     throw new TypeError(`${field} must be a normalized path inside cfg.root`);
   }
   return path;
@@ -227,7 +230,7 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
   exact(
     payload,
     ['nodeWorkerRuntime', 'cfg', 'terminal'],
-    ['previewScope'],
+    ['previewScope', 'remoteFsRoot'],
     'dev-server bootstrap payload',
   );
   const cfg = snapshotPackageConfig(payload.cfg);
@@ -236,6 +239,8 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
     optionalOwnField(payload, 'previewScope'),
     'dev-server bootstrap payload.previewScope',
   );
+  const remoteFsRootValue = optionalOwnField(payload, 'remoteFsRoot');
+  const remoteFsRoot = remoteFsRootValue === undefined ? undefined : projectRoot(remoteFsRootValue);
   return Object.freeze({
     nodeWorkerRuntime: snapshotNodeWorkerRuntimeConfig(
       payload.nodeWorkerRuntime,
@@ -243,6 +248,7 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
     ),
     cfg,
     terminal,
+    ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
     ...(previewScope === undefined ? {} : { previewScope }),
   });
 }
@@ -254,6 +260,7 @@ export function buildDevServerChildEntry(
     readonly nodeWorkerRuntime: NodeWorkerRuntimeConfig;
     readonly cfg: NodeServerPackageConfig;
     readonly terminal: NodeEntryTerminalBootstrap;
+    readonly remoteFsRoot?: string;
     readonly previewScope?: string;
   },
 ): Extract<WorkerEntryDescriptor, { readonly kind: 'url' }> {
@@ -273,6 +280,7 @@ export function buildDevServerChildEntry(
         nodeWorkerRuntime: inspected.nodeWorkerRuntime,
         cfg: inspected.cfg,
         terminal: inspected.terminal,
+        ...(inspected.remoteFsRoot === undefined ? {} : { remoteFsRoot: inspected.remoteFsRoot }),
         ...(inspected.previewScope === undefined ? {} : { previewScope: inspected.previewScope }),
       }),
     }),

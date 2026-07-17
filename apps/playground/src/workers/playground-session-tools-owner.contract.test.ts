@@ -18,6 +18,7 @@ import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
 const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 const SOURCE = `${PROJECT_ROOT}/src/main.ts`;
+const STAGED_DELETE = `${PROJECT_ROOT}/staged-delete.txt`;
 const PACKAGE_JSON = '{"name":"project-a","version":"1.0.0"}\n';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -100,6 +101,7 @@ describe('owner-resident Playground session tools', () => {
     projectVfs.publishSnapshot();
 
     const frames: OwnerPlaygroundSessionToolsFrame[] = [];
+    const backgroundFailures: Error[] = [];
     const recordMutation = vi.fn(async (_kind: 'scm' | 'archive', _treeRevision: number) => {});
     const service = await createOwnerPlaygroundSessionTools({
       projectRoot: PROJECT_ROOT,
@@ -119,6 +121,7 @@ describe('owner-resident Playground session tools', () => {
         return undefined;
       },
       recordMutation,
+      fatal: (error) => backgroundFailures.push(error),
       log: () => {},
     });
     expect(service.initialScmSnapshot.history).toHaveLength(1);
@@ -147,8 +150,29 @@ describe('owner-resident Playground session tools', () => {
       return response.response.result;
     };
 
-    await vfs.writeFile(SOURCE, 'export const value = 2;\n');
-    await projectVfs.publicationBarrier();
+    const beforeExternalMutation = frames.length;
+    owner.authority.writeFileSync(SOURCE, encoder.encode('export const value = interim;\n'));
+    projectVfs.publishSnapshot();
+    owner.authority.writeFileSync(SOURCE, encoder.encode('export const value = 2;\n'));
+    projectVfs.publishSnapshot();
+    await vi.waitFor(() => {
+      expect(
+        frames
+          .slice(beforeExternalMutation)
+          .some(
+            (frame) =>
+              frame.type === 'workbench:playground-session-tools-scm-snapshot' &&
+              frame.snapshot.changes.some(
+                (change) => change.path === '/src/main.ts' && change.area === 'working',
+              ),
+          ),
+      ).toBe(true);
+    });
+    expect(
+      frames
+        .slice(beforeExternalMutation)
+        .filter((frame) => frame.type === 'workbench:playground-session-tools-scm-snapshot'),
+    ).toHaveLength(1);
     const refreshed = await call({ type: 'scm:refresh' });
     expect(refreshed).toMatchObject({
       type: 'scm:snapshot',
@@ -166,8 +190,61 @@ describe('owner-resident Playground session tools', () => {
     }
     expect(recordMutation).not.toHaveBeenCalled();
 
+    const beforeGuardedMutation = frames.length;
+    await projectVfs.mutationGuard([{ kind: 'write', path: `${PROJECT_ROOT}/package.json` }], () =>
+      vfs.writeFile(
+        `${PROJECT_ROOT}/package.json`,
+        '{"name":"project-a","version":"1.0.0","description":"changed"}\n',
+      ),
+    );
+    await vi.waitFor(() => {
+      expect(
+        frames
+          .slice(beforeGuardedMutation)
+          .some(
+            (frame) =>
+              frame.type === 'workbench:playground-session-tools-scm-snapshot' &&
+              frame.snapshot.changes.some((change) => change.path === '/package.json'),
+          ),
+      ).toBe(true);
+    });
+
     expect(await call({ type: 'scm:stage', path: '/src/main.ts' })).toEqual({ type: 'scm:void' });
     expect(recordMutation).toHaveBeenLastCalledWith('scm', owner.authority.treeRevision);
+    await projectVfs.mutationGuard([{ kind: 'write', path: STAGED_DELETE }], () =>
+      vfs.writeFile(STAGED_DELETE, 'staged add\n'),
+    );
+    expect(await call({ type: 'scm:stage', path: '/staged-delete.txt' })).toEqual({
+      type: 'scm:void',
+    });
+
+    // Fault class: concurrent-same-key × owner writer/SCM reader. Later guest
+    // writes must replace staged-only status with both MM and AD resource rows.
+    const beforePostStageMutation = frames.length;
+    await projectVfs.mutationGuard([{ kind: 'write', path: SOURCE }], () =>
+      vfs.writeFile(SOURCE, 'export const value = 2;\nexport const working = true;\n'),
+    );
+    await projectVfs.mutationGuard([{ kind: 'rm', path: STAGED_DELETE }], () =>
+      vfs.rm(STAGED_DELETE),
+    );
+    expect(backgroundFailures).toEqual([]);
+    await vi.waitFor(
+      () => {
+        const snapshots = frames
+          .slice(beforePostStageMutation)
+          .filter((frame) => frame.type === 'workbench:playground-session-tools-scm-snapshot');
+        expect(snapshots.at(-1)?.snapshot.changes).toEqual(
+          expect.arrayContaining([
+            { path: '/src/main.ts', code: 'MM', area: 'staged' },
+            { path: '/src/main.ts', code: 'MM', area: 'working' },
+            { path: '/staged-delete.txt', code: 'AD', area: 'staged' },
+            { path: '/staged-delete.txt', code: 'AD', area: 'working' },
+          ]),
+        );
+      },
+      { timeout: 5_000 },
+    );
+
     expect(await call({ type: 'scm:unstage', path: '/src/main.ts' })).toEqual({ type: 'scm:void' });
     expect(recordMutation).toHaveBeenLastCalledWith('scm', owner.authority.treeRevision);
     const beforeDiscard = owner.authority.treeRevision;
@@ -221,8 +298,94 @@ describe('owner-resident Playground session tools', () => {
       'scm',
       'scm',
       'scm',
+      'scm',
       'archive',
     ]);
+
+    let releaseDurability!: () => void;
+    const durabilityPending = new Promise<void>((resolve) => {
+      releaseDurability = resolve;
+    });
+    const flush = vi
+      .spyOn(owner.authority, 'flush')
+      .mockImplementationOnce(() => durabilityPending.then(() => undefined));
+    const durabilityRequest = service.handle({
+      type: 'workbench:playground-session-tools-request',
+      requestId: 'owner-durability',
+      operation: { type: 'durability:flush' },
+    } as unknown as PagePlaygroundSessionToolsFrame);
+    durabilityRequest.catch(() => {});
+    await vi.waitFor(() => expect(flush).toHaveBeenCalledTimes(1));
+    expect(
+      frames.find(
+        (frame) =>
+          frame.type === 'workbench:playground-session-tools-response' &&
+          frame.requestId === 'owner-durability',
+      ),
+    ).toBeUndefined();
+    releaseDurability();
+    await durabilityRequest;
+    expect(
+      frames.find(
+        (frame) =>
+          frame.type === 'workbench:playground-session-tools-response' &&
+          frame.requestId === 'owner-durability',
+      ),
+    ).toEqual({
+      type: 'workbench:playground-session-tools-response',
+      requestId: 'owner-durability',
+      response: { ok: true, result: { type: 'durability:void' } },
+    });
+
+    flush.mockResolvedValueOnce({
+      total: 2,
+      failures: [
+        { op: 'write', path: SOURCE, message: 'quota exceeded' },
+        {
+          op: 'write',
+          path: '/.rifty/workbench/v1/catalog.json',
+          message: 'catalog permission denied',
+        },
+      ],
+    });
+    await service.handle({
+      type: 'workbench:playground-session-tools-request',
+      requestId: 'owner-durability-failed',
+      operation: { type: 'durability:flush' },
+    } as unknown as PagePlaygroundSessionToolsFrame);
+    expect(
+      frames.find(
+        (frame) =>
+          frame.type === 'workbench:playground-session-tools-response' &&
+          frame.requestId === 'owner-durability-failed',
+      ),
+    ).toMatchObject({
+      response: {
+        ok: false,
+        error: {
+          message: expect.stringContaining('write /src/main.ts: quota exceeded'),
+        },
+      },
+    });
+    const durabilityFailure = frames.find(
+      (frame) =>
+        frame.type === 'workbench:playground-session-tools-response' &&
+        frame.requestId === 'owner-durability-failed',
+    );
+    if (
+      durabilityFailure?.type !== 'workbench:playground-session-tools-response' ||
+      durabilityFailure.response.ok
+    ) {
+      throw new Error('expected failed durability response');
+    }
+    expect(durabilityFailure.response.error.message).toContain(
+      'write [outside active project]: catalog permission denied',
+    );
+    expect(durabilityFailure.response.error.message).not.toContain(PROJECT_ROOT);
+    expect(durabilityFailure.response.error.message).not.toContain(
+      '/.rifty/workbench/v1/catalog.json',
+    );
+    flush.mockRestore();
 
     const beforeDuplicate = frames.length;
     await expect(
@@ -260,8 +423,47 @@ describe('owner-resident Playground session tools', () => {
     ).rejects.toBeInstanceOf(ClosedHandleError);
 
     await service.close();
+    const failedRefreshFrames: OwnerPlaygroundSessionToolsFrame[] = [];
+    const failedRefreshes: Error[] = [];
+    const failedService = await createOwnerPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      owner,
+      packages,
+      projectVfs,
+      vfs,
+      git,
+      commitIdentity: COMMIT_IDENTITY,
+      tsWorkerUrl: 'ts-lsp-worker.js',
+      nodeWorkerRuntimeEnv: {},
+      spawnTsWorker: () => {
+        throw new Error('TS worker must remain lazy in the SCM failure contract');
+      },
+      send(frame) {
+        failedRefreshFrames.push(structuredClone(frame));
+        return undefined;
+      },
+      fatal: (error) => failedRefreshes.push(error),
+      log: () => {},
+    });
+    owner.authority.writeFileSync(
+      `${PROJECT_ROOT}/.git/index`,
+      encoder.encode('corrupt git index'),
+    );
+    projectVfs.publishSnapshot();
+    await vi.waitFor(() => expect(failedRefreshes).toHaveLength(1));
+    await expect(
+      failedService.handle({
+        type: 'workbench:playground-session-tools-request',
+        requestId: 'after-background-failure',
+        operation: { type: 'scm:refresh' },
+      }),
+    ).rejects.toBeInstanceOf(ClosedHandleError);
+    await expect(failedService.close()).rejects.toBe(failedRefreshes[0]);
+    expect(failedRefreshFrames).toEqual([]);
+
     await packages.quiesce();
     await projectVfs.close();
+    expect(backgroundFailures).toEqual([]);
     expect(vfsFailures).toEqual([]);
     expect(vfsFrames.length).toBeGreaterThan(0);
   });

@@ -10,8 +10,10 @@ import {
   type OwnerPlaygroundSessionToolsFrame,
   type PagePlaygroundSessionToolsFrame,
   createBrowserPlaygroundSessionTools,
+  flushBrowserPlaygroundSessionDurability,
   inspectOwnerPlaygroundSessionToolsFrame,
   inspectPagePlaygroundSessionToolsFrame,
+  reinitializeBrowserPlaygroundTypeScript,
 } from './playground-session-tools-transport.ts';
 
 const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
@@ -96,6 +98,11 @@ function pageFrames(): readonly PagePlaygroundSessionToolsFrame[] {
     {
       type: 'workbench:playground-session-tools-request',
       requestId: '9',
+      operation: { type: 'durability:flush' },
+    },
+    {
+      type: 'workbench:playground-session-tools-request',
+      requestId: '10',
       operation: { type: 'close' },
     },
     {
@@ -178,6 +185,11 @@ function ownerFrames(): readonly OwnerPlaygroundSessionToolsFrame[] {
     {
       type: 'workbench:playground-session-tools-response',
       requestId: '9',
+      response: { ok: true, result: { type: 'durability:void' } },
+    },
+    {
+      type: 'workbench:playground-session-tools-response',
+      requestId: '10',
       response: { ok: false, error: { name: 'Error', message: 'failed' } },
     },
     {
@@ -357,6 +369,236 @@ function okResponse(
 }
 
 describe('browser session-tools lifecycle and proxies', () => {
+  it('keeps durability package-private and settles only from the correlated owner result', async () => {
+    const route = routeHarness();
+    let requestSequence = 0;
+    const lifecycle = createBrowserPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      documents: documentsController(),
+      initialScmSnapshot: snapshot,
+      previews: emptyPreviews(),
+      send: route.send,
+      subscribe: route.subscribe,
+      generateRequestId: () => `durability-${String(++requestSequence)}`,
+      requestTimeoutMs: 1_000,
+      tsRequestTimeoutMs: 1_000,
+    });
+
+    expect(Reflect.ownKeys(lifecycle.tools)).toEqual(['typescript', 'scm', 'archive', 'previews']);
+    await expect(flushBrowserPlaygroundSessionDurability({} as never)).rejects.toThrow(
+      'Unknown browser Playground session tools',
+    );
+
+    let settled = false;
+    const durable = flushBrowserPlaygroundSessionDurability(lifecycle.tools).then(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(route.sent).toHaveLength(1));
+    const request = route.sent[0]!;
+    if (request.type !== 'workbench:playground-session-tools-request') {
+      throw new Error('expected durability request');
+    }
+    expect(request.operation).toEqual({ type: 'durability:flush' });
+    expect(settled).toBe(false);
+    route.deliver(okResponse(request.requestId, { type: 'durability:void' } as never));
+    await durable;
+    expect(settled).toBe(true);
+
+    const failed = flushBrowserPlaygroundSessionDurability(lifecycle.tools);
+    await vi.waitFor(() => expect(route.sent).toHaveLength(2));
+    const failedRequest = route.sent[1]!;
+    if (failedRequest.type !== 'workbench:playground-session-tools-request') {
+      throw new Error('expected failed durability request');
+    }
+    route.deliver({
+      type: 'workbench:playground-session-tools-response',
+      requestId: failedRequest.requestId,
+      response: { ok: false, error: { name: 'Error', message: 'OPFS flush failed' } },
+    });
+    await expect(failed).rejects.toThrow('OPFS flush failed');
+
+    const close = lifecycle.close();
+    await vi.waitFor(() => expect(route.sent).toHaveLength(3));
+    const closeRequest = route.sent[2]!;
+    if (closeRequest.type !== 'workbench:playground-session-tools-request') {
+      throw new Error('expected owner endpoint close');
+    }
+    route.deliver(okResponse(closeRequest.requestId, { type: 'closed' }));
+    await close;
+  });
+
+  it('reinitializes the captured TS project internally without widening the public tool', async () => {
+    const route = routeHarness();
+    const lifecycle = createBrowserPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      documents: documentsController(),
+      initialScmSnapshot: snapshot,
+      previews: emptyPreviews(),
+      send: route.send,
+      subscribe: route.subscribe,
+      requestTimeoutMs: 1_000,
+      tsRequestTimeoutMs: 1_000,
+    });
+
+    expect(Reflect.ownKeys(lifecycle.tools.typescript)).not.toContain('init');
+    expect(Reflect.ownKeys(lifecycle.tools.typescript)).not.toContain('reinitialize');
+    await expect(reinitializeBrowserPlaygroundTypeScript({} as never)).rejects.toThrow(
+      'Unknown browser Playground TypeScript tool',
+    );
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const reinitialized = reinitializeBrowserPlaygroundTypeScript(lifecycle.tools.typescript);
+      await vi.waitFor(() => expect(route.sent).toHaveLength(attempt));
+      const frame = route.sent[attempt - 1]!;
+      if (frame.type !== 'workbench:playground-session-tools-ts-request') {
+        throw new Error('expected TS init');
+      }
+      expect(frame.message.request).toMatchObject({
+        type: 'ts:init',
+        projectRoot: PROJECT_ROOT,
+      });
+      route.deliver({
+        type: 'workbench:playground-session-tools-ts-response',
+        message: {
+          type: 'rifty:ts-lsp',
+          response: { id: frame.message.request.id, ok: true, kind: 'ack' },
+        },
+      });
+      await expect(reinitialized).resolves.toBeUndefined();
+    }
+
+    const close = lifecycle.close();
+    await vi.waitFor(() => expect(route.sent).toHaveLength(3));
+    const dispose = route.sent[2]!;
+    if (dispose.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected TS dispose');
+    }
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: { id: dispose.message.request.id, ok: true, kind: 'ack' },
+      },
+    });
+    await vi.waitFor(() => expect(route.sent).toHaveLength(4));
+    const closeRequest = route.sent[3]!;
+    if (closeRequest.type !== 'workbench:playground-session-tools-request') {
+      throw new Error('expected owner endpoint close');
+    }
+    route.deliver(okResponse(closeRequest.requestId, { type: 'closed' }));
+    await close;
+  });
+
+  // Fault classes: failed-first-attempt + concurrent-same-key. A DEV rebuild may
+  // retry a failed init, but overlapping rebuilds and later queries stay ordered.
+  it('retries a failed TS init and serializes concurrent rebuilds before later queries', async () => {
+    const route = routeHarness();
+    const lifecycle = createBrowserPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      documents: documentsController(),
+      initialScmSnapshot: snapshot,
+      previews: emptyPreviews(),
+      send: route.send,
+      subscribe: route.subscribe,
+      requestTimeoutMs: 1_000,
+      tsRequestTimeoutMs: 1_000,
+    });
+
+    const failed = reinitializeBrowserPlaygroundTypeScript(lifecycle.tools.typescript);
+    await vi.waitFor(() => expect(route.sent).toHaveLength(1));
+    const failedFrame = route.sent[0]!;
+    if (failedFrame.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected failed TS init');
+    }
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: {
+          id: failedFrame.message.request.id,
+          ok: false,
+          kind: 'error',
+          error: { name: 'Error', message: 'first init failed' },
+        },
+      },
+    });
+    await expect(failed).rejects.toThrow('first init failed');
+
+    const retry = reinitializeBrowserPlaygroundTypeScript(lifecycle.tools.typescript);
+    const concurrent = reinitializeBrowserPlaygroundTypeScript(lifecycle.tools.typescript);
+    const diagnostics = lifecycle.tools.typescript.getSyntacticDiagnostics(SOURCE);
+    await vi.waitFor(() => expect(route.sent).toHaveLength(2));
+    const retryFrame = route.sent[1]!;
+    if (retryFrame.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected retry TS init');
+    }
+    expect(retryFrame.message.request.type).toBe('ts:init');
+    expect(route.sent).toHaveLength(2);
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: { id: retryFrame.message.request.id, ok: true, kind: 'ack' },
+      },
+    });
+    await expect(retry).resolves.toBeUndefined();
+
+    await vi.waitFor(() => expect(route.sent).toHaveLength(3));
+    const concurrentFrame = route.sent[2]!;
+    if (concurrentFrame.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected concurrent TS init');
+    }
+    expect(concurrentFrame.message.request.type).toBe('ts:init');
+    expect(route.sent).toHaveLength(3);
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: { id: concurrentFrame.message.request.id, ok: true, kind: 'ack' },
+      },
+    });
+    await expect(concurrent).resolves.toBeUndefined();
+
+    await vi.waitFor(() => expect(route.sent).toHaveLength(4));
+    const query = route.sent[3]!;
+    if (query.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected TS diagnostics query');
+    }
+    expect(query.message.request).toMatchObject({
+      type: 'ts:getSyntacticDiagnostics',
+      path: OWNER_SOURCE,
+    });
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: { id: query.message.request.id, ok: true, kind: 'diagnostics', diagnostics: [] },
+      },
+    });
+    await expect(diagnostics).resolves.toEqual([]);
+
+    const close = lifecycle.close();
+    await vi.waitFor(() => expect(route.sent).toHaveLength(5));
+    const dispose = route.sent[4]!;
+    if (dispose.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected TS dispose');
+    }
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: { id: dispose.message.request.id, ok: true, kind: 'ack' },
+      },
+    });
+    await vi.waitFor(() => expect(route.sent).toHaveLength(6));
+    const closeRequest = route.sent[5]!;
+    if (closeRequest.type !== 'workbench:playground-session-tools-request') {
+      throw new Error('expected owner endpoint close');
+    }
+    route.deliver(okResponse(closeRequest.requestId, { type: 'closed' }));
+    await close;
+  });
+
   it('keeps routing private, replays SCM state, and maps TS paths through the semantic adapter', async () => {
     const route = routeHarness();
     let requestSequence = 0;
@@ -472,6 +714,160 @@ describe('browser session-tools lifecycle and proxies', () => {
     if (closeRequest.type !== 'workbench:playground-session-tools-request')
       throw new Error('expected close');
     expect(closeRequest.operation).toEqual({ type: 'close' });
+    route.deliver(okResponse(closeRequest.requestId, { type: 'closed' }));
+    await expect(close).resolves.toBeUndefined();
+  });
+
+  it('drains a concurrently failing TypeScript init without owning its error or disposing it', async () => {
+    const route = routeHarness();
+    let requestSequence = 0;
+    const lifecycle = createBrowserPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      documents: documentsController(),
+      initialScmSnapshot: snapshot,
+      previews: emptyPreviews(),
+      send: route.send,
+      subscribe: route.subscribe,
+      generateRequestId: () => `failed-init-${String(++requestSequence)}`,
+      requestTimeoutMs: 1_000,
+      tsRequestTimeoutMs: 1_000,
+    });
+
+    const diagnostics = lifecycle.tools.typescript.getSyntacticDiagnostics(SOURCE);
+    await vi.waitFor(() => expect(route.sent).toHaveLength(1));
+    const init = route.sent[0]!;
+    if (init.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected TS init');
+    }
+    const close = lifecycle.close();
+    expect(route.sent).toHaveLength(1);
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: {
+          id: init.message.request.id,
+          ok: false,
+          kind: 'error',
+          error: {
+            name: 'Error',
+            message: 'TypeScript is not installed in this project; run npm install -D typescript',
+          },
+        },
+      },
+    });
+    await expect(diagnostics).rejects.toThrow('TypeScript is not installed');
+
+    await vi.waitFor(() => expect(route.sent).toHaveLength(2));
+    const closeRequest = route.sent[1]!;
+    if (closeRequest.type !== 'workbench:playground-session-tools-request') {
+      throw new Error('failed TS init must not admit a TS dispose request');
+    }
+    expect(closeRequest.operation).toEqual({ type: 'close' });
+    route.deliver(okResponse(closeRequest.requestId, { type: 'closed' }));
+    await expect(close).resolves.toBeUndefined();
+  });
+
+  it('drains a concurrently failing SCM call without re-owning its caller-visible error', async () => {
+    const route = routeHarness();
+    let requestSequence = 0;
+    const lifecycle = createBrowserPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      documents: documentsController(),
+      initialScmSnapshot: snapshot,
+      previews: emptyPreviews(),
+      send: route.send,
+      subscribe: route.subscribe,
+      generateRequestId: () => `failed-scm-${String(++requestSequence)}`,
+      requestTimeoutMs: 1_000,
+      tsRequestTimeoutMs: 1_000,
+    });
+
+    const refresh = lifecycle.tools.scm.refresh();
+    await vi.waitFor(() => expect(route.sent).toHaveLength(1));
+    const refreshRequest = route.sent[0]!;
+    if (refreshRequest.type !== 'workbench:playground-session-tools-request') {
+      throw new Error('expected SCM refresh');
+    }
+    const close = lifecycle.close();
+    route.deliver({
+      type: 'workbench:playground-session-tools-response',
+      requestId: refreshRequest.requestId,
+      response: { ok: false, error: { name: 'Error', message: 'refresh failed' } },
+    });
+    await expect(refresh).rejects.toThrow('refresh failed');
+
+    await vi.waitFor(() => expect(route.sent).toHaveLength(2));
+    const closeRequest = route.sent[1]!;
+    if (closeRequest.type !== 'workbench:playground-session-tools-request') {
+      throw new Error('expected owner endpoint close');
+    }
+    expect(closeRequest.operation).toEqual({ type: 'close' });
+    route.deliver(okResponse(closeRequest.requestId, { type: 'closed' }));
+    await expect(close).resolves.toBeUndefined();
+  });
+
+  it('drains a concurrent successful TypeScript init before one dispose and endpoint close', async () => {
+    const route = routeHarness();
+    let requestSequence = 0;
+    const lifecycle = createBrowserPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      documents: documentsController(),
+      initialScmSnapshot: snapshot,
+      previews: emptyPreviews(),
+      send: route.send,
+      subscribe: route.subscribe,
+      generateRequestId: () => `successful-init-${String(++requestSequence)}`,
+      requestTimeoutMs: 1_000,
+      tsRequestTimeoutMs: 1_000,
+    });
+
+    const diagnostics = lifecycle.tools.typescript.getSyntacticDiagnostics(SOURCE);
+    await vi.waitFor(() => expect(route.sent).toHaveLength(1));
+    const init = route.sent[0]!;
+    if (init.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected TS init');
+    }
+    const close = lifecycle.close();
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: { id: init.message.request.id, ok: true, kind: 'ack' },
+      },
+    });
+    await vi.waitFor(() => expect(route.sent).toHaveLength(2));
+    const query = route.sent[1]!;
+    if (query.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected TS diagnostics query');
+    }
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: { id: query.message.request.id, ok: true, kind: 'diagnostics', diagnostics: [] },
+      },
+    });
+    await expect(diagnostics).resolves.toEqual([]);
+
+    await vi.waitFor(() => expect(route.sent).toHaveLength(3));
+    const dispose = route.sent[2]!;
+    if (dispose.type !== 'workbench:playground-session-tools-ts-request') {
+      throw new Error('expected one TS dispose');
+    }
+    expect(dispose.message.request.type).toBe('ts:dispose');
+    route.deliver({
+      type: 'workbench:playground-session-tools-ts-response',
+      message: {
+        type: 'rifty:ts-lsp',
+        response: { id: dispose.message.request.id, ok: true, kind: 'ack' },
+      },
+    });
+    await vi.waitFor(() => expect(route.sent).toHaveLength(4));
+    const closeRequest = route.sent[3]!;
+    if (closeRequest.type !== 'workbench:playground-session-tools-request') {
+      throw new Error('expected owner endpoint close');
+    }
     route.deliver(okResponse(closeRequest.requestId, { type: 'closed' }));
     await expect(close).resolves.toBeUndefined();
   });

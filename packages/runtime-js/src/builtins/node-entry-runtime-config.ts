@@ -1,4 +1,5 @@
 import { type WorkerEntryDescriptor, readKernelEntryBootstrap } from '@riftydev/kernel';
+import { isAbsolute, normalizePath } from '@riftydev/vfs';
 
 export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v1' as const;
 
@@ -14,6 +15,8 @@ export interface NodeEntryProgramLaunch {
   readonly kind: 'program';
   readonly bin: boolean;
   readonly remoteFs: boolean;
+  /** Host-only physical root behind the child's public `/` namespace. */
+  readonly remoteFsRoot?: string;
   readonly nodeServe: boolean;
   readonly previewScope?: string;
   readonly terminal?: NodeEntryTerminalBootstrap;
@@ -22,6 +25,8 @@ export interface NodeEntryProgramLaunch {
 export interface NodeEntryWorkerThreadLaunch {
   readonly kind: 'worker-thread';
   readonly remoteFs: boolean;
+  /** Inherited host-only physical root behind the worker's public `/` namespace. */
+  readonly remoteFsRoot?: string;
   readonly threadId: number;
   readonly workerDataJson?: string;
 }
@@ -113,6 +118,27 @@ function positiveInteger(value: unknown, owner: string): number {
   return value as number;
 }
 
+function remoteFsRootValue(value: unknown, remoteFs: boolean): string | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== 'string' ||
+    value === '/' ||
+    value.includes('\0') ||
+    !isAbsolute(value) ||
+    normalizePath(value) !== value
+  ) {
+    throw new TypeError(
+      'node-entry bootstrap launch.remoteFsRoot must be an absolute normalized non-root path',
+    );
+  }
+  if (!remoteFs) {
+    throw new TypeError(
+      'node-entry bootstrap launch.remoteFsRoot requires launch.remoteFs to be true',
+    );
+  }
+  return value;
+}
+
 const TERMINAL_FIELDS = ['stdinIsTTY', 'stdoutIsTTY', 'stderrIsTTY', 'cols', 'rows'] as const;
 
 /** Package-internal exact-own snapshot shared by entry and late process bootstraps. */
@@ -142,11 +168,12 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
   if (kind === 'program') {
     assertAllowedOwnFields(
       record,
-      ['kind', 'bin', 'remoteFs', 'nodeServe', 'previewScope', 'terminal'],
+      ['kind', 'bin', 'remoteFs', 'remoteFsRoot', 'nodeServe', 'previewScope', 'terminal'],
       'node-entry bootstrap program launch',
     );
     const bin = booleanOwnField(record, 'bin', 'node-entry bootstrap launch');
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
+    const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
     const nodeServe = booleanOwnField(record, 'nodeServe', 'node-entry bootstrap launch');
     const previewScope = optionalOwnField(record, 'previewScope');
     if (previewScope !== undefined && (typeof previewScope !== 'string' || previewScope === '')) {
@@ -157,6 +184,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       kind: 'program',
       bin,
       remoteFs,
+      ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
       nodeServe,
       ...(previewScope === undefined ? {} : { previewScope }),
       ...(terminal === undefined ? {} : { terminal: snapshotNodeEntryTerminalBootstrap(terminal) }),
@@ -165,10 +193,11 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
   if (kind === 'worker-thread') {
     assertAllowedOwnFields(
       record,
-      ['kind', 'remoteFs', 'threadId', 'workerDataJson'],
+      ['kind', 'remoteFs', 'remoteFsRoot', 'threadId', 'workerDataJson'],
       'node-entry bootstrap worker-thread launch',
     );
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
+    const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
     const threadId = positiveInteger(
       requiredOwnField(record, 'threadId', 'node-entry bootstrap launch'),
       'node-entry bootstrap launch.threadId',
@@ -187,6 +216,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     return Object.freeze({
       kind: 'worker-thread',
       remoteFs,
+      ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
       threadId,
       ...(workerDataJson === undefined ? {} : { workerDataJson }),
     });
@@ -228,7 +258,20 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
   if (config?.hostRuntime == null) {
     throw new Error('node-entry worker bootstrap config is not configured');
   }
-  return buildNodeEntryWorkerEntry(config.url, config.hostRuntime, launch);
+  const current = readNodeEntryBootstrapIfPresent();
+  const inheritedRoot = current?.launch.remoteFsRoot;
+  if (
+    inheritedRoot !== undefined &&
+    launch.remoteFsRoot !== undefined &&
+    launch.remoteFsRoot !== inheritedRoot
+  ) {
+    throw new TypeError('nested node-entry launch cannot replace the inherited remoteFsRoot');
+  }
+  const nestedLaunch =
+    inheritedRoot === undefined || !launch.remoteFs
+      ? launch
+      : { ...launch, remoteFsRoot: inheritedRoot };
+  return buildNodeEntryWorkerEntry(config.url, config.hostRuntime, nestedLaunch);
 }
 
 /** Decode this realm's node-entry envelope; missing/wrong protocol is loud. */

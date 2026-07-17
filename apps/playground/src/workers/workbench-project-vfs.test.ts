@@ -147,6 +147,40 @@ function writeRequest(
 }
 
 describe('Workbench project VFS owner adapter', () => {
+  it('notifies one publication seam for host, guest/package, and owner-applied revisions', async () => {
+    const h = harness();
+    const revisions: number[] = [];
+    const unsubscribe = h.vfs.subscribePublications((treeRevision) => {
+      revisions.push(treeRevision);
+    });
+    const path = `${ROOT}/src/main.ts`;
+
+    h.vfs.publishSnapshot();
+
+    const hostVersion = h.authority.versionOf(path);
+    if (hostVersion === null) throw new Error('test version missing');
+    await h.vfs.handleFrame({
+      type: 'rifty:owner-vfs-commit',
+      request: writeRequest('publication-host', path, hostVersion),
+    });
+
+    await h.vfs.mutationGuard([{ kind: 'write', path }], () => {
+      h.authority.writeFileSync(path, encoder.encode('guest-or-package'));
+    });
+
+    h.authority.writeFileSync(path, encoder.encode('owner-applied'));
+    await h.vfs.publicationBarrier();
+
+    expect(revisions).toEqual([expect.any(Number), expect.any(Number), expect.any(Number)]);
+    expect(revisions).toEqual([...revisions].sort((left, right) => left - right));
+    expect(new Set(revisions).size).toBe(revisions.length);
+
+    unsubscribe();
+    h.authority.writeFileSync(path, encoder.encode('after-unsubscribe'));
+    await h.vfs.publicationBarrier();
+    expect(revisions).toHaveLength(3);
+  });
+
   it('records file and guest mutations before their publication settles', async () => {
     const events: string[] = [];
     const recordMutation = vi.fn(async (kind: string, treeRevision: number) => {
@@ -937,6 +971,49 @@ describe('Workbench project VFS owner adapter', () => {
       },
     ]);
     expect(fatalFailures).toEqual([]);
+  });
+
+  // Fault class: concurrent-same-key × owner writer/SCM reader.
+  it('gives a consistent read one FIFO slot between prior and later project mutations', async () => {
+    const h = harness();
+    const path = `${ROOT}/src/main.ts`;
+    h.vfs.publishSnapshot();
+    const firstEntered = deferred<void>();
+    const releaseFirst = deferred<void>();
+    const first = Promise.resolve(
+      h.vfs.mutationGuard([{ kind: 'write', path }], async () => {
+        h.authority.writeFileSync(path, encoder.encode('first'));
+        firstEntered.resolve();
+        await releaseFirst.promise;
+      }),
+    );
+    await firstEntered.promise;
+
+    const readEntered = deferred<void>();
+    const releaseRead = deferred<void>();
+    const read = h.vfs.readConsistent(async () => {
+      readEntered.resolve();
+      await releaseRead.promise;
+      return new TextDecoder().decode(h.authority.readFileBytesSync(path));
+    });
+    await settle();
+    expect(await isPending(read)).toBe(true);
+
+    releaseFirst.resolve();
+    await first;
+    await readEntered.promise;
+    const later = Promise.resolve(
+      h.vfs.mutationGuard([{ kind: 'write', path }], () => {
+        h.authority.writeFileSync(path, encoder.encode('later'));
+      }),
+    );
+    await settle();
+    expect(await isPending(later)).toBe(true);
+
+    releaseRead.resolve();
+    await expect(read).resolves.toBe('first');
+    await later;
+    expect(new TextDecoder().decode(h.authority.readFileBytesSync(path))).toBe('later');
   });
 
   it('publishes a same-revision empty state before ACK for a host no-op', async () => {

@@ -1,9 +1,9 @@
 /** `rm [-r|-R] [-f] PATH...` — remove files/dirs. `-f` ignores missing operands. */
 
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, guardVfsMutations, syncMirror } from '@riftydev/vfs';
+import { VfsError, guardVfsMutations } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { resolve, strerror } from './_shared.ts';
+import { commandFileSystem, resolve, strerror } from './_shared.ts';
 
 export const rm: ShellCommand = async (args, ctx) => {
   let recursive = false;
@@ -32,7 +32,7 @@ export const rm: ShellCommand = async (args, ctx) => {
     ctx.stderr.write('rm: missing operand\n');
     return 1;
   }
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   const targets = paths.map((path) => ({ path, absolute: resolve(ctx.cwd, path) }));
   return await guardVfsMutations(
     ctx.mutationGuard,

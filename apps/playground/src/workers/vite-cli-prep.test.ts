@@ -21,6 +21,7 @@ import { decideViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 const dec = new TextDecoder();
 const CLI_PATH = '/app/node_modules/vite/dist/node/cli.js';
+const CONFIG_PATH = '/app/node_modules/vite/dist/node/chunks/config.js';
 const VITE_PACKAGE_JSON = '/app/node_modules/vite/package.json';
 const VITE_BIN = '/app/node_modules/.bin/vite';
 const ESBUILD_WASM_URL = 'blob:test-esbuild-wasm';
@@ -47,9 +48,25 @@ const CAC_CALL_SITE = [
   'globalThis.__riftyTestCac = TestCac;',
 ].join('\n');
 
+const CHOKIDAR_DIR_ENTRY_CALL_SITE = [
+  'const EMPTY_STR = "";',
+  'const ONE_DOT = ".";',
+  'const TWO_DOTS = "..";',
+  'class TestDirEntry {',
+  '  constructor() { this.items = new Set(); }',
+  '  add(item) {',
+  '    const { items } = this;',
+  '    if (!items) return;',
+  '    if (item !== ONE_DOT && item !== TWO_DOTS) items.add(item);',
+  '  }',
+  '}',
+  'globalThis.__riftyTestDirEntry = TestDirEntry;',
+].join('\n');
+
 interface TestGlobals {
   __rifty?: { esbuild?: unknown };
   __riftyTestCac?: new (action: () => unknown) => { parse(): void };
+  __riftyTestDirEntry?: new () => { items: Set<string>; add(item: string): void };
   __riftyTrackCliPromise?: (promise: PromiseLike<unknown>) => void;
 }
 const g = globalThis as TestGlobals;
@@ -61,7 +78,21 @@ function clearEsbuildRuntimeSlot(): void {
 function bootFs(files: Record<string, string> = {}): MemoryFsSync {
   const { vfs, fsSync } = createMemoryFs();
   setSyncMirror(fsSync, { async: vfs });
-  fsSync.loadFixture({ '/app/package.json': '{}', ...files });
+  const fixture = { '/app/package.json': '{}', ...files };
+  for (const path of Object.keys(fixture)) {
+    const suffix = '/dist/node/cli.js';
+    if (!path.endsWith(suffix) || !path.includes('/node_modules/vite/')) continue;
+    const packageRoot = path.slice(0, -suffix.length);
+    const hasChunk = Object.keys(fixture).some((candidate) =>
+      candidate.startsWith(`${packageRoot}/dist/node/chunks/`),
+    );
+    if (!hasChunk) {
+      Object.assign(fixture, {
+        [`${packageRoot}/dist/node/chunks/config.js`]: CHOKIDAR_DIR_ENTRY_CALL_SITE,
+      });
+    }
+  }
+  fsSync.loadFixture(fixture);
   return fsSync;
 }
 
@@ -102,6 +133,7 @@ const savedTracker = g.__riftyTrackCliPromise;
 afterEach(() => {
   g.__riftyTrackCliPromise = savedTracker;
   g.__riftyTestCac = undefined;
+  g.__riftyTestDirEntry = undefined;
   resetSyncMirror();
 });
 
@@ -190,6 +222,43 @@ describe('prepareViteCliAcquisitionFiles — pre-promotion CLI keepalive patch',
     await prepareViteCliAcquisitionFiles('/app');
     expect(fsSync.existsSync(CLI_PATH)).toBe(false);
     expect(g.__riftyTrackCliPromise).toBeUndefined();
+  });
+});
+
+describe('prepareViteCliAcquisitionFiles — rooted Chokidar catalog', () => {
+  it.each(['config.js', 'node.js'])(
+    'rejects the impossible empty self-entry in %s without dropping real root children',
+    async (bundle) => {
+      const fsSync = bootFs({
+        [CLI_PATH]: CAC_CALL_SITE,
+        [`/app/node_modules/vite/dist/node/chunks/${bundle}`]: CHOKIDAR_DIR_ENTRY_CALL_SITE,
+      });
+
+      await prepareViteCliAcquisitionFiles('/app');
+      const once = readText(fsSync, `/app/node_modules/vite/dist/node/chunks/${bundle}`);
+      await prepareViteCliAcquisitionFiles('/app');
+      expect(readText(fsSync, `/app/node_modules/vite/dist/node/chunks/${bundle}`)).toBe(once);
+      new Function(once)();
+
+      const DirEntry = g.__riftyTestDirEntry;
+      if (!DirEntry) throw new Error('fixture config.js did not register TestDirEntry');
+      const root = new DirEntry();
+      root.add('');
+      root.add('vite.config.js');
+
+      expect([...root.items]).toEqual(['vite.config.js']);
+    },
+  );
+
+  it('fails loudly when the bundled Chokidar anchor drifts', async () => {
+    bootFs({
+      [CLI_PATH]: CAC_CALL_SITE,
+      [CONFIG_PATH]: 'export const changedUpstreamShape = true;',
+    });
+
+    await expect(prepareViteCliAcquisitionFiles('/app')).rejects.toThrow(
+      /expected exactly one Chokidar DirEntry\.add anchor; found 0/,
+    );
   });
 });
 

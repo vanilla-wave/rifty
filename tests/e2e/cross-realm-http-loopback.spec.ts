@@ -2,10 +2,10 @@ import { type Page, expect, test } from '@playwright/test';
 import {
   bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
-  waitForViteBootOrIdleShell,
 } from './helpers/playground.ts';
 
 // Echo-confirmed line entry (copied from node-command.spec.ts): a keystroke that
@@ -68,18 +68,19 @@ test.describe('cross-realm http loopback between two node realms (ADR-0180)', ()
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    // Cross-realm behavior only needs a stable shell. Default Vite autorun is
-    // pinned elsewhere; CI retries can legitimately land on an already-idle
-    // shell, so don't fail before the net contract starts.
-    const initialTerminal = await waitForViteBootOrIdleShell(page);
-
-    // Free Terminal 1 if the dev server is occupying it, so it can host the api server.
-    await page.locator('[data-testid="terminal"]').click();
-    if (initialTerminal === 'vite-booted') await page.keyboard.press('Control+c');
+    // Wait for the retained primary run, stop it, then reuse that exact session.
+    await expectViteDevServerReady(page);
+    await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
+    await page.keyboard.press('Control+c');
+    await expect(page.locator('.rf-terminal-tab[data-active="true"]')).toHaveAttribute(
+      'data-running',
+      'false',
+      { timeout: 15_000 },
+    );
     await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toMatch(/>\s*$/u);
 
-    // api server (realm A) — listens on 4101 in Terminal 1's supervised child.
-    await runLineConfirmed(page, `echo '${API_SRC}' > /scratch/api.js`);
+    // API server (realm A) — listens on 4101 in the active session's supervised child.
+    await runLineConfirmed(page, `echo '${API_SRC}' > api.js`);
     await runLineConfirmed(page, 'node api.js');
 
     // The owner registered the api port → switcher gains :4101. This also proves
@@ -93,7 +94,7 @@ test.describe('cross-realm http loopback between two node realms (ADR-0180)', ()
     // client (realm B) — a SECOND supervised child. Its http.get to 4101 misses
     // realm B's registry → crosses to realm A via the broker.
     await openShellTerminal(page);
-    await runLineConfirmed(page, `echo '${CLIENT_SRC}' > /scratch/client.js`);
+    await runLineConfirmed(page, `echo '${CLIENT_SRC}' > client.js`);
     await runLineConfirmed(page, 'node client.js');
 
     // The api's JSON came back across the realm hop, decoded utf8 (the gateway's

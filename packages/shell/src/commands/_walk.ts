@@ -6,7 +6,7 @@
  * only; pulling the legacy runtime-js walker here would be a reverse-import.
  */
 
-import { joinPath, syncMirror } from '@riftydev/vfs';
+import { type FsSync, joinPath, syncMirror } from '@riftydev/vfs';
 
 /** One visited node. `root` itself is never yielded; direct children are depth 1. */
 export interface WalkEntry {
@@ -35,8 +35,8 @@ export interface WalkEntry {
 export function* walk(
   root: string,
   opts: { maxDepth?: number; includeDirs?: boolean } = {},
+  fs: FsSync = syncMirror(),
 ): Generator<WalkEntry> {
-  const fs = syncMirror();
   const maxDepth = opts.maxDepth ?? Number.POSITIVE_INFINITY;
   const includeDirs = opts.includeDirs ?? false;
 

@@ -91,6 +91,30 @@ describe('buildDevServerChildSpawnSpec', () => {
     expect(spec.env.RIFTY_ESBUILD_WASM_URL).toBeUndefined();
   });
 
+  it('keeps guest cwd and argv public while carrying the private remote root out-of-band', () => {
+    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const cfg: NodeServerPackageConfig = {
+      ...nodeServerConfig,
+      root: '/',
+      entryPath: '/server.mjs',
+      seedFiles: { '/server.mjs': 'export {}' },
+    };
+    const spec = buildDevServerChildSpawnSpec(
+      { ...params, cfg, remoteFsRoot },
+      'blob:dev-server-url',
+      NODE_WORKER_RUNTIME_ENV,
+    );
+
+    expect(spec.cwd).toBe('/');
+    expect(spec.argv).toEqual(['rifty', '/server.mjs']);
+    expect(spec.entry).toMatchObject({
+      bootstrap: { payload: { cfg, remoteFsRoot } },
+    });
+    expect(JSON.stringify({ argv: spec.argv, cwd: spec.cwd, env: spec.env })).not.toContain(
+      remoteFsRoot,
+    );
+  });
+
   it('keeps preview/runtime selection entry-owned while preserving guest env', () => {
     const spec = buildDevServerChildSpawnSpec(
       { ...params, previewScope: 'expected-preview' },

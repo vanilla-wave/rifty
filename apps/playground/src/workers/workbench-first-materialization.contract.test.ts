@@ -917,7 +917,9 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     acquisition: {
       ensure: (request) =>
         packageState.activateAndEnsure(
-          workbenchPackageConfig(request.definition, request.projectRoot),
+          workbenchPackageConfig(request.definition, request.projectRoot, {
+            packageJsonBytes: authority.readFileBytesSync(`${request.projectRoot}/package.json`),
+          }),
         ),
     },
   });
@@ -933,7 +935,9 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     definition: PlaygroundDefinition,
     materialized: MaterializedProject,
   ): Promise<ProjectSession<unknown>> => {
-    const config = workbenchPackageConfig(definition, materialized.projectRoot);
+    const config = workbenchPackageConfig(definition, materialized.projectRoot, {
+      packageJsonBytes: authority.readFileBytesSync(`${materialized.projectRoot}/package.json`),
+    });
     let pty = createPtyClient({ send: () => {} });
     let alive = true;
     let resolveClosed!: (reason: unknown) => void;
@@ -1371,6 +1375,238 @@ describe('Workbench companion first materialization Contract+RED', () => {
         event.startsWith('child:spawn:'),
       ),
     ).toBeGreaterThan(eventIndex(h.timeline.events, 'snapshot:fetch:end'));
+  });
+
+  // Fault class: torn-multi-step. Snapshot replacement and explicit template
+  // node_modules reassertion are one package-authority transaction.
+  it('reasserts exact binary template node_modules bytes after snapshot restore replaces the tree', async () => {
+    const id = 'vite-snapshot-template-node-modules';
+    const templateId = 'vite-snapshot-template-node-modules-v1';
+    const fixturePath = '/node_modules/@rifty/example-types/fixture.bin';
+    const fixtureBytes = new Uint8Array([0x00, 0xff, 0x07, 0x80]);
+    const definitionWith = (firstMaterialization: FirstMaterialization): PlaygroundDefinition =>
+      withPlaygroundMetadata(
+        inspectProjectDefinition(
+          projects.vite({
+            id,
+            files: {
+              '/index.html': '<main id="app"></main>',
+              '/src/main.ts': "console.log('typed fixture')\n",
+              [fixturePath]: fixtureBytes,
+            },
+            viteVersion: '8.0.16',
+          }),
+        ),
+        {
+          starterId: 'vite-starter',
+          templateId,
+          firstMaterialization,
+          port: VITE_PORT,
+        },
+      );
+    const baseline = definitionWith({ kind: 'install' });
+    const snapshot = bakedSnapshot(baseline, templateId);
+    const fixture = snapshotFixtureFromValue(snapshot);
+    const descriptor = {
+      snapshotId: fixture.snapshotId,
+      assetUrl: 'https://playground.test/snapshots/vite-template-node-modules.json.gz',
+      templateId,
+    } as const;
+    const definition = definitionWith({ kind: 'snapshot', snapshot: descriptor });
+    const fetchSnapshot = vi.fn(async () => new Response(gzipSnapshot(fixture.bytes, 6)));
+    vi.stubGlobal('fetch', fetchSnapshot);
+    const h = ownerHarness();
+
+    const materialized = await h.open(definition);
+    await h.close();
+
+    expect
+      .soft(snapshot.nodeModules.files.map((file) => file.path))
+      .not.toContain(fixturePath.slice('/node_modules/'.length));
+    expect.soft(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect.soft(materialized.acquisition).toMatchObject({
+      kind: 'ready',
+      provenance: { outcome: 'snapshot', snapshotId: descriptor.snapshotId },
+    });
+    expect(h.authority.readFileBytesSync(`${materialized.projectRoot}${fixturePath}`)).toEqual(
+      fixtureBytes,
+    );
+  });
+
+  // Fault class: provenance-lie. A snapshot-born tree is not install-first;
+  // later bare npm cannot be authorized to replace its current user manifest.
+  it('preserves a snapshot-materialized user manifest during a later bare npm install', async () => {
+    const id = 'vite-snapshot-user-manifest';
+    const templateId = 'vite-snapshot-user-manifest-v1';
+    const baseline = viteDefinition({ kind: 'install' }, id);
+    const fixture = serializedSnapshotFixture(baseline, templateId);
+    const descriptor = {
+      snapshotId: fixture.snapshotId,
+      assetUrl: 'https://playground.test/snapshots/vite-user-manifest.json.gz',
+      templateId,
+    } as const;
+    const definition = viteDefinition({ kind: 'snapshot', snapshot: descriptor }, id);
+    const fetchSnapshot = vi.fn(async () => new Response(gzipSnapshot(fixture.bytes, 6)));
+    vi.stubGlobal('fetch', fetchSnapshot);
+    const h = ownerHarness();
+
+    const materialized = await h.open(definition);
+    await h.packageState.quiesce();
+    const manifestPath = `${materialized.projectRoot}/package.json`;
+    const userManifest = `${JSON.stringify({
+      name: 'user-tooling-project',
+      version: '1.0.0',
+      dependencies: { cowsay: '1.6.0' },
+    })}\n`;
+    await h.packageState.mutations.guardedMutation(
+      [{ kind: 'write', path: manifestPath }],
+      async () => {
+        h.authority.writeFileSync(manifestPath, encoder.encode(userManifest));
+      },
+    );
+    await h.packageState.quiesce();
+
+    const sink = { write: (_chunk: string | Uint8Array): void => {} };
+    const npm = h.packageState.createNpmCommand(async () => 1);
+    await expect(
+      npm(['install'], {
+        cwd: materialized.projectRoot,
+        env: {},
+        stdout: sink,
+        stderr: sink,
+      }),
+    ).resolves.toBe(0);
+    await h.packageState.quiesce();
+    await h.close();
+
+    expect.soft(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect.soft(h.timeline.installs).toHaveLength(1);
+    expect(decoder.decode(h.authority.readFileBytesSync(manifestPath))).toBe(userManifest);
+    expect(
+      h.authority.existsSync(`${materialized.projectRoot}/node_modules/cowsay/package.json`),
+    ).toBe(true);
+  });
+
+  it('reinstalls A from its current extended manifest after a direct tree mutation revokes it, then A→B→A', async () => {
+    const id = 'vite-reopen-current-manifest';
+    const templateId = 'vite-reopen-current-manifest-v1';
+    const fixture = serializedSnapshotFixture(viteDefinition({ kind: 'install' }, id), templateId);
+    const descriptor = {
+      snapshotId: fixture.snapshotId,
+      assetUrl: 'https://playground.test/snapshots/vite-reopen-current-manifest.json.gz',
+      templateId,
+    } as const;
+    const definitionA = viteDefinition({ kind: 'snapshot', snapshot: descriptor }, id);
+    const definitionB = viteDefinition({ kind: 'install' }, 'vite-reopen-switch-away');
+    const installerManifests: string[] = [];
+    const fetchSnapshot = vi.fn(async () => new Response(gzipSnapshot(fixture.bytes, 6)));
+    vi.stubGlobal('fetch', fetchSnapshot);
+    const h = ownerHarness({
+      beforeInstallReturn: async (options) => {
+        const manifest = await options.vfs.readFileText(`${options.cwd}/package.json`);
+        installerManifests.push(manifest);
+        if (dependencyMap(manifest).cowsay !== '1.6.0') return;
+        await options.vfs.mkdir(`${options.cwd}/node_modules/cowsay`, { recursive: true });
+        await options.vfs.writeFile(
+          `${options.cwd}/node_modules/cowsay/package.json`,
+          '{"name":"cowsay","version":"1.6.0"}\n',
+        );
+        await options.vfs.writeFile(
+          `${options.cwd}/node_modules/cowsay/marker.txt`,
+          'cowsay-ready\n',
+        );
+        await options.vfs.mkdir(`${options.cwd}/node_modules/.bin`, { recursive: true });
+        await options.vfs.writeFile(
+          `${options.cwd}/node_modules/.bin/cowsay`,
+          '#!/usr/bin/env node\n',
+        );
+      },
+    });
+
+    const first = await h.open(definitionA);
+    await h.packageState.quiesce();
+    const sink = { write: (_chunk: string | Uint8Array): void => {} };
+    const npm = h.packageState.createNpmCommand(async () => 1);
+    await expect(
+      npm(['install', 'cowsay@1.6.0'], {
+        cwd: first.projectRoot,
+        env: {},
+        stdout: sink,
+        stderr: sink,
+      }),
+    ).resolves.toBe(0);
+    await h.packageState.quiesce();
+    const warmBeforeMutation = await h.open(definitionA);
+
+    const markerPath = `${first.projectRoot}/node_modules/cowsay/marker.txt`;
+    const cowsayBinPath = `${first.projectRoot}/node_modules/.bin/cowsay`;
+    expect.soft(h.authority.existsSync(markerPath)).toBe(true);
+    expect.soft(h.authority.existsSync(cowsayBinPath)).toBe(true);
+
+    const viteTempDir = `${first.projectRoot}/node_modules/.vite-temp`;
+    const timestampModule = `${viteTempDir}/vite.config.js.timestamp-1752700000000-a1b2c3d4.mjs`;
+    await h.packageState.mutations.guardedMutation(
+      [{ kind: 'mkdir', path: viteTempDir }],
+      async () => {
+        h.authority.mkdirSync(viteTempDir, { recursive: true });
+      },
+    );
+    await h.packageState.mutations.guardedMutation(
+      [{ kind: 'write', path: timestampModule }],
+      async () => {
+        h.authority.writeFileSync(timestampModule, encoder.encode('export default {}\n'));
+      },
+    );
+    await h.packageState.mutations.guardedMutation(
+      [{ kind: 'rm', path: timestampModule }],
+      async () => {
+        h.authority.rmSync(timestampModule, { force: true });
+      },
+    );
+    await h.packageState.quiesce();
+
+    await h.open(definitionB);
+    const installsBeforeReopen = h.timeline.installs.length;
+    const reopened = await h.open(definitionA);
+    if (!isDeferredInstallPlan(reopened.acquisition)) {
+      await h.close();
+      expect(reopened.acquisition).toEqual({
+        kind: 'install',
+        snapshotFailures: [{ snapshotId: descriptor.snapshotId, reason: 'package-json-mismatch' }],
+      });
+      return;
+    }
+
+    const session = await h.session(definitionA, reopened);
+    const run = session.run();
+    const child = await waitForChild(h, 0);
+    child.finish('vite: reopened current manifest output\n');
+    await run.exited;
+    await run.close();
+    await session.close();
+    await h.close();
+
+    expect.soft(first.acquisition).toMatchObject({
+      kind: 'ready',
+      provenance: { outcome: 'snapshot', snapshotId: descriptor.snapshotId },
+    });
+    expect.soft(warmBeforeMutation.acquisition).toMatchObject({
+      kind: 'ready',
+      provenance: { outcome: 'existing' },
+    });
+    expect.soft(fetchSnapshot).toHaveBeenCalledTimes(2);
+    expect.soft(installsBeforeReopen).toBe(1);
+    expect.soft(reopened.acquisition).toEqual({
+      kind: 'install',
+      snapshotFailures: [{ snapshotId: descriptor.snapshotId, reason: 'package-json-mismatch' }],
+    });
+    expect.soft(h.timeline.installs).toHaveLength(installsBeforeReopen + 1);
+    expect.soft(dependencyMap(installerManifests.at(-1) ?? '{}')).toMatchObject({
+      vite: '8.0.16',
+      cowsay: '1.6.0',
+    });
+    expect.soft(h.authority.existsSync(markerPath)).toBe(true);
+    expect.soft(h.authority.existsSync(cowsayBinPath)).toBe(true);
   });
 
   // One Workbench owns one active ProjectSession/VFS cursor. Exercise duplicate

@@ -19,6 +19,10 @@
 
 ### Fixed
 
+- Node-entry program and worker-thread bootstrap metadata can carry one
+  validated host-only remote-FS root. Nested `worker_threads` and recursive
+  Node entries inherit it while guest argv, cwd, and environment stay public.
+
 - **Parent `worker_threads.Worker` events are EventEmitter-only (ADR-0270).**
   Assigned `onmessage`/`onerror` expandos stay inert like Node instead of
   receiving every frame a second time. This prevents emnapi's Node bridge from

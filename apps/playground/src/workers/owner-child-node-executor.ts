@@ -23,12 +23,14 @@ export function buildNodeChildSpawnSpec(
   cols = 80,
   rows = 24,
   previewScope?: string,
+  remoteFsRoot?: string,
 ): SpawnWorkerSpec {
   return {
     entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
       kind: 'program',
       bin: false,
       remoteFs: true,
+      ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
       nodeServe: true,
       ...(previewScope === undefined ? {} : { previewScope }),
       terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
@@ -62,6 +64,8 @@ export interface NodeRunHooks {
   readonly sid: string;
   /** Owner-minted provenance bound to this launch, never guest env. */
   readonly previewScope?: string;
+  /** Host-only physical root behind the child process's public `/` namespace. */
+  readonly remoteFsRoot?: string;
   readonly onListening: (sid: string, ports: number[], previewScope?: string) => void;
   readonly onExit: (sid: string) => void;
 }
@@ -103,6 +107,7 @@ export function createOwnerChildNodeExecutor(
         ctx.cols ?? 80,
         ctx.rows ?? 24,
         hooks.previewScope,
+        hooks.remoteFsRoot,
       ),
     );
     // Shared foreground driver (stream/abort/exit). A server child posts

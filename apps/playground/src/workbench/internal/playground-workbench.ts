@@ -1,8 +1,4 @@
-import {
-  ClosedHandleError,
-  DirtyProjectDocumentError,
-  ProjectDocumentSaveInProgressError,
-} from '../errors.ts';
+import { ClosedHandleError, isRetryableProjectClosePreflightError } from '../errors.ts';
 import {
   type Workbench,
   type WorkbenchOptions,
@@ -69,13 +65,6 @@ interface OwnedSession {
   lifecycle: SessionToolLifecycle | null;
   toolCloseFailure: unknown | null;
   closePromise: Promise<void> | null;
-}
-
-function isRetryablePreflight(error: unknown): boolean {
-  return (
-    error instanceof DirtyProjectDocumentError ||
-    error instanceof ProjectDocumentSaveInProgressError
-  );
 }
 
 function closeFailure(toolFailure: unknown | null, coreFailure: unknown | null): never {
@@ -150,7 +139,7 @@ export function createPlaygroundWorkbenchFacade(
             if (state.toolCloseFailure !== null) closeFailure(state.toolCloseFailure, null);
           },
           (error: unknown) => {
-            if (isRetryablePreflight(error) && state.toolCloseFailure === null) {
+            if (isRetryableProjectClosePreflightError(error) && state.toolCloseFailure === null) {
               state.state = 'live';
               state.closePromise = null;
               throw error;

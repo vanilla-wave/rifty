@@ -217,8 +217,14 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
   const modelUriToTabId = new Map<string, string>();
   const modelContentDisposables = new Map<string, monaco.IDisposable>();
   const readOnlyPaths = new Set<string>();
-  const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  const inFlightWrites = new Map<string, Promise<void>>();
+  interface EditorWriteState {
+    readonly model: monaco.editor.ITextModel;
+    generation: number;
+    publishedGeneration: number;
+    timer: ReturnType<typeof setTimeout> | undefined;
+    readonly inFlight: Map<number, Promise<void>>;
+  }
+  const writeStates = new Map<string, EditorWriteState>();
   const diffModels = new Map<
     string,
     {
@@ -249,6 +255,34 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
   // Page LS-client subscribers (ADR-0166 P1.9b): notified on model open/change/close.
   const documentListeners = new Set<(ev: EditorDocumentEvent) => void>();
 
+  function discardWriteState(path: string): void {
+    const state = writeStates.get(path);
+    if (state?.timer !== undefined) clearTimeout(state.timer);
+    writeStates.delete(path);
+  }
+
+  function discardAllWriteStates(): void {
+    for (const state of writeStates.values()) {
+      if (state.timer !== undefined) clearTimeout(state.timer);
+    }
+    writeStates.clear();
+  }
+
+  function editWriteState(path: string, model: monaco.editor.ITextModel): EditorWriteState {
+    const current = writeStates.get(path);
+    if (current?.model === model) return current;
+    discardWriteState(path);
+    const state: EditorWriteState = {
+      model,
+      generation: 0,
+      publishedGeneration: 0,
+      timer: undefined,
+      inFlight: new Map(),
+    };
+    writeStates.set(path, state);
+    return state;
+  }
+
   /** Tab id → absolute VFS path. File tab ids are absolute paths. */
   function docPathForTab(id: string): string {
     return id;
@@ -271,6 +305,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
   function unregisterModel(id: string): monaco.editor.ITextModel | undefined {
     const model = models.get(id);
     if (model) modelUriToTabId.delete(model.uri.toString());
+    discardWriteState(id);
     modelContentDisposables.get(id)?.dispose();
     modelContentDisposables.delete(id);
     models.delete(id);
@@ -278,6 +313,10 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
   }
   function handleModelContentChange(id: string): void {
     if (readOnlyPaths.has(id)) return;
+    const model = models.get(id);
+    if (model === undefined) return;
+    const write = editWriteState(id, model);
+    write.generation += 1;
     emitDocument(id, 'change');
     setTabs((t) => setDirty(t, id, true));
     dirtyGutterLocalPaths.add(docPathForTab(id));
@@ -486,52 +525,88 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
     for (const id of ids) disposeDiffTab(id);
   }
 
-  async function flushWrite(path: string): Promise<void> {
-    const m = models.get(path);
-    if (!m) return;
-    // Single-store-owner (ADR-0148): the OWNER is the single authoritative store —
-    // the editor writes there, not the read-only owner-snapshot `vfs` it reads from.
-    await props.onFileWritten?.(path, m.getValue());
-    setTabs((t) => setDirty(t, path, false));
-  }
-
   function reportWriteError(err: unknown): void {
     props.onError?.((err as Error).message);
   }
 
   function flushWriteTracked(path: string): Promise<void> {
-    const tracked = flushWrite(path).finally(() => {
-      if (inFlightWrites.get(path) === tracked) inFlightWrites.delete(path);
-    });
-    inFlightWrites.set(path, tracked);
+    const state = writeStates.get(path);
+    const model = models.get(path);
+    if (
+      state === undefined ||
+      model !== state.model ||
+      readOnlyPaths.has(path) ||
+      state.publishedGeneration >= state.generation
+    ) {
+      return Promise.resolve();
+    }
+    const generation = state.generation;
+    const existing = state.inFlight.get(generation);
+    if (existing !== undefined) return existing;
+    const text = model.getValue();
+    let publication: Promise<void>;
+    try {
+      // Single-store-owner (ADR-0148): capture one exact model generation for
+      // the OWNER; later model edits cannot change this admitted write's text.
+      publication = Promise.resolve(props.onFileWritten?.(path, text));
+    } catch (error) {
+      publication = Promise.reject(error);
+    }
+    const tracked = publication
+      .then(() => {
+        if (writeStates.get(path) !== state || models.get(path) !== model) return;
+        state.publishedGeneration = Math.max(state.publishedGeneration, generation);
+        if (state.publishedGeneration === state.generation) {
+          setTabs((tabs) => setDirty(tabs, path, false));
+        }
+      })
+      .finally(() => {
+        state.inFlight.delete(generation);
+        if (
+          writeStates.get(path) === state &&
+          state.timer === undefined &&
+          state.inFlight.size === 0 &&
+          state.publishedGeneration === state.generation
+        ) {
+          writeStates.delete(path);
+        }
+      });
+    state.inFlight.set(generation, tracked);
     return tracked;
   }
 
   async function flushPendingWrites(): Promise<void> {
     for (;;) {
-      const inFlight = [...inFlightWrites.values()];
-      const pending = [...writeTimers.keys()];
-      for (const path of pending) {
-        const timer = writeTimers.get(path);
-        if (timer) clearTimeout(timer);
-        writeTimers.delete(path);
+      const admitted = new Set<Promise<void>>();
+      for (const [path, state] of writeStates) {
+        if (models.get(path) !== state.model || readOnlyPaths.has(path)) {
+          discardWriteState(path);
+          continue;
+        }
+        if (state.timer !== undefined) {
+          clearTimeout(state.timer);
+          state.timer = undefined;
+        }
+        for (const write of state.inFlight.values()) admitted.add(write);
+        if (state.publishedGeneration < state.generation) {
+          admitted.add(flushWriteTracked(path));
+        }
       }
-      if (inFlight.length === 0 && pending.length === 0) return;
-      await Promise.all([...inFlight, ...pending.map((path) => flushWriteTracked(path))]);
-      if (inFlightWrites.size === 0 && writeTimers.size === 0) return;
+      if (admitted.size === 0) return;
+      await Promise.all(admitted);
+      if (writeStates.size === 0) return;
     }
   }
 
   function scheduleWrite(path: string): void {
-    const prev = writeTimers.get(path);
-    if (prev) clearTimeout(prev);
-    writeTimers.set(
-      path,
-      setTimeout(() => {
-        writeTimers.delete(path);
-        void flushWriteTracked(path).catch(reportWriteError);
-      }, 300),
-    );
+    const state = writeStates.get(path);
+    if (state === undefined) return;
+    if (state.timer !== undefined) clearTimeout(state.timer);
+    state.timer = setTimeout(() => {
+      if (writeStates.get(path) !== state) return;
+      state.timer = undefined;
+      void flushWriteTracked(path).catch(reportWriteError);
+    }, 300);
   }
 
   function isNodeModulesPath(path: string): boolean {
@@ -650,7 +725,11 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
    * read-only owner read-port. Race-free: driven by the publish event, no timer.
    * No `subscribe` (plain mirror, never republishes) → surface the read error.
    */
-  function awaitSnapshotThenOpen(path: string, err: Error, shouldActivate: boolean): void {
+  function awaitSnapshotThenOpen(
+    path: string,
+    err: Error,
+    activation: 'never' | 'requested' | 'if-empty',
+  ): void {
     const subscribe = props.vfs.subscribe?.bind(props.vfs);
     if (!subscribe || snapshotAwaits.has(path)) {
       if (!subscribe) props.onError?.(err.message);
@@ -665,7 +744,12 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
       try {
         const bytes = props.vfs.readFileBytesSync(path);
         clearAwait(path);
-        openSyncFile(path, bytes, shouldActivate);
+        openSyncFile(
+          path,
+          bytes,
+          activation === 'requested' ||
+            (activation === 'if-empty' && activeId() === NO_ACTIVE_TAB_ID),
+        );
       } catch {
         // Still missing — keep waiting for a later frame.
       }
@@ -681,7 +765,11 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
     }
   }
 
-  function openFile(path: string, options: EditorOpenFileOptions = {}): void {
+  function openFile(
+    path: string,
+    options: EditorOpenFileOptions = {},
+    awaitedActivation: 'requested' | 'if-empty' = 'requested',
+  ): void {
     const shouldActivate = options.activate !== false;
     // Queue the click-to-jump reveal (ADR-0166 P1.9c): applied in the activeId
     // effect once this tab's model is the editor's active model.
@@ -732,7 +820,11 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
         // Non-node_modules path absent from the snapshot — a project file racing
         // the owner publish (or genuinely owner-only). Wait for the next frame
         // and open editable; never the read-only owner read-port.
-        awaitSnapshotThenOpen(path, readErr ?? new Error(`ENOENT: "${path}"`), shouldActivate);
+        awaitSnapshotThenOpen(
+          path,
+          readErr ?? new Error(`ENOENT: "${path}"`),
+          shouldActivate ? awaitedActivation : 'never',
+        );
         return;
     }
   }
@@ -858,13 +950,17 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
     }
     closeDiffTabsForPathTree(path, { liveModelOnly: true });
     clearAwait(path);
-    const timer = writeTimers.get(path);
-    if (timer) {
-      clearTimeout(timer);
-      writeTimers.delete(path);
-      if (opts.flushPending !== false) {
-        void flushWriteTracked(path).catch(reportWriteError);
-      }
+    const write = writeStates.get(path);
+    if (write?.timer !== undefined) {
+      clearTimeout(write.timer);
+      write.timer = undefined;
+    }
+    if (
+      opts.flushPending !== false &&
+      write !== undefined &&
+      write.publishedGeneration < write.generation
+    ) {
+      void flushWriteTracked(path).catch(reportWriteError);
     }
     emitDocument(path, 'close');
     const m = unregisterModel(path);
@@ -901,9 +997,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
   }
 
   function disposeAllOpenModels(): void {
-    for (const timer of writeTimers.values()) clearTimeout(timer);
-    writeTimers.clear();
-    inFlightWrites.clear();
+    discardAllWriteStates();
     for (const unsubscribe of snapshotAwaits.values()) unsubscribe();
     snapshotAwaits.clear();
     for (const id of [...pendingDiffOpens.keys()]) cancelPendingDiffOpen(id);
@@ -929,10 +1023,14 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
   function resetOpenFileTabs(paths: readonly string[]): void {
     const uniquePaths = [...new Set(paths)];
     disposeAllOpenModels();
-    setTabs(initialTabs(uniquePaths.map((path) => ({ path, title: titleForFilePath(path) }))));
-    setActiveId(uniquePaths[0] ?? NO_ACTIVE_TAB_ID);
-    for (const [index, path] of uniquePaths.entries()) {
-      openFile(path, { activate: index === 0 });
+    setTabs(initialTabs());
+    setActiveId(NO_ACTIVE_TAB_ID);
+    for (const path of uniquePaths) {
+      // A preset path may have been renamed/deleted by the user. A visible tab
+      // therefore starts only with a real model. If an earlier path is merely
+      // racing its snapshot frame, it may become active later only while no
+      // available sibling has already claimed the editor.
+      openFile(path, { activate: activeId() === NO_ACTIVE_TAB_ID }, 'if-empty');
     }
   }
 
@@ -1060,8 +1158,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
 
   /** onCleanup part 1: stop debounced writes + snapshot awaits (before widget disposal). */
   function teardownPendingWork(): void {
-    for (const timer of writeTimers.values()) clearTimeout(timer);
-    writeTimers.clear();
+    discardAllWriteStates();
     for (const unsubscribe of snapshotAwaits.values()) unsubscribe();
     snapshotAwaits.clear();
   }
@@ -1135,6 +1232,14 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
     },
   };
 
+  /** Publish the imperative API only after preset tabs exist. Registration may
+   *  synchronously drain user opens queued while Monaco was mounting; hydrating
+   *  afterwards would reset those freshly opened tabs. */
+  function registerHydratedApi(registerApi: (api: EditorApi) => void): void {
+    handleInitialFilesChanged();
+    registerApi(api);
+  }
+
   return {
     api,
     tabs,
@@ -1142,6 +1247,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
     setActiveId,
     activeTabKind,
     closeFile,
+    registerHydratedApi,
     handleInitialFilesChanged,
     handleRootChanged,
     handleGitStatusChanged,

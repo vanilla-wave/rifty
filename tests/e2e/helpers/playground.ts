@@ -1,10 +1,16 @@
-import { type Page, expect } from '@playwright/test';
+import { type Locator, type Page, expect } from '@playwright/test';
 
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 
 function stripTerminal(text: string): string {
   return text.replace(ANSI_SGR, '');
 }
+
+export interface TerminalSessionTarget {
+  readonly sessionId: string;
+}
+
+export type TerminalTarget = 'active' | number | TerminalSessionTarget;
 
 async function waitForWorkspaceOwner(page: Page): Promise<void> {
   await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
@@ -18,21 +24,28 @@ async function waitForProjectIndex(page: Page): Promise<void> {
   });
 }
 
-export async function terminalBuffer(
-  page: Page,
-  slot: 'active' | number = 'active',
-): Promise<string> {
-  const locator =
-    slot === 'active'
-      ? page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal-buffer"]')
-      : page.locator('.rf-terminal-slot').nth(slot).locator('[data-testid="terminal-buffer"]');
+async function terminalSlot(page: Page, slot: TerminalTarget): Promise<Locator> {
+  if (slot === 'active') return page.locator('.rf-terminal-slot[data-active="true"]');
+  if (typeof slot === 'number') return page.locator('.rf-terminal-slot').nth(slot);
+  return page.locator(`.rf-terminal-slot[data-session-id="${slot.sessionId}"]`);
+}
+
+function terminalTab(page: Page, target: number | TerminalSessionTarget): Locator {
+  const tabs = page.locator('.rf-terminal-tab__select[role="tab"][data-session-id]');
+  return typeof target === 'number'
+    ? tabs.nth(target)
+    : page.locator(`.rf-terminal-tab__select[role="tab"][data-session-id="${target.sessionId}"]`);
+}
+
+export async function terminalBuffer(page: Page, slot: TerminalTarget = 'active'): Promise<string> {
+  const locator = (await terminalSlot(page, slot)).locator('[data-testid="terminal-buffer"]');
   return stripTerminal((await locator.getAttribute('data-terminal-buffer')) ?? '');
 }
 
 export async function openShellTerminal(
   page: Page,
   options: { readonly focus?: boolean } = {},
-): Promise<number> {
+): Promise<TerminalSessionTarget> {
   const focus = options.focus ?? true;
   if (
     await page
@@ -43,7 +56,7 @@ export async function openShellTerminal(
     await openActiveProjectFromLauncher(page);
   }
   await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Terminal \d+/ }).first()).toBeVisible();
+  await expect(page.locator('.rf-terminal-tab__select[role="tab"]').first()).toBeVisible();
   await expect(page.locator('.rf-terminal-slot').first()).toBeAttached();
   const terminalSlots = page.locator('.rf-terminal-slot');
   const slotCountBefore = await terminalSlots.count();
@@ -71,13 +84,9 @@ export async function openShellTerminal(
   await expect(tab).toHaveAttribute('aria-selected', 'true');
   const slot = page.locator(`.rf-terminal-slot[data-session-id="${sessionId}"]`);
   await expect(slot).toHaveAttribute('data-active', 'true');
-  const slotIndex = await terminalSlots.evaluateAll(
-    (slots, id) => slots.findIndex((slot) => slot.getAttribute('data-session-id') === id),
-    sessionId,
-  );
-  if (slotIndex < 0) throw new Error('new terminal did not activate a terminal slot');
-  await expect.poll(() => terminalBuffer(page, slotIndex), { timeout: 30_000 }).toMatch(/>\s*$/u);
-  if (!focus) return slotIndex;
+  const target = Object.freeze({ sessionId });
+  await expect.poll(() => terminalBuffer(page, target), { timeout: 30_000 }).toMatch(/>\s*$/u);
+  if (!focus) return target;
   await slot.locator('[data-testid="terminal"]').click();
   await expect
     .poll(
@@ -90,7 +99,7 @@ export async function openShellTerminal(
       { timeout: 5_000 },
     )
     .toBe(true);
-  return slotIndex;
+  return target;
 }
 
 export async function pickStarter(page: Page, id = 'project-files'): Promise<void> {
@@ -109,6 +118,16 @@ export async function pickStarter(page: Page, id = 'project-files'): Promise<voi
     await discard.click();
   }
 
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="launcher"]') === null ||
+      document.querySelector('.rf-toast[data-tone="error"]') !== null,
+    undefined,
+    { timeout: 90_000 },
+  );
+  const errorToast = page.locator('.rf-toast[data-tone="error"]');
+  const transitionError = (await errorToast.count()) === 0 ? null : await errorToast.textContent();
+  if (transitionError !== null) throw new Error(`Starter transition failed: ${transitionError}`);
   await expect(launcher).toHaveCount(0, { timeout: 90_000 });
   await waitForWorkspaceOwner(page);
 }
@@ -162,22 +181,41 @@ export async function bootShell(page: Page): Promise<void> {
   await bootProjectFiles(page);
 }
 
+export async function resetSandboxThroughUi(page: Page): Promise<void> {
+  await page.goto('/');
+  const launcher = page.locator('[data-testid="launcher"]');
+  if (!(await launcher.isVisible({ timeout: 10_000 }).catch(() => false))) {
+    const trigger = page.locator('[data-action="open-launcher"]');
+    await expect(trigger).toBeEnabled({ timeout: 90_000 });
+    await trigger.click({ force: true });
+  }
+  await expect(launcher).toBeVisible({ timeout: 30_000 });
+  await launcher.getByRole('button', { name: /^Projects/ }).click();
+  await launcher.getByRole('button', { name: 'Reset sandbox' }).click();
+  const dialog = page.locator('.rf-dialog[role="dialog"]');
+  await expect(dialog).toContainText('Reset browser sandbox?');
+  await Promise.all([
+    page.waitForEvent('framenavigated', {
+      predicate: (frame) => frame === page.mainFrame(),
+      timeout: 90_000,
+    }),
+    dialog.getByRole('button', { name: 'Reset sandbox' }).click(),
+  ]);
+}
+
 export async function runTerminalLine(
   page: Page,
   line: string,
-  targetSlot: 'active' | number = 'active',
+  targetSlot: TerminalTarget = 'active',
 ): Promise<void> {
   await closeLauncherIfOpen(page, 0);
   if (targetSlot !== 'active') {
-    const tab = page.getByRole('tab', { name: /Terminal \d+/ }).nth(targetSlot);
+    const tab = terminalTab(page, targetSlot);
     await expect(tab).toBeVisible();
     await tab.click();
     await expect(tab).toHaveAttribute('aria-selected', 'true');
   }
-  const slot =
-    targetSlot === 'active'
-      ? page.locator('.rf-terminal-slot[data-active="true"]')
-      : page.locator('.rf-terminal-slot').nth(targetSlot);
+  const slot = await terminalSlot(page, targetSlot);
   await expect(slot).toBeVisible();
   await expect.poll(() => terminalBuffer(page, targetSlot), { timeout: 30_000 }).toMatch(/>\s*$/u);
   await slot.locator('[data-testid="terminal"]').click();
@@ -233,23 +271,62 @@ export async function runTerminalLineSettled(
     .toBe(true);
 }
 
+export interface ActiveProjectText {
+  readonly exists: boolean;
+  readonly text: string;
+}
+
+let activeProjectReadSequence = 0;
+
+function shellWord(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export async function readActiveProjectText(
+  page: Page,
+  path: string,
+  timeout = 30_000,
+): Promise<ActiveProjectText> {
+  const sequence = ++activeProjectReadSequence;
+  const marker = `__rifty_project_read_${String(Date.now())}_${String(sequence)}__`;
+  const begin = `${marker}begin`;
+  const missing = `${marker}missing`;
+  const end = `${marker}end`;
+  await runTerminalLineSettled(
+    page,
+    `printf '${begin}\\n'; cat ${shellWord(path)} || printf '\\n${missing}\\n'; printf '${end}\\n'`,
+    timeout,
+  );
+  const buffer = await terminalBuffer(page);
+  const start = buffer.lastIndexOf(begin);
+  const finish = start < 0 ? -1 : buffer.indexOf(end, start + begin.length);
+  if (start < 0 || finish < 0) throw new Error(`Project read markers missing for ${path}`);
+  const payload = buffer
+    .slice(start + begin.length, finish)
+    .replace(/^\r?\n/u, '')
+    .replace(/\r?\n$/u, '');
+  if (!payload.includes(missing)) return Object.freeze({ exists: true, text: payload });
+  const diagnostic = payload.slice(0, payload.indexOf(missing)).trim();
+  if (!/cat: .*: No such file or directory$/u.test(diagnostic)) {
+    throw new Error(`Project read failed for ${path}: ${diagnostic || 'unknown cat error'}`);
+  }
+  return Object.freeze({ exists: false, text: '' });
+}
+
 export async function insertTerminalLineSettled(
   page: Page,
   line: string,
   timeout = 30_000,
-  targetSlot: 'active' | number = 'active',
+  targetSlot: TerminalTarget = 'active',
 ): Promise<void> {
   const before = terminalPromptCount(await terminalBuffer(page, targetSlot));
   if (targetSlot !== 'active') {
-    const tab = page.getByRole('tab', { name: /Terminal \d+/ }).nth(targetSlot);
+    const tab = terminalTab(page, targetSlot);
     await expect(tab).toBeVisible();
     await tab.click();
     await expect(tab).toHaveAttribute('aria-selected', 'true');
   }
-  const slot =
-    targetSlot === 'active'
-      ? page.locator('.rf-terminal-slot[data-active="true"]')
-      : page.locator('.rf-terminal-slot').nth(targetSlot);
+  const slot = await terminalSlot(page, targetSlot);
   await expect(slot).toBeVisible();
   await expect.poll(() => terminalBuffer(page, targetSlot), { timeout: 30_000 }).toMatch(/>\s*$/u);
   await slot.locator('[data-testid="terminal"]').click();
@@ -320,29 +397,37 @@ function terminalPattern(text: string | RegExp): string | RegExp {
 export async function selectPreset(page: Page, id: string): Promise<void> {
   const launcher = page.locator('[data-testid="launcher"]');
   const trigger = page.locator('[data-action="open-launcher"]');
-  for (let attempt = 0; attempt < 5; attempt++) {
-    // The project-first chooser AUTO-opens on cold boot (~1s) and its veil would
-    // intercept a header-trigger click. Wait past that beat (>1s) so a cold boot
-    // always finds the auto-chooser; only open it ourselves — force, so no veil can
-    // block it since it's only closed mid-session — if it stayed shut.
-    if (!(await launcher.isVisible({ timeout: 3_000 }).catch(() => false))) {
-      await trigger.click({ force: true }).catch(() => {});
-    }
-    await expect(launcher).toBeVisible({ timeout: 10_000 });
-    const row = page.locator(`[data-preset="${id}"]`);
-    if (!(await row.isVisible().catch(() => false))) {
-      await page.getByRole('button', { name: 'Starters' }).click();
-    }
-    await expect(row).toBeVisible({ timeout: 10_000 });
-    await row.click({ force: true });
-    try {
-      await expect(page.locator('[data-testid="launcher"]')).toBeHidden({ timeout: 1_000 });
-      return;
-    } catch {
-      await page.waitForTimeout(100);
-    }
+  // The project-first chooser auto-opens on cold boot. Open it ourselves only
+  // when that did not happen.
+  if (!(await launcher.isVisible({ timeout: 3_000 }).catch(() => false))) {
+    await expect(trigger).toBeEnabled({ timeout: 90_000 });
+    // The auto-open may win after the visibility sample; force keeps this
+    // idempotent open intent from hanging behind the launcher's own veil.
+    await trigger.click({ force: true });
   }
-  await expect(page.locator('[data-testid="launcher"]')).toBeHidden({ timeout: 5_000 });
+  await expect(launcher).toBeVisible({ timeout: 10_000 });
+  const row = page.locator(`[data-preset="${id}"]`);
+  if (!(await row.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: 'Starters' }).click();
+  }
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await expect(row).toBeEnabled({ timeout: 90_000 });
+  await row.click();
+
+  const discard = page.getByRole('button', { name: 'Discard & continue' });
+  if (await discard.isVisible().catch(() => false)) await discard.click();
+
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="launcher"]') === null ||
+      document.querySelector('.rf-toast[data-tone="error"]') !== null,
+    undefined,
+    { timeout: 150_000 },
+  );
+  const errorToast = page.locator('.rf-toast[data-tone="error"]');
+  const transitionError = (await errorToast.count()) === 0 ? null : await errorToast.textContent();
+  if (transitionError !== null) throw new Error(`Preset transition failed: ${transitionError}`);
+  await expect(launcher).toHaveCount(0);
 }
 
 /**
@@ -357,7 +442,7 @@ export async function expectViteDevServerReady(
   page: Page,
   port = 5174,
   timeout = 60_000,
-  slot: 'active' | number = 'active',
+  slot: TerminalTarget = 'active',
 ): Promise<void> {
   const ready = new RegExp(
     `VITE v\\d+(?:\\.\\d+){0,2}\\s+ready|localhost:${port}|\\[status\\] UP :${port}`,

@@ -268,7 +268,9 @@ async function bootstrap(): Promise<void> {
       acquisition: {
         ensure: (request) =>
           packageState.activateAndEnsure(
-            workbenchPackageConfig(request.definition, request.projectRoot),
+            workbenchPackageConfig(request.definition, request.projectRoot, {
+              packageJsonBytes: authority.readFileBytesSync(`${request.projectRoot}/package.json`),
+            }),
           ),
       },
     });
@@ -287,7 +289,9 @@ async function bootstrap(): Promise<void> {
       acquisition: {
         ensure: (request) =>
           packageState.activateAndEnsure(
-            workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot),
+            workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
+              packageJsonBytes: authority.readFileBytesSync(`${request.projectRoot}/package.json`),
+            }),
           ),
       },
     });
@@ -373,7 +377,9 @@ async function bootstrap(): Promise<void> {
           createRuntime: (vfs) =>
             createWorkbenchProjectRuntime({
               projectRoot,
-              packageConfig: workbenchPackageConfig(input.definition, projectRoot),
+              packageConfig: workbenchPackageConfig(input.definition, projectRoot, {
+                packageJsonBytes: authority.readFileBytesSync(`${projectRoot}/package.json`),
+              }),
               authority,
               packageState,
               nodeEntryWorkerUrl: config.deployment.workers.node,
@@ -425,6 +431,7 @@ async function bootstrap(): Promise<void> {
               input.emit({ type: 'playground-tools', frame });
               return undefined;
             },
+            fatal: (error) => rejectOwnerLifetime(error),
             ...(input.recordMutation === undefined ? {} : { recordMutation: input.recordMutation }),
             log: (line) => globalThis.process.stdout.write(line),
           });

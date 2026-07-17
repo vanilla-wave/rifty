@@ -22,7 +22,7 @@ import { ScmPanel } from '../components/ScmPanel.tsx';
 import { Splitter } from '../components/Splitter.tsx';
 import { StatusBar } from '../components/StatusBar.tsx';
 import type { TerminalDims, TerminalModeHint } from '../components/TerminalPanel.tsx';
-import type { EditorApi } from '../components/editor-host-core.ts';
+import type { EditorApi, EditorOpenFileOptions } from '../components/editor-host-core.ts';
 import { Icon } from '../components/icons.tsx';
 import { resetBrowserSandboxState } from '../glue/browser-sandbox-reset.ts';
 import { copyToClipboard } from '../glue/clipboard.ts';
@@ -30,6 +30,7 @@ import {
   degradedBannerVisible,
   saveAffordance,
   storageModeFromBoot,
+  workspaceSaveMessage,
 } from '../glue/degraded-storage.ts';
 import { looksBinary } from '../glue/fs-ops.ts';
 import { initialEditorFilesForPreset } from '../glue/initial-editor-files.ts';
@@ -45,9 +46,19 @@ import { pathFromTerminalFileLink } from '../glue/terminal-links.ts';
 import type { TerminalPersistence } from '../glue/terminal-persistence.ts';
 import { createTsDiagnosticsSync } from '../glue/ts-diagnostics-sync.ts';
 import { lspToMonacoMarkers } from '../glue/ts-ls-client.ts';
+import {
+  clearTsLsInitDiagnostics,
+  shouldPublishTsLsInitDiagnostic,
+  upsertTsLsInitDiagnostic,
+} from '../glue/ts-ls-init-diagnostic.ts';
 import type { TsLanguageServiceProvidersHandle } from '../glue/ts-ls-monaco-providers.ts';
+import { createEditorOpQueue } from '../orchestration/editor-op-queue.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset } from '../presets.ts';
 import { resolveProjectSpec } from '../templates/registry.ts';
+import {
+  flushBrowserPlaygroundSessionDurability,
+  reinitializeBrowserPlaygroundTypeScript,
+} from '../workbench/internal/playground-session-tools-transport.ts';
 import type {
   PlaygroundCatalogSnapshot,
   PlaygroundPreview,
@@ -69,9 +80,15 @@ import {
   createPlaygroundDocumentWriter,
   createPlaygroundFileMutations,
   createPlaygroundProjectMirror,
+  readPlaygroundEditorRemoteFile,
+  readPlaygroundGitOriginalText,
 } from './playground-project-view.ts';
+import { savePlaygroundSession } from './playground-save.ts';
+import { playgroundScmDiffPresentation } from './playground-scm-diff-presentation.ts';
+import { selectPlaygroundSidebarView } from './playground-sidebar-view.ts';
 import { persistedProjectTerminalState } from './playground-terminal-state.ts';
 import { type PlaygroundTerminalUi, createPlaygroundTerminalUi } from './playground-terminal-ui.ts';
+import type { PlaygroundTsDevHooksHandle } from './playground-ts-dev-hooks.ts';
 import { openPlaygroundAppWorkbench } from './playground-workbench-host.ts';
 import type { TerminalSessionSnapshot } from './terminal-manager.ts';
 import { useLayout } from './useLayout.ts';
@@ -156,10 +173,12 @@ function downloadBlob(name: string, blob: Blob): void {
 }
 
 interface BoundProject {
+  readonly editorContextKey: string;
   readonly context: PlaygroundAppProjectContext;
   readonly mirror: PlaygroundProjectMirror;
   readonly documents: PlaygroundDocumentWriter;
   readonly terminal: PlaygroundTerminalUi;
+  readonly typescriptBootReady: Promise<void>;
   readonly mutations: FileExplorerMutations;
   readonly unsubscribeScm: () => void;
   readonly unsubscribePreviews: () => void;
@@ -223,18 +242,20 @@ export function App(props: AppProps) {
   }
 
   let runtime: PlaygroundAppRuntime | null = null;
+  let editorContextId = 0;
   let latestTerminalState: ProjectTerminalSnapshot = Object.freeze({
     cwd: '/',
     env: Object.freeze({}),
   });
   let unsubscribeCatalog: (() => void) | null = null;
   let editorApi: EditorApi | undefined;
-  let editorOperations: ((api: EditorApi) => void)[] = [];
+  const editorOpQueue = createEditorOpQueue<EditorApi>();
   let editorDocumentUnsubscribe: (() => void) | null = null;
   let diagnosticSync: ReturnType<
     typeof createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>
   > | null = null;
   let providerHandle: TsLanguageServiceProvidersHandle | null = null;
+  let tsDevHooks: PlaygroundTsDevHooksHandle | null = null;
   let editorBindingEpoch = 0;
   let hiddenDeleteId: string | undefined;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -254,6 +275,14 @@ export function App(props: AppProps) {
   function currentRuntime(): PlaygroundAppRuntime {
     if (runtime === null) throw new Error('Playground Workbench is not ready');
     return runtime;
+  }
+
+  function projectAdmissionBlocked(): boolean {
+    return !workbenchReady() || projectBusy();
+  }
+
+  function effectiveRunState(): 'stopped' | 'starting' | 'running' {
+    return previewPorts().length > 0 ? 'running' : runState();
   }
 
   function terminalSession(project: BoundProject, id: string): TerminalSessionSnapshot {
@@ -355,58 +384,125 @@ export function App(props: AppProps) {
     return initialEditorFilesForPreset(presetForId(current.context.plan.starterId), '/');
   });
 
-  function unbindEditor(): void {
+  function releaseEditorBinding(): void {
     editorBindingEpoch += 1;
     editorDocumentUnsubscribe?.();
     editorDocumentUnsubscribe = null;
     diagnosticSync?.dispose();
     diagnosticSync = null;
+    tsDevHooks?.dispose();
+    tsDevHooks = null;
     providerHandle?.dispose();
     providerHandle = null;
     editorApi = undefined;
-    editorOperations = [];
     setDiagnostics(new Map());
   }
 
+  function unbindEditor(): void {
+    releaseEditorBinding();
+    editorOpQueue.discardStale(false, '');
+  }
+
   function bindEditor(api: EditorApi, project: BoundProject): void {
-    unbindEditor();
+    if (bound() !== project) return;
+    releaseEditorBinding();
     editorApi = api;
     const epoch = editorBindingEpoch;
-    diagnosticSync = createTsDiagnosticsSync({
+    const isCurrent = (): boolean => !disposed && epoch === editorBindingEpoch && editorApi === api;
+    const spec = resolveProjectSpec(project.context.plan.templateId);
+    const clearTypeScriptInitFailure = (): void => {
+      if (!isCurrent()) return;
+      setDiagnostics((previous) => clearTsLsInitDiagnostics(new Map(previous)));
+    };
+    const reportTypeScriptFailure = (message: string): void => {
+      if (!isCurrent()) return;
+      setDiagnostics((previous) => {
+        const next = new Map(previous);
+        return shouldPublishTsLsInitDiagnostic(spec, message)
+          ? upsertTsLsInitDiagnostic(next, '/', message)
+          : clearTsLsInitDiagnostics(next);
+      });
+      console.warn('[typescript]', message);
+    };
+    const sync = createTsDiagnosticsSync({
       client: project.context.tools.typescript,
       debounceMs: 120,
       isSupportedPath: (path) => /\.(?:[cm]?[jt]sx?)$/.test(path),
       setMarkers: (path, markers) => api.setMarkers(path, [...markers]),
       setDiagnostics: (update) => setDiagnostics((previous) => update(new Map(previous))),
       toMarkers: lspToMonacoMarkers,
-      warn: (message) => console.warn('[typescript]', message),
+      beforeRequest: () => project.typescriptBootReady,
+      warn: reportTypeScriptFailure,
     });
-    editorDocumentUnsubscribe = api.onDocument(diagnosticSync.handleDocument);
-    const queued = editorOperations;
-    editorOperations = [];
-    for (const operation of queued) operation(api);
-    void import('../glue/ts-ls-monaco-providers.ts').then(
-      ({ registerTsLanguageServiceProviders }) => {
-        if (disposed || epoch !== editorBindingEpoch || editorApi !== api) return;
-        providerHandle = registerTsLanguageServiceProviders(project.context.tools.typescript, api);
-      },
+    let providerReady: Promise<void> = project.typescriptBootReady;
+    const reinitialize = (): Promise<boolean> => {
+      const run = providerReady
+        .then(async () => {
+          await reinitializeBrowserPlaygroundTypeScript(project.context.tools.typescript);
+          if (!isCurrent()) return false;
+          clearTypeScriptInitFailure();
+          await sync.reopenOpenDocuments();
+          return isCurrent();
+        })
+        .catch((error: unknown) => {
+          reportTypeScriptFailure(errorMessage(error));
+          return false;
+        });
+      providerReady = run.then(() => undefined);
+      return run;
+    };
+    diagnosticSync = sync;
+    editorDocumentUnsubscribe = api.onDocument(sync.handleDocument);
+    editorOpQueue.flush(api, project.editorContextKey);
+    void Promise.all([
+      import('../glue/ts-ls-monaco-providers.ts'),
+      import('./playground-ts-dev-hooks.ts'),
+    ]).then(([{ registerTsLanguageServiceProviders }, { installPlaygroundTsDevHooks }]) => {
+      if (!isCurrent()) return;
+      const providers = registerTsLanguageServiceProviders(project.context.tools.typescript, api, {
+        beforeRequest: () => providerReady,
+      });
+      providerHandle = providers;
+      tsDevHooks = installPlaygroundTsDevHooks({
+        api,
+        providers,
+        reinitialize,
+      });
+    });
+  }
+
+  function withProjectEditor(project: BoundProject, operation: (api: EditorApi) => void): void {
+    const contextReady = bound() === project;
+    editorOpQueue.runOrQueue(
+      contextReady ? editorApi : undefined,
+      contextReady,
+      project.editorContextKey,
+      operation,
     );
   }
 
-  function withEditor(operation: (api: EditorApi) => void): void {
-    if (editorApi !== undefined) operation(editorApi);
-    else editorOperations.push(operation);
-  }
-
-  async function openEditorFile(path: string): Promise<void> {
+  async function openEditorFile(path: string, options?: EditorOpenFileOptions): Promise<void> {
     const project = bound();
     if (project === undefined) return;
     try {
       await project.mirror.ensureFile(path);
-      withEditor((api) => api.openFile(path));
+      withProjectEditor(project, (api) => api.openFile(path, options));
     } catch (error) {
-      flashError(`Open failed: ${errorMessage(error)}`);
+      if (bound() === project) flashError(`Open failed: ${errorMessage(error)}`);
     }
+  }
+
+  async function saveActiveProject(): Promise<void> {
+    const project = bound();
+    if (project === undefined) return;
+    const api = editorApi;
+    await savePlaygroundSession({
+      flushPendingEditorWrites: () => api?.flushPendingWrites() ?? Promise.resolve(),
+      flushOwnerDurability: () => flushBrowserPlaygroundSessionDurability(project.context.tools),
+      isCurrent: () => bound() === project,
+      reportSaved: () => flashToast(workspaceSaveMessage(storageMode()), 'success'),
+      reportFailure: (error) => flashError(`Save failed: ${errorMessage(error)}`),
+    });
   }
 
   async function disposeBound(): Promise<void> {
@@ -457,28 +553,42 @@ export function App(props: AppProps) {
           }
         },
       );
+      let releaseTypeScriptBoot!: () => void;
+      const typescriptBootReady = new Promise<void>((resolve) => {
+        releaseTypeScriptBoot = resolve;
+      });
       const project: BoundProject = {
+        editorContextKey: `${context.plan.id}\0${String(++editorContextId)}`,
         context,
         mirror,
         documents,
         terminal,
+        typescriptBootReady,
         mutations,
         unsubscribeScm,
         unsubscribePreviews,
         unsubscribeTerminal,
       };
-      await machine.loadPreset(presetForId(context.plan.starterId));
+      const preset = presetForId(context.plan.starterId);
+      await machine.loadPreset(preset);
       setBound(() => project);
-      const run = terminal.startProject(activeName());
+      const run = terminal.startProject(
+        activeName(),
+        context.plan.kind === 'node-cli'
+          ? { kind: 'node-cli', displayName: preset.label }
+          : undefined,
+      );
       setActiveSessionId(run.id);
       setRunState('starting');
       persistTerminalSession(project, run.id);
       void run.ready.then(
         () => {
+          releaseTypeScriptBoot();
           if (bound() !== project) return;
           setRunState('running');
         },
         (error: unknown) => {
+          releaseTypeScriptBoot();
           if (bound() !== project) return;
           setRunState('stopped');
           flashError(`Project start failed: ${errorMessage(error)}`);
@@ -507,13 +617,15 @@ export function App(props: AppProps) {
   async function transition(
     operation: (app: PlaygroundAppRuntime) => Promise<PlaygroundAppProjectContext | null>,
   ): Promise<PlaygroundAppProjectContext | null> {
+    if (!workbenchReady()) throw new Error('Playground Workbench is not ready');
     if (projectBusy()) throw new Error('Project transition is already running');
+    const app = currentRuntime();
     setProjectBusy(true);
     try {
       await disposeBound();
       let context: PlaygroundAppProjectContext | null;
       try {
-        context = await operation(currentRuntime());
+        context = await operation(app);
       } catch (error) {
         const restored = runtime?.current() ?? null;
         if (restored !== null) await bindProject(restored);
@@ -790,19 +902,22 @@ export function App(props: AppProps) {
     try {
       await editorApi?.flushPendingWrites();
       const diff = await project.context.tools.scm.diff(change);
-      withEditor((api) =>
+      const presentation = playgroundScmDiffPresentation(
+        projectFileName(change.path),
+        change,
+        diff,
+      );
+      withProjectEditor(project, (api) =>
         api.openTextDiff({
           id: `scm:${change.area}:${change.path}:${change.code}`,
           path: change.path,
-          title: projectFileName(change.path),
-          originalTitle: diff.original.source,
-          modifiedTitle: diff.modified.source,
+          ...presentation,
           original: decodeText(`${diff.original.source}:${change.path}`, diff.original.bytes),
           modified: decodeText(`${diff.modified.source}:${change.path}`, diff.modified.bytes),
         }),
       );
     } catch (error) {
-      flashError(`Diff failed: ${errorMessage(error)}`);
+      if (bound() === project) flashError(`Diff failed: ${errorMessage(error)}`);
     }
   }
 
@@ -814,7 +929,7 @@ export function App(props: AppProps) {
         project.mirror.ensureFile(left),
         project.mirror.ensureFile(right),
       ]);
-      withEditor((api) =>
+      withProjectEditor(project, (api) =>
         api.openTextDiff({
           id: `compare:${left}:${right}`,
           path: right,
@@ -826,7 +941,7 @@ export function App(props: AppProps) {
         }),
       );
     } catch (error) {
-      flashError(`Compare failed: ${errorMessage(error)}`);
+      if (bound() === project) flashError(`Compare failed: ${errorMessage(error)}`);
     }
   }
 
@@ -853,7 +968,7 @@ export function App(props: AppProps) {
   }
 
   function archiveBlocked(): boolean {
-    return projectBusy() || runState() !== 'stopped';
+    return !workbenchReady() || projectBusy() || effectiveRunState() !== 'stopped';
   }
 
   async function exportArchive(): Promise<void> {
@@ -982,9 +1097,14 @@ export function App(props: AppProps) {
     popup.document.close();
   }
 
-  function selectSidebarView(view: 'explorer' | 'scm'): void {
-    layout.selectView(view);
-    if (view === 'scm') void bound()?.context.tools.scm.refresh();
+  function selectSidebarView(view: 'explorer' | 'scm'): Promise<void> {
+    return selectPlaygroundSidebarView(view, {
+      currentView: layout.view,
+      sidebarCollapsed: layout.sidebarCollapsed,
+      flushPendingWrites: () => editorApi?.flushPendingWrites() ?? Promise.resolve(),
+      refreshScm: () => bound()?.context.tools.scm.refresh() ?? Promise.resolve(),
+      selectView: layout.selectView,
+    });
   }
 
   function paletteItems(): readonly PaletteItem[] {
@@ -994,7 +1114,7 @@ export function App(props: AppProps) {
       label: preset.label,
       hint: preset.blurb,
       icon: preset.icon,
-      disabled: projectBusy,
+      disabled: projectAdmissionBlocked,
       run: () => onPickStarter(preset.id),
     }));
     for (const path of bound()?.mirror.filePaths() ?? []) {
@@ -1059,9 +1179,14 @@ export function App(props: AppProps) {
 
   const livePillLabel = (): string => {
     if (projectBusy()) return 'SWITCHING';
-    if (runState() === 'starting') return 'STARTING';
     if (previewPorts()[0] !== undefined) return `LIVE :${String(previewPorts()[0]?.port)}`;
+    if (runState() === 'starting') return 'STARTING';
     return runState() === 'running' ? 'RUNNING' : 'STOPPED';
+  };
+
+  const livePillState = (): 'stopped' | 'starting' | 'running' | 'switching' => {
+    if (projectBusy()) return 'switching';
+    return effectiveRunState();
   };
 
   const modeLabel = (): string => {
@@ -1128,8 +1253,7 @@ export function App(props: AppProps) {
       ) {
         event.preventDefault();
         event.stopPropagation();
-        void editorApi?.flushPendingWrites();
-        flashToast('Saved', 'success');
+        void saveActiveProject();
       } else if (
         (event.metaKey || event.ctrlKey) &&
         (event.key.toLowerCase() === 'w' || event.code === 'KeyW') &&
@@ -1204,11 +1328,7 @@ export function App(props: AppProps) {
           dirty={store.dirty()}
           onOpen={openLauncher}
         />
-        <span
-          class="rf-livepill"
-          data-state={projectBusy() ? 'switching' : runState()}
-          title={modeLabel()}
-        >
+        <span class="rf-livepill" data-state={livePillState()} title={modeLabel()}>
           <span class="rf-livepill__dot" aria-hidden="true" />
           {livePillLabel()}
         </span>
@@ -1251,7 +1371,7 @@ export function App(props: AppProps) {
                 role="tab"
                 class="rf-sidebar__tab"
                 aria-selected={layout.view() !== 'scm'}
-                onClick={() => selectSidebarView('explorer')}
+                onClick={() => void selectSidebarView('explorer')}
               >
                 Files
               </button>
@@ -1260,7 +1380,7 @@ export function App(props: AppProps) {
                 role="tab"
                 class="rf-sidebar__tab"
                 aria-selected={layout.view() === 'scm'}
-                onClick={() => selectSidebarView('scm')}
+                onClick={() => void selectSidebarView('scm')}
               >
                 GIT
               </button>
@@ -1351,6 +1471,16 @@ export function App(props: AppProps) {
                       setActiveFilePath(info.path);
                     }}
                     onFileWritten={(path, content) => project.documents.write(path, content)}
+                    readNodeModulesFile={(path) =>
+                      readPlaygroundEditorRemoteFile(project.context.session.files, path)
+                    }
+                    readGitOriginalText={(input) =>
+                      readPlaygroundGitOriginalText(
+                        project.context.tools.scm,
+                        project.mirror,
+                        input,
+                      )
+                    }
                     gitStatus={gitStatus}
                     previewUrl={previewUrl}
                     onOpenPreviewTab={() => openPreviewTab()}
@@ -1424,9 +1554,7 @@ export function App(props: AppProps) {
               onLine={runTerminalLine}
               diagnostics={diagnostics()}
               onOpenProblem={(path, line, column) =>
-                void openEditorFile(path).then(() =>
-                  withEditor((api) => api.openFile(path, { reveal: { line, column } })),
-                )
+                void openEditorFile(path, { reveal: { line, column } })
               }
             />
           </main>
@@ -1479,7 +1607,7 @@ export function App(props: AppProps) {
         projects={store.projects()}
         scratch={store.scratch()}
         activeId={store.activeId()}
-        ownerBlocked={projectBusy()}
+        ownerBlocked={projectAdmissionBlocked()}
         storage={store.storage()}
         menuFor={store.menuFor()}
         q={store.q()}
@@ -1502,7 +1630,7 @@ export function App(props: AppProps) {
 
       <ProjectDialogs
         dialog={store.dialog()}
-        ownerBlocked={projectBusy()}
+        ownerBlocked={projectAdmissionBlocked()}
         saveName={saveName()}
         renameName={renameName()}
         targetName={dialogTargetName()}

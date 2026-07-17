@@ -11,6 +11,7 @@ import { type VfsMutationGuard, isAbsolute, normalizePath } from '@riftydev/vfs'
 import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
+import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
 import { readNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
@@ -30,6 +31,10 @@ import {
   runPtyDevServerShellCommand,
 } from './preview-producer-bindings.ts';
 import { createPreviewRegistry } from './preview-registry.ts';
+import {
+  type ProjectTerminalNamespace,
+  createProjectTerminalNamespace,
+} from './project-terminal-namespace.ts';
 import { type PtyServer, createPtyServer } from './pty-server.ts';
 import { createPreviewScope } from './vite-cli-prep.ts';
 
@@ -102,12 +107,58 @@ function assertCleanFlush(report: Awaited<ReturnType<OwnerVfsAuthority['flush']>
   );
 }
 
+function publicNodeServerConfig(
+  cfg: NodeServerPackageConfig,
+  namespace: ProjectTerminalNamespace,
+): NodeServerPackageConfig {
+  return {
+    ...cfg,
+    root: '/',
+    entryPath: namespace.toProjectPath(cfg.entryPath),
+    seedFiles: Object.fromEntries(
+      Object.entries(cfg.seedFiles).map(([path, content]) => [
+        namespace.toProjectPath(path),
+        content,
+      ]),
+    ),
+  };
+}
+
+function projectSeedCwd(
+  namespace: ProjectTerminalNamespace,
+  ownerCwd: string | undefined,
+): string | undefined {
+  if (ownerCwd === undefined) return undefined;
+  try {
+    return namespace.toProjectPath(ownerCwd);
+  } catch {
+    return undefined;
+  }
+}
+
 /** One active Workbench project; the lifetime owner retains storage/package authorities. */
 export function createWorkbenchProjectRuntime(
   options: WorkbenchProjectRuntimeOptions,
 ): WorkbenchProjectRuntime {
   const projectRoot = assertProjectRoot(options);
-  const previews = createPreviewRegistry({ send: options.send });
+  const namespace = createProjectTerminalNamespace({
+    projectRoot,
+    fileSystem: options.authority,
+    mutationGuard: options.mutationGuard,
+    assertPortablePaths: (paths) => options.authority.assertPortablePaths(paths),
+  });
+  const send = (frame: OwnerToPageFrame): void => {
+    if (frame.type === 'pty:exit') {
+      options.send({ ...frame, cwd: namespace.toOwnerPath(frame.cwd) });
+      return;
+    }
+    if (frame.type === 'pty:dev-server' && frame.cwd !== undefined) {
+      options.send({ ...frame, cwd: namespace.toOwnerPath(frame.cwd) });
+      return;
+    }
+    options.send(frame);
+  };
+  const previews = createPreviewRegistry({ send });
   const serverRef: { current?: PtyServer } = {};
   let binSequence = 0;
   let nodeSequence = 0;
@@ -121,6 +172,7 @@ export function createWorkbenchProjectRuntime(
     options.packageConfig.cfg.runtime === 'node-server'
       ? (() => {
           const cfg = options.packageConfig.cfg;
+          const childCfg = publicNodeServerConfig(cfg, namespace);
           const child = createOwnerChildDevServer(
             options.devServerWorkerUrl,
             readNodeWorkerRuntimeConfig(options.nodeWorkerRuntimeEnv, 'workbench-project-runtime'),
@@ -132,8 +184,9 @@ export function createWorkbenchProjectRuntime(
                 signal: ctx.signal,
                 log: (chunk) => ctx.stdout.write(chunk),
                 params: {
-                  cfg,
+                  cfg: childCfg,
                   env: { ...ctx.env },
+                  remoteFsRoot: projectRoot,
                   previewScope: createPreviewScope(),
                   isTTY: ctx.isTTY === true,
                   cols: ctx.cols ?? 80,
@@ -169,30 +222,51 @@ export function createWorkbenchProjectRuntime(
         allocateSid: () => `workbench-bin-${++binSequence}`,
         previews,
       }),
+      (request) => ({ ...request, remoteFsRoot: projectRoot }),
     );
     const executeInstalledBin: BinExecutor = async (binPath, args, ctx) => {
       await options.packageState.reassertTemplateNodeModules(options.packageConfig);
       return childBinExecutor(binPath, args, ctx);
     };
     const shell = new Shell({
-      cwd: reachableCwd(options.authority, seed?.cwd, projectRoot),
+      cwd: reachableCwd(namespace.fileSystem, projectSeedCwd(namespace, seed?.cwd), '/'),
       env: { ...(seed?.env ?? {}) },
       execBin: executeInstalledBin,
-      mutationGuard: options.mutationGuard,
-      assertPortablePaths: (paths) => options.authority.assertPortablePaths(paths),
+      fileSystem: namespace.fileSystem,
+      mutationGuard: namespace.mutationGuard,
+      assertPortablePaths: namespace.assertPortablePaths,
     });
     const npm = options.packageState.createNpmCommand(
       async (name, command, ctx) => {
         if (name === 'dev' && devServer !== null) {
           await options.packageState.reassertTemplateNodeModules(options.packageConfig);
-          return runPtyDevServerShellCommand({ captureOrigin, controller: devServer, ctx });
+          return runPtyDevServerShellCommand({
+            captureOrigin,
+            controller: devServer,
+            ctx: {
+              ...ctx,
+              cwd: namespace.toProjectPath(ctx.cwd),
+              fileSystem: namespace.fileSystem,
+              mutationGuard: namespace.mutationGuard,
+              assertPortablePaths: namespace.assertPortablePaths,
+            },
+          });
         }
         const nested = makeShell({ cwd: ctx.cwd, env: ctx.env }, ptySid);
         return runNestedShellCommand(nested, command, ctx);
       },
-      options.recordMutation === undefined ? {} : { recordMutation: options.recordMutation },
+      {
+        mapInvocationContext: namespace.toOwnerContext,
+        ...(options.recordMutation === undefined ? {} : { recordMutation: options.recordMutation }),
+      },
     );
-    shell.registerCommand('npm', npm);
+    shell.registerCommand('npm', async (args, ctx) => {
+      try {
+        return await npm(args, ctx);
+      } catch (error) {
+        return namespace.rethrowOwnerError(error);
+      }
+    });
     const spawnNodeEntry = (
       entryPath: string,
       scriptArgs: readonly string[],
@@ -210,6 +284,7 @@ export function createWorkbenchProjectRuntime(
           cwd: ctx.cwd,
           sid,
           previewScope,
+          remoteFsRoot: projectRoot,
         }),
       );
     };
@@ -244,7 +319,7 @@ export function createWorkbenchProjectRuntime(
   };
 
   const ptyServer = createPtyServer({
-    send: options.send,
+    send,
     makeShell,
     beforeExit: options.publicationBarrier,
     onPreviewReq: () => previews.publish(),

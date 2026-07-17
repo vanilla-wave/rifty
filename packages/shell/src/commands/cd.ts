@@ -5,16 +5,15 @@
  * shell state without a reverse import. Errors (missing / not-a-dir) exit 1.
  */
 
-import { syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { resolve } from './_shared.ts';
+import { commandFileSystem, resolve } from './_shared.ts';
 
 export const cd =
   (setCwd: (p: string) => void): ShellCommand =>
   async (args, ctx) => {
     const target = args[0] ?? ctx.env.HOME ?? '/';
     const next = resolve(ctx.cwd, target);
-    const fs = syncMirror();
+    const fs = commandFileSystem(ctx);
     if (!fs.existsSync(next)) {
       ctx.stderr.write(`cd: ${target}: no such file or directory\n`);
       return 1;

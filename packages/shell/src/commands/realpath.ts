@@ -16,9 +16,8 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { resolve } from './_shared.ts';
+import { commandFileSystem, resolve } from './_shared.ts';
 
 const USAGE = 'usage: realpath [-e] [-m] [-q] NAME...\n';
 
@@ -87,7 +86,7 @@ export const realpath: ShellCommand = async (args, ctx) => {
     return 1;
   }
 
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   let exit = 0;
   for (const name of names) {
     const abs = resolve(ctx.cwd, name);

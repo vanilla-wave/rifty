@@ -41,9 +41,9 @@ import { fileURLToPath } from 'node:url';
 export const ALLOWLIST = [
   {
     file: 'apps/playground/src/App.test.ts',
-    count: 46,
-    digest: '9f5bcbb81a69',
-    why: 'browser App imports xterm; residual pins only client JSX/composition bindings, with semantic behavior in adapters/*.contract.test.ts and browser e2e',
+    count: 40,
+    digest: 'fb6b1bc2dc0f',
+    why: 'browser App imports xterm; residual pins only client JSX/composition bindings; TS boot/reinit behavior lives in diagnostics-sync contracts + browser e2e',
   },
   {
     file: 'apps/playground/src/components/BottomPanel.test.ts',

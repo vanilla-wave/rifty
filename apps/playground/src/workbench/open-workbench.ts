@@ -2,9 +2,8 @@ import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
 import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import {
   ClosedHandleError,
-  DirtyProjectDocumentError,
   ProjectBusyError,
-  ProjectDocumentSaveInProgressError,
+  isRetryableProjectClosePreflightError,
 } from './errors.ts';
 import {
   type InspectedProjectDefinition,
@@ -309,7 +308,7 @@ function createWorkbench(
           completion.resolve(undefined);
         },
         (error: unknown) => {
-          if (isRetryableProjectClosePreflight(error)) {
+          if (isRetryableProjectClosePreflightError(error)) {
             closeAttempt = null;
             settlePreflight({ retryable: true, error });
           } else {
@@ -527,13 +526,6 @@ type CloseOutcome = { readonly ok: true } | { readonly ok: false; readonly error
 
 const CLOSE_SUCCEEDED = Object.freeze({ ok: true }) satisfies CloseOutcome;
 const CLOSE_PREFLIGHT_PASSED = Object.freeze({ retryable: false }) satisfies ProjectClosePreflight;
-
-function isRetryableProjectClosePreflight(error: unknown): boolean {
-  return (
-    error instanceof DirtyProjectDocumentError ||
-    error instanceof ProjectDocumentSaveInProgressError
-  );
-}
 
 function attemptClose(operation: () => Promise<void>): Promise<CloseOutcome> {
   try {

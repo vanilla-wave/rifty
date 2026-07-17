@@ -1,4 +1,4 @@
-import type { ProcessExit } from '@riftydev/shell';
+import { type ProcessExit, shellCommandExitCode } from '@riftydev/shell';
 import type { TerminalRawInput } from '@riftydev/terminal';
 import type { ProjectRun, ProjectSession } from '../workbench/project-session.ts';
 import type { ProjectTerminal, ProjectTerminalRun } from '../workbench/project-terminal.ts';
@@ -29,12 +29,20 @@ export interface PlaygroundProjectRunUi {
   readonly exited: Promise<ProcessExit>;
 }
 
+export type PlaygroundProjectLifecyclePresentation = {
+  readonly kind: 'node-cli';
+  readonly displayName: string;
+};
+
 export interface PlaygroundTerminalUi {
   sessions(): readonly TerminalSessionSnapshot[];
   subscribe(listener: (sessions: readonly TerminalSessionSnapshot[]) => void): () => void;
   activeSessionId(): string;
   select(id: string): void;
-  startProject(title?: string): PlaygroundProjectRunUi;
+  startProject(
+    title?: string,
+    lifecycle?: PlaygroundProjectLifecyclePresentation,
+  ): PlaygroundProjectRunUi;
   stopProject(): Promise<ProcessExit | undefined>;
   createSession(title?: string): TerminalSessionSnapshot;
   attach(id: string, writer: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
@@ -125,7 +133,7 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
     }
   };
 
-  const add = (terminal: ProjectTerminal, title?: string): UiTerminal => {
+  const add = (terminal: ProjectTerminal, title?: string, initialOutput = ''): UiTerminal => {
     assertOpen();
     const id = `project-terminal-${String(nextId++)}`;
     const state = {
@@ -134,8 +142,8 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
       terminal,
       detach: () => {},
       writer: null,
-      pending: [],
-      pendingChars: 0,
+      pending: initialOutput === '' ? [] : [{ chunk: initialOutput, stream: 'stdout' as const }],
+      pendingChars: initialOutput.length,
       status: 'idle' as const,
       activeRun: null,
       closed: false,
@@ -152,10 +160,18 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
     state: UiTerminal,
     run: ActiveRun,
     exited: Promise<ProcessExit>,
+    lifecycle?: PlaygroundProjectLifecyclePresentation,
   ): Promise<ProcessExit> => {
     let exit: ProcessExit;
     try {
       exit = await exited;
+      if (lifecycle?.kind === 'node-cli') {
+        buffer(
+          state,
+          `[cli] completed with exit code ${String(shellCommandExitCode(exit))}\n`,
+          'stdout',
+        );
+      }
     } finally {
       try {
         await run.close();
@@ -190,16 +206,18 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
       publish();
     },
 
-    startProject(title = 'Project') {
+    startProject(title, lifecycle) {
       assertOpen();
       const run: ProjectRun<unknown> = session.run();
       primaryRun = run;
-      const state = add(run.terminal, title);
+      const initialOutput =
+        lifecycle?.kind === 'node-cli' ? `cli: running ${lifecycle.displayName}\n` : '';
+      const state = add(run.terminal, title ?? 'Project', initialOutput);
       state.status = 'running';
       state.activeRun = run;
       activeId = state.id;
       publish();
-      const exited = settle(state, run, run.exited);
+      const exited = settle(state, run, run.exited, lifecycle);
       void exited.catch(() => {});
       return Object.freeze({ id: state.id, ready: run.ready, exited });
     },
@@ -253,11 +271,24 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
     async closeSession(id) {
       const state = get(id);
       if (state.activeRun !== null) throw new Error(`Terminal ${id} is running`);
+      const visualOrder = [...terminals.values()]
+        .filter(({ closed }) => !closed)
+        .map((terminal) => terminal.id);
+      const closingIndex = visualOrder.indexOf(id);
+      const fallbackOrder = [
+        ...visualOrder.slice(0, closingIndex).reverse(),
+        ...visualOrder.slice(closingIndex + 1),
+      ];
       state.closed = true;
       state.detach();
       await state.terminal.close();
       terminals.delete(id);
-      if (activeId === id) activeId = [...terminals.keys()][0] ?? '';
+      if (activeId === id) {
+        activeId =
+          fallbackOrder.find((candidate) => terminals.get(candidate)?.closed === false) ??
+          [...terminals.values()].find(({ closed }) => !closed)?.id ??
+          '';
+      }
       publish();
     },
 

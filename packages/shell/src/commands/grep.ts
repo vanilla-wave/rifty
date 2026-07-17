@@ -1,8 +1,15 @@
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, syncMirror } from '@riftydev/vfs';
+import { VfsError } from '@riftydev/vfs';
 import type { CommandContext, ShellCommand } from '../types.ts';
 import { osc8FileLink } from './_osc8.ts';
-import { dec, escapeRegExp, readAllStdin, resolve, strerror } from './_shared.ts';
+import {
+  commandFileSystem,
+  dec,
+  escapeRegExp,
+  readAllStdin,
+  resolve,
+  strerror,
+} from './_shared.ts';
 import { walk } from './_walk.ts';
 
 interface Opts {
@@ -127,7 +134,7 @@ function grepFile(
   showName: boolean,
   ctx: CommandContext,
 ): { count: number; lines: string[] } {
-  const text = dec.decode(syncMirror().readFileBytesSync(t.read));
+  const text = dec.decode(commandFileSystem(ctx).readFileBytesSync(t.read));
   const name = showName ? `${osc8FileLink(t.read, t.show, ctx)}:` : '';
   return grepText(text, re, opts, (lineNo) => `${name}${opts.lineNo ? `${lineNo}:` : ''}`);
 }
@@ -186,10 +193,10 @@ export const grep: ShellCommand = async (args, ctx) => {
     for (const root of roots) {
       const resolved = resolve(ctx.cwd, root);
       try {
-        const fs = syncMirror();
+        const fs = commandFileSystem(ctx);
         // A file arg (not a dir) is grepped directly; only dirs are walked.
         if (fs.statSync(resolved).isDirectory) {
-          for (const entry of walk(resolved)) {
+          for (const entry of walk(resolved, {}, fs)) {
             const rel = entry.path.slice(resolved.length).replace(/^\/+/, '');
             targets.push({ read: entry.path, show: joinAsGiven(root, rel) });
           }

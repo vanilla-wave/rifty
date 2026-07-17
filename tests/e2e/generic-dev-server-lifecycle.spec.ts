@@ -61,7 +61,7 @@ test.describe('generic dev-server lifecycle — non-vite fork', () => {
 
     // Let the preset's vite boot settle, then stop it — the fork replaces it.
     await expectViteDevServerReady(page, 5174, 90_000);
-    await page.locator('[data-testid="terminal"]').click();
+    await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
     await page.keyboard.press('Control+c');
     const pill = page.locator('.rf-livepill');
     await expect(pill).not.toHaveAttribute('data-state', 'running', { timeout: 60_000 });
@@ -72,11 +72,11 @@ test.describe('generic dev-server lifecycle — non-vite fork', () => {
     await openShellTerminal(page);
     await runLineConfirmed(
       page,
-      'echo \'import http from "node:http"; const s = http.createServer((req, res) => { if (req.url === "/close") { res.end("CLOSING"); s.close(); } else { res.end("FORK-OK host=" + req.headers.host); } }); s.listen(4100);\' > /scratch/server.mjs',
+      'echo \'import http from "node:http"; const s = http.createServer((req, res) => { if (req.url === "/close") { res.end("CLOSING"); s.close(); } else { res.end("FORK-OK host=" + req.headers.host); } }); s.listen(4100);\' > server.mjs',
     );
     await runLineConfirmed(
       page,
-      'echo \'{"name":"fork","type":"module","scripts":{"dev":"node server.mjs"}}\' > /scratch/package.json',
+      'echo \'{"name":"fork","type":"module","scripts":{"dev":"node server.mjs"}}\' > package.json',
     );
     await runLineConfirmed(page, 'npm run dev');
 
@@ -85,6 +85,7 @@ test.describe('generic dev-server lifecycle — non-vite fork', () => {
       timeout: 90_000,
     });
     await expect(page.locator('.rf-livepill')).toContainText(':4100', { timeout: 30_000 });
+    await expect(page.getByRole('button', { name: 'Export' })).toBeDisabled();
 
     // …and the preview route serves the fork's response.
     const fetchPreview = async (path: string): Promise<string> =>
@@ -128,7 +129,7 @@ test.describe('generic dev-server lifecycle — non-vite fork', () => {
     // The dev script's session is STILL foreground (close ≠ exit): Ctrl-C frees
     // it and a fresh command runs — proving the pill drop came from the port
     // event, not a child death.
-    await page.locator('[data-testid="terminal"]').click();
+    await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
     await page.keyboard.press('Control+c');
     await runLineConfirmed(page, 'echo freed');
     await expectTerminalContains(page, 'freed', 15_000);
@@ -159,9 +160,9 @@ test.describe('generic dev-server lifecycle — dual-server preset switch', () =
     await openShellTerminal(page);
     await runLineConfirmed(
       page,
-      'echo \'import http from "node:http"; http.createServer((_q, res) => res.end("SECOND-OK")).listen(4200);\' > /scratch/second.mjs',
+      'echo \'import http from "node:http"; http.createServer((_q, res) => res.end("SECOND-OK")).listen(4200);\' > second.mjs',
     );
-    await runLineConfirmed(page, 'node /scratch/second.mjs');
+    await runLineConfirmed(page, 'node second.mjs');
     const fetchPreview = async (path: string): Promise<string> =>
       page.evaluate(async (p: string) => {
         const ac = new AbortController();

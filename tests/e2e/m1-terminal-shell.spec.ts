@@ -1,15 +1,51 @@
-import { type Page, expect, test } from '@playwright/test';
+import { type Locator, type Page, expect, test } from '@playwright/test';
 import {
+  type TerminalSessionTarget,
   bootProjectFiles,
   expectTerminalContains,
   expectViteDevServerReady,
+  insertTerminalLineSettled,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
 } from './helpers/playground.ts';
 
-const terminalSessionTabs = (page: Page) =>
-  page.locator('.rf-terminal-tab').filter({ hasText: /^Terminal \d+/ });
+const terminalSessionTabs = (page: Page): Locator =>
+  page.locator('.rf-terminal-tabs > .rf-terminal-tab');
+
+function terminalTab(page: Page, target: TerminalSessionTarget): Locator {
+  return page.locator(`.rf-terminal-tab__select[data-session-id="${target.sessionId}"]`);
+}
+
+function terminalTabContainer(page: Page, target: TerminalSessionTarget): Locator {
+  return page.locator('.rf-terminal-tab').filter({ has: terminalTab(page, target) });
+}
+
+async function firstTerminalSession(page: Page): Promise<TerminalSessionTarget> {
+  const tab = terminalSessionTabs(page)
+    .first()
+    .locator('.rf-terminal-tab__select[data-session-id]');
+  await expect(tab).toBeVisible();
+  const sessionId = await tab.getAttribute('data-session-id');
+  if (sessionId === null) throw new Error('terminal tab has no session id');
+  return Object.freeze({ sessionId });
+}
+
+async function activeTerminalSession(page: Page): Promise<TerminalSessionTarget> {
+  const tab = page.locator(
+    '.rf-terminal-tabs .rf-terminal-tab__select[data-session-id][aria-selected="true"]',
+  );
+  await expect(tab).toHaveCount(1);
+  const sessionId = await tab.getAttribute('data-session-id');
+  if (sessionId === null) throw new Error('active terminal tab has no session id');
+  return Object.freeze({ sessionId });
+}
+
+async function closeTerminal(page: Page, target: TerminalSessionTarget): Promise<void> {
+  const close = terminalTabContainer(page, target).locator('.rf-terminal-tab__close');
+  await expect(close).toBeVisible();
+  await close.click();
+}
 
 const DEFAULT_VITE_READY = /VITE v.*ready/u;
 
@@ -34,19 +70,17 @@ test.describe('M1 - terminal shell', () => {
 
   test('bottom panel is a shell terminal and prestarts Vite visibly', async ({ page }) => {
     await bootProjectFiles(page);
+    const primary = await firstTerminalSession(page);
 
     // Bottom panel header shows terminal sessions plus the permanent Problems tab.
-    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
+    await expect(terminalTab(page, primary)).toBeVisible();
     await expect(page.locator('[data-testid="problems-tab"]')).toBeVisible();
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
-      'Commands run in /scratch',
+      'Commands run in /;',
     );
     await expectDefaultViteReady(page);
     await expect(terminalSessionTabs(page)).toHaveCount(1);
-    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(terminalTab(page, primary)).toHaveAttribute('aria-selected', 'true');
   });
 
   test('instant preset boots straight to vite — deps pre-seeded, NO install (ADR-0135)', async ({
@@ -54,7 +88,7 @@ test.describe('M1 - terminal shell', () => {
   }) => {
     test.setTimeout(120_000);
     await bootProjectFiles(page);
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
 
     // Fresh browser context = empty OPFS = no stamp: an instant preset's deps are
     // PRE-SEEDED from the baked snapshot (owner-seed), so the dev line just runs.
@@ -67,12 +101,13 @@ test.describe('M1 - terminal shell', () => {
 
   test('new terminal opens a separate idle shell while Vite keeps running', async ({ page }) => {
     await bootProjectFiles(page);
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
+    const primary = await firstTerminalSession(page);
 
     await openShellTerminal(page);
 
     await expect(terminalSessionTabs(page)).toHaveCount(2);
-    await expect(terminalSessionTabs(page).first()).toHaveAttribute('data-running', 'true');
+    await expect(terminalTabContainer(page, primary)).toHaveAttribute('data-running', 'true');
 
     await runTerminalLine(page, 'echo hello-from-shell');
 
@@ -82,7 +117,7 @@ test.describe('M1 - terminal shell', () => {
 
   test('new terminal receives keyboard focus immediately', async ({ page }) => {
     await bootProjectFiles(page);
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
 
     await openShellTerminal(page, { focus: false });
 
@@ -91,11 +126,7 @@ test.describe('M1 - terminal shell', () => {
 
   test('empty Enter keeps the running Vite terminal quiet', async ({ page }) => {
     await bootProjectFiles(page);
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
-    // Anchor past the deps-restore window: the `$ vite` echo now paints BEFORE
-    // the baked snapshot restore (per-run gate), whose progress line would
-    // otherwise land inside the 250 ms quiet window below. Once Vite is ready,
-    // the terminal is in the steady streaming state this contract is about.
+    // Tool-owned readiness anchors the terminal in the steady streaming state.
     await expectDefaultViteReady(page);
     const before = await terminalBuffer(page);
 
@@ -111,87 +142,77 @@ test.describe('M1 - terminal shell', () => {
 
   test('empty Enter in an idle terminal submits without blank prompt rows', async ({ page }) => {
     await bootProjectFiles(page);
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
-    await openShellTerminal(page);
+    await expectDefaultViteReady(page);
+    const shell = await openShellTerminal(page);
     await expect
-      .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout: 5_000 })
+      .poll(async () => terminalPromptCount(await terminalBuffer(page, shell)), {
+        timeout: 5_000,
+      })
       .toBeGreaterThan(0);
-    const before = await terminalBuffer(page);
+    const before = await terminalBuffer(page, shell);
 
-    await page.keyboard.press('Enter');
-    await page.keyboard.press('Enter');
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(250);
+    await insertTerminalLineSettled(page, '', 5_000, shell);
+    await insertTerminalLineSettled(page, '', 5_000, shell);
+    await insertTerminalLineSettled(page, '', 5_000, shell);
 
-    const after = await terminalBuffer(page);
+    const after = await terminalBuffer(page, shell);
     expect(terminalPromptCount(after)).toBe(terminalPromptCount(before) + 3);
     expect(after).not.toMatch(/(?:^|\n)> \n\n> /u);
   });
 
   test('terminal tabs switch between their own buffers', async ({ page }) => {
     await bootProjectFiles(page);
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
+    const primary = await firstTerminalSession(page);
 
-    await openShellTerminal(page);
+    const shell = await openShellTerminal(page);
     await runTerminalLine(page, 'echo hello-from-terminal-2');
     await expectTerminalContains(page, 'hello-from-terminal-2');
 
-    await page.getByRole('tab', { name: 'Terminal 1' }).click();
-    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await terminalTab(page, primary).click();
+    await expect(terminalTab(page, primary)).toHaveAttribute('aria-selected', 'true');
     await expectDefaultViteReady(page);
     expect(await terminalBuffer(page)).not.toContain('hello-from-terminal-2');
 
-    await page.getByRole('tab', { name: 'Terminal 2' }).click();
-    await expect(page.getByRole('tab', { name: 'Terminal 2' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await terminalTab(page, shell).click();
+    await expect(terminalTab(page, shell)).toHaveAttribute('aria-selected', 'true');
     await expectTerminalContains(page, 'hello-from-terminal-2');
   });
 
   test('closing an idle terminal returns to the running terminal cleanly', async ({ page }) => {
     await bootProjectFiles(page);
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expectDefaultViteReady(page);
+    const primary = await firstTerminalSession(page);
 
-    await openShellTerminal(page);
-    await page.getByRole('button', { name: 'Close Terminal 2' }).click();
+    const shell = await openShellTerminal(page);
+    await closeTerminal(page, shell);
 
     await expect(terminalSessionTabs(page)).toHaveCount(1);
-    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(terminalTab(page, primary)).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.rf-terminal-slot[data-active="true"]')).toHaveCount(1);
     await expectDefaultViteReady(page);
   });
 
   test('closing the active idle terminal focuses the previous terminal tab', async ({ page }) => {
     await bootProjectFiles(page);
-    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
+    await firstTerminalSession(page);
 
-    await openShellTerminal(page);
+    const previous = await openShellTerminal(page);
     await page.getByRole('button', { name: 'New terminal' }).click();
-    await expect(page.getByRole('tab', { name: 'Terminal 3' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(terminalSessionTabs(page)).toHaveCount(3);
+    const active = await activeTerminalSession(page);
+    await expect(terminalTab(page, active)).toHaveAttribute('aria-selected', 'true');
 
-    await page.getByRole('button', { name: 'Close Terminal 3' }).click();
+    await closeTerminal(page, active);
 
     await expect(terminalSessionTabs(page)).toHaveCount(2);
-    await expect(page.getByRole('tab', { name: 'Terminal 2' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(terminalTab(page, previous)).toHaveAttribute('aria-selected', 'true');
     await expect.poll(() => terminalOwnsFocus(page), { timeout: 2_000 }).toBe(true);
   });
 
   test('new-terminal button stays attached while Problems stays pinned left', async ({ page }) => {
     await bootProjectFiles(page);
-    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
+    await firstTerminalSession(page);
 
     await openShellTerminal(page);
 
