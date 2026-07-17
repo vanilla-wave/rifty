@@ -129,6 +129,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0195 | Eddy wire protocol v1.1 — GET-by-hash, CORS-simple POST, streaming client, prefetch seam |
 | 0201 | Bounded-fetch chokepoint: no-progress stall bounds on all npm-client fetches |
 | 0258 | Structured install acquisition provenance |
+| 0283 | Canonical package manifest serialization |
 
 ### playground
 
@@ -252,6 +253,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0278 | Playground companion terminal state and preview registry |
 | 0279 | Compact staged Playground catalog transactions |
 | 0280 | Project-rooted terminal execution namespace |
+| 0282 | Extraction-safe Playground host and session seams |
 
 ## Superseded (removed)
 
@@ -284,6 +286,9 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
+| 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
+| 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
 | 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |

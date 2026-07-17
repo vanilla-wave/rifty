@@ -2,13 +2,12 @@ import esbuildWasmUrl from 'esbuild-wasm/esbuild.wasm?url';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { getRegistryProxyPrefix } from '../glue/registry-fetch.ts';
 import { getEddyBundleBaseUrl, getResolverUrl } from '../glue/resolver-config.ts';
-import { inspectBrowserPlaygroundLegacyWorkspacePrefix } from '../workbench/internal/browser-workbench-composition.ts';
-import type { WorkbenchOptions } from '../workbench/open-workbench.ts';
-import type { PlaygroundWorkbench } from '../workbench/playground.ts';
+import type { PlaygroundWorkbench, PlaygroundWorkbenchOptions } from '../workbench/playground.ts';
 import { openPlaygroundWorkbench } from '../workbench/playground.ts';
 import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&url';
 import kernelWorkerUrl from '../workers/kernel-worker-entry.ts?worker&url';
 import nodeWorkerUrl from '../workers/node-entry-bootstrap.ts?worker&url';
+import typescriptWorkerUrl from '../workers/ts-lsp-worker-entry.ts?worker&url';
 import ownerWorkerUrl from '../workers/workbench-owner-bootstrap.ts?worker&url';
 
 function presetPins(value: unknown): Readonly<Record<string, string>> | undefined {
@@ -36,7 +35,7 @@ function presetPins(value: unknown): Readonly<Record<string, string>> | undefine
 }
 
 /** Vite/bundler deployment boundary; semantic App code receives no worker URLs. */
-export function playgroundWorkbenchOptions(): WorkbenchOptions {
+export function playgroundWorkbenchOptions(): PlaygroundWorkbenchOptions {
   const resolverUrl = getResolverUrl();
   const bundleBaseUrl = getEddyBundleBaseUrl();
   const pins = presetPins(import.meta.env.VITE_RIFTY_EDDY_PINS);
@@ -47,6 +46,7 @@ export function playgroundWorkbenchOptions(): WorkbenchOptions {
         kernel: kernelWorkerUrl,
         node: nodeWorkerUrl,
         devServer: devServerWorkerUrl,
+        typescript: typescriptWorkerUrl,
       }),
       serviceWorker: Object.freeze({ url: '/sw.js', scope: '/' }),
       wasm: Object.freeze({ sqlite: sqlWasmUrl, esbuild: esbuildWasmUrl }),
@@ -70,26 +70,9 @@ export function playgroundWorkbenchOptions(): WorkbenchOptions {
 
 export interface OpenedPlaygroundAppWorkbench {
   readonly workbench: PlaygroundWorkbench;
-  readonly legacyWorkspacePrefix?: string;
 }
 
 export async function openPlaygroundAppWorkbench(): Promise<OpenedPlaygroundAppWorkbench> {
   const workbench = await openPlaygroundWorkbench(playgroundWorkbenchOptions());
-  try {
-    const legacyWorkspacePrefix = inspectBrowserPlaygroundLegacyWorkspacePrefix(workbench);
-    return Object.freeze({
-      workbench,
-      ...(legacyWorkspacePrefix === undefined ? {} : { legacyWorkspacePrefix }),
-    });
-  } catch (error) {
-    try {
-      await workbench.close();
-    } catch (closeError) {
-      throw new AggregateError(
-        [error, closeError],
-        'Playground App Workbench inspection and cleanup failed',
-      );
-    }
-    throw error;
-  }
+  return Object.freeze({ workbench });
 }

@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ProjectFileEntry } from '../workbench/errors.ts';
 import type { PlaygroundScm, PlaygroundScmChange } from '../workbench/playground.ts';
 import type { ProjectDocument, ProjectDocuments } from '../workbench/project-documents.ts';
 import type {
@@ -7,6 +6,7 @@ import type {
   ProjectFiles,
   ProjectFilesSnapshot,
 } from '../workbench/project-files.ts';
+import type { ProjectFileEntry } from '../workbench/public.ts';
 import {
   createPlaygroundDocumentWriter,
   createPlaygroundFileMutations,
@@ -283,6 +283,54 @@ describe('Playground logical project view', () => {
       mirror.dispose();
     },
   );
+
+  it('prevalidates every renameMany path before editor preflight or owner mutation', async () => {
+    const h = filesHarness({
+      entries: [
+        entry('/src', 'dir', 'v1'),
+        entry('/src/a.js', 'file', 'v1', 1),
+        entry('/src/c.js', 'file', 'v1', 1),
+      ],
+      bytes: { '/src/a.js': 'a', '/src/c.js': 'c' },
+    });
+    const mirror = createPlaygroundProjectMirror(h.files);
+    const beforeMutation = vi.fn(async () => {});
+    const mutations = createPlaygroundFileMutations(h.files, mirror, beforeMutation);
+
+    await expect(
+      mutations.renameMany([
+        { from: '/src/a.js', to: '/src/b.js' },
+        { from: '/src/c.js', to: '../outside.js' },
+      ]),
+    ).rejects.toThrow(/Invalid logical project path/);
+
+    expect(beforeMutation).not.toHaveBeenCalled();
+    expect(h.files.rename).not.toHaveBeenCalled();
+    expect(mirror.filePaths()).toEqual(['/src/a.js', '/src/c.js']);
+    mirror.dispose();
+  });
+
+  it('prevalidates every writeFiles path before editor preflight or owner mutation', async () => {
+    const h = filesHarness({
+      entries: [entry('/src', 'dir', 'v1'), entry('/src/a.js', 'file', 'v1', 1)],
+      bytes: { '/src/a.js': 'a' },
+    });
+    const mirror = createPlaygroundProjectMirror(h.files);
+    const beforeMutation = vi.fn(async () => {});
+    const mutations = createPlaygroundFileMutations(h.files, mirror, beforeMutation);
+
+    await expect(
+      mutations.writeFiles([
+        { path: '/src/a.js', data: encoder.encode('changed') },
+        { path: '../outside.js', data: encoder.encode('outside') },
+      ]),
+    ).rejects.toThrow(/Invalid logical project path/);
+
+    expect(beforeMutation).not.toHaveBeenCalled();
+    expect(h.files.writeFile).not.toHaveBeenCalled();
+    expect(new TextDecoder().decode(h.contents.get('/src/a.js'))).toBe('a');
+    mirror.dispose();
+  });
 });
 
 describe('Playground editor Documents binding', () => {

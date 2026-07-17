@@ -60,11 +60,14 @@ function errorFrom(error: unknown): Error {
 
 async function requireDurable(authority: OwnerVfsAuthority): Promise<void> {
   const report = await authority.flush();
-  if (report === undefined || report.failures.length === 0) return;
+  if (report === undefined || report.total === 0) return;
   const detail = report.failures
     .map((failure) => `${failure.op} ${failure.path}: ${failure.message}`)
     .join('; ');
-  throw new Error(`Playground archive persistence failed: ${detail}`);
+  const summary = `${String(report.total)} unhealed failure${report.total === 1 ? '' : 's'}`;
+  throw new Error(
+    `Playground archive persistence failed: ${summary}; ${detail || 'failure sample unavailable'}`,
+  );
 }
 
 async function settleArchiveOperation<T>(

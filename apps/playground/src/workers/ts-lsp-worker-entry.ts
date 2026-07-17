@@ -26,11 +26,6 @@
  * safe if the guarded bottom-of-module auto-boot already ran.
  */
 
-// The vendored TS std-lib bundle (lib*.d.ts as a JSON map). The package fetches
-// it from `getTsLibUrl()` in the browser; point that at the Vite-served asset URL
-// (D-004: no hardcoded URL — the bootstrap global is the published seam). MUST be
-// set BEFORE the package entry's lazy `loadLibDts` runs (first `ts:init`).
-import tsLibBundleUrl from '@riftydev/ts-language-service/vendor/lib-bundle.json?url';
 import { bootTsLanguageServiceWorker } from '@riftydev/ts-language-service/worker/entry';
 import {
   installNodeWorkerRuntimeConfig,
@@ -49,7 +44,5 @@ installBundleLocalBuffer();
 installNodeWorkerRuntimeConfig(
   readNodeWorkerRuntimeConfigFromProcess(globalThis.process, 'ts-lsp-child'),
 );
-
-(globalThis as unknown as { __RIFTY_TS_LIB_URL?: string }).__RIFTY_TS_LIB_URL = tsLibBundleUrl;
 
 bootTsLanguageServiceWorker();

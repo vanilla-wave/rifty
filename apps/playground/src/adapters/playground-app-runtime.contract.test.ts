@@ -1,18 +1,21 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  DirtyProjectDocumentError,
-  ProjectDocumentSaveInProgressError,
-} from '../workbench/errors.ts';
 import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectPlan,
   PlaygroundSessionTools,
   PlaygroundWorkbench,
 } from '../workbench/playground.ts';
-import type { ProjectDefinition } from '../workbench/project-definition.ts';
-import type { ProjectSession } from '../workbench/project-session.ts';
-import type { ProjectTerminalSnapshot } from '../workbench/project-terminal.ts';
+import {
+  DirtyProjectDocumentError,
+  type ProjectDefinition,
+  ProjectDocumentSaveInProgressError,
+  type ProjectSession,
+  type ProjectTerminalSnapshot,
+} from '../workbench/public.ts';
 import { createPlaygroundAppRuntime } from './playground-app-runtime.ts';
+
+const runtimeSource = readFileSync(new URL('./playground-app-runtime.ts', import.meta.url), 'utf8');
 
 const EMPTY_CATALOG: PlaygroundCatalogSnapshot = Object.freeze({
   active: null,
@@ -38,6 +41,7 @@ function tools(): PlaygroundSessionTools {
     scm: {} as PlaygroundSessionTools['scm'],
     archive: {} as PlaygroundSessionTools['archive'],
     previews: {} as PlaygroundSessionTools['previews'],
+    awaitDurability: async () => {},
   });
 }
 
@@ -188,6 +192,7 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
             );
           }),
       },
+      restoreTerminalState: ({ state }) => state,
       forSession(session: ProjectSession<unknown>) {
         events.push(`tools:${String((session as { readonly id?: string }).id)}`);
         return tools();
@@ -235,6 +240,11 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
 }
 
 describe('Playground App semantic runtime', () => {
+  it('uses public error classes instead of Workbench implementation helpers', () => {
+    expect(runtimeSource).not.toContain("from '../workbench/errors.ts'");
+    expect(runtimeSource).not.toContain("from '../workbench/internal/");
+  });
+
   it('reads the latest host terminal snapshot for every semantic project open', async () => {
     let state: ProjectTerminalSnapshot = { cwd: '/src', env: { COLOR: '1' } };
     const h = harness(() => state);

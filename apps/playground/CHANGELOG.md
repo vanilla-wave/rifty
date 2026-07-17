@@ -4,6 +4,9 @@
 
 ### Added (app-local Workbench contract)
 
+- Companion hosts now supply the dedicated TypeScript Worker explicitly;
+  session tools expose root-free `awaitDurability()`, TS recovery, and exact
+  persisted terminal restoration across the sealed boundary (ADR-0282).
 - Companion session tools now expose one frozen semantic preview registry for
   every live project port. Browser routes are mounted and control-proved before
   publication; raw owner/PTy identities remain private (ADR-0278).

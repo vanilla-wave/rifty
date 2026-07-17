@@ -26,8 +26,10 @@ import {
   type PlaygroundScmDiff,
   type PlaygroundScmSnapshot,
   type PlaygroundSessionTools,
+  type PlaygroundTerminalStateRestoreInput,
   type PlaygroundTypeScript,
   type PlaygroundWorkbench,
+  type PlaygroundWorkbenchOptions,
   type VitePlaygroundPlan,
   openPlaygroundWorkbench,
 } from '../playground.ts';
@@ -116,6 +118,11 @@ type ExpectedPlaygroundProjectOpenOptions = {
   readonly initialTerminalState?: ProjectTerminalSnapshot;
 };
 
+type ExpectedPlaygroundTerminalStateRestoreInput = {
+  readonly format: 'project-rooted' | 'legacy-workspace-absolute';
+  readonly state: ProjectTerminalSnapshot;
+};
+
 type ExpectedPlaygroundPreview = {
   readonly port: number;
   readonly url: string;
@@ -133,6 +140,7 @@ type ExpectedPlaygroundSessionTools = {
   readonly scm: PlaygroundScm;
   readonly archive: PlaygroundArchive;
   readonly previews: PlaygroundPreviewRegistry;
+  awaitDurability(): Promise<void>;
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -161,6 +169,17 @@ function options(): WorkbenchOptions {
     },
     packageAcquisition: { registryUrl: '/npm-registry' },
     storage: { persistence: 'ephemeral' },
+  };
+}
+
+function playgroundOptions(): PlaygroundWorkbenchOptions {
+  const root = options();
+  return {
+    ...root,
+    deployment: {
+      ...root.deployment,
+      workers: { ...root.deployment.workers, typescript: '/typescript.js' },
+    },
   };
 }
 
@@ -415,6 +434,7 @@ function catalog(
 function typescriptTool(): PlaygroundTypeScript {
   const workspaceEdit = () => ({ changes: {} });
   return Object.freeze({
+    reinitialize: async () => {},
     open: async () => {},
     update: async () => {},
     close: async () => {},
@@ -502,6 +522,7 @@ function tools(overrides: { readonly archive?: PlaygroundArchive } = {}): Playgr
     scm: scmTool(),
     archive: overrides.archive ?? archiveTool(),
     previews: previewTool(),
+    awaitDurability: async () => {},
   } satisfies PlaygroundSessionTools);
 }
 
@@ -602,7 +623,7 @@ describe('Playground companion sealed contract', () => {
     expect(rootModule).not.toHaveProperty('openPlaygroundWorkbench');
     expect(rootModule).not.toHaveProperty('PlaygroundWorkbench');
     expectTypeOf(openPlaygroundWorkbench).toEqualTypeOf<
-      (options: WorkbenchOptions) => Promise<PlaygroundWorkbench>
+      (options: PlaygroundWorkbenchOptions) => Promise<PlaygroundWorkbench>
     >();
     expectTypeOf<PlaygroundScmChange>().toEqualTypeOf<ExpectedPlaygroundScmChange>();
     expectTypeOf<PlaygroundScmSnapshot>().toEqualTypeOf<ExpectedPlaygroundScmSnapshot>();
@@ -614,6 +635,7 @@ describe('Playground companion sealed contract', () => {
     expectTypeOf<PlaygroundPreviewRegistry>().toEqualTypeOf<ExpectedPlaygroundPreviewRegistry>();
     expectTypeOf<ProjectTerminalSnapshot>().toEqualTypeOf<ExpectedProjectTerminalSnapshot>();
     expectTypeOf<PlaygroundProjectOpenOptions>().toEqualTypeOf<ExpectedPlaygroundProjectOpenOptions>();
+    expectTypeOf<PlaygroundTerminalStateRestoreInput>().toEqualTypeOf<ExpectedPlaygroundTerminalStateRestoreInput>();
     expectTypeOf<ProjectTerminal['snapshot']>().returns.toEqualTypeOf<ProjectTerminalSnapshot>();
     expectTypeOf<PlaygroundSessionTools>().toEqualTypeOf<ExpectedPlaygroundSessionTools>();
   });
@@ -744,7 +766,7 @@ describe('Playground opener URL-context authority', () => {
         });
       },
     });
-    const openOptions = options();
+    const openOptions = playgroundOptions();
 
     const workbench = await open(openOptions);
     workbench.playground.define(
@@ -773,6 +795,24 @@ describe('Playground opener URL-context authority', () => {
     );
     await workbench.close();
     expect(root?.ownerClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires the companion TypeScript worker before URL capture or root effects', async () => {
+    const captureUrlContext = vi.fn(() => CAPTURED_URL_CONTEXT);
+    const openWorkbench = vi.fn(async () => (await createRootHarness()).workbench);
+    const open = createOpenPlaygroundWorkbench({
+      captureUrlContext,
+      openWorkbench,
+      createFacade: () => {
+        throw new Error('facade effect must not run');
+      },
+    });
+
+    await expect(open(options() as PlaygroundWorkbenchOptions)).rejects.toThrow(
+      /deployment\.workers\.typescript/,
+    );
+    expect(captureUrlContext).not.toHaveBeenCalled();
+    expect(openWorkbench).not.toHaveBeenCalled();
   });
 });
 
@@ -1275,6 +1315,47 @@ describe('Playground plan validation', () => {
 });
 
 describe('Playground session authority and teardown', () => {
+  it('restores terminal state against the exact captured legacy selection without exposing it', async () => {
+    const root = await createRootHarness();
+    const facade = createPlaygroundWorkbenchFacade({
+      workbench: root.workbench,
+      urlContext: CAPTURED_URL_CONTEXT,
+      legacyWorkspacePrefix: '/workspaces/legacy-tab',
+      definePlan,
+      catalog: catalog(),
+      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      registerBeforeClose: () => {},
+    });
+    const env = { KEEP: 'yes', RIFTY_OWNER_TOKEN: 'guest-owned' };
+
+    const restored = facade.playground.restoreTerminalState({
+      format: 'legacy-workspace-absolute',
+      state: { cwd: '/workspaces/legacy-tab/src', env },
+    });
+    env.KEEP = 'mutated';
+
+    expect(restored).toEqual({
+      cwd: '/src',
+      env: { KEEP: 'yes', RIFTY_OWNER_TOKEN: 'guest-owned' },
+    });
+    expect(Object.isFrozen(restored)).toBe(true);
+    expect(Object.isFrozen(restored.env)).toBe(true);
+    expect(JSON.stringify(restored)).not.toContain('/workspaces/legacy-tab');
+    expect(
+      facade.playground.restoreTerminalState({
+        format: 'legacy-workspace-absolute',
+        state: { cwd: '/workspaces/other/src', env: {} },
+      }),
+    ).toEqual({ cwd: '/', env: {} });
+    expect(
+      facade.playground.restoreTerminalState({
+        format: 'project-rooted',
+        state: { cwd: '/src/nested', env: { KEEP: 'yes' } },
+      }),
+    ).toEqual({ cwd: '/src/nested', env: { KEEP: 'yes' } });
+    await facade.close();
+  });
+
   it('rejects malformed initial terminal state before invoking the project-open effect', async () => {
     const root = await createRootHarness();
     let openProjectCalls = 0;
@@ -1422,7 +1503,13 @@ describe('Playground session authority and teardown', () => {
 
     expect(first.playground.forSession(firstSession)).toBe(firstTools);
     expect(Object.isFrozen(firstTools)).toBe(true);
-    expect(Object.keys(firstTools).sort()).toEqual(['archive', 'previews', 'scm', 'typescript']);
+    expect(Object.keys(firstTools).sort()).toEqual([
+      'archive',
+      'awaitDurability',
+      'previews',
+      'scm',
+      'typescript',
+    ]);
     expect(Object.keys(firstTools.scm).sort()).toEqual([
       'commit',
       'diff',
@@ -1447,6 +1534,7 @@ describe('Playground session authority and teardown', () => {
       expect(handle).not.toHaveProperty('close');
     }
     expect(firstTools.typescript.close).toEqual(expect.any(Function));
+    expect(firstTools.typescript.reinitialize).toEqual(expect.any(Function));
     expect(firstCreateTools).toHaveBeenCalledTimes(1);
     expect(firstCreateTools).toHaveBeenCalledWith(firstRoot.ownerSessions[0]);
     expect(firstCreateTools).not.toHaveBeenCalledWith(firstSession);
@@ -1518,6 +1606,37 @@ describe('Playground session authority and teardown', () => {
       expect.arrayContaining(['core:terminal', 'core:runtime', 'core:project-transport']),
     );
     await facade.close();
+  });
+
+  it('keeps the facade and its session retryable after Workbench dirty-close preflight rejects', async () => {
+    const root = await createRootHarness();
+    const sessionTools = tools();
+    const facade = createPlaygroundWorkbenchFacade({
+      workbench: root.workbench,
+      urlContext: CAPTURED_URL_CONTEXT,
+      definePlan,
+      catalog: catalog(),
+      createSessionTools: () => ({ tools: sessionTools, close: async () => {} }),
+      registerBeforeClose: (_session: ProjectSession<unknown>, hook: () => Promise<void>) =>
+        root.setBeforeCoreClose(hook),
+    });
+    const session = await facade.openProject(facade.playground.define(vitePlan()));
+    expect(facade.playground.forSession(session)).toBe(sessionTools);
+    const document = await session.documents.open('/src/main.ts');
+    document.replace('dirty');
+
+    const rejected = facade.close();
+
+    await expect(rejected).rejects.toBeInstanceOf(DirtyProjectDocumentError);
+    expect(root.ownerClose).not.toHaveBeenCalled();
+    expect(facade.playground.forSession(session)).toBe(sessionTools);
+
+    await document.close({ dirty: 'discard' });
+    const retry = facade.close();
+    expect(retry).not.toBe(rejected);
+    await retry;
+    expect(root.ownerClose).toHaveBeenCalledTimes(1);
+    expect(() => facade.playground.forSession(session)).toThrowError(/ClosedHandleError/);
   });
 
   it('aggregates tool and core close failures while still attempting every teardown layer', async () => {

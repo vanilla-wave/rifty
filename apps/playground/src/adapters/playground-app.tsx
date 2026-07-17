@@ -55,10 +55,6 @@ import type { TsLanguageServiceProvidersHandle } from '../glue/ts-ls-monaco-prov
 import { createEditorOpQueue } from '../orchestration/editor-op-queue.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset } from '../presets.ts';
 import { resolveProjectSpec } from '../templates/registry.ts';
-import {
-  flushBrowserPlaygroundSessionDurability,
-  reinitializeBrowserPlaygroundTypeScript,
-} from '../workbench/internal/playground-session-tools-transport.ts';
 import type {
   PlaygroundCatalogSnapshot,
   PlaygroundPreview,
@@ -66,7 +62,7 @@ import type {
   PlaygroundScmChange,
   PlaygroundScmSnapshot,
 } from '../workbench/playground.ts';
-import type { ProjectTerminalSnapshot } from '../workbench/project-terminal.ts';
+import type { ProjectTerminalSnapshot } from '../workbench/public.ts';
 import {
   type PlaygroundAppProjectContext,
   type PlaygroundAppRuntime,
@@ -86,7 +82,6 @@ import {
 import { savePlaygroundSession } from './playground-save.ts';
 import { playgroundScmDiffPresentation } from './playground-scm-diff-presentation.ts';
 import { selectPlaygroundSidebarView } from './playground-sidebar-view.ts';
-import { persistedProjectTerminalState } from './playground-terminal-state.ts';
 import { type PlaygroundTerminalUi, createPlaygroundTerminalUi } from './playground-terminal-ui.ts';
 import type { PlaygroundTsDevHooksHandle } from './playground-ts-dev-hooks.ts';
 import { openPlaygroundAppWorkbench } from './playground-workbench-host.ts';
@@ -438,7 +433,7 @@ export function App(props: AppProps) {
     const reinitialize = (): Promise<boolean> => {
       const run = providerReady
         .then(async () => {
-          await reinitializeBrowserPlaygroundTypeScript(project.context.tools.typescript);
+          await project.context.tools.typescript.reinitialize();
           if (!isCurrent()) return false;
           clearTypeScriptInitFailure();
           await sync.reopenOpenDocuments();
@@ -498,7 +493,7 @@ export function App(props: AppProps) {
     const api = editorApi;
     await savePlaygroundSession({
       flushPendingEditorWrites: () => api?.flushPendingWrites() ?? Promise.resolve(),
-      flushOwnerDurability: () => flushBrowserPlaygroundSessionDurability(project.context.tools),
+      flushOwnerDurability: () => project.context.tools.awaitDurability(),
       isCurrent: () => bound() === project,
       reportSaved: () => flashToast(workspaceSaveMessage(storageMode()), 'success'),
       reportFailure: (error) => flashError(`Save failed: ${errorMessage(error)}`),
@@ -675,12 +670,12 @@ export function App(props: AppProps) {
       await workbench.close();
       return;
     }
-    latestTerminalState = persistedProjectTerminalState({
-      source: props.terminalPersistence.initialStateSource,
+    latestTerminalState = workbench.playground.restoreTerminalState({
+      format:
+        props.terminalPersistence.initialStateSource === 'legacy-absolute'
+          ? 'legacy-workspace-absolute'
+          : 'project-rooted',
       state: props.terminalPersistence.initialState,
-      ...(opened.legacyWorkspacePrefix === undefined
-        ? {}
-        : { legacyWorkspacePrefix: opened.legacyWorkspacePrefix }),
     });
     runtime = createPlaygroundAppRuntime(workbench, {
       terminalState: () => latestTerminalState,

@@ -4,11 +4,51 @@ import {
   ownProjectTerminalSnapshot,
   projectTerminalStateFromOwner,
   projectTerminalStateToOwner,
+  restorePlaygroundTerminalState,
 } from './playground-terminal-state.ts';
 
 const PROJECT_ROOT = '/.rifty/workbench/projects/terminal-state';
 
 describe('Playground terminal state boundary', () => {
+  it.each([
+    ['project-rooted', '/src/nested', undefined, '/src/nested'],
+    ['project-rooted', '/src/../escape', undefined, '/'],
+    ['legacy-workspace-absolute', '/workspaces/legacy-tab', '/workspaces/legacy-tab', '/'],
+    ['legacy-workspace-absolute', '/workspaces/legacy-tab/src', '/workspaces/legacy-tab', '/src'],
+    ['legacy-workspace-absolute', '/workspaces/other/src', '/workspaces/legacy-tab', '/'],
+    ['legacy-workspace-absolute', '/workspaces/legacy-tab/src', undefined, '/'],
+  ] as const)(
+    'restores %s cwd %s against capture %s as %s',
+    (format, cwd, legacyWorkspacePrefix, expected) => {
+      expect(
+        restorePlaygroundTerminalState(
+          { format, state: { cwd, env: { KEEP: 'yes' } } },
+          legacyWorkspacePrefix,
+        ),
+      ).toEqual({ cwd: expected, env: { KEEP: 'yes' } });
+    },
+  );
+
+  it('corrupt-input fault: rejects widened/accessor restore input without reading it', () => {
+    expect(() =>
+      restorePlaygroundTerminalState({
+        format: 'project-rooted',
+        state: { cwd: '/', env: {} },
+        ownerRoot: PROJECT_ROOT,
+      }),
+    ).toThrow(TypeError);
+    const read = vi.fn(() => ({ cwd: '/', env: {} }));
+    const accessor = Object.defineProperties(
+      {},
+      {
+        format: { enumerable: true, value: 'project-rooted' },
+        state: { enumerable: true, get: read },
+      },
+    );
+    expect(() => restorePlaygroundTerminalState(accessor)).toThrow(TypeError);
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it('corrupt-input fault: accepts only exact data-property open options', () => {
     const owned = ownPlaygroundProjectOpenOptions({
       initialTerminalState: { cwd: '/', env: { KEEP: 'yes' } },

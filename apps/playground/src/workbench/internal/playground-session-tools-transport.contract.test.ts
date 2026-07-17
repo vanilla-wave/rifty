@@ -10,10 +10,8 @@ import {
   type OwnerPlaygroundSessionToolsFrame,
   type PagePlaygroundSessionToolsFrame,
   createBrowserPlaygroundSessionTools,
-  flushBrowserPlaygroundSessionDurability,
   inspectOwnerPlaygroundSessionToolsFrame,
   inspectPagePlaygroundSessionToolsFrame,
-  reinitializeBrowserPlaygroundTypeScript,
 } from './playground-session-tools-transport.ts';
 
 const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
@@ -369,7 +367,7 @@ function okResponse(
 }
 
 describe('browser session-tools lifecycle and proxies', () => {
-  it('keeps durability package-private and settles only from the correlated owner result', async () => {
+  it('exposes a semantic durability barrier that settles only from the correlated owner result', async () => {
     const route = routeHarness();
     let requestSequence = 0;
     const lifecycle = createBrowserPlaygroundSessionTools({
@@ -384,13 +382,16 @@ describe('browser session-tools lifecycle and proxies', () => {
       tsRequestTimeoutMs: 1_000,
     });
 
-    expect(Reflect.ownKeys(lifecycle.tools)).toEqual(['typescript', 'scm', 'archive', 'previews']);
-    await expect(flushBrowserPlaygroundSessionDurability({} as never)).rejects.toThrow(
-      'Unknown browser Playground session tools',
-    );
+    expect(Reflect.ownKeys(lifecycle.tools)).toEqual([
+      'typescript',
+      'scm',
+      'archive',
+      'previews',
+      'awaitDurability',
+    ]);
 
     let settled = false;
-    const durable = flushBrowserPlaygroundSessionDurability(lifecycle.tools).then(() => {
+    const durable = lifecycle.tools.awaitDurability().then(() => {
       settled = true;
     });
     await vi.waitFor(() => expect(route.sent).toHaveLength(1));
@@ -404,7 +405,7 @@ describe('browser session-tools lifecycle and proxies', () => {
     await durable;
     expect(settled).toBe(true);
 
-    const failed = flushBrowserPlaygroundSessionDurability(lifecycle.tools);
+    const failed = lifecycle.tools.awaitDurability();
     await vi.waitFor(() => expect(route.sent).toHaveLength(2));
     const failedRequest = route.sent[1]!;
     if (failedRequest.type !== 'workbench:playground-session-tools-request') {
@@ -427,7 +428,7 @@ describe('browser session-tools lifecycle and proxies', () => {
     await close;
   });
 
-  it('reinitializes the captured TS project internally without widening the public tool', async () => {
+  it('reinitializes the captured TS project without exposing its physical root', async () => {
     const route = routeHarness();
     const lifecycle = createBrowserPlaygroundSessionTools({
       projectRoot: PROJECT_ROOT,
@@ -441,13 +442,10 @@ describe('browser session-tools lifecycle and proxies', () => {
     });
 
     expect(Reflect.ownKeys(lifecycle.tools.typescript)).not.toContain('init');
-    expect(Reflect.ownKeys(lifecycle.tools.typescript)).not.toContain('reinitialize');
-    await expect(reinitializeBrowserPlaygroundTypeScript({} as never)).rejects.toThrow(
-      'Unknown browser Playground TypeScript tool',
-    );
+    expect(Reflect.ownKeys(lifecycle.tools.typescript)).toContain('reinitialize');
 
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const reinitialized = reinitializeBrowserPlaygroundTypeScript(lifecycle.tools.typescript);
+      const reinitialized = lifecycle.tools.typescript.reinitialize();
       await vi.waitFor(() => expect(route.sent).toHaveLength(attempt));
       const frame = route.sent[attempt - 1]!;
       if (frame.type !== 'workbench:playground-session-tools-ts-request') {
@@ -504,7 +502,7 @@ describe('browser session-tools lifecycle and proxies', () => {
       tsRequestTimeoutMs: 1_000,
     });
 
-    const failed = reinitializeBrowserPlaygroundTypeScript(lifecycle.tools.typescript);
+    const failed = lifecycle.tools.typescript.reinitialize();
     await vi.waitFor(() => expect(route.sent).toHaveLength(1));
     const failedFrame = route.sent[0]!;
     if (failedFrame.type !== 'workbench:playground-session-tools-ts-request') {
@@ -524,8 +522,8 @@ describe('browser session-tools lifecycle and proxies', () => {
     });
     await expect(failed).rejects.toThrow('first init failed');
 
-    const retry = reinitializeBrowserPlaygroundTypeScript(lifecycle.tools.typescript);
-    const concurrent = reinitializeBrowserPlaygroundTypeScript(lifecycle.tools.typescript);
+    const retry = lifecycle.tools.typescript.reinitialize();
+    const concurrent = lifecycle.tools.typescript.reinitialize();
     const diagnostics = lifecycle.tools.typescript.getSyntacticDiagnostics(SOURCE);
     await vi.waitFor(() => expect(route.sent).toHaveLength(2));
     const retryFrame = route.sent[1]!;
@@ -615,7 +613,13 @@ describe('browser session-tools lifecycle and proxies', () => {
     });
 
     expect(Object.isFrozen(lifecycle.tools)).toBe(true);
-    expect(Reflect.ownKeys(lifecycle.tools)).toEqual(['typescript', 'scm', 'archive', 'previews']);
+    expect(Reflect.ownKeys(lifecycle.tools)).toEqual([
+      'typescript',
+      'scm',
+      'archive',
+      'previews',
+      'awaitDurability',
+    ]);
     expect(lifecycle.tools.previews.snapshot()).toEqual([]);
     expect(JSON.stringify(lifecycle.tools)).not.toContain(PROJECT_ROOT);
 

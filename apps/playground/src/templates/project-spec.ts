@@ -18,20 +18,38 @@
  * `RIFTY_RFV_TEMPLATE`); each realm re-resolves the full spec locally.
  */
 
-import type {
-  NodeCliPackageConfig,
-  NodeServerPackageConfig,
-  ProjectPackageConfig,
-  VitePackageConfig,
-} from '../workbench/internal/project-package-config.ts';
-import { serializeProjectPackageJson } from '../workbench/internal/project-package-json.ts';
+import { serializePackageJson } from '@riftydev/npm-client';
 
-export type {
-  NodeCliPackageConfig as NodeCliBootstrapConfig,
-  NodeServerPackageConfig as NodeServerBootstrapConfig,
-  ProjectPackageConfig as BootstrapConfig,
-  VitePackageConfig as ViteBootstrapConfig,
-} from '../workbench/internal/project-package-config.ts';
+interface BootstrapConfigBase {
+  readonly root: string;
+  readonly entryPath: string;
+  readonly packageName: string;
+  readonly packageVersion: string;
+  readonly installDeps: Readonly<Record<string, string>>;
+  readonly packageJson: string;
+  readonly seedFiles: Readonly<Record<string, string>>;
+  readonly bakedNodeModulesUrl?: string;
+  readonly bakedNodeModulesTemplateId?: string;
+}
+
+export interface ViteBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'vite';
+  readonly port: number;
+}
+
+export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'node-server';
+  readonly port: number;
+}
+
+export interface NodeCliBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'node-cli';
+}
+
+export type BootstrapConfig =
+  | ViteBootstrapConfig
+  | NodeServerBootstrapConfig
+  | NodeCliBootstrapConfig;
 
 export interface ProjectEntry {
   /** Root-relative entry path with a leading slash (e.g. `/src/main.js`). */
@@ -195,7 +213,7 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
   const name = `rifty-${spec.id}-app`;
   const version = '0.0.0';
   const scripts = projectScripts(spec);
-  const json = serializeProjectPackageJson({
+  const json = serializePackageJson({
     name,
     version,
     private: true,
@@ -230,7 +248,7 @@ export function resolveBootstrapConfig(
   spec: ProjectSpec,
   port: number,
   root: string,
-): ProjectPackageConfig {
+): BootstrapConfig {
   const entryPath = `${root}${spec.entry.relativePath}`;
   const pkg = buildProjectPackageJson(spec);
   const base = {
@@ -253,9 +271,14 @@ export function resolveBootstrapConfig(
     };
     addExtraFiles(seedFiles, root, spec.extraFiles);
     if (spec.runtime === 'node-cli') {
-      return { ...base, runtime: 'node-cli', seedFiles } satisfies NodeCliPackageConfig;
+      return { ...base, runtime: 'node-cli', seedFiles } satisfies NodeCliBootstrapConfig;
     }
-    return { ...base, runtime: 'node-server', port, seedFiles } satisfies NodeServerPackageConfig;
+    return {
+      ...base,
+      runtime: 'node-server',
+      port,
+      seedFiles,
+    } satisfies NodeServerBootstrapConfig;
   }
   const seedFiles: Record<string, string> = {
     ...initializedGitFiles(root),
@@ -269,5 +292,5 @@ export function resolveBootstrapConfig(
     runtime: 'vite',
     port,
     seedFiles,
-  } satisfies VitePackageConfig;
+  } satisfies ViteBootstrapConfig;
 }

@@ -1,4 +1,3 @@
-import { ClosedHandleError, isRetryableProjectClosePreflightError } from '../workbench/errors.ts';
 import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectPlan,
@@ -6,9 +5,14 @@ import type {
   PlaygroundSessionTools,
   PlaygroundWorkbench,
 } from '../workbench/playground.ts';
-import type { ProjectDefinition } from '../workbench/project-definition.ts';
-import type { ProjectSession } from '../workbench/project-session.ts';
-import type { ProjectTerminalSnapshot } from '../workbench/project-terminal.ts';
+import {
+  ClosedHandleError,
+  DirtyProjectDocumentError,
+  type ProjectDefinition,
+  ProjectDocumentSaveInProgressError,
+  type ProjectSession,
+  type ProjectTerminalSnapshot,
+} from '../workbench/public.ts';
 
 export interface PlaygroundAppProjectContext {
   readonly plan: PlaygroundProjectPlan;
@@ -51,6 +55,15 @@ function activeMatches(snapshot: PlaygroundCatalogSnapshot, plan: PlaygroundProj
   return plan.id === 'scratch'
     ? active?.kind === 'scratch'
     : active?.kind === 'project' && active.id === plan.id;
+}
+
+function isRetryableClosePreflightError(
+  error: unknown,
+): error is DirtyProjectDocumentError | ProjectDocumentSaveInProgressError {
+  return (
+    error instanceof DirtyProjectDocumentError ||
+    error instanceof ProjectDocumentSaveInProgressError
+  );
 }
 
 /**
@@ -127,7 +140,7 @@ export function createPlaygroundAppRuntime(
     try {
       await prior.session.close();
     } catch (error) {
-      if (!isRetryableProjectClosePreflightError(error) && active === prior) active = null;
+      if (!isRetryableClosePreflightError(error) && active === prior) active = null;
       throw error;
     }
     if (active === prior) active = null;

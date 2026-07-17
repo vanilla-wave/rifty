@@ -4,6 +4,9 @@
 
 ### Added
 
+- `serializePackageJson()` provides one canonical byte spelling for manifests
+  shared by host plans, Workbench definitions, and snapshot tooling.
+
 - **Structured install acquisition provenance (ADR-0258).** Every
   `InstallResult` now reports `lockfile | metadata` resolution, each unique
   package's `cache | eddy | registry` transport, and the exact Eddy fallback

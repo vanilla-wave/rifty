@@ -51,3 +51,10 @@ the existing `EPHEMERAL` affordance remains authoritative.
 - Save can wait for storage and can fail visibly instead of acknowledging early.
 - Reload acceptance waits for `Saved`; it does not inspect private owner paths or
   treat reload itself as a persistence primitive.
+
+## Correction 2026-07-16
+
+ADR-0282 replaces the package-private call detail with public semantic
+`PlaygroundSessionTools.awaitDurability()`. It returns no persistence report or
+topology; editor drain, failure UI, and active-project correlation remain App
+policy, and the barrier ordering above is unchanged.

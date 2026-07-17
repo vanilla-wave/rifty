@@ -46,6 +46,11 @@ export interface PlaygroundProjectOpenOptions {
   readonly initialTerminalState?: ProjectTerminalSnapshot;
 }
 
+export interface PlaygroundTerminalStateRestoreInput {
+  readonly format: 'project-rooted' | 'legacy-workspace-absolute';
+  readonly state: ProjectTerminalSnapshot;
+}
+
 export interface PlaygroundTrustedSnapshot {
   readonly snapshotId: string;
   readonly assetUrl: string;
@@ -134,6 +139,7 @@ export interface PlaygroundProjectCatalog {
 }
 
 export interface PlaygroundTypeScript {
+  reinitialize(): Promise<void>;
   open(path: string, text: string): Promise<void>;
   update(path: string, text: string): Promise<void>;
   close(path: string): Promise<void>;
@@ -287,6 +293,7 @@ export interface PlaygroundSessionTools {
   readonly scm: PlaygroundScm;
   readonly archive: PlaygroundArchive;
   readonly previews: PlaygroundPreviewRegistry;
+  awaitDurability(): Promise<void>;
 }
 
 export interface PlaygroundWorkbench extends Workbench {
@@ -300,12 +307,23 @@ export interface PlaygroundWorkbench extends Workbench {
     define(plan: NodeCliPlaygroundPlan): ProjectDefinition<void>;
     define(plan: PlaygroundProjectPlan): ProjectDefinition<unknown>;
     readonly catalog: PlaygroundProjectCatalog;
+    restoreTerminalState(input: PlaygroundTerminalStateRestoreInput): ProjectTerminalSnapshot;
     forSession<T>(session: ProjectSession<T>): PlaygroundSessionTools;
   };
 }
 
+export type PlaygroundWorkbenchOptions = Omit<WorkbenchOptions, 'deployment'> & {
+  readonly deployment: Omit<WorkbenchOptions['deployment'], 'workers'> & {
+    readonly workers: WorkbenchOptions['deployment']['workers'] & {
+      readonly typescript: string;
+    };
+  };
+};
+
 /** Browser composition is wired with the owner/catalog implementation at the integration seam. */
-export type OpenPlaygroundWorkbench = (options: WorkbenchOptions) => Promise<PlaygroundWorkbench>;
+export type OpenPlaygroundWorkbench = (
+  options: PlaygroundWorkbenchOptions,
+) => Promise<PlaygroundWorkbench>;
 
 /** First-party browser companion; deployment assets remain explicit caller input. */
 export const openPlaygroundWorkbench: OpenPlaygroundWorkbench =

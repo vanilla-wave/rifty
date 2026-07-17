@@ -1,3 +1,4 @@
+import { serializePackageJson } from '@riftydev/npm-client';
 import {
   DEFAULT_VITE8_CONFIG_JS,
   DEFAULT_VITE8_CONFIG_PATH,
@@ -6,7 +7,6 @@ import {
 } from '../vite-project-policy.ts';
 import { nodeProjectShellCommand } from './internal/node-command.ts';
 import { defineOwnEnumerableProperty } from './internal/own-property.ts';
-import { serializeProjectPackageJson } from './internal/project-package-json.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
 
 declare const projectDefinitionReady: unique symbol;
@@ -260,7 +260,7 @@ function normalizeManifest(
   if (devDependencies === undefined) Reflect.deleteProperty(manifest, 'devDependencies');
   else manifest.devDependencies = devDependencies;
   // TODO(backlog: playground/workbench-implicit-vite-module-scope)
-  files['/package.json'] = encoder.encode(serializeProjectPackageJson(manifest));
+  files['/package.json'] = encoder.encode(serializePackageJson(manifest));
   return (
     viteVersion === undefined && dependencyVite === undefined && devDependencyVite === undefined
   );
@@ -299,7 +299,7 @@ function normalizeNodeManifest(
     scripts.dev = nodeProjectShellCommand(serverEntryPath, []);
     manifest.scripts = scripts;
   }
-  files['/package.json'] = encoder.encode(serializeProjectPackageJson(manifest));
+  files['/package.json'] = encoder.encode(serializePackageJson(manifest));
 }
 
 function nodeEntryPath(value: unknown, files: Record<string, Uint8Array>): string {

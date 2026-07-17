@@ -28,6 +28,7 @@ const BOOT_CONFIG = Object.freeze({
       kernel: 'https://workbench.invalid/kernel.js',
       node: 'https://workbench.invalid/node.js',
       devServer: 'https://workbench.invalid/dev-server.js',
+      typescript: 'https://workbench.invalid/typescript.js',
     }),
     wasm: Object.freeze({
       sqlite: 'https://workbench.invalid/sqlite.wasm',

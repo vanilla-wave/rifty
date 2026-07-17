@@ -1,5 +1,8 @@
-import type { PlaygroundProjectOpenOptions } from '../playground.ts';
-import { toOwnerProjectPath, toProjectPath } from '../project-file-boundary.ts';
+import type {
+  PlaygroundProjectOpenOptions,
+  PlaygroundTerminalStateRestoreInput,
+} from '../playground.ts';
+import { assertProjectPath, toOwnerProjectPath, toProjectPath } from '../project-file-boundary.ts';
 import {
   type ProjectTerminalSnapshot,
   ownProjectTerminalSnapshot,
@@ -11,6 +14,68 @@ export { ownProjectTerminalSnapshot } from '../project-terminal-state.ts';
 export interface OwnerProjectTerminalState {
   readonly cwd: string;
   readonly env: Readonly<Record<string, string>>;
+}
+
+function restoreInput(value: unknown): PlaygroundTerminalStateRestoreInput {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
+  ) {
+    throw new TypeError('Playground terminal restore input must be a plain object');
+  }
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== 2 || !keys.includes('format') || !keys.includes('state')) {
+    throw new TypeError('Playground terminal restore input must contain format and state');
+  }
+  const field = (key: 'format' | 'state'): unknown => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (
+      descriptor === undefined ||
+      descriptor.enumerable !== true ||
+      descriptor.get !== undefined ||
+      descriptor.set !== undefined ||
+      !Object.hasOwn(descriptor, 'value')
+    ) {
+      throw new TypeError(`Playground terminal restore input.${key} must be a data property`);
+    }
+    return descriptor.value;
+  };
+  const format = field('format');
+  if (format !== 'project-rooted' && format !== 'legacy-workspace-absolute') {
+    throw new TypeError('Playground terminal restore input.format is invalid');
+  }
+  return Object.freeze({
+    format,
+    state: ownTerminalStateRecord(field('state'), 'Persisted Playground terminal state'),
+  });
+}
+
+function safeProjectCwd(cwd: string): string {
+  try {
+    return assertProjectPath(cwd, { allowRoot: true });
+  } catch {
+    return '/';
+  }
+}
+
+/** Persisted host state → public project-rooted state using this open's adoption selection. */
+export function restorePlaygroundTerminalState(
+  value: unknown,
+  legacyWorkspacePrefix?: string,
+): ProjectTerminalSnapshot {
+  const input = restoreInput(value);
+  let cwd = '/';
+  if (input.format === 'project-rooted') {
+    cwd = safeProjectCwd(input.state.cwd);
+  } else if (legacyWorkspacePrefix !== undefined) {
+    if (input.state.cwd === legacyWorkspacePrefix) cwd = '/';
+    else if (input.state.cwd.startsWith(`${legacyWorkspacePrefix}/`)) {
+      cwd = safeProjectCwd(input.state.cwd.slice(legacyWorkspacePrefix.length));
+    }
+  }
+  return Object.freeze({ cwd, env: input.state.env });
 }
 
 export function ownPlaygroundProjectOpenOptions(value: unknown): PlaygroundProjectOpenOptions {

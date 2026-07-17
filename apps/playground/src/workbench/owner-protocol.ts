@@ -30,6 +30,7 @@ export interface WorkbenchOwnerBootConfig {
       readonly kernel: string;
       readonly node: string;
       readonly devServer: string;
+      readonly typescript?: string;
     };
     readonly wasm: { readonly sqlite: string; readonly esbuild: string };
     readonly previewProbeTimeoutMs: number;
@@ -206,7 +207,11 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   const deployment = record(config.deployment, 'owner boot deployment');
   exact(deployment, ['workers', 'wasm', 'previewProbeTimeoutMs'], 'owner boot deployment');
   const workers = record(deployment.workers, 'owner boot workers');
-  exact(workers, ['kernel', 'node', 'devServer'], 'owner boot workers');
+  exact(
+    workers,
+    optionalKeys(workers, ['kernel', 'node', 'devServer'], ['typescript']),
+    'owner boot workers',
+  );
   const wasm = record(deployment.wasm, 'owner boot wasm');
   exact(wasm, ['sqlite', 'esbuild'], 'owner boot wasm');
   const previewProbeTimeoutMs = positiveFinite(
@@ -246,6 +251,9 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
       kernel: nonEmptyString(workers.kernel, 'owner boot kernel worker'),
       node: nonEmptyString(workers.node, 'owner boot node worker'),
       devServer: nonEmptyString(workers.devServer, 'owner boot dev-server worker'),
+      ...(own(workers, 'typescript')
+        ? { typescript: nonEmptyString(workers.typescript, 'owner boot TypeScript worker') }
+        : {}),
     }),
     wasm: Object.freeze({
       sqlite: nonEmptyString(wasm.sqlite, 'owner boot sqlite wasm'),

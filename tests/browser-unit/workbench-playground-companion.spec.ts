@@ -143,6 +143,7 @@ test('Playground companion installs and executes a Node CLI through one real Wor
               readonly kernel: string;
               readonly node: string;
               readonly devServer: string;
+              readonly typescript: string;
             };
             readonly serviceWorker: { readonly url: string; readonly scope: string };
             readonly wasm: { readonly sqlite: string; readonly esbuild: string };
@@ -158,6 +159,7 @@ test('Playground companion installs and executes a Node CLI through one real Wor
           readonly kernel: string;
           readonly node: string;
           readonly devServer: string;
+          readonly typescript: string;
         };
         readonly wasm: { readonly sqlite: string; readonly esbuild: string };
       };
@@ -394,6 +396,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
             readonly kernel: string;
             readonly node: string;
             readonly devServer: string;
+            readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
           readonly wasm: { readonly sqlite: string; readonly esbuild: string };
@@ -409,6 +412,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
         readonly kernel: string;
         readonly node: string;
         readonly devServer: string;
+        readonly typescript: string;
       };
       readonly wasm: { readonly sqlite: string; readonly esbuild: string };
     };
@@ -820,6 +824,7 @@ test('real instant Vite preset keeps mapper port 5174 through snapshot restore a
             readonly kernel: string;
             readonly node: string;
             readonly devServer: string;
+            readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
           readonly wasm: { readonly sqlite: string; readonly esbuild: string };
@@ -835,6 +840,7 @@ test('real instant Vite preset keeps mapper port 5174 through snapshot restore a
         readonly kernel: string;
         readonly node: string;
         readonly devServer: string;
+        readonly typescript: string;
       };
       readonly wasm: { readonly sqlite: string; readonly esbuild: string };
     };
@@ -1080,6 +1086,7 @@ test('selected historical workspace migrates through one physical Workbench owne
             readonly kernel: string;
             readonly node: string;
             readonly devServer: string;
+            readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
           readonly wasm: { readonly sqlite: string; readonly esbuild: string };
@@ -1095,6 +1102,7 @@ test('selected historical workspace migrates through one physical Workbench owne
         readonly kernel: string;
         readonly node: string;
         readonly devServer: string;
+        readonly typescript: string;
       };
       readonly wasm: { readonly sqlite: string; readonly esbuild: string };
     };
@@ -1347,6 +1355,7 @@ test('forSession TypeScript uses the real owner service and returns only project
             readonly kernel: string;
             readonly node: string;
             readonly devServer: string;
+            readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
           readonly wasm: { readonly sqlite: string; readonly esbuild: string };
@@ -1363,6 +1372,7 @@ test('forSession TypeScript uses the real owner service and returns only project
         readonly kernel: string;
         readonly node: string;
         readonly devServer: string;
+        readonly typescript: string;
       };
       readonly wasm: { readonly sqlite: string; readonly esbuild: string };
     };

@@ -507,6 +507,9 @@ export function startBrowserWorkspaceOwner(
         kernel: input.deployment.workers.kernel,
         node: input.deployment.workers.node,
         devServer: input.deployment.workers.devServer,
+        ...(input.deployment.workers.typescript === undefined
+          ? {}
+          : { typescript: input.deployment.workers.typescript }),
       }),
       wasm: Object.freeze({
         sqlite: input.deployment.wasm.sqlite,

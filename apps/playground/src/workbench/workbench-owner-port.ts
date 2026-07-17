@@ -30,6 +30,7 @@ export interface WorkbenchOwnerStartInput {
       readonly kernel: string;
       readonly node: string;
       readonly devServer: string;
+      readonly typescript?: string;
     };
     readonly wasm: {
       readonly sqlite: string;

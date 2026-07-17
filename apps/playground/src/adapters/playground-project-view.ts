@@ -2,10 +2,14 @@ import { type VfsDirent, dirname, isAbsolute, normalizePath } from '@riftydev/vf
 import type { FileExplorerMutations } from '../components/FileExplorer.tsx';
 import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
 import { NODE_MODULES_MAX_CONTENT_BYTES } from '../glue/node-modules-port.ts';
-import type { ProjectFileEntry } from '../workbench/errors.ts';
 import type { PlaygroundScm } from '../workbench/playground.ts';
-import type { ProjectDocument, ProjectDocuments } from '../workbench/project-documents.ts';
-import type { ProjectFiles, ProjectFilesSnapshot } from '../workbench/project-files.ts';
+import type {
+  ProjectDocument,
+  ProjectDocuments,
+  ProjectFileEntry,
+  ProjectFiles,
+  ProjectFilesSnapshot,
+} from '../workbench/public.ts';
 
 interface CachedFile {
   readonly version: string;
@@ -347,10 +351,14 @@ export function createPlaygroundFileMutations(
     },
 
     async renameMany(changes) {
-      await beforeMutation(changes.flatMap(({ from, to }) => [from, to]));
-      for (const { from, to } of changes) {
+      const validated = changes.map(({ from, to }) => ({
+        from: projectPath(from),
+        to: projectPath(to),
+      }));
+      await beforeMutation(validated.flatMap(({ from, to }) => [from, to]));
+      for (const { from, to } of validated) {
         const source = requiredEntry(mirror, from);
-        await files.rename(source.path, projectPath(to), {
+        await files.rename(source.path, to, {
           expectedSourceVersion: source.version,
           expectedTargetVersion: mirror.version(to),
         });
@@ -369,14 +377,14 @@ export function createPlaygroundFileMutations(
     },
 
     async writeFiles(writes) {
-      await beforeMutation(writes.map(({ path }) => path));
-      for (const item of writes) {
-        const logical = projectPath(item.path);
-        if (item.recursive === true) await ensureParents(files, mirror, logical);
-        await files.writeFile(logical, item.data, {
-          expectedVersion: mirror.version(logical),
+      const validated = writes.map((item) => ({ ...item, path: projectPath(item.path) }));
+      await beforeMutation(validated.map(({ path }) => path));
+      for (const item of validated) {
+        if (item.recursive === true) await ensureParents(files, mirror, item.path);
+        await files.writeFile(item.path, item.data, {
+          expectedVersion: mirror.version(item.path),
         });
-        await mirror.ensureFile(logical);
+        await mirror.ensureFile(item.path);
       }
     },
   };

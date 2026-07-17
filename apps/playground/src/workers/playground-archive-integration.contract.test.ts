@@ -714,6 +714,31 @@ describe('Playground archive owner/session integration', () => {
     await h.close();
   });
 
+  it('rejects an empty failure sample when the full durability ledger is not clean', async () => {
+    const h = await harness();
+    const originalPaths = publicPaths(h.content);
+    const initialScmSnapshot = h.scmSnapshots[0];
+    vi.mocked(h.owner.authority.flush).mockImplementationOnce(async () => {
+      await h.fs.flush();
+      return { failures: [], total: 1 };
+    });
+
+    await expect(h.archive.import(IMPORT_ARCHIVE)).rejects.toThrow(
+      /archive persistence failed.*1 unhealed failure/i,
+    );
+
+    expect(h.timeline).not.toContain('documents:invalidate-all');
+    expect(h.timeline).not.toContain('files:publish');
+    expect(h.timeline).not.toContain('scm:publish');
+    expect(publicPaths(h.content)).toEqual(originalPaths);
+    expect(h.scmSnapshots).toEqual([initialScmSnapshot]);
+    expect(decoder.decode(h.owner.authority.readFileBytesSync(`${PROJECT_ROOT}/src/main.ts`))).toBe(
+      ORIGINAL_SOURCE,
+    );
+    expectNoPendingPrimitives(h.fs);
+    await h.close();
+  });
+
   it.each(DURABILITY_FAULTS)(
     'sweeps every persisted archive primitive and crash boundary across $name',
     async ({ kind, message }) => {

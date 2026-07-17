@@ -4,7 +4,7 @@ import {
   createOpenWorkbench,
   inspectWorkbenchInternals,
 } from '../open-workbench.ts';
-import type { OpenPlaygroundWorkbench, PlaygroundWorkbench } from '../playground.ts';
+import type { OpenPlaygroundWorkbench } from '../playground.ts';
 import { createBrowserWorkbenchOwnerPort } from '../workbench-browser-owner.ts';
 import type {
   WorkbenchOwnerPort,
@@ -74,17 +74,6 @@ export function createBrowserOpenWorkbench(options: BrowserWorkbenchCompositionO
 interface PendingPlaygroundBoot {
   readonly urlContext: { readonly apiBaseUrl: string; readonly clientUrl: string };
   readonly legacyWorkspacePrefix?: string;
-}
-
-const playgroundBoots = new WeakMap<object, PendingPlaygroundBoot>();
-
-/** First-party host policy reads the exact legacy root captured for this companion open. */
-export function inspectBrowserPlaygroundLegacyWorkspacePrefix(
-  workbench: PlaygroundWorkbench,
-): string | undefined {
-  const boot = playgroundBoots.get(workbench);
-  if (boot === undefined) throw new TypeError('Invalid browser Playground Workbench');
-  return boot.legacyWorkspacePrefix;
 }
 
 function captureLegacyWorkspacePrefix(): string | undefined {
@@ -182,6 +171,9 @@ export function createBrowserOpenPlaygroundWorkbench(): OpenPlaygroundWorkbench 
         const facade = createPlaygroundWorkbenchFacade({
           workbench,
           urlContext,
+          ...(boot.legacyWorkspacePrefix === undefined
+            ? {}
+            : { legacyWorkspacePrefix: boot.legacyWorkspacePrefix }),
           definePlan: (plan) => definePlaygroundProject(plan, urlContext),
           catalog: playground.catalog,
           openProject: (definition, projectOptions) =>
@@ -191,7 +183,6 @@ export function createBrowserOpenPlaygroundWorkbench(): OpenPlaygroundWorkbench 
           createSessionTools: (session) => playground.sessionTools(session),
           registerBeforeClose: (session, hook) => internals.registerBeforeClose(session, hook),
         });
-        playgroundBoots.set(facade, boot);
         return facade;
       } finally {
         if (admittedBoot === boot) admittedBoot = null;

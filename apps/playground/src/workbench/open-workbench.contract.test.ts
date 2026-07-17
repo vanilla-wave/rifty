@@ -546,6 +546,29 @@ describe('openWorkbench normalized composition', () => {
     await workbench.close();
   });
 
+  it('carries an optional companion TypeScript worker through the normalized owner input', async () => {
+    const h = harness();
+    const base = optionsWithDefaults();
+    const workbench = await h.open({
+      ...base,
+      deployment: {
+        ...base.deployment,
+        workers: { ...base.deployment.workers, typescript: './typescript.js' },
+      },
+    } as WorkbenchOptions);
+
+    expect(h.owner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deployment: expect.objectContaining({
+          workers: expect.objectContaining({
+            typescript: 'https://workbench.invalid/app/typescript.js',
+          }),
+        }),
+      }),
+    );
+    await workbench.close();
+  });
+
   it('preserves own preset-pin keys that collide with Object.prototype', async () => {
     const h = harness();
     const base = validOptions();

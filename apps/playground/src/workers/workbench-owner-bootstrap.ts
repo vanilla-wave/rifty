@@ -42,7 +42,6 @@ import {
   createPlaygroundProjectAuthority,
 } from './playground-project-authority.ts';
 import { createOwnerPlaygroundSessionTools } from './playground-session-tools-owner.ts';
-import tsLspWorkerUrl from './ts-lsp-worker-entry.ts?worker&url';
 import { createWorkbenchOwnerChildVfsMutationGuard } from './workbench-owner-child-vfs.ts';
 import {
   type WorkbenchOwnerProjectRuntime,
@@ -109,6 +108,14 @@ function assertCleanDurability(report: Awaited<ReturnType<OwnerVfsAuthority['flu
   throw new Error(
     `${String(report.total)} unhealed persistence failure(s)${detail ? `: ${detail}` : ''}`,
   );
+}
+
+function playgroundTypeScriptWorkerUrl(config: WorkbenchOwnerBootConfig): string {
+  const url = config.deployment.workers.typescript;
+  if (url === undefined) {
+    throw new Error('Playground session tools require deployment.workers.typescript');
+  }
+  return url;
 }
 
 function withOwnerClose(
@@ -425,7 +432,7 @@ async function bootstrap(): Promise<void> {
             vfs,
             git,
             commitIdentity: await resolveOwnerGitCommitIdentity(git),
-            tsWorkerUrl: tsLspWorkerUrl,
+            tsWorkerUrl: playgroundTypeScriptWorkerUrl(config),
             nodeWorkerRuntimeEnv,
             send: (frame) => {
               input.emit({ type: 'playground-tools', frame });

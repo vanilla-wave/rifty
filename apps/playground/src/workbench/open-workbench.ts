@@ -680,6 +680,15 @@ function validateWorkbenchOptions(
             'deployment.workers.devServer',
             urlContext,
           ),
+          ...(workers.typescript === undefined
+            ? {}
+            : {
+                typescript: isolatedWorkerUrl(
+                  workers.typescript,
+                  'deployment.workers.typescript',
+                  urlContext,
+                ),
+              }),
         }),
         wasm: Object.freeze({
           sqlite: wasmAssetUrl(wasm.sqlite, 'deployment.wasm.sqlite', urlContext),

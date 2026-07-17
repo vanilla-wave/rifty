@@ -726,29 +726,6 @@ interface PendingRequest {
   readonly timer: ReturnType<typeof setTimeout>;
 }
 
-const browserTypeScriptReinitializers = new WeakMap<object, () => Promise<void>>();
-const browserSessionDurabilityFlushers = new WeakMap<object, () => Promise<void>>();
-
-/** Package-private App seam: rebuild the captured project without exposing init(root). */
-export function reinitializeBrowserPlaygroundTypeScript(
-  typescript: PlaygroundTypeScript,
-): Promise<void> {
-  const reinitialize = browserTypeScriptReinitializers.get(typescript as object);
-  return reinitialize === undefined
-    ? Promise.reject(new TypeError('Unknown browser Playground TypeScript tool'))
-    : reinitialize();
-}
-
-/** Package-private App seam: settle the captured owner without widening session tools. */
-export function flushBrowserPlaygroundSessionDurability(
-  tools: PlaygroundSessionTools,
-): Promise<void> {
-  const flush = browserSessionDurabilityFlushers.get(tools as object);
-  return flush === undefined
-    ? Promise.reject(new TypeError('Unknown browser Playground session tools'))
-    : flush();
-}
-
 export interface BrowserPlaygroundSessionToolsOptions {
   readonly projectRoot: string;
   readonly documents: Pick<ProjectDocumentsController, 'awaitOwnerByteAdmission' | 'invalidate'>;
@@ -1017,8 +994,8 @@ export function createBrowserPlaygroundSessionTools(
         return Reflect.apply(method, adaptedTypeScript, args);
       });
   }
+  wrappedTsMethods.reinitialize = () => admit(initializeTs);
   const typescript = Object.freeze(wrappedTsMethods) as unknown as PlaygroundTypeScript;
-  browserTypeScriptReinitializers.set(typescript as object, () => admit(initializeTs));
 
   const scm: PlaygroundScm = Object.freeze({
     snapshot() {
@@ -1050,12 +1027,16 @@ export function createBrowserPlaygroundSessionTools(
       return options.previews.subscribe(listener);
     },
   });
-  const tools: PlaygroundSessionTools = Object.freeze({ typescript, scm, archive, previews });
-  browserSessionDurabilityFlushers.set(tools as object, () =>
-    admit(async () => {
-      resultType(await request({ type: 'durability:flush' }), 'durability:void');
-    }),
-  );
+  const tools: PlaygroundSessionTools = Object.freeze({
+    typescript,
+    scm,
+    archive,
+    previews,
+    awaitDurability: () =>
+      admit(async () => {
+        resultType(await request({ type: 'durability:flush' }), 'durability:void');
+      }),
+  });
 
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise;

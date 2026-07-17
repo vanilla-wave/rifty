@@ -12,7 +12,9 @@ import type {
   PlaygroundProjectOpenOptions,
   PlaygroundProjectPlan,
   PlaygroundSessionTools,
+  PlaygroundTerminalStateRestoreInput,
   PlaygroundWorkbench,
+  PlaygroundWorkbenchOptions,
   VitePlaygroundPlan,
 } from '../playground.ts';
 import type { PreviewHandle } from '../preview-readiness.ts';
@@ -22,7 +24,10 @@ import {
   type CapturedPlaygroundUrlContext,
   ownPlaygroundProjectPlan,
 } from './playground-project-definition.ts';
-import { ownPlaygroundProjectOpenOptions } from './playground-terminal-state.ts';
+import {
+  ownPlaygroundProjectOpenOptions,
+  restorePlaygroundTerminalState,
+} from './playground-terminal-state.ts';
 
 interface SessionToolLifecycle {
   readonly tools: PlaygroundSessionTools;
@@ -32,6 +37,7 @@ interface SessionToolLifecycle {
 export interface CreatePlaygroundWorkbenchFacadeOptions {
   readonly workbench: Workbench;
   readonly urlContext: CapturedPlaygroundUrlContext;
+  readonly legacyWorkspacePrefix?: string;
   readonly definePlan: (plan: PlaygroundProjectPlan) => ProjectDefinition<unknown>;
   readonly catalog: PlaygroundProjectCatalog;
   readonly openProject?: <TReady>(
@@ -87,6 +93,7 @@ export function createPlaygroundWorkbenchFacade(
   const ownedSessions = new WeakMap<object, OwnedSession>();
   const sessionStates = new Set<OwnedSession>();
   let closed = false;
+  let closePromise: Promise<void> | null = null;
 
   const assertOpen = (): void => {
     if (closed) throw new ClosedHandleError('Playground Workbench');
@@ -194,19 +201,41 @@ export function createPlaygroundWorkbenchFacade(
       assertOpen();
       await options.catalog.delete(id);
     },
-    async close(): Promise<void> {
-      if (closed) return;
+    close(): Promise<void> {
+      if (closePromise !== null) return closePromise;
+      if (closed) return Promise.resolve();
       closed = true;
+      let coreClose: Promise<void>;
       try {
-        await options.workbench.close();
-      } finally {
-        for (const state of sessionStates) state.state = 'closed';
-        sessionStates.clear();
+        coreClose = options.workbench.close();
+      } catch (error) {
+        coreClose = Promise.reject(error);
       }
+      const closing = coreClose.then(
+        () => {
+          for (const state of sessionStates) state.state = 'closed';
+          sessionStates.clear();
+        },
+        (error: unknown) => {
+          if (isRetryableProjectClosePreflightError(error)) {
+            closed = false;
+            closePromise = null;
+            throw error;
+          }
+          for (const state of sessionStates) state.state = 'closed';
+          sessionStates.clear();
+          throw error;
+        },
+      );
+      closePromise = closing;
+      void closing.catch(() => {});
+      return closing;
     },
     playground: Object.freeze({
       define,
       catalog: options.catalog,
+      restoreTerminalState: (input: PlaygroundTerminalStateRestoreInput) =>
+        restorePlaygroundTerminalState(input, options.legacyWorkspacePrefix),
       forSession<T>(session: ProjectSession<T>): PlaygroundSessionTools {
         assertOpen();
         const state =
@@ -225,8 +254,14 @@ export function createPlaygroundWorkbenchFacade(
 
 export function createOpenPlaygroundWorkbench(
   dependencies: CreateOpenPlaygroundWorkbenchDependencies,
-): (options: WorkbenchOptions) => Promise<PlaygroundWorkbench> {
-  return async (options: WorkbenchOptions): Promise<PlaygroundWorkbench> => {
+): (options: PlaygroundWorkbenchOptions) => Promise<PlaygroundWorkbench> {
+  return async (options: PlaygroundWorkbenchOptions): Promise<PlaygroundWorkbench> => {
+    if (
+      typeof options?.deployment?.workers?.typescript !== 'string' ||
+      options.deployment.workers.typescript.length === 0
+    ) {
+      throw new TypeError('deployment.workers.typescript must be a non-empty string');
+    }
     const captured = dependencies.captureUrlContext();
     const urlContext = Object.freeze({
       apiBaseUrl: captured.apiBaseUrl,

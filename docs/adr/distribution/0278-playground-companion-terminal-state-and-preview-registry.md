@@ -684,3 +684,11 @@ acceptance.
   the catalog-selected definition; this matches the observable restart model.
 - PR #136 remains an implementation quarry for validators, TS relay, Git,
   archive, and browser scenarios; none of its public controller seam survives.
+
+## Correction 2026-07-16
+
+ADR-0282 adds `PlaygroundTypeScript.reinitialize()`,
+`PlaygroundSessionTools.awaitDurability()`, and semantic
+`playground.restoreTerminalState()`. Restoration closes over the same captured
+legacy selection used by owner adoption; no prefix is exposed. All other
+terminal/catalog/tool contracts above stand.

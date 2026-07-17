@@ -1,7 +1,11 @@
 import { type ProcessExit, shellCommandExitCode } from '@riftydev/shell';
 import type { TerminalRawInput } from '@riftydev/terminal';
-import type { ProjectRun, ProjectSession } from '../workbench/project-session.ts';
-import type { ProjectTerminal, ProjectTerminalRun } from '../workbench/project-terminal.ts';
+import type {
+  ProjectRun,
+  ProjectSession,
+  ProjectTerminal,
+  ProjectTerminalRun,
+} from '../workbench/public.ts';
 import type { TerminalSessionSnapshot } from './terminal-manager.ts';
 
 const MAX_PENDING_CHARS = 1_000_000;
