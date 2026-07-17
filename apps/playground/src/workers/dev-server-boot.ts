@@ -58,7 +58,8 @@ async function bootNodeServer(
   };
   (globalThis as { console: unknown }).console = new Console(termWriter, termWriter);
 
-  log(`[real-vite/worker] starting server ${cfg.entryPath} on port ${cfg.port}…\n`);
+  const projectEntryPath = cfg.root === '/' ? cfg.entryPath : cfg.entryPath.slice(cfg.root.length);
+  log(`[real-vite/worker] starting server ${projectEntryPath} on port ${cfg.port}…\n`);
   await loader.import(cfg.entryPath, `${cfg.root}/__entry__.mjs`);
   await waitForListeningPort(cfg.port, 10_000);
   log(`[real-vite/worker] server is listening on internal port ${cfg.port}\n`);

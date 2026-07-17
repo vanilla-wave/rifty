@@ -267,6 +267,14 @@ async function identityFrom(git: Git, env: Record<string, string>): Promise<GitI
   return { name, email, timestamp, timezoneOffset: 0 };
 }
 
+/** Shared owner-realm identity resolution for semantic SCM and the legacy RPC adapter. */
+export function resolveOwnerGitCommitIdentity(
+  git: Git,
+  env: Record<string, string> = ownerEnv(),
+): Promise<GitIdentity> {
+  return identityFrom(git, env);
+}
+
 function committerFrom(env: Record<string, string>, author: GitIdentity): GitIdentity {
   const name = env.GIT_COMMITTER_NAME ?? author.name;
   const email = env.GIT_COMMITTER_EMAIL ?? author.email;
@@ -316,7 +324,7 @@ async function dispatchGitOwnerRequest(
         if (refusal !== null) throw new Error(refusal);
       }
       const env = ownerEnv();
-      const author = await identityFrom(git, env);
+      const author = await resolveOwnerGitCommitIdentity(git, env);
       return git.commit({
         message: request.message,
         author,

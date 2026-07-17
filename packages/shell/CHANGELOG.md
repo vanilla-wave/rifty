@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **Terminal Git handles a repository rooted at `/`.** Relative pathspecs map
+  inside the repository, while `git apply` from a subdirectory still filters
+  root-level patch entries out of scope.
 - **Terminal Git publishes semantic replacement candidates.** Restore/checkout
   path forms name exact mapped paths; repo-wide worktree commands pair ordinary
   `.git` writes with a repo replacement candidate, and the full prepared plan is
@@ -77,6 +80,10 @@
 
 ### Added
 
+- **Instance-local filesystem (ADR-0280).** `ShellOptions.fileSystem` binds
+  builtins, redirects, globs, recursive walkers, `.bin` lookup, and Git's
+  derived async view to one `FsSync`; omitted callers keep the dynamically
+  resolved ambient sync/async VFS behavior.
 - **Host-owned VFS mutation guard (ADR-0276).** `ShellOptions.mutationGuard`
   batches each logical `rm`/`mv`/`cp`/`mkdir`/`touch`, stdout redirect, and git
   mutation through the shared `@riftydev/vfs` intent contract before bytes

@@ -1,7 +1,10 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { viteCliActionPatchPolicy } from '../../../apps/playground/src/workers/vite-cli-install-policy.ts';
+import {
+  viteCliActionPatchPolicy,
+  viteRootWatchPatchPolicy,
+} from '../../../apps/playground/src/workers/vite-cli-install-policy.ts';
 import { bakedOverrides, internalsShims } from '../src/index.ts';
 import { identityForRecipe } from '../src/install-artifact-recipe.ts';
 
@@ -54,6 +57,7 @@ export async function buildInstallArtifactRecipe() {
     bakedOverrides,
     internalsShims,
     viteCliActionPatch: viteCliActionPatchPolicy,
+    viteRootWatchPatch: viteRootWatchPatchPolicy,
     esbuildRuntimePolicy: await readJson(policyUrl),
     esbuildRuntimeOutput: await readRuntimeOutputIdentity(),
   };

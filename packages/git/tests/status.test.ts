@@ -56,3 +56,14 @@ it('MD is reachable: stage a modification, then delete the file on disk', async 
   await vfs.rm('/repo/a.txt');
   expect(await xyFor(g, 'a.txt')).toBe('MD');
 });
+
+it('status is byte-read-only with respect to the Git index', async () => {
+  const { g, vfs } = await seeded();
+  const before = await vfs.readFile('/repo/.git/index');
+  // Archive replacement can rewrite an unchanged tracked file with fresh stat
+  // metadata. Status must compare it without refreshing the index cache.
+  await vfs.writeFile('/repo/a.txt', 'first\n');
+
+  expect(await xyFor(g, 'a.txt')).toBeNull();
+  expect(await vfs.readFile('/repo/.git/index')).toEqual(before);
+});

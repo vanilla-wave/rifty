@@ -12,6 +12,34 @@ import type { OwnerToPageFrame, PageToOwnerFrame, PtyPreview } from '../glue/pty
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import { ClosedHandleError, ProjectBusyError, deserializeWorkbenchOwnerError } from './errors.ts';
 import {
+  type PageToPlaygroundOwnerMessage,
+  type PlaygroundCatalogCommand,
+  type PlaygroundOwnerToPageMessage,
+  type PlaygroundProjectRuntimeDecision,
+  inspectPageToPlaygroundOwnerMessage,
+  inspectPlaygroundOwnerToPageMessage,
+  isPageToPlaygroundOwnerMessage,
+  isPlaygroundOwnerToPageMessage,
+} from './internal/playground-owner-protocol.ts';
+import {
+  type BrowserPlaygroundPreviewAuthority,
+  createBrowserPlaygroundPreviewAuthority,
+} from './internal/playground-preview-registry.ts';
+import {
+  type InspectedPlaygroundProjectDefinition,
+  inspectPlaygroundProjectDefinition,
+  playgroundProjectDefinitionWire,
+} from './internal/playground-project-definition.ts';
+import {
+  type BrowserPlaygroundSessionToolsLifecycle,
+  type OwnerPlaygroundSessionToolsFrame,
+  createBrowserPlaygroundSessionTools,
+} from './internal/playground-session-tools-transport.ts';
+import {
+  ownPlaygroundProjectOpenOptions,
+  projectTerminalStateFromOwner,
+} from './internal/playground-terminal-state.ts';
+import {
   createNodeCliProjectRuntime,
   createNodeServerProjectRuntime,
 } from './node-project-runtime.ts';
@@ -23,6 +51,12 @@ import {
   inspectPageToWorkbenchOwnerMessage,
   inspectWorkbenchOwnerToPageMessage,
 } from './owner-protocol.ts';
+import type {
+  PlaygroundCatalogSnapshot,
+  PlaygroundProjectCatalog,
+  PlaygroundProjectOpenOptions,
+  PlaygroundScmSnapshot,
+} from './playground.ts';
 import {
   type PreviewAdvertisement,
   type PreviewHandle,
@@ -33,12 +67,20 @@ import {
   createProjectContentTransport,
 } from './project-content-transport.ts';
 import type { ProjectContentController } from './project-content.ts';
-import { type InspectedProjectDefinition, projectDefinitionWire } from './project-definition.ts';
+import {
+  type InspectedProjectDefinition,
+  type ProjectDefinition,
+  projectDefinitionWire,
+} from './project-definition.ts';
+import { toOwnerProjectPath } from './project-file-boundary.ts';
+import type { ProjectAcquisitionPlan } from './project-materialization.ts';
 import { type ProjectSession, createProjectSession } from './project-session.ts';
 import {
   type ProjectTerminal,
   type ProjectTerminalExecOptions,
   type ProjectTerminalPort,
+  type ProjectTerminalPortState,
+  type ProjectTerminalSnapshot,
   createProjectTerminal,
 } from './project-terminal.ts';
 import {
@@ -70,6 +112,13 @@ interface OpenedProject {
   readonly projectRoot: string;
 }
 
+interface OpenedPlaygroundProject extends OpenedProject {
+  readonly acquisition: ProjectAcquisitionPlan;
+  readonly runtime: PlaygroundProjectRuntimeDecision;
+  readonly initialScmSnapshot: PlaygroundScmSnapshot;
+  readonly initialTerminalState?: ProjectTerminalSnapshot;
+}
+
 interface Deferred<T> {
   readonly promise: Promise<T>;
   readonly resolve: (value: T) => void;
@@ -79,8 +128,12 @@ interface Deferred<T> {
 
 type PendingOperation =
   | (Deferred<OpenedProject> & { readonly kind: 'open' })
+  | (Deferred<OpenedPlaygroundProject> & { readonly kind: 'playground-open' })
+  | (Deferred<PlaygroundCatalogSnapshot> & { readonly kind: 'playground-catalog' })
   | (Deferred<void> & { readonly kind: 'close'; readonly projectToken: OwnerProjectToken })
   | (Deferred<void> & { readonly kind: 'delete'; readonly id: string });
+
+type PageToPhysicalOwnerMessage = PageToWorkbenchOwnerMessage | PageToPlaygroundOwnerMessage;
 
 interface ProjectTransport {
   readonly token: OwnerProjectToken;
@@ -88,14 +141,20 @@ interface ProjectTransport {
   readonly content: ProjectContentTransport;
   readonly pty: ReturnType<typeof createPtyClient>;
   readonly terminalPort: ProjectTerminalPort;
-  readonly subscribePreview: (
-    listener: (entries: readonly PreviewAdvertisement[]) => void,
-  ) => () => void;
-  readonly requestPreview: () => void;
+  readonly previews: BrowserPlaygroundPreviewAuthority;
+  playgroundScmSnapshot(): PlaygroundScmSnapshot;
+  subscribePlaygroundTools(listener: (frame: unknown) => void): () => void;
   acceptPty(frame: OwnerToPageFrame): void;
   acceptPreview(frame: PtyPreview): void;
   acceptVfs(frame: WorkbenchOwnerToPageMessage & { readonly type: 'workbench:project-vfs' }): void;
+  acceptPlaygroundTools(frame: OwnerPlaygroundSessionToolsFrame): void;
   disconnect(error?: Error): void;
+}
+
+interface PlaygroundSessionState {
+  readonly transport: ProjectTransport;
+  readonly content: ProjectContentController;
+  lifecycle: BrowserPlaygroundSessionToolsLifecycle | null;
 }
 
 function deferred<T>(): Deferred<T> {
@@ -194,10 +253,16 @@ export function startBrowserWorkspaceOwner(
   dependencies: BrowserOwnerDependencies,
 ): RawWorkspaceOwnerHandle {
   const worker = dependencies.spawnOwner(input);
+  const playgroundUrlContext = input.playgroundUrlContext;
+  const companionMode = playgroundUrlContext !== undefined;
   const readyState = deferred<void>();
   const closedState = deferred<void>();
   const pending = new Map<string, PendingOperation>();
+  const catalogListeners = new Set<(snapshot: PlaygroundCatalogSnapshot) => void>();
+  const playgroundSessions = new WeakMap<object, PlaygroundSessionState>();
   let storage: OwnerStorageSnapshot | null = null;
+  let catalogSnapshot: PlaygroundCatalogSnapshot | null = null;
+  let playgroundReady = false;
   let activeProject: ProjectTransport | null = null;
   let terminalSequence = 0;
   let exited = false;
@@ -205,6 +270,30 @@ export function startBrowserWorkspaceOwner(
   let protocolFailure: Error | null = null;
 
   const ownerClosed = closedState.promise;
+
+  const resolveReady = (): void => {
+    if (storage !== null && (!companionMode || playgroundReady)) {
+      readyState.resolve(undefined);
+    }
+  };
+
+  const currentCatalog = (): PlaygroundCatalogSnapshot => {
+    if (catalogSnapshot === null || !playgroundReady) {
+      throw new Error('Playground catalog is unavailable before readiness');
+    }
+    return catalogSnapshot;
+  };
+
+  const publishCatalog = (snapshot: PlaygroundCatalogSnapshot): void => {
+    catalogSnapshot = snapshot;
+    for (const listener of [...catalogListeners]) {
+      try {
+        listener(snapshot);
+      } catch {
+        // One page consumer cannot invalidate an already-owner-committed catalog.
+      }
+    }
+  };
 
   const rejectPending = (error: Error): void => {
     for (const operation of pending.values()) operation.reject(error);
@@ -220,11 +309,17 @@ export function startBrowserWorkspaceOwner(
     if (!exited) worker.kill('SIGTERM');
   };
 
-  const send = (message: PageToWorkbenchOwnerMessage): void => {
+  const send = (message: PageToPhysicalOwnerMessage): void => {
     if (exited || protocolFailure !== null) {
       throw new ClosedHandleError('Workbench owner transport', protocolFailure ?? 'owner exited');
     }
-    const owned = inspectPageToWorkbenchOwnerMessage(message);
+    const owned = isPageToPlaygroundOwnerMessage(message)
+      ? playgroundUrlContext === undefined
+        ? (() => {
+            throw new TypeError('Playground companion owner is unavailable');
+          })()
+        : inspectPageToPlaygroundOwnerMessage(message, playgroundUrlContext)
+      : inspectPageToWorkbenchOwnerMessage(message);
     if (!worker.send(owned)) {
       throw new ClosedHandleError('Workbench owner transport', 'IPC send was refused');
     }
@@ -232,7 +327,7 @@ export function startBrowserWorkspaceOwner(
 
   const request = <T>(
     operation: PendingOperation,
-    message: PageToWorkbenchOwnerMessage,
+    message: PageToPhysicalOwnerMessage,
   ): Promise<T> => {
     const opId = 'opId' in message ? message.opId : null;
     if (opId === null) return Promise.reject(new TypeError('Owner operation requires opId'));
@@ -258,7 +353,53 @@ export function startBrowserWorkspaceOwner(
     return operation as Extract<PendingOperation, { readonly kind: K }>;
   };
 
+  const acceptPlaygroundMessage = (message: PlaygroundOwnerToPageMessage): void => {
+    switch (message.type) {
+      case 'workbench:playground-ready':
+        if (!companionMode) throw new Error('Generic Workbench owner sent Playground readiness');
+        if (playgroundReady || catalogSnapshot !== null) {
+          throw new Error('Workbench owner sent duplicate Playground readiness');
+        }
+        catalogSnapshot = message.catalog;
+        playgroundReady = true;
+        resolveReady();
+        return;
+      case 'workbench:playground-catalog-updated':
+        if (!playgroundReady || catalogSnapshot === null) {
+          throw new Error('Workbench owner sent a Playground catalog update before readiness');
+        }
+        publishCatalog(message.catalog);
+        return;
+      case 'workbench:playground-catalog-completed': {
+        const operation = takePending(message.opId, 'playground-catalog');
+        operation.resolve(currentCatalog());
+        return;
+      }
+      case 'workbench:playground-project-opened': {
+        const operation = takePending(message.opId, 'playground-open');
+        operation.resolve(message);
+        return;
+      }
+      case 'workbench:playground-project-tools':
+        if (activeProject?.token !== message.projectToken) {
+          throw new Error('Workbench owner sent session tools data for a retired project');
+        }
+        activeProject.acceptPlaygroundTools(message.frame);
+    }
+  };
+
   const acceptMessage = (raw: unknown): void => {
+    if (isPlaygroundOwnerToPageMessage(raw)) {
+      try {
+        if (!companionMode) {
+          throw new TypeError('Generic Workbench owner received a Playground companion frame');
+        }
+        acceptPlaygroundMessage(inspectPlaygroundOwnerToPageMessage(raw));
+      } catch (error) {
+        failProtocol(error);
+      }
+      return;
+    }
     let message: WorkbenchOwnerToPageMessage;
     try {
       message = inspectWorkbenchOwnerToPageMessage(raw);
@@ -269,11 +410,11 @@ export function startBrowserWorkspaceOwner(
     try {
       switch (message.type) {
         case 'workbench:owner-ready':
-          if (storage !== null || readyState.settled()) {
+          if (storage !== null) {
             throw new Error('Workbench owner sent duplicate readiness');
           }
           storage = message.storage;
-          readyState.resolve(undefined);
+          resolveReady();
           return;
         case 'workbench:project-opened': {
           const operation = takePending(message.opId, 'open');
@@ -366,6 +507,9 @@ export function startBrowserWorkspaceOwner(
         kernel: input.deployment.workers.kernel,
         node: input.deployment.workers.node,
         devServer: input.deployment.workers.devServer,
+        ...(input.deployment.workers.typescript === undefined
+          ? {}
+          : { typescript: input.deployment.workers.typescript }),
       }),
       wasm: Object.freeze({
         sqlite: input.deployment.wasm.sqlite,
@@ -375,6 +519,12 @@ export function startBrowserWorkspaceOwner(
     }),
     packageAcquisition: input.packageAcquisition,
     storage: input.storage,
+    ...(input.legacyWorkspacePrefix === undefined
+      ? {}
+      : { legacyWorkspacePrefix: input.legacyWorkspacePrefix }),
+    ...(input.playgroundUrlContext === undefined
+      ? {}
+      : { playgroundUrlContext: input.playgroundUrlContext }),
   });
   try {
     send({ type: 'workbench:initialize', config: bootConfig });
@@ -392,10 +542,15 @@ export function startBrowserWorkspaceOwner(
     });
   };
 
-  const makeProjectTransport = (opened: OpenedProject): ProjectTransport => {
+  const makeProjectTransport = (
+    opened: OpenedProject,
+    initialScmSnapshot: PlaygroundScmSnapshot | null = null,
+  ): ProjectTransport => {
     let disconnected = false;
     let currentPreview: readonly PreviewAdvertisement[] = Object.freeze([]);
+    let currentScmSnapshot = initialScmSnapshot;
     const previewListeners = new Set<(entries: readonly PreviewAdvertisement[]) => void>();
+    const playgroundToolListeners = new Set<(frame: unknown) => void>();
 
     const assertCurrent = (): void => {
       if (
@@ -431,6 +586,7 @@ export function startBrowserWorkspaceOwner(
               ownerToken: opened.projectToken,
               port: entry.port,
               url: entry.url,
+              label: entry.label,
               source: entry.source,
               sid: entry.sid,
               ...(entry.previewScope === undefined ? {} : { previewScope: entry.previewScope }),
@@ -444,10 +600,38 @@ export function startBrowserWorkspaceOwner(
       },
     });
 
+    const subscribeRawPreview = (
+      listener: (entries: readonly PreviewAdvertisement[]) => void,
+    ): (() => void) => {
+      assertCurrent();
+      previewListeners.add(listener);
+      listener(currentPreview);
+      return () => previewListeners.delete(listener);
+    };
+    const requestRawPreview = (): void => pty.requestPreview();
+    const provePreviewControl = (signal: AbortSignal): Promise<void> =>
+      proveRiftyServiceWorkerControl({
+        container: dependencies.serviceWorker,
+        timeoutMs: input.deployment.previewProbeTimeoutMs,
+        signal,
+        timers: dependencies.timers,
+      });
+    const previews = createBrowserPlaygroundPreviewAuthority({
+      subscribe: subscribeRawPreview,
+      requestSnapshot: requestRawPreview,
+      mountRoute: (entry) =>
+        dependencies.mountPreview(entry.port, entry.ownerToken, entry.previewScope),
+      proveServiceWorkerControl: provePreviewControl,
+      onFailure: failProtocol,
+    });
+
     const terminalPort = Object.freeze({
       closed: ownerClosed,
       isAlive: () => !disconnected && !exited && activeProject?.token === opened.projectToken,
-      openSession: (sid: string) => pty.openSession(sid, { cwd: opened.projectRoot }),
+      openSession: (sid: string, initialState?: ProjectTerminalPortState) =>
+        pty.openSession(sid, initialState ?? { cwd: opened.projectRoot }),
+      snapshot: (sid: string) =>
+        projectTerminalStateFromOwner(opened.projectRoot, pty.snapshot(sid)),
       execResult: (sid: string, line: string, options: ProjectTerminalExecOptions) =>
         pty.execResult(sid, line, options),
       writeStdin: (sid: string, rid: string, data: Uint8Array) => pty.writeStdin(sid, rid, data),
@@ -485,22 +669,53 @@ export function startBrowserWorkspaceOwner(
       content,
       pty,
       terminalPort,
-      subscribePreview(listener) {
+      previews,
+      playgroundScmSnapshot() {
         assertCurrent();
-        previewListeners.add(listener);
-        listener(currentPreview);
-        return () => previewListeners.delete(listener);
+        if (currentScmSnapshot === null) {
+          throw new TypeError('Playground session tools are unavailable for this project');
+        }
+        return currentScmSnapshot;
       },
-      requestPreview: () => pty.requestPreview(),
+      subscribePlaygroundTools(listener) {
+        assertCurrent();
+        playgroundToolListeners.add(listener);
+        return () => playgroundToolListeners.delete(listener);
+      },
       acceptPty: (frame) => pty.onFrame(frame),
       acceptPreview: (frame) => pty.onFrame(frame),
       acceptVfs: (message) => content.accept(message.frame),
+      acceptPlaygroundTools(frame) {
+        if (currentScmSnapshot === null) {
+          throw new TypeError('Playground session tools are unavailable for this project');
+        }
+        if (frame.type === 'workbench:playground-session-tools-scm-snapshot') {
+          currentScmSnapshot = frame.snapshot;
+        }
+        for (const listener of [...playgroundToolListeners]) {
+          try {
+            listener(frame);
+          } catch {
+            // The semantic session-tools transport owns listener failure state.
+          }
+        }
+      },
       disconnect(error) {
         if (disconnected) return;
         disconnected = true;
+        void previews.close().catch(() => {});
         currentPreview = Object.freeze([]);
         for (const listener of [...previewListeners]) listener(currentPreview);
         previewListeners.clear();
+        const toolsFailure = error ?? new ClosedHandleError('Workbench project transport');
+        for (const listener of [...playgroundToolListeners]) {
+          try {
+            listener(toolsFailure);
+          } catch {
+            // Disconnect is already authoritative; consumer failure cannot reopen it.
+          }
+        }
+        playgroundToolListeners.clear();
         pty.disconnect();
         content.disconnect(error);
       },
@@ -511,27 +726,34 @@ export function startBrowserWorkspaceOwner(
     transport: ProjectTransport,
     definition: InspectedProjectDefinition<TReady>,
     content: ProjectContentController,
+    companion?: Pick<OpenedPlaygroundProject, 'acquisition' | 'runtime' | 'initialTerminalState'>,
   ): ProjectSession<TReady> => {
-    const openTerminal = (): ProjectTerminal =>
-      createProjectTerminal({
+    const ownerInitialTerminalState =
+      companion?.initialTerminalState === undefined
+        ? undefined
+        : Object.freeze({
+            cwd: toOwnerProjectPath(transport.projectRoot, companion.initialTerminalState.cwd, {
+              allowRoot: true,
+            }),
+            env: companion.initialTerminalState.env,
+          });
+    const openTerminal = (): ProjectTerminal => {
+      return createProjectTerminal({
         id: `workbench-terminal-${String(++terminalSequence)}`,
         port: transport.terminalPort,
+        ...(ownerInitialTerminalState === undefined
+          ? {}
+          : { initialState: ownerInitialTerminalState }),
       });
+    };
     const terminal = openTerminal();
     const previewReadiness = () =>
       createPreviewReadiness({
         timeoutMs: input.deployment.previewProbeTimeoutMs,
-        subscribe: transport.subscribePreview,
-        requestSnapshot: transport.requestPreview,
-        mountRoute: (entry) =>
-          dependencies.mountPreview(entry.port, entry.ownerToken, entry.previewScope),
-        proveServiceWorkerControl: (signal) =>
-          proveRiftyServiceWorkerControl({
-            container: dependencies.serviceWorker,
-            timeoutMs: input.deployment.previewProbeTimeoutMs,
-            signal,
-            timers: dependencies.timers,
-          }),
+        subscribe: transport.previews.subscribeRouted,
+        requestSnapshot: transport.previews.requestSnapshot,
+        mountRoute: () => () => {},
+        proveServiceWorkerControl: async () => {},
         probe: async (url, signal) => {
           const response = await dependencies.fetch(url, {
             cache: 'no-store',
@@ -542,13 +764,86 @@ export function startBrowserWorkspaceOwner(
       });
 
     const closeOwner = async (): Promise<void> => {
+      const failures: Error[] = [];
       try {
         await requestCloseProject(transport.token);
+      } catch (error) {
+        failures.push(errorFrom(error));
+      }
+      try {
+        await transport.previews.close();
+      } catch (error) {
+        failures.push(errorFrom(error));
       } finally {
-        transport.disconnect();
-        if (activeProject === transport) activeProject = null;
+        transport.disconnect(failures[0]);
+      }
+      if (activeProject === transport) activeProject = null;
+      if (failures.length === 1) throw failures[0] as Error;
+      if (failures.length > 1) {
+        throw new AggregateError(failures, 'Workbench project owner and preview close failed');
       }
     };
+
+    if (companion !== undefined) {
+      const runtime = companion.runtime;
+      let session: ProjectSession<unknown>;
+      if (runtime.kind === 'node-cli') {
+        if (definition.kind !== 'node-cli') {
+          throw new TypeError('Owner Playground runtime does not match the project definition');
+        }
+        session = createProjectSession<void>({
+          content,
+          runtime: createNodeCliProjectRuntime({
+            terminal,
+            entryPath: definition.entryPath,
+            args: definition.args,
+            acquisition: companion.acquisition,
+          }),
+          terminal,
+          createTerminal: openTerminal,
+          closeOwner,
+        });
+      } else {
+        if (runtime.kind === 'node-server') {
+          if (definition.kind !== 'node-server') {
+            throw new TypeError('Owner Playground runtime does not match the project definition');
+          }
+          session = createProjectSession<PreviewHandle>({
+            content,
+            runtime: createNodeServerProjectRuntime({
+              terminal,
+              ownerToken: transport.token,
+              entryPath: definition.entryPath,
+              port: definition.port,
+              createPreviewReadiness: previewReadiness,
+              acquisition: companion.acquisition,
+            }),
+            terminal,
+            createTerminal: openTerminal,
+            closeOwner,
+          });
+        } else {
+          if (definition.kind !== 'vite') {
+            throw new TypeError('Owner Playground runtime does not match the project definition');
+          }
+          session = createProjectSession<PreviewHandle>({
+            content,
+            runtime: createViteProjectRuntime({
+              terminal,
+              ownerToken: transport.token,
+              port: runtime.port,
+              createPreviewReadiness: previewReadiness,
+              acquisition: companion.acquisition,
+            }),
+            terminal,
+            createTerminal: openTerminal,
+            closeOwner,
+          });
+        }
+      }
+      // The owner-born finite runtime decision is the authority for readiness.
+      return session as ProjectSession<TReady>;
+    }
 
     const session =
       definition.kind === 'node-cli'
@@ -588,6 +883,174 @@ export function startBrowserWorkspaceOwner(
     return session as ProjectSession<TReady>;
   };
 
+  const admitOpenedProject = async <TReady>(
+    opened: OpenedProject,
+    definition: InspectedProjectDefinition<TReady>,
+    companion?: OpenedPlaygroundProject,
+  ): Promise<ProjectSession<TReady>> => {
+    const transport = makeProjectTransport(opened, companion?.initialScmSnapshot ?? null);
+    activeProject = transport;
+    try {
+      const content = await transport.content.ready;
+      const session = createBrowserProject<TReady>(transport, definition, content, companion);
+      if (companion !== undefined) {
+        playgroundSessions.set(session, { transport, content, lifecycle: null });
+      }
+      return session;
+    } catch (error) {
+      const failures = [errorFrom(error)];
+      try {
+        await requestCloseProject(opened.projectToken);
+      } catch (closeError) {
+        failures.push(errorFrom(closeError));
+      }
+      try {
+        await transport.previews.close();
+      } catch (previewError) {
+        failures.push(errorFrom(previewError));
+      }
+      transport.disconnect();
+      if (activeProject === transport) activeProject = null;
+      if (failures.length === 1) throw failures[0] as Error;
+      throw new AggregateError(failures, 'Workbench project construction and cleanup failed');
+    }
+  };
+
+  const inspectCompanionDefinition = <TReady>(
+    definition: ProjectDefinition<TReady>,
+  ): InspectedPlaygroundProjectDefinition<TReady> => {
+    if (playgroundUrlContext === undefined) {
+      throw new TypeError('Playground companion owner is unavailable');
+    }
+    return inspectPlaygroundProjectDefinition(definition, playgroundUrlContext);
+  };
+
+  const requestCatalog = (
+    command: PlaygroundCatalogCommand,
+  ): Promise<PlaygroundCatalogSnapshot> => {
+    currentCatalog();
+    const opId = dependencies.operationId();
+    const operation = {
+      ...deferred<PlaygroundCatalogSnapshot>(),
+      kind: 'playground-catalog' as const,
+    };
+    return request<PlaygroundCatalogSnapshot>(operation, {
+      type: 'workbench:playground-catalog',
+      opId,
+      command,
+    });
+  };
+
+  const catalog: PlaygroundProjectCatalog | undefined = companionMode
+    ? Object.freeze({
+        snapshot: currentCatalog,
+        subscribe(listener: (snapshot: PlaygroundCatalogSnapshot) => void) {
+          if (typeof listener !== 'function') {
+            throw new TypeError('Catalog listener must be a function');
+          }
+          const snapshot = currentCatalog();
+          catalogListeners.add(listener);
+          listener(snapshot);
+          return () => catalogListeners.delete(listener);
+        },
+        createScratch(input: Parameters<PlaygroundProjectCatalog['createScratch']>[0]) {
+          inspectCompanionDefinition(input.definition);
+          return requestCatalog({
+            kind: 'create-scratch',
+            definition: playgroundProjectDefinitionWire(input.definition),
+            ...(input.preserveDirtySameStarter === undefined
+              ? {}
+              : { preserveDirtySameStarter: input.preserveDirtySameStarter }),
+          });
+        },
+        saveScratch(input: Parameters<PlaygroundProjectCatalog['saveScratch']>[0]) {
+          inspectCompanionDefinition(input.definition);
+          return requestCatalog({
+            kind: 'save-scratch',
+            id: input.id,
+            name: input.name,
+            definition: playgroundProjectDefinitionWire(input.definition),
+          });
+        },
+        activate(target: Parameters<PlaygroundProjectCatalog['activate']>[0]) {
+          return requestCatalog({ kind: 'activate', target });
+        },
+        rename(...args: Parameters<PlaygroundProjectCatalog['rename']>) {
+          return requestCatalog({ kind: 'rename', id: args[0], name: args[1] });
+        },
+        reset(input: Parameters<PlaygroundProjectCatalog['reset']>[0]) {
+          inspectCompanionDefinition(input.definition);
+          return requestCatalog({
+            kind: 'reset',
+            target: input.target,
+            definition: playgroundProjectDefinitionWire(input.definition),
+          });
+        },
+        delete(id: string) {
+          return requestCatalog({ kind: 'delete', id });
+        },
+      } satisfies PlaygroundProjectCatalog)
+    : undefined;
+
+  const playgroundHandle: RawWorkspaceOwnerHandle['playground'] =
+    catalog === undefined
+      ? undefined
+      : Object.freeze({
+          catalog,
+          async openProject<TReady>(
+            definition: ProjectDefinition<TReady>,
+            projectOptions?: PlaygroundProjectOpenOptions,
+          ) {
+            const ownedOptions = ownPlaygroundProjectOpenOptions(projectOptions);
+            if (activeProject !== null) throw new ProjectBusyError('Workbench owner project');
+            const inspected = inspectCompanionDefinition(definition);
+            const opId = dependencies.operationId();
+            const operation = {
+              ...deferred<OpenedPlaygroundProject>(),
+              kind: 'playground-open' as const,
+            };
+            const opened = await request<OpenedPlaygroundProject>(operation, {
+              type: 'workbench:playground-open-project',
+              opId,
+              definition: playgroundProjectDefinitionWire(definition),
+              ...(ownedOptions.initialTerminalState === undefined
+                ? {}
+                : { initialTerminalState: ownedOptions.initialTerminalState }),
+            });
+            return admitOpenedProject(opened, inspected, opened);
+          },
+          sessionTools(session: ProjectSession<unknown>) {
+            const state =
+              typeof session === 'object' && session !== null
+                ? playgroundSessions.get(session)
+                : undefined;
+            if (state === undefined) {
+              throw new TypeError('Invalid, forged, or foreign Playground ProjectSession');
+            }
+            if (activeProject !== state.transport) {
+              throw new ClosedHandleError('Playground ProjectSession');
+            }
+            state.lifecycle ??= createBrowserPlaygroundSessionTools({
+              projectRoot: state.transport.projectRoot,
+              documents: state.content,
+              initialScmSnapshot: state.transport.playgroundScmSnapshot(),
+              previews: state.transport.previews.registry,
+              send(frame) {
+                if (activeProject !== state.transport) return false;
+                send({
+                  type: 'workbench:playground-project-tools',
+                  projectToken: state.transport.token,
+                  frame,
+                });
+                return true;
+              },
+              subscribe: (listener) => state.transport.subscribePlaygroundTools(listener),
+              generateRequestId: dependencies.operationId,
+            });
+            return state.lifecycle;
+          },
+        });
+
   return {
     ready: readyState.promise,
     closed: ownerClosed,
@@ -606,23 +1069,7 @@ export function startBrowserWorkspaceOwner(
         opId,
         definition: projectDefinitionWire(definition),
       });
-      const transport = makeProjectTransport(opened);
-      activeProject = transport;
-      try {
-        const content = await transport.content.ready;
-        return createBrowserProject<TReady>(transport, definition, content);
-      } catch (error) {
-        const failures = [errorFrom(error)];
-        try {
-          await requestCloseProject(opened.projectToken);
-        } catch (closeError) {
-          failures.push(errorFrom(closeError));
-        }
-        transport.disconnect();
-        if (activeProject === transport) activeProject = null;
-        if (failures.length === 1) throw failures[0] as Error;
-        throw new AggregateError(failures, 'Workbench project construction and cleanup failed');
-      }
+      return admitOpenedProject(opened, definition);
     },
     deleteProject(id: string) {
       if (activeProject !== null) {
@@ -632,6 +1079,7 @@ export function startBrowserWorkspaceOwner(
       const operation = { ...deferred<void>(), kind: 'delete' as const, id };
       return request<void>(operation, { type: 'workbench:delete-project', opId, id });
     },
+    ...(playgroundHandle === undefined ? {} : { playground: playgroundHandle }),
     close() {
       if (closeRequested || exited) return;
       closeRequested = true;

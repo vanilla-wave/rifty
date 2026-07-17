@@ -41,9 +41,9 @@ import { fileURLToPath } from 'node:url';
 export const ALLOWLIST = [
   {
     file: 'apps/playground/src/App.test.ts',
-    count: 88,
-    digest: '241992824d30',
-    why: 'App.tsx unrenderable in node (xterm import); residual = negative architectural invariants + one binding pin per wiring surface, including project-index owner snapshot/closed pairing and no app-eval editor warm; behavior heirs in orchestration/*.test.ts + glue tests + e2e',
+    count: 40,
+    digest: 'fb6b1bc2dc0f',
+    why: 'browser App imports xterm; residual pins only client JSX/composition bindings; TS boot/reinit behavior lives in diagnostics-sync contracts + browser e2e',
   },
   {
     file: 'apps/playground/src/components/BottomPanel.test.ts',

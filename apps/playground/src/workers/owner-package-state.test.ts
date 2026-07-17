@@ -1,12 +1,16 @@
 import { type InstallOptions, type InstallResult, RegistryClient } from '@riftydev/npm-client';
 import { Shell } from '@riftydev/shell';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type { BootstrapConfig } from '../templates/project-spec.ts';
-import { type OwnerPackageConfig, createOwnerPackageState } from './owner-package-state.ts';
+import {
+  type FirstMaterializationOwnerPackageConfig,
+  type OwnerPackageConfig,
+  createOwnerPackageState,
+} from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 
 const ROOT = '/project';
@@ -46,6 +50,97 @@ function installResult(): InstallResult {
 }
 
 afterEach(resetSyncMirror);
+
+async function packageMutationHarness(ownerEpoch: string) {
+  const pair = createMemoryFs();
+  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+    ownerEpoch,
+    initialRoots: ['/'],
+  });
+  setSyncMirror(authority, { async: pair.vfs });
+  authority.mkdirSync(ROOT, { recursive: true });
+  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(BASE_PACKAGE_JSON));
+  const firstConfig: FirstMaterializationOwnerPackageConfig = {
+    cfg: config,
+    templateId: 'vite',
+    slug: 'scratch',
+    fromScratch: true,
+    firstMaterialization: { kind: 'install' },
+  };
+  let installInvocation = 0;
+  const state = createOwnerPackageState({
+    vfs: new SyncMirrorVfs(),
+    fsSync: authority,
+    installStampClaims,
+    flush: async () => ({ failures: [], total: 0 }),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry: new RegistryClient({
+      baseUrl: '/unused',
+      fetch: async () => new Response('', { status: 599 }),
+    }),
+    install: async (arg1) => {
+      const opts = arg1 as InstallOptions;
+      installInvocation += 1;
+      authority.mkdirSync(`${opts.cwd}/node_modules/user-pkg`, { recursive: true });
+      authority.writeFileSync(
+        `${opts.cwd}/node_modules/user-pkg/index.js`,
+        new TextEncoder().encode('module.exports = true;\n'),
+      );
+      await opts.vfs.writeFile(
+        `${opts.cwd}/package-lock.json`,
+        `${JSON.stringify({ installInvocation })}\n`,
+      );
+      return installResult();
+    },
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+  await expect(state.activateAndEnsure(firstConfig)).resolves.toMatchObject({ kind: 'install' });
+
+  const recordMutation = vi.fn(
+    async (_kind: 'dependency' | 'package-manifest' | 'package-lock', _revision: number) => {},
+  );
+  const shell = new Shell({ cwd: ROOT });
+  shell.registerCommand(
+    'npm',
+    state.createNpmCommand(async () => 0, { recordMutation }),
+  );
+
+  return { recordMutation, shell };
+}
+
+it('classifies first dependency arrival separately from user package manifest/lock edits', async () => {
+  const { recordMutation, shell } = await packageMutationHarness(
+    'owner-package-mutation-classification-test',
+  );
+
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+  expect(recordMutation).toHaveBeenCalledWith('dependency', expect.any(Number));
+
+  recordMutation.mockClear();
+  expect((await shell.run('npm install user-pkg@1.0.0')).exitCode).toBe(0);
+  expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual([
+    'package-manifest',
+    'package-lock',
+  ]);
+});
+
+it.each(['install', 'i', 'add'] as const)(
+  'classifies a first deferred npm %s with a package spec as manifest/lock mutations',
+  async (subcommand) => {
+    const { recordMutation, shell } = await packageMutationHarness(
+      `owner-package-first-user-${subcommand}-classification-test`,
+    );
+
+    expect((await shell.run(`npm ${subcommand} user-pkg@1.0.0`)).exitCode).toBe(0);
+    expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual([
+      'package-manifest',
+      'package-lock',
+    ]);
+  },
+);
 
 it('preserves a trusted user-extended tree when the first dev config replaces hidden-empty', async () => {
   const pair = createMemoryFs();

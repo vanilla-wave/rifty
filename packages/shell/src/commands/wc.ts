@@ -11,9 +11,9 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, syncMirror } from '@riftydev/vfs';
+import { VfsError } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, readAllStdin, resolve, strerror } from './_shared.ts';
+import { commandFileSystem, dec, readAllStdin, resolve, strerror } from './_shared.ts';
 
 interface Selected {
   lines: boolean;
@@ -115,7 +115,7 @@ export const wc: ShellCommand = async (args, ctx) => {
     return 0;
   }
 
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   const rows: { counts: Counts; label: string }[] = [];
   const total: Counts = { lines: 0, words: 0, bytes: 0, chars: 0 };
   let exit = 0;

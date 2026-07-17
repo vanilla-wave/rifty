@@ -19,4 +19,13 @@ describe('initial editor files', () => {
       'Preset file escapes workspace: ../other.js',
     );
   });
+
+  it('maps preset files into the semantic project root without allowing parent escape', () => {
+    expect(initialEditorFilesForPreset({ openFiles: ['src/main.js'] }, '/')).toEqual([
+      '/src/main.js',
+    ]);
+    expect(() => workspacePresetPath('/', '../other.js')).toThrow(
+      'Preset file escapes workspace: ../other.js',
+    );
+  });
 });

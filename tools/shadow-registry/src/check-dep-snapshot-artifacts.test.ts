@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
@@ -51,9 +52,16 @@ function canonical(value: CheckedDepSnapshot): Buffer {
   return gzipSync(Buffer.from(serialize(value)), { level: 9 });
 }
 
-function expectation(value = snapshot()): SnapshotArtifactExpectation {
+function snapshotId(value: CheckedDepSnapshot): string {
+  return `sha256:${createHash('sha256').update(serialize(value)).digest('hex')}`;
+}
+
+function expectation(
+  value = snapshot(),
+): SnapshotArtifactExpectation & { readonly snapshotId: string } {
   return {
     bytes: canonical(value),
+    snapshotId: snapshotId(value),
     label: 'fixture',
     templateId: 'fixture',
     packageJsonText: PACKAGE_JSON_TEXT,
@@ -73,6 +81,20 @@ describe('snapshot artifact drift check', () => {
     const value = { ...snapshot(), installArtifactIdentity: `sha256:${'b'.repeat(64)}` };
     expect(() => assertSnapshotArtifactCurrent(expectation(value))).toThrow(
       /installArtifactIdentity.*pnpm snapshots:bake/,
+    );
+  });
+
+  it('rejects a stale bake-owned snapshot identity derived from other serialized bytes', () => {
+    const input = { ...expectation(), snapshotId: `sha256:${'b'.repeat(64)}` };
+
+    expect(() => assertSnapshotArtifactCurrent(input)).toThrow(/snapshotId.*pnpm snapshots:bake/);
+  });
+
+  it('rejects an artifact check that omits bake-owned snapshot identity', () => {
+    const { snapshotId: _omitted, ...input } = expectation();
+
+    expect(() => assertSnapshotArtifactCurrent(input as SnapshotArtifactExpectation)).toThrow(
+      /snapshotId.*pnpm snapshots:bake/,
     );
   });
 

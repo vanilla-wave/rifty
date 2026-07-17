@@ -24,7 +24,12 @@ export type PackageMutationIntents =
   | (() => readonly VfsMutationIntent[]);
 export type PackageResetPlan =
   | { readonly status: 'noop' }
-  | { readonly status: 'ready'; readonly mutate: PackageMutation };
+  | {
+      readonly status: 'ready';
+      /** Supplies the sole acquisition-adapter tree reset inside the mutation scope. */
+      readonly resetDependencyTree?: true;
+      readonly mutate: (resetDependencyTree?: PackageMutation) => Promise<void>;
+    };
 export type PackageResetPreparation = () => Promise<PackageResetPlan>;
 export type PackageEditPreflight<T> = () => Promise<
   { readonly status: 'ready' } | { readonly status: 'noop'; readonly value: T }
@@ -406,8 +411,7 @@ export function discoverPackageAcquisitionGuardTransitions(
 
 export function applyPackageAwareVfsMutations<T>(
   mutations: PackageMutationExecutor,
-  // TODO(backlog: distribution/workbench-guest-vfs-namespace): enforce the
-  // decided guest root across reads, cwd, Shell, child RPC, and WASI together.
+  // Legacy bootstrap compatibility; Workbench maps paths before this adapter.
   _root: string,
   intents: readonly VfsMutationIntent[],
   apply: () => T | Promise<T>,

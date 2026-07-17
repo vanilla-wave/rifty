@@ -1,9 +1,9 @@
 /** `mkdir [-p|--parents] DIR...` — create directories. `-p` ⇒ recursive. */
 
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, guardVfsMutations, syncMirror } from '@riftydev/vfs';
+import { VfsError, guardVfsMutations } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { resolve, strerror } from './_shared.ts';
+import { commandFileSystem, resolve, strerror } from './_shared.ts';
 
 export const mkdir: ShellCommand = async (args, ctx) => {
   let recursive = false;
@@ -35,7 +35,7 @@ export const mkdir: ShellCommand = async (args, ctx) => {
     ctx.stderr.write('mkdir: missing operand\n');
     return 1;
   }
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   const targets = paths.map((path) => ({ path, absolute: resolve(ctx.cwd, path) }));
   return await guardVfsMutations(
     ctx.mutationGuard,

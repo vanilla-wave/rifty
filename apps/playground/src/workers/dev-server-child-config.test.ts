@@ -45,6 +45,7 @@ function envelope(
     readonly nodeWorkerRuntime?: unknown;
     readonly terminal?: unknown;
     readonly previewScope?: unknown;
+    readonly remoteFsRoot?: unknown;
   } = {},
 ): unknown {
   return {
@@ -56,6 +57,9 @@ function envelope(
       ...(Object.prototype.hasOwnProperty.call(input, 'previewScope')
         ? { previewScope: input.previewScope }
         : {}),
+      ...(Object.prototype.hasOwnProperty.call(input, 'remoteFsRoot')
+        ? { remoteFsRoot: input.remoteFsRoot }
+        : {}),
     },
   };
 }
@@ -63,6 +67,21 @@ function envelope(
 afterEach(() => publishKernelEntryBootstrap(null));
 
 describe('dev-server entry bootstrap', () => {
+  it('accepts guest root only with a typed private remote-root binding', () => {
+    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const cfg = {
+      ...CFG,
+      root: '/',
+      entryPath: '/server.mjs',
+      seedFiles: { '/server.mjs': 'export {}' },
+    };
+
+    expect(resolveDevServerChildConfig(envelope({ cfg, remoteFsRoot }))).toMatchObject({
+      cfg,
+      remoteFsRoot,
+    });
+  });
+
   it('boots from the complete entry-scoped runtime config without an app template registry', () => {
     const resolved = resolveDevServerChildConfig(envelope({ previewScope: 'consumer-preview' }));
 

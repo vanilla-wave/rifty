@@ -1,7 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, basename, guardVfsMutations, joinPath, syncMirror } from '@riftydev/vfs';
+import { VfsError, basename, guardVfsMutations, joinPath } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { resolve, strerror } from './_shared.ts';
+import { commandFileSystem, resolve, strerror } from './_shared.ts';
 
 interface Opts {
   noClobber: boolean; // -n
@@ -45,7 +45,7 @@ function move(
   opts: Opts,
   ctx: Parameters<ShellCommand>[1],
 ): number {
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   if (opts.noClobber && fs.existsSync(dstAbs)) return 0; // skip silently (GNU -n)
   try {
     fs.renameSync(srcAbs, dstAbs);
@@ -82,7 +82,7 @@ export const mv: ShellCommand = async (args, ctx) => {
     ctx.stderr.write('mv: missing file operand\n');
     return 1;
   }
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   // Guarded by `operands.length < 2` above; assert through noUncheckedIndexedAccess.
   const dst = operands[operands.length - 1] as string;
   const sources = operands.slice(0, -1);

@@ -19,12 +19,14 @@ import {
   applyNodeProcessTerminalBootstrap,
   setProcessCwd,
 } from '@riftydev/runtime-js/builtins/process';
+import { setSyncMirror } from '@riftydev/vfs/internal';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 import { readDevServerChildConfig } from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
+import { ProjectTerminalFsSync } from './project-terminal-namespace.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -63,7 +65,12 @@ async function bootstrapDevServerChild(): Promise<void> {
       'dev-server-child: no kernel sync call published — cannot reach the owner store',
     );
   }
-  const remoteFs = installRemoteSyncFs(syncApi.call);
+  const ownerRemoteFs = installRemoteSyncFs(syncApi.call);
+  const remoteFs =
+    c.remoteFsRoot === undefined
+      ? ownerRemoteFs
+      : new ProjectTerminalFsSync(ownerRemoteFs, c.remoteFsRoot);
+  setSyncMirror(remoteFs);
   // A node-server child may spawn nested workers whose `fs.*` sync-RPC calls
   // land on THIS realm's dispatcher. The child has no OPFS of its own
   // (single-writer is the owner), so register the fs handlers backed by our own

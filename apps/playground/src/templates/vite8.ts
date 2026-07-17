@@ -1,3 +1,4 @@
+import bakedSnapshotIdentities from '../generated/baked-snapshot-identities.json';
 /**
  * Vite 8 opt-in template. Dev is proven; build/preview remain outside compat
  * while Rolldown's WASI pthread path is upstream-blocked.
@@ -31,6 +32,7 @@ export const VITE8_TEMPLATE: ViteProjectSpec = {
   runtime: 'vite',
   install: { vite: DEFAULT_VITE8_VERSION },
   bakedNodeModulesUrl: '/snapshots/vite8-node-modules.json.gz',
+  bakedNodeModulesSnapshotId: bakedSnapshotIdentities.snapshots.vite8,
   entry: { relativePath: '/src/main.js', content: INITIAL_MAIN_JS },
   defaultPort: 5174,
   estimatedBootSeconds: 25,

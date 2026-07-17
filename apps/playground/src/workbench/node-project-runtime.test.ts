@@ -58,6 +58,8 @@ class PtyBoundary {
   readonly closeCalls: string[] = [];
   alive = true;
 
+  constructor(private readonly cwd = '/') {}
+
   isAlive(): boolean {
     return this.alive;
   }
@@ -66,6 +68,10 @@ class PtyBoundary {
     const gate = deferred<void>();
     this.openGates.set(sid, gate);
     return gate.promise;
+  }
+
+  snapshot(): { readonly cwd: string; readonly env: Record<string, string> } {
+    return { cwd: this.cwd, env: {} };
   }
 
   resolveOpen(sid: string): void {
@@ -182,14 +188,15 @@ function advertisement(overrides: Partial<PreviewAdvertisement> = {}): PreviewAd
     ptyRid: 'run-1',
     port: SERVER_PORT,
     url: `/preview/${SERVER_PORT}/`,
+    label: 'npm run dev',
     source: 'dev-server',
     sid: 'node-server-1',
     ...overrides,
   };
 }
 
-function createServerHarness() {
-  const pty = new PtyBoundary();
+function createServerHarness(cwd = '/') {
+  const pty = new PtyBoundary(cwd);
   const previews = new PreviewBoundary();
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
   const runtime = createNodeServerProjectRuntime({
@@ -210,8 +217,8 @@ function createServerHarness() {
   return { pty, previews, terminal, runtime, session };
 }
 
-function createCliHarness() {
-  const pty = new PtyBoundary();
+function createCliHarness(cwd = '/') {
+  const pty = new PtyBoundary(cwd);
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
   const runtime = createNodeCliProjectRuntime({
     terminal,
@@ -256,6 +263,17 @@ async function finishServerRun(
 }
 
 describe('Node server project runtime Contract+RED', () => {
+  it('runs the project lifecycle at project root without discarding restored terminal cwd', async () => {
+    const h = createServerHarness('/src');
+    h.session.run();
+
+    h.pty.resolveOpen(TERMINAL_SID);
+    await settleMicrotasks();
+
+    expect(h.pty.execCalls[0]?.line).toBe('npm --prefix .. run dev');
+    expect(h.terminal.snapshot().cwd).toBe('/src');
+  });
+
   it('claims synchronously, runs the dedicated lifecycle, then requires exact admitted preview provenance', async () => {
     const h = createServerHarness();
     const run = h.session.run();
@@ -356,6 +374,19 @@ describe('Node server project runtime Contract+RED', () => {
 });
 
 describe('Node CLI project runtime Contract+RED', () => {
+  it('resolves the project-rooted entry from restored terminal cwd', async () => {
+    const h = createCliHarness('/scripts');
+    h.session.run();
+
+    h.pty.resolveOpen(TERMINAL_SID);
+    await settleMicrotasks();
+
+    expect(h.pty.execCalls[0]?.line).toBe(
+      "node './cli report'\\''s.mjs' plain 'two words' 'semi;colon' 'single'\\''quote' '' '$HOME'",
+    );
+    expect(h.terminal.snapshot().cwd).toBe('/scripts');
+  });
+
   it('keeps a root-level dash-prefixed entry a path instead of a Node option', async () => {
     const pty = new PtyBoundary();
     const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });

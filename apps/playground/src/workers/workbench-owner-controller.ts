@@ -4,12 +4,29 @@ import {
   serializeWorkbenchOwnerError,
 } from '../workbench/errors.ts';
 import {
+  type PageToPlaygroundOwnerMessage,
+  type PlaygroundOwnerToPageMessage,
+  type PlaygroundProjectRuntimeDecision,
+  inspectPageToPlaygroundOwnerMessage,
+  isPageToPlaygroundOwnerMessage,
+} from '../workbench/internal/playground-owner-protocol.ts';
+import {
+  type CapturedPlaygroundUrlContext,
+  inspectPlaygroundProjectDefinition,
+  recreatePlaygroundProjectDefinition,
+} from '../workbench/internal/playground-project-definition.ts';
+import type {
+  OwnerPlaygroundSessionToolsFrame,
+  PagePlaygroundSessionToolsFrame,
+} from '../workbench/internal/playground-session-tools-transport.ts';
+import {
   type OwnerProjectToken,
   type PageToWorkbenchOwnerMessage,
   type WorkbenchOwnerToPageMessage,
   createOwnerProjectToken,
   inspectPageToWorkbenchOwnerMessage,
 } from '../workbench/owner-protocol.ts';
+import type { PlaygroundScmSnapshot } from '../workbench/playground.ts';
 import {
   type InspectedProjectDefinition,
   inspectProjectDefinitionWire,
@@ -18,6 +35,10 @@ import type {
   MaterializedProject,
   ProjectMaterializer,
 } from '../workbench/project-materialization.ts';
+import type {
+  PlaygroundProjectAuthority,
+  PlaygroundProjectMutationKind,
+} from './playground-project-authority.ts';
 
 type ProjectPtyInput = Extract<
   PageToWorkbenchOwnerMessage,
@@ -54,10 +75,15 @@ export type WorkbenchOwnerProjectRuntimeFrame =
 export type WorkbenchOwnerProjectRuntimeOutput =
   | { readonly type: 'pty'; readonly frame: ProjectPtyOutput }
   | { readonly type: 'preview'; readonly frame: ProjectPreviewOutput }
-  | { readonly type: 'vfs'; readonly frame: ProjectVfsOutput };
+  | { readonly type: 'vfs'; readonly frame: ProjectVfsOutput }
+  | { readonly type: 'playground-tools'; readonly frame: OwnerPlaygroundSessionToolsFrame };
 
 export interface WorkbenchOwnerProjectRuntime {
   handleFrame(frame: WorkbenchOwnerProjectRuntimeFrame): void | Promise<void>;
+  readonly playgroundTools?: {
+    readonly initialScmSnapshot: PlaygroundScmSnapshot;
+    handle(frame: PagePlaygroundSessionToolsFrame): Promise<void>;
+  };
   close(): Promise<void>;
 }
 
@@ -65,14 +91,25 @@ export interface WorkbenchOwnerProjectRuntimeInput {
   readonly definition: InspectedProjectDefinition;
   readonly materialized: MaterializedProject;
   readonly emit: (output: WorkbenchOwnerProjectRuntimeOutput) => void;
+  /** Present only for the companion's exact live authority handle. */
+  readonly recordMutation?: (
+    kind: PlaygroundProjectMutationKind,
+    treeRevision: number,
+  ) => Promise<void>;
 }
 
 export interface WorkbenchOwnerControllerDependencies {
-  readonly materializer: ProjectMaterializer;
+  readonly materializer?: ProjectMaterializer;
   readonly createProject: (
     input: WorkbenchOwnerProjectRuntimeInput,
   ) => WorkbenchOwnerProjectRuntime | Promise<WorkbenchOwnerProjectRuntime>;
   readonly send: (message: WorkbenchOwnerToPageMessage) => void;
+  readonly playground?: {
+    readonly urlContext: CapturedPlaygroundUrlContext;
+    readonly authority: PlaygroundProjectAuthority;
+    readonly send: (message: PlaygroundOwnerToPageMessage) => void;
+  };
+  readonly closeAuthority?: () => Promise<void>;
   /** Tests inject determinism; production defaults to the owner realm's crypto. */
   readonly generateProjectToken?: () => string;
 }
@@ -90,6 +127,7 @@ interface ActiveProject {
   acceptingInput: boolean;
   acceptingOutput: boolean;
   closePromise: Promise<void> | null;
+  readonly release: (() => Promise<void>) | null;
 }
 
 type OpenMessage = Extract<
@@ -111,6 +149,15 @@ type ProjectInputMessage = Extract<
   }
 >;
 
+type PlaygroundOpenMessage = Extract<
+  PageToPlaygroundOwnerMessage,
+  { readonly type: 'workbench:playground-open-project' }
+>;
+type PlaygroundCatalogMessage = Extract<
+  PageToPlaygroundOwnerMessage,
+  { readonly type: 'workbench:playground-catalog' }
+>;
+
 /**
  * Single owner-side lifecycle chokepoint. Bootstrap owns initialization and the
  * physical process; this controller owns every subsequent project transition.
@@ -118,7 +165,12 @@ type ProjectInputMessage = Extract<
 export function createWorkbenchOwnerController(
   dependencies: WorkbenchOwnerControllerDependencies,
 ): WorkbenchOwnerController {
-  const { materializer, createProject, send } = dependencies;
+  const { materializer, createProject, send, playground } = dependencies;
+  const closeAuthority =
+    dependencies.closeAuthority ?? (materializer === undefined ? null : () => materializer.close());
+  if (closeAuthority === null) {
+    throw new TypeError('Workbench owner controller requires an authority close boundary');
+  }
   const generateProjectToken =
     dependencies.generateProjectToken ?? (() => globalThis.crypto.randomUUID());
   const issuedTokens = new Set<string>();
@@ -180,11 +232,24 @@ export function createWorkbenchOwnerController(
 
   const closeProjectRuntime = (project: ActiveProject): Promise<void> => {
     project.acceptingInput = false;
-    project.closePromise ??= Promise.resolve()
-      .then(() => project.runtime.close())
-      .finally(() => {
-        project.acceptingOutput = false;
-      });
+    project.closePromise ??= (async () => {
+      const failures: unknown[] = [];
+      try {
+        await project.runtime.close();
+      } catch (error) {
+        failures.push(error);
+      }
+      if (project.release !== null) {
+        try {
+          await project.release();
+        } catch (error) {
+          appendUnique(failures, error);
+        }
+      }
+      throwFailures(failures, 'Workbench project runtime and authority release failed');
+    })().finally(() => {
+      project.acceptingOutput = false;
+    });
     return project.closePromise;
   };
 
@@ -208,6 +273,17 @@ export function createWorkbenchOwnerController(
       });
       return;
     }
+    if (output.type === 'playground-tools') {
+      if (playground === undefined) {
+        throw new TypeError('Playground project tools output requires a companion owner');
+      }
+      playground.send({
+        type: 'workbench:playground-project-tools',
+        projectToken: project.token,
+        frame: output.frame,
+      });
+      return;
+    }
     send({ type: 'workbench:project-vfs', projectToken: project.token, frame: output.frame });
   };
 
@@ -216,6 +292,9 @@ export function createWorkbenchOwnerController(
       if (shutdownRequested) throw closedOwnerError();
       if (poison !== undefined) throw poisonedError();
       if (active !== null) throw new ProjectBusyError('Workbench');
+      if (playground !== undefined || materializer === undefined) {
+        throw new TypeError('Core project open is unavailable in a Playground companion owner');
+      }
 
       // Recompute derived identity/storage data at the controller boundary even
       // when the physical bootstrap already applied the protocol inspector.
@@ -239,6 +318,7 @@ export function createWorkbenchOwnerController(
         acceptingInput: true,
         acceptingOutput: true,
         closePromise: null,
+        release: null,
       };
       active = project;
 
@@ -276,6 +356,181 @@ export function createWorkbenchOwnerController(
     }
   };
 
+  const runtimeDecision = (
+    definition: ReturnType<typeof inspectPlaygroundProjectDefinition>,
+  ): PlaygroundProjectRuntimeDecision => {
+    if (definition.kind === 'vite') {
+      if (definition.port === undefined) {
+        throw new TypeError('Playground Vite definition is missing its owner port');
+      }
+      return Object.freeze({ kind: 'vite', port: definition.port });
+    }
+    return Object.freeze({ kind: definition.kind });
+  };
+
+  const performPlaygroundOpen = async (message: PlaygroundOpenMessage): Promise<void> => {
+    let opened: Awaited<ReturnType<PlaygroundProjectAuthority['openProject']>> | null = null;
+    try {
+      if (shutdownRequested) throw closedOwnerError();
+      if (poison !== undefined) throw poisonedError();
+      if (active !== null) throw new ProjectBusyError('Workbench');
+      if (playground === undefined)
+        throw new TypeError('Playground companion owner is unavailable');
+
+      const localDefinition = recreatePlaygroundProjectDefinition(
+        message.definition,
+        playground.urlContext,
+      );
+      const definition = inspectPlaygroundProjectDefinition(localDefinition, playground.urlContext);
+      opened = await playground.authority.openProject(
+        localDefinition,
+        message.initialTerminalState,
+      );
+      if (shutdownRequested) throw closedOwnerError();
+      const projectRoot = opened.projectRoot;
+      const acquisition = opened.acquisition;
+      const initialTerminalState = opened.initialTerminalState;
+      const authorityProject = opened;
+
+      const token = mintProjectToken();
+      let project: ActiveProject | null = null;
+      const runtime = await createProject({
+        definition,
+        materialized: Object.freeze({
+          projectKey: opened.projectKey,
+          projectRoot,
+          acquisition,
+        }),
+        recordMutation: (kind, treeRevision) =>
+          playground.authority.recordMutation({
+            kind,
+            project: authorityProject,
+            treeRevision,
+          }),
+        emit(output) {
+          if (project === null) throw new ClosedHandleError('Workbench project output');
+          emitFor(project, output);
+        },
+      });
+      if (runtime.playgroundTools === undefined) {
+        throw new TypeError('Playground project runtime is missing session tools');
+      }
+      const release = opened.close.bind(opened);
+      opened = null;
+      project = {
+        token,
+        runtime,
+        acceptingInput: true,
+        acceptingOutput: true,
+        closePromise: null,
+        release,
+      };
+      active = project;
+
+      if (shutdownRequested) {
+        project.acceptingInput = false;
+        try {
+          await closeProjectRuntime(project);
+          if (active === project) active = null;
+        } catch (error) {
+          poison = error;
+        }
+        throw closedOwnerError();
+      }
+
+      try {
+        playground.send({
+          type: 'workbench:playground-project-opened',
+          opId: message.opId,
+          projectToken: token,
+          projectRoot,
+          acquisition,
+          runtime: runtimeDecision(definition),
+          initialScmSnapshot: runtime.playgroundTools.initialScmSnapshot,
+          ...(initialTerminalState === undefined ? {} : { initialTerminalState }),
+        });
+      } catch (error) {
+        project.acceptingInput = false;
+        try {
+          await closeProjectRuntime(project);
+          if (active === project) active = null;
+        } catch (closeError) {
+          poison = closeError;
+          throw new AggregateError([error, closeError], 'Playground open reply and cleanup failed');
+        }
+        throw error;
+      }
+    } catch (error) {
+      let failure = error;
+      if (opened !== null) {
+        try {
+          await opened.close();
+        } catch (closeError) {
+          failure = new AggregateError(
+            [failure, closeError],
+            'Playground project open and cleanup failed',
+          );
+        }
+      }
+      sendFailure(failure, message.opId);
+    }
+  };
+
+  const performPlaygroundCatalog = async (message: PlaygroundCatalogMessage): Promise<void> => {
+    try {
+      if (shutdownRequested) throw closedOwnerError();
+      if (poison !== undefined) throw poisonedError();
+      if (playground === undefined)
+        throw new TypeError('Playground companion owner is unavailable');
+      const command = message.command;
+      switch (command.kind) {
+        case 'create-scratch':
+          await playground.authority.createScratch({
+            definition: recreatePlaygroundProjectDefinition(
+              command.definition,
+              playground.urlContext,
+            ),
+            ...(command.preserveDirtySameStarter === undefined
+              ? {}
+              : { preserveDirtySameStarter: command.preserveDirtySameStarter }),
+          });
+          break;
+        case 'save-scratch':
+          await playground.authority.saveScratch({
+            id: command.id,
+            name: command.name,
+            definition: recreatePlaygroundProjectDefinition(
+              command.definition,
+              playground.urlContext,
+            ),
+          });
+          break;
+        case 'activate':
+          await playground.authority.activate(command.target);
+          break;
+        case 'rename':
+          await playground.authority.rename(command.id, command.name);
+          break;
+        case 'reset':
+          await playground.authority.reset({
+            target: command.target,
+            definition: recreatePlaygroundProjectDefinition(
+              command.definition,
+              playground.urlContext,
+            ),
+          });
+          break;
+        case 'delete':
+          await playground.authority.delete(command.id);
+          break;
+      }
+      if (shutdownRequested) throw closedOwnerError();
+      playground.send({ type: 'workbench:playground-catalog-completed', opId: message.opId });
+    } catch (error) {
+      sendFailure(error, message.opId);
+    }
+  };
+
   const performClose = async (message: CloseMessage, project: ActiveProject): Promise<void> => {
     try {
       await closeProjectRuntime(project);
@@ -297,6 +552,9 @@ export function createWorkbenchOwnerController(
       if (shutdownRequested) throw closedOwnerError();
       if (poison !== undefined) throw poisonedError();
       if (active !== null) throw new ProjectBusyError('Workbench');
+      if (playground !== undefined || materializer === undefined) {
+        throw new TypeError('Core project delete is unavailable in a Playground companion owner');
+      }
       await materializer.delete(message.id);
       if (shutdownRequested) throw closedOwnerError();
       send({ type: 'workbench:project-deleted', opId: message.opId, id: message.id });
@@ -322,6 +580,20 @@ export function createWorkbenchOwnerController(
     }
   };
 
+  const performPlaygroundTools = async (
+    frame: PagePlaygroundSessionToolsFrame,
+    project: ActiveProject,
+  ): Promise<void> => {
+    try {
+      const tools = project.runtime.playgroundTools;
+      if (tools === undefined)
+        throw new TypeError('Playground project session tools are unavailable');
+      await tools.handle(frame);
+    } catch (error) {
+      sendFailure(error);
+    }
+  };
+
   const requestShutdown = (): Promise<void> => {
     if (shutdownPromise !== null) return shutdownPromise;
     shutdownRequested = true;
@@ -340,7 +612,7 @@ export function createWorkbenchOwnerController(
       }
       if (poison !== undefined) appendUnique(failures, poison);
       try {
-        await materializer.close();
+        await closeAuthority();
       } catch (error) {
         appendUnique(failures, error);
       }
@@ -351,6 +623,34 @@ export function createWorkbenchOwnerController(
   };
 
   const handle = (value: unknown): Promise<void> => {
+    if (isPageToPlaygroundOwnerMessage(value)) {
+      if (playground === undefined) {
+        return rejectImmediately(
+          new TypeError('Playground companion owner is unavailable'),
+          recoverPlaygroundOperationId(value),
+        );
+      }
+      let message: PageToPlaygroundOwnerMessage;
+      try {
+        message = inspectPageToPlaygroundOwnerMessage(value, playground.urlContext);
+      } catch (error) {
+        return rejectImmediately(error, recoverPlaygroundOperationId(value));
+      }
+      if (shutdownRequested) {
+        return rejectImmediately(closedOwnerError(), 'opId' in message ? message.opId : undefined);
+      }
+      if (message.type === 'workbench:playground-project-tools') {
+        if (poison !== undefined) return rejectImmediately(poisonedError());
+        const project = active;
+        if (project === null || !project.acceptingInput || project.token !== message.projectToken) {
+          return rejectImmediately(inactiveTokenError());
+        }
+        return performPlaygroundTools(message.frame, project);
+      }
+      return message.type === 'workbench:playground-open-project'
+        ? enqueue(() => performPlaygroundOpen(message))
+        : enqueue(() => performPlaygroundCatalog(message));
+    }
     let message: PageToWorkbenchOwnerMessage;
     try {
       message = inspectPageToWorkbenchOwnerMessage(value);
@@ -390,6 +690,14 @@ export function createWorkbenchOwnerController(
   };
 
   return Object.freeze({ handle, lifetime });
+}
+
+function recoverPlaygroundOperationId(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.opId === 'string' && candidate.opId.length > 0
+    ? candidate.opId
+    : undefined;
 }
 
 function recoverOperationId(value: unknown): string | undefined {

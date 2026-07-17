@@ -1,3 +1,4 @@
+import { serializePackageJson } from '@riftydev/npm-client';
 import {
   DEFAULT_VITE8_CONFIG_JS,
   DEFAULT_VITE8_CONFIG_PATH,
@@ -209,17 +210,6 @@ function mergeDependencies(
   return { ...(base ?? {}), ...(overrides ?? {}) };
 }
 
-type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-
-function canonicalJson(value: JsonValue): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  return `{${Object.keys(value)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key] as JsonValue)}`)
-    .join(',')}}`;
-}
-
 function parseManifest(files: Record<string, Uint8Array>): Record<string, unknown> {
   const bytes = files['/package.json'];
   if (bytes === undefined) return {};
@@ -270,7 +260,7 @@ function normalizeManifest(
   if (devDependencies === undefined) Reflect.deleteProperty(manifest, 'devDependencies');
   else manifest.devDependencies = devDependencies;
   // TODO(backlog: playground/workbench-implicit-vite-module-scope)
-  files['/package.json'] = encoder.encode(`${canonicalJson(manifest as JsonValue)}\n`);
+  files['/package.json'] = encoder.encode(serializePackageJson(manifest));
   return (
     viteVersion === undefined && dependencyVite === undefined && devDependencyVite === undefined
   );
@@ -309,7 +299,7 @@ function normalizeNodeManifest(
     scripts.dev = nodeProjectShellCommand(serverEntryPath, []);
     manifest.scripts = scripts;
   }
-  files['/package.json'] = encoder.encode(`${canonicalJson(manifest as JsonValue)}\n`);
+  files['/package.json'] = encoder.encode(serializePackageJson(manifest));
 }
 
 function nodeEntryPath(value: unknown, files: Record<string, Uint8Array>): string {

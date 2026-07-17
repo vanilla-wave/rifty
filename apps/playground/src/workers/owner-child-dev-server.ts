@@ -26,6 +26,7 @@ import type { NodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 export interface DevServerChildSpawnParams extends ChildTerminalContext {
   readonly cfg: NodeServerPackageConfig;
   readonly env: Readonly<Record<string, string>>;
+  readonly remoteFsRoot?: string;
   readonly previewScope?: string;
 }
 
@@ -40,6 +41,7 @@ export function buildDevServerChildSpawnSpec(
       nodeWorkerRuntime,
       cfg: params.cfg,
       terminal: childTerminalBootstrap(params),
+      ...(params.remoteFsRoot === undefined ? {} : { remoteFsRoot: params.remoteFsRoot }),
       ...(params.previewScope === undefined ? {} : { previewScope: params.previewScope }),
     }),
     argv: ['rifty', params.cfg.entryPath],

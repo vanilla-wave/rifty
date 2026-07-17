@@ -60,6 +60,35 @@ import * as monaco from 'monaco-editor';
 import { lspToMonacoRange, monacoToLspPosition, monacoToLspRange } from './lsp-position.ts';
 import type { TsLanguageServiceClient } from './ts-ls-client.ts';
 
+/** Semantic query surface consumed by Monaco; transport/lifecycle stay outside this seam. */
+export type TsLanguageServiceProviderClient = Pick<
+  TsLanguageServiceClient,
+  | 'getCodeFixes'
+  | 'getCombinedCodeFix'
+  | 'getCompletionDetails'
+  | 'getCompletions'
+  | 'getDefinitionLinks'
+  | 'getDocumentHighlights'
+  | 'getDocumentSymbols'
+  | 'getEncodedSemanticClassifications'
+  | 'getFoldingRanges'
+  | 'getFormattingEdits'
+  | 'getImplementation'
+  | 'getInlayHints'
+  | 'getLinkedEditingRange'
+  | 'getOnTypeFormattingEdits'
+  | 'getQuickInfo'
+  | 'getRangeFormattingEdits'
+  | 'getRefactorActions'
+  | 'getReferences'
+  | 'getRenameEdits'
+  | 'getSelectionRange'
+  | 'getSignatureHelp'
+  | 'getTypeDefinition'
+  | 'organizeImports'
+  | 'prepareRename'
+>;
+
 /** The marker owner the rifty diagnostics pass sets (mirrors `EditorHost.setMarkers`). */
 const RIFTY_MARKER_OWNER = 'rifty-ts';
 /** LSP `CodeActionKind` for the organize-imports source action. */
@@ -748,7 +777,7 @@ export interface TsLanguageServiceProviderOptions {
  * no stale provider pointing at a disposed client).
  */
 export function registerTsLanguageServiceProviders(
-  client: TsLanguageServiceClient,
+  client: TsLanguageServiceProviderClient,
   bridge: EditorPathBridge,
   options: TsLanguageServiceProviderOptions = {},
 ): TsLanguageServiceProvidersHandle {

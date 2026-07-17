@@ -15,7 +15,46 @@ function prototypeKeyMap(version: string): Readonly<Record<string, string>> {
   return parsed as Readonly<Record<string, string>>;
 }
 
+function currentManifest(definition: ReturnType<typeof inspectProjectDefinition>): Uint8Array {
+  const bytes = definition.files['/package.json'];
+  if (bytes === undefined) throw new Error('test definition omitted normalized /package.json');
+  return bytes;
+}
+
 describe('Workbench package config', () => {
+  it('reserves clean-start install preparation for install-first projects', () => {
+    const definition = inspectProjectDefinition(
+      projects.vite({ id: 'config-materialization', files: { '/index.html': '<h1>A</h1>' } }),
+    );
+    const instant = Object.freeze({
+      ...definition,
+      templateId: 'vite',
+      firstMaterialization: Object.freeze({
+        kind: 'snapshot' as const,
+        snapshot: Object.freeze({
+          snapshotId: `sha256:${'0'.repeat(64)}`,
+          assetUrl: '/snapshot.json.gz',
+          templateId: 'vite',
+        }),
+      }),
+    });
+    const fromScratch = Object.freeze({
+      ...definition,
+      templateId: 'vite',
+      firstMaterialization: Object.freeze({ kind: 'install' as const }),
+    });
+    const options = { packageJsonBytes: currentManifest(definition) };
+
+    expect(
+      workbenchPackageConfig(instant, '/owner/projects/config-materialization', options)
+        .fromScratch,
+    ).toBe(false);
+    expect(
+      workbenchPackageConfig(fromScratch, '/owner/projects/config-materialization', options)
+        .fromScratch,
+    ).toBe(true);
+  });
+
   it('preserves the owner-revalidated manifest and binds only the owner-born root', () => {
     const definition = inspectProjectDefinition(
       projects.vite({
@@ -33,7 +72,9 @@ describe('Workbench package config', () => {
     );
     const expectedManifest = new TextDecoder().decode(definition.files['/package.json']);
 
-    const config = workbenchPackageConfig(definition, '/owner/projects/config-a');
+    const config = workbenchPackageConfig(definition, '/owner/projects/config-a', {
+      packageJsonBytes: currentManifest(definition),
+    });
 
     expect(config).toMatchObject({
       templateId: 'config-a',
@@ -53,6 +94,67 @@ describe('Workbench package config', () => {
     expect(config.cfg.packageJson).toBe(expectedManifest);
   });
 
+  it('uses the current owner-tree manifest when reopening a user-extended project', () => {
+    const definition = inspectProjectDefinition(
+      projects.vite({
+        id: 'config-reopen',
+        files: { '/index.html': '<h1>Reopen</h1>' },
+        dependencies: { vite: '8.0.16' },
+      }),
+    );
+    const currentManifest = `${JSON.stringify({
+      name: 'user-extended-project',
+      version: '2.0.0',
+      type: 'module',
+      dependencies: { vite: '8.0.16', cowsay: '1.6.0' },
+    })}\n`;
+
+    const config = workbenchPackageConfig(definition, '/owner/projects/config-reopen', {
+      packageJsonBytes: new TextEncoder().encode(currentManifest),
+    });
+
+    expect(config.cfg).toMatchObject({
+      packageName: 'user-extended-project',
+      packageVersion: '2.0.0',
+      packageJson: currentManifest,
+      installDeps: { vite: '8.0.16', cowsay: '1.6.0' },
+    });
+  });
+
+  it('retains exact explicit node_modules seed bytes outside the runtime bootstrap config', () => {
+    const binary = new Uint8Array([0, 255, 7, 128]);
+    const definition = inspectProjectDefinition(
+      projects.vite({
+        id: 'config-template-node-modules',
+        files: {
+          '/index.html': '<h1>Typed fixture</h1>',
+          '/src/main.ts': 'export {}\n',
+          '/node_modules/@rifty/example-types/index.d.ts': 'declare const fixture: true;\n',
+          '/node_modules/@rifty/example-types/fixture.bin': binary,
+        },
+      }),
+    );
+
+    const config = workbenchPackageConfig(
+      definition,
+      '/owner/projects/config-template-node-modules',
+      { packageJsonBytes: currentManifest(definition) },
+    );
+    const seedFiles = Reflect.get(config, 'templateNodeModulesFiles') as unknown;
+
+    expect(config.cfg.seedFiles).toEqual({});
+    expect(seedFiles).toEqual({
+      '/owner/projects/config-template-node-modules/node_modules/@rifty/example-types/index.d.ts':
+        new TextEncoder().encode('declare const fixture: true;\n'),
+      '/owner/projects/config-template-node-modules/node_modules/@rifty/example-types/fixture.bin':
+        binary,
+    });
+    expect(Object.isFrozen(seedFiles)).toBe(true);
+    expect(Reflect.ownKeys(seedFiles as object)).not.toContain(
+      '/owner/projects/config-template-node-modules/src/main.ts',
+    );
+  });
+
   // Fault classes: corrupt-input + lossy-aggregate. Package acquisition must
   // receive the same own dependency keys carried by the normalized manifest.
   it('preserves prototype-colliding dependencies consistently in installDeps', () => {
@@ -66,6 +168,7 @@ describe('Workbench package config', () => {
     const config = workbenchPackageConfig(
       definition,
       '/owner/projects/config-prototype-dependency',
+      { packageJsonBytes: currentManifest(definition) },
     );
     const parsedManifest: unknown = JSON.parse(config.cfg.packageJson);
     if (
@@ -102,36 +205,39 @@ describe('Workbench package config', () => {
       projects.vite({ id: 'config-b', files: { '/index.html': '<h1>B</h1>' } }),
     );
 
-    expect(() => workbenchPackageConfig(definition, 'projects/config-b')).toThrow(/absolute/i);
-    expect(() => workbenchPackageConfig(definition, '/projects/../config-b')).toThrow(
+    const options = { packageJsonBytes: currentManifest(definition) };
+    expect(() => workbenchPackageConfig(definition, 'projects/config-b', options)).toThrow(
+      /absolute/i,
+    );
+    expect(() => workbenchPackageConfig(definition, '/projects/../config-b', options)).toThrow(
       /normalized/i,
     );
   });
 
   it('maps finite Node metadata into exact owner-rooted package configs', () => {
     const files = { '/src/main.mjs': 'console.log("node");\n' };
-    const server = workbenchPackageConfig(
-      inspectProjectDefinition(
-        defineNodeServerProject({
-          id: 'config-server',
-          files,
-          entryPath: '/src/main.mjs',
-          port: 4321,
-        }),
-      ),
-      '/owner/projects/config-server',
+    const serverDefinition = inspectProjectDefinition(
+      defineNodeServerProject({
+        id: 'config-server',
+        files,
+        entryPath: '/src/main.mjs',
+        port: 4321,
+      }),
     );
-    const cli = workbenchPackageConfig(
-      inspectProjectDefinition(
-        defineNodeCliProject({
-          id: 'config-cli',
-          files,
-          entryPath: '/src/main.mjs',
-          args: ['--format', 'json'],
-        }),
-      ),
-      '/owner/projects/config-cli',
+    const server = workbenchPackageConfig(serverDefinition, '/owner/projects/config-server', {
+      packageJsonBytes: currentManifest(serverDefinition),
+    });
+    const cliDefinition = inspectProjectDefinition(
+      defineNodeCliProject({
+        id: 'config-cli',
+        files,
+        entryPath: '/src/main.mjs',
+        args: ['--format', 'json'],
+      }),
     );
+    const cli = workbenchPackageConfig(cliDefinition, '/owner/projects/config-cli', {
+      packageJsonBytes: currentManifest(cliDefinition),
+    });
 
     expect(server.cfg).toMatchObject({
       runtime: 'node-server',

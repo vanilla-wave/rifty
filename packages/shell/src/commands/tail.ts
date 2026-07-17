@@ -9,9 +9,9 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { type FsSync, syncMirror } from '@riftydev/vfs';
+import type { FsSync } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, readAllStdin, resolve } from './_shared.ts';
+import { commandFileSystem, dec, readAllStdin, resolve } from './_shared.ts';
 
 type Unit = 'lines' | 'bytes';
 /** `from > 0` ⇒ start at 1-based index `from` (the `+N` form); else take last `count`. */
@@ -147,7 +147,7 @@ export const tail: ShellCommand = async (args, ctx) => {
     return 1;
   }
 
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   const files = parsed.files.length > 0 ? parsed.files : ['-'];
   const showHeaders = parsed.verbose || (!parsed.quiet && files.length > 1);
   let status = 0;

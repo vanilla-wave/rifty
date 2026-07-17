@@ -30,6 +30,7 @@ export interface WorkbenchOwnerBootConfig {
       readonly kernel: string;
       readonly node: string;
       readonly devServer: string;
+      readonly typescript?: string;
     };
     readonly wasm: { readonly sqlite: string; readonly esbuild: string };
     readonly previewProbeTimeoutMs: number;
@@ -43,6 +44,11 @@ export interface WorkbenchOwnerBootConfig {
     };
   };
   readonly storage: { readonly persistence: 'required' | 'preferred' | 'ephemeral' };
+  readonly legacyWorkspacePrefix?: string;
+  readonly playgroundUrlContext?: {
+    readonly apiBaseUrl: string;
+    readonly clientUrl: string;
+  };
 }
 
 type PageProjectPtyFrame = Exclude<PageToOwnerFrame, PtyPreviewReq>;
@@ -188,12 +194,24 @@ export function inspectPageToWorkbenchOwnerMessage(value: unknown): PageToWorkbe
 
 function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   const config = record(value, 'owner boot config');
-  exact(config, ['deployment', 'packageAcquisition', 'storage'], 'owner boot config');
+  exact(
+    config,
+    optionalKeys(
+      config,
+      ['deployment', 'packageAcquisition', 'storage'],
+      ['legacyWorkspacePrefix', 'playgroundUrlContext'],
+    ),
+    'owner boot config',
+  );
 
   const deployment = record(config.deployment, 'owner boot deployment');
   exact(deployment, ['workers', 'wasm', 'previewProbeTimeoutMs'], 'owner boot deployment');
   const workers = record(deployment.workers, 'owner boot workers');
-  exact(workers, ['kernel', 'node', 'devServer'], 'owner boot workers');
+  exact(
+    workers,
+    optionalKeys(workers, ['kernel', 'node', 'devServer'], ['typescript']),
+    'owner boot workers',
+  );
   const wasm = record(deployment.wasm, 'owner boot wasm');
   exact(wasm, ['sqlite', 'esbuild'], 'owner boot wasm');
   const previewProbeTimeoutMs = positiveFinite(
@@ -233,6 +251,9 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
       kernel: nonEmptyString(workers.kernel, 'owner boot kernel worker'),
       node: nonEmptyString(workers.node, 'owner boot node worker'),
       devServer: nonEmptyString(workers.devServer, 'owner boot dev-server worker'),
+      ...(own(workers, 'typescript')
+        ? { typescript: nonEmptyString(workers.typescript, 'owner boot TypeScript worker') }
+        : {}),
     }),
     wasm: Object.freeze({
       sqlite: nonEmptyString(wasm.sqlite, 'owner boot sqlite wasm'),
@@ -244,10 +265,31 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     registryUrl: nonEmptyString(packageAcquisition.registryUrl, 'owner boot registryUrl'),
     ...(eddy === undefined ? {} : { eddy }),
   });
+  let legacyWorkspacePrefix: string | undefined;
+  if (own(config, 'legacyWorkspacePrefix')) {
+    const candidate = nonEmptyString(
+      config.legacyWorkspacePrefix,
+      'owner boot legacy workspace prefix',
+    );
+    if (!/^\/workspaces\/[A-Za-z0-9._-]+$/.test(candidate)) {
+      throw invalid('owner boot legacy workspace prefix');
+    }
+    legacyWorkspacePrefix = candidate;
+  }
+  let playgroundUrlContext: WorkbenchOwnerBootConfig['playgroundUrlContext'];
+  if (own(config, 'playgroundUrlContext')) {
+    const context = record(config.playgroundUrlContext, 'owner boot Playground URL context');
+    exact(context, ['apiBaseUrl', 'clientUrl'], 'owner boot Playground URL context');
+    const apiBaseUrl = absoluteHttpUrl(context.apiBaseUrl, 'owner boot Playground API base URL');
+    const clientUrl = absoluteHttpUrl(context.clientUrl, 'owner boot Playground client URL');
+    playgroundUrlContext = Object.freeze({ apiBaseUrl, clientUrl });
+  }
   return Object.freeze({
     deployment: frozenDeployment,
     packageAcquisition: frozenAcquisition,
     storage: Object.freeze({ persistence: storage.persistence }),
+    ...(legacyWorkspacePrefix === undefined ? {} : { legacyWorkspacePrefix }),
+    ...(playgroundUrlContext === undefined ? {} : { playgroundUrlContext }),
   });
 }
 
@@ -691,6 +733,20 @@ function absoluteProjectRoot(value: unknown): string {
 function nonEmptyString(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.length === 0) throw invalid(label);
   return value;
+}
+
+function absoluteHttpUrl(value: unknown, label: string): string {
+  const candidate = nonEmptyString(value, label);
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    throw invalid(label);
+  }
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) {
+    throw invalid(label);
+  }
+  return url.href;
 }
 
 function string(value: unknown, label: string): string {

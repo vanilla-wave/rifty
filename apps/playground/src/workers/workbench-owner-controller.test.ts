@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { PlaygroundOwnerToPageMessage } from '../workbench/internal/playground-owner-protocol.ts';
+import {
+  definePlaygroundProject,
+  playgroundProjectDefinitionWire,
+} from '../workbench/internal/playground-project-definition.ts';
 import {
   type OwnerProjectToken,
   type WorkbenchOwnerToPageMessage,
@@ -10,6 +15,7 @@ import {
   projects,
 } from '../workbench/project-definition.ts';
 import type { ProjectMaterializer } from '../workbench/project-materialization.ts';
+import type { PlaygroundProjectAuthority } from './playground-project-authority.ts';
 import {
   type WorkbenchOwnerProjectRuntime,
   type WorkbenchOwnerProjectRuntimeInput,
@@ -172,6 +178,173 @@ function vfsMessage(projectToken: OwnerProjectToken) {
 }
 
 describe('Workbench owner controller', () => {
+  it('routes companion open/catalog through one authority and releases it after runtime teardown', async () => {
+    const urlContext = Object.freeze({
+      apiBaseUrl: 'https://playground.test/app/',
+      clientUrl: 'https://playground.test/app/index.html',
+    });
+    const definition = definePlaygroundProject(
+      {
+        kind: 'vite',
+        id: 'scratch',
+        starterId: 'starter-a',
+        templateId: 'vite-v1',
+        files: { '/package.json': '{"scripts":{"dev":"vite"}}\n' },
+        port: 5174,
+        firstMaterialization: { kind: 'install' },
+      },
+      urlContext,
+    );
+    const events: string[] = [];
+    const release = vi.fn(async () => {
+      events.push('authority-release');
+    });
+    const openedProject = Object.freeze({
+      projectKey: 'scratch',
+      projectRoot: '/.rifty/workbench/v1/projects/scratch/tree',
+      acquisition: Object.freeze({ kind: 'install' as const, snapshotFailures: Object.freeze([]) }),
+      initialTerminalState: Object.freeze({
+        cwd: '/',
+        env: Object.freeze({ PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' }),
+      }),
+      close: release,
+    });
+    const authority = {
+      openProject: vi.fn(async () => openedProject),
+      recordMutation: vi.fn(async () => {}),
+      rename: vi.fn(async () => ({ active: null, scratch: null, projects: [] })),
+    } as unknown as PlaygroundProjectAuthority;
+    const coreMessages: WorkbenchOwnerToPageMessage[] = [];
+    const companionMessages: PlaygroundOwnerToPageMessage[] = [];
+    const runtimeClose = vi.fn(async () => {
+      events.push('runtime-close');
+    });
+    const playgroundTools = {
+      initialScmSnapshot: Object.freeze({ history: Object.freeze([]), changes: Object.freeze([]) }),
+      handle: vi.fn(async () => {}),
+    };
+    const closeAuthority = vi.fn(async () => {
+      events.push('owner-close');
+    });
+    let createdInput: WorkbenchOwnerProjectRuntimeInput | undefined;
+    const createProject = vi.fn(async (input: WorkbenchOwnerProjectRuntimeInput) => {
+      createdInput = input;
+      return {
+        handleFrame: vi.fn(),
+        playgroundTools,
+        close: runtimeClose,
+      };
+    });
+    const controller = createWorkbenchOwnerController({
+      closeAuthority,
+      createProject,
+      generateProjectToken: () => 'companion-token',
+      send: (message) => coreMessages.push(message),
+      playground: {
+        urlContext,
+        authority,
+        send: (message) => companionMessages.push(message),
+      },
+    });
+
+    await controller.handle({
+      type: 'workbench:playground-open-project',
+      opId: 'open-companion',
+      definition: playgroundProjectDefinitionWire(definition),
+      initialTerminalState: {
+        cwd: '/stale',
+        env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+      },
+    });
+    expect(authority.openProject).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        cwd: '/stale',
+        env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+      }),
+    );
+    expect(companionMessages).toEqual([
+      {
+        type: 'workbench:playground-project-opened',
+        opId: 'open-companion',
+        projectToken: 'companion-token',
+        projectRoot: '/.rifty/workbench/v1/projects/scratch/tree',
+        acquisition: { kind: 'install', snapshotFailures: [] },
+        runtime: { kind: 'vite', port: 5174 },
+        initialScmSnapshot: { history: [], changes: [] },
+        initialTerminalState: {
+          cwd: '/',
+          env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+        },
+      },
+    ]);
+    expect(coreMessages).toEqual([]);
+
+    if (createdInput === undefined) throw new Error('Companion project input was not captured');
+    if (createdInput.recordMutation === undefined) {
+      throw new Error('Companion project mutation recorder was not captured');
+    }
+    await createdInput.recordMutation('file', 42);
+    expect(authority.recordMutation).toHaveBeenCalledWith({
+      kind: 'file',
+      project: openedProject,
+      treeRevision: 42,
+    });
+    createdInput.emit({
+      type: 'playground-tools',
+      frame: {
+        type: 'workbench:playground-session-tools-scm-snapshot',
+        snapshot: { history: [], changes: [] },
+      },
+    });
+    expect(companionMessages.at(-1)).toEqual({
+      type: 'workbench:playground-project-tools',
+      projectToken: 'companion-token',
+      frame: {
+        type: 'workbench:playground-session-tools-scm-snapshot',
+        snapshot: { history: [], changes: [] },
+      },
+    });
+
+    await controller.handle({
+      type: 'workbench:playground-project-tools',
+      projectToken: createOwnerProjectToken(() => 'companion-token'),
+      frame: {
+        type: 'workbench:playground-session-tools-request',
+        requestId: 'refresh-1',
+        operation: { type: 'scm:refresh' },
+      },
+    });
+    expect(playgroundTools.handle).toHaveBeenCalledWith({
+      type: 'workbench:playground-session-tools-request',
+      requestId: 'refresh-1',
+      operation: { type: 'scm:refresh' },
+    });
+
+    await controller.handle({
+      type: 'workbench:close-project',
+      opId: 'close-companion',
+      projectToken: createOwnerProjectToken(() => 'companion-token'),
+    });
+    expect(events).toEqual(['runtime-close', 'authority-release']);
+
+    await controller.handle({
+      type: 'workbench:playground-catalog',
+      opId: 'rename-companion',
+      command: { kind: 'rename', id: 'project-a', name: 'Renamed' },
+    });
+    expect(authority.rename).toHaveBeenCalledWith('project-a', 'Renamed');
+    expect(companionMessages.at(-1)).toEqual({
+      type: 'workbench:playground-catalog-completed',
+      opId: 'rename-companion',
+    });
+
+    await controller.handle({ type: 'workbench:shutdown' });
+    await controller.lifetime;
+    expect(closeAuthority).toHaveBeenCalledTimes(1);
+    expect(events.at(-1)).toBe('owner-close');
+  });
+
   it('revalidates exact wire bytes at owner ingress and recovers after a failed open', async () => {
     const h = harness();
     const valid = definitionWire();

@@ -41,6 +41,11 @@ export function saveAffordance(storage: StorageMode): SaveAffordance {
     : { label: 'Saved', badge: 'UNSAVED', tone: 'ok', ephemeral: false };
 }
 
+/** Cmd/Ctrl+S acknowledgement must expose whether bytes survive this session. */
+export function workspaceSaveMessage(storage: StorageMode): string {
+  return storage === 'memory' ? 'Saved for this session · EPHEMERAL' : 'Saved';
+}
+
 export interface StorageChip {
   readonly label: string;
   readonly tone: 'ok' | 'warn';

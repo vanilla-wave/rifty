@@ -2,10 +2,10 @@ import { type Page, expect, test } from '@playwright/test';
 import {
   bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
-  waitForViteBootOrIdleShell,
 } from './helpers/playground.ts';
 
 // Echo-confirmed line entry (copied from cross-realm-http-loopback.spec.ts): a
@@ -68,18 +68,19 @@ test.describe('cross-realm EADDRINUSE between two node realms (ADR-0186)', () =>
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    // Cross-realm behavior only needs a stable shell. Default Vite autorun is
-    // pinned elsewhere; CI retries can legitimately land on an already-idle
-    // shell, so don't fail before the net contract starts.
-    const initialTerminal = await waitForViteBootOrIdleShell(page);
-
-    // Free Terminal 1 if the dev server is occupying it, so it can host server A.
-    await page.locator('[data-testid="terminal"]').click();
-    if (initialTerminal === 'vite-booted') await page.keyboard.press('Control+c');
+    // Wait for the retained primary run, stop it, then reuse that exact session.
+    await expectViteDevServerReady(page);
+    await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
+    await page.keyboard.press('Control+c');
+    await expect(page.locator('.rf-terminal-tab[data-active="true"]')).toHaveAttribute(
+      'data-running',
+      'false',
+      { timeout: 15_000 },
+    );
     await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toMatch(/>\s*$/u);
 
-    // Realm A — binds 4112 in Terminal 1's supervised child and stays alive.
-    await runLineConfirmed(page, `echo '${SERVER_A_SRC}' > /scratch/server-a.js`);
+    // Realm A — binds 4112 in the active session's supervised child and stays alive.
+    await runLineConfirmed(page, `echo '${SERVER_A_SRC}' > server-a.js`);
     await runLineConfirmed(page, 'node server-a.js');
 
     // A owns the port → the switcher gains :4112 (also proves A's claim won and it
@@ -93,7 +94,7 @@ test.describe('cross-realm EADDRINUSE between two node realms (ADR-0186)', () =>
     // Realm B — a SECOND supervised child binding the SAME port. Its claim is
     // denied by A → Node-shaped EADDRINUSE, no 'listening'.
     await openShellTerminal(page);
-    await runLineConfirmed(page, `echo '${SERVER_B_SRC}' > /scratch/server-b.js`);
+    await runLineConfirmed(page, `echo '${SERVER_B_SRC}' > server-b.js`);
     await runLineConfirmed(page, 'node server-b.js');
 
     // B printed the EADDRINUSE code (the '.on("error")' branch), NOT the

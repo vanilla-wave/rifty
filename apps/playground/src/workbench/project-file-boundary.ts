@@ -1,3 +1,4 @@
+import type { PersistFailure } from '@riftydev/vfs';
 import {
   type HostCommitAck,
   VfsCommitAppliedError,
@@ -120,6 +121,25 @@ export function toProjectPath(projectRoot: string, ownerPath: string): string {
     throw new TypeError('Owner entry is outside the project');
   }
   return assertProjectPath(ownerPath.slice(projectRoot.length), { allowRoot: true });
+}
+
+/** Owner paths with no public project representation stay opaque. */
+export function projectPathOrOutside(projectRoot: string, ownerPath: string): string {
+  try {
+    return toProjectPath(projectRoot, ownerPath);
+  } catch {
+    return '[outside active project]';
+  }
+}
+
+/** One owner durability sample translated into the public project namespace. */
+export function formatProjectPersistenceFailure(
+  projectRoot: string,
+  failure: PersistFailure,
+): string {
+  const path = projectPathOrOutside(projectRoot, failure.path);
+  const message = failure.message.replaceAll(failure.path, path).replaceAll(projectRoot, '');
+  return `${failure.op} ${path}: ${message}`;
 }
 
 /** Strip owner-only entry fields and clone the stable public metadata. */

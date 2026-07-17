@@ -34,12 +34,13 @@ import { getKernelDispatcher, readKernelSyncApi } from '@riftydev/kernel';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { awaitDrain, installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
+import { awaitDrain, installConsole } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { syncMirror } from '@riftydev/vfs';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
+import { installNodeEntryRemoteFs } from './node-entry-remote-fs.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import {
   installNodeWorkerRuntimeConfig,
@@ -85,7 +86,7 @@ if (launch.remoteFs) {
   if (syncApi === null) {
     throw new Error('node-entry: remote owner fs requested but no kernel sync call published');
   }
-  const remoteFs = installRemoteSyncFs(syncApi.call);
+  const remoteFs = installNodeEntryRemoteFs(syncApi.call, launch.remoteFsRoot);
 
   // This realm owns the dispatcher for every kernel Worker it creates. Relay
   // the upstream-authoritative mirror so a nested Worker can load its entry/fs

@@ -149,6 +149,37 @@ describe('pre-entry gate (ADR-0157)', () => {
     expect(proc.stderr).toMatchObject({ isTTY: true, columns: 132, rows: 43 });
   });
 
+  it('keeps process argv/cwd public when the host launch carries a private remote-FS root', () => {
+    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const entry = buildNodeEntryWorkerEntry(
+      'https://host.test/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+      {
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        remoteFsRoot,
+        nodeServe: true,
+      },
+    );
+    publishKernelEntryBootstrap(entry.bootstrap ?? null);
+    const publicSpec = {
+      ...spec({ USER_VALUE: 'kept' }),
+      argv: ['rifty', '/src/server.js', '--port', '3000'],
+      cwd: '/',
+    };
+
+    installNodeRuntime(publicSpec);
+
+    const proc = (globalThis as { process?: unknown }).process as NodeProcess;
+    expect(proc.argv).toEqual(['rifty', '/src/server.js', '--port', '3000']);
+    expect(proc.cwd()).toBe('/');
+    expect(proc.env).toEqual({ USER_VALUE: 'kept' });
+    expect(JSON.stringify({ argv: proc.argv, cwd: proc.cwd(), env: proc.env })).not.toContain(
+      remoteFsRoot,
+    );
+  });
+
   it('Node worker: TTY stdout exposes cursor helpers and writes ANSI control sequences', async () => {
     const stdout = new MessageChannel();
     const s = spec();

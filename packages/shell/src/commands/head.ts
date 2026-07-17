@@ -8,9 +8,9 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, syncMirror } from '@riftydev/vfs';
+import { VfsError } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, readAllStdin, resolve } from './_shared.ts';
+import { commandFileSystem, dec, readAllStdin, resolve } from './_shared.ts';
 
 const NL = 0x0a; // '\n'
 
@@ -137,7 +137,7 @@ export const head: ShellCommand = async (args, ctx) => {
     return 1;
   }
 
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   const showHeaders = opts.headers === 'force' || (opts.headers === 'auto' && sources.length > 1);
   let status = 0;
   let printed = 0; // files actually emitted, for blank-line separators

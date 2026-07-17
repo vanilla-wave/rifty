@@ -18,19 +18,38 @@
  * `RIFTY_RFV_TEMPLATE`); each realm re-resolves the full spec locally.
  */
 
-import type {
-  NodeCliPackageConfig,
-  NodeServerPackageConfig,
-  ProjectPackageConfig,
-  VitePackageConfig,
-} from '../workbench/internal/project-package-config.ts';
+import { serializePackageJson } from '@riftydev/npm-client';
 
-export type {
-  NodeCliPackageConfig as NodeCliBootstrapConfig,
-  NodeServerPackageConfig as NodeServerBootstrapConfig,
-  ProjectPackageConfig as BootstrapConfig,
-  VitePackageConfig as ViteBootstrapConfig,
-} from '../workbench/internal/project-package-config.ts';
+interface BootstrapConfigBase {
+  readonly root: string;
+  readonly entryPath: string;
+  readonly packageName: string;
+  readonly packageVersion: string;
+  readonly installDeps: Readonly<Record<string, string>>;
+  readonly packageJson: string;
+  readonly seedFiles: Readonly<Record<string, string>>;
+  readonly bakedNodeModulesUrl?: string;
+  readonly bakedNodeModulesTemplateId?: string;
+}
+
+export interface ViteBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'vite';
+  readonly port: number;
+}
+
+export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'node-server';
+  readonly port: number;
+}
+
+export interface NodeCliBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'node-cli';
+}
+
+export type BootstrapConfig =
+  | ViteBootstrapConfig
+  | NodeServerBootstrapConfig
+  | NodeCliBootstrapConfig;
 
 export interface ProjectEntry {
   /** Root-relative entry path with a leading slash (e.g. `/src/main.js`). */
@@ -58,6 +77,8 @@ interface ProjectSpecBase {
    * an instant preset is truly instant. Absent → install as usual.
    */
   readonly bakedNodeModulesUrl?: string;
+  /** SHA-256 of the exact uncompressed serialized v2 snapshot bytes. */
+  readonly bakedNodeModulesSnapshotId?: string;
   /**
    * Template id recorded inside the baked snapshot. Defaults to this spec's id;
    * set when a template deliberately shares another template's node_modules tree.
@@ -192,19 +213,15 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
   const name = `rifty-${spec.id}-app`;
   const version = '0.0.0';
   const scripts = projectScripts(spec);
-  const json = `${JSON.stringify(
-    {
-      name,
-      version,
-      private: true,
-      type: 'module',
-      scripts,
-      dependencies: spec.install,
-      ...(spec.devDependencies ? { devDependencies: spec.devDependencies } : {}),
-    },
-    null,
-    2,
-  )}\n`;
+  const json = serializePackageJson({
+    name,
+    version,
+    private: true,
+    type: 'module',
+    scripts,
+    dependencies: spec.install,
+    ...(spec.devDependencies ? { devDependencies: spec.devDependencies } : {}),
+  });
   return { name, version, json };
 }
 
@@ -231,7 +248,7 @@ export function resolveBootstrapConfig(
   spec: ProjectSpec,
   port: number,
   root: string,
-): ProjectPackageConfig {
+): BootstrapConfig {
   const entryPath = `${root}${spec.entry.relativePath}`;
   const pkg = buildProjectPackageJson(spec);
   const base = {
@@ -254,9 +271,14 @@ export function resolveBootstrapConfig(
     };
     addExtraFiles(seedFiles, root, spec.extraFiles);
     if (spec.runtime === 'node-cli') {
-      return { ...base, runtime: 'node-cli', seedFiles } satisfies NodeCliPackageConfig;
+      return { ...base, runtime: 'node-cli', seedFiles } satisfies NodeCliBootstrapConfig;
     }
-    return { ...base, runtime: 'node-server', port, seedFiles } satisfies NodeServerPackageConfig;
+    return {
+      ...base,
+      runtime: 'node-server',
+      port,
+      seedFiles,
+    } satisfies NodeServerBootstrapConfig;
   }
   const seedFiles: Record<string, string> = {
     ...initializedGitFiles(root),
@@ -270,5 +292,5 @@ export function resolveBootstrapConfig(
     runtime: 'vite',
     port,
     seedFiles,
-  } satisfies VitePackageConfig;
+  } satisfies ViteBootstrapConfig;
 }

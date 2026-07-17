@@ -108,11 +108,13 @@ export function createNodePreviewRunHooks(options: {
   readonly cwd: string;
   readonly sid: string;
   readonly previewScope: string;
+  readonly remoteFsRoot?: string;
 }): NodeRunHooks {
   const origin = options.captureOrigin();
   return {
     sid: options.sid,
     previewScope: options.previewScope,
+    ...(options.remoteFsRoot === undefined ? {} : { remoteFsRoot: options.remoteFsRoot }),
     onListening: (sid, ports, previewScope) =>
       options.previews.addNode(sid, ports, previewScope ?? options.previewScope, {
         origin,

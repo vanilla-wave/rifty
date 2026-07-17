@@ -21,9 +21,14 @@ import { readEffectiveDeps } from '../src/glue/install-stamp.ts';
 import { buildProjectPackageJson } from '../src/templates/project-spec.ts';
 import { allProjectSpecs } from '../src/templates/registry.ts';
 import { assertRollupWasmNodeLockstep } from '../src/templates/rollup-lockstep.ts';
+import { type BakedSnapshotOutput, emitBakedSnapshotOutputs } from './baked-snapshot-identities.ts';
 
 const ROOT = '/workspace';
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), '../public');
+const identityManifestPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../src/generated/baked-snapshot-identities.json',
+);
 // D-004: env-overridable; npmjs is the canonical default for this build tool
 // (the in-browser proxy route is meaningless in Node).
 const registryBaseUrl = process.env.REGISTRY_BASE_URL ?? 'https://registry.npmjs.org';
@@ -33,6 +38,7 @@ if (baked.length === 0) {
   console.log('no templates declare bakedNodeModulesUrl — nothing to bake');
 }
 
+const outputs: BakedSnapshotOutput[] = [];
 for (const spec of baked) {
   const url = spec.bakedNodeModulesUrl;
   if (!url) continue;
@@ -61,9 +67,25 @@ for (const spec of baked) {
   const json = serializeDepSnapshot(snapshot);
   const gz = gzipSync(Buffer.from(json), { level: 9 });
   const outPath = join(publicDir, ...url.replace(/^\/+/, '').split('/'));
-  mkdirSync(dirname(outPath), { recursive: true });
-  writeFileSync(outPath, gz);
+  outputs.push({
+    id: spec.id,
+    assetUrl: url,
+    serializedBytes: Buffer.from(json),
+    compressedBytes: gz,
+  });
   console.log(
     `  ${spec.id}: ${result.packages.length} packages, ${(json.length / 1e6).toFixed(1)} MB json → ${(gz.length / 1e6).toFixed(1)} MB gz → ${outPath}`,
   );
 }
+
+await emitBakedSnapshotOutputs(outputs, {
+  async writeArtifact(assetUrl, bytes) {
+    const outPath = join(publicDir, ...assetUrl.replace(/^\/+/, '').split('/'));
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, bytes);
+  },
+  async writeIdentityManifest(contents) {
+    mkdirSync(dirname(identityManifestPath), { recursive: true });
+    writeFileSync(identityManifestPath, contents);
+  },
+});

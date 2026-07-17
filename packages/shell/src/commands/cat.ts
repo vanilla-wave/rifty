@@ -1,7 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, syncMirror } from '@riftydev/vfs';
+import { VfsError } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { enc, readAllStdin, resolve, strerror } from './_shared.ts';
+import { commandFileSystem, enc, readAllStdin, resolve, strerror } from './_shared.ts';
 
 interface Opts {
   numberAll: boolean; // -n
@@ -178,7 +178,7 @@ export const cat: ShellCommand = async (args, ctx) => {
     ctx.stderr.write('cat: missing argument\n');
     return 1;
   }
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   let exit = 0;
   let lineNo = 1; // GNU numbers across all files in one stream
   let stdinBytes: Uint8Array | null = null; // drained once, shared by every `-`

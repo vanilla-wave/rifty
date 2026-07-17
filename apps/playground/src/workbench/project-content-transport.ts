@@ -398,6 +398,7 @@ export function createProjectContentTransport(
       documents: controller.documents,
       invalidate: controller.invalidate,
       invalidateAll: controller.invalidateAll,
+      awaitOwnerByteAdmission: controller.awaitOwnerByteAdmission,
       preflightClose: controller.preflightClose,
       async close() {
         await controller.close();

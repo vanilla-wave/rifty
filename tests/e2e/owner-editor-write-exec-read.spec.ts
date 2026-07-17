@@ -17,13 +17,12 @@ import {
  * exec. Under the single-store-owner model the editor write travels over the
  * vfs-write bridge into the OWNER `syncMirror` — the same tree the shell reads.
  *
- * This drives the REAL page path: a keystroke into the Monaco file editor
- * debounces through `writeWorkspaceFile(<activeRoot>/src/main.js)` → owner. A
- * second shell then `cat`s that exact path and must see the NEW marker.
+ * This drives the REAL page path: a keystroke into the Monaco file editor writes
+ * `/src/main.js` in the active project's logical namespace. A second shell then
+ * `cat`s the same relative path and must see the NEW marker.
  *
- * ADR-0165 §4: the editor file path is ROOT-RELATIVE — the edit must land at
- * `<activeRoot>/src/main.js` (`/scratch` on boot), the path the dev server runs,
- * NOT the legacy hardcoded `/workspace`.
+ * ADR-0165 §4: page and shell share the logical project root `/`; neither surface
+ * exposes or hardcodes the backing storage root.
  *
  * Load-bearing: the marker is unique per run, so `cat` returning it cannot be a
  * stale-tree coincidence — it proves the page-originated write landed in the
@@ -43,19 +42,21 @@ test.describe('a page editor write is read back by exec in the owner', () => {
     test.setTimeout(60_000);
     await bootProjectFiles(page);
 
-    // Wait for the owner shell to be ready: terminal 1 echoes the boot dev line.
-    // By now the owner seed has run, so the edit below is not clobbered by a
-    // later seed write.
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
-    await expectViteDevServerReady(page, 5174, 90_000, 0);
+    // Capture the auto-started session by identity, then wait for its real Vite
+    // endpoint. The editor write below cannot be clobbered by a later seed.
+    const bootSlot = page.locator('.rf-terminal-slot[data-active="true"]');
+    await expect(bootSlot).toBeVisible({ timeout: 30_000 });
+    const bootSessionId = await bootSlot.getAttribute('data-session-id');
+    if (bootSessionId === null) throw new Error('Boot terminal has no session id');
+    const bootSession = Object.freeze({ sessionId: bootSessionId });
+    await expectViteDevServerReady(page, 5174, 90_000, bootSession);
 
     // A second idle shell on the same persistent owner — the reader.
     await openShellTerminal(page);
 
     // Edit the entry file through Monaco's real input path (no test-only setter):
     // prepend a unique marker comment at line 1. The change fires the ordinary
-    // file-tab owner write bridge → <activeRoot>/src/main.js in the owner syncMirror
-    // (ADR-0165 §4: root-relative, /scratch on boot).
+    // file-tab owner write bridge → `/src/main.js` in the active project.
     const marker = `editor-write-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const editor = page.locator('[data-testid="editor"]');
     const editorInput = editor.locator('textarea.inputarea').first();
@@ -71,13 +72,11 @@ test.describe('a page editor write is read back by exec in the owner', () => {
     // The edit is in the editor model (sanity: the write actually originated here).
     await expect(editorLines).toContainText(marker);
     await page.waitForTimeout(1_000);
-    expect(await terminalBuffer(page, 0)).not.toContain('module invalidation failed');
+    expect(await terminalBuffer(page, bootSession)).not.toContain('module invalidation failed');
 
-    // Exec reads the ROOT-RELATIVE entry path in the owner → the marker the
-    // editor just wrote is visible. The boot root is /scratch (ADR-0165 §4), so a
-    // `cat /workspace/...` would be a dead path — the edit lands at /scratch.
-    // Poll (the write crosses the page→owner IPC asynchronously).
-    await runTerminalLine(page, 'cat /scratch/src/main.js');
+    // Exec reads the same relative entry path. Poll because the write crosses
+    // page→owner IPC asynchronously.
+    await runTerminalLine(page, 'cat src/main.js');
     await expectTerminalContains(page, marker, 15_000);
   });
 });

@@ -8,6 +8,8 @@ import {
   ProjectDefinitionMismatchError,
   ProjectFileOperationError,
 } from './errors.ts';
+import type { PageToPlaygroundOwnerMessage } from './internal/playground-owner-protocol.ts';
+import { definePlaygroundProject } from './internal/playground-project-definition.ts';
 import type { PageToWorkbenchOwnerMessage } from './owner-protocol.ts';
 import {
   defineNodeCliProject,
@@ -33,15 +35,26 @@ const input: WorkbenchOwnerStartInput = Object.freeze({
   storage: Object.freeze({ persistence: 'ephemeral' as const }),
 });
 const encoder = new TextEncoder();
+const playgroundUrlContext = Object.freeze({
+  apiBaseUrl: 'https://playground.test/app/',
+  clientUrl: 'https://playground.test/app/index.html',
+});
+const companionInput: WorkbenchOwnerStartInput = Object.freeze({
+  ...input,
+  legacyWorkspacePrefix: '/workspaces/vite',
+  playgroundUrlContext,
+});
+
+type PageToPhysicalOwnerMessage = PageToWorkbenchOwnerMessage | PageToPlaygroundOwnerMessage;
 
 class FakeOwnerWorker extends EventEmitter {
   readonly kind = 'worker' as const;
-  readonly sent: PageToWorkbenchOwnerMessage[] = [];
+  readonly sent: PageToPhysicalOwnerMessage[] = [];
   readonly output = new EventEmitter();
   killedWith: string | null = null;
 
   send(message: unknown): boolean {
-    this.sent.push(message as PageToWorkbenchOwnerMessage);
+    this.sent.push(message as PageToPhysicalOwnerMessage);
     return true;
   }
 
@@ -136,6 +149,16 @@ function sentOf<T extends PageToWorkbenchOwnerMessage['type']>(
   );
 }
 
+function sentPlaygroundOf<T extends PageToPlaygroundOwnerMessage['type']>(
+  worker: FakeOwnerWorker,
+  type: T,
+): Extract<PageToPlaygroundOwnerMessage, { readonly type: T }>[] {
+  return worker.sent.filter(
+    (message): message is Extract<PageToPlaygroundOwnerMessage, { readonly type: T }> =>
+      message.type === type,
+  );
+}
+
 async function acceptOpenedProject(
   worker: FakeOwnerWorker,
   openRequest: Extract<PageToWorkbenchOwnerMessage, { readonly type: 'workbench:open-project' }>,
@@ -193,6 +216,399 @@ describe('browser Workbench owner transport', () => {
       cwd: '/',
       serve: false,
     });
+  });
+
+  it('admits a companion only after both readiness frames and maintains one exact catalog proxy', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(companionInput, dependencies(worker));
+    const companion = raw.playground;
+    if (companion === undefined) throw new Error('missing Playground companion handle');
+
+    let ready = false;
+    void raw.ready.then(() => {
+      ready = true;
+    });
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await settleMicrotasks();
+    expect(ready).toBe(false);
+
+    const initial = {
+      active: { kind: 'project', id: 'project-a' },
+      scratch: null,
+      projects: [
+        {
+          id: 'project-a',
+          name: 'Project A',
+          starterId: 'vite',
+          editedAt: '2026-07-16T12:00:00.000Z',
+        },
+      ],
+    };
+    worker.emit('message', { type: 'workbench:playground-ready', catalog: initial });
+    await raw.ready;
+
+    const admitted = companion.catalog.snapshot();
+    expect(admitted).toEqual(initial);
+    expect(Object.isFrozen(admitted)).toBe(true);
+    expect(Object.isFrozen(admitted.active)).toBe(true);
+    expect(Object.isFrozen(admitted.projects)).toBe(true);
+    expect(Object.isFrozen(admitted.projects[0])).toBe(true);
+
+    const observed: unknown[] = [];
+    const unsubscribe = companion.catalog.subscribe((snapshot) => observed.push(snapshot));
+    expect(observed).toEqual([admitted]);
+
+    const renaming = companion.catalog.rename('project-a', 'Renamed');
+    const request = sentPlaygroundOf(worker, 'workbench:playground-catalog').at(-1);
+    expect(request).toEqual({
+      type: 'workbench:playground-catalog',
+      opId: expect.any(String),
+      command: { kind: 'rename', id: 'project-a', name: 'Renamed' },
+    });
+    if (request === undefined) throw new Error('missing Playground catalog request');
+    let mutationSettled = false;
+    void renaming.then(() => {
+      mutationSettled = true;
+    });
+
+    const updated = {
+      ...initial,
+      projects: [{ ...initial.projects[0], name: 'Renamed' }],
+    };
+    worker.emit('message', { type: 'workbench:playground-catalog-updated', catalog: updated });
+    await settleMicrotasks();
+    expect(mutationSettled).toBe(false);
+    expect(observed).toEqual([admitted, companion.catalog.snapshot()]);
+    expect(Object.isFrozen(companion.catalog.snapshot().projects[0])).toBe(true);
+
+    worker.emit('message', {
+      type: 'workbench:playground-catalog-completed',
+      opId: request.opId,
+    });
+    await expect(renaming).resolves.toBe(companion.catalog.snapshot());
+    unsubscribe();
+
+    raw.close();
+    worker.emit('exit', 0, null);
+    await raw.closed;
+  });
+
+  it('opens the semantic companion project with owner decisions and token-gates session tools', async () => {
+    const worker = new FakeOwnerWorker();
+    const serviceWorker = new ControlledServiceWorkerContainer();
+    const deps = { ...dependencies(worker), serviceWorker };
+    const raw = startBrowserWorkspaceOwner(companionInput, deps);
+    const companion = raw.playground;
+    if (companion === undefined) throw new Error('missing Playground companion handle');
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    worker.emit('message', {
+      type: 'workbench:playground-ready',
+      catalog: {
+        active: { kind: 'scratch' },
+        scratch: {
+          starterId: 'vite',
+          dirty: false,
+          editedAt: '2026-07-16T12:00:00.000Z',
+        },
+        projects: [],
+      },
+    });
+    await raw.ready;
+
+    const definition = definePlaygroundProject(
+      {
+        kind: 'vite',
+        id: 'scratch',
+        starterId: 'vite',
+        templateId: 'vite',
+        files: { '/index.html': '<main>Companion</main>' },
+        firstMaterialization: { kind: 'install' },
+        port: 4173,
+      },
+      playgroundUrlContext,
+    );
+    const initialEnv = { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' };
+    const initialTerminalState = { cwd: '/src', env: initialEnv };
+    const opening = companion.openProject(definition, { initialTerminalState });
+    initialTerminalState.cwd = '/mutated-after-admission';
+    initialEnv.PATH = '/mutated-after-admission';
+    const openRequest = sentPlaygroundOf(worker, 'workbench:playground-open-project')[0];
+    if (openRequest === undefined) throw new Error('missing Playground open request');
+    expect(openRequest).toMatchObject({
+      initialTerminalState: {
+        cwd: '/src',
+        env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+      },
+    });
+    expect(sentOf(worker, 'workbench:open-project')).toEqual([]);
+
+    const snapshotId = `sha256:${'a'.repeat(64)}`;
+    worker.emit('message', {
+      type: 'workbench:playground-project-opened',
+      opId: openRequest.opId,
+      projectToken: 'playground-owner-token',
+      projectRoot: '/owner-born/playground/scratch',
+      acquisition: {
+        kind: 'install',
+        snapshotFailures: [{ snapshotId, reason: 'snapshot unavailable' }],
+      },
+      runtime: { kind: 'vite', port: 4321 },
+      initialScmSnapshot: { history: [], changes: [] },
+      initialTerminalState: {
+        cwd: '/src',
+        env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+      },
+    });
+    await acceptProjectSnapshot(
+      worker,
+      'playground-owner-token',
+      '/owner-born/playground/scratch',
+      [],
+    );
+    const project = await opening;
+    const openPty = sentOf(worker, 'workbench:project-pty').find(
+      (message) => message.frame.type === 'pty:open',
+    );
+    if (openPty?.frame.type !== 'pty:open') throw new Error('missing Playground PTY open');
+    expect(openPty.frame).toMatchObject({
+      cwd: '/owner-born/playground/scratch/src',
+      env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+    });
+    const extra = project.terminals.open();
+    const openPtys = sentOf(worker, 'workbench:project-pty').filter(
+      (message) => message.frame.type === 'pty:open',
+    );
+    expect(openPtys).toHaveLength(2);
+    expect(openPtys[1]?.frame).toMatchObject({
+      cwd: '/owner-born/playground/scratch/src',
+      env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+    });
+    expect(extra.snapshot()).toEqual({
+      cwd: '/src',
+      env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+    });
+    worker.emit('message', {
+      type: 'workbench:project-pty',
+      projectToken: 'playground-owner-token',
+      frame: { type: 'pty:ready', sid: openPty.frame.sid },
+    });
+
+    const run = project.run();
+    expect(run.terminal.snapshot()).toEqual({
+      cwd: '/src',
+      env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
+    });
+    await settleMicrotasks();
+    const exec = sentOf(worker, 'workbench:project-pty').find(
+      (message) => message.frame.type === 'pty:exec',
+    );
+    if (exec?.frame.type !== 'pty:exec') throw new Error('missing Playground runtime exec');
+    expect(exec.frame.line).toBe(
+      `echo '${snapshotId}: snapshot unavailable' && npm --prefix .. install && vite .. --port 4321`,
+    );
+    worker.emit('message', {
+      type: 'workbench:project-pty',
+      projectToken: 'playground-owner-token',
+      frame: { type: 'pty:run-ready', sid: exec.frame.sid, rid: exec.frame.rid },
+    });
+    worker.emit('message', {
+      type: 'workbench:project-pty',
+      projectToken: 'playground-owner-token',
+      frame: {
+        type: 'pty:exit',
+        sid: exec.frame.sid,
+        rid: exec.frame.rid,
+        code: 0,
+        exit: { code: 0, signal: null },
+        cwd: '/owner-born/playground/scratch/src/after',
+        env: { AFTER: 'run' },
+      },
+    });
+    await expect(run.exited.then(() => run.terminal.snapshot())).resolves.toEqual({
+      cwd: '/src/after',
+      env: { AFTER: 'run' },
+    });
+
+    const lifecycle = companion.sessionTools(project);
+    expect(companion.sessionTools(project)).toBe(lifecycle);
+    expect(() => companion.sessionTools({ ...project })).toThrow(TypeError);
+    expect(lifecycle.tools.scm.snapshot()).toEqual({ history: [], changes: [] });
+    const previewSnapshots: unknown[] = [];
+    lifecycle.tools.previews.subscribe((snapshot) => previewSnapshots.push(snapshot));
+    worker.emit('message', {
+      type: 'workbench:project-preview',
+      projectToken: 'playground-owner-token',
+      frame: {
+        type: 'pty:preview',
+        ports: [
+          {
+            port: 4100,
+            url: '/preview/4100/',
+            label: 'node api :4100',
+            source: 'node',
+            sid: 'node-api',
+            previewScope: 'scope-api',
+          },
+          {
+            port: 4200,
+            url: '/preview/4200/',
+            label: 'vite preview',
+            source: 'preview',
+            sid: 'preview',
+            previewScope: 'scope-preview',
+          },
+        ],
+      },
+    });
+    await settleMicrotasks();
+    expect(lifecycle.tools.previews.snapshot()).toEqual([]);
+    expect(deps.mountPreview).toHaveBeenCalledTimes(2);
+    expect(serviceWorker.controller.messages).toHaveLength(1);
+    serviceWorker.pong(0);
+    await vi.waitFor(() => expect(lifecycle.tools.previews.snapshot()).toHaveLength(2));
+    expect(lifecycle.tools.previews.snapshot()).toEqual([
+      { port: 4100, url: '/preview/4100/', label: 'node api :4100', source: 'node' },
+      { port: 4200, url: '/preview/4200/', label: 'vite preview', source: 'preview' },
+    ]);
+    expect(Reflect.ownKeys(lifecycle.tools.previews.snapshot()[0] ?? {})).toEqual([
+      'port',
+      'url',
+      'label',
+      'source',
+    ]);
+    expect(previewSnapshots).toHaveLength(2);
+    const refreshing = lifecycle.tools.scm.refresh();
+    const toolsRequest = sentPlaygroundOf(worker, 'workbench:playground-project-tools').at(-1);
+    if (
+      toolsRequest === undefined ||
+      toolsRequest.frame.type !== 'workbench:playground-session-tools-request'
+    ) {
+      throw new Error('missing Playground session-tools request');
+    }
+    expect(toolsRequest.projectToken).toBe('playground-owner-token');
+    worker.emit('message', {
+      type: 'workbench:playground-project-tools',
+      projectToken: 'playground-owner-token',
+      frame: {
+        type: 'workbench:playground-session-tools-response',
+        requestId: toolsRequest.frame.requestId,
+        response: {
+          ok: true,
+          result: {
+            type: 'scm:snapshot',
+            snapshot: {
+              branch: 'main',
+              history: [],
+              changes: [{ path: '/index.html', code: ' M', area: 'working' }],
+            },
+          },
+        },
+      },
+    });
+    await expect(refreshing).resolves.toEqual({
+      branch: 'main',
+      history: [],
+      changes: [{ path: '/index.html', code: ' M', area: 'working' }],
+    });
+
+    worker.emit('message', {
+      type: 'workbench:playground-project-tools',
+      projectToken: 'retired-playground-token',
+      frame: {
+        type: 'workbench:playground-session-tools-scm-snapshot',
+        snapshot: { history: [], changes: [] },
+      },
+    });
+    expect(worker.killedWith).toBe('SIGTERM');
+    await expect(raw.closed).rejects.toThrow('session tools data for a retired project');
+  });
+
+  it('falls a stale companion cwd back to the exact project root without dropping env', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(companionInput, dependencies(worker));
+    const companion = raw.playground;
+    if (companion === undefined) throw new Error('missing Playground companion handle');
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    worker.emit('message', {
+      type: 'workbench:playground-ready',
+      catalog: {
+        active: { kind: 'scratch' },
+        scratch: {
+          starterId: 'vite',
+          dirty: false,
+          editedAt: '2026-07-16T12:00:00.000Z',
+        },
+        projects: [],
+      },
+    });
+    await raw.ready;
+    const definition = definePlaygroundProject(
+      {
+        kind: 'vite',
+        id: 'scratch',
+        starterId: 'vite',
+        templateId: 'vite',
+        files: { '/index.html': '<main>Companion</main>' },
+        firstMaterialization: { kind: 'install' },
+        port: 4173,
+      },
+      playgroundUrlContext,
+    );
+
+    const opening = companion.openProject(definition, {
+      initialTerminalState: { cwd: '/deleted', env: { KEEP: 'yes' } },
+    });
+    const openRequest = sentPlaygroundOf(worker, 'workbench:playground-open-project')[0];
+    if (openRequest === undefined) throw new Error('missing Playground open request');
+    expect(openRequest).toMatchObject({
+      initialTerminalState: { cwd: '/deleted', env: { KEEP: 'yes' } },
+    });
+    worker.emit('message', {
+      type: 'workbench:playground-project-opened',
+      opId: openRequest.opId,
+      projectToken: 'playground-stale-token',
+      projectRoot: '/owner-born/playground/scratch',
+      acquisition: { kind: 'install', snapshotFailures: [] },
+      runtime: { kind: 'vite', port: 4173 },
+      initialScmSnapshot: { history: [], changes: [] },
+      initialTerminalState: { cwd: '/', env: { KEEP: 'yes' } },
+    });
+    await acceptProjectSnapshot(
+      worker,
+      'playground-stale-token',
+      '/owner-born/playground/scratch',
+      [
+        {
+          path: '/owner-born/playground/scratch/deleted',
+          kind: 'dir',
+          size: 0,
+          version: 'misleading-page-snapshot',
+        },
+      ],
+    );
+    const project = await opening;
+    const openPty = sentOf(worker, 'workbench:project-pty').find(
+      (message) => message.frame.type === 'pty:open',
+    );
+    if (openPty?.frame.type !== 'pty:open') throw new Error('missing Playground PTY open');
+    expect(openPty.frame).toMatchObject({
+      cwd: '/owner-born/playground/scratch',
+      env: { KEEP: 'yes' },
+    });
+    expect(project.run().terminal.snapshot()).toEqual({ cwd: '/', env: { KEEP: 'yes' } });
+
+    raw.close();
+    worker.emit('exit', 0, null);
+    await raw.closed;
   });
 
   it('uses owner-born root and token for PTY lifecycle, then awaits physical shutdown', async () => {

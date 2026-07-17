@@ -55,6 +55,35 @@ describe('bounded static-asset acquisition — unbounded-read fault tier', () =>
     ).rejects.toThrow('streamed asset: body exceeded 3 bytes');
   });
 
+  it('does not let stalled cancellation hide a bounded stream failure', async () => {
+    let announceCancellation!: () => void;
+    const cancellationStarted = new Promise<void>((resolve) => {
+      announceCancellation = resolve;
+    });
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+      },
+      cancel() {
+        announceCancellation();
+        return new Promise<void>(() => {});
+      },
+    });
+    const read = drainByteStreamBounded(stream, {
+      label: 'cancellation asset',
+      maxBytes: 1,
+    });
+    let outcome: unknown = 'pending';
+    void read.catch((error: unknown) => {
+      outcome = error;
+    });
+
+    await cancellationStarted;
+    await Promise.resolve();
+    expect(outcome).toBeInstanceOf(Error);
+    await expect(read).rejects.toThrow('cancellation asset: body exceeded 1 bytes');
+  });
+
   it('concatenates a bounded progressing body exactly', async () => {
     const bytes = await fetchAssetBytesBounded('/asset', {
       label: 'fixture asset',

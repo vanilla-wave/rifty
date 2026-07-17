@@ -89,10 +89,16 @@ export interface ProjectDocumentsController {
   invalidate(mutation: ProjectDocumentsMutation, revision: ProjectDocumentsRevision): void;
   /** Transport lifecycle fence; does not claim a new owner revision. */
   invalidateAll(reason: ProjectDocumentInvalidation): void;
+  /** Wait only saves admitted before this owner-byte operation, then recheck state. */
+  awaitOwnerByteAdmission(scope: ProjectDocumentsOwnerByteScope): Promise<void>;
   /** Pure synchronous admission check; does not fence handles. */
   preflightClose(): void;
   close(): Promise<void>;
 }
+
+export type ProjectDocumentsOwnerByteScope =
+  | { readonly kind: 'path'; readonly path: string }
+  | { readonly kind: 'project' };
 
 export interface ProjectDocumentsControllerOptions {
   readonly projectRoot: string;
@@ -116,6 +122,7 @@ interface TrackedDocument {
   readonly internalDocument: InternalProjectDocument;
   provenRevision(): ProjectDocumentsRevision;
   isSaving(): boolean;
+  pendingSave(): Promise<void> | null;
   closeClean(): Promise<void>;
 }
 
@@ -537,6 +544,7 @@ export function createProjectDocumentsController(
         return provenRevision;
       },
       isSaving: () => pendingSave !== null || closeSaving,
+      pendingSave: () => pendingSave,
       closeClean: () => publicDocument.close(),
     };
     tracked.add(record);
@@ -620,6 +628,38 @@ export function createProjectDocumentsController(
       }
       for (const document of tracked) {
         document.internalDocument.invalidate(reason, document.provenRevision());
+      }
+    },
+
+    async awaitOwnerByteAdmission(scope) {
+      assertControllerOpen();
+      const admittedPath = scope.kind === 'path' ? assertProjectPath(scope.path) : null;
+      const relevant = (document: TrackedDocument): boolean => {
+        const state = document.internalDocument.snapshot();
+        return !state.closed && (admittedPath === null || document.path === admittedPath);
+      };
+
+      const captured: Promise<void>[] = [];
+      for (const document of tracked) {
+        if (!relevant(document)) continue;
+        const saving = document.pendingSave();
+        if (saving !== null) captured.push(saving);
+        else if (document.internalDocument.snapshot().dirty) {
+          throw new DirtyProjectDocumentError(document.path);
+        }
+      }
+
+      await Promise.all(captured);
+      assertControllerOpen();
+
+      for (const document of tracked) {
+        if (!relevant(document)) continue;
+        if (document.pendingSave() !== null || document.isSaving()) {
+          throw new ProjectDocumentSaveInProgressError(document.path);
+        }
+        if (document.internalDocument.snapshot().dirty) {
+          throw new DirtyProjectDocumentError(document.path);
+        }
       }
     },
 

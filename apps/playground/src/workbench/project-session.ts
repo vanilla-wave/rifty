@@ -37,6 +37,27 @@ export interface ProjectSession<TReady> {
   close(): Promise<void>;
 }
 
+interface ProjectSessionCloseInternals {
+  readonly beforeClose: Set<() => Promise<void>>;
+  readonly isClosing: () => boolean;
+}
+
+const closeInternals = new WeakMap<object, ProjectSessionCloseInternals>();
+
+/** Package-private lifecycle hook; clean preflight always runs before these drains. */
+export function registerProjectSessionBeforeClose(
+  session: ProjectSession<unknown>,
+  hook: () => Promise<void>,
+): void {
+  if (typeof hook !== 'function')
+    throw new TypeError('Project session pre-close hook must be a function');
+  const internals =
+    typeof session === 'object' && session !== null ? closeInternals.get(session) : undefined;
+  if (internals === undefined) throw new TypeError('Invalid or forged ProjectSession');
+  if (internals.isClosing()) throw new ClosedHandleError('Project session');
+  internals.beforeClose.add(hook);
+}
+
 export function createProjectSession<TReady>(_options: {
   readonly content: ProjectContentController;
   readonly runtime: ProjectRuntime<TReady>;
@@ -52,6 +73,7 @@ export function createProjectSession<TReady>(_options: {
   let closing = false;
   let closed = false;
   let closePromise: Promise<void> | null = null;
+  const beforeClose = new Set<() => Promise<void>>();
 
   const assertOpen = (): void => {
     if (closing || closed) throw new ClosedHandleError('Project session');
@@ -170,6 +192,7 @@ export function createProjectSession<TReady>(_options: {
 
       closing = true;
       void (async () => {
+        const errors: Error[] = [];
         const operations: Promise<unknown>[] = [];
         const start = <T>(operation: () => Promise<T>): Promise<T> => {
           try {
@@ -178,6 +201,16 @@ export function createProjectSession<TReady>(_options: {
             return Promise.reject(errorFrom(error));
           }
         };
+        const hooks = [...beforeClose];
+        beforeClose.clear();
+        if (hooks.length > 0) {
+          const hookResults = await Promise.allSettled(hooks.map((hook) => start(hook)));
+          errors.push(
+            ...hookResults.flatMap((result) =>
+              result.status === 'rejected' ? [errorFrom(result.reason)] : [],
+            ),
+          );
+        }
         // Start every admitted teardown synchronously after preflight. A lost
         // handed-off VFS terminal needs owner-close/disconnect to settle; it
         // cannot be awaited before physical owner teardown starts.
@@ -190,8 +223,10 @@ export function createProjectSession<TReady>(_options: {
         // token is retired. Dirty preflight never reaches this hook.
         if (closeOwner !== undefined) operations.push(start(closeOwner));
         const results = await Promise.allSettled(operations);
-        const errors = results.flatMap((result) =>
-          result.status === 'rejected' ? [errorFrom(result.reason)] : [],
+        errors.push(
+          ...results.flatMap((result) =>
+            result.status === 'rejected' ? [errorFrom(result.reason)] : [],
+          ),
         );
         activeRun = null;
         runClaimed = false;
@@ -211,6 +246,8 @@ export function createProjectSession<TReady>(_options: {
       return closeOutcome.promise;
     },
   };
+
+  closeInternals.set(session, { beforeClose, isClosing: () => closing || closed });
 
   return session;
 }

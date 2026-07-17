@@ -62,6 +62,7 @@ class TerminalPortFixture {
   readonly closeCancellations: Array<Error | undefined> = [];
   readonly closeFailures = new Map<string, Error>();
   readonly openGates = new Map<string, ReturnType<typeof deferred<void>>>();
+  readonly states = new Map<string, { cwd: string; env: Record<string, string> }>();
   closeGate: ReturnType<typeof deferred<void>> | null = null;
   execFailure: Error | null = null;
   signalFailure: Error | null = null;
@@ -75,8 +76,15 @@ class TerminalPortFixture {
     return this.alive;
   }
 
-  openSession(sid: string): Promise<void> {
+  openSession(
+    sid: string,
+    state: { readonly cwd: string; readonly env: Readonly<Record<string, string>> } = {
+      cwd: '/',
+      env: {},
+    },
+  ): Promise<void> {
     this.openCalls.push(sid);
+    this.states.set(sid, { cwd: state.cwd, env: { ...state.env } });
     const gate = deferred<void>();
     this.openGates.set(sid, gate);
     return gate.promise;
@@ -84,6 +92,14 @@ class TerminalPortFixture {
 
   resolveOpen(sid: string): void {
     this.openGates.get(sid)?.resolve();
+  }
+
+  snapshot(sid: string): { readonly cwd: string; readonly env: Record<string, string> } {
+    return this.states.get(sid) ?? { cwd: '/', env: {} };
+  }
+
+  setSnapshot(sid: string, cwd: string, env: Record<string, string>): void {
+    this.states.set(sid, { cwd, env });
   }
 
   execResult(sid: string, line: string, options: ExecOptions): Promise<ExecResult> {
@@ -155,6 +171,53 @@ class TerminalPortFixture {
 }
 
 describe('ProjectTerminal lifecycle contract', () => {
+  it('returns fresh frozen snapshots and commits owner state before run.exited settles', async () => {
+    const port = new TerminalPortFixture();
+    const terminal = createProjectTerminal({
+      id: 'terminal-1',
+      port,
+      initialState: { cwd: '/src', env: { BEFORE: 'yes' } },
+    });
+
+    const initial = terminal.snapshot();
+    const second = terminal.snapshot();
+    expect(initial).toEqual({ cwd: '/src', env: { BEFORE: 'yes' } });
+    expect(second).toEqual(initial);
+    expect(second).not.toBe(initial);
+    expect(second.env).not.toBe(initial.env);
+    expect(Object.isFrozen(initial)).toBe(true);
+    expect(Object.isFrozen(initial.env)).toBe(true);
+
+    const run = terminal.run('cd /after && export AFTER=run');
+    port.resolveOpen('terminal-1');
+    await settleMicrotasks();
+    port.admit(0, 'run-1');
+    await run.ready;
+    port.setSnapshot('terminal-1', '/after', { AFTER: 'run' });
+    port.exit(0, { code: 0, signal: null });
+
+    await expect(run.exited.then(() => terminal.snapshot())).resolves.toEqual({
+      cwd: '/after',
+      env: { AFTER: 'run' },
+    });
+  });
+
+  it('throws ClosedHandleError from snapshot as soon as close starts and after owner death', async () => {
+    const port = new TerminalPortFixture();
+    port.closeGate = deferred<void>();
+    const terminal = createProjectTerminal({ id: 'terminal-1', port });
+
+    const closing = terminal.close();
+    expect(() => terminal.snapshot()).toThrow(ClosedHandleError);
+    port.closeGate.resolve();
+    await closing;
+    expect(() => terminal.snapshot()).toThrow(ClosedHandleError);
+
+    const sibling = createProjectTerminal({ id: 'terminal-2', port });
+    port.die(1);
+    expect(() => sibling.snapshot()).toThrow(ClosedHandleError);
+  });
+
   it('awaits owner-ACKed idle dimensions before sending the synchronously claimed run', async () => {
     const port = new TerminalPortFixture();
     port.autoAck = false;

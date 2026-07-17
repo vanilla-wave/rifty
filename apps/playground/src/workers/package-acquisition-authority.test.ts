@@ -694,6 +694,69 @@ describe('package-acquisition authority', () => {
     ).resolves.toMatchObject({ status: 'absent' });
   });
 
+  it('keeps reset noops inert and supplies the adapter reset only after claim revocation', async () => {
+    const vfs = await seededVfs();
+    await writeInstalledTree(vfs);
+    const stamps = createInstallStampAuthority({ vfs });
+    const claim = await stamps.demote(PROJECT);
+    await expect(
+      stamps.promote(
+        { ...PROJECT, packageJsonText: PACKAGE_JSON },
+        { epoch: claim.epoch, packages: 1 },
+      ),
+    ).resolves.toMatchObject({ status: 'trusted' });
+    const timeline: string[] = [];
+    const authority = createPackageAcquisitionAuthority({
+      stamps,
+      adapter: adapterWith({
+        reset: async () => {
+          timeline.push('adapter:reset');
+        },
+      }),
+    });
+
+    await authority.dispatch({
+      type: 'reset',
+      target: { root: ROOT },
+      prepare: async () => {
+        timeline.push('noop:prepare');
+        return { status: 'noop' as const };
+      },
+    });
+    expect(timeline).toEqual(['noop:prepare']);
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+      status: 'trusted',
+    });
+
+    await authority.dispatch({
+      type: 'reset',
+      target: { root: ROOT },
+      prepare: async () => {
+        timeline.push('ready:prepare');
+        return {
+          status: 'ready',
+          resetDependencyTree: true,
+          mutate: async (resetDependencyTree) => {
+            await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+              status: 'absent',
+            });
+            timeline.push('ready:scope');
+            if (resetDependencyTree === undefined) throw new Error('adapter reset missing');
+            await resetDependencyTree();
+            timeline.push('ready:mutate');
+          },
+        };
+      },
+    });
+    expect(timeline).toEqual([
+      'noop:prepare',
+      'ready:prepare',
+      'ready:scope',
+      'adapter:reset',
+      'ready:mutate',
+    ]);
+  });
+
   it('serializes install/install FIFO with no overlapping adapter operation', async () => {
     const vfs = await seededVfs();
     const stamps = createInstallStampAuthority({ vfs });

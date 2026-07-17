@@ -1,9 +1,9 @@
 /**
- * M10 preview panel — iframe pinned to `/preview/<port>/` for the playground
- * Service Worker to route to the runtime's port registry.
+ * M10 preview panel — iframe consumes the exact routed URL published by the
+ * owner PreviewRegistry after its Service Worker bridge proof.
  *
  * Two-step readiness so the pill never lies:
- *   1. Poll `fetch(/preview/<port>/)` until `ok` — proves the server is up and
+ *   1. Poll the published URL until `ok` — proves the server is up and
  *      the SW bridge round-trips a *subresource* request (what M7 e2e exercises).
  *   2. Point the iframe at the route and check the nav actually *committed*
  *      (frame left `about:blank`). A sub-frame nav can abort on commit even
@@ -35,9 +35,14 @@ import {
   onCleanup,
 } from 'solid-js';
 import { copyToClipboard } from '../glue/clipboard.ts';
-import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
 import { Icon } from './icons.tsx';
-import { openPreviewTab, previewUrlFor, runPreviewFrameWarmup } from './preview-panel-core.ts';
+import { openPreviewTab, runPreviewFrameWarmup } from './preview-panel-core.ts';
+
+export interface PreviewPanelEntry {
+  readonly port: number;
+  readonly url: string;
+  readonly label: string;
+}
 
 // `unreachable` = the route never answered ok (dev server down); `error` = the
 // route responded but the in-page frame didn't commit. Distinct so the overlay
@@ -45,13 +50,13 @@ import { openPreviewTab, previewUrlFor, runPreviewFrameWarmup } from './preview-
 type Phase = 'starting' | 'live' | 'error' | 'unreachable';
 
 // Which port the switcher should show given the live set + current selection
-// (ADR-0155). Empty set → keep current (manual-input fallback owns it). A port
+// (ADR-0155). Empty set → keep current until the registry publishes. A port
 // NEWLY appended since the previous reconcile auto-selects (the user just
 // started that server — `vite preview`, webpack, a node server alike; replaces
 // the old `source === 'preview'` special case, backlog:
 // playground/generic-dev-server-lifecycle). Else current-if-live, else last.
 export function reconcileSelectedPort(
-  entries: PreviewPortEntry[],
+  entries: readonly PreviewPanelEntry[],
   current: number,
   knownPorts?: ReadonlySet<number>,
 ): number {
@@ -64,11 +69,11 @@ export function reconcileSelectedPort(
 
 export function PreviewPanel(props: {
   initialPort?: number;
-  onOpenTab?: (port: number) => void;
+  onOpenTab?: (url: string) => void;
   /** Toast bridge for copy-URL feedback. */
   onNotify?: (message: string, tone: 'error' | 'success') => void;
-  /** Live previewable ports (ADR-0155). Non-empty → switcher; empty → manual port input. */
-  ports?: Accessor<PreviewPortEntry[]>;
+  /** Live previews published by the owner registry (ADR-0278). */
+  ports?: Accessor<readonly PreviewPanelEntry[]>;
 }) {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);
   const [phase, setPhase] = createSignal<Phase>('starting');
@@ -76,10 +81,12 @@ export function PreviewPanel(props: {
   const [frameEpoch, setFrameEpoch] = createSignal(0);
   let frame: HTMLIFrameElement | undefined;
 
-  const previewUrl = (): string => previewUrlFor(port());
+  const entries = createMemo<readonly PreviewPanelEntry[]>(() => props.ports?.() ?? []);
+  const selectedEntry = createMemo<PreviewPanelEntry | undefined>(
+    () => entries().find((entry) => entry.port === port()) ?? entries().at(-1),
+  );
+  const previewUrl = (): string | undefined => selectedEntry()?.url;
   const frameKey = createMemo(() => ({ epoch: frameEpoch() }));
-
-  const entries = createMemo<PreviewPortEntry[]>(() => props.ports?.() ?? []);
 
   // Keep the selected port valid against the live set: a NEWLY appended server
   // auto-selects, a removed selection falls back to the last entry. The warm-up
@@ -94,7 +101,9 @@ export function PreviewPanel(props: {
   });
 
   function openTab(): void {
-    openPreviewTab(port(), props.onOpenTab, (url, target) => {
+    const url = previewUrl();
+    if (url === undefined) return;
+    openPreviewTab(url, props.onOpenTab, (url, target) => {
       globalThis.window?.open(url, target);
     });
   }
@@ -109,14 +118,16 @@ export function PreviewPanel(props: {
   }
 
   // The displayed `localhost:<port>` host is virtual (no real TCP listener) —
-  // the real route is this origin's SW-routed /preview/<port>/ path. Since
+  // the registry supplies the exact SW-routed URL only after bridge proof. Since
   // ADR-0160 the SW routes a foreign tab's preview requests port-keyed to the
   // playground window that owns the port, so a copied URL loads in a separate
   // tab while that playground tab stays open (the dev server lives in its owner
   // worker); a missing owner renders an honest 503. The ↗ wrapper stays the
   // most robust path (inherits opener context).
   async function copyUrl(): Promise<void> {
-    const url = new URL(previewUrl(), globalThis.location?.href).href;
+    const routedUrl = previewUrl();
+    if (routedUrl === undefined) return;
+    const url = new URL(routedUrl, globalThis.location?.href).href;
     const ok = await copyToClipboard(url);
     if (ok) props.onNotify?.('Preview URL copied — for a separate tab use ↗', 'success');
     else props.onNotify?.('Could not copy the preview URL', 'error');
@@ -126,8 +137,10 @@ export function PreviewPanel(props: {
   // nav exposes `/preview/<port>/` on its location; an aborted one stays on
   // `about:blank`. A thrown SecurityError means it went cross-origin (committed).
   function committed(): boolean {
+    const url = previewUrl();
+    if (url === undefined) return false;
     try {
-      return (frame?.contentWindow?.location.href ?? 'about:blank').includes(previewUrl());
+      return (frame?.contentWindow?.location.href ?? 'about:blank').includes(url);
     } catch {
       return true;
     }
@@ -147,8 +160,13 @@ export function PreviewPanel(props: {
   createEffect(() => {
     const url = previewUrl();
     retry();
-    let alive = true;
     setPhase('starting');
+    if (url === undefined) {
+      frame = undefined;
+      wakeWarmup = null;
+      return;
+    }
+    let alive = true;
     void runPreviewFrameWarmup(url, {
       fetchImpl: (input, init) => fetch(input, init),
       currentFrame: () => frame,
@@ -177,35 +195,30 @@ export function PreviewPanel(props: {
         <span class="rf-preview__dot" aria-hidden="true" />
         <span class="rf-preview__dot" aria-hidden="true" />
         <div class="rf-preview__address">
-          <button
-            type="button"
-            class="rf-preview__copy"
-            title="Copy preview URL"
-            aria-label="Copy preview URL"
-            onClick={() => void copyUrl()}
-          >
-            <Icon name="lock" size={11} />
-            <span class="rf-preview__host">localhost:</span>
-          </button>
           <Show
-            when={entries().length > 0}
+            when={selectedEntry() !== undefined}
             fallback={
-              <input
-                class="rf-preview__port"
-                type="number"
-                value={port()}
-                min={1}
-                max={65535}
-                onChange={(e) => setPort(Number.parseInt(e.currentTarget.value, 10) || 3000)}
-                aria-label="Preview port"
-              />
+              <>
+                <span class="rf-preview__host">Waiting for preview</span>
+                <PhasePill phase={phase} />
+              </>
             }
           >
+            <button
+              type="button"
+              class="rf-preview__copy"
+              title="Copy preview URL"
+              aria-label="Copy preview URL"
+              onClick={() => void copyUrl()}
+            >
+              <Icon name="lock" size={11} />
+              <span class="rf-preview__host">localhost:</span>
+            </button>
             <span class="rf-preview__switcher-shell">
               <select
                 class="rf-preview__switcher"
                 aria-label="Preview server"
-                value={port()}
+                value={selectedEntry()?.port ?? port()}
                 onChange={(e) => setPort(Number(e.currentTarget.value))}
               >
                 <For each={entries()}>
@@ -214,40 +227,44 @@ export function PreviewPanel(props: {
               </select>
               <Icon name="chevron-down" size={12} class="rf-preview__switcher-caret" />
             </span>
+            <PhasePill phase={phase} />
           </Show>
-          <PhasePill phase={phase} />
         </div>
-        <button
-          type="button"
-          class="rf-iconbtn"
-          title="Reload preview"
-          aria-label="Reload preview"
-          onClick={reload}
-        >
-          <Icon name="rotate-ccw" size={14} />
-        </button>
-        <button
-          type="button"
-          class="rf-iconbtn"
-          title="Open preview in new tab"
-          aria-label="Open preview in new tab"
-          onClick={openTab}
-        >
-          <Icon name="external-link" size={14} />
-        </button>
+        <Show when={selectedEntry() !== undefined}>
+          <button
+            type="button"
+            class="rf-iconbtn"
+            title="Reload preview"
+            aria-label="Reload preview"
+            onClick={reload}
+          >
+            <Icon name="rotate-ccw" size={14} />
+          </button>
+          <button
+            type="button"
+            class="rf-iconbtn"
+            title="Open preview in new tab"
+            aria-label="Open preview in new tab"
+            onClick={openTab}
+          >
+            <Icon name="external-link" size={14} />
+          </button>
+        </Show>
       </div>
       <div class="rf-pane__body">
-        <Show keyed when={frameKey()}>
-          {(_key) => (
-            <iframe
-              ref={frame}
-              class="rf-preview__frame"
-              src="about:blank"
-              title={`Preview port ${port()}`}
-            />
-          )}
+        <Show when={selectedEntry() !== undefined}>
+          <Show keyed when={frameKey()}>
+            {(_key) => (
+              <iframe
+                ref={frame}
+                class="rf-preview__frame"
+                src="about:blank"
+                title={`Preview port ${String(selectedEntry()?.port)}`}
+              />
+            )}
+          </Show>
         </Show>
-        {phase() === 'starting' && (
+        {(selectedEntry() === undefined || phase() === 'starting') && (
           <div
             class="rf-preview__empty"
             data-testid="preview-empty"
@@ -257,7 +274,7 @@ export function PreviewPanel(props: {
             <span class="rf-preview__starting-label">Starting dev server…</span>
           </div>
         )}
-        {phase() === 'error' && (
+        {selectedEntry() !== undefined && phase() === 'error' && (
           <div class="rf-preview__overlay">
             <p class="rf-preview__overlay-title">Preview couldn't load in-frame</p>
             <p class="rf-preview__overlay-body">
@@ -274,7 +291,7 @@ export function PreviewPanel(props: {
             </p>
           </div>
         )}
-        {phase() === 'unreachable' && (
+        {selectedEntry() !== undefined && phase() === 'unreachable' && (
           <div class="rf-preview__overlay">
             <p class="rf-preview__overlay-title">Dev server didn't come up</p>
             <p class="rf-preview__overlay-body">

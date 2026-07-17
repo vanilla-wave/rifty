@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
 
 interface SnapshotFile {
@@ -28,6 +29,7 @@ export interface SnapshotShim {
 
 export interface SnapshotArtifactExpectation {
   readonly bytes: Uint8Array;
+  readonly snapshotId?: string;
   readonly label: string;
   readonly templateId: string;
   readonly packageJsonText: string;
@@ -136,9 +138,17 @@ function proveCurrentShimBytes(
 
 /** Read-only contract/drift gate. Never rewrites or relabels an archive. */
 export function assertSnapshotArtifactCurrent(expectation: SnapshotArtifactExpectation): void {
+  if (
+    typeof expectation.snapshotId !== 'string' ||
+    !/^sha256:[0-9a-f]{64}$/.test(expectation.snapshotId)
+  ) {
+    stale(expectation.label, 'snapshotId is missing or malformed');
+  }
+  let serialized: Buffer;
   let json: string;
   try {
-    json = gunzipSync(expectation.bytes).toString('utf8');
+    serialized = gunzipSync(expectation.bytes);
+    json = serialized.toString('utf8');
   } catch {
     stale(expectation.label, 'snapshot is not a valid gzip archive');
   }
@@ -178,5 +188,9 @@ export function assertSnapshotArtifactCurrent(expectation: SnapshotArtifactExpec
   const canonical = gzipSync(Buffer.from(expectation.canonicalize(snapshot)), { level: 9 });
   if (!Buffer.from(expectation.bytes).equals(canonical)) {
     stale(expectation.label, 'snapshot gzip bytes are not canonical');
+  }
+  const snapshotId = `sha256:${createHash('sha256').update(serialized).digest('hex')}`;
+  if (snapshotId !== expectation.snapshotId) {
+    stale(expectation.label, 'snapshotId differs from the exact serialized snapshot bytes');
   }
 }

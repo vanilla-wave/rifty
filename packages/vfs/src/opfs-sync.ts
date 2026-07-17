@@ -186,6 +186,7 @@ export class OpfsFsSync implements FsSync {
   private readonly index = new Map<string, IndexEntry>();
   /** atime/mtime side-table — see file header (ADR-0029). */
   private readonly times = new Map<string, { atime: number; mtime: number }>();
+
   private readonly root: FileSystemDirectoryHandle;
   /**
    * Synchronous file-content cache (ADR-0072). `readFileBytesSync` /

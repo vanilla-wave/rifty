@@ -157,6 +157,16 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(fsSync.existsSync(`${ROOT}/src/ignored.ts`)).toBe(false);
   });
 
+  it('seeds exact binary template-owned node_modules bytes', () => {
+    const { fsSync } = project();
+    const path = `${ROOT}/node_modules/@rifty/types/fixture.bin`;
+    const bytes = new Uint8Array([0, 255, 7, 128]);
+
+    seedTemplateNodeModulesFiles(fsSync, ROOT, { [path]: bytes } as never);
+
+    expect(fsSync.readFileBytesSync(path)).toEqual(bytes);
+  });
+
   it('reports exact missing template node_modules writes without prefix siblings', () => {
     const { fsSync } = project();
     fsSync.mkdirSync(`${ROOT}/node_modules/@rifty/types`, { recursive: true });

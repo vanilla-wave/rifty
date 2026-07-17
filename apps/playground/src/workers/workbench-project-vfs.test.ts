@@ -77,6 +77,7 @@ function harness(
     throw error;
   },
   onEmit: (frame: OwnerProjectVfsFrame) => void = () => {},
+  recordMutation: (kind: 'guest' | 'file', treeRevision: number) => Promise<void> = async () => {},
 ) {
   const memory = createMemoryFs();
   const rawFs = new FaultInjectableMemoryFsSync(memory.backend);
@@ -120,6 +121,7 @@ function harness(
       emitted.push(frame);
       onEmit(frame);
     },
+    recordMutation,
     fatal,
   });
   return {
@@ -145,6 +147,75 @@ function writeRequest(
 }
 
 describe('Workbench project VFS owner adapter', () => {
+  it('notifies one publication seam for host, guest/package, and owner-applied revisions', async () => {
+    const h = harness();
+    const revisions: number[] = [];
+    const unsubscribe = h.vfs.subscribePublications((treeRevision) => {
+      revisions.push(treeRevision);
+    });
+    const path = `${ROOT}/src/main.ts`;
+
+    h.vfs.publishSnapshot();
+
+    const hostVersion = h.authority.versionOf(path);
+    if (hostVersion === null) throw new Error('test version missing');
+    await h.vfs.handleFrame({
+      type: 'rifty:owner-vfs-commit',
+      request: writeRequest('publication-host', path, hostVersion),
+    });
+
+    await h.vfs.mutationGuard([{ kind: 'write', path }], () => {
+      h.authority.writeFileSync(path, encoder.encode('guest-or-package'));
+    });
+
+    h.authority.writeFileSync(path, encoder.encode('owner-applied'));
+    await h.vfs.publicationBarrier();
+
+    expect(revisions).toEqual([expect.any(Number), expect.any(Number), expect.any(Number)]);
+    expect(revisions).toEqual([...revisions].sort((left, right) => left - right));
+    expect(new Set(revisions).size).toBe(revisions.length);
+
+    unsubscribe();
+    h.authority.writeFileSync(path, encoder.encode('after-unsubscribe'));
+    await h.vfs.publicationBarrier();
+    expect(revisions).toHaveLength(3);
+  });
+
+  it('records file and guest mutations before their publication settles', async () => {
+    const events: string[] = [];
+    const recordMutation = vi.fn(async (kind: string, treeRevision: number) => {
+      events.push(`dirty:${kind}:${String(treeRevision)}`);
+    });
+    const h = harness(undefined, (frame) => events.push(`emit:${frame.type}`), recordMutation);
+    const path = `${ROOT}/src/main.ts`;
+    const expectedVersion = h.authority.versionOf(path);
+    if (expectedVersion === null) throw new Error('test version missing');
+    h.vfs.publishSnapshot();
+    events.splice(0);
+
+    await h.vfs.handleFrame({
+      type: 'rifty:owner-vfs-commit',
+      request: writeRequest('dirty-file', path, expectedVersion),
+    });
+    const fileRevision = h.authority.treeRevision;
+    expect(events).toEqual([
+      `dirty:file:${String(fileRevision)}`,
+      'emit:workbench:project-vfs-state',
+      'emit:rifty:owner-vfs-commit-ack',
+    ]);
+
+    events.splice(0);
+    await h.vfs.mutationGuard([{ kind: 'write', path }], () => {
+      h.authority.writeFileSync(path, encoder.encode('guest'));
+    });
+    const guestRevision = h.authority.treeRevision;
+    expect(events).toEqual([
+      `dirty:guest:${String(guestRevision)}`,
+      'emit:workbench:project-vfs-state',
+    ]);
+    expect(recordMutation).toHaveBeenCalledTimes(2);
+  });
+
   it('publishes only the active source tree and serves each read from one atomic snapshot', () => {
     const h = harness();
 
@@ -758,6 +829,52 @@ describe('Workbench project VFS owner adapter', () => {
     });
   });
 
+  // Fault class: quota-perm-fail × recoverable owner transaction publication.
+  it('suppresses a recovered transaction revision instead of publishing tentative Files state', async () => {
+    const h = harness();
+    const path = `${ROOT}/src/main.ts`;
+    const failure = new Error('archive durability failed; private recovery retained');
+    h.vfs.publishSnapshot();
+    const baseline = h.emitted[0];
+
+    await expect(
+      h.vfs.recoverableMutation([{ kind: 'replace', path }], async () => {
+        h.authority.writeFileSync(path, encoder.encode('tentative'));
+        h.authority.writeFileSync(path, encoder.encode('old'));
+        return { status: 'recoverable-failure', error: failure };
+      }),
+    ).rejects.toBe(failure);
+    await settle();
+
+    expect(h.authority.readFileBytesSync(path)).toEqual(encoder.encode('old'));
+    expect(h.emitted).toEqual([baseline]);
+  });
+
+  it('acknowledges a failed private prepare without publishing an unchanged Files state', async () => {
+    const h = harness();
+    const failure = new Error('archive stage persistence failed');
+    let applied = false;
+    h.vfs.publishSnapshot();
+    const baseline = h.emitted[0];
+
+    await expect(
+      h.vfs.recoverableProjectReplace(
+        () => {
+          h.authority.writeFileSync('/archive-stage', encoder.encode('private'));
+          throw failure;
+        },
+        () => {
+          applied = true;
+          return { status: 'committed', value: undefined };
+        },
+      ),
+    ).rejects.toBe(failure);
+    await settle();
+
+    expect(applied).toBe(false);
+    expect(h.emitted).toEqual([baseline]);
+  });
+
   // Fault class: torn-state × semantic scope/background publisher.
   it('does not publish a torn journal while a semantic replacement scope is active', async () => {
     const fatalFailures: Error[] = [];
@@ -854,6 +971,49 @@ describe('Workbench project VFS owner adapter', () => {
       },
     ]);
     expect(fatalFailures).toEqual([]);
+  });
+
+  // Fault class: concurrent-same-key × owner writer/SCM reader.
+  it('gives a consistent read one FIFO slot between prior and later project mutations', async () => {
+    const h = harness();
+    const path = `${ROOT}/src/main.ts`;
+    h.vfs.publishSnapshot();
+    const firstEntered = deferred<void>();
+    const releaseFirst = deferred<void>();
+    const first = Promise.resolve(
+      h.vfs.mutationGuard([{ kind: 'write', path }], async () => {
+        h.authority.writeFileSync(path, encoder.encode('first'));
+        firstEntered.resolve();
+        await releaseFirst.promise;
+      }),
+    );
+    await firstEntered.promise;
+
+    const readEntered = deferred<void>();
+    const releaseRead = deferred<void>();
+    const read = h.vfs.readConsistent(async () => {
+      readEntered.resolve();
+      await releaseRead.promise;
+      return new TextDecoder().decode(h.authority.readFileBytesSync(path));
+    });
+    await settle();
+    expect(await isPending(read)).toBe(true);
+
+    releaseFirst.resolve();
+    await first;
+    await readEntered.promise;
+    const later = Promise.resolve(
+      h.vfs.mutationGuard([{ kind: 'write', path }], () => {
+        h.authority.writeFileSync(path, encoder.encode('later'));
+      }),
+    );
+    await settle();
+    expect(await isPending(later)).toBe(true);
+
+    releaseRead.resolve();
+    await expect(read).resolves.toBe('first');
+    await later;
+    expect(new TextDecoder().decode(h.authority.readFileBytesSync(path))).toBe('later');
   });
 
   it('publishes a same-revision empty state before ACK for a host no-op', async () => {

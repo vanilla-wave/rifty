@@ -49,10 +49,10 @@ test.describe('single source of truth: page viewer and exec read identical bytes
     // Write a unique, small (in-cap) marker file in the owner via the shell.
     const marker = `single-source-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const file = `byteid-${Date.now().toString(36)}.txt`;
-    await runTerminalLine(page, `echo ${marker} > /scratch/${file}`);
+    await runTerminalLine(page, `echo ${marker} > ./${file}`);
 
     // EXEC-side read: `cat` runs in the owner and prints the owner-store bytes.
-    await runTerminalLine(page, `cat /scratch/${file}`);
+    await runTerminalLine(page, `cat ./${file}`);
     await expectTerminalContains(page, marker, 15_000);
 
     // PAGE-VIEWER side: the owner republished its snapshot on command exit, so the

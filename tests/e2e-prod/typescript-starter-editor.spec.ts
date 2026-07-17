@@ -1,11 +1,11 @@
 import { type Locator, type Page, expect, test } from '@playwright/test';
-import { pickStarter, terminalBuffer } from '../e2e/helpers/playground.ts';
+import { expectViteDevServerReady, pickStarter } from '../e2e/helpers/playground.ts';
 
 async function pickStarterAndWaitForTemplate(page: Page): Promise<void> {
   const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
   const previewBody = page.frameLocator('iframe[title="Preview port 5174"]').locator('body');
   await pickStarter(page, 'typescript-ls');
-  await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
+  await expectViteDevServerReady(page, 5174, 45_000);
   await expect(editorLines).toContainText('LibraryShape', { timeout: 45_000 });
   await expect(previewBody).toContainText('TypeScript language surface', { timeout: 90_000 });
 }

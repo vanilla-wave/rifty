@@ -85,6 +85,8 @@ export interface NpmShellCommandDeps {
   readonly install?: InstallFn;
   /** Host-owned all-target namespace preflight, before the installer links bytes. */
   readonly assertPortablePaths?: InstallOptions['assertPortablePaths'];
+  /** Translate a fully parsed terminal invocation into the owner's storage namespace. */
+  readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
   /** Pre-install tree preparation (e.g. the from-scratch clean-start
    *  clear/reseed) — runs INSIDE the owner acquisition FIFO, before any
    *  read or mutation of this install: a preparation that deletes/reseeds the
@@ -200,6 +202,27 @@ function stampAuthorityFor(deps: NpmShellCommandDeps): InstallStampAuthority {
   );
 }
 
+function npmPrefixInvocation(
+  args: readonly string[],
+  context: CommandContext,
+): { readonly args: readonly string[]; readonly context: CommandContext } | null {
+  const first = args[0];
+  if (first !== '--prefix' && !first?.startsWith('--prefix=')) {
+    return { args, context };
+  }
+  const inline = first.startsWith('--prefix=');
+  const prefix = inline ? first.slice('--prefix='.length) : args[1];
+  if (prefix === undefined || prefix.length === 0 || prefix.includes('\0')) {
+    context.stderr.write('npm: --prefix requires a non-empty path\n');
+    return null;
+  }
+  const cwd = normalizePath(prefix.startsWith('/') ? prefix : `${context.cwd}/${prefix}`);
+  return {
+    args: args.slice(inline ? 1 : 2),
+    context: { ...context, cwd },
+  };
+}
+
 /**
  * Build the `npm` shell command. The composition root (`App.tsx`) registers it
  * on a `ShellSession`; this factory stays Solid-free so unit tests can exercise
@@ -207,7 +230,11 @@ function stampAuthorityFor(deps: NpmShellCommandDeps): InstallStampAuthority {
  */
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
   const packages = deps.packageAcquisitionAuthority ?? createNpmPackageAcquisitionAuthority(deps);
-  return async (args, ctx) => {
+  return async (rawArgs, rawContext) => {
+    const invocation = npmPrefixInvocation(rawArgs, rawContext);
+    if (invocation === null) return 1;
+    const { args } = invocation;
+    const ctx = deps.mapInvocationContext?.(invocation.context) ?? invocation.context;
     const sub = args[0];
     // Bare `npm` and the help flags print the command list (one per line), but
     // keep npm's observable usage-exit contract: these forms return 1.

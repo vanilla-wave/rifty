@@ -4,6 +4,15 @@
 
 ### Added (app-local Workbench contract)
 
+- Companion hosts now supply the dedicated TypeScript Worker explicitly;
+  session tools expose root-free `awaitDurability()`, TS recovery, and exact
+  persisted terminal restoration across the sealed boundary (ADR-0282).
+- Companion session tools now expose one frozen semantic preview registry for
+  every live project port. Browser routes are mounted and control-proved before
+  publication; raw owner/PTy identities remain private (ADR-0278).
+- Companion project terminals now expose fresh frozen project-rooted cwd/env
+  snapshots and accept one exact persisted seed; stale cwd restores to `/`
+  without dropping guest environment entries (ADR-0278).
 - A sealed app-local Workbench core now owns immutable Vite project
   definitions, injective project identity, serialized seed/delete durability,
   typed project/run/terminal lifetimes, controlling-service-worker preview
@@ -31,6 +40,81 @@
 
 ### Fixed (finite Node Workbench review)
 
+- Archive export and crash recovery now share finite iterative traversal,
+  topology, path-depth, file, and byte budgets; corrupt durable stages reject
+  before package or live-tree mutation. Archive import now closes replaced
+  editor models and document handles before publishing restored owner bytes;
+  structured durability errors expose project paths, while unstructured
+  archive and post-import errors recursively redact owner paths.
+- Preview UI now waits for a routed semantic registry entry before probing,
+  framing, copying, or opening it; no manual or port-derived route can claim
+  `LIVE` before the owner bridge is published.
+- Terminal migration preserves whitespace Enter, releases failed admissions,
+  hides closing tabs before owner acknowledgement, and leaves remote teardown to
+  the session lifecycle so switch/reset/delete cannot be blocked by duplicate UI
+  closes. Legacy terminal persistence is reduced to exact project-rooted
+  `cwd`/`env` data before companion restore.
+- A stalled stream cancellation no longer hides an already-bounded snapshot or
+  static-asset acquisition failure.
+- Cmd/Ctrl+S now awaits pending editor writes and a clean owner durability flush
+  before displaying `Saved`; memory mode instead says `Saved for this session ·
+  EPHEMERAL`. Failed debounced generations retry on the next Save, stale
+  generations/project sessions cannot publish success, and persistence errors
+  expose only public project paths (ADR-0281).
+- GIT now flushes pending editor bytes before its initial refresh and follows
+  every coalesced ProjectVFS publication, including shell and package writes;
+  refresh reads hold the owner FIFO and diffs retain HEAD/Index/Working Tree labels.
+- Initial editor hydration now precedes queued user file opens, so a click made
+  while a project starts survives mount and project switches.
+- Preset tabs now appear only after a real file model is admitted; renamed or
+  deleted starter paths cannot leave a selected blank tab after Save.
+- Monaco dirty gutters again read exact HEAD bytes, including staged+worktree
+  states, and file rename/delete sample CAS versions after editor flush.
+- Finite Node-CLI projects again bracket their real stdout with the visible
+  running label and exact completion exit code after moving to Workbench runs.
+- Supervised Node and installed-bin children can mount the active project's
+  owner tree behind public `/` through typed bootstrap metadata; the private
+  root never enters guest argv, cwd, or environment.
+- Playground catalog mutations now keep project bytes in derived VFS stages
+  instead of expanding installed trees into the JSON journal, so Save preserves
+  real `node_modules` trees without exceeding the browser string limit
+  (ADR-0279).
+- Reopen package acquisition now reads the current owner-tree `package.json`,
+  so user-added dependencies survive a revoked install claim and safe reinstall.
+- Resetting an inactive saved project now restores the catalog-active session
+  instead of trying to bind the reset target as active.
+- Project transitions no longer rebind a terminally closed session when a
+  companion tool request failed during teardown; close waits for admitted work
+  without taking ownership of errors already returned to its caller.
+- Node-server startup logs show the project-rooted entry path instead of the
+  private owner-storage root.
+- Closing the active terminal now focuses its nearest surviving predecessor;
+  closing a background terminal preserves the user's current session.
+- Fresh rooted Vite 7 and Vite 8 sessions no longer mistake `/` for an empty
+  child entry and repeatedly restart after loading `vite.config.js`.
+- TypeScript Starter snapshot restores now reassert its explicit declaration
+  package byte-for-byte, so diagnostics and module resolution keep the same tree.
+- Go to Definition can open excluded `node_modules` targets read-only through
+  the session Files handle; the 128 KiB preview bound remains explicit.
+- TypeScript requests now wait for project boot; compiler init failures remain
+  visible in Problems and clear after a successful race-safe rebuild.
+- The first-party App now migrates only the selected legacy terminal root,
+  persists owner-acknowledged project cwd/env, subscribes to semantic previews,
+  and stops the exact retained primary `ProjectRun` (ADR-0278).
+- Restored nested terminal cwd no longer mis-resolves primary Node, Vite, npm
+  install, or npm-script commands; runtime commands address the project root
+  without changing the user's shell cwd.
+- Companion terminal seeds cross the private open protocol and are validated
+  by the owner VFS before a session is exposed; stale dirs reset to `/` while
+  opaque guest env survives unchanged.
+- Baked snapshots and Workbench definitions now share one byte-canonical
+  package manifest, so exact snapshot identity restores instead of silently
+  falling back to a real install.
+- Owner package mutations now dirty the active catalog record by semantic kind:
+  deferred bare install records dependency materialization, while any explicit
+  package spec records the real manifest and lockfile changes.
+- Archive import and startup recovery now revoke package trust and clear
+  dependency bytes through the package authority before live project promotion.
 - Owner-side Files, terminal, child, and package mutations now publish one
   post-apply project state; Documents invalidate before Files reflection and
   mutation replies (ADR-0275).

@@ -154,6 +154,15 @@ export class ProjectDocumentSaveInProgressError extends Error {
   }
 }
 
+export function isRetryableProjectClosePreflightError(
+  error: unknown,
+): error is DirtyProjectDocumentError | ProjectDocumentSaveInProgressError {
+  return (
+    error instanceof DirtyProjectDocumentError ||
+    error instanceof ProjectDocumentSaveInProgressError
+  );
+}
+
 export interface SerializedWorkbenchOwnerError {
   readonly name: string;
   readonly message: string;

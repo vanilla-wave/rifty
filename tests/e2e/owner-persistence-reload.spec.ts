@@ -1,11 +1,49 @@
 import { type Page, expect, test } from '@playwright/test';
-import { clearWorkspaceOpfs, readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
 import {
-  expectTerminalContains,
+  type TerminalSessionTarget,
   openShellTerminal,
   pickStarter,
   runTerminalLine,
+  terminalBuffer,
 } from './helpers/playground.ts';
+
+const OWNER_TIMEOUT = 90_000;
+
+async function expectReopenedWorkspace(page: Page): Promise<void> {
+  await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+    timeout: OWNER_TIMEOUT,
+  });
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
+}
+
+async function expectSessionContains(
+  page: Page,
+  target: TerminalSessionTarget,
+  marker: string,
+  timeout: number,
+): Promise<void> {
+  await expect.poll(() => terminalBuffer(page, target), { timeout }).toContain(marker);
+}
+
+async function openProjects(page: Page): Promise<void> {
+  const trigger = page.locator('[data-action="open-launcher"]');
+  await expect(trigger).toBeEnabled({ timeout: OWNER_TIMEOUT });
+  await trigger.click();
+  await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 5_000 });
+  await page.getByRole('button', { name: /^Projects/ }).click();
+}
+
+async function closeLauncher(page: Page): Promise<void> {
+  await page.locator('.rf-launcher__close').click();
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+}
+
+async function saveWorkspace(page: Page): Promise<void> {
+  await page.keyboard.press('ControlOrMeta+KeyS');
+  await expect(
+    page.locator('.rf-toast[data-tone="success"]').filter({ hasText: /^Saved$/ }),
+  ).toBeVisible({ timeout: OWNER_TIMEOUT });
+}
 
 async function setOpenEditorValue(page: Page, path: string, text: string): Promise<void> {
   await expect
@@ -32,8 +70,12 @@ async function recordMainJsTabPaintsOnNextDocument(page: Page): Promise<void> {
     const state = globalThis as typeof globalThis & { __riftySawMainJsTab?: boolean };
     state.__riftySawMainJsTab = false;
     const scan = (): void => {
-      for (const tab of document.querySelectorAll('[role="tab"]')) {
-        if (tab.textContent?.includes('src/main.js')) state.__riftySawMainJsTab = true;
+      for (const tab of document.querySelectorAll(
+        '[role="tablist"][aria-label="Open editors"] [role="tab"]',
+      )) {
+        if (tab.querySelector('.rf-tab__label')?.textContent?.trim() === 'main.js') {
+          state.__riftySawMainJsTab = true;
+        }
       }
     };
     const start = (): void => {
@@ -50,65 +92,44 @@ async function recordMainJsTabPaintsOnNextDocument(page: Page): Promise<void> {
 }
 
 /**
- * Owner OPFS persistence (chromium only; ADR-0013/0072 + ADR-0143 single-store-owner).
- *
- * The workspace owner is the single source-of-truth for the project tree, but
- * was the only worker realm not wiring `initBackend()` → it ran
- * memory-only, so everything vanished on reload. OPFS is now wired in the owner; the
- * OPFS content-cache write-through (ADR-0072) then persists shell writes, so a
- * file written from the shell survives `page.reload()`.
- *
- * Load-bearing: write `MARKER > /scratch/persist.txt`, reload (browser
- * terminates the owner worker), re-open a shell, `cat` → MARKER returns from the
- * OPFS-preloaded tree. On the memory backend this fails (the reload loses it),
- * so the assertion is honest, not trivially green.
- *
- * Requires cross-origin isolation (the owner is SAB-IPC-gated; the harness serves
- * COOP/COEP). Unique per-run marker → no dependence on (or pollution of) prior
- * OPFS state across tests in a worker.
- *
- * Timing: the dev server auto-boots in Terminal 1 on mount and grabs terminal
- * focus while it streams; we wait for the LIVE pill before opening the second
- * shell so Terminal 2 stays the active session (else the active-terminal read
- * lands on the dev-server log, not our shell).
+ * The public Saved acknowledgement is the durability boundary. Every scenario
+ * establishes project identity and bytes through the public editor, explorer,
+ * catalog, chip, preview, or a stable shell session, awaits Saved, then reloads.
+ * Owner storage paths and catalog files are deliberately outside this contract.
  */
-test.describe('owner workspace persists across reload (OPFS)', () => {
+test.describe('workspace state persists across reload', () => {
   test('a shell-written file survives page.reload()', async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(120_000);
     const marker = `persist-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
     await page.goto('/');
-    // Deterministic start: wipe this page's owner workspace namespace only.
-    await clearWorkspaceOpfs(page);
-    await page.reload();
     await pickStarter(page, 'project-files');
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });
-    await openShellTerminal(page);
+    const shell = await openShellTerminal(page);
 
-    // Write via the shell → owner syncMirror. The dev server is already LIVE (boot
-    // write-through drained by the install stamp flush), so this small write drains
-    // to OPFS promptly — durable well before the reload below.
-    await runTerminalLine(page, `echo ${marker} > /scratch/persist.txt`);
-    await runTerminalLine(page, 'cat /scratch/persist.txt');
-    await expectTerminalContains(page, marker, 15_000);
-    await expect
-      .poll(() => readWorkspaceText(page, '/scratch/persist.txt'), { timeout: 60_000 })
-      .toContain(marker);
+    await runTerminalLine(page, `echo ${marker} > ./persist.txt`, shell);
+    await runTerminalLine(page, 'cat ./persist.txt', shell);
+    await expectSessionContains(page, shell, marker, 15_000);
+    const persistedFile = page.getByRole('treeitem', { name: /persist\.txt/ });
+    await expect(persistedFile).toBeVisible({ timeout: 15_000 });
+    await saveWorkspace(page);
 
-    // Reload: the browser terminates the owner worker; on re-boot the owner wires
-    // OPFS (initBackend) and preloads the persisted tree before serving.
     await page.reload();
-    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
-      timeout: 60_000,
+    await expectReopenedWorkspace(page);
+    await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(
+      'Project files scratch',
+      { timeout: OWNER_TIMEOUT },
+    );
+    await expect(persistedFile).toBeVisible({ timeout: OWNER_TIMEOUT });
+    await persistedFile.click();
+    await expect(page.locator('[data-testid="editor"] .view-lines').first()).toContainText(marker, {
+      timeout: 15_000,
     });
-    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
-    await expect
-      .poll(() => readWorkspaceText(page, '/scratch/persist.txt'), { timeout: 60_000 })
-      .toContain(marker);
-    await openShellTerminal(page);
-    await runTerminalLine(page, 'cat /scratch/persist.txt');
-    await expectTerminalContains(page, marker, 20_000);
+
+    const reopenedShell = await openShellTerminal(page);
+    await runTerminalLine(page, 'cat ./persist.txt', reopenedShell);
+    await expectSessionContains(page, reopenedShell, marker, 20_000);
   });
 
   test('an edited starter becomes a durable scratch draft and reopens after reload', async ({
@@ -120,43 +141,40 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     const marker = `draft-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
     await page.goto('/');
-    await clearWorkspaceOpfs(page);
-    await page.reload();
     await pickStarter(page, 'project-files');
 
     const editor = page.locator('[data-testid="editor"]');
-    await setOpenEditorValue(page, '/scratch/src/main.js', `// ${marker}\n`);
+    await setOpenEditorValue(page, '/src/main.js', `// ${marker}\n`);
     await expect(editor.locator('.view-lines').first()).toContainText(marker);
     await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
       timeout: 10_000,
     });
 
-    await expect
-      .poll(
-        async () => {
-          const index = await readWorkspaceJson<{
-            activeId: string;
-            scratch: { starter: string; dirty: boolean } | null;
-          }>(page, '/.rifty-project-index.json');
-          return index?.activeId === 'scratch' && index.scratch
-            ? `${index.scratch.starter}:${index.scratch.dirty ? 'dirty' : 'clean'}`
-            : 'missing';
-        },
-        { timeout: 60_000 },
-      )
-      .toBe('project-files:dirty');
-    await expect
-      .poll(() => readWorkspaceText(page, '/scratch/src/main.js'), { timeout: 60_000 })
-      .toContain(marker);
+    await openProjects(page);
+    const scratch = page.locator('.rf-scratch[data-active="true"]');
+    await expect(scratch).toContainText('Project files scratch', { timeout: OWNER_TIMEOUT });
+    await expect(scratch).toContainText('edited just now · not yet saved');
+    await closeLauncher(page);
+    await saveWorkspace(page);
 
     await page.reload();
-    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
-      timeout: 60_000,
+    await expectReopenedWorkspace(page);
+    const chip = page.locator('[data-action="open-launcher"]');
+    await expect(chip.locator('.rf-chip__name')).toHaveText('Project files scratch', {
+      timeout: OWNER_TIMEOUT,
     });
-    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
-    await expect
-      .poll(() => readWorkspaceText(page, '/scratch/src/main.js'), { timeout: 60_000 })
-      .toContain(marker);
+    await expect(chip).toHaveAttribute('data-dirty', 'true');
+    await expect(page.getByRole('tab', { name: /main\.js/ })).toBeVisible({
+      timeout: OWNER_TIMEOUT,
+    });
+    await expect(editor.locator('.view-lines').first()).toContainText(marker, {
+      timeout: OWNER_TIMEOUT,
+    });
+
+    await openProjects(page);
+    await expect(scratch).toContainText('Project files scratch', { timeout: OWNER_TIMEOUT });
+    await expect(scratch).toContainText('edited just now · not yet saved');
+    await closeLauncher(page);
   });
 
   test('a TypeScript scratch draft reloads without painting the default JavaScript entry tab', async ({
@@ -168,29 +186,27 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     const marker = `ts-draft-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
     await page.goto('/');
-    await clearWorkspaceOpfs(page);
-    await page.reload();
     await pickStarter(page, 'typescript-ls');
-    await expect(page.locator('[data-testid="editor"] .view-lines').first()).toContainText(
-      'LibraryShape',
-      { timeout: 60_000 },
-    );
+    const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
+    await expect(editorLines).toContainText('LibraryShape', { timeout: 60_000 });
 
-    await setOpenEditorValue(page, '/scratch/src/main.ts', `// ${marker}\n`);
+    await setOpenEditorValue(page, '/src/main.ts', `// ${marker}\n`);
+    await expect(editorLines).toContainText(marker);
     await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
       timeout: 10_000,
     });
-    await expect
-      .poll(() => readWorkspaceText(page, '/scratch/src/main.ts'), { timeout: 60_000 })
-      .toContain(marker);
+    await saveWorkspace(page);
 
     await recordMainJsTabPaintsOnNextDocument(page);
     await page.reload();
-    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
-      timeout: 60_000,
+    await expectReopenedWorkspace(page);
+    await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
+      timeout: OWNER_TIMEOUT,
     });
-    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
-    await expect(page.getByRole('tab', { name: /src\/main\.ts/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /main\.ts/ })).toBeVisible({
+      timeout: OWNER_TIMEOUT,
+    });
+    await expect(editorLines).toContainText(marker, { timeout: OWNER_TIMEOUT });
     await expect
       .poll(() =>
         page.evaluate(
@@ -211,33 +227,31 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     const marker = `revive-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
     await page.goto('/');
-    await clearWorkspaceOpfs(page);
-    await page.reload();
     await pickStarter(page, 'typescript-ls');
-    // The fresh pick launches the co-resident dev server (ADR-0148): LIVE pill + preview.
     await expect(page.locator('.rf-livepill[data-state="running"]')).toBeVisible({
       timeout: 90_000,
     });
     await expect(page.locator('[data-testid="preview"]')).toBeVisible({ timeout: 90_000 });
 
-    // Edit → the scratch becomes a durable dirty draft (reload-discoverable).
-    await setOpenEditorValue(page, '/scratch/src/main.ts', `// ${marker}\n`);
+    const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
+    await setOpenEditorValue(page, '/src/main.ts', `// ${marker}\n`);
+    await expect(editorLines).toContainText(marker);
     await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
       timeout: 10_000,
     });
-    await expect
-      .poll(() => readWorkspaceText(page, '/scratch/src/main.ts'), { timeout: 60_000 })
-      .toContain(marker);
+    await saveWorkspace(page);
 
-    // Reload reopens the same draft. The co-resident dev server is a pty command
-    // that died with the previous page, so the reopen MUST relaunch it — else the
-    // console stays empty and no preview mounts (the reported bug). Regression guard
-    // for the reload dev-server relaunch, NOT covered by the file/tab guards above.
+    // After Saved, reload must restore both halves of the same user session: the
+    // edited draft and its running dev-server surface.
     await page.reload();
-    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
-      timeout: 90_000,
+    await expectReopenedWorkspace(page);
+    await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
+      timeout: OWNER_TIMEOUT,
     });
-    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: /main\.ts/ })).toBeVisible({
+      timeout: OWNER_TIMEOUT,
+    });
+    await expect(editorLines).toContainText(marker, { timeout: OWNER_TIMEOUT });
     await expect(page.locator('.rf-livepill[data-state="running"]')).toBeVisible({
       timeout: 90_000,
     });
@@ -254,69 +268,54 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     const projectName = `Saved ${marker}`;
 
     await page.goto('/');
-    await clearWorkspaceOpfs(page);
-    await page.reload();
     await pickStarter(page, 'project-files');
 
-    // Dirty the scratch (marker), then Save-as-project: activeId flips to /projects/<id>
-    // and persists durably; the in-session owner re-roots to it.
-    await setOpenEditorValue(page, '/scratch/src/main.js', `// ${marker}\n`);
+    await setOpenEditorValue(page, '/src/main.js', `// ${marker}\n`);
     await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
       timeout: 10_000,
     });
-    const launcher = page.locator('[data-testid="launcher"]');
-    await page.click('[data-action="open-launcher"]');
-    await expect(launcher).toBeVisible({ timeout: 5_000 });
-    await page.getByRole('button', { name: /^Projects/ }).click();
+    await openProjects(page);
     await page.click('[data-action="save-scratch"]');
     const dialog = page.locator('.rf-dialog[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
     await dialog.locator('input.rf-dialog__input').fill(projectName);
     await dialog.getByRole('button', { name: 'Save project' }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 5_000 });
-    const projectId = await (async (): Promise<string> => {
-      const read = async (): Promise<string> => {
-        const index = await readWorkspaceJson<{
-          projects: { id: string; name: string }[];
-        }>(page, '/.rifty-project-index.json');
-        return index?.projects.find((p) => p.name === projectName)?.id ?? '';
-      };
-      await expect.poll(read, { timeout: 60_000 }).not.toBe('');
-      return read();
-    })();
-    await page.locator('.rf-launcher__close').click();
-    await expect(launcher).toHaveCount(0, { timeout: 5_000 });
-
-    // Reload: the cold-boot hidden owner is rooted at /scratch. The persisted
-    // project-active index MUST re-root the owner to /projects/<id> — else the IDE
-    // boots into the empty scratch. Regression guard for the boot re-root.
-    await page.reload();
-    await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
-      timeout: 90_000,
+    await expect(dialog).toHaveCount(0, { timeout: OWNER_TIMEOUT });
+    const projectCard = page.locator('.rf-pcard', { hasText: projectName }).first();
+    await expect(projectCard).toBeVisible({ timeout: OWNER_TIMEOUT });
+    await expect(projectCard).toHaveAttribute('data-active', 'true');
+    await closeLauncher(page);
+    const chip = page.locator('[data-action="open-launcher"]');
+    await expect(chip.locator('.rf-chip__name')).toHaveText(projectName, {
+      timeout: OWNER_TIMEOUT,
     });
-    await expect(launcher).toHaveCount(0);
+    await expect(chip).toHaveAttribute('data-dirty', 'false');
+    await saveWorkspace(page);
 
-    // The durable index still points at the saved project (not reset to scratch).
-    await expect
-      .poll(
-        async () => {
-          const index = await readWorkspaceJson<{ activeId: string }>(
-            page,
-            '/.rifty-project-index.json',
-          );
-          return index?.activeId ?? 'missing';
-        },
-        { timeout: 60_000 },
-      )
-      .toBe(projectId);
+    await page.reload();
+    await expectReopenedWorkspace(page);
+    await expect(chip.locator('.rf-chip__name')).toHaveText(projectName, {
+      timeout: OWNER_TIMEOUT,
+    });
+    await expect(chip).toHaveAttribute('data-dirty', 'false');
+    await expect(page.getByRole('tab', { name: /main\.js/ })).toBeVisible({
+      timeout: OWNER_TIMEOUT,
+    });
+    await expect(page.locator('[data-testid="editor"] .view-lines').first()).toContainText(marker, {
+      timeout: OWNER_TIMEOUT,
+    });
 
-    // Decisive: the owner-resident shell's cwd IS the owner root. A correct re-root
-    // lands the shell in /projects/<id> with the saved file; the bug (owner left at
-    // /scratch) prints /scratch and the relative `cat` misses the marker.
-    await openShellTerminal(page);
-    await runTerminalLine(page, 'pwd');
-    await expectTerminalContains(page, `/projects/${projectId}`, 20_000);
-    await runTerminalLine(page, 'cat src/main.js');
-    await expectTerminalContains(page, marker, 20_000);
+    await openProjects(page);
+    await expect(projectCard).toBeVisible({ timeout: OWNER_TIMEOUT });
+    await expect(projectCard).toHaveAttribute('data-active', 'true');
+    await closeLauncher(page);
+
+    const reopenedShell = await openShellTerminal(page);
+    const modeHint = page.locator(
+      `.rf-terminal-slot[data-session-id="${reopenedShell.sessionId}"] [data-testid="terminal-mode-hint"]`,
+    );
+    await expect(modeHint).toContainText('Commands run in /;', { timeout: 30_000 });
+    await runTerminalLine(page, 'cat ./src/main.js', reopenedShell);
+    await expectSessionContains(page, reopenedShell, marker, 20_000);
   });
 });

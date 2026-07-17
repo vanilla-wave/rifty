@@ -1,7 +1,7 @@
 /**
  * PreviewPanel core (epic playground-testable-core): the effect-free preview
- * glue extracted from PreviewPanel.tsx so node vitest can drive it — route
- * derivation, open-tab routing, and the concrete warm-up hooks (fetch probe,
+ * glue extracted from PreviewPanel.tsx so node vitest can drive it — semantic
+ * URL forwarding, open-tab routing, and the concrete warm-up hooks (fetch probe,
  * fresh-frame navigation) fed to the runPreviewWarmup state machine. The
  * component keeps only the DOM/signal bindings (iframe ref, keyed remount,
  * phase signal) and passes them in as a PreviewFrameHost.
@@ -24,24 +24,17 @@ export const PREVIEW_WARMUP_CONFIG: PreviewWarmupConfig = {
   commitIntervalMs: 200,
 };
 
-/** SW-routed preview route for a virtual localhost port. Exact — no query
- * params: reloads are HMR-client-driven (ADR-0126), never `?rf=` cache-busted. */
-export function previewUrlFor(port: number): string {
-  return `/preview/${port}/`;
-}
-
-/** ↗ action: App's tab callback gets the selected port; without one, fall back
- * to a real window (SW routes the copied URL port-keyed, ADR-0160). */
+/** ↗ action consumes the exact URL already admitted by PreviewRegistry. */
 export function openPreviewTab(
-  port: number,
-  onOpenTab: ((port: number) => void) | undefined,
+  url: string,
+  onOpenTab: ((url: string) => void) | undefined,
   openWindow: (url: string, target: string) => void,
 ): void {
   if (onOpenTab) {
-    onOpenTab(port);
+    onOpenTab(url);
     return;
   }
-  openWindow(previewUrlFor(port), '_blank');
+  openWindow(url, '_blank');
 }
 
 export interface PreviewFrameLike {

@@ -1,8 +1,8 @@
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, syncMirror } from '@riftydev/vfs';
+import { type FsSync, VfsError } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
 import { matchSegment } from './_glob.ts';
-import { resolve } from './_shared.ts';
+import { commandFileSystem, resolve } from './_shared.ts';
 import { walk } from './_walk.ts';
 
 type TypeFilter = 'f' | 'd';
@@ -109,13 +109,13 @@ function nameMatches(name: string | null, basename: string): boolean {
 
 /** Emit one start path's tree. Returns 0, or 1 if the start path is missing. */
 function walkOne(
+  fs: FsSync,
   startPath: string,
   opts: Opts,
   stdout: { write(s: string): void },
   stderr: { write(s: string): void },
   cwd: string,
 ): number {
-  const fs = syncMirror();
   const root = resolve(cwd, startPath);
 
   let rootIsDir: boolean;
@@ -144,7 +144,7 @@ function walkOne(
   // walk yields depth 1+; its maxDepth caps descent (entries at maxDepth kept,
   // children not visited) — pass the SAME cap so -maxdepth bounds the walk too.
   const cap = opts.maxDepth === Number.POSITIVE_INFINITY ? undefined : opts.maxDepth;
-  for (const entry of walk(root, { maxDepth: cap, includeDirs: true })) {
+  for (const entry of walk(root, { maxDepth: cap, includeDirs: true }, fs)) {
     if (entry.depth < opts.minDepth || entry.depth > opts.maxDepth) continue;
     if (!typeMatches(opts.type, entry.isDirectory)) continue;
     if (!nameMatches(opts.name, entry.name)) continue;
@@ -170,9 +170,10 @@ function walkOne(
  */
 export const find: ShellCommand = async (args, ctx) => {
   const { paths, opts } = parse(args);
+  const fs = commandFileSystem(ctx);
   let exit = 0;
   for (const p of paths) {
-    if (walkOne(p, opts, ctx.stdout, ctx.stderr, ctx.cwd) !== 0) exit = 1;
+    if (walkOne(fs, p, opts, ctx.stdout, ctx.stderr, ctx.cwd) !== 0) exit = 1;
   }
   return exit;
 };

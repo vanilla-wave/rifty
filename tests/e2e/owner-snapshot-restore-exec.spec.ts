@@ -1,12 +1,46 @@
-import { expect, test } from '@playwright/test';
-import { clearWorkspaceOpfs, readWorkspaceText } from './helpers/opfs.ts';
+import { type Page, expect, test } from '@playwright/test';
 import {
   expectTerminalContains,
   openShellTerminal,
   pickStarter,
+  resetSandboxThroughUi,
   runTerminalLine,
+  runTerminalLineSettled,
+  selectPreset,
   terminalBuffer,
 } from './helpers/playground.ts';
+
+async function saveScratchAs(page: Page, name: string): Promise<void> {
+  await page.locator('[data-action="open-launcher"]').click();
+  const launcher = page.locator('[data-testid="launcher"]');
+  await expect(launcher).toBeVisible({ timeout: 30_000 });
+  await launcher.getByRole('button', { name: /^Projects/ }).click();
+  await launcher.locator('[data-action="save-scratch"]').click();
+  const dialog = page.locator('.rf-dialog[role="dialog"]');
+  await expect(dialog).toContainText('Save as project');
+  await dialog.locator('input.rf-dialog__input').fill(name);
+  await dialog.getByRole('button', { name: 'Save project' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 120_000 });
+  await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(name, {
+    timeout: 120_000,
+  });
+  await page.locator('.rf-launcher__close').click();
+  await expect(launcher).toHaveCount(0);
+}
+
+async function switchToSavedProject(page: Page, name: string): Promise<void> {
+  await page.locator('[data-action="open-launcher"]').click();
+  const launcher = page.locator('[data-testid="launcher"]');
+  await expect(launcher).toBeVisible({ timeout: 30_000 });
+  await launcher.getByRole('button', { name: /^Projects/ }).click();
+  const card = launcher.locator('.rf-pcard', { hasText: name }).first();
+  await expect(card).toHaveAttribute('role', 'button', { timeout: 120_000 });
+  await card.click();
+  await expect(launcher).toHaveCount(0, { timeout: 120_000 });
+  await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(name, {
+    timeout: 120_000,
+  });
+}
 
 /**
  * The full sandbox contract in ONE run: create → write → exec → teardown →
@@ -17,21 +51,20 @@ import {
  *   - the persistence spec does write → reload → `cat` (a READ after restore);
  *   - the cowsay spec does install → exec with NO reload.
  * Neither proves an installed CLI still RUNS after the owner is torn down and
- * its tree restored — so a post-reload regression in OPFS-persisted node_modules
- * or `.bin` resolution would ship green. This is that composite.
+ * its durable project tree restored. A post-reload regression that drops the
+ * user's dependency intent or cannot re-establish `.bin` resolution would
+ * therefore ship green. This is that composite.
  *
  * Flow:
- *   1. clean OPFS + reload → a fresh owner on an empty tree (deterministic).
+ *   1. Reset sandbox through the Projects UI → a fresh empty browser sandbox.
  *   2. `npm install cowsay` (exec writes node_modules into the owner) and
  *      `echo MARKER > data.txt` (a user file) — create + write.
  *   3. `cowsay hi` draws `< hi >` / `^__^` — exec runs pre-teardown.
- *   4. `page.reload()` — the browser TERMINATES the owner worker (teardown); the
- *      re-booted owner wires OPFS and preloads the persisted tree (restore).
- *   5. `cowsay hi` draws AGAIN — the installed CLI survived restore and still
- *      resolves + runs (load-bearing: node_modules persisted AND `.bin` resolves
- *      against the preloaded tree); `cat data.txt` returns MARKER (the user file
- *      survived too). On the memory backend both vanish, so the assertions are
- *      honest, not trivially green.
+ *   4. `page.reload()` — the browser terminates the owner worker; the re-booted
+ *      owner restores the durable active-project tree.
+ *   5. The current package.json still names cowsay, `cowsay` draws AGAIN, and
+ *      `cat data.txt` returns the marker. Trusted tree reuse and a safe reinstall
+ *      after legitimate Vite cache mutation are both valid recovery paths.
  *
  * Requires cross-origin isolation (owner is SAB-IPC-gated); the harness serves
  * COOP/COEP. Chromium-only, matching the other owner specs.
@@ -44,75 +77,67 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(300_000);
     const marker = `restore-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const projectName = `Restore-${Date.now()}`;
 
-    await page.goto('/');
-    // Deterministic start: wipe this page's owner workspace namespace only.
-    await clearWorkspaceOpfs(page);
-    await page.reload();
+    await resetSandboxThroughUi(page);
     await pickStarter(page, 'project-files');
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });
+    await saveScratchAs(page, projectName);
     await openShellTerminal(page);
 
-    // CREATE + WRITE. The dev server is already LIVE (its install-stamp flush
-    // drained the boot write-through), so these writes drain to OPFS promptly.
-    await runTerminalLine(page, `echo ${marker} > /scratch/data.txt`);
-    await runTerminalLine(page, 'npm install cowsay');
-    // Wait for COMPLETION (not the mid-stream `+ cowsay@`): keystrokes typed
-    // mid-install land in the running install's stdin. The summary is the idle signal.
+    // Create a user file and install a real CLI at the logical project root.
+    await runTerminalLineSettled(page, `echo ${marker} > data.txt`, 30_000);
+    await expect(
+      page.locator('.rf-row[role="treeitem"][data-kind="file"]', { hasText: 'data.txt' }),
+    ).toBeVisible({ timeout: 15_000 });
+    await runTerminalLineSettled(page, 'npm install cowsay', 200_000);
     await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 200_000);
-
     // EXEC pre-teardown: the installed CLI runs in-realm and draws the cow.
-    await runTerminalLine(page, 'cowsay hi');
-    await expectTerminalContains(page, '< hi >', 20_000);
+    await runTerminalLineSettled(page, 'cowsay before-switch', 30_000);
+    await expectTerminalContains(page, '< before-switch >', 20_000);
     expect(await terminalBuffer(page)).toContain('^__^');
 
-    // The durability sequence runs in BACKGROUND after install exit (backlog
-    // install-stamp-background-flush) — this spec's claim is the RESTORED
-    // tree, so wait for its proof IN OPFS, not the in-memory mirror: THIS
-    // install's TRUSTED stamp (deps include cowsay — the boot install's
-    // earlier stamp does not; no pending marker) is written only after the
-    // tree drain reported clean (drain → gate → stamp order), and reading it
-    // from OPFS directly proves its own persist finished too. A terminal
-    // `cat` would race the reload against the stamp's in-flight persist and
-    // silently downgrade this spec to the reinstall/self-heal path.
-    await expect
-      .poll(
-        async () => {
-          const text = await readWorkspaceText(
-            page,
-            '/scratch/node_modules/.rifty-install-stamp.json',
-          );
-          return text.includes('"cowsay"') && !text.includes('"durability"');
-        },
-        { timeout: 60_000 },
-      )
-      .toBe(true);
+    // A public project switch closes the named project's live runtime and waits
+    // for its durability phase. Returning to the same identity must recover the
+    // user's current manifest and dependency capability, whether the trusted
+    // tree is reusable or Vite legitimately revoked it with a cache mutation.
+    await selectPreset(page, 'node-worker');
+    await switchToSavedProject(page, projectName);
+    await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 120_000 });
+    await openShellTerminal(page);
+    await runTerminalLineSettled(page, 'cat data.txt', 30_000);
+    await expectTerminalContains(page, marker, 15_000);
+    await runTerminalLineSettled(page, 'cat package.json', 30_000);
+    await expectTerminalContains(page, /"cowsay"\s*:\s*"latest"/u, 15_000);
+    await runTerminalLineSettled(page, 'cowsay after-switch', 30_000);
+    await expectTerminalContains(page, '< after-switch >', 20_000);
 
     // TEARDOWN + RESTORE: reload terminates the owner worker; on re-boot the owner
-    // wires OPFS (initBackend) and preloads the persisted tree — node_modules + the
-    // user file — before serving.
+    // restores the current project manifest + user file and reaches a
+    // dependency-ready state before serving.
     await page.reload();
     await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
       timeout: 60_000,
     });
     await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
+    await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 120_000 });
     await openShellTerminal(page);
 
-    // EXEC after restore: the installed CLI STILL resolves + runs from the
-    // preloaded node_modules (no fresh install) — the load-bearing claim.
-    await runTerminalLine(page, 'cowsay hi');
-    await expectTerminalContains(page, '< hi >', 30_000);
+    // The restored dependency intent and executable capability must agree.
+    await runTerminalLineSettled(page, 'cat package.json', 30_000);
+    await expectTerminalContains(page, /"cowsay"\s*:\s*"latest"/u, 15_000);
+    await runTerminalLineSettled(page, 'cowsay after-reload', 30_000);
+    await expectTerminalContains(page, '< after-reload >', 30_000);
     expect(await terminalBuffer(page)).toContain('^__^');
 
     // …and the user file written before teardown is still readable.
-    await runTerminalLine(page, 'cat /scratch/data.txt');
+    await runTerminalLine(page, 'cat data.txt');
     await expectTerminalContains(page, marker, 20_000);
 
-    // FAST RELOAD (backlog install-stamp-background-flush fault row): reload
-    // IMMEDIATELY after install exit, racing the background drain/stamp. The
-    // contract is self-heal — restore either reuses the tree (stamp landed) or
-    // re-installs (no stamp yet); either way the workspace boots and serves,
-    // never a crash or a trusted torn tree. Deliberately NO stamp wait here.
+    // FAST RELOAD: reload immediately after install exits, while durability may
+    // still be publishing. Restore must either reuse a complete dependency tree
+    // or rebuild it; either way the project boots and serves without exposing a
+    // torn tree.
     await runTerminalLine(page, 'npm install ms');
     // The terminal buffer does NOT survive the reload above (verified live —
     // review r4's "stale cowsay summary matches first" concern is refuted):
@@ -123,11 +148,10 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
       timeout: 60_000,
     });
     await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
-    // The dev server reaching LIVE proves the boot install path completed —
-    // either the stamp landed (tree reused) or the restore re-installed; a
-    // torn trusted tree could not serve the dev server. That IS the fault-row
-    // claim: self-heal, no crash (the ms package itself may legitimately be
-    // re-installed away — the accepted cost of reloading inside the window).
+    // LIVE proves the restored project can still complete its boot path; a torn
+    // dependency tree could not serve the dev server. The newly installed `ms`
+    // package may be rebuilt away because the reload intentionally lands inside
+    // the durability window.
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 120_000 });
     await openShellTerminal(page);
     await runTerminalLine(page, `echo fast-reload-${marker}`);

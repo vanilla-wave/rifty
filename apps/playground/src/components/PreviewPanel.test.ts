@@ -36,17 +36,17 @@ const WITH_PROD_PREVIEW: PreviewPortEntry[] = [
 describe('PreviewPanel refresh contract', () => {
   it('does not accept a parent snapshot refresh key', () => {
     // ADR-0126 — preview reloads are HMR-client-driven; snapshot reload removed.
-    // tsc-gated (playground tsconfig covers tests); the `?rf=` cache-buster
-    // shape is killed by previewUrlFor's exact-equality test (preview-panel-core).
+    // tsc-gated (playground tsconfig covers tests); the exact semantic URL
+    // routing is pinned in preview-panel-core.test.ts.
     expectTypeOf(PreviewPanel).parameter(0).not.toHaveProperty('refreshKey');
   });
 
-  it('passes the manually selected preview port to the open-tab callback', () => {
-    // tsc-gated prop signature; call routing (callback gets the port, window
-    // fallback otherwise) is behavioral in preview-panel-core.test.ts.
+  it('passes the selected semantic preview URL to the open-tab callback', () => {
+    // ADR-0278: the semantic registry URL, not a caller-reconstructed port
+    // route, crosses the UI callback.
     expectTypeOf(PreviewPanel)
       .parameter(0)
-      .toMatchObjectType<{ onOpenTab?: (port: number) => void }>();
+      .toMatchObjectType<{ onOpenTab?: (url: string) => void }>();
   });
 
   it('recreates the iframe before preview navigation so the SW controls the document', () => {
@@ -104,15 +104,20 @@ describe('PreviewPanel port switcher (ADR-0155)', () => {
   // onChange→setPort→iframe path. A source-grep of the exact handler string was
   // dropped (ADR-0157 review C8) — it broke on cosmetic rewrites with no behavior change.
 
-  it('falls back to the manual port <input> when there are no known ports', () => {
+  it('offers no manual route or preview actions before the registry publishes an entry', () => {
     const empty = renderToString(() => PreviewPanel({ ports: () => [] }));
-    expect(empty).toContain('class="rf-preview__port"');
+    expect(empty).not.toContain('class="rf-preview__port"');
     expect(empty).not.toContain('class="rf-preview__switcher"');
+    expect(empty).not.toContain('class="rf-preview__frame"');
+    expect(empty).not.toContain('aria-label="Copy preview URL"');
+    expect(empty).not.toContain('aria-label="Reload preview"');
+    expect(empty).not.toContain('aria-label="Open preview in new tab"');
     expect(empty).toContain('data-testid="preview-empty"');
 
     const none = renderToString(() => PreviewPanel({}));
-    expect(none).toContain('class="rf-preview__port"');
+    expect(none).not.toContain('class="rf-preview__port"');
     expect(none).not.toContain('class="rf-preview__switcher"');
+    expect(none).not.toContain('class="rf-preview__frame"');
     expect(none).toContain('data-testid="preview-empty"');
   });
 });

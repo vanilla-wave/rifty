@@ -1,19 +1,18 @@
 /** `touch FILE...` — create empty files, or bump mtime if they already exist. */
 
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, guardVfsMutations, syncMirror } from '@riftydev/vfs';
+import { type FsSync, VfsError, guardVfsMutations } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { enc, resolve, strerror } from './_shared.ts';
+import { commandFileSystem, enc, resolve, strerror } from './_shared.ts';
 
 /**
- * Update mtime of an existing file/dir on the active sync mirror via
+ * Update mtime of an existing file/dir on the command filesystem via
  * `FsSync.utimes` (ADR-0029). `Date.now()` can return the same value twice
  * in tight loops, so we monotonically bump the timestamp by at least 1 ms so
  * consecutive `touch`es are visibly distinct (matches GNU `touch` semantics
  * in practice).
  */
-function bumpMtime(path: string): void {
-  const fs = syncMirror();
+function bumpMtime(fs: FsSync, path: string): void {
   const prev = fs.statSync(path).mtime ?? 0;
   const now = Date.now();
   const next = now > prev ? now : prev + 1;
@@ -40,7 +39,7 @@ export const touch: ShellCommand = async (args, ctx) => {
     ctx.stderr.write('touch: missing operand\n');
     return 1;
   }
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   const targets = files.map((path) => {
     const absolute = resolve(ctx.cwd, path);
     return { path, absolute, exists: fs.existsSync(absolute) };
@@ -55,7 +54,7 @@ export const touch: ShellCommand = async (args, ctx) => {
       let exit = 0;
       for (const { path, absolute } of targets) {
         try {
-          if (fs.existsSync(absolute)) bumpMtime(absolute);
+          if (fs.existsSync(absolute)) bumpMtime(fs, absolute);
           else fs.writeFileSync(absolute, enc.encode(''));
         } catch (err) {
           const msg = err instanceof VfsError ? strerror(err) : (err as Error).message;

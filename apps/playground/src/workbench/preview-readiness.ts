@@ -2,6 +2,7 @@ interface PreviewAdvertisementBase {
   readonly ownerToken: string;
   readonly port: number;
   readonly url: string;
+  readonly label: string;
   readonly source: 'dev-server' | 'preview' | 'node';
   readonly sid: string;
   readonly previewScope?: string;

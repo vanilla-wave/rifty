@@ -38,7 +38,7 @@ test('visible xterm resize reaches the real owner child before SIGWINCH', async 
     'process.stdout.on("resize",()=>process.stdout.write("RESIZE:"+process.stdout.columns+"x"+process.stdout.rows+"\\n"));' +
     'process.on("SIGWINCH",()=>process.stdout.write("SIGWINCH:"+process.stdout.columns+"x"+process.stdout.rows+"\\n"));' +
     'setInterval(()=>{},1000);';
-  await runTerminalLineSettled(page, `echo '${source}' > /scratch/terminal-live-resize.js`, 20_000);
+  await runTerminalLineSettled(page, `echo '${source}' > terminal-live-resize.js`, 20_000);
   await runTerminalLine(page, 'node terminal-live-resize.js', slot);
 
   await expect

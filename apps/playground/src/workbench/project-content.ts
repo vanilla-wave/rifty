@@ -5,6 +5,7 @@ import {
   type ProjectDocumentReadEntry,
   type ProjectDocuments,
   type ProjectDocumentsMutation,
+  type ProjectDocumentsOwnerByteScope,
   type ProjectDocumentsRevision,
   createProjectDocumentsController,
 } from './project-documents.ts';
@@ -30,6 +31,8 @@ export interface ProjectContentController {
   invalidate(mutation: ProjectDocumentsMutation, revision: ProjectDocumentsRevision): void;
   /** Transport lifecycle fence; does not claim a new owner revision. */
   invalidateAll(reason: ProjectDocumentInvalidation): void;
+  /** Private semantic admission gate for session tools. */
+  awaitOwnerByteAdmission(scope: ProjectDocumentsOwnerByteScope): Promise<void>;
   /** Pure synchronous admission check; does not fence content handles. */
   preflightClose(): void;
   /** Dirty/saving documents reject before files or the committer are fenced. */
@@ -105,6 +108,7 @@ export function createProjectContentController(
     documents: documentController.documents,
     invalidate: documentController.invalidate,
     invalidateAll: documentController.invalidateAll,
+    awaitOwnerByteAdmission: documentController.awaitOwnerByteAdmission,
     preflightClose,
     close,
   });

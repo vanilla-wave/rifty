@@ -33,6 +33,7 @@ export function buildChildSpawnSpec(
       kind: 'program',
       bin: true,
       remoteFs: true,
+      ...(req.remoteFsRoot === undefined ? {} : { remoteFsRoot: req.remoteFsRoot }),
       nodeServe: true,
       ...(req.previewScope === undefined ? {} : { previewScope: req.previewScope }),
       terminal: childTerminalBootstrap(req),

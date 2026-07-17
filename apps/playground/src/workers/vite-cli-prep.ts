@@ -1,13 +1,20 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
 import type { BinSpawnRequest } from '../glue/bin-executor.ts';
-import { applyViteCliActionPatch, viteCliActionPatchApplied } from './vite-cli-install-policy.ts';
+import {
+  applyViteCliActionPatch,
+  applyViteRootWatchPatch,
+  viteCliActionPatchApplied,
+  viteRootWatchPatchApplied,
+  viteRootWatchPatchPolicy,
+} from './vite-cli-install-policy.ts';
 import { prepareViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 export type ViteCliMode = 'dev' | 'build' | 'preview' | 'optimize' | 'info';
 const VITE_BIN_SUFFIX = '/.bin/vite';
+const VITE_CHUNKS_SUFFIX = '/dist/node/chunks';
 
 declare global {
   // Pins detached async CLI actions (Vite's bundled CAC parse() does not await them).
@@ -46,12 +53,57 @@ export function viteCliPreparationFromArgs(options: {
 // NOT shadow-registry shims (those apply at install time, ADR-0188): this
 // patches Vite's own CLI before package promotion. Trusted child startup only
 // validates the exact bytes below; it never repairs node_modules.
-function installCliActionPatch(vitePackageRoot: string): void {
+function installCliActionPatch(vitePackageRoot: string): boolean {
   const fs = syncMirror();
   const path = normalizePath(`${vitePackageRoot}/dist/node/cli.js`);
-  if (!fs.existsSync(path)) return;
+  if (!fs.existsSync(path)) return false;
   const source = dec.decode(fs.readFileBytesSync(path));
   const prepared = applyViteCliActionPatch(source);
+  if (prepared !== source) fs.writeFileSync(path, enc.encode(prepared));
+  return true;
+}
+
+interface ViteRootWatchPatchSite {
+  readonly path: string;
+  readonly source: string;
+}
+
+function occurrences(source: string, needle: string): number {
+  return source.split(needle).length - 1;
+}
+
+function rootWatchPatchSite(vitePackageRoot: string): ViteRootWatchPatchSite {
+  const fs = syncMirror();
+  const chunks = normalizePath(`${vitePackageRoot}${VITE_CHUNKS_SUFFIX}`);
+  if (!fs.existsSync(chunks)) {
+    throw new Error(`vite root watcher patch failed: missing chunks directory ${chunks}`);
+  }
+  const sites: ViteRootWatchPatchSite[] = [];
+  let anchors = 0;
+  for (const entry of fs.readdirSync(chunks)) {
+    if (entry.isDirectory || !entry.name.endsWith('.js')) continue;
+    const path = `${chunks}/${entry.name}`;
+    const source = dec.decode(fs.readFileBytesSync(path));
+    const count =
+      occurrences(source, viteRootWatchPatchPolicy.needle) +
+      occurrences(source, viteRootWatchPatchPolicy.replacement);
+    if (count > 0) sites.push({ path, source });
+    anchors += count;
+  }
+  if (anchors !== 1 || sites.length !== 1) {
+    throw new Error(
+      `vite root watcher patch failed: expected exactly one Chokidar DirEntry.add anchor; found ${anchors}`,
+    );
+  }
+  const site = sites[0];
+  if (!site) throw new Error('vite root watcher patch failed: missing patch site');
+  return site;
+}
+
+function installRootWatchPatch(vitePackageRoot: string): void {
+  const fs = syncMirror();
+  const { path, source } = rootWatchPatchSite(vitePackageRoot);
+  const prepared = applyViteRootWatchPatch(source);
   if (prepared === source) return;
   fs.writeFileSync(path, enc.encode(prepared));
 }
@@ -65,6 +117,13 @@ function validateCliActionPatch(vitePackageRoot: string): void {
   const source = dec.decode(fs.readFileBytesSync(path));
   if (!viteCliActionPatchApplied(source)) {
     throw new Error(`vite CLI files must be prepared by acquisition before promotion: ${path}`);
+  }
+}
+
+function validateRootWatchPatch(vitePackageRoot: string): void {
+  const { path, source } = rootWatchPatchSite(vitePackageRoot);
+  if (!viteRootWatchPatchApplied(source)) {
+    throw new Error(`vite root watcher must be prepared by acquisition before promotion: ${path}`);
   }
 }
 
@@ -86,12 +145,14 @@ export async function prepareViteCliAcquisitionFiles(
   root: string,
   executedBinPath?: string,
 ): Promise<void> {
-  installCliActionPatch(vitePackageRoot(root, executedBinPath));
+  const packageRoot = vitePackageRoot(root, executedBinPath);
+  if (installCliActionPatch(packageRoot)) installRootWatchPatch(packageRoot);
 }
 
 export async function prepareViteCli(options: ViteCliPreparation): Promise<void> {
   const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
   validateCliActionPatch(packageRoot);
+  validateRootWatchPatch(packageRoot);
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   if (options.mode === 'info') return;
   const fs = syncMirror();

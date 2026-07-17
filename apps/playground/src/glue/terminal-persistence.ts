@@ -18,15 +18,24 @@ import {
 } from '@riftydev/terminal/state';
 import { OpfsVfs, syncMirror } from '@riftydev/vfs';
 
+export interface ProjectTerminalPersistenceState {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string>>;
+}
+
 export interface TerminalPersistence {
   readonly backend: 'opfs' | 'memory';
   readonly initialHistory: readonly TerminalHistoryRecord[];
-  readonly initialState: TerminalState;
+  readonly initialState: ProjectTerminalPersistenceState;
+  readonly initialStateSource: 'legacy-absolute' | 'project-rooted';
   saveHistory(records: readonly TerminalHistoryRecord[]): Promise<void>;
-  saveState(state: TerminalState): Promise<void>;
+  saveState(state: ProjectTerminalPersistenceState): Promise<void>;
 }
 
 type TerminalWorkspaceFs = TerminalHistoryFs & TerminalStateFs;
+type InitialTerminalState = Pick<TerminalPersistence, 'initialState' | 'initialStateSource'>;
+
+const PROJECT_ROOTED_TERMINAL_STATE_PATH = '/workspace/.rifty/project-terminal-state.json';
 
 export interface TerminalPersistenceDeps {
   createOpfs?: () => Promise<TerminalHistoryVfs & TerminalStateVfs>;
@@ -56,6 +65,49 @@ function createWriteQueue(): (task: () => Promise<void>) => Promise<void> {
   };
 }
 
+function projectTerminalState(state: TerminalState): ProjectTerminalPersistenceState {
+  return Object.freeze({ cwd: state.cwd, env: Object.freeze({ ...state.env }) });
+}
+
+function storedTerminalState(state: ProjectTerminalPersistenceState): TerminalState {
+  return { cwd: state.cwd, env: { ...state.env } };
+}
+
+async function loadInitialStateAsync(
+  store: TerminalStateVfs,
+  legacyDefaultCwd: string,
+): Promise<InitialTerminalState> {
+  try {
+    await store.readFile(PROJECT_ROOTED_TERMINAL_STATE_PATH);
+  } catch {
+    return {
+      initialState: projectTerminalState(await loadTerminalStateAsync(store, legacyDefaultCwd)),
+      initialStateSource: 'legacy-absolute',
+    };
+  }
+  return {
+    initialState: projectTerminalState(
+      await loadTerminalStateAsync(store, '/', PROJECT_ROOTED_TERMINAL_STATE_PATH),
+    ),
+    initialStateSource: 'project-rooted',
+  };
+}
+
+function loadInitialState(store: TerminalStateFs, legacyDefaultCwd: string): InitialTerminalState {
+  if (!store.existsSync(PROJECT_ROOTED_TERMINAL_STATE_PATH)) {
+    return {
+      initialState: projectTerminalState(loadTerminalState(store, legacyDefaultCwd)),
+      initialStateSource: 'legacy-absolute',
+    };
+  }
+  return {
+    initialState: projectTerminalState(
+      loadTerminalState(store, '/', PROJECT_ROOTED_TERMINAL_STATE_PATH),
+    ),
+    initialStateSource: 'project-rooted',
+  };
+}
+
 export async function createTerminalPersistence(
   defaultCwd: string,
   deps: TerminalPersistenceDeps = {},
@@ -63,16 +115,20 @@ export async function createTerminalPersistence(
   const enqueue = createWriteQueue();
   try {
     const opfs = await (deps.createOpfs ?? createOpfsStore)();
+    const initial = await loadInitialStateAsync(opfs, defaultCwd);
     return {
       backend: 'opfs',
       initialHistory: await loadTerminalHistoryAsync(opfs),
-      // cwd is passed through as-is; the OWNER validates it against its tree on
-      // session open (single store owner; the page holds no authoritative fs to
-      // check, reading through ports — see reachableCwd in real-vite-bootstrap's
-      // makeShell).
-      initialState: await loadTerminalStateAsync(opfs, defaultCwd),
+      ...initial,
       saveHistory: (records) => enqueue(() => saveTerminalHistoryAsync(opfs, records)),
-      saveState: (state) => enqueue(() => saveTerminalStateAsync(opfs, state)),
+      saveState: (state) =>
+        enqueue(() =>
+          saveTerminalStateAsync(
+            opfs,
+            storedTerminalState(state),
+            PROJECT_ROOTED_TERMINAL_STATE_PATH,
+          ),
+        ),
     };
   } catch {
     // OPFS unavailable → degraded, session-local history only. The page holds no
@@ -80,12 +136,20 @@ export async function createTerminalPersistence(
     // this reads the empty lazy-default mirror;
     // nothing persists across reload (honestly reported as `backend: 'memory'`).
     const workspaceFs = (deps.syncFs ?? syncMirror)();
+    const initial = loadInitialState(workspaceFs, defaultCwd);
     return {
       backend: 'memory',
       initialHistory: loadTerminalHistory(workspaceFs),
-      initialState: loadTerminalState(workspaceFs, defaultCwd),
+      ...initial,
       saveHistory: (records) => enqueue(async () => saveTerminalHistory(workspaceFs, records)),
-      saveState: (state) => enqueue(async () => saveTerminalState(workspaceFs, state)),
+      saveState: (state) =>
+        enqueue(async () =>
+          saveTerminalState(
+            workspaceFs,
+            storedTerminalState(state),
+            PROJECT_ROOTED_TERMINAL_STATE_PATH,
+          ),
+        ),
     };
   }
 }

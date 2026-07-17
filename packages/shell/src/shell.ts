@@ -17,6 +17,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import {
+  type FsSync,
   type VfsMutationGuard,
   guardVfsMutations,
   isAbsolute,
@@ -53,6 +54,8 @@ export type BinExecutor = (
 export interface ShellOptions {
   cwd?: string;
   env?: Record<string, string>;
+  /** Instance-local file namespace; omitted calls resolve the ambient sync mirror. */
+  fileSystem?: FsSync;
   /**
    * Injected by the host to run a resolved `.bin` shim (ADR-0137). Executing a
    * Node program needs a Worker realm the shell layer can't reach, so the
@@ -312,6 +315,7 @@ export class Shell {
   private readonly backgroundJobs: BackgroundJob[] = [];
   private backgroundSeq = 0;
   private readonly execBin?: BinExecutor;
+  private readonly fileSystem?: FsSync;
   private readonly mutationGuard?: VfsMutationGuard;
   private readonly assertPortablePaths?: (absolutePaths: readonly string[]) => void;
 
@@ -319,6 +323,7 @@ export class Shell {
     this._cwd = normalizePath(options.cwd ?? '/');
     this.env = { ...(options.env ?? {}) };
     this.execBin = options.execBin;
+    this.fileSystem = options.fileSystem;
     this.mutationGuard = options.mutationGuard;
     this.assertPortablePaths = options.assertPortablePaths;
     const builtins = builtinCommands(
@@ -330,7 +335,7 @@ export class Shell {
       (n) => this.commands.has(n),
       () => this.listBackgroundJobs(),
       // `which` reports installed-CLI hits at the LIVE cwd (cd mutates it).
-      (n) => resolveBin(this._cwd, n),
+      (n) => resolveBin(this.activeFileSystem(), this._cwd, n),
       // `help` lists the live registry (builtins + host-registered programs).
       () => this.commandNames(),
     );
@@ -339,6 +344,10 @@ export class Shell {
 
   get cwd(): string {
     return this._cwd;
+  }
+
+  private activeFileSystem(): FsSync {
+    return this.fileSystem ?? syncMirror();
   }
 
   envSnapshot(): Record<string, string> {
@@ -625,6 +634,7 @@ export class Shell {
       cwd: this._cwd,
       env: this.env,
       execBin: this.execBin,
+      fileSystem: this.fileSystem,
       mutationGuard: this.mutationGuard,
       assertPortablePaths: this.assertPortablePaths,
     });
@@ -835,7 +845,7 @@ export class Shell {
         const inPath = normalizePath(
           isAbsolute(redirectFrom) ? redirectFrom : joinPath(this._cwd, redirectFrom),
         );
-        stageStdin = bufferStdin(syncMirror().readFileBytesSync(inPath));
+        stageStdin = bufferStdin(this.activeFileSystem().readFileBytesSync(inPath));
       } catch (err) {
         const code = (err as { code?: string }).code;
         const reason = code === 'EISDIR' ? 'Is a directory' : 'No such file or directory';
@@ -871,12 +881,13 @@ export class Shell {
       terminal,
       stdin: stageStdin,
       signal,
+      fileSystem: this.fileSystem,
       mutationGuard: this.mutationGuard,
       assertPortablePaths: this.assertPortablePaths,
     };
 
     if (!handler) {
-      const binPath = resolveBin(this._cwd, cmd);
+      const binPath = resolveBin(this.activeFileSystem(), this._cwd, cmd);
       if (binPath === null) {
         // A recognized package manager → a directed npm nudge INSTEAD of the
         // generic miss + a wrong `Did you mean 'npm'?`.
@@ -943,7 +954,7 @@ export class Shell {
         const path = normalizePath(
           isAbsolute(redirectTo.path) ? redirectTo.path : joinPath(this._cwd, redirectTo.path),
         );
-        const fs = syncMirror();
+        const fs = this.activeFileSystem();
         // The captured BYTES flow to the file verbatim (ADR-0198) — encoding
         // the display string minted U+FFFD into binary payloads.
         const payload = concatBytes(stdoutChunks);
@@ -1018,7 +1029,7 @@ export class Shell {
 
     let entries: readonly { name: string }[];
     try {
-      entries = syncMirror().readdirSync(dir);
+      entries = this.activeFileSystem().readdirSync(dir);
     } catch {
       return [word]; // unreadable dir → literal (nullglob-off)
     }

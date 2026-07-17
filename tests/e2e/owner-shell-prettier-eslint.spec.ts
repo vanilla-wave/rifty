@@ -65,7 +65,7 @@ test.describe('owner shell runs real Prettier and ESLint package tooling', () =>
     await expectTerminalContains(page, /@typescript-eslint\/no-explicit-any/, 60_000);
     await expectTerminalContains(page, 'TSLINT_EXPECTED_FAILURE', 60_000);
     const typedLintOutput = await terminalBuffer(page);
-    expect(typedLintOutput).toMatch(/(?:\/scratch\/)?src\/typed\.ts/);
+    expect(typedLintOutput).toMatch(/\bsrc\/typed\.ts/);
     for (const crashMarker of [
       'Oops! Something went wrong!',
       'Parsing error',
