@@ -1090,16 +1090,16 @@ export function App(props: AppProps) {
     return previewPorts().length > 0 || (plan?.kind !== 'node-cli' && runState() === 'starting');
   }
 
-  function openPreviewTab(
-    port = previewPorts()[0]?.port ?? glyphFor(activeStarterId()).port,
-  ): void {
+  function openPreviewTab(url = previewPorts()[0]?.url): void {
+    if (url === undefined) {
+      flashError('Preview is still starting');
+      return;
+    }
     const popup = globalThis.window?.open('', '_blank');
     if (popup === null || popup === undefined) {
       flashError('Popup blocked — allow popups to open the preview');
       return;
     }
-    const url =
-      previewPorts().find((preview) => preview.port === port)?.url ?? `/preview/${String(port)}/`;
     popup.document.write(
       `<!doctype html><html><head><title>rifty preview</title><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;background:#101218}</style></head><body><iframe src="${url.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"></iframe></body></html>`,
     );
@@ -1512,7 +1512,7 @@ export function App(props: AppProps) {
                   onReset={layout.resetPreviewW}
                 />
                 <PreviewPanel
-                  initialPort={previewPorts()[0]?.port ?? glyphFor(activeStarterId()).port}
+                  initialPort={previewPorts()[0]?.port}
                   onOpenTab={openPreviewTab}
                   onNotify={flashToast}
                   ports={previewPorts}

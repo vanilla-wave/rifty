@@ -1,5 +1,6 @@
 import { type GitIdentity, makeGit, vfsToGitFs } from '@riftydev/git';
 import { RegistryClient } from '@riftydev/npm-client';
+import type { PersistFailureReport } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { InstallStampAuthorityError } from '../glue/install-stamp-authority.ts';
@@ -44,6 +45,7 @@ const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 const ARCHIVE_TRANSACTION_ROOT = '/.rifty/workbench/v1/projects/project-a/.playground-archive-v1';
 const ARCHIVE_TRANSACTION_STAGE = `${ARCHIVE_TRANSACTION_ROOT}/stage`;
 const ARCHIVE_TRANSACTION_PHASE = `${ARCHIVE_TRANSACTION_ROOT}/phase`;
+const FOREIGN_OWNER_PATH = '/.rifty/workbench/v1/projects/project-b/tree/private.ts';
 const PACKAGE_JSON = '{"name":"project-a","version":"1.0.0","dependencies":{"kleur":"4.1.5"}}\n';
 const ORIGINAL_SOURCE = 'export const value = "original";\n';
 const IMPORTED_SOURCE = 'export const value = "imported";\n';
@@ -512,6 +514,32 @@ function expectNoPendingPrimitives(fs: DurableOwnerFs): void {
   ).toBe(0);
 }
 
+function ownerRootedFailureReport(): PersistFailureReport {
+  const failures = Object.freeze([
+    Object.freeze({
+      op: 'write' as const,
+      path: `${PROJECT_ROOT}/src/main.ts`,
+      message: 'project quota sample',
+    }),
+    Object.freeze({
+      op: 'mkdir' as const,
+      path: ARCHIVE_TRANSACTION_ROOT,
+      message: 'transaction quota sample',
+    }),
+    Object.freeze({
+      op: 'write' as const,
+      path: FOREIGN_OWNER_PATH,
+      message: 'foreign quota sample',
+    }),
+  ]);
+  return Object.freeze({
+    failures,
+    total: failures.length,
+    anyFailure: (predicate: (path: string) => boolean) =>
+      failures.some((failure) => predicate(failure.path)),
+  });
+}
+
 async function importAndRecordResolution(h: ArchiveHarness): Promise<void> {
   await h.archive.import(IMPORT_ARCHIVE).then(() => {
     h.timeline.push('resolve');
@@ -769,6 +797,42 @@ describe('Playground archive owner/session integration', () => {
     expectNoPendingPrimitives(h.fs);
     await h.close();
   });
+
+  it.each(['construction', 'operation settlement'] as const)(
+    'keeps owner-rooted durability paths private across archive %s failures',
+    async (boundary) => {
+      // Fault class: provenance-lie. The public archive error namespace is
+      // project-rooted even though its durability report is owner-rooted.
+      const report = ownerRootedFailureReport();
+      let failure: unknown;
+      let opened: ArchiveHarness | null = null;
+      if (boundary === 'construction') {
+        const fs = new DurableOwnerFs();
+        fs.mkdirSync(PROJECT_ROOT, { recursive: true });
+        await fs.flush();
+        vi.spyOn(fs, 'flush').mockResolvedValueOnce(report);
+        failure = await harness(fs, { seed: false }).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      } else {
+        opened = await harness();
+        vi.mocked(opened.owner.authority.flush).mockResolvedValueOnce(report);
+        failure = await opened.archive.import(IMPORT_ARCHIVE).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      }
+
+      const detail = nestedErrors(failure).map(String).join('\n');
+      expect(detail).toContain('write /src/main.ts: project quota sample');
+      expect(detail).not.toContain(PROJECT_ROOT);
+      expect(detail).not.toContain(ARCHIVE_TRANSACTION_ROOT);
+      expect(detail).not.toContain(FOREIGN_OWNER_PATH);
+
+      if (opened !== null) await opened.close();
+    },
+  );
 
   it.each(DURABILITY_FAULTS)(
     'sweeps every persisted archive primitive and crash boundary across $name',

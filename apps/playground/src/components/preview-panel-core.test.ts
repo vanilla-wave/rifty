@@ -3,7 +3,6 @@ import {
   type PreviewFrameHost,
   type PreviewFrameLike,
   openPreviewTab,
-  previewUrlFor,
   runPreviewFrameWarmup,
 } from './preview-panel-core.ts';
 
@@ -49,25 +48,22 @@ function makeHost(overrides: Partial<PreviewFrameHost> = {}) {
 }
 
 describe('preview-panel-core', () => {
-  it('derives the exact SW preview route for a port — no cache-buster query (ADR-0126)', () => {
-    expect(previewUrlFor(3000)).toBe('/preview/3000/');
-    expect(previewUrlFor(5174)).toBe('/preview/5174/');
-  });
-
-  it('open-tab passes the selected port to the App callback, never opening a window', () => {
+  it('open-tab passes the exact registry-routed URL to the App callback', () => {
+    const routedUrl = '/owner-routes/session-a/preview-5174';
     const onOpenTab = vi.fn();
     const openWindow = vi.fn();
-    openPreviewTab(5174, onOpenTab, openWindow);
+    openPreviewTab(routedUrl, onOpenTab, openWindow);
     expect(onOpenTab).toHaveBeenCalledTimes(1);
-    expect(onOpenTab).toHaveBeenCalledWith(5174);
+    expect(onOpenTab).toHaveBeenCalledWith(routedUrl);
     expect(openWindow).not.toHaveBeenCalled();
   });
 
-  it('open-tab without a callback falls back to a real window on the preview route', () => {
+  it('open-tab without a callback uses the exact registry-routed URL, never a port-derived route', () => {
+    const routedUrl = '/owner-routes/session-a/preview-3000';
     const openWindow = vi.fn();
-    openPreviewTab(3000, undefined, openWindow);
+    openPreviewTab(routedUrl, undefined, openWindow);
     expect(openWindow).toHaveBeenCalledTimes(1);
-    expect(openWindow).toHaveBeenCalledWith('/preview/3000/', '_blank');
+    expect(openWindow).toHaveBeenCalledWith(routedUrl, '_blank');
   });
 
   it('probes the route with a no-store GET and drains the body before reporting ok', async () => {

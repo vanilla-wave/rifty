@@ -7,6 +7,7 @@ import {
 } from '../workbench/internal/playground-archive.ts';
 import type { PlaygroundArchive, PlaygroundScm } from '../workbench/playground.ts';
 import type { ProjectContentController } from '../workbench/project-content.ts';
+import { toProjectPath } from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
 import type { OwnerVfsAuthority, OwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import type { WorkbenchProjectVfs } from './workbench-project-vfs.ts';
@@ -60,11 +61,23 @@ function errorFrom(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-async function requireDurable(authority: OwnerVfsAuthority): Promise<void> {
+function publicFailurePath(projectRoot: string, ownerPath: string): string {
+  try {
+    return toProjectPath(projectRoot, ownerPath);
+  } catch {
+    return '[outside active project]';
+  }
+}
+
+async function requireDurable(authority: OwnerVfsAuthority, projectRoot: string): Promise<void> {
   const report = await authority.flush();
   if (report === undefined || report.total === 0) return;
   const detail = report.failures
-    .map((failure) => `${failure.op} ${failure.path}: ${failure.message}`)
+    .map((failure) => {
+      const path = publicFailurePath(projectRoot, failure.path);
+      const message = failure.message.replaceAll(failure.path, path).replaceAll(projectRoot, '');
+      return `${failure.op} ${path}: ${message}`;
+    })
     .join('; ');
   const summary = `${String(report.total)} unhealed failure${report.total === 1 ? '' : 's'}`;
   throw new Error(
@@ -74,13 +87,14 @@ async function requireDurable(authority: OwnerVfsAuthority): Promise<void> {
 
 async function settleArchiveOperation<T>(
   authority: OwnerVfsAuthority,
+  projectRoot: string,
   operation: () => Promise<T>,
 ): Promise<T> {
   try {
     return await operation();
   } catch (error) {
     try {
-      await requireDurable(authority);
+      await requireDurable(authority, projectRoot);
     } catch (drainError) {
       throw new AggregateError(
         [errorFrom(error), errorFrom(drainError)],
@@ -91,26 +105,35 @@ async function settleArchiveOperation<T>(
   }
 }
 
-async function durableMkdir(authority: OwnerVfsAuthority, path: string): Promise<void> {
+async function durableMkdir(
+  authority: OwnerVfsAuthority,
+  projectRoot: string,
+  path: string,
+): Promise<void> {
   if (authority.statSyncOrNull(path) !== null) return;
   authority.mkdirSync(path, { recursive: true });
-  await requireDurable(authority);
+  await requireDurable(authority, projectRoot);
 }
 
 async function durableWrite(
   authority: OwnerVfsAuthority,
+  projectRoot: string,
   path: string,
   bytes: Uint8Array,
 ): Promise<void> {
-  await durableMkdir(authority, dirname(path));
+  await durableMkdir(authority, projectRoot, dirname(path));
   authority.writeFileSync(path, bytes);
-  await requireDurable(authority);
+  await requireDurable(authority, projectRoot);
 }
 
-async function durableRemove(authority: OwnerVfsAuthority, path: string): Promise<void> {
+async function durableRemove(
+  authority: OwnerVfsAuthority,
+  projectRoot: string,
+  path: string,
+): Promise<void> {
   if (authority.statSyncOrNull(path) === null) return;
   authority.rmSync(path, { recursive: true, force: true });
-  await requireDurable(authority);
+  await requireDurable(authority, projectRoot);
 }
 
 function readPhase(authority: OwnerVfsAuthority, paths: ArchiveTransactionPaths): string | null {
@@ -140,11 +163,12 @@ function stageFiles(
 }
 
 async function materializeStage(
+  projectRoot: string,
   authority: OwnerVfsAuthority,
   paths: ArchiveTransactionPaths,
   files: readonly { readonly path: string; readonly bytes: Uint8Array }[],
 ): Promise<void> {
-  await durableMkdir(authority, paths.stage);
+  await durableMkdir(authority, projectRoot, paths.stage);
   const directories = new Set<string>();
   for (const file of files) {
     let directory = dirname(`${paths.stage}/${file.path}`);
@@ -157,10 +181,10 @@ async function materializeStage(
     const depth = left.split('/').length - right.split('/').length;
     return depth || compareCodeUnits(left, right);
   })) {
-    await durableMkdir(authority, directory);
+    await durableMkdir(authority, projectRoot, directory);
   }
   for (const file of [...files].sort((left, right) => compareCodeUnits(left.path, right.path))) {
-    await durableWrite(authority, `${paths.stage}/${file.path}`, file.bytes);
+    await durableWrite(authority, projectRoot, `${paths.stage}/${file.path}`, file.bytes);
   }
 }
 
@@ -172,13 +196,13 @@ async function promoteStage(
   if (authority.statSyncOrNull(`${projectRoot}/node_modules`) !== null) {
     throw new Error('Playground archive package reset left node_modules present');
   }
-  await durableMkdir(authority, projectRoot);
+  await durableMkdir(authority, projectRoot, projectRoot);
   const children = [...authority.readdirSync(projectRoot)].sort((left, right) =>
     compareCodeUnits(left.name, right.name),
   );
   for (const child of children) {
     if (PRESERVED_ROOT_ENTRIES.has(child.name)) continue;
-    await durableRemove(authority, `${projectRoot}/${child.name}`);
+    await durableRemove(authority, projectRoot, `${projectRoot}/${child.name}`);
   }
 
   const directories = new Set<string>();
@@ -193,10 +217,10 @@ async function promoteStage(
     const depth = left.split('/').length - right.split('/').length;
     return depth || compareCodeUnits(left, right);
   })) {
-    await durableMkdir(authority, directory);
+    await durableMkdir(authority, projectRoot, directory);
   }
   for (const file of staged) {
-    await durableWrite(authority, `${projectRoot}/${file.path}`, file.bytes);
+    await durableWrite(authority, projectRoot, `${projectRoot}/${file.path}`, file.bytes);
   }
 }
 
@@ -208,12 +232,12 @@ async function recoverArchiveTransaction(
 ): Promise<void> {
   if (owner.authority.statSyncOrNull(paths.root) === null) return;
   let staged: readonly ArchiveStageFile[] | null = null;
-  await settleArchiveOperation(owner.authority, () =>
+  await settleArchiveOperation(owner.authority, projectRoot, () =>
     packages.mutations.reset({ root: projectRoot }, async () => {
       const phase = readPhase(owner.authority, paths);
       if (phase !== PHASE_PROMOTING) {
         // A committed or unarmed stage has no live replacement left to recover.
-        await durableRemove(owner.authority, paths.root);
+        await durableRemove(owner.authority, projectRoot, paths.root);
         return { status: 'noop' };
       }
       staged = stageFiles(owner.authority, paths);
@@ -229,7 +253,7 @@ async function recoverArchiveTransaction(
             throw new Error('Playground archive recovery stage was not prepared');
           }
           await promoteStage(projectRoot, owner.authority, staged);
-          await durableRemove(owner.authority, paths.root);
+          await durableRemove(owner.authority, projectRoot, paths.root);
         },
       };
     }),
@@ -243,10 +267,10 @@ export async function createOwnerPlaygroundArchive(
   await recoverArchiveTransaction(options.projectRoot, options.owner, options.packages, paths);
   // Construction may follow Git/bootstrap writes admitted before this slice.
   // The archive starts only from a fully drained durability boundary.
-  await requireDurable(options.owner.authority);
+  await requireDurable(options.owner.authority, options.projectRoot);
 
   return Object.freeze({
-    settle: () => requireDurable(options.owner.authority),
+    settle: () => requireDurable(options.owner.authority, options.projectRoot),
     async export(): Promise<string> {
       await options.packages.quiesce();
       await options.projectVfs.publicationBarrier();
@@ -260,13 +284,14 @@ export async function createOwnerPlaygroundArchive(
       );
       const files = prepared.decodedFiles();
       let staged: readonly ArchiveStageFile[] | null = null;
-      await settleArchiveOperation(options.owner.authority, () =>
+      await settleArchiveOperation(options.owner.authority, options.projectRoot, () =>
         options.projectVfs.recoverableProjectReplace(
           async () => {
-            await durableRemove(options.owner.authority, paths.root);
-            await materializeStage(options.owner.authority, paths, files);
+            await durableRemove(options.owner.authority, options.projectRoot, paths.root);
+            await materializeStage(options.projectRoot, options.owner.authority, paths, files);
             await durableWrite(
               options.owner.authority,
+              options.projectRoot,
               paths.phase,
               encoder.encode(PHASE_PROMOTING),
             );
@@ -278,10 +303,11 @@ export async function createOwnerPlaygroundArchive(
               await promoteStage(options.projectRoot, options.owner.authority, staged);
               await durableWrite(
                 options.owner.authority,
+                options.projectRoot,
                 paths.phase,
                 encoder.encode(PHASE_COMMITTED),
               );
-              await durableRemove(options.owner.authority, paths.root);
+              await durableRemove(options.owner.authority, options.projectRoot, paths.root);
               beforePublish();
               return { status: 'committed', value: undefined };
             } catch (error) {

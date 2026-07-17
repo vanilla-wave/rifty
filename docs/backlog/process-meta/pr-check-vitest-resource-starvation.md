@@ -28,6 +28,15 @@ full Vitest also passed beside `build:libs`; a Vite false sourcemap warning was
 non-fatal. The gate needs child signal/resource telemetry before choosing its
 bounded concurrency policy.
 
+Recurred deterministically while validating the PR #136 companion migration on
+`ae707dca`. Under the 12-command pool, the first two
+`realVite.owner-exit.test.ts` cases spent 5.21 s and 5.08 s in their fresh
+dynamic import and hit Vitest's 5 s test timeout; the other 46 cases passed.
+That unchanged file passed standalone 48/48 in 2.09 s, and the full standalone
+suite passed 593 files / 7623 tests. `build:libs`, `test:parity`, and
+Vitest overlapped for 70–84 s in the failing run. This gives the missing exact
+failure mode: nested command/test parallelism starves fresh transform work.
+
 This points to the gate's host-load envelope, not a repeatable product test
 failure. Refine with bounded-concurrency measurements and the exact child exit
 signal/resource telemetry. The fix must keep every current check and must not

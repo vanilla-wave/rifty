@@ -193,9 +193,8 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
     await page.keyboard.press('Control+c');
 
-    // The :3000 entry leaves the switcher (the only node port → the switcher
-    // collapses back to the manual port input; assert the OPTION is gone, robust
-    // to whether the dev-server slot is up yet in this terminal's view).
+    // The :3000 entry leaves the semantic switcher; assert the OPTION is gone,
+    // robust to whether the dev-server slot is up yet in this terminal's view.
     await expect(switcher.locator('option', { hasText: ':3000' })).toHaveCount(0, {
       timeout: 30_000,
     });
@@ -329,9 +328,8 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     });
     await expect(editorArea).toHaveAttribute('data-preview', 'on', { timeout: 30_000 });
 
-    // The SW `/preview/<port>/` route — what the iframe loads and "open in new tab"
-    // opens — resolves for a node-only port (dev stopped). (The previewUrl/openPreviewTab
-    // un-gating itself is unit-pinned in App.test.ts; this asserts the live route.)
+    // The registry-routed URL used by the iframe and "open in new tab" resolves
+    // for a node-only port (dev stopped); this asserts the live route itself.
     const fetchOnly = async (): Promise<string> =>
       page.evaluate(async () => {
         const ac = new AbortController();

@@ -43,7 +43,11 @@
 - Archive export and crash recovery now share finite iterative traversal,
   topology, path-depth, file, and byte budgets; corrupt durable stages reject
   before package or live-tree mutation. Archive import now closes replaced
-  editor models and document handles before publishing restored owner bytes.
+  editor models and document handles before publishing restored owner bytes;
+  durability errors expose only project-rooted paths.
+- Preview UI now waits for a routed semantic registry entry before probing,
+  framing, copying, or opening it; no manual or port-derived route can claim
+  `LIVE` before the owner bridge is published.
 - Terminal migration preserves whitespace Enter, releases failed admissions,
   hides closing tabs before owner acknowledgement, and leaves remote teardown to
   the session lifecycle so switch/reset/delete cannot be blocked by duplicate UI
