@@ -2,6 +2,7 @@ import { type Page, expect, test } from '@playwright/test';
 import {
   bootProjectFiles,
   expectTerminalContains,
+  expectViteDevServerReady,
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
@@ -63,8 +64,9 @@ test.describe('production build — child-realm global Buffer matches its module
     // Cross-origin isolation must be live on the prod headers (owner is SAB-gated).
     expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(true);
 
-    // Let the initial dev-server boot storm settle before typing (mirror node-command).
-    await expect.poll(() => terminalBuffer(page), { timeout: 120_000 }).toMatch(/\$ vite/);
+    // Let the real dev server settle before typing; restored terminal history
+    // is not a readiness oracle.
+    await expectViteDevServerReady(page, 5173, 120_000);
     await openShellTerminal(page);
 
     // ESM (seeded workspace package.json is `type: module`): build a buffer from
@@ -74,9 +76,9 @@ test.describe('production build — child-realm global Buffer matches its module
       'import { Buffer as B } from "node:buffer"; ' +
       'const chunk = B.from("hi", "utf8"); ' +
       'console.log("BUF-CHECK global-isBuffer=" + globalThis.Buffer.isBuffer(chunk) + " same=" + (globalThis.Buffer === B));';
-    // ADR-0165 §4: the active workspace root is /scratch now (was the single
-    // /workspace); `node buftest.js` runs relative to the cwd (/scratch).
-    await runLineConfirmed(page, `echo '${src}' > /scratch/buftest.js`);
+    // The public terminal cwd is the active project root; owner storage paths
+    // are intentionally unreachable from shell commands.
+    await runLineConfirmed(page, `echo '${src}' > buftest.js`);
     await runLineConfirmed(page, 'node buftest.js');
 
     // GREEN: the realigned global recognises the realm's buffer. (RED before the
