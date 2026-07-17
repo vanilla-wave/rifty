@@ -242,8 +242,11 @@ supplies a digest. The
 authority publishes `pending(error.plan)`, schedules ordinary independent v4
 promotion, then rethrows the original asset error. It admits neither a ready
 receipt nor a child. Generic open returns no new session; an already-open
-companion session stays available for inspect/clear/retry through the storage
-item's public recovery surface.
+companion session stays available for inspect and retry. `clear-and-retry` is
+the existing root lifecycle: inspect → close the companion session → await
+close → `workbench.runtimeAssets.clear()` → reopen the project → retry. Direct
+clear while the session is active remains `ProjectBusyError`; acquisition does
+not invent active clear or a second admin path.
 
 If the finalizer also fails, schedule no promotion and throw
 `AggregateError([assetError,finalizerError])` in that order. Pre-tree and
@@ -354,13 +357,16 @@ session registration, admission fencing, and FIFO settlement.
 8. Post-tree package-add asset failure preserves the requested dependency and
    finalizer output, may promote v4 independently, rejects the operation, and
    admits no ready child. Finalizer failure aggregates and creates no claim.
-9. A package mutation racing child admission follows FIFO order. A delayed
+9. An active companion post-tree failure remains inspectable and retryable.
+   Clear-and-retry first closes the session, then clears from root idle, reopens,
+   and retries; direct active clear rejects without owner mutation.
+10. A package mutation racing child admission follows FIFO order. A delayed
    reservation, spawn throw, attachment throw, and commit throw each prove the
    stated linearization and cleanup behavior with no unsupervised child.
-10. Close during every ensure and reservation phase settles opens, terminals,
+11. Close during every ensure and reservation phase settles opens, terminals,
     child handles, ports, FIFO, and owner lifetime without a late project or
     child publication.
-11. Callback throw, late progress, wrong op id, and an owner asset failure prove
+12. Callback throw, late progress, wrong op id, and an owner asset failure prove
     observer isolation, strict protocol failure, and exact public error fields
     without internal evidence.
 
@@ -381,6 +387,7 @@ session registration, admission fencing, and FIFO settlement.
 | --- | --- | --- |
 | `observable-order` | generic/snapshot open publishes before readiness | impossible at one post-tree FIFO seam |
 | `observable-order` | companion cold install starts at open or child starts before terminal ready | open remains non-installing; first run remains visibly ordered |
+| `observable-order` | active companion receives `clear-and-retry` | direct clear rejects; close settles before root clear/reopen/retry |
 | `observable-order` | install mutation/progress escapes its operation | token-bound barrier; callback/signal/sink dropped at settlement |
 | `observable-order` | package/tree mutation races child admission | one FIFO order and one exact epoch snapshot |
 | `observable-order` | reservation continuation delays or physical spawn throws | FIFO remains held; session settles once |

@@ -6,7 +6,7 @@ created: 2026-07-17
 why: cold standard install adds a serial 13,918,738-byte runtime-asset fill, but its user-visible wall time and response bytes are not recorded under a reproducible boundary
 user_story: As a Workbench operator, I want a truthful cold STD runtime-asset baseline so I can budget first-run latency and compare Eddy against the identical verified work.
 epic: honest-shadow-substitutions
-blocked_by: [distribution/workbench-runtime-asset-cutover]
+blocked_by: [distribution/workbench-runtime-asset-cutover, npm-client/esbuild-alias-override-retirement]
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/npm-client/0201-bounded-fetch-chokepoint-no-progress-stall-bounds-on-all-npm-client-fetches.md, docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, docs/adr/npm-client/0194-eddy-v1-2-stateless-bundle-store-shared-resolve-caches-learned-pins.md]
 code: [tools/perf/bench.mjs, tools/perf/src/aggregate.mjs, tools/perf/src/aggregate.test.ts, tests/integration/fixtures/workbench-vite-consumer, perf/benchmarks.json]
 ---

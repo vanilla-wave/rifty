@@ -261,6 +261,11 @@ one owner/VFS/protocol/package-FIFO seams, so storage and acquisition land there
 first; acquisition blocks the later mechanical extraction. Runtime consumption,
 host-asset removal, and node-entry/v2 remain one post-extraction cutover.
 
+Correction 2026-07-17: measured esbuild alias retirement is an epic-closing
+post-cutover item. This changes delivery scope only. The alias item's draft-to-
+ready gate still owns the delegate/lockfile provenance decision and requires an
+ADR before implementation; the runtime-asset architecture below is unchanged.
+
 ~~~text
 catalog + exact planner -> manager -> MessagePort adapter --------+
                               \-> private storage + inspect/clear -+
@@ -276,6 +281,9 @@ kernel entry capabilities --------------------------------------+ |
                                                   cutover + node-entry/v2
                                                                   |
                                                                   v
+                                                   retire alias network payload
+                                                                  |
+                                                                  v
                                                          cold STD benchmark
                                                                   |
                                                                   v
@@ -288,8 +296,9 @@ admission are semantic RED/GREEN slices that may land on the current app-local
 Workbench through its existing interfaces. Acquisition blocks controller
 extraction; extraction then moves those semantics without introducing another
 facade, owner protocol, VFS, or package-state owner. Cutover and the committed
-cold benchmark use the extracted composition. Alias retirement is a contingent
-draft, not part of this delivery order.
+cold benchmark use the extracted composition. Measured alias retirement lands
+between them and the epic remains open until it removes the redundant response
+bytes without a Vite parity or provenance regression.
 
 This ADR composes with ADR-0267: entry capability ports are a sibling to host
 bootstrap. It narrowly corrects ADR-0263's host-resolved esbuild deployment
@@ -308,6 +317,9 @@ projection; their other decisions stand.
   admitted member is 13,918,738 bytes; seconds and response bytes are measured
   in the dedicated cold-bench item's committed Workbench row, and the Eddy
   item adds its matched row.
+- The epic also removes the redundant alias network payload after cutover. Its
+  matched before/after proof records exact response-body bytes; no `~20 MB`
+  network claim is inferred from the uncompressed WASM member.
 - Existing v3 claims miss once so v4 can attest exact lockfile bytes.
 - Warm sync prefetch may do redundant bounded work because only async WebCrypto
   can prove v4; correctness never depends on that speculative result. Any
