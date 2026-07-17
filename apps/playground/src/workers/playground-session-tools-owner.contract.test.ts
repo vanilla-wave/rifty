@@ -337,10 +337,17 @@ describe('owner-resident Playground session tools', () => {
       response: { ok: true, result: { type: 'durability:void' } },
     });
 
+    // Fault classes: provenance-lie + sibling-drift. Reserved owner entries
+    // are outside the public project namespace even when nested under its root.
     flush.mockResolvedValueOnce({
-      total: 2,
+      total: 3,
       failures: [
         { op: 'write', path: SOURCE, message: 'quota exceeded' },
+        {
+          op: 'write',
+          path: `${PROJECT_ROOT}/.rifty/owner.json`,
+          message: 'reserved metadata permission denied',
+        },
         {
           op: 'write',
           path: '/.rifty/workbench/v1/catalog.json',
@@ -380,6 +387,10 @@ describe('owner-resident Playground session tools', () => {
     }
     expect(durabilityFailure.response.error.message).toContain(
       'write [outside active project]: catalog permission denied',
+    );
+    expect(durabilityFailure.response.error.message).not.toContain('/.rifty/owner.json');
+    expect(durabilityFailure.response.error.message).toContain(
+      'write [outside active project]: reserved metadata permission denied',
     );
     expect(durabilityFailure.response.error.message).not.toContain(PROJECT_ROOT);
     expect(durabilityFailure.response.error.message).not.toContain(

@@ -17,6 +17,7 @@ import {
   inspectPagePlaygroundSessionToolsFrame,
   inspectPlaygroundScmSnapshot,
 } from '../workbench/internal/playground-session-tools-transport.ts';
+import { formatProjectPersistenceFailure } from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
 import type { OwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import { createOwnerPlaygroundArchive } from './playground-archive-integration.ts';
@@ -56,16 +57,7 @@ function persistenceFailure(
 ): Error | null {
   if (report === undefined || report.total === 0) return null;
   const sample = report.failures
-    .map((failure) => {
-      const path =
-        failure.path === projectRoot
-          ? '/'
-          : failure.path.startsWith(`${projectRoot}/`)
-            ? failure.path.slice(projectRoot.length)
-            : '[outside active project]';
-      const message = failure.message.replaceAll(failure.path, path).replaceAll(projectRoot, '');
-      return `${failure.op} ${path}: ${message}`;
-    })
+    .map((failure) => formatProjectPersistenceFailure(projectRoot, failure))
     .join('; ');
   return new Error(
     `Playground ${operation} persistence failed with ${String(report.total)} unhealed persistence failure(s)${sample.length > 0 ? `: ${sample}` : ''}`,

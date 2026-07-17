@@ -1,4 +1,5 @@
 import { dirname } from '@riftydev/vfs';
+import { InstallStampAuthorityError } from '../glue/install-stamp-authority.ts';
 import {
   PLAYGROUND_ARCHIVE_V1_LIMITS,
   exportPlaygroundArchiveV1,
@@ -7,7 +8,10 @@ import {
 } from '../workbench/internal/playground-archive.ts';
 import type { PlaygroundArchive, PlaygroundScm } from '../workbench/playground.ts';
 import type { ProjectContentController } from '../workbench/project-content.ts';
-import { toProjectPath } from '../workbench/project-file-boundary.ts';
+import {
+  formatProjectPersistenceFailure,
+  projectPathOrOutside,
+} from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
 import type { OwnerVfsAuthority, OwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import type { WorkbenchProjectVfs } from './workbench-project-vfs.ts';
@@ -61,11 +65,75 @@ function errorFrom(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-function publicFailurePath(projectRoot: string, ownerPath: string): string {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function rootedPathPattern(root: string): RegExp {
+  return new RegExp(`${escapeRegExp(root)}(?:/[^\\s"'<>;,)}\\]]+)*`, 'g');
+}
+
+function publicArchiveMessage(
+  projectRoot: string,
+  paths: ArchiveTransactionPaths,
+  message: string,
+): string {
+  const withoutTransaction = message.replace(
+    rootedPathPattern(paths.root),
+    '[outside active project]',
+  );
+  const projectRooted = withoutTransaction.replace(rootedPathPattern(projectRoot), (ownerPath) =>
+    projectPathOrOutside(projectRoot, ownerPath),
+  );
+  return projectRooted.replace(/\/\.rifty(?:\/[^\s"'<>;,)}\]]+)*/g, '[outside active project]');
+}
+
+function publicArchiveError(
+  projectRoot: string,
+  paths: ArchiveTransactionPaths,
+  error: unknown,
+  seen = new Set<unknown>(),
+): Error {
+  if (seen.has(error)) return new Error('Playground archive error cause cycle');
+  seen.add(error);
+  if (error instanceof AggregateError) {
+    const cause =
+      error.cause === undefined
+        ? undefined
+        : publicArchiveError(projectRoot, paths, error.cause, seen);
+    return new AggregateError(
+      error.errors.map((nested) => publicArchiveError(projectRoot, paths, nested, seen)),
+      publicArchiveMessage(projectRoot, paths, error.message),
+      cause === undefined ? undefined : { cause },
+    );
+  }
+  const source = errorFrom(error);
+  const cause =
+    source.cause === undefined
+      ? undefined
+      : publicArchiveError(projectRoot, paths, source.cause, seen);
+  const message = publicArchiveMessage(projectRoot, paths, source.message);
+  if (source instanceof InstallStampAuthorityError) {
+    return new InstallStampAuthorityError(
+      source.code,
+      message,
+      cause === undefined ? undefined : { cause },
+    );
+  }
+  const projected = new Error(message, cause === undefined ? undefined : { cause });
+  projected.name = publicArchiveMessage(projectRoot, paths, source.name) || 'Error';
+  return projected;
+}
+
+async function publicArchiveBoundary<T>(
+  projectRoot: string,
+  paths: ArchiveTransactionPaths,
+  operation: () => Promise<T> | T,
+): Promise<T> {
   try {
-    return toProjectPath(projectRoot, ownerPath);
-  } catch {
-    return '[outside active project]';
+    return await operation();
+  } catch (error) {
+    throw publicArchiveError(projectRoot, paths, error);
   }
 }
 
@@ -73,11 +141,7 @@ async function requireDurable(authority: OwnerVfsAuthority, projectRoot: string)
   const report = await authority.flush();
   if (report === undefined || report.total === 0) return;
   const detail = report.failures
-    .map((failure) => {
-      const path = publicFailurePath(projectRoot, failure.path);
-      const message = failure.message.replaceAll(failure.path, path).replaceAll(projectRoot, '');
-      return `${failure.op} ${path}: ${message}`;
-    })
+    .map((failure) => formatProjectPersistenceFailure(projectRoot, failure))
     .join('; ');
   const summary = `${String(report.total)} unhealed failure${report.total === 1 ? '' : 's'}`;
   throw new Error(
@@ -264,59 +328,68 @@ export async function createOwnerPlaygroundArchive(
   options: CreateOwnerPlaygroundArchiveOptions,
 ): Promise<OwnerPlaygroundArchive> {
   const paths = transactionPaths(options.projectRoot);
-  await recoverArchiveTransaction(options.projectRoot, options.owner, options.packages, paths);
-  // Construction may follow Git/bootstrap writes admitted before this slice.
-  // The archive starts only from a fully drained durability boundary.
-  await requireDurable(options.owner.authority, options.projectRoot);
+  return publicArchiveBoundary(options.projectRoot, paths, async () => {
+    await recoverArchiveTransaction(options.projectRoot, options.owner, options.packages, paths);
+    // Construction may follow Git/bootstrap writes admitted before this slice.
+    // The archive starts only from a fully drained durability boundary.
+    await requireDurable(options.owner.authority, options.projectRoot);
 
-  return Object.freeze({
-    settle: () => requireDurable(options.owner.authority, options.projectRoot),
-    async export(): Promise<string> {
-      await options.packages.quiesce();
-      await options.projectVfs.publicationBarrier();
-      return exportPlaygroundArchiveV1(options.owner.authority, options.projectRoot);
-    },
-    async import(archiveJson: string, beforePublish: () => void): Promise<void> {
-      const prepared = preparePlaygroundArchiveV1Import(
-        options.owner.authority,
-        options.projectRoot,
-        archiveJson,
-      );
-      const files = prepared.decodedFiles();
-      let staged: readonly ArchiveStageFile[] | null = null;
-      await settleArchiveOperation(options.owner.authority, options.projectRoot, () =>
-        options.projectVfs.recoverableProjectReplace(
-          async () => {
-            await durableRemove(options.owner.authority, options.projectRoot, paths.root);
-            await materializeStage(options.projectRoot, options.owner.authority, paths, files);
-            await durableWrite(
-              options.owner.authority,
-              options.projectRoot,
-              paths.phase,
-              encoder.encode(PHASE_PROMOTING),
-            );
-            staged = stageFiles(options.owner.authority, paths);
-          },
-          async () => {
-            try {
-              if (staged === null) throw new Error('Playground archive stage was not prepared');
-              await promoteStage(options.projectRoot, options.owner.authority, staged);
-              await durableWrite(
-                options.owner.authority,
-                options.projectRoot,
-                paths.phase,
-                encoder.encode(PHASE_COMMITTED),
-              );
-              await durableRemove(options.owner.authority, options.projectRoot, paths.root);
-              beforePublish();
-              return { status: 'committed', value: undefined };
-            } catch (error) {
-              return { status: 'recoverable-failure', error: errorFrom(error) };
-            }
-          },
+    return Object.freeze({
+      settle: () =>
+        publicArchiveBoundary(options.projectRoot, paths, () =>
+          requireDurable(options.owner.authority, options.projectRoot),
         ),
-      );
-    },
+      export: () =>
+        publicArchiveBoundary(options.projectRoot, paths, async () => {
+          await options.packages.quiesce();
+          await options.projectVfs.publicationBarrier();
+          return exportPlaygroundArchiveV1(options.owner.authority, options.projectRoot);
+        }),
+      import: (archiveJson: string, beforePublish: () => void) =>
+        publicArchiveBoundary(options.projectRoot, paths, async () => {
+          const prepared = preparePlaygroundArchiveV1Import(
+            options.owner.authority,
+            options.projectRoot,
+            archiveJson,
+          );
+          const files = prepared.decodedFiles();
+          let staged: readonly ArchiveStageFile[] | null = null;
+          await settleArchiveOperation(options.owner.authority, options.projectRoot, () =>
+            options.projectVfs.recoverableProjectReplace(
+              async () => {
+                await durableRemove(options.owner.authority, options.projectRoot, paths.root);
+                await materializeStage(options.projectRoot, options.owner.authority, paths, files);
+                await durableWrite(
+                  options.owner.authority,
+                  options.projectRoot,
+                  paths.phase,
+                  encoder.encode(PHASE_PROMOTING),
+                );
+                staged = stageFiles(options.owner.authority, paths);
+              },
+              async () => {
+                try {
+                  if (staged === null) {
+                    throw new Error('Playground archive stage was not prepared');
+                  }
+                  await promoteStage(options.projectRoot, options.owner.authority, staged);
+                  await durableWrite(
+                    options.owner.authority,
+                    options.projectRoot,
+                    paths.phase,
+                    encoder.encode(PHASE_COMMITTED),
+                  );
+                  await durableRemove(options.owner.authority, options.projectRoot, paths.root);
+                  beforePublish();
+                  return { status: 'committed', value: undefined };
+                } catch (error) {
+                  return { status: 'recoverable-failure', error: errorFrom(error) };
+                }
+              },
+            ),
+          );
+        }),
+    });
   });
 }
 

@@ -540,6 +540,103 @@ function ownerRootedFailureReport(): PersistFailureReport {
   });
 }
 
+const PRIVATE_PATH_ERROR_BOUNDARIES = Object.freeze([
+  'construction recovery',
+  'export',
+  'import',
+  'operation settlement',
+] as const);
+
+type PrivatePathErrorBoundary = (typeof PRIVATE_PATH_ERROR_BOUNDARIES)[number];
+
+function privatePathBoundaryError(boundary: PrivatePathErrorBoundary): Error {
+  return new Error(
+    `${boundary} failed at ${PROJECT_ROOT}/src/main.ts via ${ARCHIVE_TRANSACTION_ROOT}; foreign ${FOREIGN_OWNER_PATH}`,
+  );
+}
+
+async function rejectedValue(operation: Promise<unknown>): Promise<unknown> {
+  return operation.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+}
+
+async function observePrivatePathBoundaryFailure(
+  boundary: PrivatePathErrorBoundary,
+): Promise<unknown> {
+  if (boundary === 'construction recovery') {
+    const fs = new DurableOwnerFs();
+    fs.mkdirSync(PROJECT_ROOT, { recursive: true });
+    await fs.flush();
+    const statSyncOrNull = fs.statSyncOrNull.bind(fs);
+    let injected = false;
+    const statFault = vi.spyOn(fs, 'statSyncOrNull').mockImplementation((path) => {
+      if (path === ARCHIVE_TRANSACTION_ROOT) {
+        injected = true;
+        throw privatePathBoundaryError(boundary);
+      }
+      return statSyncOrNull(path);
+    });
+    try {
+      const outcome = await harness(fs, { seed: false }).then(
+        (value) => ({ kind: 'opened' as const, value }),
+        (error: unknown) => ({ kind: 'failed' as const, error }),
+      );
+      if (outcome.kind === 'failed') return outcome.error;
+      await outcome.value.close();
+      return undefined;
+    } finally {
+      statFault.mockRestore();
+      expect(injected).toBe(true);
+    }
+  }
+
+  const opened = await harness();
+  const restore: (() => void)[] = [];
+  let injected = 0;
+  try {
+    if (boundary === 'export') {
+      const readFileBytesSync = opened.owner.authority.readFileBytesSync.bind(
+        opened.owner.authority,
+      );
+      const readFault = vi
+        .spyOn(opened.owner.authority, 'readFileBytesSync')
+        .mockImplementation((path) => {
+          if (path === `${PROJECT_ROOT}/src/main.ts`) {
+            injected += 1;
+            throw privatePathBoundaryError(boundary);
+          }
+          return readFileBytesSync(path);
+        });
+      restore.push(() => readFault.mockRestore());
+      return await rejectedValue(opened.archive.export());
+    }
+
+    const statSyncOrNull = opened.owner.authority.statSyncOrNull.bind(opened.owner.authority);
+    const statFault = vi
+      .spyOn(opened.owner.authority, 'statSyncOrNull')
+      .mockImplementation((path) => {
+        if (path === ARCHIVE_TRANSACTION_ROOT) {
+          injected += 1;
+          throw privatePathBoundaryError(boundary);
+        }
+        return statSyncOrNull(path);
+      });
+    restore.push(() => statFault.mockRestore());
+    if (boundary === 'operation settlement') {
+      vi.mocked(opened.owner.authority.flush).mockRejectedValueOnce(
+        privatePathBoundaryError(boundary),
+      );
+    }
+    return await rejectedValue(opened.archive.import(IMPORT_ARCHIVE));
+  } finally {
+    for (const restoreFault of restore.reverse()) restoreFault();
+    expect(injected).toBeGreaterThan(0);
+    await opened.close();
+  }
+}
+
 async function importAndRecordResolution(h: ArchiveHarness): Promise<void> {
   await h.archive.import(IMPORT_ARCHIVE).then(() => {
     h.timeline.push('resolve');
@@ -834,6 +931,20 @@ describe('Playground archive owner/session integration', () => {
     },
   );
 
+  it.each(PRIVATE_PATH_ERROR_BOUNDARIES)(
+    'keeps thrown private paths out of public archive %s errors',
+    async (boundary) => {
+      // Fault class: provenance-lie. Error projection owns every thrown/rejected
+      // archive sibling, including both errors retained by AggregateError.
+      const failure = await observePrivatePathBoundaryFailure(boundary);
+      expect(failure).toBeInstanceOf(Error);
+      const detail = nestedErrors(failure).map(String).join('\n');
+      expect(detail).not.toContain(PROJECT_ROOT);
+      expect(detail).not.toContain(ARCHIVE_TRANSACTION_ROOT);
+      expect(detail).not.toContain(FOREIGN_OWNER_PATH);
+    },
+  );
+
   it.each(DURABILITY_FAULTS)(
     'sweeps every persisted archive primitive and crash boundary across $name',
     async ({ kind, message }) => {
@@ -899,6 +1010,7 @@ describe('Playground archive owner/session integration', () => {
         }
         expect(
           stampFailure !== undefined || failures.some((failure) => message.test(String(failure))),
+          `archive ordinal ${String(failAt)} lost its injected failure: ${failures.map(String).join(' | ')}`,
         ).toBe(true);
         expect(first.fs.trace).toContainEqual(
           expect.objectContaining({ ordinal: failAt, outcome: 'injected-failure' }),
