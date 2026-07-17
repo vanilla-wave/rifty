@@ -96,4 +96,18 @@ describe('GIT status projection', () => {
       },
     ]);
   });
+
+  it('includes descendants when the rendered root is the filesystem root', () => {
+    const rows = scmRowsFromStatusMap(new Map([['/src/main.ts', ' M']]), '/');
+
+    expect(rows.changes).toEqual([
+      {
+        path: '/src/main.ts',
+        relativePath: 'src/main.ts',
+        code: ' M',
+        side: 'worktree',
+        badge: 'M',
+      },
+    ]);
+  });
 });

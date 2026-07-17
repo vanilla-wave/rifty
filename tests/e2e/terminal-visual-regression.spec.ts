@@ -1,14 +1,6 @@
 import { inflateSync } from 'node:zlib';
 import { type Page, expect, test } from '@playwright/test';
-import { bootShell, runTerminalLineSettled } from './helpers/playground.ts';
-
-async function openShellTerminal(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'New terminal' }).click();
-  await expect(page.getByRole('tab', { name: /Terminal 2/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-}
+import { bootShell, openShellTerminal, runTerminalLineSettled } from './helpers/playground.ts';
 
 async function runCommand(page: Page, command: string): Promise<void> {
   await runTerminalLineSettled(page, command);

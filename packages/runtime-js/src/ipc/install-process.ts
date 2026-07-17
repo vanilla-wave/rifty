@@ -32,6 +32,7 @@ import {
   setKernelPreEntryHook,
 } from '@riftydev/kernel';
 import { Buffer } from '../builtins/buffer.ts';
+import { readNodeEntryBootstrapIfPresent } from '../builtins/node-entry-runtime-config.ts';
 import { NodeProcess, patchPromiseForNextTick } from '../builtins/process.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
 import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
@@ -74,16 +75,19 @@ export function installNodeProcessShim(
 
 /**
  * Pre-entry hook: install the seeded process, then — only for Node workers —
- * the rich extras. Gate: a WASI worker self-identifies via `__RIFTY_WASI_WASM_URL`
- * and gets NEITHER the Promise.then nextTick patch NOR `globalThis.Buffer` NOR
- * `globalThis.global` (no Node over-implementation where it shouldn't be).
+ * the rich extras. A matching node-entry envelope authoritatively selects Node;
+ * its guest env remains ordinary data even if it contains the legacy WASI key.
+ * Other workers retain the `__RIFTY_WASI_WASM_URL` gate and get NEITHER the
+ * Promise.then nextTick patch NOR `globalThis.Buffer` NOR `globalThis.global`
+ * (no Node over-implementation where it shouldn't be).
  * Every other kernel worker (.bin / execSync / node-serve / dev-server / owner)
  * is a Node worker and gets them — closing the latent gap where `.bin`/execSync
  * children lacked them.
  * Timers + keepalive stay universal at `kernel-worker-entry.ts` module top-level.
  */
 export function installNodeRuntime(spec: WorkerSpawnSpec): void {
-  const isNode = spec.env.__RIFTY_WASI_WASM_URL === undefined;
+  const isNodeEntry = readNodeEntryBootstrapIfPresent() !== null;
+  const isNode = isNodeEntry || spec.env.__RIFTY_WASI_WASM_URL === undefined;
   installNodeProcessShim(
     {
       pid: spec.pid,

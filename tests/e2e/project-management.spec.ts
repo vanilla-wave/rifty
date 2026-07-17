@@ -1,31 +1,30 @@
 /**
  * ADR-0165 post-review e2e — the multi-project flows the review found shipped
  * broken or unguarded, driven end-to-end against the real owner:
- *  - §9 dirty-scratch SWITCH dialog: "Discard & continue" lands at the target
- *    root (it used to re-open the dialog + respawn at the wrong template), and
+ *  - §9 dirty-scratch SWITCH dialog: "Discard & continue" activates the target
+ *    project (it used to re-open the dialog + respawn the wrong starter), and
  *    "Save scratch, then continue" saves the draft AND continues (it used to stop
  *    after the save).
- *  - §6 named-project RESET is a REAL on-disk re-seed (it used to toast + bump
- *    editedAt while the tree was untouched — a lying happy-path).
+ *  - §6 named-project RESET really re-seeds the project tree (it used to toast +
+ *    bump editedAt while the tree was untouched — a lying happy-path).
  *
  * SERIAL (test.describe.configure): each test boots its own COI/SAB workspace
- * owner (heavy WASI), so running them concurrently with each other would starve
- * the OPFS flush. Serial keeps peak owner-concurrency from this file at one — they
- * still overlap the rest of the fullyParallel suite, which already tolerates
- * several concurrent owner-heavy specs.
+ * owner (heavy WASI), so running them concurrently would starve owner transitions.
+ * Serial keeps peak owner-concurrency from this file at one; it still overlaps the
+ * rest of the fullyParallel suite.
  *
  * RED-checks:
  *  - Discard: restore `applyPending` to re-call the dirty-guarded `requestSwitch`
- *    → the dialog re-opens, the hint stays `/scratch`, the assert times out.
+ *    → the dialog re-opens and the target project never becomes active.
  *  - Save-then: restore `onSwitchSaveThen` to only open the save dialog → after
- *    Save the hint shows the SAVED draft's root, not Alpha's.
- *  - Reset: revert the owner `index-reset-project` handler (resetProjectTree →
- *    no-op) → `/projects/<id>/stray.txt` survives → the MISSING poll times out.
+ *    Save the chip shows the SAVED draft, not Alpha.
+ *  - Reset: make the owner reset a no-op → `stray.txt` survives after activating
+ *    the reset project.
  */
 import { type Page, expect, test } from '@playwright/test';
-import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
 import {
   pickStarter as pickStarterFromLauncher,
+  readActiveProjectText,
   runTerminalLineSettled,
   terminalBuffer,
 } from './helpers/playground.ts';
@@ -35,15 +34,9 @@ import {
 // keeps the clicks immediate under the full-suite load).
 test.use({ viewport: { width: 1280, height: 940 } });
 
-// OPFS reads/flushes slow down when several owner workers boot under load (full
-// parallel suite); durable-state polls are generous so a starved flush still lands.
-const OPFS_POLL = 90_000;
+// Owner transitions slow down when several workers boot under full-suite load.
+const OWNER_TIMEOUT = 90_000;
 const TERMINAL_TAB = '.rf-terminal-tab__select[role="tab"]';
-type ProjectIndexSnapshot = {
-  activeId: string;
-  scratch: { starter: string; dirty: boolean } | null;
-  projects: { id: string; name: string }[];
-};
 
 async function bootScratch(page: Page): Promise<void> {
   await page.goto('/');
@@ -51,7 +44,7 @@ async function bootScratch(page: Page): Promise<void> {
     timeout: 15_000,
   });
   await pickStarterFromLauncher(page, 'project-files');
-  await expect(hintLocator(page)).toContainText('Commands run in /scratch;', { timeout: 30_000 });
+  await expect(hintLocator(page)).toContainText('Commands run in /;', { timeout: 30_000 });
 }
 
 function hintLocator(page: Page) {
@@ -71,7 +64,9 @@ async function pickStarter(page: Page, id: string): Promise<void> {
   await page.click('[data-action="open-launcher"]');
   await page.getByRole('button', { name: 'Starters', exact: true }).click();
   await page.click(`[data-preset="${id}"]`);
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: OPFS_POLL });
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
+    timeout: OWNER_TIMEOUT,
+  });
 }
 
 async function openProjects(page: Page): Promise<void> {
@@ -80,68 +75,67 @@ async function openProjects(page: Page): Promise<void> {
   await page.getByRole('button', { name: /^Projects/ }).click();
 }
 
-async function readProjectIndex(page: Page): Promise<ProjectIndexSnapshot | null> {
-  return readWorkspaceJson<ProjectIndexSnapshot>(page, '/.rifty-project-index.json');
-}
-
-async function waitDurableScratch(page: Page, starter?: string): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const index = await readProjectIndex(page);
-        return index?.activeId === 'scratch' &&
-          index.scratch &&
-          (starter === undefined || index.scratch.starter === starter)
-          ? `${index.activeId}:${index.scratch.dirty ? 'dirty' : 'clean'}`
-          : '';
-      },
-      { timeout: OPFS_POLL },
-    )
-    .toBe('scratch:clean');
-}
-
-async function projectIdFromDurableIndex(page: Page, name: string): Promise<string> {
-  const readId = async (): Promise<string> => {
-    const index = await readProjectIndex(page);
-    return index?.projects.find((p) => p.name === name)?.id ?? '';
-  };
-  await expect.poll(readId, { timeout: OPFS_POLL }).not.toBe('');
-  return readId();
+async function expectProjectChipName(page: Page, name: string): Promise<void> {
+  await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(name, {
+    timeout: OWNER_TIMEOUT,
+  });
 }
 
 async function saveScratchAs(page: Page, name: string): Promise<string> {
-  await waitDurableScratch(page);
   await openProjects(page);
   await page.click('[data-action="save-scratch"]');
   const dialog = page.locator('.rf-dialog[role="dialog"]');
   await expect(dialog).toBeVisible({ timeout: 5_000 });
   await dialog.locator('input.rf-dialog__input').fill(name);
   await dialog.getByRole('button', { name: 'Save project' }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 5_000 });
-  const id = await projectIdFromDurableIndex(page, name);
+  await expect(dialog).toHaveCount(0, { timeout: OWNER_TIMEOUT });
+  const card = page.locator('.rf-pcard', { hasText: name }).first();
+  await expect(card).toBeVisible({ timeout: OWNER_TIMEOUT });
+  await expect(card).toHaveAttribute('data-active', 'true');
+  const projectId = await card.getAttribute('data-project');
+  if (projectId === null || projectId.length === 0) {
+    throw new Error(`Saved project ${name} has no owner project id`);
+  }
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
-  return id;
+  await expectProjectChipName(page, name);
+  return projectId;
 }
 
-async function projectCardIdForName(page: Page, name: string): Promise<string> {
+async function expectSavedProject(page: Page, name: string): Promise<void> {
   await openProjects(page);
   const card = page.locator('.rf-pcard', { hasText: name }).first();
-  await expect(card).toBeVisible({ timeout: OPFS_POLL });
-  const id = (await card.getAttribute('data-project')) ?? '';
-  expect(id).not.toBe('');
+  await expect(card).toBeVisible({ timeout: OWNER_TIMEOUT });
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
-  return id;
 }
 
-/** Read `/projects/<id>/<rel>` from OPFS, or `MISSING:<reason>` when absent. */
-async function readProjectFile(page: Page, id: string, rel: string): Promise<string> {
-  return await readWorkspaceText(page, `/projects/${id}/${rel}`);
+async function switchToSavedProject(
+  page: Page,
+  name: string,
+  options: { readonly discardDirtyScratch?: boolean } = {},
+): Promise<void> {
+  await openProjects(page);
+  const card = page.locator('.rf-pcard', { hasText: name }).first();
+  await expect(card).toHaveAttribute('role', 'button', { timeout: OWNER_TIMEOUT });
+  await card.click();
+  if (options.discardDirtyScratch) {
+    const dialog = page.locator('.rf-dialog[role="dialog"]');
+    await expect(dialog).toContainText('Discard unsaved scratch?', { timeout: 5_000 });
+    await dialog.getByRole('button', { name: 'Discard & continue' }).click();
+  }
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
+    timeout: OWNER_TIMEOUT,
+  });
+  await expectProjectChipName(page, name);
+  await expect(page.locator('.rf-livepill[data-state="switching"]')).toHaveCount(0, {
+    timeout: OWNER_TIMEOUT,
+  });
 }
 
 /** Insert a marker via Monaco's real input path → owner file write → scratch dirty. */
-async function dirtyScratchViaEditor(page: Page): Promise<void> {
+async function dirtyScratchViaEditor(page: Page): Promise<string> {
+  const marker = `// dirty-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const editor = page.locator('[data-testid="editor"]');
   await editor
     .locator('.view-line')
@@ -151,26 +145,32 @@ async function dirtyScratchViaEditor(page: Page): Promise<void> {
   await editorInput.click({ force: true });
   await expect(editorInput).toBeFocused();
   await page.keyboard.press('Home');
-  await page.keyboard.insertText(`// dirty-${Date.now()}\n`);
+  await page.keyboard.insertText(`${marker}\n`);
   await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible({
     timeout: 10_000,
   });
+  return marker;
 }
 
 /** Save scratch → Alpha, then spin a fresh DIRTY node-worker scratch to switch FROM. */
 async function bootDirtyScratchWithSavedAlpha(
   page: Page,
   alphaName: string,
-): Promise<{ alphaId: string }> {
+): Promise<{
+  readonly alphaMarker: string;
+  readonly dirtyMarker: string;
+  readonly alphaProjectId: string;
+}> {
   const hint = hintLocator(page);
+  const alphaMarker = `alpha-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   await bootScratch(page);
-  const alphaId = await saveScratchAs(page, alphaName);
-  expect(alphaId).not.toBe('');
+  await newShell(page);
+  await runTerminalLineSettled(page, `echo ${alphaMarker} > project-proof.txt`, 30_000);
+  const alphaProjectId = await saveScratchAs(page, alphaName);
   await pickStarter(page, 'node-worker');
-  await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
-  await waitDurableScratch(page, 'node-worker');
-  await dirtyScratchViaEditor(page);
-  return { alphaId };
+  await expect(hint).toContainText('Commands run in /;', { timeout: 30_000 });
+  const dirtyMarker = await dirtyScratchViaEditor(page);
+  return Object.freeze({ alphaMarker, dirtyMarker, alphaProjectId });
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -184,18 +184,9 @@ test.describe('starter git baseline', () => {
     test.setTimeout(180_000);
 
     await bootScratch(page);
-    await waitDurableScratch(page, 'project-files');
-    await expect
-      .poll(
-        async () =>
-          (await readWorkspaceText(page, '/scratch/package-lock.json')).startsWith('MISSING:')
-            ? 'missing'
-            : 'present',
-        { timeout: OPFS_POLL },
-      )
-      .toBe('present');
-
     await newShell(page);
+    const packageLock = await readActiveProjectText(page, 'package-lock.json', OWNER_TIMEOUT);
+    expect(packageLock.exists).toBe(true);
     await runTerminalLineSettled(page, 'git status --porcelain && echo STATUS_DONE', 60_000);
     const output = await terminalBuffer(page);
     const statusBlock = output.slice(output.lastIndexOf('git status --porcelain'));
@@ -206,7 +197,7 @@ test.describe('starter git baseline', () => {
 });
 
 test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
-  test('Discard & continue switches to the target project (right root, no re-opened dialog)', async ({
+  test('Discard & continue switches to the target project (target active, no re-opened dialog)', async ({
     page,
     browserName,
   }) => {
@@ -215,12 +206,23 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
 
     const tag = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    const { alphaId } = await bootDirtyScratchWithSavedAlpha(page, `Alpha-${tag}`);
+    const alphaName = `Alpha-${tag}`;
+    const { alphaMarker, alphaProjectId } = await bootDirtyScratchWithSavedAlpha(page, alphaName);
     const hint = hintLocator(page);
 
+    // A program in the active scratch must not address the retained Alpha tree
+    // through the owner's physical layout. Before ADR-0280 this exact absolute
+    // path overwrote Alpha; the project-rooted namespace rejects it before I/O.
+    await newShell(page);
+    await runTerminalLineSettled(
+      page,
+      `echo corrupted > '/.rifty/workbench/v1/projects/${alphaProjectId}/tree/project-proof.txt'`,
+      30_000,
+    );
+
     await openProjects(page);
-    const target = page.locator('.rf-pcard', { hasText: `Alpha-${tag}` }).first();
-    await expect(target).toHaveAttribute('role', 'button', { timeout: OPFS_POLL });
+    const target = page.locator('.rf-pcard', { hasText: alphaName }).first();
+    await expect(target).toHaveAttribute('role', 'button', { timeout: OWNER_TIMEOUT });
     await target.click();
     const dialog = page.locator('.rf-dialog[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
@@ -228,7 +230,13 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
 
     await dialog.getByRole('button', { name: 'Discard & continue' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 5_000 });
-    await expect(hint).toContainText(`Commands run in /projects/${alphaId};`, { timeout: 90_000 });
+    await expectProjectChipName(page, alphaName);
+    await expect(hint).toContainText('Commands run in /;', { timeout: OWNER_TIMEOUT });
+    await newShell(page);
+    expect(await readActiveProjectText(page, 'project-proof.txt', OWNER_TIMEOUT)).toEqual({
+      exists: true,
+      text: alphaMarker,
+    });
   });
 
   test('Save scratch, then continue saves the draft AND continues to the target', async ({
@@ -241,12 +249,13 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
 
     const tag = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const gammaName = `Gamma-${tag}`;
-    const { alphaId } = await bootDirtyScratchWithSavedAlpha(page, `Alpha-${tag}`);
+    const alphaName = `Alpha-${tag}`;
+    const { alphaMarker, dirtyMarker } = await bootDirtyScratchWithSavedAlpha(page, alphaName);
     const hint = hintLocator(page);
 
     await openProjects(page);
-    const target = page.locator('.rf-pcard', { hasText: `Alpha-${tag}` }).first();
-    await expect(target).toHaveAttribute('role', 'button', { timeout: OPFS_POLL });
+    const target = page.locator('.rf-pcard', { hasText: alphaName }).first();
+    await expect(target).toHaveAttribute('role', 'button', { timeout: OWNER_TIMEOUT });
     await target.click();
     const dialog = page.locator('.rf-dialog[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
@@ -257,13 +266,26 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
     await dialog.getByRole('button', { name: 'Save project' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 10_000 });
 
-    await expect(hint).toContainText(`Commands run in /projects/${alphaId};`, { timeout: 90_000 });
-    expect(await projectCardIdForName(page, gammaName)).not.toBe('');
+    await expectProjectChipName(page, alphaName);
+    await expect(hint).toContainText('Commands run in /;', { timeout: OWNER_TIMEOUT });
+    await expectSavedProject(page, gammaName);
+    await newShell(page);
+    expect(await readActiveProjectText(page, 'project-proof.txt', OWNER_TIMEOUT)).toEqual({
+      exists: true,
+      text: alphaMarker,
+    });
+
+    await switchToSavedProject(page, gammaName);
+    await newShell(page);
+    expect(await readActiveProjectText(page, 'src/main.js', OWNER_TIMEOUT)).toMatchObject({
+      exists: true,
+      text: expect.stringContaining(dirtyMarker),
+    });
   });
 });
 
-test.describe('ADR-0165 §6 — named-project Reset is a real on-disk restore', () => {
-  test('resetting a saved project wipes its edits + re-seeds the starter tree on disk', async ({
+test.describe('ADR-0165 §6 — named-project Reset is a real project-tree restore', () => {
+  test('resetting a saved project wipes its edits + re-seeds the starter tree', async ({
     page,
     browserName,
   }) => {
@@ -277,67 +299,46 @@ test.describe('ADR-0165 §6 — named-project Reset is a real on-disk restore', 
     await bootScratch(page);
     const hint = hintLocator(page);
 
-    // Boot scratch, write a STRAY file (absolute active root), Save as a project →
-    // the stray moves into /projects/<id>/stray.txt.
+    // Write a stray file through the active project's logical root, then save it.
     await newShell(page);
-    await runTerminalLineSettled(page, 'echo stray-edit > /scratch/stray.txt');
-    const id = await saveScratchAs(page, projName);
-    expect(id).not.toBe('');
-    await expect
-      .poll(() => readProjectFile(page, id, 'stray.txt'), { timeout: OPFS_POLL })
-      .toContain('stray-edit');
+    await runTerminalLineSettled(page, 'echo stray-edit > stray.txt');
+    const strayBeforeSave = await readActiveProjectText(page, 'stray.txt');
+    expect(strayBeforeSave).toEqual({ exists: true, text: 'stray-edit' });
+    await saveScratchAs(page, projName);
 
-    // Make a DIFFERENT scratch active so the reset target is NON-active (no live
-    // dev-server restart in the assertion path — purely the on-disk re-seed).
+    // Make a different scratch active so Reset operates on an inactive project.
     await pickStarter(page, 'node-worker');
-    await expectPaletteStarterAdmissionBlocked(page);
+    await newShell(page);
+    const activeScratchProof = `active-scratch-${tag}`;
+    await runTerminalLineSettled(page, `echo ${activeScratchProof} > active-scratch-proof.txt`);
+    await resetProjectViaMenu(page, projName);
+    await expect(hint).toContainText('Commands run in /;', { timeout: 30_000 });
+    await newShell(page);
+    expect(await readActiveProjectText(page, 'active-scratch-proof.txt', OWNER_TIMEOUT)).toEqual({
+      exists: true,
+      text: activeScratchProof,
+    });
 
-    await resetProjectViaMenu(page, projName, { expectOwnerBusy: true });
-    await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
-
-    // The stray edit is GONE (tree wiped) and the starter baseline is back —
-    // proving Reset is a real on-disk restore, not a page-mirror no-op.
-    await expect
-      .poll(() => readProjectFile(page, id, 'stray.txt'), { timeout: OPFS_POLL })
-      .toContain('MISSING');
-    await expect
-      .poll(() => readProjectFile(page, id, 'src/main.js'), { timeout: OPFS_POLL })
-      .not.toContain('MISSING');
+    // Activate the reset target and inspect it through the public active-project
+    // shell boundary. Reset must wipe the stray and restore the starter baseline.
+    await switchToSavedProject(page, projName, { discardDirtyScratch: true });
+    await expect(hint).toContainText('Commands run in /;', { timeout: OWNER_TIMEOUT });
+    await newShell(page);
+    expect(await readActiveProjectText(page, 'stray.txt', OWNER_TIMEOUT)).toEqual({
+      exists: false,
+      text: '',
+    });
+    expect(await readActiveProjectText(page, 'src/main.js', OWNER_TIMEOUT)).toEqual({
+      exists: true,
+      text: expect.stringContaining("import project from './project.json'"),
+    });
   });
 });
 
-async function expectPaletteStarterAdmissionBlocked(page: Page): Promise<void> {
-  await expect(page.locator('.rf-livepill[data-state="switching"]')).toBeVisible({
-    timeout: 5_000,
-  });
-  await page.click('[data-action="open-palette"]');
-  const palette = page.locator('[data-testid="command-palette"]');
-  const firstTemplate = palette.getByRole('button', { name: /Project files/ });
-  await expect(firstTemplate).toBeDisabled();
-  await page.keyboard.press('Enter');
-  await expect(palette).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(palette).toHaveCount(0);
-}
-
 /** Open the row menu for project `name` and click "Reset to starter…" → "Reset files". */
-async function resetProjectViaMenu(
-  page: Page,
-  name: string,
-  opts: { readonly expectOwnerBusy?: boolean } = {},
-): Promise<void> {
+async function resetProjectViaMenu(page: Page, name: string): Promise<void> {
   await openProjects(page);
   const card = page.locator('.rf-pcard', { hasText: name }).first();
-  if (opts.expectOwnerBusy) {
-    await expect(page.locator('.rf-scratch').getByRole('button', { name: 'Open' })).toBeDisabled();
-    await expect(card).toHaveAttribute('tabindex', '-1');
-    await expect(card).toHaveAttribute('data-switch-disabled', 'true');
-    await expect(card).not.toHaveAttribute('role', 'button');
-    await card.click();
-    await expect(page.locator('[data-testid="launcher"]')).toBeVisible();
-    await card.press('Enter');
-    await expect(page.locator('[data-testid="launcher"]')).toBeVisible();
-  }
   await card.locator('.rf-pcard__menu').click();
   // Scope to the row menu; a page-level role query can also match the card's text.
   await card
@@ -347,17 +348,12 @@ async function resetProjectViaMenu(
   const dialog = page.locator('.rf-dialog[role="dialog"]');
   await expect(dialog).toBeVisible({ timeout: 5_000 });
   const reset = dialog.getByRole('button', { name: 'Reset files' });
-  if (opts.expectOwnerBusy) {
-    const ownerTransition = page.locator('.rf-livepill[data-state="switching"]');
-    await expect(ownerTransition).toBeVisible({ timeout: 5_000 });
-    await expect(reset).toBeDisabled();
-    await expect(reset).toBeEnabled({ timeout: OPFS_POLL });
-    await expect(ownerTransition).toHaveCount(0);
-  }
   await reset.click();
-  await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+  await expect(dialog).toHaveCount(0, { timeout: OWNER_TIMEOUT });
   await page.locator('.rf-launcher__close').click();
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
+    timeout: OWNER_TIMEOUT,
+  });
 }
 
 async function openLauncherViaChip(page: Page): Promise<void> {

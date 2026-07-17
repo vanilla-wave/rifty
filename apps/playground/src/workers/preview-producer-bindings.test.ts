@@ -13,7 +13,6 @@ import {
 } from './dev-server-controller.ts';
 import { type NodeChildHandle, createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
 import {
-  PTY_SESSION_ENV,
   createInstalledBinPreviewHooks,
   createNodePreviewRunHooks,
   createPreviewOriginCapture,
@@ -21,6 +20,8 @@ import {
 } from './preview-producer-bindings.ts';
 import { HOST_PREVIEW_ORIGIN, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
+
+const FORGED_PTY_SESSION_ENV = 'RIFTY_INTERNAL_PTY_SID';
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -74,7 +75,7 @@ function actorHarness() {
 function producerContext(signal?: AbortSignal): CommandContext {
   return {
     cwd: '/workspace',
-    env: { [PTY_SESSION_ENV]: 'terminal-shared' },
+    env: { [FORGED_PTY_SESSION_ENV]: 'terminal-forged' },
     stdout: { write: () => {} },
     stderr: { write: () => {} },
     signal,
@@ -192,10 +193,7 @@ describe('owner preview producer admission capture', () => {
             previews: preview.previews,
           }),
         });
-        const shell = new Shell({
-          cwd: '/workspace',
-          env: { [PTY_SESSION_ENV]: ptySid },
-        });
+        const shell = new Shell({ cwd: '/workspace', env: {} });
         shell.registerCommand('hold', () => holdB.promise);
         shell.registerCommand('launch-preview', (_args, ctx) =>
           executor('/workspace/node_modules/.bin/vite', [], ctx),
@@ -222,7 +220,7 @@ describe('owner preview producer admission capture', () => {
         type: 'pty:exec',
         sid: 'terminal-a',
         rid: 'run-a',
-        line: `${PTY_SESSION_ENV}=terminal-b launch-preview`,
+        line: `${FORGED_PTY_SESSION_ENV}=terminal-b launch-preview`,
         cols: 80,
         rows: 24,
         isTTY: true,
@@ -271,10 +269,7 @@ describe('owner preview producer admission capture', () => {
           (sid) => server.activeAdmission(sid),
           ptySid,
         );
-        const shell = new Shell({
-          cwd: '/workspace',
-          env: { [PTY_SESSION_ENV]: ptySid },
-        });
+        const shell = new Shell({ cwd: '/workspace', env: {} });
         shell.registerCommand('hold', () => holdB.promise);
         shell.registerCommand('launch-dev', (_args, ctx) =>
           runPtyDevServerShellCommand({
@@ -305,7 +300,7 @@ describe('owner preview producer admission capture', () => {
         type: 'pty:exec',
         sid: 'terminal-a',
         rid: 'run-a',
-        line: `${PTY_SESSION_ENV}=terminal-b launch-dev`,
+        line: `${FORGED_PTY_SESSION_ENV}=terminal-b launch-dev`,
         cols: 80,
         rows: 24,
         isTTY: true,
@@ -420,7 +415,11 @@ describe('owner preview producer admission capture', () => {
     const first = actor.start('run-a', 0);
     const preview = previewHarness();
     const child = controllableNodeSpawn();
-    const executor = createOwnerChildNodeExecutor('node-entry', {}, child.spawn);
+    const executor = createOwnerChildNodeExecutor(
+      'node-entry',
+      { RIFTY_KERNEL_WORKER_URL: 'kernel-entry' },
+      child.spawn,
+    );
     const ctx = producerContext();
     const captureOrigin = createPreviewOriginCapture(
       (ptySid) => actor.server.activeAdmission(ptySid),

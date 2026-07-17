@@ -6,14 +6,17 @@ import {
   decodeReply,
   encodeRequest,
 } from '@riftydev/kernel';
-import type { VfsMutationIntent } from '@riftydev/vfs';
+import type { VfsMutationGuard, VfsMutationIntent } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import type { OwnerProjectVfsFrame } from '../workbench/project-vfs-protocol.ts';
 import { createOwnerVfsAuthorityComposition } from '../workers/owner-vfs-authority.ts';
 import {
   type PackageAcquisitionProject,
   createPackageAcquisitionAuthority,
 } from '../workers/package-acquisition-authority.ts';
+import { createWorkbenchOwnerChildVfsMutationGuard } from '../workers/workbench-owner-child-vfs.ts';
+import { createWorkbenchProjectVfs } from '../workers/workbench-project-vfs.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import { installOwnerSyncRuntimeHandlers } from './owner-sync-runtime-handlers.ts';
@@ -124,12 +127,24 @@ async function roundTrip(
   return decodeReply(await caller.waitReplyAsync(5_000));
 }
 
-async function harness(options: { readonly parkInstall?: boolean } = {}) {
+async function harness(
+  options: {
+    readonly parkInstall?: boolean;
+    readonly projectPublication?: boolean;
+    readonly projectFrame?: (frame: OwnerProjectVfsFrame) => void;
+    readonly projectFatal?: (error: Error) => void;
+  } = {},
+) {
   const { vfs, fsSync } = createMemoryFs();
   fsSync.mkdirSync(`${ROOT}/node_modules/pkg`, { recursive: true });
   fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(PACKAGE_JSON));
   fsSync.writeFileSync(`${ROOT}/node_modules/pkg/index.js`, enc.encode('trusted'));
-  const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(fsSync, {
+  fsSync.writeFileSync(`${ROOT}/before.txt`, enc.encode('before'));
+  const {
+    authority: owner,
+    appliedMutations,
+    installStampClaims,
+  } = createOwnerVfsAuthorityComposition(fsSync, {
     ownerEpoch: 'owner',
     initialRoots: ['/'],
   });
@@ -171,17 +186,32 @@ async function harness(options: { readonly parkInstall?: boolean } = {}) {
     },
   });
   const mutations = mutationExecutor(packages);
+  const projectVfs = options.projectPublication
+    ? createWorkbenchProjectVfs({
+        projectRoot: ROOT,
+        authority: owner,
+        appliedMutations,
+        packageMutations: mutations,
+        durability: 'ephemeral',
+        emit: options.projectFrame ?? (() => {}),
+        fatal: options.projectFatal ?? (() => {}),
+      })
+    : null;
+  projectVfs?.publishSnapshot();
+  const mutationGuard: VfsMutationGuard =
+    projectVfs === null
+      ? (intents, apply) => applyPackageAwareVfsMutations(mutations, ROOT, intents, apply)
+      : createWorkbenchOwnerChildVfsMutationGuard({
+          activeProject: () => ({ root: ROOT, vfs: projectVfs }),
+        });
   const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
-  installOwnerSyncRuntimeHandlers(
-    dispatcher,
-    () => owner,
-    (intents, apply) => applyPackageAwareVfsMutations(mutations, ROOT, intents, apply),
-  );
+  installOwnerSyncRuntimeHandlers(dispatcher, () => owner, mutationGuard);
 
   return {
     owner,
     stamps,
     packages,
+    projectVfs,
     dispatcher,
     installStart,
     releaseInstall,
@@ -200,6 +230,82 @@ async function expectUntrusted(
 }
 
 describe('owner sync runtime package mutation guard', () => {
+  it('publishes a real child rename state before the sync-RPC success reply', async () => {
+    const timeline: string[] = [];
+    const frames: OwnerProjectVfsFrame[] = [];
+    const { owner, dispatcher } = await harness({
+      projectPublication: true,
+      projectFrame: (frame) => {
+        frames.push(frame);
+        if (frame.type === 'workbench:project-vfs-state') timeline.push('project-state');
+      },
+    });
+
+    const reply = await roundTrip(dispatcher, FS_METHODS.rename, {
+      src: `${ROOT}/before.txt`,
+      dst: `${ROOT}/after.txt`,
+    }).then((value) => {
+      timeline.push(value.ok ? 'rpc-success' : 'rpc-error');
+      return value;
+    });
+
+    expect(reply).toEqual({ ok: true, value: null });
+    expect(timeline).toEqual(['project-state', 'rpc-success']);
+    expect(owner.existsSync(`${ROOT}/before.txt`)).toBe(false);
+    expect(owner.readFileBytesSync(`${ROOT}/after.txt`)).toEqual(enc.encode('before'));
+    expect(frames.find((frame) => frame.type === 'workbench:project-vfs-state')).toMatchObject({
+      type: 'workbench:project-vfs-state',
+      mutations: [
+        {
+          kind: 'rename',
+          sourcePath: `${ROOT}/before.txt`,
+          targetPath: `${ROOT}/after.txt`,
+        },
+      ],
+    });
+  });
+
+  // Fault classes: observable-order + torn-state. Applied child bytes cannot
+  // receive a success reply when their owner state failed to reach the page.
+  it('returns an RPC error and fatally ends the owner when child state publication fails', async () => {
+    const failure = new Error('child project state delivery failed');
+    const timeline: string[] = [];
+    let ownerFatal: Error | null = null;
+    const { owner, dispatcher } = await harness({
+      projectPublication: true,
+      projectFrame: (frame) => {
+        if (frame.type === 'workbench:project-vfs-state') {
+          timeline.push('project-state-attempt');
+          throw failure;
+        }
+        if (frame.type === 'workbench:project-vfs-fatal') timeline.push('project-fatal');
+      },
+      projectFatal: (error) => {
+        ownerFatal = error;
+        timeline.push('owner-fatal');
+      },
+    });
+
+    const reply = await roundTrip(dispatcher, FS_METHODS.rename, {
+      src: `${ROOT}/before.txt`,
+      dst: `${ROOT}/after.txt`,
+    }).then((value) => {
+      timeline.push(value.ok ? 'rpc-success' : 'rpc-error');
+      return value;
+    });
+
+    expect(reply).toMatchObject({ ok: false });
+    expect(timeline).toEqual([
+      'project-state-attempt',
+      'project-fatal',
+      'owner-fatal',
+      'rpc-error',
+    ]);
+    expect(ownerFatal).toBe(failure);
+    expect(owner.existsSync(`${ROOT}/before.txt`)).toBe(false);
+    expect(owner.readFileBytesSync(`${ROOT}/after.txt`)).toEqual(enc.encode('before'));
+  });
+
   it.each([
     ['package.json', `${ROOT}/package.json`, '{"name":"changed"}\n'],
     ['node_modules child', `${ROOT}/node_modules/pkg/index.js`, 'changed'],

@@ -6,8 +6,9 @@
  * `globalProcessManager.spawnWorker` in prod; fake in unit tests).
  */
 import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
-import { childTerminalEnv } from '../glue/child-terminal.ts';
+import { childTerminalBootstrap } from '../glue/child-terminal.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { type ForegroundWritable, runForegroundChild } from '../glue/run-foreground-child.ts';
 
@@ -21,21 +22,23 @@ export function buildNodeChildSpawnSpec(
   tty = false,
   cols = 80,
   rows = 24,
+  previewScope?: string,
+  remoteFsRoot?: string,
 ): SpawnWorkerSpec {
   return {
-    entry: { kind: 'url', url: nodeEntryUrl },
+    entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
+      kind: 'program',
+      bin: false,
+      remoteFs: true,
+      ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+      nodeServe: true,
+      ...(previewScope === undefined ? {} : { previewScope }),
+      terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
+    }),
     argv: ['rifty', entry, ...args],
-    // RIFTY_BIN=0 → runNodeEntry(bin:false) imports the entry directly (not a
-    // .bin shim). serve:true → kernel keeps it alive; the bootstrap owns the
-    // run-vs-serve decision (ADR-0155). RIFTY_NODE_SERVE gates the new path.
-    env: {
-      ...env,
-      ...nodeWorkerRuntimeEnv,
-      RIFTY_BIN: '0',
-      RIFTY_REMOTE_FS: '1',
-      RIFTY_NODE_SERVE: '1',
-      ...childTerminalEnv({ isTTY: tty, cols, rows }),
-    },
+    // serve:true → kernel keeps it alive; the entry-scoped bootstrap owns the
+    // run-vs-serve decision (ADR-0155) without changing observable guest env.
+    env: { ...env },
     cwd,
     serve: true,
   };
@@ -59,6 +62,10 @@ export interface NodeChildHandle {
 export interface NodeRunHooks {
   /** Stable id for this run (registry key + label). */
   readonly sid: string;
+  /** Owner-minted provenance bound to this launch, never guest env. */
+  readonly previewScope?: string;
+  /** Host-only physical root behind the child process's public `/` namespace. */
+  readonly remoteFsRoot?: string;
   readonly onListening: (sid: string, ports: number[], previewScope?: string) => void;
   readonly onExit: (sid: string) => void;
 }
@@ -99,6 +106,8 @@ export function createOwnerChildNodeExecutor(
         ctx.isTTY === true,
         ctx.cols ?? 80,
         ctx.rows ?? 24,
+        hooks.previewScope,
+        hooks.remoteFsRoot,
       ),
     );
     // Shared foreground driver (stream/abort/exit). A server child posts

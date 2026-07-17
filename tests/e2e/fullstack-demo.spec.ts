@@ -29,15 +29,13 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     });
     // Select the demo preset. ADR-0165 §9 moved the gallery into the launcher
     // modal: pick the card from the first-run launcher. The launcher closes on pick
-    // (a fresh scratch from the chosen starter) and the
-    // boot proceeds — proven by the `npm run dev` terminal lines just below, so no
-    // redundant chip-text assertion (the chip now shows the scratch name, not the id).
+    // (a fresh scratch from the chosen starter). The real install progress and
+    // server/API observations below prove that boot proceeded; the chip now shows
+    // the scratch name, not the starter id.
     await pickStarter(page, 'express-sqlite');
     // From-scratch preset (ADR-0135, revised): the visible `npm install` runs in
     // the OWNER realm (which serves the preview), streaming each package to the
-    // terminal — `npm run dev` boots the node server co-resident in the owner
-    // (ADR-0148).
-    await expectTerminalContains(page, 'npm run dev', 150_000);
+    // terminal before the node server boots co-resident in the owner (ADR-0148).
     await expectTerminalContains(page, 'npm: + express@', 120_000);
 
     // Express + engine boot behind a live npm install — poll the API route.

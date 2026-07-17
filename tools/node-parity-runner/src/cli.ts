@@ -47,6 +47,7 @@ async function runOne(file: string): Promise<CaseRun> {
     // observe the replacement while selecting/spawning the real Node process.
     const installsProcess =
       testCase.kind === 'exec-sync' ||
+      testCase.kind === 'worker-env' ||
       testCase.kind === 'tty-resize' ||
       testCase.stdin !== undefined;
     const [nodeOut, riftyOut] = installsProcess

@@ -6,20 +6,19 @@
  * `/` (first hit wins). A name containing `/` is a path, not a PATH lookup —
  * bash never consults PATH for it — so it never resolves here.
  *
- * Pure VFS read against the sync mirror; the shell dispatches the resolved shim
- * to its injected `BinExecutor` (a name the shell layer can't run on its own).
+ * Pure VFS read against the shell's filesystem; the shell dispatches the
+ * resolved shim to its injected `BinExecutor` (a name this layer can't run).
  */
 
-import { joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
+import { type FsSync, joinPath, normalizePath } from '@riftydev/vfs';
 
 /**
  * Absolute path of the nearest `node_modules/.bin/<name>` shim reachable by
  * walking up from `cwd`, or `null` when none exists / `name` is not a bare
  * command (empty or path-like).
  */
-export function resolveBin(cwd: string, name: string): string | null {
+export function resolveBin(fs: FsSync, cwd: string, name: string): string | null {
   if (name === '' || name.includes('/')) return null;
-  const fs = syncMirror();
   let dir = normalizePath(cwd);
   for (;;) {
     const candidate = joinPath(dir, 'node_modules', '.bin', name);

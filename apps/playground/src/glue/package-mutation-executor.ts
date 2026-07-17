@@ -24,7 +24,12 @@ export type PackageMutationIntents =
   | (() => readonly VfsMutationIntent[]);
 export type PackageResetPlan =
   | { readonly status: 'noop' }
-  | { readonly status: 'ready'; readonly mutate: PackageMutation };
+  | {
+      readonly status: 'ready';
+      /** Supplies the sole acquisition-adapter tree reset inside the mutation scope. */
+      readonly resetDependencyTree?: true;
+      readonly mutate: (resetDependencyTree?: PackageMutation) => Promise<void>;
+    };
 export type PackageResetPreparation = () => Promise<PackageResetPlan>;
 export type PackageEditPreflight<T> = () => Promise<
   { readonly status: 'ready' } | { readonly status: 'noop'; readonly value: T }
@@ -307,7 +312,9 @@ export function assertPortableVfsMutationIntents(
 
 function mutationScanPaths(intent: VfsMutationIntent): readonly string[] {
   if ('path' in intent) {
-    return intent.kind === 'rm' || intent.kind === 'write' ? [intent.path] : [];
+    return intent.kind === 'rm' || intent.kind === 'write' || intent.kind === 'replace'
+      ? [intent.path]
+      : [];
   }
   return intent.kind === 'copy' ? [intent.targetPath] : [intent.sourcePath, intent.targetPath];
 }
@@ -404,6 +411,7 @@ export function discoverPackageAcquisitionGuardTransitions(
 
 export function applyPackageAwareVfsMutations<T>(
   mutations: PackageMutationExecutor,
+  // Legacy bootstrap compatibility; Workbench maps paths before this adapter.
   _root: string,
   intents: readonly VfsMutationIntent[],
   apply: () => T | Promise<T>,

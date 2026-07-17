@@ -1807,6 +1807,40 @@ it('apply from a repo subdirectory only applies patch entries under that subdire
   expect(await vfs.readFileText('/repo/sub/local.txt')).toBe('two\n');
 });
 
+it('apply from a subdirectory of a rooted repository keeps root entries out of scope', async () => {
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  await vfs.mkdir('/sub', { recursive: true });
+  await writeFile('/root.txt', 'one\n');
+  await writeFile('/sub/local.txt', 'one\n');
+  await git(['init'], makeCtx({ cwd: '/', env: ENV }).ctx);
+  await git(['add', 'root.txt', 'sub/local.txt'], makeCtx({ cwd: '/', env: ENV }).ctx);
+  await git(['commit', '-m', 'first'], makeCtx({ cwd: '/', env: ENV }).ctx);
+  await writeFile(
+    '/change.patch',
+    [
+      'diff --git a/root.txt b/root.txt',
+      '--- a/root.txt',
+      '+++ b/root.txt',
+      '@@ -1 +1 @@',
+      '-one',
+      '+two',
+      'diff --git a/sub/local.txt b/sub/local.txt',
+      '--- a/sub/local.txt',
+      '+++ b/sub/local.txt',
+      '@@ -1 +1 @@',
+      '-one',
+      '+two',
+      '',
+    ].join('\n'),
+  );
+
+  const apply = makeCtx({ cwd: '/sub', env: ENV });
+  expect(await git(['apply', '../change.patch'], apply.ctx)).toBe(0);
+  expect(await vfs.readFileText('/root.txt')).toBe('one\n');
+  expect(await vfs.readFileText('/sub/local.txt')).toBe('two\n');
+});
+
 it('apply from a repo subdirectory ignores unsupported metadata for entries outside cwd scope', async () => {
   await seedRepoDir();
   const vfs = asyncVfs();

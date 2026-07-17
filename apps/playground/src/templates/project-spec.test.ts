@@ -86,6 +86,7 @@ describe('resolveBootstrapConfig', () => {
 
   it('honours a non-default port and root (not spec.defaultPort / not /workspace)', () => {
     const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5999, '/proj');
+    if (cfg.runtime !== 'vite') throw new Error('unreachable');
     expect(cfg.port).toBe(5999);
     expect(cfg.entryPath).toBe('/proj/src/main.js');
   });

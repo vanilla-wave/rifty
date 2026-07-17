@@ -21,38 +21,8 @@ import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
 import { ModuleLoadError } from '../module-loader/errors.ts';
 import { type ModuleLoader, createModuleLoader } from '../module-loader/loader.ts';
-import { __setCreateRequireImpl } from './module.ts';
 
 const utf8 = new TextDecoder();
-
-interface RequireLike {
-  (id: string): unknown;
-  resolve(id: string): string;
-  cache: Record<string, unknown>;
-  extensions: Record<string, unknown>;
-  main: undefined;
-}
-
-/**
- * Back `node:module.createRequire` with `loader` for THIS realm. A Node entry
- * (e.g. Rolldown's `wasi-worker.mjs`, run in the worker_threads pthread realm)
- * may call `createRequire(import.meta.url)`, which throws "no loader registered"
- * until an impl is published — mirrors the dev-server boot's wiring.
- */
-function registerCreateRequire(loader: ModuleLoader): void {
-  __setCreateRequireImpl((from: string) => {
-    const fromPath = from.startsWith('file://')
-      ? decodeURIComponent(from.slice('file://'.length))
-      : from;
-    const req = ((id: string) => loader.require(id, fromPath)) as RequireLike;
-    req.resolve = (id: string) =>
-      loader.resolver.resolve(id, { fromFile: fromPath, esm: false }).id;
-    req.cache = {};
-    req.extensions = {};
-    req.main = undefined;
-    return req;
-  });
-}
 
 /**
  * Real-Node printed form of an uncaught CJS-loader `MODULE_NOT_FOUND`: the
@@ -144,7 +114,6 @@ function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | nu
 /** Import the resolved Node entry (or a `.bin` launcher's target) via the loader. */
 export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
   const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
-  registerCreateRequire(loader);
   try {
     if (opts.bin) {
       const shim = utf8.decode(opts.vfs.readFileBytesSync(opts.entryPath));

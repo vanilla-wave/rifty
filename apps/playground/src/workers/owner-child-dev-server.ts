@@ -10,21 +10,23 @@ import type { ProcessExit } from '@riftydev/shell';
 import {
   type ChildTerminalContext,
   bindChildTerminalResize,
-  childTerminalEnv,
+  childTerminalBootstrap,
 } from '../glue/child-terminal.ts';
 import { type DevServerChildMessage, isDevServerChildMessage } from '../glue/dev-server-ipc.ts';
 import { processExitFromChildEvent } from '../glue/process-exit.ts';
+import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
+import { buildDevServerChildEntry } from './dev-server-child-config.ts';
 import {
   type DevServerFailure,
   DevServerRunError,
   type SupervisedDevServerHandle,
 } from './dev-server-controller.ts';
+import type { NodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 
 export interface DevServerChildSpawnParams extends ChildTerminalContext {
-  readonly templateId: string;
-  readonly root: string;
-  /** The template's real dev port (distinct from the owner's 59124 bridge key). */
-  readonly devPort: number;
+  readonly cfg: NodeServerPackageConfig;
+  readonly env: Readonly<Record<string, string>>;
+  readonly remoteFsRoot?: string;
   readonly previewScope?: string;
 }
 
@@ -32,18 +34,19 @@ export interface DevServerChildSpawnParams extends ChildTerminalContext {
 export function buildDevServerChildSpawnSpec(
   params: DevServerChildSpawnParams,
   devServerWorkerUrl: string,
-  nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
+  nodeWorkerRuntime: NodeWorkerRuntimeConfig,
 ): SpawnWorkerSpec {
   return {
-    entry: { kind: 'url', url: devServerWorkerUrl },
-    argv: ['rifty', 'dev-server'],
+    entry: buildDevServerChildEntry(devServerWorkerUrl, {
+      nodeWorkerRuntime,
+      cfg: params.cfg,
+      terminal: childTerminalBootstrap(params),
+      ...(params.remoteFsRoot === undefined ? {} : { remoteFsRoot: params.remoteFsRoot }),
+      ...(params.previewScope === undefined ? {} : { previewScope: params.previewScope }),
+    }),
+    argv: ['rifty', params.cfg.entryPath],
     env: {
-      ...nodeWorkerRuntimeEnv,
-      RIFTY_REMOTE_FS: '1',
-      RIFTY_RFV_TEMPLATE: params.templateId,
-      RIFTY_RFV_ROOT: params.root,
-      RIFTY_DEV_PORT: String(params.devPort),
-      ...(params.previewScope === undefined ? {} : { RIFTY_PREVIEW_SCOPE: params.previewScope }),
+      ...params.env,
       // rifty has no native bindings by construction. Force napi-rs consumers
       // onto their WASI path so a failed WASI load stays loud instead of falling
       // through to the generic "Cannot find native binding" diagnostic.
@@ -54,10 +57,9 @@ export function buildDevServerChildSpawnSpec(
       // the entry across the PROD process-globals clobber — the entry reads its
       // env from the spawn-time KernelProcessSpec.env (the clobber-safe source),
       // which otherwise inherits the owner's spawn-time PORT unless overridden.
-      PORT: String(params.devPort),
-      ...childTerminalEnv(params),
+      PORT: String(params.cfg.port),
     },
-    cwd: params.root,
+    cwd: params.cfg.root,
     // ADR-0144: serve:true — the kernel does NOT reap the realm when the entry's
     // setup finishes; the dev server stays listening until the owner kills it.
     serve: true,
@@ -128,7 +130,7 @@ function decodeChunk(chunk: unknown): string {
  */
 export function createOwnerChildDevServer(
   devServerWorkerUrl: string,
-  nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
+  nodeWorkerRuntime: NodeWorkerRuntimeConfig,
   spawn: (spec: SpawnWorkerSpec) => DevServerChildHandle = (spec: SpawnWorkerSpec) => {
     const h = globalProcessManager.spawnWorker('dev-server', spec, 1);
     if (h.kind !== 'worker') {
@@ -141,7 +143,7 @@ export function createOwnerChildDevServer(
     boot(opts: DevServerChildBootOpts): Promise<SupervisedDevServerHandle> {
       return new Promise<SupervisedDevServerHandle>((resolve, reject) => {
         const handle = spawn(
-          buildDevServerChildSpawnSpec(opts.params, devServerWorkerUrl, nodeWorkerRuntimeEnv),
+          buildDevServerChildSpawnSpec(opts.params, devServerWorkerUrl, nodeWorkerRuntime),
         );
         let outputClosed = false;
         const writeLog = (chunk: unknown): void => {

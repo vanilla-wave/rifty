@@ -18,8 +18,8 @@ const WORKSPACE = '/workspace';
 // is painted as early as possible.
 assertCrossOriginIsolated();
 
-// ADR-0231 — atomically install the worker URLs + WASM assets every recursive
-// Node realm must inherit. The app owns Vite URLs; runtime-js sees only RIFTY_*.
+// ADR-0267 — install the worker URLs + WASM assets every recursive Node realm
+// receives through its entry-scoped bootstrap; guest process.env stays user-owned.
 installPlaygroundNodeWorkerRuntime();
 
 // e2e-only: the execSync-over-SAB harness (tests/e2e/execsync-sab.spec.ts).

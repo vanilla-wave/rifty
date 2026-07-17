@@ -1,5 +1,6 @@
 import { Writable } from '@riftydev/io';
 import type { KernelProcessSpec } from '@riftydev/kernel';
+import { applyNodeProcessTerminalBootstrap } from '@riftydev/runtime-js/builtins/process';
 import { installNodeProcessShim } from '@riftydev/runtime-js/install-process';
 import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -21,11 +22,19 @@ function realSeededProcess(): { stdin: unknown } {
     pid: 2,
     ppid: 1,
     argv: ['node', '/entry.js'],
-    env: { RIFTY_NODE_SERVE: '1', RIFTY_STDIN_IS_TTY: '1' },
+    env: { RIFTY_NODE_SERVE: '1' },
     cwd: '/workspace',
     stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
   };
-  return installNodeProcessShim(spec) as unknown as { stdin: unknown };
+  const process = installNodeProcessShim(spec);
+  applyNodeProcessTerminalBootstrap(process, {
+    stdinIsTTY: true,
+    stdoutIsTTY: false,
+    stderrIsTTY: false,
+    cols: 80,
+    rows: 24,
+  });
+  return process as unknown as { stdin: unknown };
 }
 
 interface LoudStdin {

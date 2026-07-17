@@ -44,6 +44,7 @@ export {
 } from './eddy-request.ts';
 export { link, buildLockfile, type ResolvedPackage, type Lockfile } from './linker.ts';
 export { closureHashOf, canonicalClosureJson } from './closure-hash.ts';
+export { serializePackageJson } from './package-json.ts';
 // The bundle-adoption completeness gate, shared so eddy's durable store
 // validates objects EXACTLY as strictly as the client adopts them (a store
 // hit a client would reject must read as a miss and self-heal).

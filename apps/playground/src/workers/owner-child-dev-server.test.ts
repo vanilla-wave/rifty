@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { TerminalResizeSource, TerminalSize } from '@riftydev/shell';
 import { describe, expect, it } from 'vitest';
+import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import {
   type DevServerChildHandle,
   type DevServerChildSpawnParams,
@@ -8,17 +9,33 @@ import {
   createOwnerChildDevServer,
 } from './owner-child-dev-server.ts';
 
-const params: DevServerChildSpawnParams = {
-  templateId: 'express-sqlite',
+const nodeServerConfig: NodeServerPackageConfig = {
+  runtime: 'node-server',
   root: '/workspace',
-  devPort: 5174,
+  port: 5174,
+  entryPath: '/workspace/server.mjs',
+  packageName: 'express-sqlite',
+  packageVersion: '1.0.0',
+  installDeps: { express: '5.1.0' },
+  packageJson: '{"name":"express-sqlite","version":"1.0.0"}\n',
+  seedFiles: { '/workspace/server.mjs': 'export {}' },
+};
+
+const params: DevServerChildSpawnParams = {
+  cfg: nodeServerConfig,
+  env: {
+    USER_VALUE: 'kept',
+    RIFTY_PREVIEW_SCOPE: 'guest-preview',
+    NAPI_RS_FORCE_WASI: '0',
+    PORT: '9999',
+  },
 };
 
 const NODE_WORKER_RUNTIME_ENV = {
-  RIFTY_KERNEL_WORKER_URL: 'blob:kernel-url',
-  RIFTY_NODE_ENTRY_WORKER_URL: 'blob:node-entry-url',
-  RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
-  RIFTY_ESBUILD_WASM_URL: 'blob:esbuild-wasm',
+  kernelWorkerUrl: 'blob:kernel-url',
+  nodeEntryWorkerUrl: 'blob:node-entry-url',
+  sqliteWasmUrl: 'blob:sqlite-wasm',
+  esbuildWasmUrl: 'blob:esbuild-wasm',
 };
 
 describe('buildDevServerChildSpawnSpec', () => {
@@ -28,14 +45,36 @@ describe('buildDevServerChildSpawnSpec', () => {
       'blob:dev-server-url',
       NODE_WORKER_RUNTIME_ENV,
     );
-    expect(spec.entry).toEqual({ kind: 'url', url: 'blob:dev-server-url' });
-    expect(spec.argv).toEqual(['rifty', 'dev-server']);
+    expect(spec.entry).toEqual({
+      kind: 'url',
+      url: 'blob:dev-server-url',
+      bootstrap: {
+        protocol: 'rifty.dev-server/v1',
+        payload: {
+          nodeWorkerRuntime: {
+            kernelWorkerUrl: 'blob:kernel-url',
+            nodeEntryWorkerUrl: 'blob:node-entry-url',
+            sqliteWasmUrl: 'blob:sqlite-wasm',
+            esbuildWasmUrl: 'blob:esbuild-wasm',
+          },
+          cfg: nodeServerConfig,
+          terminal: {
+            stdinIsTTY: false,
+            stdoutIsTTY: false,
+            stderrIsTTY: false,
+            cols: 80,
+            rows: 24,
+          },
+        },
+      },
+    });
+    expect(spec.argv).toEqual(['rifty', '/workspace/server.mjs']);
     expect(spec.cwd).toBe('/workspace');
     expect(spec.serve).toBe(true); // long-lived server (vs P6a run-to-completion)
-    expect(spec.env.RIFTY_REMOTE_FS).toBe('1');
-    expect(spec.env.RIFTY_RFV_TEMPLATE).toBe('express-sqlite');
-    expect(spec.env.RIFTY_RFV_ROOT).toBe('/workspace');
-    expect(spec.env.RIFTY_DEV_PORT).toBe('5174');
+    expect(spec.env.RIFTY_REMOTE_FS).toBeUndefined();
+    expect(spec.env.RIFTY_RFV_TEMPLATE).toBeUndefined();
+    expect(spec.env.RIFTY_RFV_ROOT).toBeUndefined();
+    expect(spec.env.RIFTY_DEV_PORT).toBeUndefined();
     expect(spec.env.PORT).toBe('5174'); // node-server entries bind process.env.PORT
   });
 
@@ -46,36 +85,68 @@ describe('buildDevServerChildSpawnSpec', () => {
       NODE_WORKER_RUNTIME_ENV,
     );
 
-    expect(spec.env.RIFTY_KERNEL_WORKER_URL).toBe('blob:kernel-url');
-    expect(spec.env.RIFTY_NODE_ENTRY_WORKER_URL).toBe('blob:node-entry-url');
-    expect(spec.env.RIFTY_SQLITE_WASM_URL).toBe('blob:sqlite-wasm');
-    expect(spec.env.RIFTY_ESBUILD_WASM_URL).toBe('blob:esbuild-wasm');
+    expect(spec.env.RIFTY_KERNEL_WORKER_URL).toBeUndefined();
+    expect(spec.env.RIFTY_NODE_ENTRY_WORKER_URL).toBeUndefined();
+    expect(spec.env.RIFTY_SQLITE_WASM_URL).toBeUndefined();
+    expect(spec.env.RIFTY_ESBUILD_WASM_URL).toBeUndefined();
   });
 
-  it('applies host metadata before operation-owned child controls', () => {
+  it('keeps guest cwd and argv public while carrying the private remote root out-of-band', () => {
+    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const cfg: NodeServerPackageConfig = {
+      ...nodeServerConfig,
+      root: '/',
+      entryPath: '/server.mjs',
+      seedFiles: { '/server.mjs': 'export {}' },
+    };
+    const spec = buildDevServerChildSpawnSpec(
+      { ...params, cfg, remoteFsRoot },
+      'blob:dev-server-url',
+      NODE_WORKER_RUNTIME_ENV,
+    );
+
+    expect(spec.cwd).toBe('/');
+    expect(spec.argv).toEqual(['rifty', '/server.mjs']);
+    expect(spec.entry).toMatchObject({
+      bootstrap: { payload: { cfg, remoteFsRoot } },
+    });
+    expect(JSON.stringify({ argv: spec.argv, cwd: spec.cwd, env: spec.env })).not.toContain(
+      remoteFsRoot,
+    );
+  });
+
+  it('keeps preview/runtime selection entry-owned while preserving guest env', () => {
     const spec = buildDevServerChildSpawnSpec(
       { ...params, previewScope: 'expected-preview' },
       'blob:dev-server-url',
-      {
-        ...NODE_WORKER_RUNTIME_ENV,
-        RIFTY_REMOTE_FS: 'poison-remote',
-        RIFTY_RFV_TEMPLATE: 'poison-template',
-        RIFTY_RFV_ROOT: 'poison-root',
-        RIFTY_DEV_PORT: '9999',
-        RIFTY_PREVIEW_SCOPE: 'poison-preview',
-        NAPI_RS_FORCE_WASI: '0',
-        PORT: '9999',
-      },
+      NODE_WORKER_RUNTIME_ENV,
     );
 
-    expect(spec.env).toMatchObject({
-      RIFTY_REMOTE_FS: '1',
-      RIFTY_RFV_TEMPLATE: 'express-sqlite',
-      RIFTY_RFV_ROOT: '/workspace',
-      RIFTY_DEV_PORT: '5174',
-      RIFTY_PREVIEW_SCOPE: 'expected-preview',
+    expect(spec.env).toEqual({
+      USER_VALUE: 'kept',
+      RIFTY_PREVIEW_SCOPE: 'guest-preview',
       NAPI_RS_FORCE_WASI: '1',
       PORT: '5174',
+    });
+    expect(spec.env.RIFTY_REMOTE_FS).toBeUndefined();
+    expect(spec.env.RIFTY_RFV_TEMPLATE).toBeUndefined();
+    expect(spec.env.RIFTY_RFV_ROOT).toBeUndefined();
+    expect(spec.env.RIFTY_DEV_PORT).toBeUndefined();
+    expect(spec.env.RIFTY_PREVIEW_SCOPE).toBe('guest-preview');
+    expect(spec.entry).toMatchObject({
+      bootstrap: {
+        payload: {
+          cfg: nodeServerConfig,
+          previewScope: 'expected-preview',
+          terminal: {
+            stdinIsTTY: false,
+            stdoutIsTTY: false,
+            stderrIsTTY: false,
+            cols: 80,
+            rows: 24,
+          },
+        },
+      },
     });
   });
 
@@ -163,8 +234,10 @@ describe('createOwnerChildDevServer', () => {
   it('forwards one TTY context from spawn through live resize and unsubscribes on stop', async () => {
     const fake = new FakeHandle();
     const terminal = new MutableTerminalResizeSource(100, 30);
+    let capturedEntry: unknown;
     let capturedEnv: Readonly<Record<string, string>> | undefined;
     const driver = createOwnerChildDevServer('blob:dev-url', NODE_WORKER_RUNTIME_ENV, (spec) => {
+      capturedEntry = spec.entry;
       capturedEnv = spec.env;
       return fake;
     });
@@ -181,12 +254,24 @@ describe('createOwnerChildDevServer', () => {
       onSnapshotDirty: () => {},
     });
 
-    expect(capturedEnv).toMatchObject({
-      RIFTY_STDIN_IS_TTY: '0',
-      RIFTY_STDOUT_IS_TTY: '1',
-      RIFTY_STDERR_IS_TTY: '1',
-      RIFTY_TTY_COLS: '80',
-      RIFTY_TTY_ROWS: '24',
+    expect(capturedEnv).toEqual({
+      USER_VALUE: 'kept',
+      RIFTY_PREVIEW_SCOPE: 'guest-preview',
+      NAPI_RS_FORCE_WASI: '1',
+      PORT: '5174',
+    });
+    expect(capturedEntry).toMatchObject({
+      bootstrap: {
+        payload: {
+          terminal: {
+            stdinIsTTY: false,
+            stdoutIsTTY: true,
+            stderrIsTTY: true,
+            cols: 80,
+            rows: 24,
+          },
+        },
+      },
     });
     expect(fake.resizes).toEqual([{ cols: 100, rows: 30 }]);
     expect(terminal.listenerCount()).toBe(1);
@@ -372,11 +457,7 @@ describe('createOwnerChildDevServer', () => {
     const bootPromise = driver.boot({
       signal,
       log: (c) => logs.push(c),
-      params: {
-        templateId: 'express-sqlite',
-        root: '/workspace',
-        devPort: 5174,
-      },
+      params,
       onSnapshotDirty: () => snapshots.push(1),
     });
     fake.emitStdout('installing…\n');
@@ -400,11 +481,7 @@ describe('createOwnerChildDevServer', () => {
     const bootPromise = driver.boot({
       signal: new AbortController().signal,
       log: () => {},
-      params: {
-        templateId: 'express-sqlite',
-        root: '/workspace',
-        devPort: 5174,
-      },
+      params,
       onSnapshotDirty: () => {},
       onPortsChanged: (ports) => changes.push(ports),
     });
@@ -436,11 +513,7 @@ describe('createOwnerChildDevServer', () => {
     const bootPromise = driver.boot({
       signal: new AbortController().signal,
       log: () => {},
-      params: {
-        templateId: 't',
-        root: '/workspace',
-        devPort: 5174,
-      },
+      params,
       onSnapshotDirty: () => {},
       flush,
     });
@@ -466,11 +539,7 @@ describe('createOwnerChildDevServer', () => {
     const bootPromise = driver.boot({
       signal: new AbortController().signal,
       log: () => {},
-      params: {
-        templateId: 't',
-        root: '/workspace',
-        devPort: 5174,
-      },
+      params,
       onSnapshotDirty: () => {},
       // no flush
     });
@@ -486,13 +555,7 @@ describe('createOwnerChildDevServer', () => {
     const p = driver.boot({
       signal: new AbortController().signal,
       log: () => {},
-      params: {
-        templateId: 't',
-        root: '/workspace',
-        devPort: 5174,
-        isTTY: true,
-        terminal,
-      },
+      params: { ...params, isTTY: true, terminal },
       onSnapshotDirty: () => {},
     });
     expect(terminal.listenerCount()).toBe(1);
@@ -510,11 +573,7 @@ describe('createOwnerChildDevServer', () => {
     const p = driver.boot({
       signal: new AbortController().signal,
       log: () => {},
-      params: {
-        templateId: 't',
-        root: '/workspace',
-        devPort: 5174,
-      },
+      params,
       onSnapshotDirty: () => {},
     });
     fake.emitExit(1);
@@ -602,7 +661,7 @@ describe('createOwnerChildDevServer', () => {
     const bootPromise = driver.boot({
       signal: new AbortController().signal,
       log: () => {},
-      params: { templateId: 't', root: '/workspace', devPort: 5174 },
+      params,
       onSnapshotDirty: () => {},
     });
     fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });

@@ -135,6 +135,7 @@ import {
   resolveNodeEntry,
 } from './node-entry-resolve.ts';
 import {
+  type NodeWorkerRuntimeConfig,
   installNodeWorkerRuntimeConfig,
   readNodeWorkerRuntimeConfig,
 } from './node-worker-runtime-config.ts';
@@ -147,7 +148,6 @@ import {
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
 import {
-  PTY_SESSION_ENV,
   createInstalledBinPreviewHooks,
   createNodePreviewRunHooks,
   createPreviewOriginCapture,
@@ -155,7 +155,7 @@ import {
 } from './preview-producer-bindings.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
-import { createPreviewScope, withViteCliEnv } from './vite-cli-prep.ts';
+import { createPreviewScope } from './vite-cli-prep.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -257,18 +257,6 @@ function isFullInstall(args: readonly string[]): boolean {
   return args.slice(1).every((a) => a.startsWith('-'));
 }
 
-function withPreviewScope(ctx: CommandContext, previewScope?: string): CommandContext {
-  return {
-    ...ctx,
-    env: {
-      ...ctx.env,
-      // An already-minted scope (e.g. the vite CLI env prep) is preserved so the
-      // child's serveCrossRealmPreview and the page bridge key on the same value.
-      RIFTY_PREVIEW_SCOPE: previewScope ?? ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope(),
-    },
-  };
-}
-
 /** Apply the optional `RIFTY_RFV_ENTRY` override. */
 function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
   if (entryRel === spec.entry.relativePath) return spec;
@@ -304,6 +292,8 @@ async function bootShellOwner(opts: {
   readonly nodeEntryWorkerUrl: string;
   /** Opaque host bootstrap snapshot inherited by every node-capable descendant. */
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
+  /** Typed host snapshot bound atomically to the dedicated dev-server entry. */
+  readonly nodeWorkerRuntimeConfig: NodeWorkerRuntimeConfig;
   /** Node-server bootstrap URL — the supervised serve:true child (ADR-0150 P6b). */
   readonly devServerWorkerUrl: string;
   /** ts-lsp child bootstrap worker URL — the supervised serve:true LS child the owner spawns (ADR-0166 P1.9a). */
@@ -510,6 +500,11 @@ async function bootShellOwner(opts: {
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
     boot: async (devCtx, origin) => {
+      if (devCfg.runtime !== 'node-server') {
+        throw new TypeError(
+          `Dedicated dev-server runtime requires node-server config, received ${devCfg.runtime}`,
+        );
+      }
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()
@@ -520,11 +515,8 @@ async function bootShellOwner(opts: {
         signal: devCtx.signal,
         log: (chunk) => devCtx.stdout.write(chunk),
         params: {
-          templateId: devSpec.id,
-          // The dev server listens on the template port (devCfg.port), distinct
-          // from `port` (the owner's snapshot/nm/vfs-write bridge key).
-          root: devCfg.root,
-          devPort: devCfg.port,
+          cfg: devCfg,
+          env: { ...devCtx.env },
           previewScope: createPreviewScope(),
           isTTY: devCtx.isTTY,
           cols: devCtx.cols,
@@ -590,7 +582,7 @@ async function bootShellOwner(opts: {
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
   const devServerChild = createOwnerChildDevServer(
     opts.devServerWorkerUrl,
-    opts.nodeWorkerRuntimeEnv,
+    opts.nodeWorkerRuntimeConfig,
   );
   // ADR-0155: `node <file>` runs in a supervised child like the bin executor, but
   // a server entry (it called `listen()`) posts its ports back so the owner adds a
@@ -618,14 +610,14 @@ async function bootShellOwner(opts: {
         allocateSid: () => `bin-${++binRunSeq}`,
         previews,
       }),
+      (req) => ({ ...req, previewScope: req.previewScope ?? createPreviewScope() }),
     );
     const ownerBinExecutor: BinExecutor = async (binPath, args, ctx) => {
       // Every installed CLI crosses this package-authority seam. The preset boot
       // line invokes `.bin/vite` directly (outside npm's dev-alias gate), while
       // arbitrary CLIs need the same template-seed guarantee without name dispatch.
       await reassertActiveDevTemplateNodeModules();
-      const viteCtx = withViteCliEnv(binPath, args, ctx);
-      return childBinExecutor(binPath, args, withPreviewScope(viteCtx));
+      return childBinExecutor(binPath, args, ctx);
     };
     // Node-server scripts use the dedicated supervised server child and block the
     // run until Ctrl-C. Vite scripts use the generic installed-bin child path.
@@ -639,10 +631,7 @@ async function bootShellOwner(opts: {
     // deleted since.
     const shell = new Shell({
       cwd: reachableCwd(syncMirror(), seed?.cwd, cfg.root),
-      env: {
-        ...(seed?.env ?? {}),
-        ...(ptySid === undefined ? {} : { [PTY_SESSION_ENV]: ptySid }),
-      },
+      env: { ...(seed?.env ?? {}) },
       execBin: ownerBinExecutor,
       mutationGuard: ((intents, apply) =>
         packageMutations.guardedMutation(intents, async () => apply())) satisfies VfsMutationGuard,
@@ -712,7 +701,7 @@ async function bootShellOwner(opts: {
       return ownerNodeExecutor(
         entryPath,
         [...scriptArgs],
-        withPreviewScope(ctx, previewScope),
+        ctx,
         createNodePreviewRunHooks({
           captureOrigin,
           previews,
@@ -722,9 +711,8 @@ async function bootShellOwner(opts: {
         }),
       );
     };
-    // `-e`/`-p`: write the source to a temp `.cjs` in cwd (so `require` resolves
-    // like real `node -e`, faithful CJS), run it through the loader realm, then
-    // clean up regardless of outcome — never `new Function` (require/import stay real).
+    // `-e`/`-p`: run a temp `.cjs` through the real loader realm, not `new Function`.
+    // TODO(backlog: runtime-js/node-cli-eval-identity-parity)
     const runNodeEval = async (
       inv: Extract<NodeInvocation, { kind: 'eval' }>,
       ctx: CommandContext,
@@ -1187,6 +1175,7 @@ async function bootstrap(): Promise<void> {
     kernelWorkerUrl,
     nodeEntryWorkerUrl,
     nodeWorkerRuntimeEnv,
+    nodeWorkerRuntimeConfig,
     devServerWorkerUrl,
     tsLspWorkerUrl,
   });

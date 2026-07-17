@@ -19,7 +19,10 @@ import { type FsSync, dirname } from '@riftydev/vfs';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
-import { mergeNodeEntryWorkerEnv } from './node-entry-runtime-config.ts';
+import {
+  buildConfiguredNodeEntryWorkerEntry,
+  readNodeEntryBootstrapIfPresent,
+} from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
 
@@ -70,8 +73,6 @@ export function setSameRealmWorkerModuleImporter(importer: SameRealmWorkerModule
 export class Worker extends EventEmitter {
   static isMainThread = true;
   threadId: number;
-  onmessage: WorkerMessageHandler | null = null;
-  onerror: ((error: unknown) => void) | null = null;
   private readonly script: string;
   private readonly workerData: unknown;
   private readonly env: Record<string, string>;
@@ -95,6 +96,9 @@ export class Worker extends EventEmitter {
       opts.env === undefined
         ? { ...(this.processContext?.env ?? {}) }
         : snapshotWorkerEnvironment(opts.env);
+    // TODO(backlog: runtime-js/worker-threads-prompt-start-atomics-wait):
+    // synchronous allocation cannot close prompt-start while entry loading
+    // still needs parent-serviced remote FS.
     queueMicrotask(() => this.start());
   }
 
@@ -121,23 +125,19 @@ export class Worker extends EventEmitter {
           'kernel-backed Worker requires setNodeEntryWorkerUrl(...)',
         );
       }
-      const env: Record<string, string> = {
-        ...mergeNodeEntryWorkerEnv(this.env),
-        RIFTY_REMOTE_FS: '1',
-        RIFTY_WORKER_THREADS: '1',
-        RIFTY_WORKER_THREAD_ID: String(this.threadId),
-      };
+      const env: Record<string, string> = { ...this.env };
       const encodedWorkerData = encodeWorkerData(this.workerData);
-      if (encodedWorkerData !== undefined) env.RIFTY_WORKER_DATA_JSON = encodedWorkerData;
+      const entry = buildConfiguredNodeEntryWorkerEntry({
+        kind: 'worker-thread',
+        remoteFs: true,
+        threadId: this.threadId,
+        ...(encodedWorkerData === undefined ? {} : { workerDataJson: encodedWorkerData }),
+      });
       if (this.processContext === null) {
         throw new Error('worker_threads.Worker: kernel Node process context is unavailable');
       }
       const spec: SpawnWorkerSpec = {
-        entry: {
-          kind: 'url',
-          url:
-            typeof nodeEntryWorkerUrl === 'string' ? nodeEntryWorkerUrl : nodeEntryWorkerUrl.href,
-        },
+        entry,
         argv: ['rifty', this.script],
         env,
         cwd: this.processContext.cwd,
@@ -153,13 +153,13 @@ export class Worker extends EventEmitter {
       const handle = globalProcessManager.spawnWorker('node', spec);
       this.workerHandle = handle;
       if (handle.kind === 'worker') {
-        // Node emits 'online' once the worker thread is up; the kernel realm now
-        // exists, so signal it before wiring stdio/messages.
-        this.emit('online');
         handle.stdout().on('data', (chunk) => this.emit('stdout', chunk));
         handle.stderr().on('data', (chunk) => this.emit('stderr', chunk));
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
+        // Node emits 'online' once the worker realm exists. Construction-start
+        // is already deferred at the shared entry above.
+        this.emit('online');
       }
       handle.on('exit', (code) => {
         // TODO(backlog: runtime-js/worker-threads-kernel-error-event): a
@@ -279,7 +279,6 @@ export class Worker extends EventEmitter {
 
   private emitWorkerMessage(msg: unknown): void {
     this.emit('message', msg);
-    this.onmessage?.({ data: msg });
   }
 
   private flushKernelMessages(handle: Extract<ProcessHandle, { kind: 'worker' }>): void {
@@ -314,7 +313,6 @@ export class Worker extends EventEmitter {
 
   private emitWorkerError(error: unknown): void {
     this.emit('error', error);
-    this.onerror?.(error);
   }
 
   private finish(code: number): void {
@@ -486,7 +484,6 @@ function withSameRealmWorkerContextSync<T>(context: WorkerThreadContext, fn: () 
 }
 
 interface ProcessWithWorkerIpc {
-  env?: Record<string, string | undefined>;
   on?(event: 'message', handler: (message: unknown) => void): unknown;
   send?(message: unknown): unknown;
 }
@@ -494,10 +491,12 @@ interface ProcessWithWorkerIpc {
 function readProcessWorkerContext(): WorkerThreadContext | null {
   if (cachedProcessWorkerContext !== undefined) return cachedProcessWorkerContext;
   const proc = globalThis.process as unknown as ProcessWithWorkerIpc | undefined;
-  if (proc?.env?.RIFTY_WORKER_THREADS !== '1') {
+  const bootstrap = readNodeEntryBootstrapIfPresent();
+  if (proc === undefined || bootstrap?.launch.kind !== 'worker-thread') {
     cachedProcessWorkerContext = null;
     return null;
   }
+  const launch = bootstrap.launch;
   const parentPort = createWorkerPort((msg) => {
     if (typeof proc.send !== 'function') {
       throw new NotImplementedError(
@@ -509,8 +508,8 @@ function readProcessWorkerContext(): WorkerThreadContext | null {
   });
   const context: WorkerThreadContext = {
     parentPort,
-    workerData: decodeWorkerData(proc.env.RIFTY_WORKER_DATA_JSON),
-    threadId: Number(proc.env.RIFTY_WORKER_THREAD_ID ?? 1),
+    workerData: decodeWorkerData(launch.workerDataJson),
+    threadId: launch.threadId,
   };
   proc.on?.('message', (msg) => {
     withSameRealmWorkerContextSync(context, () => deliverToPort(parentPort, msg));

@@ -122,9 +122,8 @@ const SPEC = {
       './lsp-types': './src/lsp-types.ts',
       './worker/entry': './src/worker/entry.ts',
     },
-    // The vendored TS std-lib bundle the browser host fetches by URL (ADR-0166 —
-    // `getTsLibUrl()`); an asset, not a JS entry, so no tsup bundling / .d.ts.
-    // The playground LS worker imports it `?url` to seed `__RIFTY_TS_LIB_URL`.
+    // ADR-0177 retains the vendored TS std-lib bundle as a package/test resource;
+    // it is an asset, not a JS entry, so no tsup bundling / .d.ts.
     assetExports: { './vendor/lib-bundle.json': './vendor/lib-bundle.json' },
     extraFiles: ['vendor'],
     keywords: ['typescript', 'language-service', 'lsp', 'diagnostics'],

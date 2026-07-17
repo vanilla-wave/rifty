@@ -2,6 +2,7 @@
  * Default Vite 7 template (ADR-0078/0174): install, visible config, entry, port.
  * Installed `.bin/vite` owns execution; adding a template is registry data.
  */
+import bakedSnapshotIdentities from '../generated/baked-snapshot-identities.json';
 import type { ViteProjectSpec } from './project-spec.ts';
 
 const INITIAL_MAIN_JS = `const message =
@@ -36,6 +37,7 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   install: { vite: '^7.0.0' },
   // Regenerate with `pnpm snapshots:bake` after changing `install` (ADR-0135).
   bakedNodeModulesUrl: '/snapshots/vite-node-modules.json.gz',
+  bakedNodeModulesSnapshotId: bakedSnapshotIdentities.snapshots.vite,
   entry: { relativePath: '/src/main.js', content: INITIAL_MAIN_JS },
   defaultPort: 5174,
   estimatedBootSeconds: 20,

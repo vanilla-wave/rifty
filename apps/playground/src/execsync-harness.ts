@@ -68,7 +68,7 @@ const ACCEPTANCE_PKG_JSON = '{"name":"demo-pkg"}';
 // workspace shape; a `.js` outside a module scope is CJS and a top-level
 // `import` is a parse error — the loader's `detectKind`).
 const ACCEPTANCE_PACKAGE_JSON = '{"type":"module"}';
-const MISSING_RUNTIME_CONFIG_ERROR = 'node-entry worker runtime config is not configured';
+const MISSING_RUNTIME_CONFIG_ERROR = 'node-entry worker bootstrap config is not configured';
 
 export type ExecSyncHarnessOptions =
   | { readonly fault?: undefined }

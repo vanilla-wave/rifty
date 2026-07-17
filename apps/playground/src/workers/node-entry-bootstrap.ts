@@ -11,16 +11,16 @@
  * `kind:'source'` (`new AsyncFunction`) path cannot do.
  *
  * VFS SELECTION (ADR-0150 — foreground CLI runs in a supervised child that reads
- * the owner fs over sync-RPC; KNOWN GAP closed): when `RIFTY_REMOTE_FS=1` the
- * child installs the owner store as its GLOBAL sync mirror via
+ * the owner fs over sync-RPC; KNOWN GAP closed): the entry-scoped launch
+ * bootstrap selects the owner store as this realm's GLOBAL sync mirror via
  * `installRemoteSyncFs`. This ensures BOTH the module loader AND `node:fs`
  * builtins (which read `syncMirror()`) route to the owner over RPC — closing the
  * ENOENT gap that arose when only the loader received the remote VFS.
  *
- * `RIFTY_BIN=1` marks a `node_modules/.bin/<name>` launcher shim (run its
- * import target). Run-to-completion: when the entry's top-level settles the
- * realm exits and the kernel posts the exit code; a throw propagates to the
- * kernel worker-entry, which surfaces it on stderr (exit 1) — never silent.
+ * The entry-scoped launch bootstrap marks `node_modules/.bin/<name>` launcher
+ * shims (run their import target). Run-to-completion: when the entry's top-level
+ * settles the realm exits and the kernel posts the exit code; a throw propagates
+ * to the kernel worker-entry, which surfaces it on stderr (exit 1) — never silent.
  *
  * NOTE: `initBackend()` is NOT called here — the child reads AND WRITES the owner
  * store via fs.* sync-RPC (each handler atomic, serialized on the owner's single
@@ -34,25 +34,32 @@ import { getKernelDispatcher, readKernelSyncApi } from '@riftydev/kernel';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { awaitDrain, installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
+import { awaitDrain, installConsole } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
+import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { syncMirror } from '@riftydev/vfs';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
+import { installNodeEntryRemoteFs } from './node-entry-remote-fs.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import {
   installNodeWorkerRuntimeConfig,
-  readNodeWorkerRuntimeConfigFromProcess,
+  readNodeWorkerRuntimeConfig,
 } from './node-worker-runtime-config.ts';
-import { prepareViteCli, viteCliPreparationFromEnv } from './vite-cli-prep.ts';
+import { prepareViteCli, viteCliPreparationFromArgs } from './vite-cli-prep.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
-const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfigFromProcess(
-  proc,
+const nodeEntryBootstrap = readNodeEntryBootstrap();
+const launch = nodeEntryBootstrap.launch;
+const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(
+  nodeEntryBootstrap.hostRuntime,
   'node-entry-bootstrap',
 );
 installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
+const bin = launch.kind === 'program' && launch.bin;
+const nodeServe = launch.kind === 'program' && launch.nodeServe;
+const previewScope = launch.kind === 'program' ? launch.previewScope : undefined;
 const entryPath = proc.argv[1];
 if (typeof entryPath !== 'string' || entryPath === '') {
   throw new Error('node-entry-bootstrap: missing entry path (process.argv[1])');
@@ -72,17 +79,14 @@ installConsole({
   stderr: (chunk) => proc.stderr.write(chunk),
 });
 
-// ADR-0150: when spawned as a supervised child (RIFTY_REMOTE_FS=1) that reads the
-// owner fs over sync-RPC, make the owner store this realm's sync mirror — both the
-// module loader AND node:fs read it.
-if (proc.env.RIFTY_REMOTE_FS === '1') {
+// ADR-0150: a supervised child that reads the owner fs over sync-RPC makes the
+// owner store this realm's sync mirror — both the module loader AND node:fs read it.
+if (launch.remoteFs) {
   const syncApi = readKernelSyncApi();
   if (syncApi === null) {
-    throw new Error(
-      'node-entry: RIFTY_REMOTE_FS=1 but no kernel sync call published — cannot reach the owner store',
-    );
+    throw new Error('node-entry: remote owner fs requested but no kernel sync call published');
   }
-  const remoteFs = installRemoteSyncFs(syncApi.call);
+  const remoteFs = installNodeEntryRemoteFs(syncApi.call, launch.remoteFsRoot);
 
   // This realm owns the dispatcher for every kernel Worker it creates. Relay
   // the upstream-authoritative mirror so a nested Worker can load its entry/fs
@@ -96,17 +100,17 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
 registerSqliteBuiltin();
 installSqliteWasmSyncProvider(nodeWorkerRuntimeConfig.sqliteWasmUrl);
 
-const vitePreparation = viteCliPreparationFromEnv({
-  root: proc.cwd(),
-  mode: proc.env.RIFTY_VITE_CLI_MODE,
-  executedBinPath: entryPath,
-  esbuildWasmUrl: nodeWorkerRuntimeConfig.esbuildWasmUrl,
-});
+const vitePreparation = bin
+  ? viteCliPreparationFromArgs({
+      root: proc.cwd(),
+      args: proc.argv.slice(2),
+      executedBinPath: entryPath,
+      esbuildWasmUrl: nodeWorkerRuntimeConfig.esbuildWasmUrl,
+    })
+  : null;
 if (vitePreparation !== null) {
   await prepareViteCli(vitePreparation);
 }
-
-const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;
 
 // `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
@@ -127,8 +131,8 @@ const previewScope = proc.env.RIFTY_PREVIEW_SCOPE || undefined;
 // correct argv/cwd/stdin + fork-IPC `send`. No swap, so every entry path reads the
 // same runtime-owned flowing stdin and its loud unsupported pull/raw surfaces.
 // The else-branch (.bin/execSync) already has Buffer + nextTick from pre-entry;
-// RIFTY_NODE_SERVE additionally registers net builtins.
-if (proc.env.RIFTY_NODE_SERVE === '1') {
+// a server-capable launch additionally registers net builtins.
+if (nodeServe) {
   registerNetBuiltins();
   await runNodeProgramLifecycle({
     runEntry: () =>
@@ -136,7 +140,7 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
         vfs: syncMirror(),
         entryPath,
         cwd: proc.cwd(),
-        bin: proc.env.RIFTY_BIN === '1',
+        bin,
       }),
     listPorts: () => listPorts(),
     onPortsChange: (cb) => onRegistryChange(cb),
@@ -161,7 +165,7 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
     vfs: syncMirror(),
     entryPath,
     cwd: proc.cwd(),
-    bin: proc.env.RIFTY_BIN === '1',
+    bin,
   });
   // Honor process.exitCode on a clean return (Node parity, ADR-0157 D4): the kernel
   // reaps a no-throw return as exit 0, so a `.bin`/execSync CLI that set a non-zero

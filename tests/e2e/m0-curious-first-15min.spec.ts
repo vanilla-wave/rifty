@@ -1,19 +1,11 @@
-import { type Page, expect, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
+  bootProjectFiles,
   expectTerminalContains,
+  openShellTerminal,
   runTerminalLineSettled,
   terminalBuffer,
 } from './helpers/playground.ts';
-
-// Project-first cold boot auto-opens the chooser; dismiss it to poke the pre-pick
-// hidden-empty shell (a real shell before any project pick, ADR-0165). `isVisible()`
-// does NOT wait, so wait for the chooser to appear before closing it.
-async function dismissChooser(page: Page): Promise<void> {
-  const launcher = page.locator('[data-testid="launcher"]');
-  await expect(launcher).toBeVisible({ timeout: 30_000 });
-  await page.locator('.rf-launcher__close').click();
-  await expect(launcher).toHaveCount(0, { timeout: 5_000 });
-}
 
 /**
  * The frictionless-first-poke epic Done-gate: a "curious first 15 minutes" walk.
@@ -28,8 +20,8 @@ test.describe('M0 - curious first 15 minutes', () => {
 
   test('the terminal greets and the reflexive first moves work', async ({ page }) => {
     test.setTimeout(120_000);
-    await page.goto('/');
-    await dismissChooser(page);
+    await bootProjectFiles(page);
+    await openShellTerminal(page);
     await expect
       .poll(() => terminalBuffer(page), { timeout: 15_000 })
       .toContain('rifty · node v24.0.0');
@@ -41,18 +33,20 @@ test.describe('M0 - curious first 15 minutes', () => {
     expect(greeting).toContain('try:');
     expect(greeting).toContain('node -v');
 
-    // The reflexive first moves run in the pre-pick hidden-empty shell (Terminal 1,
-    // idle — under project-first there's no auto-booted vite sharing it).
+    // Project-first admission owns the shell namespace; use a fresh project shell
+    // so the preset's dev process cannot share the active terminal.
 
-    // `node -v` — the universal sanity check (was MODULE_NOT_FOUND on /workspace/--version).
+    // `node -v` — the universal sanity check (must be parsed as a flag, not a file).
     await runTerminalLineSettled(page, 'node -v');
     await expectTerminalContains(page, /v24\.0\.0/);
 
-    // `node -e` / `-p` run through the real loader realm.
-    await runTerminalLineSettled(page, 'node -e "console.log(\'evalmarker\', 41 + 1)"', 60_000);
-    await expectTerminalContains(page, 'evalmarker 42', 60_000);
-    await runTerminalLineSettled(page, 'node -p "100 + 11"', 60_000);
-    await expectTerminalContains(page, /(?:^|\n)111\b/, 60_000);
+    // The supported file-entry path runs real CommonJS in the Node child realm.
+    await runTerminalLineSettled(
+      page,
+      'echo \'console.log("filemarker", 41 + 1)\' > first-poke.cjs',
+    );
+    await runTerminalLineSettled(page, 'node first-poke.cjs', 60_000);
+    await expectTerminalContains(page, 'filemarker 42', 60_000);
 
     // `help` lists the commands (was command-not-found exit 127).
     await runTerminalLineSettled(page, 'help');
@@ -71,12 +65,16 @@ test.describe('M0 - curious first 15 minutes', () => {
     expect(buf).not.toContain('unknown subcommand');
   });
 
-  test('every ceiling fails loud + directed, not silently or wrong', async ({ page }) => {
+  test('every ceiling fails loud + explicit, not silently or wrong', async ({ page }) => {
     test.setTimeout(120_000);
-    await page.goto('/');
-    await dismissChooser(page);
+    await bootProjectFiles(page);
+    await openShellTerminal(page);
 
-    // Unknown node flag → `bad option`, never a MODULE_NOT_FOUND on /workspace/<flag>.
+    // Eval identity is not implemented: do not revive the legacy temporary-file lie.
+    await runTerminalLineSettled(page, 'node -e "1"');
+    await expectTerminalContains(page, 'Not implemented: workbench.node.eval-context');
+
+    // Unknown node flag → `bad option`, never a MODULE_NOT_FOUND for a file path.
     await runTerminalLineSettled(page, 'node --frobnicate');
     await expectTerminalContains(page, 'node: bad option: --frobnicate');
 

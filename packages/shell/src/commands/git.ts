@@ -1,9 +1,9 @@
 /**
  * `git` builtin — a thin CLI over the {@link makeGit} facade (`@riftydev/git`),
- * bound to the ambient async VFS (`asyncVfs()`), so it operates on the SAME tree
- * the shell + runtime see. LOCAL porcelain + network verbs (clone/fetch/pull/
- * push) over smart-HTTP; unsupported transports, the browser cross-origin wall,
- * and real network errors all surface as a loud exit-128, never a fake success.
+ * bound to the shell's injected filesystem or the ambient async VFS fallback.
+ * LOCAL porcelain + network verbs (clone/fetch/pull/push) use smart-HTTP;
+ * unsupported transports, the browser cross-origin wall, and real network
+ * errors all surface as a loud exit-128, never a fake success.
  *
  * `status --porcelain` maps isomorphic-git's 3-char statusMatrix code
  * (`${head}${workdir}${stage}`) to git's two-column `XY` porcelain-v1 output.
@@ -32,19 +32,27 @@ import {
 import type { CommandContext, ShellCommand } from '../types.ts';
 import {
   OutsideRepoPathspecError,
+  type PreparedCheckoutPlan,
   doCheckout,
+  prepareCheckout,
   renderCheckoutError,
   renderCheckoutOrFatal,
   renderRevisionAndPathAmbiguity,
   revisionExists,
 } from './_git-checkout.ts';
 import { doConfig } from './_git-config.ts';
-import { doRestore } from './_git-restore.ts';
+import { type PreparedRestorePlan, doRestore, prepareRestore } from './_git-restore.ts';
 import { doSwitch } from './_git-switch.ts';
 import { hasGlobMeta } from './_glob.ts';
+import { syncVfs } from './_sync-vfs.ts';
 
-/** The ambient async VFS the `git` builtin binds to (never undefined past the guard). */
+/** Async VFS used by the `git` builtin (never undefined past the guard). */
 type Vfs = NonNullable<ReturnType<typeof asyncVfs>>;
+
+/** Injected sync namespace wins; legacy callers retain the paired ambient async VFS. */
+function commandVfs(ctx: CommandContext): Vfs | null {
+  return ctx.fileSystem ? syncVfs(ctx.fileSystem) : asyncVfs();
+}
 
 /**
  * The facade returned by {@link makeGit}. Its named interface (`Git`) is not on
@@ -329,6 +337,7 @@ function makeRepoPathspecMapper(root: string, cwd: string): PathspecMapper {
           ? normalizePath(pathspec)
           : normalizePath(joinPath(repoCwd, pathspec));
     if (absolute === repoRoot) return '.';
+    if (repoRoot === '/') return absolute.slice(1);
     if (absolute.startsWith(`${repoRoot}/`)) return absolute.slice(repoRoot.length + 1);
     throw new OutsideRepoPathspecError(pathspec, repoRoot);
   };
@@ -1854,6 +1863,7 @@ function repoRelativeCwd(root: string, cwd: string): string {
   const normalizedRoot = normalizePath(root);
   const normalizedCwd = normalizePath(cwd);
   if (normalizedCwd === normalizedRoot) return '';
+  if (normalizedRoot === '/') return normalizedCwd.slice(1);
   return normalizedCwd.startsWith(`${normalizedRoot}/`)
     ? normalizedCwd.slice(normalizedRoot.length + 1)
     : '';
@@ -2591,7 +2601,14 @@ interface GitMutationPlan {
   readonly intents: readonly VfsMutationIntent[];
   readonly verifyRepoRoot: boolean;
   readonly expectedRepoRoot: string | null;
+  readonly prepared?: PreparedGitInvocation;
 }
+
+type PreparedGitInvocation =
+  | { readonly kind: 'checkout'; readonly plan: PreparedCheckoutPlan }
+  | { readonly kind: 'checkout-error'; readonly error: unknown }
+  | { readonly kind: 'restore'; readonly plan: PreparedRestorePlan }
+  | { readonly kind: 'restore-error'; readonly error: unknown };
 
 function tagMayWrite(args: string[]): boolean {
   let annotated = false;
@@ -2735,12 +2752,95 @@ async function gitMutationPlan(
       expectedRepoRoot: null,
     };
   }
-  const broad: VfsMutationIntent[] = [{ kind: 'write', path: root }];
   const metadata: VfsMutationIntent = {
     kind: 'write',
     path: normalizePath(joinPath(root, '.git')),
   };
   const mapPathspec = makeRepoPathspecMapper(root, ctx.cwd);
+  const repoReplacement: VfsMutationIntent[] = [metadata, { kind: 'replace', path: root }];
+
+  if (sub === 'checkout') {
+    let prepared: PreparedCheckoutPlan;
+    let preparedInvocation: PreparedGitInvocation;
+    try {
+      const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+      prepared = await prepareCheckout(g, args, mapPathspec);
+      preparedInvocation = { kind: 'checkout', plan: prepared };
+    } catch (error) {
+      return {
+        intents: [],
+        verifyRepoRoot: true,
+        expectedRepoRoot: root,
+        prepared: { kind: 'checkout-error', error },
+      };
+    }
+    if (prepared.kind === 'noop' || prepared.kind === 'ambiguity') {
+      return {
+        intents: [],
+        verifyRepoRoot: true,
+        expectedRepoRoot: root,
+        prepared: preparedInvocation,
+      };
+    }
+    const intents =
+      prepared.kind === 'switch'
+        ? repoReplacement
+        : [
+            metadata,
+            ...prepared.pathspecs.map(
+              (pathspec): VfsMutationIntent => ({
+                kind: 'replace',
+                path: mappedRepoPath(root, pathspec),
+              }),
+            ),
+          ];
+    return {
+      intents,
+      verifyRepoRoot: true,
+      expectedRepoRoot: root,
+      prepared: preparedInvocation,
+    };
+  }
+
+  if (sub === 'restore') {
+    let prepared: PreparedRestorePlan;
+    try {
+      prepared = prepareRestore(args, mapPathspec);
+    } catch (error) {
+      return {
+        intents: [],
+        verifyRepoRoot: true,
+        expectedRepoRoot: root,
+        prepared: { kind: 'restore-error', error },
+      };
+    }
+    if (prepared.pathspecs.length === 0) {
+      return {
+        intents: [],
+        verifyRepoRoot: true,
+        expectedRepoRoot: root,
+        prepared: { kind: 'restore', plan: prepared },
+      };
+    }
+    const intents: VfsMutationIntent[] = [metadata];
+    if (prepared.worktree) {
+      intents.push(
+        ...prepared.pathspecs.map(
+          (pathspec): VfsMutationIntent => ({
+            kind: 'replace',
+            path: mappedRepoPath(root, pathspec),
+          }),
+        ),
+      );
+    }
+    return {
+      intents,
+      verifyRepoRoot: true,
+      expectedRepoRoot: root,
+      prepared: { kind: 'restore', plan: prepared },
+    };
+  }
+
   let intents: readonly VfsMutationIntent[];
   if (descriptor.kind === 'metadata') {
     intents = [
@@ -2749,7 +2849,7 @@ async function gitMutationPlan(
         : metadata,
     ];
   } else if (descriptor.kind === 'worktree') {
-    intents = broad;
+    intents = repoReplacement;
   } else if (descriptor.kind === 'rm') {
     let specs: string[];
     try {
@@ -2760,7 +2860,7 @@ async function gitMutationPlan(
     intents = descriptor.cached
       ? [metadata]
       : specs.length === 0 || specs.some(hasGlobMeta)
-        ? broad
+        ? repoReplacement
         : [
             metadata,
             ...specs.map(
@@ -2778,7 +2878,7 @@ async function gitMutationPlan(
       operands = [];
     }
     if (operands.length !== 2) {
-      intents = broad;
+      intents = repoReplacement;
     } else {
       const [source, target] = operands as [string, string];
       const sourcePath = mappedRepoPath(root, source);
@@ -2796,11 +2896,15 @@ async function gitMutationPlan(
   return { intents, verifyRepoRoot: true, expectedRepoRoot: root };
 }
 
-const runGit: ShellCommand = async (args, ctx) => {
+async function runGit(
+  args: string[],
+  ctx: CommandContext,
+  prepared?: PreparedGitInvocation,
+): Promise<number> {
   if (ctx.signal?.aborted) return 130;
 
   const sub = args[0];
-  const vfs = asyncVfs();
+  const vfs = commandVfs(ctx);
   if (!vfs) {
     ctx.stderr.write('git: no filesystem\n');
     return 128;
@@ -2849,11 +2953,29 @@ const runGit: ShellCommand = async (args, ctx) => {
       case 'branch':
         return doBranch(g, ctx);
       case 'checkout':
-        return doCheckout(g, args, ctx, mapPathspec);
+        if (prepared?.kind === 'checkout-error') {
+          return renderCheckoutOrFatal(prepared.error, ctx);
+        }
+        return doCheckout(
+          g,
+          args,
+          ctx,
+          mapPathspec,
+          prepared?.kind === 'checkout' ? prepared.plan : undefined,
+        );
       case 'switch':
         return doSwitch(g, args, ctx);
       case 'restore':
-        return doRestore(g, args, ctx, mapPathspec);
+        if (prepared?.kind === 'restore-error') {
+          return renderCheckoutOrFatal(prepared.error, ctx);
+        }
+        return doRestore(
+          g,
+          args,
+          ctx,
+          mapPathspec,
+          prepared?.kind === 'restore' ? prepared.plan : undefined,
+        );
       case 'config':
         return doConfig(g, args, ctx);
       case 'reset':
@@ -2895,25 +3017,39 @@ const runGit: ShellCommand = async (args, ctx) => {
   }
   ctx.stderr.write(`git: '${sub ?? ''}' is not a git command\n`);
   return 1;
-};
+}
+
+function sameGitMutationPlan(a: GitMutationPlan, b: GitMutationPlan | null): boolean {
+  return (
+    b !== null &&
+    a.verifyRepoRoot === b.verifyRepoRoot &&
+    a.expectedRepoRoot === b.expectedRepoRoot &&
+    JSON.stringify(a.intents) === JSON.stringify(b.intents) &&
+    JSON.stringify(a.prepared) === JSON.stringify(b.prepared)
+  );
+}
 
 export const git: ShellCommand = async (args, ctx) => {
   if (ctx.signal?.aborted) return runGit(args, ctx);
   if (!ctx.mutationGuard) return runGit(args, ctx);
-  const vfs = asyncVfs();
+  const vfs = commandVfs(ctx);
   if (!vfs) return runGit(args, ctx);
   const plan = await gitMutationPlan(args, ctx, vfs);
   if (plan === null) return runGit(args, ctx);
+  if (plan.intents.length === 0) return runGit(args, ctx, plan.prepared);
   return await guardVfsMutations(ctx.mutationGuard, plan.intents, async () => {
-    if (plan.verifyRepoRoot) {
-      const actualRepoRoot = await findRepoRoot(vfs, ctx.cwd);
-      if (actualRepoRoot !== plan.expectedRepoRoot) {
-        ctx.stderr.write(
-          `fatal: repository root changed while waiting for mutation guard (expected ${plan.expectedRepoRoot ?? '<none>'}, found ${actualRepoRoot ?? '<none>'})\n`,
-        );
-        return 128;
-      }
+    const revalidated = await gitMutationPlan(args, ctx, vfs);
+    if (revalidated === null || !sameGitMutationPlan(plan, revalidated)) {
+      const actualRepoRoot = revalidated?.expectedRepoRoot ?? null;
+      const rootDetail =
+        actualRepoRoot !== plan.expectedRepoRoot
+          ? `; repository root changed (expected ${plan.expectedRepoRoot ?? '<none>'}, found ${actualRepoRoot ?? '<none>'})`
+          : '';
+      ctx.stderr.write(
+        `fatal: mutation plan changed while waiting for mutation guard${rootDetail}\n`,
+      );
+      return 128;
     }
-    return runGit(args, ctx);
+    return runGit(args, ctx, revalidated.prepared);
   });
 };

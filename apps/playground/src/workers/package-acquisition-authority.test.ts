@@ -694,6 +694,69 @@ describe('package-acquisition authority', () => {
     ).resolves.toMatchObject({ status: 'absent' });
   });
 
+  it('keeps reset noops inert and supplies the adapter reset only after claim revocation', async () => {
+    const vfs = await seededVfs();
+    await writeInstalledTree(vfs);
+    const stamps = createInstallStampAuthority({ vfs });
+    const claim = await stamps.demote(PROJECT);
+    await expect(
+      stamps.promote(
+        { ...PROJECT, packageJsonText: PACKAGE_JSON },
+        { epoch: claim.epoch, packages: 1 },
+      ),
+    ).resolves.toMatchObject({ status: 'trusted' });
+    const timeline: string[] = [];
+    const authority = createPackageAcquisitionAuthority({
+      stamps,
+      adapter: adapterWith({
+        reset: async () => {
+          timeline.push('adapter:reset');
+        },
+      }),
+    });
+
+    await authority.dispatch({
+      type: 'reset',
+      target: { root: ROOT },
+      prepare: async () => {
+        timeline.push('noop:prepare');
+        return { status: 'noop' as const };
+      },
+    });
+    expect(timeline).toEqual(['noop:prepare']);
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+      status: 'trusted',
+    });
+
+    await authority.dispatch({
+      type: 'reset',
+      target: { root: ROOT },
+      prepare: async () => {
+        timeline.push('ready:prepare');
+        return {
+          status: 'ready',
+          resetDependencyTree: true,
+          mutate: async (resetDependencyTree) => {
+            await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+              status: 'absent',
+            });
+            timeline.push('ready:scope');
+            if (resetDependencyTree === undefined) throw new Error('adapter reset missing');
+            await resetDependencyTree();
+            timeline.push('ready:mutate');
+          },
+        };
+      },
+    });
+    expect(timeline).toEqual([
+      'noop:prepare',
+      'ready:prepare',
+      'ready:scope',
+      'adapter:reset',
+      'ready:mutate',
+    ]);
+  });
+
   it('serializes install/install FIFO with no overlapping adapter operation', async () => {
     const vfs = await seededVfs();
     const stamps = createInstallStampAuthority({ vfs });
@@ -747,6 +810,94 @@ describe('package-acquisition authority', () => {
       'install-2:end',
     ]);
     expect(maximumActive).toBe(1);
+  });
+
+  it('fault: quiesces prior FIFO work through detached stamp settlement without waiting for later admission', async () => {
+    const secondRoot = '/projects/later';
+    const secondPackageJson = '{"name":"later","dependencies":{"vite":"^5.4.0"}}\n';
+    const secondProject: PackageAcquisitionProject = {
+      projectId: 'later',
+      root: secondRoot,
+      slug: 'later',
+      identity: installArtifactIdentity,
+    };
+    const vfs = await seededVfs();
+    await vfs.mkdir(secondRoot, { recursive: true });
+    await vfs.writeFile(`${secondRoot}/package.json`, secondPackageJson);
+    const firstInstallStarted = deferred<void>();
+    const firstInstallGate = deferred<void>();
+    const firstPromotionStarted = deferred<void>();
+    const firstPromotionGate = deferred<void>();
+    const secondInstallStarted = deferred<void>();
+    const secondInstallGate = deferred<void>();
+    let installNumber = 0;
+    let flushNumber = 0;
+    const stamps = createInstallStampAuthority({ vfs });
+    const authority = createPackageAcquisitionAuthority({
+      stamps,
+      stampTransition: {
+        flush: () => {
+          flushNumber += 1;
+          if (flushNumber !== 1) return Promise.resolve(undefined);
+          firstPromotionStarted.resolve();
+          return firstPromotionGate.promise.then(() => undefined);
+        },
+      },
+      adapter: adapterWith({
+        install: async (request) => {
+          installNumber += 1;
+          if (installNumber === 1) {
+            firstInstallStarted.resolve();
+            await firstInstallGate.promise;
+          } else {
+            secondInstallStarted.resolve();
+            await secondInstallGate.promise;
+          }
+          await vfs.mkdir(`${request.project.root}/node_modules/vite`, { recursive: true });
+          await vfs.writeFile(`${request.project.root}/node_modules/vite/package.json`, '{}\n');
+          return {
+            result: installResult('registry'),
+            packageJsonText: request.project.root === ROOT ? PACKAGE_JSON : secondPackageJson,
+          };
+        },
+      }),
+    });
+
+    const first = authority.dispatch({
+      type: 'terminal-install',
+      project: PROJECT,
+      argv: [],
+    });
+    await firstInstallStarted.promise;
+    let quiesced = false;
+    const quiescence = authority.quiesce().then(() => {
+      quiesced = true;
+    });
+    let secondSettled = false;
+    const second = authority
+      .dispatch({ type: 'terminal-install', project: secondProject, argv: [] })
+      .then((result) => {
+        secondSettled = true;
+        return result;
+      });
+
+    firstInstallGate.resolve();
+    await expect(first).resolves.toMatchObject({ outcome: 'installed' });
+    await firstPromotionStarted.promise;
+    await secondInstallStarted.promise;
+    expect(quiesced).toBe(false);
+
+    firstPromotionGate.resolve();
+    await quiescence;
+    expect(quiesced).toBe(true);
+    expect(secondSettled).toBe(false);
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+      status: 'trusted',
+    });
+
+    secondInstallGate.resolve();
+    await expect(second).resolves.toMatchObject({ outcome: 'installed' });
+    await authority.quiesce();
   });
 
   it('captures a warm trusted same-project tree before terminal demotion', async () => {

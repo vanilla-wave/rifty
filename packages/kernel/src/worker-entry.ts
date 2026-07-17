@@ -38,8 +38,10 @@ import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from './ipc/sab-ring.ts';
 import { SyncRpcClient } from './ipc/sync-client.ts';
 import {
   KERNEL_SYNC_CALL_KEY,
+  type KernelEntryBootstrapEnvelope,
   type KernelProcessSpec,
   type KernelSyncCall,
+  publishKernelEntryBootstrap,
   publishKernelProcessSpec,
   publishKernelSyncApi,
 } from './shared-globals.ts';
@@ -70,7 +72,12 @@ export interface WorkerStdioPorts {
 /** Entry script descriptor. Either inlined source or a URL to `import()`. */
 export type WorkerEntryDescriptor =
   | { readonly kind: 'source'; readonly code: string; readonly sourceUrl: string }
-  | { readonly kind: 'url'; readonly url: string };
+  | {
+      readonly kind: 'url';
+      readonly url: string;
+      /** Entry-scoped higher-runtime metadata; kernel transports it opaquely. */
+      readonly bootstrap?: KernelEntryBootstrapEnvelope;
+    };
 
 /**
  * Bootstrap payload sent from `kernel.spawn` to a fresh kernel Worker.
@@ -314,6 +321,10 @@ export async function runEntryLifecycle(
   let code = 0;
   let threw = false;
   try {
+    // One publication boundary for every entry lifecycle. URL entries expose
+    // their opaque higher-runtime envelope; URL-without-envelope and source
+    // entries publish null so stale host/test state cannot cross entries.
+    publishKernelEntryBootstrap(spec.entry.kind === 'url' ? (spec.entry.bootstrap ?? null) : null);
     if (deps.preEntryHook !== null) deps.preEntryHook(spec);
     await deps.runEntry(spec.entry);
     if (spec.serve !== true && deps.drainHook !== null) {

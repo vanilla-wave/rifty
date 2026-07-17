@@ -2,6 +2,7 @@ import { Writable } from '@riftydev/io';
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
+import { applyNodeProcessTerminalBootstrap } from '../builtins/process.ts';
 import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
@@ -95,7 +96,14 @@ describe('installNodeProcessShim stdin', () => {
   });
 
   it('makes every unsupported readable, pull, and raw surface a precise loud gap', () => {
-    const process = installNodeProcessShim(spec({ RIFTY_STDIN_IS_TTY: '1' }));
+    const process = installNodeProcessShim(spec());
+    applyNodeProcessTerminalBootstrap(process, {
+      stdinIsTTY: true,
+      stdoutIsTTY: false,
+      stderrIsTTY: false,
+      cols: 80,
+      rows: 24,
+    });
     const stdin = process.stdin as UnsupportedStdinSurface;
     expect(() => stdin.readable).not.toThrow();
     const gaps: ReadonlyArray<readonly [string, () => unknown]> = [

@@ -41,9 +41,9 @@ import { fileURLToPath } from 'node:url';
 export const ALLOWLIST = [
   {
     file: 'apps/playground/src/App.test.ts',
-    count: 88,
-    digest: '241992824d30',
-    why: 'App.tsx unrenderable in node (xterm import); residual = negative architectural invariants + one binding pin per wiring surface, including project-index owner snapshot/closed pairing and no app-eval editor warm; behavior heirs in orchestration/*.test.ts + glue tests + e2e',
+    count: 40,
+    digest: 'fb6b1bc2dc0f',
+    why: 'browser App imports xterm; residual pins only client JSX/composition bindings; TS boot/reinit behavior lives in diagnostics-sync contracts + browser e2e',
   },
   {
     file: 'apps/playground/src/components/BottomPanel.test.ts',
@@ -74,12 +74,6 @@ export const ALLOWLIST = [
     count: 1,
     digest: '7dd54a601fb2',
     why: 'RiftyTerminal is constructed in onMount (client-only, solid server runtime) — ctor-option wiring unobservable in node; values pinned via terminal-appearance module',
-  },
-  {
-    file: 'apps/playground/src/workers/node-entry-bootstrap.test.ts',
-    count: 2,
-    digest: '72006ccff761',
-    why: 'worker-only kind:url entry (top-level await runs the program on import); residual = serve/bin spawn flags; prepare/runtime and file-watch heirs run in browser contract/e2e',
   },
   {
     file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',

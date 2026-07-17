@@ -4,6 +4,17 @@
 
 ### Fixed
 
+- **Terminal Git handles a repository rooted at `/`.** Relative pathspecs map
+  inside the repository, while `git apply` from a subdirectory still filters
+  root-level patch entries out of scope.
+- **Terminal Git publishes semantic replacement candidates.** Restore/checkout
+  path forms name exact mapped paths; repo-wide worktree commands pair ordinary
+  `.git` writes with a repo replacement candidate, and the full prepared plan is
+  revalidated inside the mutation FIFO before execution.
+- **Explicit empty quoted words survive into argv.** Bare `''` and `""` now
+  produce one empty argument each while unquoted empty variable expansions are
+  still elided and `*''` remains glob-eligible. This keeps quoted Node CLI and
+  direct Shell arguments byte-for-byte faithful.
 - **Terminal Git checks complete worktree plans before namespace ingress.**
   `ShellOptions.assertPortablePaths` synchronously validates absolute paths for
   checkout/switch/restore/reset/merge/cherry-pick/stash/clone/pull plus direct
@@ -69,7 +80,11 @@
 
 ### Added
 
-- **Host-owned VFS mutation guard (ADR-0260).** `ShellOptions.mutationGuard`
+- **Instance-local filesystem (ADR-0280).** `ShellOptions.fileSystem` binds
+  builtins, redirects, globs, recursive walkers, `.bin` lookup, and Git's
+  derived async view to one `FsSync`; omitted callers keep the dynamically
+  resolved ambient sync/async VFS behavior.
+- **Host-owned VFS mutation guard (ADR-0276).** `ShellOptions.mutationGuard`
   batches each logical `rm`/`mv`/`cp`/`mkdir`/`touch`, stdout redirect, and git
   mutation through the shared `@riftydev/vfs` intent contract before bytes
   change. Git publishes exact worktree paths where known, root-wide intents for

@@ -15,16 +15,18 @@ import { getKernelDispatcher, readKernelProcessSpec, readKernelSyncApi } from '@
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
-import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import {
+  applyNodeProcessTerminalBootstrap,
+  setProcessCwd,
+} from '@riftydev/runtime-js/builtins/process';
+import { setSyncMirror } from '@riftydev/vfs/internal';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
-import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
+import { readDevServerChildConfig } from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
-import {
-  installNodeWorkerRuntimeConfig,
-  readNodeWorkerRuntimeConfig,
-} from './node-worker-runtime-config.ts';
+import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
+import { ProjectTerminalFsSync } from './project-terminal-namespace.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -41,14 +43,15 @@ async function bootstrapDevServerChild(): Promise<void> {
   // production build (res.json → etag throw). See installBundleLocalBuffer.
   installBundleLocalBuffer();
 
+  const c = readDevServerChildConfig();
   const env = { ...(readKernelProcessSpec()?.env ?? globalThis.process.env) };
   const kernelIpc: KernelIpc = installRuntimeGlobals();
+  applyNodeProcessTerminalBootstrap(globalThis.process, c.terminal);
   globalThis.process.env = env;
 
-  const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(env, 'dev-server-child');
-  installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
+  installNodeWorkerRuntimeConfig(c.nodeWorkerRuntime);
   // node:sqlite self-initializes at first require using the inherited asset.
-  installSqliteWasmSyncProvider(nodeWorkerRuntimeConfig.sqliteWasmUrl);
+  installSqliteWasmSyncProvider(c.nodeWorkerRuntime.sqliteWasmUrl);
 
   const proc = globalThis.process;
   installConsole({
@@ -62,7 +65,12 @@ async function bootstrapDevServerChild(): Promise<void> {
       'dev-server-child: no kernel sync call published — cannot reach the owner store',
     );
   }
-  const remoteFs = installRemoteSyncFs(syncApi.call);
+  const ownerRemoteFs = installRemoteSyncFs(syncApi.call);
+  const remoteFs =
+    c.remoteFsRoot === undefined
+      ? ownerRemoteFs
+      : new ProjectTerminalFsSync(ownerRemoteFs, c.remoteFsRoot);
+  setSyncMirror(remoteFs);
   // A node-server child may spawn nested workers whose `fs.*` sync-RPC calls
   // land on THIS realm's dispatcher. The child has no OPFS of its own
   // (single-writer is the owner), so register the fs handlers backed by our own
@@ -70,8 +78,7 @@ async function bootstrapDevServerChild(): Promise<void> {
   // `fs.statOrNull`/reads to the owner store.
   installOwnerSyncRuntimeHandlers(getKernelDispatcher(), () => remoteFs);
 
-  const c = resolveDevServerChildConfig(env);
-  setProcessCwd(c.root);
+  setProcessCwd(c.cfg.root);
 
   const send = (message: unknown): void => {
     kernelIpc.send?.(message);

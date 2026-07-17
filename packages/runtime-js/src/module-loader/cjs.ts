@@ -5,7 +5,7 @@ import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
-import type { ModuleRecord, ModuleRegistry } from './registry.ts';
+import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 
@@ -32,6 +32,10 @@ function assertNotTsCjs(id: string): void {
 export interface CjsLoaderDeps {
   readonly registry: ModuleRegistry;
   readonly resolver: Resolver;
+  /** Loader-owned mutable table shared by local require and createRequire. */
+  readonly extensions: CjsExtensions;
+  /** Create a require bound to `fromFile`, including the shared extensions table. */
+  makeRequire(fromFile: string): CjsRequire;
   /**
    * Load any module (CJS or ESM or JSON) by resolved id. Returns the module's
    * exports namespace. The CJS loader uses this to recursively load deps.
@@ -43,6 +47,16 @@ export interface CjsLoaderDeps {
   loadAsync(id: string): Promise<Record<string, unknown>>;
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
 }
+
+export type CjsExtensionHook = (module: CjsModule, filename: string) => void;
+export type CjsExtensions = Record<string, CjsExtensionHook>;
+
+export type CjsRequire = ((specifier: string) => unknown) & {
+  resolve(specifier: string): string;
+  cache: Record<string, unknown>;
+  extensions: CjsExtensions;
+  main: undefined;
+};
 
 /**
  * Best-effort source snippet for a `new Function` compile failure. A bare
@@ -1751,6 +1765,93 @@ function walkDefaultForFunctionReferences(n: AnyNodeShape, ctx: FunctionRewriteC
   }
 }
 
+function compileCjsSource(
+  moduleObject: CjsModule,
+  sourceText: string,
+  filename: string,
+  deps: CjsLoaderDeps,
+): void {
+  const require = deps.makeRequire(filename);
+  const dynamicImport = async (specifier: unknown): Promise<Record<string, unknown>> => {
+    keepaliveRef();
+    try {
+      const dep = deps.resolve(toDynamicImportSpecifier(specifier), filename, true);
+      return await deps.loadAsync(dep.id);
+    } finally {
+      keepaliveUnref();
+    }
+  };
+
+  type CjsFactory = (
+    module: CjsModule,
+    exports: Record<string, unknown>,
+    require: CjsRequire,
+    __filename: string,
+    __dirname: string,
+    __riftyDynamicImport: (specifier: unknown) => Promise<Record<string, unknown>>,
+    __riftyFunction: FunctionConstructor,
+  ) => void;
+
+  const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
+  const dynamicImportHelperName = uniqueHelperName(sourceText, '__riftyDynamicImport');
+  const functionHelperName = uniqueHelperName(
+    sourceText,
+    '__riftyFunction',
+    new Set([dynamicImportHelperName]),
+  );
+  const source = rewriteCjsFunctionConstructorReferences(
+    rewriteDynamicImports(sourceText, filename, dynamicImportHelperName),
+    filename,
+    functionHelperName,
+  );
+  let fn: CjsFactory;
+  try {
+    fn = new Function(
+      'module',
+      'exports',
+      'require',
+      '__filename',
+      '__dirname',
+      dynamicImportHelperName,
+      functionHelperName,
+      `${source}\n//# sourceURL=${filename}`,
+    ) as CjsFactory;
+  } catch (error) {
+    // `new Function` SyntaxError has no file context — surface a directed
+    // error naming the module (mirrors the ESM path in esm.ts).
+    const message = (error as Error).message ?? String(error);
+    throw new ModuleLoadError(
+      'SYNTAX_ERROR',
+      filename,
+      `Failed to compile CJS module ${filename}: ${message}${snippetForSource(sourceText, (error as Error).stack ?? '')}`,
+      filename,
+    );
+  }
+
+  fn.call(
+    moduleObject.exports,
+    moduleObject,
+    moduleObject.exports,
+    require,
+    filename,
+    dirname(filename),
+    dynamicImport,
+    routedConstructors.Function,
+  );
+}
+
+function createCjsModule(deps: CjsLoaderDeps): CjsModule {
+  const moduleObject = { exports: Object.create(null) } as CjsModule;
+  Object.defineProperty(moduleObject, '_compile', {
+    configurable: true,
+    writable: true,
+    value(source: string, filename: string): void {
+      compileCjsSource(moduleObject, source, filename, deps);
+    },
+  });
+  return moduleObject;
+}
+
 export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
   // Guard BEFORE touching the registry so repeated require() calls throw
   // idempotently, not return a stale loading record (ADR-0052 D1 alt-C).
@@ -1772,14 +1873,17 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
     existing = undefined;
   }
   const record = existing ?? registry.getOrCreate(resolved.id, resolved.kind);
+  const moduleObject = createCjsModule(deps);
+  record.cjsModule = moduleObject;
+  record.exports = moduleObject.exports;
 
   if (resolved.kind === 'json') {
     try {
-      record.exports = JSON.parse(resolved.source) as Record<string, unknown>;
+      moduleObject.exports = JSON.parse(resolved.source) as Record<string, unknown>;
     } catch (error) {
       failCjsRecord(registry, record, error);
     }
-    record.cjsModule = { exports: record.exports };
+    record.exports = moduleObject.exports;
     record.state = 'loaded';
     return record.exports;
   }
@@ -1789,102 +1893,18 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
     // `require('./f.txt')` returns the string; ESM `import x from './f.txt'`
     // routes here, then `cjsNamespaceFor` maps the non-object export to
     // `default`.
-    record.exports = resolved.source as unknown as Record<string, unknown>;
-    record.cjsModule = { exports: record.exports };
+    moduleObject.exports = resolved.source as unknown as Record<string, unknown>;
+    record.exports = moduleObject.exports;
     record.state = 'loaded';
     return record.exports;
   }
 
-  // Expose the half-populated exports so a CJS cycle re-entering via require()
-  // during this module's execution sees it.
-  const moduleObject: { exports: Record<string, unknown> } = { exports: Object.create(null) };
-  record.cjsModule = moduleObject;
-  record.exports = moduleObject.exports;
-
-  const require = (specifier: string): unknown => {
-    const dep = deps.resolve(specifier, resolved.id, false);
-    if (dep.kind === 'esm') {
-      throw new ModuleLoadError(
-        'UNSUPPORTED_PROTOCOL',
-        specifier,
-        `require() of ES Module ${dep.id} from ${resolved.id} is not supported. Use dynamic import() instead.`,
-        resolved.id,
-      );
-    }
-    return deps.loadSync(dep.id);
-  };
-  // TODO(backlog: runtime-js/require-cache-module-record-surface): expose the
-  // same ModuleRegistry-backed cache through CJS-local and createRequire views.
-  require.resolve = (specifier: string): string => deps.resolve(specifier, resolved.id, false).id;
-
-  const __filename = resolved.id;
-  const __dirname = dirname(resolved.id);
-  const dynamicImport = async (specifier: unknown): Promise<Record<string, unknown>> => {
-    keepaliveRef();
-    try {
-      const dep = deps.resolve(toDynamicImportSpecifier(specifier), resolved.id, true);
-      return await deps.loadAsync(dep.id);
-    } finally {
-      keepaliveUnref();
-    }
-  };
-
-  type CjsFactory = (
-    module: { exports: Record<string, unknown> },
-    exports: Record<string, unknown>,
-    require: (s: string) => unknown,
-    __filename: string,
-    __dirname: string,
-    __riftyDynamicImport: (s: unknown) => Promise<Record<string, unknown>>,
-    __riftyFunction: FunctionConstructor,
-  ) => void;
   try {
-    const routedConstructors = createFunctionImportRouting(dynamicImport, resolved.id);
-    const dynamicImportHelperName = uniqueHelperName(resolved.source, '__riftyDynamicImport');
-    const functionHelperName = uniqueHelperName(
-      resolved.source,
-      '__riftyFunction',
-      new Set([dynamicImportHelperName]),
-    );
-    const source = rewriteCjsFunctionConstructorReferences(
-      rewriteDynamicImports(resolved.source, resolved.id, dynamicImportHelperName),
-      resolved.id,
-      functionHelperName,
-    );
-    let fn: CjsFactory;
-    try {
-      fn = new Function(
-        'module',
-        'exports',
-        'require',
-        '__filename',
-        '__dirname',
-        dynamicImportHelperName,
-        functionHelperName,
-        `${source}\n//# sourceURL=${resolved.id}`,
-      ) as CjsFactory;
-    } catch (error) {
-      // `new Function` SyntaxError has no file context — surface a directed
-      // error naming the module (mirrors the ESM path in esm.ts).
-      const message = (error as Error).message ?? String(error);
-      throw new ModuleLoadError(
-        'SYNTAX_ERROR',
-        resolved.id,
-        `Failed to compile CJS module ${resolved.id}: ${message}${snippetForSource(resolved.source, (error as Error).stack ?? '')}`,
-        resolved.id,
-      );
+    const extension = deps.extensions['.js'];
+    if (typeof extension !== 'function') {
+      throw new TypeError("require.extensions['.js'] is not a function");
     }
-
-    fn.call(
-      moduleObject.exports,
-      moduleObject,
-      moduleObject.exports,
-      require,
-      __filename,
-      __dirname,
-      dynamicImport,
-      routedConstructors.Function,
-    );
+    extension(moduleObject, resolved.id);
   } catch (error) {
     failCjsRecord(registry, record, error);
   }

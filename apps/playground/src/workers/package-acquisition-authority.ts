@@ -1,4 +1,4 @@
-import type { InstallAcquisitionProvenance, InstallResult } from '@riftydev/npm-client';
+import type { InstallResult } from '@riftydev/npm-client';
 import type { CommandContext } from '@riftydev/shell';
 import { normalizePath } from '@riftydev/vfs';
 import type {
@@ -8,16 +8,13 @@ import type {
   InstallStampTransitionOptions,
 } from '../glue/install-stamp-authority.ts';
 import type { PackageResetPreparation } from '../glue/package-mutation-executor.ts';
+import type {
+  ProjectAcquisitionPlan,
+  ProjectAcquisitionProvenance,
+  ProjectSnapshotFailure,
+} from '../workbench/project-materialization.ts';
 
-export type AcquisitionProvenance =
-  | { readonly outcome: 'existing'; readonly identity: string; readonly packages: number }
-  | {
-      readonly outcome: 'snapshot';
-      readonly snapshotId: string;
-      readonly identity: string;
-      readonly packages: number;
-    }
-  | ({ readonly outcome: 'installed' } & InstallAcquisitionProvenance);
+export type AcquisitionProvenance = ProjectAcquisitionProvenance;
 
 export interface PackageAcquisitionProject {
   readonly projectId: string;
@@ -74,6 +71,8 @@ export interface TerminalInstallCommand {
   /** Present for the real npm shell adapter; authority tests may omit it. */
   readonly context?: CommandContext;
   readonly onPromotion?: (result: InstallStampPromotionResult) => void;
+  /** Authority-captured admission fact: a snapshot prepare was already ahead. */
+  readonly reuseTrustedClaim?: boolean;
 }
 
 export interface PackageJsonEditCommand {
@@ -104,6 +103,32 @@ export interface ProjectSwitchCommand {
   readonly packageJsonText?: string;
 }
 
+export interface ActivateAndEnsurePackagesCommand {
+  readonly type: 'activate-and-ensure';
+  /** Bind adapter-owned config at the FIFO head before any active-project observation. */
+  readonly register: () => void;
+  /** Resolve at the FIFO head so back-to-back activations observe the actual predecessor. */
+  readonly from: PackageAcquisitionProject | null | (() => PackageAcquisitionProject | null);
+  readonly to: PackageAcquisitionProject;
+  readonly packageJsonText: string;
+  readonly replaceTreeOnMiss?: boolean;
+  readonly onPromotion?: (result: InstallStampPromotionResult) => void;
+}
+
+export interface PrepareFirstMaterializationPackagesCommand {
+  readonly type: 'prepare-first-materialization';
+  /** Bind adapter-owned config at the FIFO head before any active-project observation. */
+  readonly register: () => void;
+  readonly from: PackageAcquisitionProject | null | (() => PackageAcquisitionProject | null);
+  readonly to: PackageAcquisitionProject;
+  readonly packageJsonText: string;
+  readonly materialization:
+    | { readonly kind: 'install' }
+    | { readonly kind: 'snapshot'; readonly source: PackageSnapshotSource };
+  readonly replaceTreeOnMiss?: boolean;
+  readonly onPromotion?: (result: InstallStampPromotionResult) => void;
+}
+
 export type PackageMutationTransition =
   | { readonly mode: 'demote'; readonly project: PackageAcquisitionProject }
   | { readonly mode: 'revoke'; readonly root: string };
@@ -124,7 +149,9 @@ export type PackageAcquisitionCommand =
   | PackageJsonEditCommand
   | ResetPackagesCommand
   | GuardedPackageMutationCommand
-  | ProjectSwitchCommand;
+  | ProjectSwitchCommand
+  | ActivateAndEnsurePackagesCommand
+  | PrepareFirstMaterializationPackagesCommand;
 
 export type PackageInstallRequest =
   | Pick<EnsurePackagesCommand, 'type' | 'project' | 'packageJsonText'>
@@ -186,10 +213,7 @@ export interface PackageAcquisitionAdapter {
   switchProject(command: ProjectSwitchCommand): Promise<void>;
 }
 
-export interface SnapshotFailure {
-  readonly snapshotId: string;
-  readonly reason: string;
-}
+export type SnapshotFailure = ProjectSnapshotFailure;
 
 export type AcquisitionObservation =
   | {
@@ -217,6 +241,8 @@ export interface PackageAcquisitionAuthorityOptions {
   ) => readonly PackageMutationTransition[];
   /** Diagnostic sink only. A throwing observer cannot change acquisition. */
   readonly observe?: (event: AcquisitionObservation) => void;
+  /** Samples owner state when a terminal install is admitted, before FIFO wait. */
+  readonly captureDeferredTerminalReuse?: () => boolean;
 }
 
 export class PackageAcquisitionError extends Error {
@@ -252,19 +278,31 @@ export type PackageAcquisitionFailure =
 export interface PackageAcquisitionAuthority {
   /** Live projects observed by this owner; retained conservatively after revoke. */
   knownProjects?(): readonly PackageAcquisitionProject[];
+  /** Wait for commands admitted before this call and their detached stamp settlements. */
+  quiesce(): Promise<void>;
   dispatch(command: EnsurePackagesCommand): Promise<AcquisitionProvenance>;
+  dispatch(command: ActivateAndEnsurePackagesCommand): Promise<AcquisitionProvenance>;
+  dispatch(command: PrepareFirstMaterializationPackagesCommand): Promise<ProjectAcquisitionPlan>;
   dispatch(command: TerminalInstallCommand): Promise<AcquisitionProvenance | undefined>;
   dispatch(command: PackageJsonEditCommand): Promise<void>;
   dispatch(command: ResetPackagesCommand): Promise<void>;
   dispatch(command: GuardedPackageMutationCommand): Promise<void>;
   dispatch(command: ProjectSwitchCommand): Promise<void>;
-  dispatch(command: PackageAcquisitionCommand): Promise<AcquisitionProvenance | undefined>;
+  dispatch(command: PackageAcquisitionCommand): Promise<PackageAcquisitionResult>;
 }
 
+type PackageAcquisitionResult = AcquisitionProvenance | ProjectAcquisitionPlan | undefined;
+
 interface QueueEntry {
+  readonly admission: number;
   readonly command: PackageAcquisitionCommand;
-  readonly resolve: (value: AcquisitionProvenance | undefined) => void;
+  readonly resolve: (value: PackageAcquisitionResult) => void;
   readonly reject: (reason: unknown) => void;
+}
+
+interface AdmissionWaiter {
+  readonly through: number;
+  readonly resolve: () => void;
 }
 
 function reasonOf(error: unknown): string {
@@ -303,10 +341,16 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   readonly #adapter: PackageAcquisitionAdapter;
   readonly #resolveTreeGuards?: PackageAcquisitionAuthorityOptions['resolveTreeGuards'];
   readonly #observe?: (event: AcquisitionObservation) => void;
+  readonly #captureDeferredTerminalReuse?: () => boolean;
   readonly #queue: QueueEntry[] = [];
   readonly #terminalActivity = new Map<string, string>();
   readonly #knownProjects = new Map<string, PackageAcquisitionProject>();
+  readonly #detachedSettlements = new Map<Promise<void>, number>();
+  readonly #admissionWaiters = new Set<AdmissionWaiter>();
   #draining = false;
+  #lastAdmission = 0;
+  #completedAdmission = 0;
+  #executingAdmission: number | null = null;
 
   constructor(options: PackageAcquisitionAuthorityOptions) {
     this.#stamps = options.stamps;
@@ -314,6 +358,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     this.#adapter = options.adapter;
     this.#resolveTreeGuards = options.resolveTreeGuards;
     this.#observe = options.observe;
+    this.#captureDeferredTerminalReuse = options.captureDeferredTerminalReuse;
   }
 
   knownProjects(): readonly PackageAcquisitionProject[] {
@@ -325,17 +370,38 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     this.#knownProjects.set(root, { ...project, root });
   }
 
+  async quiesce(): Promise<void> {
+    const through = this.#lastAdmission;
+    if (through === 0) return;
+    await this.#waitForAdmission(through);
+    while (true) {
+      const pending = [...this.#detachedSettlements]
+        .filter(([, admission]) => admission <= through)
+        .map(([settlement]) => settlement);
+      if (pending.length === 0) return;
+      await Promise.allSettled(pending);
+    }
+  }
+
   dispatch(command: EnsurePackagesCommand): Promise<AcquisitionProvenance>;
+  dispatch(command: ActivateAndEnsurePackagesCommand): Promise<AcquisitionProvenance>;
+  dispatch(command: PrepareFirstMaterializationPackagesCommand): Promise<ProjectAcquisitionPlan>;
   dispatch(command: TerminalInstallCommand): Promise<AcquisitionProvenance | undefined>;
   dispatch(command: PackageJsonEditCommand): Promise<void>;
   dispatch(command: ResetPackagesCommand): Promise<void>;
   dispatch(command: GuardedPackageMutationCommand): Promise<void>;
   dispatch(command: ProjectSwitchCommand): Promise<void>;
-  dispatch(command: PackageAcquisitionCommand): Promise<AcquisitionProvenance | undefined>;
+  dispatch(command: PackageAcquisitionCommand): Promise<PackageAcquisitionResult>;
   dispatch(command: PackageAcquisitionCommand): Promise<unknown> {
-    const pending = new Promise<AcquisitionProvenance | undefined>((resolve, reject) => {
+    const admission = ++this.#lastAdmission;
+    const admittedCommand =
+      command.type === 'terminal-install' && this.#captureDeferredTerminalReuse?.() === true
+        ? { ...command, reuseTrustedClaim: true }
+        : command;
+    const pending = new Promise<PackageAcquisitionResult>((resolve, reject) => {
       this.#queue.push({
-        command,
+        admission,
+        command: admittedCommand,
         resolve: (value) => resolve(value),
         reject,
       });
@@ -355,11 +421,21 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       while (this.#queue.length > 0) {
         const entry = this.#queue.shift();
         if (!entry) break;
+        if (
+          entry.command.type === 'prepare-first-materialization' ||
+          (entry.command.type === 'terminal-install' && entry.command.reuseTrustedClaim === true)
+        ) {
+          await this.#waitForDetachedSettlementsBefore(entry.admission);
+        }
+        this.#executingAdmission = entry.admission;
         try {
           const value = await this.#execute(entry.command);
           entry.resolve(value);
         } catch (error) {
           entry.reject(error);
+        } finally {
+          this.#executingAdmission = null;
+          this.#completeAdmission(entry.admission);
         }
       }
     } finally {
@@ -367,7 +443,45 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     }
   }
 
-  async #execute(command: PackageAcquisitionCommand): Promise<AcquisitionProvenance | undefined> {
+  #waitForAdmission(through: number): Promise<void> {
+    if (this.#completedAdmission >= through) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.#admissionWaiters.add({ through, resolve });
+    });
+  }
+
+  #completeAdmission(admission: number): void {
+    this.#completedAdmission = admission;
+    for (const waiter of this.#admissionWaiters) {
+      if (waiter.through > admission) continue;
+      this.#admissionWaiters.delete(waiter);
+      waiter.resolve();
+    }
+  }
+
+  #trackDetachedSettlement(settlement: Promise<void>): void {
+    const admission = this.#executingAdmission;
+    if (admission === null) {
+      throw new Error('detached package settlement has no FIFO admission');
+    }
+    this.#detachedSettlements.set(settlement, admission);
+    const forget = (): void => {
+      this.#detachedSettlements.delete(settlement);
+    };
+    void settlement.then(forget, forget);
+  }
+
+  async #waitForDetachedSettlementsBefore(admission: number): Promise<void> {
+    for (;;) {
+      const pending = [...this.#detachedSettlements]
+        .filter(([, ownerAdmission]) => ownerAdmission < admission)
+        .map(([settlement]) => settlement);
+      if (pending.length === 0) return;
+      await Promise.allSettled(pending);
+    }
+  }
+
+  async #execute(command: PackageAcquisitionCommand): Promise<PackageAcquisitionResult> {
     switch (command.type) {
       case 'ensure':
         this.#rememberProject(command.project);
@@ -394,8 +508,11 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           ...transitions,
           { mode: 'revoke', root: command.target.root },
         ]);
-        if (plan) await plan.mutate();
-        else await this.#adapter.reset(command);
+        if (plan) {
+          if (plan.resetDependencyTree) {
+            await plan.mutate(() => this.#adapter.reset(command));
+          } else await plan.mutate();
+        } else await this.#adapter.reset(command);
         return;
       }
       case 'guarded-mutation':
@@ -412,6 +529,64 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         }
         await this.#adapter.switchProject(command);
         return;
+      case 'activate-and-ensure': {
+        command.register();
+        const from = typeof command.from === 'function' ? command.from() : command.from;
+        if (from) this.#rememberProject(from);
+        this.#rememberProject(command.to);
+        await this.#adapter.switchProject({ type: 'project-switch', from, to: command.to });
+        return this.#ensure({
+          type: 'ensure',
+          project: command.to,
+          packageJsonText: command.packageJsonText,
+          fallback: 'install',
+          ...(command.replaceTreeOnMiss ? { replaceTreeOnMiss: true } : {}),
+          ...(command.onPromotion ? { onPromotion: command.onPromotion } : {}),
+        });
+      }
+      case 'prepare-first-materialization': {
+        command.register();
+        const from = typeof command.from === 'function' ? command.from() : command.from;
+        if (from) this.#rememberProject(from);
+        this.#rememberProject(command.to);
+        await this.#adapter.switchProject({ type: 'project-switch', from, to: command.to });
+
+        const existing = await this.#trustedProvenance(command.to, command.packageJsonText);
+        if (existing !== null) {
+          return Object.freeze({ kind: 'ready', provenance: Object.freeze(existing) });
+        }
+        if (command.materialization.kind === 'install') {
+          return Object.freeze({
+            kind: 'install',
+            snapshotFailures: Object.freeze([]),
+          });
+        }
+        try {
+          const provenance = await this.#ensure({
+            type: 'ensure',
+            project: command.to,
+            packageJsonText: command.packageJsonText,
+            snapshotSource: command.materialization.source,
+            fallback: 'snapshot-only',
+            ...(command.replaceTreeOnMiss ? { replaceTreeOnMiss: true } : {}),
+            ...(command.onPromotion ? { onPromotion: command.onPromotion } : {}),
+          });
+          return Object.freeze({ kind: 'ready', provenance: Object.freeze(provenance) });
+        } catch (error) {
+          if (
+            !(error instanceof PackageAcquisitionError) ||
+            error.failure !== 'snapshot-unavailable'
+          ) {
+            throw error;
+          }
+          return Object.freeze({
+            kind: 'install',
+            snapshotFailures: Object.freeze(
+              error.snapshotFailures.map((failure) => Object.freeze({ ...failure })),
+            ),
+          });
+        }
+      }
       default:
         return unreachable(command);
     }
@@ -460,15 +635,18 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     }
   }
 
-  async #ensure(command: EnsurePackagesCommand): Promise<AcquisitionProvenance> {
+  async #trustedProvenance(
+    project: PackageAcquisitionProject,
+    packageJsonText: string,
+  ): Promise<Extract<AcquisitionProvenance, { readonly outcome: 'existing' }> | null> {
     const existing = await this.#stamps.check({
-      root: command.project.root,
-      slug: command.project.slug,
-      expectedPackageJsonText: command.packageJsonText,
+      root: project.root,
+      slug: project.slug,
+      expectedPackageJsonText: packageJsonText,
     });
     if (
       existing.status === 'trusted' &&
-      existing.stamp.installArtifactIdentity === command.project.identity
+      existing.stamp.installArtifactIdentity === project.identity
     ) {
       return {
         outcome: 'existing',
@@ -476,6 +654,12 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         packages: existing.stamp.packages,
       };
     }
+    return null;
+  }
+
+  async #ensure(command: EnsurePackagesCommand): Promise<AcquisitionProvenance> {
+    const existing = await this.#trustedProvenance(command.project, command.packageJsonText);
+    if (existing !== null) return existing;
 
     const failures: SnapshotFailure[] = [];
     let snapshot = command.snapshot;
@@ -683,6 +867,23 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     priorClaim: InstallStampClaim | null,
     onPromotion?: (result: InstallStampPromotionResult) => void,
   ): Promise<AcquisitionProvenance | undefined> {
+    if (request.type === 'terminal-install' && request.reuseTrustedClaim === true) {
+      const current = await this.#stamps.check({
+        root: request.project.root,
+        slug: request.project.slug,
+      });
+      if (
+        current.status === 'trusted' &&
+        current.stamp.installArtifactIdentity === request.project.identity
+      ) {
+        return {
+          outcome: 'existing',
+          identity: current.stamp.installArtifactIdentity,
+          packages: current.stamp.packages,
+        };
+      }
+    }
+
     let priorTrustedTree = false;
     let claim: InstallStampClaim;
     try {
@@ -797,7 +998,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     };
 
     if (this.#stampTransition?.flush) {
-      void settle();
+      this.#trackDetachedSettlement(settle());
       return;
     }
     await settle();

@@ -6,7 +6,11 @@ import { serializeDepSnapshot } from '../../../apps/playground/src/glue/dep-snap
 import { effectiveDepsFromPackageJsonText } from '../../../apps/playground/src/glue/install-stamp.ts';
 import { buildProjectPackageJson } from '../../../apps/playground/src/templates/project-spec.ts';
 import { allProjectSpecs } from '../../../apps/playground/src/templates/registry.ts';
-import { applyViteCliActionPatch } from '../../../apps/playground/src/workers/vite-cli-install-policy.ts';
+import {
+  applyViteCliActionPatch,
+  applyViteRootWatchPatch,
+  viteRootWatchPatchPolicy,
+} from '../../../apps/playground/src/workers/vite-cli-install-policy.ts';
 import { internalsShims } from '../src/index.ts';
 import { assertSnapshotArtifactCurrent } from '../src/snapshot-artifact-check.ts';
 
@@ -31,6 +35,7 @@ async function main(): Promise<void> {
     }
     assertSnapshotArtifactCurrent({
       bytes,
+      snapshotId: spec.bakedNodeModulesSnapshotId,
       label: spec.id,
       templateId: spec.id,
       packageJsonText,
@@ -56,6 +61,33 @@ function proveViteCliPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
       applyViteCliActionPatch(decoder.decode(files.get(path)));
     } catch (error) {
       throw new Error(`${path} is not patchable by the current Vite CLI transform`, {
+        cause: error,
+      });
+    }
+  }
+  const chunkPaths = [...files.keys()].filter(
+    (path) =>
+      (path.startsWith('vite/dist/node/chunks/') ||
+        path.includes('/node_modules/vite/dist/node/chunks/')) &&
+      path.endsWith('.js'),
+  );
+  const candidates = chunkPaths.filter((path) => {
+    const source = decoder.decode(files.get(path));
+    return (
+      source.includes(viteRootWatchPatchPolicy.needle) ||
+      source.includes(viteRootWatchPatchPolicy.replacement)
+    );
+  });
+  if (candidates.length !== 1) {
+    throw new Error(
+      `snapshot must contain one Vite root watcher input; found ${candidates.length}`,
+    );
+  }
+  for (const path of candidates) {
+    try {
+      applyViteRootWatchPatch(decoder.decode(files.get(path)));
+    } catch (error) {
+      throw new Error(`${path} is not patchable by the current Vite root watcher transform`, {
         cause: error,
       });
     }

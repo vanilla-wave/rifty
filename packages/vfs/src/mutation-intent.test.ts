@@ -18,6 +18,7 @@ describe('guardVfsMutations', () => {
   it('passes one closed intent batch and returns only the apply result', () => {
     const intents = [
       WRITE,
+      { kind: 'replace', path: '/workspace/src' },
       { kind: 'mkdir', path: '/workspace/node_modules' },
       { kind: 'rm', path: '/workspace/old' },
       { kind: 'utimes', path: '/workspace/package.json' },

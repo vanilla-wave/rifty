@@ -17,6 +17,7 @@ export function pathFromTerminalFileLink(uri: string, root = WORKSPACE_ROOT): st
     return null;
   }
   const workspace = normalizePath(root);
-  if (path === workspace || path.startsWith(`${workspace}/`)) return path;
+  const prefix = workspace === '/' ? '/' : `${workspace}/`;
+  if (path === workspace || path.startsWith(prefix)) return path;
   return null;
 }

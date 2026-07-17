@@ -5,7 +5,11 @@ import {
   OperationIdReuseError,
   VfsVersionConflictError,
 } from '../glue/owner-vfs-protocol.ts';
-import { type OwnerVfsAuthority, createOwnerVfsAuthority } from './owner-vfs-authority.ts';
+import {
+  type OwnerVfsAuthority,
+  createOwnerVfsAuthority,
+  createOwnerVfsAuthorityComposition,
+} from './owner-vfs-authority.ts';
 
 const encoder = new TextEncoder();
 
@@ -280,6 +284,51 @@ describe('owner VFS authority faults', () => {
 
     expect(() => authority.writeFileSync('/missing/file.txt', encoder.encode('x'))).toThrow();
     expect(authority.snapshot()).toEqual(before);
+  });
+
+  it('does not journal a failed raw rename or failed rename CAS', () => {
+    class FailingRenameFs extends MemoryFsSync {
+      failRename = false;
+
+      override renameSync(sourcePath: string, targetPath: string): void {
+        if (this.failRename) throw new Error('raw rename failed');
+        super.renameSync(sourcePath, targetPath);
+      }
+    }
+
+    const fs = new FailingRenameFs();
+    fs.writeFileSync('/source.txt', encoder.encode('source'));
+    fs.writeFileSync('/target.txt', encoder.encode('target'));
+    const { authority, appliedMutations } = createOwnerVfsAuthorityComposition(fs, {
+      ownerEpoch: 'fault-owner',
+    });
+    const cursor = appliedMutations.openCursor();
+    const before = authority.snapshot();
+
+    try {
+      fs.failRename = true;
+      expect(() => authority.renameSync('/source.txt', '/moved.txt')).toThrow('raw rename failed');
+      expect(authority.snapshot()).toEqual(before);
+      expect(cursor.peek()).toEqual([]);
+
+      fs.failRename = false;
+      const sourceVersion = authority.versionOf('/source.txt');
+      if (sourceVersion === null) throw new Error('source version missing after raw failure');
+      expect(() =>
+        authority.applyHostCommit({
+          kind: 'rename',
+          operationId: 'stale-journal-rename',
+          sourcePath: '/source.txt',
+          targetPath: '/target.txt',
+          expectedSourceVersion: sourceVersion,
+          expectedTargetVersion: null,
+        }),
+      ).toThrow(VfsVersionConflictError);
+      expect(authority.snapshot()).toEqual(before);
+      expect(cursor.peek()).toEqual([]);
+    } finally {
+      cursor.close();
+    }
   });
 
   it('records each real partial cp mutation before propagating the later failure', () => {

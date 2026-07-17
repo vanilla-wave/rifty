@@ -2,11 +2,12 @@ import { Worker as NodeWorker } from 'node:worker_threads';
 import { expect, test } from '@playwright/test';
 import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
 
-const MISSING_RUNTIME_CONFIG_ERROR = 'node-entry worker runtime config is not configured';
+const MISSING_RUNTIME_CONFIG_ERROR = 'node-entry worker bootstrap config is not configured';
 const MUST_NOT_LOAD_BOOTSTRAP_PATH = '/__recursive-node-bootstrap-must-not-load__.js';
 
 interface WorkerContextOracle {
   readonly env: string;
+  readonly envKeys: readonly string[];
   readonly parentAbsent: boolean;
   readonly cwdInherited: boolean;
   readonly data: number;
@@ -18,6 +19,7 @@ function nativeWorkerContextOracle(): Promise<WorkerContextOracle> {
       `const { parentPort, workerData } = require('node:worker_threads');
 parentPort.postMessage({
   env: process.env.CONTEXT_SENTINEL,
+  envKeys: Object.keys(process.env).sort(),
   parentAbsent: process.env.PARENT_ONLY === undefined,
   cwdInherited: process.cwd() === workerData.parentCwd,
   data: workerData.answer,
@@ -81,6 +83,7 @@ test('kernel Worker matches Node context and relays owner FS, execSync, and sqli
   const oracle = await nativeWorkerContextOracle();
   expect(oracle).toEqual({
     env: 'worker-exact',
+    envKeys: ['CONTEXT_SENTINEL'],
     parentAbsent: true,
     cwdInherited: true,
     data: 42,
@@ -121,6 +124,7 @@ const nested = execSync('node worker-grandchild.mjs', {
 }).toString();
 parentPort.postMessage({
   env: process.env.CONTEXT_SENTINEL,
+  envKeys: Object.keys(process.env).sort(),
   parentAbsent: process.env.PARENT_ONLY === undefined,
   cwd: process.cwd(),
   data: workerData.answer,
@@ -155,6 +159,7 @@ const message = await new Promise((resolve, reject) => {
 process.stdout.write(
   'WORKER_RELAY' +
     '|env=' + message.env +
+    '|envKeys=' + message.envKeys.join(',') +
     '|parentAbsent=' + message.parentAbsent +
     '|cwdInherited=' + (message.cwd === parentCwd) +
     '|cwd=' + message.cwd +
@@ -170,7 +175,7 @@ await worker.terminate();
     const result = await execLine(page, 'node worker-parent.mjs');
     expect(result.exit, result.out).toBe(0);
     expect(result.out).toContain(
-      `WORKER_RELAY|env=${oracle.env}|parentAbsent=${oracle.parentAbsent}|cwdInherited=${oracle.cwdInherited}|cwd=/scratch|data=${oracle.data}|file=owner-file|sqlite=worker-sqlite|nested=grandchild-sqlite:grand-exact`,
+      `WORKER_RELAY|env=${oracle.env}|envKeys=${oracle.envKeys.join(',')}|parentAbsent=${oracle.parentAbsent}|cwdInherited=${oracle.cwdInherited}|cwd=/scratch|data=${oracle.data}|file=owner-file|sqlite=worker-sqlite|nested=grandchild-sqlite:grand-exact`,
     );
   } finally {
     await closeOwner(page);

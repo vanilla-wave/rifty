@@ -1,4 +1,4 @@
-import type { VfsMutationGuard } from '@riftydev/vfs';
+import type { FsSync, VfsMutationGuard } from '@riftydev/vfs';
 
 /**
  * Public types for the shell.
@@ -51,6 +51,8 @@ export type ShellCommandResult = number | ProcessExit;
 export interface CommandContext {
   cwd: string;
   env: Record<string, string>;
+  /** File namespace owned by this shell invocation. */
+  readonly fileSystem?: FsSync;
   stdout: Writer;
   stderr: Writer;
   /** Present when input is connected (pipe RHS, `<` redirect, interactive). */

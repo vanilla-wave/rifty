@@ -1,19 +1,29 @@
 import { type Page, expect, test } from '@playwright/test';
-import { clearWorkspaceOpfs, readWorkspaceText } from './helpers/opfs.ts';
 import {
+  type TerminalSessionTarget,
   bootProjectFiles,
-  expectTerminalContains,
+  expectViteDevServerReady,
+  insertTerminalLineSettled,
   openShellTerminal,
   pickStarter,
-  runTerminalLine,
+  resetSandboxThroughUi,
   terminalBuffer,
 } from './helpers/playground.ts';
 
-async function reinitTsLanguageService(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const fn = (globalThis as { __riftyTsReinit?: () => Promise<boolean> }).__riftyTsReinit;
-    return fn ? fn() : Promise.resolve(false);
-  });
+function editorTab(page: Page, name: string) {
+  return page
+    .locator('[role="tablist"][aria-label="Open editors"] [role="tab"]')
+    .filter({ has: page.getByText(name, { exact: true }) })
+    .first();
+}
+
+async function expectSessionContains(
+  page: Page,
+  target: TerminalSessionTarget,
+  text: string,
+  timeout = 30_000,
+): Promise<void> {
+  await expect.poll(() => terminalBuffer(page, target), { timeout }).toContain(text);
 }
 
 async function recordChooserProjectArtifactsOnNextDocument(page: Page): Promise<void> {
@@ -25,9 +35,9 @@ async function recordChooserProjectArtifactsOnNextDocument(page: Page): Promise<
     const scan = (): void => {
       const launcherOpen = document.querySelector('[data-testid="launcher"]') !== null;
       if (!launcherOpen) return;
-      const hasProgramTab = Array.from(document.querySelectorAll('[role="tab"]')).some((tab) =>
-        tab.textContent?.includes('src/main.js'),
-      );
+      const hasProgramTab = Array.from(
+        document.querySelectorAll('[role="tablist"][aria-label="Open editors"] [role="tab"]'),
+      ).some((tab) => tab.querySelector('.rf-tab__label')?.textContent?.trim() === 'main.js');
       const hasWorkspaceRows =
         (document
           .querySelector('[role="tree"][aria-label="Workspace files"]')
@@ -48,16 +58,22 @@ async function recordChooserProjectArtifactsOnNextDocument(page: Page): Promise<
 }
 
 test.describe('M0 — Foundation', () => {
-  test('playground loads, terminal + chooser are visible, and shell terminals can be opened', async ({
+  test('playground loads with the chooser and opens shell terminals after project admission', async ({
     page,
   }) => {
     await page.goto('/');
     await expect(page.getByRole('strong').filter({ hasText: 'rifty' })).toBeVisible();
     await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('[data-testid="terminal"]')).toBeVisible();
+    await expect(page.locator('[data-testid="terminal"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="editor"]')).toHaveCount(0);
-    await expect(page.getByRole('tab', { name: /src\/main\.js/ })).toHaveCount(0);
+    await expect(editorTab(page, 'main.js')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
+
+    await pickStarter(page, 'project-files');
+    const shell = await openShellTerminal(page);
+    await expect(
+      page.locator(`.rf-terminal-slot[data-session-id="${shell.sessionId}"]`),
+    ).toBeVisible();
   });
 
   test('first-run boot keeps the project unloaded until a starter is chosen', async ({ page }) => {
@@ -76,20 +92,20 @@ test.describe('M0 — Foundation', () => {
   test('reset first-run chooser does not reveal starter files or the default program tab', async ({
     page,
   }) => {
-    await page.goto('/');
-    await clearWorkspaceOpfs(page);
+    test.setTimeout(120_000);
     await recordChooserProjectArtifactsOnNextDocument(page);
-    await page.reload();
+    await resetSandboxThroughUi(page);
 
     await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('.rf-app[data-workspace-owner="chooser"]')).toBeVisible();
-    await expect(page.locator('.rf-app[data-project-index="ready"]')).toBeVisible({
+    const projectChip = page.locator('[data-action="open-launcher"]');
+    await expect(projectChip.locator('.rf-chip__name')).toHaveText('Choose project', {
       timeout: 30_000,
     });
+    await expect(projectChip).toBeEnabled({ timeout: 30_000 });
     await page.waitForTimeout(2_000);
 
     await expect(
-      page.getByRole('tab', { name: /src\/main\.js/ }),
+      editorTab(page, 'main.js'),
       'no fallback starter tab should be visible behind the chooser',
     ).toHaveCount(0);
     await expect(
@@ -124,9 +140,7 @@ test.describe('M0 — Foundation', () => {
     await expect(launcher).toHaveCount(0, { timeout: 5_000 });
     // Lazy-Monaco split: the starter intent paints the chosen starter's initial
     // tabs/snapshot promptly; Monaco source follows when the editor chunk lands.
-    await expect(page.locator('.rf-tab', { hasText: 'src/main.js' })).toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(editorTab(page, 'main.js')).toBeVisible({ timeout: 5_000 });
     await expect(editorLines).toContainText("import project from './project.json'", {
       timeout: 60_000,
     });
@@ -137,18 +151,7 @@ test.describe('M0 — Foundation', () => {
   }) => {
     await page.goto('/');
     await pickStarter(page, 'project-files');
-
-    await expect
-      .poll(
-        () =>
-          page.evaluate(
-            () =>
-              typeof (globalThis as { __riftyTsReinit?: unknown }).__riftyTsReinit === 'function',
-          ),
-        { timeout: 30_000 },
-      )
-      .toBe(true);
-    expect(await reinitTsLanguageService(page)).toBe(false);
+    await expectViteDevServerReady(page, 5174, 90_000);
 
     await page.locator('[data-testid="problems-tab"]').click();
     await expect(page.locator('[data-testid="problems-panel"]')).toBeVisible();
@@ -158,28 +161,33 @@ test.describe('M0 — Foundation', () => {
     );
   });
 
-  test('first-run hidden empty project has a real shell but no files before a starter pick', async ({
+  test('first-run chooser exposes no hidden project session before a starter pick', async ({
     page,
   }) => {
     await page.goto('/');
     const launcher = page.locator('[data-testid="launcher"]');
     await expect(launcher).toBeVisible({ timeout: 30_000 });
-    await page.locator('.rf-launcher__close').click();
-    await expect(launcher).toHaveCount(0, { timeout: 5_000 });
 
-    await expect
-      .poll(async () => await readWorkspaceText(page, '/scratch/src/main.js'), { timeout: 30_000 })
-      .toMatch(/^MISSING:/u);
+    await expect(page.locator('[data-testid="editor"]')).toHaveCount(0);
+    await expect(editorTab(page, 'main.js')).toHaveCount(0);
+    await expect(page.locator('.rf-terminal-slot')).toHaveCount(0);
     await expect(
       page.locator('[role="tree"][aria-label="Workspace files"] [role="treeitem"]'),
     ).toHaveCount(0);
-    await expect(page.locator('.rf-app[data-workspace-owner="chooser"]')).toBeVisible();
+    await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(
+      'Choose project',
+    );
 
+    await pickStarter(page, 'project-files');
     const marker = `hidden-empty-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    await runTerminalLine(page, `pwd && echo ${marker}`);
-    await expectTerminalContains(page, marker, 30_000);
-    await expectTerminalContains(page, /\/scratch/u);
-    await expect.poll(() => terminalBuffer(page)).not.toContain('Choose a project before');
+    const shell = await openShellTerminal(page);
+    const modeHint = page.locator(
+      `.rf-terminal-slot[data-session-id="${shell.sessionId}"] [data-testid="terminal-mode-hint"]`,
+    );
+    await expect(modeHint).toContainText('Commands run in /;', { timeout: 30_000 });
+    await insertTerminalLineSettled(page, `echo ${marker}`, 30_000, shell);
+    await expectSessionContains(page, shell, marker);
+    await expect.poll(() => terminalBuffer(page, shell)).not.toContain('Choose a project before');
   });
 
   test('crossOriginIsolated is enabled', async ({ page }) => {
@@ -209,14 +217,22 @@ test.describe('M0 — Foundation', () => {
 
   test('shell file commands round-trip through the workspace VFS', async ({ page }) => {
     await bootProjectFiles(page);
-    await openShellTerminal(page);
+    const shell = await openShellTerminal(page);
 
     const marker = `persist-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    await runTerminalLine(
+    const file = `roundtrip-${Date.now().toString(36)}.txt`;
+    await insertTerminalLineSettled(
       page,
-      `mkdir -p /workspace && echo ${marker} > /workspace/persist.txt && cat /workspace/persist.txt`,
+      `echo ${marker} > ./${file} && cat ./${file}`,
+      30_000,
+      shell,
     );
-    await expectTerminalContains(page, marker);
+    await expectSessionContains(page, shell, marker);
+    await expect(
+      page.getByRole('treeitem', { name: new RegExp(file.replace('.', '\\.')) }),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test('SharedArrayBuffer is available', async ({ page }) => {

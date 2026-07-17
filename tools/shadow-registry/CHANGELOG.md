@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Baked dependency snapshot ids are SHA-256 of the exact uncompressed
+  serialized bytes; the drift gate rejects missing, malformed, or stale ids.
 - Install-artifact identity now includes the exact Vite CLI patch policy, and
   snapshot drift checks prove every baked Vite CLI is patchable before accepting
   generated metadata.

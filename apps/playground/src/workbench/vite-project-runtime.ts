@@ -1,5 +1,7 @@
 import { ClosedHandleError, ProjectBusyError } from './errors.ts';
-import type { PreviewHandle, PreviewReadiness } from './preview-readiness.ts';
+import { projectRelativePath, projectRuntimeShellWord } from './internal/node-command.ts';
+import type { PreviewAdvertisement, PreviewHandle, PreviewReadiness } from './preview-readiness.ts';
+import type { ProjectAcquisitionPlan } from './project-materialization.ts';
 import type { ProjectRuntime } from './project-session.ts';
 import {
   type ProjectTerminal,
@@ -11,10 +13,45 @@ export interface ViteProjectRuntimeDependencies {
   readonly terminal: ProjectTerminal;
   readonly ownerToken: string;
   readonly createPreviewReadiness: () => PreviewReadiness;
+  readonly port?: number;
+  readonly acquisition?: ProjectAcquisitionPlan;
 }
 
-export function createViteProjectRuntime(
-  dependencies: ViteProjectRuntimeDependencies,
+export interface PreviewProjectRuntimeDependencies extends ViteProjectRuntimeDependencies {
+  readonly label: string;
+  readonly line: string | (() => string);
+  readonly matches: (entry: PreviewAdvertisement) => boolean;
+}
+
+function shellWord(value: string): string {
+  if (value.includes('\0')) throw new TypeError('Runtime status text must not contain NUL');
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+export function projectRuntimeShellLine(
+  runtimeLine: string,
+  acquisition: ProjectAcquisitionPlan | undefined,
+  cwd = '/',
+): string {
+  if (acquisition?.kind !== 'install') return runtimeLine;
+  const notices = acquisition.snapshotFailures.map(
+    (failure) => `echo ${shellWord(`${failure.snapshotId}: ${failure.reason}`)}`,
+  );
+  const root = projectRelativePath('/', cwd);
+  const install =
+    root === '.' ? 'npm install' : `npm --prefix ${projectRuntimeShellWord(root)} install`;
+  return [...notices, install, runtimeLine].join(' && ');
+}
+
+function vitePort(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 65_535) {
+    throw new RangeError('Vite runtime port must be an integer from 1 to 65535');
+  }
+  return value;
+}
+
+export function createPreviewProjectRuntime(
+  dependencies: PreviewProjectRuntimeDependencies,
 ): ProjectRuntime<PreviewHandle> {
   type RunState = {
     readonly run: ProjectTerminalRun;
@@ -76,10 +113,11 @@ export function createViteProjectRuntime(
 
   return Object.freeze({
     start() {
-      if (closing || closed) throw new ClosedHandleError('Vite project runtime');
-      if (active !== null) throw new ProjectBusyError('Vite project runtime');
+      if (closing || closed) throw new ClosedHandleError(dependencies.label);
+      if (active !== null) throw new ProjectBusyError(dependencies.label);
 
-      const run = dependencies.terminal.run('vite');
+      const line = typeof dependencies.line === 'string' ? dependencies.line : dependencies.line();
+      const run = dependencies.terminal.run(line);
       const state: RunState = {
         run,
         readiness: null,
@@ -93,19 +131,19 @@ export function createViteProjectRuntime(
 
       const ready = projectTerminalAdmission(run).then(async (admission) => {
         if (state.cancelled || closing || closed) {
-          throw new ClosedHandleError('Vite project runtime run');
+          throw new ClosedHandleError(`${dependencies.label} run`);
         }
         const readiness = dependencies.createPreviewReadiness();
         state.readiness = readiness;
         if (state.cancelled || closing || closed) {
           await closeReadiness(state);
-          throw new ClosedHandleError('Vite project runtime run');
+          throw new ClosedHandleError(`${dependencies.label} run`);
         }
         return readiness.waitFor({
           ownerToken: dependencies.ownerToken,
           ptySid: admission.ptySid,
           ptyRid: admission.ptyRid,
-          matches: (entry) => entry.source === 'node',
+          matches: dependencies.matches,
         });
       });
       void ready.catch(() => {});
@@ -147,5 +185,26 @@ export function createViteProjectRuntime(
       void closePromise.catch(() => {});
       return closePromise;
     },
+  });
+}
+
+export function createViteProjectRuntime(
+  dependencies: ViteProjectRuntimeDependencies,
+): ProjectRuntime<PreviewHandle> {
+  const port = dependencies.port === undefined ? undefined : vitePort(dependencies.port);
+  return createPreviewProjectRuntime({
+    ...dependencies,
+    label: 'Vite project runtime',
+    line: () => {
+      const cwd = dependencies.terminal.snapshot().cwd;
+      const root = projectRelativePath('/', cwd);
+      const runtimeLine = [
+        'vite',
+        ...(root === '.' ? [] : [projectRuntimeShellWord(root)]),
+        ...(port === undefined ? [] : ['--port', String(port)]),
+      ].join(' ');
+      return projectRuntimeShellLine(runtimeLine, dependencies.acquisition, cwd);
+    },
+    matches: (entry) => entry.source === 'node',
   });
 }

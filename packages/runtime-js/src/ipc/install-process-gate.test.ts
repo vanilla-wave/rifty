@@ -3,18 +3,23 @@
  *
  * `installNodeRuntime(spec)` installs ONE seeded process for every kernel worker;
  * the rich extras (`globalThis.Buffer` + the `Promise.prototype.then` nextTick
- * patch) are gated to NODE workers. A WASI worker (`spec.env.__RIFTY_WASI_WASM_URL`)
- * must get NEITHER — no Node over-implementation where it shouldn't be.
+ * patch) are gated to NODE workers. A legacy WASI worker (no node-entry envelope,
+ * `spec.env.__RIFTY_WASI_WASM_URL`) gets NEITHER; a valid Node envelope wins.
  *
  * Capture native `Promise.prototype.then` at module load (the patch is global +
  * irreversible per realm), so the WASI test — which MUST run before the Node test
  * patches the realm — asserts it stayed native. `isolate: true` (vitest default)
  * gives this file a fresh realm.
  */
-import type { WorkerSpawnSpec } from '@riftydev/kernel';
+import { type WorkerSpawnSpec, publishKernelEntryBootstrap } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Buffer as RiftyBuffer } from '../builtins/buffer.ts';
-import { NodeProcess, getProcessCwd } from '../builtins/process.ts';
+import { buildNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
+import {
+  NodeProcess,
+  applyNodeProcessTerminalBootstrap,
+  getProcessCwd,
+} from '../builtins/process.ts';
 import { installNodeProcessShim, installNodeRuntime } from './install-process.ts';
 
 const NATIVE_THEN = Promise.prototype.then;
@@ -35,6 +40,7 @@ function spec(env: Record<string, string> = {}): WorkerSpawnSpec {
 }
 
 afterEach(() => {
+  publishKernelEntryBootstrap(null);
   Object.defineProperty(globalThis, 'process', {
     value: ORIGINAL_PROCESS,
     writable: true,
@@ -59,6 +65,24 @@ describe('pre-entry gate (ADR-0157)', () => {
     expect(Object.prototype.hasOwnProperty.call(globalThis, 'global')).toBe(false);
   });
 
+  it('Node-entry bootstrap outranks a guest __RIFTY_WASI_WASM_URL key', () => {
+    const entry = buildNodeEntryWorkerEntry(
+      'https://host.test/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+      { kind: 'worker-thread', remoteFs: true, threadId: 7 },
+    );
+    publishKernelEntryBootstrap(entry.bootstrap ?? null);
+    Reflect.deleteProperty(globalThis, 'global');
+
+    installNodeRuntime(spec({ __RIFTY_WASI_WASM_URL: 'guest-poison' }));
+
+    const proc = (globalThis as { process?: unknown }).process as NodeProcess;
+    expect(proc.env.__RIFTY_WASI_WASM_URL).toBe('guest-poison');
+    expect(Promise.prototype.then).not.toBe(NATIVE_THEN);
+    expect((globalThis as { Buffer?: unknown }).Buffer).toBe(RiftyBuffer);
+    expect((globalThis as { global?: unknown }).global).toBe(globalThis);
+  });
+
   it('Node worker: seeds the process AND installs Buffer + global + the nextTick Promise patch', () => {
     (globalThis as { global?: unknown }).global = undefined;
     installNodeRuntime(spec());
@@ -68,26 +92,107 @@ describe('pre-entry gate (ADR-0157)', () => {
     expect((globalThis as { global?: unknown }).global).toBe(globalThis);
   });
 
-  it('Node worker: maps kernel TTY metadata onto process stdio streams', () => {
-    installNodeRuntime(
-      spec({
-        RIFTY_STDIN_IS_TTY: '1',
-        RIFTY_STDOUT_IS_TTY: '1',
-        RIFTY_STDERR_IS_TTY: '1',
-      }),
-    );
+  it('Node worker: typed terminal bootstrap shapes process stdio streams', () => {
+    installNodeRuntime(spec());
     const proc = (globalThis as { process?: unknown }).process as NodeProcess;
+    applyNodeProcessTerminalBootstrap(proc, {
+      stdinIsTTY: true,
+      stdoutIsTTY: true,
+      stderrIsTTY: true,
+      cols: 80,
+      rows: 24,
+    });
     expect(proc.stdin.isTTY).toBe(true);
     expect(proc.stdout.isTTY).toBe(true);
     expect(proc.stderr.isTTY).toBe(true);
   });
 
+  it('Node-entry terminal bootstrap ignores colliding guest env without rewriting it', () => {
+    const entry = buildNodeEntryWorkerEntry(
+      'https://host.test/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+      {
+        kind: 'program',
+        bin: true,
+        remoteFs: true,
+        nodeServe: true,
+        terminal: {
+          stdinIsTTY: false,
+          stdoutIsTTY: true,
+          stderrIsTTY: true,
+          cols: 132,
+          rows: 43,
+        },
+      },
+    );
+    publishKernelEntryBootstrap(entry.bootstrap ?? null);
+    installNodeRuntime(
+      spec({
+        RIFTY_STDIN_IS_TTY: 'guest-stdin',
+        RIFTY_STDOUT_IS_TTY: 'guest-stdout',
+        RIFTY_STDERR_IS_TTY: 'guest-stderr',
+        RIFTY_TTY_COLS: 'wide',
+        RIFTY_TTY_ROWS: 'tall',
+      }),
+    );
+
+    const proc = (globalThis as { process?: unknown }).process as NodeProcess;
+    expect(proc.env).toEqual({
+      RIFTY_STDIN_IS_TTY: 'guest-stdin',
+      RIFTY_STDOUT_IS_TTY: 'guest-stdout',
+      RIFTY_STDERR_IS_TTY: 'guest-stderr',
+      RIFTY_TTY_COLS: 'wide',
+      RIFTY_TTY_ROWS: 'tall',
+    });
+    expect(proc.stdin.isTTY).toBe(false);
+    expect(proc.stdout).toMatchObject({ isTTY: true, columns: 132, rows: 43 });
+    expect(proc.stderr).toMatchObject({ isTTY: true, columns: 132, rows: 43 });
+  });
+
+  it('keeps process argv/cwd public when the host launch carries a private remote-FS root', () => {
+    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const entry = buildNodeEntryWorkerEntry(
+      'https://host.test/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+      {
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        remoteFsRoot,
+        nodeServe: true,
+      },
+    );
+    publishKernelEntryBootstrap(entry.bootstrap ?? null);
+    const publicSpec = {
+      ...spec({ USER_VALUE: 'kept' }),
+      argv: ['rifty', '/src/server.js', '--port', '3000'],
+      cwd: '/',
+    };
+
+    installNodeRuntime(publicSpec);
+
+    const proc = (globalThis as { process?: unknown }).process as NodeProcess;
+    expect(proc.argv).toEqual(['rifty', '/src/server.js', '--port', '3000']);
+    expect(proc.cwd()).toBe('/');
+    expect(proc.env).toEqual({ USER_VALUE: 'kept' });
+    expect(JSON.stringify({ argv: proc.argv, cwd: proc.cwd(), env: proc.env })).not.toContain(
+      remoteFsRoot,
+    );
+  });
+
   it('Node worker: TTY stdout exposes cursor helpers and writes ANSI control sequences', async () => {
     const stdout = new MessageChannel();
-    const s = spec({ RIFTY_STDOUT_IS_TTY: '1' });
+    const s = spec();
     const proc = installNodeProcessShim({
       ...s,
       stdio: { ...s.stdio, stdout: stdout.port1 },
+    });
+    applyNodeProcessTerminalBootstrap(proc, {
+      stdinIsTTY: false,
+      stdoutIsTTY: true,
+      stderrIsTTY: false,
+      cols: 80,
+      rows: 24,
     });
     const stream = proc.stdout as typeof proc.stdout & {
       clearLine(dir?: number, cb?: () => void): boolean;

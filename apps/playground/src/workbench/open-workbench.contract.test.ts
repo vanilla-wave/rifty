@@ -5,10 +5,16 @@ import {
   SW_PONG,
   SW_ROUTING_VERSION,
 } from '@riftydev/service-worker';
-import { describe, expect, it, vi } from 'vitest';
-import { ClosedHandleError, ProjectBusyError } from './errors.ts';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import {
+  ClosedHandleError,
+  DirtyProjectDocumentError,
+  ProjectBusyError,
+  ProjectDocumentSaveInProgressError,
+} from './errors.ts';
 import { type WorkbenchStorageSnapshot, createOpenWorkbench } from './open-workbench.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
+import { createUnusedOwnerProjectHandles } from './project-content.test-fixture.ts';
 import {
   type InspectedProjectDefinition,
   inspectProjectDefinition,
@@ -48,7 +54,9 @@ interface Deferred<T> {
 
 interface TestServiceWorkerController extends ServiceWorkerControlWorker {
   readonly label: string;
-  readonly postMessage: ReturnType<typeof vi.fn<(message: unknown) => void>>;
+  readonly postMessage: ReturnType<
+    typeof vi.fn<(message: unknown, transfer: Transferable[]) => void>
+  >;
 }
 
 interface TestSession<TReady> {
@@ -133,6 +141,7 @@ function createTestSession<TReady>(): TestSession<TReady> {
   let closeImplementation = async (): Promise<void> => {};
   const close = vi.fn(() => closeImplementation());
   const session = {
+    ...createUnusedOwnerProjectHandles('openWorkbench contract owner session'),
     run(): ProjectRun<TReady> {
       throw new Error('test session run is not used by openWorkbench tests');
     },
@@ -299,7 +308,11 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
   };
   let automaticPongSource: TestServiceWorkerController | null | undefined;
   let postMessageImplementation:
-    | ((controller: TestServiceWorkerController, message: unknown) => void)
+    | ((
+        controller: TestServiceWorkerController,
+        message: unknown,
+        transfer: Transferable[],
+      ) => void)
     | null = null;
   let opfsOpenFailure: unknown;
   let durabilityFailure: unknown;
@@ -325,13 +338,19 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     controllerNumber += 1;
     const controller: TestServiceWorkerController = {
       label,
-      postMessage: vi.fn((message: unknown): void => {
+      postMessage: vi.fn((message: unknown, transfer: Transferable[]): void => {
         if (postMessageImplementation !== null) {
-          postMessageImplementation(controller, message);
+          postMessageImplementation(controller, message, transfer);
           return;
         }
         if (automaticPong === null) return;
-        container.dispatchMessage(automaticPongSource ?? controller, automaticPong);
+        if (automaticPongSource !== undefined) {
+          container.dispatchMessage(automaticPongSource, automaticPong);
+          return;
+        }
+        const replyPort = transfer[0];
+        if (!(replyPort instanceof MessagePort)) throw new Error('missing SW control reply port');
+        replyPort.postMessage(automaticPong);
       }),
     };
     return controller;
@@ -429,7 +448,11 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
       automaticPongSource = source;
     },
     setPostMessageImplementation(
-      implementation: (controller: TestServiceWorkerController, message: unknown) => void,
+      implementation: (
+        controller: TestServiceWorkerController,
+        message: unknown,
+        transfer: Transferable[],
+      ) => void,
     ): void {
       postMessageImplementation = implementation;
     },
@@ -523,6 +546,29 @@ describe('openWorkbench normalized composition', () => {
     await workbench.close();
   });
 
+  it('carries an optional companion TypeScript worker through the normalized owner input', async () => {
+    const h = harness();
+    const base = optionsWithDefaults();
+    const workbench = await h.open({
+      ...base,
+      deployment: {
+        ...base.deployment,
+        workers: { ...base.deployment.workers, typescript: './typescript.js' },
+      },
+    } as WorkbenchOptions);
+
+    expect(h.owner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deployment: expect.objectContaining({
+          workers: expect.objectContaining({
+            typescript: 'https://workbench.invalid/app/typescript.js',
+          }),
+        }),
+      }),
+    );
+    await workbench.close();
+  });
+
   it('preserves own preset-pin keys that collide with Object.prototype', async () => {
     const h = harness();
     const base = validOptions();
@@ -560,6 +606,7 @@ describe('openWorkbench normalized composition', () => {
     const opening: Promise<ProjectSession<PreviewHandle>> = workbench.openProject(vite);
     const session = await opening;
 
+    expectTypeOf<Extract<keyof PreviewHandle, 'ownerToken'>>().toEqualTypeOf<never>();
     expect(h.ownerHandle.openProject).toHaveBeenCalledWith(inspectProjectDefinition(vite));
     const typedRun: () => ProjectRun<PreviewHandle> = session.run;
     expect(typedRun).toBe(session.run);
@@ -592,11 +639,14 @@ describe('openWorkbench controlling service-worker proof', () => {
     h.container.setController(replacement);
     const workbench = await opening;
 
-    expect(replacement.postMessage).toHaveBeenCalledWith({
-      type: SW_PING,
-      frameVersion: SW_FRAME_VERSION,
-      routingVersion: SW_ROUTING_VERSION,
-    });
+    expect(replacement.postMessage).toHaveBeenCalledWith(
+      {
+        type: SW_PING,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      [expect.any(MessagePort)],
+    );
     expect(h.listenerCount).toBe(0);
     expect(h.clock.pending).toBe(0);
     await workbench.close();
@@ -676,13 +726,17 @@ describe('openWorkbench controlling service-worker proof', () => {
       routingVersion: SW_ROUTING_VERSION,
       from: 'service-worker',
     };
-    h.setPostMessageImplementation((controller) => {
+    let replacementReplyPort: MessagePort | undefined;
+    h.setPostMessageImplementation((controller, _message, transfer) => {
+      const replyPort = transfer[0];
+      if (!(replyPort instanceof MessagePort)) throw new Error('missing SW control reply port');
       if (controller === h.controller) {
         h.container.setController(replacement);
-        h.container.dispatchMessage(h.controller, exactPong);
+        replyPort.postMessage(exactPong);
+        replacementReplyPort?.postMessage(exactPong);
         return;
       }
-      h.container.dispatchMessage(replacement, exactPong);
+      replacementReplyPort = replyPort;
     });
 
     const workbench = await h.open(validOptions());
@@ -933,6 +987,41 @@ describe('openWorkbench close fault contract', () => {
     expect(h.ownerHandle.close).toHaveBeenCalledTimes(1);
     expect(h.locks.held).toBe(false);
   });
+
+  it.each([
+    ['dirty document', new DirtyProjectDocumentError('/src/main.ts')],
+    ['document save in progress', new ProjectDocumentSaveInProgressError('/src/main.ts')],
+  ])(
+    'keeps Workbench and its active session retryable after %s preflight rejection',
+    async (_scenario, failure) => {
+      const h = harness();
+      const workbench = await h.open(validOptions());
+      const session = createTestSession<unknown>();
+      let allowClose = false;
+      session.setCloseImplementation(async () => {
+        if (!allowClose) throw failure;
+      });
+      h.setOwnerOpenProjectImplementation(async () => session.session);
+      await workbench.openProject(definition('retryable-close-preflight'));
+
+      const rejected = workbench.close();
+
+      await expect(rejected).rejects.toBe(failure);
+      expect(h.ownerHandle.close).not.toHaveBeenCalled();
+      expect(h.locks.held).toBe(true);
+      await expect(workbench.deleteProject('still-active')).rejects.toBeInstanceOf(
+        ProjectBusyError,
+      );
+
+      allowClose = true;
+      const retry = workbench.close();
+      expect(retry).not.toBe(rejected);
+      await retry;
+      expect(session.close).toHaveBeenCalledTimes(2);
+      expect(h.ownerHandle.close).toHaveBeenCalledTimes(1);
+      expect(h.locks.held).toBe(false);
+    },
+  );
 
   it('starts owner close to cancel an admitted open instead of waiting on that open', async () => {
     const h = harness();

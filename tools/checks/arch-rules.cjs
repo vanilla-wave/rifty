@@ -97,6 +97,20 @@ const forbidden = [
     },
   },
   {
+    name: 'playground-app-uses-sealed-workbench-entrypoints',
+    severity: 'error',
+    comment:
+      'ADR-0282: App production modules survive extraction by importing Workbench only through public.ts/playground.ts',
+    from: {
+      path: '(?:^|/)playground/src/',
+      pathNot: '(?:^|/)playground/src/(?:workbench|workers)/',
+    },
+    to: {
+      path: '(?:^|/)playground/src/workbench/',
+      pathNot: '(?:^|/)playground/src/workbench/(?:public|playground)\\.ts$',
+    },
+  },
+  {
     name: 'monaco-only-in-lazy-editor-stack',
     severity: 'error',
     comment:

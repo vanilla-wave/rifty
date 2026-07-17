@@ -46,6 +46,14 @@ describe('tokenize — quote provenance (ADR-0091)', () => {
     expect(words(tokenize("echo *''"))[1]).toEqual({ value: '*', quoted: false });
   });
 
+  it('keeps bare empty single- and double-quoted words as quoted argv entries', () => {
+    expect(tokenize(`node '' ""`)).toEqual([
+      { value: 'node', quoted: false },
+      { value: '', quoted: true },
+      { value: '', quoted: true },
+    ]);
+  });
+
   it('an expanded $VAR inside double quotes is quoted; unquoted $VAR is not', () => {
     expect(words(tokenize('echo "$X"', { X: '*.ts' }))[1]).toEqual({ value: '*.ts', quoted: true });
     expect(words(tokenize('echo $X', { X: '*.ts' }))[1]).toEqual({ value: '*.ts', quoted: false });

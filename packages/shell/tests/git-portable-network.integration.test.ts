@@ -199,7 +199,12 @@ describe.skipIf(!AVAILABLE)('terminal Git real smart-HTTP portable preflight', (
       expect(pull.exitCode).toBe(128);
       expect(pull.stderr).toContain('EPERM');
       expect(pullCalls).toEqual([['/workspace/repo/a.txt', `/workspace/repo/${CLAIM}`]]);
-      expect(pullBatches).toEqual([[{ kind: 'write', path: '/workspace/repo' }]]);
+      expect(pullBatches).toEqual([
+        [
+          { kind: 'write', path: '/workspace/repo/.git' },
+          { kind: 'replace', path: '/workspace/repo' },
+        ],
+      ]);
       expect(await vfs.readFileText('/workspace/repo/a.txt')).toBe('initial\n');
       expect(await vfs.exists(`/workspace/repo/${CLAIM}`)).toBe(false);
       expect(await local.resolveRef('HEAD')).toBe(head);

@@ -5,6 +5,11 @@ export type VfsMutationIntent =
       readonly path: string;
     }
   | {
+      /** Candidate scope whose applied content writes replace prior identity. */
+      readonly kind: 'replace';
+      readonly path: string;
+    }
+  | {
       readonly kind: 'rename' | 'copy';
       readonly sourcePath: string;
       readonly targetPath: string;

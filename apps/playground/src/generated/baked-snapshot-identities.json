@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "snapshots": {
+    "typescript": "sha256:8e4da49d318e3d731dd7bb61b068a404f487edc82ce473bd9875e7806d90876b",
+    "vite": "sha256:7748776ed6cd683cfc069b514c2028d6c478162b93f68d44750591d2d9914c7c",
+    "vite8": "sha256:c5b4f264cf3124b6503f16a779a1db92e3b18d660f23443d426febe289a7f972"
+  }
+}

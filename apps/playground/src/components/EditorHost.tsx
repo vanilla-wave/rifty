@@ -176,7 +176,11 @@ export function EditorHost(props: EditorHostProps) {
       },
     });
 
-    props.registerApi(core.api);
+    // Establish preset/session tabs before App drains user intents queued while
+    // Monaco mounted. The reactive echo below shares the core dedup key.
+    core.registerHydratedApi(() => {
+      props.registerApi(core.api);
+    });
 
     // E2E-only window hooks (ADR-0166 P1.9d) — DEV-only: `import.meta.env.DEV`
     // gates them so Vite strips them from the production bundle entirely (mirrors

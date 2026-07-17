@@ -21,7 +21,7 @@ test.describe('Hono API template through the SW preview bridge', () => {
 
     await expectTerminalContains(
       page,
-      '[real-vite/worker] starting server /scratch/src/main.js on port 3321',
+      '[real-vite/worker] starting server /src/main.js on port 3321',
       150_000,
     );
     await expectTerminalContains(page, 'npm: + hono@', 120_000);

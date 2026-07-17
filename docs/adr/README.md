@@ -16,7 +16,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0072 | OPFS sync content cache + async write-through |
 | 0090 | VFS sync `copyFileSync`/`cpSync`/`renameSync` primitives for shell `cp`/`mv` |
 | 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
-| 0260 | Host-injected VFS mutation intents |
+| 0276 | Semantic VFS replacements use applied owner evidence |
 
 ### kernel
 
@@ -59,11 +59,14 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0171 | Function constructor dynamic import routing |
 | 0178 | node:zlib gzip Transform stream subset |
 | 0200 | Persistent ESM transform cache across dev-server child boots |
-| 0231 | Host-owned bootstrap config for recursive node workers |
 | 0237 | Readable owns read-hook dispatch and demand latch |
 | 0238 | Readable.from defaults to object mode |
 | 0239 | fromWeb arguments have one staged validation owner |
 | 0240 | Writable completion separates internal and public phases |
+| 0267 | Entry-scoped host bootstrap metadata for recursive Node workers |
+| 0269 | shared require.extensions compile hooks for CJS loaders |
+| 0270 | worker_threads.Worker parent events are EventEmitter-only |
+| 0272 | Late typed process terminal bootstrap |
 
 ### runtime-wasi
 
@@ -102,6 +105,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0125 | Preview owner binding — async resolution, ready-window preference, clientId sentinels |
 | 0160 | Window owner ports and anti-hijack ready-frame routing |
 | 0265 | Owner-correlated preview readiness by PTY run |
+| 0271 | Correlated service-worker control proofs fence Workbench preview revocation |
 
 ### npm-client
 
@@ -127,6 +131,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0201 | Bounded-fetch chokepoint: no-progress stall bounds on all npm-client fetches |
 | 0249 | Owner-managed shadow runtime assets in a Workbench content store |
 | 0258 | Structured install acquisition provenance |
+| 0283 | Canonical package manifest serialization |
 
 ### playground
 
@@ -161,6 +166,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
 | 0243 | Visible Vite config ownership via durable root-local seed claim |
 | 0261 | Root-bound serialized install trust claims and non-transferable claim ingress |
+| 0281 | Cmd+S is a workspace durability barrier |
 
 ### toolchain-build
 
@@ -243,6 +249,13 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | # | Title |
 |---|---|
 | 0263 | Workbench Playground companion subpath |
+| 0273 | Workbench files and documents handle contract |
+| 0274 | Session-scoped opaque Workbench file versions |
+| 0275 | Owner-applied project mutation stream |
+| 0278 | Playground companion terminal state and preview registry |
+| 0279 | Compact staged Playground catalog transactions |
+| 0280 | Project-rooted terminal execution namespace |
+| 0282 | Extraction-safe Playground host and session seams |
 
 ## Superseded (removed)
 
@@ -264,6 +277,9 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0216 | 0261 | background durability, learned-pin SWR, and stamp fault history grafted |
 | 0224 | 0263 | sealed root retained; finite Playground companion owns first-party plans/tools without exposing the owner |
 | 0241 | 0261 | exact request/artifact identity and snapshot migration grafted |
+| 0231 | 0267 | host bootstrap leaves guest `process.env`; recursive-worker context grafted |
+| 0260 | 0276 | shared guard law retained; closed vocabulary gains applied-evidence semantic replacement |
+| 0277 | 0278 | finite plans/catalog/TS/SCM/archive grafted; terminal state and owner preview registry added |
 
 ## Corrections (active)
 
@@ -272,6 +288,10 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
+| 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
+| 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
+| 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |

@@ -42,7 +42,7 @@ export interface BinWorkerHandle {
 
 /** Spawn request: the executor builds this; the host maps it to a Worker spec. */
 export interface BinSpawnRequest {
-  /** Absolute `.bin` shim path — the worker's entry (`argv[1]`, `RIFTY_BIN=1`). */
+  /** Absolute `.bin` shim path — `argv[1]`; launch metadata marks it as a bin. */
   readonly shimPath: string;
   readonly args: readonly string[];
   readonly env: Record<string, string>;
@@ -50,9 +50,15 @@ export interface BinSpawnRequest {
   readonly isTTY: boolean;
   readonly cols?: number;
   readonly rows?: number;
+  /** Host-minted preview correlation; never part of guest `process.env`. */
+  readonly previewScope?: string;
+  /** Host-only physical root behind the child process's public `/` namespace. */
+  readonly remoteFsRoot?: string;
 }
 
 export interface BinExecutorDeps {
+  /** Enrich host-only launch metadata before lifecycle hooks and spawn. */
+  readonly prepareRequest?: (req: BinSpawnRequest, ctx: CommandContext) => BinSpawnRequest;
   /** Spawns the node-entry worker for the shim and returns its handle. */
   readonly spawn: (req: BinSpawnRequest) => BinWorkerHandle;
   /** Optional lifecycle hook for owners that mirror server-capable bins into UI state. */
@@ -78,7 +84,7 @@ export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
     // + settle-on-exit, incl. the exit-before-pre-abort ordering) is shared with
     // the owner `node <file>` executor via run-foreground-child. Server-capable
     // bins can also surface child IPC through the optional hooks.
-    const req: BinSpawnRequest = {
+    const baseRequest: BinSpawnRequest = {
       shimPath: binPath,
       args,
       env: ctx.env,
@@ -87,6 +93,7 @@ export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
       cols: ctx.cols,
       rows: ctx.rows,
     };
+    const req = deps.prepareRequest?.(baseRequest, ctx) ?? baseRequest;
     deps.onStart?.(req, ctx);
     const handle = deps.spawn(req);
     deps.onSpawn?.(req, handle, ctx);

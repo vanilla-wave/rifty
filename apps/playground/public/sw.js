@@ -1,4 +1,59 @@
 // Generated from packages/service-worker/src/sw.ts — do not edit. Source of truth: ADR 0016.
+// ../../packages/service-worker/src/protocol.ts
+var SW_FRAME_VERSION = "1";
+var SW_ROUTING_VERSION = "6";
+var SW_PING = "__rifty_sw_ping__";
+var SW_PONG = "__rifty_sw_pong__";
+var SW_PREVIEW_READY = "rifty:preview:ready";
+var SW_PREVIEW_GOODBYE = "rifty:preview:goodbye";
+var SW_PREVIEW_REQUEST = "rifty:preview:request";
+var SW_ERROR_PROTOCOL_VERSION_MISMATCH = "PROTOCOL_VERSION_MISMATCH";
+
+// ../../packages/service-worker/src/control-ping.ts
+function createControlPingHandler(warn = (message) => console.warn(message)) {
+  const mismatchWarned = /* @__PURE__ */ new Set();
+  return (event) => {
+    const data = event.data;
+    if (!data || typeof data !== "object" || data.type !== SW_PING) return;
+    const source = event.source;
+    const clientId = source && "id" in source && typeof source.id === "string" ? source.id : "<unknown>";
+    const frameOk = data.frameVersion === SW_FRAME_VERSION;
+    const routingOk = data.routingVersion === SW_ROUTING_VERSION;
+    if (!frameOk || !routingOk) {
+      if (!mismatchWarned.has(clientId)) {
+        mismatchWarned.add(clientId);
+        const drifted = [];
+        if (!frameOk) drifted.push("frame");
+        if (!routingOk) drifted.push("routing");
+        warn(
+          `[rifty/service-worker] ping protocol version mismatch from ${clientId} (${drifted.join(
+            "+"
+          )}): got frame=${String(data.frameVersion)} routing=${String(
+            data.routingVersion
+          )}, want frame=${SW_FRAME_VERSION} routing=${SW_ROUTING_VERSION}`
+        );
+      }
+      return;
+    }
+    const pong = {
+      type: SW_PONG,
+      frameVersion: SW_FRAME_VERSION,
+      routingVersion: SW_ROUTING_VERSION,
+      from: "service-worker"
+    };
+    const replyPort = event.ports[0];
+    if (replyPort === void 0) {
+      source?.postMessage(pong);
+      return;
+    }
+    try {
+      replyPort.postMessage(pong);
+    } finally {
+      replyPort.close();
+    }
+  };
+}
+
 // ../../packages/io/src/preview-protocol.ts
 var PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
 function synthesizePreviewUrl(path, port) {
@@ -12,16 +67,6 @@ function parsePreviewPath(path) {
   const rest = m[2] ?? "/";
   return { port, rest };
 }
-
-// ../../packages/service-worker/src/protocol.ts
-var SW_FRAME_VERSION = "1";
-var SW_ROUTING_VERSION = "6";
-var SW_PING = "__rifty_sw_ping__";
-var SW_PONG = "__rifty_sw_pong__";
-var SW_PREVIEW_READY = "rifty:preview:ready";
-var SW_PREVIEW_GOODBYE = "rifty:preview:goodbye";
-var SW_PREVIEW_REQUEST = "rifty:preview:request";
-var SW_ERROR_PROTOCOL_VERSION_MISMATCH = "PROTOCOL_VERSION_MISMATCH";
 
 // ../../packages/service-worker/src/owner-resolver.ts
 var fallbackWarned = /* @__PURE__ */ new WeakSet();
@@ -829,35 +874,5 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
-var pingMismatchWarned = /* @__PURE__ */ new Set();
-self.addEventListener("message", (event) => {
-  const data = event.data;
-  if (!data || typeof data !== "object" || data.type !== SW_PING) return;
-  const source = event.source;
-  const clientId = source && "id" in source && typeof source.id === "string" ? source.id : "<unknown>";
-  const frameOk = data.frameVersion === SW_FRAME_VERSION;
-  const routingOk = data.routingVersion === SW_ROUTING_VERSION;
-  if (!frameOk || !routingOk) {
-    if (!pingMismatchWarned.has(clientId)) {
-      pingMismatchWarned.add(clientId);
-      const drifted = [];
-      if (!frameOk) drifted.push("frame");
-      if (!routingOk) drifted.push("routing");
-      console.warn(
-        `[rifty/service-worker] ping protocol version mismatch from ${clientId} (${drifted.join(
-          "+"
-        )}): got frame=${String(data.frameVersion)} routing=${String(
-          data.routingVersion
-        )}, want frame=${SW_FRAME_VERSION} routing=${SW_ROUTING_VERSION}`
-      );
-    }
-    return;
-  }
-  event.source?.postMessage({
-    type: SW_PONG,
-    frameVersion: SW_FRAME_VERSION,
-    routingVersion: SW_ROUTING_VERSION,
-    from: "service-worker"
-  });
-});
+self.addEventListener("message", createControlPingHandler());
 installPreviewInterceptor(self);

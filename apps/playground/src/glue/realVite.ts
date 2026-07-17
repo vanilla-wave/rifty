@@ -13,7 +13,6 @@
  * fallback; this adapter requires `crossOriginIsolated` + SAB IPC (ADR-0011).
  */
 import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
-import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
 import { isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { NotImplementedError } from '@riftydev/vfs';
 import type { ProjectSpec } from '../templates/project-spec.ts';
@@ -22,19 +21,7 @@ import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import tsLspWorkerUrl from '../workers/ts-lsp-worker-entry.ts?worker&url';
 import type { OwnerBridgeKey } from './owner-bridge-key.ts';
-import {
-  decodeOwnerVfsCommitFailure,
-  decodeOwnerVfsError,
-  equalOwnerVfsCommitTerminals,
-  isOwnerVfsCommitCleanedMessage,
-  isOwnerVfsCommitIpcMessage,
-  isOwnerVfsCommitReleasedMessage,
-  isOwnerVfsDurabilityAckMessage,
-  validateHostCommitAckForRequest,
-  validateOwnerVfsCommitTerminal,
-  validateOwnerVfsCommitTerminalForRequest,
-} from './owner-vfs-ipc.ts';
-import type { OwnerVfsAppliedCommitTerminal, OwnerVfsCommitTerminal } from './owner-vfs-ipc.ts';
+import { createOwnerVfsClient } from './owner-vfs-client.ts';
 import type {
   HostCommitAck,
   HostCommitRequest,
@@ -42,13 +29,8 @@ import type {
   OwnerVfsDurabilityReceipt,
   TreeRevision,
 } from './owner-vfs-protocol.ts';
-import {
-  OperationIdReuseError,
-  VfsCommitProtocolError,
-  equalHostCommitRequests,
-} from './owner-vfs-protocol.ts';
 import { PLAYGROUND_NODE_WORKER_RUNTIME_ENV } from './playground-node-worker-runtime.ts';
-import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
+export { wirePreviewBridge } from './preview-port-wiring.ts';
 import {
   type ExecOptions,
   type PtyOpenSeed,
@@ -82,56 +64,11 @@ const dec = new TextDecoder();
 /** OPFS durability drain can trail a big write burst (post-install trees run
  *  hundreds of ms; quota-pressure retries longer) — give the barrier slack. */
 const VFS_FLUSH_ACK_TIMEOUT_MS = 30_000;
-// The owner OPFS watchdog reports at 30s; leave transport time to carry its
-// exact failure instead of racing it with a page timeout.
-const OWNER_VFS_DURABILITY_ACK_TIMEOUT_MS = 35_000;
-const OWNER_VFS_COMMIT_RECEIPT_RETRY_MS = 250;
-const OWNER_VFS_COMMIT_REPLAY_MS = 250;
-
-function ownHostCommitRequest(request: HostCommitRequest): HostCommitRequest {
-  return request.kind === 'write' ? { ...request, data: request.data.slice() } : { ...request };
-}
 
 function createPreviewOwnerToken(): string {
   const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
   if (randomUUID) return randomUUID();
   return `owner-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
-
-/**
- * Wire the PAGE side of the co-resident preview (ADR-0148). The owner worker
- * serves `/preview/<port>/` (its `setupPreviewBridge` + `serveCrossRealmPreview`,
- * keyed by `ownerToken`); this registers the matching page-side cross-realm
- * bridge so the SW route reaches the owner. Call it when the owner reports the
- * dev server running (the `pty:dev-server` frame carries the port + token); the
- * returned teardown runs on stop.
- *
- * Replaces {@link startRealVite}'s per-run preview wiring — the worker is no
- * longer spawned per dev run (it IS the persistent owner), only the page-side
- * route is (un)registered as the dev server starts/stops.
- */
-export function wirePreviewBridge(
-  port: number,
-  ownerToken: string,
-  previewScope?: string,
-): () => void {
-  // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net` registry
-  // routes through this handler over BroadcastChannel to the owner's
-  // `serveCrossRealmPreview`.
-  const previewBridge = bridgeCrossRealmPreview(
-    port,
-    previewScope === undefined ? {} : { scope: previewScope },
-  );
-  registerPort(port, previewBridge);
-  // ADR-0086: typed handle → SW requests take the struct fast-path.
-  // ADR-0160: advertise the served port so the SW routes /preview/<port>/ by
-  // port to THIS window (multi-window isolation).
-  const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge, { ownerToken, ports: [port] });
-  return (): void => {
-    tearSwBridge();
-    unregisterPort(port);
-    previewBridge.dispose();
-  };
 }
 
 /**
@@ -454,41 +391,8 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       readonly timer: ReturnType<typeof setTimeout>;
     }
   >();
-  const pendingOwnerVfsCommits = new Map<
-    string,
-    {
-      readonly request: HostCommitRequest;
-      readonly ownerEpoch: OwnerEpoch;
-      readonly promise: Promise<HostCommitAck>;
-      readonly resolve: (ack: HostCommitAck) => void;
-      readonly reject: (error: Error) => void;
-      replayTimer: ReturnType<typeof setTimeout> | null;
-      candidate: OwnerVfsCommitTerminal | null;
-    }
-  >();
-  const pendingOwnerVfsReceipts = new Map<
-    string,
-    {
-      readonly terminal: OwnerVfsCommitTerminal;
-      timer: ReturnType<typeof setTimeout> | null;
-    }
-  >();
-  const pendingOwnerVfsCleanups = new Map<
-    string,
-    {
-      readonly terminal: OwnerVfsCommitTerminal;
-      timer: ReturnType<typeof setTimeout> | null;
-    }
-  >();
-  const pendingOwnerVfsDurability = new Map<
-    string,
-    {
-      readonly resolve: (receipt: OwnerVfsDurabilityReceipt) => void;
-      readonly reject: (error: Error) => void;
-      readonly timer: ReturnType<typeof setTimeout>;
-    }
-  >();
   let currentOwnerEpoch: OwnerEpoch | null = null;
+  let exited = false;
   let readySettled = false;
   let resolveReady: () => void = () => {};
   let rejectReady: (err: Error) => void = () => {};
@@ -502,136 +406,19 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     readySettled = true;
     resolveReady();
   };
-  const postOwnerVfsCommitReceipt = (operationId: string): void => {
-    const pending = pendingOwnerVfsReceipts.get(operationId);
-    if (!pending) return;
-    try {
-      worker.send({ type: 'rifty:owner-vfs-commit-received', terminal: pending.terminal });
-    } catch {
-      // The terminal has already reached the page. A local retry failure owns
-      // only owner-ledger cleanup and cannot rewrite the mutation outcome.
-    }
-    if (pendingOwnerVfsReceipts.get(operationId) !== pending) return;
-    pending.timer = setTimeout(
-      () => postOwnerVfsCommitReceipt(operationId),
-      OWNER_VFS_COMMIT_RECEIPT_RETRY_MS,
-    );
-  };
-  const stopOwnerVfsCommitReceipt = (operationId: string): void => {
-    const pending = pendingOwnerVfsReceipts.get(operationId);
-    if (!pending) return;
-    pendingOwnerVfsReceipts.delete(operationId);
-    if (pending.timer !== null) clearTimeout(pending.timer);
-  };
-  const receiveOwnerVfsCommitTerminal = (terminal: OwnerVfsCommitTerminal): void => {
-    const prior = pendingOwnerVfsReceipts.get(terminal.operationId);
-    if (prior) {
-      if (equalOwnerVfsCommitTerminals(prior.terminal, terminal)) return;
-      stopOwnerVfsCommitReceipt(terminal.operationId);
-    }
-    pendingOwnerVfsReceipts.set(terminal.operationId, { terminal, timer: null });
-    postOwnerVfsCommitReceipt(terminal.operationId);
-  };
-  const postOwnerVfsCommitCleanup = (operationId: string): void => {
-    const pending = pendingOwnerVfsCleanups.get(operationId);
-    if (!pending) return;
-    try {
-      worker.send({ type: 'rifty:owner-vfs-commit-cleanup', terminal: pending.terminal });
-    } catch {
-      // Owner exit clears this bounded retry state; a dropped cleanup cannot
-      // leave retained request bytes without another exact attempt.
-    }
-    if (pendingOwnerVfsCleanups.get(operationId) !== pending) return;
-    pending.timer = setTimeout(
-      () => postOwnerVfsCommitCleanup(operationId),
-      OWNER_VFS_COMMIT_RECEIPT_RETRY_MS,
-    );
-  };
-  const stopOwnerVfsCommitCleanup = (operationId: string): void => {
-    const pending = pendingOwnerVfsCleanups.get(operationId);
-    if (!pending) return;
-    pendingOwnerVfsCleanups.delete(operationId);
-    if (pending.timer !== null) clearTimeout(pending.timer);
-  };
-  const startOwnerVfsCommitCleanup = (terminal: OwnerVfsCommitTerminal): void => {
-    const prior = pendingOwnerVfsCleanups.get(terminal.operationId);
-    if (prior) {
-      if (equalOwnerVfsCommitTerminals(prior.terminal, terminal)) return;
-      stopOwnerVfsCommitCleanup(terminal.operationId);
-    }
-    pendingOwnerVfsCleanups.set(terminal.operationId, { terminal, timer: null });
-    postOwnerVfsCommitCleanup(terminal.operationId);
-  };
-  const reportOwnerVfsProtocolError = (error: VfsCommitProtocolError): void => {
-    console.error('[real-vite/page] rejected divergent owner VFS terminal', error);
-  };
-  const scheduleOwnerVfsCommitReplay = (operationId: string): void => {
-    const pending = pendingOwnerVfsCommits.get(operationId);
-    if (!pending || pending.candidate !== null || pending.replayTimer !== null) return;
-    pending.replayTimer = setTimeout(() => {
-      if (pendingOwnerVfsCommits.get(operationId) !== pending) return;
-      pending.replayTimer = null;
-      replayOwnerVfsCommit(operationId);
-    }, OWNER_VFS_COMMIT_REPLAY_MS);
-  };
-  const replayOwnerVfsCommit = (operationId: string): void => {
-    const pending = pendingOwnerVfsCommits.get(operationId);
-    if (!pending || pending.candidate !== null) return;
-    if (pending.replayTimer !== null) {
-      clearTimeout(pending.replayTimer);
-      pending.replayTimer = null;
-    }
-    try {
-      worker.send({ type: 'rifty:owner-vfs-commit', request: pending.request });
-    } catch {
-      // The exact operation may already be admitted. Keep replaying until its
-      // valid terminal or certified owner exit owns the outcome.
-    }
-    if (pendingOwnerVfsCommits.get(operationId) !== pending) return;
-    scheduleOwnerVfsCommitReplay(operationId);
-  };
-  const startOwnerVfsCommitReplay = (operationId: string): void => {
-    const pending = pendingOwnerVfsCommits.get(operationId);
-    if (!pending || pending.candidate !== null) return;
-    replayOwnerVfsCommit(operationId);
-  };
-  const takeOwnerVfsCommit = (operationId: string) => {
-    const pending = pendingOwnerVfsCommits.get(operationId);
-    if (!pending) return null;
-    pendingOwnerVfsCommits.delete(operationId);
-    if (pending.replayTimer !== null) clearTimeout(pending.replayTimer);
-    stopOwnerVfsCommitReceipt(operationId);
-    return pending;
-  };
-  const stageOwnerVfsCommitCandidate = (
-    operationId: string,
-    candidate: OwnerVfsCommitTerminal,
-  ): void => {
-    const pending = pendingOwnerVfsCommits.get(operationId);
-    if (!pending) return;
-    if (pending.replayTimer !== null) {
-      clearTimeout(pending.replayTimer);
-      pending.replayTimer = null;
-    }
-    pending.candidate = candidate;
-    receiveOwnerVfsCommitTerminal(candidate);
-  };
-  const protocolAppliedTerminal = (
-    operationId: string,
-    applied: HostCommitAck,
-    error: VfsCommitProtocolError,
-  ): OwnerVfsAppliedCommitTerminal => ({
-    type: 'rifty:owner-vfs-commit-ack',
-    operationId,
-    ok: false,
-    error: { kind: 'error', name: error.name, message: error.message },
-    applied,
-  });
   const failReady = (err: Error): void => {
     if (readySettled) return;
     readySettled = true;
     rejectReady(err);
   };
+  const ownerVfsClient = createOwnerVfsClient({
+    send: (frame) => worker.send(frame),
+    currentOwnerEpoch: () => currentOwnerEpoch,
+    isAlive: () => !exited,
+    reportProtocolError: (error) => {
+      console.error('[real-vite/page] rejected divergent owner VFS terminal', error);
+    },
+  });
   const client = createPtyClient({
     send: (frame) => {
       if (!worker.send({ type: PTY_IPC_TYPE, frame })) {
@@ -670,128 +457,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       settleReady();
       return;
     }
-    const terminal = validateOwnerVfsCommitTerminal(message);
-    if (terminal.kind === 'malformed') {
-      if (terminal.operationId === null) return;
-      const pending = pendingOwnerVfsCommits.get(terminal.operationId);
-      if (!pending) return;
-      if (terminal.applied) {
-        const correlationError = validateHostCommitAckForRequest(
-          terminal.applied,
-          pending.request,
-          pending.ownerEpoch,
-        );
-        if (correlationError) {
-          reportOwnerVfsProtocolError(correlationError);
-          startOwnerVfsCommitReplay(terminal.operationId);
-          return;
-        }
-        stageOwnerVfsCommitCandidate(
-          terminal.operationId,
-          protocolAppliedTerminal(terminal.operationId, terminal.applied, terminal.error),
-        );
-        return;
-      }
-      reportOwnerVfsProtocolError(terminal.error);
-      startOwnerVfsCommitReplay(terminal.operationId);
-      return;
-    }
-    if (terminal.kind === 'valid') {
-      const pending = pendingOwnerVfsCommits.get(terminal.message.operationId);
-      if (!pending) return;
-      const correlationError = validateOwnerVfsCommitTerminalForRequest(
-        terminal.message,
-        pending.request,
-        pending.ownerEpoch,
-      );
-      if (correlationError) {
-        if (
-          !terminal.message.ok &&
-          terminal.message.applied &&
-          validateHostCommitAckForRequest(
-            terminal.message.applied,
-            pending.request,
-            pending.ownerEpoch,
-          ) === null
-        ) {
-          stageOwnerVfsCommitCandidate(
-            terminal.message.operationId,
-            protocolAppliedTerminal(
-              terminal.message.operationId,
-              terminal.message.applied,
-              correlationError,
-            ),
-          );
-          return;
-        }
-        reportOwnerVfsProtocolError(correlationError);
-        startOwnerVfsCommitReplay(terminal.message.operationId);
-        return;
-      }
-      if (terminal.message.ok) {
-        stageOwnerVfsCommitCandidate(terminal.message.operationId, terminal.message);
-        return;
-      }
-      if (terminal.message.applied) {
-        stageOwnerVfsCommitCandidate(
-          terminal.message.operationId,
-          terminal.message as OwnerVfsAppliedCommitTerminal,
-        );
-        return;
-      }
-      stageOwnerVfsCommitCandidate(terminal.message.operationId, terminal.message);
-      return;
-    }
-    if (isOwnerVfsCommitReleasedMessage(message)) {
-      const operationId = message.terminal.operationId;
-      const pending = pendingOwnerVfsCommits.get(operationId);
-      const receipt = pendingOwnerVfsReceipts.get(operationId);
-      if (!pending?.candidate || !receipt) return;
-      if (
-        !equalOwnerVfsCommitTerminals(pending.candidate, message.terminal) ||
-        !equalOwnerVfsCommitTerminals(receipt.terminal, message.terminal)
-      ) {
-        return;
-      }
-      const correlationError = validateOwnerVfsCommitTerminalForRequest(
-        message.terminal,
-        pending.request,
-        pending.ownerEpoch,
-      );
-      if (correlationError) {
-        reportOwnerVfsProtocolError(correlationError);
-        return;
-      }
-      const settled = takeOwnerVfsCommit(operationId);
-      if (!settled) return;
-      startOwnerVfsCommitCleanup(message.terminal);
-      if (message.terminal.ok) settled.resolve(message.terminal.ack);
-      else settled.reject(decodeOwnerVfsCommitFailure(message.terminal));
-      return;
-    }
-    if (isOwnerVfsCommitCleanedMessage(message)) {
-      const pending = pendingOwnerVfsCleanups.get(message.terminal.operationId);
-      if (!pending || !equalOwnerVfsCommitTerminals(pending.terminal, message.terminal)) {
-        return;
-      }
-      stopOwnerVfsCommitCleanup(message.terminal.operationId);
-      return;
-    }
-    if (isOwnerVfsDurabilityAckMessage(message)) {
-      const pending = pendingOwnerVfsDurability.get(message.barrierId);
-      if (!pending) return;
-      pendingOwnerVfsDurability.delete(message.barrierId);
-      clearTimeout(pending.timer);
-      if (message.ok) pending.resolve(message.receipt);
-      else {
-        try {
-          pending.reject(decodeOwnerVfsError(message.error));
-        } catch (error) {
-          pending.reject(error instanceof Error ? error : new Error(String(error)));
-        }
-      }
-      return;
-    }
+    if (ownerVfsClient.accept(message)) return;
     if (isVfsWriteAckMessage(message)) {
       const pending = pendingVfsWrites.get(message.opId);
       if (!pending) return;
@@ -846,7 +512,6 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     )
     .catch(() => {});
 
-  let exited = false;
   let resolveClosed: (code: number | null) => void = () => {};
   const closed = new Promise<number | null>((resolve) => {
     resolveClosed = resolve;
@@ -856,6 +521,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     const exitCode = typeof code === 'number' ? code : null;
     failReady(new Error(`workspace owner exited before ready (code ${exitCode ?? 'null'})`));
     client.disconnect(); // resolve in-flight runs nonzero — never hang
+    ownerVfsClient.disconnect();
     for (const [opId, pending] of pendingVfsWrites) {
       pendingVfsWrites.delete(opId);
       pending.reject(new Error(`workspace owner exited before VFS write ack (${opId})`));
@@ -864,26 +530,6 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       pendingVfsFlushes.delete(opId);
       clearTimeout(pending.timer);
       pending.reject(new Error(`workspace owner exited before VFS flush ack (${opId})`));
-    }
-    for (const [operationId, pending] of pendingOwnerVfsCommits) {
-      pendingOwnerVfsCommits.delete(operationId);
-      if (pending.replayTimer !== null) clearTimeout(pending.replayTimer);
-      pending.reject(
-        new Error(`workspace owner exited before conditional VFS commit ack (${operationId})`),
-      );
-    }
-    for (const [operationId, pending] of pendingOwnerVfsReceipts) {
-      pendingOwnerVfsReceipts.delete(operationId);
-      if (pending.timer !== null) clearTimeout(pending.timer);
-    }
-    for (const [operationId, pending] of pendingOwnerVfsCleanups) {
-      pendingOwnerVfsCleanups.delete(operationId);
-      if (pending.timer !== null) clearTimeout(pending.timer);
-    }
-    for (const [barrierId, pending] of pendingOwnerVfsDurability) {
-      pendingOwnerVfsDurability.delete(barrierId);
-      clearTimeout(pending.timer);
-      pending.reject(new Error(`workspace owner exited before VFS durability ack (${barrierId})`));
     }
     // Owner died → the co-resident dev server is gone. Synthesize a stopped
     // frame to the page so its LIVE pill leaves 'running' (Bug #4: the exit
@@ -960,91 +606,6 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       }
     });
   };
-  const applyHostCommit = (request: HostCommitRequest): Promise<HostCommitAck> => {
-    if (exited) {
-      return Promise.reject(
-        new Error('workspace owner has exited — conditional VFS commit was not applied.'),
-      );
-    }
-    const ownerEpoch = currentOwnerEpoch;
-    if (ownerEpoch === null) {
-      return Promise.reject(new Error('workspace owner is not ready for conditional VFS commits'));
-    }
-    if (!isOwnerVfsCommitIpcMessage({ type: 'rifty:owner-vfs-commit', request })) {
-      return Promise.reject(
-        new VfsCommitProtocolError(
-          `VFS commit ${String(request.operationId)} has a malformed request frame`,
-        ),
-      );
-    }
-    const ownedRequest = ownHostCommitRequest(request);
-    const prior = pendingOwnerVfsCommits.get(request.operationId);
-    if (prior) {
-      return equalHostCommitRequests(prior.request, ownedRequest)
-        ? prior.promise
-        : Promise.reject(new OperationIdReuseError(request.operationId));
-    }
-    let resolveCommit: (ack: HostCommitAck) => void = () => {};
-    let rejectCommit: (error: Error) => void = () => {};
-    const promise = new Promise<HostCommitAck>((resolve, reject) => {
-      resolveCommit = resolve;
-      rejectCommit = reject;
-    });
-    pendingOwnerVfsCommits.set(request.operationId, {
-      request: ownedRequest,
-      ownerEpoch,
-      promise,
-      resolve: resolveCommit,
-      reject: rejectCommit,
-      replayTimer: null,
-      candidate: null,
-    });
-    let sent = false;
-    try {
-      sent = worker.send({ type: 'rifty:owner-vfs-commit', request: ownedRequest });
-    } catch {
-      // Handled below with the same definite-not-admitted outcome as `false`.
-    }
-    if (!sent) {
-      takeOwnerVfsCommit(request.operationId);
-      rejectCommit(new Error(`owner conditional VFS commit send failed (${request.operationId})`));
-      return promise;
-    }
-    scheduleOwnerVfsCommitReplay(request.operationId);
-    return promise;
-  };
-  const durabilityBarrier = (treeRevision: TreeRevision): Promise<OwnerVfsDurabilityReceipt> => {
-    if (exited) {
-      return Promise.reject(
-        new Error('workspace owner has exited — VFS durability cannot be proven.'),
-      );
-    }
-    const ownerEpoch = currentOwnerEpoch;
-    if (ownerEpoch === null) {
-      return Promise.reject(new Error('workspace owner is not ready for VFS durability'));
-    }
-    const barrierId =
-      globalThis.crypto?.randomUUID?.() ?? `vfs-barrier-${Math.random().toString(36).slice(2, 10)}`;
-    return new Promise<OwnerVfsDurabilityReceipt>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pendingOwnerVfsDurability.delete(barrierId);
-        reject(new Error(`owner VFS durability ack timed out (${barrierId})`));
-      }, OWNER_VFS_DURABILITY_ACK_TIMEOUT_MS);
-      pendingOwnerVfsDurability.set(barrierId, { resolve, reject, timer });
-      if (
-        !worker.send({
-          type: 'rifty:owner-vfs-durability',
-          barrierId,
-          ownerEpoch,
-          treeRevision,
-        })
-      ) {
-        pendingOwnerVfsDurability.delete(barrierId);
-        clearTimeout(timer);
-        reject(new Error(`owner VFS durability send failed (${barrierId})`));
-      }
-    });
-  };
   const readFileBytes = (path: string): Promise<Uint8Array> => {
     if (exited) {
       return Promise.reject(
@@ -1099,8 +660,8 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     writeFrame,
     writeFrameAcked,
     flushDurable,
-    applyHostCommit,
-    durabilityBarrier,
+    applyHostCommit: ownerVfsClient.applyHostCommit,
+    durabilityBarrier: ownerVfsClient.durabilityBarrier,
     exportArchive: () => archiveBridge.export(),
     importArchive: (archiveJson) => archiveBridge.import(archiveJson),
     readFileBytes,

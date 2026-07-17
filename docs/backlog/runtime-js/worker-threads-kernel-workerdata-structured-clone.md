@@ -1,9 +1,9 @@
 ---
 area: runtime-js
 status: draft
-title: worker_threads kernel path — full structuredClone workerData (JSON-only today)
+title: worker_threads kernel path — full structuredClone workerData (JSON-only typed bootstrap today)
 created: 2026-06-21
-why: the kernel-backed Worker ships workerData as JSON (RIFTY_WORKER_DATA_JSON env), so structuredClone-valid values Node accepts (Date, Map, Set, TypedArray, ArrayBuffer, BigInt, -0, NaN, Infinity) loud-throw NotImplementedError instead of round-tripping
+why: the kernel-backed Worker ships workerData as JSON in typed entry bootstrap launch.workerDataJson, so structuredClone-valid values Node accepts (Date, Map, Set, TypedArray, ArrayBuffer, BigInt, -0, NaN, Infinity) loud-throw NotImplementedError instead of round-tripping
 user_story: As a dev passing `workerData: { when: new Date(), seen: new Map() }` to a kernel-backed `worker_threads.Worker`, I want it inside the worker like Node (structuredClone) — but today the kernel path encodes workerData as JSON, so anything JSON can't faithfully carry is loud-rejected with NotImplementedError('worker_threads.workerData.structuredClone').
 sources: [packages/runtime-js/src/builtins/worker_threads.ts]
 code: [packages/runtime-js/src/builtins/worker_threads.ts]
@@ -11,14 +11,17 @@ code: [packages/runtime-js/src/builtins/worker_threads.ts]
 
 ## Context
 
-The kernel path serializes `workerData` with `JSON.stringify` into the
-`RIFTY_WORKER_DATA_JSON` spawn-env key and `JSON.parse`s it in the child
-(`encodeWorkerData`/`decodeWorkerData`). `assertJsonCloneSafeWorkerData` walks the
-value FIRST and loud-throws `NotImplementedError('worker_threads.workerData.structuredClone')`
-for anything JSON can't carry faithfully — non-plain objects (Date/Map/Set/RegExp/
-class instances), TypedArray/ArrayBuffer, BigInt, functions, `undefined` holes,
-cycles, and the finite-number exclusions `NaN`/`Infinity`/`-0` (the latter three
-because `JSON.stringify` would silently reshape them — `-0`→`0`, `NaN`/`Infinity`→
+The kernel path serializes `workerData` with `JSON.stringify` into the typed,
+entry-scoped Node bootstrap field `launch.workerDataJson` and `JSON.parse`s it in
+the child (`encodeWorkerData`/`decodeWorkerData`). It never uses `process.env`:
+Node's exact inherited/replacement guest env remains guest-owned and carries no
+host bootstrap or launch control. `assertJsonCloneSafeWorkerData` walks the value
+FIRST and loud-throws
+`NotImplementedError('worker_threads.workerData.structuredClone')` for anything
+JSON can't carry faithfully — non-plain objects (Date/Map/Set/RegExp/class
+instances), TypedArray/ArrayBuffer, BigInt, functions, `undefined` holes, cycles,
+and the finite-number exclusions `NaN`/`Infinity`/`-0` (the latter three because
+`JSON.stringify` would silently reshape them — `-0`→`0`, `NaN`/`Infinity`→
 `null`). Node's `workerData` uses structuredClone, which accepts all of these.
 
 So the gap is an HONEST, loud divergence (NotImplementedError, never silent — the
@@ -28,12 +31,13 @@ passes `workerData` by reference in-realm), so this is kernel-path-only.
 
 ## Options or Next
 
-Carry `workerData` over the kernel channel with a structured-clone-faithful codec
-instead of JSON — either a real `structuredClone` over the fork-IPC frame (not the
-spawn-env string, which is JSON-shaped by construction) or a typed
-serialize/deserialize covering the structuredClone-supported set. Decide the
-boundary deliberately (match structuredClone, or a documented subset with the rest
-still loud-throwing). Failing test first (COI/SAB kernel path): `workerData` with a
+Carry `workerData` over the typed entry-bootstrap/kernel boundary with a
+structured-clone-faithful representation instead of the JSON string field —
+either a structured-cloneable bootstrap value or a typed serialize/deserialize
+covering the structuredClone-supported set. Keep Node guest env exact; never
+reintroduce workerData as an env control key. Decide the boundary deliberately
+(match structuredClone, or a documented subset with the rest still loud-throwing).
+Failing test first (COI/SAB kernel path): `workerData` with a
 `Date`/`Map`/`TypedArray` round-trips equal inside the worker.
 
 Until then the loud throw stays (honest gap, not a silent reshape), marked
@@ -43,5 +47,6 @@ guard.
 ## Reversibility
 
 REVERSIBLE — widening the workerData codec is additive (more inputs accepted, none
-break); the env-string vs IPC-frame transport choice is internal. No public
-worker_threads API change.
+break); the JSON bootstrap field vs structured bootstrap representation is
+internal. Node guest-env fidelity remains unchanged. No public worker_threads API
+change.

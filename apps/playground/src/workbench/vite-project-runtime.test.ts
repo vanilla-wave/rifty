@@ -6,6 +6,7 @@ import {
   type PreviewReadiness,
   createPreviewReadiness,
 } from './preview-readiness.ts';
+import { createUnusedProjectContent } from './project-content.test-fixture.ts';
 import { createProjectSession } from './project-session.ts';
 import { type ProjectTerminalExecOptions, createProjectTerminal } from './project-terminal.ts';
 import { createViteProjectRuntime } from './vite-project-runtime.ts';
@@ -54,6 +55,8 @@ class PtyBoundary {
   readonly closeCalls: string[] = [];
   alive = true;
 
+  constructor(private readonly cwd = '/') {}
+
   isAlive(): boolean {
     return this.alive;
   }
@@ -62,6 +65,10 @@ class PtyBoundary {
     const gate = deferred<void>();
     this.openGates.set(sid, gate);
     return gate.promise;
+  }
+
+  snapshot(): { readonly cwd: string; readonly env: Record<string, string> } {
+    return { cwd: this.cwd, env: {} };
   }
 
   resolveOpen(sid: string): void {
@@ -177,14 +184,17 @@ function advertisement(overrides: Partial<PreviewAdvertisement> = {}): PreviewAd
     ptyRid: 'run-1',
     port: 5173,
     url: '/preview/5173/',
+    label: 'node :5173',
     source: 'node',
     sid: 'bin-vite-1',
     ...overrides,
   };
 }
 
-function createHarness(options: { readonly readinessCloseGate?: Deferred<void> } = {}) {
-  const pty = new PtyBoundary();
+function createHarness(
+  options: { readonly readinessCloseGate?: Deferred<void>; readonly cwd?: string } = {},
+) {
+  const pty = new PtyBoundary(options.cwd);
   const previews = new PreviewBoundary();
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
   const runtime = createViteProjectRuntime({
@@ -205,6 +215,7 @@ function createHarness(options: { readonly readinessCloseGate?: Deferred<void> }
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
+    content: createUnusedProjectContent('vite-runtime-test'),
     runtime,
     terminal,
     createTerminal: () =>
@@ -229,6 +240,17 @@ async function proveExactPreview(h: ReturnType<typeof createHarness>) {
 }
 
 describe('Vite project runtime Contract+RED', () => {
+  it('passes the project root explicitly when restored terminal cwd is nested', async () => {
+    const h = createHarness({ cwd: '/src/nested' });
+    h.session.run();
+
+    h.pty.resolveOpen(TERMINAL_SID);
+    await settleMicrotasks();
+
+    expect(h.pty.execCalls[0]?.line).toBe('vite ../..');
+    expect(h.terminal.snapshot().cwd).toBe('/src/nested');
+  });
+
   it('claims synchronously, runs exactly vite, and waits for owner admission before preview', async () => {
     const h = createHarness();
     const run = h.session.run();
@@ -250,7 +272,11 @@ describe('Vite project runtime Contract+RED', () => {
     await proveExactPreview(h);
     await expect(run.ready).resolves.toMatchObject({ port: 5173, url: '/preview/5173/' });
     h.pty.exit(0, { code: 0, signal: null });
-    await run.close();
+    const closing = run.close();
+    await settleMicrotasks();
+    expect(h.previews.swProofs).toHaveLength(2);
+    h.previews.swProofs[1]?.resolve();
+    await closing;
     await h.session.close();
   });
 
@@ -281,13 +307,16 @@ describe('Vite project runtime Contract+RED', () => {
     await settleMicrotasks();
     h.previews.httpProofs[0]?.resolve({ ok: true, status: 200 });
     await expect(run.ready).resolves.toEqual({
-      ownerToken: OWNER_TOKEN,
       port: 5173,
       url: '/preview/5173/',
     });
 
     h.pty.exit(0, { code: 0, signal: null });
-    await run.close();
+    const closing = run.close();
+    await settleMicrotasks();
+    expect(h.previews.swProofs).toHaveLength(2);
+    h.previews.swProofs[1]?.resolve();
+    await closing;
     await h.session.close();
   });
 
@@ -302,7 +331,11 @@ describe('Vite project runtime Contract+RED', () => {
     h.previews.httpProofs[0]?.resolve({ ok: true, status: 200 });
     await first.ready;
     h.pty.exit(0, { code: 0, signal: null });
-    await first.close();
+    const firstClosing = first.close();
+    await settleMicrotasks();
+    expect(h.previews.swProofs).toHaveLength(2);
+    h.previews.swProofs[1]?.resolve();
+    await firstClosing;
 
     const second = h.session.run();
     await settleMicrotasks();
@@ -315,7 +348,7 @@ describe('Vite project runtime Contract+RED', () => {
     h.previews.publish([lateA]);
     await settleMicrotasks();
     expect(h.previews.mounted).toEqual([exactA]);
-    expect(h.previews.swProofs).toHaveLength(1);
+    expect(h.previews.swProofs).toHaveLength(2);
     expect(
       await settledOr(
         second.ready.then(() => 'ready'),
@@ -326,17 +359,20 @@ describe('Vite project runtime Contract+RED', () => {
     const exactB = advertisement({ ptyRid: 'run-b', sid: 'vite-b' });
     h.previews.publish([exactB]);
     expect(h.previews.mounted).toEqual([exactA, exactB]);
-    h.previews.swProofs[1]?.resolve();
+    h.previews.swProofs[2]?.resolve();
     await settleMicrotasks();
     h.previews.httpProofs[1]?.resolve({ ok: true, status: 200 });
     await expect(second.ready).resolves.toEqual({
-      ownerToken: OWNER_TOKEN,
       port: 5173,
       url: '/preview/5173/',
     });
 
     h.pty.exit(1, { code: 0, signal: null });
-    await second.close();
+    const secondClosing = second.close();
+    await settleMicrotasks();
+    expect(h.previews.swProofs).toHaveLength(4);
+    h.previews.swProofs[3]?.resolve();
+    await secondClosing;
     await h.session.close();
   });
 
@@ -397,11 +433,20 @@ describe('Vite project runtime Contract+RED', () => {
     expect((readinessError as ProjectRunExitedBeforeReadyError).exit).toBe(exactExit);
     await settleMicrotasks();
     expect(h.previews.teardownCalls).toBe(1);
+    expect(h.previews.swProofs).toHaveLength(2);
 
     h.previews.swProofs[0]?.resolve();
     await settleMicrotasks();
     expect(h.previews.httpProofs).toHaveLength(0);
-    await expect(run.close()).resolves.toBe(exactExit);
+    const closing = run.close();
+    expect(
+      await settledOr(
+        closing.then(() => 'closed'),
+        'pending',
+      ),
+    ).toBe('pending');
+    h.previews.swProofs[1]?.resolve();
+    await expect(closing).resolves.toBe(exactExit);
     await h.session.close();
   });
 
@@ -425,6 +470,9 @@ describe('Vite project runtime Contract+RED', () => {
 
     const exactExit = { code: null, signal: 'SIGINT' } as const;
     h.pty.exit(0, exactExit, 130);
+    await settleMicrotasks();
+    expect(h.previews.swProofs).toHaveLength(2);
+    h.previews.swProofs[1]?.resolve();
     await expect(closing).resolves.toBe(exactExit);
     await settleMicrotasks();
     expect(h.previews.teardownCalls).toBe(1);
@@ -454,6 +502,9 @@ describe('Vite project runtime Contract+RED', () => {
     expect(() => h.session.run()).toThrowError(ProjectBusyError);
 
     readinessClose.resolve();
+    await settleMicrotasks();
+    expect(h.previews.swProofs).toHaveLength(2);
+    h.previews.swProofs[1]?.resolve();
     await expect(closing).resolves.toBe(exactExit);
     expect(h.previews.teardownCalls).toBe(1);
     await h.session.close();

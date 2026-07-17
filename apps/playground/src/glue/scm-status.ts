@@ -12,7 +12,8 @@ export interface ScmResourceGroups {
 }
 
 function relativePath(root: string, path: string): string {
-  return path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path.replace(/^\/+/, '');
+  const prefix = root === '/' ? '/' : `${root}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path.replace(/^\/+/, '');
 }
 
 function badgeForCode(code: string, side: 'index' | 'worktree'): ScmResourceRow['badge'] {
@@ -48,8 +49,9 @@ export function scmRowsFromStatusMap(
 ): ScmResourceGroups {
   const staged: ScmResourceRow[] = [];
   const changes: ScmResourceRow[] = [];
+  const prefix = root === '/' ? '/' : `${root}/`;
   for (const [path, code] of status) {
-    if (path !== root && !path.startsWith(`${root}/`)) continue;
+    if (path !== root && !path.startsWith(prefix)) continue;
     if (hasIndexChange(code)) staged.push(row(path, root, code, 'index'));
     if (hasWorktreeChange(code)) changes.push(row(path, root, code, 'worktree'));
   }

@@ -57,10 +57,9 @@ test.describe('Socket Lab preset — honest socket capability gate', () => {
       timeout: 15_000,
     });
     // ADR-0165 §9: the gallery lives in the launcher modal now — open the chip,
-    // pick the card. The launcher closes on pick and the boot proceeds (proven by
-    // the `npm run dev` / listening lines below).
+    // pick the card. The launcher closes on pick and the process's own listening
+    // line below proves that boot proceeds.
     await pickStarter(page, 'socket-lab');
-    await expectTerminalContains(page, 'npm run dev', 150_000);
     await expectTerminalContains(page, 'socket lab listening on port 3220', 180_000);
 
     const matrix = await pollJson<{ rows: CapabilityRow[] }>(

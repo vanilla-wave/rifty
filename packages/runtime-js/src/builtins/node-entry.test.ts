@@ -232,4 +232,45 @@ describe('runNodeEntry', () => {
     const req = createRequire('/work/main.js') as (id: string) => { answer: number };
     expect(req('./dep.js').answer).toBe(42);
   });
+
+  it('honors createRequire extension hooks that compile replacement CJS source', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/main.mjs': `
+        import { createRequire } from 'node:module';
+        const req = createRequire(import.meta.url);
+        const target = req.resolve('./vite.config.js');
+        const defaultLoader = req.extensions['.js'];
+        req.extensions['.js'] = (module, filename) => {
+          if (filename === target) {
+            module._compile(
+              "module.exports = { source: 'bundled', dep: require('./dep.js') };",
+              filename,
+            );
+          } else {
+            defaultLoader(module, filename);
+          }
+        };
+        delete req.cache[target];
+        try {
+          globalThis.__riftyRequireExtensionResult = req('./vite.config.js');
+        } finally {
+          req.extensions['.js'] = defaultLoader;
+          delete req.cache[target];
+        }
+      `,
+      '/work/vite.config.js': 'export default { source: "original" };\n',
+      '/work/dep.js': 'module.exports = "dep";\n',
+    });
+
+    Reflect.deleteProperty(globalThis, '__riftyRequireExtensionResult');
+    try {
+      await runNodeEntry({ vfs, entryPath: '/work/main.mjs', cwd: '/work' });
+      expect(
+        (globalThis as { __riftyRequireExtensionResult?: unknown }).__riftyRequireExtensionResult,
+      ).toEqual({ source: 'bundled', dep: 'dep' });
+    } finally {
+      Reflect.deleteProperty(globalThis, '__riftyRequireExtensionResult');
+    }
+  });
 });

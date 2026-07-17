@@ -3,7 +3,11 @@ import type {
   TerminalHistoryRecord,
   TerminalHistoryVfs,
 } from '@riftydev/terminal/history';
-import type { TerminalStateFs, TerminalStateVfs } from '@riftydev/terminal/state';
+import {
+  type TerminalStateFs,
+  type TerminalStateVfs,
+  saveTerminalState,
+} from '@riftydev/terminal/state';
 import { describe, expect, it } from 'vitest';
 import { createTerminalPersistence } from './terminal-persistence.ts';
 
@@ -50,6 +54,91 @@ function fakeStore(): TestStore {
 }
 
 describe('terminal persistence adapter', () => {
+  it('migrates OPFS state from legacy absolute to unambiguous project-rooted provenance', async () => {
+    const opfs = fakeStore();
+    saveTerminalState(opfs, {
+      cwd: '/workspace/projects/legacy/src',
+      env: { SOURCE: 'legacy' },
+    });
+
+    const legacy = await createTerminalPersistence('/workspace', {
+      createOpfs: async () => opfs,
+    });
+    expect(legacy.initialStateSource).toBe('legacy-absolute');
+    expect(legacy.initialState).toEqual({
+      cwd: '/workspace/projects/legacy/src',
+      env: { SOURCE: 'legacy' },
+    });
+
+    await legacy.saveState({ cwd: '/src', env: { SOURCE: 'project' } });
+    const migrated = await createTerminalPersistence('/workspace', {
+      createOpfs: async () => opfs,
+    });
+    expect(migrated.initialStateSource).toBe('project-rooted');
+    expect(migrated.initialState).toEqual({ cwd: '/src', env: { SOURCE: 'project' } });
+
+    saveTerminalState(opfs, { cwd: '/workspace/projects/other', env: { SOURCE: 'stale' } });
+    const stable = await createTerminalPersistence('/workspace', {
+      createOpfs: async () => opfs,
+    });
+    expect(stable.initialStateSource).toBe('project-rooted');
+    expect(stable.initialState).toEqual({ cwd: '/src', env: { SOURCE: 'project' } });
+  });
+
+  it('hands Workbench an exact project terminal snapshot without legacy devCommand', async () => {
+    const opfs = fakeStore();
+    saveTerminalState(
+      opfs,
+      {
+        cwd: '/src',
+        env: { SOURCE: 'project' },
+        devCommand: { line: 'pnpm dev', cwd: '/src' },
+      },
+      '/workspace/.rifty/project-terminal-state.json',
+    );
+
+    const persistence = await createTerminalPersistence('/workspace', {
+      createOpfs: async () => opfs,
+    });
+
+    expect(Reflect.ownKeys(persistence.initialState)).toEqual(['cwd', 'env']);
+    expect(persistence.initialState).toStrictEqual({
+      cwd: '/src',
+      env: { SOURCE: 'project' },
+    });
+  });
+
+  it('migrates memory state from legacy absolute to unambiguous project-rooted provenance', async () => {
+    const sync = fakeStore();
+    saveTerminalState(sync, {
+      cwd: '/workspace/projects/legacy/src',
+      env: { SOURCE: 'legacy' },
+    });
+    const deps = {
+      createOpfs: async () => {
+        throw new Error('no opfs');
+      },
+      syncFs: () => sync,
+    };
+
+    const legacy = await createTerminalPersistence('/workspace', deps);
+    expect(legacy.initialStateSource).toBe('legacy-absolute');
+    expect(legacy.initialState).toEqual({
+      cwd: '/workspace/projects/legacy/src',
+      env: { SOURCE: 'legacy' },
+    });
+
+    await legacy.saveState({ cwd: '/src', env: { SOURCE: 'project' } });
+    const migrated = await createTerminalPersistence('/workspace', deps);
+    expect(migrated.initialStateSource).toBe('project-rooted');
+    expect(migrated.initialState).toEqual({ cwd: '/src', env: { SOURCE: 'project' } });
+
+    saveTerminalState(sync, { cwd: '/workspace/projects/other', env: { SOURCE: 'stale' } });
+    const stable = await createTerminalPersistence('/workspace', deps);
+    expect(stable.initialStateSource).toBe('project-rooted');
+    expect(stable.initialState).toEqual({ cwd: '/src', env: { SOURCE: 'project' } });
+  });
+
   it('prefers the async OPFS store when it initializes', async () => {
     const opfs = fakeStore();
     const workspace = fakeStore();

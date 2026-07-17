@@ -691,7 +691,7 @@ export function makeGit(opts: MakeGitOptions): Git {
       await git.remove({ fs, dir, filepath });
     },
     async status() {
-      const matrix = await git.statusMatrix({ fs, dir });
+      const matrix = await git.statusMatrix({ fs, dir, refresh: false });
       return matrix.map(
         ([filepath, head, workdir, stage]): StatusEntry => ({
           filepath,

@@ -23,6 +23,7 @@ export interface TsDiagnosticsSyncOptions<Diagnostic, Marker> {
 
 export interface TsDiagnosticsSync {
   handleDocument(ev: EditorDocumentEvent): void;
+  reopenOpenDocuments(): Promise<void>;
   refreshOpenDiagnostics(): Promise<void>;
   dispose(): void;
 }
@@ -32,7 +33,9 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
 ): TsDiagnosticsSync {
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const openPaths = new Set<string>();
+  const liveDocuments = new Map<string, string>();
   const diagnosticVersions = new Map<string, number>();
+  let activeReopen: Promise<void> | undefined;
   let disposed = false;
 
   function bumpDiagnosticVersion(path: string): number {
@@ -72,19 +75,31 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
     }
   }
 
+  async function waitForActiveReopen(): Promise<void> {
+    while (activeReopen !== undefined) {
+      const pending = activeReopen;
+      try {
+        await pending;
+      } catch {
+        // Reopen caller owns failure; a later event still applies latest text.
+      }
+      if (activeReopen === pending) return;
+    }
+  }
+
   function handleDocument(ev: EditorDocumentEvent): void {
     if (!options.isSupportedPath(ev.path)) return;
     if (ev.kind === 'close') {
+      liveDocuments.delete(ev.path);
       bumpDiagnosticVersion(ev.path);
       clearTimer(ev.path);
-      if (openPaths.delete(ev.path)) {
-        void (async (): Promise<void> => {
-          await options.beforeRequest?.();
-          if (!disposed) await options.client.close(ev.path);
-        })().catch((err: unknown) => {
-          if (!disposed) options.warn((err as Error).message);
-        });
-      }
+      void (async (): Promise<void> => {
+        await waitForActiveReopen();
+        await options.beforeRequest?.();
+        if (!disposed && openPaths.delete(ev.path)) await options.client.close(ev.path);
+      })().catch((err: unknown) => {
+        if (!disposed) options.warn((err as Error).message);
+      });
       options.setMarkers(ev.path, []);
       options.setDiagnostics((prev) => {
         if (!prev.has(ev.path)) return prev;
@@ -95,6 +110,7 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
       return;
     }
 
+    liveDocuments.set(ev.path, ev.text);
     const version = bumpDiagnosticVersion(ev.path);
     clearTimer(ev.path);
     debounceTimers.set(
@@ -102,8 +118,15 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
       setTimeout(() => {
         debounceTimers.delete(ev.path);
         void (async (): Promise<void> => {
+          await waitForActiveReopen();
           await options.beforeRequest?.();
-          if (disposed || diagnosticVersions.get(ev.path) !== version) return;
+          if (
+            disposed ||
+            diagnosticVersions.get(ev.path) !== version ||
+            liveDocuments.get(ev.path) !== ev.text
+          ) {
+            return;
+          }
           if (openPaths.has(ev.path)) {
             await options.client.update(ev.path, ev.text);
           } else {
@@ -118,6 +141,52 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
     );
   }
 
+  async function reopenOpenDocuments(): Promise<void> {
+    if (disposed) return;
+    const previousReopen = activeReopen;
+    const documents = [...liveDocuments].map(([path, text]) => {
+      clearTimer(path);
+      return { path, text, version: bumpDiagnosticVersion(path) };
+    });
+    openPaths.clear();
+    for (const { path } of documents) options.setMarkers(path, []);
+    options.setDiagnostics((prev) => {
+      const next = new Map(prev);
+      for (const { path } of documents) next.delete(path);
+      return next;
+    });
+
+    const replay = (async (): Promise<void> => {
+      if (previousReopen !== undefined) {
+        try {
+          await previousReopen;
+        } catch {
+          // This reset supersedes the failed replay.
+        }
+      }
+      const results = await Promise.allSettled(
+        documents.map(async ({ path, text, version }) => {
+          await options.beforeRequest?.();
+          if (disposed) return;
+          await options.client.open(path, text);
+          if (disposed) return;
+          openPaths.add(path);
+          await refreshDiagnostics(path, version);
+        }),
+      );
+      const failure = results.find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      if (failure !== undefined) throw failure.reason;
+    })();
+    activeReopen = replay;
+    try {
+      await replay;
+    } finally {
+      if (activeReopen === replay) activeReopen = undefined;
+    }
+  }
+
   async function refreshOpenDiagnostics(): Promise<void> {
     await Promise.all(
       [...openPaths].map((path) => refreshDiagnostics(path, bumpDiagnosticVersion(path))),
@@ -129,8 +198,9 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
     for (const timer of debounceTimers.values()) clearTimeout(timer);
     debounceTimers.clear();
     openPaths.clear();
+    liveDocuments.clear();
     diagnosticVersions.clear();
   }
 
-  return { handleDocument, refreshOpenDiagnostics, dispose };
+  return { handleDocument, reopenOpenDocuments, refreshOpenDiagnostics, dispose };
 }

@@ -1,13 +1,17 @@
 import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
 import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
-import { ClosedHandleError, ProjectBusyError } from './errors.ts';
+import {
+  ClosedHandleError,
+  ProjectBusyError,
+  isRetryableProjectClosePreflightError,
+} from './errors.ts';
 import {
   type InspectedProjectDefinition,
   type ProjectDefinition,
   inspectProjectDefinition,
   projectStorageSegment,
 } from './project-definition.ts';
-import type { ProjectSession } from './project-session.ts';
+import { type ProjectSession, registerProjectSessionBeforeClose } from './project-session.ts';
 import {
   type ServiceWorkerControlContainer,
   type ServiceWorkerControlTimers,
@@ -65,6 +69,28 @@ export interface Workbench {
   close(): Promise<void>;
 }
 
+export interface WorkbenchInternals {
+  readonly owner: WorkbenchOwnerHandle;
+  openProjectWithOwner<TReady>(
+    definition: ProjectDefinition<TReady>,
+    openOwner: (inspected: InspectedProjectDefinition<TReady>) => Promise<ProjectSession<TReady>>,
+  ): Promise<ProjectSession<TReady>>;
+  rawSession<TReady>(session: ProjectSession<TReady>): ProjectSession<TReady>;
+  registerBeforeClose(session: ProjectSession<unknown>, hook: () => Promise<void>): void;
+}
+
+const workbenchInternals = new WeakMap<object, WorkbenchInternals>();
+
+/** Package-private companion composition; no owner handle crosses the public Workbench. */
+export function inspectWorkbenchInternals(workbench: Workbench): WorkbenchInternals {
+  const internals =
+    typeof workbench === 'object' && workbench !== null
+      ? workbenchInternals.get(workbench)
+      : undefined;
+  if (internals === undefined) throw new TypeError('Invalid or forged Workbench');
+  return internals;
+}
+
 export type NormalizedWorkbenchOwnerInput = WorkbenchOwnerStartInput;
 
 interface CapabilitySnapshot {
@@ -100,6 +126,11 @@ export interface OpenWorkbenchDependencies {
   readonly locks: LockPort;
   readonly serviceWorker: WorkbenchServiceWorkerPort;
   readonly owner: WorkbenchOwnerPort;
+  readonly openOwnerProject?: <TReady>(input: {
+    readonly owner: WorkbenchOwnerHandle;
+    readonly definition: ProjectDefinition<TReady>;
+    readonly inspected: InspectedProjectDefinition<TReady>;
+  }) => Promise<ProjectSession<TReady>>;
   readonly timers: ServiceWorkerControlTimers;
 }
 
@@ -125,10 +156,28 @@ interface CloseableProject {
   close(): Promise<void>;
 }
 
+type ProjectClosePreflight =
+  | { readonly retryable: false }
+  | { readonly retryable: true; readonly error: unknown };
+
+interface ActiveProjectClose {
+  readonly promise: Promise<void>;
+  readonly preflight: Promise<ProjectClosePreflight>;
+}
+
+interface ActiveProject {
+  readonly session: CloseableProject;
+  beginClose(): ActiveProjectClose;
+}
+
+interface TrackedProject<TReady> extends ActiveProject {
+  readonly session: ProjectSession<TReady>;
+}
+
 type ProjectOperation =
   | { readonly kind: 'idle' }
   | { readonly kind: 'opening'; readonly ownerPromise: Promise<CloseableProject> }
-  | { readonly kind: 'active'; readonly project: CloseableProject }
+  | { readonly kind: 'active'; readonly project: ActiveProject }
   | { readonly kind: 'deleting'; readonly ownerPromise: Promise<void> }
   | { readonly kind: 'closing'; readonly promise: Promise<void> }
   | { readonly kind: 'closed'; readonly promise: Promise<void> };
@@ -182,7 +231,13 @@ async function initializeWorkbench(
       }),
     );
     owner = started.owner;
-    return createWorkbench(owner, started.storage, lease, releasePageClaim);
+    return createWorkbench(
+      owner,
+      started.storage,
+      lease,
+      releasePageClaim,
+      dependencies.openOwnerProject,
+    );
   } catch (error) {
     const failures: unknown[] = [error];
     if (owner !== null) {
@@ -209,8 +264,10 @@ function createWorkbench(
   storage: WorkbenchStorageSnapshot,
   lease: OriginLease,
   releasePageClaim: () => void,
+  openOwnerProject: OpenWorkbenchDependencies['openOwnerProject'],
 ): Workbench {
   const snapshot = Object.freeze({ storage }) satisfies WorkbenchSnapshot;
+  const rawSessions = new WeakMap<object, ProjectSession<unknown>>();
   let state: ProjectOperation = { kind: 'idle' };
 
   const assertIdle = (): void => {
@@ -220,65 +277,106 @@ function createWorkbench(
     if (state.kind !== 'idle') throw new ProjectBusyError('Workbench project operations');
   };
 
-  const trackSession = <TReady>(session: ProjectSession<TReady>): ProjectSession<TReady> => {
-    let closePromise: Promise<void> | null = null;
-    const tracked: ProjectSession<TReady> = Object.freeze({
+  const trackSession = <TReady>(session: ProjectSession<TReady>): TrackedProject<TReady> => {
+    let closeAttempt: ActiveProjectClose | null = null;
+
+    const beginClose = (): ActiveProjectClose => {
+      if (closeAttempt !== null) return closeAttempt;
+      const completion = deferred<void>();
+      const preflight = deferred<ProjectClosePreflight>();
+      let preflightSettled = false;
+      const settlePreflight = (result: ProjectClosePreflight): void => {
+        if (preflightSettled) return;
+        preflightSettled = true;
+        preflight.resolve(result);
+      };
+      const attempt = Object.freeze({ promise: completion.promise, preflight: preflight.promise });
+      closeAttempt = attempt;
+      void completion.promise.catch(() => {});
+      let rawClose: Promise<void>;
+      try {
+        rawClose = session.close();
+      } catch (error) {
+        rawClose = Promise.reject(error);
+      }
+      void rawClose.then(
+        () => {
+          settlePreflight(CLOSE_PREFLIGHT_PASSED);
+          if (state.kind === 'active' && state.project.session === trackedSession) {
+            state = { kind: 'idle' };
+          }
+          completion.resolve(undefined);
+        },
+        (error: unknown) => {
+          if (isRetryableProjectClosePreflightError(error)) {
+            closeAttempt = null;
+            settlePreflight({ retryable: true, error });
+          } else {
+            settlePreflight(CLOSE_PREFLIGHT_PASSED);
+          }
+          completion.reject(error);
+        },
+      );
+      // Synchronous close preflight settles before this checkpoint; later failures are terminal.
+      queueMicrotask(() => settlePreflight(CLOSE_PREFLIGHT_PASSED));
+      return attempt;
+    };
+
+    const trackedSession: ProjectSession<TReady> = Object.freeze({
+      files: session.files,
+      documents: session.documents,
       run: () => session.run(),
       terminals: session.terminals,
-      close() {
-        if (closePromise !== null) return closePromise;
-        const completion = deferred<void>();
-        const promise = completion.promise;
-        closePromise = promise;
-        void promise.catch(() => {});
-        let rawClose: Promise<void>;
-        try {
-          rawClose = session.close();
-        } catch (error) {
-          rawClose = Promise.reject(error);
-        }
-        void rawClose.then(
-          () => {
-            if (state.kind === 'active' && state.project === tracked) state = { kind: 'idle' };
-            completion.resolve(undefined);
-          },
-          (error: unknown) => completion.reject(error),
-        );
-        return promise;
-      },
+      close: () => beginClose().promise,
     });
-    return tracked;
+    rawSessions.set(trackedSession, session);
+    const trackedProject = Object.freeze({ session: trackedSession, beginClose });
+    return trackedProject;
+  };
+
+  const openTrackedProject = <TReady>(
+    definition: ProjectDefinition<TReady>,
+    explicitOwnerOpen?: (
+      inspected: InspectedProjectDefinition<TReady>,
+    ) => Promise<ProjectSession<TReady>>,
+  ): Promise<ProjectSession<TReady>> => {
+    let inspected: InspectedProjectDefinition<TReady>;
+    try {
+      inspected = inspectProjectDefinition(definition);
+      assertIdle();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+
+    const ownerPromise = Promise.resolve().then(() => {
+      if (explicitOwnerOpen !== undefined) return explicitOwnerOpen(inspected);
+      return openOwnerProject === undefined
+        ? owner.openProject(inspected)
+        : openOwnerProject({ owner, definition, inspected });
+    });
+    const opening = { kind: 'opening', ownerPromise } as const;
+    state = opening;
+    const result = ownerPromise.then(
+      (session) => {
+        if (state !== opening) throw new ClosedHandleError('Workbench project open');
+        const tracked = trackSession(session);
+        state = { kind: 'active', project: tracked };
+        return tracked.session;
+      },
+      (error: unknown) => {
+        if (state === opening) state = { kind: 'idle' };
+        throw error;
+      },
+    );
+    void result.catch(() => {});
+    return result;
   };
 
   const workbench: Workbench = {
     snapshot: () => snapshot,
 
     openProject<TReady>(definition: ProjectDefinition<TReady>): Promise<ProjectSession<TReady>> {
-      let inspected: InspectedProjectDefinition<TReady>;
-      try {
-        inspected = inspectProjectDefinition(definition);
-        assertIdle();
-      } catch (error) {
-        return Promise.reject(error);
-      }
-
-      const ownerPromise = Promise.resolve().then(() => owner.openProject(inspected));
-      const opening = { kind: 'opening', ownerPromise } as const;
-      state = opening;
-      const result = ownerPromise.then(
-        (session) => {
-          if (state !== opening) throw new ClosedHandleError('Workbench project open');
-          const tracked = trackSession(session);
-          state = { kind: 'active', project: tracked };
-          return tracked;
-        },
-        (error: unknown) => {
-          if (state === opening) state = { kind: 'idle' };
-          throw error;
-        },
-      );
-      void result.catch(() => {});
-      return result;
+      return openTrackedProject(definition);
     },
 
     deleteProject(id: string): Promise<void> {
@@ -312,26 +410,75 @@ function createWorkbench(
       const promise = completion.promise;
       state = { kind: 'closing', promise };
       void promise.catch(() => {});
-      const teardown = closeWorkbench(previous, owner, lease, releasePageClaim);
-      void teardown.then(
-        () => {
-          state = { kind: 'closed', promise };
-          completion.resolve(undefined);
-        },
-        (error: unknown) => {
-          state = { kind: 'closed', promise };
-          completion.reject(error);
-        },
-      );
+
+      const finishTerminalClose = (activeClose: Promise<void> | null): void => {
+        const teardown = closeWorkbench(previous, activeClose, owner, lease, releasePageClaim);
+        void teardown.then(
+          () => {
+            state = { kind: 'closed', promise };
+            completion.resolve(undefined);
+          },
+          (error: unknown) => {
+            state = { kind: 'closed', promise };
+            completion.reject(error);
+          },
+        );
+      };
+
+      if (previous.kind !== 'active') {
+        finishTerminalClose(null);
+        return promise;
+      }
+
+      const activeClose = previous.project.beginClose();
+      void activeClose.preflight.then((preflight) => {
+        if (preflight.retryable) {
+          state = previous;
+          completion.reject(preflight.error);
+          return;
+        }
+        finishTerminalClose(activeClose.promise);
+      });
       return promise;
     },
   };
+
+  workbenchInternals.set(
+    workbench,
+    Object.freeze({
+      owner,
+      openProjectWithOwner<TReady>(
+        definition: ProjectDefinition<TReady>,
+        openOwner: (
+          inspected: InspectedProjectDefinition<TReady>,
+        ) => Promise<ProjectSession<TReady>>,
+      ): Promise<ProjectSession<TReady>> {
+        if (typeof openOwner !== 'function') {
+          return Promise.reject(new TypeError('Workbench owner opener must be a function'));
+        }
+        return openTrackedProject(definition, openOwner);
+      },
+      rawSession<TReady>(session: ProjectSession<TReady>): ProjectSession<TReady> {
+        const raw =
+          typeof session === 'object' && session !== null ? rawSessions.get(session) : undefined;
+        if (raw === undefined) throw new TypeError('Foreign or forged Workbench ProjectSession');
+        return raw as ProjectSession<TReady>;
+      },
+      registerBeforeClose(session: ProjectSession<unknown>, hook: () => Promise<void>): void {
+        const raw =
+          typeof session === 'object' && session !== null ? rawSessions.get(session) : undefined;
+        if (raw === undefined) throw new TypeError('Foreign or forged Workbench ProjectSession');
+        registerProjectSessionBeforeClose(raw, hook);
+      },
+    }),
+  );
 
   return workbench;
 }
 
 async function closeWorkbench(
   admitted: Exclude<ProjectOperation, { readonly kind: 'closing' | 'closed' }>,
+  activeClose: Promise<void> | null,
   owner: WorkbenchOwnerHandle,
   lease: OriginLease,
   releasePageClaim: () => void,
@@ -344,7 +491,8 @@ async function closeWorkbench(
       () => CLOSE_SUCCEEDED,
     );
   } else if (admitted.kind === 'active') {
-    admittedClose = attemptClose(() => admitted.project.close());
+    if (activeClose === null) throw new Error('Active project close was not admitted');
+    admittedClose = attemptClose(() => activeClose);
   } else if (admitted.kind === 'deleting') {
     admittedClose = admitted.ownerPromise.then(
       () => CLOSE_SUCCEEDED,
@@ -377,6 +525,7 @@ async function closeWorkbench(
 type CloseOutcome = { readonly ok: true } | { readonly ok: false; readonly error: unknown };
 
 const CLOSE_SUCCEEDED = Object.freeze({ ok: true }) satisfies CloseOutcome;
+const CLOSE_PREFLIGHT_PASSED = Object.freeze({ retryable: false }) satisfies ProjectClosePreflight;
 
 function attemptClose(operation: () => Promise<void>): Promise<CloseOutcome> {
   try {
@@ -455,6 +604,11 @@ function validateWorkbenchOptions(
   const serviceWorker = record(deployment.serviceWorker, 'deployment.serviceWorker');
   const wasm = record(deployment.wasm, 'deployment.wasm');
   const acquisition = record(root.packageAcquisition, 'packageAcquisition');
+  if (Reflect.ownKeys(acquisition).includes('snapshotUrl')) {
+    throw new TypeError(
+      'packageAcquisition.snapshotUrl is retired; trusted snapshots belong to Playground definitions',
+    );
+  }
   const storage = record(root.storage, 'storage');
 
   const timeoutValue = deployment.previewProbeTimeoutMs;
@@ -526,6 +680,15 @@ function validateWorkbenchOptions(
             'deployment.workers.devServer',
             urlContext,
           ),
+          ...(workers.typescript === undefined
+            ? {}
+            : {
+                typescript: isolatedWorkerUrl(
+                  workers.typescript,
+                  'deployment.workers.typescript',
+                  urlContext,
+                ),
+              }),
         }),
         wasm: Object.freeze({
           sqlite: wasmAssetUrl(wasm.sqlite, 'deployment.wasm.sqlite', urlContext),

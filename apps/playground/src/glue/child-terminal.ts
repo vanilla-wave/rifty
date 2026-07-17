@@ -1,3 +1,5 @@
+import type { NodeEntryTerminalBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
+
 interface ChildTerminalSize {
   readonly cols: number;
   readonly rows: number;
@@ -17,14 +19,15 @@ interface ChildTerminalHandle {
   resize(cols: number, rows: number): unknown;
 }
 
-export function childTerminalEnv(ctx: ChildTerminalContext) {
-  const isTTY = ctx.isTTY === true ? '1' : '0';
+/** Node-entry PTY metadata travels beside the exact entry, never in guest env. */
+export function childTerminalBootstrap(ctx: ChildTerminalContext): NodeEntryTerminalBootstrap {
+  const isTTY = ctx.isTTY === true;
   return {
-    RIFTY_STDIN_IS_TTY: '0',
-    RIFTY_STDOUT_IS_TTY: isTTY,
-    RIFTY_STDERR_IS_TTY: isTTY,
-    RIFTY_TTY_COLS: String(ctx.cols ?? 80),
-    RIFTY_TTY_ROWS: String(ctx.rows ?? 24),
+    stdinIsTTY: false,
+    stdoutIsTTY: isTTY,
+    stderrIsTTY: isTTY,
+    cols: ctx.cols ?? 80,
+    rows: ctx.rows ?? 24,
   };
 }
 

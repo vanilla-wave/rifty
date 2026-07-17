@@ -1,7 +1,13 @@
+import bakedSnapshotIdentities from '../generated/baked-snapshot-identities.json';
 /**
  * Vite 8 opt-in template. Dev is proven; build/preview remain outside compat
  * while Rolldown's WASI pthread path is upstream-blocked.
  */
+import {
+  DEFAULT_VITE8_CONFIG_JS,
+  DEFAULT_VITE8_CONFIG_PATH,
+  DEFAULT_VITE8_VERSION,
+} from '../vite-project-policy.ts';
 import type { ViteProjectSpec } from './project-spec.ts';
 
 const INITIAL_MAIN_JS = `const message =
@@ -20,24 +26,19 @@ if (import.meta.hot) {
 }
 `;
 
-const VITE8_CONFIG_JS = `export default {
-  server: { hmr: false },
-  optimizeDeps: { noDiscovery: true, include: [] },
-};
-`;
-
 export const VITE8_TEMPLATE: ViteProjectSpec = {
   id: 'vite8',
   displayName: 'Vite 8 (Rolldown experimental)',
   runtime: 'vite',
-  install: { vite: '8.0.16' },
+  install: { vite: DEFAULT_VITE8_VERSION },
   bakedNodeModulesUrl: '/snapshots/vite8-node-modules.json.gz',
+  bakedNodeModulesSnapshotId: bakedSnapshotIdentities.snapshots.vite8,
   entry: { relativePath: '/src/main.js', content: INITIAL_MAIN_JS },
   defaultPort: 5174,
   estimatedBootSeconds: 25,
   htmlTitle: 'rifty + real Vite 8 (Rolldown, worker)',
   extraFiles: {
     // Rolldown optimizer/HMR remain off in user-visible template policy.
-    '/vite.config.js': VITE8_CONFIG_JS,
+    [DEFAULT_VITE8_CONFIG_PATH]: DEFAULT_VITE8_CONFIG_JS,
   },
 };

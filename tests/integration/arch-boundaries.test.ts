@@ -97,6 +97,32 @@ describe('check:arch layer boundaries', () => {
     expect(ruleNames([root])).not.toContain('solid-only-in-playground');
   });
 
+  it('flags App extraction-boundary imports of Workbench implementation modules', () => {
+    const root = fixture({
+      'playground/src/adapters/host.ts':
+        "import '../workbench/internal/owner';\nexport const host = 1;\n",
+      'playground/src/templates/project-spec.ts':
+        "import '../workbench/project-definition';\nexport const spec = 1;\n",
+      'playground/src/workbench/internal/owner.ts': 'export const owner = 1;\n',
+      'playground/src/workbench/project-definition.ts': 'export const definition = 1;\n',
+    });
+    expect(
+      ruleNames([root]).filter(
+        (name) => name === 'playground-app-uses-sealed-workbench-entrypoints',
+      ),
+    ).toHaveLength(2);
+  });
+
+  it('allows App extraction-boundary imports through sealed Workbench entrypoints', () => {
+    const root = fixture({
+      'playground/src/adapters/host.ts':
+        "import '../workbench/public';\nimport '../workbench/playground';\nexport const host = 1;\n",
+      'playground/src/workbench/public.ts': 'export const publicApi = 1;\n',
+      'playground/src/workbench/playground.ts': 'export const companion = 1;\n',
+    });
+    expect(ruleNames([root])).not.toContain('playground-app-uses-sealed-workbench-entrypoints');
+  });
+
   it('flags an eager monaco-editor import outside the lazy editor stack', () => {
     const root = fixture({
       'playground/src/glue/eager.ts': "import 'monaco-editor';\nexport const a = 1;\n",

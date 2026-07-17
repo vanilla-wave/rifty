@@ -1290,26 +1290,6 @@ body {
   color: var(--rf-text-dim);
   white-space: nowrap;
 }
-.rf-preview__port {
-  margin-left: -8px; /* sit flush after "localhost:" despite the address gap */
-  width: 5ch;
-  font: 400 12px / 16px var(--rf-font-mono);
-  color: var(--rf-text-dim);
-  background: transparent;
-  border: none;
-  padding: 0;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-.rf-preview__port::-webkit-outer-spin-button,
-.rf-preview__port::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.rf-preview__port:focus-visible {
-  outline: 1px solid var(--rf-accent);
-  border-radius: 2px;
-}
 .rf-preview__switcher-shell {
   position: relative;
   flex: 1 1 128px;

@@ -359,3 +359,53 @@ describe('preview-registry derived dev-server lifecycle', () => {
     expect(devFrames(sent).at(-1)).toMatchObject({ status: 'running', cwd: '/projects/p1' });
   });
 });
+
+describe('preview-registry teardown', () => {
+  it('revokes both advertisements once and fences every late producer callback', () => {
+    const { send, sent } = frames();
+    const reg = createPreviewRegistry({ send });
+    const origin = ptyOrigin('term-1', 'run-1');
+    reg.setDevServer(5174, 'scope-dev', { origin });
+    reg.setPreview(4173, 'scope-preview', origin);
+    reg.addNode('node-1', [3000], 'scope-node', { origin });
+    reg.devStarting(origin);
+    sent.length = 0;
+
+    expect(reg.close()).toBeUndefined();
+    expect(sent).toEqual([
+      { type: 'pty:preview', ports: [] },
+      { type: 'pty:dev-server', status: 'stopped' },
+    ]);
+
+    reg.setDevServer(5175, 'scope-late-dev', { origin });
+    reg.clearDevServer();
+    reg.setPreview(4174, 'scope-late-preview', origin);
+    reg.clearPreview();
+    reg.addNode('node-late', [4000], 'scope-late-node', { origin });
+    reg.removeBySid('node-late');
+    reg.devStarting(origin);
+    reg.devStopped();
+    reg.devBootFailed('late failure', origin);
+    reg.publish();
+    reg.publishDev();
+    reg.close();
+
+    expect(sent).toEqual([
+      { type: 'pty:preview', ports: [] },
+      { type: 'pty:dev-server', status: 'stopped' },
+    ]);
+  });
+
+  it('publishes an explicit empty teardown snapshot when no producer registered', () => {
+    const { send, sent } = frames();
+    const reg = createPreviewRegistry({ send });
+
+    reg.close();
+    reg.close();
+
+    expect(sent).toEqual([
+      { type: 'pty:preview', ports: [] },
+      { type: 'pty:dev-server', status: 'stopped' },
+    ]);
+  });
+});

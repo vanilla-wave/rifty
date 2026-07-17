@@ -1,30 +1,25 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
-import type { CommandContext } from '@riftydev/shell';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
-import { applyViteCliActionPatch, viteCliActionPatchApplied } from './vite-cli-install-policy.ts';
+import type { BinSpawnRequest } from '../glue/bin-executor.ts';
+import {
+  applyViteCliActionPatch,
+  applyViteRootWatchPatch,
+  viteCliActionPatchApplied,
+  viteRootWatchPatchApplied,
+  viteRootWatchPatchPolicy,
+} from './vite-cli-install-policy.ts';
 import { prepareViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 export type ViteCliMode = 'dev' | 'build' | 'preview' | 'optimize' | 'info';
+const VITE_BIN_SUFFIX = '/.bin/vite';
+const VITE_CHUNKS_SUFFIX = '/dist/node/chunks';
 
 declare global {
   // Pins detached async CLI actions (Vite's bundled CAC parse() does not await them).
   // eslint-disable-next-line no-var
   var __riftyTrackCliPromise: ((promise: PromiseLike<unknown>) => void) | undefined;
-}
-
-// Env → CLI-prep decoding: the owner sets RIFTY_VITE_CLI_* on the child;
-// node-entry-bootstrap threads proc.env through these (moved here for node
-// testability — the bootstrap is a worker-only entry).
-export function viteCliModeFromEnv(value: string | undefined): ViteCliMode | null {
-  return value === 'dev' ||
-    value === 'build' ||
-    value === 'preview' ||
-    value === 'optimize' ||
-    value === 'info'
-    ? value
-    : null;
 }
 
 export interface ViteCliPreparation {
@@ -34,19 +29,22 @@ export interface ViteCliPreparation {
   readonly esbuildWasmUrl: string;
 }
 
-/** Decode one complete bootstrap-owned Vite preparation or no preparation. */
-export function viteCliPreparationFromEnv(options: {
+/** Derive one complete Vite preparation from the executed entry + real argv. */
+export function viteCliPreparationFromArgs(options: {
   readonly root: string;
-  readonly mode: string | undefined;
+  readonly args: readonly string[];
   readonly executedBinPath: string;
   readonly esbuildWasmUrl: string;
 }): ViteCliPreparation | null {
-  const mode = viteCliModeFromEnv(options.mode);
-  return mode === null
+  const binPath = normalizePath(options.executedBinPath);
+  const nodeModules = binPath.endsWith(VITE_BIN_SUFFIX)
+    ? binPath.slice(0, -VITE_BIN_SUFFIX.length)
+    : '';
+  return !nodeModules.endsWith('/node_modules')
     ? null
     : {
         root: options.root,
-        mode,
+        mode: viteCliMode(options.args),
         executedBinPath: options.executedBinPath,
         esbuildWasmUrl: options.esbuildWasmUrl,
       };
@@ -55,12 +53,57 @@ export function viteCliPreparationFromEnv(options: {
 // NOT shadow-registry shims (those apply at install time, ADR-0188): this
 // patches Vite's own CLI before package promotion. Trusted child startup only
 // validates the exact bytes below; it never repairs node_modules.
-function installCliActionPatch(vitePackageRoot: string): void {
+function installCliActionPatch(vitePackageRoot: string): boolean {
   const fs = syncMirror();
   const path = normalizePath(`${vitePackageRoot}/dist/node/cli.js`);
-  if (!fs.existsSync(path)) return;
+  if (!fs.existsSync(path)) return false;
   const source = dec.decode(fs.readFileBytesSync(path));
   const prepared = applyViteCliActionPatch(source);
+  if (prepared !== source) fs.writeFileSync(path, enc.encode(prepared));
+  return true;
+}
+
+interface ViteRootWatchPatchSite {
+  readonly path: string;
+  readonly source: string;
+}
+
+function occurrences(source: string, needle: string): number {
+  return source.split(needle).length - 1;
+}
+
+function rootWatchPatchSite(vitePackageRoot: string): ViteRootWatchPatchSite {
+  const fs = syncMirror();
+  const chunks = normalizePath(`${vitePackageRoot}${VITE_CHUNKS_SUFFIX}`);
+  if (!fs.existsSync(chunks)) {
+    throw new Error(`vite root watcher patch failed: missing chunks directory ${chunks}`);
+  }
+  const sites: ViteRootWatchPatchSite[] = [];
+  let anchors = 0;
+  for (const entry of fs.readdirSync(chunks)) {
+    if (entry.isDirectory || !entry.name.endsWith('.js')) continue;
+    const path = `${chunks}/${entry.name}`;
+    const source = dec.decode(fs.readFileBytesSync(path));
+    const count =
+      occurrences(source, viteRootWatchPatchPolicy.needle) +
+      occurrences(source, viteRootWatchPatchPolicy.replacement);
+    if (count > 0) sites.push({ path, source });
+    anchors += count;
+  }
+  if (anchors !== 1 || sites.length !== 1) {
+    throw new Error(
+      `vite root watcher patch failed: expected exactly one Chokidar DirEntry.add anchor; found ${anchors}`,
+    );
+  }
+  const site = sites[0];
+  if (!site) throw new Error('vite root watcher patch failed: missing patch site');
+  return site;
+}
+
+function installRootWatchPatch(vitePackageRoot: string): void {
+  const fs = syncMirror();
+  const { path, source } = rootWatchPatchSite(vitePackageRoot);
+  const prepared = applyViteRootWatchPatch(source);
   if (prepared === source) return;
   fs.writeFileSync(path, enc.encode(prepared));
 }
@@ -77,7 +120,13 @@ function validateCliActionPatch(vitePackageRoot: string): void {
   }
 }
 
-const VITE_BIN_SUFFIX = '/.bin/vite';
+function validateRootWatchPatch(vitePackageRoot: string): void {
+  const { path, source } = rootWatchPatchSite(vitePackageRoot);
+  if (!viteRootWatchPatchApplied(source)) {
+    throw new Error(`vite root watcher must be prepared by acquisition before promotion: ${path}`);
+  }
+}
+
 function vitePackageRoot(root: string, executedBinPath?: string): string {
   if (executedBinPath === undefined) return normalizePath(`${root}/node_modules/vite`);
   const binPath = normalizePath(executedBinPath);
@@ -96,12 +145,14 @@ export async function prepareViteCliAcquisitionFiles(
   root: string,
   executedBinPath?: string,
 ): Promise<void> {
-  installCliActionPatch(vitePackageRoot(root, executedBinPath));
+  const packageRoot = vitePackageRoot(root, executedBinPath);
+  if (installCliActionPatch(packageRoot)) installRootWatchPatch(packageRoot);
 }
 
 export async function prepareViteCli(options: ViteCliPreparation): Promise<void> {
   const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
   validateCliActionPatch(packageRoot);
+  validateRootWatchPatch(packageRoot);
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   if (options.mode === 'info') return;
   const fs = syncMirror();
@@ -237,22 +288,21 @@ export function createPreviewScope(): string {
   return globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random()}`;
 }
 
-export function withViteCliEnv(
-  binPath: string,
-  args: readonly string[],
-  ctx: CommandContext,
-): CommandContext {
-  if (binNameOf(binPath) !== 'vite') return ctx;
-  const mode = viteCliMode(args);
+export function prepareViteBinSpawnRequest(request: BinSpawnRequest): BinSpawnRequest {
+  if (binNameOf(request.shimPath) !== 'vite') return request;
+  const mode = viteCliMode(request.args);
   const previewMode = mode === 'dev' || mode === 'preview';
   return {
-    ...ctx,
+    ...request,
     env: {
-      ...ctx.env,
-      RIFTY_VITE_CLI_MODE: mode,
-      ...(previewMode
-        ? { RIFTY_PREVIEW_SCOPE: ctx.env.RIFTY_PREVIEW_SCOPE ?? createPreviewScope() }
-        : {}),
+      ...request.env,
+      // Public napi-rs selector: rifty installs WASI bindings and no native
+      // platform package. This is guest-visible library configuration, not a
+      // host launch-role/control channel (ADR-0051/0162).
+      NAPI_RS_FORCE_WASI: '1',
     },
+    ...(previewMode && request.previewScope === undefined
+      ? { previewScope: createPreviewScope() }
+      : {}),
   };
 }

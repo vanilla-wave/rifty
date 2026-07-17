@@ -131,6 +131,50 @@ async function runShell(shell: Shell, line: string): Promise<{ exitCode: number;
 }
 
 describe('npm-shell-command — happy path', () => {
+  it('runs scripts at an explicit relative --prefix without changing shell cwd', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/src', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ scripts: { dev: 'node src/server.mjs' } })}\n`,
+    );
+    const calls: Array<{ readonly name: string; readonly command: string; readonly cwd: string }> =
+      [];
+    const shell = new Shell({ cwd: '/proj/src' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name, command, ctx) => {
+          calls.push({ name, command, cwd: ctx.cwd });
+          return 0;
+        },
+      }),
+    );
+
+    const result = await runShell(shell, 'npm --prefix .. run dev');
+
+    expect(result).toMatchObject({ exitCode: 0 });
+    expect(calls).toEqual([{ name: 'dev', command: 'node src/server.mjs', cwd: '/proj' }]);
+    expect(shell.cwd).toBe('/proj/src');
+  });
+
+  it('installs at an explicit relative --prefix without changing shell cwd', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/src', { recursive: true });
+    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const shell = new Shell({ cwd: '/proj/src' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, 'npm --prefix .. install kleur@^4.1.0');
+
+    expect(result).toMatchObject({ exitCode: 0 });
+    expect(calls[0]?.cwd).toBe('/proj');
+    expect(shell.cwd).toBe('/proj/src');
+    await expect(vfs.readFileText('/proj/package.json')).resolves.toContain('"kleur": "^4.1.0"');
+  });
+
   it('runs package scripts through the injected script runner', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });

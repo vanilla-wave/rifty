@@ -241,3 +241,10 @@ not a public cold-install alias.
 - Multiple Workbenches/projects per origin, SSR, custom runtimes, raw TTY, and
   unverified bundlers remain loud unsupported gaps.
 - External npm publication remains a separate confirm-first action.
+
+## Correction 2026-07-16
+
+ADR-0282 replaces the four-worker/extraction detail: the companion host also
+supplies a dedicated TypeScript worker, and sealed semantic recovery/durability/
+terminal-restore operations replace App imports of package-private functions.
+The generic root and every other decision above stand.

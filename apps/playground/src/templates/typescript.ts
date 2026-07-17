@@ -1,3 +1,4 @@
+import bakedSnapshotIdentities from '../generated/baked-snapshot-identities.json';
 import type { ViteProjectSpec } from './project-spec.ts';
 import { DEFAULT_VITE_CONFIG_JS, VITE_TEMPLATE } from './vite.ts';
 
@@ -210,6 +211,7 @@ export const TYPESCRIPT_TEMPLATE = {
   install: VITE_TEMPLATE.install,
   devDependencies: { typescript: '5.9.3' },
   bakedNodeModulesUrl: '/snapshots/typescript-node-modules.json.gz',
+  bakedNodeModulesSnapshotId: bakedSnapshotIdentities.snapshots.typescript,
   entry: { relativePath: '/src/main.ts', content: TYPESCRIPT_ENTRY_SOURCE },
   defaultPort: 5174,
   estimatedBootSeconds: 20,

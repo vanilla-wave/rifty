@@ -18,6 +18,39 @@
  * `RIFTY_RFV_TEMPLATE`); each realm re-resolves the full spec locally.
  */
 
+import { serializePackageJson } from '@riftydev/npm-client';
+
+interface BootstrapConfigBase {
+  readonly root: string;
+  readonly entryPath: string;
+  readonly packageName: string;
+  readonly packageVersion: string;
+  readonly installDeps: Readonly<Record<string, string>>;
+  readonly packageJson: string;
+  readonly seedFiles: Readonly<Record<string, string>>;
+  readonly bakedNodeModulesUrl?: string;
+  readonly bakedNodeModulesTemplateId?: string;
+}
+
+export interface ViteBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'vite';
+  readonly port: number;
+}
+
+export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'node-server';
+  readonly port: number;
+}
+
+export interface NodeCliBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'node-cli';
+}
+
+export type BootstrapConfig =
+  | ViteBootstrapConfig
+  | NodeServerBootstrapConfig
+  | NodeCliBootstrapConfig;
+
 export interface ProjectEntry {
   /** Root-relative entry path with a leading slash (e.g. `/src/main.js`). */
   readonly relativePath: string;
@@ -44,6 +77,8 @@ interface ProjectSpecBase {
    * an instant preset is truly instant. Absent → install as usual.
    */
   readonly bakedNodeModulesUrl?: string;
+  /** SHA-256 of the exact uncompressed serialized v2 snapshot bytes. */
+  readonly bakedNodeModulesSnapshotId?: string;
   /**
    * Template id recorded inside the baked snapshot. Defaults to this spec's id;
    * set when a template deliberately shares another template's node_modules tree.
@@ -78,42 +113,6 @@ export interface NodeCliProjectSpec extends NodeProjectSpecBase {
 }
 
 export type ProjectSpec = ViteProjectSpec | NodeServerProjectSpec | NodeCliProjectSpec;
-
-interface BootstrapConfigBase {
-  readonly root: string;
-  readonly port: number;
-  readonly entryPath: string;
-  /** npm package name/version serialized into the seeded package.json. */
-  readonly packageName: string;
-  readonly packageVersion: string;
-  /** Dependencies serialized into package.json; npm-client reads them from VFS. */
-  readonly installDeps: Readonly<Record<string, string>>;
-  /** Serialized package.json written into the project root. */
-  readonly packageJson: string;
-  /** Absolute-path → contents map the worker seeds idempotently. */
-  readonly seedFiles: Readonly<Record<string, string>>;
-  /** Carried from {@link ProjectSpecBase.bakedNodeModulesUrl}. */
-  readonly bakedNodeModulesUrl?: string;
-  /** Carried from {@link ProjectSpecBase.bakedNodeModulesTemplateId}. */
-  readonly bakedNodeModulesTemplateId?: string;
-}
-
-export interface ViteBootstrapConfig extends BootstrapConfigBase {
-  readonly runtime: 'vite';
-}
-
-export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
-  readonly runtime: 'node-server';
-}
-
-export interface NodeCliBootstrapConfig extends BootstrapConfigBase {
-  readonly runtime: 'node-cli';
-}
-
-export type BootstrapConfig =
-  | ViteBootstrapConfig
-  | NodeServerBootstrapConfig
-  | NodeCliBootstrapConfig;
 
 /**
  * The `<script>` src is RELATIVE and DERIVED from the entry path, so seeded
@@ -214,19 +213,15 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
   const name = `rifty-${spec.id}-app`;
   const version = '0.0.0';
   const scripts = projectScripts(spec);
-  const json = `${JSON.stringify(
-    {
-      name,
-      version,
-      private: true,
-      type: 'module',
-      scripts,
-      dependencies: spec.install,
-      ...(spec.devDependencies ? { devDependencies: spec.devDependencies } : {}),
-    },
-    null,
-    2,
-  )}\n`;
+  const json = serializePackageJson({
+    name,
+    version,
+    private: true,
+    type: 'module',
+    scripts,
+    dependencies: spec.install,
+    ...(spec.devDependencies ? { devDependencies: spec.devDependencies } : {}),
+  });
   return { name, version, json };
 }
 
@@ -258,7 +253,6 @@ export function resolveBootstrapConfig(
   const pkg = buildProjectPackageJson(spec);
   const base = {
     root,
-    port,
     entryPath,
     packageName: pkg.name,
     packageVersion: pkg.version,
@@ -276,8 +270,15 @@ export function resolveBootstrapConfig(
       [`${root}/package.json`]: pkg.json,
     };
     addExtraFiles(seedFiles, root, spec.extraFiles);
-    if (spec.runtime === 'node-cli') return { ...base, runtime: 'node-cli', seedFiles };
-    return { ...base, runtime: 'node-server', seedFiles };
+    if (spec.runtime === 'node-cli') {
+      return { ...base, runtime: 'node-cli', seedFiles } satisfies NodeCliBootstrapConfig;
+    }
+    return {
+      ...base,
+      runtime: 'node-server',
+      port,
+      seedFiles,
+    } satisfies NodeServerBootstrapConfig;
   }
   const seedFiles: Record<string, string> = {
     ...initializedGitFiles(root),
@@ -289,6 +290,7 @@ export function resolveBootstrapConfig(
   return {
     ...base,
     runtime: 'vite',
+    port,
     seedFiles,
-  };
+  } satisfies ViteBootstrapConfig;
 }

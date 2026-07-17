@@ -7,7 +7,7 @@ import type {
   OwnerVfsRevisionFrame,
   TreeRevision,
 } from './owner-vfs-protocol.ts';
-import { VfsCommitProtocolError } from './owner-vfs-protocol.ts';
+import { VfsCommitAppliedError, VfsCommitProtocolError } from './owner-vfs-protocol.ts';
 
 export type VfsCommitStage = 'reflection' | 'durability';
 
@@ -69,9 +69,17 @@ export interface VfsCommitReceipt extends HostCommitAck {
   readonly durability: OwnerVfsDurabilityReceipt['durability'];
 }
 
+export interface VfsCommitObservation {
+  /** Runs once immediately after a correlated ACK proves the mutation applied. */
+  readonly onApplied?: (revision: OwnerVfsRevisionFrame) => void;
+}
+
 export interface VfsCommitCoordinator {
   /** Claims an operation id and invokes owner transport before returning. */
-  commit(operation: HostCommitOperation): Promise<VfsCommitReceipt>;
+  commit(
+    operation: HostCommitOperation,
+    observation?: VfsCommitObservation,
+  ): Promise<VfsCommitReceipt>;
   /** Rejects all pending and future commits. Idempotent. */
   close(error?: Error): void;
 }
@@ -108,6 +116,10 @@ function toError(error: unknown): Error {
 
 function cleanupError(primary: Error, secondary: Error | null): Error {
   return secondary === null ? primary : new AggregateError([primary, secondary], primary.message);
+}
+
+function hasAppliedEvidence(error: Error): boolean {
+  return error instanceof VfsCommitAppliedError || error instanceof VfsCommitTimeoutError;
 }
 
 function assertAck(ack: HostCommitAck, operationId: string, ownerEpoch: OwnerEpoch): HostCommitAck {
@@ -189,7 +201,7 @@ export function createVfsCommitCoordinator(
   };
 
   const coordinator: VfsCommitCoordinator = {
-    commit(operation) {
+    commit(operation, observation = {}) {
       if (closedError !== null) return Promise.reject(closedError);
 
       const operationId = `host-vfs:${coordinatorId}:${++nextOperationId}`;
@@ -228,10 +240,15 @@ export function createVfsCommitCoordinator(
           }
         };
 
+        const appliedError = (error: Error): Error => {
+          if (ack === null || hasAppliedEvidence(error)) return error;
+          return new VfsCommitAppliedError(ack, error);
+        };
+
         const fail = (error: Error): void => {
           if (settled) return;
           settled = true;
-          reject(cleanupError(error, cleanup()));
+          reject(appliedError(cleanupError(error, cleanup())));
         };
 
         const finish = (receipt: OwnerVfsDurabilityReceipt): void => {
@@ -251,7 +268,7 @@ export function createVfsCommitCoordinator(
           settled = true;
           const releaseError = cleanup();
           if (releaseError !== null) {
-            reject(releaseError);
+            reject(appliedError(releaseError));
             return;
           }
           resolve({ ...ack, durability: checked.durability });
@@ -363,6 +380,9 @@ export function createVfsCommitCoordinator(
             if (settled) return;
             try {
               ack = assertAck(candidate, operationId, owner.ownerEpoch);
+              observation.onApplied?.(
+                Object.freeze({ ownerEpoch: ack.ownerEpoch, treeRevision: ack.treeRevision }),
+              );
             } catch (error) {
               fail(toError(error));
               return;

@@ -3,7 +3,11 @@ import type { RegistryClient } from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand, ShellCommandResult } from '@riftydev/shell';
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import { normalizePath } from '@riftydev/vfs';
-import { type DepSnapshotV2, prepareDepSnapshotRestore } from '../glue/dep-snapshot.ts';
+import {
+  type DepSnapshotV2,
+  fetchVerifiedDepSnapshot,
+  prepareDepSnapshotRestore,
+} from '../glue/dep-snapshot.ts';
 import {
   learnedPinForPackageJsonSync,
   readLearnedPin,
@@ -37,10 +41,15 @@ import {
 } from '../glue/project-deps.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
+import type { ProjectPackageConfig } from '../workbench/internal/project-package-config.ts';
+import type {
+  ProjectAcquisitionPlan,
+  ProjectFirstMaterialization,
+} from '../workbench/project-materialization.ts';
 import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
+  type AcquisitionProvenance,
   type PackageAcquisitionProject,
   createPackageAcquisitionAuthority,
 } from './package-acquisition-authority.ts';
@@ -48,16 +57,29 @@ import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 
 const enc = new TextEncoder();
 
+export type OwnerPackageMutationKind = 'dependency' | 'package-manifest' | 'package-lock';
+
+export interface OwnerNpmCommandOptions {
+  readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
+  readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
+}
+
 export interface OwnerPackageConfig {
-  readonly cfg: BootstrapConfig;
+  readonly cfg: ProjectPackageConfig;
   readonly templateId: string;
   readonly slug: string;
   readonly fromScratch: boolean;
+  /** Explicit baseline files restored after package acquisition replaces node_modules. */
+  readonly templateNodeModulesFiles?: Readonly<Record<string, string | Uint8Array>>;
+}
+
+export interface FirstMaterializationOwnerPackageConfig extends OwnerPackageConfig {
+  readonly firstMaterialization: ProjectFirstMaterialization;
 }
 
 export interface OwnerPackageStateOptions {
-  readonly initial: OwnerPackageConfig;
-  readonly primeInitialPrefetch: boolean;
+  readonly initial?: OwnerPackageConfig;
+  readonly primeInitialPrefetch?: boolean;
   readonly vfs: Vfs;
   readonly fsSync: OwnerVfsAuthority;
   readonly installStampClaims: InstallStampClaimIo;
@@ -74,6 +96,13 @@ export interface OwnerPackageStateOptions {
 
 export interface OwnerPackageState {
   readonly mutations: PackageMutationExecutor;
+  /** Register, activate, and install/reuse one exact project through one FIFO admission. */
+  activateAndEnsure(
+    config: FirstMaterializationOwnerPackageConfig,
+  ): Promise<ProjectAcquisitionPlan>;
+  activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
+  /** Settle package commands and durability work admitted before this call. */
+  quiesce(): Promise<void>;
   /** Registers the terminal-facing config and starts its optional prefetch. */
   configure(config: OwnerPackageConfig): void;
   /** Restore an instant config without ever turning boot into an implicit install. */
@@ -85,6 +114,7 @@ export interface OwnerPackageState {
   /** The npm command already bound to the same acquisition/stamp authority. */
   createNpmCommand(
     runScript: (name: string, command: string, ctx: CommandContext) => Promise<ShellCommandResult>,
+    options?: OwnerNpmCommandOptions,
   ): ShellCommand;
 }
 
@@ -101,16 +131,46 @@ function packageProject(config: OwnerPackageConfig): PackageAcquisitionProject {
   };
 }
 
+function hasFirstMaterialization(
+  config: OwnerPackageConfig,
+): config is FirstMaterializationOwnerPackageConfig {
+  return Object.hasOwn(config, 'firstMaterialization');
+}
+
+function isBareInstallCommand(args: readonly string[]): boolean {
+  const subcommand = args[0];
+  if (subcommand !== 'install' && subcommand !== 'i' && subcommand !== 'add') return false;
+  const parsed = parseNpmInstallRequest(args.slice(1));
+  return parsed.status === 'ready' && parsed.request.packageSpecs.length === 0;
+}
+
 function decodeChunk(chunk: string | Uint8Array): string {
   return typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
 }
 
+function optionalFile(authority: OwnerVfsAuthority, path: string): Uint8Array | null {
+  return authority.statSyncOrNull(path)?.isFile === true ? authority.readFileBytesSync(path) : null;
+}
+
+function equalOptionalBytes(left: Uint8Array | null, right: Uint8Array | null): boolean {
+  if (left === null || right === null) return left === right;
+  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
+}
+
 export function createOwnerPackageState(options: OwnerPackageStateOptions): OwnerPackageState {
   const configs = new Map<string, OwnerPackageConfig>();
+
+  const templateNodeModulesFiles = (
+    config: OwnerPackageConfig,
+  ): Readonly<Record<string, string | Uint8Array>> =>
+    config.templateNodeModulesFiles ?? config.cfg.seedFiles;
   let configured = options.initial;
-  let activeProject = packageProject(options.initial);
+  let activeProject = options.initial ? packageProject(options.initial) : null;
   let activeTemplateId: string | null = null;
-  configs.set(configKey(activeProject.root, activeProject.slug), options.initial);
+  const firstMaterializationPhases = new Map<string, 'preparing' | 'deferred' | 'consuming'>();
+  if (options.initial) {
+    configs.set(configKey(options.initial.cfg.root, options.initial.slug), options.initial);
+  }
 
   const registry = options.registry ?? createProxiedRegistryClient();
   const resolverUrl = options.resolverUrl ?? getResolverUrl;
@@ -187,7 +247,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     flush: options.flush,
     projectSlug: (root) => {
       const normalized = normalizePath(root);
-      return normalized === normalizePath(activeProject.root)
+      return activeProject && normalized === normalizePath(activeProject.root)
         ? activeProject.slug
         : `root:${normalized}`;
     },
@@ -223,6 +283,14 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         );
       }
     },
+    captureDeferredTerminalReuse: () => {
+      if (activeProject === null) return false;
+      const key = configKey(activeProject.root, activeProject.slug);
+      const phase = firstMaterializationPhases.get(key);
+      if (phase === 'preparing' || phase === 'consuming') return true;
+      if (phase === 'deferred') firstMaterializationPhases.set(key, 'consuming');
+      return false;
+    },
     adapter: {
       prepareEnsure: async (command, execution) => {
         if (!command.replaceTreeOnMiss) return;
@@ -252,7 +320,11 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             packages: payload.packages,
             apply: async () => {
               prepared.apply();
-              seedTemplateNodeModulesFiles(options.fsSync, config.cfg.root, config.cfg.seedFiles);
+              seedTemplateNodeModulesFiles(
+                options.fsSync,
+                config.cfg.root,
+                templateNodeModulesFiles(config),
+              );
               await finalizePackageInstallFiles({ root: project.root });
             },
           } as const;
@@ -288,8 +360,9 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
               },
               resolverClosureHash: () => resolverPin(config.templateId),
               resolverPrefetch: () =>
+                configured !== undefined &&
                 configKey(configured.cfg.root, configured.slug) ===
-                configKey(request.project.root, request.project.slug)
+                  configKey(request.project.root, request.project.slug)
                   ? installPrefetch
                   : undefined,
             }
@@ -309,28 +382,56 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                 stdout: sink,
                 stderr: sink,
               };
-        const installed = await executeNpmInstallOperation(
-          parsed.request,
-          context,
-          operationDeps,
-          execution,
-        );
-        if (installed.status !== 'noop') {
-          await finalizePackageInstallFiles({
-            root: request.project.root,
-            ...(config
-              ? {
-                  seedTemplateFiles: () =>
-                    seedTemplateNodeModulesFiles(
-                      options.fsSync,
-                      config.cfg.root,
-                      config.cfg.seedFiles,
-                    ),
-                }
-              : {}),
-          });
+        if (
+          request.type === 'terminal-install' &&
+          config !== undefined &&
+          hasFirstMaterialization(config)
+        ) {
+          const packageSpecs = request.argv.length === 0 ? '' : ` ${request.argv.join(' ')}`;
+          context.stdout.write(`$ npm install${packageSpecs}\n`);
         }
-        return installed;
+        const firstMaterializationKey =
+          config !== undefined && hasFirstMaterialization(config)
+            ? configKey(config.cfg.root, config.slug)
+            : null;
+        if (
+          firstMaterializationKey !== null &&
+          firstMaterializationPhases.get(firstMaterializationKey) === 'deferred'
+        ) {
+          firstMaterializationPhases.set(firstMaterializationKey, 'consuming');
+        }
+        try {
+          const installed = await executeNpmInstallOperation(
+            parsed.request,
+            context,
+            operationDeps,
+            execution,
+          );
+          if (installed.status !== 'noop') {
+            await finalizePackageInstallFiles({
+              root: request.project.root,
+              ...(config
+                ? {
+                    seedTemplateFiles: () =>
+                      seedTemplateNodeModulesFiles(
+                        options.fsSync,
+                        config.cfg.root,
+                        templateNodeModulesFiles(config),
+                      ),
+                  }
+                : {}),
+            });
+          }
+          if (firstMaterializationKey !== null) {
+            firstMaterializationPhases.delete(firstMaterializationKey);
+          }
+          return installed;
+        } catch (error) {
+          if (firstMaterializationKey !== null) {
+            firstMaterializationPhases.set(firstMaterializationKey, 'deferred');
+          }
+          throw error;
+        }
       },
       reset: async (command) => clearProjectTree(options.fsSync, command.target.root),
       switchProject: async (command) => {
@@ -345,6 +446,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           );
         }
         activeProject = command.to;
+        activeTemplateId = configFor(command.to).templateId;
       },
     },
   });
@@ -353,7 +455,10 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     packages,
     fs: options.fsSync,
     assertPortablePaths: (paths) => options.fsSync.assertPortablePaths(paths),
-    activeProject: () => activeProject,
+    activeProject: () => {
+      if (!activeProject) throw new Error('package acquisition project is not active');
+      return activeProject;
+    },
   });
 
   const reassertTemplateNodeModules = async (config: OwnerPackageConfig): Promise<void> => {
@@ -361,12 +466,16 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     await mutations.guardedMutation(
       () => intents,
       async () =>
-        seedTemplateNodeModulesFiles(options.fsSync, config.cfg.root, config.cfg.seedFiles),
+        seedTemplateNodeModulesFiles(
+          options.fsSync,
+          config.cfg.root,
+          templateNodeModulesFiles(config),
+        ),
       async () => {
         intents = templateNodeModulesSeedMutationIntents(
           options.fsSync,
           config.cfg.root,
-          config.cfg.seedFiles,
+          templateNodeModulesFiles(config),
         );
         return intents.length === 0 ? { status: 'noop', value: undefined } : { status: 'ready' };
       },
@@ -402,6 +511,76 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     }
   };
 
+  function activateAndEnsure(
+    config: FirstMaterializationOwnerPackageConfig,
+  ): Promise<ProjectAcquisitionPlan>;
+  function activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
+  function activateAndEnsure(
+    config: OwnerPackageConfig,
+  ): Promise<ProjectAcquisitionPlan | AcquisitionProvenance> {
+    if (!hasFirstMaterialization(config)) {
+      return packages.dispatch({
+        type: 'activate-and-ensure',
+        register: () => configure(config),
+        from: () => activeProject,
+        to: packageProject(config),
+        packageJsonText: config.cfg.packageJson,
+        replaceTreeOnMiss: true,
+      });
+    }
+
+    const materialization = config.firstMaterialization;
+    const key = configKey(config.cfg.root, config.slug);
+    firstMaterializationPhases.set(key, 'preparing');
+    const prepared = packages.dispatch({
+      type: 'prepare-first-materialization',
+      register: () => configure(config),
+      from: () => activeProject,
+      to: packageProject(config),
+      packageJsonText: config.cfg.packageJson,
+      materialization:
+        materialization.kind === 'install'
+          ? { kind: 'install' }
+          : {
+              kind: 'snapshot',
+              source: {
+                snapshotId: materialization.snapshot.snapshotId,
+                resolve: async () => {
+                  const verified = await fetchVerifiedDepSnapshot(
+                    materialization.snapshot.assetUrl,
+                    materialization.snapshot.snapshotId,
+                  );
+                  if (verified.status === 'mismatch') {
+                    return { status: 'rejected' as const, reason: 'snapshot-id-mismatch' };
+                  }
+                  const snapshot = verified.snapshot;
+                  if (snapshot.templateId !== materialization.snapshot.templateId) {
+                    return { status: 'rejected' as const, reason: 'snapshot-template-mismatch' };
+                  }
+                  return {
+                    status: 'candidate' as const,
+                    snapshot: {
+                      snapshotId: materialization.snapshot.snapshotId,
+                      identity: snapshot.installArtifactIdentity,
+                      packageJsonText: snapshot.packageJsonText,
+                      payload: snapshot,
+                    },
+                  };
+                },
+              },
+            },
+      replaceTreeOnMiss: true,
+    });
+    void prepared.then(
+      (plan) => {
+        if (plan.kind === 'install') firstMaterializationPhases.set(key, 'deferred');
+        else firstMaterializationPhases.delete(key);
+      },
+      () => firstMaterializationPhases.delete(key),
+    );
+    return prepared;
+  }
+
   const transition = async (config: OwnerPackageConfig): Promise<void> => {
     configs.set(configKey(config.cfg.root, config.slug), config);
     const checked = config.fromScratch
@@ -413,7 +592,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       : null;
     const clean = shouldCleanForDevBootWithInstallState({
       lastTemplateId: activeTemplateId,
-      lastRoot: activeProject.root,
+      lastRoot: activeProject?.root ?? null,
       nextTemplateId: config.templateId,
       nextRoot: config.cfg.root,
       fromScratch: config.fromScratch,
@@ -428,23 +607,95 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       resetPackages: clean && !config.fromScratch,
       ...(clean && !config.fromScratch ? { packageJsonText: config.cfg.packageJson } : {}),
     });
-    activeTemplateId = config.templateId;
     if (!config.fromScratch) await restore(config);
   };
 
-  if (options.primeInitialPrefetch) primePrefetch(options.initial);
+  if (options.primeInitialPrefetch) {
+    if (!options.initial) throw new Error('initial package config required to prime prefetch');
+    primePrefetch(options.initial);
+  }
 
   return {
     mutations,
+    activateAndEnsure,
+    quiesce: () => packages.quiesce(),
     configure,
     restore,
     transition,
     reassertTemplateNodeModules,
-    createNpmCommand: (runScript) =>
-      createNpmShellCommand({
+    createNpmCommand: (runScript, commandOptions = {}) => {
+      const command = createNpmShellCommand({
         ...baseNpmDeps,
         packageAcquisitionAuthority: packages,
         runScript,
-      }),
+        ...(commandOptions.mapInvocationContext === undefined
+          ? {}
+          : { mapInvocationContext: commandOptions.mapInvocationContext }),
+      });
+      return async (args, context) => {
+        const config = configured;
+        const reflectionContext = commandOptions.mapInvocationContext?.(context) ?? context;
+        if (
+          config === undefined ||
+          normalizePath(reflectionContext.cwd) !== normalizePath(config.cfg.root) ||
+          commandOptions.recordMutation === undefined
+        ) {
+          return command(args, context);
+        }
+
+        const key = configKey(config.cfg.root, config.slug);
+        const firstDependencyArrival =
+          firstMaterializationPhases.has(key) && isBareInstallCommand(args);
+        const packageJsonPath = normalizePath(`${config.cfg.root}/package.json`);
+        const packageLockPath = normalizePath(`${config.cfg.root}/package-lock.json`);
+        const priorTreeRevision = options.fsSync.treeRevision;
+        const priorPackageJson = optionalFile(options.fsSync, packageJsonPath);
+        const priorPackageLock = optionalFile(options.fsSync, packageLockPath);
+        let result: ShellCommandResult | undefined;
+        let commandFailure: unknown;
+        try {
+          result = await command(args, context);
+        } catch (error) {
+          commandFailure = error;
+        }
+
+        let recordFailure: unknown;
+        try {
+          const treeRevision = options.fsSync.treeRevision;
+          if (treeRevision > priorTreeRevision) {
+            if (firstDependencyArrival) {
+              await commandOptions.recordMutation('dependency', treeRevision);
+            } else {
+              const packageJsonChanged = !equalOptionalBytes(
+                priorPackageJson,
+                optionalFile(options.fsSync, packageJsonPath),
+              );
+              const packageLockChanged = !equalOptionalBytes(
+                priorPackageLock,
+                optionalFile(options.fsSync, packageLockPath),
+              );
+              if (packageJsonChanged) {
+                await commandOptions.recordMutation('package-manifest', treeRevision);
+              }
+              if (packageLockChanged) {
+                await commandOptions.recordMutation('package-lock', treeRevision);
+              }
+            }
+          }
+        } catch (error) {
+          recordFailure = error;
+        }
+
+        if (commandFailure !== undefined && recordFailure !== undefined) {
+          throw new AggregateError(
+            [commandFailure, recordFailure],
+            'npm command and package mutation reflection failed',
+          );
+        }
+        if (commandFailure !== undefined) throw commandFailure;
+        if (recordFailure !== undefined) throw recordFailure;
+        return result as ShellCommandResult;
+      };
+    },
   };
 }

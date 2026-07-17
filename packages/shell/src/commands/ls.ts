@@ -9,11 +9,11 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { type VfsDirent, VfsError, syncMirror } from '@riftydev/vfs';
+import { type FsSync, type VfsDirent, VfsError } from '@riftydev/vfs';
 import type { CommandContext, ShellCommand } from '../types.ts';
 import { packColumns } from './_columns.ts';
 import { colorize } from './_sgr.ts';
-import { resolve } from './_shared.ts';
+import { commandFileSystem, resolve } from './_shared.ts';
 
 type ColorMode = 'auto' | 'always' | 'never';
 
@@ -117,8 +117,7 @@ function byteCompare(a: string, b: string): number {
 }
 
 /** Build the listable entries for one directory, applying dotfile policy + sort. */
-function collect(dir: string, opts: Opts): Entry[] {
-  const fs = syncMirror();
+function collect(fs: FsSync, dir: string, opts: Opts): Entry[] {
   const dirents = fs.readdirSync(dir);
   const entries: Entry[] = [];
 
@@ -164,12 +163,12 @@ function formatMtime(ms: number): string {
 }
 
 /** Real on-disk size for an entry (0 for synthetic '.'/'..'). */
-function entrySize(e: Entry, dir: string): number {
+function entrySize(fs: FsSync, e: Entry, dir: string): number {
   if (e.name === '.' || e.name === '..') return 0;
   // resolve handles BOTH a plain child (dir/name) and a file operand whose name
   // is an absolute / non-child path — e.g. `ls -l /etc/hosts` from cwd /home,
   // which the raw `${dir}/${name}` join turned into `/home//etc/hosts` (crash).
-  return syncMirror().statSync(resolve(dir, e.name)).size ?? 0;
+  return fs.statSync(resolve(dir, e.name)).size ?? 0;
 }
 
 /**
@@ -177,22 +176,23 @@ function entrySize(e: Entry, dir: string): number {
  * dirent, fixed perms, nlink 1, owner/group 'user'. Only size + mtime are real.
  * `sizeWidth` right-aligns the size column GNU-style across the listing.
  */
-function longLine(e: Entry, dir: string, color: boolean, sizeWidth: number): string {
+function longLine(fs: FsSync, e: Entry, dir: string, color: boolean, sizeWidth: number): string {
   const typeChar = e.isDirectory ? 'd' : '-';
   const perms = e.isDirectory ? 'rwxr-xr-x' : 'rw-r--r--';
-  const size = String(entrySize(e, dir)).padStart(sizeWidth, ' ');
+  const size = String(entrySize(fs, e, dir)).padStart(sizeWidth, ' ');
   const name = colorize(e.name, { isDirectory: e.isDirectory, isFile: e.isFile }, color);
   return `${typeChar}${perms} 1 user user ${size} ${formatMtime(e.mtime)} ${name}`;
 }
 
 /** Render one directory's entries to the chosen layout. */
 function renderDir(entries: Entry[], dir: string, opts: Opts, ctx: CommandContext): string {
+  const fs = commandFileSystem(ctx);
   const color = colorEnabled(opts.color, ctx.isTTY ?? false);
 
   if (opts.long) {
     if (entries.length === 0) return '';
-    const sizeWidth = Math.max(...entries.map((e) => String(entrySize(e, dir)).length));
-    return `${entries.map((e) => longLine(e, dir, color, sizeWidth)).join('\n')}\n`;
+    const sizeWidth = Math.max(...entries.map((e) => String(entrySize(fs, e, dir)).length));
+    return `${entries.map((e) => longLine(fs, e, dir, color, sizeWidth)).join('\n')}\n`;
   }
 
   // One-per-line on non-TTY OR -1; column-packed only on an interactive TTY.
@@ -224,7 +224,7 @@ function renderDir(entries: Entry[], dir: string, opts: Opts, ctx: CommandContex
  */
 export const ls: ShellCommand = async (args, ctx) => {
   const { opts, paths } = parse(args, ctx);
-  const fs = syncMirror();
+  const fs = commandFileSystem(ctx);
   const operands = paths.length === 0 ? ['.'] : paths;
 
   // Classify operands; a missing one is reported now (GNU exits 1, lists rest).
@@ -273,7 +273,7 @@ export const ls: ShellCommand = async (args, ctx) => {
 
   for (const p of dirOperands) {
     const abs = resolve(ctx.cwd, p);
-    const entries = collect(abs, opts);
+    const entries = collect(fs, abs, opts);
     const body = renderDir(entries, abs, opts, ctx);
     groups.push(showHeaders ? `${p}:\n${body}` : body);
   }
