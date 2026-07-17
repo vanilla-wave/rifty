@@ -11,6 +11,28 @@ export interface ScmResourceGroups {
   readonly changes: readonly ScmResourceRow[];
 }
 
+export interface ScmStatusGapRow {
+  readonly path: string;
+  readonly relativePath: string;
+  readonly rawStatusMatrixCode: string;
+  readonly badge: '!';
+}
+
+export type ScmPanelRow = ScmResourceRow | ScmStatusGapRow;
+
+export interface ScmPanelResourceGroups {
+  readonly staged: readonly ScmResourceRow[];
+  readonly changes: readonly ScmPanelRow[];
+}
+
+export type ScmChangeInput =
+  | {
+      readonly path: string;
+      readonly code: string;
+      readonly area: 'staged' | 'working';
+    }
+  | { readonly path: string; readonly rawStatusMatrixCode: string };
+
 function relativePath(root: string, path: string): string {
   const prefix = root === '/' ? '/' : `${root}/`;
   return path.startsWith(prefix) ? path.slice(prefix.length) : path.replace(/^\/+/, '');
@@ -54,6 +76,37 @@ export function scmRowsFromStatusMap(
     if (path !== root && !path.startsWith(prefix)) continue;
     if (hasIndexChange(code)) staged.push(row(path, root, code, 'index'));
     if (hasWorktreeChange(code)) changes.push(row(path, root, code, 'worktree'));
+  }
+  return { staged, changes };
+}
+
+/** Project explicit SCM entries to panel rows without inventing porcelain for gaps. */
+export function scmRowsFromChanges(
+  entries: readonly ScmChangeInput[],
+  root: string,
+): ScmPanelResourceGroups {
+  const staged: ScmResourceRow[] = [];
+  const changes: ScmPanelRow[] = [];
+  const prefix = root === '/' ? '/' : `${root}/`;
+  for (const entry of entries) {
+    if (entry.path !== root && !entry.path.startsWith(prefix)) continue;
+    if ('rawStatusMatrixCode' in entry) {
+      changes.push({
+        path: entry.path,
+        relativePath: relativePath(root, entry.path),
+        rawStatusMatrixCode: entry.rawStatusMatrixCode,
+        badge: '!',
+      });
+      continue;
+    }
+    const projected = row(
+      entry.path,
+      root,
+      entry.code,
+      entry.area === 'staged' ? 'index' : 'worktree',
+    );
+    if (entry.area === 'staged') staged.push(projected);
+    else changes.push(projected);
   }
   return { staged, changes };
 }

@@ -43,6 +43,18 @@ export interface BrowserSandboxResetDeps {
   readonly indexedDB?: IndexedDbLike;
 }
 
+function defaultBrowserSandboxResetDeps(): BrowserSandboxResetDeps {
+  const localStorage = browserLocalStorage();
+  const sessionStorage = browserSessionStorage();
+  return {
+    navigator: globalThis.navigator as NavigatorLike | undefined,
+    ...(localStorage === undefined ? {} : { localStorage }),
+    ...(sessionStorage === undefined ? {} : { sessionStorage }),
+    caches: globalThis.caches,
+    indexedDB: globalThis.indexedDB,
+  };
+}
+
 type OpfsEntryIterable = AsyncIterable<[string, FileSystemHandle]>;
 
 function reasonOf(err: unknown): string {
@@ -87,13 +99,7 @@ async function unregisterServiceWorkers(nav: NavigatorLike | undefined): Promise
 }
 
 export async function resetBrowserSandboxState(
-  deps: BrowserSandboxResetDeps = {
-    navigator: globalThis.navigator as NavigatorLike | undefined,
-    localStorage: globalThis.localStorage,
-    sessionStorage: globalThis.sessionStorage,
-    caches: globalThis.caches,
-    indexedDB: globalThis.indexedDB,
-  },
+  deps: BrowserSandboxResetDeps = defaultBrowserSandboxResetDeps(),
 ): Promise<BrowserSandboxResetResult> {
   const cleared: string[] = [];
   const failed: BrowserSandboxResetFailure[] = [];
@@ -126,3 +132,4 @@ export async function resetBrowserSandboxState(
 
   return { cleared, failed };
 }
+import { browserLocalStorage, browserSessionStorage } from './browser-storage.ts';

@@ -135,6 +135,25 @@ it('status --porcelain: mixed (modified/staged-new/untracked/deleted) matches re
   expect(await runGit(['status', '--porcelain'])).toBe(fixtureBody('status-mixed.porcelain'));
 });
 
+it.each([
+  ['head-identical', 'one\n'],
+  ['head-different', 'recreated\n'],
+] as const)(
+  'status --porcelain: staged delete plus %s same-path recreation preserves both rows',
+  async (_case, recreated) => {
+    await initRepo();
+    await writeFile(`${REPO}/a.txt`, 'one\n');
+    await runGit(['add', 'a.txt']);
+    await runGit(['commit', '-m', 'base']);
+    await runGit(['rm', 'a.txt']);
+    await writeFile(`${REPO}/a.txt`, recreated);
+
+    expect(await runGit(['status', '--porcelain'])).toBe(
+      fixtureBody('status-staged-delete-recreated.porcelain'),
+    );
+  },
+);
+
 it('log --oneline: 2 commits matches real git byte-for-byte (canonical SHAs)', async () => {
   await initRepo();
   await writeFile(`${REPO}/a.txt`, 'alpha\n');

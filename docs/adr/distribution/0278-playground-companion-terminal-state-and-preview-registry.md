@@ -615,6 +615,11 @@ whole-project replace. Import resolves after package-claim revocation,
 Documents invalidation, Files reflection, SCM refresh, and durability; a failed
 validation or unpromoted stage leaves the live tree unchanged.
 
+**Correction 2026-07-17 (ADR-0286):** the depth-insensitive `.git`/`.rifty`
+exclusion above was lossy. V1 now transfers Git bytes and nested ordinary
+`.rifty`; only root `.rifty` remains private. Old V1 archives without `.git`
+retain their source-only import behavior. Derived-tree and finite bounds stand.
+
 Dirty document preflight runs before tool teardown. A rejected dirty close
 leaves tools live. An admitted session close stops new tool calls, drains or
 cancels admitted TS/SCM/archive work, closes those implementations, then closes

@@ -5,10 +5,11 @@
  * stdout summary per working-tree state. The shell `git commit` builtin and the
  * playground SCM owner RPC both need byte-identical refusals so panel-commit and
  * shell-commit behave the same on identical inputs — kept here on the git facade
- * rather than duplicated per realm (the precedent set for `porcelainXY` by
- * ADR-0179).
+ * rather than duplicated per realm (the precedent retained by
+ * `porcelainStatusLines`, ADR-0284).
  */
 import type { Git } from './git.ts';
+import { requireSupportedStatusEntries } from './status.ts';
 
 /** git's exact stderr line for `commit -m ''` (an empty, non-amend message). */
 export const EMPTY_COMMIT_MESSAGE_ERROR = 'Aborting commit due to empty commit message.';
@@ -21,7 +22,7 @@ export const EMPTY_COMMIT_MESSAGE_ERROR = 'Aborting commit due to empty commit m
 export async function commitRefusal(
   git: Pick<Git, 'status' | 'resolveRef'>,
 ): Promise<string | null> {
-  const entries = await git.status();
+  const entries = requireSupportedStatusEntries(await git.status());
   const hasStaged = entries.some((e) => {
     const head = e.status[0];
     const stage = e.status[2];

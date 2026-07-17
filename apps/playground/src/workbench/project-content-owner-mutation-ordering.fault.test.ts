@@ -1,6 +1,10 @@
 import { RegistryClient } from '@riftydev/npm-client';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import {
+  type PlaygroundDocumentWriter,
+  createPlaygroundDocumentWriter,
+} from '../adapters/playground-project-view.ts';
 import type { HostCommitRequest } from '../glue/owner-vfs-protocol.ts';
 import { collectSnapshot } from '../glue/vfs-snapshot-port.ts';
 import type { BootstrapConfig } from '../templates/project-spec.ts';
@@ -13,7 +17,7 @@ import {
   createOwnerVfsAuthorityComposition,
 } from '../workers/owner-vfs-authority.ts';
 import { createWorkbenchProjectVfs } from '../workers/workbench-project-vfs.ts';
-import type { ProjectDocumentInvalidation } from './errors.ts';
+import { FileConflictError, type ProjectDocumentInvalidation } from './errors.ts';
 import {
   type ProjectContentTransport,
   createProjectContentTransport,
@@ -320,5 +324,41 @@ describe('owner-applied no-op ordering', () => {
     expect.soft(h.timeline).toEqual([{ kind: 'owner', type: 'rifty:owner-vfs-commit-ack' }]);
     expect.soft(observed.document.snapshot().staleReason).toBeNull();
     observed.unsubscribe();
+  });
+});
+
+describe('editor document CAS ordering', () => {
+  // Fault class: observable-order + provenance-lie. The editor-open read and
+  // Document CAS base are one identity; sampling the handle at first write
+  // silently makes stale editor bytes look current.
+  it('keeps the editor-open V1 as the first-write CAS base after an external V2', async () => {
+    const h = harness();
+    const content = await h.transport.ready;
+    const writer: PlaygroundDocumentWriter = createPlaygroundDocumentWriter(content.documents);
+    const opened = await content.files.readFile('/src/main.ts');
+    await writer.open('/src/main.ts');
+
+    const externalBytes = encoder.encode('external');
+    await h.vfs.mutationGuard([{ kind: 'write', path: SOURCE }], () => {
+      h.authority.writeFileSync(SOURCE, externalBytes);
+    });
+    const external = await content.files.readFile('/src/main.ts');
+    expect(external.version).not.toBe(opened.version);
+    expect(external.bytes).toEqual(externalBytes);
+
+    const failure = await writer
+      .write('/src/main.ts', new TextDecoder().decode(opened.bytes))
+      .catch((error: unknown) => error);
+    const preserved = await content.files.readFile('/src/main.ts');
+
+    expect.soft(failure).toBeInstanceOf(FileConflictError);
+    expect.soft(failure).toMatchObject({
+      path: '/src/main.ts',
+      expectedVersion: opened.version,
+      actualVersion: external.version,
+    });
+    expect.soft((failure as FileConflictError | undefined)?.actualBytes).toEqual(externalBytes);
+    expect.soft(preserved).toEqual(external);
+    expect.soft(h.backgroundFailures).toEqual([]);
   });
 });

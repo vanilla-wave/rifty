@@ -263,6 +263,10 @@ export function createWorkbenchProjectVfs(
   let publishedRevision: number | null = null;
   let publicationAdmissions = 0;
   let resolvePublicationIdle: (() => void) | null = null;
+  let admissionGate: Promise<void> | null = null;
+  let resolveAdmissionGate: (() => void) | null = null;
+  let barrierRequests = 0;
+  let barrierTail: Promise<void> = Promise.resolve();
   let fatalError: Error | null = null;
   let pump: Promise<void> | null = null;
   const publicationListeners = new Set<(treeRevision: number) => void>();
@@ -370,27 +374,59 @@ export function createWorkbenchProjectVfs(
     }
   };
 
-  const publicationBarrier = async (): Promise<void> => {
+  const withPublicationBarrier = <T>(
+    critical: () => T | Promise<T>,
+    shouldPublish: () => boolean = () => true,
+  ): Promise<T> => {
     assertAccepting();
-    while (publicationAdmissions > 0) {
-      await awaitPublicationIdle();
-      assertAccepting();
+    barrierRequests += 1;
+    if (barrierRequests === 1) {
+      admissionGate = new Promise<void>((resolve) => {
+        resolveAdmissionGate = resolve;
+      });
     }
-    await publishThroughCurrent(false);
+    const operation = barrierTail.then(async () => {
+      assertAccepting();
+      while (publicationAdmissions > 0) {
+        await awaitPublicationIdle();
+        assertAccepting();
+      }
+      if (shouldPublish()) await publishThroughCurrent(false);
+      return critical();
+    });
+    barrierTail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation.finally(() => {
+      barrierRequests -= 1;
+      if (barrierRequests !== 0) return;
+      const resolve = resolveAdmissionGate;
+      resolveAdmissionGate = null;
+      admissionGate = null;
+      resolve?.();
+    });
   };
+
+  const publicationBarrier = (): Promise<void> => withPublicationBarrier(() => undefined);
 
   const readConsistent = async <T>(read: () => T | Promise<T>): Promise<T> => {
     assertAccepting();
     if (typeof read !== 'function')
       throw new TypeError('Project VFS consistent read must be a function');
-    await publicationBarrier();
-    return activePackageMutations.guardedMutation([], async () => {
-      assertAccepting();
-      return read();
-    });
+    return withPublicationBarrier(() =>
+      activePackageMutations.guardedMutation([], async () => {
+        assertAccepting();
+        return read();
+      }),
+    );
   };
 
-  const startPublicationAdmission = (): void => {
+  const startPublicationAdmission = async (): Promise<void> => {
+    while (admissionGate !== null) {
+      const gate = admissionGate;
+      await gate;
+    }
     assertAccepting();
     publicationAdmissions += 1;
   };
@@ -462,6 +498,8 @@ export function createWorkbenchProjectVfs(
     | { readonly kind: 'publish-failure'; readonly error: unknown }
     | { readonly kind: 'suppress-failure'; readonly error: Error };
 
+  type AppliedEvidenceMode = 'semantic-replacements' | 'whole-project-reset';
+
   const settleMutationOutcome = <T>(outcome: MutationOutcome<T>): T => {
     if (outcome.kind === 'publish-success') return outcome.value;
     throw outcome.error;
@@ -471,9 +509,12 @@ export function createWorkbenchProjectVfs(
     intents: readonly VfsMutationIntent[],
     mutationKind: 'guest' | null,
     apply: () => MutationOutcome<T> | Promise<MutationOutcome<T>>,
+    evidenceMode: AppliedEvidenceMode = 'semantic-replacements',
   ): Promise<MutationOutcome<T>> => {
     const priorTreeRevision = options.authority.treeRevision;
-    const scoped = await options.appliedMutations.withSemanticReplacements(intents, apply);
+    const scoped = await (evidenceMode === 'whole-project-reset'
+      ? options.appliedMutations.withStructuralReset(projectRoot, apply)
+      : options.appliedMutations.withSemanticReplacements(intents, apply));
     if (scoped.kind === 'suppress-failure') {
       // The caller has retained enough private durable state for startup
       // recovery. No tentative/recovered revision crosses to the page.
@@ -501,8 +542,9 @@ export function createWorkbenchProjectVfs(
     mutationKind: 'guest' | null,
     apply: () => MutationOutcome<T> | Promise<MutationOutcome<T>>,
   ): Promise<T> => {
-    startPublicationAdmission();
+    if (fatalError !== null) return Promise.reject(fatalError);
     const operation = (async () => {
+      await startPublicationAdmission();
       try {
         const outcome = await activePackageMutations.guardedMutation(intents, () =>
           applyMutation(intents, mutationKind, apply),
@@ -549,30 +591,37 @@ export function createWorkbenchProjectVfs(
   ): Promise<T> => {
     await publicationBarrier();
     const intents = Object.freeze([{ kind: 'replace' as const, path: projectRoot }]);
-    startPublicationAdmission();
+    await startPublicationAdmission();
     const operation = (async () => {
       let outcome: MutationOutcome<T> | undefined;
+      let armed = false;
       try {
         await activePackageMutations.reset({ root: projectRoot }, async () => {
           await prepare();
+          armed = true;
           return {
             status: 'ready',
             resetDependencyTree: true,
             mutate: async (resetDependencyTree) => {
-              outcome = await applyMutation(intents, null, async () => {
-                try {
-                  if (resetDependencyTree === undefined) {
-                    throw new Error('recoverable project replacement package reset is missing');
+              outcome = await applyMutation(
+                intents,
+                null,
+                async () => {
+                  try {
+                    if (resetDependencyTree === undefined) {
+                      throw new Error('recoverable project replacement package reset is missing');
+                    }
+                    await resetDependencyTree();
+                    const result = await apply();
+                    return result.status === 'committed'
+                      ? { kind: 'publish-success', value: result.value }
+                      : { kind: 'suppress-failure', error: result.error };
+                  } catch (error) {
+                    return { kind: 'suppress-failure', error: errorFrom(error) };
                   }
-                  await resetDependencyTree();
-                  const result = await apply();
-                  return result.status === 'committed'
-                    ? { kind: 'publish-success', value: result.value }
-                    : { kind: 'suppress-failure', error: result.error };
-                } catch (error) {
-                  return { kind: 'suppress-failure', error: errorFrom(error) };
-                }
-              });
+                },
+                'whole-project-reset',
+              );
             },
           };
         });
@@ -581,7 +630,10 @@ export function createWorkbenchProjectVfs(
         }
         return settleMutationOutcome(outcome);
       } catch (error) {
-        if (outcome === undefined) cursor.acknowledge(options.authority.treeRevision);
+        if (armed) throw failOwnerPreserving(error);
+        // Pre-arm work is ordinary owner state (usually a private stage). Keep
+        // the live session coherent by advancing the page publication cursor.
+        await publishThroughCurrent(true);
         throw error;
       } finally {
         finishPublicationAdmission();
@@ -601,12 +653,14 @@ export function createWorkbenchProjectVfs(
           if (!accepting) return;
           throw error;
         }
-        while (publicationAdmissions > 0) await awaitPublicationIdle();
-        if (!accepting) return;
-        if (cursor.peek().length === 0) continue;
         try {
-          rawPublishCurrent();
+          await withPublicationBarrier(
+            () => undefined,
+            () => cursor.peek().length > 0,
+          );
         } catch (error) {
+          if (fatalError !== null) throw error;
+          if (!accepting) return;
           throw failOwnerPreserving(error);
         }
       }
@@ -616,10 +670,10 @@ export function createWorkbenchProjectVfs(
     });
   };
 
-  const handleCommit = (
+  const handleCommit = async (
     frame: Extract<PageProjectVfsFrame, { readonly type: 'rifty:owner-vfs-commit' }>,
   ): Promise<void> => {
-    startPublicationAdmission();
+    await startPublicationAdmission();
     let publicationFailure: Error | null = null;
     const completed = deferredCompletion();
     const task = track(completed.promise);

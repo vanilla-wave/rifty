@@ -50,6 +50,7 @@ function harness() {
       clearTimeout: (timer) => clearTimeout(timer),
     },
     commitReplayMs: 10,
+    commitAckTimeoutMs: 20,
     commitReceiptRetryMs: 10,
     durabilityAckTimeoutMs: 20,
     reportProtocolError: (error) => protocolErrors.push(error),
@@ -75,6 +76,78 @@ afterEach(() => {
 });
 
 describe('OwnerVfsClient', () => {
+  it('defaults the first-terminal deadline to the full 60-second owner drain window', () => {
+    const delays: number[] = [];
+    const client = createOwnerVfsClient({
+      send: () => true,
+      currentOwnerEpoch: () => 'owner-a',
+      isAlive: () => true,
+      timers: {
+        setTimeout: (_callback, delayMs) => {
+          delays.push(delayMs);
+          return Object.freeze({}) as ReturnType<typeof setTimeout>;
+        },
+        clearTimeout: () => {},
+      },
+    });
+    const applying = client.applyHostCommit({
+      kind: 'mkdir',
+      operationId: 'host-vfs:default-terminal-deadline',
+      path: '/slow-owner',
+      expectedVersion: null,
+    });
+    void applying.catch(() => {});
+
+    expect(delays).toEqual([60_000, 250]);
+    client.close();
+  });
+
+  // Fault class: unbounded-read. Replay improves delivery but cannot replace a
+  // finite terminal deadline owned by the commit correlation map.
+  it('times out a commit that never receives its first terminal', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    const applying = h.client.applyHostCommit({
+      kind: 'mkdir',
+      operationId: 'host-vfs:hung-terminal',
+      path: '/hung',
+      expectedVersion: null,
+    });
+    void applying.catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    await expect(applying).rejects.toThrow(/commit ack.*timed out.*hung-terminal/i);
+    const sentAtTimeout = h.sent.length;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(h.sent).toHaveLength(sentAtTimeout);
+  });
+
+  it('retains a first terminal past the deadline until its exact release', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    const request: HostCommitRequest = {
+      kind: 'mkdir',
+      operationId: 'host-vfs:delayed-release',
+      path: '/delayed',
+      expectedVersion: null,
+    };
+    const applying = h.client.applyHostCommit(request);
+    void applying.catch(() => {});
+    const terminal = success(request, 2);
+
+    expect(h.client.accept(terminal)).toBe(true);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(h.sent.filter((frame) => frame.type === 'rifty:owner-vfs-commit-received').length).toBe(
+      6,
+    );
+
+    expect(h.client.accept({ type: 'rifty:owner-vfs-commit-released', terminal })).toBe(true);
+    await expect(applying).resolves.toEqual(
+      (terminal as Extract<typeof terminal, { ok: true }>).ack,
+    );
+  });
+
   it('owns exact request reuse and the receipt/release/cleanup handshake', async () => {
     vi.useFakeTimers();
     const h = harness();
@@ -274,5 +347,45 @@ describe('OwnerVfsClient', () => {
     await expect(h.client.durabilityBarrier(2)).rejects.toThrow(
       'workspace owner has exited — VFS durability cannot be proven',
     );
+  });
+
+  it('preserves the caller-owned disconnect cause for pending and future VFS operations', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    const applying = h.client.applyHostCommit({
+      kind: 'mkdir',
+      operationId: 'host-vfs:disconnect-provenance',
+      path: '/assets',
+      expectedVersion: null,
+    });
+    const durable = h.client.durabilityBarrier(1);
+    const disconnectCause = new Error('exact project owner disconnect');
+    const pending = [applying, durable].map((operation) =>
+      operation.then(
+        () => null,
+        (error: unknown) => error,
+      ),
+    );
+
+    h.setAlive(false);
+    h.client.disconnect(disconnectCause);
+    h.client.disconnect(new Error('later disconnect must not replace the first cause'));
+
+    const future = [
+      h.client.applyHostCommit({
+        kind: 'mkdir',
+        operationId: 'host-vfs:future-after-disconnect',
+        path: '/future',
+        expectedVersion: null,
+      }),
+      h.client.durabilityBarrier(2),
+    ].map((operation) =>
+      operation.then(
+        () => null,
+        (error: unknown) => error,
+      ),
+    );
+    const outcomes = [...(await Promise.all(pending)), ...(await Promise.all(future))];
+    expect(outcomes).toEqual(outcomes.map(() => disconnectCause));
   });
 });

@@ -18,13 +18,16 @@ export interface BrowserPlaygroundPreviewAuthorityDependencies {
   readonly requestSnapshot: () => void;
   readonly mountRoute: (entry: PreviewAdvertisement) => () => void;
   readonly proveServiceWorkerControl: (signal: AbortSignal) => Promise<void>;
-  readonly onFailure: (error: Error) => void;
+  readonly onDegraded: (error: Error) => void;
+  readonly onHealthy: () => void;
+  readonly onInvariant: (error: Error) => void;
 }
 
 export interface BrowserPlaygroundPreviewAuthority {
   readonly registry: BrowserPlaygroundPreviewRegistry;
   subscribeRouted(listener: (snapshot: readonly PreviewAdvertisement[]) => void): () => void;
   requestSnapshot(): void;
+  recover(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -40,6 +43,16 @@ interface PreviewGeneration {
 }
 
 type AuthorityState = 'live' | 'closing' | 'closed' | 'failed';
+
+class PreviewInvariantFailure extends Error {
+  readonly invariant: Error;
+
+  constructor(invariant: Error) {
+    super(invariant.message);
+    this.name = 'PreviewInvariantFailure';
+    this.invariant = invariant;
+  }
+}
 
 function errorFrom(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
@@ -92,6 +105,7 @@ export function createBrowserPlaygroundPreviewAuthority(
   const mounted = new Map<number, MountedRoute>();
   let state: AuthorityState = 'live';
   let failure: Error | null = null;
+  let degradation: Error | null = null;
   let routedSnapshot: readonly PreviewAdvertisement[] = Object.freeze([]);
   let publicSnapshot: readonly BrowserPlaygroundPreview[] = Object.freeze([]);
   let latestGeneration: PreviewGeneration = {
@@ -99,6 +113,7 @@ export function createBrowserPlaygroundPreviewAuthority(
     abort: new AbortController(),
   };
   let operationTail: Promise<void> = Promise.resolve();
+  let recoveryPromise: Promise<void> | null = null;
   let closePromise: Promise<void> | null = null;
 
   const assertLive = (): void => {
@@ -119,7 +134,13 @@ export function createBrowserPlaygroundPreviewAuthority(
 
   const publishRouted = (snapshot: readonly PreviewAdvertisement[]): void => {
     routedSnapshot = snapshot;
-    for (const listener of [...routedListeners]) listener(snapshot);
+    for (const listener of [...routedListeners]) {
+      try {
+        listener(snapshot);
+      } catch {
+        // A route observer cannot invalidate already-routed owner state.
+      }
+    }
   };
 
   const withdrawPorts = (ports: ReadonlySet<number>): void => {
@@ -177,8 +198,33 @@ export function createBrowserPlaygroundPreviewAuthority(
 
   let unsubscribeRaw = (): void => {};
 
-  const fail = async (reason: unknown): Promise<void> => {
-    if (failure !== null || state === 'closed') return;
+  const notifyDegraded = (error: Error): void => {
+    try {
+      dependencies.onDegraded(error);
+    } catch {
+      // Health observers cannot change preview authority state.
+    }
+  };
+
+  const notifyHealthy = (): void => {
+    try {
+      dependencies.onHealthy();
+    } catch {
+      // Health observers cannot change preview authority state.
+    }
+  };
+
+  const notifyInvariant = (error: Error): void => {
+    try {
+      dependencies.onInvariant(error);
+    } catch {
+      // Fatal observers cannot replace the first invariant failure.
+    }
+  };
+
+  const failInvariant = (reason: unknown): Error => {
+    if (failure !== null) return failure;
+    if (state === 'closed') return new ClosedHandleError('Playground preview registry');
     state = 'failed';
     const primary = errorFrom(reason);
     const errors = [primary];
@@ -196,7 +242,30 @@ export function createBrowserPlaygroundPreviewAuthority(
     publicListeners.clear();
     routedListeners.clear();
     failure = aggregate(errors, 'Playground preview route authority failed');
-    dependencies.onFailure(failure);
+    notifyInvariant(failure);
+    return failure;
+  };
+
+  const degrade = (reason: unknown): Error => {
+    const primary = errorFrom(reason);
+    if (state !== 'live') return primary;
+    abortGeneration(latestGeneration, primary);
+    if (publicSnapshot.length > 0 || routedSnapshot.length > 0) {
+      publishRouted(Object.freeze([]));
+      publishPublic(Object.freeze([]));
+    }
+    degradation = aggregate(
+      [primary, ...tearDownPorts([...mounted.keys()])],
+      'Playground preview route reconciliation degraded',
+    );
+    notifyDegraded(degradation);
+    return degradation;
+  };
+
+  const markHealthy = (): void => {
+    if (degradation === null) return;
+    degradation = null;
+    notifyHealthy();
   };
 
   const reconcile = async (generation: PreviewGeneration): Promise<void> => {
@@ -205,12 +274,17 @@ export function createBrowserPlaygroundPreviewAuthority(
     const seenPorts = new Set<number>();
     for (const entry of next) {
       if (seenPorts.has(entry.port)) {
-        throw new TypeError(`Owner preview snapshot repeats port ${String(entry.port)}`);
+        throw new PreviewInvariantFailure(
+          new TypeError(`Owner preview snapshot repeats port ${String(entry.port)}`),
+        );
       }
       seenPorts.add(entry.port);
     }
     if (generation !== latestGeneration) return;
-    if (sameEntries(routedSnapshot, next) && mountedMatches(next)) return;
+    if (sameEntries(routedSnapshot, next) && mountedMatches(next)) {
+      markHealthy();
+      return;
+    }
 
     const nextByPort = new Map(next.map((entry) => [entry.port, entry] as const));
     const withdrawn = new Set<number>();
@@ -237,7 +311,9 @@ export function createBrowserPlaygroundPreviewAuthority(
       if (existing?.key === key) continue;
       const tearDown = dependencies.mountRoute(candidate);
       if (typeof tearDown !== 'function') {
-        throw new TypeError('Playground preview route mount omitted teardown');
+        throw new PreviewInvariantFailure(
+          new TypeError('Playground preview route mount omitted teardown'),
+        );
       }
       mounted.set(candidate.port, { entry: candidate, key, tearDown });
       routesChanged = true;
@@ -262,28 +338,51 @@ export function createBrowserPlaygroundPreviewAuthority(
     if (sameEntries(routedSnapshot, admitted)) return;
     publishRouted(admitted);
     publishPublic(Object.freeze(admitted.map(semanticEntry)));
+    markHealthy();
+  };
+
+  const scheduleReconcile = (generation: PreviewGeneration): Promise<void> => {
+    const operation = operationTail.then(() => reconcile(generation));
+    const reported = operation.catch((error: unknown) => {
+      if (error instanceof PreviewInvariantFailure) {
+        throw failInvariant(error.invariant);
+      }
+      throw degrade(error);
+    });
+    operationTail = reported.catch(() => {});
+    void reported.catch(() => {});
+    return reported;
+  };
+
+  const replaceGeneration = (
+    snapshot: readonly PreviewAdvertisement[],
+    reason: Error,
+  ): PreviewGeneration => {
+    abortGeneration(latestGeneration, reason);
+    const generation: PreviewGeneration = {
+      snapshot: Object.freeze([...snapshot]),
+      abort: new AbortController(),
+    };
+    latestGeneration = generation;
+    return generation;
   };
 
   const admitRaw = (snapshot: readonly PreviewAdvertisement[]): void => {
     if (state !== 'live') return;
     const owned = Object.freeze([...snapshot]);
     if (sameEntries(latestGeneration.snapshot, owned)) return;
-    abortGeneration(
-      latestGeneration,
+    const generation = replaceGeneration(
+      owned,
       new Error('Owner preview snapshot superseded pending route proof'),
     );
-    const generation: PreviewGeneration = { snapshot: owned, abort: new AbortController() };
-    latestGeneration = generation;
-    const operation = operationTail.then(() => reconcile(generation));
-    operationTail = operation.catch((error: unknown) => fail(error));
-    void operationTail.catch(() => {});
+    void scheduleReconcile(generation);
   };
 
   try {
     unsubscribeRaw = dependencies.subscribe(admitRaw);
     dependencies.requestSnapshot();
   } catch (error) {
-    void fail(error);
+    failInvariant(error);
   }
 
   const registry: BrowserPlaygroundPreviewRegistry = Object.freeze({
@@ -313,12 +412,44 @@ export function createBrowserPlaygroundPreviewAuthority(
         throw new TypeError('Routed preview listener must be a function');
       }
       routedListeners.add(listener);
-      listener(routedSnapshot);
+      try {
+        listener(routedSnapshot);
+      } catch {
+        // Replay follows the same observer isolation as committed updates.
+      }
       return () => routedListeners.delete(listener);
     },
     requestSnapshot() {
       assertLive();
       dependencies.requestSnapshot();
+    },
+    recover() {
+      if (failure !== null) return Promise.reject(failure);
+      if (state !== 'live') {
+        return Promise.reject(new ClosedHandleError('Playground preview registry'));
+      }
+      if (recoveryPromise !== null) return recoveryPromise;
+      const recovery = (async (): Promise<void> => {
+        try {
+          dependencies.requestSnapshot();
+        } catch (error) {
+          throw degrade(error);
+        }
+        while (state === 'live') {
+          const generation = replaceGeneration(
+            latestGeneration.snapshot,
+            new Error('Explicit preview recovery superseded pending route proof'),
+          );
+          await scheduleReconcile(generation);
+          if (generation === latestGeneration) return;
+        }
+        assertLive();
+      })();
+      const recoveryPromiseResult = recovery.finally(() => {
+        if (recoveryPromise === recoveryPromiseResult) recoveryPromise = null;
+      });
+      recoveryPromise = recoveryPromiseResult;
+      return recoveryPromiseResult;
     },
     close() {
       if (closePromise !== null) return closePromise;

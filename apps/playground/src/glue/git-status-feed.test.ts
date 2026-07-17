@@ -42,9 +42,9 @@ describe('git status publisher', () => {
     vi.useFakeTimers();
     const status = vi
       .fn()
-      .mockResolvedValueOnce([{ filepath: 'a.txt', status: '121' }])
-      .mockResolvedValueOnce([{ filepath: 'a.txt', status: '121' }])
-      .mockResolvedValueOnce([{ filepath: 'a.txt', status: '122' }]);
+      .mockResolvedValueOnce([{ kind: 'supported', filepath: 'a.txt', status: '121' }])
+      .mockResolvedValueOnce([{ kind: 'supported', filepath: 'a.txt', status: '121' }])
+      .mockResolvedValueOnce([{ kind: 'supported', filepath: 'a.txt', status: '122' }]);
     const frames: unknown[] = [];
     const publisher = createGitStatusPublisher({ status }, (frame) => frames.push(frame), {
       debounceMs: 200,
@@ -62,7 +62,7 @@ describe('git status publisher', () => {
       {
         type: 'git-status',
         label: 'rifty-git status',
-        entries: [{ path: 'a.txt', code: ' M' }],
+        entries: [{ kind: 'supported', path: 'a.txt', code: ' M' }],
       },
     ]);
 
@@ -75,7 +75,9 @@ describe('git status publisher', () => {
     await vi.advanceTimersByTimeAsync(200);
     expect(status).toHaveBeenCalledTimes(3);
     expect(frames).toHaveLength(2);
-    expect(frames.at(-1)).toMatchObject({ entries: [{ path: 'a.txt', code: 'M ' }] });
+    expect(frames.at(-1)).toMatchObject({
+      entries: [{ kind: 'supported', path: 'a.txt', code: 'M ' }],
+    });
 
     publisher.dispose();
   });
@@ -102,7 +104,7 @@ describe('git status publisher', () => {
       {
         type: 'git-status',
         label: 'rifty-git status',
-        entries: [{ path: 'src.js', code: '??' }],
+        entries: [{ kind: 'supported', path: 'src.js', code: '??' }],
       },
     ]);
     publisher.dispose();
@@ -110,8 +112,10 @@ describe('git status publisher', () => {
 });
 
 describe('git status page channel/cache', () => {
-  it('serves current status on subscribe and applies frames as a path→code cache', async () => {
-    const source = { status: vi.fn().mockResolvedValue([{ filepath: 'a.txt', status: '121' }]) };
+  it('serves current status on subscribe and applies frames as a path→rows cache', async () => {
+    const source = {
+      status: vi.fn().mockResolvedValue([{ kind: 'supported', filepath: 'a.txt', status: '121' }]),
+    };
     const server = serveGitStatusFeed('git-status-channel', source, { debounceMs: 10 });
     teardowns.push(() => server.dispose());
     const frames: Parameters<typeof applyGitStatusFrame>[1][] = [];
@@ -119,28 +123,61 @@ describe('git status page channel/cache', () => {
 
     await waitFor(() => expect(frames).toHaveLength(1));
 
-    const cache = new Map<string, string>();
+    const cache = new Map<
+      string,
+      readonly Parameters<typeof applyGitStatusFrame>[1]['entries'][number][]
+    >();
     const first = frames[0];
     if (first === undefined) throw new Error('expected status frame');
     applyGitStatusFrame(cache, first);
-    expect([...cache.entries()]).toEqual([['a.txt', ' M']]);
+    expect([...cache.entries()]).toEqual([
+      ['a.txt', [{ kind: 'supported', path: 'a.txt', code: ' M' }]],
+    ]);
 
     applyGitStatusFrame(cache, {
       type: 'git-status',
       label: 'rifty-git status',
-      entries: [{ path: 'b.txt', code: '??' }],
+      entries: [{ kind: 'unsupported', path: 'b.txt', rawStatusMatrixCode: '999' }],
     });
-    expect([...cache.entries()]).toEqual([['b.txt', '??']]);
+    expect([...cache.entries()]).toEqual([
+      ['b.txt', [{ kind: 'unsupported', path: 'b.txt', rawStatusMatrixCode: '999' }]],
+    ]);
+  });
+
+  it('preserves ordered same-path porcelain rows in the page cache', () => {
+    const cache = new Map<
+      string,
+      readonly Parameters<typeof applyGitStatusFrame>[1]['entries'][number][]
+    >();
+    applyGitStatusFrame(cache, {
+      type: 'git-status',
+      label: 'rifty-git status',
+      entries: [
+        { kind: 'supported', path: 'recreated.txt', code: 'D ' },
+        { kind: 'supported', path: 'recreated.txt', code: '??' },
+      ],
+    });
+
+    expect(cache.get('recreated.txt')).toEqual([
+      { kind: 'supported', path: 'recreated.txt', code: 'D ' },
+      { kind: 'supported', path: 'recreated.txt', code: '??' },
+    ]);
   });
 
   it('creates a page cache that clears independently of owner updates', async () => {
-    const source = { status: vi.fn().mockResolvedValue([{ filepath: 'a.txt', status: '121' }]) };
+    const source = {
+      status: vi.fn().mockResolvedValue([{ kind: 'supported', filepath: 'a.txt', status: '121' }]),
+    };
     const server = serveGitStatusFeed('git-status-store', source, { debounceMs: 10 });
     teardowns.push(() => server.dispose());
     const store = createGitStatusStore('git-status-store');
     teardowns.push(() => store.dispose());
 
-    await waitFor(() => expect([...store.map.entries()]).toEqual([['a.txt', ' M']]));
+    await waitFor(() =>
+      expect([...store.map.entries()]).toEqual([
+        ['a.txt', [{ kind: 'supported', path: 'a.txt', code: ' M' }]],
+      ]),
+    );
 
     store.clear();
     expect([...store.map.entries()]).toEqual([]);

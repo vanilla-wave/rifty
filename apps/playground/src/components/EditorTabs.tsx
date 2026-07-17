@@ -2,7 +2,7 @@
  * Editor tab strip (ADR-0075). Presentational: editor tabs render a dirty dot +
  * close affordance; state lives in {@link EditorHost.tsx}.
  */
-import { For } from 'solid-js';
+import { For, Show } from 'solid-js';
 import type { EditorTab } from '../glue/editor-tabs.ts';
 import { Icon } from './icons.tsx';
 
@@ -13,8 +13,11 @@ export function EditorTabs(props: {
   onClose(id: string): void;
   previewUrl?: string;
   onOpenPreviewTab?(): void;
+  persistenceAtRisk?: boolean;
 }) {
   const canOpenPreview = () => Boolean(props.previewUrl && props.onOpenPreviewTab);
+  const persistenceAtRisk = (tab: EditorTab): boolean =>
+    tab.kind === 'file' && props.persistenceAtRisk === true;
 
   return (
     <div class="rf-tabsbar">
@@ -28,6 +31,7 @@ export function EditorTabs(props: {
               data-tab={tab.kind}
               data-active={props.activeId === tab.id}
               data-dirty={tab.dirty}
+              data-persistence-risk={persistenceAtRisk(tab)}
               aria-selected={props.activeId === tab.id}
               onClick={() => props.onSelect(tab.id)}
               onKeyDown={(e) => {
@@ -45,6 +49,15 @@ export function EditorTabs(props: {
               }}
             >
               <span class="rf-tab__dot" data-dirty={tab.dirty} aria-hidden="true" />
+              <Show when={persistenceAtRisk(tab)}>
+                <span
+                  class="rf-tab__persistence-risk"
+                  aria-label="Workspace persistence at risk"
+                  title="Workspace persistence failed; retry before closing this tab"
+                >
+                  !
+                </span>
+              </Show>
               <span class="rf-tab__label">{tab.title}</span>
               <button
                 type="button"

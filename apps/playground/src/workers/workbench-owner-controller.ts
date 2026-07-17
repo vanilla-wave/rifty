@@ -176,6 +176,7 @@ export function createWorkbenchOwnerController(
   const issuedTokens = new Set<string>();
   let operationTail = Promise.resolve();
   let active: ActiveProject | null = null;
+  let fencedProjectToken: OwnerProjectToken | null = null;
   let poison: unknown;
   let shutdownRequested = false;
   let shutdownPromise: Promise<void> | null = null;
@@ -216,6 +217,13 @@ export function createWorkbenchOwnerController(
 
   const closedOwnerError = (): ClosedHandleError => new ClosedHandleError('Workbench owner');
   const inactiveTokenError = (): Error => new Error('Workbench project token is not active');
+  const isExpectedPostFenceToken = (projectToken: OwnerProjectToken): boolean =>
+    fencedProjectToken === projectToken &&
+    (active === null || (active.token === projectToken && !active.acceptingInput));
+  const fenceProjectInput = (project: ActiveProject): void => {
+    project.acceptingInput = false;
+    fencedProjectToken = project.token;
+  };
   const poisonedError = (): Error => {
     const detail = serializeWorkbenchOwnerError(poison).message;
     return new Error(`Workbench owner lifecycle is poisoned: ${detail}`);
@@ -231,7 +239,7 @@ export function createWorkbenchOwnerController(
   };
 
   const closeProjectRuntime = (project: ActiveProject): Promise<void> => {
-    project.acceptingInput = false;
+    fenceProjectInput(project);
     project.closePromise ??= (async () => {
       const failures: unknown[] = [];
       try {
@@ -321,9 +329,10 @@ export function createWorkbenchOwnerController(
         release: null,
       };
       active = project;
+      fencedProjectToken = null;
 
       if (shutdownRequested) {
-        project.acceptingInput = false;
+        fenceProjectInput(project);
         try {
           await closeProjectRuntime(project);
           if (active === project) active = null;
@@ -341,7 +350,7 @@ export function createWorkbenchOwnerController(
           projectRoot: materialized.projectRoot,
         });
       } catch (error) {
-        project.acceptingInput = false;
+        fenceProjectInput(project);
         try {
           await closeProjectRuntime(project);
           if (active === project) active = null;
@@ -426,9 +435,10 @@ export function createWorkbenchOwnerController(
         release,
       };
       active = project;
+      fencedProjectToken = null;
 
       if (shutdownRequested) {
-        project.acceptingInput = false;
+        fenceProjectInput(project);
         try {
           await closeProjectRuntime(project);
           if (active === project) active = null;
@@ -450,7 +460,7 @@ export function createWorkbenchOwnerController(
           ...(initialTerminalState === undefined ? {} : { initialTerminalState }),
         });
       } catch (error) {
-        project.acceptingInput = false;
+        fenceProjectInput(project);
         try {
           await closeProjectRuntime(project);
           if (active === project) active = null;
@@ -597,7 +607,7 @@ export function createWorkbenchOwnerController(
   const requestShutdown = (): Promise<void> => {
     if (shutdownPromise !== null) return shutdownPromise;
     shutdownRequested = true;
-    if (active !== null) active.acceptingInput = false;
+    if (active !== null) fenceProjectInput(active);
 
     shutdownPromise = enqueue(async () => {
       const failures: unknown[] = [];
@@ -636,6 +646,13 @@ export function createWorkbenchOwnerController(
       } catch (error) {
         return rejectImmediately(error, recoverPlaygroundOperationId(value));
       }
+      if (
+        shutdownRequested &&
+        message.type === 'workbench:playground-project-tools' &&
+        isExpectedPostFenceToken(message.projectToken)
+      ) {
+        return Promise.resolve();
+      }
       if (shutdownRequested) {
         return rejectImmediately(closedOwnerError(), 'opId' in message ? message.opId : undefined);
       }
@@ -643,6 +660,7 @@ export function createWorkbenchOwnerController(
         if (poison !== undefined) return rejectImmediately(poisonedError());
         const project = active;
         if (project === null || !project.acceptingInput || project.token !== message.projectToken) {
+          if (isExpectedPostFenceToken(message.projectToken)) return Promise.resolve();
           return rejectImmediately(inactiveTokenError());
         }
         return performPlaygroundTools(message.frame, project);
@@ -659,7 +677,25 @@ export function createWorkbenchOwnerController(
     }
 
     if (message.type === 'workbench:shutdown') return requestShutdown();
-    if (shutdownRequested) return rejectImmediately(closedOwnerError(), operationId(message));
+    if (message.type === 'workbench:close-project') {
+      if (poison !== undefined) return rejectImmediately(poisonedError(), message.opId);
+      const project = active;
+      if (project === null || project.token !== message.projectToken) {
+        return rejectImmediately(inactiveTokenError(), message.opId);
+      }
+      if (!project.acceptingInput) {
+        return performClose(message, project);
+      }
+      // The receive turn owns the fence; no later frame can enter while close awaits.
+      fenceProjectInput(project);
+      return enqueue(() => performClose(message, project));
+    }
+    if (shutdownRequested) {
+      if (isProjectInputMessage(message) && isExpectedPostFenceToken(message.projectToken)) {
+        return Promise.resolve();
+      }
+      return rejectImmediately(closedOwnerError(), operationId(message));
+    }
     if (message.type === 'workbench:initialize') {
       return rejectImmediately(new TypeError('Workbench owner is already initialized'));
     }
@@ -669,19 +705,9 @@ export function createWorkbenchOwnerController(
     if (message.type === 'workbench:delete-project') {
       return enqueue(() => performDelete(message));
     }
-    if (message.type === 'workbench:close-project') {
-      if (poison !== undefined) return rejectImmediately(poisonedError(), message.opId);
-      const project = active;
-      if (project === null || !project.acceptingInput || project.token !== message.projectToken) {
-        return rejectImmediately(inactiveTokenError(), message.opId);
-      }
-      // The receive turn owns the fence; no later frame can enter while close awaits.
-      project.acceptingInput = false;
-      return enqueue(() => performClose(message, project));
-    }
-
     const project = active;
     if (project === null || !project.acceptingInput || project.token !== message.projectToken) {
+      if (isExpectedPostFenceToken(message.projectToken)) return Promise.resolve();
       return rejectImmediately(inactiveTokenError());
     }
     // PTY runs may remain pending for minutes. The runtime actor owns their
@@ -713,6 +739,16 @@ function recoverOperationId(value: unknown): string | undefined {
   return typeof candidate.opId === 'string' && candidate.opId.length > 0
     ? candidate.opId
     : undefined;
+}
+
+function isProjectInputMessage(
+  message: PageToWorkbenchOwnerMessage,
+): message is ProjectInputMessage {
+  return (
+    message.type === 'workbench:project-pty' ||
+    message.type === 'workbench:project-preview' ||
+    message.type === 'workbench:project-vfs'
+  );
 }
 
 function operationId(message: PageToWorkbenchOwnerMessage): string | undefined {

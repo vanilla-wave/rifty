@@ -1,0 +1,3 @@
+# git 2.50.1 | LC_ALL=C | git status --porcelain | tree: staged deletion plus a same-path untracked recreation
+D  a.txt
+?? a.txt

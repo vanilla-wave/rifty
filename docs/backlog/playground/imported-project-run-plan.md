@@ -8,12 +8,12 @@ user_story: As a developer who opened a real npm project, I want to review scrip
 epic: from-intent-to-running-project
 blocked_by: [playground/project-ingress-transaction, playground/project-compatibility-preflight]
 sources: [M11, M13, docs/public/compat/package-tooling.md]
-code: [apps/playground/src/orchestration/workspace-files.ts, apps/playground/src/glue/npm-shell-command.ts, apps/playground/src/glue/devMode.ts, apps/playground/src/orchestration/dev-server-lifecycle.ts]
+code: [apps/playground/src/workers/playground-archive-integration.ts, apps/playground/src/workers/package-acquisition-authority.ts, apps/playground/src/workers/workbench-project-runtime.ts, apps/playground/src/adapters/playground-app.tsx]
 ---
 
 ## Context
 
-After import, read the real `package.json`, show scripts/entry evidence, detected `packageManager`, every lockfile marker, and the compatibility preflight, then let the user choose: install, run a named script, or open the terminal without running. Enable Install only when the catalog proves rifty's package path supports that manager and lockfile version. An explicitly unsupported manager/lockfile is a linked blocker; conflicting markers or a manager with no applicable claim stay `unknown` with Install disabled. Never silently invoke rifty npm for another manager or overwrite/ignore its lockfile. Preserve raw npm/script output and real exit code; discover preview only from owner-published ports. Absence of a recognized script is not an error and must not trigger a guessed `npm run dev`.
+After owner archive import, read the real `package.json` through the ProjectSession, show scripts/entry evidence, detected `packageManager`, every lockfile marker, and the compatibility preflight, then let the user choose: install, run a named script, or open the terminal without running. Enable Install only when the catalog proves rifty's package path supports that manager and lockfile version. An explicitly unsupported manager/lockfile is a linked blocker; conflicting markers or a manager with no applicable claim stay `unknown` with Install disabled. Never silently invoke rifty npm for another manager or overwrite/ignore its lockfile. Preserve raw npm/script output and real exit code; discover preview only from owner-published ports. Absence of a recognized script is not an error and must not trigger a guessed `npm run dev`.
 
 The run plan needs a runtime-neutral project identity rather than assigning an arbitrary existing `ProjectSpec`; this item owns that runtime-plan ADR separately from the ingress transaction's provenance/reset/publication ADR. `No known blocker` is not permission to claim the project is supported.
 

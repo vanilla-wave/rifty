@@ -1,11 +1,13 @@
+import { NotImplementedError } from '@riftydev/io';
 import { type VfsDirent, dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
 import type { FileExplorerMutations } from '../components/FileExplorer.tsx';
 import type { EditorApi } from '../components/editor-host-core.ts';
 import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
 import { NODE_MODULES_MAX_CONTENT_BYTES } from '../glue/node-modules-port.ts';
-import type { PlaygroundScm } from '../workbench/playground.ts';
+import type { PlaygroundScm, PlaygroundScmSupportedChange } from '../workbench/playground.ts';
 import type {
   ProjectDocument,
+  ProjectDocumentSnapshot,
   ProjectDocuments,
   ProjectFileEntry,
   ProjectFiles,
@@ -21,11 +23,15 @@ export interface PlaygroundProjectMirror extends FsOpsTarget {
   readonly root: '/';
   filePaths(): readonly string[];
   version(path: string): string | null;
+  /** Admit bytes and version captured by the editor's exact Document handle. */
+  admitFile(snapshot: ProjectDocumentSnapshot): Uint8Array;
   ensureFile(path: string): Promise<Uint8Array>;
   dispose(): void;
 }
 
 export interface PlaygroundDocumentWriter {
+  /** Capture (or refresh) the exact CAS base before an editable model opens. */
+  open(path: string): Promise<ProjectDocumentSnapshot>;
   write(path: string, text: string): Promise<void>;
   closeTree(path: string): Promise<void>;
   closeAll(): Promise<void>;
@@ -125,9 +131,19 @@ export async function readPlaygroundGitOriginalText(
   if (input.ref !== 'HEAD') throw new Error(`Unsupported Git original ref ${input.ref}`);
   const path = projectPath(input.path);
   const changes = scm.snapshot().changes.filter((change) => change.path === path);
+  const gap = changes.find((candidate) => 'rawStatusMatrixCode' in candidate);
+  if (gap !== undefined && 'rawStatusMatrixCode' in gap) {
+    throw new NotImplementedError(`git.status-matrix.${gap.rawStatusMatrixCode}`);
+  }
   const change =
-    changes.find((candidate) => candidate.area === 'staged') ??
-    changes.find((candidate) => candidate.area === 'working');
+    changes.find(
+      (candidate): candidate is PlaygroundScmSupportedChange =>
+        'area' in candidate && candidate.area === 'staged',
+    ) ??
+    changes.find(
+      (candidate): candidate is PlaygroundScmSupportedChange =>
+        'area' in candidate && candidate.area === 'working',
+    );
   if (change === undefined) {
     return decodeProjectText(`HEAD:${path}`, await mirror.ensureFile(path));
   }
@@ -183,6 +199,28 @@ export function createPlaygroundProjectMirror(files: ProjectFiles): PlaygroundPr
 
     version(path) {
       return entries.get(projectPath(path))?.version ?? null;
+    },
+
+    admitFile(opened) {
+      const logical = projectPath(opened.path);
+      if (disposed) throw new Error('Playground project mirror is closed');
+      const expected = entries.get(logical);
+      if (
+        expected?.kind !== 'file' ||
+        opened.version === null ||
+        expected.version !== opened.version ||
+        opened.closed ||
+        opened.staleReason !== null
+      ) {
+        throw new Error(`Project file ${logical} changed while its editor document opened`);
+      }
+      const bytes = opened.bytes.slice();
+      if (bytes.byteLength !== expected.size) {
+        throw new Error(`Project file ${logical} size changed without a version change`);
+      }
+      cache.set(logical, { version: opened.version, bytes });
+      notify();
+      return bytes.slice();
     },
 
     async ensureFile(path) {
@@ -427,6 +465,25 @@ export function createPlaygroundDocumentWriter(
     return opening;
   };
 
+  const snapshot = (document: ProjectDocument): ProjectDocumentSnapshot => {
+    const current = document.snapshot();
+    return Object.freeze({
+      ...current,
+      bytes: current.bytes.slice(),
+      conflict:
+        current.conflict === null
+          ? null
+          : Object.freeze({
+              ...current.conflict,
+              actualEntry:
+                current.conflict.actualEntry === null
+                  ? null
+                  : Object.freeze({ ...current.conflict.actualEntry }),
+              actualBytes: current.conflict.actualBytes?.slice() ?? null,
+            }),
+    });
+  };
+
   const enqueue = (path: string, operation: () => Promise<void>): Promise<void> => {
     const logical = projectPath(path);
     const prior = tails.get(logical) ?? Promise.resolve();
@@ -462,10 +519,27 @@ export function createPlaygroundDocumentWriter(
   };
 
   const writer: PlaygroundDocumentWriter = {
+    async open(path) {
+      const logical = projectPath(path);
+      await (tails.get(logical) ?? Promise.resolve());
+      let document = await handle(logical);
+      const current = document.snapshot();
+      if (current.staleReason !== null && !current.dirty) {
+        await document.close();
+        handles.delete(logical);
+        document = await handle(logical);
+      }
+      return snapshot(document);
+    },
+
     write(path, text) {
       const logical = projectPath(path);
       return enqueue(logical, async () => {
-        const document = await handle(logical);
+        const opened = handles.get(logical);
+        if (opened === undefined) {
+          throw new Error(`Project editor document ${logical} was not opened before its write`);
+        }
+        const document = await opened;
         document.replace(text);
         await document.save();
       });

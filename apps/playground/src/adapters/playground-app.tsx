@@ -6,7 +6,7 @@ import {
 } from '@riftydev/terminal/history';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import type * as monaco from 'monaco-editor';
-import { Show, createMemo, createSignal, lazy, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, lazy, onCleanup, onMount } from 'solid-js';
 import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from '../boot.ts';
 import { BottomPanel } from '../components/BottomPanel.tsx';
 import { CapabilitiesPanel } from '../components/CapabilitiesPanel.tsx';
@@ -24,7 +24,9 @@ import { StatusBar } from '../components/StatusBar.tsx';
 import type { TerminalDims, TerminalModeHint } from '../components/TerminalPanel.tsx';
 import type { EditorApi, EditorOpenFileOptions } from '../components/editor-host-core.ts';
 import { Icon } from '../components/icons.tsx';
+import { DELETE_GRACE_MS } from '../glue/app-project-store.ts';
 import { resetBrowserSandboxState } from '../glue/browser-sandbox-reset.ts';
+import { browserLocalStorage } from '../glue/browser-storage.ts';
 import { copyToClipboard } from '../glue/clipboard.ts';
 import {
   degradedBannerVisible,
@@ -37,6 +39,12 @@ import { initialEditorFilesForPreset } from '../glue/initial-editor-files.ts';
 import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from '../glue/launcher-prefs.ts';
 import { createPageStore } from '../glue/page-store.ts';
 import { parsePresetDeepLink } from '../glue/preset-deep-link.ts';
+import {
+  hasPersistedProjectHint,
+  reconcileProjectChoiceOnBoot,
+  recordProjectPresenceHint,
+  shouldOpenInstantProjectChoice,
+} from '../glue/project-boot-policy.ts';
 import { scratchDisplayName } from '../glue/project-display-name.ts';
 import type { ActiveId, ProjectIndex } from '../glue/project-index.ts';
 import type { ScmResourceRow } from '../glue/scm-status.ts';
@@ -59,8 +67,8 @@ import type {
   PlaygroundCatalogSnapshot,
   PlaygroundPreview,
   PlaygroundProjectPlan,
-  PlaygroundScmChange,
   PlaygroundScmSnapshot,
+  PlaygroundScmSupportedChange,
 } from '../workbench/playground.ts';
 import type { ProjectTerminalSnapshot } from '../workbench/public.ts';
 import {
@@ -69,6 +77,7 @@ import {
   createPlaygroundAppRuntime,
 } from './playground-app-runtime.ts';
 import { createDelayedCatalogDelete } from './playground-delete-policy.ts';
+import { PlaygroundHealthBanner, createPlaygroundHealthUi } from './playground-health-ui.tsx';
 import { toPlaygroundProjectPlan } from './playground-project-plan.ts';
 import {
   type PlaygroundDocumentWriter,
@@ -82,8 +91,13 @@ import {
 } from './playground-project-view.ts';
 import { savePlaygroundSession } from './playground-save.ts';
 import { playgroundScmDiffPresentation } from './playground-scm-diff-presentation.ts';
+import {
+  SidebarRecoveryAffordance,
+  createSidebarTogglePaletteItem,
+} from './playground-sidebar-recovery.tsx';
 import { selectPlaygroundSidebarView } from './playground-sidebar-view.ts';
 import { type PlaygroundTerminalUi, createPlaygroundTerminalUi } from './playground-terminal-ui.ts';
+import { createPlaygroundStoreToastDismissal } from './playground-toast-policy.ts';
 import type { PlaygroundTsDevHooksHandle } from './playground-ts-dev-hooks.ts';
 import { openPlaygroundAppWorkbench } from './playground-workbench-host.ts';
 import type { TerminalSessionSnapshot } from './terminal-manager.ts';
@@ -226,9 +240,17 @@ export function App(props: AppProps) {
     readonly starterId?: string;
     readonly projectId?: string;
   } | null>(null);
+  const healthUi = createPlaygroundHealthUi();
 
   const store = createPageStore();
   store.setStorage(initialStorageMode);
+  const workspaceAtRisk = (): boolean => store.dirty() || healthUi.persistenceAtRisk();
+  const workbenchUnavailable = (): boolean =>
+    healthUi.issues().some((issue) => issue.kind === 'unavailable' || issue.kind === 'fatal');
+  const storeToastDismissal = createPlaygroundStoreToastDismissal((expected) => {
+    if (store.toast() === expected) store.setToast(null);
+  });
+  createEffect(() => storeToastDismissal.update(store.toast()));
   const presetDeepLink = parsePresetDeepLink(globalThis.location?.search ?? '');
   const deepLinkStarterId = PRESETS.some((preset) => preset.id === presetDeepLink.presetId)
     ? presetDeepLink.presetId
@@ -244,6 +266,9 @@ export function App(props: AppProps) {
     env: Object.freeze({}),
   });
   let unsubscribeCatalog: (() => void) | null = null;
+  let catalogChoiceReconciled = false;
+  let initialization: Promise<void> | null = null;
+  let retryWorkbenchAfterCleanup = false;
   let editorApi: EditorApi | undefined;
   const editorOpQueue = createEditorOpQueue<EditorApi>();
   let editorDocumentUnsubscribe: (() => void) | null = null;
@@ -274,7 +299,7 @@ export function App(props: AppProps) {
   }
 
   function projectAdmissionBlocked(): boolean {
-    return !workbenchReady() || projectBusy();
+    return !workbenchReady() || projectBusy() || workbenchUnavailable();
   }
 
   function effectiveRunState(): 'stopped' | 'starting' | 'running' {
@@ -370,7 +395,9 @@ export function App(props: AppProps) {
 
   const gitStatus = createMemo<ReadonlyMap<string, string>>(() => {
     const map = new Map<string, string>();
-    for (const change of scmSnapshot().changes) map.set(change.path, change.code);
+    for (const change of scmSnapshot().changes) {
+      if ('code' in change) map.set(change.path, change.code);
+    }
     return map;
   });
 
@@ -481,7 +508,7 @@ export function App(props: AppProps) {
     const project = bound();
     if (project === undefined) return;
     try {
-      await project.mirror.ensureFile(path);
+      project.mirror.admitFile(await project.documents.open(path));
       withProjectEditor(project, (api) => api.openFile(path, options));
     } catch (error) {
       if (bound() === project) flashError(`Open failed: ${errorMessage(error)}`);
@@ -502,6 +529,7 @@ export function App(props: AppProps) {
   }
 
   async function disposeBound(): Promise<void> {
+    healthUi.bindSession(undefined);
     const project = bound();
     if (project === undefined) return;
     const api = editorApi;
@@ -525,9 +553,14 @@ export function App(props: AppProps) {
   async function bindProject(context: PlaygroundAppProjectContext): Promise<BoundProject> {
     warmEditorStack();
     const mirror = createPlaygroundProjectMirror(context.session.files);
+    const documents = createPlaygroundDocumentWriter(context.session.documents);
     try {
-      await Promise.all(mirror.filePaths().map((path) => mirror.ensureFile(path)));
-      const documents = createPlaygroundDocumentWriter(context.session.documents);
+      // The editor bytes and the first-write CAS base are the same Document
+      // capture. Eager source-file loading already happened here; use that read
+      // to establish provenance instead of sampling a handle on first write.
+      await Promise.all(
+        mirror.filePaths().map(async (path) => mirror.admitFile(await documents.open(path))),
+      );
       const terminal = createPlaygroundTerminalUi(context.session);
       const unsubscribeScm = context.tools.scm.subscribe(setScmSnapshot);
       const unsubscribePreviews = context.tools.previews.subscribe(setPreviewPorts);
@@ -538,6 +571,7 @@ export function App(props: AppProps) {
           next.some((session) => session.id === selected) ? selected : (next[0]?.id ?? ''),
         );
       });
+      healthUi.bindSession(context.tools.health);
       const mutations = createPlaygroundFileMutations(context.session.files, mirror, (paths) =>
         preparePlaygroundOwnerByteOperation({
           editor: editorApi,
@@ -601,7 +635,16 @@ export function App(props: AppProps) {
       );
       return project;
     } catch (error) {
+      healthUi.bindSession(undefined);
       mirror.dispose();
+      try {
+        await documents.closeAll();
+      } catch (closeError) {
+        throw new AggregateError(
+          [error, closeError],
+          'Playground project binding and document cleanup failed',
+        );
+      }
       throw error;
     }
   }
@@ -667,6 +710,7 @@ export function App(props: AppProps) {
       await workbench.close();
       return;
     }
+    healthUi.bindWorkbench(workbench.health);
     latestTerminalState = workbench.playground.restoreTerminalState({
       format:
         props.terminalPersistence.initialStateSource === 'legacy-absolute'
@@ -680,7 +724,20 @@ export function App(props: AppProps) {
     setStorageMode(workbench.snapshot().storage.backend === 'opfs' ? 'opfs' : 'memory');
     store.setStorage(workbench.snapshot().storage.backend === 'opfs' ? 'opfs' : 'memory');
     unsubscribeCatalog = runtime.catalog.subscribe((snapshot) => {
-      store.hydrateIndex(catalogIndex(snapshot, hiddenDeleteId));
+      const index = catalogIndex(snapshot, hiddenDeleteId);
+      store.hydrateIndex(index);
+      if (!catalogChoiceReconciled) {
+        catalogChoiceReconciled = true;
+        reconcileProjectChoiceOnBoot(index, {
+          openStarterChoice() {
+            store.setLauncherTab('starters');
+            store.openLauncher();
+          },
+          closeProjectChoice: store.closeLauncher,
+        });
+      } else {
+        recordProjectPresenceHint(index);
+      }
     });
     setWorkbenchReady(true);
     if (deepLinkStarterId !== undefined) {
@@ -701,6 +758,52 @@ export function App(props: AppProps) {
     }
   }
 
+  function startWorkbench(): void {
+    if (initialization !== null) {
+      retryWorkbenchAfterCleanup = true;
+      return;
+    }
+    healthUi.beginBoot();
+    setWorkbenchReady(false);
+    catalogChoiceReconciled = false;
+    const attempt = initialize().catch(async (error: unknown) => {
+      healthUi.bootFailed(error);
+      setWorkbenchReady(false);
+      unsubscribeCatalog?.();
+      unsubscribeCatalog = null;
+      try {
+        await disposeBound();
+        await runtime?.close();
+      } catch (cleanupError) {
+        console.error('[playground] failed Workbench cleanup failed', cleanupError);
+      }
+      runtime = null;
+    });
+    initialization = attempt.finally(() => {
+      initialization = null;
+      if (!disposed && retryWorkbenchAfterCleanup) {
+        retryWorkbenchAfterCleanup = false;
+        startWorkbench();
+      }
+    });
+  }
+
+  function recoverWorkbench(scope: 'scm' | 'preview' | 'persistence'): void {
+    void healthUi
+      .recover(scope)
+      .catch((error: unknown) => flashError(`${scope} recovery failed: ${errorMessage(error)}`));
+  }
+
+  function reloadWorkbench(): void {
+    if (runtime === null || healthUi.boot().kind === 'boot-failed') {
+      globalThis.location?.reload();
+      return;
+    }
+    void runtime.workbench.health
+      .recover('reload')
+      .catch((error: unknown) => flashError(`Reload failed: ${errorMessage(error)}`));
+  }
+
   async function share(): Promise<void> {
     const copied = await copyToClipboard(globalThis.location?.href ?? '');
     flashToast(
@@ -711,7 +814,7 @@ export function App(props: AppProps) {
 
   function openLauncher(): void {
     store.setLauncherTab(
-      initialLauncherTab(store.projects().length, loadLauncherTab(globalThis.localStorage)),
+      initialLauncherTab(store.projects().length, loadLauncherTab(browserLocalStorage())),
     );
     store.openLauncher();
   }
@@ -794,7 +897,7 @@ export function App(props: AppProps) {
   }
 
   const deletePolicy = createDelayedCatalogDelete({
-    delayMs: 3_200,
+    delayMs: DELETE_GRACE_MS,
     deleteProject: async (id) => void (await transition((app) => app.delete(id))),
     onCommitted() {
       hiddenDeleteId = undefined;
@@ -821,7 +924,6 @@ export function App(props: AppProps) {
     hiddenDeleteId = undefined;
     store.undoDelete();
     if (runtime !== null) store.hydrateIndex(catalogIndex(runtime.catalog.snapshot()));
-    store.setToast(null);
   }
 
   function onMenuAction(id: string, action: RowAction): void {
@@ -878,17 +980,20 @@ export function App(props: AppProps) {
     }
   }
 
-  function scmChange(row: ScmResourceRow): PlaygroundScmChange {
+  function scmChange(row: ScmResourceRow): PlaygroundScmSupportedChange {
     const area = row.side === 'index' ? 'staged' : 'working';
     const change = scmSnapshot().changes.find(
-      (candidate) =>
-        candidate.path === row.path && candidate.code === row.code && candidate.area === area,
+      (candidate): candidate is PlaygroundScmSupportedChange =>
+        'code' in candidate &&
+        candidate.path === row.path &&
+        candidate.code === row.code &&
+        candidate.area === area,
     );
     if (change === undefined) throw new Error(`SCM change ${row.path} is stale`);
     return change;
   }
 
-  async function openScmDiff(change: PlaygroundScmChange): Promise<void> {
+  async function openScmDiff(change: PlaygroundScmSupportedChange): Promise<void> {
     const project = bound();
     if (project === undefined) return;
     try {
@@ -937,6 +1042,19 @@ export function App(props: AppProps) {
     }
   }
 
+  async function compareWorkingFileWithHead(path: string): Promise<void> {
+    const project = bound();
+    if (project === undefined) return;
+    try {
+      await editorApi?.flushPendingWrites();
+      await project.context.tools.scm.refresh();
+      if (bound() !== project) return;
+      withProjectEditor(project, (api) => api.openWorkingDiff({ path, ref: 'HEAD' }));
+    } catch (error) {
+      if (bound() === project) flashError(`Compare failed: ${errorMessage(error)}`);
+    }
+  }
+
   async function runScm(
     operation: () => Promise<void>,
     success?: string,
@@ -970,7 +1088,12 @@ export function App(props: AppProps) {
   }
 
   function archiveBlocked(): boolean {
-    return !workbenchReady() || projectBusy() || effectiveRunState() !== 'stopped';
+    return (
+      !workbenchReady() ||
+      projectBusy() ||
+      workbenchUnavailable() ||
+      effectiveRunState() !== 'stopped'
+    );
   }
 
   async function exportArchive(): Promise<void> {
@@ -1137,6 +1260,7 @@ export function App(props: AppProps) {
       });
     }
     items.push(
+      createSidebarTogglePaletteItem(layout),
       {
         id: 'act:new-terminal',
         section: 'Commands',
@@ -1241,10 +1365,16 @@ export function App(props: AppProps) {
 
   onMount(() => {
     if (capabilities.sufficient) {
-      void initialize().catch((error: unknown) => {
-        flashError(`Workbench open failed: ${errorMessage(error)}`);
-        setWorkbenchReady(false);
-      });
+      if (
+        shouldOpenInstantProjectChoice({
+          hasPersistedProject: hasPersistedProjectHint(),
+          ...(deepLinkStarterId === undefined ? {} : { requestedStarterId: deepLinkStarterId }),
+        })
+      ) {
+        store.setLauncherTab('starters');
+        store.openLauncher();
+      }
+      startWorkbench();
     }
     const onKey = (event: KeyboardEvent): void => {
       if (
@@ -1278,7 +1408,7 @@ export function App(props: AppProps) {
       }
     };
     const onBeforeUnload = (event: BeforeUnloadEvent): void => {
-      if (storageMode() === 'memory' && store.dirty()) {
+      if (healthUi.persistenceAtRisk() || (storageMode() === 'memory' && store.dirty())) {
         event.preventDefault();
         event.returnValue = '';
       }
@@ -1293,7 +1423,10 @@ export function App(props: AppProps) {
 
   onCleanup(() => {
     disposed = true;
+    retryWorkbenchAfterCleanup = false;
+    healthUi.dispose();
     deletePolicy.dispose();
+    storeToastDismissal.dispose();
     if (toastTimer !== undefined) clearTimeout(toastTimer);
     unsubscribeCatalog?.();
     unsubscribeCatalog = null;
@@ -1325,6 +1458,16 @@ export function App(props: AppProps) {
         </div>
       </Show>
 
+      <Show when={capabilities.sufficient}>
+        <PlaygroundHealthBanner
+          boot={healthUi.boot}
+          issues={healthUi.issues}
+          onRetry={startWorkbench}
+          onRecover={recoverWorkbench}
+          onReload={reloadWorkbench}
+        />
+      </Show>
+
       <header class="rf-header rf-card">
         <span class="rf-brand">
           <span class="rf-brand__mark" aria-hidden="true" />
@@ -1334,7 +1477,7 @@ export function App(props: AppProps) {
           name={activeName()}
           glyph={activeGlyph().text}
           glyphColor={activeGlyph().color}
-          dirty={store.dirty()}
+          dirty={workspaceAtRisk()}
           onOpen={openLauncher}
         />
         <span class="rf-livepill" data-state={livePillState()} title={modeLabel()}>
@@ -1373,6 +1516,10 @@ export function App(props: AppProps) {
             '--rf-preview-w': `${layout.previewW()}px`,
           }}
         >
+          <SidebarRecoveryAffordance
+            collapsed={layout.sidebarCollapsed()}
+            onExpand={layout.toggleSidebar}
+          />
           <aside class="rf-sidebar rf-card">
             <div class="rf-sidebar__nav" role="tablist" aria-label="Sidebar views">
               <button
@@ -1409,13 +1556,7 @@ export function App(props: AppProps) {
                       onOpenFile={(path) => void openEditorFile(path)}
                       onDownloadFile={(path) => void downloadFile(path)}
                       onCompareFiles={(left, right) => void compareFiles(left, right)}
-                      onCompareWithHead={(path) => {
-                        const change =
-                          scmSnapshot().changes.find(
-                            (candidate) => candidate.path === path && candidate.area === 'working',
-                          ) ?? scmSnapshot().changes.find((candidate) => candidate.path === path);
-                        if (change !== undefined) void openScmDiff(change);
-                      }}
+                      onCompareWithHead={(path) => void compareWorkingFileWithHead(path)}
                       onNotify={flashToast}
                     />
                   )}
@@ -1425,7 +1566,7 @@ export function App(props: AppProps) {
               <ScmPanel
                 root="/"
                 branch={scmSnapshot().branch}
-                status={gitStatus()}
+                changes={scmSnapshot().changes}
                 history={scmSnapshot().history}
                 onOpenChange={(row) => void openScmDiff(scmChange(row))}
                 onStage={(row) =>
@@ -1480,7 +1621,11 @@ export function App(props: AppProps) {
                       setActiveLang(info.language);
                       setActiveFilePath(info.path);
                     }}
-                    onFileWritten={(path, content) => project.documents.write(path, content)}
+                    onFileWritten={(path, content) => {
+                      // TODO(backlog: playground/editor-conflict-recovery)
+                      return project.documents.write(path, content);
+                    }}
+                    persistenceAtRisk={healthUi.persistenceAtRisk}
                     readNodeModulesFile={(path) =>
                       readPlaygroundEditorRemoteFile(project.context.session.files, path)
                     }
@@ -1598,7 +1743,7 @@ export function App(props: AppProps) {
           coi={isCrossOriginIsolated()}
           activeName={activeName()}
           activeStarter={activeGlyph().label}
-          dirty={store.dirty()}
+          dirty={workspaceAtRisk()}
           onExport={() => void exportArchive()}
           exportDisabled={archiveBlocked()}
           exportTitle={
@@ -1625,7 +1770,7 @@ export function App(props: AppProps) {
         glyphFor={glyphFor}
         onTab={(tab) => {
           store.setLauncherTab(tab);
-          saveLauncherTab(globalThis.localStorage, tab);
+          saveLauncherTab(browserLocalStorage(), tab);
         }}
         onClose={closeLauncher}
         onSearch={store.setQ}

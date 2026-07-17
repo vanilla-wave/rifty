@@ -13,6 +13,7 @@ import {
   PathspecError,
   type makeGit,
   pathspecMatch,
+  requireSupportedStatusEntries,
 } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import type { CommandContext } from '../types.ts';
@@ -367,7 +368,11 @@ export async function prepareCheckout(
   }
   if (await revisionExists(g, first)) {
     const firstPathspec = mapPathspec(first);
-    if ((await g.status()).some((entry) => pathspecMatch(entry.filepath, firstPathspec))) {
+    if (
+      requireSupportedStatusEntries(await g.status()).some((entry) =>
+        pathspecMatch(entry.filepath, firstPathspec),
+      )
+    ) {
       return { kind: 'ambiguity', arg: first };
     }
     return { kind: 'restore', pathspecs: restSpecs, source: first };

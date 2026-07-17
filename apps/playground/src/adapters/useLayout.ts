@@ -7,6 +7,7 @@
  * tick — `onInput` only moves the signal; `onCommit`/toggles call `persist()`.
  */
 import { createSignal } from 'solid-js';
+import { browserLocalStorage } from '../glue/browser-storage.ts';
 import {
   LAYOUT_BOUNDS,
   LAYOUT_DEFAULTS,
@@ -16,14 +17,6 @@ import {
   loadLayout,
   saveLayout,
 } from '../glue/layout-store.ts';
-
-function safeLocalStorage(): StorageLike | undefined {
-  try {
-    return globalThis.localStorage;
-  } catch {
-    return undefined;
-  }
-}
 
 export interface LayoutController {
   sidebarW(): number;
@@ -49,7 +42,7 @@ export interface LayoutController {
 }
 
 export function useLayout(): LayoutController {
-  const storage = safeLocalStorage();
+  const storage: StorageLike | undefined = browserLocalStorage();
   const initial = loadLayout(storage);
 
   const [sidebarW, setSidebarW] = createSignal(initial.sidebarW);

@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- `git status` and `git status --porcelain` preserve row multiplicity when a
+  staged deletion is followed by an untracked same-path recreation, matching
+  real Git's ordered `D ` plus `??` output instead of collapsing one path to a
+  single misleading row (ADR-0284).
+- All status-dependent Git commands now pass through one strict classifier
+  preflight, so a future matrix gap throws before shell output or mutation.
 - **Terminal Git handles a repository rooted at `/`.** Relative pathspecs map
   inside the repository, while `git apply` from a subdirectory still filters
   root-level patch entries out of scope.

@@ -235,6 +235,7 @@ export function EditorHost(props: EditorHostProps) {
         onClose={core.closeFile}
         previewUrl={props.previewUrl?.()}
         onOpenPreviewTab={props.onOpenPreviewTab}
+        persistenceAtRisk={props.persistenceAtRisk?.()}
       />
       <div class="rf-editor__surface">
         <div

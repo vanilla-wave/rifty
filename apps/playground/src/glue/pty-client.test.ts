@@ -260,6 +260,7 @@ describe('pty-client', () => {
     });
     // snapshot reflects the seed BEFORE any command runs (no pty:exit yet)
     expect(client.snapshot('s1')).toEqual({ cwd: '/restored', env: { TERM: 'xterm' } });
+    client.onFrame({ type: 'pty:ready', sid: 's1' });
   });
 
   it('disconnect rejects a hung exec loudly instead of inventing a process exit', async () => {
@@ -269,9 +270,207 @@ describe('pty-client', () => {
     await expect(p).rejects.toThrow(/ClosedHandleError.*owner died/i);
   });
 
+  it('preserves one caller-owned disconnect cause across every pending and future operation', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const opening = client.openSession('opening');
+    const idleResize = client.resizeSession('idle-resize', 80, 24);
+    const devConfig = client.setDevConfig({
+      templateId: 'typescript',
+      slug: 'disconnect-provenance',
+      setup: 'instant',
+    });
+    const closing = client.closeSession('closing');
+    const running = client.exec('running', 'cat', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const exec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    );
+    if (exec === undefined) throw new Error('missing exec frame');
+    const writing = client.writeStdin('running', exec.rid, new Uint8Array([1]));
+    const ending = client.endStdin('running', exec.rid);
+    const resizing = client.resize('running', exec.rid, 100, 30);
+    const pending = [
+      opening,
+      idleResize,
+      devConfig,
+      closing,
+      running,
+      writing,
+      ending,
+      resizing,
+    ].map((operation) =>
+      operation.then(
+        () => null,
+        (error: unknown) => error,
+      ),
+    );
+    const disconnectCause = new Error('exact owner transport disconnect');
+
+    client.disconnect(disconnectCause);
+    client.disconnect(new Error('later disconnect must not replace the first cause'));
+
+    const future = [
+      client.openSession('future-open'),
+      client.resizeSession('future-resize', 80, 24),
+      client.closeSession('future-close'),
+      client.setDevConfig({
+        templateId: 'vite-react',
+        slug: 'future-config',
+        setup: 'from-scratch',
+      }),
+      client.exec('future-run', 'true', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      }),
+      client.writeStdin('future-run', 'future-rid', new Uint8Array([1])),
+      client.endStdin('future-run', 'future-rid'),
+    ].map((operation) =>
+      operation.then(
+        () => null,
+        (error: unknown) => error,
+      ),
+    );
+
+    const thrownBy = (operation: () => void): unknown => {
+      try {
+        operation();
+        return null;
+      } catch (error) {
+        return error;
+      }
+    };
+    const synchronous = [
+      thrownBy(() => client.resize('future-run', 'future-rid', 80, 24)),
+      thrownBy(() => client.signal('future-run', 'future-rid')),
+      thrownBy(() => client.requestDevServer()),
+      thrownBy(() => client.requestPreview()),
+    ];
+    const outcomes = [
+      ...(await Promise.all(pending)),
+      ...(await Promise.all(future)),
+      ...synchronous,
+    ];
+    expect(outcomes).toEqual(outcomes.map(() => disconnectCause));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   // Race a promise against a 50ms sentinel so a hang fails fast + deterministically.
   const settledOr = <T>(p: Promise<T>, pending: T): Promise<T> =>
     Promise.race([p, new Promise<T>((r) => setTimeout(() => r(pending), 50))]);
+
+  const ACK_TIMEOUT_MS = 60_000;
+
+  it('bounds initial session readiness, ignores its late frame, and fences only that session', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const opening = client.openSession('hung-open');
+    let failure: unknown;
+    void opening.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:ready.*hung-open.*60000ms/i),
+      }),
+    );
+    client.onFrame({ type: 'pty:ready', sid: 'hung-open' });
+    await expect(client.openSession('hung-open')).rejects.toBe(failure);
+    expect(
+      sent.filter((frame) => frame.type === 'pty:open' && frame.sid === 'hung-open'),
+    ).toHaveLength(1);
+
+    const sibling = client.openSession('healthy-open');
+    client.onFrame({ type: 'pty:ready', sid: 'healthy-open' });
+    await expect(sibling).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds run admission without timing out an admitted process lifetime', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const starts: string[] = [];
+    const hung = client.exec('hung-run', 'node server.js', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+      onStart: (rid) => starts.push(rid),
+    });
+    const hungFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )!;
+    let failure: unknown;
+    void hung.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:run-ready.*hung-run.*60000ms/i),
+      }),
+    );
+    client.onFrame({ type: 'pty:run-ready', sid: 'hung-run', rid: hungFrame.rid });
+    expect(starts).toEqual([]);
+    expect(() =>
+      client.exec('hung-run', 'must-not-overlap', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      }),
+    ).toThrow(/pty:run-ready.*hung-run/i);
+
+    let admittedOutcome = 'pending';
+    const admitted = client.exec('healthy-run', 'node long-lived.js', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    void admitted.then(
+      () => {
+        admittedOutcome = 'resolved';
+      },
+      () => {
+        admittedOutcome = 'rejected';
+      },
+    );
+    const admittedFrame = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )[1]!;
+    client.onFrame({ type: 'pty:run-ready', sid: 'healthy-run', rid: admittedFrame.rid });
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS * 2);
+    expect(admittedOutcome).toBe('pending');
+
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 'healthy-run',
+      rid: admittedFrame.rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    await expect(admitted).resolves.toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 
   it('claims one run per session synchronously', async () => {
     const { client, sent } = harness();
@@ -669,6 +868,252 @@ describe('pty-client', () => {
     await run;
   });
 
+  it.each(['data', 'eof'] as const)(
+    'bounds a hung stdin %s acknowledgement, ignores it late, and keeps process lifetime unbounded',
+    async (kind) => {
+      vi.useFakeTimers();
+      const { client, sent } = harness();
+      const run = client.exec('stdin-timeout', 'cat', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      });
+      const exec = sent.find(
+        (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+          frame.type === 'pty:exec',
+      )!;
+      client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+
+      const operation =
+        kind === 'data'
+          ? client.writeStdin(exec.sid, exec.rid, new Uint8Array([1]))
+          : client.endStdin(exec.sid, exec.rid);
+      const operationFrame = sent.find(
+        (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:stdin' | 'pty:stdin-eof' }> =>
+          frame.type === (kind === 'data' ? 'pty:stdin' : 'pty:stdin-eof'),
+      )!;
+      let failure: unknown;
+      void operation.catch((error: unknown) => {
+        failure = error;
+      });
+
+      await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+      expect(failure).toEqual(
+        expect.objectContaining({
+          name: 'PtyAckTimeoutError',
+          message: expect.stringMatching(/pty:stdin.*stdin-timeout.*60000ms/i),
+        }),
+      );
+      client.onFrame({
+        type: 'pty:stdin-ack',
+        sid: exec.sid,
+        rid: exec.rid,
+        opId: operationFrame.opId,
+        ok: true,
+      });
+
+      let runOutcome = 'pending';
+      void run.then(
+        () => {
+          runOutcome = 'resolved';
+        },
+        () => {
+          runOutcome = 'rejected';
+        },
+      );
+      await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+      expect(runOutcome).toBe('pending');
+      client.onFrame({
+        type: 'pty:exit',
+        sid: exec.sid,
+        rid: exec.rid,
+        code: 0,
+        exit: { code: 0, signal: null },
+        cwd: '/',
+        env: {},
+      });
+      await expect(run).resolves.toBe(0);
+
+      const next = client.exec(exec.sid, 'true', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      });
+      const nextExec = sent.filter(
+        (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+          frame.type === 'pty:exec',
+      )[1]!;
+      client.onFrame({ type: 'pty:run-ready', sid: nextExec.sid, rid: nextExec.rid });
+      client.onFrame({
+        type: 'pty:exit',
+        sid: nextExec.sid,
+        rid: nextExec.rid,
+        code: 0,
+        exit: { code: 0, signal: null },
+        cwd: '/',
+        env: {},
+      });
+      await expect(next).resolves.toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('bounds active resize per opId, ignores a late ACK, and admits a subsequent resize', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const run = client.exec('resize-timeout', 'cat', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const exec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )!;
+    client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+    const first = client.resize(exec.sid, exec.rid, 100, 30);
+    const firstFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:resize' }> =>
+        frame.type === 'pty:resize',
+    )!;
+    let failure: unknown;
+    void first.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:resize-ack.*resize-timeout.*60000ms/i),
+      }),
+    );
+    client.onFrame({
+      type: 'pty:resize-ack',
+      sid: exec.sid,
+      rid: exec.rid,
+      opId: firstFrame.opId,
+      ok: true,
+    });
+
+    const second = client.resize(exec.sid, exec.rid, 120, 40);
+    const secondFrame = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:resize' }> =>
+        frame.type === 'pty:resize',
+    )[1]!;
+    client.onFrame({
+      type: 'pty:resize-ack',
+      sid: exec.sid,
+      rid: exec.rid,
+      opId: secondFrame.opId,
+      ok: true,
+    });
+    await expect(second).resolves.toBeUndefined();
+    client.onFrame({
+      type: 'pty:exit',
+      sid: exec.sid,
+      rid: exec.rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    await run;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds idle resize per opId, ignores a late ACK, and admits a subsequent resize', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const first = client.resizeSession('idle-timeout', 100, 30);
+    const firstFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:session-resize' }> =>
+        frame.type === 'pty:session-resize',
+    )!;
+    let failure: unknown;
+    void first.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:session-resize-ack.*idle-timeout.*60000ms/i),
+      }),
+    );
+    client.onFrame({
+      type: 'pty:session-resize-ack',
+      sid: firstFrame.sid,
+      opId: firstFrame.opId,
+      ok: true,
+    });
+
+    const second = client.resizeSession(firstFrame.sid, 120, 40);
+    const secondFrame = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:session-resize' }> =>
+        frame.type === 'pty:session-resize',
+    )[1]!;
+    client.onFrame({
+      type: 'pty:session-resize-ack',
+      sid: secondFrame.sid,
+      opId: secondFrame.opId,
+      ok: true,
+    });
+    await expect(second).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds session close, ignores its late ACK, and permits an opId-correlated recovery close', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const first = client.closeSession('close-timeout');
+    const firstFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+        frame.type === 'pty:close',
+    )!;
+    let failure: unknown;
+    void first.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:close-ack.*close-timeout.*60000ms/i),
+      }),
+    );
+    client.onFrame({
+      type: 'pty:close-ack',
+      sid: firstFrame.sid,
+      opId: firstFrame.opId,
+      ok: true,
+    });
+
+    const recovery = client.closeSession(firstFrame.sid);
+    const recoveryFrame = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+        frame.type === 'pty:close',
+    )[1]!;
+    expect(recoveryFrame.opId).not.toBe(firstFrame.opId);
+    client.onFrame({
+      type: 'pty:close-ack',
+      sid: recoveryFrame.sid,
+      opId: recoveryFrame.opId,
+      ok: true,
+    });
+    await expect(recovery).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('keeps session state until idempotent close receives its owner ack', async () => {
     const { client, sent } = harness();
     const opening = client.openSession('s1', { cwd: '/kept', env: { A: '1' } });
@@ -990,29 +1435,54 @@ describe('pty-client', () => {
     await expect(ready).resolves.toBeUndefined();
   });
 
-  it('keeps an admitted dev config pending past the former readiness timeout', async () => {
+  it('bounds dev-config readiness and fences only the indeterminate config channel', async () => {
     vi.useFakeTimers();
-    const { client } = harness();
+    const { client, sent } = harness();
     const ready = client.setDevConfig({
       templateId: 'express-sqlite',
       slug: 'slow-config',
       setup: 'from-scratch',
     });
-    let outcome = 'pending';
-    void ready.then(
-      () => {
-        outcome = 'resolved';
-      },
-      () => {
-        outcome = 'rejected';
-      },
+    let failure: unknown;
+    void ready.catch((error: unknown) => {
+      failure = error;
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    const concurrent = client.setDevConfig({
+      templateId: 'typescript',
+      slug: 'also-indeterminate',
+      setup: 'instant',
+    });
+    let concurrentFailure: unknown;
+    void concurrent.catch((error: unknown) => {
+      concurrentFailure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS - 10_000 + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:dev-config-ready.*dc1.*60000ms/i),
+      }),
     );
-
-    await vi.advanceTimersByTimeAsync(60_001);
-    expect(outcome).toBe('pending');
-
+    expect(concurrentFailure).toBe(failure);
     client.onFrame({ type: 'pty:dev-config-ready', id: 'dc1' });
-    await expect(ready).resolves.toBeUndefined();
+    client.onFrame({ type: 'pty:dev-config-ready', id: 'dc2' });
+
+    await expect(
+      client.setDevConfig({
+        templateId: 'typescript',
+        slug: 'unsafe-reorder',
+        setup: 'instant',
+      }),
+    ).rejects.toBe(failure);
+    expect(sent.filter((frame) => frame.type === 'pty:dev-config')).toHaveLength(2);
+
+    const opening = client.openSession('config-timeout-sibling');
+    client.onFrame({ type: 'pty:ready', sid: 'config-timeout-sibling' });
+    await expect(opening).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('registers dev config settlement before a synchronous owner reply', async () => {

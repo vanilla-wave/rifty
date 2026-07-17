@@ -335,6 +335,335 @@ describe('VfsCommitCoordinator', () => {
     });
   });
 
+  // Fault class: false-fallback. Automatic host commits already cross the
+  // durability barrier; its failure must feed the persistent health authority,
+  // not remain visible only to a later explicit Save.
+  it('reports an automatic durability failure and proves recovery at the same applied revision', async () => {
+    const ownerClosed = deferred<unknown>();
+    const durabilityFailure = new Error('OPFS quota exhausted');
+    const events: Array<
+      | { readonly status: 'failed'; readonly recover: () => Promise<void> }
+      | { readonly status: 'proved' }
+    > = [];
+    let listener = (_frame: OwnerVfsRevisionFrame): void => {};
+    let durabilityCalls = 0;
+    const coordinator = createVfsCommitCoordinator({
+      captureOwner: () => ({
+        ownerEpoch: 'owner-a',
+        isAlive: () => true,
+        closed: ownerClosed.promise,
+        applyHostCommit(request) {
+          return Promise.resolve({
+            operationId: request.operationId,
+            ownerEpoch: 'owner-a',
+            treeRevision: 8,
+            versions: [{ path: '/src/main.ts', version: 'v2' }],
+          });
+        },
+        durabilityBarrier(treeRevision) {
+          durabilityCalls++;
+          return durabilityCalls === 1
+            ? Promise.reject(durabilityFailure)
+            : Promise.resolve({
+                ownerEpoch: 'owner-a',
+                treeRevision,
+                durability: 'durable' as const,
+              });
+        },
+      }),
+      subscribeSnapshots(next) {
+        listener = next;
+        return () => {};
+      },
+      timeoutMs: 1_000,
+      onDurabilityState(event) {
+        events.push(
+          event.status === 'failed'
+            ? { status: event.status, recover: event.recover }
+            : { status: event.status },
+        );
+      },
+    });
+
+    const committed = coordinator.commit({
+      kind: 'write',
+      path: '/src/main.ts',
+      data: new TextEncoder().encode('next'),
+      expectedVersion: 'v1',
+    });
+    await settleMicrotasks();
+    listener(snapshot('owner-a', 8));
+    await expect(committed).rejects.toMatchObject({ cause: durabilityFailure });
+    expect(events).toHaveLength(1);
+    expect(events[0]?.status).toBe('failed');
+
+    const failed = events[0];
+    if (failed?.status !== 'failed') throw new Error('missing durability recovery');
+    await expect(failed.recover()).resolves.toBeUndefined();
+    expect(durabilityCalls).toBe(2);
+    expect(events.map((event) => event.status)).toEqual(['failed', 'proved']);
+  });
+
+  // Fault class: observable-order. Durability completions may arrive out of
+  // revision order; an older proof cannot erase a newer failed high-water mark.
+  it('retains a newer durability failure when an older barrier succeeds later', async () => {
+    const ownerClosed = deferred<unknown>();
+    const olderDurability = deferred<OwnerVfsDurabilityReceipt>();
+    const newerDurability = deferred<OwnerVfsDurabilityReceipt>();
+    const newerFailure = new Error('revision 10 durability failed');
+    const events: Array<
+      | { readonly status: 'failed'; readonly recover: () => Promise<void> }
+      | { readonly status: 'proved' }
+    > = [];
+    const listeners = new Set<(frame: OwnerVfsRevisionFrame) => void>();
+    const barrierCalls: number[] = [];
+    let nextRevision = 8;
+    const coordinator = createVfsCommitCoordinator({
+      captureOwner: () => ({
+        ownerEpoch: 'owner-a',
+        isAlive: () => true,
+        closed: ownerClosed.promise,
+        applyHostCommit(request) {
+          const treeRevision = ++nextRevision;
+          return Promise.resolve({
+            operationId: request.operationId,
+            ownerEpoch: 'owner-a',
+            treeRevision,
+            versions: [],
+          });
+        },
+        durabilityBarrier(treeRevision) {
+          barrierCalls.push(treeRevision);
+          if (treeRevision === 9) return olderDurability.promise;
+          if (barrierCalls.filter((revision) => revision === 10).length === 1) {
+            return newerDurability.promise;
+          }
+          return Promise.resolve({
+            ownerEpoch: 'owner-a',
+            treeRevision,
+            durability: 'durable' as const,
+          });
+        },
+      }),
+      subscribeSnapshots(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      timeoutMs: 1_000,
+      onDurabilityState(event) {
+        events.push(
+          event.status === 'failed'
+            ? { status: event.status, recover: event.recover }
+            : { status: event.status },
+        );
+      },
+    });
+
+    const older = coordinator.commit({ kind: 'mkdir', path: '/older', expectedVersion: null });
+    const newer = coordinator.commit({ kind: 'mkdir', path: '/newer', expectedVersion: null });
+    await settleMicrotasks();
+    for (const listener of listeners) listener(snapshot('owner-a', 10));
+    await settleMicrotasks();
+
+    newerDurability.reject(newerFailure);
+    await expect(newer).rejects.toMatchObject({ cause: newerFailure });
+    expect(events.map((event) => event.status)).toEqual(['failed']);
+
+    olderDurability.resolve({ ownerEpoch: 'owner-a', treeRevision: 9, durability: 'durable' });
+    await expect(older).resolves.toMatchObject({ treeRevision: 9, durability: 'durable' });
+    expect(events.map((event) => event.status)).toEqual(['failed']);
+
+    const failed = events[0];
+    if (failed?.status !== 'failed') throw new Error('missing revision 10 recovery');
+    await expect(failed.recover()).resolves.toBeUndefined();
+    expect(barrierCalls).toEqual([9, 10, 10]);
+    expect(events.map((event) => event.status)).toEqual(['failed', 'proved']);
+  });
+
+  it('ignores an older durability failure after a newer revision is proved', async () => {
+    const ownerClosed = deferred<unknown>();
+    const olderDurability = deferred<OwnerVfsDurabilityReceipt>();
+    const olderFailure = new Error('revision 9 durability failed late');
+    const events: string[] = [];
+    const listeners = new Set<(frame: OwnerVfsRevisionFrame) => void>();
+    let nextRevision = 8;
+    const coordinator = createVfsCommitCoordinator({
+      captureOwner: () => ({
+        ownerEpoch: 'owner-a',
+        isAlive: () => true,
+        closed: ownerClosed.promise,
+        applyHostCommit(request) {
+          return Promise.resolve({
+            operationId: request.operationId,
+            ownerEpoch: 'owner-a',
+            treeRevision: ++nextRevision,
+            versions: [],
+          });
+        },
+        durabilityBarrier(treeRevision) {
+          return treeRevision === 9
+            ? olderDurability.promise
+            : Promise.resolve({
+                ownerEpoch: 'owner-a',
+                treeRevision,
+                durability: 'durable' as const,
+              });
+        },
+      }),
+      subscribeSnapshots(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      timeoutMs: 1_000,
+      onDurabilityState: (event) => events.push(event.status),
+    });
+
+    const older = coordinator.commit({ kind: 'mkdir', path: '/older', expectedVersion: null });
+    const newer = coordinator.commit({ kind: 'mkdir', path: '/newer', expectedVersion: null });
+    await settleMicrotasks();
+    for (const listener of listeners) listener(snapshot('owner-a', 10));
+    await expect(newer).resolves.toMatchObject({ treeRevision: 10, durability: 'durable' });
+    expect(events).toEqual([]);
+
+    olderDurability.reject(olderFailure);
+    await expect(older).rejects.toMatchObject({ cause: olderFailure });
+    expect(events).toEqual([]);
+  });
+
+  it('records an exact durability proof before rejecting snapshot cleanup', async () => {
+    const ownerClosed = deferred<unknown>();
+    const durabilityFailure = new Error('revision 9 durability failed');
+    const cleanupFailure = new Error('snapshot unsubscribe failed');
+    const listeners = new Set<(frame: OwnerVfsRevisionFrame) => void>();
+    const events: string[] = [];
+    let nextRevision = 8;
+    let subscription = 0;
+    const coordinator = createVfsCommitCoordinator({
+      captureOwner: () => ({
+        ownerEpoch: 'owner-a',
+        isAlive: () => true,
+        closed: ownerClosed.promise,
+        applyHostCommit(request) {
+          const treeRevision = ++nextRevision;
+          return Promise.resolve({
+            operationId: request.operationId,
+            ownerEpoch: 'owner-a',
+            treeRevision,
+            versions: [],
+          });
+        },
+        durabilityBarrier(treeRevision) {
+          return treeRevision === 9
+            ? Promise.reject(durabilityFailure)
+            : Promise.resolve({
+                ownerEpoch: 'owner-a',
+                treeRevision,
+                durability: 'durable' as const,
+              });
+        },
+      }),
+      subscribeSnapshots(listener) {
+        const currentSubscription = ++subscription;
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+          if (currentSubscription === 2) throw cleanupFailure;
+        };
+      },
+      timeoutMs: 1_000,
+      onDurabilityState: (event) => events.push(event.status),
+    });
+
+    const failed = coordinator.commit({ kind: 'mkdir', path: '/older', expectedVersion: null });
+    await settleMicrotasks();
+    for (const listener of listeners) listener(snapshot('owner-a', 9));
+    await expect(failed).rejects.toMatchObject({ cause: durabilityFailure });
+    expect(events).toEqual(['failed']);
+
+    const proved = coordinator.commit({ kind: 'mkdir', path: '/newer', expectedVersion: null });
+    await settleMicrotasks();
+    for (const listener of listeners) listener(snapshot('owner-a', 10));
+    await expect(proved).rejects.toMatchObject({ cause: cleanupFailure });
+    expect(events).toEqual(['failed', 'proved']);
+  });
+
+  it('makes an older recovery prove the latest failed durability high-water revision', async () => {
+    const ownerClosed = deferred<unknown>();
+    const olderDurability = deferred<OwnerVfsDurabilityReceipt>();
+    const newerDurability = deferred<OwnerVfsDurabilityReceipt>();
+    const events: Array<
+      | { readonly status: 'failed'; readonly recover: () => Promise<void> }
+      | { readonly status: 'proved' }
+    > = [];
+    const listeners = new Set<(frame: OwnerVfsRevisionFrame) => void>();
+    const barrierCalls: number[] = [];
+    const barrierAttempts = new Map<number, number>();
+    let nextRevision = 8;
+    const coordinator = createVfsCommitCoordinator({
+      captureOwner: () => ({
+        ownerEpoch: 'owner-a',
+        isAlive: () => true,
+        closed: ownerClosed.promise,
+        applyHostCommit(request) {
+          const treeRevision = ++nextRevision;
+          return Promise.resolve({
+            operationId: request.operationId,
+            ownerEpoch: 'owner-a',
+            treeRevision,
+            versions: [],
+          });
+        },
+        durabilityBarrier(treeRevision) {
+          barrierCalls.push(treeRevision);
+          const attempt = (barrierAttempts.get(treeRevision) ?? 0) + 1;
+          barrierAttempts.set(treeRevision, attempt);
+          if (attempt === 1 && treeRevision === 9) return olderDurability.promise;
+          if (attempt === 1 && treeRevision === 10) return newerDurability.promise;
+          return Promise.resolve({
+            ownerEpoch: 'owner-a',
+            treeRevision,
+            durability: 'durable' as const,
+          });
+        },
+      }),
+      subscribeSnapshots(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      timeoutMs: 1_000,
+      onDurabilityState(event) {
+        events.push(
+          event.status === 'failed'
+            ? { status: event.status, recover: event.recover }
+            : { status: event.status },
+        );
+      },
+    });
+
+    const older = coordinator
+      .commit({ kind: 'mkdir', path: '/older', expectedVersion: null })
+      .catch((error: unknown) => error);
+    const newer = coordinator
+      .commit({ kind: 'mkdir', path: '/newer', expectedVersion: null })
+      .catch((error: unknown) => error);
+    await settleMicrotasks();
+    for (const listener of listeners) listener(snapshot('owner-a', 10));
+    await settleMicrotasks();
+
+    olderDurability.reject(new Error('revision 9 durability failed'));
+    await older;
+    const olderFailure = events[0];
+    if (olderFailure?.status !== 'failed') throw new Error('missing revision 9 recovery');
+
+    newerDurability.reject(new Error('revision 10 durability failed'));
+    await newer;
+    expect(events.map((event) => event.status)).toEqual(['failed', 'failed']);
+
+    await expect(olderFailure.recover()).resolves.toBeUndefined();
+    expect(barrierCalls).toEqual([9, 10, 10]);
+    expect(events.map((event) => event.status)).toEqual(['failed', 'failed', 'proved']);
+  });
+
   it('preserves applied evidence when the captured owner exits after ACK', async () => {
     const ownerClosed = deferred<unknown>();
     const coordinator = createVfsCommitCoordinator({

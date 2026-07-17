@@ -850,12 +850,15 @@ describe('Workbench project VFS owner adapter', () => {
     expect(h.emitted).toEqual([baseline]);
   });
 
-  it('acknowledges a failed private prepare without publishing an unchanged Files state', async () => {
+  // Fault class: hidden-ack. A pre-arm private write still advances the shared
+  // owner revision and therefore needs an explicit empty project-state frame.
+  it('publishes an empty Files revision when a private prepare fails before arming', async () => {
     const h = harness();
     const failure = new Error('archive stage persistence failed');
     let applied = false;
     h.vfs.publishSnapshot();
     const baseline = h.emitted[0];
+    const baselineRevision = h.authority.treeRevision;
 
     await expect(
       h.vfs.recoverableProjectReplace(
@@ -872,7 +875,72 @@ describe('Workbench project VFS owner adapter', () => {
     await settle();
 
     expect(applied).toBe(false);
-    expect(h.emitted).toEqual([baseline]);
+    expect(h.emitted).toEqual([
+      baseline,
+      {
+        type: 'workbench:project-vfs-state',
+        fromTreeRevision: baselineRevision,
+        mutations: [],
+        frame: collectSnapshot(h.authority, ROOT),
+      },
+    ]);
+  });
+
+  // Fault class: torn-state. Once a recoverable replacement is armed and has
+  // applied effects, startup recovery is the only authority allowed to continue.
+  it('fatally fences the owner immediately after an armed recoverable project replacement fails', async () => {
+    const failure = new Error('armed archive replacement failed');
+    const fatalFailures: Error[] = [];
+    const timeline: string[] = [];
+    const h = harness(
+      (error) => {
+        fatalFailures.push(error);
+        timeline.push('fatal-callback');
+      },
+      (frame) => {
+        if (frame.type === 'workbench:project-vfs-fatal') timeline.push('fatal-frame');
+      },
+    );
+    const path = `${ROOT}/src/main.ts`;
+    let continued = false;
+    h.vfs.publishSnapshot();
+    const baseline = h.emitted[0];
+
+    const replacement = h.vfs
+      .recoverableProjectReplace(
+        () => {
+          h.authority.mkdirSync('/archive-transaction', { recursive: true });
+          h.authority.writeFileSync('/archive-transaction/phase', encoder.encode('promoting\n'));
+        },
+        () => {
+          h.authority.writeFileSync(path, encoder.encode('tentative'));
+          return { status: 'recoverable-failure', error: failure };
+        },
+      )
+      .catch((error: unknown) => {
+        timeline.push('rejection');
+        throw error;
+      });
+
+    await expect(replacement).rejects.toBe(failure);
+    expect(timeline).toEqual(['fatal-frame', 'fatal-callback', 'rejection']);
+    expect(h.emitted).toEqual([
+      baseline,
+      {
+        type: 'workbench:project-vfs-fatal',
+        error: { name: 'Error', message: failure.message },
+      },
+    ]);
+    expect(fatalFailures).toEqual([failure]);
+
+    await expect(
+      h.vfs.mutationGuard([{ kind: 'write', path }], () => {
+        continued = true;
+        h.authority.writeFileSync(path, encoder.encode('silently continued'));
+      }),
+    ).rejects.toBe(failure);
+    expect(continued).toBe(false);
+    expect(h.authority.readFileBytesSync(path)).toEqual(encoder.encode('tentative'));
   });
 
   // Fault class: torn-state × semantic scope/background publisher.
@@ -927,6 +995,37 @@ describe('Workbench project VFS owner adapter', () => {
       frame: collectSnapshot(h.authority, ROOT),
     });
     expect(fatalFailures).toEqual([]);
+  });
+
+  // Fault class: torn-state × provenance-lie. A separately proven whole-tree
+  // replacement is one reset, not its incidental delete/write sequence.
+  it('publishes one root reset for an explicit whole-project replacement', async () => {
+    const h = harness();
+    h.vfs.publishSnapshot();
+    const baselineRevision = h.authority.treeRevision;
+
+    await h.vfs.recoverableProjectReplace(
+      () => undefined,
+      () => {
+        h.authority.rmSync(`${ROOT}/src`, { recursive: true, force: true });
+        h.authority.mkdirSync(`${ROOT}/src`, { recursive: true });
+        h.authority.writeFileSync(`${ROOT}/src/main.ts`, encoder.encode('replacement'));
+        return { status: 'committed', value: undefined };
+      },
+    );
+
+    expect(h.emitted).toEqual([
+      {
+        type: 'workbench:project-vfs-snapshot',
+        frame: expect.objectContaining({ treeRevision: baselineRevision }),
+      },
+      {
+        type: 'workbench:project-vfs-state',
+        fromTreeRevision: baselineRevision,
+        mutations: [{ kind: 'reset', treeRevision: h.authority.treeRevision, rootPath: ROOT }],
+        frame: collectSnapshot(h.authority, ROOT),
+      },
+    ]);
   });
 
   // Fault class: torn-state × semantic scope/external publication barrier.
@@ -1014,6 +1113,47 @@ describe('Workbench project VFS owner adapter', () => {
     await expect(read).resolves.toBe('first');
     await later;
     expect(new TextDecoder().decode(h.authority.readFileBytesSync(path))).toBe('later');
+  });
+
+  // Fault class: starvation/unbounded-read. A barrier closes the admission gate
+  // synchronously, so later mutation traffic cannot extend its wait forever.
+  it('admits a publication barrier before a later long-running mutation', async () => {
+    const h = harness();
+    const path = `${ROOT}/src/main.ts`;
+    h.vfs.publishSnapshot();
+    const firstEntered = deferred<void>();
+    const releaseFirst = deferred<void>();
+    const first = Promise.resolve(
+      h.vfs.mutationGuard([{ kind: 'write', path }], async () => {
+        firstEntered.resolve();
+        await releaseFirst.promise;
+      }),
+    );
+    await firstEntered.promise;
+
+    const readEntered = deferred<void>();
+    const read = h.vfs.readConsistent(() => {
+      readEntered.resolve();
+      return 'consistent';
+    });
+    const laterEntered = deferred<void>();
+    const releaseLater = deferred<void>();
+    const later = Promise.resolve(
+      h.vfs.mutationGuard([{ kind: 'write', path }], async () => {
+        laterEntered.resolve();
+        await releaseLater.promise;
+      }),
+    );
+
+    releaseFirst.resolve();
+    await first;
+    await settle();
+    expect(await isPending(readEntered.promise)).toBe(false);
+    expect(await isPending(laterEntered.promise)).toBe(true);
+    await expect(read).resolves.toBe('consistent');
+
+    releaseLater.resolve();
+    await later;
   });
 
   it('publishes a same-revision empty state before ACK for a host no-op', async () => {

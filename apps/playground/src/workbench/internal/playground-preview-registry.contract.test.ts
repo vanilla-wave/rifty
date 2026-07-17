@@ -37,15 +37,21 @@ function harness(
   options: {
     readonly proofFailure?: Error;
     readonly mountFailure?: Error;
+    readonly malformedMount?: boolean;
     readonly deferredProof?: boolean;
+    readonly throwHealthCallbacks?: boolean;
   } = {},
 ) {
   let publishRaw: (snapshot: readonly PreviewAdvertisement[]) => void = () => {
     throw new Error('raw preview listener was not installed');
   };
   const events: string[] = [];
-  const failures: Error[] = [];
+  const degraded: Error[] = [];
+  const healthy: number[] = [];
+  const invariants: Error[] = [];
   const proofs: (Deferred<void> & { readonly signal: AbortSignal })[] = [];
+  let proofFailure = options.proofFailure;
+  let mountFailure = options.mountFailure;
   const requestSnapshot = vi.fn(() => events.push('request'));
   const unsubscribe = vi.fn(() => events.push('unsubscribe'));
   const authority = createBrowserPlaygroundPreviewAuthority({
@@ -58,29 +64,49 @@ function harness(
     requestSnapshot,
     mountRoute(candidate) {
       events.push(`mount:${String(candidate.port)}:${candidate.previewScope ?? ''}`);
-      if (options.mountFailure !== undefined) throw options.mountFailure;
+      if (mountFailure !== undefined) throw mountFailure;
+      if (options.malformedMount === true) return undefined as never;
       return () => events.push(`unmount:${String(candidate.port)}:${candidate.previewScope ?? ''}`);
     },
     proveServiceWorkerControl(signal) {
       events.push('prove');
-      if (options.proofFailure !== undefined) return Promise.reject(options.proofFailure);
+      if (proofFailure !== undefined) return Promise.reject(proofFailure);
       if (options.deferredProof !== true) return Promise.resolve();
       const proof = deferred<void>();
       proofs.push({ ...proof, signal });
       return proof.promise;
     },
-    onFailure(error) {
-      failures.push(error);
-      events.push(`failure:${error.message}`);
+    onDegraded(error) {
+      degraded.push(error);
+      events.push(`degraded:${error.message}`);
+      if (options.throwHealthCallbacks === true) throw new Error('degraded observer failed');
+    },
+    onHealthy() {
+      healthy.push(healthy.length + 1);
+      events.push('healthy');
+      if (options.throwHealthCallbacks === true) throw new Error('healthy observer failed');
+    },
+    onInvariant(error) {
+      invariants.push(error);
+      events.push(`invariant:${error.message}`);
+      if (options.throwHealthCallbacks === true) throw new Error('invariant observer failed');
     },
   });
   return {
     authority,
+    degraded,
     events,
-    failures,
+    healthy,
+    invariants,
     proofs,
     publishRaw: (snapshot: readonly PreviewAdvertisement[]) => publishRaw(snapshot),
     requestSnapshot,
+    setMountFailure(error: Error | undefined) {
+      mountFailure = error;
+    },
+    setProofFailure(error: Error | undefined) {
+      proofFailure = error;
+    },
     unsubscribe,
   };
 }
@@ -265,28 +291,115 @@ describe('browser Playground preview registry contract', () => {
     expect(h.events.filter((event) => event === 'mount:4100:scope-4100')).toHaveLength(1);
   });
 
-  it('fails loudly and never publishes an unrouted entry when mount or control proof fails', async () => {
+  it.each([
+    ['route mount', new Error('route mount failed')],
+    ['control proof', new Error('control proof failed')],
+  ])(
+    'withdraws previews and stays subscribed when transient %s reconciliation fails',
+    async (kind, operationalFailure) => {
+      const h = harness();
+      h.publishRaw(Object.freeze([entry(4100)]));
+      await vi.waitFor(() => expect(h.authority.registry.snapshot()).toHaveLength(1));
+      h.events.length = 0;
+      if (kind === 'route mount') h.setMountFailure(operationalFailure);
+      else h.setProofFailure(operationalFailure);
+
+      h.publishRaw(Object.freeze([entry(4200)]));
+
+      await vi.waitFor(() => expect(h.degraded).toEqual([operationalFailure]));
+      expect(h.authority.registry.snapshot()).toEqual([]);
+      expect(h.unsubscribe).not.toHaveBeenCalled();
+      expect(h.events).toContain('unmount:4100:scope-4100');
+      expect(h.events).not.toContain('public:4200');
+
+      if (kind === 'route mount') h.setMountFailure(undefined);
+      else h.setProofFailure(undefined);
+      h.publishRaw(Object.freeze([entry(4300)]));
+      await vi.waitFor(() => expect(h.authority.registry.snapshot()[0]?.port).toBe(4300));
+      expect(h.healthy).toHaveLength(1);
+      expect(h.unsubscribe).not.toHaveBeenCalled();
+    },
+  );
+
+  it('coalesces explicit recovery, repeats the latest route proof, then restores preview health', async () => {
+    const proofFailure = new Error('control proof failed');
+    const h = harness({ proofFailure });
+    const publicSnapshots: number[][] = [];
+    h.authority.registry.subscribe((snapshot) =>
+      publicSnapshots.push(snapshot.map(({ port }) => port)),
+    );
+    h.publishRaw(Object.freeze([entry(4200)]));
+    await vi.waitFor(() => expect(h.degraded).toEqual([proofFailure]));
+    expect(h.authority.registry.snapshot()).toEqual([]);
+    expect(h.unsubscribe).not.toHaveBeenCalled();
+    h.setProofFailure(undefined);
+
+    const first = h.authority.recover();
+    const coalesced = h.authority.recover();
+
+    expect(coalesced).toBe(first);
+    await expect(first).resolves.toBeUndefined();
+    expect(h.authority.registry.snapshot()).toEqual([
+      { port: 4200, url: '/preview/4200/', label: 'node :4200', source: 'node' },
+    ]);
+    expect(h.healthy).toHaveLength(1);
+    expect(h.requestSnapshot).toHaveBeenCalledTimes(2);
+    expect(h.events.filter((event) => event === 'mount:4200:scope-4200')).toHaveLength(2);
+    expect(h.events.filter((event) => event === 'prove')).toHaveLength(2);
+    expect(publicSnapshots.at(-1)).toEqual([4200]);
+  });
+
+  it.each([
+    {
+      case: 'duplicate owner ports',
+      h: () => harness(),
+      publish: (h: ReturnType<typeof harness>) =>
+        h.publishRaw(Object.freeze([entry(4100), entry(4100)])),
+      message: 'Owner preview snapshot repeats port 4100',
+    },
+    {
+      case: 'malformed mount contract',
+      h: () => harness({ malformedMount: true, throwHealthCallbacks: true }),
+      publish: (h: ReturnType<typeof harness>) => h.publishRaw(Object.freeze([entry(4100)])),
+      message: 'Playground preview route mount omitted teardown',
+    },
+  ])('reports $case as a fatal invariant and permanently fences the registry', async (row) => {
+    const h = row.h();
+    row.publish(h);
+
+    await vi.waitFor(() => expect(h.invariants).toHaveLength(1));
+    expect(h.invariants[0]?.message).toBe(row.message);
+    expect(h.degraded).toEqual([]);
+    expect(h.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(() => h.authority.registry.snapshot()).toThrow(row.message);
+    await expect(h.authority.recover()).rejects.toThrow(row.message);
+  });
+
+  it('isolates public, routed, and health observers from preview authority state', async () => {
+    const proofFailure = new Error('control proof failed');
+    const h = harness({ proofFailure, throwHealthCallbacks: true });
+    h.authority.registry.subscribe(() => {
+      throw new Error('public observer failed');
+    });
+    h.authority.subscribeRouted(() => {
+      throw new Error('routed observer failed');
+    });
+    h.publishRaw(Object.freeze([entry(4100)]));
+    await vi.waitFor(() => expect(h.degraded).toEqual([proofFailure]));
+    h.setProofFailure(undefined);
+
+    await expect(h.authority.recover()).resolves.toBeUndefined();
+    expect(h.authority.registry.snapshot()).toHaveLength(1);
+    expect(h.healthy).toHaveLength(1);
+  });
+
+  it('never publishes an unrouted entry when an operational route mount fails', async () => {
     const mountFailure = new Error('route mount failed');
     const mount = harness({ mountFailure });
     mount.publishRaw(Object.freeze([entry(4100)]));
-    await vi.waitFor(() => expect(mount.failures).toEqual([mountFailure]));
-    expect(() => mount.authority.registry.snapshot()).toThrow(mountFailure);
+    await vi.waitFor(() => expect(mount.degraded).toEqual([mountFailure]));
+    expect(mount.authority.registry.snapshot()).toEqual([]);
     expect(mount.events).not.toContain('public:4100');
-
-    const proofFailure = new Error('control proof failed');
-    const proof = harness({ proofFailure });
-    proof.publishRaw(Object.freeze([entry(4200)]));
-    await vi.waitFor(() => expect(proof.failures).toEqual([proofFailure]));
-    expect(proof.events).toEqual([
-      'subscribe',
-      'request',
-      'mount:4200:scope-4200',
-      'prove',
-      'unmount:4200:scope-4200',
-      'unsubscribe',
-      'failure:control proof failed',
-    ]);
-    expect(() => proof.authority.registry.subscribe(() => {})).toThrow(proofFailure);
   });
 
   it('close publishes no live entry, releases all routes, fences control, and is idempotent', async () => {

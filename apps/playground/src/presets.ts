@@ -1,4 +1,3 @@
-import type { TerminalDevCommand } from '@riftydev/terminal/state';
 import type { IconName } from './components/icons.tsx';
 import { MONO_FONT_STACK } from './glue/fonts.ts';
 import { CLI_REPORT_TEMPLATE } from './templates/cli-report.ts';
@@ -615,20 +614,6 @@ export function presetBootLines(preset: Preset, root: string): readonly string[]
   if (preset.setup !== 'from-scratch') return [dev];
   const bareDev = dev.replace(/^cd \S+ && /, '');
   return [`cd ${root} && npm install && ${bareDev}`];
-}
-
-/**
- * Reload-restore boot lines: replay the RECORDED dev command of the previously
- * running session (a fork may have swapped vite for another server), prefixing
- * `cd` when it ran outside the active root. No record → template presetBootLines.
- */
-export function restoreBootLines(
-  devCommand: TerminalDevCommand | undefined,
-  preset: Preset,
-  root: string,
-): readonly string[] {
-  if (!devCommand) return presetBootLines(preset, root);
-  return [devCommand.cwd === root ? devCommand.line : `cd ${devCommand.cwd} && ${devCommand.line}`];
 }
 
 /** Category render order in the gallery. */

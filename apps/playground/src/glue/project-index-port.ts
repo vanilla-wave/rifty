@@ -879,7 +879,6 @@ export function serveProjectIndex(
 
 const INDEX_APPLIED_RETRY_MS = 250;
 const INDEX_SAVE_STATUS_POLL_MS = 1_000;
-// TODO(backlog: playground/project-lifecycle-outcome-recovery): exact generic disposition replay.
 const INDEX_MUTATION_OUTCOME_TIMEOUT_MS = 120_000;
 
 export type ProjectIndexSaveApplication =

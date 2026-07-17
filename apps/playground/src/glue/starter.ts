@@ -9,7 +9,7 @@
  * NO stored per-project artifact, so the reset baseline survives reload and can't
  * drift.
  */
-import { makeGit, vfsToGitFs } from '@riftydev/git';
+import { makeGit, requireSupportedStatusEntries, vfsToGitFs } from '@riftydev/git';
 import type { Vfs } from '@riftydev/vfs';
 import { PRESETS, type Preset } from '../presets.ts';
 import { resolveBootstrapConfig } from '../templates/project-spec.ts';
@@ -121,7 +121,7 @@ async function headCommitExists(g: ReturnType<typeof makeGit>): Promise<boolean>
 }
 
 async function stageInitialTree(g: ReturnType<typeof makeGit>): Promise<boolean> {
-  const changed = await g.status();
+  const changed = requireSupportedStatusEntries(await g.status());
   for (const entry of changed) {
     if (entry.status === '111') continue;
     if (entry.status === '101' || entry.status === '100') await g.remove(entry.filepath);
@@ -131,7 +131,7 @@ async function stageInitialTree(g: ReturnType<typeof makeGit>): Promise<boolean>
 }
 
 async function stageGeneratedBaseline(g: ReturnType<typeof makeGit>): Promise<boolean> {
-  const changed = await g.status();
+  const changed = requireSupportedStatusEntries(await g.status());
   let staged = false;
   for (const entry of changed) {
     if (!GENERATED_BASELINE_FILES.has(entry.filepath) || entry.status === '111') continue;

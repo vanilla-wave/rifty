@@ -1,4 +1,4 @@
-import type { LogEntry } from '@riftydev/git';
+import type { GitPorcelainXY, LogEntry } from '@riftydev/git';
 import { SW_FRAME_VERSION, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { SnapshotFs } from '../../glue/snapshot-fs.ts';
@@ -26,6 +26,7 @@ import {
   type PlaygroundScmDiff,
   type PlaygroundScmSnapshot,
   type PlaygroundSessionTools,
+  type PlaygroundSessionToolsView,
   type PlaygroundTerminalStateRestoreInput,
   type PlaygroundTypeScript,
   type PlaygroundWorkbench,
@@ -53,6 +54,11 @@ import {
 } from '../project-terminal.ts';
 import * as rootModule from '../public.ts';
 import type { PreviewHandle, ProjectDefinition } from '../public.ts';
+import type {
+  PlaygroundOwnerOperationalHealth,
+  PlaygroundOwnerSessionToolLifecycle,
+} from '../workbench-owner-port.ts';
+import { PLAYGROUND_PERSISTENCE_FAILURE_NAME } from './playground-session-tools-transport.ts';
 import {
   createOpenPlaygroundWorkbench,
   createPlaygroundWorkbenchFacade,
@@ -71,11 +77,16 @@ interface CapturedUrlContext {
   readonly clientUrl: string;
 }
 
-type ExpectedPlaygroundScmChange = {
-  readonly path: string;
-  readonly code: string;
-  readonly area: 'staged' | 'working';
-};
+type ExpectedPlaygroundScmChange =
+  | {
+      readonly path: string;
+      readonly code: GitPorcelainXY;
+      readonly area: 'staged' | 'working';
+    }
+  | {
+      readonly path: string;
+      readonly rawStatusMatrixCode: string;
+    };
 
 type ExpectedPlaygroundScmSnapshot = {
   readonly branch?: string;
@@ -338,6 +349,8 @@ async function createRootHarness(): Promise<RootHarness> {
   const ownerClose = vi.fn(async () => {
     events.push('owner:close');
   });
+  const ownerClosed = deferred<unknown>();
+  void ownerClosed.promise.catch(() => {});
   const ownerDelete = vi.fn(async () => {});
   const ownerStart = vi.fn(async () => ({
     storage: Object.freeze({
@@ -346,6 +359,8 @@ async function createRootHarness(): Promise<RootHarness> {
       durability: 'ephemeral' as const,
     }),
     owner: Object.freeze({
+      closed: ownerClosed.promise,
+      subscribeHealth: () => () => {},
       openProject,
       deleteProject: ownerDelete,
       close: ownerClose,
@@ -526,13 +541,28 @@ function tools(overrides: { readonly archive?: PlaygroundArchive } = {}): Playgr
   } satisfies PlaygroundSessionTools);
 }
 
+function toolLifecycle(
+  sessionTools: PlaygroundSessionTools = tools(),
+  close: () => Promise<void> = async () => {},
+): PlaygroundOwnerSessionToolLifecycle {
+  return Object.freeze({
+    tools: sessionTools,
+    subscribeOperationalHealth(listener: (health: PlaygroundOwnerOperationalHealth) => void) {
+      listener({ scope: 'scm', status: 'healthy' });
+      listener({ scope: 'preview', status: 'healthy' });
+      return () => {};
+    },
+    async recoverOperationalHealth(scope: PlaygroundOwnerOperationalHealth['scope']) {
+      if (scope === 'scm') await sessionTools.scm.refresh();
+    },
+    close,
+  });
+}
+
 function admittedArchiveTools(
   events: string[],
   gate: { readonly promise: Promise<void> },
-): {
-  readonly tools: PlaygroundSessionTools;
-  readonly close: ReturnType<typeof vi.fn>;
-} {
+): PlaygroundOwnerSessionToolLifecycle & { readonly close: ReturnType<typeof vi.fn> } {
   let closing = false;
   let admitted: Promise<string> | null = null;
   const assertOpen = (): void => {
@@ -567,7 +597,7 @@ function admittedArchiveTools(
     events.push('tools:close');
     if (admitted !== null) await admitted;
   });
-  return { tools: tools({ archive }), close };
+  return { ...toolLifecycle(tools({ archive }), close), close };
 }
 
 function definePlan(plan: PlaygroundProjectPlan): ProjectDefinition<unknown> {
@@ -638,6 +668,7 @@ describe('Playground companion sealed contract', () => {
     expectTypeOf<PlaygroundTerminalStateRestoreInput>().toEqualTypeOf<ExpectedPlaygroundTerminalStateRestoreInput>();
     expectTypeOf<ProjectTerminal['snapshot']>().returns.toEqualTypeOf<ProjectTerminalSnapshot>();
     expectTypeOf<PlaygroundSessionTools>().toEqualTypeOf<ExpectedPlaygroundSessionTools>();
+    expectTypeOf<PlaygroundSessionToolsView['health']>().toHaveProperty('recover');
   });
 
   it('preserves the three finite define overloads and rejects widened plan shapes in types', async () => {
@@ -647,7 +678,7 @@ describe('Playground companion sealed contract', () => {
       urlContext: CAPTURED_URL_CONTEXT,
       definePlan,
       catalog: catalog(),
-      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      createSessionTools: () => toolLifecycle(),
       registerBeforeClose: () => {},
     });
     const viteDefinition = facade.playground.define(vitePlan());
@@ -761,7 +792,7 @@ describe('Playground opener URL-context authority', () => {
             return definePlan(plan);
           },
           catalog: catalog(),
-          createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+          createSessionTools: () => toolLifecycle(),
           registerBeforeClose: () => {},
         });
       },
@@ -831,7 +862,7 @@ describe('Playground plan validation', () => {
         return definePlan(plan);
       },
       catalog: catalog(),
-      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      createSessionTools: () => toolLifecycle(),
       registerBeforeClose: () => {},
     });
     documentContext.baseURI = 'https://playground.invalid/relocated/index.html';
@@ -912,7 +943,7 @@ describe('Playground plan validation', () => {
       urlContext: CAPTURED_URL_CONTEXT,
       definePlan: effect,
       catalog: catalog(),
-      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      createSessionTools: () => toolLifecycle(),
       registerBeforeClose: () => {},
     });
     let getterCalls = 0;
@@ -1323,7 +1354,7 @@ describe('Playground session authority and teardown', () => {
       legacyWorkspacePrefix: '/workspaces/legacy-tab',
       definePlan,
       catalog: catalog(),
-      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      createSessionTools: () => toolLifecycle(),
       registerBeforeClose: () => {},
     });
     const env = { KEEP: 'yes', RIFTY_OWNER_TOKEN: 'guest-owned' };
@@ -1369,7 +1400,7 @@ describe('Playground session authority and teardown', () => {
       definePlan,
       catalog: catalog(),
       openProject,
-      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      createSessionTools: () => toolLifecycle(),
       registerBeforeClose: () => {},
     });
     const definition = facade.playground.define(vitePlan());
@@ -1409,7 +1440,7 @@ describe('Playground session authority and teardown', () => {
         admitted.push(projectOptions);
         return root.workbench.openProject(definition);
       },
-      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      createSessionTools: () => toolLifecycle(),
       registerBeforeClose: () => {},
     });
     const definition = facade.playground.define(vitePlan());
@@ -1444,7 +1475,7 @@ describe('Playground session authority and teardown', () => {
       urlContext: CAPTURED_URL_CONTEXT,
       definePlan,
       catalog: projectCatalog,
-      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      createSessionTools: () => toolLifecycle(),
       registerBeforeClose: (_session: ProjectSession<unknown>, hook: () => Promise<void>) =>
         root.setBeforeCoreClose(hook),
     });
@@ -1472,11 +1503,8 @@ describe('Playground session authority and teardown', () => {
   it('accepts only an exact live session, memoizes frozen tools and keeps one owner', async () => {
     const firstRoot = await createRootHarness();
     const secondRoot = await createRootHarness();
-    const firstCreateTools = vi.fn((_session: ProjectSession<unknown>) => ({
-      tools: tools(),
-      close: async () => {},
-    }));
-    const secondCreateTools = vi.fn(() => ({ tools: tools(), close: async () => {} }));
+    const firstCreateTools = vi.fn((_session: ProjectSession<unknown>) => toolLifecycle());
+    const secondCreateTools = vi.fn(() => toolLifecycle());
     const first = createPlaygroundWorkbenchFacade({
       workbench: firstRoot.workbench,
       urlContext: CAPTURED_URL_CONTEXT,
@@ -1506,6 +1534,7 @@ describe('Playground session authority and teardown', () => {
     expect(Object.keys(firstTools).sort()).toEqual([
       'archive',
       'awaitDurability',
+      'health',
       'previews',
       'scm',
       'typescript',
@@ -1521,6 +1550,9 @@ describe('Playground session authority and teardown', () => {
       'unstage',
     ]);
     expect(Object.keys(firstTools.archive).sort()).toEqual(['export', 'import']);
+    expect(Object.keys(firstTools.health).sort()).toEqual(['recover', 'snapshot', 'subscribe']);
+    expect(firstTools.health).not.toBe(first.health);
+    expect(firstTools.health.snapshot()).toEqual(first.health.snapshot());
     for (const handle of [
       firstTools,
       firstTools.typescript,
@@ -1546,12 +1578,165 @@ describe('Playground session authority and teardown', () => {
     ).toThrow(TypeError);
 
     await firstSession.close();
+    expect(() => firstTools.health.snapshot()).toThrow(ClosedHandleError);
     expect(() => first.playground.forSession(firstSession)).toThrowError(/ClosedHandleError/);
     await secondSession.close();
     await first.close();
     await second.close();
     expect(firstRoot.ownerClose).toHaveBeenCalledTimes(1);
     expect(secondRoot.ownerClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains a durability failure in session and Workbench health until recovery succeeds', async () => {
+    const root = await createRootHarness();
+    const persistenceFailure = new Error('OPFS quota exhausted while flushing');
+    persistenceFailure.name = PLAYGROUND_PERSISTENCE_FAILURE_NAME;
+    const awaitDurability = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(persistenceFailure)
+      .mockResolvedValue(undefined);
+    const rawTools = Object.freeze({ ...tools(), awaitDurability });
+    const facade = createPlaygroundWorkbenchFacade({
+      workbench: root.workbench,
+      urlContext: CAPTURED_URL_CONTEXT,
+      definePlan,
+      catalog: catalog(),
+      createSessionTools: () => toolLifecycle(rawTools),
+      registerBeforeClose: (_session: ProjectSession<unknown>, hook: () => Promise<void>) =>
+        root.setBeforeCoreClose(hook),
+    });
+    const session = await facade.openProject(facade.playground.define(vitePlan()));
+    const sessionTools = facade.playground.forSession(session);
+
+    await expect(sessionTools.awaitDurability()).rejects.toBe(persistenceFailure);
+    expect(sessionTools.health.snapshot()).toEqual({
+      disposition: 'degraded',
+      issues: [
+        {
+          kind: 'degraded',
+          scope: 'persistence',
+          summary: 'Workspace persistence failed',
+          recovery: 'persistence',
+        },
+      ],
+    });
+    expect(facade.health.snapshot()).toEqual(sessionTools.health.snapshot());
+
+    await expect(sessionTools.health.recover('persistence')).resolves.toBeUndefined();
+    expect(awaitDurability).toHaveBeenCalledTimes(2);
+    expect(sessionTools.health.snapshot()).toEqual({ disposition: 'healthy', issues: [] });
+
+    await session.close();
+    await facade.close();
+  });
+
+  it('does not misclassify owner or transport failure as a persistence failure', async () => {
+    const root = await createRootHarness();
+    const transportFailure = new ClosedHandleError('owner transport');
+    const rawTools = Object.freeze({
+      ...tools(),
+      awaitDurability: vi.fn<() => Promise<void>>().mockRejectedValue(transportFailure),
+    });
+    const facade = createPlaygroundWorkbenchFacade({
+      workbench: root.workbench,
+      urlContext: CAPTURED_URL_CONTEXT,
+      definePlan,
+      catalog: catalog(),
+      createSessionTools: () => toolLifecycle(rawTools),
+      registerBeforeClose: (_session: ProjectSession<unknown>, hook: () => Promise<void>) =>
+        root.setBeforeCoreClose(hook),
+    });
+    const session = await facade.openProject(facade.playground.define(vitePlan()));
+    const sessionTools = facade.playground.forSession(session);
+
+    await expect(sessionTools.awaitDurability()).rejects.toBe(transportFailure);
+    expect(sessionTools.health.snapshot()).toEqual({ disposition: 'healthy', issues: [] });
+
+    await session.close();
+    await facade.close();
+  });
+
+  it('replays SCM and preview degradation into one redacted generation health authority', async () => {
+    const root = await createRootHarness();
+    const listeners = new Set<(health: PlaygroundOwnerOperationalHealth) => void>();
+    const states = new Map<
+      PlaygroundOwnerOperationalHealth['scope'],
+      PlaygroundOwnerOperationalHealth
+    >([
+      [
+        'scm',
+        {
+          scope: 'scm',
+          status: 'degraded',
+          error: { name: 'GitError', message: 'private /.git/index read failed' },
+        },
+      ],
+      ['preview', { scope: 'preview', status: 'healthy' }],
+    ]);
+    const recoverOperationalHealth = vi.fn(
+      async (scope: PlaygroundOwnerOperationalHealth['scope']): Promise<void> => {
+        const healthy = { scope, status: 'healthy' as const };
+        states.set(scope, healthy);
+        for (const listener of [...listeners]) listener(healthy);
+      },
+    );
+    const lifecycle: PlaygroundOwnerSessionToolLifecycle = Object.freeze({
+      tools: tools(),
+      subscribeOperationalHealth(listener: (health: PlaygroundOwnerOperationalHealth) => void) {
+        listeners.add(listener);
+        for (const health of states.values()) listener(health);
+        return () => listeners.delete(listener);
+      },
+      recoverOperationalHealth,
+      close: async () => {},
+    });
+    const facade = createPlaygroundWorkbenchFacade({
+      workbench: root.workbench,
+      urlContext: CAPTURED_URL_CONTEXT,
+      definePlan,
+      catalog: catalog(),
+      createSessionTools: () => lifecycle,
+      registerBeforeClose: (_session: ProjectSession<unknown>, hook: () => Promise<void>) =>
+        root.setBeforeCoreClose(hook),
+    });
+
+    const session = await facade.openProject(facade.playground.define(vitePlan()));
+    expect(facade.health.snapshot()).toEqual({
+      disposition: 'degraded',
+      issues: [
+        {
+          kind: 'degraded',
+          scope: 'scm',
+          summary: 'Source control refresh failed',
+          recovery: 'scm',
+        },
+      ],
+    });
+    expect(JSON.stringify(facade.health.snapshot())).not.toContain('/.git/index');
+
+    await facade.health.recover('scm');
+    const previewFailure: PlaygroundOwnerOperationalHealth = {
+      scope: 'preview',
+      status: 'degraded',
+      error: { name: 'TimeoutError', message: 'private service-worker route detail' },
+    };
+    states.set('preview', previewFailure);
+    for (const listener of [...listeners]) listener(previewFailure);
+    expect(facade.health.snapshot().issues).toEqual([
+      {
+        kind: 'degraded',
+        scope: 'preview',
+        summary: 'Preview routing failed',
+        recovery: 'preview',
+      },
+    ]);
+
+    await facade.playground.forSession(session).health.recover('preview');
+    expect(recoverOperationalHealth.mock.calls.map(([scope]) => scope)).toEqual(['scm', 'preview']);
+    expect(facade.health.snapshot()).toEqual({ disposition: 'healthy', issues: [] });
+
+    await session.close();
+    await facade.close();
   });
 
   it('runs dirty preflight, stops new tool calls, and drains admitted work before core teardown', async () => {
@@ -1616,12 +1801,14 @@ describe('Playground session authority and teardown', () => {
       urlContext: CAPTURED_URL_CONTEXT,
       definePlan,
       catalog: catalog(),
-      createSessionTools: () => ({ tools: sessionTools, close: async () => {} }),
+      createSessionTools: () => toolLifecycle(sessionTools),
       registerBeforeClose: (_session: ProjectSession<unknown>, hook: () => Promise<void>) =>
         root.setBeforeCoreClose(hook),
     });
     const session = await facade.openProject(facade.playground.define(vitePlan()));
-    expect(facade.playground.forSession(session)).toBe(sessionTools);
+    const exposedTools = facade.playground.forSession(session);
+    expect(exposedTools).not.toBe(sessionTools);
+    expect(exposedTools.scm).toBe(sessionTools.scm);
     const document = await session.documents.open('/src/main.ts');
     document.replace('dirty');
 
@@ -1629,7 +1816,7 @@ describe('Playground session authority and teardown', () => {
 
     await expect(rejected).rejects.toBeInstanceOf(DirtyProjectDocumentError);
     expect(root.ownerClose).not.toHaveBeenCalled();
-    expect(facade.playground.forSession(session)).toBe(sessionTools);
+    expect(facade.playground.forSession(session)).toBe(exposedTools);
 
     await document.close({ dirty: 'discard' });
     const retry = facade.close();
@@ -1653,7 +1840,7 @@ describe('Playground session authority and teardown', () => {
       urlContext: CAPTURED_URL_CONTEXT,
       definePlan,
       catalog: catalog(),
-      createSessionTools: () => ({ tools: tools(), close: closeTools }),
+      createSessionTools: () => toolLifecycle(tools(), closeTools),
       registerBeforeClose: (_session: ProjectSession<unknown>, hook: () => Promise<void>) =>
         root.setBeforeCoreClose(hook),
     });

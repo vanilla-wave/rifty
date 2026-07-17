@@ -1,6 +1,13 @@
-import { type GitIdentity, type LogEntry, makeGit, vfsToGitFs } from '@riftydev/git';
+import {
+  type GitIdentity,
+  type GitPorcelainXY,
+  type LogEntry,
+  makeGit,
+  requireSupportedStatusEntries,
+  vfsToGitFs,
+} from '@riftydev/git';
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createPlaygroundScmAdapter as createAdapter } from './playground-scm.ts';
 
 const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
@@ -47,11 +54,18 @@ const PUBLIC_METHODS = Object.freeze([
   'unstage',
 ]);
 
-interface PlaygroundScmChange {
+interface PlaygroundScmSupportedChange {
   readonly path: string;
-  readonly code: string;
+  readonly code: GitPorcelainXY;
   readonly area: 'staged' | 'working';
 }
+
+interface PlaygroundScmStatusGap {
+  readonly path: string;
+  readonly rawStatusMatrixCode: string;
+}
+
+type PlaygroundScmChange = PlaygroundScmSupportedChange | PlaygroundScmStatusGap;
 
 interface PlaygroundScmSnapshot {
   readonly branch?: string;
@@ -101,7 +115,7 @@ interface DiffMatrixCase {
   readonly name: string;
   readonly path: string;
   readonly code: string;
-  readonly area: PlaygroundScmChange['area'];
+  readonly area: PlaygroundScmSupportedChange['area'];
   readonly original: { readonly source: PlaygroundScmBlob['source']; readonly bytes: Uint8Array };
   readonly modified: { readonly source: PlaygroundScmBlob['source']; readonly bytes: Uint8Array };
 }
@@ -137,16 +151,16 @@ async function treeSnapshot(vfs: Vfs): Promise<TreeSnapshot> {
 async function statusSnapshot(
   git: ReturnType<typeof makeGit>,
 ): Promise<readonly { readonly filepath: string; readonly status: string }[]> {
-  return [...(await git.status())]
+  return [...requireSupportedStatusEntries(await git.status())]
     .map(({ filepath, status }) => ({ filepath, status }))
     .sort((left, right) => left.filepath.localeCompare(right.filepath));
 }
 
 function expectedChange(
   path: string,
-  code: string,
-  area: PlaygroundScmChange['area'],
-): PlaygroundScmChange {
+  code: GitPorcelainXY,
+  area: PlaygroundScmSupportedChange['area'],
+): PlaygroundScmSupportedChange {
   return { path, code, area };
 }
 
@@ -185,6 +199,20 @@ async function harness(): Promise<ScmHarness> {
     commitIdentity: COMMIT_IDENTITY,
   });
   return { vfs, git, scm };
+}
+
+function withStatusEntries(
+  git: ReturnType<typeof makeGit>,
+  entries: readonly unknown[] | (() => readonly unknown[]),
+): ReturnType<typeof makeGit> {
+  return new Proxy(git, {
+    get(target, property, receiver) {
+      if (property === 'status') {
+        return async () => (typeof entries === 'function' ? entries() : entries);
+      }
+      return Reflect.get(target, property, receiver) as unknown;
+    },
+  });
 }
 
 async function diffMatrixHarness(): Promise<ScmHarness> {
@@ -278,10 +306,11 @@ const DIFF_MATRIX: readonly DiffMatrixCase[] = Object.freeze([
 function findChange(
   snapshot: PlaygroundScmSnapshot,
   path: string,
-  area: PlaygroundScmChange['area'],
-): PlaygroundScmChange {
+  area: PlaygroundScmSupportedChange['area'],
+): PlaygroundScmSupportedChange {
   const change = snapshot.changes.find(
-    (candidate) => candidate.path === path && candidate.area === area,
+    (candidate): candidate is PlaygroundScmSupportedChange =>
+      'area' in candidate && candidate.path === path && candidate.area === area,
   );
   if (change === undefined) throw new Error(`Missing ${area} change ${path}`);
   return change;
@@ -328,6 +357,150 @@ function expectDiff(
 }
 
 describe('Playground SCM real-backend Contract+RED', () => {
+  // Fault class: false-fallback. A path-local classifier gap must be visible
+  // without dropping supported siblings or rejecting owner SCM construction.
+  it('keeps supported paths available while one status matrix path is unsupported', async () => {
+    const h = await harness();
+    const git = withStatusEntries(h.git, [
+      { kind: 'supported', filepath: 'src/edited.ts', status: '121' },
+      { kind: 'unsupported', filepath: 'src/future.ts', rawStatusMatrixCode: '999' },
+      { kind: 'supported', filepath: 'src/new.ts', status: '020' },
+    ]);
+
+    const scm = await createPlaygroundScmAdapter({
+      projectRoot: PROJECT_ROOT,
+      vfs: h.vfs,
+      git,
+      commitIdentity: COMMIT_IDENTITY,
+    });
+
+    expect(scm.snapshot().changes).toEqual([
+      { path: '/src/edited.ts', code: ' M', area: 'working' },
+      { path: '/src/future.ts', rawStatusMatrixCode: '999' },
+      { path: '/src/new.ts', code: '??', area: 'working' },
+    ]);
+    await expect(scm.refresh()).resolves.toEqual(scm.snapshot());
+
+    const gap = scm
+      .snapshot()
+      .changes.find((change) => change.path === '/src/future.ts') as PlaygroundScmChange;
+    await expect(scm.diff(gap)).rejects.toThrow(/git\.status-matrix\.999/);
+    await expect(scm.stage('/src/future.ts')).rejects.toThrow(/git\.status-matrix\.999/);
+
+    await write(h.vfs, '/src/new.ts', Uint8Array.from([1, 2, 3]));
+    await expect(scm.stage('/src/new.ts')).resolves.toBeUndefined();
+  });
+
+  it('rechecks status before unstage so a post-snapshot gap cannot be mutated', async () => {
+    const h = await harness();
+    let entries: readonly unknown[] = [
+      { kind: 'supported', filepath: 'src/future.ts', status: '122' },
+    ];
+    const unstage = vi.spyOn(h.git, 'unstage').mockResolvedValue();
+    const scm = await createPlaygroundScmAdapter({
+      projectRoot: PROJECT_ROOT,
+      vfs: h.vfs,
+      git: withStatusEntries(h.git, () => entries),
+      commitIdentity: COMMIT_IDENTITY,
+    });
+
+    entries = [{ kind: 'unsupported', filepath: 'src/future.ts', rawStatusMatrixCode: '999' }];
+    await expect(scm.unstage('/src/future.ts')).rejects.toThrow(/git\.status-matrix\.999/);
+    expect(unstage).not.toHaveBeenCalled();
+  });
+
+  it('rechecks every status path before commit so a post-snapshot gap cannot be committed', async () => {
+    const h = await harness();
+    let entries: readonly unknown[] = await h.git.status();
+    const commit = vi.spyOn(h.git, 'commit');
+    const scm = await createPlaygroundScmAdapter({
+      projectRoot: PROJECT_ROOT,
+      vfs: h.vfs,
+      git: withStatusEntries(h.git, () => entries),
+      commitIdentity: COMMIT_IDENTITY,
+    });
+
+    entries = [
+      ...entries,
+      { kind: 'unsupported', filepath: 'src/future.ts', rawStatusMatrixCode: '999' },
+    ];
+    await expect(scm.commit('must not commit a status gap')).rejects.toThrow(
+      /git\.status-matrix\.999/,
+    );
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['110', INITIAL_DISCARD],
+    ['120', WORKING_DISCARD],
+  ] as const)(
+    'projects matrix %s as staged deletion plus same-path untracked worktree bytes',
+    async (matrixCode, recreated) => {
+      const vfs = new MemoryVfs();
+      await vfs.mkdir(PROJECT_ROOT, { recursive: true });
+      const git = makeGit({ fs: vfsToGitFs(vfs), dir: PROJECT_ROOT });
+      await git.init();
+      await write(vfs, DISCARD, INITIAL_DISCARD);
+      await git.add(DISCARD.slice(1));
+      await git.commit({
+        message: 'seed staged-delete recreation',
+        author: COMMIT_IDENTITY,
+        committer: COMMIT_IDENTITY,
+      });
+      await git.remove(DISCARD.slice(1));
+      await write(vfs, DISCARD, recreated);
+      expect(
+        requireSupportedStatusEntries(await git.status()).find(
+          ({ filepath }) => filepath === DISCARD.slice(1),
+        )?.status,
+      ).toBe(matrixCode);
+
+      const scm = await createPlaygroundScmAdapter({
+        projectRoot: PROJECT_ROOT,
+        vfs,
+        git,
+        commitIdentity: COMMIT_IDENTITY,
+      });
+      const staged = findChange(scm.snapshot(), DISCARD, 'staged');
+      const working = findChange(scm.snapshot(), DISCARD, 'working');
+      expect(staged.code).toBe('D ');
+      expect(working.code).toBe('??');
+      expectDiff(await scm.diff(staged), {
+        original: { source: 'head', bytes: INITIAL_DISCARD },
+        modified: { source: 'empty', bytes: new Uint8Array() },
+      });
+      expectDiff(await scm.diff(working), {
+        original: { source: 'empty', bytes: new Uint8Array() },
+        modified: { source: 'working', bytes: recreated },
+      });
+    },
+  );
+
+  it('filters the reserved root .rifty metadata namespace before public path validation', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir(PROJECT_ROOT, { recursive: true });
+    const git = makeGit({ fs: vfsToGitFs(vfs), dir: PROJECT_ROOT });
+    await git.init();
+    await write(vfs, '/package.json', Uint8Array.from([123, 125, 10]));
+    await git.add('package.json');
+    await git.commit({
+      message: 'seed public source',
+      author: COMMIT_IDENTITY,
+      committer: COMMIT_IDENTITY,
+    });
+    await write(vfs, '/.rifty/vite-config.seeded', Uint8Array.from([49]));
+
+    const scm = await createPlaygroundScmAdapter({
+      projectRoot: PROJECT_ROOT,
+      vfs,
+      git,
+      commitIdentity: COMMIT_IDENTITY,
+    });
+
+    expect(scm.snapshot().changes).toEqual([]);
+    await expect(scm.refresh()).resolves.toMatchObject({ changes: [] });
+  });
+
   it('publishes one exact frozen project-rooted snapshot and replays the latest value', async () => {
     const h = await harness();
     const initial = await expectExactSnapshot(h, INITIAL_CHANGES);

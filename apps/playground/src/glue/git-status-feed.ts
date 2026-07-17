@@ -39,7 +39,7 @@ export interface GitStatusPublisherOptions {
 }
 
 export interface GitStatusStore {
-  readonly map: ReadonlyMap<string, string>;
+  readonly map: ReadonlyMap<string, readonly GitStatusDeltaEntry[]>;
   clear(): void;
   dispose(): void;
 }
@@ -49,7 +49,13 @@ function gitStatusChannelUrl(key: OwnerBridgeKey): string {
 }
 
 function signature(entries: readonly GitStatusDeltaEntry[]): string {
-  return entries.map((entry) => `${entry.path}\0${entry.code}`).join('\0');
+  return entries
+    .map((entry) =>
+      entry.kind === 'supported'
+        ? `${entry.path}\0supported\0${entry.code}`
+        : `${entry.path}\0unsupported\0${entry.rawStatusMatrixCode}`,
+    )
+    .join('\0');
 }
 
 export function createGitStatusPublisher(
@@ -160,13 +166,18 @@ export function subscribeGitStatus(
   };
 }
 
-export function applyGitStatusFrame(cache: Map<string, string>, frame: GitStatusFrame): void {
+export function applyGitStatusFrame(
+  cache: Map<string, readonly GitStatusDeltaEntry[]>,
+  frame: GitStatusFrame,
+): void {
   cache.clear();
-  for (const entry of frame.entries) cache.set(entry.path, entry.code);
+  for (const entry of frame.entries) {
+    cache.set(entry.path, Object.freeze([...(cache.get(entry.path) ?? []), entry]));
+  }
 }
 
 export function createGitStatusStore(key: OwnerBridgeKey): GitStatusStore {
-  const cache = new Map<string, string>();
+  const cache = new Map<string, readonly GitStatusDeltaEntry[]>();
   const unsubscribe = subscribeGitStatus(key, (frame) => applyGitStatusFrame(cache, frame));
   return {
     map: cache,

@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   hasPersistedProjectHint,
   needsProjectChoiceOnBoot,
+  reconcileProjectChoiceOnBoot,
   recordProjectPresenceHint,
+  shouldOpenInstantProjectChoice,
 } from './project-boot-policy.ts';
 import type { ProjectIndex } from './project-index.ts';
 
@@ -85,5 +87,81 @@ describe('project presence hint (instant first-run chooser)', () => {
     expect(() =>
       recordProjectPresenceHint({ activeId: 'scratch', scratch: null, projects: [] }, throwing),
     ).not.toThrow();
+  });
+
+  it('tolerates an opaque-origin localStorage getter that throws before method access', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('opaque origin', 'SecurityError');
+      },
+    });
+    try {
+      expect(hasPersistedProjectHint()).toBe(false);
+      expect(() =>
+        recordProjectPresenceHint({ activeId: 'scratch', scratch: null, projects: [] }),
+      ).not.toThrow();
+      expect(() =>
+        reconcileProjectChoiceOnBoot(
+          { activeId: 'scratch', scratch: null, projects: [] },
+          { openStarterChoice: vi.fn(), closeProjectChoice: vi.fn() },
+        ),
+      ).not.toThrow();
+    } finally {
+      if (descriptor === undefined) Reflect.deleteProperty(globalThis, 'localStorage');
+      else Object.defineProperty(globalThis, 'localStorage', descriptor);
+    }
+  });
+
+  it('opens the starter chooser synchronously for a true first run', () => {
+    const open = vi.fn();
+    const close = vi.fn();
+    const storage = fakeStorage();
+    reconcileProjectChoiceOnBoot(
+      { activeId: 'scratch', scratch: null, projects: [] },
+      { openStarterChoice: open, closeProjectChoice: close },
+      storage,
+    );
+    expect(open).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+    expect(hasPersistedProjectHint(storage)).toBe(false);
+  });
+
+  it('lets an explicit preset deep link pre-empt the speculative first-run chooser', () => {
+    expect(shouldOpenInstantProjectChoice({ hasPersistedProject: false })).toBe(true);
+    expect(
+      shouldOpenInstantProjectChoice({
+        hasPersistedProject: false,
+        requestedStarterId: 'real-vite',
+      }),
+    ).toBe(false);
+    expect(shouldOpenInstantProjectChoice({ hasPersistedProject: true })).toBe(false);
+  });
+
+  it('reconciles both stale hint directions from the authoritative catalog publish', () => {
+    const storage = fakeStorage({ 'rifty.hasActiveProject': '1' });
+    const open = vi.fn();
+    const close = vi.fn();
+    const actions = { openStarterChoice: open, closeProjectChoice: close };
+    reconcileProjectChoiceOnBoot(
+      { activeId: 'scratch', scratch: null, projects: [] },
+      actions,
+      storage,
+    );
+    expect(open).toHaveBeenCalledOnce();
+    expect(hasPersistedProjectHint(storage)).toBe(false);
+
+    reconcileProjectChoiceOnBoot(
+      {
+        activeId: 'p-1',
+        scratch: null,
+        projects: [{ id: 'p-1', name: 'Saved', starter: 'vite', editedAt: 'now' }],
+      },
+      actions,
+      storage,
+    );
+    expect(close).toHaveBeenCalledOnce();
+    expect(hasPersistedProjectHint(storage)).toBe(true);
   });
 });

@@ -192,6 +192,36 @@ async function setOpenEditorValue(page: Page, path: string, text: string): Promi
 }
 
 test.describe('GIT file manager', () => {
+  test('Compare with HEAD opens a clean file as a live editable working diff', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated - chromium only');
+    test.setTimeout(180_000);
+
+    await bootScmFileManager(page);
+    const readme = explorerRow(page, 'README.md', 'file');
+    await expect(readme).toBeVisible({ timeout: 30_000 });
+    await expect(readme.locator('.rf-row__gitbadge')).toHaveCount(0);
+
+    await openExplorerContextMenu(page, 'README.md', 'file');
+    await page.getByRole('menuitem', { name: 'Compare with HEAD' }).click();
+    await expect(page.getByRole('tab', { name: 'README.md ↔ HEAD' })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    const marker = `live-head-compare-${Date.now().toString(36)}`;
+    await setOpenEditorValue(page, '/README.md', `${marker}\n`);
+    const activeDiff = page.locator('.rf-diff-editor[data-active="true"] .monaco-diff-editor');
+    await expect(activeDiff.locator('.view-lines').last()).toContainText(marker, {
+      timeout: 30_000,
+    });
+
+    const shell = await openShellTerminal(page);
+    await runShellLine(page, shell, `grep ${marker} README.md`);
+    await expectShellContains(page, shell, marker);
+  });
+
   test('File Explorer context menu retains viewport placement in the real App', async ({
     page,
     browserName,

@@ -21,6 +21,12 @@ export type {
   ProjectMutationOutcome,
 } from './errors.ts';
 export type {
+  WorkbenchHealth,
+  WorkbenchHealthIssue,
+  WorkbenchHealthSnapshot,
+  WorkbenchRecoveryScope,
+} from './health.ts';
+export type {
   StoragePersistence,
   Workbench,
   WorkbenchOptions,

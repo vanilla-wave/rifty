@@ -37,6 +37,7 @@ import {
   type OwnerVfsAuthorityComposition,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import { recoverOwnerPlaygroundArchiveTransaction } from './playground-archive-integration.ts';
 import {
   type PlaygroundProjectAuthority,
   createPlaygroundProjectAuthority,
@@ -301,6 +302,12 @@ async function bootstrap(): Promise<void> {
             }),
           ),
       },
+      beforeOpenProject: (projectRoot) =>
+        recoverOwnerPlaygroundArchiveTransaction({
+          projectRoot,
+          owner: ownerComposition,
+          packages: packageState,
+        }),
     });
     let initialReplay = true;
     const unsubscribeCatalog = playgroundAuthority.subscribeCatalog((catalog) => {

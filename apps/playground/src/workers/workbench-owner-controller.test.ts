@@ -840,7 +840,11 @@ describe('Workbench owner controller', () => {
 
     const shutdown = h.controller.handle({ type: 'workbench:shutdown' });
     expect(h.controller.handle({ type: 'workbench:shutdown' })).toBe(shutdown);
-    const lateFrame = h.controller.handle(ptyMessage(token, 'after-shutdown'));
+    const lateFrames = [
+      h.controller.handle(ptyMessage(token, 'after-shutdown')),
+      h.controller.handle(previewMessage(token)),
+      h.controller.handle(vfsMessage(token)),
+    ];
     const lateDelete = h.controller.handle({
       type: 'workbench:delete-project',
       opId: 'delete-after-shutdown',
@@ -848,14 +852,10 @@ describe('Workbench owner controller', () => {
     });
 
     expect(runtime.runtime.handleFrame).not.toHaveBeenCalled();
-    await Promise.all([lateFrame, lateDelete]);
-    expect(h.sent).toContainEqual({
-      type: 'workbench:failure',
-      error: {
-        name: 'ClosedHandleError',
-        message: 'ClosedHandleError: Workbench owner is closed',
-      },
-    });
+    await Promise.all([...lateFrames, lateDelete]);
+    expect(
+      h.sent.filter((message) => message.type === 'workbench:failure' && !('opId' in message)),
+    ).toEqual([]);
     expect(h.sent).toContainEqual({
       type: 'workbench:failure',
       opId: 'delete-after-shutdown',

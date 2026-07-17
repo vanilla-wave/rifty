@@ -10,7 +10,13 @@ export {
 export { EMPTY_COMMIT_MESSAGE_ERROR, commitRefusal } from './commit-refusal.ts';
 export { type GitFs, type GitStat, vfsToGitFs } from './fs-adapter.ts';
 export { makeGit, pathspecMatch } from './git.ts';
-export { porcelainXY } from './status.ts';
+export {
+  isGitStatusMatrixCode,
+  isGitPorcelainXY,
+  porcelainStatusLines,
+  requireSupportedStatusEntries,
+} from './status.ts';
+export type { GitPorcelainXY, GitStatusMatrixCode } from './status.ts';
 export {
   type GitHttp,
   type GitHttpRequest,
@@ -43,5 +49,7 @@ export type {
   StashEntry,
   StashOp,
   StatusEntry,
+  SupportedStatusEntry,
   TagInput,
+  UnsupportedStatusEntry,
 } from './types.ts';

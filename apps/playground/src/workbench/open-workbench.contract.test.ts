@@ -323,6 +323,8 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     backend: 'opfs',
     durability: 'durable',
   });
+  const ownerClosed = deferred<unknown>();
+  void ownerClosed.promise.catch(() => {});
   let ownerCloseImplementation = async (): Promise<void> => {};
   let ownerDeleteProjectImplementation = async (_id: string): Promise<void> => {};
   const ownerProjectSessions: TestSession<unknown>[] = [];
@@ -398,6 +400,8 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     close: vi.fn(() => ownerCloseImplementation()),
   };
   const ownerHandle: OwnerHandle = {
+    closed: ownerClosed.promise,
+    subscribeHealth: () => () => {},
     // The inspected definition carries TReady only as a phantom; the test
     // boundary records an erased call, then restores that same phantom here.
     openProject<TReady>(definition: InspectedProjectDefinition<TReady>) {
@@ -480,6 +484,9 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     },
     failOwnerStart(error: unknown): void {
       ownerStartFailure = error;
+    },
+    failOwnerClosed(error: unknown): void {
+      ownerClosed.reject(error);
     },
     clearOwnerStartFailure(): void {
       ownerStartFailure = undefined;
@@ -1022,6 +1029,38 @@ describe('openWorkbench close fault contract', () => {
       expect(h.locks.held).toBe(false);
     },
   );
+
+  it('retains an owner exit that races a retryable close preflight rollback', async () => {
+    const h = harness();
+    const workbench = await h.open(validOptions());
+    const session = createTestSession<unknown>();
+    const preflightFailure = new DirtyProjectDocumentError('/src/main.ts');
+    const ownerExit = new Error('owner exited during close preflight');
+    let allowClose = false;
+    session.setCloseImplementation(() => {
+      if (allowClose) return Promise.resolve();
+      h.failOwnerClosed(ownerExit);
+      return Promise.reject(preflightFailure);
+    });
+    h.setOwnerOpenProjectImplementation(async () => session.session);
+    await workbench.openProject(definition('owner-exit-close-preflight'));
+
+    await expect(workbench.close()).rejects.toBe(preflightFailure);
+    expect(workbench.health.snapshot()).toEqual({
+      disposition: 'unavailable',
+      issues: [
+        {
+          kind: 'unavailable',
+          scope: 'owner',
+          summary: 'Workbench owner exited unexpectedly',
+          recovery: 'reload',
+        },
+      ],
+    });
+
+    allowClose = true;
+    await workbench.close();
+  });
 
   it('starts owner close to cancel an admitted open instead of waiting on that open', async () => {
     const h = harness();

@@ -40,6 +40,26 @@
 
 ### Fixed (finite Node Workbench review)
 
+- An unknown Git statusMatrix code now degrades only its path: SCM keeps and
+  publishes supported siblings, shows the gap with a non-porcelain `!` badge,
+  keeps the owner available, and reports retryable degraded SCM health. Gap
+  actions throw loudly; root `.rifty` remains private while nested `.rifty`
+  paths remain ordinary project content (ADR-0284).
+- Workbench boot, owner exit, invariant, SCM, preview, and persistence failures
+  now stay visible with scoped retry/reload actions. Persistence risk clears only
+  after exact owner durability re-proof; the selected backend identity remains
+  truthful, and unresolved risk keeps the unload warning armed plus a distinct
+  marker on editable tabs without falsifying their local dirty state.
+- First-run project choice again opens before owner boot; every catalog publish
+  reconciles the persisted project-presence hint without flashing returning users.
+  Opaque-origin storage getters now degrade to unpersisted layout/launcher hints
+  instead of aborting chooser reconciliation or sandbox reset.
+- Removed the retired page-side workspace, save, reset, file, terminal, and
+  dev-server orchestration implementations and their test-only terminal
+  manager; the companion remains the single production state owner.
+- Workspace archives now round-trip observable Git history and Files-visible
+  nested `.rifty` bytes. Root `.rifty` authority and derived trees remain
+  excluded; pre-0286 source-only V1 imports keep destination Git (ADR-0286).
 - Archive export and crash recovery now share finite iterative traversal,
   topology, path-depth, file, and byte budgets; corrupt durable stages reject
   before package or live-tree mutation. Archive import now closes replaced
@@ -53,7 +73,8 @@
   hides closing tabs before owner acknowledgement, and leaves remote teardown to
   the session lifecycle so switch/reset/delete cannot be blocked by duplicate UI
   closes. Legacy terminal persistence is reduced to exact project-rooted
-  `cwd`/`env` data before companion restore.
+  `cwd`/`env` data before companion restore; reload never auto-replays an
+  arbitrary command from the previous terminal session.
 - A stalled stream cancellation no longer hides an already-bounded snapshot or
   static-asset acquisition failure.
 - Cmd/Ctrl+S now awaits pending editor writes and a clean owner durability flush
@@ -79,6 +100,10 @@
   instead of expanding installed trees into the JSON journal, so Save preserves
   real `node_modules` trees without exceeding the browser string limit
   (ADR-0279).
+- The owner catalog now proves Scratch Save in ephemeral memory as a real
+  session-scoped project transaction; every catalog mutation survives each
+  persisted primitive cut and hard restart, replacing the retired page/index
+  lifecycle split.
 - Reopen package acquisition now reads the current owner-tree `package.json`,
   so user-added dependencies survive a revoked install claim and safe reinstall.
 - Resetting an inactive saved project now restores the catalog-active session
@@ -1020,7 +1045,7 @@
   and a staged-then-re-edited file (`MM`) is orange/modified (was blue) — matching
   VS Code's green=added, orange=modified, red=deleted. The added-file dirty gutter
   no longer fires a spurious `HEAD:<newfile>` not-found error. Roots in
-  `@riftydev/git` `porcelainXY` completing the reachable code set.
+  `@riftydev/git` `porcelainStatusLines` completing the reachable code set.
 - **Discard now drops the open editor model.** `git restore` from the SCM panel
   closes the open tab for the path, so the discarded buffer can't be re-flushed to
   the owner on the next keystroke (silently resurrecting the change).
