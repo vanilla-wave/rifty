@@ -108,17 +108,23 @@ restore a page-owned store or hide cold install behind project open.
   projects and later Workbench lifetimes share OPFS cache; memory is
   owner-session only. `deleteProject` retains the cache. Explicit
   `workbench.runtimeAssets.clear()` removes it after manager-flight settlement
-  and storage acknowledgement.
+  and storage acknowledgement. A lock loser constructs no manager/store and
+  touches no package/cache state; a replacement after crash revalidates the
+  stored chain.
 - Write durability and browser eviction retention stay distinct owner-born
   facts. Runtime-asset storage class is `opfs-persisted` only for durable OPFS
   plus confirmed persistent grant, `opfs-best-effort` for other durable OPFS,
   and `memory-session` for memory. Retention is exposed by
-  `runtimeAssets.inspect()`; general `OwnerStorageSnapshot` does not grow.
+  `runtimeAssets.inspect()`; general `OwnerStorageSnapshot` does not grow. A
+  failed retention probe yields best-effort even under `required`; that policy
+  rejects only absent/failed durable OPFS write proof.
 - Persist acknowledgement is scope-aware over the one authority: asset writes
   accept only failures under the semantic asset root; project materialization
-  accepts only project-scope failures. The final owner flush still aggregates
-  every scope. A failure in one scope cannot prove or disprove durability in
-  the other.
+  uses `waitForDurability({projectKey,revision})` and accepts only that key's
+  project/stage paths. Callers pass a captured key, never ambient active state.
+  Full-ledger `anyFailure` decides; a truncated sample without it cannot prove a
+  scope clean. The final owner flush still aggregates every scope. A failure in
+  one scope cannot prove or disprove durability in the other.
 - Public Workbench exposes semantic `runtimeAssets.inspect()/clear()` and
   optional typed `WorkbenchProjectOpenOptions.onRuntimeAssetProgress`.
   `PlaygroundProjectOpenOptions` extends that root type with
@@ -212,11 +218,13 @@ restore a page-owned store or hide cold install behind project open.
 - A typed `ESHADOWASSET` is recognized before `npm-shell-command` generic
   package-add rollback. Preserve the post-install `package.json` and lockfile,
   then run `finalizePackageInstallFiles`. Only a successful finalizer may return
-  the internal `post-tree-failure {treeResult, packageJsonText,
-  lockfileSha256, error}` to acquisition authority for ordinary independent v4
-  promotion scheduling. The authority then rethrows the original asset error
-  and admits no runtime/asset-ready receipt. A failing generic open returns no
-  new session; an already-open companion session remains usable for recovery.
+  the internal `post-tree-failure {treeResult, packageJsonText, error}` to
+  acquisition authority for ordinary independent v4 promotion scheduling.
+  `InstallStampAuthority` re-reads and hashes the exact stored lockfile in its
+  serialized promotion slot; no caller supplies `lockfileSha256`. The authority
+  then rethrows the original asset error and admits no runtime/asset-ready
+  receipt. A failing generic open returns no new session; an already-open
+  companion session remains usable for recovery.
   If finalization also fails, do not promote and throw
   `AggregateError([assetError, finalizerError])` in that order.
 - Project close fences admission, closes children/ports, then quiesces package
@@ -247,26 +255,41 @@ restore a page-owned store or hide cold install behind project open.
 
 ### Delivery order
 
+Correction 2026-07-17: the original itemization delayed every Workbench edit
+until controller extraction. Current app-local Workbench already exposes the
+one owner/VFS/protocol/package-FIFO seams, so storage and acquisition land there
+first; acquisition blocks the later mechanical extraction. Runtime consumption,
+host-asset removal, and node-entry/v2 remain one post-extraction cutover.
+
 ~~~text
-catalog + exact planner
-          |
-          v
-manager + STD/store
-          |
-          v
-MessagePort adapter ---------+
-                             |
-kernel entry capabilities ---+--> Workbench runtime assets
-                             |
-Workbench controllers -------+
-                                      |
-                                      v
-                         Eddy / alias retirement
+catalog + exact planner -> manager -> MessagePort adapter --------+
+                              \-> private storage + inspect/clear -+
+v4 install stamp -----------------------------------------------+ |
+kernel entry capabilities --------------------------------------+ |
+                                                                  v
+                                       acquisition timing + child admission
+                                                                  |
+                                                                  v
+                                                controller extraction
+                                                                  |
+                                                                  v
+                                                  cutover + node-entry/v2
+                                                                  |
+                                                                  v
+                                                         cold STD benchmark
+                                                                  |
+                                                                  v
+                                                                 Eddy
 ~~~
 
 Catalog, manager, and MessagePort items touch only shadow-registry/npm-client.
-Kernel can start immediately on landed ADR-0267. Workbench files change only in
-the final join after controller extraction.
+Kernel and v4 can start independently. Private storage/admin and acquisition/
+admission are semantic RED/GREEN slices that may land on the current app-local
+Workbench through its existing interfaces. Acquisition blocks controller
+extraction; extraction then moves those semantics without introducing another
+facade, owner protocol, VFS, or package-state owner. Cutover and the committed
+cold benchmark use the extracted composition. Alias retirement is a contingent
+draft, not part of this delivery order.
 
 This ADR composes with ADR-0267: entry capability ports are a sibling to host
 bootstrap. It narrowly corrects ADR-0263's host-resolved esbuild deployment
@@ -283,9 +306,12 @@ projection; their other decisions stand.
   lifecycle join rather than a manager rewrite.
 - Cold STD install adds one serial bounded asset fetch after the tree. The
   admitted member is 13,918,738 bytes; seconds and response bytes are measured
-  in the Workbench bench row, and the Eddy item adds its matched row.
+  in the dedicated cold-bench item's committed Workbench row, and the Eddy
+  item adds its matched row.
 - Existing v3 claims miss once so v4 can attest exact lockfile bytes.
 - Warm sync prefetch may do redundant bounded work because only async WebCrypto
-  can prove v4; correctness never depends on that speculative result.
+  can prove v4; correctness never depends on that speculative result. Any
+  measured optimization belongs to
+  `docs/backlog/perf/redundant-v4-eddy-prefetch.md`.
 - This does not generalize runtime adaptation for Sass, SWC, sharp, or arbitrary
   external adapters; each remains an explicit parity/public-interface decision.

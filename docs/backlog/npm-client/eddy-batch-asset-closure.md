@@ -6,7 +6,7 @@ created: 2026-07-13
 why: per-asset fetches scale as n round-trips and skip eddy's shared cache; one ensure can batch its exact missing source packages
 user_story: As a vite user on an eddy-enabled deployment, I want shadow assets to arrive as fast as my dependencies do, but today the wasm fetch bypasses eddy entirely
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-asset-manager, distribution/workbench-runtime-assets]
+blocked_by: [npm-client/shadow-asset-manager, distribution/workbench-runtime-asset-cold-bench]
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/npm-client/0182-eddy-opt-in-fast-install-resolver.md, docs/adr/npm-client/0194-eddy-v1-2-stateless-bundle-store-shared-resolve-caches-learned-pins.md, docs/adr/npm-client/0195-eddy-wire-protocol-v1-1-get-by-hash-cors-simple-post-streaming-client-prefetch-seam.md]
 code: [packages/npm-client/src/eddy-request.ts, packages/npm-client/src/eddy-bundle.ts, packages/npm-client/src/eddy-prefetch.ts, tools/perf/bench.mjs, tools/perf/src/aggregate.mjs, tools/perf/src/aggregate.test.ts, perf/benchmarks.json]
 ---
@@ -42,7 +42,7 @@ hits never enter either transport.
   gates; no readiness receipt publishes until the whole required set validates.
 - STD and Eddy share the one manager writer and produce byte-identical objects;
   receipts differ only in truthful transport/cache fields.
-- Extend the Workbench runtime-assets item's committed
+- Extend the Workbench cold-bench item's committed
   `shadowAssetColdFillMs.standard` record with
   a matched `eddy` row; preserve STD verbatim. Use the same phase boundary,
   asset set, five fresh Chromium contexts, storage class, client/origin cache

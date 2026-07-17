@@ -5,7 +5,6 @@ title: sass-embedded substitution — choose and prove a second real runtime pat
 created: 2026-07-13
 why: sass is the most common native dependency in vite projects and forces an explicit choice between an honest upstream twin and a derived runtime adapter
 user_story: As a vite user, I want `npm i -D sass-embedded` + an `.scss` import to compile through a real Sass compiler in the browser, but today install hits the native dart-sass binary and fails
-epic: honest-shadow-substitutions
 blocked_by: []
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/npm-client/0188-install-time-shadow-internals-shims-with-companion-pins-and-substitution-provenance.md]
 code: [tools/shadow-registry/src/index.ts, packages/npm-client/src/shadow-shims.ts]

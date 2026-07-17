@@ -6,8 +6,9 @@ created: 2026-06-08
 why: embedders need one package that owns real project lifecycle, files, packages, terminals, and preview; exporting playground controllers would export their coordination burden and keep Vite above the correct seam
 user_story: As a SaaS developer embedding rifty with my own UI, I want to provide project files and call `.run()` on a durable browser project, while Workbench owns the real Node/VFS/PTY lifecycle and exposes no playground or Vite-host internals.
 epic: embeddable-dev-loop
+blocked_by: [distribution/workbench-runtime-asset-acquisition]
 sources: [ADR-0263, ADR-0273, ADR-0275, ADR-0276, ADR-0264, ADR-0225, ADR-0230, ADR-0267, ADR-0078, ADR-0135, ADR-0185]
-code: [apps/playground/src/glue, apps/playground/src/orchestration, apps/playground/src/templates, apps/playground/src/workers, packages/kernel/src, packages/runtime-js/src]
+code: [apps/playground/src/glue, apps/playground/src/orchestration, apps/playground/src/templates, apps/playground/src/workers, packages/kernel/src, packages/runtime-js/src, tests/integration/fixtures/workbench-vite-consumer]
 ---
 
 ## Outcome
@@ -25,6 +26,11 @@ Vite plugin/query/env dependency inside Workbench.
 PR #136 is an implementation quarry only. Port individual RED tests and useful
 mechanisms onto current `main`; do not refactor or cherry-pick its 391-file
 megacommit.
+
+ADR-0249's app-local storage and acquisition slices land before this item.
+Extraction moves their proven owner/protocol/VFS/package-FIFO semantics with
+the rest of Workbench; it must not run against those shared files concurrently
+or recreate them behind a migration facade.
 
 ## Public contract
 
@@ -450,7 +456,8 @@ mechanical commits separate from behavior.
    Repoint the Playground before choosing the package boundary.
 6. **Mechanical package extraction.** Move the proven facade/runtime into
    `packages/workbench`; seal root/worker subpaths; delete app-local copies;
-   update architecture/publish wiring. No semantic fixes in move commits.
+   update architecture/publish wiring. Include the landed runtime-asset
+   storage/acquisition semantics unchanged. No semantic fixes in move commits.
 7. **Acceptance and seal.** Packed-tarball external Vite host; real Chromium
    Vite HMR, Express preview, CLI stdin/exit, storage/fault/teardown cases;
    remove migration-only paths; update compat and CHANGELOG files.
@@ -484,8 +491,10 @@ mechanical commits separate from behavior.
   same project reuses a valid tree, while two project ids never share a stamp.
 - Playground imports only the public root, `playground`, and worker subpaths;
   no duplicate mutable implementation or raw owner surface remains.
-- Packed consumer installs tarballs without workspace resolution, performs a
-  Vite production build, and passes Chromium acceptance.
+- The packed consumer at
+  `tests/integration/fixtures/workbench-vite-consumer` installs tarballs without
+  workspace resolution, performs a Vite production build, and passes Chromium
+  acceptance.
 - `pnpm pr:check`, browser-unit, e2e, prod-e2e, publish dry-run, and the packed
   consumer all pass sequentially on one SHA with zero Final+GREEN blockers.
 

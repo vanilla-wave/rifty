@@ -27,7 +27,7 @@ Done when the in-repo reference host (a plain Vite React app standing in for the
 
 ## Items
 
-- `distribution/workbench-controllers` — the deep base: owner-resident state authorities, generic ProjectRuntime with real Vite/server/CLI adapters, sealed project-session API, Playground dogfood, and packed Chromium proof. Blocks the other two.
+- `distribution/workbench-controllers` — the deep base: owner-resident state authorities, generic ProjectRuntime with real Vite/server/CLI adapters, sealed project-session API, Playground dogfood, and packed Chromium proof. It moves ADR-0249's already-landed app-local storage/acquisition semantics, then blocks the other two.
 - `distribution/react-bindings` — the ready components: `@riftydev/react` provider + atoms over the workbench, headless + themeable (DD-4).
 - `distribution/embed-host-vite-example` — the acceptance vehicle: reference Vite React host app + the `docs/public/` embedding doc + CI e2e on the built bundle.
 

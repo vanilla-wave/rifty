@@ -288,6 +288,8 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0249 post-extraction-only delivery-order clause | 0249 note 2026-07-17 | private storage and acquisition land on current app-local owners before their mechanical extraction; runtime/deployment cutover stays post-extraction |
+| 0263 post-extraction-only runtime-assets sequencing clause | 0249 / note 2026-07-17 | storage/acquisition land on app-local owners before extraction; host-field/runtime-reader cutover remains post-extraction |
 | 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
 | 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |

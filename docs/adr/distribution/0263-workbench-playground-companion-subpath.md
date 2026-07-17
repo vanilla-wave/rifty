@@ -80,6 +80,11 @@ interface PlaygroundProjectOpenOptions
 }
 ```
 
+Correction 2026-07-17 (ADR-0249): private storage/admin and acquisition/
+admission may land first through the current app-local owner interfaces and now
+block mechanical controller extraction. The deployment-field removal and
+runtime-reader cutover remain post-extraction.
+
 The companion forwards both fields. Generic open and companion trusted/snapshot
 open may report assets before project-opened. ADR-0278 cold install/fallback
 still happens visibly in first `session.run()`; its terminal owns asset progress
