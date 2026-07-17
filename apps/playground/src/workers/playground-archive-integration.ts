@@ -70,7 +70,7 @@ function escapeRegExp(value: string): string {
 }
 
 function rootedPathPattern(root: string): RegExp {
-  return new RegExp(`${escapeRegExp(root)}(?:/[^\\s"'<>;,)}\\]]+)*`, 'g');
+  return new RegExp(`${escapeRegExp(root)}(?:/[^\\s"'<>;,):}\\]]+)*(?=$|[\\s"'<>;,):}\\]])`, 'g');
 }
 
 function publicArchiveMessage(
