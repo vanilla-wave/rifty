@@ -665,10 +665,11 @@ are introduced.
 Contract+RED includes unit fault tests for each semantic boundary plus real
 browser-owner cases for companion minting, real npm/process execution,
 non-default Vite port, selected-legacy boot wiring, persisted cwd/env restore
-and post-exit round trip, arbitrary-command multi-port add/remove/switch, exact
-primary-run stop, and the real TypeScript service. Synthetic relay/process
-fixtures remain unit-ordering evidence only; they never close observable
-acceptance.
+and post-exit round trip, archive export/import with immediate Files/editor
+reflection and reload recovery, arbitrary-command multi-port add/remove/switch,
+exact primary-run stop, and the real TypeScript service. Synthetic
+relay/process fixtures remain unit-ordering evidence only; they never close
+observable acceptance.
 
 ## Consequences
 
@@ -691,4 +692,10 @@ ADR-0282 adds `PlaygroundTypeScript.reinitialize()`,
 `PlaygroundSessionTools.awaitDurability()`, and semantic
 `playground.restoreTerminalState()`. Restoration closes over the same captured
 legacy selection used by owner adoption; no prefix is exposed. All other
-terminal/catalog/tool contracts above stand.
+terminal/catalog/tool contracts above stand. Archive traversal additionally
+caps 20,000 visited file/directory entries and 256 path segments. Export and
+durable recovery share one iterative reader with the file/byte budgets; import
+validates its implied topology before decode or effects. Page terminal disposal
+releases only UI bindings; `ProjectSession.close()` remains the single remote
+tool/runtime/PTY teardown authority. Host terminal persistence strips legacy
+`devCommand` before exact project-rooted companion restore.

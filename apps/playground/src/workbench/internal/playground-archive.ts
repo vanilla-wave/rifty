@@ -8,6 +8,8 @@ let importSequence = 0;
 
 export interface PlaygroundArchiveV1Limits {
   readonly maxJsonCodeUnits: number;
+  readonly maxTraversalEntries: number;
+  readonly maxPathSegments: number;
   readonly maxFiles: number;
   readonly maxDecodedFileBytes: number;
   readonly maxTotalDecodedBytes: number;
@@ -15,6 +17,8 @@ export interface PlaygroundArchiveV1Limits {
 
 export const PLAYGROUND_ARCHIVE_V1_LIMITS: PlaygroundArchiveV1Limits = Object.freeze({
   maxJsonCodeUnits: 48 * MEBIBYTE,
+  maxTraversalEntries: 20_000,
+  maxPathSegments: 256,
   maxFiles: 10_000,
   maxDecodedFileBytes: 16 * MEBIBYTE,
   maxTotalDecodedBytes: 32 * MEBIBYTE,
@@ -55,6 +59,8 @@ function compareCodeUnits(left: string, right: string): number {
 function assertLimits(limits: PlaygroundArchiveV1Limits): void {
   const keys = [
     'maxJsonCodeUnits',
+    'maxTraversalEntries',
+    'maxPathSegments',
     'maxFiles',
     'maxDecodedFileBytes',
     'maxTotalDecodedBytes',
@@ -132,7 +138,10 @@ function dataValue(record: Record<string, unknown>, key: string): unknown {
   return descriptor.value;
 }
 
-function assertPortableRelativePath(path: string): readonly string[] {
+function assertPortableRelativePath(
+  path: string,
+  limits: PlaygroundArchiveV1Limits,
+): readonly string[] {
   if (path.length === 0 || path.startsWith('/') || path.includes('\\') || path.includes('\0')) {
     throw new TypeError(`Playground archive path is not normalized: ${JSON.stringify(path)}`);
   }
@@ -140,17 +149,23 @@ function assertPortableRelativePath(path: string): readonly string[] {
   if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
     throw new TypeError(`Playground archive path is not normalized: ${JSON.stringify(path)}`);
   }
+  if (segments.length > limits.maxPathSegments) {
+    throw new RangeError('Playground archive path segment limit exceeded');
+  }
   const normalized = normalizePath(`/${path}`).slice(1);
   if (normalized !== path) {
     throw new TypeError(`Playground archive path is not normalized: ${JSON.stringify(path)}`);
   }
+  return segments;
+}
+
+function assertNoReservedSegment(segments: readonly string[]): void {
   const excluded = segments.find((segment) => EXCLUDED_SEGMENTS.has(segment));
   if (excluded !== undefined) {
     throw new TypeError(
       `Playground archive path uses reserved segment ${JSON.stringify(excluded)}`,
     );
   }
-  return segments;
 }
 
 function decodedBase64Size(content: string): number {
@@ -196,6 +211,7 @@ function parsedArchiveFiles(
 
   const parsed: Array<{ path: string; content: string; decodedSize: number }> = [];
   const paths = new Set<string>();
+  const topology = new Set<string>();
   let totalDecodedBytes = 0;
   for (const candidate of files) {
     if (!plainRecord(candidate) || !exactKeys(candidate, ['path', 'encoding', 'content'])) {
@@ -213,9 +229,16 @@ function parsedArchiveFiles(
     if (typeof content !== 'string') {
       throw new TypeError('Playground archive file content must be a string');
     }
-    assertPortableRelativePath(path);
+    const segments = assertPortableRelativePath(path, limits);
+    assertNoReservedSegment(segments);
     if (paths.has(path)) throw new TypeError(`Playground archive path collision: ${path}`);
     paths.add(path);
+    for (let end = 1; end <= segments.length; end += 1) {
+      topology.add(segments.slice(0, end).join('/'));
+      if (topology.size > limits.maxTraversalEntries) {
+        throw new RangeError('Playground archive traversal entry limit exceeded');
+      }
+    }
     const decodedSize = decodedBase64Size(content);
     if (decodedSize > limits.maxDecodedFileBytes) {
       throw new RangeError(`Playground archive file byte limit exceeded: ${path}`);
@@ -246,6 +269,104 @@ function childPath(directory: string, name: string): string {
 function relativePath(root: string, path: string): string {
   if (!path.startsWith(`${root}/`)) throw new Error(`Archive export path escaped ${root}`);
   return path.slice(root.length + 1);
+}
+
+export interface BoundedPlaygroundArchiveTreeFile {
+  readonly path: string;
+  readonly bytes: Uint8Array;
+}
+
+interface DirectoryFrame {
+  readonly directory: string;
+  readonly children: ReturnType<FsSync['readdirSync']>;
+  index: number;
+}
+
+function directoryFrame(fs: FsSync, directory: string): DirectoryFrame {
+  return {
+    directory,
+    children: [...fs.readdirSync(directory)].sort((left, right) =>
+      compareCodeUnits(left.name, right.name),
+    ),
+    index: 0,
+  };
+}
+
+/** One iterative, finite tree reader shared by export and crash recovery. */
+export function readBoundedPlaygroundArchiveTree(
+  fs: FsSync,
+  rawRoot: string,
+  limits: PlaygroundArchiveV1Limits = PLAYGROUND_ARCHIVE_V1_LIMITS,
+  reservedPolicy: 'exclude' | 'reject' = 'reject',
+): readonly BoundedPlaygroundArchiveTreeFile[] {
+  assertLimits(limits);
+  const root = assertProjectRoot(fs, rawRoot, true);
+  const files: BoundedPlaygroundArchiveTreeFile[] = [];
+  const stack: DirectoryFrame[] = [directoryFrame(fs, root)];
+  let traversalEntries = 0;
+  let totalDecodedBytes = 0;
+
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1];
+    if (frame === undefined) break;
+    const child = frame.children[frame.index];
+    if (child === undefined) {
+      stack.pop();
+      continue;
+    }
+    frame.index += 1;
+    traversalEntries += 1;
+    if (traversalEntries > limits.maxTraversalEntries) {
+      throw new RangeError('Playground archive traversal entry limit exceeded');
+    }
+
+    const path = childPath(frame.directory, child.name);
+    const relative = relativePath(root, path);
+    const segments = assertPortableRelativePath(relative, limits);
+    const reserved = segments.some((segment) => EXCLUDED_SEGMENTS.has(segment));
+    if (reserved) {
+      if (reservedPolicy === 'exclude') continue;
+      assertNoReservedSegment(segments);
+    }
+    if (child.isDirectory) {
+      stack.push(directoryFrame(fs, path));
+      continue;
+    }
+    if (!child.isFile) throw new TypeError(`Playground archive entry is not a file: ${relative}`);
+    if (files.length >= limits.maxFiles) {
+      throw new RangeError('Playground archive file limit exceeded');
+    }
+
+    const stat = fs.statSync(path);
+    if (!stat.isFile) throw new TypeError(`Playground archive entry changed kind: ${relative}`);
+    if (
+      stat.size !== undefined &&
+      (!Number.isSafeInteger(stat.size) || stat.size < 0 || stat.size > limits.maxDecodedFileBytes)
+    ) {
+      if (Number.isSafeInteger(stat.size) && stat.size > limits.maxDecodedFileBytes) {
+        throw new RangeError(`Playground archive file byte limit exceeded: ${relative}`);
+      }
+      throw new TypeError(`Playground archive file size is invalid: ${relative}`);
+    }
+    if (stat.size !== undefined && totalDecodedBytes + stat.size > limits.maxTotalDecodedBytes) {
+      throw new RangeError('Playground archive total byte limit exceeded');
+    }
+    const bytes = fs.readFileBytesSync(path);
+    if (bytes.byteLength > limits.maxDecodedFileBytes) {
+      throw new RangeError(`Playground archive file byte limit exceeded: ${relative}`);
+    }
+    if (stat.size !== undefined && stat.size !== bytes.byteLength) {
+      throw new Error(`Playground archive file size changed while reading: ${relative}`);
+    }
+    totalDecodedBytes += bytes.byteLength;
+    if (totalDecodedBytes > limits.maxTotalDecodedBytes) {
+      throw new RangeError('Playground archive total byte limit exceeded');
+    }
+    files.push(Object.freeze({ path: relative, bytes }));
+  }
+
+  files.sort((left, right) => compareCodeUnits(left.path, right.path));
+  return Object.freeze(files);
 }
 
 function privateImportPaths(root: string): { readonly stage: string; readonly backup: string } {
@@ -281,39 +402,12 @@ export function exportPlaygroundArchiveV1(
   limits: PlaygroundArchiveV1Limits = PLAYGROUND_ARCHIVE_V1_LIMITS,
 ): string {
   assertLimits(limits);
-  const root = assertProjectRoot(fs, rawRoot, true);
-  const files: PlaygroundArchiveFileV1[] = [];
-  let totalDecodedBytes = 0;
-
-  const walk = (directory: string): void => {
-    const children = [...fs.readdirSync(directory)].sort((left, right) =>
-      compareCodeUnits(left.name, right.name),
-    );
-    for (const child of children) {
-      const path = childPath(directory, child.name);
-      const relative = relativePath(root, path);
-      const segments = relative.split('/');
-      if (segments.some((segment) => EXCLUDED_SEGMENTS.has(segment))) continue;
-      if (child.isDirectory) {
-        walk(path);
-        continue;
-      }
-      if (files.length >= limits.maxFiles) {
-        throw new RangeError('Playground archive file limit exceeded');
-      }
-      const bytes = fs.readFileBytesSync(path);
-      if (bytes.byteLength > limits.maxDecodedFileBytes) {
-        throw new RangeError(`Playground archive file byte limit exceeded: ${relative}`);
-      }
-      totalDecodedBytes += bytes.byteLength;
-      if (totalDecodedBytes > limits.maxTotalDecodedBytes) {
-        throw new RangeError('Playground archive total byte limit exceeded');
-      }
-      files.push({ path: relative, encoding: 'base64', content: bytesToBase64(bytes) });
-    }
-  };
-  walk(root);
-  files.sort((left, right) => compareCodeUnits(left.path, right.path));
+  const files: PlaygroundArchiveFileV1[] = readBoundedPlaygroundArchiveTree(
+    fs,
+    rawRoot,
+    limits,
+    'exclude',
+  ).map(({ path, bytes }) => ({ path, encoding: 'base64', content: bytesToBase64(bytes) }));
   const json = JSON.stringify({ version: 1, root: '/', files } satisfies PlaygroundArchiveV1);
   if (json.length > limits.maxJsonCodeUnits) {
     throw new RangeError('Playground archive JSON code-unit limit exceeded');

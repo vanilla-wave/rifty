@@ -18,13 +18,18 @@ import {
 } from '@riftydev/terminal/state';
 import { OpfsVfs, syncMirror } from '@riftydev/vfs';
 
+export interface ProjectTerminalPersistenceState {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string>>;
+}
+
 export interface TerminalPersistence {
   readonly backend: 'opfs' | 'memory';
   readonly initialHistory: readonly TerminalHistoryRecord[];
-  readonly initialState: TerminalState;
+  readonly initialState: ProjectTerminalPersistenceState;
   readonly initialStateSource: 'legacy-absolute' | 'project-rooted';
   saveHistory(records: readonly TerminalHistoryRecord[]): Promise<void>;
-  saveState(state: TerminalState): Promise<void>;
+  saveState(state: ProjectTerminalPersistenceState): Promise<void>;
 }
 
 type TerminalWorkspaceFs = TerminalHistoryFs & TerminalStateFs;
@@ -60,6 +65,14 @@ function createWriteQueue(): (task: () => Promise<void>) => Promise<void> {
   };
 }
 
+function projectTerminalState(state: TerminalState): ProjectTerminalPersistenceState {
+  return Object.freeze({ cwd: state.cwd, env: Object.freeze({ ...state.env }) });
+}
+
+function storedTerminalState(state: ProjectTerminalPersistenceState): TerminalState {
+  return { cwd: state.cwd, env: { ...state.env } };
+}
+
 async function loadInitialStateAsync(
   store: TerminalStateVfs,
   legacyDefaultCwd: string,
@@ -68,12 +81,14 @@ async function loadInitialStateAsync(
     await store.readFile(PROJECT_ROOTED_TERMINAL_STATE_PATH);
   } catch {
     return {
-      initialState: await loadTerminalStateAsync(store, legacyDefaultCwd),
+      initialState: projectTerminalState(await loadTerminalStateAsync(store, legacyDefaultCwd)),
       initialStateSource: 'legacy-absolute',
     };
   }
   return {
-    initialState: await loadTerminalStateAsync(store, '/', PROJECT_ROOTED_TERMINAL_STATE_PATH),
+    initialState: projectTerminalState(
+      await loadTerminalStateAsync(store, '/', PROJECT_ROOTED_TERMINAL_STATE_PATH),
+    ),
     initialStateSource: 'project-rooted',
   };
 }
@@ -81,12 +96,14 @@ async function loadInitialStateAsync(
 function loadInitialState(store: TerminalStateFs, legacyDefaultCwd: string): InitialTerminalState {
   if (!store.existsSync(PROJECT_ROOTED_TERMINAL_STATE_PATH)) {
     return {
-      initialState: loadTerminalState(store, legacyDefaultCwd),
+      initialState: projectTerminalState(loadTerminalState(store, legacyDefaultCwd)),
       initialStateSource: 'legacy-absolute',
     };
   }
   return {
-    initialState: loadTerminalState(store, '/', PROJECT_ROOTED_TERMINAL_STATE_PATH),
+    initialState: projectTerminalState(
+      loadTerminalState(store, '/', PROJECT_ROOTED_TERMINAL_STATE_PATH),
+    ),
     initialStateSource: 'project-rooted',
   };
 }
@@ -105,7 +122,13 @@ export async function createTerminalPersistence(
       ...initial,
       saveHistory: (records) => enqueue(() => saveTerminalHistoryAsync(opfs, records)),
       saveState: (state) =>
-        enqueue(() => saveTerminalStateAsync(opfs, state, PROJECT_ROOTED_TERMINAL_STATE_PATH)),
+        enqueue(() =>
+          saveTerminalStateAsync(
+            opfs,
+            storedTerminalState(state),
+            PROJECT_ROOTED_TERMINAL_STATE_PATH,
+          ),
+        ),
     };
   } catch {
     // OPFS unavailable → degraded, session-local history only. The page holds no
@@ -121,7 +144,11 @@ export async function createTerminalPersistence(
       saveHistory: (records) => enqueue(async () => saveTerminalHistory(workspaceFs, records)),
       saveState: (state) =>
         enqueue(async () =>
-          saveTerminalState(workspaceFs, state, PROJECT_ROOTED_TERMINAL_STATE_PATH),
+          saveTerminalState(
+            workspaceFs,
+            storedTerminalState(state),
+            PROJECT_ROOTED_TERMINAL_STATE_PATH,
+          ),
         ),
     };
   }

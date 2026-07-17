@@ -90,9 +90,9 @@ export const ALLOWLIST = [
   },
   {
     file: 'apps/playground/src/workers/bundle-local-buffer.test.ts',
-    count: 5,
-    digest: '48a01d0768ed',
-    why: 'dual-copy Buffer hazard exists only in PROD ?worker&url bundles (dev/browser-unit share one ESM instance); wiring pins on child bootstraps; behavior covered in tests/e2e-prod',
+    count: 6,
+    digest: '602c634db1fa',
+    why: 'dual-copy Buffer + explicit TS endpoint are PROD emitted-bundle wiring; ADR-0282 no-bundler-query pin is a mechanical package-extraction source-shape contract, unobservable in node/dev; e2e-prod covers runtime symptoms and the extraction dry-run covers the package build',
   },
 ];
 

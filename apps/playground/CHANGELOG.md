@@ -40,6 +40,17 @@
 
 ### Fixed (finite Node Workbench review)
 
+- Archive export and crash recovery now share finite iterative traversal,
+  topology, path-depth, file, and byte budgets; corrupt durable stages reject
+  before package or live-tree mutation. Archive import now closes replaced
+  editor models and document handles before publishing restored owner bytes.
+- Terminal migration preserves whitespace Enter, releases failed admissions,
+  hides closing tabs before owner acknowledgement, and leaves remote teardown to
+  the session lifecycle so switch/reset/delete cannot be blocked by duplicate UI
+  closes. Legacy terminal persistence is reduced to exact project-rooted
+  `cwd`/`env` data before companion restore.
+- A stalled stream cancellation no longer hides an already-bounded snapshot or
+  static-asset acquisition failure.
 - Cmd/Ctrl+S now awaits pending editor writes and a clean owner durability flush
   before displaying `Saved`; memory mode instead says `Saved for this session ·
   EPHEMERAL`. Failed debounced generations retry on the next Save, stale

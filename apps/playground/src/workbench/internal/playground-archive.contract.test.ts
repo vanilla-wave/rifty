@@ -208,6 +208,8 @@ function importInto(fs: FsSync, json: string): void {
 function exactFixtureLimits(jsonCodeUnits: number): PlaygroundArchiveV1Limits {
   return {
     maxJsonCodeUnits: jsonCodeUnits,
+    maxTraversalEntries: 2,
+    maxPathSegments: 1,
     maxFiles: 2,
     maxDecodedFileBytes: 3,
     maxTotalDecodedBytes: 5,
@@ -266,6 +268,8 @@ describe('Playground archive v1 finite budgets', () => {
   it('publishes the exact immutable source-only browser defaults', () => {
     const expected = {
       maxJsonCodeUnits: 48 * MEBIBYTE,
+      maxTraversalEntries: 20_000,
+      maxPathSegments: 256,
       maxFiles: 10_000,
       maxDecodedFileBytes: 16 * MEBIBYTE,
       maxTotalDecodedBytes: 32 * MEBIBYTE,
@@ -273,6 +277,8 @@ describe('Playground archive v1 finite budgets', () => {
 
     expect(Reflect.ownKeys(PLAYGROUND_ARCHIVE_V1_LIMITS)).toEqual([
       'maxJsonCodeUnits',
+      'maxTraversalEntries',
+      'maxPathSegments',
       'maxFiles',
       'maxDecodedFileBytes',
       'maxTotalDecodedBytes',
@@ -291,6 +297,57 @@ describe('Playground archive v1 finite budgets', () => {
     expect(exportPlaygroundArchiveV1(fs, PROJECT_ROOT, exactFixtureLimits(expected.length))).toBe(
       expected,
     );
+  });
+
+  it('rejects export over the traversal-entry budget before reading file bytes', () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync(`${PROJECT_ROOT}/a`, { recursive: true });
+    fs.mkdirSync(`${PROJECT_ROOT}/b`, { recursive: true });
+    fs.mkdirSync(`${PROJECT_ROOT}/c`, { recursive: true });
+    const readFile = vi.spyOn(fs, 'readFileBytesSync');
+    const limits = {
+      ...PLAYGROUND_ARCHIVE_V1_LIMITS,
+      maxFiles: 0,
+      maxTraversalEntries: 2,
+      maxPathSegments: 256,
+    } as PlaygroundArchiveV1Limits;
+
+    expect(() => exportPlaygroundArchiveV1(fs, PROJECT_ROOT, limits)).toThrow(
+      'Playground archive traversal entry limit exceeded',
+    );
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects export paths deeper than the finite segment budget without recursion overflow', () => {
+    const fs = new MemoryFsSync();
+    fs.mkdirSync(`${PROJECT_ROOT}/a/b/c`, { recursive: true });
+    const limits = {
+      ...PLAYGROUND_ARCHIVE_V1_LIMITS,
+      maxTraversalEntries: 10,
+      maxPathSegments: 2,
+    } as PlaygroundArchiveV1Limits;
+
+    expect(() => exportPlaygroundArchiveV1(fs, PROJECT_ROOT, limits)).toThrow(
+      'Playground archive path segment limit exceeded',
+    );
+  });
+
+  it('rejects import depth and implied topology before decode or filesystem effects', () => {
+    const deepJson = archive([file('a/b/c.txt', 'deep')]);
+    const deepLimits = {
+      ...PLAYGROUND_ARCHIVE_V1_LIMITS,
+      maxTraversalEntries: 10,
+      maxPathSegments: 2,
+    } as PlaygroundArchiveV1Limits;
+    expectImportBudgetRejectionBeforeEffects(deepJson, deepLimits, 1);
+
+    const wideJson = archive([file('a/x.txt', 'a'), file('b/y.txt', 'b')]);
+    const wideLimits = {
+      ...PLAYGROUND_ARCHIVE_V1_LIMITS,
+      maxTraversalEntries: 3,
+      maxPathSegments: 2,
+    } as PlaygroundArchiveV1Limits;
+    expectImportBudgetRejectionBeforeEffects(wideJson, wideLimits, 1);
   });
 
   it.each([
@@ -573,6 +630,8 @@ describe('Playground archive v1 strict import boundary', () => {
         json,
         limits: {
           maxJsonCodeUnits: json.length,
+          maxTraversalEntries: 2,
+          maxPathSegments: 1,
           maxFiles: 1,
           maxDecodedFileBytes: 1,
           maxTotalDecodedBytes: 2,

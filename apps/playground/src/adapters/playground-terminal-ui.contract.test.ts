@@ -229,6 +229,58 @@ describe('Playground semantic terminal UI adapter', () => {
     await ui.dispose();
   });
 
+  it('keeps empty and whitespace-only Enter as an idle no-op', async () => {
+    const interactive = terminalHarness();
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(),
+      terminals: { open: vi.fn(() => interactive.terminal) },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+    const opened = ui.createSession('Terminal 1');
+
+    await expect(ui.runLine(opened.id, ' \t ')).resolves.toBe(0);
+    expect(interactive.terminal.run).not.toHaveBeenCalled();
+    expect(interactive.terminal.resize).not.toHaveBeenCalled();
+    expect(ui.sessions()[0]).toMatchObject({ status: 'idle' });
+    await ui.dispose();
+  });
+
+  it('closes and releases an interactive run whose owner admission fails', async () => {
+    const interactive = terminalHarness();
+    const ready = deferred<void>();
+    const exited = deferred<ProcessExit>();
+    void exited.promise.catch(() => {});
+    const failedRun = {
+      ready: ready.promise,
+      exited: exited.promise,
+      stop: vi.fn(async () => ({ code: null, signal: 'SIGINT' }) as ProcessExit),
+      close: vi.fn(async () => ({ code: 1, signal: null }) as ProcessExit),
+    } satisfies ProjectTerminalRun;
+    interactive.terminal.run.mockReturnValueOnce(failedRun);
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(),
+      terminals: { open: vi.fn(() => interactive.terminal) },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+    const opened = ui.createSession('Terminal 1');
+
+    const line = ui.runLine(opened.id, 'node missing.mjs');
+    const failure = new Error('owner admission failed');
+    ready.reject(failure);
+    exited.reject(failure);
+
+    await expect(line).rejects.toBe(failure);
+    expect(failedRun.close).toHaveBeenCalledTimes(1);
+    expect(ui.sessions()[0]).toMatchObject({ status: 'idle' });
+    await ui.dispose();
+  });
+
   it('selects the previous surviving session after active close and retains active on sibling close', async () => {
     const primary = terminalHarness();
     const second = terminalHarness();
@@ -270,5 +322,77 @@ describe('Playground semantic terminal UI adapter', () => {
     await ui.closeSession(nonActive.id);
     expect(ui.activeSessionId()).toBe(previous.id);
     await ui.dispose();
+  });
+
+  it('hides a closing tab and selects its fallback before owner close settles', async () => {
+    const primary = terminalHarness();
+    const previous = terminalHarness();
+    const active = terminalHarness();
+    const closeAck = deferred<void>();
+    active.terminal.close.mockReturnValueOnce(closeAck.promise);
+    const projectRun = {
+      terminal: primary.terminal,
+      ready: Promise.resolve(),
+      exited: new Promise<ProcessExit>(() => {}),
+      stop: primary.run.stop,
+      close: primary.run.close,
+    } satisfies ProjectRun<unknown>;
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(() => projectRun),
+      terminals: {
+        open: vi
+          .fn<() => ProjectTerminal>()
+          .mockReturnValueOnce(previous.terminal)
+          .mockReturnValueOnce(active.terminal),
+      },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+    ui.startProject('Project');
+    const fallback = ui.createSession('Previous');
+    const closing = ui.createSession('Active');
+
+    const failure = new Error('owner close failed');
+    const close = ui.closeSession(closing.id);
+    void close.catch(() => {});
+    expect(ui.sessions().map(({ id }) => id)).not.toContain(closing.id);
+    expect(ui.activeSessionId()).toBe(fallback.id);
+
+    closeAck.reject(failure);
+    await expect(close).rejects.toBe(failure);
+    expect(ui.sessions().map(({ id }) => id)).not.toContain(closing.id);
+    expect(ui.activeSessionId()).toBe(fallback.id);
+    await ui.dispose();
+  });
+
+  it('disposes only page bindings while ProjectSession retains remote teardown authority', async () => {
+    const primary = terminalHarness();
+    const sibling = terminalHarness();
+    const projectRun = {
+      terminal: primary.terminal,
+      ready: Promise.resolve(),
+      exited: new Promise<ProcessExit>(() => {}),
+      stop: primary.run.stop,
+      close: primary.run.close,
+    } satisfies ProjectRun<unknown>;
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(() => projectRun),
+      terminals: { open: vi.fn(() => sibling.terminal) },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+    ui.startProject('Project');
+    ui.createSession('Terminal 1');
+
+    await ui.dispose();
+
+    expect(projectRun.close).not.toHaveBeenCalled();
+    expect(primary.terminal.close).not.toHaveBeenCalled();
+    expect(sibling.terminal.close).not.toHaveBeenCalled();
+    expect(ui.sessions()).toEqual([]);
   });
 });

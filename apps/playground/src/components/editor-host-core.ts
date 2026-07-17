@@ -474,7 +474,10 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
 
   function pathIsInTree(path: string, rootPath: string): boolean {
     const normalizedRoot = normalizeTreeRoot(rootPath);
-    return path === normalizedRoot || path.startsWith(`${normalizedRoot}/`);
+    return (
+      path === normalizedRoot ||
+      (normalizedRoot === '/' ? path.startsWith('/') : path.startsWith(`${normalizedRoot}/`))
+    );
   }
 
   function disposeDiffTab(id: string): void {
@@ -981,7 +984,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
     ]);
     return [...ids]
       .map((id) => docPathForTab(id))
-      .filter((path) => path === normalizedRoot || path.startsWith(`${normalizedRoot}/`));
+      .filter((path) => pathIsInTree(path, normalizedRoot));
   }
 
   function closeExternalPathTree(rootPath: string): void {

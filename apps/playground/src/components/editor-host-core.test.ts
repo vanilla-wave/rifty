@@ -791,6 +791,21 @@ describe('editor-host-core close hooks (owner rename/delete lifecycles)', () => 
     expect(h.core.modelForPath('/p/srcfoo.ts')).toBeDefined();
   });
 
+  it('treats / as the whole open editor tree', () => {
+    const h = createHarness({
+      files: { '/p/src/a.ts': 'a', '/p/other.ts': 'b' },
+    });
+    h.core.api.openFile('/p/src/a.ts');
+    h.core.api.openFile('/p/other.ts');
+
+    expect([...h.core.api.openPathsUnder('/')].sort()).toEqual(['/p/other.ts', '/p/src/a.ts']);
+    h.core.api.closePathTree('/');
+
+    expect(h.core.tabs()).toEqual([]);
+    expect(h.core.modelForPath('/p/src/a.ts')).toBeUndefined();
+    expect(h.core.modelForPath('/p/other.ts')).toBeUndefined();
+  });
+
   it('closing the working file tears down its live-model git diff but keeps blob compares', async () => {
     const h = createHarness({
       files: { '/p/a.ts': 'working' },

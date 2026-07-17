@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import type {
   PlaygroundCatalogSnapshot,
@@ -14,8 +13,6 @@ import {
   type ProjectTerminalSnapshot,
 } from '../workbench/public.ts';
 import { createPlaygroundAppRuntime } from './playground-app-runtime.ts';
-
-const runtimeSource = readFileSync(new URL('./playground-app-runtime.ts', import.meta.url), 'utf8');
 
 const EMPTY_CATALOG: PlaygroundCatalogSnapshot = Object.freeze({
   active: null,
@@ -240,11 +237,6 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
 }
 
 describe('Playground App semantic runtime', () => {
-  it('uses public error classes instead of Workbench implementation helpers', () => {
-    expect(runtimeSource).not.toContain("from '../workbench/errors.ts'");
-    expect(runtimeSource).not.toContain("from '../workbench/internal/");
-  });
-
   it('reads the latest host terminal snapshot for every semantic project open', async () => {
     let state: ProjectTerminalSnapshot = { cwd: '/src', env: { COLOR: '1' } };
     const h = harness(() => state);

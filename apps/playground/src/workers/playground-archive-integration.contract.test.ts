@@ -325,9 +325,9 @@ interface ArchiveHarness {
 
 async function harness(
   fs = new DurableOwnerFs(),
-  options: { readonly seed?: boolean } = {},
+  options: { readonly seed?: boolean; readonly constructionTimeline?: string[] } = {},
 ): Promise<ArchiveHarness> {
-  const timeline: string[] = [];
+  const timeline = options.constructionTimeline ?? [];
   const vfs = new SyncMirrorVfs();
   setSyncMirror(fs, { async: vfs });
   const baseComposition = createOwnerVfsAuthorityComposition(fs, {
@@ -686,6 +686,37 @@ describe('Playground archive owner/session integration', () => {
     expectNoPendingPrimitives(recovered.fs);
     await recovered.close();
   });
+
+  it.each([
+    [
+      'reserved stage path',
+      `${ARCHIVE_TRANSACTION_STAGE}/node_modules/poison.js`,
+      'uses reserved segment',
+    ],
+    [
+      'over-depth stage path',
+      `${ARCHIVE_TRANSACTION_STAGE}/${Array.from({ length: 257 }, (_, index) => `d${String(index)}`).join('/')}/poison.js`,
+      'path segment limit exceeded',
+    ],
+  ] as const)(
+    'rejects corrupt recovery %s before package or live-tree effects',
+    async (_case, corruptPath, expected) => {
+      const seeded = await harness();
+      write(seeded.owner.authority, corruptPath, 'poison');
+      write(seeded.owner.authority, ARCHIVE_TRANSACTION_PHASE, PHASE_PROMOTING);
+      await seeded.owner.authority.flush();
+      const crashed = seeded.fs.restartFromDurableState();
+      seeded.crash();
+      const constructionTimeline: string[] = [];
+
+      await expect(harness(crashed, { seed: false, constructionTimeline })).rejects.toThrow(
+        expected,
+      );
+      expect(constructionTimeline).not.toContain('claim:revoke');
+      expect(constructionTimeline).not.toContain('package-tree:reset');
+      expect(constructionTimeline).not.toContain('archive:promote');
+    },
+  );
 
   it('keeps the public handle semantic and resolves only after the ordered durable replacement', async () => {
     const h = await harness();

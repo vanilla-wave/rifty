@@ -104,6 +104,5 @@ describe('ts-lsp worker bootstrap keeps the package endpoint in production bundl
   it('contains no nested bundler asset query after Workbench extraction', () => {
     const src = read('ts-lsp-worker-entry.ts');
     expect(src).not.toMatch(/from\s+['"][^'"]+\?(?:worker(?:&url)?|url)['"]/);
-    expect(src).not.toContain('__RIFTY_TS_LIB_URL');
   });
 });

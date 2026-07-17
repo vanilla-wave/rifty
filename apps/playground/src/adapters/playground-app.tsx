@@ -76,6 +76,7 @@ import {
   createPlaygroundDocumentWriter,
   createPlaygroundFileMutations,
   createPlaygroundProjectMirror,
+  preparePlaygroundOwnerByteOperation,
   readPlaygroundEditorRemoteFile,
   readPlaygroundGitOriginalText,
 } from './playground-project-view.ts';
@@ -537,16 +538,12 @@ export function App(props: AppProps) {
           next.some((session) => session.id === selected) ? selected : (next[0]?.id ?? ''),
         );
       });
-      const mutations = createPlaygroundFileMutations(
-        context.session.files,
-        mirror,
-        async (paths) => {
-          await editorApi?.flushPendingWrites();
-          for (const path of paths) {
-            editorApi?.closePathTree(path);
-            await documents.closeTree(path);
-          }
-        },
+      const mutations = createPlaygroundFileMutations(context.session.files, mirror, (paths) =>
+        preparePlaygroundOwnerByteOperation({
+          editor: editorApi,
+          documents,
+          replacePaths: paths,
+        }),
       );
       let releaseTypeScriptBoot!: () => void;
       const typescriptBootReady = new Promise<void>((resolve) => {
@@ -940,9 +937,19 @@ export function App(props: AppProps) {
     }
   }
 
-  async function runScm(operation: () => Promise<void>, success?: string): Promise<void> {
+  async function runScm(
+    operation: () => Promise<void>,
+    success?: string,
+    replacePaths: readonly string[] = [],
+  ): Promise<void> {
+    const project = bound();
+    if (project === undefined) return;
     try {
-      await editorApi?.flushPendingWrites();
+      await preparePlaygroundOwnerByteOperation({
+        editor: editorApi,
+        documents: project.documents,
+        replacePaths,
+      });
       await operation();
       if (success !== undefined) flashToast(success, 'success');
     } catch (error) {
@@ -970,6 +977,10 @@ export function App(props: AppProps) {
     const project = bound();
     if (project === undefined || archiveBlocked()) return;
     try {
+      await preparePlaygroundOwnerByteOperation({
+        editor: editorApi,
+        documents: project.documents,
+      });
       const json = await project.context.tools.archive.export();
       downloadBlob(
         `${project.context.plan.id}.rifty.json`,
@@ -993,8 +1004,11 @@ export function App(props: AppProps) {
         .then(async (json) => {
           const project = bound();
           if (project === undefined) return;
-          await editorApi?.flushPendingWrites();
-          await project.documents.closeAll();
+          await preparePlaygroundOwnerByteOperation({
+            editor: editorApi,
+            documents: project.documents,
+            replacePaths: ['/'],
+          });
           await project.context.tools.archive.import(json);
           flashToast('Workspace archive imported', 'success');
         })
@@ -1423,9 +1437,10 @@ export function App(props: AppProps) {
                 onDiscard={(row) => {
                   if (!globalThis.confirm(`Discard changes in ${row.relativePath}?`))
                     return Promise.resolve();
-                  editorApi?.closePath(row.path);
                   return runScm(
                     () => bound()?.context.tools.scm.discard(row.path) ?? Promise.resolve(),
+                    undefined,
+                    [row.path],
                   );
                 }}
                 onCommit={(message) =>

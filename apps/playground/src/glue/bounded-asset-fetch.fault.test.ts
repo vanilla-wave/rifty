@@ -55,14 +55,10 @@ describe('bounded static-asset acquisition — unbounded-read fault tier', () =>
     ).rejects.toThrow('streamed asset: body exceeded 3 bytes');
   });
 
-  it('settles cancellation before exposing a bounded stream failure', async () => {
+  it('does not let stalled cancellation hide a bounded stream failure', async () => {
     let announceCancellation!: () => void;
     const cancellationStarted = new Promise<void>((resolve) => {
       announceCancellation = resolve;
-    });
-    let finishCancellation!: () => void;
-    const cancellationFinished = new Promise<void>((resolve) => {
-      finishCancellation = resolve;
     });
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -70,22 +66,21 @@ describe('bounded static-asset acquisition — unbounded-read fault tier', () =>
       },
       cancel() {
         announceCancellation();
-        return cancellationFinished;
+        return new Promise<void>(() => {});
       },
     });
     const read = drainByteStreamBounded(stream, {
       label: 'cancellation asset',
       maxBytes: 1,
     });
-    let settled = false;
-    void read.catch(() => {
-      settled = true;
+    let outcome: unknown = 'pending';
+    void read.catch((error: unknown) => {
+      outcome = error;
     });
 
     await cancellationStarted;
     await Promise.resolve();
-    expect(settled).toBe(false);
-    finishCancellation();
+    expect(outcome).toBeInstanceOf(Error);
     await expect(read).rejects.toThrow('cancellation asset: body exceeded 1 bytes');
   });
 

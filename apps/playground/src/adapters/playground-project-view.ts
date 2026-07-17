@@ -1,5 +1,6 @@
 import { type VfsDirent, dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
 import type { FileExplorerMutations } from '../components/FileExplorer.tsx';
+import type { EditorApi } from '../components/editor-host-core.ts';
 import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
 import { NODE_MODULES_MAX_CONTENT_BYTES } from '../glue/node-modules-port.ts';
 import type { PlaygroundScm } from '../workbench/playground.ts';
@@ -30,6 +31,13 @@ export interface PlaygroundDocumentWriter {
   closeAll(): Promise<void>;
 }
 
+export interface PlaygroundOwnerByteOperationOptions {
+  readonly editor: Pick<EditorApi, 'flushPendingWrites' | 'closePathTree'> | null | undefined;
+  readonly documents: Pick<PlaygroundDocumentWriter, 'closeTree'>;
+  /** Trees whose owner bytes the operation may replace. Empty means read-only. */
+  readonly replacePaths?: readonly string[];
+}
+
 export interface PlaygroundEditorRemoteFile {
   readonly size: number;
   readonly content: Uint8Array | null;
@@ -49,6 +57,16 @@ function projectPath(value: string): string {
 
 function pathInside(path: string, root: string): boolean {
   return path === root || (root === '/' ? path.startsWith('/') : path.startsWith(`${root}/`));
+}
+
+/** One App-level gate from live Monaco bytes to owner reads/replacements. */
+export async function preparePlaygroundOwnerByteOperation(
+  options: PlaygroundOwnerByteOperationOptions,
+): Promise<void> {
+  const replacePaths = [...new Set((options.replacePaths ?? []).map((path) => projectPath(path)))];
+  await options.editor?.flushPendingWrites();
+  for (const path of replacePaths) options.editor?.closePathTree(path);
+  for (const path of replacePaths) await options.documents.closeTree(path);
 }
 
 function readOnly(op: string, path: string): never {

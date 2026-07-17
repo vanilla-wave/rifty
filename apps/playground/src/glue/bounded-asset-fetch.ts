@@ -87,7 +87,7 @@ export async function drainByteStreamBounded(
       chunks.push(next.value);
     }
   } catch (error) {
-    await reader.cancel().catch(() => {});
+    void reader.cancel().catch(() => {});
     throw error;
   }
 

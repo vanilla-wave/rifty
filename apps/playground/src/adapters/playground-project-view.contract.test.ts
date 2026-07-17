@@ -11,6 +11,7 @@ import {
   createPlaygroundDocumentWriter,
   createPlaygroundFileMutations,
   createPlaygroundProjectMirror,
+  preparePlaygroundOwnerByteOperation,
   readPlaygroundEditorRemoteFile,
   readPlaygroundGitOriginalText,
 } from './playground-project-view.ts';
@@ -122,6 +123,57 @@ function filesHarness(initial: {
 }
 
 describe('Playground logical project view', () => {
+  it('flushes live editor bytes before closing every replaced model and document tree', async () => {
+    const events: string[] = [];
+    const editor = {
+      flushPendingWrites: vi.fn(async () => {
+        events.push('editor:flush');
+      }),
+      closePathTree: vi.fn((path: string) => {
+        events.push(`editor:close:${path}`);
+      }),
+    };
+    const documents = {
+      closeTree: vi.fn(async (path: string) => {
+        events.push(`documents:close:${path}`);
+      }),
+    };
+
+    await preparePlaygroundOwnerByteOperation({
+      editor,
+      documents,
+      replacePaths: ['/src', '/src', '/README.md'],
+    });
+
+    expect(events).toEqual([
+      'editor:flush',
+      'editor:close:/src',
+      'editor:close:/README.md',
+      'documents:close:/src',
+      'documents:close:/README.md',
+    ]);
+  });
+
+  it('prevalidates every replacement path before flushing editor bytes', async () => {
+    const editor = {
+      flushPendingWrites: vi.fn(async () => {}),
+      closePathTree: vi.fn(),
+    };
+    const documents = { closeTree: vi.fn(async () => {}) };
+
+    await expect(
+      preparePlaygroundOwnerByteOperation({
+        editor,
+        documents,
+        replacePaths: ['/src', '../outside'],
+      }),
+    ).rejects.toThrow(/Invalid logical project path/u);
+
+    expect(editor.flushPendingWrites).not.toHaveBeenCalled();
+    expect(editor.closePathTree).not.toHaveBeenCalled();
+    expect(documents.closeTree).not.toHaveBeenCalled();
+  });
+
   it('reads the HEAD baseline through the staged SCM change and clean mirror', async () => {
     const staged = Object.freeze({
       path: '/README.md',

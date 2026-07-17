@@ -85,6 +85,29 @@ describe('terminal persistence adapter', () => {
     expect(stable.initialState).toEqual({ cwd: '/src', env: { SOURCE: 'project' } });
   });
 
+  it('hands Workbench an exact project terminal snapshot without legacy devCommand', async () => {
+    const opfs = fakeStore();
+    saveTerminalState(
+      opfs,
+      {
+        cwd: '/src',
+        env: { SOURCE: 'project' },
+        devCommand: { line: 'pnpm dev', cwd: '/src' },
+      },
+      '/workspace/.rifty/project-terminal-state.json',
+    );
+
+    const persistence = await createTerminalPersistence('/workspace', {
+      createOpfs: async () => opfs,
+    });
+
+    expect(Reflect.ownKeys(persistence.initialState)).toEqual(['cwd', 'env']);
+    expect(persistence.initialState).toStrictEqual({
+      cwd: '/src',
+      env: { SOURCE: 'project' },
+    });
+  });
+
   it('migrates memory state from legacy absolute to unambiguous project-rooted provenance', async () => {
     const sync = fakeStore();
     saveTerminalState(sync, {

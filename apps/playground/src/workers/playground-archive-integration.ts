@@ -1,7 +1,9 @@
 import { dirname } from '@riftydev/vfs';
 import {
+  PLAYGROUND_ARCHIVE_V1_LIMITS,
   exportPlaygroundArchiveV1,
   preparePlaygroundArchiveV1Import,
+  readBoundedPlaygroundArchiveTree,
 } from '../workbench/internal/playground-archive.ts';
 import type { PlaygroundArchive, PlaygroundScm } from '../workbench/playground.ts';
 import type { ProjectContentController } from '../workbench/project-content.ts';
@@ -127,24 +129,13 @@ function stageFiles(
   if (authority.statSyncOrNull(paths.stage)?.isDirectory !== true) {
     throw new Error('Playground archive recovery stage is missing');
   }
-  const files: Array<{ path: string; bytes: Uint8Array }> = [];
-  const walk = (directory: string): void => {
-    const children = [...authority.readdirSync(directory)].sort((left, right) =>
-      compareCodeUnits(left.name, right.name),
-    );
-    for (const child of children) {
-      const path = `${directory}/${child.name}`;
-      if (child.isDirectory) walk(path);
-      else
-        files.push({
-          path: path.slice(paths.stage.length + 1),
-          bytes: authority.readFileBytesSync(path),
-        });
-    }
-  };
-  walk(paths.stage);
   return Object.freeze(
-    files.map(({ path, bytes }) => Object.freeze({ path, bytes: bytes.slice() })),
+    readBoundedPlaygroundArchiveTree(
+      authority,
+      paths.stage,
+      PLAYGROUND_ARCHIVE_V1_LIMITS,
+      'reject',
+    ).map(({ path, bytes }) => Object.freeze({ path, bytes: bytes.slice() })),
   );
 }
 

@@ -248,6 +248,7 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
 
     async runLine(id, line, dimensions = {}) {
       const state = get(id);
+      if (line.trim().length === 0) return 0;
       if (state.activeRun !== null) throw new Error(`Terminal ${id} is busy`);
       const cols = dimensions.cols ?? 80;
       const rows = dimensions.rows ?? 24;
@@ -257,8 +258,11 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
       state.status = 'running';
       state.exitCode = undefined;
       publish();
-      await run.ready;
-      const exit = await settle(state, run, run.exited);
+      const exit = await settle(
+        state,
+        run,
+        run.ready.then(() => run.exited),
+      );
       return exit.code ?? (exit.signal === null ? 0 : 1);
     },
 
@@ -285,7 +289,6 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
       ];
       state.closed = true;
       state.detach();
-      await state.terminal.close();
       terminals.delete(id);
       if (activeId === id) {
         activeId =
@@ -294,37 +297,25 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
           '';
       }
       publish();
+      await state.terminal.close();
     },
 
     dispose() {
       if (disposePromise !== null) return disposePromise;
       disposed = true;
-      disposePromise = (async () => {
-        const failures: unknown[] = [];
-        for (const state of terminals.values()) {
-          state.detach();
-          if (state.activeRun !== null) {
-            try {
-              await state.activeRun.close();
-            } catch (error) {
-              failures.push(error);
-            }
-          }
-          try {
-            await state.terminal.close();
-          } catch (error) {
-            failures.push(error);
-          }
-          state.closed = true;
-        }
-        terminals.clear();
-        listeners.clear();
-        activeId = '';
-        if (failures.length === 1) throw failures[0];
-        if (failures.length > 1) {
-          throw new AggregateError(failures, 'Playground terminal UI close failed');
-        }
-      })();
+      for (const state of terminals.values()) {
+        state.detach();
+        state.writer = null;
+        state.pending = [];
+        state.pendingChars = 0;
+        state.activeRun = null;
+        state.closed = true;
+      }
+      terminals.clear();
+      listeners.clear();
+      primaryRun = null;
+      activeId = '';
+      disposePromise = Promise.resolve();
       return disposePromise;
     },
   };
