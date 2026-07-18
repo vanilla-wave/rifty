@@ -70,6 +70,7 @@ export {
   type ShadowAssetPlan,
   type ShadowAssetSourceDescriptor,
 } from './shadow-asset-plan.ts';
+export { shadowAssetPlanFromLockfileBytes } from './shadow-asset-lockfile-facts.ts';
 export {
   SHADOW_ASSET_MAX_READ_DEADLINE_MS,
   ShadowAssetError,

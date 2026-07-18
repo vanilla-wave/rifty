@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Exact lockfile shadow facts (ADR-0295).** npm-client persists canonical,
+  asset-revision-independent applied-recipe evidence, including explicit empty
+  provenance, and exposes a strict exact-byte producer for trusted/snapshot
+  readiness. Alias-name coincidence, legacy ambiguity, trace/tree drift, and
+  user overrides cannot mint a builtin runtime-asset plan.
+
 - **Bounded shadow-asset MessagePort capability.** Exact-plan sessions expose
   only verified runtime reads, transfer response-owned buffers, preserve typed
   domain failures, and bound progress, cancellation, peer loss, and disposal.

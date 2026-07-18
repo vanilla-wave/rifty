@@ -3,6 +3,11 @@ import { canonicalShadowDigest, canonicalShadowJson, sha256Hex } from './canonic
 import { fetchAndUnpackToCache } from './fetch-and-unpack.ts';
 import type { InstallTreeResult } from './installer.ts';
 import type { RegistryClient } from './registry.ts';
+import { shadowAssetPlanFromLockfileFacts } from './shadow-asset-lockfile-facts.ts';
+import {
+  createShadowSubstitutionLockfileTrace,
+  planBuiltinShadowAssetsFromLockfileTrace,
+} from './shadow-asset-lockfile-trace.ts';
 import type { ShadowAssetDescriptor, ShadowAssetPlan } from './shadow-asset-plan.ts';
 import { type TarballCache, computeIntegrity, parseIntegrityAlgorithm } from './tarball-cache.ts';
 
@@ -196,6 +201,14 @@ function snapshotBin(
   return snapshotStringRecord(value, label);
 }
 
+function snapshotLockfileRifty(value: unknown): InstallTreeResult['lockfile']['rifty'] {
+  exactFailureObject(value, ['shadowSubstitutions'], [], 'InstallTreeResult.lockfile.rifty');
+  const plan = planBuiltinShadowAssetsFromLockfileTrace(value.shadowSubstitutions);
+  return Object.freeze({
+    shadowSubstitutions: createShadowSubstitutionLockfileTrace(plan),
+  });
+}
+
 function snapshotInstallTreeResult(value: InstallTreeResult): InstallTreeResult {
   exactFailureObject(
     value,
@@ -264,7 +277,7 @@ function snapshotInstallTreeResult(value: InstallTreeResult): InstallTreeResult 
   exactFailureObject(
     value.lockfile,
     ['lockfileVersion', 'name', 'packages', 'requires', 'version'],
-    [],
+    ['rifty'],
     'InstallTreeResult.lockfile',
   );
   assertMessage(value.lockfile.name, 'InstallTreeResult.lockfile.name');
@@ -327,6 +340,14 @@ function snapshotInstallTreeResult(value: InstallTreeResult): InstallTreeResult 
     lockfileVersion: 3 as const,
     requires: true as const,
     packages: Object.freeze(lockPackages),
+    ...('rifty' in value.lockfile
+      ? {
+          rifty:
+            value.lockfile.rifty === undefined
+              ? undefined
+              : snapshotLockfileRifty(value.lockfile.rifty),
+        }
+      : {}),
   });
 
   if (!Array.isArray(value.conflicts))
@@ -469,6 +490,10 @@ export class ShadowAssetInstallError extends ShadowAssetError {
   constructor(treeResult: InstallTreeResult, plan: ShadowAssetPlan, failure: ShadowAssetFailure) {
     const treeSnapshot = snapshotInstallTreeResult(treeResult);
     const planSnapshot = snapshotShadowAssetPlan(plan);
+    const lockfilePlan = shadowAssetPlanFromLockfileFacts(treeSnapshot.lockfile);
+    if (canonicalShadowJson(lockfilePlan) !== canonicalShadowJson(planSnapshot)) {
+      throw new TypeError('ShadowAssetInstallError lockfile trace does not match its plan');
+    }
     exactFailureObject(
       failure,
       ['message', 'phase', 'recovery', 'requiredSetDigest', 'transports'],

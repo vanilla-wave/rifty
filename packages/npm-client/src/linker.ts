@@ -9,6 +9,13 @@
  */
 
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
+import {
+  type ShadowSubstitutionLockfileTrace,
+  createShadowSubstitutionLockfileTrace,
+} from './shadow-asset-lockfile-trace.ts';
+import type { ShadowAssetPlan } from './shadow-asset-plan.ts';
+
+export { RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL } from './shadow-asset-lockfile-trace.ts';
 
 export interface ResolvedPackage {
   name: string;
@@ -127,6 +134,10 @@ export interface Lockfile {
   lockfileVersion: 3;
   requires: true;
   packages: Record<string, LockfileEntry>;
+  /** Stable npm-client-owned applied-recipe trace; never inferred from names. */
+  rifty?: Readonly<{
+    shadowSubstitutions: ShadowSubstitutionLockfileTrace;
+  }>;
 }
 
 export interface LockfileEntry {
@@ -144,6 +155,11 @@ export interface LockfileEntry {
   peerDependencies?: Record<string, string>;
 }
 
+interface BuildLockfileOptions {
+  /** Present (including empty) when npm-client owns the exact applied trace. */
+  readonly shadowAssetPlan?: ShadowAssetPlan;
+}
+
 /**
  * Build a v3 lockfile from the resolved package set. Each non-root entry
  * carries `resolved` (tarball URL) and `integrity` so subsequent installs
@@ -151,7 +167,7 @@ export interface LockfileEntry {
  * is persisted so the lockfile fast path runs the same missing-peer warn
  * pass as the live-resolve path (closes D-F drift, 2026-05-26).
  */
-export function buildLockfile(
+function buildLockfileWithOptions(
   rootName: string,
   rootVersion: string,
   packages: readonly (ResolvedPackage & {
@@ -159,6 +175,7 @@ export function buildLockfile(
     integrity?: string;
     peerDependencies?: Record<string, string>;
   })[],
+  options: BuildLockfileOptions = {},
 ): Lockfile {
   // Root entry lists only FLAT (hoisted) deps, matching npm's lockfile
   // shape. A nested copy is reachable only via its parent's entry.
@@ -168,15 +185,21 @@ export function buildLockfile(
       flatTopLevel[p.name] = p.version;
     }
   }
+  const rootEntry: LockfileEntry = { version: rootVersion, dependencies: flatTopLevel };
   const lf: Lockfile = {
     name: rootName,
     version: rootVersion,
     lockfileVersion: 3,
     requires: true,
     packages: {
-      '': { version: rootVersion, dependencies: flatTopLevel },
+      '': rootEntry,
     },
   };
+  if (options.shadowAssetPlan !== undefined) {
+    lf.rifty = Object.freeze({
+      shadowSubstitutions: createShadowSubstitutionLockfileTrace(options.shadowAssetPlan),
+    });
+  }
   for (const p of packages) {
     const entry: LockfileEntry = {
       version: p.version,
@@ -194,4 +217,33 @@ export function buildLockfile(
     lf.packages[key] = entry;
   }
   return lf;
+}
+
+/** Public npm-compatible builder; applied provenance can only be minted by install(). */
+export function buildLockfile(
+  rootName: string,
+  rootVersion: string,
+  packages: readonly (ResolvedPackage & {
+    resolved?: string;
+    integrity?: string;
+    peerDependencies?: Record<string, string>;
+  })[],
+): Lockfile {
+  return buildLockfileWithOptions(rootName, rootVersion, packages);
+}
+
+/** Package-private install result builder; intentionally absent from the public barrel. */
+export function buildInstallLockfile(
+  rootName: string,
+  rootVersion: string,
+  packages: readonly (ResolvedPackage & {
+    resolved?: string;
+    integrity?: string;
+    peerDependencies?: Record<string, string>;
+  })[],
+  shadowAssetPlan: ShadowAssetPlan,
+): Lockfile {
+  return buildLockfileWithOptions(rootName, rootVersion, packages, {
+    shadowAssetPlan,
+  });
 }

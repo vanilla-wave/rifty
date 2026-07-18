@@ -66,7 +66,7 @@ import {
   readExistingLockfile,
   writeLockfileIfChanged,
 } from './installer-lockfile-reader.ts';
-import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './linker.ts';
+import { type Lockfile, type ResolvedPackage, buildInstallLockfile, link } from './linker.ts';
 import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
@@ -516,7 +516,7 @@ export async function install(
   // ADR-0188: install-time internals shims into the actual installed dirs —
   // AFTER link so tarball bytes never clobber a shim. Both paths (+ eddy).
   await applyInternalsShims(opts.vfs, opts.cwd, packages, substitutions.line);
-  const lockfile = buildLockfile(rootName, normalizedRootVersion, packages);
+  const lockfile = buildInstallLockfile(rootName, normalizedRootVersion, packages, shadowAssetPlan);
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
   const treeResult: InstallTreeResult = {

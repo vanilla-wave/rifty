@@ -1,9 +1,9 @@
 /**
  * Stable content hash of a resolved closure (ADR-0182 §6 immutable artifact
- * key). Order-independent over the lockfile's package keys, so the same resolved
- * graph yields the same hash regardless of walk order — the key for the
- * immutable `closure-hash → bundle` tier. Excludes the manifest `resolvedAt`
- * (varies per resolution) so a re-resolve of an unchanged closure is a cache hit.
+ * key). Order-independent over package-map keys, but includes the exact
+ * npm-client-owned shadow-substitution trace: equal trees with different
+ * provenance are different closures. Excludes the manifest `resolvedAt` (varies
+ * per resolution) so a re-resolve of an unchanged closure is a cache hit.
  *
  * ONE implementation shared by eddy (which stamps the manifest) and the client
  * (which re-derives it to verify a bundle's self-claimed `closureHash` — a
@@ -35,7 +35,9 @@ function deepCanonical(value: unknown): unknown {
  */
 export function canonicalClosureJson(lockfile: Lockfile): string {
   const keys = Object.keys(lockfile.packages).sort();
-  return JSON.stringify(keys.map((k) => [k, deepCanonical(lockfile.packages[k])]));
+  const packages = keys.map((key) => [key, deepCanonical(lockfile.packages[key])]);
+  if (lockfile.rifty === undefined) return JSON.stringify(packages);
+  return JSON.stringify({ packages, rifty: deepCanonical(lockfile.rifty) });
 }
 
 export async function closureHashOf(lockfile: Lockfile): Promise<string> {

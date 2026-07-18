@@ -132,6 +132,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0249 | Owner-managed shadow runtime assets in a Workbench content store |
 | 0258 | Structured install acquisition provenance |
 | 0283 | Canonical package manifest serialization |
+| 0295 | Persist exact applied shadow substitution facts in lockfiles |
 
 ### playground
 
