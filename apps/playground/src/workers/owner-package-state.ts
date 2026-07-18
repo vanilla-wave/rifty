@@ -44,7 +44,6 @@ import {
   seedTemplateNodeModulesFiles,
   templateNodeModulesSeedMutationIntents,
 } from '../glue/project-deps.ts';
-import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import type { ProjectPackageConfig } from '../workbench/internal/project-package-config.ts';
 import type {
@@ -99,7 +98,7 @@ export interface OwnerPackageStateOptions {
   readonly flush: () => Promise<PersistFailureReport | undefined>;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   readonly log: (line: string) => void;
-  readonly registry?: RegistryClient;
+  readonly registry: RegistryClient;
   /** Exact npm-client facts producer plus the storage-owned readiness installer. */
   readonly runtimeAssets?: PackageRuntimeAssetPort;
   /** Test seam at the external registry/install boundary. */
@@ -312,7 +311,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     publishUnavailableProject(packageProject(options.initial));
   }
 
-  const registry = options.registry ?? createProxiedRegistryClient();
+  const registry = options.registry;
   const resolverUrl = options.resolverUrl ?? getResolverUrl;
   const resolverBundleBaseUrl = options.resolverBundleBaseUrl ?? getEddyBundleBaseUrl;
   const resolverPin = options.resolverPin ?? getEddyPin;

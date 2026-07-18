@@ -33,6 +33,7 @@ import {
 } from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
+import type { RegistryClient } from '@riftydev/npm-client';
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import {
@@ -91,6 +92,8 @@ import {
   isPtyIpcMessage,
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
+import { getRegistryProxyPrefix } from '../glue/registry-config.ts';
+import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
@@ -276,6 +279,7 @@ async function bootShellOwner(opts: {
   readonly vfsAuthority: OwnerVfsAuthority;
   readonly installStampClaims: InstallStampClaimIo;
   readonly durability: OwnerVfsDurabilityReceipt['durability'];
+  readonly registry: RegistryClient;
   readonly spec: ProjectSpec;
   readonly slug: string;
   /** Active STARTER id (preset id) for the spawn — keys a synthesized scratch entry (ADR-0165 §4). */
@@ -306,6 +310,7 @@ async function bootShellOwner(opts: {
     vfsAuthority,
     installStampClaims,
     durability,
+    registry,
     spec,
     slug,
     starter,
@@ -338,6 +343,7 @@ async function bootShellOwner(opts: {
     flush: flushSyncMirror,
     nodeWorkerRuntimeEnv: opts.nodeWorkerRuntimeEnv,
     log,
+    registry,
   });
   const packageMutations = packageState.mutations;
   installOwnerSyncRuntimeHandlers(getKernelDispatcher(), syncMirror, (intents, apply) =>
@@ -1084,6 +1090,7 @@ async function bootstrap(): Promise<void> {
   // bridges. It is a synthetic owner bridge key, not a real network port. The
   // owner-supervised dev server listens on the template's own port (`cfg.port`).
   const cfg = resolveBootstrapConfig(effectiveSpec, effectiveSpec.defaultPort, root);
+  const registry = createProxiedRegistryClient({ proxyPrefix: getRegistryProxyPrefix() });
 
   const kernelIpc = installRuntimeGlobals();
   // Same root as the process.env "chunk-graph leak" note above: this self-contained
@@ -1165,6 +1172,7 @@ async function bootstrap(): Promise<void> {
     vfsAuthority,
     installStampClaims,
     durability,
+    registry,
     spec,
     slug,
     starter,

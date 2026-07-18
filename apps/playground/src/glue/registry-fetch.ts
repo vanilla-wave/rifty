@@ -7,37 +7,25 @@
  * succeeds for the packument (CORS-friendly JSON), but routing both metadata
  * and tarballs through one configured proxy keeps COEP/CORP behavior explicit.
  */
-import { type Fetcher, RegistryClient, getRegistryBaseUrl } from '@riftydev/npm-client';
+import { type Fetcher, RegistryClient } from '@riftydev/npm-client';
 
 const UPSTREAM_PREFIX = 'https://registry.npmjs.org';
 
 interface ProxiedRegistryFetchOptions {
-  readonly proxyPrefix?: string;
+  readonly proxyPrefix: string;
   readonly fetcher?: Fetcher;
 }
 
 interface ProxiedRegistryClientOptions {
-  readonly proxyPrefix?: string;
+  readonly proxyPrefix: string;
   readonly fetcher?: Fetcher;
 }
 
-function viteRegistryBaseUrl(): string | undefined {
-  const value = import.meta.env.VITE_RIFTY_REGISTRY_URL;
-  if (typeof value === 'string' && value.length > 0) return value;
-  return undefined;
+function registryProxyPrefix(value: string): string {
+  return value.replace(/\/$/, '');
 }
 
-function registryProxyPrefix(override: string | undefined): string {
-  return (override ?? viteRegistryBaseUrl() ?? getRegistryBaseUrl()).replace(/\/$/, '');
-}
-
-/** The registry base the playground actually fetches from (env override or the
- * npm-client default) — the boot preconnect target (ADR-0195). */
-export function getRegistryProxyPrefix(): string {
-  return registryProxyPrefix(undefined);
-}
-
-export function proxiedRegistryFetch(options: ProxiedRegistryFetchOptions = {}): Fetcher {
+export function proxiedRegistryFetch(options: ProxiedRegistryFetchOptions): Fetcher {
   const proxyPrefix = registryProxyPrefix(options.proxyPrefix);
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
 
@@ -49,9 +37,7 @@ export function proxiedRegistryFetch(options: ProxiedRegistryFetchOptions = {}):
   };
 }
 
-export function createProxiedRegistryClient(
-  options: ProxiedRegistryClientOptions = {},
-): RegistryClient {
+export function createProxiedRegistryClient(options: ProxiedRegistryClientOptions): RegistryClient {
   const proxyPrefix = registryProxyPrefix(options.proxyPrefix);
   return new RegistryClient({
     baseUrl: proxyPrefix,

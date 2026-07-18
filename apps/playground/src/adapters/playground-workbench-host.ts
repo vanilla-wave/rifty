@@ -1,6 +1,6 @@
 import esbuildWasmUrl from 'esbuild-wasm/esbuild.wasm?url';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import { getRegistryProxyPrefix } from '../glue/registry-fetch.ts';
+import { getRegistryProxyPrefix } from '../glue/registry-config.ts';
 import { getEddyBundleBaseUrl, getResolverUrl } from '../glue/resolver-config.ts';
 import type { PlaygroundWorkbench, PlaygroundWorkbenchOptions } from '../workbench/playground.ts';
 import { openPlaygroundWorkbench } from '../workbench/playground.ts';
