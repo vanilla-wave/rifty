@@ -3,9 +3,12 @@ import { gzipSync } from 'node:zlib';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import { canonicalShadowDigest } from './canonical-shadow-json.ts';
+import type { InstallTreeResult } from './installer.ts';
 import { RegistryClient } from './registry.ts';
+import { EMPTY_SHADOW_ASSET_PLAN } from './shadow-asset-plan.ts';
 import {
   ShadowAssetError,
+  ShadowAssetInstallError,
   type ShadowAssetPlan,
   ShadowAssetReadError,
   type ShadowAssetReadOptions,
@@ -106,6 +109,50 @@ function source(bytes: Uint8Array): ShadowAssetSource & { acquire: ReturnType<ty
 }
 
 describe('ShadowAssetManager', () => {
+  it('requires exact post-tree evidence and snapshots it at ShadowAssetInstallError construction', () => {
+    const plan = structuredClone(EMPTY_SHADOW_ASSET_PLAN);
+    const failure = {
+      message: 'asset persistence failed',
+      requiredSetDigest: plan.requiredSetDigest,
+      phase: 'persist' as const,
+      transports: [],
+      recovery: 'clear-and-retry' as const,
+    };
+    expect(
+      () => new ShadowAssetInstallError({} as InstallTreeResult, plan, failure),
+    ).toThrowError(TypeError);
+
+    const treeResult: InstallTreeResult = {
+      packages: [],
+      lockfile: {
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {},
+      },
+      conflicts: [],
+      provenance: { resolution: 'metadata', packages: [] },
+      source: 'standard',
+    };
+    const error = new ShadowAssetInstallError(treeResult, plan, failure);
+    treeResult.packages.push({
+      name: 'late-mutation',
+      version: '1.0.0',
+      files: {},
+      dependencies: {},
+    });
+    treeResult.lockfile.name = 'mutated';
+    (plan.substitutions as unknown as unknown[]).push({});
+
+    expect(error.treeResult.packages).toEqual([]);
+    expect(error.treeResult.lockfile.name).toBe('root');
+    expect(error.plan.substitutions).toEqual([]);
+    expect(Object.isFrozen(error.treeResult)).toBe(true);
+    expect(Object.isFrozen(error.treeResult.lockfile)).toBe(true);
+    expect(Object.isFrozen(error.plan)).toBe(true);
+  });
+
   it('joins the real STD RegistryClient/tarball-cache adapter to MemoryVfs readiness', async () => {
     const { member, plan, tgz } = fixture();
     const network = vi.fn(async (url: string | URL) => {
