@@ -112,7 +112,7 @@ async function packageMutationHarness(ownerEpoch: string) {
     state.createNpmCommand(async () => 0, { recordMutation }),
   );
 
-  return { recordMutation, shell };
+  return { authority, recordMutation, shell, state };
 }
 
 it('classifies first dependency arrival separately from user package manifest/lock edits', async () => {
@@ -145,6 +145,68 @@ it.each(['install', 'i', 'add'] as const)(
     ]);
   },
 );
+
+// Fault class: provenance-lie. A descendant package install cannot attest that
+// the configured root's deferred first materialization was consumed.
+it('scopes deferred first-materialization consumption to the exact configured root', async () => {
+  const { authority, state } = await packageMutationHarness(
+    'owner-package-first-materialization-exact-target-test',
+  );
+  const nestedRoot = `${ROOT}/packages/nested`;
+  authority.mkdirSync(nestedRoot, { recursive: true });
+  authority.writeFileSync(
+    `${nestedRoot}/package.json`,
+    new TextEncoder().encode('{"name":"nested","version":"1.0.0"}\n'),
+  );
+
+  let phase: 'nested' | 'root' = 'nested';
+  const consumptionPhases: Array<'nested' | 'root'> = [];
+  const npm = state.createNpmCommand(async () => 0, {
+    onFirstMaterializationConsumed: () => consumptionPhases.push(phase),
+  });
+  const nestedShell = new Shell({ cwd: nestedRoot });
+  nestedShell.registerCommand('npm', npm);
+  const rootShell = new Shell({ cwd: ROOT });
+  rootShell.registerCommand('npm', npm);
+
+  expect.soft((await nestedShell.run('npm install')).exitCode).toBe(0);
+  expect.soft(consumptionPhases).toEqual([]);
+
+  phase = 'root';
+  expect.soft((await rootShell.run('npm install')).exitCode).toBe(0);
+  expect(consumptionPhases).toEqual(['root']);
+});
+
+// Fault class: observable-order. Deferred consumption requires the explicit
+// owner acknowledgement; install success alone cannot stand in for it.
+it('rejects a missing consumption acknowledgement and keeps deferred state retryable', async () => {
+  const { state } = await packageMutationHarness(
+    'owner-package-first-materialization-missing-acknowledgement-test',
+  );
+  const missingAcknowledgementShell = new Shell({ cwd: ROOT });
+  missingAcknowledgementShell.registerCommand(
+    'npm',
+    state.createNpmCommand(async () => 0),
+  );
+
+  const rejected = await missingAcknowledgementShell.run('npm install');
+  expect.soft(rejected.exitCode).toBe(1);
+  expect.soft(rejected.stderr).toMatch(/deferred first materialization.*owner.*acknowledg/i);
+
+  const consumed = vi.fn();
+  const retryShell = new Shell({ cwd: ROOT });
+  retryShell.registerCommand(
+    'npm',
+    state.createNpmCommand(async () => 0, {
+      onFirstMaterializationConsumed: consumed,
+    }),
+  );
+
+  expect.soft((await retryShell.run('npm install')).exitCode).toBe(0);
+  expect.soft(consumed).toHaveBeenCalledTimes(1);
+  expect.soft((await retryShell.run('npm install')).exitCode).toBe(0);
+  expect(consumed).toHaveBeenCalledTimes(1);
+});
 
 it('preserves a trusted user-extended tree when the first dev config replaces hidden-empty', async () => {
   const pair = createMemoryFs();
