@@ -195,7 +195,10 @@ function advertisement(overrides: Partial<PreviewAdvertisement> = {}): PreviewAd
   };
 }
 
-function createServerHarness(cwd = '/') {
+function createServerHarness(
+  cwd = '/',
+  acquisition?: { readonly kind: 'install'; readonly snapshotFailures: readonly [] },
+) {
   const pty = new PtyBoundary(cwd);
   const previews = new PreviewBoundary();
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
@@ -205,6 +208,7 @@ function createServerHarness(cwd = '/') {
     entryPath: '/src/server.mjs',
     port: SERVER_PORT,
     createPreviewReadiness: () => previews.create(),
+    ...(acquisition === undefined ? {} : { acquisition }),
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
@@ -217,13 +221,17 @@ function createServerHarness(cwd = '/') {
   return { pty, previews, terminal, runtime, session };
 }
 
-function createCliHarness(cwd = '/') {
+function createCliHarness(
+  cwd = '/',
+  acquisition?: { readonly kind: 'install'; readonly snapshotFailures: readonly [] },
+) {
   const pty = new PtyBoundary(cwd);
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
   const runtime = createNodeCliProjectRuntime({
     terminal,
     entryPath: "/scripts/cli report's.mjs",
     args: ['plain', 'two words', 'semi;colon', "single'quote", '', '$HOME'],
+    ...(acquisition === undefined ? {} : { acquisition }),
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
@@ -263,6 +271,24 @@ async function finishServerRun(
 }
 
 describe('Node server project runtime Contract+RED', () => {
+  it('consumes a deferred install after admitted server start in the same session', async () => {
+    const h = createServerHarness('/', { kind: 'install', snapshotFailures: [] });
+    const first = h.session.run();
+    h.pty.resolveOpen(TERMINAL_SID);
+    await settleMicrotasks();
+    expect(h.pty.execCalls[0]?.line).toBe('npm install && npm run dev');
+
+    h.pty.admit(0, 'run-install');
+    await settleMicrotasks();
+    h.pty.exit(0, { code: 0, signal: null });
+    h.previews.swProofs[0]?.resolve();
+    await first.close();
+
+    h.session.run();
+    await settleMicrotasks();
+    expect(h.pty.execCalls[1]?.line).toBe('npm run dev');
+  });
+
   it('runs the project lifecycle at project root without discarding restored terminal cwd', async () => {
     const h = createServerHarness('/src');
     h.session.run();
@@ -374,6 +400,23 @@ describe('Node server project runtime Contract+RED', () => {
 });
 
 describe('Node CLI project runtime Contract+RED', () => {
+  it('consumes a deferred install after admitted CLI start in the same session', async () => {
+    const h = createCliHarness('/', { kind: 'install', snapshotFailures: [] });
+    const first = h.session.run();
+    h.pty.resolveOpen(TERMINAL_SID);
+    await settleMicrotasks();
+    expect(h.pty.execCalls[0]?.line).toContain('npm install && node ');
+
+    h.pty.admit(0, 'run-install');
+    h.pty.exit(0, { code: 0, signal: null });
+    await first.close();
+
+    h.session.run();
+    await settleMicrotasks();
+    expect(h.pty.execCalls[1]?.line).not.toContain('npm install');
+    expect(h.pty.execCalls[1]?.line).toMatch(/^node /);
+  });
+
   it('resolves the project-rooted entry from restored terminal cwd', async () => {
     const h = createCliHarness('/scripts');
     h.session.run();

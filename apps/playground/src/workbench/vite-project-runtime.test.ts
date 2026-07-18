@@ -192,7 +192,11 @@ function advertisement(overrides: Partial<PreviewAdvertisement> = {}): PreviewAd
 }
 
 function createHarness(
-  options: { readonly readinessCloseGate?: Deferred<void>; readonly cwd?: string } = {},
+  options: {
+    readonly readinessCloseGate?: Deferred<void>;
+    readonly cwd?: string;
+    readonly acquisition?: { readonly kind: 'install'; readonly snapshotFailures: readonly [] };
+  } = {},
 ) {
   const pty = new PtyBoundary(options.cwd);
   const previews = new PreviewBoundary();
@@ -212,6 +216,7 @@ function createHarness(
         },
       };
     },
+    ...(options.acquisition === undefined ? {} : { acquisition: options.acquisition }),
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
@@ -240,6 +245,23 @@ async function proveExactPreview(h: ReturnType<typeof createHarness>) {
 }
 
 describe('Vite project runtime Contract+RED', () => {
+  it('consumes a deferred install only after owner child admission in the same session', async () => {
+    const h = createHarness({ acquisition: { kind: 'install', snapshotFailures: [] } });
+    const first = h.session.run();
+    h.pty.resolveOpen(TERMINAL_SID);
+    await settleMicrotasks();
+    expect(h.pty.execCalls[0]?.line).toBe('npm install && vite');
+
+    h.pty.admit(0, 'run-install');
+    await settleMicrotasks();
+    h.pty.exit(0, { code: 0, signal: null });
+    await first.close();
+
+    h.session.run();
+    await settleMicrotasks();
+    expect(h.pty.execCalls[1]?.line).toBe('vite');
+  });
+
   it('passes the project root explicitly when restored terminal cwd is nested', async () => {
     const h = createHarness({ cwd: '/src/nested' });
     h.session.run();

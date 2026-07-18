@@ -1468,18 +1468,13 @@ describe('Workbench companion first materialization Contract+RED', () => {
       child.finish(`vite: seven ${variant} output\n`);
       await run.exited;
       await run.close();
-      await session.close();
-
-      const secondMaterialized = await h.open(definition);
-      const secondPlan = secondMaterialized.acquisition as ProjectAcquisitionPlan;
       const beforeSecondRun = h.timeline.events.length;
-      const secondSession = await h.session(definition, secondMaterialized);
-      const secondRun = secondSession.run();
+      const secondRun = session.run();
       const secondChild = await waitForChild(h, 1, 10_000);
       secondChild.finish(`vite: seven ${variant} warm output\n`);
       await secondRun.exited;
       await secondRun.close();
-      await secondSession.close();
+      await session.close();
 
       const root = projectRoot(definition);
       const directPlan = shadowAssetPlanFromLockfileBytes(
@@ -1498,10 +1493,6 @@ describe('Workbench companion first materialization Contract+RED', () => {
       else expect.soft(fetchSnapshot).toHaveBeenCalledTimes(1);
       expect.soft(h.timeline.installs).toHaveLength(1);
       expect.soft(assets.attempts()).toBe(1);
-      expect.soft(secondPlan).toMatchObject({
-        kind: 'ready',
-        provenance: { outcome: 'existing' },
-      });
       expect.soft(directPlan.assets).toHaveLength(1);
       expect.soft(directPlan.substitutions).toMatchObject([
         {
