@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Bounded shadow-asset MessagePort capability.** Exact-plan sessions expose
+  only verified runtime reads, transfer response-owned buffers, preserve typed
+  domain failures, and bound progress, cancellation, peer loss, and disposal.
+
 - **Verified shadow runtime assets (ADR-0249).** Builtin substitutions now
   produce one exact pre-tree `ShadowAssetPlan`; `ShadowAssetManager` owns
   bounded STD acquisition, exact-member verification, semantic MemoryVfs

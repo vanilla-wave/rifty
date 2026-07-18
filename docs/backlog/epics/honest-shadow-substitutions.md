@@ -5,7 +5,7 @@ title: Honest builtin shadow runtime delivery
 created: 2026-07-13
 value: Vite 7 installs and executes npm-proven esbuild bytes without host WASM or a redundant alias payload, with storage-qualified readiness and measured STD/Eddy cost
 user_story: As a browser-IDE user with a Vite project, I want cold install to fetch and execute esbuild's exact runtime bytes once with npm-grade provenance, but today it downloads an unused alias while the executed WASM arrives outside npm as an app-bundle asset
-items: [npm-client/shadow-asset-message-port, distribution/workbench-runtime-asset-acquisition, distribution/workbench-runtime-asset-cutover, npm-client/esbuild-alias-override-retirement, distribution/workbench-runtime-asset-cold-bench, npm-client/eddy-batch-asset-closure]
+items: [distribution/workbench-runtime-asset-acquisition, distribution/workbench-runtime-asset-cutover, npm-client/esbuild-alias-override-retirement, distribution/workbench-runtime-asset-cold-bench, npm-client/eddy-batch-asset-closure]
 ---
 
 ## Outcome
@@ -111,9 +111,6 @@ inheritance or a host-esbuild fallback remains forbidden.
 
 ## Items
 
-- `npm-client/shadow-asset-message-port` — exact-plan async protocol over a
-  real `MessageChannel`; bounded reads/errors/cancel/dispose without spawn
-  wiring (ready; unblocked).
 - `distribution/workbench-runtime-asset-acquisition` — one package-FIFO
   readiness authority for generic/companion timing, mutation epochs, post-tree
   failure, and exact-plan child admission (ready; blocked by v4, storage,

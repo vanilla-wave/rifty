@@ -104,6 +104,16 @@ export {
   type ShadowAssetUsage,
 } from './shadow-assets.ts';
 export {
+  SHADOW_ASSET_CAPABILITY,
+  ShadowAssetPortError,
+  createShadowAssetPortClient,
+  startShadowAssetPortServer,
+  type ShadowAssetPortClient,
+  type ShadowAssetPortFailure,
+  type ShadowAssetPortFailurePhase,
+  type ShadowAssetPortServer,
+} from './shadow-asset-message-port.ts';
+export {
   TARBALL_CACHE_ROOT,
   VfsTarballCache,
   computeIntegrity,
