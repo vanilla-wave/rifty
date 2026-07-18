@@ -28,10 +28,14 @@ const SELECTION_MATRIX: readonly SelectionCase[] = Object.freeze([
 
 describe('Workbench SCM diff source selection', () => {
   it.each(SELECTION_MATRIX)('$area $code selects $original -> $modified', (testCase) => {
-    expect(selectPlaygroundScmDiffSources(testCase)).toEqual({
+    const first = selectPlaygroundScmDiffSources(testCase);
+    const second = selectPlaygroundScmDiffSources(testCase);
+    expect(first).toEqual({
       original: testCase.original,
       modified: testCase.modified,
     });
+    expect(second).toEqual(first);
+    expect(Object.isFrozen(first)).toBe(true);
   });
 
   it.each([

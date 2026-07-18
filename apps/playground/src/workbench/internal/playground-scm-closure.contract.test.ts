@@ -65,19 +65,26 @@ describe('Workbench SCM source closure', () => {
     const appScmFiles = files.filter(
       (path) => path === 'glue/scm-diff-plan.ts' || path === 'glue/scm-status.ts',
     );
+    const frameworks = [...closure.bareSpecifiers]
+      .filter((specifier) => specifier === 'monaco-editor' || specifier === 'solid-js')
+      .sort();
 
     expect({
       entry: files.includes('workbench/internal/playground-scm.ts'),
       appScmFiles,
+      frameworks,
     }).toEqual({
       entry: true,
       appScmFiles: [],
+      frameworks: [],
     });
   });
 
   it('retains the ScmResourceRow mapping in the App diff planner', () => {
     const plannerPath = fileURLToPath(new URL('../../glue/scm-diff-plan.ts', import.meta.url));
+    const imports = staticImportSpecifiers(plannerPath);
 
-    expect(staticImportSpecifiers(plannerPath)).toContain('./scm-status.ts');
+    expect(imports).toContain('./scm-status.ts');
+    expect(imports.some((specifier) => specifier.includes('/workbench/'))).toBe(false);
   });
 });
