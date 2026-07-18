@@ -134,6 +134,38 @@ class TornSupervisionChild implements OwnerChildAdmissionHandle {
   }
 }
 
+class FirstExitObserverThrowsChild implements OwnerChildAdmissionHandle {
+  readonly #events: string[];
+  readonly #attachmentFailure: Error;
+  #exit: (() => void) | undefined;
+
+  constructor(events: string[], attachmentFailure: Error) {
+    this.#events = events;
+    this.#attachmentFailure = attachmentFailure;
+  }
+
+  once(event: 'exit', _listener: (...args: unknown[]) => void): unknown {
+    this.#events.push(`observe:${event}:throw`);
+    throw this.#attachmentFailure;
+  }
+
+  on(event: 'exit', listener: (...args: unknown[]) => void): unknown {
+    this.#events.push(`observe:${event}:fallback`);
+    this.#exit = listener;
+    return this;
+  }
+
+  kill(signal?: string): unknown {
+    this.#events.push(`kill:${signal ?? ''}`);
+    return true;
+  }
+
+  exit(): void {
+    this.#events.push('physical-exit');
+    this.#exit?.();
+  }
+}
+
 function authority(
   assetPlan: ShadowAssetPlan,
   events: string[],
@@ -429,6 +461,52 @@ describe('owner child admission transaction', () => {
     expect((error as AggregateError).errors).toEqual([attachmentFailure, settlementFailure]);
     expect(events).toContain('abort-settled');
     peer?.close();
+  });
+
+  it('holds the reservation through physical exit when the first exit observer throws', async () => {
+    const events: string[] = [];
+    const attachmentFailure = new Error('first exit observer failed');
+    const child = new FirstExitObserverThrowsChild(events, attachmentFailure);
+    let held = true;
+    const admission = admitOwnerChild({
+      authority: authority(plan(), events, {
+        abortAfterChildSettlement: async (error, exited) => {
+          expect(error).toBe(attachmentFailure);
+          events.push('abort-after');
+          await exited;
+          held = false;
+          events.push('reservation-released');
+        },
+      }),
+      spawn: () => {
+        events.push('spawn');
+        return child;
+      },
+      supervise: () => {
+        throw new Error('unreachable');
+      },
+    });
+    let settled = false;
+    const outcome = admission
+      .catch((error: unknown) => error)
+      .then((result) => {
+        settled = true;
+        return result;
+      });
+
+    await vi.waitFor(() => {
+      expect(events).toContain('kill:SIGTERM');
+      expect(events).toContain('abort-after');
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(held).toBe(true);
+    expect(settled).toBe(false);
+
+    child.exit();
+    await expect(outcome).resolves.toBe(attachmentFailure);
+    expect(held).toBe(false);
+    expect(events.indexOf('physical-exit')).toBeLessThan(events.indexOf('reservation-released'));
+    expect(events).toContain('observe:exit:fallback');
   });
 
   it('holds the reservation until physical exit when session disposal rejects first', async () => {
