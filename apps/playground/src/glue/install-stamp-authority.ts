@@ -75,6 +75,12 @@ export interface InstallStampPromoteOptions extends InstallStampTransitionOption
   readonly packages: number;
 }
 
+export interface InstallStampPromotionAdmission {
+  /** Durability proof and final publication, already running after the exact
+   * pending claim has been materialized or admission ended terminally. */
+  readonly settlement: Promise<InstallStampPromotionResult>;
+}
+
 export interface InstallStampAuthority {
   check(input: InstallStampCheckInput): Promise<InstallStampCheck>;
   checkSync(input: InstallStampCheckInput): InstallStampCheck;
@@ -86,6 +92,11 @@ export interface InstallStampAuthority {
    * mutates its ancestor tree. State and epoch stay pending; promotion must
    * re-materialize the same claim before its durability proof. */
   prepareTreeMutation(claim: InstallStampClaim): Promise<void>;
+  /** Materialize the exact pending claim without waiting for durability. */
+  admitPromotion(
+    identity: InstallStampIdentity,
+    options: InstallStampPromoteOptions,
+  ): Promise<InstallStampPromotionAdmission>;
   promote(
     identity: InstallStampIdentity,
     options: InstallStampPromoteOptions,
@@ -619,11 +630,7 @@ export function createInstallStampAuthority(options: {
       };
       let wrotePending = false;
       let pendingWriteFailed = false;
-      if (
-        packageJsonText !== undefined &&
-        currentLockfileHash !== null &&
-        dependencyTreeExists
-      ) {
+      if (packageJsonText !== undefined && currentLockfileHash !== null && dependencyTreeExists) {
         try {
           await writeRawStamp(
             io,
@@ -688,15 +695,21 @@ export function createInstallStampAuthority(options: {
     });
   };
 
-  const promote = async (
+  const admitPromotion = async (
     rawIdentity: InstallStampIdentity,
     transition: InstallStampPromoteOptions,
-  ): Promise<InstallStampPromotionResult> => {
+  ): Promise<InstallStampPromotionAdmission> => {
     const identity = { ...rawIdentity, root: canonicalAuthorityRoot(rawIdentity.root) };
     const state = stateFor(identity.root);
     const { epoch, packages, flush } = transition;
-    if (state.epoch !== epoch) return { status: 'stale' };
-    if (state.slug !== identity.slug) return { status: 'refused', reason: 'claim-replaced' };
+    if (state.epoch !== epoch) {
+      return { settlement: Promise.resolve({ status: 'stale' }) };
+    }
+    if (state.slug !== identity.slug) {
+      return {
+        settlement: Promise.resolve({ status: 'refused', reason: 'claim-replaced' }),
+      };
+    }
 
     const admitted = await enqueue(state, async () => {
       if (state.epoch !== epoch || state.slug !== identity.slug) return 'claim-replaced' as const;
@@ -728,140 +741,159 @@ export function createInstallStampAuthority(options: {
         : ('claim-replaced' as const);
     });
     if (admitted === 'identity-drift') {
-      return { status: 'refused', reason: 'identity-drift' };
-    }
-    if (admitted === 'tree-missing') {
-      return { status: 'refused', reason: 'tree-missing' };
-    }
-    if (admitted !== 'admitted') {
-      return state.epoch === epoch
-        ? { status: 'refused', reason: 'claim-replaced' }
-        : { status: 'stale' };
-    }
-
-    // One full-ledger proof while pending is sufficient. The serialized slot
-    // below rechecks epoch, exact identity, tree, and claim before publishing
-    // trusted as the final commit marker.
-    let proofReport: PersistFailureReport | undefined;
-    if (flush) {
-      try {
-        proofReport = await flush();
-      } catch (error) {
-        return {
-          status: 'refused',
-          reason: 'flush-failed',
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-    }
-
-    const conclusion = await enqueue(state, async () => {
-      if (state.epoch !== epoch || state.slug !== identity.slug) {
-        return { kind: 'stale' as const };
-      }
-      if (guardedScopeFailed(proofReport, identity.root)) {
-        state.phase = 'pending';
-        return { kind: 'guarded-failure' as const, report: proofReport };
-      }
-      if (claimFailed(proofReport, identity.root) && state.materialized) {
-        state.phase = 'pending';
-        return { kind: 'claim-failed' as const, report: proofReport };
-      }
-      const packageJsonPath = joinPath(identity.root, 'package.json');
-      const lockfilePath = joinPath(identity.root, 'package-lock.json');
-      const currentText = await readText(io, packageJsonPath);
-      const lockfileBefore = await readBytes(io, lockfilePath);
-      let currentLockfileHash: string | null = null;
-      if (lockfileBefore !== null) {
-        try {
-          currentLockfileHash = await sha256Hex(lockfileBefore);
-        } catch {
-          currentLockfileHash = null;
-        }
-      }
-      const currentTextAfterHash = await readText(io, packageJsonPath);
-      const lockfileAfterHash = await readBytes(io, lockfilePath);
-      const treeExists = await pathExists(io, installTreeDir(identity.root));
-      const pending = await readStamp(io, identity.root);
-      if (state.epoch !== epoch || state.slug !== identity.slug) {
-        return { kind: 'stale' as const };
-      }
-      if (
-        currentText !== identity.packageJsonText ||
-        currentTextAfterHash !== identity.packageJsonText ||
-        currentLockfileHash === null ||
-        !bytesEqual(lockfileBefore, lockfileAfterHash)
-      ) {
-        state.phase = 'pending';
-        return { kind: 'identity-drift' as const };
-      }
-      if (!treeExists) {
-        state.phase = 'absent';
-        state.epoch = null;
-        state.slug = null;
-        state.materialized = false;
-        return { kind: 'tree-missing' as const };
-      }
-      if (!isCurrentPendingClaim(state, pending, epoch)) {
-        return { kind: 'claim-replaced' as const };
-      }
-      const commitText = await readText(io, packageJsonPath);
-      const commitLockfile = await readBytes(io, lockfilePath);
-      if (state.epoch !== epoch || state.slug !== identity.slug) {
-        return { kind: 'stale' as const };
-      }
-      if (
-        commitText !== identity.packageJsonText ||
-        !bytesEqual(lockfileAfterHash, commitLockfile)
-      ) {
-        state.phase = 'pending';
-        return { kind: 'identity-drift' as const };
-      }
-      const stamp = trustedStamp(identity, packages, currentLockfileHash);
-      try {
-        await writeRawStamp(io, identity.root, stamp, false);
-      } catch (error) {
-        state.phase = 'pending';
-        return {
-          kind: 'write-failed' as const,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-      if (state.epoch !== epoch || state.slug !== identity.slug) {
-        return { kind: 'stale' as const };
-      }
-      state.phase = 'trusted';
-      state.epoch = null;
-      state.slug = identity.slug;
-      state.materialized = false;
-      return { kind: 'trusted' as const, stamp };
-    });
-
-    if (conclusion.kind === 'stale') return { status: 'stale' };
-    if (conclusion.kind === 'trusted') return { status: 'trusted', stamp: conclusion.stamp };
-    if (conclusion.kind === 'claim-failed') {
-      return { status: 'refused', reason: 'claim-not-durable', report: conclusion.report };
-    }
-    if (conclusion.kind === 'guarded-failure') {
       return {
-        status: 'refused',
-        reason: 'guarded-scope-not-durable',
-        report: conclusion.report,
+        settlement: Promise.resolve({ status: 'refused', reason: 'identity-drift' }),
       };
     }
-    if (conclusion.kind === 'identity-drift') {
-      return { status: 'refused', reason: 'identity-drift' };
+    if (admitted === 'tree-missing') {
+      return {
+        settlement: Promise.resolve({ status: 'refused', reason: 'tree-missing' }),
+      };
     }
-    if (conclusion.kind === 'tree-missing') {
-      return { status: 'refused', reason: 'tree-missing' };
+    if (admitted !== 'admitted') {
+      return {
+        settlement: Promise.resolve(
+          state.epoch === epoch
+            ? { status: 'refused', reason: 'claim-replaced' }
+            : { status: 'stale' },
+        ),
+      };
     }
-    if (conclusion.kind === 'claim-replaced') {
-      return { status: 'refused', reason: 'claim-replaced' };
-    }
-    if (conclusion.kind === 'write-failed') {
-      return { status: 'refused', reason: 'write-failed', error: conclusion.error };
-    }
-    return unreachable(conclusion);
+
+    const settlement = (async (): Promise<InstallStampPromotionResult> => {
+      // One full-ledger proof while pending is sufficient. The serialized slot
+      // below rechecks epoch, exact identity, tree, and claim before publishing
+      // trusted as the final commit marker.
+      let proofReport: PersistFailureReport | undefined;
+      if (flush) {
+        try {
+          proofReport = await flush();
+        } catch (error) {
+          return {
+            status: 'refused',
+            reason: 'flush-failed',
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }
+
+      const conclusion = await enqueue(state, async () => {
+        if (state.epoch !== epoch || state.slug !== identity.slug) {
+          return { kind: 'stale' as const };
+        }
+        if (guardedScopeFailed(proofReport, identity.root)) {
+          state.phase = 'pending';
+          return { kind: 'guarded-failure' as const, report: proofReport };
+        }
+        if (claimFailed(proofReport, identity.root) && state.materialized) {
+          state.phase = 'pending';
+          return { kind: 'claim-failed' as const, report: proofReport };
+        }
+        const packageJsonPath = joinPath(identity.root, 'package.json');
+        const lockfilePath = joinPath(identity.root, 'package-lock.json');
+        const currentText = await readText(io, packageJsonPath);
+        const lockfileBefore = await readBytes(io, lockfilePath);
+        let currentLockfileHash: string | null = null;
+        if (lockfileBefore !== null) {
+          try {
+            currentLockfileHash = await sha256Hex(lockfileBefore);
+          } catch {
+            currentLockfileHash = null;
+          }
+        }
+        const currentTextAfterHash = await readText(io, packageJsonPath);
+        const lockfileAfterHash = await readBytes(io, lockfilePath);
+        const treeExists = await pathExists(io, installTreeDir(identity.root));
+        const pending = await readStamp(io, identity.root);
+        if (state.epoch !== epoch || state.slug !== identity.slug) {
+          return { kind: 'stale' as const };
+        }
+        if (
+          currentText !== identity.packageJsonText ||
+          currentTextAfterHash !== identity.packageJsonText ||
+          currentLockfileHash === null ||
+          !bytesEqual(lockfileBefore, lockfileAfterHash)
+        ) {
+          state.phase = 'pending';
+          return { kind: 'identity-drift' as const };
+        }
+        if (!treeExists) {
+          state.phase = 'absent';
+          state.epoch = null;
+          state.slug = null;
+          state.materialized = false;
+          return { kind: 'tree-missing' as const };
+        }
+        if (!isCurrentPendingClaim(state, pending, epoch)) {
+          return { kind: 'claim-replaced' as const };
+        }
+        const commitText = await readText(io, packageJsonPath);
+        const commitLockfile = await readBytes(io, lockfilePath);
+        if (state.epoch !== epoch || state.slug !== identity.slug) {
+          return { kind: 'stale' as const };
+        }
+        if (
+          commitText !== identity.packageJsonText ||
+          !bytesEqual(lockfileAfterHash, commitLockfile)
+        ) {
+          state.phase = 'pending';
+          return { kind: 'identity-drift' as const };
+        }
+        const stamp = trustedStamp(identity, packages, currentLockfileHash);
+        try {
+          await writeRawStamp(io, identity.root, stamp, false);
+        } catch (error) {
+          state.phase = 'pending';
+          return {
+            kind: 'write-failed' as const,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+        if (state.epoch !== epoch || state.slug !== identity.slug) {
+          return { kind: 'stale' as const };
+        }
+        state.phase = 'trusted';
+        state.epoch = null;
+        state.slug = identity.slug;
+        state.materialized = false;
+        return { kind: 'trusted' as const, stamp };
+      });
+
+      if (conclusion.kind === 'stale') return { status: 'stale' };
+      if (conclusion.kind === 'trusted') return { status: 'trusted', stamp: conclusion.stamp };
+      if (conclusion.kind === 'claim-failed') {
+        return { status: 'refused', reason: 'claim-not-durable', report: conclusion.report };
+      }
+      if (conclusion.kind === 'guarded-failure') {
+        return {
+          status: 'refused',
+          reason: 'guarded-scope-not-durable',
+          report: conclusion.report,
+        };
+      }
+      if (conclusion.kind === 'identity-drift') {
+        return { status: 'refused', reason: 'identity-drift' };
+      }
+      if (conclusion.kind === 'tree-missing') {
+        return { status: 'refused', reason: 'tree-missing' };
+      }
+      if (conclusion.kind === 'claim-replaced') {
+        return { status: 'refused', reason: 'claim-replaced' };
+      }
+      if (conclusion.kind === 'write-failed') {
+        return { status: 'refused', reason: 'write-failed', error: conclusion.error };
+      }
+      return unreachable(conclusion);
+    })();
+    return { settlement };
+  };
+
+  const promote = async (
+    identity: InstallStampIdentity,
+    transition: InstallStampPromoteOptions,
+  ): Promise<InstallStampPromotionResult> => {
+    const admission = await admitPromotion(identity, transition);
+    return admission.settlement;
   };
 
   const revoke = (
@@ -902,5 +934,5 @@ export function createInstallStampAuthority(options: {
     });
   };
 
-  return { check, checkSync, demote, prepareTreeMutation, promote, revoke };
+  return { check, checkSync, demote, prepareTreeMutation, admitPromotion, promote, revoke };
 }

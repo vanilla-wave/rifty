@@ -960,19 +960,31 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     claim: InstallStampClaim,
     onPromotion?: (result: InstallStampPromotionResult) => void,
   ): Promise<void> {
+    let settlement: Promise<InstallStampPromotionResult>;
+    if (packageJsonText === null) {
+      settlement = Promise.resolve({ status: 'refused', reason: 'identity-drift' });
+    } else {
+      try {
+        const admission = await this.#stamps.admitPromotion(
+          { ...project, packageJsonText },
+          { epoch: claim.epoch, packages, ...this.#stampTransition },
+        );
+        settlement = admission.settlement;
+      } catch (error) {
+        settlement = Promise.resolve({
+          status: 'refused',
+          reason: 'write-failed',
+          error: reasonOf(error),
+        });
+      }
+    }
+
     const settle = async (): Promise<void> => {
       let result: InstallStampPromotionResult;
-      if (packageJsonText === null) {
-        result = { status: 'refused', reason: 'identity-drift' };
-      } else {
-        try {
-          result = await this.#stamps.promote(
-            { ...project, packageJsonText },
-            { epoch: claim.epoch, packages, ...this.#stampTransition },
-          );
-        } catch (error) {
-          result = { status: 'refused', reason: 'write-failed', error: reasonOf(error) };
-        }
+      try {
+        result = await settlement;
+      } catch (error) {
+        result = { status: 'refused', reason: 'write-failed', error: reasonOf(error) };
       }
       try {
         onPromotion?.(result);

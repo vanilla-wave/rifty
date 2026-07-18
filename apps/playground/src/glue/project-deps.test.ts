@@ -907,6 +907,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
         throw demoteFailure;
       },
       prepareTreeMutation: async () => {},
+      admitPromotion: async () => ({ settlement: Promise.resolve({ status: 'stale' }) }),
       promote: async () => ({ status: 'stale' }),
       revoke: async () => {},
     };
