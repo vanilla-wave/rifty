@@ -167,6 +167,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0286 | Workspace archives round-trip observable Git and nested dot-rifty state |
 | 0284 | Git status entries preserve per-path classification gaps |
 | 0292 | Workbench authorities replace Solid orchestration core |
+| 0293 | Tab-independent workspace admission UX |
 
 ### toolchain-build
 
@@ -290,6 +291,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0263 generic origin-contention rejection clause | 0293 / note 2026-07-18 | callback-null origin contention has public `WorkbenchOriginOccupiedError`; same-page/capability/request/init failures remain fatal |
 | 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
 | 0278 depth-insensitive archive `.git`/`.rifty` exclusion clause | 0286 / note 2026-07-17 | Git and nested ordinary `.rifty` round-trip; root `.rifty` remains private |

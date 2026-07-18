@@ -1,6 +1,6 @@
 import { SW_FRAME_VERSION, SW_PING, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 import { describe, expect, it, vi } from 'vitest';
-import { ClosedHandleError } from './errors.ts';
+import { ClosedHandleError, WorkbenchOriginOccupiedError } from './errors.ts';
 import { type WorkbenchStorageSnapshot, createOpenWorkbench } from './open-workbench.ts';
 import { createUnusedOwnerProjectHandles } from './project-content.test-fixture.ts';
 import { type InspectedProjectDefinition, projects } from './project-definition.ts';
@@ -862,7 +862,12 @@ describe('openWorkbench configuration and host admission', () => {
     const secondPage = harness(locks);
     const first = await firstPage.open(validOptions());
 
-    await expect(secondPage.open(validOptions())).rejects.toThrow(/Workbench.*busy|lock/i);
+    const contention = await secondPage.open(validOptions()).catch((error: unknown) => error);
+    expect(contention).toBeInstanceOf(WorkbenchOriginOccupiedError);
+    expect(contention).toMatchObject({
+      name: 'WorkbenchOriginOccupiedError',
+      message: expect.stringContaining('another page'),
+    });
     expect(secondPage.serviceWorker.register).not.toHaveBeenCalled();
     expect(secondPage.storage.openOpfs).not.toHaveBeenCalled();
     expect(secondPage.owner.start).not.toHaveBeenCalled();
@@ -872,6 +877,28 @@ describe('openWorkbench configuration and host admission', () => {
     expect(locks.held).toBe(true);
     await second.close();
   });
+
+  it.each(['throw', 'reject'] as const)(
+    'preserves a lock request %s as fatal instead of classifying it occupied',
+    async (kind) => {
+      const h = harness();
+      const cause = new DOMException('storage bucket denied', 'SecurityError');
+      h.locks.request.mockImplementationOnce(() => {
+        if (kind === 'throw') throw cause;
+        return Promise.reject(cause);
+      });
+
+      const failure = await h.open(validOptions()).catch((error: unknown) => error);
+
+      expect(failure).toBe(cause);
+      expect(failure).not.toBeInstanceOf(WorkbenchOriginOccupiedError);
+      expect(h.serviceWorker.register).not.toHaveBeenCalled();
+      expect(h.owner.start).not.toHaveBeenCalled();
+
+      const retried = await h.open(validOptions());
+      await retried.close();
+    },
+  );
 });
 
 describe('openWorkbench service-worker proof', () => {
