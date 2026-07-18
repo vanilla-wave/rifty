@@ -16,6 +16,7 @@ import {
   isSabIpcSupported,
 } from '@riftydev/kernel';
 import { type FsSync, dirname } from '@riftydev/vfs';
+import { fileURLToPathPosix } from '../internal/posix-file-url.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -428,7 +429,7 @@ export function isMarkedAsUncloneable(object: unknown): boolean {
 
 function normalizeWorkerScript(script: WorkerScript): string {
   const raw = typeof script === 'string' ? script : script.href;
-  if (raw.startsWith('file://')) return decodeURIComponent(new URL(raw).pathname);
+  if (raw.startsWith('file://')) return fileURLToPathPosix(raw);
   return raw;
 }
 

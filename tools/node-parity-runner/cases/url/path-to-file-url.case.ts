@@ -17,6 +17,7 @@ const c: ParityCase = {
     console.log(pathToFileURL('/back\\\\slash').href);
     console.log(pathToFileURL('/a//x/../~\\\\b/').href);
     console.log(pathToFileURL('/bad-' + String.fromCharCode(0xd800)).href);
+    console.log(pathToFileURL('/pair-😀-bad-' + String.fromCharCode(0xdc00)).href);
     console.log(fileURLToPath('file:///a%5Cb'));
     for (const value of [
       'file:///a%2Fb',
@@ -39,6 +40,7 @@ const c: ParityCase = {
     'file:///back%5Cslash',
     'file:///a/%7E%5Cb/',
     'file:///bad-%EF%BF%BD',
+    'file:///pair-%F0%9F%98%80-bad-%EF%BF%BD',
     '/a\\b',
     'ERR_INVALID_FILE_URL_PATH',
     'ERR_INVALID_FILE_URL_HOST',

@@ -7,21 +7,14 @@
  */
 
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { URLConstructor, fileURLToPathPosix } from '../internal/posix-file-url.ts';
 import { getProcessCwd } from './process.ts';
 
 export type PathLike = string | URL | Uint8Array;
 
 export function pathToString(p: PathLike): string {
   if (typeof p === 'string') return p;
-  if (p instanceof URL) {
-    // Node's fs accepts file:// URLs; decode to a path.
-    if (p.protocol !== 'file:') {
-      throw Object.assign(new TypeError('Only file: URLs are supported'), {
-        code: 'ERR_INVALID_URL_SCHEME',
-      });
-    }
-    return decodeURIComponent(p.pathname);
-  }
+  if (p instanceof URLConstructor) return fileURLToPathPosix(p);
   if (p instanceof Uint8Array) return new TextDecoder().decode(p);
   throw new TypeError('fs path must be string, Buffer, or URL');
 }

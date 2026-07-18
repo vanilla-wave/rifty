@@ -45,6 +45,11 @@ describe('node:url POSIX file-path conversion', () => {
         roundTrip: '/bad-�',
       },
       {
+        path: `/pair-😀-bad-${String.fromCharCode(0xdc00)}`,
+        href: 'file:///pair-%F0%9F%98%80-bad-%EF%BF%BD',
+        roundTrip: '/pair-😀-bad-�',
+      },
+      {
         path: 'nested #?% ü/',
         href: 'file:///app/nested%20%23%3F%25%20%C3%BC/',
         roundTrip: '/app/nested #?% ü/',

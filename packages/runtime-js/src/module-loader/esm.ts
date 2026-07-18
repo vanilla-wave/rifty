@@ -3,6 +3,7 @@ import { dirname } from '@riftydev/vfs';
 import type { Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { fileURLFromResolvedPath } from '../internal/posix-file-url.ts';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
@@ -1712,7 +1713,7 @@ export async function executeEsm(
 
   const __metaDirname = dirname(resolved.id);
   const __metaFilename = resolved.id;
-  const __importMetaUrl = `file://${resolved.id}`;
+  const __importMetaUrl = fileURLFromResolvedPath(resolved.id).href;
 
   // ESM (unlike CJS) does NOT inject `__dirname`/`__filename` as locals — Node
   // exposes them only on `import.meta`. Injecting them collided with user code
@@ -1820,7 +1821,7 @@ export async function executeEsm(
     // route `node:` through the resolver, which throws on an unregistered builtin.
     if (spec.startsWith('node:')) return spec;
     const dep = deps.resolve(spec, resolved.id, true);
-    return dep.kind === 'builtin' ? dep.id : `file://${dep.id}`;
+    return dep.kind === 'builtin' ? dep.id : fileURLFromResolvedPath(dep.id).href;
   };
   const routedConstructors = createFunctionImportRouting(dynamicImport, resolved.id);
 

@@ -150,7 +150,9 @@ describe('CJS extension hooks', () => {
         require.extensions['.js'] = function (module, filename) {
           if (filename === target) {
             module._compile(
-              'module.exports = { compiled: true, receiver: this === require.extensions };',
+              'module.exports = { compiled: true, receiver: ' +
+                (this === require.extensions) +
+                ' };',
               filename,
             );
           } else {

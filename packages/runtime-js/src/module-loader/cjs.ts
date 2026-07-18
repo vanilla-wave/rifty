@@ -34,6 +34,8 @@ export interface CjsLoaderDeps {
   readonly resolver: Resolver;
   /** Loader-owned mutable table shared by local require and createRequire. */
   readonly extensions: CjsExtensions;
+  /** Loader-owned `.js` identity; replacements own unregistered suffixes. */
+  readonly defaultJsExtension: CjsExtensionHook;
   /** Create a require bound to `fromFile`, including the shared extensions table. */
   makeRequire(fromFile: string): CjsRequire;
   /**
@@ -48,7 +50,7 @@ export interface CjsLoaderDeps {
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
 }
 
-export type CjsExtensionHook = (module: CjsModule, filename: string) => void;
+export type CjsExtensionHook = (this: CjsExtensions, module: CjsModule, filename: string) => void;
 export type CjsExtensions = Record<string, CjsExtensionHook>;
 
 export type CjsRequire = ((specifier: string) => unknown) & {
@@ -1852,11 +1854,21 @@ function createCjsModule(deps: CjsLoaderDeps): CjsModule {
   return moduleObject;
 }
 
-export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
-  // Guard BEFORE touching the registry so repeated require() calls throw
-  // idempotently, not return a stale loading record (ADR-0052 D1 alt-C).
-  if (resolved.kind !== 'json') assertNotTsCjs(resolved.id);
+function findRegisteredExtension(filename: string, extensions: CjsExtensions): string | undefined {
+  const name = filename.slice(filename.lastIndexOf('/') + 1);
+  let startIndex = 0;
+  while (startIndex < name.length) {
+    const index = name.indexOf('.', startIndex);
+    if (index === -1) break;
+    startIndex = index + 1;
+    if (index === 0) continue;
+    const extension = name.slice(index);
+    if ((extensions as Record<string, unknown>)[extension]) return extension;
+  }
+  return undefined;
+}
 
+export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
   const { registry } = deps;
   let existing = registry.get(resolved.id);
   if (existing && existing.state === 'loaded') return existing.exports;
@@ -1872,23 +1884,20 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
     registry.invalidate(resolved.id);
     existing = undefined;
   }
+
+  const registeredExtension = findRegisteredExtension(resolved.id, deps.extensions);
+  const selectedKey = registeredExtension ?? '.js';
+  const selectedExtension: unknown = deps.extensions[selectedKey];
+  if (registeredExtension === undefined && selectedExtension === deps.defaultJsExtension) {
+    assertNotTsCjs(resolved.id);
+  }
+
   const record = existing ?? registry.getOrCreate(resolved.id, resolved.kind);
   const moduleObject = createCjsModule(deps);
   record.cjsModule = moduleObject;
   record.exports = moduleObject.exports;
 
-  if (resolved.kind === 'json') {
-    try {
-      moduleObject.exports = JSON.parse(resolved.source) as Record<string, unknown>;
-    } catch (error) {
-      failCjsRecord(registry, record, error);
-    }
-    record.exports = moduleObject.exports;
-    record.state = 'loaded';
-    return record.exports;
-  }
-
-  if (resolved.kind === 'text') {
+  if (resolved.kind === 'text' && registeredExtension === undefined) {
     // Text-asset import (ADR-0067): the module value IS the raw file contents.
     // `require('./f.txt')` returns the string; ESM `import x from './f.txt'`
     // routes here, then `cjsNamespaceFor` maps the non-object export to
@@ -1900,11 +1909,10 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
   }
 
   try {
-    const extension = deps.extensions['.js'];
-    if (typeof extension !== 'function') {
-      throw new TypeError("require.extensions['.js'] is not a function");
+    if (typeof selectedExtension !== 'function') {
+      throw new TypeError(`require.extensions[${JSON.stringify(selectedKey)}] is not a function`);
     }
-    extension(moduleObject, resolved.id);
+    selectedExtension.call(deps.extensions, moduleObject, resolved.id);
   } catch (error) {
     failCjsRecord(registry, record, error);
   }

@@ -5,6 +5,7 @@ const c: ParityCase = {
   setup: {
     files: {
       'a/b.mjs': 'export const nested = true;\n',
+      'a\\b.mjs': 'export const backslash = true;\n',
       'dir #?% ü~/mod.mjs': `
         const moduleTail = '/dir%20%23%3F%25%20%C3%BC%7E/mod.mjs';
         const assetTail = '/dir%20%23%3F%25%20%C3%BC%7E/asset.txt';
@@ -18,12 +19,13 @@ const c: ParityCase = {
     },
   },
   code: `
-    const encodedSlash = new URL('./a%2Fb.mjs', import.meta.url);
-    try {
-      await import(encodedSlash.href);
-      console.log('LOADED');
-    } catch (error) {
-      console.log(error.code);
+    for (const specifier of ['./a%2Fb.mjs', './a%5Cb.mjs']) {
+      try {
+        await import(new URL(specifier, import.meta.url).href);
+        console.log('LOADED');
+      } catch (error) {
+        console.log(error.code);
+      }
     }
 
     const moduleUrl = new URL(
@@ -33,7 +35,7 @@ const c: ParityCase = {
     const module = await import(moduleUrl.href);
     console.log(module.loaded);
   `,
-  expected: 'ERR_INVALID_MODULE_SPECIFIER\ntrue\ntrue\ntrue\n',
+  expected: 'ERR_INVALID_MODULE_SPECIFIER\nERR_INVALID_MODULE_SPECIFIER\ntrue\ntrue\ntrue\n',
 };
 
 export default c;

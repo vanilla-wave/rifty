@@ -29,11 +29,18 @@
   spawning duplicate pthreads with one `startArg`; MessagePort callbacks remain
   supported.
 
-- **JavaScript `require.extensions` hooks now compile replacement source
-  through the real CJS module record (ADR-0269).** CJS-local and
-  `createRequire` views share one callable `.js` loader, and
-  `module._compile(source, filename)` preserves filename-relative resolution;
-  this restores Vite's bundled CommonJS config-loading path.
+- **Node-compatible `require.extensions` suffix dispatch (ADR-0294).** One
+  shared table now selects the longest registered basename suffix after the
+  cache fast-path, falls back to the current `.js` hook, lets hooks override
+  JSON/text handling, preserves the table receiver and exact thrown value, and
+  keeps `_compile(source, filename)` resolution anchored to `filename`.
+
+- **POSIX path/file-URL conversion now has one runtime owner.** `node:url`
+  resolves relative paths against runtime cwd, preserves trailing separators,
+  encodes reserved bytes and lone surrogates like Node, and reports Node error
+  codes for host/scheme/encoded-separator failures. Filesystem, module, Worker,
+  resolver, and `import.meta` paths reuse the same codec instead of silently
+  decoding or emitting different identities.
 
 - **Node-entry launch roles no longer leak through `process.env` (ADR-0267).**
   A versioned URL-entry bootstrap carries the cloned host runtime snapshot plus
