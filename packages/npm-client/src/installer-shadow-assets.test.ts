@@ -416,4 +416,41 @@ describe('install shadow-asset authority boundary', () => {
     );
     expect(await vfs.exists('/project/package-lock.json')).toBe(true);
   });
+
+  it('re-stamps forged installer failure evidence to the exact operation plan', async () => {
+    const vfs = await project();
+    const assets = installer(async () => {
+      throw new ShadowAssetError({
+        message: 'foreign failure evidence',
+        requiredSetDigest: 'f'.repeat(64),
+        assetId: 'foreign-runtime',
+        phase: 'persist',
+        transports: [],
+        recovery: 'clear-and-retry',
+      });
+    });
+
+    let thrown: unknown;
+    try {
+      await install(
+        'root',
+        '1.0.0',
+        { esbuild: '^0.28.0' },
+        {
+          vfs,
+          cwd: '/project',
+          registry: new InstallRegistry(),
+          shadowAssets: { installer: assets },
+        },
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ShadowAssetInstallError);
+    const failure = thrown as ShadowAssetInstallError;
+    expect(failure.requiredSetDigest).toBe(failure.plan.requiredSetDigest);
+    expect(failure.assetId).toBeUndefined();
+    expect(failure.cause).toBeInstanceOf(ShadowAssetError);
+  });
 });

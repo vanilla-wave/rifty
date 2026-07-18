@@ -94,6 +94,18 @@ function fixture(
   return { member, plan, tgz };
 }
 
+function siblingPlan(plan: ShadowAssetPlan, requestedRange: string): ShadowAssetPlan {
+  const substitutions = plan.substitutions.map((substitution) => ({
+    ...substitution,
+    requestedRange,
+  }));
+  return {
+    requiredSetDigest: canonicalShadowDigest({ schema: 1, substitutions, assets: plan.assets }),
+    substitutions,
+    assets: plan.assets,
+  };
+}
+
 function source(bytes: Uint8Array): ShadowAssetSource & { acquire: ReturnType<typeof vi.fn> } {
   return {
     acquire: vi.fn(async (requests) =>
@@ -151,6 +163,44 @@ describe('ShadowAssetManager', () => {
     expect(Object.isFrozen(error.treeResult)).toBe(true);
     expect(Object.isFrozen(error.treeResult.lockfile)).toBe(true);
     expect(Object.isFrozen(error.plan)).toBe(true);
+  });
+
+  it('rejects post-tree failure evidence that belongs to another plan', () => {
+    const { plan } = fixture();
+    const treeResult: InstallTreeResult = {
+      packages: [],
+      lockfile: {
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {},
+      },
+      conflicts: [],
+      provenance: { resolution: 'metadata', packages: [] },
+    };
+    const base = {
+      message: 'asset persistence failed',
+      requiredSetDigest: plan.requiredSetDigest,
+      phase: 'persist' as const,
+      transports: [],
+      recovery: 'clear-and-retry' as const,
+    };
+
+    expect(
+      () =>
+        new ShadowAssetInstallError(treeResult, plan, {
+          ...base,
+          requiredSetDigest: 'f'.repeat(64),
+        }),
+    ).toThrowError(TypeError);
+    expect(
+      () =>
+        new ShadowAssetInstallError(treeResult, plan, {
+          ...base,
+          assetId: 'foreign-runtime',
+        }),
+    ).toThrowError(TypeError);
   });
 
   it('joins the real STD RegistryClient/tarball-cache adapter to MemoryVfs readiness', async () => {
@@ -218,6 +268,33 @@ describe('ShadowAssetManager', () => {
     });
 
     await expect(manager.installer.ensure(plan)).resolves.toEqual({ kind: 'not-required', plan });
+    expect(assetSource.acquire).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed canonical SRI before storage or source work', async () => {
+    const { plan, tgz } = fixture();
+    const assets = plan.assets.map((asset) => ({
+      ...asset,
+      source: { ...asset.source, integrity: 'sha512-not-base64' },
+    }));
+    const corrupt: ShadowAssetPlan = {
+      requiredSetDigest: canonicalShadowDigest({
+        schema: 1,
+        substitutions: plan.substitutions,
+        assets,
+      }),
+      substitutions: plan.substitutions,
+      assets,
+    };
+    const storage = createMemoryShadowAssetStorage();
+    const read = vi.spyOn(storage, 'read');
+    const write = vi.spyOn(storage, 'write');
+    const assetSource = source(tgz);
+    const manager = createShadowAssetManager({ storage, source: assetSource });
+
+    await expect(manager.installer.ensure(corrupt)).rejects.toBeInstanceOf(TypeError);
+    expect(read).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
     expect(assetSource.acquire).not.toHaveBeenCalled();
   });
 
@@ -319,6 +396,71 @@ describe('ShadowAssetManager', () => {
     expect(assetSource.acquire).toHaveBeenCalledTimes(1);
   });
 
+  it('performs zero work for an already-aborted sole ensure', async () => {
+    const { plan, tgz } = fixture();
+    const inner = createMemoryShadowAssetStorage();
+    const read = vi.fn((entry: Parameters<ShadowAssetStorage['read']>[0]) => inner.read(entry));
+    const write = vi.fn((entry: Parameters<ShadowAssetStorage['write']>[0], bytes: Uint8Array) =>
+      inner.write(entry, bytes),
+    );
+    const assetSource = source(tgz);
+    const manager = createShadowAssetManager({
+      storage: { ...inner, read, write },
+      source: assetSource,
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      manager.installer.ensure(plan, { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(read).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(assetSource.acquire).not.toHaveBeenCalled();
+  });
+
+  it('aborts a sole producer when its only waiter cancels and never publishes readiness', async () => {
+    const { plan } = fixture();
+    let producerSignal: AbortSignal | undefined;
+    let admitted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      admitted = resolve;
+    });
+    const acquire = vi.fn(
+      async (
+        _requests: readonly ShadowAssetSourceRequest[],
+        options: Readonly<{ signal: AbortSignal }>,
+      ): Promise<never> => {
+        producerSignal = options.signal;
+        admitted();
+        await new Promise<never>((_resolve, reject) => {
+          options.signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('The operation was aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+        throw new Error('unreachable');
+      },
+    );
+    const storage = createMemoryShadowAssetStorage();
+    const write = vi.spyOn(storage, 'write');
+    const manager = createShadowAssetManager({
+      storage,
+      source: { acquire, close: async () => undefined },
+    });
+    const controller = new AbortController();
+    const ensuring = manager.installer.ensure(plan, { signal: controller.signal });
+    void ensuring.catch(() => undefined);
+    await started;
+    controller.abort();
+
+    await expect(ensuring).rejects.toMatchObject({ name: 'AbortError' });
+    expect(producerSignal?.aborted).toBe(true);
+    expect(write).not.toHaveBeenCalled();
+    expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).toBeNull();
+  });
+
   it('single-flights the same missing object across different required-set receipts', async () => {
     const { plan, tgz } = fixture();
     const substitutions = plan.substitutions.map((substitution) => ({
@@ -359,6 +501,54 @@ describe('ShadowAssetManager', () => {
     expect(assetSource.acquire).toHaveBeenCalledTimes(1);
     expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).not.toBeNull();
     expect(await manager.installer.inspectReceipt(sibling.requiredSetDigest)).not.toBeNull();
+  });
+
+  it('replays and forwards object-flight progress to sibling sets and runtime readers', async () => {
+    const { plan, tgz } = fixture();
+    const sibling = siblingPlan(plan, '1.0.0');
+    const readerPlan = siblingPlan(plan, '~1.0.0');
+    let release!: () => void;
+    let admitted!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      admitted = resolve;
+    });
+    const assetSource = source(tgz);
+    assetSource.acquire.mockImplementationOnce(async (requests) => {
+      admitted();
+      await gate;
+      return requests.map((request: ShadowAssetSourceRequest) => ({
+        request,
+        bytes: tgz.slice(),
+        fillTransport: 'standard' as const,
+        fillCache: 'network' as const,
+      }));
+    });
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: assetSource,
+    });
+    const leader = manager.installer.ensure(plan);
+    await started;
+    const siblingProgress: string[] = [];
+    const readerProgress: string[] = [];
+    const follower = manager.installer.ensure(sibling, {
+      onProgress: (event) => siblingProgress.push(event.phase),
+    });
+    const read = manager.runtimeReader(readerPlan).readVerified('runtime', {
+      onProgress: (event) => readerProgress.push(event.phase),
+    });
+    void read.catch(() => undefined);
+    await Promise.resolve();
+    release();
+
+    await expect(Promise.all([leader, follower])).resolves.toHaveLength(2);
+    await expect(read).resolves.toEqual(encoder.encode('runtime'));
+    expect(assetSource.acquire).toHaveBeenCalledTimes(1);
+    expect(siblingProgress).toEqual(['cache-check', 'fetch', 'verify', 'persist', 'ready']);
+    expect(readerProgress).toEqual(['fetch', 'verify', 'persist']);
   });
 
   it('keeps the object flight visible until a delayed receipt publication admits late sibling sets', async () => {
