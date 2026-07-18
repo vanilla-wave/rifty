@@ -6,7 +6,7 @@ import {
   type InstallStampAuthority,
   createInstallStampAuthority,
 } from '../glue/install-stamp-authority.ts';
-import { installStampPath } from '../glue/install-stamp.ts';
+import { installStampPath, readInstallStamp } from '../glue/install-stamp.ts';
 import {
   type AcquisitionObservation,
   type PackageAcquisitionAdapter,
@@ -277,6 +277,48 @@ describe('package-acquisition authority faults', () => {
     expect(observations).toContainEqual(
       expect.objectContaining({ type: 'promotion-refused', projectId: PROJECT.projectId }),
     );
+  });
+
+  it('materializes the exact pending claim before returning from background promotion admission', async () => {
+    const vfs = await vfsHarness();
+    const stamps = createInstallStampAuthority({ vfs });
+    let releaseFlush!: () => void;
+    const flushGate = new Promise<void>((resolve) => {
+      releaseFlush = resolve;
+    });
+    const authority = createPackageAcquisitionAuthority({
+      stamps,
+      stampTransition: {
+        flush: async () => {
+          await flushGate;
+          return { failures: [], total: 0 };
+        },
+      },
+      adapter: adapterWith({
+        install: async () => {
+          const installed = result();
+          await seedTree(vfs);
+          await vfs.writeFile(
+            `${ROOT}/package-lock.json`,
+            `${JSON.stringify(installed.lockfile, null, 2)}\n`,
+          );
+          return { result: installed, packageJsonText: PACKAGE_JSON };
+        },
+      }),
+    });
+
+    try {
+      await expect(
+        authority.dispatch({ type: 'terminal-install', project: PROJECT, argv: ['vite'] }),
+      ).resolves.toMatchObject({ outcome: 'installed' });
+      await expect(readInstallStamp(vfs, ROOT)).resolves.toMatchObject({
+        durability: 'pending',
+        slug: PROJECT.slug,
+      });
+    } finally {
+      releaseFlush();
+      await authority.quiesce();
+    }
   });
 
   it('forwards durability proof to reset revocation before reset mutates the tree', async () => {

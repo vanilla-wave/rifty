@@ -47,6 +47,15 @@ function installResult(count: number): InstallResult {
   };
 }
 
+function installedResult(fsSync: MemoryFsSync, count: number): InstallResult {
+  const result = installResult(count);
+  fsSync.writeFileSync(
+    `${ROOT}/package-lock.json`,
+    enc.encode(JSON.stringify(result.lockfile, null, 2)),
+  );
+  return result;
+}
+
 function viteSnapshot(): DepSnapshotV2 {
   const fs = new MemoryFsSync();
   fs.mkdirSync(ROOT, { recursive: true });
@@ -71,6 +80,9 @@ async function seedTrustedStamp(
   packages: number,
 ): Promise<void> {
   const authority = createInstallStampAuthority(target);
+  if (!target.fsSync.existsSync(`${ROOT}/package-lock.json`)) {
+    installedResult(target.fsSync, packages);
+  }
   const packageJsonText = await target.vfs.readFileText(`${ROOT}/package.json`);
   const claim = await authority.demote({ root: ROOT, slug });
   const result = await authority.promote(
@@ -235,7 +247,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       install: async () => {
         installed = true;
         fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
-        return installResult(8);
+        return installedResult(fsSync, 8);
       },
       log: logFn,
     });
@@ -272,7 +284,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
           lockfile: fsSync.existsSync(`${ROOT}/package-lock.json`),
           viteDir: fsSync.existsSync(`${ROOT}/node_modules/vite`),
         };
-        return installResult(8);
+        return installedResult(fsSync, 8);
       },
       log: logFn,
     });
@@ -296,7 +308,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fetchSnapshot: async () => viteSnapshot(),
       install: async () => {
         installed = true;
-        return installResult(0);
+        return installedResult(fsSync, 0);
       },
       log: logFn,
     });
@@ -320,6 +332,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       const pair = createMemoryFs();
       pair.fsSync.mkdirSync(`${ROOT}/node_modules/existing`, { recursive: true });
       pair.fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(VITE_PACKAGE_JSON_TEXT));
+      installedResult(pair.fsSync, 1);
       pair.fsSync.writeFileSync(`${ROOT}/node_modules/existing/index.js`, enc.encode('keep'));
       const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(
         pair.fsSync,
@@ -379,7 +392,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fetchSnapshot: async () => viteSnapshot(),
       install: async () => {
         fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
-        return installResult(9);
+        return installedResult(fsSync, 9);
       },
       log: logFn,
     });
@@ -400,7 +413,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => null,
-      install: async () => installResult(9),
+      install: async () => installedResult(fsSync, 9),
       log: logFn,
     });
 
@@ -421,7 +434,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fetchSnapshot: async () => {
         throw new Error('HTTP 404 Not Found');
       },
-      install: async () => installResult(9),
+      install: async () => installedResult(fsSync, 9),
       log: logFn,
     });
 
@@ -445,7 +458,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       },
       install: async () => {
         fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
-        return installResult(60);
+        return installedResult(fsSync, 60);
       },
       log: logFn,
     });
@@ -471,7 +484,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
-      install: async () => installResult(0),
+      install: async () => installedResult(fsSync, 0),
       log: logFn,
       flush: () => new Promise(() => {}),
     });
