@@ -61,7 +61,10 @@ describe('spawnKernelWorker capability resource transaction', () => {
   const nativeChannels: MessageChannel[] = [];
   let worker: FaultingWorker;
 
-  function capability(): { readonly channel: MessageChannel; readonly close: ReturnType<typeof vi.spyOn> } {
+  function capability(): {
+    readonly channel: MessageChannel;
+    readonly close: ReturnType<typeof vi.spyOn>;
+  } {
     const channel = new NativeMessageChannel();
     nativeChannels.push(channel);
     return { channel, close: vi.spyOn(channel.port2, 'close') };
@@ -178,6 +181,29 @@ describe('spawnKernelWorker capability resource transaction', () => {
     expect(thrown).toBe(attachError);
     expect(dispatcher.getAttachmentCount()).toBe(0);
     expect(dispatcher.getActiveTimerCount()).toBe(0);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(cap.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not detach when dispatcher attach fails before publishing the ring', () => {
+    const cap = capability();
+    const dispatcher = getKernelDispatcher();
+    const attachError = new Error('dispatcher-attach-failed-before-publication');
+    vi.spyOn(dispatcher, 'attach').mockImplementation(() => {
+      throw attachError;
+    });
+    const detach = vi.spyOn(dispatcher, 'detach');
+
+    let thrown: unknown;
+    try {
+      spawnWithCapability(cap.channel.port2);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBe(attachError);
+    expect(detach).not.toHaveBeenCalled();
+    expect(dispatcher.getAttachmentCount()).toBe(0);
     expect(worker.terminate).toHaveBeenCalledTimes(1);
     expect(cap.close).toHaveBeenCalledTimes(1);
   });

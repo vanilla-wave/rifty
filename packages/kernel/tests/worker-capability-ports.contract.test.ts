@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KernelProcessSpec } from '../src/shared-globals.ts';
+import * as workerEntryPublic from '../src/worker-entry.ts';
+import type { EntryLifecycleDeps } from '../src/worker-entry.ts';
 import {
   type WorkerLike,
   clearKernelDispatcher,
@@ -32,6 +34,16 @@ const processSpecCannotCarryCapabilityPorts: KernelProcessSpec = {
   capabilityPorts: {},
 };
 void processSpecCannotCarryCapabilityPorts;
+
+const publicLifecycleDepsCannotPrepare: EntryLifecycleDeps = {
+  // @ts-expect-error child bootstrap setup is an internal kernel seam.
+  prepareEntry() {},
+  preEntryHook: null,
+  drainHook: null,
+  async runEntry() {},
+  writeStderr() {},
+};
+void publicLifecycleDepsCannotPrepare;
 
 type WorkerListener = (event: MessageEvent) => void;
 
@@ -116,7 +128,7 @@ describe('URL-entry capability ports contract', () => {
       ['Test.Beta', beta.port2],
     ]);
 
-    delete supplied['test.alpha'];
+    Reflect.deleteProperty(supplied, 'test.alpha');
     supplied.late = channel().port2;
     expect(Object.keys(snapshot ?? {})).toEqual(['test.alpha', 'Test.Beta']);
 
@@ -131,6 +143,10 @@ describe('URL-entry capability ports contract', () => {
 
     expect(worker.posted[0]?.transfer?.length).toBe(4);
     result.terminate();
+  });
+
+  it('does not expose the spawn-only normalizer from the public worker-entry subpath', () => {
+    expect(Object.hasOwn(workerEntryPublic, 'normalizeWorkerEntryDescriptor')).toBe(false);
   });
 
   it.each([
