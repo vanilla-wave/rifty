@@ -35,6 +35,7 @@ import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { projectTerminalStateFromOwner } from '../workbench/internal/playground-terminal-state.ts';
+import { createProjectRuntimeAcquisitionController } from '../workbench/internal/project-runtime-acquisition.ts';
 import { createNodeCliProjectRuntime } from '../workbench/node-project-runtime.ts';
 import { createPreviewReadiness } from '../workbench/preview-readiness.ts';
 import { createUnusedProjectContent } from '../workbench/project-content.test-fixture.ts';
@@ -1218,7 +1219,13 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     const config = workbenchPackageConfig(definition, materialized.projectRoot, {
       packageJsonBytes: authority.readFileBytesSync(`${materialized.projectRoot}/package.json`),
     });
-    let pty = createPtyClient({ send: () => {} });
+    const acquisition = materialized.acquisition as ProjectAcquisitionPlan;
+    const runtimeAcquisition = createProjectRuntimeAcquisitionController(acquisition);
+    let pty = createPtyClient({
+      send: () => {},
+      onFirstMaterializationConsumed: (evidence) =>
+        runtimeAcquisition.acceptFirstMaterializationConsumed(evidence),
+    });
     let auxiliaryTerminalSequence = 0;
     let alive = true;
     let resolveClosed!: (reason: unknown) => void;
@@ -1273,6 +1280,8 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
         if (frame.type === 'pty:exec') timeline.events.push(`exec:${frame.line}`);
         void Promise.resolve(composition.runtime.handlePtyFrame(frame));
       },
+      onFirstMaterializationConsumed: (evidence) =>
+        runtimeAcquisition.acceptFirstMaterializationConsumed(evidence),
     });
     const port = {
       closed,
@@ -1293,7 +1302,6 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     terminal.attach((chunk, stream) => {
       timeline.events.push(`terminal:${stream}:${chunk.replaceAll('\n', '\\n')}`);
     });
-    const acquisition = materialized.acquisition as ProjectAcquisitionPlan;
     const previewReadiness = () =>
       createPreviewReadiness({
         timeoutMs: 100,
@@ -1309,19 +1317,14 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
             terminal,
             entryPath: definition.entryPath,
             args: definition.args,
-            acquisition,
-          } as Parameters<typeof createNodeCliProjectRuntime>[0] & {
-            readonly acquisition: ProjectAcquisitionPlan;
+            acquisition: runtimeAcquisition.runtime,
           })
         : createViteProjectRuntime({
             terminal,
             ownerToken: OWNER_TOKEN,
             createPreviewReadiness: previewReadiness,
             port: definition.port,
-            acquisition,
-          } as Parameters<typeof createViteProjectRuntime>[0] & {
-            readonly port: number;
-            readonly acquisition: ProjectAcquisitionPlan;
+            acquisition: runtimeAcquisition.runtime,
           });
     return createProjectSession<unknown>({
       content: createUnusedProjectContent(`first-materialization-${definition.id}`),
@@ -2249,8 +2252,13 @@ describe('Workbench companion first materialization Contract+RED', () => {
       stdout: terminalOutput(consumer),
       stderr: terminalOutput(consumer),
     });
-    const firstNpm = h.packageState.createNpmCommand(async () => 1);
-    const secondNpm = h.packageState.createNpmCommand(async () => 1);
+    const consumptionEvidence = vi.fn();
+    const firstNpm = h.packageState.createNpmCommand(async () => 1, {
+      onFirstMaterializationConsumed: consumptionEvidence,
+    });
+    const secondNpm = h.packageState.createNpmCommand(async () => 1, {
+      onFirstMaterializationConsumed: consumptionEvidence,
+    });
     gateInstall = true;
     const firstRun = firstNpm(['install'], context('first'));
     const secondRun = secondNpm(['install'], context('second'));
@@ -2272,6 +2280,7 @@ describe('Workbench companion first materialization Contract+RED', () => {
     expect.soft(fetchSnapshot).not.toHaveBeenCalled();
     expect.soft(h.timeline.installs).toHaveLength(1);
     expect.soft(h.timeline.maxActiveInstalls).toBe(1);
+    expect.soft(consumptionEvidence).toHaveBeenCalledTimes(1);
     expect
       .soft(h.timeline.events.filter((event) => event.includes('$ npm install')))
       .toHaveLength(1);

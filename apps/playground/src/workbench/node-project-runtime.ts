@@ -4,20 +4,20 @@ import {
   projectRelativePath,
   projectRuntimeShellWord,
 } from './internal/node-command.ts';
+import type { ProjectRuntimeAcquisition } from './internal/project-runtime-acquisition.ts';
 import type { PreviewHandle, PreviewReadiness } from './preview-readiness.ts';
-import type { ProjectAcquisitionPlan } from './project-materialization.ts';
 import type { ProjectRuntime } from './project-session.ts';
 import {
   type ProjectTerminal,
   type ProjectTerminalRun,
   projectTerminalAdmission,
 } from './project-terminal.ts';
-import { createPreviewProjectRuntime, projectRuntimeShellLine } from './vite-project-runtime.ts';
+import { createPreviewProjectRuntime } from './vite-project-runtime.ts';
 
 interface NodeProjectRuntimeDependencies {
   readonly terminal: ProjectTerminal;
   readonly entryPath: string;
-  readonly acquisition?: ProjectAcquisitionPlan;
+  readonly acquisition: ProjectRuntimeAcquisition;
 }
 
 export interface NodeServerProjectRuntimeDependencies extends NodeProjectRuntimeDependencies {
@@ -46,13 +46,14 @@ export function createNodeServerProjectRuntime(
     terminal: dependencies.terminal,
     ownerToken: dependencies.ownerToken,
     createPreviewReadiness: dependencies.createPreviewReadiness,
+    acquisition: dependencies.acquisition,
     label: 'Node server project runtime',
     line: () => {
       const cwd = dependencies.terminal.snapshot().cwd;
       const root = projectRelativePath('/', cwd);
       const runtimeLine =
         root === '.' ? 'npm run dev' : `npm --prefix ${projectRuntimeShellWord(root)} run dev`;
-      return projectRuntimeShellLine(runtimeLine, dependencies.acquisition, cwd);
+      return dependencies.acquisition.line(runtimeLine, cwd);
     },
     matches: (entry) => entry.source === 'dev-server' && entry.port === port,
   });
@@ -84,9 +85,8 @@ export function createNodeCliProjectRuntime(
       if (active !== null) throw new ProjectBusyError('Node CLI project runtime');
 
       const cwd = dependencies.terminal.snapshot().cwd;
-      const command = projectRuntimeShellLine(
+      const command = dependencies.acquisition.line(
         nodeProjectShellCommand(dependencies.entryPath, args, cwd),
-        dependencies.acquisition,
         cwd,
       );
       const run = dependencies.terminal.run(command);

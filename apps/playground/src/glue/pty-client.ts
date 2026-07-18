@@ -109,6 +109,11 @@ export interface PtyClientDeps {
   onDevServer?: (frame: PtyDevServer) => void;
   /** Owner→page snapshot of ALL live previewable ports (ADR-0155); the page derives its preview switcher + per-port bridges. */
   onPreview?: (frame: PtyPreview) => void;
+  /** Project-scoped owner evidence, after this client validates its admitted PTY run. */
+  onFirstMaterializationConsumed?: (evidence: {
+    readonly sid: string;
+    readonly rid: string;
+  }) => void;
 }
 
 /** Seed cwd/env for a session (restored persisted terminal state, ADR-0146). */
@@ -543,6 +548,20 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
             }
             run.reject(error instanceof Error ? error : new Error(String(error)));
           }
+          return;
+        }
+        case 'pty:first-materialization-consumed': {
+          const run = runs.get(frame.rid);
+          if (run?.sid !== frame.sid || !run.admitted) {
+            throw new Error(
+              `pty:first-materialization-consumed has no matching admitted run ${frame.sid}/${frame.rid}`,
+            );
+          }
+          const callback = deps.onFirstMaterializationConsumed;
+          if (callback === undefined) {
+            throw new Error('pty:first-materialization-consumed has no project callback');
+          }
+          callback(Object.freeze({ sid: frame.sid, rid: frame.rid }));
           return;
         }
         case 'pty:chunk': {

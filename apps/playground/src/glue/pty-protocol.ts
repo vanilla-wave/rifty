@@ -50,6 +50,12 @@ export type PtyClose = { type: 'pty:close'; sid: string; opId: string };
 export type PtyReady = { type: 'pty:ready'; sid: string; error?: string };
 /** Owner actor accepted `rid` as this session's one active run. */
 export type PtyRunReady = { type: 'pty:run-ready'; sid: string; rid: string };
+/** Owner package authority consumed this run's deferred first materialization. */
+export type PtyFirstMaterializationConsumed = {
+  type: 'pty:first-materialization-consumed';
+  sid: string;
+  rid: string;
+};
 export type PtyChunk = {
   type: 'pty:chunk';
   sid: string;
@@ -179,6 +185,7 @@ export type PageToOwnerFrame =
 export type OwnerToPageFrame =
   | PtyReady
   | PtyRunReady
+  | PtyFirstMaterializationConsumed
   | PtyChunk
   | PtyExit
   | PtyResizeAck
@@ -213,6 +220,7 @@ const PAGE_TO_OWNER = new Set([
 const OWNER_TO_PAGE = new Set([
   'pty:ready',
   'pty:run-ready',
+  'pty:first-materialization-consumed',
   'pty:chunk',
   'pty:exit',
   'pty:resize-ack',

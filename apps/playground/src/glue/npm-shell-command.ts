@@ -96,6 +96,8 @@ export interface NpmShellCommandDeps {
   readonly shadowAssets?: InstallOptions['shadowAssets'];
   /** Owner epoch fence immediately before npm-client can first mutate the tree. */
   readonly onTreeMutationStart?: InstallOptions['onTreeMutationStart'];
+  /** Owner-local acknowledgement for one deferred first materialization. */
+  readonly onFirstMaterializationConsumed?: () => void;
   /** Translate a fully parsed terminal invocation into the owner's storage namespace. */
   readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
   /** Pre-install tree preparation (e.g. the from-scratch clean-start
@@ -649,6 +651,9 @@ async function runInstall(
       ...(packages.supportsRuntimeAssetReadiness === true
         ? { runtimeAssets: { signal: ctx.signal, onProgress: onRuntimeAssetProgress } }
         : {}),
+      ...(deps.onFirstMaterializationConsumed === undefined
+        ? {}
+        : { onFirstMaterializationConsumed: deps.onFirstMaterializationConsumed }),
     });
     return 0;
   } catch (error) {

@@ -77,6 +77,7 @@ const OWNER_PTY_FRAMES = [
   { type: 'pty:ready', sid: 's1' },
   { type: 'pty:ready', sid: 's1', error: 'open failed' },
   { type: 'pty:run-ready', sid: 's1', rid: 'r1' },
+  { type: 'pty:first-materialization-consumed', sid: 's1', rid: 'r1' },
   {
     type: 'pty:chunk',
     sid: 's1',

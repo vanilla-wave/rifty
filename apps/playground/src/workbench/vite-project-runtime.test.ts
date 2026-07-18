@@ -1,6 +1,7 @@
 import type { ProcessExit } from '@riftydev/shell';
 import { describe, expect, it } from 'vitest';
 import { ProjectBusyError, ProjectRunExitedBeforeReadyError } from './errors.ts';
+import { createProjectRuntimeAcquisitionController } from './internal/project-runtime-acquisition.ts';
 import {
   type PreviewAdvertisement,
   type PreviewReadiness,
@@ -41,9 +42,7 @@ async function settledOr<T>(promise: Promise<T>, pending: T): Promise<T> {
 type ExecCall = {
   readonly sid: string;
   readonly line: string;
-  readonly options: ProjectTerminalExecOptions & {
-    readonly onFirstMaterializationConsumed?: () => void;
-  };
+  readonly options: ProjectTerminalExecOptions;
   readonly result: Deferred<{ readonly exitCode: number; readonly exit: ProcessExit }>;
 };
 
@@ -91,12 +90,6 @@ class PtyBoundary {
     const call = this.execCalls[index];
     if (call === undefined) throw new Error(`missing exec call ${index}`);
     call.options.onStart?.(rid);
-  }
-
-  consumeFirstMaterialization(index: number): void {
-    const call = this.execCalls[index];
-    if (call === undefined) throw new Error(`missing exec call ${index}`);
-    call.options.onFirstMaterializationConsumed?.();
   }
 
   exit(index: number, exit: ProcessExit, exitCode = exit.code ?? 130): void {
@@ -209,6 +202,7 @@ function createHarness(
   const pty = new PtyBoundary(options.cwd);
   const previews = new PreviewBoundary();
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
+  const acquisition = createProjectRuntimeAcquisitionController(options.acquisition);
   const runtime = createViteProjectRuntime({
     terminal,
     ownerToken: OWNER_TOKEN,
@@ -224,7 +218,7 @@ function createHarness(
         },
       };
     },
-    ...(options.acquisition === undefined ? {} : { acquisition: options.acquisition }),
+    acquisition: acquisition.runtime,
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
@@ -234,7 +228,7 @@ function createHarness(
     createTerminal: () =>
       createProjectTerminal({ id: `terminal-extra-${++extraTerminalSequence}`, port: pty }),
   });
-  return { pty, previews, terminal, runtime, session };
+  return { acquisition, pty, previews, terminal, runtime, session };
 }
 
 async function admitDefaultRun(h: ReturnType<typeof createHarness>, rid = 'run-1') {
@@ -261,7 +255,7 @@ describe('Vite project runtime Contract+RED', () => {
     expect(h.pty.execCalls[0]?.line).toBe('npm install && vite');
 
     h.pty.admit(0, 'run-install');
-    h.pty.consumeFirstMaterialization(0);
+    h.acquisition.acceptFirstMaterializationConsumed({ sid: TERMINAL_SID, rid: 'run-install' });
     await settleMicrotasks();
     h.pty.exit(0, { code: 0, signal: null });
     await first.close();

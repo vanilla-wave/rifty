@@ -1,6 +1,7 @@
 import { type ProcessExit, Shell } from '@riftydev/shell';
 import { describe, expect, it } from 'vitest';
 import { ProjectBusyError, ProjectRunExitedBeforeReadyError } from './errors.ts';
+import { createProjectRuntimeAcquisitionController } from './internal/project-runtime-acquisition.ts';
 import {
   createNodeCliProjectRuntime,
   createNodeServerProjectRuntime,
@@ -44,9 +45,7 @@ async function settledOr<T>(promise: Promise<T>, pending: T): Promise<T> {
 type ExecCall = {
   readonly sid: string;
   readonly line: string;
-  readonly options: ProjectTerminalExecOptions & {
-    readonly onFirstMaterializationConsumed?: () => void;
-  };
+  readonly options: ProjectTerminalExecOptions;
   readonly result: Deferred<{ readonly exitCode: number; readonly exit: ProcessExit }>;
 };
 
@@ -94,12 +93,6 @@ class PtyBoundary {
     const call = this.execCalls[index];
     if (call === undefined) throw new Error(`missing exec call ${index}`);
     call.options.onStart?.(rid);
-  }
-
-  consumeFirstMaterialization(index: number): void {
-    const call = this.execCalls[index];
-    if (call === undefined) throw new Error(`missing exec call ${index}`);
-    call.options.onFirstMaterializationConsumed?.();
   }
 
   exit(index: number, exit: ProcessExit, exitCode = exit.code ?? 130): void {
@@ -210,13 +203,14 @@ function createServerHarness(
   const pty = new PtyBoundary(cwd);
   const previews = new PreviewBoundary();
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
+  const acquisitionController = createProjectRuntimeAcquisitionController(acquisition);
   const runtime = createNodeServerProjectRuntime({
     terminal,
     ownerToken: OWNER_TOKEN,
     entryPath: '/src/server.mjs',
     port: SERVER_PORT,
     createPreviewReadiness: () => previews.create(),
-    ...(acquisition === undefined ? {} : { acquisition }),
+    acquisition: acquisitionController.runtime,
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
@@ -226,7 +220,7 @@ function createServerHarness(
     createTerminal: () =>
       createProjectTerminal({ id: `terminal-extra-${++extraTerminalSequence}`, port: pty }),
   });
-  return { pty, previews, terminal, runtime, session };
+  return { acquisition: acquisitionController, pty, previews, terminal, runtime, session };
 }
 
 function createCliHarness(
@@ -235,11 +229,12 @@ function createCliHarness(
 ) {
   const pty = new PtyBoundary(cwd);
   const terminal = createProjectTerminal({ id: TERMINAL_SID, port: pty });
+  const acquisitionController = createProjectRuntimeAcquisitionController(acquisition);
   const runtime = createNodeCliProjectRuntime({
     terminal,
     entryPath: "/scripts/cli report's.mjs",
     args: ['plain', 'two words', 'semi;colon', "single'quote", '', '$HOME'],
-    ...(acquisition === undefined ? {} : { acquisition }),
+    acquisition: acquisitionController.runtime,
   });
   let extraTerminalSequence = 0;
   const session = createProjectSession({
@@ -249,7 +244,7 @@ function createCliHarness(
     createTerminal: () =>
       createProjectTerminal({ id: `terminal-extra-${++extraTerminalSequence}`, port: pty }),
   });
-  return { pty, terminal, runtime, session };
+  return { acquisition: acquisitionController, pty, terminal, runtime, session };
 }
 
 async function admitServerRun(h: ReturnType<typeof createServerHarness>, rid = 'run-1') {
@@ -287,7 +282,7 @@ describe('Node server project runtime Contract+RED', () => {
     expect(h.pty.execCalls[0]?.line).toBe('npm install && npm run dev');
 
     h.pty.admit(0, 'run-install');
-    h.pty.consumeFirstMaterialization(0);
+    h.acquisition.acceptFirstMaterializationConsumed({ sid: TERMINAL_SID, rid: 'run-install' });
     await settleMicrotasks();
     h.pty.exit(0, { code: 0, signal: null });
     h.previews.swProofs[0]?.resolve();
@@ -417,7 +412,7 @@ describe('Node CLI project runtime Contract+RED', () => {
     expect(h.pty.execCalls[0]?.line).toContain('npm install && node ');
 
     h.pty.admit(0, 'run-install');
-    h.pty.consumeFirstMaterialization(0);
+    h.acquisition.acceptFirstMaterializationConsumed({ sid: TERMINAL_SID, rid: 'run-install' });
     h.pty.exit(0, { code: 0, signal: null });
     await first.close();
 
@@ -447,6 +442,7 @@ describe('Node CLI project runtime Contract+RED', () => {
       terminal,
       entryPath: '/--version',
       args: [],
+      acquisition: createProjectRuntimeAcquisitionController(undefined).runtime,
     });
 
     runtime.start();

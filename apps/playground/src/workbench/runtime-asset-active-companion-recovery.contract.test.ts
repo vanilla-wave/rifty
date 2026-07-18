@@ -46,6 +46,7 @@ import {
   createOpenPlaygroundWorkbench,
   createPlaygroundWorkbenchFacade,
 } from './internal/playground-workbench.ts';
+import { createProjectRuntimeAcquisitionController } from './internal/project-runtime-acquisition.ts';
 import { createNodeCliProjectRuntime } from './node-project-runtime.ts';
 import {
   type OpenWorkbenchDependencies,
@@ -60,7 +61,6 @@ import type {
 } from './playground.ts';
 import { createUnusedProjectContent } from './project-content.test-fixture.ts';
 import type { ProjectDefinition } from './project-definition.ts';
-import type { ProjectAcquisitionPlan } from './project-materialization.ts';
 import { type ProjectSession, createProjectSession } from './project-session.ts';
 import {
   type ProjectTerminalPort,
@@ -447,10 +447,13 @@ async function harness(): Promise<Harness> {
         }),
     });
     composition.vfs.publishSnapshot();
+    const runtimeAcquisition = createProjectRuntimeAcquisitionController(opened.acquisition);
     pty = createPtyClient({
       send(frame) {
         void Promise.resolve(composition.runtime.handlePtyFrame(frame));
       },
+      onFirstMaterializationConsumed: (evidence) =>
+        runtimeAcquisition.acceptFirstMaterializationConsumed(evidence),
     });
     let alive = true;
     let resolveClosed!: (reason: unknown) => void;
@@ -479,7 +482,7 @@ async function harness(): Promise<Harness> {
       terminal,
       entryPath: inspected.entryPath,
       args: inspected.args,
-      acquisition: opened.acquisition as ProjectAcquisitionPlan,
+      acquisition: runtimeAcquisition.runtime,
     });
     const content = createUnusedProjectContent('active-companion-runtime-asset-recovery');
     return createProjectSession({

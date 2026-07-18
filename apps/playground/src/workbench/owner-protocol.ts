@@ -508,6 +508,11 @@ function inspectOwnerPtyFrame(value: unknown): OwnerProjectPtyFrame {
       nonEmptyString(frame.sid, 'pty:run-ready sid');
       nonEmptyString(frame.rid, 'pty:run-ready rid');
       break;
+    case 'pty:first-materialization-consumed':
+      exact(frame, ['type', 'sid', 'rid'], 'pty:first-materialization-consumed frame');
+      nonEmptyString(frame.sid, 'pty:first-materialization-consumed sid');
+      nonEmptyString(frame.rid, 'pty:first-materialization-consumed rid');
+      break;
     case 'pty:chunk':
       exact(frame, ['type', 'sid', 'rid', 'stream', 'seq', 'data'], 'pty:chunk frame');
       nonEmptyString(frame.sid, 'pty:chunk sid');

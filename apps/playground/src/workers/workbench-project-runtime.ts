@@ -293,6 +293,17 @@ export function createWorkbenchProjectRuntime(
       },
       {
         mapInvocationContext: namespace.toOwnerContext,
+        onFirstMaterializationConsumed: () => {
+          const admission = activeAdmission(ptySid);
+          if (admission === null) {
+            throw new Error('Deferred first materialization has no active PTY run');
+          }
+          send({
+            type: 'pty:first-materialization-consumed',
+            sid: admission.ptySid,
+            rid: admission.ptyRid,
+          });
+        },
         ...(options.recordMutation === undefined ? {} : { recordMutation: options.recordMutation }),
       },
     );

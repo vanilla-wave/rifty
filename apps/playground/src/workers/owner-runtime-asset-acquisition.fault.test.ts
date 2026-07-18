@@ -254,7 +254,10 @@ describe('owner post-tree runtime-asset commit order', () => {
       readonly seed: readonly number[] | null;
       readonly readiness: string;
     }> = [];
-    const npm = state.createNpmCommand(async () => 0);
+    const consumptionEvidence = vi.fn();
+    const npm = state.createNpmCommand(async () => 0, {
+      onFirstMaterializationConsumed: consumptionEvidence,
+    });
     await expect(
       npm(
         ['install'],
@@ -281,6 +284,7 @@ describe('owner post-tree runtime-asset commit order', () => {
       kind: 'pending',
       plan: assetPlan,
     });
+    expect.soft(consumptionEvidence).not.toHaveBeenCalled();
     const stamp = await readInstallStamp(pair.vfs, ROOT);
     expect(stamp).not.toBeNull();
     if (stamp) expect(stampTrusted(stamp)).toBe(true);
@@ -326,12 +330,16 @@ describe('owner post-tree runtime-asset commit order', () => {
     });
 
     await expect(state.activateAndEnsure(config)).resolves.toMatchObject({ kind: 'install' });
-    const npm = state.createNpmCommand(async () => 0);
+    const consumptionEvidence = vi.fn();
+    const npm = state.createNpmCommand(async () => 0, {
+      onFirstMaterializationConsumed: consumptionEvidence,
+    });
     await expect(npm(['install'], commandContext())).resolves.toBe(1);
     await state.quiesce();
 
     expect(await readInstallStamp(pair.vfs, ROOT)).toBeNull();
     expect(state.readPackageTreeEpoch(PROJECT).readiness).toEqual({ kind: 'unavailable' });
+    expect(consumptionEvidence).not.toHaveBeenCalled();
   });
 
   // The special post-tree pair is already the complete causal error. A broad
@@ -473,7 +481,10 @@ describe('deferred first materialization runtime readiness', () => {
       kind: 'install',
       snapshotFailures: [],
     });
-    const npm = state.createNpmCommand(async () => 0);
+    const consumptionEvidence = vi.fn();
+    const npm = state.createNpmCommand(async () => 0, {
+      onFirstMaterializationConsumed: consumptionEvidence,
+    });
 
     const first = npm(['install'], commandContext());
     await readinessEntered.promise;
@@ -509,6 +520,7 @@ describe('deferred first materialization runtime readiness', () => {
       )
       .toBe('install 1\n');
     expect.soft(readinessCalls).toBe(2);
+    expect.soft(consumptionEvidence).toHaveBeenCalledTimes(1);
     expect.soft(state.readPackageTreeEpoch(PROJECT).readiness).toEqual({
       kind: 'ready',
       plan: assetPlan,

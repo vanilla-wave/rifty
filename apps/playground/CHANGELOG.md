@@ -25,6 +25,9 @@
 - Post-tree asset failure finalizes exact template-owned files before stamp or
   readiness publication; failed readiness retries the promoted tree without a
   second physical install and consumes first-materialization state only on success.
+- Deferred first materialization now consumes through one strict project-scoped
+  owner acknowledgement; auxiliary/concurrent installs cannot make later Vite or
+  Node starts repeat `npm install`.
 - Workbench runtime assets now use one owner-private semantic cache with honest
   OPFS retention classification, scope-aware durability, exact public
   inspection/clear recovery, sanitized failures, and root-serialized lifecycle.

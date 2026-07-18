@@ -358,8 +358,10 @@ describe('post-tree runtime-asset readiness uses the package FIFO', () => {
       stamps,
       runtimeAssets: runtime.port,
       captureDeferredTerminalConsumption: () => ({
-        reuseTrustedClaim: true,
-        settle: () => {},
+        resolve: () => ({
+          reuseTrustedClaim: true,
+          settle: () => {},
+        }),
       }),
       adapter: adapterWith({
         install: async () => {

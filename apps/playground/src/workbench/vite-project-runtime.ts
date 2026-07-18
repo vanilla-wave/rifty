@@ -1,7 +1,7 @@
 import { ClosedHandleError, ProjectBusyError } from './errors.ts';
 import { projectRelativePath, projectRuntimeShellWord } from './internal/node-command.ts';
+import type { ProjectRuntimeAcquisition } from './internal/project-runtime-acquisition.ts';
 import type { PreviewAdvertisement, PreviewHandle, PreviewReadiness } from './preview-readiness.ts';
-import type { ProjectAcquisitionPlan } from './project-materialization.ts';
 import type { ProjectRuntime } from './project-session.ts';
 import {
   type ProjectTerminal,
@@ -14,33 +14,13 @@ export interface ViteProjectRuntimeDependencies {
   readonly ownerToken: string;
   readonly createPreviewReadiness: () => PreviewReadiness;
   readonly port?: number;
-  readonly acquisition?: ProjectAcquisitionPlan;
+  readonly acquisition: ProjectRuntimeAcquisition;
 }
 
 export interface PreviewProjectRuntimeDependencies extends ViteProjectRuntimeDependencies {
   readonly label: string;
   readonly line: string | (() => string);
   readonly matches: (entry: PreviewAdvertisement) => boolean;
-}
-
-function shellWord(value: string): string {
-  if (value.includes('\0')) throw new TypeError('Runtime status text must not contain NUL');
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
-export function projectRuntimeShellLine(
-  runtimeLine: string,
-  acquisition: ProjectAcquisitionPlan | undefined,
-  cwd = '/',
-): string {
-  if (acquisition?.kind !== 'install') return runtimeLine;
-  const notices = acquisition.snapshotFailures.map(
-    (failure) => `echo ${shellWord(`${failure.snapshotId}: ${failure.reason}`)}`,
-  );
-  const root = projectRelativePath('/', cwd);
-  const install =
-    root === '.' ? 'npm install' : `npm --prefix ${projectRuntimeShellWord(root)} install`;
-  return [...notices, install, runtimeLine].join(' && ');
 }
 
 function vitePort(value: number): number {
@@ -203,7 +183,7 @@ export function createViteProjectRuntime(
         ...(root === '.' ? [] : [projectRuntimeShellWord(root)]),
         ...(port === undefined ? [] : ['--port', String(port)]),
       ].join(' ');
-      return projectRuntimeShellLine(runtimeLine, dependencies.acquisition, cwd);
+      return dependencies.acquisition.line(runtimeLine, cwd);
     },
     matches: (entry) => entry.source === 'node',
   });

@@ -46,6 +46,10 @@ import {
   projectTerminalStateFromOwner,
 } from './internal/playground-terminal-state.ts';
 import {
+  type ProjectRuntimeAcquisition,
+  createProjectRuntimeAcquisitionController,
+} from './internal/project-runtime-acquisition.ts';
+import {
   createNodeCliProjectRuntime,
   createNodeServerProjectRuntime,
 } from './node-project-runtime.ts';
@@ -164,6 +168,7 @@ interface ProjectTransport {
   readonly content: ProjectContentTransport;
   readonly pty: ReturnType<typeof createPtyClient>;
   readonly terminalPort: ProjectTerminalPort;
+  readonly runtimeAcquisition: ProjectRuntimeAcquisition;
   readonly previews: BrowserPlaygroundPreviewAuthority;
   playgroundScmSnapshot(): PlaygroundScmSnapshot;
   subscribePlaygroundTools(listener: (frame: unknown) => void): () => void;
@@ -695,12 +700,14 @@ export function startBrowserWorkspaceOwner(
   const makeProjectTransport = (
     opened: OpenedProject,
     initialScmSnapshot: PlaygroundScmSnapshot | null = null,
+    acquisition?: ProjectAcquisitionPlan,
   ): ProjectTransport => {
     let disconnected = false;
     let currentPreview: readonly PreviewAdvertisement[] = Object.freeze([]);
     let currentScmSnapshot = initialScmSnapshot;
     const previewListeners = new Set<(entries: readonly PreviewAdvertisement[]) => void>();
     const playgroundToolListeners = new Set<(frame: unknown) => void>();
+    const runtimeAcquisition = createProjectRuntimeAcquisitionController(acquisition);
 
     const assertCurrent = (): void => {
       if (
@@ -729,6 +736,8 @@ export function startBrowserWorkspaceOwner(
           });
         }
       },
+      onFirstMaterializationConsumed: (evidence) =>
+        runtimeAcquisition.acceptFirstMaterializationConsumed(evidence),
       onPreview: (frame) => {
         currentPreview = Object.freeze(
           frame.ports.map((entry): PreviewAdvertisement => {
@@ -819,6 +828,7 @@ export function startBrowserWorkspaceOwner(
       content,
       pty,
       terminalPort,
+      runtimeAcquisition: runtimeAcquisition.runtime,
       previews,
       playgroundScmSnapshot() {
         assertCurrent();
@@ -947,7 +957,7 @@ export function startBrowserWorkspaceOwner(
             terminal,
             entryPath: definition.entryPath,
             args: definition.args,
-            acquisition: companion.acquisition,
+            acquisition: transport.runtimeAcquisition,
           }),
           terminal,
           createTerminal: openTerminal,
@@ -966,7 +976,7 @@ export function startBrowserWorkspaceOwner(
               entryPath: definition.entryPath,
               port: definition.port,
               createPreviewReadiness: previewReadiness,
-              acquisition: companion.acquisition,
+              acquisition: transport.runtimeAcquisition,
             }),
             terminal,
             createTerminal: openTerminal,
@@ -983,7 +993,7 @@ export function startBrowserWorkspaceOwner(
               ownerToken: transport.token,
               port: runtime.port,
               createPreviewReadiness: previewReadiness,
-              acquisition: companion.acquisition,
+              acquisition: transport.runtimeAcquisition,
             }),
             terminal,
             createTerminal: openTerminal,
@@ -1003,6 +1013,7 @@ export function startBrowserWorkspaceOwner(
               terminal,
               entryPath: definition.entryPath,
               args: definition.args,
+              acquisition: transport.runtimeAcquisition,
             }),
             terminal,
             createTerminal: openTerminal,
@@ -1018,11 +1029,13 @@ export function startBrowserWorkspaceOwner(
                     entryPath: definition.entryPath,
                     port: definition.port,
                     createPreviewReadiness: previewReadiness,
+                    acquisition: transport.runtimeAcquisition,
                   })
                 : createViteProjectRuntime({
                     terminal,
                     ownerToken: transport.token,
                     createPreviewReadiness: previewReadiness,
+                    acquisition: transport.runtimeAcquisition,
                   }),
             terminal,
             createTerminal: openTerminal,
@@ -1038,7 +1051,11 @@ export function startBrowserWorkspaceOwner(
     definition: InspectedProjectDefinition<TReady>,
     companion?: OpenedPlaygroundProject,
   ): Promise<ProjectSession<TReady>> => {
-    const transport = makeProjectTransport(opened, companion?.initialScmSnapshot ?? null);
+    const transport = makeProjectTransport(
+      opened,
+      companion?.initialScmSnapshot ?? null,
+      companion?.acquisition,
+    );
     activeProject = transport;
     try {
       const content = await transport.content.ready;

@@ -74,6 +74,7 @@ export type OwnerPackageMutationKind = 'dependency' | 'package-manifest' | 'pack
 export interface OwnerNpmCommandOptions {
   readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
   readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
+  readonly onFirstMaterializationConsumed?: () => void;
 }
 
 export interface OwnerPackageConfig {
@@ -174,7 +175,7 @@ export interface OwnerChildAdmissionReservation {
 }
 
 interface FirstMaterializationState {
-  readonly consumptions: Set<object>;
+  consumed: boolean;
 }
 
 function configKey(root: string, slug: string): string {
@@ -425,22 +426,49 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         );
       }
     },
-    captureDeferredTerminalConsumption: () => {
+    captureDeferredTerminalConsumption: (command) => {
       if (activeProject === null) return null;
-      const key = configKey(activeProject.root, activeProject.slug);
+      const capturedProject = activeProject;
+      const key = configKey(capturedProject.root, capturedProject.slug);
       const state = firstMaterializations.get(key);
       if (!state) return null;
-      const token = Object.freeze({});
-      state.consumptions.add(token);
-      let settled = false;
+      let resolved = false;
       return Object.freeze({
-        reuseTrustedClaim: true as const,
-        settle: (outcome: 'success' | 'failure'): void => {
-          if (settled) throw new Error('deferred terminal consumption already settled');
-          settled = true;
-          state.consumptions.delete(token);
-          if (firstMaterializations.get(key) !== state) return;
-          if (outcome === 'success') firstMaterializations.delete(key);
+        resolve(project: PackageAcquisitionProject) {
+          if (resolved) throw new Error('deferred terminal consumption already resolved');
+          resolved = true;
+          if (
+            normalizePath(project.root) !== normalizePath(capturedProject.root) ||
+            project.slug !== capturedProject.slug ||
+            (firstMaterializations.get(key) !== state && !state.consumed)
+          ) {
+            return null;
+          }
+          const onConsumed = command.onFirstMaterializationConsumed;
+          if (!state.consumed && onConsumed === undefined) {
+            throw new Error(
+              'Deferred first materialization requires an owner consumption acknowledgement',
+            );
+          }
+          let settled = false;
+          return Object.freeze({
+            reuseTrustedClaim: true as const,
+            settle: (outcome: 'success' | 'failure'): void => {
+              if (settled) throw new Error('deferred terminal consumption already settled');
+              settled = true;
+              if (state.consumed || firstMaterializations.get(key) !== state) return;
+              if (outcome === 'success') {
+                if (onConsumed === undefined) {
+                  throw new Error(
+                    'Deferred first materialization lost its owner consumption acknowledgement',
+                  );
+                }
+                onConsumed();
+                state.consumed = true;
+                firstMaterializations.delete(key);
+              }
+            },
+          });
         },
       });
     },
@@ -700,7 +728,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     const materialization = config.firstMaterialization;
     const key = configKey(config.cfg.root, config.slug);
     const firstMaterialization: FirstMaterializationState = {
-      consumptions: new Set(),
+      consumed: false,
     };
     firstMaterializations.set(key, firstMaterialization);
     const prepared = packages.dispatch({
@@ -889,6 +917,11 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         ...(commandOptions.mapInvocationContext === undefined
           ? {}
           : { mapInvocationContext: commandOptions.mapInvocationContext }),
+        ...(commandOptions.onFirstMaterializationConsumed === undefined
+          ? {}
+          : {
+              onFirstMaterializationConsumed: commandOptions.onFirstMaterializationConsumed,
+            }),
       });
       return async (args, context) => {
         const config = configured;

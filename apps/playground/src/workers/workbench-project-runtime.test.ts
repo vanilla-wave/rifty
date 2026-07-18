@@ -815,6 +815,7 @@ describe('Workbench project runtime', () => {
     expect(createNpmCommand).toHaveBeenCalledWith(expect.any(Function), {
       recordMutation,
       mapInvocationContext: expect.any(Function),
+      onFirstMaterializationConsumed: expect.any(Function),
     });
     await h.runtime.close();
   });

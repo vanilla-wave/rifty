@@ -43,6 +43,16 @@ describe('pty-protocol', () => {
     expect(isOwnerToPage(admitted)).toBe(true);
     expect(isPageToOwner(admitted)).toBe(false);
   });
+  it('classifies owner first-materialization evidence as owner→page', () => {
+    const consumed: PtyFrame = {
+      type: 'pty:first-materialization-consumed',
+      sid: 's1',
+      rid: 'r1',
+    };
+
+    expect(isOwnerToPage(consumed)).toBe(true);
+    expect(isPageToOwner(consumed)).toBe(false);
+  });
   it('chunk frames carry Uint8Array data + monotonic seq shape', () => {
     const f: PtyFrame = {
       type: 'pty:chunk',

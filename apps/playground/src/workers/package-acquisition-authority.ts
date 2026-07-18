@@ -83,6 +83,8 @@ export interface TerminalInstallCommand {
   readonly onPromotion?: (result: InstallStampPromotionResult) => void;
   /** Operation-scoped cancellation/progress for post-tree asset readiness. */
   readonly runtimeAssets?: ShadowAssetEnsureOptions;
+  /** Owner-local signal emitted only when deferred first materialization settles. */
+  readonly onFirstMaterializationConsumed?: () => void;
   /** Authority-captured admission fact: a snapshot prepare was already ahead. */
   readonly reuseTrustedClaim?: boolean;
 }
@@ -306,6 +308,11 @@ export interface DeferredTerminalConsumption {
   settle(outcome: 'success' | 'failure'): void;
 }
 
+export interface DeferredTerminalConsumptionCapture {
+  /** Resolve terminal cwd/project only at the FIFO head; mismatch declines consumption. */
+  resolve(project: PackageAcquisitionProject): DeferredTerminalConsumption | null;
+}
+
 export interface PackageAcquisitionAuthorityOptions {
   readonly stamps: InstallStampAuthority;
   /** The owner durability barrier forwarded to every stamp state transition. */
@@ -331,7 +338,9 @@ export interface PackageAcquisitionAuthorityOptions {
   /** Diagnostic sink only. A throwing observer cannot change acquisition. */
   readonly observe?: (event: AcquisitionObservation) => void;
   /** Captures owner first-materialization state when terminal work enters the FIFO. */
-  readonly captureDeferredTerminalConsumption?: () => DeferredTerminalConsumption | null;
+  readonly captureDeferredTerminalConsumption?: (
+    command: TerminalInstallCommand,
+  ) => DeferredTerminalConsumptionCapture | null;
 }
 
 export class PackageAcquisitionError extends Error {
@@ -398,7 +407,7 @@ interface QueueEntry {
   readonly admission: number;
   readonly acquisitionToken: object;
   readonly command: PackageAcquisitionCommand;
-  readonly deferredTerminalConsumption?: DeferredTerminalConsumption;
+  readonly deferredTerminalConsumption?: DeferredTerminalConsumptionCapture;
   readonly resolve: (value: PackageAcquisitionResult) => void;
   readonly reject: (reason: unknown) => void;
 }
@@ -458,7 +467,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   readonly #publishTreeReadiness?: PackageAcquisitionAuthorityOptions['publishTreeReadiness'];
   readonly #resolveTreeGuards?: PackageAcquisitionAuthorityOptions['resolveTreeGuards'];
   readonly #observe?: (event: AcquisitionObservation) => void;
-  readonly #captureDeferredTerminalConsumption?: () => DeferredTerminalConsumption | null;
+  readonly #captureDeferredTerminalConsumption?: PackageAcquisitionAuthorityOptions['captureDeferredTerminalConsumption'];
   readonly #queue: FifoQueueEntry[] = [];
   readonly #terminalActivity = new Map<string, string>();
   readonly #knownProjects = new Map<string, PackageAcquisitionProject>();
@@ -532,18 +541,14 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     const admission = ++this.#lastAdmission;
     const deferredTerminalConsumption =
       command.type === 'terminal-install'
-        ? this.#captureDeferredTerminalConsumption?.()
+        ? this.#captureDeferredTerminalConsumption?.(command)
         : undefined;
-    const admittedCommand =
-      command.type === 'terminal-install' && deferredTerminalConsumption?.reuseTrustedClaim === true
-        ? { ...command, reuseTrustedClaim: true }
-        : command;
     const pending = new Promise<PackageAcquisitionResult>((resolve, reject) => {
       this.#queue.push({
         kind: 'command',
         admission,
         acquisitionToken: Object.freeze({ admission }),
-        command: admittedCommand,
+        command,
         ...(deferredTerminalConsumption ? { deferredTerminalConsumption } : {}),
         resolve: (value) => resolve(value),
         reject,
@@ -576,24 +581,36 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           }
           continue;
         }
-        if (
-          entry.command.type === 'prepare-first-materialization' ||
-          (entry.command.type === 'terminal-install' && entry.command.reuseTrustedClaim === true)
-        ) {
-          await this.#waitForDetachedSettlementsBefore(entry.admission);
-        }
         this.#executingAdmission = entry.admission;
+        let deferredTerminalConsumption: DeferredTerminalConsumption | null = null;
         try {
-          const value = await this.#execute(entry.command, entry.acquisitionToken);
+          let command = entry.command;
+          if (command.type === 'terminal-install') {
+            const project =
+              typeof command.project === 'function' ? command.project() : command.project;
+            deferredTerminalConsumption =
+              entry.deferredTerminalConsumption?.resolve(project) ?? null;
+            command =
+              deferredTerminalConsumption?.reuseTrustedClaim === true
+                ? { ...command, project, reuseTrustedClaim: true }
+                : { ...command, project };
+          }
+          if (
+            command.type === 'prepare-first-materialization' ||
+            (command.type === 'terminal-install' && command.reuseTrustedClaim === true)
+          ) {
+            await this.#waitForDetachedSettlementsBefore(entry.admission);
+          }
+          const value = await this.#execute(command, entry.acquisitionToken);
           try {
-            entry.deferredTerminalConsumption?.settle('success');
+            deferredTerminalConsumption?.settle('success');
             entry.resolve(value);
           } catch (settlementError) {
             entry.reject(settlementError);
           }
         } catch (error) {
           try {
-            entry.deferredTerminalConsumption?.settle('failure');
+            deferredTerminalConsumption?.settle('failure');
             entry.reject(error);
           } catch (settlementError) {
             entry.reject(

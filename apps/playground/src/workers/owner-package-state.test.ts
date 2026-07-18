@@ -109,7 +109,10 @@ async function packageMutationHarness(ownerEpoch: string) {
   const shell = new Shell({ cwd: ROOT });
   shell.registerCommand(
     'npm',
-    state.createNpmCommand(async () => 0, { recordMutation }),
+    state.createNpmCommand(async () => 0, {
+      recordMutation,
+      onFirstMaterializationConsumed: () => {},
+    }),
   );
 
   return { authority, recordMutation, shell, state };
@@ -204,6 +207,35 @@ it('rejects a missing consumption acknowledgement and keeps deferred state retry
 
   expect.soft((await retryShell.run('npm install')).exitCode).toBe(0);
   expect.soft(consumed).toHaveBeenCalledTimes(1);
+  expect.soft((await retryShell.run('npm install')).exitCode).toBe(0);
+  expect(consumed).toHaveBeenCalledTimes(1);
+});
+
+it('keeps deferred state retryable when publishing consumption evidence throws', async () => {
+  const { state } = await packageMutationHarness(
+    'owner-package-first-materialization-publish-failure-test',
+  );
+  const failedPublish = new Error('project transport rejected consumption evidence');
+  const firstShell = new Shell({ cwd: ROOT });
+  firstShell.registerCommand(
+    'npm',
+    state.createNpmCommand(async () => 0, {
+      onFirstMaterializationConsumed: () => {
+        throw failedPublish;
+      },
+    }),
+  );
+
+  const failed = await firstShell.run('npm install');
+  expect.soft(failed.exitCode).toBe(1);
+  expect.soft(failed.stderr).toContain(failedPublish.message);
+
+  const consumed = vi.fn();
+  const retryShell = new Shell({ cwd: ROOT });
+  retryShell.registerCommand(
+    'npm',
+    state.createNpmCommand(async () => 0, { onFirstMaterializationConsumed: consumed }),
+  );
   expect.soft((await retryShell.run('npm install')).exitCode).toBe(0);
   expect(consumed).toHaveBeenCalledTimes(1);
 });
