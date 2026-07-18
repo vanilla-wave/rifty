@@ -76,6 +76,7 @@ afterEach(() => {
 
 const PORT = 59126;
 const enc = new TextEncoder();
+const PACKAGE_LOCK = '{"name":"p1","lockfileVersion":3,"requires":true,"packages":{}}\n';
 
 /** Seed a project tree at /projects/<id> with a marker file (mirrors the test convention). */
 function seedTree(fs: MemoryFsSync, id: string, marker: string): void {
@@ -205,6 +206,7 @@ describe('owner index-delete (ADR-0165 §56 durable delete)', () => {
     const root = rootForId('p1');
     const packageJsonText = '{"name":"p1","dependencies":{"vite":"^5.4.0"}}\n';
     fsSync.writeFileSync(`${root}/package.json`, enc.encode(packageJsonText));
+    fsSync.writeFileSync(`${root}/package-lock.json`, enc.encode(PACKAGE_LOCK));
     fsSync.mkdirSync(`${root}/node_modules/vite`, { recursive: true });
     fsSync.writeFileSync(`${root}/node_modules/vite/package.json`, enc.encode('{}\n'));
     writeIndex(fsSync, '/', {

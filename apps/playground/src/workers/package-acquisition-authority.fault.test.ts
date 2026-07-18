@@ -24,6 +24,20 @@ const PROJECT: PackageAcquisitionProject = {
   identity: installArtifactIdentity,
 };
 
+function resultLockfile(): InstallResult['lockfile'] {
+  return {
+    name: 'app',
+    version: '0.0.0',
+    lockfileVersion: 3,
+    requires: true,
+    packages: {},
+  };
+}
+
+function resultLockfileText(): string {
+  return `${JSON.stringify(resultLockfile(), null, 2)}\n`;
+}
+
 async function vfsHarness(): Promise<MemoryVfs> {
   const vfs = new MemoryVfs();
   await vfs.mkdir(ROOT, { recursive: true });
@@ -36,8 +50,15 @@ async function seedTree(vfs: MemoryVfs): Promise<void> {
   await vfs.writeFile(`${ROOT}/node_modules/vite/package.json`, '{}\n');
 }
 
-async function trustTree(vfs: MemoryVfs, stamps: InstallStampAuthority): Promise<void> {
+async function seedInstalledTree(vfs: MemoryVfs): Promise<InstallResult> {
+  const installed = result();
   await seedTree(vfs);
+  await vfs.writeFile(`${ROOT}/package-lock.json`, resultLockfileText());
+  return installed;
+}
+
+async function trustTree(vfs: MemoryVfs, stamps: InstallStampAuthority): Promise<void> {
+  await seedInstalledTree(vfs);
   const claim = await stamps.demote(PROJECT);
   await stamps.promote(
     { ...PROJECT, packageJsonText: PACKAGE_JSON },
@@ -48,13 +69,7 @@ async function trustTree(vfs: MemoryVfs, stamps: InstallStampAuthority): Promise
 function result(): InstallResult {
   return {
     packages: [{ name: 'vite', version: '5.4.21', dependencies: {}, files: {} }],
-    lockfile: {
-      name: 'app',
-      version: '0.0.0',
-      lockfileVersion: 3,
-      requires: true,
-      packages: {},
-    },
+    lockfile: resultLockfile(),
     conflicts: [],
     provenance: {
       resolution: 'metadata',
@@ -173,6 +188,7 @@ describe('package-acquisition authority faults', () => {
     };
     await vfs.mkdir(`${otherRoot}/node_modules/pkg`, { recursive: true });
     await vfs.writeFile(`${otherRoot}/package.json`, PACKAGE_JSON);
+    await vfs.writeFile(`${otherRoot}/package-lock.json`, resultLockfileText());
     const stamps = createInstallStampAuthority({ vfs });
     await trustTree(vfs, stamps);
     const otherClaim = await stamps.demote(otherProject);
@@ -250,8 +266,8 @@ describe('package-acquisition authority faults', () => {
       },
       adapter: adapterWith({
         install: async () => {
-          await seedTree(vfs);
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          const installed = await seedInstalledTree(vfs);
+          return { result: installed, packageJsonText: PACKAGE_JSON };
         },
       }),
     });
@@ -296,12 +312,7 @@ describe('package-acquisition authority faults', () => {
       },
       adapter: adapterWith({
         install: async () => {
-          const installed = result();
-          await seedTree(vfs);
-          await vfs.writeFile(
-            `${ROOT}/package-lock.json`,
-            `${JSON.stringify(installed.lockfile, null, 2)}\n`,
-          );
+          const installed = await seedInstalledTree(vfs);
           return { result: installed, packageJsonText: PACKAGE_JSON };
         },
       }),
@@ -369,8 +380,8 @@ describe('package-acquisition authority faults', () => {
       },
       adapter: adapterWith({
         install: async () => {
-          await seedTree(vfs);
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          const installed = await seedInstalledTree(vfs);
+          return { result: installed, packageJsonText: PACKAGE_JSON };
         },
       }),
     });
@@ -569,8 +580,8 @@ describe('package-acquisition authority faults', () => {
             return { status: 'ready', packages: 1, apply: async () => {} };
           },
           install: async () => {
-            await seedTree(vfs);
-            return { result: result(), packageJsonText: PACKAGE_JSON };
+            const installed = await seedInstalledTree(vfs);
+            return { result: installed, packageJsonText: PACKAGE_JSON };
           },
         }),
       });
@@ -618,8 +629,8 @@ describe('package-acquisition authority faults', () => {
         }),
         install: async () => {
           partialSeenByInstall = await vfs.exists(partial);
-          await seedTree(vfs);
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          const installed = await seedInstalledTree(vfs);
+          return { result: installed, packageJsonText: PACKAGE_JSON };
         },
       }),
     });
@@ -703,8 +714,8 @@ describe('package-acquisition authority faults', () => {
         },
         install: async () => {
           calls.push('install');
-          await seedTree(vfs);
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          const installed = await seedInstalledTree(vfs);
+          return { result: installed, packageJsonText: PACKAGE_JSON };
         },
       }),
     });

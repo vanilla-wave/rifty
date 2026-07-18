@@ -18,6 +18,7 @@ const PACKAGE_JSON = `${JSON.stringify({
   name: 'app',
   dependencies: { vite: '^5.4.0' },
 })}\n`;
+const enc = new TextEncoder();
 
 const PROJECT: PackageAcquisitionProject = {
   projectId: 'app',
@@ -30,6 +31,20 @@ interface Deferred<T> {
   readonly promise: Promise<T>;
   readonly resolve: (value: T) => void;
   readonly reject: (reason: unknown) => void;
+}
+
+function resultLockfile(): InstallResult['lockfile'] {
+  return {
+    name: 'app',
+    version: '0.0.0',
+    lockfileVersion: 3,
+    requires: true,
+    packages: {},
+  };
+}
+
+function resultLockfileText(): string {
+  return `${JSON.stringify(resultLockfile(), null, 2)}\n`;
 }
 
 function deferred<T>(): Deferred<T> {
@@ -51,13 +66,7 @@ function installResult(
 ): InstallResult {
   return {
     packages: [{ name: 'vite', version: '5.4.21', dependencies: {}, files: {} }],
-    lockfile: {
-      name: 'app',
-      version: '0.0.0',
-      lockfileVersion: 3,
-      requires: true,
-      packages: {},
-    },
+    lockfile: resultLockfile(),
     conflicts: [],
     provenance: {
       resolution: options.resolution ?? 'metadata',
@@ -76,6 +85,7 @@ async function seededVfs(): Promise<MemoryVfs> {
 
 async function writeInstalledTree(vfs: MemoryVfs, packageJsonText = PACKAGE_JSON): Promise<void> {
   await vfs.writeFile(`${ROOT}/package.json`, packageJsonText);
+  await vfs.writeFile(`${ROOT}/package-lock.json`, resultLockfileText());
   await vfs.mkdir(`${ROOT}/node_modules/vite`, { recursive: true });
   await vfs.writeFile(`${ROOT}/node_modules/vite/package.json`, '{}\n');
 }
@@ -106,7 +116,8 @@ describe('package-acquisition authority', () => {
   it('opens a real Owner tree-replacement window after demotion before snapshot restore', async () => {
     const pair = createMemoryFs();
     pair.fsSync.mkdirSync(`${ROOT}/node_modules/old`, { recursive: true });
-    pair.fsSync.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(PACKAGE_JSON));
+    pair.fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(PACKAGE_JSON));
+    pair.fsSync.writeFileSync(`${ROOT}/package-lock.json`, enc.encode(resultLockfileText()));
     const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(
       pair.fsSync,
       { ownerEpoch: 'owner-snapshot-replacement' },
@@ -136,6 +147,10 @@ describe('package-acquisition authority', () => {
           status: 'ready',
           packages: 1,
           apply: async () => {
+            owner.writeFileSync(
+              `${project.root}/package-lock.json`,
+              enc.encode(resultLockfileText()),
+            );
             owner.mkdirSync(`${project.root}/node_modules/vite`, { recursive: true });
             owner.writeFileSync(
               `${project.root}/node_modules/vite/package.json`,
@@ -167,7 +182,8 @@ describe('package-acquisition authority', () => {
   it('opens the same real Owner replacement window before a terminal full install', async () => {
     const pair = createMemoryFs();
     pair.fsSync.mkdirSync(`${ROOT}/node_modules/old`, { recursive: true });
-    pair.fsSync.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(PACKAGE_JSON));
+    pair.fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(PACKAGE_JSON));
+    pair.fsSync.writeFileSync(`${ROOT}/package-lock.json`, enc.encode(resultLockfileText()));
     const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(
       pair.fsSync,
       { ownerEpoch: 'owner-terminal-replacement' },
@@ -187,9 +203,10 @@ describe('package-acquisition authority', () => {
       adapter: adapterWith({
         install: async (request) => {
           clearProjectTree(owner, request.project.root);
+          owner.writeFileSync(`${request.project.root}/package.json`, enc.encode(PACKAGE_JSON));
           owner.writeFileSync(
-            `${request.project.root}/package.json`,
-            new TextEncoder().encode(PACKAGE_JSON),
+            `${request.project.root}/package-lock.json`,
+            enc.encode(resultLockfileText()),
           );
           owner.mkdirSync(`${request.project.root}/node_modules/vite`, { recursive: true });
           owner.writeFileSync(
@@ -409,6 +426,9 @@ describe('package-acquisition authority', () => {
     await vfs.writeFile(`${ROOT}/package.json`, PACKAGE_JSON);
     await vfs.writeFile(`${middleRoot}/package.json`, middlePackageJson);
     await vfs.writeFile(`${nestedRoot}/package.json`, nestedPackageJson);
+    await vfs.writeFile(`${ROOT}/package-lock.json`, resultLockfileText());
+    await vfs.writeFile(`${middleRoot}/package-lock.json`, resultLockfileText());
+    await vfs.writeFile(`${nestedRoot}/package-lock.json`, resultLockfileText());
     const stamps = createInstallStampAuthority({ vfs });
     const middleClaim = await stamps.demote(middleProject);
     await stamps.promote(
@@ -428,6 +448,7 @@ describe('package-acquisition authority', () => {
           calls.push(`install:${request.project.root}`);
           await vfs.mkdir(`${nestedRoot}/node_modules/vite`, { recursive: true });
           await vfs.writeFile(`${nestedRoot}/node_modules/vite/package.json`, '{}\n');
+          await vfs.writeFile(`${nestedRoot}/package-lock.json`, resultLockfileText());
           return { result: installResult('cache'), packageJsonText: nestedPackageJson };
         },
       }),
@@ -551,6 +572,8 @@ describe('package-acquisition authority', () => {
     await vfs.mkdir(`${otherRoot}/node_modules/pkg`, { recursive: true });
     await vfs.writeFile(`${ROOT}/package.json`, PACKAGE_JSON);
     await vfs.writeFile(`${otherRoot}/package.json`, PACKAGE_JSON);
+    await vfs.writeFile(`${ROOT}/package-lock.json`, resultLockfileText());
+    await vfs.writeFile(`${otherRoot}/package-lock.json`, resultLockfileText());
     const stamps = createInstallStampAuthority({ vfs });
     for (const project of [PROJECT, otherProject]) {
       const claim = await stamps.demote(project);
@@ -597,6 +620,8 @@ describe('package-acquisition authority', () => {
     await vfs.mkdir(`${nestedRoot}/node_modules/vite`, { recursive: true });
     await vfs.writeFile(`${ROOT}/package.json`, PACKAGE_JSON);
     await vfs.writeFile(`${nestedRoot}/package.json`, nestedPackageJson);
+    await vfs.writeFile(`${ROOT}/package-lock.json`, resultLockfileText());
+    await vfs.writeFile(`${nestedRoot}/package-lock.json`, resultLockfileText());
     const stamps = createInstallStampAuthority({ vfs });
     const nestedClaim = await stamps.demote(nestedProject);
     await stamps.promote(
@@ -651,6 +676,7 @@ describe('package-acquisition authority', () => {
     await vfs.mkdir(`${nestedRoot}/node_modules/pkg`, { recursive: true });
     await vfs.writeFile(`${ROOT}/package.json`, PACKAGE_JSON);
     await vfs.writeFile(`${nestedRoot}/package.json`, nestedPackageJson);
+    await vfs.writeFile(`${nestedRoot}/package-lock.json`, resultLockfileText());
     const stamps = createInstallStampAuthority({ vfs });
     const nestedClaim = await stamps.demote(nestedProject);
     let releaseProof!: (report: { failures: []; total: 0 }) => void;
@@ -855,6 +881,7 @@ describe('package-acquisition authority', () => {
           }
           await vfs.mkdir(`${request.project.root}/node_modules/vite`, { recursive: true });
           await vfs.writeFile(`${request.project.root}/node_modules/vite/package.json`, '{}\n');
+          await vfs.writeFile(`${request.project.root}/package-lock.json`, resultLockfileText());
           return {
             result: installResult('registry'),
             packageJsonText: request.project.root === ROOT ? PACKAGE_JSON : secondPackageJson,

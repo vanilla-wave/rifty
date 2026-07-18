@@ -30,6 +30,7 @@ import {
 
 const ROOT = '/workspace';
 const PACKAGE_JSON = '{"name":"app","dependencies":{"pkg":"1.0.0"}}\n';
+const PACKAGE_LOCK = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const PROJECT: PackageAcquisitionProject = {
@@ -138,6 +139,7 @@ async function harness(
   const { vfs, fsSync } = createMemoryFs();
   fsSync.mkdirSync(`${ROOT}/node_modules/pkg`, { recursive: true });
   fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(PACKAGE_JSON));
+  fsSync.writeFileSync(`${ROOT}/package-lock.json`, enc.encode(PACKAGE_LOCK));
   fsSync.writeFileSync(`${ROOT}/node_modules/pkg/index.js`, enc.encode('trusted'));
   fsSync.writeFileSync(`${ROOT}/before.txt`, enc.encode('before'));
   const {
