@@ -266,6 +266,18 @@ post-cutover item. This changes delivery scope only. The alias item's draft-to-
 ready gate still owns the delegate/lockfile provenance decision and requires an
 ADR before implementation; the runtime-asset architecture below is unchanged.
 
+Correction 2026-07-18: npm-client remains the sole v0 producer and public home
+of the applied-substitution record/planner, but the record is installer-neutral
+value data and contains no resolver node, placement, parser object, callback,
+VFS handle, or current alias redirect target. Asset source comes from the exact
+catalog descriptor; delegate materialization/lockfile provenance remains the
+alias-retirement ADR's decision. Workbench consumes the plan through one
+package-private package-acquisition producer seam and never parses a lockfile
+for shadow planning. A later native package-manager direction may replace only
+the installer-side producer/composition after its own recorded decision while
+retaining the plan/receipt, manager/store, owner readiness/epoch/admission, and
+child runtime-reader interfaces. v0 adds no hypothetical producer SPI.
+
 ~~~text
 catalog + exact planner -> manager -> MessagePort adapter --------+
                               \-> private storage + inspect/clear -+

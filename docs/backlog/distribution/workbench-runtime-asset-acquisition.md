@@ -142,11 +142,18 @@ or terminal close aborts only its waiter; it does not abort a manager flight
 still shared by another waiter. The source retains ADR-0201's no-progress
 bound; Workbench adds no total cold-fetch deadline.
 
-Fresh install uses the planner output and receipt from its exact applied
-substitution trace. Trusted-existing and snapshot paths re-read the stored
-lockfile and run the same npm-client lockfile-facts planner. Stamp package
-count, installed-name coincidence, app catalogs, project definition identity,
-and terminal text never reconstruct a plan.
+Every path obtains its exact plan and optional matching receipt through one
+package-private package-acquisition producer seam before entering readiness.
+Workbench never parses a lockfile for shadow planning or calls the planner.
+The current npm-client composition has two producer paths: fresh install returns
+the plan/receipt from its exact applied-substitution record; trusted-existing
+and snapshot replay give exact stored lockfile bytes to npm-client's
+lockfile-facts producer. Both return the same installer-neutral value contract.
+A later native package-manager direction replaces this producer-side
+composition, not the plan/receipt, manager/store, owner
+readiness/epoch/admission, or child runtime reader. Stamp package count,
+installed-name coincidence, app catalogs, project definition identity, and
+terminal text never reconstruct a plan. No public producer interface is added.
 
 ## Owner-private attested tree epoch
 
@@ -396,7 +403,7 @@ session registration, admission fencing, and FIFO settlement.
 | `torn-state` | typed asset failure followed by finalizer/promotion failure | manifest honesty; no false ready or tree claim |
 | `torn-state` | close during ensure/reservation/child start | all waiters, sessions, children, and FIFO settle exactly once |
 | `concurrent-same-key` | open/terminal/children demand one required set | shared manager flight; independent waiter/session settlement |
-| `provenance-lie` | plan inferred from count, catalog, text, or edited lockfile | forbidden; trace or exact stored lockfile facts only |
+| `provenance-lie` | Workbench infers a plan from count, catalog, text, or edited lockfile | forbidden; only the producer's exact applied-evidence value enters readiness |
 | `provenance-lie` | project/root changes while prior epoch is ready | exact `{root,slug}` mismatch is unavailable |
 | `lossy-aggregate` | package or asset set changes under same count | exact lockfile/set digests select the new plan |
 | `lossy-aggregate` | spawn replans after concurrent manifest edit | forbidden; reservation's attested epoch is sole source |
@@ -414,6 +421,9 @@ session registration, admission fencing, and FIFO settlement.
   blocker owns them.
 - Catalog/plan construction, manager/source algorithms, and MessagePort wire
   implementation; consume their ready interfaces without duplicating them.
+- Native package-manager adoption or a public plan-producer interface; this
+  item defines only the package-private acquisition seam and current npm-client
+  composition.
 - Child-side capability decoding, runtime-reader injection, Vite consumption,
   removing `deployment.wasm.esbuild`, host imports/env seams, or bumping
   `rifty.node-entry/v1` to v2. The deployment-cutover item owns that atomic
@@ -430,6 +440,9 @@ session registration, admission fencing, and FIFO settlement.
   moves it mechanically and does not layer a second interface.
 - `OwnerPackageState` owns the epoch; `PackageAcquisitionAuthority` owns all
   ordering. Runtimes and child spawners consume reservations only.
+- The package-acquisition producer owns fresh/replay planning. Workbench accepts
+  only its installer-neutral exact value and never parses package-manager
+  lockfiles for shadow planning.
 - Install completion means exact runtime-asset readiness. Generic/reusable open
   pays before publication; ADR-0278 deferred first materialization pays visibly
   at first run.

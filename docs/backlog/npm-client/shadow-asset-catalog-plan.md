@@ -17,6 +17,11 @@ This is the conflict-free first implementation slice. It changes only
 `tools/shadow-registry` and `packages/npm-client`; no Worker, Workbench,
 Playground, storage, or runtime bootstrap file participates.
 
+The record/plan value shape is installer-neutral, not a permanent interface to
+npm-client's resolver implementation. npm-client remains the sole v0 producer
+and public home; a second real installer requires its own decision rather
+than a speculative producer SPI here.
+
 ## Acceptance
 
 - Shadow registry exports a builtin, clone-safe declarative catalog with exact
@@ -29,13 +34,20 @@ Playground, storage, or runtime bootstrap file participates.
   `esbuild-runtime-policy.json` plus the exact SRI-verified
   `esbuild-wasm@0.28.0` tarball. Caps equal the exact compressed tarball and
   decompressed archive byte lengths; they are measured/generated, never guessed.
-- One typed pre-mutation trace records only substitutions actually applied:
-  catalog id/digest, public name, requested range, resolved exact public
-  version, substitution id, runtime-adapter id, source target, and whether the
-  override was builtin. Text rendered by `onSubstitution` is presentation and
-  never planner input.
+- One typed, clone-safe, installer-neutral pre-mutation record contains only
+  substitutions actually applied: catalog id/digest, public name, requested
+  range, resolved exact public version, substitution id, runtime-adapter id,
+  and whether the substitution was builtin. It contains no redirect/source
+  target, resolver node, placement, mutable manifest/lockfile parser object,
+  callback, or VFS handle. Asset source coordinates come only from the exact
+  catalog descriptor. Text rendered by `onSubstitution`, including the current
+  alias target, is presentation and never planner input.
+- npm-client's fresh-resolution and exact-lockfile paths are the only v0
+  producers. Each converts its internal facts to the same record before
+  planning; planner tests consume that value interface rather than either
+  producer's internal types.
 - npm-client exports a builtin-only pure planner. It accepts the typed exact
-  trace, validates catalog/source conflicts, resolves only exact version maps,
+  record, validates catalog/source conflicts, resolves only exact version maps,
   sorts/deduplicates descriptors, and returns one deeply frozen
   `ShadowAssetPlan {requiredSetDigest, substitutions, assets}`. Empty input
   returns the canonical empty plan.
@@ -81,17 +93,21 @@ Playground, storage, or runtime bootstrap file participates.
 | `corrupt-input` | malformed catalog/member/hash/SRI/size | construction throws before plan publication |
 | `lossy-aggregate` | same count, changed descriptor/pin/order | canonical digest changes exactly for semantic input |
 | `provenance-lie` | explicit override/direct install resembles builtin target | no builtin applied-substitution claim |
-| `sibling-drift` | fresh and lockfile planners diverge | one planner over the same typed exact facts |
+| `sibling-drift` | fresh/replay producer shape or planner diverges | one value record over the same exact facts; no internal type crosses the seam |
 
 ## Out of scope
 
 - Fetch, extraction, VFS persistence, receipts, progress, or MessagePort.
 - Workbench/owner composition, install stamp v4, and runtime capability wiring.
 - External catalogs or runtime-adapter functions.
+- Native npm/pnpm/yarn adoption or a public substitution-record producer SPI.
+- Delegate materialization and lockfile provenance shape; alias retirement and
+  its required ADR own that decision.
 
 ## Decisions
 
 - Catalog data is declarative; executable adaptation stays owner-bundled code.
-- The exact applied-substitution trace, never installed-name coincidence or
-  terminal text, is the planning authority.
+- The installer-neutral exact applied-substitution record, never
+  installed-name coincidence or terminal text, is the planning authority;
+  npm-client is its sole v0 producer, not part of its value shape.
 - Asset-set and dependency-tree identities remain independent.

@@ -288,6 +288,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0249 npm-client-specific applied-substitution-record clause | 0249 note 2026-07-18 | record/plan values exclude resolver, lockfile-schema, and redirect-target internals; only installer-side producer/composition changes for a future package manager, with no speculative producer SPI |
 | 0249 alias-retirement-outside-delivery clause | 0249 note 2026-07-17 | measured alias retirement is an epic-closing post-cutover item; runtime-asset contract unchanged |
 | 0249 post-extraction-only delivery-order clause | 0249 note 2026-07-17 | private storage and acquisition land on current app-local owners before their mechanical extraction; runtime/deployment cutover stays post-extraction |
 | 0263 post-extraction-only runtime-assets sequencing clause | 0249 / note 2026-07-17 | storage/acquisition land on app-local owners before extraction; host-field/runtime-reader cutover remains post-extraction |

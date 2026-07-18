@@ -18,6 +18,14 @@ through ADR-0266's URL-entry capability (ADR-0249). Receipts distinguish
 `opfs-persisted`, `opfs-best-effort`, and `memory-session`; the latter two make
 no stronger reload claim.
 
+The applied-substitution record is installer-neutral value data. npm-client is
+the sole v0 producer; resolver nodes, placements, redirect targets, and lockfile
+parser objects never enter the plan. A future native package-manager direction
+may replace the installer-side producer/composition after its own recorded
+decision and must prove what was actually applied. The plan/receipt,
+manager/store, owner readiness/epoch/admission, and child runtime reader stay
+unchanged. This epic adds no hypothetical producer SPI.
+
 Executed bytes gain npm provenance, esbuild WASM leaves deployment config, and
 delegate materialization removes the unused `@esbuild/wasi-preview1` alias
 payload from cold install. Opt-in Eddy batches only the missing applied set and
@@ -104,8 +112,9 @@ inheritance or a host-esbuild fallback remains forbidden.
 ## Items
 
 - `npm-client/shadow-asset-catalog-plan` — clone-safe builtin descriptors,
-  typed applied-substitution trace, exact planner, and independent tree/set
-  identities (ready; unblocked).
+  installer-neutral typed applied-substitution record with npm-client as its
+  sole v0 producer, exact planner, and independent tree/set identities (ready;
+  unblocked).
 - `npm-client/shadow-asset-manager` — path-neutral deep manager, verified
   store/publish/receipts, STD transport, and structured install outcome (ready;
   blocked by catalog/plan).
