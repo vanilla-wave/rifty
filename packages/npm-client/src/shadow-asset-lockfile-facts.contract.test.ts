@@ -142,6 +142,118 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
     );
   });
 
+  it.each([
+    [
+      'public package key',
+      {
+        '': { version: '1.0.0', dependencies: {} },
+        'node_modules/esbuild': { version: '0.28.0', dependencies: {} },
+      },
+    ],
+    [
+      'baked-target package key',
+      {
+        '': { version: '1.0.0', dependencies: {} },
+        'node_modules/@esbuild/wasi-preview1': { version: '0.28.0', dependencies: {} },
+      },
+    ],
+    [
+      'public dependency edge',
+      { '': { version: '1.0.0', dependencies: { esbuild: '0.28.0' } } },
+    ],
+    [
+      'baked-target dependency edge',
+      {
+        '': {
+          version: '1.0.0',
+          dependencies: { '@esbuild/wasi-preview1': '0.28.0' },
+        },
+      },
+    ],
+  ])('treats a legacy %s as provenance-ambiguous', (_label, packages) => {
+    const bytes = enc.encode(
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages,
+      }),
+    );
+
+    let thrown: unknown;
+    try {
+      shadowAssetPlanFromLockfileBytes(bytes);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(NotImplementedError);
+    expect((thrown as NotImplementedError).feature).toBe(
+      'npm-client.lockfile.shadowSubstitutionFacts',
+    );
+  });
+
+  it('rejects a non-canonical applied trace instead of silently deduplicating it', async () => {
+    const installed = await installEsbuild();
+    const trace = installed.lockfile.rifty?.shadowSubstitutions;
+    const first = trace?.applied[0];
+    if (trace === undefined || first === undefined) {
+      throw new Error('fixture expected one applied shadow substitution');
+    }
+    const lockfile = {
+      ...installed.lockfile,
+      rifty: {
+        shadowSubstitutions: {
+          ...trace,
+          applied: [first, first],
+        },
+      },
+    };
+
+    expect(() => shadowAssetPlanFromLockfileBytes(enc.encode(JSON.stringify(lockfile)))).toThrow(
+      /canonical/i,
+    );
+  });
+
+  it.each([
+    [
+      'missing top-level identity',
+      {
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: { '': { version: '1.0.0', dependencies: {} } },
+      },
+    ],
+    [
+      'missing root package entry',
+      {
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: { 'node_modules/vite': { version: '8.0.16', dependencies: {} } },
+      },
+    ],
+    [
+      'malformed unrelated package entry',
+      {
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': { version: '1.0.0', dependencies: {} },
+          'node_modules/vite': { dependencies: {} },
+        },
+      },
+    ],
+  ])('rejects a structurally invalid v3 lockfile: %s', (_label, lockfile) => {
+    expect(() => shadowAssetPlanFromLockfileBytes(enc.encode(JSON.stringify(lockfile)))).toThrow(
+      /v3 lockfile/i,
+    );
+  });
+
   it('returns the canonical empty plan for an asset-free v3 lockfile', () => {
     const bytes = enc.encode(
       JSON.stringify({
