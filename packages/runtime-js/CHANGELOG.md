@@ -32,9 +32,10 @@
 - **Node-compatible `require.extensions` suffix dispatch (ADR-0294).** One
   shared table now publishes loading state before accessor reads, selects the
   longest registered basename suffix, and falls back to the current `.js` hook.
-  Hook invocation ignores a poisoned `.call`, replacements own JSON/text, and
-  the replaceable `.node` default loudly rejects native addons. Exact thrown
-  values, retry cleanup, and `_compile(source, filename)` anchoring match Node.
+  Selection, validation, and invocation ignore poisoned guest primordials;
+  replacements own JSON/text, and the replaceable `.node` default loudly
+  rejects native addons. Exact thrown values, retry cleanup, and
+  `_compile(source, filename)` anchoring match Node.
 
 - **POSIX path/file-URL conversion now has one runtime owner.** `node:url`
   resolves relative paths against runtime cwd, preserves trailing separators,

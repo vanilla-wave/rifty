@@ -21,7 +21,7 @@ non-leading dot, selecting the longest truthy registered suffix; otherwise it
 invokes the current `.js` hook. Fault classes: `sibling-drift` (one public
 table, separate hard-coded dispatcher), `observable-order` (table reads before
 loading-cache publication), and `frozen-assumption` (calling through a hook's
-user-owned `.call` property).
+user-owned `.call` property or guest-mutated selection/error primordials).
 
 ## Decision
 
@@ -40,8 +40,9 @@ user-owned `.call` property).
 - Resolver-owned text modules keep raw-text behavior only while the loader-owned
   default `.js` is the unregistered-suffix fallback. Replacing `.js` owns text.
 - A registered hook runs before built-in JSON or text handling, with the shared
-  table as `this`. Invocation never reads the hook's own `.call`; non-functions
-  fail loudly.
+  table as `this`. Selection, validation, and invocation use captured runtime
+  primordials; guest mutations cannot replace suffix matching or loader errors.
+  Non-functions fail loudly.
 - The loader-owned default `.js` hook compiles resolver source. Its existing
   synchronous TypeScript/JSX ceiling remains loud only when no suffix hook is
   registered and that default is still selected. Replacing `.js` gives the
