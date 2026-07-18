@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
-import { WorkbenchOriginOccupiedError } from '../workbench/public.ts';
 import type { OpenPlaygroundWorkbench, PlaygroundWorkbench } from '../workbench/playground.ts';
+import { WorkbenchOriginOccupiedError } from '../workbench/public.ts';
 import {
   createOpenPlaygroundAppWorkbench,
   playgroundWorkbenchOptions,
