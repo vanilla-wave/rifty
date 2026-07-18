@@ -578,6 +578,36 @@ describe('ShadowAssetManager', () => {
     expect(await manager.admin.inspectUsage()).toMatchObject({ readySetCount: 0 });
   });
 
+  it('does not reuse warm provenance for a different member contract with the same object hash', async () => {
+    const { plan, tgz } = fixture();
+    const assetSource = source(tgz);
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: assetSource,
+    });
+    await manager.installer.ensure(plan);
+    const assets: ShadowAssetPlan['assets'] = [
+      { ...plan.assets[0]!, member: 'package/missing.wasm' },
+    ];
+    const missingMember: ShadowAssetPlan = {
+      requiredSetDigest: canonicalShadowDigest({
+        schema: 1,
+        substitutions: plan.substitutions,
+        assets,
+      }),
+      substitutions: plan.substitutions,
+      assets,
+    };
+
+    await expect(manager.installer.ensure(missingMember)).rejects.toMatchObject({
+      code: 'ESHADOWASSET',
+      assetId: 'runtime',
+      phase: 'verify',
+    });
+    expect(await manager.installer.inspectReceipt(missingMember.requiredSetDigest)).toBeNull();
+    expect(assetSource.acquire).toHaveBeenCalledTimes(2);
+  });
+
   it('preserves per-descriptor fill provenance for cap-distinct contracts sharing one hash', async () => {
     const { plan, tgz } = fixture();
     const descriptor = plan.assets[0]!;
@@ -619,6 +649,79 @@ describe('ShadowAssetManager', () => {
     ]);
     expect(acquire).toHaveBeenCalledTimes(1);
     expect(acquire.mock.calls[0]?.[0]).toHaveLength(2);
+  });
+
+  it('publishes one hash-keyed object across concurrent cap-distinct sets', async () => {
+    const { plan, tgz } = fixture();
+    const descriptor = plan.assets[0]!;
+    const siblingAssets: ShadowAssetPlan['assets'] = [
+      { ...descriptor, maxTarballBytes: descriptor.maxTarballBytes + 1 },
+    ];
+    const sibling: ShadowAssetPlan = {
+      requiredSetDigest: canonicalShadowDigest({
+        schema: 1,
+        substitutions: plan.substitutions,
+        assets: siblingAssets,
+      }),
+      substitutions: plan.substitutions,
+      assets: siblingAssets,
+    };
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let admitted!: () => void;
+    const bothAdmitted = new Promise<void>((resolve) => {
+      admitted = resolve;
+    });
+    let acquisitions = 0;
+    const acquire = vi.fn(async (requests: readonly ShadowAssetSourceRequest[]) => {
+      acquisitions += 1;
+      if (acquisitions === 2) admitted();
+      await gate;
+      return requests.map((request) => ({
+        request,
+        bytes: tgz.slice(),
+        fillTransport: 'standard' as const,
+        fillCache:
+          request.maxTarballBytes === descriptor.maxTarballBytes
+            ? ('network' as const)
+            : ('tarball' as const),
+      }));
+    });
+    const inner = createMemoryShadowAssetStorage();
+    let objectWrites = 0;
+    const storage: ShadowAssetStorage = {
+      storageClass: inner.storageClass,
+      read: (entry) => inner.read(entry),
+      write: async (entry, bytes) => {
+        if (entry.kind === 'object') objectWrites += 1;
+        await inner.write(entry, bytes);
+      },
+      remove: (entry) => inner.remove(entry),
+      inspect: () => inner.inspect(),
+      clear: () => inner.clear(),
+      close: () => inner.close(),
+    };
+    const manager = createShadowAssetManager({
+      storage,
+      source: { acquire, close: async () => undefined },
+    });
+
+    const first = manager.installer.ensure(plan);
+    const second = manager.installer.ensure(sibling);
+    await bothAdmitted;
+    release();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult).toMatchObject({
+      kind: 'ready',
+      receipt: { assets: [{ fillCache: 'network' }] },
+    });
+    expect(secondResult).toMatchObject({
+      kind: 'ready',
+      receipt: { assets: [{ fillCache: 'tarball' }] },
+    });
+    expect(objectWrites).toBe(1);
   });
 
   it('replays and forwards object-flight progress to sibling sets and runtime readers', async () => {
