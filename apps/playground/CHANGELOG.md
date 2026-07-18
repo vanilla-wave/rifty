@@ -13,6 +13,8 @@
 
 ### Added (app-local Workbench contract)
 
+- Package acquisition now joins exact trusted/snapshot lockfile evidence and
+  fresh install evidence to runtime-asset readiness on its existing FIFO.
 - Workbench runtime assets now use one owner-private semantic cache with honest
   OPFS retention classification, scope-aware durability, exact public
   inspection/clear recovery, sanitized failures, and root-serialized lifecycle.

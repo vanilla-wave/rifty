@@ -1,4 +1,10 @@
-import type { InstallResult } from '@riftydev/npm-client';
+import type {
+  InstallResult,
+  ShadowAssetEnsureOptions,
+  ShadowAssetInstaller,
+  ShadowAssetPlan,
+  ShadowAssetReadyReceipt,
+} from '@riftydev/npm-client';
 import type { CommandContext } from '@riftydev/shell';
 import { normalizePath } from '@riftydev/vfs';
 import type {
@@ -56,6 +62,8 @@ export interface EnsurePackagesCommand {
   readonly fallback?: 'install' | 'snapshot-only';
   /** Adapter-owned foreign-tree clear/reseed, after durable demotion. */
   readonly replaceTreeOnMiss?: boolean;
+  /** Operation-scoped cancellation/progress for post-tree asset readiness. */
+  readonly runtimeAssets?: ShadowAssetEnsureOptions;
   readonly onPromotion?: (result: InstallStampPromotionResult) => void;
 }
 
@@ -71,6 +79,8 @@ export interface TerminalInstallCommand {
   /** Present for the real npm shell adapter; authority tests may omit it. */
   readonly context?: CommandContext;
   readonly onPromotion?: (result: InstallStampPromotionResult) => void;
+  /** Operation-scoped cancellation/progress for post-tree asset readiness. */
+  readonly runtimeAssets?: ShadowAssetEnsureOptions;
   /** Authority-captured admission fact: a snapshot prepare was already ahead. */
   readonly reuseTrustedClaim?: boolean;
 }
@@ -112,6 +122,8 @@ export interface ActivateAndEnsurePackagesCommand {
   readonly to: PackageAcquisitionProject;
   readonly packageJsonText: string;
   readonly replaceTreeOnMiss?: boolean;
+  /** Operation-scoped cancellation/progress for post-tree asset readiness. */
+  readonly runtimeAssets?: ShadowAssetEnsureOptions;
   readonly onPromotion?: (result: InstallStampPromotionResult) => void;
 }
 
@@ -126,6 +138,8 @@ export interface PrepareFirstMaterializationPackagesCommand {
     | { readonly kind: 'install' }
     | { readonly kind: 'snapshot'; readonly source: PackageSnapshotSource };
   readonly replaceTreeOnMiss?: boolean;
+  /** Operation-scoped cancellation/progress for post-tree asset readiness. */
+  readonly runtimeAssets?: ShadowAssetEnsureOptions;
   readonly onPromotion?: (result: InstallStampPromotionResult) => void;
 }
 
@@ -154,7 +168,7 @@ export type PackageAcquisitionCommand =
   | PrepareFirstMaterializationPackagesCommand;
 
 export type PackageInstallRequest =
-  | Pick<EnsurePackagesCommand, 'type' | 'project' | 'packageJsonText'>
+  | Pick<EnsurePackagesCommand, 'type' | 'project' | 'packageJsonText' | 'runtimeAssets'>
   | (Omit<TerminalInstallCommand, 'project'> & {
       readonly project: PackageAcquisitionProject;
     });
@@ -213,6 +227,34 @@ export interface PackageAcquisitionAdapter {
   switchProject(command: ProjectSwitchCommand): Promise<void>;
 }
 
+export type PackageRuntimeAssetFactsInput =
+  | Readonly<{
+      kind: 'lockfile';
+      outcome: 'trusted' | 'snapshot';
+      project: PackageAcquisitionProject;
+      lockfileBytes: Uint8Array;
+    }>
+  | Readonly<{
+      kind: 'install';
+      project: PackageAcquisitionProject;
+      result: InstallResult;
+    }>;
+
+export interface PackageRuntimeAssetFacts {
+  readonly plan: ShadowAssetPlan;
+  readonly receipt?: ShadowAssetReadyReceipt;
+}
+
+/** Package-private producer/installer join; no Workbench protocol crosses it. */
+export interface PackageRuntimeAssetPort {
+  readonly installer: ShadowAssetInstaller;
+  produce(input: PackageRuntimeAssetFactsInput): Promise<PackageRuntimeAssetFacts>;
+}
+
+type PostTreeRuntimeAssetInput =
+  | Omit<Extract<PackageRuntimeAssetFactsInput, { kind: 'lockfile' }>, 'lockfileBytes'>
+  | Extract<PackageRuntimeAssetFactsInput, { kind: 'install' }>;
+
 export type SnapshotFailure = ProjectSnapshotFailure;
 
 export type AcquisitionObservation =
@@ -234,6 +276,8 @@ export interface PackageAcquisitionAuthorityOptions {
   /** The owner durability barrier forwarded to every stamp state transition. */
   readonly stampTransition?: InstallStampTransitionOptions;
   readonly adapter: PackageAcquisitionAdapter;
+  /** Exact producer evidence and owner storage-backed readiness installer. */
+  readonly runtimeAssets?: PackageRuntimeAssetPort;
   /** FIFO-head ancestor/descendant claims affected by replacing `<root>/node_modules`. */
   readonly resolveTreeGuards?: (
     root: string,
@@ -339,6 +383,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   readonly #stamps: InstallStampAuthority;
   readonly #stampTransition: InstallStampTransitionOptions | undefined;
   readonly #adapter: PackageAcquisitionAdapter;
+  readonly #runtimeAssets?: PackageRuntimeAssetPort;
   readonly #resolveTreeGuards?: PackageAcquisitionAuthorityOptions['resolveTreeGuards'];
   readonly #observe?: (event: AcquisitionObservation) => void;
   readonly #captureDeferredTerminalReuse?: () => boolean;
@@ -356,6 +401,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     this.#stamps = options.stamps;
     this.#stampTransition = options.stampTransition;
     this.#adapter = options.adapter;
+    this.#runtimeAssets = options.runtimeAssets;
     this.#resolveTreeGuards = options.resolveTreeGuards;
     this.#observe = options.observe;
     this.#captureDeferredTerminalReuse = options.captureDeferredTerminalReuse;
@@ -541,6 +587,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           packageJsonText: command.packageJsonText,
           fallback: 'install',
           ...(command.replaceTreeOnMiss ? { replaceTreeOnMiss: true } : {}),
+          ...(command.runtimeAssets ? { runtimeAssets: command.runtimeAssets } : {}),
           ...(command.onPromotion ? { onPromotion: command.onPromotion } : {}),
         });
       }
@@ -551,7 +598,11 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         this.#rememberProject(command.to);
         await this.#adapter.switchProject({ type: 'project-switch', from, to: command.to });
 
-        const existing = await this.#trustedProvenance(command.to, command.packageJsonText);
+        const existing = await this.#readyTrustedProvenance(
+          command.to,
+          command.packageJsonText,
+          command.runtimeAssets,
+        );
         if (existing !== null) {
           return Object.freeze({ kind: 'ready', provenance: Object.freeze(existing) });
         }
@@ -569,6 +620,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
             snapshotSource: command.materialization.source,
             fallback: 'snapshot-only',
             ...(command.replaceTreeOnMiss ? { replaceTreeOnMiss: true } : {}),
+            ...(command.runtimeAssets ? { runtimeAssets: command.runtimeAssets } : {}),
             ...(command.onPromotion ? { onPromotion: command.onPromotion } : {}),
           });
           return Object.freeze({ kind: 'ready', provenance: Object.freeze(provenance) });
@@ -657,8 +709,92 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     return null;
   }
 
+  async #readyTrustedProvenance(
+    project: PackageAcquisitionProject,
+    packageJsonText: string,
+    options?: ShadowAssetEnsureOptions,
+  ): Promise<Extract<AcquisitionProvenance, { readonly outcome: 'existing' }> | null> {
+    const provenance = await this.#trustedProvenance(project, packageJsonText);
+    if (provenance === null) return null;
+    await this.#postTreeRuntimeAssetReadiness(
+      {
+        kind: 'lockfile',
+        outcome: 'trusted',
+        project,
+      },
+      options,
+    );
+    return provenance;
+  }
+
+  async #postTreeRuntimeAssetReadiness(
+    input: PostTreeRuntimeAssetInput,
+    options?: ShadowAssetEnsureOptions,
+  ): Promise<PackageRuntimeAssetFacts | null> {
+    const runtimeAssets = this.#runtimeAssets;
+    if (!runtimeAssets) {
+      if (options !== undefined) {
+        throw new Error('package acquisition has no runtime-asset readiness port');
+      }
+      return null;
+    }
+    let evidence: PackageRuntimeAssetFactsInput;
+    if (input.kind === 'lockfile') {
+      const read = this.#stamps.readLockfileBytes;
+      if (!read) {
+        throw new Error(
+          `package acquisition cannot produce exact runtime-asset facts for ${input.project.projectId}`,
+        );
+      }
+      evidence = {
+        ...input,
+        lockfileBytes: await read.call(this.#stamps, input.project.root),
+      };
+    } else {
+      evidence = input;
+    }
+    const facts = await runtimeAssets.produce(evidence);
+    const { plan, receipt } = facts;
+    if (plan.assets.length === 0 || receipt?.requiredSetDigest === plan.requiredSetDigest) {
+      return facts;
+    }
+
+    let warned = false;
+    const onProgress = options?.onProgress;
+    const isolatedOptions =
+      onProgress === undefined
+        ? options
+        : {
+            ...options,
+            onProgress: (progress: Parameters<NonNullable<typeof onProgress>>[0]): void => {
+              try {
+                onProgress(progress);
+              } catch (error) {
+                if (warned) return;
+                warned = true;
+                console.warn(
+                  `[package-acquisition] runtime-asset progress observer failed for ${input.project.projectId}`,
+                  error,
+                );
+              }
+            },
+          };
+    const ensured = await runtimeAssets.installer.ensure(plan, isolatedOptions);
+    if (ensured.plan.requiredSetDigest !== plan.requiredSetDigest) {
+      throw new Error('runtime-asset readiness returned a different required set');
+    }
+    if (ensured.kind !== 'ready') {
+      throw new Error('runtime-asset readiness omitted a receipt for a non-empty plan');
+    }
+    return { plan, receipt: ensured.receipt };
+  }
+
   async #ensure(command: EnsurePackagesCommand): Promise<AcquisitionProvenance> {
-    const existing = await this.#trustedProvenance(command.project, command.packageJsonText);
+    const existing = await this.#readyTrustedProvenance(
+      command.project,
+      command.packageJsonText,
+      command.runtimeAssets,
+    );
     if (existing !== null) return existing;
 
     const failures: SnapshotFailure[] = [];
@@ -783,6 +919,14 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           claim,
           command.onPromotion,
         );
+        await this.#postTreeRuntimeAssetReadiness(
+          {
+            kind: 'lockfile',
+            outcome: 'snapshot',
+            project: command.project,
+          },
+          command.runtimeAssets,
+        );
         return {
           outcome: 'snapshot',
           snapshotId: snapshot.snapshotId,
@@ -814,6 +958,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         type: 'ensure',
         project: command.project,
         packageJsonText: command.packageJsonText,
+        ...(command.runtimeAssets ? { runtimeAssets: command.runtimeAssets } : {}),
       },
       failures,
       claim,
@@ -876,6 +1021,14 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         current.status === 'trusted' &&
         current.stamp.installArtifactIdentity === request.project.identity
       ) {
+        await this.#postTreeRuntimeAssetReadiness(
+          {
+            kind: 'lockfile',
+            outcome: 'trusted',
+            project: request.project,
+          },
+          request.runtimeAssets,
+        );
         return {
           outcome: 'existing',
           identity: current.stamp.installArtifactIdentity,
@@ -948,6 +1101,10 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       installed.result.packages.length,
       claim,
       onPromotion ?? (request.type === 'terminal-install' ? request.onPromotion : undefined),
+    );
+    await this.#postTreeRuntimeAssetReadiness(
+      { kind: 'install', project: request.project, result: installed.result },
+      request.runtimeAssets,
     );
     return installedProvenance(installed.result);
   }

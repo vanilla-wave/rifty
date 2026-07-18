@@ -84,6 +84,8 @@ export interface InstallStampPromotionAdmission {
 export interface InstallStampAuthority {
   check(input: InstallStampCheckInput): Promise<InstallStampCheck>;
   checkSync(input: InstallStampCheckInput): InstallStampCheck;
+  /** Exact current lockfile bytes for package-acquisition evidence. */
+  readLockfileBytes?(root: string): Promise<Uint8Array>;
   demote(
     input: Pick<InstallStampIdentity, 'root' | 'slug'>,
     options?: InstallStampTransitionOptions,
@@ -571,6 +573,15 @@ export function createInstallStampAuthority(options: {
     return classified.result;
   };
 
+  const readLockfileBytes = async (root: string): Promise<Uint8Array> => {
+    const canonicalRoot = canonicalAuthorityRoot(root);
+    const bytes = await readBytes(io, joinPath(canonicalRoot, 'package-lock.json'));
+    if (bytes === null) {
+      throw new Error(`package lockfile is unavailable for ${canonicalRoot}`);
+    }
+    return bytes.slice();
+  };
+
   const demote = (
     rawInput: Pick<InstallStampIdentity, 'root' | 'slug'>,
     options: InstallStampTransitionOptions = {},
@@ -934,5 +945,14 @@ export function createInstallStampAuthority(options: {
     });
   };
 
-  return { check, checkSync, demote, prepareTreeMutation, admitPromotion, promote, revoke };
+  return {
+    check,
+    checkSync,
+    readLockfileBytes,
+    demote,
+    prepareTreeMutation,
+    admitPromotion,
+    promote,
+    revoke,
+  };
 }
