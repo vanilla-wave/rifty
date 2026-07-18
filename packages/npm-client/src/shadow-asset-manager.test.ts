@@ -8,6 +8,7 @@ import {
   ShadowAssetError,
   type ShadowAssetPlan,
   ShadowAssetReadError,
+  type ShadowAssetReadOptions,
   type ShadowAssetSource,
   type ShadowAssetSourceRequest,
   type ShadowAssetStorage,
@@ -48,10 +49,18 @@ function tar(entries: readonly { name: string; bytes: Uint8Array; type?: string 
   return joined;
 }
 
-function fixture(entries = [{ name: 'package/runtime.wasm', bytes: encoder.encode('runtime') }]) {
+function fixture(
+  entries: readonly { name: string; bytes: Uint8Array; type?: string }[] = [
+    { name: 'package/runtime.wasm', bytes: encoder.encode('runtime') },
+  ],
+) {
   const unpacked = tar(entries);
   const tgz = new Uint8Array(gzipSync(unpacked));
-  const member = entries[0]?.bytes ?? new Uint8Array();
+  const member =
+    entries.find((entry) => entry.name === 'package/runtime.wasm' && (entry.type ?? '0') === '0')
+      ?.bytes ??
+    entries[0]?.bytes ??
+    new Uint8Array();
   const substitutions: ShadowAssetPlan['substitutions'] = [
     {
       catalog: { id: 'test.catalog', digest: '2'.repeat(64) },
@@ -359,6 +368,82 @@ describe('ShadowAssetManager', () => {
     });
   });
 
+  it('rejects PAX path metadata instead of extracting under the unoverridden header name', async () => {
+    const body = encoder.encode('runtime');
+    const { plan, tgz } = fixture([
+      { name: 'PaxHeaders/runtime', bytes: encoder.encode('18 path=../escape\n'), type: 'x' },
+      { name: 'package/runtime.wasm', bytes: body },
+    ]);
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: source(tgz),
+    });
+
+    await expect(manager.installer.ensure(plan)).rejects.toMatchObject({
+      code: 'ESHADOWASSET',
+      phase: 'verify',
+    });
+    expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).toBeNull();
+  });
+
+  it.each([
+    ['signal', { signal: {} }],
+    ['onProgress', { onProgress: 1 }],
+  ])('validates read option %s before touching storage', async (_label, value) => {
+    const { plan, tgz } = fixture();
+    const inner = createMemoryShadowAssetStorage();
+    const read = vi.fn((entry: Parameters<ShadowAssetStorage['read']>[0]) => inner.read(entry));
+    const manager = createShadowAssetManager({
+      storage: { ...inner, read },
+      source: source(tgz),
+    });
+
+    await expect(
+      manager
+        .runtimeReader(plan)
+        .readVerified('runtime', value as unknown as ShadowAssetReadOptions),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it('delivers joined ensure progress only to the scoped runtime-read observer', async () => {
+    const { plan, tgz } = fixture();
+    let release!: () => void;
+    let admitted!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      admitted = resolve;
+    });
+    const assetSource = source(tgz);
+    assetSource.acquire.mockImplementationOnce(async (requests) => {
+      admitted();
+      await gate;
+      return requests.map((request: ShadowAssetSourceRequest) => ({
+        request,
+        bytes: tgz.slice(),
+        fillTransport: 'standard' as const,
+        fillCache: 'network' as const,
+      }));
+    });
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: assetSource,
+    });
+    const ensure = manager.installer.ensure(plan);
+    await started;
+    const progress: string[] = [];
+    const read = manager.runtimeReader(plan).readVerified('runtime', {
+      onProgress: (event) => progress.push(event.phase),
+    });
+
+    release();
+    await expect(read).resolves.toEqual(encoder.encode('runtime'));
+    await expect(ensure).resolves.toMatchObject({ kind: 'ready' });
+    expect(progress).toEqual(['verify', 'persist', 'ready']);
+  });
+
   it('never turns a failed ready-pointer acknowledgement into readiness', async () => {
     const { plan, tgz } = fixture();
     const inner = createMemoryShadowAssetStorage();
@@ -390,6 +475,18 @@ describe('ShadowAssetManager', () => {
     });
     await expect(manager.runtimeReader(plan).readVerified('other')).rejects.toBeInstanceOf(
       ShadowAssetReadError,
+    );
+  });
+
+  it('rejects an invalid receipt digest instead of reporting a semantic cache miss', async () => {
+    const { tgz } = fixture();
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: source(tgz),
+    });
+
+    await expect(manager.installer.inspectReceipt('not-a-sha256')).rejects.toBeInstanceOf(
+      TypeError,
     );
   });
 });
