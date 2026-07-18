@@ -21,6 +21,7 @@ import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type { BootstrapConfig } from '../templates/project-spec.ts';
+import { type OwnerChildAdmissionHandle, admitOwnerChild } from './owner-child-admission.ts';
 import {
   type OwnerPackageConfig,
   type OwnerPackageState,
@@ -379,6 +380,35 @@ function pendingEpochInstaller(
   };
 }
 
+class TerminationFaultChild implements OwnerChildAdmissionHandle {
+  #exit: (() => void) | undefined;
+
+  constructor(
+    private readonly killOutcome: 'throw' | 'false',
+    private readonly killFailure: Error,
+    private readonly killAttempted: Deferred<void>,
+  ) {}
+
+  on(_event: 'exit', _listener: (...args: unknown[]) => void): unknown {
+    return this;
+  }
+
+  once(_event: 'exit', listener: (...args: unknown[]) => void): unknown {
+    this.#exit = listener;
+    return this;
+  }
+
+  kill(_signal?: string): unknown {
+    this.killAttempted.resolve();
+    if (this.killOutcome === 'throw') throw this.killFailure;
+    return false;
+  }
+
+  exit(): void {
+    this.#exit?.();
+  }
+}
+
 afterEach(() => {
   resetSyncMirror();
 });
@@ -556,6 +586,72 @@ describe('child reservation owns package FIFO settlement', () => {
     await quiesce;
     expect(quiesced).toBe(true);
   });
+
+  it.each(['throw', 'false'] as const)(
+    'keeps mutation and quiesce behind physical exit when child termination returns %s',
+    async (killOutcome) => {
+      const h = await harness(`asset-reservation-termination-${killOutcome}`);
+      const supervisionFailure = new Error('supervision attachment failed');
+      const killFailure = new Error('child termination transport failed');
+      const killAttempted = deferred<void>();
+      const child = new TerminationFaultChild(killOutcome, killFailure, killAttempted);
+      let admissionSettled = false;
+      const admission = admitOwnerChild({
+        authority: {
+          reserve: (options) => h.state.reserveChildAdmission(PROJECT, options),
+          runtimeReader: () => ({
+            readVerified: async () => new Uint8Array(),
+          }),
+        },
+        spawn: () => child,
+        supervise: () => {
+          throw supervisionFailure;
+        },
+      });
+      const outcome = admission
+        .catch((error: unknown) => error)
+        .then((error) => {
+          admissionSettled = true;
+          return error;
+        });
+      await killAttempted.promise;
+
+      let mutationApplied = false;
+      const mutation = h.state.mutations.guardedMutation(
+        [{ kind: 'write', path: `${ROOT}/package.json` }],
+        async () => {
+          mutationApplied = true;
+        },
+      );
+      let quiesced = false;
+      const quiesce = h.state.quiesce().then(() => {
+        quiesced = true;
+      });
+      const beforePhysicalExit = await Promise.race([
+        Promise.all([outcome, mutation, quiesce]).then(() => 'released' as const),
+        new Promise<'held'>((resolve) => setTimeout(resolve, 30, 'held')),
+      ]);
+
+      child.exit();
+      const error = await outcome;
+      await mutation;
+      await quiesce;
+
+      expect(beforePhysicalExit).toBe('held');
+      expect(mutationApplied).toBe(true);
+      expect(quiesced).toBe(true);
+      expect(admissionSettled).toBe(true);
+      expect(error).toBeInstanceOf(AggregateError);
+      const errors = (error as AggregateError).errors;
+      expect(errors).toHaveLength(2);
+      expect(errors[0]).toBe(supervisionFailure);
+      if (killOutcome === 'throw') {
+        expect(errors[1]).toBe(killFailure);
+      } else {
+        expect(errors[1]).toEqual(new Error('owner child closed without an exit event'));
+      }
+    },
+  );
 
   it('rejects unavailable and cross-project admission with one package-private code', async () => {
     const h = await harness('asset-reservation-unavailable');

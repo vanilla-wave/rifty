@@ -382,7 +382,11 @@ describe('browser Workbench owner transport', () => {
     if (request === undefined) throw new Error('missing Playground progress open request');
     expect(request).not.toHaveProperty('onRuntimeAssetProgress');
 
-    for (const progress of [assetProgress('cache-check', 0, 1), readyProgress(1)]) {
+    for (const progress of [
+      assetProgress('cache-check', 0, 1),
+      assetProgress('verify', 0, 1),
+      readyProgress(1),
+    ]) {
       worker.emit('message', {
         type: 'workbench:runtime-assets-progress',
         opId: request.opId,
@@ -391,6 +395,7 @@ describe('browser Workbench owner transport', () => {
     }
     expect(callback.mock.calls.map(([progress]) => progress)).toEqual([
       assetProgress('cache-check', 0, 1),
+      assetProgress('verify', 0, 1),
       readyProgress(1),
     ]);
 
@@ -467,6 +472,10 @@ describe('browser Workbench owner transport', () => {
       {
         name: 'ready arrives before every index was checked',
         before: [assetProgress('cache-check', 0, 2), readyProgress(2)],
+      },
+      {
+        name: 'ready arrives before the checked asset was verified',
+        before: [assetProgress('cache-check', 0, 1), readyProgress(1)],
       },
       {
         name: 'project-opened terminates a partial trace without ready',

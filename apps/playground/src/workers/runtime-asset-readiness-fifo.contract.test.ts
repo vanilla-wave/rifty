@@ -227,6 +227,12 @@ describe('post-tree runtime-asset readiness uses the package FIFO', () => {
       entered.resolve();
       await readiness.promise;
       options?.onProgress?.({
+        phase: 'verify',
+        assetId: received.assets[0]!.id,
+        assetIndex: 0,
+        assetCount: 1,
+      });
+      options?.onProgress?.({
         phase: 'ready',
         requiredSetDigest: received.requiredSetDigest,
         assetCount: 1,
@@ -277,7 +283,7 @@ describe('post-tree runtime-asset readiness uses the package FIFO', () => {
     expect(runtime.ensureCalls).toEqual([
       { plan: assetPlan, options: { signal, onProgress: expect.any(Function) } },
     ]);
-    expect(progress.map((event) => event.phase)).toEqual(['cache-check', 'ready']);
+    expect(progress.map((event) => event.phase)).toEqual(['cache-check', 'verify', 'ready']);
   });
 
   it('passes a verified snapshot through the same producer and readiness seam before return', async () => {
@@ -421,6 +427,12 @@ describe('post-tree runtime-asset readiness uses the package FIFO', () => {
           assetCount: 1,
         },
         {
+          phase: 'verify' as const,
+          assetId: received.assets[0]!.id,
+          assetIndex: 0,
+          assetCount: 1,
+        },
+        {
           phase: 'ready' as const,
           requiredSetDigest: received.requiredSetDigest,
           assetCount: 1,
@@ -455,6 +467,6 @@ describe('post-tree runtime-asset readiness uses the package FIFO', () => {
     } finally {
       warn.mockRestore();
     }
-    expect(phases).toEqual(['cache-check', 'ready']);
+    expect(phases).toEqual(['cache-check', 'verify', 'ready']);
   });
 });

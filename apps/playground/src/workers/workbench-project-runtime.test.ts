@@ -18,6 +18,7 @@ import {
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import {
   type WorkbenchProjectRuntime,
+  type WorkbenchProjectRuntimeOptions,
   createWorkbenchProjectRuntime,
 } from './workbench-project-runtime.ts';
 
@@ -218,6 +219,7 @@ function harness(
   activePackageConfig: OwnerPackageConfig = packageConfig,
   publicationBarrier: () => Promise<void> = async () => {},
   recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>,
+  runtimeAssetReader?: WorkbenchProjectRuntimeOptions['runtimeAssetReader'],
 ) {
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
@@ -279,6 +281,7 @@ function harness(
     nodeWorkerRuntimeEnv,
     mutationGuard,
     publicationBarrier,
+    ...(runtimeAssetReader === undefined ? {} : { runtimeAssetReader }),
     ...(recordMutation === undefined ? {} : { recordMutation }),
     send: (frame: OwnerToPageFrame) => {
       frames.push(frame);
@@ -297,6 +300,73 @@ function harness(
 afterEach(() => {
   vi.restoreAllMocks();
   resetSyncMirror();
+});
+
+describe('Workbench child runtime-asset public error Contract+RED', () => {
+  it.each([
+    {
+      sibling: 'installed bin',
+      config: packageConfig,
+      line: 'vite --version',
+      expectedStderr: 'vite: Runtime asset readiness failed\n',
+    },
+    {
+      sibling: 'node entry',
+      config: nodeCliPackageConfig,
+      line: 'node src/cli.mjs',
+      expectedStderr: 'node: Runtime asset readiness failed\n',
+    },
+    {
+      sibling: 'dev server',
+      config: nodeServerPackageConfig,
+      line: 'npm run dev',
+      expectedStderr: 'Runtime asset readiness failed\n',
+    },
+  ])(
+    'projects unattested OwnerPackageState errors at the $sibling PTY boundary',
+    async ({ config, line, expectedStderr }) => {
+      const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
+        throw new Error('unattested child crossed the physical spawn boundary');
+      });
+      const h = harness(
+        undefined,
+        config,
+        async () => {},
+        undefined,
+        () => {
+          throw new Error('unattested child constructed a runtime-asset reader');
+        },
+      );
+      const sid = 'terminal-unattested';
+      const rid = 'run-unattested';
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid });
+
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid,
+        rid,
+        line,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+
+      const stderr = h.frames
+        .filter(
+          (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+            frame.type === 'pty:chunk' && frame.rid === rid && frame.stream === 'stderr',
+        )
+        .map((frame) => new TextDecoder().decode(frame.data))
+        .join('');
+      await h.runtime.close();
+
+      expect(stderr).toBe(expectedStderr);
+      expect(stderr).not.toContain(ROOT);
+      expect(stderr).not.toContain(config.slug);
+      expect(stderr).not.toContain('package tree is unattested');
+      expect(spawn).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('Workbench finite Node owner lifecycle Contract+RED', () => {

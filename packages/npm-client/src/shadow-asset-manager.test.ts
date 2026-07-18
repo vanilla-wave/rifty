@@ -485,8 +485,12 @@ describe('ShadowAssetManager', () => {
     );
     expect(await manager.runtimeReader(plan).readVerified('runtime')).toEqual(member);
 
-    const second = await manager.installer.ensure(plan);
+    const hitProgress: string[] = [];
+    const second = await manager.installer.ensure(plan, {
+      onProgress: (progress) => hitProgress.push(progress.phase),
+    });
     expect(second).toEqual(first);
+    expect(hitProgress).toEqual(['cache-check', 'verify', 'ready']);
     expect(assetSource.acquire).toHaveBeenCalledTimes(1);
     await manager.close();
   });
