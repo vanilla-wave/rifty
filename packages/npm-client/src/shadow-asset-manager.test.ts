@@ -295,6 +295,102 @@ describe('ShadowAssetManager', () => {
     expect(await manager.installer.inspectReceipt(sibling.requiredSetDigest)).not.toBeNull();
   });
 
+  it('keeps the object flight visible until a delayed receipt publication admits late sibling sets', async () => {
+    const { plan, tgz } = fixture();
+    const substitutions = plan.substitutions.map((substitution) => ({
+      ...substitution,
+      requestedRange: '1.0.0',
+    }));
+    const sibling: ShadowAssetPlan = {
+      requiredSetDigest: canonicalShadowDigest({ schema: 1, substitutions, assets: plan.assets }),
+      substitutions,
+      assets: plan.assets,
+    };
+    const inner = createMemoryShadowAssetStorage();
+    let releaseReceipt!: () => void;
+    let receiptStarted!: () => void;
+    const receiptGate = new Promise<void>((resolve) => {
+      releaseReceipt = resolve;
+    });
+    const firstReceipt = new Promise<void>((resolve) => {
+      receiptStarted = resolve;
+    });
+    let receiptWrites = 0;
+    const storage: ShadowAssetStorage = {
+      storageClass: inner.storageClass,
+      read: (entry) => inner.read(entry),
+      write: async (entry, bytes) => {
+        if (entry.kind === 'receipt' && receiptWrites++ === 0) {
+          receiptStarted();
+          await receiptGate;
+        }
+        await inner.write(entry, bytes);
+      },
+      remove: (entry) => inner.remove(entry),
+      inspect: () => inner.inspect(),
+      clear: () => inner.clear(),
+      close: () => inner.close(),
+    };
+    const assetSource = source(tgz);
+    const manager = createShadowAssetManager({ storage, source: assetSource });
+
+    const first = manager.installer.ensure(plan);
+    await firstReceipt;
+    const second = manager.installer.ensure(sibling);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    releaseReceipt();
+
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(assetSource.acquire).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-shapes a shared object-flight failure to each required set', async () => {
+    const { plan } = fixture();
+    const substitutions = plan.substitutions.map((substitution) => ({
+      ...substitution,
+      requestedRange: '1.0.0',
+    }));
+    const sibling: ShadowAssetPlan = {
+      requiredSetDigest: canonicalShadowDigest({ schema: 1, substitutions, assets: plan.assets }),
+      substitutions,
+      assets: plan.assets,
+    };
+    let release!: () => void;
+    let admitted!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      admitted = resolve;
+    });
+    const acquire = vi.fn(async () => {
+      admitted();
+      await gate;
+      throw new Error('shared source failed');
+    });
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: { acquire, close: async () => undefined },
+    });
+
+    const first = manager.installer.ensure(plan);
+    const second = manager.installer.ensure(sibling);
+    await started;
+    await Promise.resolve();
+    release();
+    const [firstResult, secondResult] = await Promise.allSettled([first, second]);
+
+    expect(firstResult).toMatchObject({
+      status: 'rejected',
+      reason: { code: 'ESHADOWASSET', requiredSetDigest: plan.requiredSetDigest },
+    });
+    expect(secondResult).toMatchObject({
+      status: 'rejected',
+      reason: { code: 'ESHADOWASSET', requiredSetDigest: sibling.requiredSetDigest },
+    });
+    expect(acquire).toHaveBeenCalledTimes(1);
+  });
+
   it('emits canonical progress after each boundary and isolates observer failure', async () => {
     const { plan, tgz } = fixture();
     const manager = createShadowAssetManager({
@@ -465,6 +561,42 @@ describe('ShadowAssetManager', () => {
       phase: 'persist',
     });
     expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).toBeNull();
+  });
+
+  it('quarantines a ready pointer whose write persisted before its acknowledgement failed', async () => {
+    const { plan, tgz } = fixture();
+    const inner = createMemoryShadowAssetStorage();
+    let failReadyAcknowledgement = true;
+    let readyWrites = 0;
+    const storage: ShadowAssetStorage = {
+      storageClass: inner.storageClass,
+      read: (entry) => inner.read(entry),
+      write: async (entry, bytes) => {
+        await inner.write(entry, bytes);
+        if (entry.kind === 'ready') {
+          readyWrites += 1;
+          if (failReadyAcknowledgement) {
+            failReadyAcknowledgement = false;
+            throw new Error('ready acknowledgement failed after persistence');
+          }
+        }
+      },
+      remove: (entry) => inner.remove(entry),
+      inspect: () => inner.inspect(),
+      clear: () => inner.clear(),
+      close: () => inner.close(),
+    };
+    const assetSource = source(tgz);
+    const manager = createShadowAssetManager({ storage, source: assetSource });
+
+    await expect(manager.installer.ensure(plan)).rejects.toMatchObject({
+      code: 'ESHADOWASSET',
+      phase: 'persist',
+    });
+    expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).toBeNull();
+    await expect(manager.installer.ensure(plan)).resolves.toMatchObject({ kind: 'ready' });
+    expect(readyWrites).toBe(2);
+    expect(assetSource.acquire).toHaveBeenCalledTimes(1);
   });
 
   it('binds readers to the exact plan and reports unknown assets', async () => {
