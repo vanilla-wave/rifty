@@ -59,4 +59,27 @@ describe('Playground App admitted Workbench ownership', () => {
     expect(runtimeClose).toHaveBeenCalledTimes(1);
     expect(admittedClose).not.toHaveBeenCalled();
   });
+
+  it.each(['admitted Workbench', 'App runtime'] as const)(
+    'delegates a retry after rejected close to the current %s',
+    async (owner) => {
+      const retryable = new Error('retryable close preflight');
+      const resourceClose = vi
+        .fn<() => Promise<void>>()
+        .mockRejectedValueOnce(retryable)
+        .mockResolvedValueOnce(undefined);
+      const admittedClose = owner === 'admitted Workbench' ? resourceClose : vi.fn(async () => {});
+      const admitted = workbench(admittedClose);
+      const ownership = createPlaygroundAppWorkbenchOwnership(admitted);
+
+      if (owner === 'App runtime') {
+        ownership.createRuntime(() => runtime(resourceClose));
+      }
+
+      await expect(ownership.close()).rejects.toBe(retryable);
+      await expect(ownership.close()).resolves.toBeUndefined();
+      expect(resourceClose).toHaveBeenCalledTimes(2);
+      if (owner === 'App runtime') expect(admittedClose).not.toHaveBeenCalled();
+    },
+  );
 });
