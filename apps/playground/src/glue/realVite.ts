@@ -17,6 +17,7 @@ import { isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { NotImplementedError } from '@riftydev/vfs';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';
+import type { OwnerEpoch, TreeRevision } from '../workbench/project-vfs-contract.ts';
 import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&url';
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import tsLspWorkerUrl from '../workers/ts-lsp-worker-entry.ts?worker&url';
@@ -25,9 +26,7 @@ import { createOwnerVfsClient } from './owner-vfs-client.ts';
 import type {
   HostCommitAck,
   HostCommitRequest,
-  OwnerEpoch,
   OwnerVfsDurabilityReceipt,
-  TreeRevision,
 } from './owner-vfs-protocol.ts';
 import { PLAYGROUND_NODE_WORKER_RUNTIME_ENV } from './playground-node-worker-runtime.ts';
 export { wirePreviewBridge } from './preview-port-wiring.ts';

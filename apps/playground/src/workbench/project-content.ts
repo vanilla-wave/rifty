@@ -1,6 +1,6 @@
-import type { SnapshotFs } from '../glue/snapshot-fs.ts';
 import type { VfsCommitCoordinator } from '../glue/vfs-commit-coordinator.ts';
 import type { ProjectDocumentInvalidation } from './errors.ts';
+import type { SnapshotFs } from './internal/snapshot-fs.ts';
 import {
   type ProjectDocumentReadEntry,
   type ProjectDocuments,

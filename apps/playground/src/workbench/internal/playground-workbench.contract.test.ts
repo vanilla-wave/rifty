@@ -1,7 +1,6 @@
 import type { LogEntry } from '@riftydev/git';
 import { SW_FRAME_VERSION, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
-import { SnapshotFs } from '../../glue/snapshot-fs.ts';
 import { createVfsCommitCoordinator } from '../../glue/vfs-commit-coordinator.ts';
 import {
   ClosedHandleError,
@@ -62,6 +61,7 @@ import {
   createOpenPlaygroundWorkbench,
   createPlaygroundWorkbenchFacade,
 } from './playground-workbench.ts';
+import { SnapshotFs } from './snapshot-fs.ts';
 
 const encoder = new TextEncoder();
 const CONTENT_ROOT = '/.rifty/workbench/projects/contract';

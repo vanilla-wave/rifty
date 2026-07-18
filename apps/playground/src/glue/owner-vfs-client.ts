@@ -1,3 +1,4 @@
+import type { OwnerEpoch, TreeRevision } from '../workbench/project-vfs-contract.ts';
 import {
   type OwnerVfsCommitCleanupMessage,
   type OwnerVfsCommitIpcMessage,
@@ -19,9 +20,7 @@ import type { OwnerVfsAppliedCommitTerminal } from './owner-vfs-ipc.ts';
 import type {
   HostCommitAck,
   HostCommitRequest,
-  OwnerEpoch,
   OwnerVfsDurabilityReceipt,
-  TreeRevision,
 } from './owner-vfs-protocol.ts';
 import {
   OperationIdReuseError,

@@ -1,13 +1,12 @@
 import { type PersistFailureReport, isAbsolute, normalizePath } from '@riftydev/vfs';
+import type { OwnerEpoch, TreeRevision } from '../workbench/project-vfs-contract.ts';
 import { ownerVfsScopeHasFailure } from './owner-vfs-durability.ts';
 import {
   type HostCommitAck,
   type HostCommitRequest,
   OperationIdReuseError,
-  type OwnerEpoch,
   type OwnerVfsDurabilityReceipt,
   type OwnerVfsSnapshotEntry,
-  type TreeRevision,
   VfsCommitAppliedError,
   VfsCommitProtocolError,
   VfsVersionConflictError,

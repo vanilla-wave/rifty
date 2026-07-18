@@ -19,14 +19,13 @@ import {
   isOwnerVfsDurabilityIpcMessage,
   validateOwnerVfsCommitTerminal,
 } from '../glue/owner-vfs-ipc.ts';
+import type { HostCommitAck, OwnerVfsSnapshotEntry } from '../glue/owner-vfs-protocol.ts';
 import type {
-  HostCommitAck,
   OwnerVfsRevisionFrame,
-  OwnerVfsSnapshotEntry,
   PathVersion,
   TreeRevision,
-} from '../glue/owner-vfs-protocol.ts';
-import type { VfsSnapshotFrame } from '../glue/vfs-snapshot-port.ts';
+  VfsSnapshotFrame,
+} from './project-vfs-contract.ts';
 
 export interface ProjectVfsSnapshotRequest {
   readonly type: 'workbench:project-vfs-snapshot-request';

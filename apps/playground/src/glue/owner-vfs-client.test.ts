@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { OwnerEpoch } from '../workbench/project-vfs-contract.ts';
 import { type OwnerVfsClientOutboundFrame, createOwnerVfsClient } from './owner-vfs-client.ts';
 import type { OwnerVfsCommitReleasedMessage, OwnerVfsCommitTerminal } from './owner-vfs-ipc.ts';
-import type { HostCommitAck, HostCommitRequest, OwnerEpoch } from './owner-vfs-protocol.ts';
+import type { HostCommitAck, HostCommitRequest } from './owner-vfs-protocol.ts';
 import { OperationIdReuseError, VfsCommitAppliedError } from './owner-vfs-protocol.ts';
 
 function success(request: HostCommitRequest, revision = 1): OwnerVfsCommitTerminal {

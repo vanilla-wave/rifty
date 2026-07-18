@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { HostCommitRequest } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
-import type { VfsSnapshotFrame } from '../glue/vfs-snapshot-port.ts';
 import { ProjectFileOperationError } from './errors.ts';
 import { createProjectContentTransport } from './project-content-transport.ts';
+import type { VfsSnapshotFrame } from './project-vfs-contract.ts';
 import type {
   OwnerProjectVfsFrame,
   PageProjectVfsFrame,

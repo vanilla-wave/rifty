@@ -20,36 +20,19 @@
 import { channelNameFor } from '@riftydev/net';
 import type { VfsDirent } from '@riftydev/vfs';
 import { joinPath } from '@riftydev/vfs';
+import type {
+  OwnerVfsRevisionFrame,
+  PathVersion,
+  VfsSnapshotEntry,
+  VfsSnapshotFrame,
+} from '../workbench/project-vfs-contract.ts';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
-import type { OwnerVfsRevisionFrame, PathVersion } from './owner-vfs-protocol.ts';
 
 /** Dirs never walked into a snapshot — heavy or derived, not user project source. */
 export const SNAPSHOT_EXCLUDE_DIRS: readonly string[] = ['node_modules', '.git', '.vite', 'dist'];
 
 /** Files at/under this many bytes ship their content; larger send size only. */
 export const SNAPSHOT_MAX_CONTENT_BYTES = 128 * 1024;
-
-/** One node of the project tree. Dirs carry no content; files may carry bytes. */
-export interface VfsSnapshotEntry {
-  readonly path: string;
-  readonly kind: 'file' | 'dir';
-  readonly size: number;
-  /** Opaque owner-issued identity; content/size are never used as identity. */
-  readonly version: PathVersion;
-  /** Present for files small enough to inline (see {@link SNAPSHOT_MAX_CONTENT_BYTES}). */
-  readonly content?: Uint8Array;
-  /** Only valid reason for an owner-certified file to omit its bytes. */
-  readonly contentOmitted?: 'size-cap';
-}
-
-/** A full-tree replace frame. The receiver swaps its store wholesale per frame. */
-export interface VfsSnapshotFrame extends OwnerVfsRevisionFrame {
-  readonly type: 'snapshot';
-  readonly root: string;
-  readonly entries: readonly VfsSnapshotEntry[];
-  /** True when an excluded `node_modules` exists under root (so the UI can hint it). */
-  readonly nodeModulesPresent: boolean;
-}
 
 /**
  * Page→owner readiness handshake frame (ADR-0146). The owner can't know when

@@ -1,5 +1,5 @@
-import { SnapshotFs } from '../glue/snapshot-fs.ts';
 import { createVfsCommitCoordinator } from '../glue/vfs-commit-coordinator.ts';
+import { SnapshotFs } from './internal/snapshot-fs.ts';
 import { createProjectContentController } from './project-content.ts';
 import type { ProjectDocuments } from './project-documents.ts';
 import type { ProjectFiles } from './project-files.ts';

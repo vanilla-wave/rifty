@@ -1,10 +1,10 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import type { VfsSnapshotFrame } from '../workbench/project-vfs-contract.ts';
 import { createOwnerVfsAuthority } from '../workers/owner-vfs-authority.ts';
 import {
   SNAPSHOT_MAX_CONTENT_BYTES,
   type SnapshotSource,
-  type VfsSnapshotFrame,
   collectSnapshot,
   publishVfsSnapshot,
   requestVfsSnapshot,

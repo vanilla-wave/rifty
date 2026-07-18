@@ -1,5 +1,7 @@
 import { OpfsFsSync } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SnapshotFs } from '../workbench/internal/snapshot-fs.ts';
+import type { OwnerVfsRevisionFrame } from '../workbench/project-vfs-contract.ts';
 import { createOwnerVfsAuthority } from '../workers/owner-vfs-authority.ts';
 import {
   type OwnerVfsDurabilityAckMessage,
@@ -7,13 +9,8 @@ import {
   handleOwnerVfsCommitRequest,
   handleOwnerVfsDurabilityRequest,
 } from './owner-vfs-ipc.ts';
-import type {
-  HostCommitAck,
-  OwnerVfsDurabilityReceipt,
-  OwnerVfsRevisionFrame,
-} from './owner-vfs-protocol.ts';
+import type { HostCommitAck, OwnerVfsDurabilityReceipt } from './owner-vfs-protocol.ts';
 import { VfsCommitAppliedError } from './owner-vfs-protocol.ts';
-import { SnapshotFs } from './snapshot-fs.ts';
 import { type VfsCommitOwner, createVfsCommitCoordinator } from './vfs-commit-coordinator.ts';
 import { collectSnapshot } from './vfs-snapshot-port.ts';
 

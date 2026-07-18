@@ -1,8 +1,7 @@
+import type { OwnerVfsRevisionFrame, PathVersion } from '../workbench/project-vfs-contract.ts';
 import {
   type HostCommitOperation,
-  type OwnerVfsRevisionFrame,
   type OwnerVfsSnapshotEntry,
-  type PathVersion,
   VfsVersionConflictError,
 } from './owner-vfs-protocol.ts';
 import type { VfsCommitReceipt } from './vfs-commit-coordinator.ts';

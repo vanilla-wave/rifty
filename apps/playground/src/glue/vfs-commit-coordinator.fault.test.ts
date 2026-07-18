@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { OwnerVfsRevisionFrame } from '../workbench/project-vfs-contract.ts';
 import type {
   HostCommitAck,
   HostCommitRequest,
   OwnerVfsDurabilityReceipt,
-  OwnerVfsRevisionFrame,
 } from './owner-vfs-protocol.ts';
 import { VfsCommitAppliedError, VfsVersionConflictError } from './owner-vfs-protocol.ts';
 import {

@@ -12,11 +12,11 @@ import {
   OperationIdReuseError,
   type OwnerVfsSnapshot,
   type OwnerVfsSnapshotEntry,
-  type PathVersion,
   VfsVersionConflictError,
 } from '../glue/owner-vfs-protocol.ts';
 import { ScopedFsSync, scopeActiveVfsToWorkspace, workspaceVfsPrefix } from '../glue/scoped-vfs.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import type { PathVersion } from '../workbench/project-vfs-contract.ts';
 import {
   type OwnerVfsAuthority,
   type OwnerVfsAuthorityOptions,

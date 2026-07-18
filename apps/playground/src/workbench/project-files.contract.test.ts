@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { HostCommitAck, OwnerVfsSnapshotEntry } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitAppliedError, VfsVersionConflictError } from '../glue/owner-vfs-protocol.ts';
-import { SnapshotFs } from '../glue/snapshot-fs.ts';
 import { VfsOwnerExitedError, createVfsCommitCoordinator } from '../glue/vfs-commit-coordinator.ts';
-import type { VfsSnapshotFrame } from '../glue/vfs-snapshot-port.ts';
 import { ClosedHandleError, FileConflictError, ProjectFileOperationError } from './errors.ts';
+import { SnapshotFs } from './internal/snapshot-fs.ts';
 import { createProjectFileVersionBoundary } from './project-file-boundary.ts';
 import { createProjectFilesController } from './project-files.ts';
+import type { VfsSnapshotFrame } from './project-vfs-contract.ts';
 
 const ROOT = '/.rifty/workbench/projects/p-1';
 const OWNER_EPOCH = 'owner-files-contract';

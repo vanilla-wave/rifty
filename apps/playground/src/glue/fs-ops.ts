@@ -28,7 +28,7 @@ export interface FsOpsTarget {
    */
   readonly readOnly?: boolean;
   /**
-   * Owner-snapshot targets ({@link ./snapshot-fs.ts}) notify on every applied
+   * Owner-snapshot targets ({@link ../workbench/internal/snapshot-fs.ts}) notify on every applied
    * frame so a reader can retry a path a just-seeded owner write has not yet
    * reflected (editor seeded-file-editable retry). Returns an unsubscribe.
    * Absent on the plain sync mirror (no async publish to await).

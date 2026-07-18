@@ -1,5 +1,5 @@
 import { type VfsMutationIntent, isAbsolute, normalizePath } from '@riftydev/vfs';
-import type { OwnerEpoch, TreeRevision } from '../glue/owner-vfs-protocol.ts';
+import type { OwnerEpoch, TreeRevision } from '../workbench/project-vfs-contract.ts';
 
 export type OwnerVfsAppliedMutation =
   | {

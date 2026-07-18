@@ -1,9 +1,8 @@
 /**
  * Read-only page-side view of a worker realm's project tree (ADR-0076).
  *
- * Built from {@link VfsSnapshotFrame}s arriving over {@link ./vfs-snapshot-port.ts};
- * implements the {@link FsOpsTarget} read slice so the {@link
- * ../components/FileExplorer.tsx | FileExplorer} and editor can render the real
+ * Built from {@link VfsSnapshotFrame}s arriving over the owner transport;
+ * implements the file-system read slice so the FileExplorer and editor can render the real
  * Vite project that lives in the worker. `readOnly` is `true`: every mutation
  * throws a clear, pathful error (no silent stub — the worker owns these files,
  * the page never writes them back). The `node_modules` subtree is intentionally
@@ -11,14 +10,14 @@
  * exists in the worker so the UI can hint it without listing thousands of files.
  */
 import { type VfsDirent, dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
-import type { FsOpsTarget } from './fs-ops.ts';
 import type {
   OwnerEpoch,
   OwnerVfsRevisionFrame,
   PathVersion,
   TreeRevision,
-} from './owner-vfs-protocol.ts';
-import type { VfsSnapshotEntry, VfsSnapshotFrame } from './vfs-snapshot-port.ts';
+  VfsSnapshotEntry,
+  VfsSnapshotFrame,
+} from '../project-vfs-contract.ts';
 
 interface Node {
   readonly kind: 'file' | 'dir';
@@ -32,7 +31,7 @@ function readOnlyThrow(op: string, path: string): never {
   throw new Error(`${op}: "${path}" is read-only — it lives in the Vite worker realm`);
 }
 
-export class SnapshotFs implements FsOpsTarget {
+export class SnapshotFs {
   readonly readOnly = true;
 
   #root: string;

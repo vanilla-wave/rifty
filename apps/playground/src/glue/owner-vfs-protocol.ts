@@ -1,13 +1,11 @@
 /** Owner-realm VFS revision/CAS frames. Internal until Workbench extraction. */
 
-/** Fresh nonce for one owner lifetime. Consumers compare it; they never parse it. */
-export type OwnerEpoch = string;
-
-/** Monotonic within one {@link OwnerEpoch}. */
-export type TreeRevision = number;
-
-/** Opaque token for one path state. Equality is its only supported operation. */
-export type PathVersion = string;
+import type {
+  OwnerEpoch,
+  OwnerVfsRevisionFrame,
+  PathVersion,
+  TreeRevision,
+} from '../workbench/project-vfs-contract.ts';
 
 /** Loud boundary failure for a malformed or mis-correlated VFS protocol frame. */
 export class VfsCommitProtocolError extends Error {
@@ -15,12 +13,6 @@ export class VfsCommitProtocolError extends Error {
     super(message);
     this.name = 'VfsCommitProtocolError';
   }
-}
-
-/** Minimal owner identity carried by every reflected state frame. */
-export interface OwnerVfsRevisionFrame {
-  readonly ownerEpoch: OwnerEpoch;
-  readonly treeRevision: TreeRevision;
 }
 
 interface HostCommitBase {

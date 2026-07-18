@@ -1,8 +1,7 @@
 import type { OwnerVfsClientTimers } from '../glue/owner-vfs-client.ts';
 import { createOwnerVfsClient } from '../glue/owner-vfs-client.ts';
-import type { HostCommitOperation, OwnerEpoch, TreeRevision } from '../glue/owner-vfs-protocol.ts';
+import type { HostCommitOperation } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
-import { SnapshotFs } from '../glue/snapshot-fs.ts';
 import type {
   VfsCommitCoordinator,
   VfsCommitObservation,
@@ -11,6 +10,7 @@ import type {
 } from '../glue/vfs-commit-coordinator.ts';
 import { createVfsCommitCoordinator } from '../glue/vfs-commit-coordinator.ts';
 import { ClosedHandleError } from './errors.ts';
+import { SnapshotFs } from './internal/snapshot-fs.ts';
 import {
   type ProjectContentController,
   createProjectContentController,
@@ -18,6 +18,7 @@ import {
 import type { ProjectDocumentReadEntry } from './project-documents.ts';
 import type { ProjectDocumentsMutation } from './project-documents.ts';
 import { type OwnerProjectFileEntry, toProjectPath } from './project-file-boundary.ts';
+import type { OwnerEpoch, TreeRevision } from './project-vfs-contract.ts';
 import type {
   OwnerProjectVfsFrame,
   PageProjectVfsFrame,

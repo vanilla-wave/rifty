@@ -2,7 +2,6 @@ import { EventEmitter } from 'node:events';
 import type { WorkerProcessHandle } from '@riftydev/kernel';
 import { SW_FRAME_VERSION, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 import { describe, expect, it, vi } from 'vitest';
-import type { VfsSnapshotEntry } from '../glue/vfs-snapshot-port.ts';
 import {
   DirtyProjectDocumentError,
   ProjectDefinitionMismatchError,
@@ -19,6 +18,7 @@ import {
   inspectProjectDefinition,
   projects,
 } from './project-definition.ts';
+import type { VfsSnapshotEntry } from './project-vfs-contract.ts';
 import { startBrowserWorkspaceOwner, workbenchOwnerSpawnSpec } from './workbench-browser-owner.ts';
 import type { WorkbenchOwnerStartInput } from './workbench-owner-port.ts';
 

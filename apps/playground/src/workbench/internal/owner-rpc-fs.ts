@@ -6,9 +6,9 @@ import {
   createFileAsync,
   deletePathAsync,
   renamePathAsync,
-} from './fs-ops.ts';
+} from '../../glue/fs-ops.ts';
+import type { VfsWriteFrame } from '../../glue/vfs-write-port.ts';
 import type { SnapshotFs } from './snapshot-fs.ts';
-import type { VfsWriteFrame } from './vfs-write-port.ts';
 
 function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
   if (left.byteLength !== right.byteLength) return false;

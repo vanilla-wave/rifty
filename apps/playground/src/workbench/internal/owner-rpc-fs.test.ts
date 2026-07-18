@@ -1,12 +1,15 @@
 import { syncMirror } from '@riftydev/vfs';
 import { resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type OwnerVfsAuthority, createOwnerVfsAuthority } from '../workers/owner-vfs-authority.ts';
-import { createFileAsync, renamePathAsync } from './fs-ops.ts';
+import { createFileAsync, renamePathAsync } from '../../glue/fs-ops.ts';
+import { SNAPSHOT_MAX_CONTENT_BYTES, collectSnapshot } from '../../glue/vfs-snapshot-port.ts';
+import { type VfsWriteFrame, applyVfsWriteFrame } from '../../glue/vfs-write-port.ts';
+import {
+  type OwnerVfsAuthority,
+  createOwnerVfsAuthority,
+} from '../../workers/owner-vfs-authority.ts';
 import { OwnerRpcFs } from './owner-rpc-fs.ts';
 import { SnapshotFs } from './snapshot-fs.ts';
-import { SNAPSHOT_MAX_CONTENT_BYTES, collectSnapshot } from './vfs-snapshot-port.ts';
-import { type VfsWriteFrame, applyVfsWriteFrame } from './vfs-write-port.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();

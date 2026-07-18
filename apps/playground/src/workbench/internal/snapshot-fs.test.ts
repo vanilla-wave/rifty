@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { FsOpsTarget } from '../../glue/fs-ops.ts';
+import type { VfsSnapshotFrame } from '../project-vfs-contract.ts';
 import { SnapshotFs } from './snapshot-fs.ts';
-import type { VfsSnapshotFrame } from './vfs-snapshot-port.ts';
 
 const enc = new TextEncoder();
 
@@ -62,6 +63,14 @@ function boundSnapshotFs(ownerEpoch = 'owner-a'): SnapshotFs {
 }
 
 describe('SnapshotFs', () => {
+  it('retains the shared read-only filesystem target surface', () => {
+    const fs = new SnapshotFs('/workspace');
+    const target: FsOpsTarget = fs;
+
+    expect(target).toBe(fs);
+    expect(target.readOnly).toBe(true);
+  });
+
   it('requires an explicit initial owner bind before accepting wire frames', () => {
     const fs = new SnapshotFs('/workspace');
 

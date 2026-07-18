@@ -1,7 +1,7 @@
 import type { ProcessExit } from '@riftydev/shell';
 import { describe, expect, it } from 'vitest';
-import { SnapshotFs } from '../glue/snapshot-fs.ts';
 import { createVfsCommitCoordinator } from '../glue/vfs-commit-coordinator.ts';
+import { SnapshotFs } from './internal/snapshot-fs.ts';
 
 import { DirtyProjectDocumentError } from './errors.ts';
 import { createProjectContentController } from './project-content.ts';

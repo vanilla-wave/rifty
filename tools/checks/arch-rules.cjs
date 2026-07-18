@@ -107,7 +107,7 @@ const forbidden = [
     },
     to: {
       path: '(?:^|/)playground/src/workbench/',
-      pathNot: '(?:^|/)playground/src/workbench/(?:public|playground)\\.ts$',
+      pathNot: '(?:^|/)playground/src/workbench/(?:public|playground|project-vfs-contract)\\.ts$',
     },
   },
   {

@@ -1,6 +1,5 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
-import { SnapshotFs } from '../glue/snapshot-fs.ts';
 import { createVfsCommitCoordinator } from '../glue/vfs-commit-coordinator.ts';
 import { collectSnapshot } from '../glue/vfs-snapshot-port.ts';
 import { createOwnerVfsAuthority } from '../workers/owner-vfs-authority.ts';
@@ -12,6 +11,7 @@ import {
   ProjectFileOperationError,
   StaleProjectDocumentError,
 } from './errors.ts';
+import { SnapshotFs } from './internal/snapshot-fs.ts';
 import { createProjectContentController } from './project-content.ts';
 import type { ProjectDocumentReadEntry } from './project-documents.ts';
 

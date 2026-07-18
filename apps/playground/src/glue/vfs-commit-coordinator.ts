@@ -1,11 +1,13 @@
 import type {
+  OwnerEpoch,
+  OwnerVfsRevisionFrame,
+  TreeRevision,
+} from '../workbench/project-vfs-contract.ts';
+import type {
   HostCommitAck,
   HostCommitOperation,
   HostCommitRequest,
-  OwnerEpoch,
   OwnerVfsDurabilityReceipt,
-  OwnerVfsRevisionFrame,
-  TreeRevision,
 } from './owner-vfs-protocol.ts';
 import { VfsCommitAppliedError, VfsCommitProtocolError } from './owner-vfs-protocol.ts';
 

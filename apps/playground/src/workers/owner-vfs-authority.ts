@@ -19,16 +19,14 @@ import {
   type HostCommitAck,
   type HostCommitRequest,
   OperationIdReuseError,
-  type OwnerEpoch,
   type OwnerVfsSnapshot,
   type OwnerVfsSnapshotEntry,
-  type PathVersion,
-  type TreeRevision,
   VfsCommitProtocolError,
   VfsVersionConflictError,
   equalHostCommitAcks,
   equalHostCommitRequests,
 } from '../glue/owner-vfs-protocol.ts';
+import type { OwnerEpoch, PathVersion, TreeRevision } from '../workbench/project-vfs-contract.ts';
 import {
   type OwnerVfsAppliedJournal,
   type OwnerVfsAppliedMutation,

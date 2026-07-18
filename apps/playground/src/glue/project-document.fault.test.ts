@@ -1,11 +1,11 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import type { OwnerVfsRevisionFrame } from '../workbench/project-vfs-contract.ts';
 import { type OwnerVfsAuthority, createOwnerVfsAuthority } from '../workers/owner-vfs-authority.ts';
 import type {
   HostCommitAck,
   HostCommitOperation,
   HostCommitRequest,
-  OwnerVfsRevisionFrame,
 } from './owner-vfs-protocol.ts';
 import { VfsVersionConflictError } from './owner-vfs-protocol.ts';
 import {

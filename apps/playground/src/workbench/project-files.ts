@@ -1,8 +1,8 @@
 import type { HostCommitOperation, OwnerVfsSnapshotEntry } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitAppliedError } from '../glue/owner-vfs-protocol.ts';
-import type { SnapshotFs } from '../glue/snapshot-fs.ts';
 import type { VfsCommitCoordinator, VfsCommitReceipt } from '../glue/vfs-commit-coordinator.ts';
 import { ClosedHandleError, type ProjectFileEntry } from './errors.ts';
+import type { SnapshotFs } from './internal/snapshot-fs.ts';
 import {
   type OwnerProjectFileEntry,
   type ProjectFileVersionBoundary,
