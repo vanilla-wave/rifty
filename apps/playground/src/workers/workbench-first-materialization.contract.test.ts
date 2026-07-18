@@ -174,6 +174,7 @@ function withPlaygroundMetadata<TReady>(
 function viteDefinition(
   firstMaterialization: FirstMaterialization,
   id = 'vite-project',
+  viteVersion = '8.0.16',
 ): PlaygroundDefinition {
   return withPlaygroundMetadata(
     inspectProjectDefinition(
@@ -183,7 +184,7 @@ function viteDefinition(
           '/index.html': '<main id="app"></main>',
           '/src/main.ts': "console.log('vite output')\n",
         },
-        viteVersion: '8.0.16',
+        viteVersion,
       }),
     ),
     {
@@ -1137,6 +1138,42 @@ afterEach(() => {
 });
 
 describe('Workbench companion first materialization Contract+RED', () => {
+  it('holds a deferred Vite 7 child behind visible runtime-asset readiness', async () => {
+    const fetchSnapshot = vi.fn(async () => {
+      throw new Error('kind:install must not fetch a dependency snapshot');
+    });
+    vi.stubGlobal('fetch', fetchSnapshot);
+    const h = ownerHarness();
+    const definition = viteDefinition(
+      { kind: 'install' },
+      'vite-seven-runtime-assets',
+      '7.3.6',
+    );
+
+    const materialized = await h.open(definition);
+    expect.soft(h.timeline.installs).toEqual([]);
+    expect.soft(h.children).toEqual([]);
+
+    const session = await h.session(definition, materialized);
+    const run = session.run();
+    const child = await waitForChild(h, 0);
+    child.finish('vite: seven output\n');
+    await run.exited;
+    await run.close();
+    await session.close();
+    await h.close();
+
+    const visibleInstall = eventIndex(h.timeline.events, 'terminal:stdout:$ npm install');
+    const cacheCheck = eventIndex(h.timeline.events, 'runtime asset 1/1 cache-check');
+    const verify = eventIndex(h.timeline.events, 'runtime asset 1/1 verify');
+    const ready = eventIndex(h.timeline.events, 'runtime assets ready: 1');
+    const spawn = eventIndex(h.timeline.events, 'child:spawn:');
+    expect(cacheCheck).toBeGreaterThan(visibleInstall);
+    expect(verify).toBeGreaterThan(cacheCheck);
+    expect(ready).toBeGreaterThan(verify);
+    expect(spawn).toBeGreaterThan(ready);
+  });
+
   it('runs a cold install visibly on the default PTY, preserves the Vite port, then reuses the warm claim', async () => {
     const fetchSnapshot = vi.fn(async () => {
       throw new Error('kind:install must not fetch a dependency snapshot');
