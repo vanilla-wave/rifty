@@ -85,17 +85,21 @@ export { SyncRpcClient, type SyncRpcClientOptions } from './ipc/sync-client.ts';
 // higher runtime layer reads to build its own `process` object.
 export {
   KERNEL_ENTRY_BOOTSTRAP_KEY,
+  KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
   KERNEL_PROCESS_SPEC_KEY,
   KERNEL_SYNC_CALL_KEY,
   type KernelEntryBootstrapEnvelope,
+  type KernelEntryCapabilityPorts,
   type KernelProcessSpec,
   type KernelProcessStdioPorts,
   type KernelSyncApi,
   type KernelSyncCall,
   publishKernelEntryBootstrap,
+  publishKernelEntryCapabilityPorts,
   publishKernelProcessSpec,
   publishKernelSyncApi,
   readKernelEntryBootstrap,
+  readKernelEntryCapabilityPorts,
   readKernelProcessSpec,
   readKernelSyncApi,
 } from './shared-globals.ts';

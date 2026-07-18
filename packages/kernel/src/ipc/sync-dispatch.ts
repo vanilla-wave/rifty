@@ -79,6 +79,8 @@ function hasWaitAsync(): boolean {
   return typeof (Atomics as unknown as { waitAsync?: unknown }).waitAsync === 'function';
 }
 
+const dispatcherAttachmentSets = new WeakMap<object, Set<SabRing>>();
+
 /**
  * Single-realm dispatcher that owns the parent side of one or more
  * {@link SabRing}s. Register handlers with {@link register}, then
@@ -125,6 +127,7 @@ export class SyncRpcDispatcher {
   private readonly inFlight = new WeakSet<SabRing>();
 
   constructor(opts: SyncRpcDispatcherOptions = {}) {
+    dispatcherAttachmentSets.set(this, this.attachments);
     this.eventDriven = hasWaitAsync();
     const requested = opts.pollIntervalMs ?? DEFAULT_BACKSTOP_MS;
     // Event-driven: clamp to the backstop window (a 1 ms backstop would defeat
@@ -173,8 +176,17 @@ export class SyncRpcDispatcher {
   attach(ring: SabRing): void {
     if (this.attachments.has(ring)) return;
     this.attachments.add(ring);
-    this.ensureTimer();
-    if (this.eventDriven) this.arm(ring);
+    try {
+      this.ensureTimer();
+      if (this.eventDriven) this.arm(ring);
+    } catch (error) {
+      try {
+        this.detach(ring);
+      } catch {
+        /* the original attachment failure wins */
+      }
+      throw error;
+    }
   }
 
   /** Stop watching `ring`. Safe to call when not attached (no-op). */
@@ -375,6 +387,26 @@ export class SyncRpcDispatcher {
       this.inFlight.delete(ring);
       this.rearm(ring);
     }
+  }
+}
+
+/**
+ * Package-private spawn chokepoint. It also handles a test/fault wrapper that
+ * throws after `attach()` returns by consulting exact per-dispatcher ring
+ * membership; aggregate counts are never used as an ownership proxy.
+ */
+export function attachSyncRpcDispatcherRing(dispatcher: SyncRpcDispatcher, ring: SabRing): void {
+  try {
+    dispatcher.attach(ring);
+  } catch (error) {
+    if (dispatcherAttachmentSets.get(dispatcher)?.has(ring) === true) {
+      try {
+        dispatcher.detach(ring);
+      } catch {
+        /* the original attachment failure wins */
+      }
+    }
+    throw error;
   }
 }
 

@@ -245,6 +245,41 @@ describe('entry-scoped bootstrap envelope', () => {
     beta.port2.close();
   });
 
+  it('publishes independent non-null bootstrap and capability snapshots before pre-entry', async () => {
+    const capability = new MessageChannel();
+    const bootstrap: KernelEntryBootstrapEnvelope = {
+      protocol: 'test:bootstrap-and-capability/v1',
+      payload: { project: 'alpha' },
+    };
+    let seenBootstrap: KernelEntryBootstrapEnvelope | null = null;
+    let seenCapabilities: Readonly<Record<string, MessagePort>> | null = null;
+
+    const outcome = await runEntryLifecycle(
+      makeSpec({
+        kind: 'url',
+        url: 'https://example.invalid/capability-entry.js',
+        bootstrap,
+        capabilityPorts: { 'test.independent': capability.port2 },
+      }),
+      makeDeps({
+        preEntryHook: () => {
+          seenBootstrap = readKernelEntryBootstrap();
+          seenCapabilities = capabilityApi.readKernelEntryCapabilityPorts();
+        },
+      }),
+    );
+
+    expect(outcome).toEqual({ threw: false, code: 0 });
+    expect(seenBootstrap).toBe(bootstrap);
+    expect(seenCapabilities).not.toBe(bootstrap);
+    expect(Object.entries(seenCapabilities ?? {})).toEqual([
+      ['test.independent', capability.port2],
+    ]);
+
+    capability.port1.close();
+    capability.port2.close();
+  });
+
   it('publishes frozen empty capabilities for absent URL and source entries, clearing stale state', async () => {
     const stale = new MessageChannel();
     capabilityApi.publishKernelEntryCapabilityPorts({ stale: stale.port2 });
@@ -269,9 +304,7 @@ describe('entry-scoped bootstrap envelope', () => {
       expect(Object.getPrototypeOf(value)).toBeNull();
       expect(Object.isFrozen(value)).toBe(true);
     }
-    expect(Object.keys(globalThis)).not.toContain(
-      capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
-    );
+    expect(Object.keys(globalThis)).not.toContain(capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY);
 
     stale.port1.close();
     stale.port2.close();

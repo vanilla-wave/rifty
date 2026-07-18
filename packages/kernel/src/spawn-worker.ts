@@ -15,7 +15,11 @@
 import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
-import type { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
+import { type SyncRpcDispatcher, attachSyncRpcDispatcherRing } from './ipc/sync-dispatch.ts';
+import {
+  type KernelEntryCapabilityPorts,
+  snapshotKernelEntryCapabilityPorts,
+} from './shared-globals.ts';
 import type {
   WorkerEntryDescriptor,
   WorkerInitMessage,
@@ -125,6 +129,42 @@ export interface SpawnWorkerResult {
   terminate(): void;
 }
 
+/** Validate/snapshot URL-entry capabilities before spawn adopts any resource. */
+function normalizeWorkerEntryDescriptor(entry: WorkerEntryDescriptor): WorkerEntryDescriptor {
+  const capabilityDescriptor = Object.getOwnPropertyDescriptor(entry, 'capabilityPorts');
+  if (entry.kind === 'source') {
+    if (capabilityDescriptor !== undefined) {
+      throw new TypeError(
+        "WorkerEntryDescriptor.capabilityPorts 'capabilityPorts' is valid only on URL entries",
+      );
+    }
+    return entry;
+  }
+
+  if (capabilityDescriptor !== undefined && !('value' in capabilityDescriptor)) {
+    throw new TypeError(
+      "WorkerEntryDescriptor.capabilityPorts 'capabilityPorts' must be a data property; accessors are forbidden",
+    );
+  }
+  if (capabilityDescriptor !== undefined && !capabilityDescriptor.enumerable) {
+    throw new TypeError(
+      "WorkerEntryDescriptor.capabilityPorts 'capabilityPorts' must be enumerable",
+    );
+  }
+
+  const capabilityPorts =
+    capabilityDescriptor === undefined || capabilityDescriptor.value === undefined
+      ? undefined
+      : snapshotKernelEntryCapabilityPorts(capabilityDescriptor.value);
+  const normalized: WorkerEntryDescriptor = {
+    kind: 'url',
+    url: entry.url,
+    ...(entry.bootstrap === undefined ? {} : { bootstrap: entry.bootstrap }),
+    ...(capabilityPorts === undefined ? {} : { capabilityPorts }),
+  };
+  return Object.freeze(normalized);
+}
+
 /**
  * Performs the `new Worker(...)` + `postMessage(init, transfer)` dance.
  * Throws {@link NotImplementedError} when {@link setKernelWorkerUrl} hasn't
@@ -145,89 +185,27 @@ export function spawnKernelWorker(
 
   const { pid, ppid } = identity;
 
-  // SAB ring (sync IPC, ADR-0011 phase 1). SAB is shared, so it is NOT in the
-  // transfer list — both peers map it. ADR-0084 #19: a single capacity value
-  // sizes the buffer AND travels in the spec so the child attaches identically.
-  const payloadCapacity = spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY;
-  const { sab, ring } = createSabRing({ payloadCapacity });
+  // Validation is the adoption point: malformed input allocates nothing and
+  // remains caller-owned. After this returns, every supplied child endpoint is
+  // part of the spawn resource transaction (ADR-0266).
+  const normalizedEntry = normalizeWorkerEntryDescriptor(spec.entry);
+  const capabilityPorts: readonly MessagePort[] =
+    normalizedEntry.kind === 'url' && normalizedEntry.capabilityPorts !== undefined
+      ? Object.values(normalizedEntry.capabilityPorts as KernelEntryCapabilityPorts)
+      : [];
 
-  // Four MessageChannels: three for stdio, one for fork-mode IPC (ADR-0045).
-  // Kernel-side keeps the `port1`s; `port2`s ship to the worker.
-  const stdoutCh = new MessageChannel();
-  const stderrCh = new MessageChannel();
-  const stdinCh = new MessageChannel();
-  const ipcCh = new MessageChannel();
-
-  const ports: WorkerStdioPorts = {
-    stdout: stdoutCh.port1,
-    stderr: stderrCh.port1,
-    stdin: stdinCh.port1,
-    ipc: ipcCh.port1,
-  };
-
-  const childPorts: WorkerStdioPorts = {
-    stdout: stdoutCh.port2,
-    stderr: stderrCh.port2,
-    stdin: stdinCh.port2,
-    ipc: ipcCh.port2,
-  };
-
-  const fullSpec: WorkerSpawnSpec = {
-    entry: spec.entry,
-    argv: spec.argv,
-    env: spec.env,
-    cwd: spec.cwd,
-    stdio: childPorts,
-    syncRing: sab,
-    payloadCapacity,
-    pid,
-    ppid,
-    serve: spec.serve,
-  };
-
-  const worker: WorkerLike = makeKernelWorker(url);
-
-  // ADR-0011 phase 3: share the single module-level dispatcher across every
-  // spawn. `attach(ring)` is idempotent and reuses the global polling timer.
-  const dispatcher = getKernelDispatcher();
-  dispatcher.attach(ring);
-
-  const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
-  try {
-    worker.postMessage(init, [
-      childPorts.stdout,
-      childPorts.stderr,
-      childPorts.stdin,
-      childPorts.ipc,
-    ]);
-  } catch (error) {
-    // Init is the commit point for this resource transaction. A synchronous
-    // structured-clone/transfer failure returns no handle to the caller, so
-    // roll back every resource acquired above before preserving the error.
-    dispatcher.detach(ring);
-    try {
-      worker.terminate();
-    } catch {
-      /* the worker constructor succeeded but its realm may already be gone */
-    }
-    for (const port of [
-      ports.stdout,
-      ports.stderr,
-      ports.stdin,
-      ports.ipc,
-      childPorts.stdout,
-      childPorts.stderr,
-      childPorts.stdin,
-      childPorts.ipc,
-    ]) {
-      try {
-        port.close();
-      } catch {
-        /* a failed transfer may already have disentangled the port */
-      }
-    }
-    throw error;
-  }
+  let ring: SabRing | null = null;
+  let sab: SharedArrayBuffer | null = null;
+  let worker: WorkerLike | null = null;
+  let dispatcher: SyncRpcDispatcher | null = null;
+  let dispatcherAttached = false;
+  let ports: WorkerStdioPorts | null = null;
+  let fullSpec: WorkerSpawnSpec | null = null;
+  const acquiredFixedPorts: MessagePort[] = [];
+  const installedListeners: Array<{
+    readonly type: string;
+    readonly listener: (event: MessageEvent) => void;
+  }> = [];
 
   let terminated = false;
   const exitListeners: ((code: number) => void)[] = [];
@@ -255,15 +233,28 @@ export function spawnKernelWorker(
   function tearDownWorker(): void {
     if (terminated) return;
     terminated = true;
-    dispatcher.detach(ring);
-    try {
-      worker.terminate();
-    } catch {
-      /* the realm may already be gone */
+    if (dispatcherAttached && dispatcher !== null && ring !== null) {
+      dispatcherAttached = false;
+      try {
+        dispatcher.detach(ring);
+      } catch {
+        /* teardown continues across independent resources */
+      }
     }
-    worker.removeEventListener('message', onMessage);
-    worker.removeEventListener('error', onError);
-    worker.removeEventListener('messageerror', onMessageError);
+    if (worker !== null) {
+      try {
+        worker.terminate();
+      } catch {
+        /* the realm may already be gone */
+      }
+      for (const installed of installedListeners) {
+        try {
+          worker.removeEventListener(installed.type, installed.listener);
+        } catch {
+          /* teardown continues across independent listeners */
+        }
+      }
+    }
   }
 
   function clearSubscribers(): void {
@@ -330,9 +321,122 @@ export function spawnKernelWorker(
     dispatchMessageError(ev);
   };
 
-  worker.addEventListener('message', onMessage);
-  worker.addEventListener('error', onError);
-  worker.addEventListener('messageerror', onMessageError);
+  const closeFailedSpawnResources = (): void => {
+    if (dispatcherAttached && dispatcher !== null && ring !== null) {
+      dispatcherAttached = false;
+      try {
+        dispatcher.detach(ring);
+      } catch {
+        /* preserve the spawn failure and continue rollback */
+      }
+    }
+    if (worker !== null) {
+      try {
+        worker.terminate();
+      } catch {
+        /* preserve the spawn failure and continue rollback */
+      }
+      for (const installed of installedListeners) {
+        try {
+          worker.removeEventListener(installed.type, installed.listener);
+        } catch {
+          /* preserve the spawn failure and continue rollback */
+        }
+      }
+    }
+    const closed = new Set<MessagePort>();
+    for (const port of [...acquiredFixedPorts, ...capabilityPorts]) {
+      if (closed.has(port)) continue;
+      closed.add(port);
+      try {
+        port.close();
+      } catch {
+        /* transferred/already-closed endpoint */
+      }
+    }
+  };
+
+  try {
+    // SAB ring (sync IPC, ADR-0011 phase 1). SAB is shared, so it is NOT in the
+    // transfer list — both peers map it. ADR-0084 #19: a single capacity value
+    // sizes the buffer AND travels in the spec so the child attaches identically.
+    const payloadCapacity = spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY;
+    const createdRing = createSabRing({ payloadCapacity });
+    sab = createdRing.sab;
+    ring = createdRing.ring;
+
+    const createTrackedChannel = (): MessageChannel => {
+      const channel = new MessageChannel();
+      acquiredFixedPorts.push(channel.port1, channel.port2);
+      return channel;
+    };
+    // Four MessageChannels: three for stdio, one for fork-mode IPC (ADR-0045).
+    const stdoutCh = createTrackedChannel();
+    const stderrCh = createTrackedChannel();
+    const stdinCh = createTrackedChannel();
+    const ipcCh = createTrackedChannel();
+
+    ports = {
+      stdout: stdoutCh.port1,
+      stderr: stderrCh.port1,
+      stdin: stdinCh.port1,
+      ipc: ipcCh.port1,
+    };
+    const childPorts: WorkerStdioPorts = {
+      stdout: stdoutCh.port2,
+      stderr: stderrCh.port2,
+      stdin: stdinCh.port2,
+      ipc: ipcCh.port2,
+    };
+    fullSpec = {
+      entry: normalizedEntry,
+      argv: spec.argv,
+      env: spec.env,
+      cwd: spec.cwd,
+      stdio: childPorts,
+      syncRing: sab,
+      payloadCapacity,
+      pid,
+      ppid,
+      serve: spec.serve,
+    };
+
+    const spawnedWorker = makeKernelWorker(url);
+    worker = spawnedWorker;
+    dispatcher = getKernelDispatcher();
+    attachSyncRpcDispatcherRing(dispatcher, ring);
+    dispatcherAttached = true;
+
+    const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
+    spawnedWorker.postMessage(init, [
+      childPorts.stdout,
+      childPorts.stderr,
+      childPorts.stdin,
+      childPorts.ipc,
+      ...capabilityPorts,
+    ]);
+
+    const addLifecycleListener = (type: string, listener: (event: MessageEvent) => void): void => {
+      spawnedWorker.addEventListener(type, listener);
+      installedListeners.push({ type, listener });
+    };
+    addLifecycleListener('message', onMessage);
+    addLifecycleListener('error', onError);
+    addLifecycleListener('messageerror', onMessageError);
+  } catch (error) {
+    closeFailedSpawnResources();
+    throw error;
+  }
+
+  if (
+    ring === null ||
+    worker === null ||
+    dispatcher === null ||
+    ports === null ||
+    fullSpec === null
+  ) {
+    throw new Error('spawnKernelWorker: resource transaction completed without a full spawn');
+  }
 
   return {
     pid,

@@ -25,6 +25,13 @@
 
 ### Added
 
+- **Opaque named capability ports for URL-worker entries (ADR-0266).** A URL
+  `WorkerEntryDescriptor` may carry a validated, snapshotted record of
+  caller-owned `MessagePort`s. Spawn transfers fixed stdio/IPC first and named
+  capabilities in record order; the child publishes a frozen null-prototype
+  snapshot before pre-entry. Allocation, attach, init-post, listener, and
+  child-setup failures now roll back every adopted endpoint and realm while
+  preserving the first failure. Source entries reject capability ports.
 - **Entry-scoped URL-worker bootstrap envelope.** `WorkerEntryDescriptor` URL
   entries may carry typed `{protocol, payload}` metadata inside the existing
   init message. Worker boot publishes it as a non-enumerable shared global

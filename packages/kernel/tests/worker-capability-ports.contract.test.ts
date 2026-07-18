@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KernelProcessSpec } from '../src/shared-globals.ts';
-import * as workerEntryPublic from '../src/worker-entry.ts';
-import type { EntryLifecycleDeps } from '../src/worker-entry.ts';
 import {
   type WorkerLike,
   clearKernelDispatcher,
@@ -12,6 +10,8 @@ import {
   setWorkerFactoryForTests,
   spawnKernelWorker,
 } from '../src/spawn-worker.ts';
+import * as workerEntryPublic from '../src/worker-entry.ts';
+import type { EntryLifecycleDeps } from '../src/worker-entry.ts';
 import type { WorkerEntryDescriptor } from '../src/worker-entry.ts';
 
 const sourceEntryCannotCarryCapabilityPorts: WorkerEntryDescriptor = {

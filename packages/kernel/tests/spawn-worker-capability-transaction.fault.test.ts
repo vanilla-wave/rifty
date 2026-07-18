@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ProcessManager } from '../src/process-manager.ts';
 import { createSabRing } from '../src/ipc/sab-ring.ts';
+import { ProcessManager } from '../src/process-manager.ts';
 import {
   type WorkerLike,
   clearKernelDispatcher,

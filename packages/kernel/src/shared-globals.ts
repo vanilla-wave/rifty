@@ -16,6 +16,9 @@
  *      attached to one URL entry. The worker bootstrap publishes it before
  *      the pre-entry hook; higher runtimes select their own protocol and
  *      decode the opaque payload.
+ *   4. {@link KernelEntryCapabilityPorts} — an entry-scoped frozen map of
+ *      opaque MessagePort capabilities, transported separately from process
+ *      identity and higher-runtime bootstrap metadata (ADR-0266).
  *
  * Values live on `globalThis` under string keys (cross-bundle sharing — no
  * module identity to rely on across the Worker boundary). The `publish*` /
@@ -79,6 +82,9 @@ export interface KernelEntryBootstrapEnvelope {
   readonly payload: unknown;
 }
 
+/** Opaque named MessagePort capabilities attached to one URL worker entry. */
+export type KernelEntryCapabilityPorts = Readonly<Record<string, MessagePort>>;
+
 /**
  * Internal hook keys. Exported only so conformance tests can assert the
  * publish path; production code goes through {@link publishKernelSyncApi} /
@@ -87,11 +93,17 @@ export interface KernelEntryBootstrapEnvelope {
 export const KERNEL_SYNC_CALL_KEY = '__riftyKernelSyncCall' as const;
 export const KERNEL_PROCESS_SPEC_KEY = '__riftyProcessSpec__' as const;
 export const KERNEL_ENTRY_BOOTSTRAP_KEY = '__riftyKernelEntryBootstrap__' as const;
+export const KERNEL_ENTRY_CAPABILITY_PORTS_KEY = '__riftyKernelEntryCapabilityPorts__' as const;
+
+const EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS = Object.freeze(
+  Object.create(null) as Record<string, MessagePort>,
+) as KernelEntryCapabilityPorts;
 
 interface GlobalWithKernelHooks {
   [KERNEL_SYNC_CALL_KEY]?: KernelSyncCall;
   [KERNEL_PROCESS_SPEC_KEY]?: KernelProcessSpec;
   [KERNEL_ENTRY_BOOTSTRAP_KEY]?: KernelEntryBootstrapEnvelope | null;
+  [KERNEL_ENTRY_CAPABILITY_PORTS_KEY]?: KernelEntryCapabilityPorts;
 }
 
 function asGlobal(): GlobalWithKernelHooks {
@@ -172,4 +184,89 @@ export function publishKernelEntryBootstrap(bootstrap: KernelEntryBootstrapEnvel
 /** Read this entry's bootstrap envelope; `null` when absent or unpublished. */
 export function readKernelEntryBootstrap(): KernelEntryBootstrapEnvelope | null {
   return asGlobal()[KERNEL_ENTRY_BOOTSTRAP_KEY] ?? null;
+}
+
+function capabilityKeyLabel(key: PropertyKey | '<root>'): string {
+  if (key === '<root>') return key;
+  if (typeof key === 'symbol') return String(key);
+  if (typeof key === 'number') return String(key);
+  if (key.length === 0) return "''";
+  return `'${key}'`;
+}
+
+function capabilityTypeError(key: PropertyKey | '<root>', detail: string): TypeError {
+  return new TypeError(
+    `WorkerEntryDescriptor.capabilityPorts ${capabilityKeyLabel(key)} ${detail}`,
+  );
+}
+
+/**
+ * Validate and snapshot an adopted capability record without invoking getters.
+ * The returned value is a frozen null-prototype record, so later caller
+ * mutation cannot change the entry transferred to the worker.
+ */
+export function snapshotKernelEntryCapabilityPorts(value: unknown): KernelEntryCapabilityPorts {
+  if (typeof value !== 'object' || value === null) {
+    throw capabilityTypeError('<root>', 'must be a plain or null-prototype record');
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw capabilityTypeError('<root>', 'must be a plain or null-prototype record');
+  }
+
+  const snapshot = Object.create(null) as Record<string, MessagePort>;
+  const seen = new Set<MessagePort>();
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) {
+      throw capabilityTypeError(key, 'changed during validation');
+    }
+    if (!('value' in descriptor)) {
+      throw capabilityTypeError(key, 'must be a data property; accessors are forbidden');
+    }
+    if (typeof key === 'symbol') {
+      if (descriptor.enumerable) {
+        throw capabilityTypeError(key, 'must not be an enumerable symbol');
+      }
+      continue;
+    }
+    if (!descriptor.enumerable) continue;
+    if (key.length === 0) {
+      throw capabilityTypeError(key, 'must be a non-empty exact string');
+    }
+    const port = descriptor.value;
+    if (typeof MessagePort === 'undefined' || !(port instanceof MessagePort)) {
+      throw capabilityTypeError(key, 'must be a MessagePort');
+    }
+    if (seen.has(port)) {
+      throw capabilityTypeError(key, 'duplicates a MessagePort already used by another name');
+    }
+    seen.add(port);
+    snapshot[key] = port;
+  }
+  return Object.freeze(snapshot);
+}
+
+/**
+ * Publish this URL entry's capability snapshot. Absence publishes the shared
+ * frozen empty value, clearing stale state in reused test hosts.
+ */
+export function publishKernelEntryCapabilityPorts(
+  ports: KernelEntryCapabilityPorts | null | undefined,
+): void {
+  const snapshot =
+    ports === null || ports === undefined
+      ? EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS
+      : snapshotKernelEntryCapabilityPorts(ports);
+  Object.defineProperty(globalThis, KERNEL_ENTRY_CAPABILITY_PORTS_KEY, {
+    value: snapshot,
+    writable: false,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
+/** Read this entry's capabilities; absence is a frozen empty null-prototype map. */
+export function readKernelEntryCapabilityPorts(): KernelEntryCapabilityPorts {
+  return asGlobal()[KERNEL_ENTRY_CAPABILITY_PORTS_KEY] ?? EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS;
 }
