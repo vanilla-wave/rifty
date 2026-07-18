@@ -7,6 +7,8 @@
 - A competing tab now gets a directed occupied-workspace screen instead of an
   editable-looking failure, while Chromium acceptance proves that exact
   `Saved` bytes reopen in both the explicitly reloaded tab and a later fresh tab.
+- Workbench admission failures keep the persistent Retry/Reload recovery
+  surface even though admission now precedes terminal and App construction.
 
 ### Added (app-local Workbench contract)
 

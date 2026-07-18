@@ -37,6 +37,7 @@ describe('Playground page entry adapter', () => {
     const calls: string[] = [];
     const createTerminalPersistence = vi.fn();
     const mountApp = vi.fn();
+    const mountBootFailed = vi.fn();
 
     await mountPlaygroundPage({
       bootstrapPlayground: async () => {
@@ -50,9 +51,35 @@ describe('Playground page entry adapter', () => {
       createTerminalPersistence,
       mountApp,
       mountOccupied: () => calls.push('occupied'),
+      mountBootFailed,
     });
 
     expect(calls).toEqual(['bootstrap', 'workbench', 'occupied']);
+    expect(createTerminalPersistence).not.toHaveBeenCalled();
+    expect(mountApp).not.toHaveBeenCalled();
+    expect(mountBootFailed).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a Workbench boot failure without terminal or App construction', async () => {
+    const cause = new Error('owner worker failed to boot');
+    const createTerminalPersistence = vi.fn();
+    const mountApp = vi.fn();
+    const mountBootFailed = vi.fn();
+    const dependencies = {
+      bootstrapPlayground: async () => BOOT,
+      openPlaygroundAppWorkbench: async () => {
+        throw cause;
+      },
+      createTerminalPersistence,
+      mountApp,
+      mountOccupied: vi.fn(),
+      mountBootFailed,
+    };
+
+    await expect(mountPlaygroundPage(dependencies)).resolves.toBeUndefined();
+
+    expect(mountBootFailed).toHaveBeenCalledTimes(1);
+    expect(mountBootFailed).toHaveBeenCalledWith(cause);
     expect(createTerminalPersistence).not.toHaveBeenCalled();
     expect(mountApp).not.toHaveBeenCalled();
   });
@@ -78,6 +105,7 @@ describe('Playground page entry adapter', () => {
       },
       mountApp,
       mountOccupied: vi.fn(),
+      mountBootFailed: vi.fn(),
     });
 
     expect(calls).toEqual(['bootstrap', 'workbench', 'terminal', 'app']);
@@ -110,6 +138,7 @@ describe('Playground page entry adapter', () => {
         },
         mountApp,
         mountOccupied: vi.fn(),
+        mountBootFailed: vi.fn(),
       });
 
       await expect(started).rejects.toBe(cause);
@@ -135,6 +164,7 @@ describe('Playground page entry adapter', () => {
         throw trigger;
       },
       mountOccupied: vi.fn(),
+      mountBootFailed: vi.fn(),
     }).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(AggregateError);

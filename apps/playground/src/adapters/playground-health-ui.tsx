@@ -198,28 +198,13 @@ export function PlaygroundHealthBanner(props: {
         </output>
       </Show>
       <Show when={props.boot().kind === 'boot-failed'}>
-        <div class="rf-banner rf-banner--health" role="alert" data-workbench-health="boot-failed">
-          <span class="rf-banner__msg">
-            Workbench failed to open —{' '}
-            {(props.boot() as Extract<PlaygroundBootLifecycle, { kind: 'boot-failed' }>).summary}
-          </span>
-          <button
-            type="button"
-            class="rf-btn rf-btn--warn-ghost"
-            data-action="retry-workbench"
-            onClick={() => props.onRetry()}
-          >
-            Retry
-          </button>
-          <button
-            type="button"
-            class="rf-btn rf-btn--ghost"
-            data-action="reload-workbench"
-            onClick={() => props.onReload()}
-          >
-            Reload
-          </button>
-        </div>
+        <PlaygroundBootFailureBanner
+          summary={
+            (props.boot() as Extract<PlaygroundBootLifecycle, { kind: 'boot-failed' }>).summary
+          }
+          onRetry={props.onRetry}
+          onReload={props.onReload}
+        />
       </Show>
       <For each={props.issues()}>
         {(issue) => (
@@ -256,5 +241,33 @@ export function PlaygroundHealthBanner(props: {
         )}
       </For>
     </>
+  );
+}
+
+export function PlaygroundBootFailureBanner(props: {
+  readonly summary: string;
+  readonly onRetry: () => void;
+  readonly onReload: () => void;
+}) {
+  return (
+    <div class="rf-banner rf-banner--health" role="alert" data-workbench-health="boot-failed">
+      <span class="rf-banner__msg">Workbench failed to open — {props.summary}</span>
+      <button
+        type="button"
+        class="rf-btn rf-btn--warn-ghost"
+        data-action="retry-workbench"
+        onClick={() => props.onRetry()}
+      >
+        Retry
+      </button>
+      <button
+        type="button"
+        class="rf-btn rf-btn--ghost"
+        data-action="reload-workbench"
+        onClick={() => props.onReload()}
+      >
+        Reload
+      </button>
+    </div>
   );
 }

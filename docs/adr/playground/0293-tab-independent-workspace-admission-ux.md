@@ -42,13 +42,17 @@ a second workspace id/path would likewise fork the already-stable catalog.
 3. **The first-party host translates, the generic Workbench rejects.** The
    Playground host maps only `WorkbenchOriginOccupiedError` to the closed
    `opened | occupied` outcome used by its entry coordinator. Other failures
-   propagate unchanged. `@riftydev/workbench` does not own UI.
+   propagate unchanged to that coordinator, which preserves ADR-0285's
+   persistent `boot-failed` Retry/Reload surface. `@riftydev/workbench` does
+   not own UI.
 4. **Admission precedes mutable page surfaces.** Normal entry order is the
    existing COI/runtime install -> non-authoritative boot probe ->
    `openPlaygroundWorkbench()` -> terminal persistence -> App. An occupied page
    replaces the cold-boot skeleton with a standalone `role=alert` notice and
    constructs neither terminal persistence nor App. The Workbench's lock-null
    path already starts no owner, project runtime, or writable Workbench store.
+   A non-contention Workbench boot failure instead mounts the shared health
+   failure surface before returning; Retry reloads into a fresh admission.
 5. **Ownership transfers exactly once.** Before App mount, the one-shot
    first-party page-entry adapter owns the opened Workbench and closes it if
    terminal construction or mount fails. After successful mount, App runtime

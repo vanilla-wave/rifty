@@ -9,6 +9,7 @@ export interface PlaygroundPageEntryDependencies {
   readonly openPlaygroundAppWorkbench: () => Promise<PlaygroundAppWorkbenchOpenOutcome>;
   readonly createTerminalPersistence: () => Promise<TerminalPersistence>;
   readonly mountOccupied: () => void;
+  readonly mountBootFailed: (error: unknown) => void;
   readonly mountApp: (props: AppProps) => void;
 }
 
@@ -17,7 +18,13 @@ export async function mountPlaygroundPage(
   dependencies: PlaygroundPageEntryDependencies,
 ): Promise<void> {
   const boot = await dependencies.bootstrapPlayground();
-  const outcome = await dependencies.openPlaygroundAppWorkbench();
+  let outcome: PlaygroundAppWorkbenchOpenOutcome;
+  try {
+    outcome = await dependencies.openPlaygroundAppWorkbench();
+  } catch (error) {
+    dependencies.mountBootFailed(error);
+    return;
+  }
   if (outcome.status === 'occupied') {
     dependencies.mountOccupied();
     return;
