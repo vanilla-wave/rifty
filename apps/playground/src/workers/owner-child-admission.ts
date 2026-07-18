@@ -6,7 +6,6 @@ import {
   type ShadowAssetRuntimeReader,
   startShadowAssetPortServer,
 } from '@riftydev/npm-client';
-import { createSupervisedPromise } from '../glue/run-foreground-child.ts';
 import type { OwnerChildAdmissionReservation } from './owner-package-state.ts';
 
 /** Owner-private bridge from the package FIFO to one fresh child port session. */
@@ -119,6 +118,45 @@ function createSessionSettlement(session: PreparedSession): () => Promise<void> 
   };
 }
 
+type PhysicalExitObservation =
+  | Readonly<{ kind: 'attached'; exited: Promise<void> }>
+  | Readonly<{ kind: 'attachment-failed'; exited: Promise<void>; error: unknown }>;
+
+function observePhysicalExit(
+  handle: OwnerChildAdmissionHandle,
+  onExitObserved: () => void,
+): PhysicalExitObservation {
+  let resolveExit!: () => void;
+  const exited = new Promise<void>((resolve) => {
+    resolveExit = resolve;
+  });
+  let observed = false;
+  const onExit = (): void => {
+    if (observed) return;
+    observed = true;
+    onExitObserved();
+    resolveExit();
+  };
+  try {
+    handle.once('exit', onExit);
+    return Object.freeze({ kind: 'attached', exited });
+  } catch (onceError) {
+    try {
+      handle.on('exit', onExit);
+    } catch (onError) {
+      return Object.freeze({
+        kind: 'attachment-failed',
+        exited,
+        error: new AggregateError(
+          [onceError, onError],
+          'owner child physical-exit observers both failed to attach',
+        ),
+      });
+    }
+    return Object.freeze({ kind: 'attachment-failed', exited, error: onceError });
+  }
+}
+
 /**
  * One child-admission transaction. After the FIFO reservation resolves, session
  * creation, physical spawn, supervision attachment, and commit stay synchronous.
@@ -160,12 +198,11 @@ export async function admitOwnerChild<Handle extends OwnerChildAdmissionHandle, 
     disposeSession = createSessionSettlement(session);
     options.beforeSpawn?.();
     handle = options.spawn(session.capabilityPorts);
-    physicalExit = createSupervisedPromise<void>((resolve) => {
-      handle!.once('exit', () => {
-        physicalExited = true;
-        resolve();
-      });
+    const exitObservation = observePhysicalExit(handle, () => {
+      physicalExited = true;
     });
+    physicalExit = exitObservation.exited;
+    if (exitObservation.kind === 'attachment-failed') throw exitObservation.error;
 
     let abortBound = false;
     const onAbort = (): void => {
