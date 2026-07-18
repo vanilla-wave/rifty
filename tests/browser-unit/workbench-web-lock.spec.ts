@@ -181,8 +181,8 @@ test('origin Web Lock excludes a second page and a page crash releases the lease
     const contended = await attemptOpenWorkbench(secondPage);
     expect(contended).toEqual({
       ok: false,
-      name: 'Error',
-      message: 'Workbench is busy: origin Web Lock unavailable',
+      name: 'WorkbenchOriginOccupiedError',
+      message: "WorkbenchOriginOccupiedError: another page holds this origin's Workbench",
     });
     expect(await workerConstructions(secondPage)).toBe(0);
     await expect(workbenchLockSnapshot(secondPage)).resolves.toEqual({

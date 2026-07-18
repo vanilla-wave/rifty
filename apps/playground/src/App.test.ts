@@ -31,11 +31,11 @@ const streamInteropAdrSrc = readFileSync(
 );
 
 describe('App semantic companion boundary', () => {
-  it('re-exports the semantic App entry and opens one Playground companion', () => {
+  it('re-exports the semantic App entry and consumes one already-admitted companion', () => {
     expect(entrySource).toContain("export { App } from './adapters/playground-app.tsx'");
-    expect(appSource).toContain('const opened = await openPlaygroundAppWorkbench()');
-    expect(appSource).toContain('runtime = createPlaygroundAppRuntime(workbench, {');
-    expect(appSource).toContain('await runtime?.close()');
+    expect(appSource).toContain('readonly workbench: PlaygroundWorkbench;');
+    expect(appSource).toContain('createPlaygroundAppWorkbenchOwnership(props.workbench)');
+    expect(appSource).not.toContain('openPlaygroundAppWorkbench');
   });
 
   it('owns no worker, VFS, catalog, Git, or TypeScript transport', () => {

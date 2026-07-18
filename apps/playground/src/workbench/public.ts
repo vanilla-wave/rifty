@@ -11,6 +11,7 @@ export {
   ProjectRunExitedBeforeReadyError,
   StaleProjectDocumentError,
   StdinClosedError,
+  WorkbenchOriginOccupiedError,
 } from './errors.ts';
 export type {
   FileConflictDetails,

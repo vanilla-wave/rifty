@@ -42,8 +42,8 @@ export const ALLOWLIST = [
   {
     file: 'apps/playground/src/App.test.ts',
     count: 40,
-    digest: '5f3bbd129ccf',
-    why: 'browser App imports xterm; residual pins only client JSX/composition bindings, including tab-open CAS capture and persistence-risk beforeunload wiring; semantic behavior lives in adapter contracts + browser e2e',
+    digest: 'f4aaffe99107',
+    why: 'browser App imports xterm; residual pins only client JSX/composition bindings, including admitted Workbench handoff and persistence-risk beforeunload wiring; semantic lifecycle and diagnostics behavior lives in adapter contracts + browser e2e',
   },
   {
     file: 'apps/playground/src/components/BottomPanel.test.ts',

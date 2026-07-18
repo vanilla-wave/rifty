@@ -3,6 +3,7 @@ import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/o
 import {
   ClosedHandleError,
   ProjectBusyError,
+  WorkbenchOriginOccupiedError,
   isRetryableProjectClosePreflightError,
 } from './errors.ts';
 import type { WorkbenchHealth } from './health.ts';
@@ -668,7 +669,7 @@ function acquireOriginLease(locks: LockPort): Promise<OriginLease> {
       { mode: 'exclusive', ifAvailable: true },
       async (lock) => {
         if (lock === null) {
-          rejectAcquired(new Error('Workbench is busy: origin Web Lock unavailable'));
+          rejectAcquired(new WorkbenchOriginOccupiedError());
           return;
         }
         resolveAcquired({

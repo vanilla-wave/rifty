@@ -1,5 +1,12 @@
 import type { ProcessExit } from '@riftydev/shell';
 
+export class WorkbenchOriginOccupiedError extends Error {
+  constructor() {
+    super("WorkbenchOriginOccupiedError: another page holds this origin's Workbench");
+    this.name = 'WorkbenchOriginOccupiedError';
+  }
+}
+
 export class ProjectBusyError extends Error {
   constructor(scope: string) {
     super(`ProjectBusyError: ${scope} already has an active run`);

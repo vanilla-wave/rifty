@@ -634,7 +634,7 @@ function vitePlan(overrides: Partial<VitePlaygroundPlan> = {}): VitePlaygroundPl
 }
 
 describe('Playground companion sealed contract', () => {
-  it('keeps the root unchanged and exposes only the companion opener at runtime', () => {
+  it('keeps the companion sealed and exposes typed origin contention at the root', () => {
     expect(Object.keys(companionModule).sort()).toEqual(['openPlaygroundWorkbench']);
     expect(Object.keys(rootModule).sort()).toEqual([
       'ClosedHandleError',
@@ -647,6 +647,7 @@ describe('Playground companion sealed contract', () => {
       'ProjectRunExitedBeforeReadyError',
       'StaleProjectDocumentError',
       'StdinClosedError',
+      'WorkbenchOriginOccupiedError',
       'openWorkbench',
       'projects',
     ]);

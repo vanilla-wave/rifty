@@ -69,6 +69,7 @@ import type {
   PlaygroundProjectPlan,
   PlaygroundScmSnapshot,
   PlaygroundScmSupportedChange,
+  PlaygroundWorkbench,
 } from '../workbench/playground.ts';
 import type { ProjectTerminalSnapshot } from '../workbench/public.ts';
 import {
@@ -76,6 +77,7 @@ import {
   type PlaygroundAppRuntime,
   createPlaygroundAppRuntime,
 } from './playground-app-runtime.ts';
+import { createPlaygroundAppWorkbenchOwnership } from './playground-app-workbench-ownership.ts';
 import { createDelayedCatalogDelete } from './playground-delete-policy.ts';
 import { PlaygroundHealthBanner, createPlaygroundHealthUi } from './playground-health-ui.tsx';
 import { toPlaygroundProjectPlan } from './playground-project-plan.ts';
@@ -99,7 +101,6 @@ import { selectPlaygroundSidebarView } from './playground-sidebar-view.ts';
 import { type PlaygroundTerminalUi, createPlaygroundTerminalUi } from './playground-terminal-ui.ts';
 import { createPlaygroundStoreToastDismissal } from './playground-toast-policy.ts';
 import type { PlaygroundTsDevHooksHandle } from './playground-ts-dev-hooks.ts';
-import { openPlaygroundAppWorkbench } from './playground-workbench-host.ts';
 import type { TerminalSessionSnapshot } from './terminal-manager.ts';
 import { useLayout } from './useLayout.ts';
 import { useMode } from './useMode.ts';
@@ -198,6 +199,7 @@ interface BoundProject {
 export interface AppProps {
   readonly boot: BootResult;
   readonly terminalPersistence: TerminalPersistence;
+  readonly workbench: PlaygroundWorkbench;
 }
 
 export function App(props: AppProps) {
@@ -265,10 +267,10 @@ export function App(props: AppProps) {
     cwd: '/',
     env: Object.freeze({}),
   });
+  const workbenchOwnership = createPlaygroundAppWorkbenchOwnership(props.workbench);
   let unsubscribeCatalog: (() => void) | null = null;
   let catalogChoiceReconciled = false;
   let initialization: Promise<void> | null = null;
-  let retryWorkbenchAfterCleanup = false;
   let editorApi: EditorApi | undefined;
   const editorOpQueue = createEditorOpQueue<EditorApi>();
   let editorDocumentUnsubscribe: (() => void) | null = null;
@@ -704,10 +706,9 @@ export function App(props: AppProps) {
   }
 
   async function initialize(): Promise<void> {
-    const opened = await openPlaygroundAppWorkbench();
-    const { workbench } = opened;
+    const workbench = props.workbench;
     if (disposed) {
-      await workbench.close();
+      await workbenchOwnership.close();
       return;
     }
     healthUi.bindWorkbench(workbench.health);
@@ -718,9 +719,11 @@ export function App(props: AppProps) {
           : 'project-rooted',
       state: props.terminalPersistence.initialState,
     });
-    runtime = createPlaygroundAppRuntime(workbench, {
-      terminalState: () => latestTerminalState,
-    });
+    runtime = workbenchOwnership.createRuntime((admittedWorkbench) =>
+      createPlaygroundAppRuntime(admittedWorkbench, {
+        terminalState: () => latestTerminalState,
+      }),
+    );
     setStorageMode(workbench.snapshot().storage.backend === 'opfs' ? 'opfs' : 'memory');
     store.setStorage(workbench.snapshot().storage.backend === 'opfs' ? 'opfs' : 'memory');
     unsubscribeCatalog = runtime.catalog.subscribe((snapshot) => {
@@ -759,32 +762,33 @@ export function App(props: AppProps) {
   }
 
   function startWorkbench(): void {
-    if (initialization !== null) {
-      retryWorkbenchAfterCleanup = true;
-      return;
-    }
+    if (initialization !== null) return;
     healthUi.beginBoot();
     setWorkbenchReady(false);
     catalogChoiceReconciled = false;
     const attempt = initialize().catch(async (error: unknown) => {
-      healthUi.bootFailed(error);
       setWorkbenchReady(false);
       unsubscribeCatalog?.();
       unsubscribeCatalog = null;
+      let trigger = error;
       try {
         await disposeBound();
-        await runtime?.close();
-      } catch (cleanupError) {
-        console.error('[playground] failed Workbench cleanup failed', cleanupError);
+      } catch (bindingCleanupFailure) {
+        trigger = new AggregateError(
+          [error, bindingCleanupFailure],
+          'Playground App initialization and binding cleanup failed',
+        );
       }
       runtime = null;
+      try {
+        await workbenchOwnership.fail(trigger);
+      } catch (failure) {
+        healthUi.bootFailed(failure);
+        console.error('[playground] Workbench initialization failed', failure);
+      }
     });
     initialization = attempt.finally(() => {
       initialization = null;
-      if (!disposed && retryWorkbenchAfterCleanup) {
-        retryWorkbenchAfterCleanup = false;
-        startWorkbench();
-      }
     });
   }
 
@@ -965,7 +969,7 @@ export function App(props: AppProps) {
       await disposeBound();
       unsubscribeCatalog?.();
       unsubscribeCatalog = null;
-      await runtime?.close();
+      await workbenchOwnership.close();
       runtime = null;
       const result = await resetBrowserSandboxState();
       if (result.failed.length > 0) {
@@ -1423,7 +1427,6 @@ export function App(props: AppProps) {
 
   onCleanup(() => {
     disposed = true;
-    retryWorkbenchAfterCleanup = false;
     healthUi.dispose();
     deletePolicy.dispose();
     storeToastDismissal.dispose();
@@ -1432,7 +1435,7 @@ export function App(props: AppProps) {
     unsubscribeCatalog = null;
     void (async () => {
       await disposeBound();
-      await runtime?.close();
+      await workbenchOwnership.close();
       runtime = null;
     })().catch((error: unknown) => console.error('[playground] close failed', error));
   });
@@ -1462,7 +1465,7 @@ export function App(props: AppProps) {
         <PlaygroundHealthBanner
           boot={healthUi.boot}
           issues={healthUi.issues}
-          onRetry={startWorkbench}
+          onRetry={reloadWorkbench}
           onRecover={recoverWorkbench}
           onReload={reloadWorkbench}
         />
