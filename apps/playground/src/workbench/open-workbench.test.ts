@@ -222,6 +222,22 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
       return ownerHandleCalls.openProject(definition) as Promise<ProjectSession<TReady>>;
     },
     deleteProject: ownerHandleCalls.deleteProject,
+    inspectRuntimeAssets: async () => ({
+      storageClass: 'memory-session',
+      entryCount: 0,
+      storedBytes: 0,
+      verifiedObjectCount: 0,
+      verifiedObjectBytes: 0,
+      readySetCount: 0,
+    }),
+    clearRuntimeAssets: async () => ({
+      storageClass: 'memory-session',
+      entryCount: 0,
+      storedBytes: 0,
+      verifiedObjectCount: 0,
+      verifiedObjectBytes: 0,
+      readySetCount: 0,
+    }),
     close: ownerHandleCalls.close,
   };
   const owner = {

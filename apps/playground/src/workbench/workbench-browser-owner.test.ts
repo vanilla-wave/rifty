@@ -7,6 +7,7 @@ import {
   DirtyProjectDocumentError,
   ProjectDefinitionMismatchError,
   ProjectFileOperationError,
+  RuntimeAssetError,
 } from './errors.ts';
 import type { PageToPlaygroundOwnerMessage } from './internal/playground-owner-protocol.ts';
 import { definePlaygroundProject } from './internal/playground-project-definition.ts';
@@ -216,6 +217,139 @@ describe('browser Workbench owner transport', () => {
       cwd: '/',
       serve: false,
     });
+  });
+
+  it('correlates runtime-asset admin terminals and reconstructs only the safe public error', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    const inspection = Object.freeze({
+      storageClass: 'memory-session' as const,
+      entryCount: 3,
+      storedBytes: 30,
+      verifiedObjectCount: 1,
+      verifiedObjectBytes: 10,
+      readySetCount: 1,
+    });
+    const inspecting = raw.inspectRuntimeAssets();
+    const inspectRequest = sentOf(worker, 'workbench:runtime-assets-inspect').at(-1);
+    if (inspectRequest === undefined) throw new Error('missing runtime asset inspect request');
+    worker.emit('message', {
+      type: 'workbench:runtime-assets-inspected',
+      opId: inspectRequest.opId,
+      inspection,
+    });
+    await expect(inspecting).resolves.toEqual(inspection);
+
+    const clearing = raw.clearRuntimeAssets();
+    const clearRequest = sentOf(worker, 'workbench:runtime-assets-clear').at(-1);
+    if (clearRequest === undefined) throw new Error('missing runtime asset clear request');
+    worker.emit('message', {
+      type: 'workbench:failure',
+      opId: clearRequest.opId,
+      error: {
+        name: 'RuntimeAssetError',
+        code: 'ESHADOWASSET',
+        message: 'Runtime asset cache clear failed',
+        phase: 'clear',
+        recovery: 'clear-and-retry',
+        usedBytes: 30,
+        requiredBytes: 40,
+      },
+    });
+    const failure = await clearing.catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(RuntimeAssetError);
+    expect(failure).toMatchObject({
+      code: 'ESHADOWASSET',
+      phase: 'clear',
+      recovery: 'clear-and-retry',
+      usedBytes: 30,
+      requiredBytes: 40,
+    });
+    expect(Object.keys(failure as object).sort()).toEqual([
+      'code',
+      'name',
+      'phase',
+      'recovery',
+      'requiredBytes',
+      'usedBytes',
+    ]);
+
+    raw.close();
+    worker.emit('exit', 0, null);
+    await raw.closed;
+  });
+
+  it('poisons before sending when an admin operation id is reused after settlement', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, {
+      ...dependencies(worker),
+      operationId: () => 'reused-admin-operation',
+    });
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    const first = raw.inspectRuntimeAssets();
+    const firstRequest = sentOf(worker, 'workbench:runtime-assets-inspect')[0];
+    if (firstRequest === undefined) throw new Error('missing first runtime asset inspect request');
+    worker.emit('message', {
+      type: 'workbench:runtime-assets-inspected',
+      opId: firstRequest.opId,
+      inspection: {
+        storageClass: 'memory-session',
+        entryCount: 0,
+        storedBytes: 0,
+        verifiedObjectCount: 0,
+        verifiedObjectBytes: 0,
+        readySetCount: 0,
+      },
+    });
+    await first;
+
+    const reused = raw.inspectRuntimeAssets();
+
+    await expect(reused).rejects.toThrow(/duplicate.*reused-admin-operation/i);
+    expect(sentOf(worker, 'workbench:runtime-assets-inspect')).toHaveLength(1);
+    expect(worker.killedWith).toBe('SIGTERM');
+    await expect(raw.closed).rejects.toThrow(/duplicate.*reused-admin-operation/i);
+  });
+
+  it('poisons the owner transport on a wrong runtime-asset terminal kind', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    const clearing = raw.clearRuntimeAssets();
+    const request = sentOf(worker, 'workbench:runtime-assets-clear').at(-1);
+    if (request === undefined) throw new Error('missing runtime asset clear request');
+    worker.emit('message', {
+      type: 'workbench:runtime-assets-inspected',
+      opId: request.opId,
+      inspection: {
+        storageClass: 'memory-session',
+        entryCount: 0,
+        storedBytes: 0,
+        verifiedObjectCount: 0,
+        verifiedObjectBytes: 0,
+        readySetCount: 0,
+      },
+    });
+
+    await expect(clearing).rejects.toThrow(/unexpected.*runtime-assets-inspect/i);
+    await expect(raw.closed).rejects.toThrow(/unexpected.*runtime-assets-inspect/i);
+    expect(worker.killedWith).toBe('SIGTERM');
   });
 
   it('admits a companion only after both readiness frames and maintains one exact catalog proxy', async () => {

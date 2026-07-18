@@ -5,7 +5,14 @@ import type {
   PtyPreviewReq,
 } from '../glue/pty-protocol.ts';
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
-import type { SerializedWorkbenchOwnerError } from './errors.ts';
+import {
+  type RuntimeAssetCacheInspection,
+  type RuntimeAssetFailurePhase,
+  type RuntimeAssetRecovery,
+  type RuntimeAssetStorageClass,
+  type SerializedWorkbenchOwnerError,
+  runtimeAssetMessage,
+} from './errors.ts';
 import {
   type ProjectDefinitionWire,
   inspectProjectDefinitionWire,
@@ -82,6 +89,8 @@ export type PageToWorkbenchOwnerMessage =
       readonly projectToken: OwnerProjectToken;
     }
   | { readonly type: 'workbench:delete-project'; readonly opId: string; readonly id: string }
+  | { readonly type: 'workbench:runtime-assets-inspect'; readonly opId: string }
+  | { readonly type: 'workbench:runtime-assets-clear'; readonly opId: string }
   | { readonly type: 'workbench:shutdown' };
 
 export type WorkbenchOwnerFailure =
@@ -125,6 +134,16 @@ export type WorkbenchOwnerToPageMessage =
       readonly projectToken: OwnerProjectToken;
     }
   | { readonly type: 'workbench:project-deleted'; readonly opId: string; readonly id: string }
+  | {
+      readonly type: 'workbench:runtime-assets-inspected';
+      readonly opId: string;
+      readonly inspection: RuntimeAssetCacheInspection;
+    }
+  | {
+      readonly type: 'workbench:runtime-assets-cleared';
+      readonly opId: string;
+      readonly inspection: RuntimeAssetCacheInspection;
+    }
   | WorkbenchOwnerFailure;
 
 export function createOwnerProjectToken(generate: () => string): OwnerProjectToken {
@@ -182,6 +201,14 @@ export function inspectPageToWorkbenchOwnerMessage(value: unknown): PageToWorkbe
         type: message.type,
         opId: nonEmptyString(message.opId, 'delete-project opId'),
         id: nonEmptyString(message.id, 'delete-project id'),
+      });
+    }
+    case 'workbench:runtime-assets-inspect':
+    case 'workbench:runtime-assets-clear': {
+      exact(message, ['type', 'opId'], `${message.type} message`);
+      return Object.freeze({
+        type: message.type,
+        opId: nonEmptyString(message.opId, `${message.type} opId`),
       });
     }
     case 'workbench:shutdown':
@@ -347,6 +374,26 @@ export function inspectWorkbenchOwnerToPageMessage(value: unknown): WorkbenchOwn
         type: message.type,
         opId: nonEmptyString(message.opId, 'project-deleted opId'),
         id: nonEmptyString(message.id, 'project-deleted id'),
+      });
+    }
+    case 'workbench:runtime-assets-inspected':
+    case 'workbench:runtime-assets-cleared': {
+      exact(message, ['type', 'opId', 'inspection'], `${message.type} message`);
+      const inspection = inspectRuntimeAssetInspection(message.inspection);
+      if (
+        message.type === 'workbench:runtime-assets-cleared' &&
+        (inspection.entryCount !== 0 ||
+          inspection.storedBytes !== 0 ||
+          inspection.verifiedObjectCount !== 0 ||
+          inspection.verifiedObjectBytes !== 0 ||
+          inspection.readySetCount !== 0)
+      ) {
+        throw invalid('runtime-assets-cleared acknowledgement');
+      }
+      return Object.freeze({
+        type: message.type,
+        opId: nonEmptyString(message.opId, `${message.type} opId`),
+        inspection,
       });
     }
     case 'workbench:failure': {
@@ -611,11 +658,112 @@ function inspectStorage(value: unknown): OwnerStorageSnapshot {
 
 function inspectSerializedError(value: unknown): WorkbenchOwnerFailure['error'] {
   const error = record(value, 'serialized owner error');
+  if (error.name === 'RuntimeAssetError') {
+    const keys = optionalKeys(
+      error,
+      ['name', 'code', 'message', 'phase', 'recovery'],
+      ['requiredSetDigest', 'assetId', 'usedBytes', 'requiredBytes'],
+    );
+    exact(error, keys, 'serialized runtime asset error');
+    if (error.code !== 'ESHADOWASSET') throw invalid('serialized runtime asset error code');
+    const phase = runtimeAssetPhase(error.phase);
+    const recovery = runtimeAssetRecovery(error.recovery);
+    const message = runtimeAssetMessage(phase);
+    if (error.message !== message) throw invalid('serialized runtime asset error message');
+    return Object.freeze({
+      name: error.name,
+      code: error.code,
+      message,
+      phase,
+      recovery,
+      ...(own(error, 'requiredSetDigest')
+        ? {
+            requiredSetDigest: nonEmptyString(
+              error.requiredSetDigest,
+              'serialized runtime asset requiredSetDigest',
+            ),
+          }
+        : {}),
+      ...(own(error, 'assetId')
+        ? { assetId: nonEmptyString(error.assetId, 'serialized runtime asset assetId') }
+        : {}),
+      ...(own(error, 'usedBytes')
+        ? { usedBytes: nonNegativeInteger(error.usedBytes, 'serialized runtime asset usedBytes') }
+        : {}),
+      ...(own(error, 'requiredBytes')
+        ? {
+            requiredBytes: nonNegativeInteger(
+              error.requiredBytes,
+              'serialized runtime asset requiredBytes',
+            ),
+          }
+        : {}),
+    });
+  }
   exact(error, ['name', 'message'], 'serialized owner error');
   return Object.freeze({
     name: nonEmptyString(error.name, 'serialized owner error name'),
     message: string(error.message, 'serialized owner error message'),
   });
+}
+
+function inspectRuntimeAssetInspection(value: unknown): RuntimeAssetCacheInspection {
+  const inspection = record(value, 'runtime asset cache inspection');
+  exact(
+    inspection,
+    [
+      'storageClass',
+      'entryCount',
+      'storedBytes',
+      'verifiedObjectCount',
+      'verifiedObjectBytes',
+      'readySetCount',
+    ],
+    'runtime asset cache inspection',
+  );
+  const storageClass = inspection.storageClass;
+  if (
+    storageClass !== 'opfs-persisted' &&
+    storageClass !== 'opfs-best-effort' &&
+    storageClass !== 'memory-session'
+  ) {
+    throw invalid('runtime asset storage class');
+  }
+  return Object.freeze({
+    storageClass: storageClass as RuntimeAssetStorageClass,
+    entryCount: nonNegativeInteger(inspection.entryCount, 'runtime asset entryCount'),
+    storedBytes: nonNegativeInteger(inspection.storedBytes, 'runtime asset storedBytes'),
+    verifiedObjectCount: nonNegativeInteger(
+      inspection.verifiedObjectCount,
+      'runtime asset verifiedObjectCount',
+    ),
+    verifiedObjectBytes: nonNegativeInteger(
+      inspection.verifiedObjectBytes,
+      'runtime asset verifiedObjectBytes',
+    ),
+    readySetCount: nonNegativeInteger(inspection.readySetCount, 'runtime asset readySetCount'),
+  });
+}
+
+function runtimeAssetPhase(value: unknown): RuntimeAssetFailurePhase {
+  switch (value) {
+    case 'cache-check':
+    case 'fetch':
+    case 'verify':
+    case 'persist':
+    case 'ready':
+    case 'inspect':
+    case 'clear':
+    case 'close':
+      return value;
+    default:
+      throw invalid('serialized runtime asset phase');
+  }
+}
+
+function runtimeAssetRecovery(value: unknown): RuntimeAssetRecovery {
+  if (value === 'retry' || value === 'clear-and-retry' || value === 'none') return value;
+  throw invalid('serialized runtime asset recovery');
 }
 
 function inspectProcessExit(value: unknown): void {

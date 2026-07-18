@@ -6,12 +6,16 @@
 
 - Install-stamp v4 binds trust to exact stored `package-lock.json` bytes;
   async checks and final promotion rehash under race fences, while sync boot
-  checks conservatively prefetch until verification completes.
+  checks conservatively prefetch until verification completes. Boot/restore
+  awaits only exact pending admission; durability proof remains detached.
 - Exact `package.json` and `package-lock.json` mutations now share one
   `package-only` demotion class across owner writer adapters.
 
 ### Added (app-local Workbench contract)
 
+- Workbench runtime assets now use one owner-private semantic cache with honest
+  OPFS retention classification, scope-aware durability, exact public
+  inspection/clear recovery, sanitized failures, and root-serialized lifecycle.
 - Companion hosts now supply the dedicated TypeScript Worker explicitly;
   session tools expose root-free `awaitDurability()`, TS recovery, and exact
   persisted terminal restoration across the sealed boundary (ADR-0282).

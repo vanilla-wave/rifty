@@ -52,7 +52,10 @@ export interface ProjectMaterializationOwner {
     readonly definitionIdentity: string;
   }): Promise<{ readonly projectRoot: string; readonly revision: number }>;
   deleteProject(projectKey: string): Promise<{ readonly revision: number }>;
-  waitForDurability(revision: number): Promise<void>;
+  waitForDurability(input: {
+    readonly projectKey: string;
+    readonly revision: number;
+  }): Promise<void>;
 }
 
 export interface ProjectAcquisitionRequest {
@@ -124,7 +127,7 @@ export function createProjectMaterializer<TAcquisition>(
           if (existing.definitionIdentity !== definition.identity) {
             throw new ProjectDefinitionMismatchError(definition.id);
           }
-          await owner.waitForDurability(existing.revision);
+          await owner.waitForDurability({ projectKey, revision: existing.revision });
           throwIfClosing();
           projectRoot = existing.projectRoot;
         } else {
@@ -155,7 +158,7 @@ export function createProjectMaterializer<TAcquisition>(
             });
             pendingStage = false;
             projectRoot = promoted.projectRoot;
-            await owner.waitForDurability(promoted.revision);
+            await owner.waitForDurability({ projectKey, revision: promoted.revision });
             throwIfClosing();
           } catch (error) {
             if (pendingStage) {
@@ -204,7 +207,7 @@ export function createProjectMaterializer<TAcquisition>(
       }
       return enqueue(async () => {
         const { revision } = await owner.deleteProject(projectKey);
-        await owner.waitForDurability(revision);
+        await owner.waitForDurability({ projectKey, revision });
         unresolvedStageCleanup.delete(projectKey);
       });
     },

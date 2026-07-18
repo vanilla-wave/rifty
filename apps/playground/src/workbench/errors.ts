@@ -43,6 +43,129 @@ export class StdinClosedError extends Error {
   }
 }
 
+export type RuntimeAssetStorageClass = 'opfs-persisted' | 'opfs-best-effort' | 'memory-session';
+
+export type RuntimeAssetFailurePhase =
+  | 'cache-check'
+  | 'fetch'
+  | 'verify'
+  | 'persist'
+  | 'ready'
+  | 'inspect'
+  | 'clear'
+  | 'close';
+
+export type RuntimeAssetRecovery = 'retry' | 'clear-and-retry' | 'none';
+
+export interface RuntimeAssetFailure {
+  readonly phase: RuntimeAssetFailurePhase;
+  readonly recovery: RuntimeAssetRecovery;
+  readonly requiredSetDigest?: string;
+  readonly assetId?: string;
+  readonly usedBytes?: number;
+  readonly requiredBytes?: number;
+}
+
+export interface RuntimeAssetCacheInspection {
+  readonly storageClass: RuntimeAssetStorageClass;
+  readonly entryCount: number;
+  readonly storedBytes: number;
+  readonly verifiedObjectCount: number;
+  readonly verifiedObjectBytes: number;
+  readonly readySetCount: number;
+}
+
+const RUNTIME_ASSET_MESSAGES = Object.freeze({
+  'cache-check': 'Runtime asset cache check failed',
+  fetch: 'Runtime asset fetch failed',
+  verify: 'Runtime asset verification failed',
+  persist: 'Runtime asset persistence failed',
+  ready: 'Runtime asset readiness failed',
+  inspect: 'Runtime asset inspection failed',
+  clear: 'Runtime asset cache clear failed',
+  close: 'Runtime asset manager close failed',
+} satisfies Record<RuntimeAssetFailurePhase, string>);
+
+const RUNTIME_ASSET_PHASES = new Set<RuntimeAssetFailurePhase>(
+  Object.keys(RUNTIME_ASSET_MESSAGES) as RuntimeAssetFailurePhase[],
+);
+const RUNTIME_ASSET_RECOVERIES = new Set<RuntimeAssetRecovery>([
+  'retry',
+  'clear-and-retry',
+  'none',
+]);
+
+export function runtimeAssetMessage(phase: RuntimeAssetFailurePhase): string {
+  return RUNTIME_ASSET_MESSAGES[phase];
+}
+
+function assertExactRuntimeAssetFailure(value: RuntimeAssetFailure): void {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
+    throw new TypeError('RuntimeAssetFailure must be a plain object');
+  }
+  if (Object.getOwnPropertySymbols(value).length > 0) {
+    throw new TypeError('RuntimeAssetFailure must not contain symbol fields');
+  }
+  const required = ['phase', 'recovery'];
+  const optional = ['assetId', 'requiredBytes', 'requiredSetDigest', 'usedBytes'];
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of required) {
+    if (!(key in descriptors)) throw new TypeError(`RuntimeAssetFailure is missing ${key}`);
+  }
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if (!required.includes(key) && !optional.includes(key)) {
+      throw new TypeError(`RuntimeAssetFailure has unexpected ${key}`);
+    }
+    if (!('value' in descriptor)) throw new TypeError('RuntimeAssetFailure must not use accessors');
+  }
+  if (!RUNTIME_ASSET_PHASES.has(value.phase)) throw new TypeError('Invalid runtime asset phase');
+  if (!RUNTIME_ASSET_RECOVERIES.has(value.recovery)) {
+    throw new TypeError('Invalid runtime asset recovery');
+  }
+  for (const field of ['requiredSetDigest', 'assetId'] as const) {
+    const candidate = value[field];
+    if (candidate !== undefined && (typeof candidate !== 'string' || candidate.length === 0)) {
+      throw new TypeError(`RuntimeAssetFailure.${field} must be a non-empty string`);
+    }
+  }
+  for (const field of ['usedBytes', 'requiredBytes'] as const) {
+    const candidate = value[field];
+    if (candidate !== undefined && (!Number.isSafeInteger(candidate) || candidate < 0)) {
+      throw new TypeError(`RuntimeAssetFailure.${field} must be a non-negative safe integer`);
+    }
+  }
+}
+
+/** Stable public projection; owner/store causes and paths never cross this boundary. */
+export class RuntimeAssetError extends Error {
+  readonly code = 'ESHADOWASSET' as const;
+  readonly phase: RuntimeAssetFailurePhase;
+  readonly recovery: RuntimeAssetRecovery;
+  declare readonly requiredSetDigest?: string;
+  declare readonly assetId?: string;
+  declare readonly usedBytes?: number;
+  declare readonly requiredBytes?: number;
+
+  constructor(failure: RuntimeAssetFailure) {
+    assertExactRuntimeAssetFailure(failure);
+    super(runtimeAssetMessage(failure.phase));
+    this.name = 'RuntimeAssetError';
+    this.phase = failure.phase;
+    this.recovery = failure.recovery;
+    if (failure.requiredSetDigest !== undefined) {
+      this.requiredSetDigest = failure.requiredSetDigest;
+    }
+    if (failure.assetId !== undefined) this.assetId = failure.assetId;
+    if (failure.usedBytes !== undefined) this.usedBytes = failure.usedBytes;
+    if (failure.requiredBytes !== undefined) this.requiredBytes = failure.requiredBytes;
+    Object.freeze(this);
+  }
+}
+
 export interface ProjectFileEntry {
   readonly path: string;
   readonly kind: 'file' | 'dir';
@@ -163,13 +286,44 @@ export function isRetryableProjectClosePreflightError(
   );
 }
 
-export interface SerializedWorkbenchOwnerError {
+export interface SerializedWorkbenchOwnerStandardError {
   readonly name: string;
   readonly message: string;
 }
 
+export interface SerializedRuntimeAssetError {
+  readonly name: 'RuntimeAssetError';
+  readonly code: 'ESHADOWASSET';
+  readonly message: string;
+  readonly phase: RuntimeAssetFailurePhase;
+  readonly recovery: RuntimeAssetRecovery;
+  readonly requiredSetDigest?: string;
+  readonly assetId?: string;
+  readonly usedBytes?: number;
+  readonly requiredBytes?: number;
+}
+
+export type SerializedWorkbenchOwnerError =
+  | SerializedWorkbenchOwnerStandardError
+  | SerializedRuntimeAssetError;
+
 /** Clone-safe owner failure payload; protocol inspection owns field validation. */
 export function serializeWorkbenchOwnerError(error: unknown): SerializedWorkbenchOwnerError {
+  if (error instanceof RuntimeAssetError) {
+    return Object.freeze({
+      name: error.name,
+      code: error.code,
+      message: error.message,
+      phase: error.phase,
+      recovery: error.recovery,
+      ...(error.requiredSetDigest === undefined
+        ? {}
+        : { requiredSetDigest: error.requiredSetDigest }),
+      ...(error.assetId === undefined ? {} : { assetId: error.assetId }),
+      ...(error.usedBytes === undefined ? {} : { usedBytes: error.usedBytes }),
+      ...(error.requiredBytes === undefined ? {} : { requiredBytes: error.requiredBytes }),
+    });
+  }
   if (error instanceof Error) {
     return Object.freeze({
       name: error.name.length > 0 ? error.name : 'Error',
@@ -181,6 +335,18 @@ export function serializeWorkbenchOwnerError(error: unknown): SerializedWorkbenc
 
 /** Restore owner-crossing public domain prototypes without guessing constructor data. */
 export function deserializeWorkbenchOwnerError(value: SerializedWorkbenchOwnerError): Error {
+  if (value.name === 'RuntimeAssetError' && 'code' in value) {
+    return new RuntimeAssetError({
+      phase: value.phase,
+      recovery: value.recovery,
+      ...(value.requiredSetDigest === undefined
+        ? {}
+        : { requiredSetDigest: value.requiredSetDigest }),
+      ...(value.assetId === undefined ? {} : { assetId: value.assetId }),
+      ...(value.usedBytes === undefined ? {} : { usedBytes: value.usedBytes }),
+      ...(value.requiredBytes === undefined ? {} : { requiredBytes: value.requiredBytes }),
+    });
+  }
   const error = new Error(value.message);
   const prototype =
     value.name === 'ProjectDefinitionMismatchError'
@@ -193,4 +359,35 @@ export function deserializeWorkbenchOwnerError(value: SerializedWorkbenchOwnerEr
   Object.setPrototypeOf(error, prototype);
   error.name = value.name;
   return error;
+}
+
+/** Package-private conversion from arbitrary owner/store failures to the safe public vocabulary. */
+export function runtimeAssetError(
+  phase: 'inspect' | 'clear' | 'close',
+  error: unknown,
+): RuntimeAssetError {
+  if (error instanceof RuntimeAssetError && error.phase === phase) return error;
+  const candidate =
+    error !== null && typeof error === 'object'
+      ? (error as {
+          readonly recovery?: unknown;
+          readonly usedBytes?: unknown;
+          readonly requiredBytes?: unknown;
+        })
+      : {};
+  const recovery = RUNTIME_ASSET_RECOVERIES.has(candidate.recovery as RuntimeAssetRecovery)
+    ? (candidate.recovery as RuntimeAssetRecovery)
+    : phase === 'close'
+      ? 'none'
+      : 'retry';
+  return new RuntimeAssetError({
+    phase,
+    recovery,
+    ...(Number.isSafeInteger(candidate.usedBytes) && (candidate.usedBytes as number) >= 0
+      ? { usedBytes: candidate.usedBytes as number }
+      : {}),
+    ...(Number.isSafeInteger(candidate.requiredBytes) && (candidate.requiredBytes as number) >= 0
+      ? { requiredBytes: candidate.requiredBytes as number }
+      : {}),
+  });
 }

@@ -24,6 +24,7 @@ import {
   normalizePath,
 } from '@riftydev/vfs';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
+import { ownerVfsScopeHasFailure } from './owner-vfs-durability.ts';
 
 export interface InstallStamp {
   readonly version: 4;
@@ -80,18 +81,12 @@ export function isStampedTreeDamage(path: string, root: string): boolean {
   return path === dir || path.startsWith(`${dir}/`);
 }
 
-/** Ask a {@link PersistFailureReport} whether ANY unhealed path matches, over
- * the FULL ledger when the backend can answer it (`anyFailure`), else the
- * SAMPLE. A durability gate must use this, never scan `report.failures`
- * directly: the sample truncates at PERSIST_REPORT_SAMPLE, so a torn-tree path
- * beyond it would be missed and the stamp would trust a broken tree. */
+/** Ask the complete durability ledger whether any unhealed path matches. */
 export function reportHasFailure(
   report: PersistFailureReport,
   predicate: (path: string) => boolean,
 ): boolean {
-  return report.anyFailure
-    ? report.anyFailure(predicate)
-    : report.failures.some((f) => predicate(f.path));
+  return ownerVfsScopeHasFailure(report, predicate);
 }
 
 function readExactStringMap(value: unknown): Record<string, string> | null {

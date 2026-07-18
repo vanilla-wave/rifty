@@ -3,7 +3,7 @@ import { SW_FRAME_VERSION, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { SnapshotFs } from '../../glue/snapshot-fs.ts';
 import { createVfsCommitCoordinator } from '../../glue/vfs-commit-coordinator.ts';
-import { ClosedHandleError, DirtyProjectDocumentError } from '../errors.ts';
+import { ClosedHandleError, DirtyProjectDocumentError, ProjectBusyError } from '../errors.ts';
 import {
   type OpenWorkbenchDependencies,
   type Workbench,
@@ -348,6 +348,22 @@ async function createRootHarness(): Promise<RootHarness> {
     owner: Object.freeze({
       openProject,
       deleteProject: ownerDelete,
+      inspectRuntimeAssets: async () => ({
+        storageClass: 'memory-session' as const,
+        entryCount: 0,
+        storedBytes: 0,
+        verifiedObjectCount: 0,
+        verifiedObjectBytes: 0,
+        readySetCount: 0,
+      }),
+      clearRuntimeAssets: async () => ({
+        storageClass: 'memory-session' as const,
+        entryCount: 0,
+        storedBytes: 0,
+        verifiedObjectCount: 0,
+        verifiedObjectBytes: 0,
+        readySetCount: 0,
+      }),
       close: ownerClose,
     }),
   }));
@@ -409,13 +425,17 @@ async function createRootHarness(): Promise<RootHarness> {
 
 function catalog(
   activeId = 'vite-project',
+  beforeDelete: () => Promise<void> = async () => {},
 ): PlaygroundProjectCatalog & { readonly delete: ReturnType<typeof vi.fn> } {
   const snapshot = Object.freeze({
     active: Object.freeze({ kind: 'project' as const, id: activeId }),
     scratch: null,
     projects: Object.freeze([]),
   });
-  const deleteProject = vi.fn(async () => snapshot);
+  const deleteProject = vi.fn(async () => {
+    await beforeDelete();
+    return snapshot;
+  });
   return Object.freeze({
     snapshot: () => snapshot,
     subscribe(listener: (value: typeof snapshot) => void) {
@@ -615,6 +635,7 @@ describe('Playground companion sealed contract', () => {
       'ProjectDocumentSaveInProgressError',
       'ProjectFileOperationError',
       'ProjectRunExitedBeforeReadyError',
+      'RuntimeAssetError',
       'StaleProjectDocumentError',
       'StdinClosedError',
       'openWorkbench',
@@ -1455,7 +1476,8 @@ describe('Playground session authority and teardown', () => {
       files: { '/index.html': '<main>forged at root</main>' },
     });
 
-    expect(facade.playground.catalog).toBe(projectCatalog);
+    expect(facade.playground.catalog).not.toBe(projectCatalog);
+    expect(facade.playground.catalog.snapshot()).toBe(projectCatalog.snapshot());
     await expect(facade.openProject(forgedAtRoot)).rejects.toThrow(TypeError);
     await expect(facade.openProject(inactive)).rejects.toThrow();
     expect(root.ownerOpen).not.toHaveBeenCalled();
@@ -1466,6 +1488,28 @@ describe('Playground session authority and teardown', () => {
     expect(projectCatalog.delete).toHaveBeenCalledTimes(1);
     expect(projectCatalog.delete).toHaveBeenCalledWith('vite-project');
     expect(root.ownerDelete).not.toHaveBeenCalled();
+    await facade.close();
+  });
+
+  it('routes direct companion catalog delete through the root state owner', async () => {
+    const root = await createRootHarness();
+    const deleteGate = deferred<void>();
+    const projectCatalog = catalog('vite-project', () => deleteGate.promise);
+    const facade = createPlaygroundWorkbenchFacade({
+      workbench: root.workbench,
+      urlContext: CAPTURED_URL_CONTEXT,
+      definePlan,
+      catalog: projectCatalog,
+      createSessionTools: () => ({ tools: tools(), close: async () => {} }),
+      registerBeforeClose: () => {},
+    });
+
+    const deleting = facade.playground.catalog.delete('vite-project');
+    await expect(facade.runtimeAssets.clear()).rejects.toBeInstanceOf(ProjectBusyError);
+    expect(projectCatalog.delete).toHaveBeenCalledTimes(1);
+    deleteGate.resolve();
+    await deleting;
+    await expect(facade.runtimeAssets.clear()).resolves.toMatchObject({ entryCount: 0 });
     await facade.close();
   });
 

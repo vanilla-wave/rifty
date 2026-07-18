@@ -344,8 +344,7 @@ async function harness(
   const git = makeGit({ fs: vfsToGitFs(vfs), dir: PROJECT_ROOT });
   if (seed && owner.authority.statSyncOrNull(PROJECT_ROOT) === null) {
     write(owner.authority, `${PROJECT_ROOT}/package.json`, PACKAGE_JSON);
-    const packageLock =
-      '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
+    const packageLock = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
     write(owner.authority, `${PROJECT_ROOT}/package-lock.json`, packageLock);
     write(owner.authority, `${PROJECT_ROOT}/src/main.ts`, ORIGINAL_SOURCE);
     write(owner.authority, `${PROJECT_ROOT}/src/old.ts`, 'export const old = true;\n');
@@ -364,7 +363,13 @@ async function harness(
     await owner.authority.flush();
     write(owner.authority, `${PROJECT_ROOT}/.gitignore`, 'node_modules/\n.rifty/\n');
     await git.init();
-    for (const path of ['.gitignore', 'package.json', 'package-lock.json', 'src/main.ts', 'src/old.ts']) {
+    for (const path of [
+      '.gitignore',
+      'package.json',
+      'package-lock.json',
+      'src/main.ts',
+      'src/old.ts',
+    ]) {
       await git.add(path);
     }
     await git.commit({
@@ -886,9 +891,7 @@ describe('Playground archive owner/session integration', () => {
       return { failures: [], total: 1 };
     });
 
-    await expect(h.archive.import(IMPORT_ARCHIVE)).rejects.toThrow(
-      /archive persistence failed.*1 unhealed failure/i,
-    );
+    await expect(h.archive.import(IMPORT_ARCHIVE)).rejects.toThrow(/archive persistence failed/i);
 
     expect(h.timeline).not.toContain('documents:invalidate-all');
     expect(h.timeline).not.toContain('files:publish');
@@ -899,6 +902,41 @@ describe('Playground archive owner/session integration', () => {
       ORIGINAL_SOURCE,
     );
     expectNoPendingPrimitives(h.fs);
+    await h.close();
+  });
+
+  it('ignores asset-only owner damage at archive-local durability barriers', async () => {
+    const h = await harness();
+    const assetPath = '/.rifty/workbench/v1/runtime-assets/v1/objects/private-asset';
+    vi.mocked(h.owner.authority.flush).mockResolvedValueOnce({
+      failures: [{ path: assetPath, op: 'write', message: 'private asset quota detail' }],
+      total: 1,
+    });
+
+    await expect(h.archive.import(IMPORT_ARCHIVE)).resolves.toBeUndefined();
+    await h.close();
+  });
+
+  it('keeps sibling-ledger details private when archive damage is mixed', async () => {
+    const h = await harness();
+    const assetPath = '/.rifty/workbench/v1/runtime-assets/v1/objects/private-asset';
+    vi.mocked(h.owner.authority.flush).mockResolvedValueOnce({
+      failures: [
+        { path: assetPath, op: 'write', message: 'private asset quota detail' },
+        { path: `${PROJECT_ROOT}/src/main.ts`, op: 'write', message: 'project quota detail' },
+      ],
+      total: 2,
+    });
+
+    const failure = await h.archive.import(IMPORT_ARCHIVE).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    const detail = nestedErrors(failure).map(String).join('\n');
+    expect(detail).toContain('project quota detail');
+    expect(detail).not.toContain(assetPath);
+    expect(detail).not.toContain('private asset quota detail');
+    expect(detail).not.toContain('2 unhealed');
     await h.close();
   });
 

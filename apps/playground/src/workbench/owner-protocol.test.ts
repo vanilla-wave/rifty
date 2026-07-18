@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
+import { RuntimeAssetError, serializeWorkbenchOwnerError } from './errors.ts';
 import {
   createOwnerProjectToken,
   inspectPageToWorkbenchOwnerMessage,
@@ -179,14 +180,54 @@ function ownerMessage(value: unknown): unknown {
 }
 
 describe('Workbench owner protocol', () => {
+  it('serializes the fixed safe RuntimeAssetError envelope and rejects drift or leaks', () => {
+    const error = new RuntimeAssetError({
+      phase: 'clear',
+      recovery: 'clear-and-retry',
+      usedBytes: 10,
+      requiredBytes: 20,
+    });
+    expect(error).toMatchObject({
+      name: 'RuntimeAssetError',
+      code: 'ESHADOWASSET',
+      message: 'Runtime asset cache clear failed',
+      phase: 'clear',
+      recovery: 'clear-and-retry',
+      usedBytes: 10,
+      requiredBytes: 20,
+    });
+    expect(Object.isFrozen(error)).toBe(true);
+    const serialized = serializeWorkbenchOwnerError(error);
+    expect(
+      ownerMessage({ type: 'workbench:failure', opId: 'clear-failure', error: serialized }),
+    ).toEqual({ type: 'workbench:failure', opId: 'clear-failure', error: serialized });
+
+    expect(() =>
+      ownerMessage({
+        type: 'workbench:failure',
+        opId: 'wrong-message',
+        error: { ...serialized, message: 'owner path leaked' },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      ownerMessage({
+        type: 'workbench:failure',
+        opId: 'extra-path',
+        error: { ...serialized, path: '/.rifty/private' },
+      }),
+    ).toThrow(TypeError);
+  });
+
   it('admits only the exact runtime-asset admin request and terminal shapes', () => {
     expect(
       pageMessage({ type: 'workbench:runtime-assets-inspect', opId: 'assets-inspect-1' }),
     ).toEqual({ type: 'workbench:runtime-assets-inspect', opId: 'assets-inspect-1' });
-    expect(pageMessage({ type: 'workbench:runtime-assets-clear', opId: 'assets-clear-1' })).toEqual({
-      type: 'workbench:runtime-assets-clear',
-      opId: 'assets-clear-1',
-    });
+    expect(pageMessage({ type: 'workbench:runtime-assets-clear', opId: 'assets-clear-1' })).toEqual(
+      {
+        type: 'workbench:runtime-assets-clear',
+        opId: 'assets-clear-1',
+      },
+    );
 
     const inspection = {
       storageClass: 'opfs-best-effort',
@@ -211,12 +252,26 @@ describe('Workbench owner protocol', () => {
       ownerMessage({
         type: 'workbench:runtime-assets-cleared',
         opId: 'assets-clear-1',
-        inspection: { ...inspection, entryCount: 0, storedBytes: 0 },
+        inspection: {
+          ...inspection,
+          entryCount: 0,
+          storedBytes: 0,
+          verifiedObjectCount: 0,
+          verifiedObjectBytes: 0,
+          readySetCount: 0,
+        },
       }),
     ).toEqual({
       type: 'workbench:runtime-assets-cleared',
       opId: 'assets-clear-1',
-      inspection: { ...inspection, entryCount: 0, storedBytes: 0 },
+      inspection: {
+        ...inspection,
+        entryCount: 0,
+        storedBytes: 0,
+        verifiedObjectCount: 0,
+        verifiedObjectBytes: 0,
+        readySetCount: 0,
+      },
     });
   });
 

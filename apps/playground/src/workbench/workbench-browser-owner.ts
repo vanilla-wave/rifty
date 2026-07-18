@@ -10,7 +10,12 @@ import { wirePreviewBridge } from '../glue/preview-port-wiring.ts';
 import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame, PageToOwnerFrame, PtyPreview } from '../glue/pty-protocol.ts';
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
-import { ClosedHandleError, ProjectBusyError, deserializeWorkbenchOwnerError } from './errors.ts';
+import {
+  ClosedHandleError,
+  ProjectBusyError,
+  type RuntimeAssetCacheInspection,
+  deserializeWorkbenchOwnerError,
+} from './errors.ts';
 import {
   type PageToPlaygroundOwnerMessage,
   type PlaygroundCatalogCommand,
@@ -131,7 +136,9 @@ type PendingOperation =
   | (Deferred<OpenedPlaygroundProject> & { readonly kind: 'playground-open' })
   | (Deferred<PlaygroundCatalogSnapshot> & { readonly kind: 'playground-catalog' })
   | (Deferred<void> & { readonly kind: 'close'; readonly projectToken: OwnerProjectToken })
-  | (Deferred<void> & { readonly kind: 'delete'; readonly id: string });
+  | (Deferred<void> & { readonly kind: 'delete'; readonly id: string })
+  | (Deferred<RuntimeAssetCacheInspection> & { readonly kind: 'runtime-assets-inspect' })
+  | (Deferred<RuntimeAssetCacheInspection> & { readonly kind: 'runtime-assets-clear' });
 
 type PageToPhysicalOwnerMessage = PageToWorkbenchOwnerMessage | PageToPlaygroundOwnerMessage;
 
@@ -258,6 +265,7 @@ export function startBrowserWorkspaceOwner(
   const readyState = deferred<void>();
   const closedState = deferred<void>();
   const pending = new Map<string, PendingOperation>();
+  const issuedOperationIds = new Set<string>();
   const catalogListeners = new Set<(snapshot: PlaygroundCatalogSnapshot) => void>();
   const playgroundSessions = new WeakMap<object, PlaygroundSessionState>();
   let storage: OwnerStorageSnapshot | null = null;
@@ -331,6 +339,13 @@ export function startBrowserWorkspaceOwner(
   ): Promise<T> => {
     const opId = 'opId' in message ? message.opId : null;
     if (opId === null) return Promise.reject(new TypeError('Owner operation requires opId'));
+    if (issuedOperationIds.has(opId)) {
+      const error = new Error(`Duplicate Workbench owner operation id ${opId}`);
+      operation.reject(error);
+      failProtocol(error);
+      return operation.promise as Promise<T>;
+    }
+    issuedOperationIds.add(opId);
     pending.set(opId, operation);
     try {
       send(message);
@@ -438,6 +453,16 @@ export function startBrowserWorkspaceOwner(
             throw new Error(`Workbench project delete id mismatch for ${message.opId}`);
           }
           operation.resolve(undefined);
+          return;
+        }
+        case 'workbench:runtime-assets-inspected': {
+          const operation = takePending(message.opId, 'runtime-assets-inspect');
+          operation.resolve(message.inspection);
+          return;
+        }
+        case 'workbench:runtime-assets-cleared': {
+          const operation = takePending(message.opId, 'runtime-assets-clear');
+          operation.resolve(message.inspection);
           return;
         }
         case 'workbench:project-pty':
@@ -1078,6 +1103,28 @@ export function startBrowserWorkspaceOwner(
       const opId = dependencies.operationId();
       const operation = { ...deferred<void>(), kind: 'delete' as const, id };
       return request<void>(operation, { type: 'workbench:delete-project', opId, id });
+    },
+    inspectRuntimeAssets() {
+      const opId = dependencies.operationId();
+      const operation = {
+        ...deferred<RuntimeAssetCacheInspection>(),
+        kind: 'runtime-assets-inspect' as const,
+      };
+      return request<RuntimeAssetCacheInspection>(operation, {
+        type: 'workbench:runtime-assets-inspect',
+        opId,
+      });
+    },
+    clearRuntimeAssets() {
+      const opId = dependencies.operationId();
+      const operation = {
+        ...deferred<RuntimeAssetCacheInspection>(),
+        kind: 'runtime-assets-clear' as const,
+      };
+      return request<RuntimeAssetCacheInspection>(operation, {
+        type: 'workbench:runtime-assets-clear',
+        opId,
+      });
     },
     ...(playgroundHandle === undefined ? {} : { playground: playgroundHandle }),
     close() {

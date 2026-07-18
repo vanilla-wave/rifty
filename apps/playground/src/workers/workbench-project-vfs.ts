@@ -769,6 +769,7 @@ export function createWorkbenchProjectVfs(
               }),
               durability: options.durability,
               flush: () => options.authority.flush(),
+              failureScope: (path) => path === projectRoot || path.startsWith(`${projectRoot}/`),
               send: options.emit,
             }),
           );

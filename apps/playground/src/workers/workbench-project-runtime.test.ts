@@ -893,6 +893,40 @@ describe('Workbench project runtime', () => {
     ]);
   });
 
+  it('ignores asset-only owner damage when closing one project runtime', async () => {
+    const h = harness();
+    const assetPath = '/.rifty/workbench/v1/runtime-assets/v1/objects/private-asset';
+    h.authority.flush = async () => ({
+      failures: [{ path: assetPath, op: 'write', message: 'private asset quota detail' }],
+      total: 1,
+    });
+
+    await expect(h.runtime.close()).resolves.toBeUndefined();
+  });
+
+  it('keeps sibling-ledger details private when project close damage is mixed', async () => {
+    const h = harness();
+    const assetPath = '/.rifty/workbench/v1/runtime-assets/v1/objects/private-asset';
+    h.authority.flush = async () => ({
+      failures: [
+        { path: assetPath, op: 'write', message: 'private asset quota detail' },
+        { path: `${ROOT}/package.json`, op: 'write', message: 'project quota detail' },
+      ],
+      total: 2,
+    });
+
+    const failure = await h.runtime.close().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    const detail = String(failure);
+    expect(detail).toContain('project quota detail');
+    expect(detail).not.toContain(assetPath);
+    expect(detail).not.toContain('private asset quota detail');
+    expect(detail).not.toContain(ROOT);
+    expect(detail).not.toContain('2 unhealed');
+  });
+
   it('waits for package mutations admitted before close to quiesce', async () => {
     const h = harness();
     const entered = deferred<void>();

@@ -2,6 +2,7 @@ import type { PersistFailureReport } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { createOwnerVfsAuthority } from './owner-vfs-authority.ts';
+import { createWorkbenchRuntimeAssetStorage } from './workbench-owner-storage.ts';
 import { createWorkbenchProjectStore } from './workbench-project-store.ts';
 
 const encoder = new TextEncoder();
@@ -34,7 +35,7 @@ describe('Workbench project store', () => {
       projectKey: 'alpha',
       definitionIdentity: 'definition-a',
     });
-    await h.store.waitForDurability(promoted.revision);
+    await h.store.waitForDurability({ projectKey: 'alpha', revision: promoted.revision });
 
     expect(promoted.projectRoot).toBe('/.rifty/workbench/v1/projects/alpha/tree');
     expect(
@@ -68,9 +69,29 @@ describe('Workbench project store', () => {
     ).toBe('guest');
 
     const deleted = await h.store.deleteProject('alpha');
-    await h.store.waitForDurability(deleted.revision);
+    await h.store.waitForDurability({ projectKey: 'alpha', revision: deleted.revision });
     expect(await h.store.readProject('alpha')).toBeNull();
     expect(h.authority.existsSync(promoted.projectRoot)).toBe(false);
+  });
+
+  it('deletes only the captured project and retains owner runtime assets', async () => {
+    const h = harness();
+    const assets = createWorkbenchRuntimeAssetStorage(h.authority, 'memory-session');
+    const assetEntry = { kind: 'temp' as const, id: 'retained-across-project-delete' };
+    await assets.write(assetEntry, new Uint8Array([4, 2]));
+    const stage = await h.store.beginStage('alpha');
+    await h.store.writeStageFile(stage.stageId, '/index.js', encoder.encode('project'));
+    await h.store.promoteStage({
+      stageId: stage.stageId,
+      projectKey: 'alpha',
+      definitionIdentity: 'definition-a',
+    });
+
+    const deleted = await h.store.deleteProject('alpha');
+    await h.store.waitForDurability({ projectKey: 'alpha', revision: deleted.revision });
+
+    await expect(assets.read(assetEntry)).resolves.toEqual(new Uint8Array([4, 2]));
+    await assets.close();
   });
 
   it('rejects corrupt partial project metadata instead of silently reseeding over it', async () => {
@@ -103,9 +124,12 @@ describe('Workbench project store', () => {
     };
     h.authority.flush = async () => report;
 
-    await expect(h.store.waitForDurability(h.authority.treeRevision)).rejects.toThrow(
-      /1 unhealed persistence failure.*quota exceeded/i,
-    );
+    await expect(
+      h.store.waitForDurability({
+        projectKey: 'alpha',
+        revision: h.authority.treeRevision,
+      }),
+    ).rejects.toThrow(/project persistence.*unhealed failure.*quota exceeded/i);
   });
 
   it('does not let an asset-only persistence failure cross-poison project durability', async () => {
@@ -128,10 +152,66 @@ describe('Workbench project store', () => {
       h.store.waitForDurability({
         projectKey: 'alpha',
         revision: h.authority.treeRevision,
-      } as never),
+      }),
     ).resolves.toBeUndefined();
   });
 
+  it('keeps mixed sibling-ledger details out of project durability failures', async () => {
+    const h = harness();
+    const assetPath = '/.rifty/workbench/v1/runtime-assets/v1/objects/private-asset';
+    h.authority.flush = async () => ({
+      failures: [
+        { path: assetPath, op: 'write', message: 'private asset quota detail' },
+        {
+          path: '/.rifty/workbench/v1/projects/alpha/tree/index.html',
+          op: 'write',
+          message: 'project quota detail',
+        },
+      ],
+      total: 2,
+    });
+
+    const failure = await h.store
+      .waitForDurability({ projectKey: 'alpha', revision: h.authority.treeRevision })
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    const detail = String(failure);
+    expect(detail).toContain('project quota detail');
+    expect(detail).not.toContain(assetPath);
+    expect(detail).not.toContain('private asset quota detail');
+    expect(detail).not.toContain('2 unhealed');
+  });
+
+  it('uses full-ledger evidence and loudly rejects an ambiguous bounded sample', async () => {
+    const h = harness();
+    const hiddenProjectPath = '/.rifty/workbench/v1/projects/alpha/tree/hidden.js';
+    const assetSample = {
+      path: '/.rifty/workbench/v1/runtime-assets/v1/tmp/residue',
+      op: 'write' as const,
+      message: 'asset residue',
+    };
+    h.authority.flush = async () => ({
+      failures: [assetSample],
+      total: 2,
+      anyFailure: (predicate) => predicate(assetSample.path) || predicate(hiddenProjectPath),
+    });
+    await expect(
+      h.store.waitForDurability({
+        projectKey: 'alpha',
+        revision: h.authority.treeRevision,
+      }),
+    ).rejects.toThrow(/persistence.*unhealed failure/i);
+
+    h.authority.flush = async () => ({ failures: [assetSample], total: 2 });
+    await expect(
+      h.store.waitForDurability({
+        projectKey: 'alpha',
+        revision: h.authority.treeRevision,
+      }),
+    ).rejects.toThrow(/truncated.*full-ledger/i);
+  });
 
   it('binds stage ids to their project key and rejects traversal-shaped inputs', async () => {
     const h = harness();

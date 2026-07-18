@@ -2,6 +2,7 @@ import { type PersistFailureReport, syncMirror } from '@riftydev/vfs';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach } from 'vitest';
 import { describe, expect, it } from 'vitest';
+import { ownerVfsScopeHasFailure } from './owner-vfs-durability.ts';
 import {
   ScopedFsSync,
   ScopedVfs,
@@ -106,5 +107,29 @@ describe('workspace-scoped VFS', () => {
       true,
     );
     expect(flushed?.anyFailure?.((path) => path.startsWith('/workspaces/active'))).toBe(false);
+  });
+
+  it('does not launder a truncated inner sample into a full-ledger predicate', async () => {
+    const { fsSync } = createMemoryFs();
+    const report: PersistFailureReport = {
+      failures: [
+        {
+          path: '/workspaces/active/foreign/cache.json',
+          op: 'write',
+          message: 'QuotaExceededError',
+        },
+      ],
+      total: 2,
+    };
+    (fsSync as typeof fsSync & { flush: () => Promise<PersistFailureReport> }).flush = async () =>
+      report;
+
+    const flushed = await new ScopedFsSync(fsSync, workspaceVfsPrefix('active')).flush();
+    if (flushed === undefined) throw new Error('missing scoped persistence report');
+
+    expect(flushed.anyFailure).toBeUndefined();
+    expect(() =>
+      ownerVfsScopeHasFailure(flushed, (path) => path === '/proj/node_modules/pkg/package.json'),
+    ).toThrow(/truncated.*full-ledger/i);
   });
 });

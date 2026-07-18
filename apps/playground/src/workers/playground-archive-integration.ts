@@ -10,7 +10,11 @@ import type { PlaygroundArchive, PlaygroundScm } from '../workbench/playground.t
 import type { ProjectContentController } from '../workbench/project-content.ts';
 import { formatProjectPersistenceFailure } from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
-import type { OwnerVfsAuthority, OwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
+import {
+  type OwnerVfsAuthority,
+  type OwnerVfsAuthorityComposition,
+  ownerVfsScopeHasFailure,
+} from './owner-vfs-authority.ts';
 import type { WorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
 const encoder = new TextEncoder();
@@ -136,13 +140,28 @@ export function runPlaygroundArchivePublicOperation<T>(
 
 async function requireDurable(authority: OwnerVfsAuthority, projectRoot: string): Promise<void> {
   const report = await authority.flush();
-  if (report === undefined || report.total === 0) return;
+  if (report === undefined) return;
+  const transactionRoot = transactionPaths(projectRoot).root;
+  const inScope = (path: string): boolean =>
+    path === projectRoot ||
+    path.startsWith(`${projectRoot}/`) ||
+    path === transactionRoot ||
+    path.startsWith(`${transactionRoot}/`);
+  let failed: boolean;
+  try {
+    failed = ownerVfsScopeHasFailure(report, inScope);
+  } catch (cause) {
+    throw new Error('Playground archive persistence failed; scoped ledger is ambiguous', {
+      cause,
+    });
+  }
+  if (!failed) return;
   const detail = report.failures
+    .filter((failure) => inScope(failure.path))
     .map((failure) => formatProjectPersistenceFailure(projectRoot, failure))
     .join('; ');
-  const summary = `${String(report.total)} unhealed failure${report.total === 1 ? '' : 's'}`;
   throw new Error(
-    `Playground archive persistence failed: ${summary}; ${detail || 'failure sample unavailable'}`,
+    `Playground archive persistence failed${detail ? `: ${detail}` : '; in-scope failure sample unavailable'}`,
   );
 }
 

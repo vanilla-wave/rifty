@@ -1269,6 +1269,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
             },
           ],
           total: 137,
+          anyFailure: (predicate) => predicate('/proj/node_modules/lodash/package.json'),
         }),
       }),
     );
@@ -1280,11 +1281,48 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       expect(rec.stderr.join('')).toContain('NOT durable');
     });
     const stderr = rec.stderr.join('');
-    expect(stderr).toContain('137 file(s) failed to persist');
+    expect(stderr).toContain('dependency tree failed to persist to OPFS');
+    expect(stderr).not.toContain('137 file(s)');
     expect(stderr).toContain('QuotaExceededError');
     expect(
       JSON.parse(await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json')),
     ).toMatchObject({ durability: 'pending' });
+  });
+
+  it('keeps a scoped dirty warning free of private runtime-asset count and path', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    const projectFailure = '/proj/node_modules/lodash/package.json';
+    const privateFailure = `/.rifty/workbench/v1/runtime-assets/v1/objects/${'a'.repeat(64)}`;
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        flush: async () => ({
+          failures: [
+            { path: privateFailure, op: 'write' as const, message: 'PrivateQuota' },
+            { path: projectFailure, op: 'write' as const, message: 'ProjectQuota' },
+          ],
+          total: 2,
+          anyFailure: (predicate) => predicate(privateFailure) || predicate(projectFailure),
+        }),
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    await vi.waitFor(() => expect(rec.stderr.join('')).toContain('NOT durable'));
+    const stderr = rec.stderr.join('');
+    expect(stderr).toContain('dependency tree failed to persist to OPFS');
+    expect(stderr).toContain('ProjectQuota');
+    expect(stderr).not.toContain('2 file(s)');
+    expect(stderr).not.toContain('runtime-assets');
+    expect(stderr).not.toContain('PrivateQuota');
   });
 
   it('a claim-file failure in the proof blocks trusted publication and stays pending', async () => {
@@ -1694,6 +1732,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
               },
             ],
             total: 137,
+            anyFailure: (predicate) => predicate('/proj/node_modules/lodash/package.json'),
           };
         },
       }),
@@ -1711,7 +1750,8 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     await vi.waitFor(() => {
       expect(rec.stderr.join('')).toContain('NOT durable'); // honesty stays loud, just async
     });
-    expect(rec.stderr.join('')).toContain('137 file(s) failed to persist');
+    expect(rec.stderr.join('')).toContain('dependency tree failed to persist to OPFS');
+    expect(rec.stderr.join('')).not.toContain('137 file(s)');
     expect(await trustedStamp(vfs)).toBeNull(); // never a trusted stamp over a dirty drain
   });
 
@@ -2235,8 +2275,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     null,
     2,
   )}\n`;
-  const TRUSTED_PACKAGE_LOCK =
-    '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
+  const TRUSTED_PACKAGE_LOCK = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
   const TRUSTED_SEED = `${JSON.stringify(
     createInstallStamp('/proj', TRUSTED_PACKAGE_JSON, {
       slug: '',

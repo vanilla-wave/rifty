@@ -21,6 +21,7 @@ import {
   type WorkbenchOwnerProjectRuntimeInput,
   createWorkbenchOwnerController,
 } from './workbench-owner-controller.ts';
+import { workbenchFinalDurabilityError } from './workbench-owner-storage.ts';
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -62,6 +63,21 @@ function definitionWire(id = 'project-a') {
       }),
     ),
   );
+}
+
+function runtimeAssetsAdmin() {
+  const empty = Object.freeze({
+    storageClass: 'memory-session' as const,
+    entryCount: 0,
+    storedBytes: 0,
+    verifiedObjectCount: 0,
+    verifiedObjectBytes: 0,
+    readySetCount: 0,
+  });
+  return {
+    inspectUsage: vi.fn(async () => empty),
+    clearCache: vi.fn(async () => empty),
+  };
 }
 
 interface RuntimeRecord {
@@ -109,9 +125,11 @@ function harness(options: { readonly generateProjectToken?: () => string } = {})
     runtimeRecords.push({ input, runtime });
     return runtime;
   });
+  const runtimeAssets = runtimeAssetsAdmin();
 
   const controller = createWorkbenchOwnerController({
     materializer,
+    runtimeAssets,
     createProject,
     generateProjectToken:
       options.generateProjectToken ??
@@ -132,6 +150,7 @@ function harness(options: { readonly generateProjectToken?: () => string } = {})
     materializerOpen,
     materializerDelete,
     materializerClose,
+    runtimeAssets,
     createProject,
     runtime(index = 0): RuntimeRecord {
       const record = runtimeRecords[index];
@@ -178,6 +197,210 @@ function vfsMessage(projectToken: OwnerProjectToken) {
 }
 
 describe('Workbench owner controller', () => {
+  it('linearizes inspect behind an admitted clear and returns post-clear zeros', async () => {
+    const h = harness();
+    const clearGate = deferred<void>();
+    const empty = await h.runtimeAssets.inspectUsage();
+    h.runtimeAssets.inspectUsage.mockClear();
+    h.runtimeAssets.clearCache.mockImplementationOnce(async () => {
+      h.events.push('assets:clear');
+      await clearGate.promise;
+      return empty;
+    });
+    h.runtimeAssets.inspectUsage.mockImplementationOnce(async () => {
+      h.events.push('assets:inspect');
+      return empty;
+    });
+
+    const clearing = h.controller.handle({
+      type: 'workbench:runtime-assets-clear',
+      opId: 'assets-clear',
+    });
+    const inspecting = h.controller.handle({
+      type: 'workbench:runtime-assets-inspect',
+      opId: 'assets-inspect',
+    });
+    await waitUntil(() => h.runtimeAssets.clearCache.mock.calls.length === 1);
+    expect(h.runtimeAssets.inspectUsage).not.toHaveBeenCalled();
+    clearGate.resolve(undefined);
+    await Promise.all([clearing, inspecting]);
+
+    expect(h.events).toEqual(['assets:clear', 'assets:inspect']);
+    expect(h.sent.slice(-2)).toEqual([
+      {
+        type: 'workbench:runtime-assets-cleared',
+        opId: 'assets-clear',
+        inspection: empty,
+      },
+      {
+        type: 'workbench:runtime-assets-inspected',
+        opId: 'assets-inspect',
+        inspection: empty,
+      },
+    ]);
+  });
+
+  it('settles an admitted clear before queued shutdown closes owner authority', async () => {
+    const h = harness();
+    const clearGate = deferred<void>();
+    const empty = await h.runtimeAssets.inspectUsage();
+    h.runtimeAssets.clearCache.mockImplementationOnce(async () => {
+      h.events.push('assets:clear:start');
+      await clearGate.promise;
+      h.events.push('assets:clear:end');
+      return empty;
+    });
+    h.materializerClose.mockImplementationOnce(async () => {
+      h.events.push('authority:close');
+    });
+
+    const clearing = h.controller.handle({
+      type: 'workbench:runtime-assets-clear',
+      opId: 'assets-clear-before-close',
+    });
+    await waitUntil(() => h.runtimeAssets.clearCache.mock.calls.length === 1);
+    const shutdown = h.controller.handle({ type: 'workbench:shutdown' });
+    expect(h.materializerClose).not.toHaveBeenCalled();
+
+    clearGate.resolve(undefined);
+    await clearing;
+    expect(h.sent).toContainEqual({
+      type: 'workbench:runtime-assets-cleared',
+      opId: 'assets-clear-before-close',
+      inspection: empty,
+    });
+    await shutdown;
+    await h.controller.lifetime;
+    expect(h.events).toEqual(['assets:clear:start', 'assets:clear:end', 'authority:close']);
+  });
+
+  it('settles an admitted inspect before queued shutdown closes owner authority', async () => {
+    const h = harness();
+    const inspectGate = deferred<void>();
+    const empty = await h.runtimeAssets.inspectUsage();
+    h.runtimeAssets.inspectUsage.mockClear();
+    h.runtimeAssets.inspectUsage.mockImplementationOnce(async () => {
+      h.events.push('assets:inspect:start');
+      await inspectGate.promise;
+      h.events.push('assets:inspect:end');
+      return empty;
+    });
+    h.materializerClose.mockImplementationOnce(async () => {
+      h.events.push('authority:close');
+    });
+
+    const inspecting = h.controller.handle({
+      type: 'workbench:runtime-assets-inspect',
+      opId: 'assets-inspect-before-close',
+    });
+    await waitUntil(() => h.runtimeAssets.inspectUsage.mock.calls.length === 1);
+    const shutdown = h.controller.handle({ type: 'workbench:shutdown' });
+    expect(h.materializerClose).not.toHaveBeenCalled();
+
+    inspectGate.resolve(undefined);
+    await inspecting;
+    expect(h.sent).toContainEqual({
+      type: 'workbench:runtime-assets-inspected',
+      opId: 'assets-inspect-before-close',
+      inspection: empty,
+    });
+    await shutdown;
+    expect(h.events).toEqual(['assets:inspect:start', 'assets:inspect:end', 'authority:close']);
+  });
+
+  it('settles clear then inspect before a later queued shutdown', async () => {
+    const h = harness();
+    const clearGate = deferred<void>();
+    const inspectGate = deferred<void>();
+    const empty = await h.runtimeAssets.inspectUsage();
+    h.runtimeAssets.inspectUsage.mockClear();
+    h.runtimeAssets.clearCache.mockImplementationOnce(async () => {
+      h.events.push('assets:clear:start');
+      await clearGate.promise;
+      h.events.push('assets:clear:end');
+      return empty;
+    });
+    h.runtimeAssets.inspectUsage.mockImplementationOnce(async () => {
+      h.events.push('assets:inspect:start');
+      await inspectGate.promise;
+      h.events.push('assets:inspect:end');
+      return empty;
+    });
+    h.materializerClose.mockImplementationOnce(async () => {
+      h.events.push('authority:close');
+    });
+
+    const clearing = h.controller.handle({
+      type: 'workbench:runtime-assets-clear',
+      opId: 'assets-clear-before-inspect-close',
+    });
+    const inspecting = h.controller.handle({
+      type: 'workbench:runtime-assets-inspect',
+      opId: 'assets-inspect-after-clear-before-close',
+    });
+    await waitUntil(() => h.runtimeAssets.clearCache.mock.calls.length === 1);
+    const shutdown = h.controller.handle({ type: 'workbench:shutdown' });
+
+    clearGate.resolve(undefined);
+    await clearing;
+    await waitUntil(() => h.runtimeAssets.inspectUsage.mock.calls.length === 1);
+    expect(h.materializerClose).not.toHaveBeenCalled();
+    inspectGate.resolve(undefined);
+    await inspecting;
+    await shutdown;
+
+    expect(h.sent.slice(-2)).toEqual([
+      {
+        type: 'workbench:runtime-assets-cleared',
+        opId: 'assets-clear-before-inspect-close',
+        inspection: empty,
+      },
+      {
+        type: 'workbench:runtime-assets-inspected',
+        opId: 'assets-inspect-after-clear-before-close',
+        inspection: empty,
+      },
+    ]);
+    expect(h.events).toEqual([
+      'assets:clear:start',
+      'assets:clear:end',
+      'assets:inspect:start',
+      'assets:inspect:end',
+      'authority:close',
+    ]);
+  });
+
+  it('projects a final asset flush failure without its owner-local path or detail', async () => {
+    const h = harness();
+    const assetPath = '/.rifty/workbench/v1/runtime-assets/v1/objects/private-object';
+    const rawDetail = 'permission denied in private OPFS handle';
+    const failure = workbenchFinalDurabilityError({
+      failures: [{ path: assetPath, op: 'write', message: rawDetail }],
+      total: 1,
+    });
+    if (failure === null) throw new Error('expected final durability failure');
+    h.materializerClose.mockRejectedValueOnce(failure);
+
+    const shutdown = h.controller.handle({ type: 'workbench:shutdown' });
+
+    await expect(shutdown).rejects.toBe(failure);
+    await expect(h.controller.lifetime).rejects.toBe(failure);
+    expect(h.sent).toEqual([
+      {
+        type: 'workbench:failure',
+        error: {
+          name: 'RuntimeAssetError',
+          code: 'ESHADOWASSET',
+          message: 'Runtime asset manager close failed',
+          phase: 'close',
+          recovery: 'none',
+        },
+      },
+    ]);
+    expect(JSON.stringify(h.sent)).not.toContain(assetPath);
+    expect(JSON.stringify(h.sent)).not.toContain(rawDetail);
+  });
+
   it('routes companion open/catalog through one authority and releases it after runtime teardown', async () => {
     const urlContext = Object.freeze({
       apiBaseUrl: 'https://playground.test/app/',
@@ -237,6 +460,7 @@ describe('Workbench owner controller', () => {
     });
     const controller = createWorkbenchOwnerController({
       closeAuthority,
+      runtimeAssets: runtimeAssetsAdmin(),
       createProject,
       generateProjectToken: () => 'companion-token',
       send: (message) => coreMessages.push(message),

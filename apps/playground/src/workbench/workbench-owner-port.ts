@@ -1,4 +1,5 @@
 import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
+import type { RuntimeAssetCacheInspection } from './errors.ts';
 import type {
   PlaygroundProjectCatalog,
   PlaygroundProjectOpenOptions,
@@ -65,6 +66,8 @@ export interface RawWorkspaceOwnerHandle {
     definition: InspectedProjectDefinition<TReady>,
   ): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
+  inspectRuntimeAssets(): Promise<RuntimeAssetCacheInspection>;
+  clearRuntimeAssets(): Promise<RuntimeAssetCacheInspection>;
   readonly playground?: PlaygroundWorkbenchOwnerHandle;
   close(): void;
 }
@@ -75,6 +78,8 @@ export interface WorkbenchOwnerHandle {
     definition: InspectedProjectDefinition<TReady>,
   ): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
+  inspectRuntimeAssets(): Promise<RuntimeAssetCacheInspection>;
+  clearRuntimeAssets(): Promise<RuntimeAssetCacheInspection>;
   readonly playground?: PlaygroundWorkbenchOwnerHandle;
   /** Stable/idempotent; settles only after the physical owner has exited. */
   close(): Promise<void>;
@@ -187,6 +192,14 @@ function createSemanticOwner(raw: RawWorkspaceOwnerHandle): WorkbenchOwnerHandle
 
     deleteProject(id: string): Promise<void> {
       return raw.deleteProject(id);
+    },
+
+    inspectRuntimeAssets(): Promise<RuntimeAssetCacheInspection> {
+      return raw.inspectRuntimeAssets();
+    },
+
+    clearRuntimeAssets(): Promise<RuntimeAssetCacheInspection> {
+      return raw.clearRuntimeAssets();
     },
 
     ...(raw.playground === undefined ? {} : { playground: raw.playground }),

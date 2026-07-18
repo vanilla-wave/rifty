@@ -71,6 +71,16 @@ function harness(snapshot: unknown = REQUIRED_STORAGE) {
     },
   );
   const deleteProject = vi.fn(async (_id: string): Promise<void> => {});
+  const runtimeAssetInspection = Object.freeze({
+    storageClass: 'memory-session' as const,
+    entryCount: 0,
+    storedBytes: 0,
+    verifiedObjectCount: 0,
+    verifiedObjectBytes: 0,
+    readySetCount: 0,
+  });
+  const inspectRuntimeAssets = vi.fn(async () => runtimeAssetInspection);
+  const clearRuntimeAssets = vi.fn(async () => runtimeAssetInspection);
   const raw: RawWorkspaceOwnerHandle = {
     ready: ready.promise,
     closed: closed.promise,
@@ -79,6 +89,8 @@ function harness(snapshot: unknown = REQUIRED_STORAGE) {
       return openProject(definition) as Promise<ProjectSession<TReady>>;
     },
     deleteProject,
+    inspectRuntimeAssets,
+    clearRuntimeAssets,
     close,
   };
   const startWorkspaceOwner = vi.fn((_input: WorkbenchOwnerStartInput) => raw);
@@ -87,6 +99,8 @@ function harness(snapshot: unknown = REQUIRED_STORAGE) {
     close,
     closed,
     deleteProject,
+    inspectRuntimeAssets,
+    clearRuntimeAssets,
     openProject,
     port,
     raw,
@@ -183,6 +197,11 @@ describe('Workbench owner port startup contract', () => {
     h.deleteProject.mockRejectedValueOnce(deleteFailure);
     await expect(owner.deleteProject('owner-forwarding')).rejects.toBe(deleteFailure);
     expect(h.deleteProject).toHaveBeenCalledWith('owner-forwarding');
+
+    await expect(owner.inspectRuntimeAssets()).resolves.toMatchObject({ entryCount: 0 });
+    await expect(owner.clearRuntimeAssets()).resolves.toMatchObject({ entryCount: 0 });
+    expect(h.inspectRuntimeAssets).toHaveBeenCalledTimes(1);
+    expect(h.clearRuntimeAssets).toHaveBeenCalledTimes(1);
 
     const closing = owner.close();
     h.closed.resolve(0);

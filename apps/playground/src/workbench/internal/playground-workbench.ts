@@ -95,6 +95,24 @@ export function createPlaygroundWorkbenchFacade(
   let closed = false;
   let closePromise: Promise<void> | null = null;
 
+  const catalog = Object.freeze({
+    snapshot: () => options.catalog.snapshot(),
+    subscribe: (listener) => options.catalog.subscribe(listener),
+    createScratch: (input) => options.catalog.createScratch(input),
+    saveScratch: (input) => options.catalog.saveScratch(input),
+    activate: (target) => options.catalog.activate(target),
+    rename: (id, name) => options.catalog.rename(id, name),
+    reset: (input) => options.catalog.reset(input),
+    delete: (id: string) => {
+      assertOpen();
+      return workbenchInternals
+        .deleteProjectWithOwner(id, async () => {
+          await options.catalog.delete(id);
+        })
+        .then(() => options.catalog.snapshot());
+    },
+  } satisfies PlaygroundProjectCatalog);
+
   const assertOpen = (): void => {
     if (closed) throw new ClosedHandleError('Playground Workbench');
   };
@@ -174,6 +192,7 @@ export function createPlaygroundWorkbenchFacade(
   };
 
   const facade: PlaygroundWorkbench = Object.freeze({
+    runtimeAssets: options.workbench.runtimeAssets,
     snapshot(): WorkbenchSnapshot {
       return options.workbench.snapshot();
     },
@@ -188,7 +207,7 @@ export function createPlaygroundWorkbenchFacade(
           ? ownedDefinitions.get(definition)
           : undefined;
       if (plan === undefined) throw new TypeError('Foreign or forged Playground ProjectDefinition');
-      if (!activeMatches(options.catalog, plan.id)) {
+      if (!activeMatches(catalog, plan.id)) {
         throw new TypeError(`Playground project ${JSON.stringify(plan.id)} is not active`);
       }
       const opened =
@@ -199,7 +218,7 @@ export function createPlaygroundWorkbenchFacade(
     },
     async deleteProject(id: string): Promise<void> {
       assertOpen();
-      await options.catalog.delete(id);
+      await catalog.delete(id);
     },
     close(): Promise<void> {
       if (closePromise !== null) return closePromise;
@@ -233,7 +252,7 @@ export function createPlaygroundWorkbenchFacade(
     },
     playground: Object.freeze({
       define,
-      catalog: options.catalog,
+      catalog,
       restoreTerminalState: (input: PlaygroundTerminalStateRestoreInput) =>
         restorePlaygroundTerminalState(input, options.legacyWorkspacePrefix),
       forSession<T>(session: ProjectSession<T>): PlaygroundSessionTools {

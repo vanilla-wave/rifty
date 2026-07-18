@@ -24,7 +24,7 @@ import type {
 } from '../workbench/project-materialization.ts';
 import type { ProjectTerminalSnapshot } from '../workbench/project-terminal-state.ts';
 import type { ProjectDefinition } from '../workbench/public.ts';
-import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
+import { type OwnerVfsAuthority, ownerVfsScopeHasFailure } from './owner-vfs-authority.ts';
 
 const WORKBENCH_ROOT = '/.rifty/workbench/v1';
 const PROJECTS_ROOT = `${WORKBENCH_ROOT}/projects`;
@@ -35,6 +35,15 @@ const MIGRATION_JOURNAL_FILE = `${PLAYGROUND_ROOT}/migration-journal.json`;
 const TRANSACTION_FILE = `${PLAYGROUND_ROOT}/transaction.json`;
 const CATALOG_TRANSACTIONS_ROOT = `${PLAYGROUND_ROOT}/catalog-transactions`;
 const MIGRATION_INTENTS_ROOT = `${PLAYGROUND_ROOT}/migration-intents`;
+const MANAGED_PARENT_PATHS = Object.freeze([
+  CATALOG_TRANSACTIONS_ROOT,
+  STAGES_ROOT,
+  PROJECTS_ROOT,
+  WORKBENCH_ROOT,
+  PLAYGROUND_ROOT,
+  '/.rifty/workbench',
+  '/.rifty',
+]);
 const PROMOTION_MARKER = 'migration-promotion.json';
 const LEGACY_INDEX_NAME = '.rifty-project-index.json';
 const INSTALL_CLAIM_NAME = '.rifty-install-stamp.json';
@@ -1050,13 +1059,18 @@ function parseTransaction(value: unknown): DurableTransaction {
   throw new TypeError('Playground transaction kind is invalid');
 }
 
-async function flushRequired(authority: OwnerVfsAuthority): Promise<void> {
+async function flushRequired(
+  authority: OwnerVfsAuthority,
+  trees: readonly string[],
+  exact: readonly string[] = [],
+): Promise<void> {
   const report = await authority.flush();
-  if (report !== undefined && report.total > 0) {
-    const sample = report.failures[0]?.message;
-    throw new Error(
-      `${String(report.total)} unhealed persistence failure(s)${sample ? `: ${sample}` : ''}`,
-    );
+  if (report === undefined) return;
+  const exactPaths = new Set(exact);
+  const inScope = (path: string): boolean =>
+    exactPaths.has(path) || trees.some((root) => path === root || path.startsWith(`${root}/`));
+  if (ownerVfsScopeHasFailure(report, inScope)) {
+    throw new Error('Playground project persistence is not durable');
   }
 }
 
@@ -1068,16 +1082,16 @@ async function durableWriteJson(
   const parent = dirname(path);
   if (!isDirectory(authority, parent)) {
     authority.mkdirSync(parent, { recursive: true });
-    await flushRequired(authority);
+    await flushRequired(authority, [], [parent]);
   }
   authority.writeFileSync(path, jsonBytes(value));
-  await flushRequired(authority);
+  await flushRequired(authority, [path]);
 }
 
 async function durableRemove(authority: OwnerVfsAuthority, path: string): Promise<void> {
   if (authority.statSyncOrNull(path) === null) return;
   authority.rmSync(path, { recursive: true, force: true });
-  await flushRequired(authority);
+  await flushRequired(authority, [path]);
 }
 
 async function applyTreeDurably(
@@ -1090,7 +1104,7 @@ async function applyTreeDurably(
     removeManagedTree(authority, claims, root);
   }
   if (image === null) {
-    await flushRequired(authority);
+    await flushRequired(authority, [root]);
     return;
   }
   const orderedImageDirectories = [...image.directories]
@@ -1103,7 +1117,7 @@ async function applyTreeDurably(
     }
   }
   if (!isDirectory(authority, root)) authority.mkdirSync(root, { recursive: true });
-  await flushRequired(authority);
+  await flushRequired(authority, [root]);
   for (const file of image.files) {
     const target = `${root}/${file.path}`;
     const bytes = new Uint8Array(file.bytes);
@@ -1113,7 +1127,7 @@ async function applyTreeDurably(
       authority.writeFileSync(target, bytes);
     }
   }
-  if (image.files.length > 0) await flushRequired(authority);
+  if (image.files.length > 0) await flushRequired(authority, [root]);
 }
 
 async function removeManagedTreeDurably(
@@ -1123,7 +1137,7 @@ async function removeManagedTreeDurably(
 ): Promise<void> {
   if (authority.statSyncOrNull(root) === null) return;
   removeManagedTree(authority, claims, root);
-  await flushRequired(authority);
+  await flushRequired(authority, [root]);
 }
 
 function tombstoneManagedTree(
@@ -1260,9 +1274,9 @@ async function copyManagedTreeDurably(
 ): Promise<void> {
   const plan = planManagedTreeCopy(authority, sourceRoot, targetRoot, options);
   applyManagedCopyDirectories(authority, plan);
-  await flushRequired(authority);
+  await flushRequired(authority, [targetRoot]);
   applyManagedCopyFiles(authority, claims, plan);
-  if (plan.files.length > 0) await flushRequired(authority);
+  if (plan.files.length > 0) await flushRequired(authority, [targetRoot]);
 }
 
 function stagedMutationFromPlan(plan: CatalogMutationPlan): StagedCatalogMutation {
@@ -1435,7 +1449,11 @@ async function rollbackStagedCatalogMutation(
     removeManagedTree(authority, claims, PLAYGROUND_ROOT);
   }
   cleanupEmptyManagedParents(authority);
-  await flushRequired(authority);
+  await flushRequired(
+    authority,
+    [PLAYGROUND_ROOT, ...transaction.mutations.map((mutation) => projectContainer(mutation.id))],
+    MANAGED_PARENT_PATHS,
+  );
 }
 
 async function finishStagedCatalogMutation(
@@ -1454,7 +1472,11 @@ async function finishStagedCatalogMutation(
   }
   tombstoneManagedTree(authority, claims, catalogTransactionRoot(transaction.txId));
   cleanupEmptyManagedParents(authority, true);
-  await flushRequired(authority);
+  await flushRequired(
+    authority,
+    [PLAYGROUND_ROOT, projectContainer('scratch')],
+    MANAGED_PARENT_PATHS,
+  );
   await durableRemove(authority, TRANSACTION_FILE);
 }
 
@@ -1752,14 +1774,14 @@ async function finishLegacyRef(
   if (currentPhase.kind === 'mark') {
     authority.rmSync(`${projectContainer(id)}/${PROMOTION_MARKER}`, { force: true });
     authority.rmSync(migrationPromoteIntent(id), { force: true });
-    await flushRequired(authority);
+    await flushRequired(authority, [projectContainer(id), PLAYGROUND_ROOT]);
     writeJson(authority, migrationCatalogMarkIntent(id), {
       version: 1,
       id,
       definitionIdentity: currentPhase.definitionIdentity,
       baselineFingerprint: currentPhase.baselineFingerprint,
     });
-    await flushRequired(authority);
+    await flushRequired(authority, [migrationCatalogMarkIntent(id)]);
     const adoption = Object.freeze({
       kind: 'adopted' as const,
       definitionIdentity: currentPhase.definitionIdentity,
@@ -1767,13 +1789,13 @@ async function finishLegacyRef(
     });
     catalog = replaceCatalogAdoption(catalog, id, adoption);
     writeJson(authority, CATALOG_FILE, catalog);
-    await flushRequired(authority);
+    await flushRequired(authority, [CATALOG_FILE]);
     const cleanup = Object.freeze({ ...currentPhase, kind: 'source-cleanup' as const });
     journal = replaceJournalPhase(journal, id, cleanup);
     writeJson(authority, MIGRATION_JOURNAL_FILE, journal);
-    await flushRequired(authority);
+    await flushRequired(authority, [MIGRATION_JOURNAL_FILE]);
     authority.rmSync(migrationCatalogMarkIntent(id), { force: true });
-    await flushRequired(authority);
+    await flushRequired(authority, [migrationCatalogMarkIntent(id)]);
     currentPhase = cleanup;
   }
   if (currentPhase.kind === 'source-cleanup') {
@@ -1784,10 +1806,10 @@ async function finishLegacyRef(
       if (sourceBefore === null) throw new TypeError(`Legacy source disappeared: ${id}`);
       try {
         removeManagedTree(authority, claims, ref.sourceRoot);
-        await flushRequired(authority);
+        await flushRequired(authority, [ref.sourceRoot]);
       } catch (error) {
         applyTree(authority, claims, ref.sourceRoot, sourceBefore);
-        await flushRequired(authority);
+        await flushRequired(authority, [ref.sourceRoot]);
         throw error;
       }
     }
@@ -1798,13 +1820,13 @@ async function finishLegacyRef(
     });
     journal = replaceJournalPhase(journal, id, adopted);
     writeJson(authority, MIGRATION_JOURNAL_FILE, journal);
-    await flushRequired(authority);
+    await flushRequired(authority, [MIGRATION_JOURNAL_FILE]);
   }
   if (allRefsAdopted(journal)) {
     const index = `${journal.legacyWorkspacePrefix}/${LEGACY_INDEX_NAME}`;
     if (authority.statSyncOrNull(index) !== null) {
       authority.rmSync(index, { force: true });
-      await flushRequired(authority);
+      await flushRequired(authority, [index]);
     }
   }
   return Object.freeze({ catalog, journal });
@@ -1828,14 +1850,14 @@ async function recoverMigrationState(
     }
     if (phase.kind === 'copy') {
       removeManagedTree(authority, claims, stageContainer(current.id, phase.stageId));
-      await flushRequired(authority);
+      await flushRequired(authority, [stageContainer(current.id, phase.stageId)]);
       const pending = Object.freeze({ kind: 'pending' as const });
       const journal = replaceJournalPhase(state.journal, current.id, pending);
       writeJson(authority, MIGRATION_JOURNAL_FILE, journal);
-      await flushRequired(authority);
+      await flushRequired(authority, [MIGRATION_JOURNAL_FILE]);
       authority.rmSync(migrationCopyIntent(current.id), { force: true });
       authority.rmSync(migrationPromoteIntent(current.id), { force: true });
-      await flushRequired(authority);
+      await flushRequired(authority, [MIGRATION_INTENTS_ROOT]);
       state = Object.freeze({ catalog: state.catalog, journal });
       continue;
     }
@@ -1848,11 +1870,11 @@ async function recoverMigrationState(
         imageMatches(authority, target, promotedImage(current.id, phase, sourceImage, true), false);
       if (completePromoted) {
         removeManagedTree(authority, claims, stageContainer(current.id, phase.stageId));
-        await flushRequired(authority);
+        await flushRequired(authority, [stageContainer(current.id, phase.stageId)]);
         const mark = Object.freeze({ ...phase, kind: 'mark' as const });
         const journal = replaceJournalPhase(state.journal, current.id, mark);
         writeJson(authority, MIGRATION_JOURNAL_FILE, journal);
-        await flushRequired(authority);
+        await flushRequired(authority, [MIGRATION_JOURNAL_FILE]);
         state = await finishLegacyRef(
           authority,
           claims,
@@ -1863,14 +1885,14 @@ async function recoverMigrationState(
       } else {
         removeManagedTree(authority, claims, target);
         removeManagedTree(authority, claims, stageContainer(current.id, phase.stageId));
-        await flushRequired(authority);
+        await flushRequired(authority, [target, stageContainer(current.id, phase.stageId)]);
         const pending = Object.freeze({ kind: 'pending' as const });
         const journal = replaceJournalPhase(state.journal, current.id, pending);
         writeJson(authority, MIGRATION_JOURNAL_FILE, journal);
-        await flushRequired(authority);
+        await flushRequired(authority, [MIGRATION_JOURNAL_FILE]);
         authority.rmSync(migrationCopyIntent(current.id), { force: true });
         authority.rmSync(migrationPromoteIntent(current.id), { force: true });
-        await flushRequired(authority);
+        await flushRequired(authority, [MIGRATION_INTENTS_ROOT]);
         state = Object.freeze({ catalog: state.catalog, journal });
       }
       continue;
@@ -1879,13 +1901,13 @@ async function recoverMigrationState(
   }
   if (isDirectory(authority, MIGRATION_INTENTS_ROOT)) {
     authority.rmSync(MIGRATION_INTENTS_ROOT, { recursive: true, force: true });
-    await flushRequired(authority);
+    await flushRequired(authority, [MIGRATION_INTENTS_ROOT]);
   }
   if (allRefsAdopted(state.journal)) {
     const index = `${state.journal.legacyWorkspacePrefix}/${LEGACY_INDEX_NAME}`;
     if (authority.statSyncOrNull(index) !== null) {
       authority.rmSync(index, { force: true });
-      await flushRequired(authority);
+      await flushRequired(authority, [index]);
     }
   }
   return state;
@@ -1898,13 +1920,13 @@ async function completeLegacyPublication(
 ): Promise<void> {
   if (writeIntent) {
     writeJson(authority, TRANSACTION_FILE, transaction);
-    await flushRequired(authority);
+    await flushRequired(authority, [TRANSACTION_FILE]);
   }
   writeJson(authority, CATALOG_FILE, transaction.catalog);
   writeJson(authority, MIGRATION_JOURNAL_FILE, transaction.journal);
-  await flushRequired(authority);
+  await flushRequired(authority, [CATALOG_FILE, MIGRATION_JOURNAL_FILE]);
   authority.rmSync(TRANSACTION_FILE, { force: true });
-  await flushRequired(authority);
+  await flushRequired(authority, [TRANSACTION_FILE]);
 }
 
 function serializedCatalogMatches(authority: OwnerVfsAuthority, catalog: StoredCatalog): boolean {
@@ -1938,7 +1960,11 @@ async function recoverInlineCatalogTransaction(
     authority.rmSync(PLAYGROUND_ROOT, { recursive: true, force: true });
     cleanupEmptyManagedParents(authority);
   }
-  await flushRequired(authority);
+  await flushRequired(
+    authority,
+    [PLAYGROUND_ROOT, ...transaction.roots.map((root) => root.path)],
+    MANAGED_PARENT_PATHS,
+  );
 }
 
 async function recoverStagedCatalogTransaction(
@@ -1969,7 +1995,9 @@ async function cleanupOrphanCatalogTransactionStages(
 ): Promise<void> {
   if (authority.statSyncOrNull(CATALOG_TRANSACTIONS_ROOT) === null) return;
   await removeManagedTreeDurably(authority, claims, CATALOG_TRANSACTIONS_ROOT);
-  if (cleanupEmptyManagedParents(authority)) await flushRequired(authority);
+  if (cleanupEmptyManagedParents(authority)) {
+    await flushRequired(authority, [], MANAGED_PARENT_PATHS);
+  }
 }
 
 async function recoverStartupTransaction(
@@ -1989,7 +2017,7 @@ async function recoverStartupTransaction(
       removeManagedTree(authority, claims, PLAYGROUND_ROOT);
       cleanupEmptyManagedParents(authority);
     }
-    await flushRequired(authority);
+    await flushRequired(authority, [PLAYGROUND_ROOT], MANAGED_PARENT_PATHS);
     await cleanupOrphanCatalogTransactionStages(authority, claims);
     return;
   }
@@ -2076,7 +2104,7 @@ export async function createPlaygroundProjectAuthority(
     !isFile(authority, MIGRATION_JOURNAL_FILE) &&
     cleanupEmptyManagedParents(authority)
   ) {
-    await flushRequired(authority);
+    await flushRequired(authority, [], MANAGED_PARENT_PATHS);
   }
 
   let stored: StoredCatalog;
@@ -2303,14 +2331,14 @@ export async function createPlaygroundProjectAuthority(
       id: ref.id,
       stageId,
     });
-    await flushRequired(authority);
+    await flushRequired(authority, [migrationCopyIntent(ref.id)]);
     writeJson(authority, MIGRATION_JOURNAL_FILE, journal);
-    await flushRequired(authority);
+    await flushRequired(authority, [MIGRATION_JOURNAL_FILE]);
 
     const sourceImage = legacyTree(authority, ref.sourceRoot);
     const stage = stageContainer(ref.id, stageId);
     applyTree(authority, installStampClaims, stage, sourceImage);
-    await flushRequired(authority);
+    await flushRequired(authority, [stage]);
 
     writeJson(authority, migrationPromoteIntent(ref.id), {
       version: 1,
@@ -2319,7 +2347,7 @@ export async function createPlaygroundProjectAuthority(
       definitionIdentity: definition.identity,
       baselineFingerprint: definition.baselineFingerprint,
     });
-    await flushRequired(authority);
+    await flushRequired(authority, [migrationPromoteIntent(ref.id)]);
 
     const key = projectStorageSegment(ref.id);
     writeJson(authority, `${stage}/definition.json`, {
@@ -2333,7 +2361,7 @@ export async function createPlaygroundProjectAuthority(
       definitionIdentity: definition.identity,
       baselineFingerprint: definition.baselineFingerprint,
     });
-    await flushRequired(authority);
+    await flushRequired(authority, [stage]);
 
     journal = replaceJournalPhase(
       journal,
@@ -2342,16 +2370,16 @@ export async function createPlaygroundProjectAuthority(
     );
     writeJson(authority, MIGRATION_JOURNAL_FILE, journal);
     authority.rmSync(migrationCopyIntent(ref.id), { force: true });
-    await flushRequired(authority);
+    await flushRequired(authority, [MIGRATION_JOURNAL_FILE, migrationCopyIntent(ref.id)]);
 
     authority.mkdirSync(PROJECTS_ROOT, { recursive: true });
     authority.renameSync(stage, projectContainer(ref.id));
-    await flushRequired(authority);
+    await flushRequired(authority, [stage, projectContainer(ref.id)], [PROJECTS_ROOT]);
 
     const mark = Object.freeze({ kind: 'mark' as const, ...proof });
     journal = replaceJournalPhase(journal, ref.id, mark);
     writeJson(authority, MIGRATION_JOURNAL_FILE, journal);
-    await flushRequired(authority);
+    await flushRequired(authority, [MIGRATION_JOURNAL_FILE]);
 
     const completed = await finishLegacyRef(
       authority,
@@ -2364,7 +2392,7 @@ export async function createPlaygroundProjectAuthority(
     migration = completed.journal;
     if (isDirectory(authority, MIGRATION_INTENTS_ROOT)) {
       authority.rmSync(MIGRATION_INTENTS_ROOT, { recursive: true, force: true });
-      await flushRequired(authority);
+      await flushRequired(authority, [MIGRATION_INTENTS_ROOT]);
     }
   };
 

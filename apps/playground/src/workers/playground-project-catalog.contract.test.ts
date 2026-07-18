@@ -1,6 +1,6 @@
 import type { FsSync } from '@riftydev/vfs';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { ProjectBusyError, ProjectDefinitionMismatchError } from '../workbench/errors.ts';
 import { createPlaygroundProjectCatalog } from '../workbench/internal/playground-project-catalog.ts';
 import { definePlaygroundProject } from '../workbench/internal/playground-project-definition.ts';
@@ -179,6 +179,20 @@ describe('PlaygroundProjectCatalog public contract', () => {
       projects: [],
     });
     expectFrozenSnapshot(snapshot);
+    await h.owner.close();
+  });
+
+  it('ignores asset-only owner damage at catalog-local durability barriers', async () => {
+    const h = await harness();
+    const assetPath = '/.rifty/workbench/v1/runtime-assets/v1/objects/private-asset';
+    vi.spyOn(h.authority, 'flush').mockResolvedValue({
+      failures: [{ path: assetPath, op: 'write', message: 'private asset quota detail' }],
+      total: 1,
+    });
+
+    await expect(
+      h.catalog.createScratch({ definition: definition('scratch') }),
+    ).resolves.toMatchObject({ active: { kind: 'scratch' } });
     await h.owner.close();
   });
 

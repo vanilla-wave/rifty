@@ -1,8 +1,10 @@
+import { NotImplementedError } from '@riftydev/io';
 import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
 import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import {
   ClosedHandleError,
   ProjectBusyError,
+  type RuntimeAssetCacheInspection,
   isRetryableProjectClosePreflightError,
 } from './errors.ts';
 import {
@@ -62,7 +64,13 @@ export interface WorkbenchSnapshot {
   readonly storage: WorkbenchStorageSnapshot;
 }
 
+export interface WorkbenchRuntimeAssets {
+  inspect(): Promise<RuntimeAssetCacheInspection>;
+  clear(): Promise<RuntimeAssetCacheInspection>;
+}
+
 export interface Workbench {
+  readonly runtimeAssets: WorkbenchRuntimeAssets;
   snapshot(): WorkbenchSnapshot;
   openProject<TReady>(definition: ProjectDefinition<TReady>): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
@@ -77,6 +85,7 @@ export interface WorkbenchInternals {
   ): Promise<ProjectSession<TReady>>;
   rawSession<TReady>(session: ProjectSession<TReady>): ProjectSession<TReady>;
   registerBeforeClose(session: ProjectSession<unknown>, hook: () => Promise<void>): void;
+  deleteProjectWithOwner(id: string, deleteOwner: () => Promise<void>): Promise<void>;
 }
 
 const workbenchInternals = new WeakMap<object, WorkbenchInternals>();
@@ -179,6 +188,10 @@ type ProjectOperation =
   | { readonly kind: 'opening'; readonly ownerPromise: Promise<CloseableProject> }
   | { readonly kind: 'active'; readonly project: ActiveProject }
   | { readonly kind: 'deleting'; readonly ownerPromise: Promise<void> }
+  | {
+      readonly kind: 'clearing';
+      readonly ownerPromise: Promise<RuntimeAssetCacheInspection>;
+    }
   | { readonly kind: 'closing'; readonly promise: Promise<void> }
   | { readonly kind: 'closed'; readonly promise: Promise<void> };
 
@@ -372,7 +385,79 @@ function createWorkbench(
     return result;
   };
 
+  const deleteProjectWithOwner = (id: string, deleteOwner: () => Promise<void>): Promise<void> => {
+    try {
+      projectStorageSegment(id);
+      if (typeof deleteOwner !== 'function') {
+        throw new TypeError('Workbench owner deleter must be a function');
+      }
+      assertIdle();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+
+    const ownerPromise = Promise.resolve().then(deleteOwner);
+    const deleting = { kind: 'deleting', ownerPromise } as const;
+    state = deleting;
+    const result = ownerPromise.then(
+      () => {
+        if (state === deleting) state = { kind: 'idle' };
+      },
+      (error: unknown) => {
+        if (state === deleting) state = { kind: 'idle' };
+        throw error;
+      },
+    );
+    void result.catch(() => {});
+    return result;
+  };
+
+  const runtimeAssets: WorkbenchRuntimeAssets = Object.freeze({
+    inspect(): Promise<RuntimeAssetCacheInspection> {
+      if (state.kind === 'closing' || state.kind === 'closed') {
+        return Promise.reject(new ClosedHandleError('Workbench'));
+      }
+      try {
+        return owner.inspectRuntimeAssets();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    },
+
+    clear(): Promise<RuntimeAssetCacheInspection> {
+      try {
+        assertIdle();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      const completion = deferred<RuntimeAssetCacheInspection>();
+      const ownerPromise = completion.promise;
+      const clearing = { kind: 'clearing', ownerPromise } as const;
+      state = clearing;
+      let requested: Promise<RuntimeAssetCacheInspection>;
+      try {
+        requested = owner.clearRuntimeAssets();
+      } catch (error) {
+        requested = Promise.reject(error);
+      }
+      void requested.then(completion.resolve, completion.reject);
+      const result = completion.promise.then(
+        (inspection) => {
+          if (state === clearing) state = { kind: 'idle' };
+          return inspection;
+        },
+        (error: unknown) => {
+          if (state === clearing) state = { kind: 'idle' };
+          throw error;
+        },
+      );
+      void result.catch(() => {});
+      return result;
+    },
+  });
+
   const workbench: Workbench = {
+    runtimeAssets,
     snapshot: () => snapshot,
 
     openProject<TReady>(definition: ProjectDefinition<TReady>): Promise<ProjectSession<TReady>> {
@@ -380,27 +465,7 @@ function createWorkbench(
     },
 
     deleteProject(id: string): Promise<void> {
-      try {
-        projectStorageSegment(id);
-        assertIdle();
-      } catch (error) {
-        return Promise.reject(error);
-      }
-
-      const ownerPromise = Promise.resolve().then(() => owner.deleteProject(id));
-      const deleting = { kind: 'deleting', ownerPromise } as const;
-      state = deleting;
-      const result = ownerPromise.then(
-        () => {
-          if (state === deleting) state = { kind: 'idle' };
-        },
-        (error: unknown) => {
-          if (state === deleting) state = { kind: 'idle' };
-          throw error;
-        },
-      );
-      void result.catch(() => {});
-      return result;
+      return deleteProjectWithOwner(id, () => owner.deleteProject(id));
     },
 
     close(): Promise<void> {
@@ -470,6 +535,7 @@ function createWorkbench(
         if (raw === undefined) throw new TypeError('Foreign or forged Workbench ProjectSession');
         registerProjectSessionBeforeClose(raw, hook);
       },
+      deleteProjectWithOwner,
     }),
   );
 
@@ -498,15 +564,22 @@ async function closeWorkbench(
       () => CLOSE_SUCCEEDED,
       () => CLOSE_SUCCEEDED,
     );
+  } else if (admitted.kind === 'clearing') {
+    admittedClose = admitted.ownerPromise.then(
+      () => CLOSE_SUCCEEDED,
+      () => CLOSE_SUCCEEDED,
+    );
   } else {
     admittedClose = Promise.resolve(CLOSE_SUCCEEDED);
   }
 
-  // Owner termination is the cancellation mechanism for pending open/install,
-  // delete, and process work. Start it after invoking an already-active project
-  // close, but before awaiting either side, so neither close can wait forever
-  // for the other to begin.
-  const ownerClose = attemptClose(() => owner.close());
+  // Owner termination cancels pending open/install, delete, and process work.
+  // An admitted clear is different: it already mutated owner storage and must
+  // publish its terminal acknowledgement before shutdown can fence replies.
+  const ownerClose =
+    admitted.kind === 'clearing'
+      ? admittedClose.then(() => attemptClose(() => owner.close()))
+      : attemptClose(() => owner.close());
   const admittedOutcome = await admittedClose;
   if (!admittedOutcome.ok) failures.push(admittedOutcome.error);
   const ownerOutcome = await ownerClose;
@@ -599,6 +672,9 @@ function validateWorkbenchOptions(
   urlContext: ValidatedUrlContext,
 ): ValidatedOptions {
   const root = record(value, 'options');
+  if (Reflect.ownKeys(root).includes('runtimeAssets')) {
+    throw new NotImplementedError('workbench.runtimeAssets.externalAdapter');
+  }
   const deployment = record(root.deployment, 'deployment');
   const workers = record(deployment.workers, 'deployment.workers');
   const serviceWorker = record(deployment.serviceWorker, 'deployment.serviceWorker');

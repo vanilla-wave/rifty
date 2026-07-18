@@ -9,6 +9,7 @@ import {
 } from '@riftydev/vfs';
 import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
 import { installStampPath, installTreeDir, isInstallStampPath } from '../glue/install-stamp.ts';
+export { ownerVfsScopeHasFailure } from '../glue/owner-vfs-durability.ts';
 import {
   type OwnerVfsCommitTerminal,
   encodeOwnerVfsError,

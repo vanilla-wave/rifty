@@ -1,4 +1,5 @@
 import { type PersistFailureReport, isAbsolute, normalizePath } from '@riftydev/vfs';
+import { ownerVfsScopeHasFailure } from './owner-vfs-durability.ts';
 import {
   type HostCommitAck,
   type HostCommitRequest,
@@ -758,10 +759,17 @@ export interface OwnerVfsDurabilityHandlerOptions {
   readonly current: () => { readonly ownerEpoch: OwnerEpoch; readonly treeRevision: TreeRevision };
   readonly durability: OwnerVfsDurabilityReceipt['durability'];
   readonly flush: () => Promise<PersistFailureReport | undefined>;
+  /** Omit only for an owner-global barrier. */
+  readonly failureScope?: (path: string) => boolean;
   readonly send: (message: OwnerVfsDurabilityAckMessage) => void;
 }
 
-function dirtyLedgerError(report: PersistFailureReport): Error {
+function dirtyLedgerError(report: PersistFailureReport, scoped: boolean): Error {
+  if (scoped) {
+    const error = new Error('OPFS write-through drained with an unhealed scoped persist failure');
+    error.name = 'PersistFailureError';
+    return error;
+  }
   const sample = report.failures
     .slice(0, 3)
     .map((failure) => `${failure.op} ${failure.path}: ${failure.message}`)
@@ -795,7 +803,12 @@ export async function handleOwnerVfsDurabilityRequest(
       );
     }
     const report = await options.flush();
-    if (report !== undefined && report.total > 0) throw dirtyLedgerError(report);
+    if (
+      report !== undefined &&
+      ownerVfsScopeHasFailure(report, options.failureScope ?? (() => true))
+    ) {
+      throw dirtyLedgerError(report, options.failureScope !== undefined);
+    }
     options.send({
       type: 'rifty:owner-vfs-durability-ack',
       barrierId: message.barrierId,

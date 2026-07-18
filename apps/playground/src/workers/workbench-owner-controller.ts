@@ -1,6 +1,8 @@
+import type { ShadowAssetAdmin } from '@riftydev/npm-client';
 import {
   ClosedHandleError,
   ProjectBusyError,
+  runtimeAssetError,
   serializeWorkbenchOwnerError,
 } from '../workbench/errors.ts';
 import {
@@ -100,6 +102,7 @@ export interface WorkbenchOwnerProjectRuntimeInput {
 
 export interface WorkbenchOwnerControllerDependencies {
   readonly materializer?: ProjectMaterializer;
+  readonly runtimeAssets: ShadowAssetAdmin;
   readonly createProject: (
     input: WorkbenchOwnerProjectRuntimeInput,
   ) => WorkbenchOwnerProjectRuntime | Promise<WorkbenchOwnerProjectRuntime>;
@@ -142,6 +145,14 @@ type DeleteMessage = Extract<
   PageToWorkbenchOwnerMessage,
   { readonly type: 'workbench:delete-project' }
 >;
+type RuntimeAssetsInspectMessage = Extract<
+  PageToWorkbenchOwnerMessage,
+  { readonly type: 'workbench:runtime-assets-inspect' }
+>;
+type RuntimeAssetsClearMessage = Extract<
+  PageToWorkbenchOwnerMessage,
+  { readonly type: 'workbench:runtime-assets-clear' }
+>;
 type ProjectInputMessage = Extract<
   PageToWorkbenchOwnerMessage,
   {
@@ -165,7 +176,7 @@ type PlaygroundCatalogMessage = Extract<
 export function createWorkbenchOwnerController(
   dependencies: WorkbenchOwnerControllerDependencies,
 ): WorkbenchOwnerController {
-  const { materializer, createProject, send, playground } = dependencies;
+  const { materializer, runtimeAssets, createProject, send, playground } = dependencies;
   const closeAuthority =
     dependencies.closeAuthority ?? (materializer === undefined ? null : () => materializer.close());
   if (closeAuthority === null) {
@@ -563,6 +574,37 @@ export function createWorkbenchOwnerController(
     }
   };
 
+  const performRuntimeAssetsInspect = async (
+    message: RuntimeAssetsInspectMessage,
+  ): Promise<void> => {
+    try {
+      if (poison !== undefined) throw poisonedError();
+      const inspection = await runtimeAssets.inspectUsage();
+      send({
+        type: 'workbench:runtime-assets-inspected',
+        opId: message.opId,
+        inspection,
+      });
+    } catch (error) {
+      sendFailure(runtimeAssetError('inspect', error), message.opId);
+    }
+  };
+
+  const performRuntimeAssetsClear = async (message: RuntimeAssetsClearMessage): Promise<void> => {
+    try {
+      if (poison !== undefined) throw poisonedError();
+      if (active !== null) throw new ProjectBusyError('Workbench');
+      const inspection = await runtimeAssets.clearCache();
+      send({
+        type: 'workbench:runtime-assets-cleared',
+        opId: message.opId,
+        inspection,
+      });
+    } catch (error) {
+      sendFailure(runtimeAssetError('clear', error), message.opId);
+    }
+  };
+
   const performProjectInput = async (
     message: ProjectInputMessage,
     project: ActiveProject,
@@ -618,7 +660,18 @@ export function createWorkbenchOwnerController(
       }
       throwFailures(failures, 'Workbench owner shutdown failed');
     });
-    void shutdownPromise.then(resolveLifetime, rejectLifetime);
+    void shutdownPromise.then(resolveLifetime, (error: unknown) => {
+      let failure = error;
+      try {
+        sendFailure(error);
+      } catch (sendError) {
+        failure = new AggregateError(
+          [error, sendError],
+          'Workbench owner shutdown failure reply failed',
+        );
+      }
+      rejectLifetime(failure);
+    });
     return shutdownPromise;
   };
 
@@ -669,6 +722,12 @@ export function createWorkbenchOwnerController(
     if (message.type === 'workbench:delete-project') {
       return enqueue(() => performDelete(message));
     }
+    if (message.type === 'workbench:runtime-assets-inspect') {
+      return enqueue(() => performRuntimeAssetsInspect(message));
+    }
+    if (message.type === 'workbench:runtime-assets-clear') {
+      return enqueue(() => performRuntimeAssetsClear(message));
+    }
     if (message.type === 'workbench:close-project') {
       if (poison !== undefined) return rejectImmediately(poisonedError(), message.opId);
       const project = active;
@@ -706,7 +765,9 @@ function recoverOperationId(value: unknown): string | undefined {
   if (
     candidate.type !== 'workbench:open-project' &&
     candidate.type !== 'workbench:close-project' &&
-    candidate.type !== 'workbench:delete-project'
+    candidate.type !== 'workbench:delete-project' &&
+    candidate.type !== 'workbench:runtime-assets-inspect' &&
+    candidate.type !== 'workbench:runtime-assets-clear'
   ) {
     return undefined;
   }
@@ -720,6 +781,8 @@ function operationId(message: PageToWorkbenchOwnerMessage): string | undefined {
     case 'workbench:open-project':
     case 'workbench:close-project':
     case 'workbench:delete-project':
+    case 'workbench:runtime-assets-inspect':
+    case 'workbench:runtime-assets-clear':
       return message.opId;
     default:
       return undefined;

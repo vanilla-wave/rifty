@@ -12,6 +12,7 @@ import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
+import { formatProjectPersistenceFailure } from '../workbench/project-file-boundary.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
 import { readNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
@@ -24,6 +25,7 @@ import type {
   OwnerPackageState,
 } from './owner-package-state.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
+import { ownerVfsScopeHasFailure } from './owner-vfs-authority.ts';
 import {
   createInstalledBinPreviewHooks,
   createNodePreviewRunHooks,
@@ -97,14 +99,19 @@ function assertProjectRoot(options: WorkbenchProjectRuntimeOptions): string {
   return options.projectRoot;
 }
 
-function assertCleanFlush(report: Awaited<ReturnType<OwnerVfsAuthority['flush']>>): void {
-  if (report === undefined || report.total === 0) return;
+function assertCleanFlush(
+  report: Awaited<ReturnType<OwnerVfsAuthority['flush']>>,
+  projectRoot: string,
+): void {
+  if (report === undefined) return;
+  const inProject = (path: string): boolean =>
+    path === projectRoot || path.startsWith(`${projectRoot}/`);
+  if (!ownerVfsScopeHasFailure(report, inProject)) return;
   const details = report.failures
-    .map((failure) => `${failure.op} ${failure.path}: ${failure.message}`)
+    .filter((failure) => inProject(failure.path))
+    .map((failure) => formatProjectPersistenceFailure(projectRoot, failure))
     .join('; ');
-  throw new Error(
-    `${String(report.total)} unhealed persistence failure(s)${details ? `: ${details}` : ''}`,
-  );
+  throw new Error(`Project persistence is not durable${details ? `: ${details}` : ''}`);
 }
 
 function publicNodeServerConfig(
@@ -365,7 +372,7 @@ export function createWorkbenchProjectRuntime(
         failures.push({ phase: 'packages', error });
       }
       try {
-        assertCleanFlush(await options.authority.flush());
+        assertCleanFlush(await options.authority.flush(), projectRoot);
       } catch (error) {
         failures.push({ phase: 'durability', error });
       }

@@ -105,15 +105,16 @@ export class ScopedFsSync implements FsSync {
       ...failure,
       path: unscopePath(this.prefix, failure.path),
     }));
+    const anyFailure = report.anyFailure;
     return {
       failures,
       total: report.total,
-      anyFailure: (predicate) => {
-        const mappedPredicate = (path: string): boolean =>
-          predicate(unscopePath(this.prefix, path));
-        if (report.anyFailure) return report.anyFailure(mappedPredicate);
-        return report.failures.some((failure) => mappedPredicate(failure.path));
-      },
+      ...(anyFailure === undefined
+        ? {}
+        : {
+            anyFailure: (predicate: (path: string) => boolean) =>
+              anyFailure.call(report, (path) => predicate(unscopePath(this.prefix, path))),
+          }),
     };
   }
 }

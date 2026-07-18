@@ -3,7 +3,7 @@ import type {
   ProjectMaterializationOwner,
   ProjectMaterializationRecord,
 } from '../workbench/project-materialization.ts';
-import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
+import { type OwnerVfsAuthority, ownerVfsScopeHasFailure } from './owner-vfs-authority.ts';
 
 const ROOT = '/.rifty/workbench/v1';
 const PROJECTS_ROOT = `${ROOT}/projects`;
@@ -109,9 +109,9 @@ function exactMetadata(value: unknown, expectedProjectKey: string): ProjectMetad
   };
 }
 
-function persistFailureMessage(total: number, failures: readonly { readonly message: string }[]) {
+function persistFailureMessage(failures: readonly { readonly message: string }[]) {
   const sample = failures[0]?.message;
-  return `${String(total)} unhealed persistence failure(s)${sample ? `: ${sample}` : ''}`;
+  return `Project persistence has an unhealed failure${sample ? `: ${sample}` : ''}`;
 }
 
 /** Owner-realm durable project tree; raw VFS authority never crosses this seam. */
@@ -226,7 +226,19 @@ export function createWorkbenchProjectStore(
       return Object.freeze({ revision: authority.treeRevision });
     },
 
-    async waitForDurability(revision: number): Promise<void> {
+    async waitForDurability(input: { readonly projectKey: string; readonly revision: number }) {
+      if (
+        input === null ||
+        typeof input !== 'object' ||
+        Object.getPrototypeOf(input) !== Object.prototype ||
+        Reflect.ownKeys(input).length !== 2 ||
+        !Object.hasOwn(input, 'projectKey') ||
+        !Object.hasOwn(input, 'revision')
+      ) {
+        throw new TypeError('Workbench durability input must contain projectKey and revision');
+      }
+      const key = assertProjectKey(input.projectKey);
+      const revision = input.revision;
       if (!Number.isSafeInteger(revision) || revision < 0 || revision > authority.treeRevision) {
         throw new RangeError(
           `Workbench durability revision ${String(revision)} is outside owner revision ${String(
@@ -235,8 +247,18 @@ export function createWorkbenchProjectStore(
         );
       }
       const report = await authority.flush();
-      if (report !== undefined && report.total > 0) {
-        throw new Error(persistFailureMessage(report.total, report.failures));
+      if (report !== undefined) {
+        const project = projectContainer(key);
+        const stages = stageProjectRoot(key);
+        const inScope = (path: string): boolean =>
+          path === project ||
+          path.startsWith(`${project}/`) ||
+          path === stages ||
+          path.startsWith(`${stages}/`);
+        if (ownerVfsScopeHasFailure(report, inScope)) {
+          const scopedSample = report.failures.filter((failure) => inScope(failure.path));
+          throw new Error(persistFailureMessage(scopedSample));
+        }
       }
     },
   });

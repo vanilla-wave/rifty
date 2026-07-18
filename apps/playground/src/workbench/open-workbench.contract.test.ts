@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 import {
   DEFAULT_READY_TIMEOUT_MS,
   SW_FRAME_VERSION,
@@ -11,6 +12,7 @@ import {
   DirtyProjectDocumentError,
   ProjectBusyError,
   ProjectDocumentSaveInProgressError,
+  type RuntimeAssetCacheInspection,
 } from './errors.ts';
 import { type WorkbenchStorageSnapshot, createOpenWorkbench } from './open-workbench.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
@@ -44,6 +46,15 @@ type ServiceWorkerEventType = 'controllerchange' | 'message';
 const URL_CONTEXT = Object.freeze({
   apiBaseUrl: 'https://workbench.invalid/app/index.html',
   clientUrl: 'https://workbench.invalid/app/index.html',
+});
+
+const EMPTY_RUNTIME_ASSETS: RuntimeAssetCacheInspection = Object.freeze({
+  storageClass: 'opfs-best-effort',
+  entryCount: 0,
+  storedBytes: 0,
+  verifiedObjectCount: 0,
+  verifiedObjectBytes: 0,
+  readySetCount: 0,
 });
 
 interface Deferred<T> {
@@ -325,6 +336,10 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
   });
   let ownerCloseImplementation = async (): Promise<void> => {};
   let ownerDeleteProjectImplementation = async (_id: string): Promise<void> => {};
+  let ownerInspectRuntimeAssetsImplementation = async (): Promise<RuntimeAssetCacheInspection> =>
+    EMPTY_RUNTIME_ASSETS;
+  let ownerClearRuntimeAssetsImplementation = async (): Promise<RuntimeAssetCacheInspection> =>
+    EMPTY_RUNTIME_ASSETS;
   const ownerProjectSessions: TestSession<unknown>[] = [];
   let ownerOpenProjectImplementation = async (
     _definition: InspectedProjectDefinition,
@@ -395,6 +410,8 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
       ownerOpenProjectImplementation(definition),
     ),
     deleteProject: vi.fn((id: string) => ownerDeleteProjectImplementation(id)),
+    inspectRuntimeAssets: vi.fn(() => ownerInspectRuntimeAssetsImplementation()),
+    clearRuntimeAssets: vi.fn(() => ownerClearRuntimeAssetsImplementation()),
     close: vi.fn(() => ownerCloseImplementation()),
   };
   const ownerHandle: OwnerHandle = {
@@ -404,6 +421,8 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
       return ownerHandleCalls.openProject(definition) as Promise<ProjectSession<TReady>>;
     },
     deleteProject: ownerHandleCalls.deleteProject,
+    inspectRuntimeAssets: ownerHandleCalls.inspectRuntimeAssets,
+    clearRuntimeAssets: ownerHandleCalls.clearRuntimeAssets,
     close: ownerHandleCalls.close,
   };
   const owner = {
@@ -495,6 +514,16 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     setOwnerDeleteProjectImplementation(implementation: (id: string) => Promise<void>): void {
       ownerDeleteProjectImplementation = implementation;
     },
+    setOwnerInspectRuntimeAssetsImplementation(
+      implementation: () => Promise<RuntimeAssetCacheInspection>,
+    ): void {
+      ownerInspectRuntimeAssetsImplementation = implementation;
+    },
+    setOwnerClearRuntimeAssetsImplementation(
+      implementation: () => Promise<RuntimeAssetCacheInspection>,
+    ): void {
+      ownerClearRuntimeAssetsImplementation = implementation;
+    },
     setOwnerCloseImplementation(implementation: () => Promise<void>): void {
       ownerCloseImplementation = implementation;
     },
@@ -505,6 +534,28 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
 }
 
 describe('openWorkbench normalized composition', () => {
+  it('loud-rejects an external runtime-asset adapter before lock or owner effects', async () => {
+    const h = harness();
+    const options = {
+      ...validOptions(),
+      runtimeAssets: { externalAdapter: Object.freeze({}) },
+    } as unknown as WorkbenchOptions;
+
+    const result = await h.open(options).then(
+      async (workbench) => {
+        await workbench.close();
+        return null;
+      },
+      (error: unknown) => error,
+    );
+
+    expect(result).toBeInstanceOf(NotImplementedError);
+    expect(result).toMatchObject({ feature: 'workbench.runtimeAssets.externalAdapter' });
+    expect(h.locks.request).not.toHaveBeenCalled();
+    expect(h.serviceWorker.register).not.toHaveBeenCalled();
+    expect(h.owner.start).not.toHaveBeenCalled();
+  });
+
   it('uses the exact 3s default for SW proof and passes one normalized owner input', async () => {
     const h = harness();
     const workbench = await h.open(optionsWithDefaults());
@@ -789,6 +840,55 @@ describe('openWorkbench project operation admission', () => {
     );
     await clearing;
     await workbench.close();
+  });
+
+  it('fences clear against delete/clear and restores idle after the exact clear failure', async () => {
+    const h = harness();
+    const workbench = await h.open(validOptions());
+    const gate = deferred<RuntimeAssetCacheInspection>();
+    h.setOwnerClearRuntimeAssetsImplementation(() => gate.promise);
+
+    const clearing = workbench.runtimeAssets.clear();
+    await expect(workbench.runtimeAssets.clear()).rejects.toBeInstanceOf(ProjectBusyError);
+    await expect(workbench.deleteProject('clear-race')).rejects.toBeInstanceOf(ProjectBusyError);
+    const failure = new Error('owner clear failed');
+    gate.reject(failure);
+    await expect(clearing).rejects.toBe(failure);
+
+    h.setOwnerClearRuntimeAssetsImplementation(async () => EMPTY_RUNTIME_ASSETS);
+    await expect(workbench.runtimeAssets.clear()).resolves.toBe(EMPTY_RUNTIME_ASSETS);
+    const opened = await workbench.openProject(definition('after-clear-failure'));
+    await opened.close();
+    await workbench.close();
+  });
+
+  it('settles an admitted clear before close begins owner shutdown', async () => {
+    const h = harness();
+    const workbench = await h.open(validOptions());
+    const gate = deferred<RuntimeAssetCacheInspection>();
+    h.setOwnerClearRuntimeAssetsImplementation(() => gate.promise);
+
+    const clearing = workbench.runtimeAssets.clear();
+    const closing = workbench.close();
+
+    expect(h.ownerHandle.close).not.toHaveBeenCalled();
+    await expect(workbench.runtimeAssets.clear()).rejects.toBeInstanceOf(ClosedHandleError);
+    gate.resolve(EMPTY_RUNTIME_ASSETS);
+    await expect(clearing).resolves.toBe(EMPTY_RUNTIME_ASSETS);
+    await closing;
+    expect(h.ownerHandle.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows read-only inspection with an active project and closes it with the root handle', async () => {
+    const h = harness();
+    const workbench = await h.open(validOptions());
+    const opened = await workbench.openProject(definition('inspect-active'));
+
+    await expect(workbench.runtimeAssets.inspect()).resolves.toBe(EMPTY_RUNTIME_ASSETS);
+    expect(h.ownerHandle.inspectRuntimeAssets).toHaveBeenCalledTimes(1);
+    await opened.close();
+    await workbench.close();
+    await expect(workbench.runtimeAssets.inspect()).rejects.toBeInstanceOf(ClosedHandleError);
   });
 
   it('claims open synchronously so open/open admits only the first call', async () => {

@@ -19,7 +19,10 @@ import {
 } from '../workbench/internal/playground-session-tools-transport.ts';
 import { formatProjectPersistenceFailure } from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
-import type { OwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
+import {
+  type OwnerVfsAuthorityComposition,
+  ownerVfsScopeHasFailure,
+} from './owner-vfs-authority.ts';
 import {
   createOwnerPlaygroundArchive,
   runPlaygroundArchivePublicOperation,
@@ -58,12 +61,16 @@ function persistenceFailure(
   operation: 'SCM' | 'save',
   projectRoot: string,
 ): Error | null {
-  if (report === undefined || report.total === 0) return null;
+  if (report === undefined) return null;
+  const inProject = (path: string): boolean =>
+    path === projectRoot || path.startsWith(`${projectRoot}/`);
+  if (!ownerVfsScopeHasFailure(report, inProject)) return null;
   const sample = report.failures
+    .filter((failure) => inProject(failure.path))
     .map((failure) => formatProjectPersistenceFailure(projectRoot, failure))
     .join('; ');
   return new Error(
-    `Playground ${operation} persistence failed with ${String(report.total)} unhealed persistence failure(s)${sample.length > 0 ? `: ${sample}` : ''}`,
+    `Playground ${operation} persistence has an unhealed project failure${sample.length > 0 ? `: ${sample}` : ''}`,
   );
 }
 

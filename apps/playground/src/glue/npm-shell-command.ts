@@ -888,11 +888,10 @@ async function installEddyRequest(
   return body ? { key: canonicalEddyRequestKey(body), body } : null;
 }
 
-/** One terminal-readable line for a dirty drain: first failure + count. */
-function persistFailureLine(report: PersistFailureReport): string {
-  const first = report.failures[0];
-  const sample = first ? ` (first: ${first.op} ${first.path}: ${first.message})` : '';
-  return `${report.total} file(s) failed to persist to OPFS${sample}`;
+/** Scope-local terminal projection; the full ledger cannot yield a scoped count. */
+function persistFailureLine(failure: PersistFailureReport['failures'][number] | undefined): string {
+  const sample = failure ? ` (first: ${failure.op} ${failure.path}: ${failure.message})` : '';
+  return `dependency tree failed to persist to OPFS${sample}`;
 }
 
 /** Translate the authority's structured durability verdict onto the terminal.
@@ -915,7 +914,7 @@ function reportInstallStampPromotion(
         return;
       }
       const example = report.failures.find((failure) => isStampedTreeDamage(failure.path, ctx.cwd));
-      notDurable(persistFailureLine({ failures: example ? [example] : [], total: report.total }));
+      notDurable(persistFailureLine(example));
       return;
     }
     case 'claim-not-durable':

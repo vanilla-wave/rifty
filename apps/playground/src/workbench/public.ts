@@ -9,6 +9,7 @@ export {
   ProjectDocumentSaveInProgressError,
   ProjectFileOperationError,
   ProjectRunExitedBeforeReadyError,
+  RuntimeAssetError,
   StaleProjectDocumentError,
   StdinClosedError,
 } from './errors.ts';
@@ -19,6 +20,11 @@ export type {
   ProjectFileOperation,
   ProjectFileOperationFailure,
   ProjectMutationOutcome,
+  RuntimeAssetCacheInspection,
+  RuntimeAssetFailure,
+  RuntimeAssetFailurePhase,
+  RuntimeAssetRecovery,
+  RuntimeAssetStorageClass,
 } from './errors.ts';
 export type {
   StoragePersistence,
@@ -26,6 +32,7 @@ export type {
   WorkbenchOptions,
   WorkbenchSnapshot,
   WorkbenchStorageSnapshot,
+  WorkbenchRuntimeAssets,
 } from './open-workbench.ts';
 export type { PreviewHandle } from './preview-readiness.ts';
 export { projects } from './project-definition.ts';

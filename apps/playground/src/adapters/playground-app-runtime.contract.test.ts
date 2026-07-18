@@ -86,6 +86,24 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
     return definition;
   }) as PlaygroundWorkbench['playground']['define'];
   const workbench = {
+    runtimeAssets: Object.freeze({
+      inspect: async () => ({
+        storageClass: 'memory-session' as const,
+        entryCount: 0,
+        storedBytes: 0,
+        verifiedObjectCount: 0,
+        verifiedObjectBytes: 0,
+        readySetCount: 0,
+      }),
+      clear: async () => ({
+        storageClass: 'memory-session' as const,
+        entryCount: 0,
+        storedBytes: 0,
+        verifiedObjectCount: 0,
+        verifiedObjectBytes: 0,
+        readySetCount: 0,
+      }),
+    }),
     snapshot: () => ({
       storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' } as const,
     }),

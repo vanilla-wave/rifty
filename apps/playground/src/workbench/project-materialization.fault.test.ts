@@ -163,15 +163,17 @@ function materializationHarness() {
     return { revision };
   });
 
-  const waitForDurability = vi.fn(async (revision: number): Promise<void> => {
-    events.push(`durability:${revision}`);
-    const held = durabilityGate;
-    durabilityGate = undefined;
-    if (held !== undefined) await held.promise;
-    const failure = durabilityFailure;
-    durabilityFailure = undefined;
-    if (failure !== undefined) throw failure;
-  });
+  const waitForDurability = vi.fn(
+    async (input: { readonly projectKey: string; readonly revision: number }): Promise<void> => {
+      events.push(`durability:${input.revision}`);
+      const held = durabilityGate;
+      durabilityGate = undefined;
+      if (held !== undefined) await held.promise;
+      const failure = durabilityFailure;
+      durabilityFailure = undefined;
+      if (failure !== undefined) throw failure;
+    },
+  );
 
   const owner = {
     readProject,
@@ -379,8 +381,8 @@ describe('project materialization', () => {
     expect(deleteResult?.type).toBe('return');
     gate.resolve();
     await expect(deleting).resolves.toBeUndefined();
-    const deleteRevision = h.owner.waitForDurability.mock.calls.at(-1)?.[0];
-    expect(deleteRevision).toEqual(expect.any(Number));
+    const deleteDurability = h.owner.waitForDurability.mock.calls.at(-1)?.[0];
+    expect(deleteDurability).toEqual({ projectKey, revision: expect.any(Number) });
   });
 
   it('rejects delete loudly when the durability barrier fails', async () => {

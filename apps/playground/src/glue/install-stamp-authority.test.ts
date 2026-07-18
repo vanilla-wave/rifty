@@ -401,7 +401,7 @@ describe.each(implementations)('install-stamp authority contract — %s', (_name
         unknown
       >;
       legacy.version = 3;
-      delete legacy.lockfileSha256;
+      Reflect.deleteProperty(legacy, 'lockfileSha256');
       await h.vfs.writeFile(installStampPath(ROOT), JSON.stringify(legacy));
 
       await expect(authority(h).check({ root: ROOT, slug: 'scratch' })).resolves.toEqual({
@@ -446,12 +446,12 @@ describe.each(implementations)('install-stamp authority contract — %s', (_name
       const hashGate = new Promise<void>((resolve) => {
         releaseHash = resolve;
       });
-      const digestSpy = vi.spyOn(crypto.subtle, 'digest').mockImplementationOnce(
-        async (algorithm, data) => {
+      const digestSpy = vi
+        .spyOn(crypto.subtle, 'digest')
+        .mockImplementationOnce(async (algorithm, data) => {
           await hashGate;
           return digest(algorithm, data);
-        },
-      );
+        });
 
       const promotion = a.promote(
         { root: ROOT, slug: 'scratch', packageJsonText: PACKAGE_JSON },
@@ -643,6 +643,34 @@ describe.each(implementations)('install-stamp authority contract — %s', (_name
       );
 
       expect(result).toMatchObject({ status: 'refused', reason: 'guarded-scope-not-durable' });
+      expect((await a.check({ root: ROOT, slug: 'scratch' })).status).not.toBe('trusted');
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it('loudly rejects a truncated durability sample without a full-ledger predicate', async () => {
+    const h = makeHarness();
+    try {
+      await seed(h);
+      const a = authority(h);
+      const claim = await a.demote({ root: ROOT, slug: 'scratch' });
+
+      await expect(
+        a.promote(
+          { root: ROOT, slug: 'scratch', packageJsonText: PACKAGE_JSON },
+          {
+            epoch: claim.epoch,
+            packages: 1,
+            flush: async () => ({
+              failures: [
+                { path: '/foreign/cache.json', op: 'write', message: 'QuotaExceededError' },
+              ],
+              total: 2,
+            }),
+          },
+        ),
+      ).rejects.toThrow(/truncated.*full-ledger/i);
       expect((await a.check({ root: ROOT, slug: 'scratch' })).status).not.toBe('trusted');
     } finally {
       h.dispose();

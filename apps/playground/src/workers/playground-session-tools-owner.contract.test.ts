@@ -416,9 +416,7 @@ describe('owner-resident Playground session tools', () => {
     ) {
       throw new Error('expected failed durability response');
     }
-    expect(durabilityFailure.response.error.message).toContain(
-      'write [outside active project]: catalog permission denied',
-    );
+    expect(durabilityFailure.response.error.message).not.toContain('catalog permission denied');
     expect(durabilityFailure.response.error.message).not.toContain('/.rifty/owner.json');
     expect(durabilityFailure.response.error.message).toContain(
       'write [outside active project]: reserved metadata permission denied',
@@ -427,6 +425,7 @@ describe('owner-resident Playground session tools', () => {
     expect(durabilityFailure.response.error.message).not.toContain(
       '/.rifty/workbench/v1/catalog.json',
     );
+    expect(durabilityFailure.response.error.message).not.toContain('3 unhealed');
     flush.mockRestore();
 
     const beforeDuplicate = frames.length;

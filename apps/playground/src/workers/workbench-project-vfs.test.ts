@@ -357,6 +357,64 @@ describe('Workbench project VFS owner adapter', () => {
     });
   });
 
+  it('ignores asset-only owner damage at the project durability barrier', async () => {
+    const h = harness();
+    const assetPath = '/.rifty/workbench/v1/runtime-assets/v1/objects/private-asset';
+    vi.spyOn(h.authority, 'flush').mockResolvedValue({
+      failures: [{ path: assetPath, op: 'write', message: 'private asset quota detail' }],
+      total: 1,
+    });
+
+    await h.vfs.handleFrame({
+      type: 'rifty:owner-vfs-durability',
+      barrierId: 'asset-only-durability',
+      ownerEpoch: OWNER_EPOCH,
+      treeRevision: h.authority.treeRevision,
+    });
+
+    expect(h.emitted.at(-1)).toEqual({
+      type: 'rifty:owner-vfs-durability-ack',
+      barrierId: 'asset-only-durability',
+      ok: true,
+      receipt: {
+        ownerEpoch: OWNER_EPOCH,
+        treeRevision: h.authority.treeRevision,
+        durability: 'ephemeral',
+      },
+    });
+  });
+
+  it('rejects mixed project damage without exposing sibling-ledger details', async () => {
+    const h = harness();
+    const assetPath = '/.rifty/workbench/v1/runtime-assets/v1/objects/private-asset';
+    vi.spyOn(h.authority, 'flush').mockResolvedValue({
+      failures: [
+        { path: assetPath, op: 'write', message: 'private asset quota detail' },
+        { path: `${ROOT}/src/main.ts`, op: 'write', message: 'project quota detail' },
+      ],
+      total: 2,
+    });
+
+    await h.vfs.handleFrame({
+      type: 'rifty:owner-vfs-durability',
+      barrierId: 'mixed-durability',
+      ownerEpoch: OWNER_EPOCH,
+      treeRevision: h.authority.treeRevision,
+    });
+
+    const terminal = h.emitted.at(-1);
+    expect(terminal).toMatchObject({
+      type: 'rifty:owner-vfs-durability-ack',
+      barrierId: 'mixed-durability',
+      ok: false,
+    });
+    const serialized = JSON.stringify(terminal);
+    expect(serialized).not.toContain(assetPath);
+    expect(serialized).not.toContain('private asset quota detail');
+    expect(serialized).not.toContain(ROOT);
+    expect(serialized).not.toContain('2 unhealed');
+  });
+
   // Fault class: torn-state. Once bytes apply, both snapshot construction and
   // state delivery failures must retain applied evidence and terminate the owner.
   it.each([
