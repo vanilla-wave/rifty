@@ -3,9 +3,13 @@ import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { readyShadowAssetInstaller } from './_test-fixtures/shadow-assets.ts';
 import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
-import { EMPTY_SHADOW_ASSET_PLAN, shadowAssetPlanFromLockfileBytes } from './index.ts';
+import {
+  EMPTY_SHADOW_ASSET_PLAN,
+  type ShadowAssetPlan,
+  shadowAssetPlanFromLockfileBytes,
+} from './index.ts';
 import { install } from './installer.ts';
-import type { Lockfile } from './linker.ts';
+import { type Lockfile, buildLockfile } from './linker.ts';
 import { type Packument, RegistryClient } from './registry.ts';
 
 const enc = new TextEncoder();
@@ -37,12 +41,10 @@ class AliasRegistry extends RegistryClient {
   }
 }
 
-async function installEsbuild(
-  overrides?: Readonly<Record<string, string>>,
-): Promise<{
+async function installEsbuild(overrides?: Readonly<Record<string, string>>): Promise<{
   readonly lockfileBytes: Uint8Array;
   readonly lockfile: Lockfile;
-  readonly plan: unknown;
+  readonly plan: ShadowAssetPlan;
 }> {
   const vfs = new MemoryVfs();
   await vfs.mkdir('/project', { recursive: true });
@@ -81,6 +83,22 @@ function standardOnlyLockfile(lockfile: Lockfile): Uint8Array {
 }
 
 describe('shadow-asset facts from exact stored npm-client lockfile bytes', () => {
+  it('does not let the public lockfile builder mint an npm-client-owned applied trace', async () => {
+    const installed = await installEsbuild();
+    const callWithForgedOptions = buildLockfile as unknown as (
+      name: string,
+      version: string,
+      packages: readonly [],
+      options: Readonly<{ appliedShadowSubstitutions: ShadowAssetPlan['substitutions'] }>,
+    ) => Lockfile;
+
+    expect(
+      callWithForgedOptions('root', '1.0.0', [], {
+        appliedShadowSubstitutions: installed.plan.substitutions,
+      }).rifty,
+    ).toBeUndefined();
+  });
+
   it('reproduces the exact fresh-install applied-substitution plan', async () => {
     const installed = await installEsbuild();
 
