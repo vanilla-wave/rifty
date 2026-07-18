@@ -108,6 +108,7 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
         publicName: 'esbuild',
         requestedRange: '^0.28.0',
         resolvedPublicVersion: '0.28.0',
+        runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
         substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
       },
     ]);
@@ -119,6 +120,7 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
       publicName: 'esbuild',
       requestedRange: '^0.28.0',
       resolvedPublicVersion: '0.28.0',
+      runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
       substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
     };
     const bytes = enc.encode(
@@ -151,7 +153,6 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
           id: builtinShadowAssetCatalog.id,
           digest: builtinShadowAssetCatalog.digest,
         },
-        runtimeAdapterId: builtinShadowAssetCatalog.substitutions[0]?.runtimeAdapterId,
         builtin: true,
       },
     ]);
