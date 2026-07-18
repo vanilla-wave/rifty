@@ -1,4 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
+import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { readyShadowAssetInstaller } from './_test-fixtures/shadow-assets.ts';
@@ -102,7 +103,59 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
   it('reproduces the exact fresh-install applied-substitution plan', async () => {
     const installed = await installEsbuild();
 
+    expect(installed.lockfile.rifty?.shadowSubstitutions.applied).toEqual([
+      {
+        publicName: 'esbuild',
+        requestedRange: '^0.28.0',
+        resolvedPublicVersion: '0.28.0',
+        substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+      },
+    ]);
     expect(shadowAssetPlanFromLockfileBytes(installed.lockfileBytes)).toEqual(installed.plan);
+  });
+
+  it('rebuilds current asset facts from stable persisted recipe evidence', () => {
+    const evidence = {
+      publicName: 'esbuild',
+      requestedRange: '^0.28.0',
+      resolvedPublicVersion: '0.28.0',
+      substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+    };
+    const bytes = enc.encode(
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': { version: '1.0.0', dependencies: { esbuild: '0.28.0' } },
+          'node_modules/@esbuild/wasi-preview1': {
+            version: '0.28.0',
+            dependencies: {},
+          },
+        },
+        rifty: {
+          shadowSubstitutions: {
+            protocol: 'rifty.lockfile-shadow-substitutions/v1',
+            applied: [evidence],
+          },
+        },
+      }),
+    );
+
+    const plan = shadowAssetPlanFromLockfileBytes(bytes);
+    expect(plan.substitutions).toEqual([
+      {
+        ...evidence,
+        catalog: {
+          id: builtinShadowAssetCatalog.id,
+          digest: builtinShadowAssetCatalog.digest,
+        },
+        runtimeAdapterId: builtinShadowAssetCatalog.substitutions[0]?.runtimeAdapterId,
+        builtin: true,
+      },
+    ]);
+    expect(plan.assets).toEqual(builtinShadowAssetCatalog.assets);
   });
 
   it('does not invent builtin provenance for a byte-shape-equivalent user override', async () => {
