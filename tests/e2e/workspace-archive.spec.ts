@@ -130,11 +130,12 @@ test('archive restores Files and editor bytes immediately and survives reload', 
   const archivedMain = archive.files.find(({ path }) => path === 'src/main.js');
   expect(archivedMain).toBeDefined();
   expect(Buffer.from(archivedMain!.content, 'base64').toString('utf8')).toContain(archivedMarker);
+  expect(archivePaths).toContain('.git/HEAD');
   expect(
-    archivePaths.every((path) =>
-      path
-        .split('/')
-        .every((segment) => !['node_modules', '.git', '.vite', 'dist', '.rifty'].includes(segment)),
+    archivePaths.every(
+      (path) =>
+        path.split('/').every((segment) => !['node_modules', '.vite', 'dist'].includes(segment)) &&
+        path.split('/')[0] !== '.rifty',
     ),
   ).toBe(true);
 

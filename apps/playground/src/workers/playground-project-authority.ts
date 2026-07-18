@@ -220,6 +220,8 @@ export interface PlaygroundProjectAuthorityOptions {
   readonly now: () => string;
   readonly createStageId: () => string;
   readonly acquisition: ProjectAcquisitionPort<ProjectAcquisitionPlan>;
+  /** Recover project-local durable transactions before any derived open read. */
+  readonly beforeOpenProject?: (projectRoot: string) => Promise<void>;
 }
 
 export interface PlaygroundProjectAuthority {
@@ -2586,6 +2588,7 @@ export async function createPlaygroundProjectAuthority(
         }
         const projectKey = projectStorageSegment(selected);
         const root = `${container}/tree`;
+        await options.beforeOpenProject?.(root);
         const acquisitionResult = await acquisition.ensure({
           projectKey,
           projectRoot: root,

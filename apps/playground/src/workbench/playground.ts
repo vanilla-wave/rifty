@@ -1,4 +1,4 @@
-import type { LogEntry } from '@riftydev/git';
+import type { GitPorcelainXY, LogEntry } from '@riftydev/git';
 import type {
   CodeAction,
   CodeFixOptions,
@@ -33,6 +33,7 @@ import type {
   TextEdit,
   WorkspaceEdit,
 } from '@riftydev/ts-language-service/lsp-types';
+import type { WorkbenchHealth } from './health.ts';
 import { createBrowserOpenPlaygroundWorkbench } from './internal/browser-workbench-composition.ts';
 import type { Workbench, WorkbenchOptions } from './open-workbench.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
@@ -230,11 +231,18 @@ export interface PlaygroundTypeScript {
   getLinkedEditingRange(path: string, position: Position): Promise<LinkedEditingRanges | null>;
 }
 
-export interface PlaygroundScmChange {
+export interface PlaygroundScmSupportedChange {
   readonly path: string;
-  readonly code: string;
+  readonly code: GitPorcelainXY;
   readonly area: 'staged' | 'working';
 }
+
+export interface PlaygroundScmStatusGap {
+  readonly path: string;
+  readonly rawStatusMatrixCode: string;
+}
+
+export type PlaygroundScmChange = PlaygroundScmSupportedChange | PlaygroundScmStatusGap;
 
 export interface PlaygroundScmSnapshot {
   readonly branch?: string;
@@ -296,6 +304,10 @@ export interface PlaygroundSessionTools {
   awaitDurability(): Promise<void>;
 }
 
+export interface PlaygroundSessionToolsView extends PlaygroundSessionTools {
+  readonly health: WorkbenchHealth;
+}
+
 export interface PlaygroundWorkbench extends Workbench {
   openProject<TReady>(
     definition: ProjectDefinition<TReady>,
@@ -308,7 +320,7 @@ export interface PlaygroundWorkbench extends Workbench {
     define(plan: PlaygroundProjectPlan): ProjectDefinition<unknown>;
     readonly catalog: PlaygroundProjectCatalog;
     restoreTerminalState(input: PlaygroundTerminalStateRestoreInput): ProjectTerminalSnapshot;
-    forSession<T>(session: ProjectSession<T>): PlaygroundSessionTools;
+    forSession<T>(session: ProjectSession<T>): PlaygroundSessionToolsView;
   };
 }
 

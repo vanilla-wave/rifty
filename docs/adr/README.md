@@ -157,14 +157,16 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0165 | Multi-project management with durable scratch |
 | 0173 | Vite 7 production build and preview |
 | 0174 | Run vite through installed bin |
-| 0179 | Expose git status classifier from git facade |
 | 0184 | Hoist commit-refusal classifier to git facade |
 | 0185 | Owner-backed SCM and file-manager bridges |
 | 0187 | Install-stamp durability via write-through FIFO order plus verified stamps |
-| 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
 | 0243 | Visible Vite config ownership via durable root-local seed claim |
 | 0261 | Root-bound serialized install trust claims and non-transferable claim ingress |
 | 0281 | Cmd+S is a workspace durability barrier |
+| 0285 | Expose one Workbench health and recovery authority |
+| 0286 | Workspace archives round-trip observable Git and nested dot-rifty state |
+| 0284 | Git status entries preserve per-path classification gaps |
+| 0292 | Workbench authorities replace Solid orchestration core |
 
 ### toolchain-build
 
@@ -278,6 +280,8 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0231 | 0267 | host bootstrap leaves guest `process.env`; recursive-worker context grafted |
 | 0260 | 0276 | shared guard law retained; closed vocabulary gains applied-evidence semantic replacement |
 | 0277 | 0278 | finite plans/catalog/TS/SCM/archive grafted; terminal state and owner preview registry added |
+| 0179 | 0284 | git-facade ownership retained; scalar result replaced by ordered rows plus explicit path gaps |
+| 0197 | 0292 | Solid testability motive retained; Workbench companion now owns lifecycle and semantic test seams |
 
 ## Corrections (active)
 
@@ -288,6 +292,7 @@ superseded.
 |---|---|---|
 | 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
+| 0278 depth-insensitive archive `.git`/`.rifty` exclusion clause | 0286 / note 2026-07-17 | Git and nested ordinary `.rifty` round-trip; root `.rifty` remains private |
 | 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
 | 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |

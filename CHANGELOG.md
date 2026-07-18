@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`check:arch` now sees type-only boundary violations without inventing
+  runtime cycles.** The checker runs an emitted-runtime graph for exact cycle
+  detection and a type-inclusive graph for layer, internal, and sealed-entry
+  policy. An erased type edge can no longer bypass an import boundary or make a
+  mixed type/value graph fail as a runtime cycle.
 - **Eddy S3 durable store handles closure hashes containing `/`.** Yandex
   Object Storage rejects SigV4 PUTs whose canonical URI signs `%2F`; the
   store now signs the raw-slash object key while leaving `+`/`=` encoded, and

@@ -457,6 +457,18 @@ mechanical commits separate from behavior.
 8. **Downstream distribution.** Build React bindings, then the built reference
    embed host. Actual npm publication is a separate explicit approval.
 
+Step 6 starts only after these app-local ownership seams are finite:
+
+- split `glue/ts-ls-client.ts` protocol/client code from Monaco presentation;
+  place shared `fs-ops` and SCM-status helpers on one explicit package boundary;
+- consolidate the security-relevant `.rifty` path classifiers and each
+  clone-safe exact-record schema family behind one owner per contract;
+- consolidate the triplicated session close/failure aggregation before moving
+  code; extraction must not add another `pageClaimed`/`pendingBoot` owner;
+- document the registry-owned service-worker proof at the browser-owner wiring
+  seam, then keep its injected no-op mount/proof dependencies mechanically
+  downstream of that invariant.
+
 ## Acceptance
 
 - Vite consumer supplies files and calls `.run()` without Vite server config;

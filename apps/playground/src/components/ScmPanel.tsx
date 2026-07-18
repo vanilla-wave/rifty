@@ -1,6 +1,11 @@
 import type { LogEntry } from '@riftydev/git';
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { type ScmResourceRow, scmRowsFromStatusMap } from '../glue/scm-status.ts';
+import {
+  type ScmChangeInput,
+  type ScmPanelRow,
+  type ScmResourceRow,
+  scmRowsFromChanges,
+} from '../glue/scm-status.ts';
 import { Icon } from './icons.tsx';
 
 function commitSubject(entry: LogEntry): string {
@@ -14,7 +19,7 @@ function shortOid(entry: LogEntry): string {
 function ResourceGroup(props: {
   kind: 'staged' | 'changes';
   title: string;
-  rows: readonly ScmResourceRow[];
+  rows: readonly ScmPanelRow[];
   onOpen(row: ScmResourceRow): void;
   onStage(row: ScmResourceRow): Promise<void>;
   onUnstage(row: ScmResourceRow): Promise<void>;
@@ -32,62 +37,77 @@ function ResourceGroup(props: {
       <Show when={props.rows.length > 0} fallback={<p class="rf-scm__empty">No files</p>}>
         <div class="rf-scm__rows">
           <For each={props.rows}>
-            {(row) => (
-              <div
-                class="rf-scm__row"
-                data-code={row.badge}
-                title={`rifty-git status: ${row.code} ${row.relativePath}`}
-              >
-                <button type="button" class="rf-scm__open" onClick={() => props.onOpen(row)}>
-                  <span class="rf-scm__badge" aria-hidden="true">
-                    {row.badge}
+            {(row) =>
+              'rawStatusMatrixCode' in row ? (
+                <div
+                  class="rf-scm__row"
+                  data-code="!"
+                  title={`Unsupported Git status matrix ${row.rawStatusMatrixCode}: ${row.relativePath}`}
+                >
+                  <span class="rf-scm__open">
+                    <span class="rf-scm__badge" aria-hidden="true">
+                      !
+                    </span>
+                    <span class="rf-scm__path">{row.relativePath}</span>
                   </span>
-                  <span class="rf-scm__path">{row.relativePath}</span>
-                </button>
-                <span class="rf-scm__actions">
-                  <Show
-                    when={props.kind === 'staged'}
-                    fallback={
-                      <>
-                        <button
-                          type="button"
-                          class="rf-iconbtn rf-iconbtn--xs"
-                          title={`Stage ${row.relativePath}`}
-                          aria-label={`Stage ${row.relativePath}`}
-                          disabled={props.pendingKey !== undefined}
-                          onClick={() => props.runAction('stage', row)}
-                        >
-                          <Icon name="plus" size={12} />
-                        </button>
-                        <Show when={canDiscard(row)}>
+                </div>
+              ) : (
+                <div
+                  class="rf-scm__row"
+                  data-code={row.badge}
+                  title={`rifty-git status: ${row.code} ${row.relativePath}`}
+                >
+                  <button type="button" class="rf-scm__open" onClick={() => props.onOpen(row)}>
+                    <span class="rf-scm__badge" aria-hidden="true">
+                      {row.badge}
+                    </span>
+                    <span class="rf-scm__path">{row.relativePath}</span>
+                  </button>
+                  <span class="rf-scm__actions">
+                    <Show
+                      when={props.kind === 'staged'}
+                      fallback={
+                        <>
                           <button
                             type="button"
                             class="rf-iconbtn rf-iconbtn--xs"
-                            title={`Discard ${row.relativePath}`}
-                            aria-label={`Discard ${row.relativePath}`}
+                            title={`Stage ${row.relativePath}`}
+                            aria-label={`Stage ${row.relativePath}`}
                             disabled={props.pendingKey !== undefined}
-                            onClick={() => props.runAction('discard', row)}
+                            onClick={() => props.runAction('stage', row)}
                           >
-                            <Icon name="arrow-rotate-left" size={12} />
+                            <Icon name="plus" size={12} />
                           </button>
-                        </Show>
-                      </>
-                    }
-                  >
-                    <button
-                      type="button"
-                      class="rf-iconbtn rf-iconbtn--xs"
-                      title={`Unstage ${row.relativePath}`}
-                      aria-label={`Unstage ${row.relativePath}`}
-                      disabled={props.pendingKey !== undefined}
-                      onClick={() => props.runAction('unstage', row)}
+                          <Show when={canDiscard(row)}>
+                            <button
+                              type="button"
+                              class="rf-iconbtn rf-iconbtn--xs"
+                              title={`Discard ${row.relativePath}`}
+                              aria-label={`Discard ${row.relativePath}`}
+                              disabled={props.pendingKey !== undefined}
+                              onClick={() => props.runAction('discard', row)}
+                            >
+                              <Icon name="arrow-rotate-left" size={12} />
+                            </button>
+                          </Show>
+                        </>
+                      }
                     >
-                      <Icon name="minus" size={12} />
-                    </button>
-                  </Show>
-                </span>
-              </div>
-            )}
+                      <button
+                        type="button"
+                        class="rf-iconbtn rf-iconbtn--xs"
+                        title={`Unstage ${row.relativePath}`}
+                        aria-label={`Unstage ${row.relativePath}`}
+                        disabled={props.pendingKey !== undefined}
+                        onClick={() => props.runAction('unstage', row)}
+                      >
+                        <Icon name="minus" size={12} />
+                      </button>
+                    </Show>
+                  </span>
+                </div>
+              )
+            }
           </For>
         </div>
       </Show>
@@ -98,7 +118,7 @@ function ResourceGroup(props: {
 export function ScmPanel(props: {
   root: string;
   branch?: string;
-  status: ReadonlyMap<string, string>;
+  changes: readonly ScmChangeInput[];
   history: readonly LogEntry[];
   onOpenChange(row: ScmResourceRow): void;
   onStage(row: ScmResourceRow): Promise<void>;
@@ -106,7 +126,7 @@ export function ScmPanel(props: {
   onDiscard(row: ScmResourceRow): Promise<void>;
   onCommit(message: string): Promise<void>;
 }) {
-  const groups = createMemo(() => scmRowsFromStatusMap(props.status, props.root));
+  const groups = createMemo(() => scmRowsFromChanges(props.changes, props.root));
   const [pendingKey, setPendingKey] = createSignal<string | undefined>();
   const [commitMessage, setCommitMessage] = createSignal('');
   const [commitPending, setCommitPending] = createSignal(false);

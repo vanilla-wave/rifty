@@ -69,7 +69,7 @@ async function seedLegacyCatalog(
   }
 }
 
-test('Playground companion installs and executes a Node CLI through one real Workbench owner', async ({
+test('Playground companion installs a Node CLI and keeps its owner live when a write races close', async ({
   page,
 }) => {
   test.setTimeout(300_000);
@@ -97,6 +97,11 @@ test('Playground companion installs and executes a Node CLI through one real Wor
       type ProjectSession = {
         readonly files: {
           readFile(path: string): Promise<{ readonly bytes: Uint8Array }>;
+          writeFile(
+            path: string,
+            data: Uint8Array,
+            options: { readonly expectedVersion: string | null },
+          ): Promise<{ readonly path: string; readonly version: string }>;
         };
         run(): ProjectRun;
         close(): Promise<void>;
@@ -268,7 +273,70 @@ test('Playground companion installs and executes a Node CLI through one real Wor
           }
         ).version;
         const catalog = workbench.playground.catalog.snapshot();
-        await withTimeout(session.close(), 'Scratch close', 60_000);
+        const closeRaceBytes = new TextEncoder().encode('write admitted before session close\n');
+        const writing = session.files.writeFile('/close-race.txt', closeRaceBytes, {
+          expectedVersion: null,
+        });
+        let writeSettled = false;
+        const writeOutcome = writing.then(
+          (value) => {
+            writeSettled = true;
+            return { status: 'fulfilled' as const, value };
+          },
+          (error: unknown) => {
+            writeSettled = true;
+            const inspected = error instanceof Error ? error : new Error(String(error));
+            return {
+              status: 'rejected' as const,
+              name: inspected.name,
+              message: inspected.message,
+            };
+          },
+        );
+        await Promise.resolve();
+        if (writeSettled) throw new Error('file write settled before the close race boundary');
+        const sessionClosing = session.close();
+        const sessionCloseOutcome = sessionClosing.then(
+          () => ({ status: 'fulfilled' as const }),
+          (error: unknown) => {
+            const inspected = error instanceof Error ? error : new Error(String(error));
+            return {
+              status: 'rejected' as const,
+              name: inspected.name,
+              message: inspected.message,
+            };
+          },
+        );
+        const [concurrentWrite, concurrentSessionClose] = await Promise.all([
+          withTimeout(writeOutcome, 'concurrent file write outcome', 60_000),
+          withTimeout(sessionCloseOutcome, 'concurrent Scratch close outcome', 60_000),
+        ]);
+        if (concurrentSessionClose.status === 'rejected') {
+          throw new Error(
+            `concurrent Scratch close rejected: ${concurrentSessionClose.name}: ${concurrentSessionClose.message}`,
+          );
+        }
+        session = null;
+
+        session = await withTimeout(
+          workbench.openProject(definition),
+          'Scratch reopen before Workbench close',
+          120_000,
+        ).catch((error: unknown) => {
+          const inspected = error instanceof Error ? error : new Error(String(error));
+          throw new Error(
+            `post-race Scratch reopen rejected: ${inspected.name}: ${inspected.message}`,
+          );
+        });
+        const reopenedManifest = await withTimeout(
+          session.files.readFile('/package.json'),
+          'post-race owner liveness verification',
+          30_000,
+        ).catch((error: unknown) => {
+          const inspected = error instanceof Error ? error : new Error(String(error));
+          throw new Error(`post-race file read rejected: ${inspected.name}: ${inspected.message}`);
+        });
+        await withTimeout(session.close(), 'post-race Scratch close', 60_000);
         session = null;
         await withTimeout(workbench.close(), 'Playground Workbench close', 60_000);
         workbench = null;
@@ -278,8 +346,10 @@ test('Playground companion installs and executes a Node CLI through one real Wor
           catalog,
           exit,
           closeExit,
+          concurrentWrite,
           installedVersion,
           output: chunks.map(({ chunk }) => chunk).join(''),
+          reopenedManifestText: new TextDecoder().decode(reopenedManifest.bytes),
         };
       } finally {
         detach?.();
@@ -300,7 +370,13 @@ test('Playground companion installs and executes a Node CLI through one real Wor
   });
   expect(result.exit).toEqual({ code: 0, signal: null });
   expect(result.closeExit).toEqual({ code: 0, signal: null });
+  expect(result.concurrentWrite).toMatchObject({
+    status: 'rejected',
+    name: 'ProjectFileOperationError',
+    message: expect.stringContaining('writeFile /close-race.txt failed'),
+  });
   expect(result.installedVersion).toBe('4.1.5');
+  expect(result.reopenedManifestText).toContain('"name":"companion-kleur"');
 
   const installCommand = result.output.indexOf('$ npm install');
   const install = result.output.indexOf('npm: installing all from package.json');
@@ -753,7 +829,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
   expect(result.reopenedClose).toEqual(stopped);
 });
 
-test('real instant Vite preset keeps mapper port 5174 through snapshot restore and preview', async ({
+test('real instant Vite preset keeps port 5174 and closes its open session through Workbench', async ({
   page,
 }) => {
   test.setTimeout(300_000);
@@ -964,9 +1040,12 @@ test('real instant Vite preset keeps mapper port 5174 through snapshot restore a
       run = null;
       detach();
       detach = null;
-      await withTimeout(session.close(), 'Vite Scratch close', 60_000);
+      await withTimeout(
+        workbench.close(),
+        'Playground Workbench close over open Vite session',
+        60_000,
+      );
       session = null;
-      await withTimeout(workbench.close(), 'Playground Workbench close', 60_000);
       workbench = null;
 
       return {

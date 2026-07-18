@@ -28,7 +28,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/e2e/owner-shell-prettier-eslint.spec.ts`
 - `apps/playground/src/glue/npm-shell-command.test.ts`
 - `apps/playground/src/glue/pty-client.test.ts`
-- `apps/playground/src/adapters/terminal-manager.test.ts`
+- `apps/playground/src/adapters/playground-terminal-ui.contract.test.ts`
+- `apps/playground/src/workbench/project-terminal.test.ts`
 - `packages/runtime-js/src/builtins/node-entry.test.ts`
 - `tests/conformance/builtins/util.test.ts`
 - `tests/conformance/builtins/fs-realpath-readdir.test.ts`

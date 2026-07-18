@@ -15,6 +15,7 @@ import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { vfsToGitFs } from '../src/fs-adapter.ts';
 import { makeGit } from '../src/git.ts';
+import { requireSupportedStatusEntries } from '../src/status.ts';
 
 const ID = { name: 'Test', email: 't@example.com', timestamp: 1_600_000_000, timezoneOffset: 0 };
 
@@ -41,7 +42,7 @@ it('a same-size content edit after commit is reported as modified (status + diff
   // iso-git's racy-clean shortcut would trust the stale index (silent data loss).
   await vfs.writeFile('/r/x.txt', 'two\n');
 
-  const entry = (await g.status()).find((e) => e.filepath === 'x.txt');
+  const entry = requireSupportedStatusEntries(await g.status()).find((e) => e.filepath === 'x.txt');
   expect(entry).toBeDefined();
   expect(entry?.status).not.toBe('111'); // 111 == unchanged — must NOT look clean
 

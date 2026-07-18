@@ -8,11 +8,22 @@ export interface GitIdentity {
   timezoneOffset: number;
 }
 
-/** One row of `status()` — `status` is the 3-char head/workdir/stage code. */
-export interface StatusEntry {
-  filepath: string;
-  status: string;
+/** One classified `status()` path understood by the finite Git oracle. */
+export interface SupportedStatusEntry {
+  readonly kind: 'supported';
+  readonly filepath: string;
+  readonly status: import('./status.ts').GitStatusMatrixCode;
 }
+
+/** One path whose upstream statusMatrix state is outside the finite Git oracle. */
+export interface UnsupportedStatusEntry {
+  readonly kind: 'unsupported';
+  readonly filepath: string;
+  readonly rawStatusMatrixCode: string;
+}
+
+/** One ordered `status()` path: classified, or an explicit path-local gap. */
+export type StatusEntry = SupportedStatusEntry | UnsupportedStatusEntry;
 
 /** One commit from `log()` (newest-first). */
 export interface LogEntry {

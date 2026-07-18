@@ -12,6 +12,7 @@ import {
   createBrowserPlaygroundSessionTools,
   inspectOwnerPlaygroundSessionToolsFrame,
   inspectPagePlaygroundSessionToolsFrame,
+  operationalHealthForScmSnapshot,
 } from './playground-session-tools-transport.ts';
 
 const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
@@ -44,6 +45,12 @@ const snapshot = Object.freeze({
 });
 
 const revision = Object.freeze({ ownerEpoch: 'owner-a', treeRevision: 7 });
+const healthyOperationalHealth = Object.freeze({ scope: 'scm', status: 'healthy' as const });
+const degradedOperationalHealth = Object.freeze({
+  scope: 'scm',
+  status: 'degraded' as const,
+  error: Object.freeze({ name: 'GitError', message: 'cannot read the Git index' }),
+});
 
 function emptyPreviews(): PlaygroundPreviewRegistry {
   const snapshot = Object.freeze([]);
@@ -195,6 +202,18 @@ function ownerFrames(): readonly OwnerPlaygroundSessionToolsFrame[] {
       snapshot,
     },
     {
+      type: 'workbench:playground-session-tools-operational-health',
+      health: {
+        scope: 'scm',
+        status: 'degraded',
+        error: { name: 'Error', message: 'Git index read failed' },
+      },
+    },
+    {
+      type: 'workbench:playground-session-tools-operational-health',
+      health: { scope: 'scm', status: 'healthy' },
+    },
+    {
       type: 'workbench:playground-session-tools-ts-response',
       message: {
         type: 'rifty:ts-lsp',
@@ -216,6 +235,26 @@ function expectDeepFrozen(value: unknown, seen = new Set<object>()): void {
 }
 
 describe('exact session-tools transport frames', () => {
+  it('derives degraded SCM health from explicit path-local status gaps', () => {
+    expect(
+      operationalHealthForScmSnapshot({
+        ...snapshot,
+        changes: [...snapshot.changes, { path: '/src/future.ts', rawStatusMatrixCode: '999' }],
+      }),
+    ).toEqual({
+      scope: 'scm',
+      status: 'degraded',
+      error: {
+        name: 'NotImplementedError',
+        message: 'Not implemented: git.status-matrix.999 for /src/future.ts',
+      },
+    });
+    expect(operationalHealthForScmSnapshot(snapshot)).toEqual({
+      scope: 'scm',
+      status: 'healthy',
+    });
+  });
+
   it('copies, freezes, and structured-clones every finite page operation and TS envelope', () => {
     for (const source of pageFrames()) {
       const inspected = inspectPagePlaygroundSessionToolsFrame(source);
@@ -233,6 +272,36 @@ describe('exact session-tools transport frames', () => {
       expect(inspected).not.toBe(source);
       expect(structuredClone(inspected)).toEqual(inspected);
       expectDeepFrozen(inspected);
+    }
+  });
+
+  // Fault class: unbounded-work. Byte payload validation is O(1) metadata plus
+  // the required byte copy; it never allocates one string key per byte.
+  it('copies large SCM byte views without enumerating their indexed keys', () => {
+    const original = new Uint8Array(64 * 1024);
+    const modified = new Uint8Array(64 * 1024);
+    const ownKeys = vi.spyOn(Reflect, 'ownKeys');
+    try {
+      const inspected = inspectOwnerPlaygroundSessionToolsFrame({
+        type: 'workbench:playground-session-tools-response',
+        requestId: 'large-diff',
+        response: {
+          ok: true,
+          result: {
+            type: 'scm:diff',
+            diff: {
+              original: { source: 'head', bytes: original },
+              modified: { source: 'working', bytes: modified },
+            },
+          },
+        },
+      });
+
+      expect(inspected).not.toBeNull();
+      expect(ownKeys).not.toHaveBeenCalledWith(original);
+      expect(ownKeys).not.toHaveBeenCalledWith(modified);
+    } finally {
+      ownKeys.mockRestore();
     }
   });
 
@@ -266,9 +335,25 @@ describe('exact session-tools transport frames', () => {
       { readonly type: 'workbench:playground-session-tools-response' }
     >;
     if (malformed.response.ok === true && malformed.response.result.type === 'scm:diff') {
-      Object.defineProperty(malformed.response.result.diff.original.bytes, 'secret', { value: 1 });
+      Object.setPrototypeOf(
+        malformed.response.result.diff.original.bytes,
+        Object.create(Uint8Array.prototype),
+      );
     }
     expect(() => inspectOwnerPlaygroundSessionToolsFrame(malformed)).toThrow(TypeError);
+
+    expect(() =>
+      inspectOwnerPlaygroundSessionToolsFrame({
+        type: 'workbench:playground-session-tools-operational-health',
+        health: { scope: 'scm', status: 'degraded' },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      inspectOwnerPlaygroundSessionToolsFrame({
+        type: 'workbench:playground-session-tools-operational-health',
+        health: { scope: 'scm', status: 'healthy', error: { name: 'Error', message: 'stale' } },
+      }),
+    ).toThrow(TypeError);
   });
 
   it('rejects unsupported or inexact official TS protocol siblings', () => {
@@ -326,7 +411,8 @@ interface RouteHarness {
   readonly sent: PagePlaygroundSessionToolsFrame[];
   readonly send: (frame: PagePlaygroundSessionToolsFrame) => boolean;
   readonly subscribe: (listener: (frame: unknown) => void) => () => void;
-  deliver(frame: OwnerPlaygroundSessionToolsFrame): void;
+  deliver(frame: unknown): void;
+  disconnect(error: Error): void;
 }
 
 function routeHarness(): RouteHarness {
@@ -344,6 +430,9 @@ function routeHarness(): RouteHarness {
     },
     deliver(frame) {
       for (const listener of [...listeners]) listener(structuredClone(frame));
+    },
+    disconnect(error) {
+      for (const listener of [...listeners]) listener(error);
     },
   };
 }
@@ -367,6 +456,114 @@ function okResponse(
 }
 
 describe('browser session-tools lifecycle and proxies', () => {
+  // Fault class: false-fallback -> fatal escalation. Operational health is one
+  // exact, replaying state stream; listener failure cannot hide it from siblings.
+  it('replays isolated SCM degraded health and clears it after owner recovery', async () => {
+    const route = routeHarness();
+    const lifecycle = createBrowserPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      documents: documentsController(),
+      initialScmSnapshot: snapshot,
+      initialOperationalHealth: degradedOperationalHealth,
+      previews: emptyPreviews(),
+      send: route.send,
+      subscribe: route.subscribe,
+      requestTimeoutMs: 1_000,
+      tsRequestTimeoutMs: 1_000,
+    });
+
+    const throwingListener = vi.fn(() => {
+      throw new Error('host health listener failed');
+    });
+    const observed = vi.fn();
+    lifecycle.subscribeOperationalHealth(throwingListener);
+    lifecycle.subscribeOperationalHealth(observed);
+    expect(throwingListener).toHaveBeenCalledWith(degradedOperationalHealth);
+    expect(observed).toHaveBeenCalledWith(degradedOperationalHealth);
+
+    const degraded = {
+      type: 'workbench:playground-session-tools-operational-health',
+      health: {
+        scope: 'scm',
+        status: 'degraded',
+        error: { name: 'GitError', message: 'cannot read the Git index' },
+      },
+    } as const;
+    route.deliver(degraded);
+    expect(observed).toHaveBeenLastCalledWith(degraded.health);
+
+    const replayed = vi.fn();
+    lifecycle.subscribeOperationalHealth(replayed);
+    expect(replayed).toHaveBeenCalledTimes(1);
+    expect(replayed).toHaveBeenLastCalledWith(degraded.health);
+
+    route.deliver({
+      type: 'workbench:playground-session-tools-operational-health',
+      health: { scope: 'scm', status: 'healthy' },
+    });
+    expect(observed).toHaveBeenLastCalledWith({ scope: 'scm', status: 'healthy' });
+    expect(replayed).toHaveBeenLastCalledWith({ scope: 'scm', status: 'healthy' });
+  });
+
+  it('treats a malformed operational-health frame as a protocol failure', async () => {
+    const route = routeHarness();
+    const lifecycle = createBrowserPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      documents: documentsController(),
+      initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
+      previews: emptyPreviews(),
+      send: route.send,
+      subscribe: route.subscribe,
+      requestTimeoutMs: 1_000,
+      tsRequestTimeoutMs: 1_000,
+    });
+
+    route.deliver({
+      type: 'workbench:playground-session-tools-operational-health',
+      health: { scope: 'scm', status: 'degraded' },
+    });
+
+    await expect(lifecycle.tools.scm.refresh()).rejects.toThrow(
+      'Invalid session tools operational health',
+    );
+  });
+
+  // Fault class: sibling-drift/error-provenance. The owner route carries both
+  // inspected frames and a typed terminal failure; neither may impersonate the other.
+  it('rejects admitted work with the exact owner disconnect error and cause', async () => {
+    const route = routeHarness();
+    const lifecycle = createBrowserPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      documents: documentsController(),
+      initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
+      previews: emptyPreviews(),
+      send: route.send,
+      subscribe: route.subscribe,
+      requestTimeoutMs: 1_000,
+      tsRequestTimeoutMs: 1_000,
+    });
+
+    const refresh = lifecycle.tools.scm.refresh();
+    await vi.waitFor(() => expect(route.sent).toHaveLength(1));
+
+    const cause = new Error('worker error event');
+    const ownerFailure = new Error('owner exited unexpectedly during SCM refresh', { cause });
+    ownerFailure.name = 'WorkbenchOwnerExitError';
+    route.disconnect(ownerFailure);
+
+    const rejected = await refresh.catch((error: unknown) => error);
+    expect(rejected).toBe(ownerFailure);
+    expect(rejected).toMatchObject({
+      name: 'WorkbenchOwnerExitError',
+      message: 'owner exited unexpectedly during SCM refresh',
+      cause,
+    });
+    expect(String(rejected)).not.toContain('Invalid owner session tools frame');
+    await expect(lifecycle.tools.scm.refresh()).rejects.toBe(ownerFailure);
+  });
+
   it('exposes a semantic durability barrier that settles only from the correlated owner result', async () => {
     const route = routeHarness();
     let requestSequence = 0;
@@ -374,6 +571,7 @@ describe('browser session-tools lifecycle and proxies', () => {
       projectRoot: PROJECT_ROOT,
       documents: documentsController(),
       initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
       previews: emptyPreviews(),
       send: route.send,
       subscribe: route.subscribe,
@@ -434,6 +632,7 @@ describe('browser session-tools lifecycle and proxies', () => {
       projectRoot: PROJECT_ROOT,
       documents: documentsController(),
       initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
       previews: emptyPreviews(),
       send: route.send,
       subscribe: route.subscribe,
@@ -495,6 +694,7 @@ describe('browser session-tools lifecycle and proxies', () => {
       projectRoot: PROJECT_ROOT,
       documents: documentsController(),
       initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
       previews: emptyPreviews(),
       send: route.send,
       subscribe: route.subscribe,
@@ -604,6 +804,7 @@ describe('browser session-tools lifecycle and proxies', () => {
       projectRoot: PROJECT_ROOT,
       documents: documentsController(),
       initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
       previews: emptyPreviews(),
       send: route.send,
       subscribe: route.subscribe,
@@ -692,6 +893,7 @@ describe('browser session-tools lifecycle and proxies', () => {
       projectRoot: PROJECT_ROOT,
       documents: documentsController(),
       initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
       previews: emptyPreviews(),
       send: route.send,
       subscribe: route.subscribe,
@@ -729,6 +931,7 @@ describe('browser session-tools lifecycle and proxies', () => {
       projectRoot: PROJECT_ROOT,
       documents: documentsController(),
       initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
       previews: emptyPreviews(),
       send: route.send,
       subscribe: route.subscribe,
@@ -779,6 +982,7 @@ describe('browser session-tools lifecycle and proxies', () => {
       projectRoot: PROJECT_ROOT,
       documents: documentsController(),
       initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
       previews: emptyPreviews(),
       send: route.send,
       subscribe: route.subscribe,
@@ -818,6 +1022,7 @@ describe('browser session-tools lifecycle and proxies', () => {
       projectRoot: PROJECT_ROOT,
       documents: documentsController(),
       initialScmSnapshot: snapshot,
+      initialOperationalHealth: healthyOperationalHealth,
       previews: emptyPreviews(),
       send: route.send,
       subscribe: route.subscribe,

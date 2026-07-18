@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- Status classification now covers the complete reachable isomorphic-git
+  matrix as a closed typed domain. Staged deletion followed by same-path
+  recreation (`110`/`120`) preserves both real porcelain rows (`D ` and `??`),
+  while an unknown future matrix code becomes an explicit per-path gap without
+  erasing supported siblings; strict consumers use one preflight adapter to
+  loud-throw before acting (ADR-0284). A generated Git 2.50.1 oracle now
+  freezes all 15 HEAD/index/worktree relations and replays the same state setups
+  through the package classifier.
 - `status()` no longer refreshes or rewrites `.git/index`; unchanged working
   bytes remain a read-only query even when host stat metadata changed.
 - **Git worktree mutations publish one complete path plan before applying bytes.** `makeGit({ assertPortablePaths })` now preflights hard reset, restore, branch switch, merge, cherry-pick, stash push/apply/pop, clone checkout, and pull checkout; a host rejection leaves ordinary paths untouched. Network clone/pull split fetch from checkout so fetched trees are known before policy runs. Guards: `worktree-preflight.test.ts`, `network.integration.test.ts`.
@@ -24,12 +32,12 @@
 - `show(':path')` now returns the staged index blob for SCM Index diffs,
   matching git's index revspec instead of forcing every UI diff through HEAD or
   the worktree.
-- `porcelainXY(code)`: shared statusMatrix → porcelain-XY classifier for shell
+- `porcelainStatusLines(code)`: shared statusMatrix → ordered porcelain-row
+  classifier for shell
   `git status --porcelain` and playground SCM status projections, keeping the
-  rifty-git status labels on one public facade. Now covers the reachable
-  staged+worktree combos `023`→`AM`, `103`→`MD`, `113`→`MM` (stage-then-edit,
-  stage-then-delete, stage-then-revert) instead of dropping them to a raw 3-char
-  code that SCM consumers rendered as garbage or a clean-looking row.
+  rifty-git status labels on one public facade. It covers every reachable
+  matrix state, including multi-row `110`/`120`, instead of dropping a raw
+  3-character code into consumers.
 - `commitRefusal(git)` + `EMPTY_COMMIT_MESSAGE_ERROR`: the empty/no-op commit
   refusal classifier hoisted from the shell builtin so shell `git commit` and the
   playground SCM owner RPC refuse identically (ADR-0184).

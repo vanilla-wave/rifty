@@ -9,6 +9,7 @@ import { MemoryVfs } from '@riftydev/vfs';
 import { expect, it } from 'vitest';
 import { vfsToGitFs } from '../src/fs-adapter.ts';
 import { makeGit } from '../src/git.ts';
+import { requireSupportedStatusEntries } from '../src/status.ts';
 
 const AUTHOR = {
   name: 'Test',
@@ -55,9 +56,13 @@ it('unstage moves a staged file back to unstaged', async () => {
   await g.init();
   await vfs.writeFile('/r/x.txt', 'x');
   await g.add('x.txt');
-  const staged = (await g.status()).find((e) => e.filepath === 'x.txt');
+  const staged = requireSupportedStatusEntries(await g.status()).find(
+    (e) => e.filepath === 'x.txt',
+  );
   await g.unstage('x.txt');
-  const unstaged = (await g.status()).find((e) => e.filepath === 'x.txt');
+  const unstaged = requireSupportedStatusEntries(await g.status()).find(
+    (e) => e.filepath === 'x.txt',
+  );
   // The stage digit (3rd code char) must change from staged → unstaged.
   expect(staged?.status).toBeDefined();
   expect(unstaged?.status).toBeDefined();

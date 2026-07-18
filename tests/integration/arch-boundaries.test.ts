@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
-// Drive the SAME depcruise CLI + config that `pnpm check:arch` runs in CI.
-const DEPCRUISE = 'node_modules/.bin/depcruise';
+// Drive the SAME two-graph checker that `pnpm check:arch` runs in CI.
+const ARCH_CHECK = 'tools/checks/check-arch.mjs';
 
 // Fixtures live INSIDE the repo (not under tests/, which options.exclude drops) so
 // depcruise yields clean cwd-relative paths and `solid-js` resolves via root node_modules.
@@ -31,11 +31,10 @@ interface CruiseResult {
 function runArch(paths: string[]): CruiseResult {
   let stdout: string;
   try {
-    stdout = execFileSync(
-      DEPCRUISE,
-      ['--config', '.dependency-cruiser.cjs', '--output-type', 'json', ...paths],
-      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-    );
+    stdout = execFileSync(process.execPath, [ARCH_CHECK, '--output-type', 'json', ...paths], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
   } catch (e) {
     // depcruise exits non-zero when violations exist; the JSON is still on stdout
     stdout = (e as { stdout?: Buffer | string }).stdout?.toString() ?? '';
@@ -69,6 +68,15 @@ describe('check:arch layer boundaries', () => {
       'io/src/b.ts': "import '../../vfs/src/a';\nexport const b = 2;\n",
     });
     expect(ruleNames([root])).toContain('no-circular');
+  });
+
+  it('does not treat a cycle closed only by an erased type edge as a runtime cycle', () => {
+    const root = fixture({
+      'vfs/src/a.ts':
+        "import type { B } from './b';\nexport const a = 1;\nexport type UsesB = B;\n",
+      'vfs/src/b.ts': "import { a } from './a';\nexport interface B { value: typeof a }\n",
+    });
+    expect(ruleNames([root])).not.toContain('no-circular');
   });
 
   it('flags reaching into another package src/internal (deep, non-index)', () => {
@@ -111,6 +119,29 @@ describe('check:arch layer boundaries', () => {
         (name) => name === 'playground-app-uses-sealed-workbench-entrypoints',
       ),
     ).toHaveLength(2);
+  });
+
+  it('flags type-only App imports of Workbench implementation modules', () => {
+    const root = fixture({
+      'playground/src/adapters/host.ts':
+        "import type { Secret } from '../workbench/internal/owner';\nexport type Host = Secret;\n",
+      'playground/src/workbench/internal/owner.ts': 'export interface Secret { value: string }\n',
+    });
+    expect(ruleNames([root])).toContain('playground-app-uses-sealed-workbench-entrypoints');
+  });
+
+  it('applies layer and internal dependency policy to type-only imports', () => {
+    const root = fixture({
+      'vfs/src/a.ts':
+        "import type { Kernel } from '../../kernel/src/b';\nexport type Low = Kernel;\n",
+      'kernel/src/b.ts': 'export interface Kernel { value: string }\n',
+      'kernel/src/c.ts':
+        "import type { Secret } from '../../vfs/src/internal/secret';\nexport type High = Secret;\n",
+      'vfs/src/internal/secret.ts': 'export interface Secret { value: string }\n',
+    });
+    const names = ruleNames([root]);
+    expect(names).toContain('no-reverse-import-vfs');
+    expect(names).toContain('no-foreign-internal');
   });
 
   it('allows App extraction-boundary imports through sealed Workbench entrypoints', () => {

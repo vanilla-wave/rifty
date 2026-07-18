@@ -9,19 +9,23 @@ import {
 } from '../workbench/internal/playground-scm.ts';
 import {
   type OwnerPlaygroundSessionToolsFrame,
+  PLAYGROUND_PERSISTENCE_FAILURE_NAME,
   type PagePlaygroundSessionToolsFrame,
   type PlaygroundSessionToolOperation,
   type PlaygroundSessionToolResult,
+  type PlaygroundSessionToolsOperationalHealth,
   assertSessionToolsTsRequestScope,
   inspectOwnerPlaygroundSessionToolsFrame,
   inspectPagePlaygroundSessionToolsFrame,
   inspectPlaygroundScmSnapshot,
+  operationalHealthForScmSnapshot,
 } from '../workbench/internal/playground-session-tools-transport.ts';
 import { formatProjectPersistenceFailure } from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
 import type { OwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import {
   createOwnerPlaygroundArchive,
+  recoverOwnerPlaygroundArchiveTransaction,
   runPlaygroundArchivePublicOperation,
 } from './playground-archive-integration.ts';
 import { type TsLspChildHandle, createTsLspOwnerRelay } from './ts-lsp-owner-relay.ts';
@@ -38,7 +42,7 @@ export interface CreateOwnerPlaygroundSessionToolsOptions {
   readonly tsWorkerUrl: string;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   readonly send: (frame: OwnerPlaygroundSessionToolsFrame) => boolean | undefined;
-  /** Background SCM refresh failure ends the owner; stale status cannot stay live. */
+  /** Invariant failure sink; operational SCM failures use the health stream. */
   readonly fatal: (error: Error) => void;
   /** Exact companion catalog reflection; absent for non-companion fixtures. */
   readonly recordMutation?: (kind: 'scm' | 'archive', treeRevision: number) => Promise<void>;
@@ -62,9 +66,11 @@ function persistenceFailure(
   const sample = report.failures
     .map((failure) => formatProjectPersistenceFailure(projectRoot, failure))
     .join('; ');
-  return new Error(
+  const error = new Error(
     `Playground ${operation} persistence failed with ${String(report.total)} unhealed persistence failure(s)${sample.length > 0 ? `: ${sample}` : ''}`,
   );
+  error.name = PLAYGROUND_PERSISTENCE_FAILURE_NAME;
+  return error;
 }
 
 function errorFrom(error: unknown): Error {
@@ -75,7 +81,11 @@ function scmSnapshotSignature(snapshot: ReturnType<typeof inspectPlaygroundScmSn
   return JSON.stringify([
     snapshot.branch ?? null,
     snapshot.history.map((entry) => entry.oid),
-    snapshot.changes.map((change) => [change.path, change.code, change.area]),
+    snapshot.changes.map((change) =>
+      'rawStatusMatrixCode' in change
+        ? [change.path, 'unsupported', change.rawStatusMatrixCode]
+        : [change.path, change.code, change.area],
+    ),
   ]);
 }
 
@@ -83,6 +93,11 @@ function scmSnapshotSignature(snapshot: ReturnType<typeof inspectPlaygroundScmSn
 export async function createOwnerPlaygroundSessionTools(
   options: CreateOwnerPlaygroundSessionToolsOptions,
 ): Promise<OwnerPlaygroundSessionTools> {
+  await recoverOwnerPlaygroundArchiveTransaction({
+    projectRoot: options.projectRoot,
+    owner: options.owner,
+    packages: options.packages,
+  });
   const scm: PlaygroundScm = await createPlaygroundScmAdapter({
     projectRoot: options.projectRoot,
     vfs: options.vfs,
@@ -132,9 +147,10 @@ export async function createOwnerPlaygroundSessionTools(
   let closePromise: Promise<void> | null = null;
   let requestedScmRevision = options.owner.authority.treeRevision;
   let reflectedScmRevision = requestedScmRevision;
+  let automaticRefreshAttemptedRevision = reflectedScmRevision;
   let publishedScmSignature = scmSnapshotSignature(initialScmSnapshot);
   let automaticRefreshQueued = false;
-  let backgroundFailure: Error | null = null;
+  let invariantFailure: Error | null = null;
 
   const revision = () =>
     Object.freeze({
@@ -150,6 +166,27 @@ export async function createOwnerPlaygroundSessionTools(
       snapshot: latestScmSnapshot,
     });
     publishedScmSignature = signature;
+  };
+
+  const publishOperationalHealth = (health: PlaygroundSessionToolsOperationalHealth): void => {
+    emit({
+      type: 'workbench:playground-session-tools-operational-health',
+      health,
+    });
+  };
+
+  const publishScmClassificationHealth = (): void => {
+    publishOperationalHealth(operationalHealthForScmSnapshot(latestScmSnapshot));
+  };
+
+  const publishDegradedScm = (error: Error): void => {
+    publishOperationalHealth(
+      Object.freeze({
+        scope: 'scm',
+        status: 'degraded',
+        error: serializeWorkbenchOwnerError(error),
+      }),
+    );
   };
 
   const settleScmMutation = async (): Promise<void> => {
@@ -172,38 +209,68 @@ export async function createOwnerPlaygroundSessionTools(
     if (failed !== null) throw failed;
   };
 
-  const refreshScm = async (
-    force = true,
-  ): Promise<ReturnType<typeof inspectPlaygroundScmSnapshot>> => {
-    while (true) {
-      let targetRevision = requestedScmRevision;
-      await options.projectVfs.readConsistent(async () => {
-        targetRevision = requestedScmRevision;
+  const readScm = async (): Promise<{
+    readonly targetRevision: number;
+    readonly failure: Error | null;
+  }> => {
+    let targetRevision = requestedScmRevision;
+    let failure: Error | null = null;
+    await options.projectVfs.readConsistent(async () => {
+      targetRevision = requestedScmRevision;
+      try {
         await scm.refresh();
-      });
-      if (targetRevision !== requestedScmRevision) continue;
-      reflectedScmRevision = Math.max(reflectedScmRevision, targetRevision);
-      publishScm(force);
-      break;
-    }
+      } catch (error) {
+        failure = errorFrom(error);
+      }
+    });
+    return Object.freeze({ targetRevision, failure });
+  };
+
+  const settleSuccessfulRefresh = (
+    targetRevision: number,
+    force: boolean,
+  ): ReturnType<typeof inspectPlaygroundScmSnapshot> => {
+    reflectedScmRevision = Math.max(reflectedScmRevision, targetRevision);
+    publishScm(force);
+    publishScmClassificationHealth();
     return latestScmSnapshot;
   };
 
-  const failBackgroundRefresh = (error: unknown): void => {
-    if (backgroundFailure !== null) return;
-    backgroundFailure = errorFrom(error);
+  const refreshScm = async (
+    force = true,
+  ): Promise<ReturnType<typeof inspectPlaygroundScmSnapshot>> => {
+    const read = await readScm();
+    if (read.failure !== null) {
+      publishDegradedScm(read.failure);
+      throw read.failure;
+    }
+    return settleSuccessfulRefresh(read.targetRevision, force);
+  };
+
+  const failInvariant = (error: unknown): void => {
+    if (invariantFailure !== null) return;
+    invariantFailure = errorFrom(error);
     accepting = false;
     try {
-      options.fatal(backgroundFailure);
+      options.fatal(invariantFailure);
     } catch {
-      // Owner termination already received the exact refresh failure.
+      // Owner termination already received the exact invariant failure.
     }
   };
 
   const refreshPublishedRevisions = async (): Promise<void> => {
-    while (accepting && reflectedScmRevision < requestedScmRevision) {
-      await refreshScm(false);
+    if (!accepting || automaticRefreshAttemptedRevision >= requestedScmRevision) return;
+    automaticRefreshAttemptedRevision = requestedScmRevision;
+    const read = await readScm();
+    automaticRefreshAttemptedRevision = Math.max(
+      automaticRefreshAttemptedRevision,
+      read.targetRevision,
+    );
+    if (read.failure !== null) {
+      publishDegradedScm(read.failure);
+      return;
     }
+    settleSuccessfulRefresh(read.targetRevision, false);
   };
 
   const queueAutomaticRefresh = (): void => {
@@ -213,13 +280,13 @@ export async function createOwnerPlaygroundSessionTools(
     tail = operation.then(
       () => {
         automaticRefreshQueued = false;
-        if (accepting && reflectedScmRevision < requestedScmRevision) {
+        if (accepting && automaticRefreshAttemptedRevision < requestedScmRevision) {
           queueAutomaticRefresh();
         }
       },
       (error: unknown) => {
         automaticRefreshQueued = false;
-        failBackgroundRefresh(error);
+        failInvariant(error);
       },
     );
   };
@@ -241,6 +308,7 @@ export async function createOwnerPlaygroundSessionTools(
     }
     await settleScmMutation();
     publishScm();
+    publishScmClassificationHealth();
     return result;
   };
 
@@ -275,8 +343,7 @@ export async function createOwnerPlaygroundSessionTools(
             await options.recordMutation?.('archive', options.owner.authority.treeRevision);
           }
           await options.projectVfs.publicationBarrier();
-          await scm.refresh();
-          publishScm();
+          await refreshScm();
           return Object.freeze({ type: 'archive:import', revision: revision() });
         });
       case 'durability:flush':
@@ -309,7 +376,7 @@ export async function createOwnerPlaygroundSessionTools(
     accepting = false;
     closePromise = (async () => {
       const failures: unknown[] = [];
-      if (backgroundFailure !== null) failures.push(backgroundFailure);
+      if (invariantFailure !== null) failures.push(invariantFailure);
       try {
         unsubscribeProjectPublications();
       } catch (error) {

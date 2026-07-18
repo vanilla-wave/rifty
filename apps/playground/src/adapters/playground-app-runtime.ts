@@ -2,7 +2,7 @@ import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectPlan,
   PlaygroundProjectRef,
-  PlaygroundSessionTools,
+  PlaygroundSessionToolsView,
   PlaygroundWorkbench,
 } from '../workbench/playground.ts';
 import {
@@ -18,7 +18,7 @@ export interface PlaygroundAppProjectContext {
   readonly plan: PlaygroundProjectPlan;
   readonly definition: ProjectDefinition<unknown>;
   readonly session: ProjectSession<unknown>;
-  readonly tools: PlaygroundSessionTools;
+  readonly tools: PlaygroundSessionToolsView;
 }
 
 export interface PlaygroundAppRuntime {

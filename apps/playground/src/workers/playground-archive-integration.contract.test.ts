@@ -9,6 +9,7 @@ import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type { BootstrapConfig } from '../templates/project-spec.ts';
 import type { ProjectDocumentInvalidation } from '../workbench/errors.ts';
 import { createPlaygroundScmAdapter } from '../workbench/internal/playground-scm.ts';
+import { createPlaygroundScmArchiveTools } from '../workbench/internal/playground-session-tool-coordinator.ts';
 import type {
   PlaygroundArchive,
   PlaygroundScm,
@@ -29,10 +30,7 @@ import {
   type OwnerVfsAuthorityComposition,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
-import {
-  createOwnerPlaygroundArchive,
-  createPlaygroundSessionArchive,
-} from './playground-archive-integration.ts';
+import { createOwnerPlaygroundArchive } from './playground-archive-integration.ts';
 import {
   type DurableOwnerFault,
   DurableOwnerFs,
@@ -437,7 +435,15 @@ async function harness(
   const instrumentedContent: ProjectContentController = Object.freeze({
     files: content.files,
     documents: content.documents,
-    invalidate: content.invalidate,
+    invalidate(
+      mutation: Parameters<ProjectContentController['invalidate']>[0],
+      revision: Parameters<ProjectContentController['invalidate']>[1],
+    ) {
+      if (mutation.kind === 'reset' && mutation.rootPath === '/') {
+        timeline.push('documents:invalidate-all');
+      }
+      content.invalidate(mutation, revision);
+    },
     awaitOwnerByteAdmission: content.awaitOwnerByteAdmission,
     invalidateAll(reason: ProjectDocumentInvalidation) {
       timeline.push('documents:invalidate-all');
@@ -452,10 +458,35 @@ async function harness(
     git,
     commitIdentity: COMMIT_IDENTITY,
   });
-  const archive = createPlaygroundSessionArchive({
-    owner: ownerArchive,
-    content: instrumentedContent,
-    scm: sessionScm,
+  const revision = () =>
+    Object.freeze({
+      ownerEpoch: owner.authority.ownerEpoch,
+      treeRevision: owner.authority.treeRevision,
+    });
+  const archive = createPlaygroundScmArchiveTools({
+    documents: instrumentedContent,
+    scm: {
+      snapshot: () => sessionScm.snapshot(),
+      subscribe: (listener) => sessionScm.subscribe(listener),
+      refresh: () => sessionScm.refresh(),
+      diff: (change) => sessionScm.diff(change),
+      stage: (path) => sessionScm.stage(path),
+      unstage: (path) => sessionScm.unstage(path),
+      commit: (message) => sessionScm.commit(message),
+      async discard(path) {
+        await sessionScm.discard(path);
+        return { revision: revision() };
+      },
+    },
+    archive: {
+      export: () => ownerArchive.export(),
+      async import(archiveJson) {
+        await ownerArchive.import(archiveJson, () => {});
+        await projectVfs.publicationBarrier();
+        await sessionScm.refresh();
+        return { revision: revision() };
+      },
+    },
   });
   const publicSnapshots: (readonly string[])[] = [];
   let filesReplayed = false;
@@ -481,7 +512,7 @@ async function harness(
     projectVfs,
     transport: createdTransport,
     content,
-    archive,
+    archive: archive.archive,
     scm: sessionScm,
     constructionTimeline,
     timeline,
@@ -700,13 +731,16 @@ function expectNoTentativePublications(
   initialScmSnapshot: PlaygroundScmSnapshot | undefined,
 ): void {
   expect(h.timeline).toContain('durability:failed');
-  expect(h.timeline).not.toContain('files:publish');
   expect(h.timeline).not.toContain('scm:publish');
   expect(h.timeline).not.toContain('resolve');
-  expect(h.publicSnapshots).toEqual([originalPaths]);
+  // A pre-arm private write advances the shared owner revision. Files receives
+  // an explicit empty state frame, but no tentative project bytes.
+  for (const snapshot of h.publicSnapshots) {
+    expect([originalPaths, []]).toContainEqual(snapshot);
+  }
   expect(h.scmSnapshots).toEqual([initialScmSnapshot]);
   expect(h.scm.snapshot()).toBe(initialScmSnapshot);
-  expect(publicPaths(h.content)).toEqual(originalPaths);
+  expect([originalPaths, []]).toContainEqual(publicPaths(h.content));
   expectNoPendingPrimitives(h.fs);
 }
 
@@ -789,6 +823,32 @@ async function recoverRecordedDurabilityBoundary(input: {
 }
 
 describe('Playground archive owner/session integration', () => {
+  // Fault class: lossy-snapshot + sibling-drift. Exercise the shipped owner
+  // path so codec acceptance cannot mask promote/recovery preserving stale Git.
+  it('round-trips observable Git history and Files-visible nested .rifty bytes exactly', async () => {
+    const h = await harness();
+    write(h.owner.authority, `${PROJECT_ROOT}/nested/.rifty/settings.json`, '{"theme":"dark"}\n');
+    await h.owner.authority.flush();
+    const archived = await h.archive.export();
+    const archivedPaths = (JSON.parse(archived) as ArchiveV1).files.map(({ path }) => path);
+
+    expect(archivedPaths).toContain('.git/HEAD');
+    expect(archivedPaths).toContain('nested/.rifty/settings.json');
+
+    write(h.owner.authority, `${PROJECT_ROOT}/.git/rifty-after-export`, 'must disappear');
+    write(h.owner.authority, `${PROJECT_ROOT}/nested/.rifty/settings.json`, '{"theme":"light"}\n');
+    write(h.owner.authority, `${PROJECT_ROOT}/after-export.txt`, 'must disappear');
+    await h.owner.authority.flush();
+
+    try {
+      await h.archive.import(archived);
+      expect(await h.archive.export()).toBe(archived);
+      expect(publicPaths(h.content)).toContain('/nested/.rifty/settings.json');
+    } finally {
+      await h.close();
+    }
+  });
+
   it('recovers a promoting transaction through the package authority before the page baseline', async () => {
     const seeded = await harness();
     expectNoPendingPrimitives(seeded.fs);
@@ -813,6 +873,60 @@ describe('Playground archive owner/session integration', () => {
     expectEventBefore(recovered.constructionTimeline, 'package-tree:reset', 'archive:promote');
     expectNoPendingPrimitives(recovered.fs);
     await recovered.close();
+  });
+
+  // Fault class: torn-state. An active-session retry must not erase the only
+  // durable roll-forward record left by an armed import.
+  it('loudly refuses a retry while retaining an existing promoting transaction', async () => {
+    const h = await harness();
+    write(h.owner.authority, `${ARCHIVE_TRANSACTION_STAGE}/package.json`, PACKAGE_JSON);
+    write(h.owner.authority, `${ARCHIVE_TRANSACTION_STAGE}/src/main.ts`, IMPORTED_SOURCE);
+    write(h.owner.authority, ARCHIVE_TRANSACTION_PHASE, PHASE_PROMOTING);
+    await h.owner.authority.flush();
+    const beforeLive = h.fs.liveSnapshot();
+    const beforeDurable = h.fs.durableSnapshot();
+
+    try {
+      const failure = await rejectedValue(h.archive.import(IMPORT_ARCHIVE));
+      expect(failure).toBeInstanceOf(Error);
+      expect(String(failure)).toMatch(/promoting.*transaction|transaction.*promoting/i);
+      expect(h.fs.liveSnapshot()).toEqual(beforeLive);
+      expect(h.fs.durableSnapshot()).toEqual(beforeDurable);
+      expectNoPendingPrimitives(h.fs);
+    } finally {
+      await h.close();
+    }
+  });
+
+  // Fault class: corrupt-input × torn-state. An unrecognized phase cannot be
+  // reclassified as unarmed and deleted; it is the only recovery provenance.
+  it.each([
+    ['unknown', encoder.encode('future-phase\n')],
+    ['corrupt UTF-8', Uint8Array.of(0xc3, 0x28)],
+  ] as const)('rejects and retains recovery phase: %s', async (_case, phaseBytes) => {
+    const seeded = await harness();
+    write(seeded.owner.authority, `${ARCHIVE_TRANSACTION_STAGE}/package.json`, PACKAGE_JSON);
+    write(seeded.owner.authority, `${ARCHIVE_TRANSACTION_STAGE}/src/main.ts`, IMPORTED_SOURCE);
+    seeded.owner.authority.writeFileSync(ARCHIVE_TRANSACTION_PHASE, phaseBytes);
+    await seeded.owner.authority.flush();
+    const crashed = seeded.fs.restartFromDurableState();
+    const beforeLive = crashed.liveSnapshot();
+    const beforeDurable = crashed.durableSnapshot();
+    seeded.crash();
+
+    const outcome = await harness(crashed, { seed: false }).then(
+      (opened) => ({ kind: 'opened' as const, opened }),
+      (error: unknown) => ({ kind: 'failed' as const, error }),
+    );
+    if (outcome.kind === 'opened') await outcome.opened.close();
+
+    expect(outcome).toMatchObject({
+      kind: 'failed',
+      error: expect.objectContaining({ message: expect.stringMatching(/archive.*phase/i) }),
+    });
+    expect(crashed.liveSnapshot()).toEqual(beforeLive);
+    expect(crashed.durableSnapshot()).toEqual(beforeDurable);
+    expectNoPendingPrimitives(crashed);
   });
 
   it.each([
@@ -887,8 +1001,9 @@ describe('Playground archive owner/session integration', () => {
     );
 
     expect(h.timeline).not.toContain('documents:invalidate-all');
-    expect(h.timeline).not.toContain('files:publish');
+    expect(h.timeline).toContain('files:publish');
     expect(h.timeline).not.toContain('scm:publish');
+    for (const snapshot of h.publicSnapshots) expect(snapshot).toEqual(originalPaths);
     expect(publicPaths(h.content)).toEqual(originalPaths);
     expect(h.scmSnapshots).toEqual([initialScmSnapshot]);
     expect(decoder.decode(h.owner.authority.readFileBytesSync(`${PROJECT_ROOT}/src/main.ts`))).toBe(

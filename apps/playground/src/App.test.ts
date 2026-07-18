@@ -69,9 +69,7 @@ describe('App client-only semantic bindings', () => {
       'const documents = createPlaygroundDocumentWriter(context.session.documents)',
     );
     expect(appSource).toContain('const mutations = createPlaygroundFileMutations(');
-    expect(appSource).toContain(
-      'onFileWritten={(path, content) => project.documents.write(path, content)}',
-    );
+    expect(appSource).toContain('return project.documents.write(path, content)');
     expect(appSource).toContain('root="/"');
     expect(appSource).toContain("root={() => '/'}");
   });
@@ -121,8 +119,10 @@ describe('App user-visible safety and honesty', () => {
     expect(appSource).toContain('editorApi?.closeActiveTab()');
   });
 
-  it('prompts before unload only for dirty memory-backed Scratch', () => {
-    expect(appSource).toContain("if (storageMode() === 'memory' && store.dirty())");
+  it('prompts before unload for unproved durability or dirty memory-backed state', () => {
+    expect(appSource).toContain(
+      "if (healthUi.persistenceAtRisk() || (storageMode() === 'memory' && store.dirty()))",
+    );
     expect(appSource).toContain(
       "globalThis.window?.addEventListener('beforeunload', onBeforeUnload)",
     );

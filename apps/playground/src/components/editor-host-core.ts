@@ -144,6 +144,9 @@ export interface EditorHostProps {
    *  text. */
   onFileWritten?(path: string, content: string): Promise<void> | void;
   onError?(message: string): void;
+  /** Owner durability is unproved; presentation marks editable tabs without
+   * conflating storage risk with unpublished editor bytes. */
+  readonly persistenceAtRisk?: Accessor<boolean>;
   readonly previewUrl?: Accessor<string | undefined>;
   onOpenPreviewTab?(): void;
   /** Async owner read-port (ADR-0080, widened ADR-0148): opening a file the sync
@@ -231,6 +234,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
       original: monaco.editor.ITextModel;
       modified: monaco.editor.ITextModel;
       disposeModified: boolean;
+      readOnly: boolean;
       path: string;
       title: string;
     }
@@ -878,7 +882,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
           riftyGitOriginalUri(path, input.ref),
         );
         const title = `${basename(path)} ↔ ${input.ref}`;
-        diffModels.set(id, { original, modified, disposeModified, path, title });
+        diffModels.set(id, { original, modified, disposeModified, readOnly: false, path, title });
         setTabs((t) =>
           openDiffTab(t, {
             id,
@@ -928,6 +932,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
       original,
       modified,
       disposeModified: true,
+      readOnly: true,
       path: input.path,
       title: input.title,
     });
@@ -1109,6 +1114,7 @@ export function createEditorHostCore(props: EditorHostProps, host: EditorHostSur
     const diff = diffModels.get(id);
     if (diff && diffEditor) {
       const { original, modified } = diff;
+      diffEditor.updateOptions({ readOnly: diff.readOnly });
       diffEditor.setModel({ original, modified });
       props.onActive({
         label: diff.title,

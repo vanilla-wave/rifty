@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectPlan,
-  PlaygroundSessionTools,
+  PlaygroundSessionToolsView,
   PlaygroundWorkbench,
 } from '../workbench/playground.ts';
 import {
@@ -11,6 +11,8 @@ import {
   ProjectDocumentSaveInProgressError,
   type ProjectSession,
   type ProjectTerminalSnapshot,
+  type WorkbenchHealth,
+  type WorkbenchHealthSnapshot,
 } from '../workbench/public.ts';
 import { createPlaygroundAppRuntime } from './playground-app-runtime.ts';
 
@@ -32,12 +34,30 @@ function plan(id: string, starterId = 'starter-a'): PlaygroundProjectPlan {
   });
 }
 
-function tools(): PlaygroundSessionTools {
+const HEALTHY = Object.freeze({
+  disposition: 'healthy',
+  issues: Object.freeze([]),
+}) satisfies WorkbenchHealthSnapshot;
+
+function health(): WorkbenchHealth {
   return Object.freeze({
-    typescript: {} as PlaygroundSessionTools['typescript'],
-    scm: {} as PlaygroundSessionTools['scm'],
-    archive: {} as PlaygroundSessionTools['archive'],
-    previews: {} as PlaygroundSessionTools['previews'],
+    snapshot: () => HEALTHY,
+    subscribe(listener: (snapshot: WorkbenchHealthSnapshot) => void) {
+      listener(HEALTHY);
+      return () => {};
+    },
+    recover: (scope: Parameters<WorkbenchHealth['recover']>[0]) =>
+      Promise.reject(new Error(`Workbench recovery scope ${scope} is not active`)),
+  });
+}
+
+function tools(): PlaygroundSessionToolsView {
+  return Object.freeze({
+    typescript: {} as PlaygroundSessionToolsView['typescript'],
+    scm: {} as PlaygroundSessionToolsView['scm'],
+    archive: {} as PlaygroundSessionToolsView['archive'],
+    previews: {} as PlaygroundSessionToolsView['previews'],
+    health: health(),
     awaitDurability: async () => {},
   });
 }
@@ -86,6 +106,7 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
     return definition;
   }) as PlaygroundWorkbench['playground']['define'];
   const workbench = {
+    health: health(),
     snapshot: () => ({
       storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' } as const,
     }),

@@ -8,10 +8,42 @@ import type { InspectedProjectDefinition } from './project-definition.ts';
 import type { ProjectDefinition } from './project-definition.ts';
 import type { ProjectSession } from './project-session.ts';
 
+const WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS = 30_000;
+
+export type PlaygroundOwnerOperationalHealth =
+  | {
+      readonly scope: 'scm' | 'preview';
+      readonly status: 'healthy';
+    }
+  | {
+      readonly scope: 'scm' | 'preview';
+      readonly status: 'degraded';
+      readonly error: { readonly name: string; readonly message: string };
+    };
+
 export interface PlaygroundOwnerSessionToolLifecycle {
   readonly tools: PlaygroundSessionTools;
+  subscribeOperationalHealth(
+    listener: (health: PlaygroundOwnerOperationalHealth) => void,
+  ): () => void;
+  recoverOperationalHealth(scope: 'scm' | 'preview'): Promise<void>;
   close(): Promise<void>;
 }
+
+export type WorkbenchOwnerHealthEvent =
+  | Readonly<{
+      kind: 'fatal-invariant';
+      summary: string;
+    }>
+  | Readonly<{
+      kind: 'persistence';
+      status: 'degraded';
+      recover: () => Promise<void>;
+    }>
+  | Readonly<{
+      kind: 'persistence';
+      status: 'healthy';
+    }>;
 
 /** Package-private semantic companion extension on the same physical owner. */
 export interface PlaygroundWorkbenchOwnerHandle {
@@ -66,16 +98,20 @@ export interface RawWorkspaceOwnerHandle {
   ): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
   readonly playground?: PlaygroundWorkbenchOwnerHandle;
+  subscribeHealth?: (listener: (event: WorkbenchOwnerHealthEvent) => void) => () => void;
   close(): void;
 }
 
 /** Semantic owner surface used directly by the public Workbench facade. */
 export interface WorkbenchOwnerHandle {
+  /** Settles with the physical owner lifecycle independently of semantic close requests. */
+  readonly closed: Promise<unknown>;
   openProject<TReady>(
     definition: InspectedProjectDefinition<TReady>,
   ): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
   readonly playground?: PlaygroundWorkbenchOwnerHandle;
+  subscribeHealth(listener: (event: WorkbenchOwnerHealthEvent) => void): () => void;
   /** Stable/idempotent; settles only after the physical owner has exited. */
   close(): Promise<void>;
 }
@@ -116,6 +152,15 @@ function admitWorkspaceOwner(
 ): Promise<WorkbenchOwnerStartResult> {
   return new Promise<WorkbenchOwnerStartResult>((resolve, reject) => {
     let startupSettled = false;
+    const readyTimer = setTimeout(() => {
+      if (startupSettled) return;
+      startupSettled = true;
+      failAfterCleanup(
+        new Error(
+          `Workspace owner ready timed out after ${String(WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS)}ms`,
+        ),
+      );
+    }, WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS);
 
     const failAfterCleanup = (failure: unknown): void => {
       void cleanupRawOwner(raw, failure).then(resolve, reject);
@@ -125,6 +170,7 @@ function admitWorkspaceOwner(
       () => {
         if (startupSettled) return;
         startupSettled = true;
+        clearTimeout(readyTimer);
 
         let untrustedSnapshot: unknown;
         try {
@@ -156,6 +202,7 @@ function admitWorkspaceOwner(
       (failure: unknown) => {
         if (startupSettled) return;
         startupSettled = true;
+        clearTimeout(readyTimer);
         failAfterCleanup(failure);
       },
     );
@@ -164,11 +211,13 @@ function admitWorkspaceOwner(
       () => {
         if (startupSettled) return;
         startupSettled = true;
+        clearTimeout(readyTimer);
         reject(new Error('Workspace owner exited before readiness'));
       },
       (failure: unknown) => {
         if (startupSettled) return;
         startupSettled = true;
+        clearTimeout(readyTimer);
         reject(failure);
       },
     );
@@ -179,6 +228,8 @@ function createSemanticOwner(raw: RawWorkspaceOwnerHandle): WorkbenchOwnerHandle
   let closePromise: Promise<void> | null = null;
 
   return Object.freeze({
+    closed: raw.closed,
+
     openProject<TReady>(
       definition: InspectedProjectDefinition<TReady>,
     ): Promise<ProjectSession<TReady>> {
@@ -190,6 +241,16 @@ function createSemanticOwner(raw: RawWorkspaceOwnerHandle): WorkbenchOwnerHandle
     },
 
     ...(raw.playground === undefined ? {} : { playground: raw.playground }),
+
+    subscribeHealth(listener: (event: WorkbenchOwnerHealthEvent) => void): () => void {
+      if (typeof listener !== 'function') {
+        throw new TypeError('Workbench owner health listener must be a function');
+      }
+      if (raw.subscribeHealth === undefined) {
+        throw new Error('Workspace owner health subscription is unavailable');
+      }
+      return raw.subscribeHealth(listener);
+    },
 
     close(): Promise<void> {
       closePromise ??= closeRawOwner(raw);
@@ -228,10 +289,32 @@ async function observeRawOwnerClose(
   failures: unknown[],
 ): Promise<void> {
   try {
-    await raw.closed;
+    await observeRawOwnerLifecycle(raw.closed, 'exit');
   } catch (error) {
     failures.push(error);
   }
+}
+
+function observeRawOwnerLifecycle<T>(observation: Promise<T>, phase: 'ready' | 'exit'): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new Error(
+          `Workspace owner ${phase} timed out after ${String(WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS)}ms`,
+        ),
+      );
+    }, WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS);
+    void observation.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 function throwFailures(failures: readonly unknown[], message: string): never {

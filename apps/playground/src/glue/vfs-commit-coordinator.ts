@@ -7,7 +7,11 @@ import type {
   OwnerVfsRevisionFrame,
   TreeRevision,
 } from './owner-vfs-protocol.ts';
-import { VfsCommitAppliedError, VfsCommitProtocolError } from './owner-vfs-protocol.ts';
+import {
+  VfsCommitAppliedError,
+  VfsCommitProtocolError,
+  VfsPersistenceFailureError,
+} from './owner-vfs-protocol.ts';
 
 export type VfsCommitStage = 'reflection' | 'durability';
 
@@ -63,7 +67,19 @@ export interface VfsCommitCoordinatorOptions {
   /** Owner revision frames only after the corresponding page mirror apply. */
   subscribeSnapshots(listener: (snapshot: OwnerVfsRevisionFrame) => void): () => void;
   readonly timeoutMs: number;
+  /** Impossible ACK/durability correlations; reporter failures never replace commit truth. */
+  readonly reportProtocolError?: (error: VfsCommitProtocolError) => void;
+  /** Exact durability-barrier transitions; observer failures never replace commit truth. */
+  readonly onDurabilityState?: (state: VfsCommitDurabilityState) => void;
 }
+
+export type VfsCommitDurabilityState =
+  | {
+      readonly status: 'failed';
+      readonly error: Error;
+      readonly recover: () => Promise<void>;
+    }
+  | { readonly status: 'proved' };
 
 export interface VfsCommitReceipt extends HostCommitAck {
   readonly durability: OwnerVfsDurabilityReceipt['durability'];
@@ -88,6 +104,14 @@ interface PendingCommit {
   owner: VfsCommitOwner | null;
   handedOff: boolean;
   cancel(error: Error): void;
+}
+
+interface DurabilityFailureTarget {
+  readonly generation: number;
+  readonly owner: VfsCommitOwner;
+  readonly operationId: string;
+  readonly ownerEpoch: OwnerEpoch;
+  readonly treeRevision: TreeRevision;
 }
 
 function createCoordinatorNonce(): string {
@@ -120,6 +144,11 @@ function cleanupError(primary: Error, secondary: Error | null): Error {
 
 function hasAppliedEvidence(error: Error): boolean {
   return error instanceof VfsCommitAppliedError || error instanceof VfsCommitTimeoutError;
+}
+
+/** Decoded only from the owner wire's completed-flush outcome. */
+function isCompletedFlushPersistenceFailure(error: Error): boolean {
+  return error instanceof VfsPersistenceFailureError;
 }
 
 function assertAck(ack: HostCommitAck, operationId: string, ownerEpoch: OwnerEpoch): HostCommitAck {
@@ -182,6 +211,83 @@ export function createVfsCommitCoordinator(
   let closedError: Error | null = null;
   const pending = new Set<PendingCommit>();
   const watchedOwners = new Set<VfsCommitOwner>();
+  const durabilityProofHighWater = new Map<OwnerEpoch, TreeRevision>();
+  const durabilityFailureHighWater = new Map<OwnerEpoch, DurabilityFailureTarget>();
+  let nextDurabilityFailureGeneration = 0;
+
+  const reportProtocolError = (error: Error): void => {
+    if (!(error instanceof VfsCommitProtocolError)) return;
+    try {
+      options.reportProtocolError?.(error);
+    } catch {
+      // Invariant observation cannot replace the exact commit rejection.
+    }
+  };
+
+  const publishDurabilityState = (state: VfsCommitDurabilityState): void => {
+    try {
+      options.onDurabilityState?.(Object.freeze(state));
+    } catch {
+      // Health observation cannot replace an already-proved commit outcome.
+    }
+  };
+
+  const recordDurabilityProof = (receipt: OwnerVfsDurabilityReceipt): void => {
+    const provedRevision = Math.max(
+      durabilityProofHighWater.get(receipt.ownerEpoch) ?? -1,
+      receipt.treeRevision,
+    );
+    durabilityProofHighWater.set(receipt.ownerEpoch, provedRevision);
+
+    const failed = durabilityFailureHighWater.get(receipt.ownerEpoch);
+    if (failed === undefined || provedRevision < failed.treeRevision) return;
+    durabilityFailureHighWater.delete(receipt.ownerEpoch);
+    if (durabilityFailureHighWater.size === 0) {
+      publishDurabilityState({ status: 'proved' });
+    }
+  };
+
+  const recoverFailedDurability = async (): Promise<void> => {
+    const targets = [...durabilityFailureHighWater.values()].sort(
+      (left, right) => left.generation - right.generation,
+    );
+    await Promise.all(
+      targets.map(async (target) => {
+        if (!target.owner.isAlive()) throw new VfsOwnerExitedError(target.ownerEpoch);
+        const receipt = await target.owner.durabilityBarrier(target.treeRevision);
+        let checked: OwnerVfsDurabilityReceipt;
+        try {
+          checked = assertDurabilityReceipt(
+            receipt,
+            target.operationId,
+            target.ownerEpoch,
+            target.treeRevision,
+          );
+        } catch (error) {
+          const failure = toError(error);
+          reportProtocolError(failure);
+          throw failure;
+        }
+        recordDurabilityProof(checked);
+      }),
+    );
+  };
+
+  const recordDurabilityFailure = (
+    target: Omit<DurabilityFailureTarget, 'generation'>,
+    error: Error,
+  ): void => {
+    const provedRevision = durabilityProofHighWater.get(target.ownerEpoch) ?? -1;
+    if (provedRevision >= target.treeRevision) return;
+
+    const failed = durabilityFailureHighWater.get(target.ownerEpoch);
+    if (failed !== undefined && failed.treeRevision >= target.treeRevision) return;
+    durabilityFailureHighWater.set(target.ownerEpoch, {
+      ...target,
+      generation: ++nextDurabilityFailureGeneration,
+    });
+    publishDurabilityState({ status: 'failed', error, recover: recoverFailedDurability });
+  };
 
   const failOwner = (owner: VfsCommitOwner, reason: unknown): void => {
     watchedOwners.delete(owner);
@@ -249,6 +355,23 @@ export function createVfsCommitCoordinator(
           if (settled) return;
           settled = true;
           reject(appliedError(cleanupError(error, cleanup())));
+          reportProtocolError(error);
+        };
+
+        const publishDurabilityFailed = (error: Error): void => {
+          if (!isCompletedFlushPersistenceFailure(error)) return;
+          const applied = ack;
+          const owner = operationState.owner;
+          if (applied === null || owner === null) return;
+          recordDurabilityFailure(
+            {
+              owner,
+              operationId,
+              ownerEpoch: applied.ownerEpoch,
+              treeRevision: applied.treeRevision,
+            },
+            error,
+          );
         };
 
         const finish = (receipt: OwnerVfsDurabilityReceipt): void => {
@@ -266,6 +389,7 @@ export function createVfsCommitCoordinator(
             return;
           }
           settled = true;
+          recordDurabilityProof(checked);
           const releaseError = cleanup();
           if (releaseError !== null) {
             reject(appliedError(releaseError));
@@ -278,10 +402,11 @@ export function createVfsCommitCoordinator(
           if (timer !== null) clearTimeout(timer);
           const applied = ack;
           if (settled || applied === null) return;
-          timer = setTimeout(
-            () => fail(new VfsCommitTimeoutError(applied, stage, options.timeoutMs)),
-            options.timeoutMs,
-          );
+          timer = setTimeout(() => {
+            const error = new VfsCommitTimeoutError(applied, stage, options.timeoutMs);
+            if (stage === 'durability') publishDurabilityFailed(error);
+            fail(error);
+          }, options.timeoutMs);
         };
 
         const crossDurability = (): void => {
@@ -316,10 +441,17 @@ export function createVfsCommitCoordinator(
           try {
             barrier = owner.durabilityBarrier(ack.treeRevision);
           } catch (error) {
-            fail(toError(error));
+            const failure = toError(error);
+            publishDurabilityFailed(failure);
+            fail(failure);
             return;
           }
-          void barrier.then(finish, (error: unknown) => fail(toError(error)));
+          void barrier.then(finish, (error: unknown) => {
+            if (settled) return;
+            const failure = toError(error);
+            publishDurabilityFailed(failure);
+            fail(failure);
+          });
         };
 
         // The pending claim exists before any injected callback can re-enter.

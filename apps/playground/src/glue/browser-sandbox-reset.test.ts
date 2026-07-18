@@ -37,6 +37,29 @@ function deleteDatabaseOk(name: string): IDBOpenDBRequest {
 }
 
 describe('resetBrowserSandboxState', () => {
+  it('treats throwing web-storage getters as unavailable during a best-effort reset', async () => {
+    const localDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    const sessionDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+    for (const name of ['localStorage', 'sessionStorage'] as const) {
+      Object.defineProperty(globalThis, name, {
+        configurable: true,
+        get() {
+          throw new DOMException('opaque origin', 'SecurityError');
+        },
+      });
+    }
+    try {
+      await expect(resetBrowserSandboxState()).resolves.toEqual(
+        expect.objectContaining({ failed: [] }),
+      );
+    } finally {
+      if (localDescriptor === undefined) Reflect.deleteProperty(globalThis, 'localStorage');
+      else Object.defineProperty(globalThis, 'localStorage', localDescriptor);
+      if (sessionDescriptor === undefined) Reflect.deleteProperty(globalThis, 'sessionStorage');
+      else Object.defineProperty(globalThis, 'sessionStorage', sessionDescriptor);
+    }
+  });
+
   it('clears OPFS, web storage, caches, and IndexedDB databases best-effort', async () => {
     const root = new FakeOpfsRoot(['scratch', 'projects', '.rifty-project-index.json']);
     const localStorage = new FakeStorage();

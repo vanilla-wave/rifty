@@ -9,6 +9,7 @@ import {
   type TreeRevision,
   VfsCommitAppliedError,
   VfsCommitProtocolError,
+  VfsPersistenceFailureError,
   VfsVersionConflictError,
   equalHostCommitAcks,
 } from './owner-vfs-protocol.ts';
@@ -60,6 +61,10 @@ export type OwnerVfsErrorFrame =
   | (SerializedErrorBase & {
       readonly kind: 'operation-id-reuse';
       readonly operationId: string;
+    })
+  | (SerializedErrorBase & {
+      readonly kind: 'persistence-failure';
+      readonly name: 'PersistFailureError';
     })
   | (SerializedErrorBase & { readonly kind: 'error' });
 
@@ -215,6 +220,8 @@ function isOwnerVfsErrorFrame(value: unknown): value is OwnerVfsErrorFrame {
       return true;
     case 'operation-id-reuse':
       return value.name === 'OperationIdReuseError' && isNonemptyString(value.operationId);
+    case 'persistence-failure':
+      return value.name === 'PersistFailureError';
     case 'version-conflict': {
       if (
         value.name !== 'VfsVersionConflictError' ||
@@ -339,6 +346,9 @@ function equalOwnerVfsErrorFrames(left: OwnerVfsErrorFrame, right: OwnerVfsError
       right.kind === 'operation-id-reuse' &&
       left.operationId === right.operationId
     );
+  }
+  if (left.kind === 'persistence-failure' || right.kind === 'persistence-failure') {
+    return left.kind === 'persistence-failure' && right.kind === 'persistence-failure';
   }
   return (
     left.path === right.path &&
@@ -621,6 +631,9 @@ export function encodeOwnerVfsError(cause: unknown): OwnerVfsErrorFrame {
       operationId: error.operationId,
     };
   }
+  if (error instanceof VfsPersistenceFailureError) {
+    return { kind: 'persistence-failure', name: 'PersistFailureError', message: error.message };
+  }
   return { kind: 'error', name: error.name, message: error.message };
 }
 
@@ -636,6 +649,9 @@ export function decodeOwnerVfsError(frame: OwnerVfsErrorFrame): Error {
     });
   }
   if (frame.kind === 'operation-id-reuse') return new OperationIdReuseError(frame.operationId);
+  if (frame.kind === 'persistence-failure') {
+    return new VfsPersistenceFailureError(frame.message);
+  }
   const error = new Error(frame.message);
   error.name = frame.name;
   return error;
@@ -761,16 +777,14 @@ export interface OwnerVfsDurabilityHandlerOptions {
   readonly send: (message: OwnerVfsDurabilityAckMessage) => void;
 }
 
-function dirtyLedgerError(report: PersistFailureReport): Error {
+function dirtyLedgerError(report: PersistFailureReport): VfsPersistenceFailureError {
   const sample = report.failures
     .slice(0, 3)
     .map((failure) => `${failure.op} ${failure.path}: ${failure.message}`)
     .join('; ');
-  const error = new Error(
+  return new VfsPersistenceFailureError(
     `OPFS write-through drained with ${report.total} unhealed persist failure(s): ${sample}`,
   );
-  error.name = 'PersistFailureError';
-  return error;
 }
 
 /** Bound owner/revision persistence barrier; never emits a false durable receipt. */

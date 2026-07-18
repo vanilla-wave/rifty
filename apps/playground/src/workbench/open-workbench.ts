@@ -5,6 +5,11 @@ import {
   ProjectBusyError,
   isRetryableProjectClosePreflightError,
 } from './errors.ts';
+import type { WorkbenchHealth } from './health.ts';
+import {
+  type WorkbenchHealthGeneration,
+  createWorkbenchHealthAuthority,
+} from './internal/workbench-health-authority.ts';
 import {
   type InspectedProjectDefinition,
   type ProjectDefinition,
@@ -63,6 +68,7 @@ export interface WorkbenchSnapshot {
 }
 
 export interface Workbench {
+  readonly health: WorkbenchHealth;
   snapshot(): WorkbenchSnapshot;
   openProject<TReady>(definition: ProjectDefinition<TReady>): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
@@ -76,6 +82,7 @@ export interface WorkbenchInternals {
     openOwner: (inspected: InspectedProjectDefinition<TReady>) => Promise<ProjectSession<TReady>>,
   ): Promise<ProjectSession<TReady>>;
   rawSession<TReady>(session: ProjectSession<TReady>): ProjectSession<TReady>;
+  healthGeneration(session: ProjectSession<unknown>): WorkbenchHealthGeneration;
   registerBeforeClose(session: ProjectSession<unknown>, hook: () => Promise<void>): void;
 }
 
@@ -126,6 +133,8 @@ export interface OpenWorkbenchDependencies {
   readonly locks: LockPort;
   readonly serviceWorker: WorkbenchServiceWorkerPort;
   readonly owner: WorkbenchOwnerPort;
+  /** Host-owned navigation recovery; browser composition always supplies it. */
+  readonly reload?: () => void;
   readonly openOwnerProject?: <TReady>(input: {
     readonly owner: WorkbenchOwnerHandle;
     readonly definition: ProjectDefinition<TReady>;
@@ -167,6 +176,7 @@ interface ActiveProjectClose {
 
 interface ActiveProject {
   readonly session: CloseableProject;
+  readonly healthGeneration: WorkbenchHealthGeneration;
   beginClose(): ActiveProjectClose;
 }
 
@@ -237,6 +247,7 @@ async function initializeWorkbench(
       lease,
       releasePageClaim,
       dependencies.openOwnerProject,
+      dependencies.reload,
     );
   } catch (error) {
     const failures: unknown[] = [error];
@@ -265,10 +276,63 @@ function createWorkbench(
   lease: OriginLease,
   releasePageClaim: () => void,
   openOwnerProject: OpenWorkbenchDependencies['openOwnerProject'],
+  reload: OpenWorkbenchDependencies['reload'],
 ): Workbench {
   const snapshot = Object.freeze({ storage }) satisfies WorkbenchSnapshot;
+  const healthAuthority = createWorkbenchHealthAuthority({
+    ...(reload === undefined
+      ? {}
+      : {
+          async recover(scope): Promise<void> {
+            if (scope !== 'reload') {
+              throw new Error(`Workbench recovery scope ${scope} has no recovery operation`);
+            }
+            reload();
+          },
+        }),
+  });
   const rawSessions = new WeakMap<object, ProjectSession<unknown>>();
+  const healthGenerations = new WeakMap<object, WorkbenchHealthGeneration>();
   let state: ProjectOperation = { kind: 'idle' };
+  let ownerCloseAdmitted = false;
+
+  const reportUnexpectedOwnerExit = (): void => {
+    if (ownerCloseAdmitted || state.kind === 'closed') return;
+    healthAuthority.owner.unavailable({ summary: 'Workbench owner exited unexpectedly' });
+  };
+  void owner.closed.then(reportUnexpectedOwnerExit, reportUnexpectedOwnerExit);
+  const unsubscribeOwnerHealth = owner.subscribeHealth((event) => {
+    if (event.kind === 'fatal-invariant') {
+      healthAuthority.invariant.fatal({ summary: event.summary });
+      return;
+    }
+    if (state.kind !== 'active') return;
+    if (event.status === 'healthy') {
+      state.project.healthGeneration.reporter.clear('persistence');
+      return;
+    }
+    state.project.healthGeneration.reporter.degraded({
+      scope: 'persistence',
+      summary: 'Workspace persistence failed',
+      recover: event.recover,
+    });
+  });
+  const closeHealth = (): unknown | null => {
+    const failures: unknown[] = [];
+    try {
+      unsubscribeOwnerHealth();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      healthAuthority.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length === 0) return null;
+    if (failures.length === 1) return failures[0];
+    return new AggregateError(failures, 'Workbench health teardown failed');
+  };
 
   const assertIdle = (): void => {
     if (state.kind === 'closing' || state.kind === 'closed') {
@@ -277,7 +341,11 @@ function createWorkbench(
     if (state.kind !== 'idle') throw new ProjectBusyError('Workbench project operations');
   };
 
-  const trackSession = <TReady>(session: ProjectSession<TReady>): TrackedProject<TReady> => {
+  const trackSession = <TReady>(
+    session: ProjectSession<TReady>,
+    generationId: string,
+  ): TrackedProject<TReady> => {
+    const healthGeneration = healthAuthority.openGeneration(generationId);
     let closeAttempt: ActiveProjectClose | null = null;
 
     const beginClose = (): ActiveProjectClose => {
@@ -302,6 +370,7 @@ function createWorkbench(
       void rawClose.then(
         () => {
           settlePreflight(CLOSE_PREFLIGHT_PASSED);
+          healthGeneration.close();
           if (state.kind === 'active' && state.project.session === trackedSession) {
             state = { kind: 'idle' };
           }
@@ -313,6 +382,7 @@ function createWorkbench(
             settlePreflight({ retryable: true, error });
           } else {
             settlePreflight(CLOSE_PREFLIGHT_PASSED);
+            healthGeneration.close();
           }
           completion.reject(error);
         },
@@ -330,7 +400,8 @@ function createWorkbench(
       close: () => beginClose().promise,
     });
     rawSessions.set(trackedSession, session);
-    const trackedProject = Object.freeze({ session: trackedSession, beginClose });
+    healthGenerations.set(trackedSession, healthGeneration);
+    const trackedProject = Object.freeze({ session: trackedSession, healthGeneration, beginClose });
     return trackedProject;
   };
 
@@ -359,7 +430,7 @@ function createWorkbench(
     const result = ownerPromise.then(
       (session) => {
         if (state !== opening) throw new ClosedHandleError('Workbench project open');
-        const tracked = trackSession(session);
+        const tracked = trackSession(session, inspected.id);
         state = { kind: 'active', project: tracked };
         return tracked.session;
       },
@@ -373,6 +444,7 @@ function createWorkbench(
   };
 
   const workbench: Workbench = {
+    health: healthAuthority.health,
     snapshot: () => snapshot,
 
     openProject<TReady>(definition: ProjectDefinition<TReady>): Promise<ProjectSession<TReady>> {
@@ -412,15 +484,23 @@ function createWorkbench(
       void promise.catch(() => {});
 
       const finishTerminalClose = (activeClose: Promise<void> | null): void => {
+        ownerCloseAdmitted = true;
         const teardown = closeWorkbench(previous, activeClose, owner, lease, releasePageClaim);
         void teardown.then(
           () => {
+            const healthFailure = closeHealth();
             state = { kind: 'closed', promise };
-            completion.resolve(undefined);
+            if (healthFailure === null) completion.resolve(undefined);
+            else completion.reject(healthFailure);
           },
           (error: unknown) => {
+            const healthFailure = closeHealth();
             state = { kind: 'closed', promise };
-            completion.reject(error);
+            completion.reject(
+              healthFailure === null
+                ? error
+                : new AggregateError([error, healthFailure], 'Workbench close failed'),
+            );
           },
         );
       };
@@ -463,6 +543,16 @@ function createWorkbench(
           typeof session === 'object' && session !== null ? rawSessions.get(session) : undefined;
         if (raw === undefined) throw new TypeError('Foreign or forged Workbench ProjectSession');
         return raw as ProjectSession<TReady>;
+      },
+      healthGeneration(session: ProjectSession<unknown>): WorkbenchHealthGeneration {
+        const generation =
+          typeof session === 'object' && session !== null
+            ? healthGenerations.get(session)
+            : undefined;
+        if (generation === undefined) {
+          throw new TypeError('Foreign or forged Workbench ProjectSession');
+        }
+        return generation;
       },
       registerBeforeClose(session: ProjectSession<unknown>, hook: () => Promise<void>): void {
         const raw =
@@ -508,8 +598,13 @@ async function closeWorkbench(
   // for the other to begin.
   const ownerClose = attemptClose(() => owner.close());
   const admittedOutcome = await admittedClose;
-  if (!admittedOutcome.ok) failures.push(admittedOutcome.error);
   const ownerOutcome = await ownerClose;
+  if (
+    !admittedOutcome.ok &&
+    (!ownerOutcome.ok || !isOwnerTerminationCancellation(admittedOutcome.error))
+  ) {
+    failures.push(admittedOutcome.error);
+  }
   if (!ownerOutcome.ok) failures.push(ownerOutcome.error);
 
   try {
@@ -520,6 +615,15 @@ async function closeWorkbench(
     releasePageClaim();
   }
   if (failures.length > 0) throwFailures(failures, 'Workbench close failed');
+}
+
+function isOwnerTerminationCancellation(error: unknown): boolean {
+  if (error instanceof ClosedHandleError) return true;
+  return (
+    error instanceof AggregateError &&
+    error.errors.length > 0 &&
+    error.errors.every(isOwnerTerminationCancellation)
+  );
 }
 
 type CloseOutcome = { readonly ok: true } | { readonly ok: false; readonly error: unknown };

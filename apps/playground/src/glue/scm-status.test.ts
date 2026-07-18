@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scmRowsFromStatusMap } from './scm-status.ts';
+import { scmRowsFromChanges, scmRowsFromStatusMap } from './scm-status.ts';
 
 describe('GIT status projection', () => {
   it('splits porcelain XY entries into staged and changes groups', () => {
@@ -107,6 +107,33 @@ describe('GIT status projection', () => {
         code: ' M',
         side: 'worktree',
         badge: 'M',
+      },
+    ]);
+  });
+
+  it('projects one unsupported status path as a visible non-porcelain gap row', () => {
+    const rows = scmRowsFromChanges(
+      [
+        { path: '/src/known.ts', code: ' M', area: 'working' },
+        { path: '/src/future.ts', rawStatusMatrixCode: '999' },
+      ],
+      '/',
+    );
+
+    expect(rows.staged).toEqual([]);
+    expect(rows.changes).toEqual([
+      {
+        path: '/src/known.ts',
+        relativePath: 'src/known.ts',
+        code: ' M',
+        side: 'worktree',
+        badge: 'M',
+      },
+      {
+        path: '/src/future.ts',
+        relativePath: 'src/future.ts',
+        rawStatusMatrixCode: '999',
+        badge: '!',
       },
     ]);
   });

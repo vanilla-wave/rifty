@@ -27,10 +27,10 @@ describe('ScmPanel', () => {
       ScmPanel({
         root: '/workspace',
         branch: 'main',
-        status: new Map([
-          ['/workspace/src/main.ts', ' M'],
-          ['/workspace/src/staged.ts', 'A '],
-        ]),
+        changes: [
+          { path: '/workspace/src/main.ts', code: ' M', area: 'working' },
+          { path: '/workspace/src/staged.ts', code: 'A ', area: 'staged' },
+        ],
         history,
         onOpenChange: () => {},
         onStage: () => Promise.resolve(),
@@ -57,5 +57,35 @@ describe('ScmPanel', () => {
     expect(html).not.toContain('Blame');
     expect(html).not.toContain('Merge');
     expect(html).not.toContain('Timeline');
+  });
+
+  it('marks an unsupported status path without exposing mutating or diff controls', () => {
+    const html = renderToString(() =>
+      ScmPanel({
+        root: '/workspace',
+        branch: 'main',
+        changes: [
+          { path: '/workspace/src/known.ts', code: ' M', area: 'working' },
+          {
+            path: '/workspace/src/future.ts',
+            rawStatusMatrixCode: '999',
+          },
+        ],
+        history,
+        onOpenChange: () => {},
+        onStage: () => Promise.resolve(),
+        onUnstage: () => Promise.resolve(),
+        onDiscard: () => Promise.resolve(),
+        onCommit: () => Promise.resolve(),
+      }),
+    );
+
+    expect(html).toContain('src/future.ts');
+    expect(html).toContain('Unsupported Git status matrix 999');
+    expect(html).toContain('data-code="!"');
+    expect(html).not.toContain('aria-label="Open changes for src/future.ts"');
+    expect(html).not.toContain('aria-label="Stage src/future.ts"');
+    expect(html).not.toContain('aria-label="Discard src/future.ts"');
+    expect(html).toContain('aria-label="Stage src/known.ts"');
   });
 });

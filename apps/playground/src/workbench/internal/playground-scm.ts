@@ -1,14 +1,30 @@
-import { type GitIdentity, type LogEntry, type makeGit, porcelainXY } from '@riftydev/git';
+import {
+  EMPTY_COMMIT_MESSAGE_ERROR,
+  type GitIdentity,
+  type GitPorcelainXY,
+  type LogEntry,
+  commitRefusal,
+  type makeGit,
+  porcelainStatusLines,
+} from '@riftydev/git';
+import { NotImplementedError } from '@riftydev/io';
 import type { Vfs } from '@riftydev/vfs';
 import { scmDiffPlan } from '../../glue/scm-diff-plan.ts';
 import type { ScmResourceRow } from '../../glue/scm-status.ts';
 import { assertProjectPath, toOwnerProjectPath } from '../project-file-boundary.ts';
 
-export interface PlaygroundScmChange {
+export interface PlaygroundScmSupportedChange {
   readonly path: string;
-  readonly code: string;
+  readonly code: GitPorcelainXY;
   readonly area: 'staged' | 'working';
 }
+
+export interface PlaygroundScmStatusGap {
+  readonly path: string;
+  readonly rawStatusMatrixCode: string;
+}
+
+export type PlaygroundScmChange = PlaygroundScmSupportedChange | PlaygroundScmStatusGap;
 
 export interface PlaygroundScmSnapshot {
   readonly branch?: string;
@@ -68,32 +84,40 @@ function cloneLogEntry(entry: LogEntry): LogEntry {
 
 function frozenChange(
   path: string,
-  code: string,
-  area: PlaygroundScmChange['area'],
-): PlaygroundScmChange {
+  code: GitPorcelainXY,
+  area: PlaygroundScmSupportedChange['area'],
+): PlaygroundScmSupportedChange {
   return Object.freeze({ path, code, area });
 }
 
-function publicStatusPath(filepath: string): string {
-  return assertProjectPath(`/${filepath}`);
+function frozenStatusGap(path: string, rawStatusMatrixCode: string): PlaygroundScmStatusGap {
+  return Object.freeze({ path, rawStatusMatrixCode });
+}
+
+function publicStatusPath(filepath: string): string | null {
+  const candidate = `/${filepath}`;
+  if (candidate === '/.rifty' || candidate.startsWith('/.rifty/')) return null;
+  return assertProjectPath(candidate);
 }
 
 function changesFromStatus(
   entries: Awaited<ReturnType<ReturnType<typeof makeGit>['status']>>,
 ): readonly PlaygroundScmChange[] {
-  const staged: PlaygroundScmChange[] = [];
+  const staged: PlaygroundScmSupportedChange[] = [];
   const working: PlaygroundScmChange[] = [];
   for (const entry of entries) {
-    const code = porcelainXY(entry.status);
-    if (code === null) continue;
-    if (code !== '??' && !/^[ MAD]{2}$/.test(code)) {
-      throw new Error(`Unsupported Git status ${entry.status} for ${entry.filepath}`);
-    }
     const path = publicStatusPath(entry.filepath);
-    const index = code[0] ?? ' ';
-    const worktree = code[1] ?? ' ';
-    if (index !== ' ' && index !== '?') staged.push(frozenChange(path, code, 'staged'));
-    if (code === '??' || worktree !== ' ') working.push(frozenChange(path, code, 'working'));
+    if (path === null) continue;
+    if (entry.kind === 'unsupported') {
+      working.push(frozenStatusGap(path, entry.rawStatusMatrixCode));
+      continue;
+    }
+    for (const code of porcelainStatusLines(entry.status)) {
+      const index = code[0];
+      const worktree = code[1];
+      if (index !== ' ' && index !== '?') staged.push(frozenChange(path, code, 'staged'));
+      if (code === '??' || worktree !== ' ') working.push(frozenChange(path, code, 'working'));
+    }
   }
   const byPath = (left: PlaygroundScmChange, right: PlaygroundScmChange): number =>
     left.path.localeCompare(right.path);
@@ -102,7 +126,7 @@ function changesFromStatus(
   return Object.freeze([...staged, ...working]);
 }
 
-function badgeFor(change: PlaygroundScmChange): ScmResourceRow['badge'] {
+function badgeFor(change: PlaygroundScmSupportedChange): ScmResourceRow['badge'] {
   if (change.code === '??') return 'U';
   const status = change.area === 'staged' ? change.code[0] : change.code[1];
   if (status === 'A') return 'A';
@@ -110,7 +134,7 @@ function badgeFor(change: PlaygroundScmChange): ScmResourceRow['badge'] {
   return 'M';
 }
 
-function diffRow(change: PlaygroundScmChange): ScmResourceRow {
+function diffRow(change: PlaygroundScmSupportedChange): ScmResourceRow {
   return {
     path: change.path,
     relativePath: change.path.slice(1),
@@ -176,9 +200,26 @@ export async function createPlaygroundScmAdapter(
     return { publicPath, relative: publicPath.slice(1) };
   };
 
-  const statusCode = async (relative: string): Promise<string | null> => {
+  const statusLines = async (relative: string): Promise<readonly GitPorcelainXY[]> => {
     const entry = (await git.status()).find((candidate) => candidate.filepath === relative);
-    return entry === undefined ? null : porcelainXY(entry.status);
+    if (entry === undefined) return [];
+    if (entry.kind === 'unsupported') {
+      throw new NotImplementedError(`git.status-matrix.${entry.rawStatusMatrixCode}`);
+    }
+    return porcelainStatusLines(entry.status);
+  };
+
+  const currentStatusGap = (publicPath: string): PlaygroundScmStatusGap | undefined =>
+    current.changes.find(
+      (change): change is PlaygroundScmStatusGap =>
+        change.path === publicPath && 'rawStatusMatrixCode' in change,
+    );
+
+  const assertSupportedPath = (publicPath: string): void => {
+    const gap = currentStatusGap(publicPath);
+    if (gap !== undefined) {
+      throw new NotImplementedError(`git.status-matrix.${gap.rawStatusMatrixCode}`);
+    }
   };
 
   const readGitBlob = async (
@@ -231,10 +272,18 @@ export async function createPlaygroundScmAdapter(
 
     async diff(change) {
       const { publicPath, relative } = checkedPath(change.path);
+      if ('rawStatusMatrixCode' in change) {
+        const gap = currentStatusGap(publicPath);
+        if (gap?.rawStatusMatrixCode !== change.rawStatusMatrixCode) {
+          throw new TypeError('SCM change is not from the current snapshot');
+        }
+        throw new NotImplementedError(`git.status-matrix.${gap.rawStatusMatrixCode}`);
+      }
       if (
         (change.area !== 'staged' && change.area !== 'working') ||
         !current.changes.some(
           (candidate) =>
+            'code' in candidate &&
             candidate.path === publicPath &&
             candidate.code === change.code &&
             candidate.area === change.area,
@@ -251,22 +300,27 @@ export async function createPlaygroundScmAdapter(
     },
 
     async stage(path) {
-      const { relative } = checkedPath(path);
-      const code = await statusCode(relative);
-      if (code !== null && code !== '??' && code[1] === 'D') await git.remove(relative);
-      else await git.add(relative);
+      const { publicPath, relative } = checkedPath(path);
+      assertSupportedPath(publicPath);
+      const lines = await statusLines(relative);
+      if (lines.length > 0 && lines.every((code) => code !== '??' && code[1] === 'D')) {
+        await git.remove(relative);
+      } else await git.add(relative);
       await refresh();
     },
 
     async unstage(path) {
-      const { relative } = checkedPath(path);
+      const { publicPath, relative } = checkedPath(path);
+      assertSupportedPath(publicPath);
+      await statusLines(relative);
       await git.unstage(relative);
       await refresh();
     },
 
     async discard(path) {
-      const { relative } = checkedPath(path);
-      if ((await statusCode(relative)) === '??') {
+      const { publicPath, relative } = checkedPath(path);
+      assertSupportedPath(publicPath);
+      if ((await statusLines(relative)).includes('??')) {
         throw new Error(`Cannot discard untracked path ${path}`);
       }
       await git.checkout({ op: 'restore', pathspecs: [relative] });
@@ -274,6 +328,9 @@ export async function createPlaygroundScmAdapter(
     },
 
     async commit(message) {
+      if (message === '') throw new Error(EMPTY_COMMIT_MESSAGE_ERROR);
+      const refusal = await commitRefusal(git);
+      if (refusal !== null) throw new Error(refusal);
       const oid = await git.commit({
         message,
         author: commitIdentity,
