@@ -26,6 +26,12 @@ const PACKAGE_JSON = `${JSON.stringify({
   dependencies: { vite: '^5.4.0' },
   overrides: { vite: '5.4.21' },
 })}\n`;
+const PACKAGE_LOCK = `${JSON.stringify({
+  name: 'app',
+  lockfileVersion: 3,
+  requires: true,
+  packages: {},
+})}\n`;
 
 interface AuthorityHarness {
   readonly vfs: MemoryVfs | SyncMirrorVfs;
@@ -192,6 +198,7 @@ const ownerCopyImplementations = [
 async function seed(h: AuthorityHarness): Promise<void> {
   await h.vfs.mkdir(`${ROOT}/node_modules/vite`, { recursive: true });
   await h.vfs.writeFile(`${ROOT}/package.json`, PACKAGE_JSON);
+  await h.vfs.writeFile(`${ROOT}/package-lock.json`, PACKAGE_LOCK);
   await h.vfs.writeFile(`${ROOT}/node_modules/vite/package.json`, '{}\n');
   await h.flush?.();
 }
@@ -241,6 +248,10 @@ describe.each(ownerCopyImplementations)(
         h.owner.mkdirSync(`${sourceRoot}/node_modules/dep`, { recursive: true });
         h.owner.writeFileSync(`${sourceRoot}/package.json`, new TextEncoder().encode(packageJson));
         h.owner.writeFileSync(
+          `${sourceRoot}/package-lock.json`,
+          new TextEncoder().encode(PACKAGE_LOCK),
+        );
+        h.owner.writeFileSync(
           `${sourceRoot}/node_modules/dep/package.json`,
           new TextEncoder().encode('{"name":"dep","version":"1.0.0"}\n'),
         );
@@ -248,6 +259,10 @@ describe.each(ownerCopyImplementations)(
         h.owner.writeFileSync(
           `${nestedSourceRoot}/package.json`,
           new TextEncoder().encode(packageJson),
+        );
+        h.owner.writeFileSync(
+          `${nestedSourceRoot}/package-lock.json`,
+          new TextEncoder().encode(PACKAGE_LOCK),
         );
         h.owner.writeFileSync(
           `${nestedSourceRoot}/node_modules/dep/package.json`,
@@ -348,6 +363,114 @@ describe.each(implementations)('install-stamp authority contract — %s', (_name
     }
   });
 
+  it('binds trusted reuse to exact package-lock.json bytes', async () => {
+    const h = makeHarness();
+    try {
+      await seed(h);
+      const a = authority(h);
+      const claim = await a.demote({ root: ROOT, slug: 'scratch' }, { flush: h.flush });
+      await expect(
+        a.promote(
+          { root: ROOT, slug: 'scratch', packageJsonText: PACKAGE_JSON },
+          { epoch: claim.epoch, packages: 1, flush: h.flush },
+        ),
+      ).resolves.toMatchObject({ status: 'trusted' });
+
+      await h.vfs.writeFile(`${ROOT}/package-lock.json`, `${PACKAGE_LOCK} `);
+
+      await expect(authority(h).check({ root: ROOT, slug: 'scratch' })).resolves.toEqual({
+        status: 'absent',
+      });
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it('treats legacy v3 as a migration miss', async () => {
+    const h = makeHarness();
+    try {
+      await seed(h);
+      const a = authority(h);
+      const claim = await a.demote({ root: ROOT, slug: 'scratch' }, { flush: h.flush });
+      await a.promote(
+        { root: ROOT, slug: 'scratch', packageJsonText: PACKAGE_JSON },
+        { epoch: claim.epoch, packages: 1, flush: h.flush },
+      );
+      const legacy = JSON.parse(await h.vfs.readFileText(installStampPath(ROOT))) as Record<
+        string,
+        unknown
+      >;
+      legacy.version = 3;
+      delete legacy.lockfileSha256;
+      await h.vfs.writeFile(installStampPath(ROOT), JSON.stringify(legacy));
+
+      await expect(authority(h).check({ root: ROOT, slug: 'scratch' })).resolves.toEqual({
+        status: 'absent',
+      });
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it('keeps sync boot checks conservative until async lockfile verification', async () => {
+    const h = makeHarness();
+    try {
+      if (!h.fsSync) return;
+      await seed(h);
+      const first = authority(h);
+      const claim = await first.demote({ root: ROOT, slug: 'scratch' }, { flush: h.flush });
+      await first.promote(
+        { root: ROOT, slug: 'scratch', packageJsonText: PACKAGE_JSON },
+        { epoch: claim.epoch, packages: 1, flush: h.flush },
+      );
+      const restarted = authority(h);
+
+      expect(restarted.checkSync({ root: ROOT, slug: 'scratch' })).toEqual({ status: 'absent' });
+      await expect(restarted.check({ root: ROOT, slug: 'scratch' })).resolves.toMatchObject({
+        status: 'trusted',
+      });
+      expect(restarted.checkSync({ root: ROOT, slug: 'scratch' })).toEqual({ status: 'absent' });
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it('refuses promotion when package-lock.json changes while SHA-256 is parked', async () => {
+    const h = makeHarness();
+    let releaseHash = (): void => {};
+    try {
+      await seed(h);
+      const a = authority(h);
+      const claim = await a.demote({ root: ROOT, slug: 'scratch' }, { flush: h.flush });
+      const digest = crypto.subtle.digest.bind(crypto.subtle);
+      const hashGate = new Promise<void>((resolve) => {
+        releaseHash = resolve;
+      });
+      const digestSpy = vi.spyOn(crypto.subtle, 'digest').mockImplementationOnce(
+        async (algorithm, data) => {
+          await hashGate;
+          return digest(algorithm, data);
+        },
+      );
+
+      const promotion = a.promote(
+        { root: ROOT, slug: 'scratch', packageJsonText: PACKAGE_JSON },
+        { epoch: claim.epoch, packages: 1, flush: h.flush },
+      );
+      await vi.waitFor(() => expect(digestSpy).toHaveBeenCalled(), { timeout: 250 });
+      await h.vfs.writeFile(`${ROOT}/package-lock.json`, `${PACKAGE_LOCK} `);
+      releaseHash();
+
+      await expect(promotion).resolves.toEqual({
+        status: 'refused',
+        reason: 'identity-drift',
+      });
+    } finally {
+      releaseHash();
+      h.dispose();
+    }
+  });
+
   it('does not trust a marker copied from a different project root', async () => {
     const h = makeHarness();
     try {
@@ -360,6 +483,7 @@ describe.each(implementations)('install-stamp authority contract — %s', (_name
       );
       await h.vfs.mkdir(`${COPIED_ROOT}/node_modules/vite`, { recursive: true });
       await h.vfs.writeFile(`${COPIED_ROOT}/package.json`, PACKAGE_JSON);
+      await h.vfs.writeFile(`${COPIED_ROOT}/package-lock.json`, PACKAGE_LOCK);
       await h.vfs.writeFile(`${COPIED_ROOT}/node_modules/vite/package.json`, '{}\n');
       await h.vfs.writeFile(
         installStampPath(COPIED_ROOT),

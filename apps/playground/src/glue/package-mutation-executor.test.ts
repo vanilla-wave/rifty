@@ -27,6 +27,7 @@ import {
 
 const ROOT = '/workspace';
 const PACKAGE_JSON = '{"name":"app","dependencies":{"vite":"^5.4.0"}}\n';
+const PACKAGE_LOCK = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const PROJECT: PackageAcquisitionProject = {
@@ -49,7 +50,12 @@ const INTENT_CLASSIFIER_CASES: readonly IntentClassifierCase[] = [
         {
           name: `${kind}: exact manifest`,
           intent: { kind, path: `${ROOT}/package.json` },
-          expected: 'manifest',
+          expected: 'package-only',
+        },
+        {
+          name: `${kind}: exact lockfile`,
+          intent: { kind, path: `${ROOT}/package-lock.json` },
+          expected: 'package-only',
         },
         {
           name: `${kind}: node_modules child`,
@@ -67,7 +73,16 @@ const INTENT_CLASSIFIER_CASES: readonly IntentClassifierCase[] = [
   {
     name: 'rename: sensitive source manifest',
     intent: { kind: 'rename', sourcePath: `${ROOT}/package.json`, targetPath: '/archive/app.json' },
-    expected: 'manifest',
+    expected: 'package-only',
+  },
+  {
+    name: 'rename: sensitive source lockfile',
+    intent: {
+      kind: 'rename',
+      sourcePath: `${ROOT}/package-lock.json`,
+      targetPath: '/archive/app-lock.json',
+    },
+    expected: 'package-only',
   },
   {
     name: 'rename: sensitive source tree',
@@ -86,7 +101,16 @@ const INTENT_CLASSIFIER_CASES: readonly IntentClassifierCase[] = [
       sourcePath: '/incoming/app.json',
       targetPath: `${ROOT}/package.json`,
     },
-    expected: 'manifest',
+    expected: 'package-only',
+  },
+  {
+    name: 'rename: sensitive target lockfile',
+    intent: {
+      kind: 'rename',
+      sourcePath: '/incoming/app-lock.json',
+      targetPath: `${ROOT}/package-lock.json`,
+    },
+    expected: 'package-only',
   },
   {
     name: 'rename: sensitive target tree',
@@ -130,7 +154,16 @@ const INTENT_CLASSIFIER_CASES: readonly IntentClassifierCase[] = [
   {
     name: 'copy: sensitive target manifest',
     intent: { kind: 'copy', sourcePath: '/incoming/app.json', targetPath: `${ROOT}/package.json` },
-    expected: 'manifest',
+    expected: 'package-only',
+  },
+  {
+    name: 'copy: sensitive target lockfile',
+    intent: {
+      kind: 'copy',
+      sourcePath: '/incoming/app-lock.json',
+      targetPath: `${ROOT}/package-lock.json`,
+    },
+    expected: 'package-only',
   },
   {
     name: 'copy: sensitive target tree',
@@ -176,6 +209,7 @@ async function harness(flush?: () => Promise<{ failures: []; total: 0 }>) {
   const { vfs, fsSync } = createMemoryFs();
   fsSync.mkdirSync(`${ROOT}/node_modules/pkg`, { recursive: true });
   fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(PACKAGE_JSON));
+  fsSync.writeFileSync(`${ROOT}/package-lock.json`, enc.encode(PACKAGE_LOCK));
   fsSync.writeFileSync(`${ROOT}/node_modules/pkg/index.js`, enc.encode('trusted'));
   const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(fsSync, {
     ownerEpoch: 'owner',
@@ -748,7 +782,7 @@ describe('package mutation routing', () => {
         },
         ROOT,
       ),
-    ).toBe('manifest');
+    ).toBe('package-only');
     expect(
       classifyHostCommitPackageImpact(
         {

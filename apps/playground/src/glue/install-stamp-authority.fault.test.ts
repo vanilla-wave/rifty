@@ -7,6 +7,7 @@ import { SyncMirrorVfs } from './sync-mirror-vfs.ts';
 
 const ROOT = '/project';
 const PACKAGE_JSON = '{"name":"app","dependencies":{"vite":"5.4.21"}}\n';
+const PACKAGE_LOCK = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
 const WATCHDOG_MS = 30_000;
 
 function fakeOpfsRoot(): FileSystemDirectoryHandle {
@@ -50,6 +51,7 @@ it('bounds a real OPFS persist hang and loudly refuses install-stamp promotion',
   setSyncMirror(fsSync, { async: vfs });
   fsSync.mkdirSync(`${ROOT}/node_modules/vite`, { recursive: true });
   fsSync.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(PACKAGE_JSON));
+  fsSync.writeFileSync(`${ROOT}/package-lock.json`, new TextEncoder().encode(PACKAGE_LOCK));
   fsSync.writeFileSync(`${ROOT}/node_modules/vite/package.json`, new TextEncoder().encode('{}\n'));
   await fsSync.flush();
 

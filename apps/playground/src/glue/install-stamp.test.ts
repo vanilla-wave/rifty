@@ -19,6 +19,8 @@ import {
 } from './install-stamp.ts';
 
 const ROOT = '/workspace';
+const LOCKFILE_TEXT = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
+const LOCKFILE_SHA256 = '260f55f93f20704a2a8dd2e904823db6c87368709eac469eec504788bc087ffd';
 
 async function seedProject(
   vfs: MemoryVfs,
@@ -29,6 +31,7 @@ async function seedProject(
 ): Promise<void> {
   await vfs.mkdir(ROOT, { recursive: true });
   await vfs.writeFile(`${ROOT}/package.json`, JSON.stringify(pkg));
+  await vfs.writeFile(`${ROOT}/package-lock.json`, LOCKFILE_TEXT);
 }
 
 async function seedNodeModules(vfs: MemoryVfs): Promise<void> {
@@ -51,6 +54,7 @@ async function seedPendingStamp(vfs: MemoryVfs, packages: number, slug: string):
   const stamp = createInstallStamp(ROOT, packageJsonText, {
     slug,
     packages,
+    lockfileSha256: LOCKFILE_SHA256,
     durability: 'pending',
     epoch: 'test:pending',
   });
@@ -73,7 +77,7 @@ describe('install stamp (ADR-0135)', () => {
     const stamp = await readInstallStamp(vfs, ROOT);
 
     expect(stamp).toEqual({
-      version: 3,
+      version: 4,
       root: ROOT,
       slug: 'real-vite',
       packageJsonText: JSON.stringify({
@@ -85,6 +89,7 @@ describe('install stamp (ADR-0135)', () => {
       installArtifactIdentity,
       deps: { vite: '^5.4.0', tool: '1.0.0', fsevents: '^2' },
       packages: 14,
+      lockfileSha256: LOCKFILE_SHA256,
     });
     expect(await vfs.exists(installStampPath(ROOT))).toBe(true);
     expect((await readInstallStamp(vfs, `${ROOT}/.`))?.root).toBe(ROOT);
@@ -159,13 +164,14 @@ describe('install stamp (ADR-0135)', () => {
     await seedPendingStamp(vfs, 14, 'real-vite');
 
     expect(await readInstallStamp(vfs, ROOT)).toEqual({
-      version: 3,
+      version: 4,
       root: ROOT,
       slug: 'real-vite',
       packageJsonText: JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }),
       installArtifactIdentity,
       deps: { vite: '^5.4.0' },
       packages: 14,
+      lockfileSha256: LOCKFILE_SHA256,
       durability: 'pending',
       epoch: 'test:pending',
     });
@@ -202,6 +208,17 @@ describe('install stamp (ADR-0135)', () => {
       name: 'app',
       dependencies: { vite: '^5.4.0', lodash: '^4' },
     });
+    expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+  });
+
+  it('does not reuse a tree after exact package-lock.json bytes drift', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await seedTrustedStamp(vfs, 14, 'real-vite');
+
+    await vfs.writeFile(`${ROOT}/package-lock.json`, `${LOCKFILE_TEXT} `);
+
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
   });
 
@@ -258,6 +275,26 @@ describe('install stamp (ADR-0135)', () => {
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
   });
 
+  it('treats schema v3, malformed lock hashes, and extra fields as migration misses', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await seedTrustedStamp(vfs, 14, 'real-vite');
+    const current = JSON.parse(await vfs.readFileText(installStampPath(ROOT))) as Record<
+      string,
+      unknown
+    >;
+
+    for (const forged of [
+      { ...current, version: 3, lockfileSha256: undefined },
+      { ...current, lockfileSha256: LOCKFILE_SHA256.toUpperCase() },
+      { ...current, lockfileSha256: LOCKFILE_SHA256.slice(1) },
+      { ...current, futureField: true },
+    ]) {
+      expect(parseInstallStamp(forged, ROOT)).toBeNull();
+    }
+  });
+
   it.each([undefined, '/copied-workspace', '/workspace/.', 'workspace'])(
     'rejects a stamp whose embedded root is not this exact canonical location: %s',
     async (embeddedRoot) => {
@@ -305,19 +342,21 @@ describe('install stamp (ADR-0135)', () => {
       createInstallStamp(ROOT, packageJsonText, {
         slug: 'real-vite',
         packages: 14,
+        lockfileSha256: LOCKFILE_SHA256,
         durability: 'pending',
         epoch,
       }),
     ).toBeNull();
 
     const forged = {
-      version: 3,
+      version: 4,
       root: ROOT,
       slug: 'real-vite',
       packageJsonText,
       installArtifactIdentity,
       deps: { vite: '^5.4.0' },
       packages: 14,
+      lockfileSha256: LOCKFILE_SHA256,
       durability: 'pending',
       ...(epoch === undefined ? {} : { epoch }),
     };
@@ -342,6 +381,7 @@ describe('install stamp (ADR-0135)', () => {
       createInstallStamp(ROOT, JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }), {
         slug: 'real-vite',
         packages: 14,
+        lockfileSha256: LOCKFILE_SHA256,
         epoch: 'forged:1',
       }),
     ).toBeNull();
@@ -354,16 +394,23 @@ describe('install stamp (ADR-0135)', () => {
     ]),
   )('treats %s as a corrupt package request at every stamp boundary', async (_case, text) => {
     expect(effectiveDepsFromPackageJsonText(text)).toBeNull();
-    expect(createInstallStamp(ROOT, text, { slug: 'real-vite', packages: 14 })).toBeNull();
+    expect(
+      createInstallStamp(ROOT, text, {
+        slug: 'real-vite',
+        packages: 14,
+        lockfileSha256: LOCKFILE_SHA256,
+      }),
+    ).toBeNull();
 
     const forged = {
-      version: 3,
+      version: 4,
       root: ROOT,
       slug: 'real-vite',
       packageJsonText: text,
       installArtifactIdentity,
       deps: {},
       packages: 14,
+      lockfileSha256: LOCKFILE_SHA256,
     };
     const stampText = JSON.stringify(forged);
     const vfs = new MemoryVfs();
@@ -400,7 +447,7 @@ describe('install stamp (ADR-0135)', () => {
     ['fractional package count', 'packages', 1.5],
     ['unsafe package count', 'packages', Number.MAX_SAFE_INTEGER + 1],
     ['non-string dependency-map member', 'deps', { vite: '^5.4.0', malformed: 42 }],
-  ] as const)('treats a v3 claim with %s as a miss', async (_case, field, value) => {
+  ] as const)('treats a v4 claim with %s as a miss', async (_case, field, value) => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
@@ -425,13 +472,13 @@ describe('install stamp (ADR-0135)', () => {
   });
 
   it.each([-1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
-    'does not construct a v3 claim with package count %s',
+    'does not construct a v4 claim with package count %s',
     (packages) => {
       expect(
         createInstallStamp(
           ROOT,
           JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }),
-          { slug: 'real-vite', packages },
+          { slug: 'real-vite', packages, lockfileSha256: LOCKFILE_SHA256 },
         ),
       ).toBeNull();
     },
@@ -516,10 +563,7 @@ describe('install stamp (ADR-0135)', () => {
     expect(depsEqual({ a: '1' }, { a: '1', b: '2' })).toBe(false);
   });
 
-  it('installStampSatisfiedForPackageJsonSync mirrors the async predicate (owner-boot prefetch gate)', async () => {
-    // The sync twin exists so the eddy prefetch gate never awaits (an async
-    // gate starves behind the busy boot loop, ADR-0195). Same verdicts as the
-    // async predicate over the same tree.
+  it('keeps the sync prefetch gate conservative until async SHA-256 verifies trust', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
@@ -537,12 +581,8 @@ describe('install stamp (ADR-0135)', () => {
       readFileBytesSync: (path) => enc.encode(files.get(path) ?? ''),
     };
     const pkgText = JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } });
-    expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'scratch', pkgText)?.packages).toBe(
-      14,
-    );
-    expect(
-      installStampSatisfiedForPackageJsonSync(fs, `${ROOT}/.`, 'scratch', pkgText)?.packages,
-    ).toBe(14);
+    expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'scratch', pkgText)).toBeNull();
+    expect(installStampSatisfiedForPackageJsonSync(fs, `${ROOT}/.`, 'scratch', pkgText)).toBeNull();
     // Wrong slug / drifted template deps → null, same as the async predicate.
     expect(installStampSatisfiedForPackageJsonSync(fs, ROOT, 'other', pkgText)).toBeNull();
     expect(
