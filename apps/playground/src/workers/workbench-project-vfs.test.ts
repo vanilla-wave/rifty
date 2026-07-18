@@ -943,6 +943,51 @@ describe('Workbench project VFS owner adapter', () => {
     expect(h.authority.readFileBytesSync(path)).toEqual(encoder.encode('tentative'));
   });
 
+  // Fault class: torn-state × quota-perm-fail × observable-order. Arming
+  // precedes the first possibly durable roll-forward marker effect.
+  it('fatally fences when the project replacement point of no return fails durably', async () => {
+    const failure = new Error('phase marker durability failed');
+    const fatalFailures: Error[] = [];
+    const timeline: string[] = [];
+    const h = harness(
+      (error) => {
+        fatalFailures.push(error);
+        timeline.push('fatal-callback');
+      },
+      (frame) => {
+        if (frame.type === 'workbench:project-vfs-fatal') timeline.push('fatal-frame');
+      },
+    );
+    const path = `${ROOT}/src/main.ts`;
+    let continued = false;
+    h.vfs.publishSnapshot();
+
+    const replacement = h.vfs
+      .recoverableProjectReplace(
+        (armPointOfNoReturn) => {
+          h.authority.mkdirSync('/archive-transaction', { recursive: true });
+          armPointOfNoReturn();
+          h.authority.writeFileSync('/archive-transaction/phase', encoder.encode('promoting\n'));
+          throw failure;
+        },
+        () => ({ status: 'committed', value: undefined }),
+      )
+      .catch((error: unknown) => {
+        timeline.push('rejection');
+        throw error;
+      });
+
+    await expect(replacement).rejects.toBe(failure);
+    expect(timeline).toEqual(['fatal-frame', 'fatal-callback', 'rejection']);
+    expect(fatalFailures).toEqual([failure]);
+    await expect(
+      h.vfs.mutationGuard([{ kind: 'write', path }], () => {
+        continued = true;
+      }),
+    ).rejects.toBe(failure);
+    expect(continued).toBe(false);
+  });
+
   // Fault class: torn-state × semantic scope/background publisher.
   it('does not publish a torn journal while a semantic replacement scope is active', async () => {
     const fatalFailures: Error[] = [];

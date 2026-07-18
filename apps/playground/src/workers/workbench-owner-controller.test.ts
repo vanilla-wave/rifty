@@ -605,6 +605,96 @@ describe('Workbench owner controller', () => {
     expect(h.events).toContain('runtime-close:end');
   });
 
+  // Fault classes: provenance-lie × observable-order. The close fence rejects
+  // new project work, but completion legs admitted before it still drain.
+  it('drains admitted VFS completion frames after the close fence while rejecting new work', async () => {
+    const h = harness();
+    const closeGate = deferred<void>();
+    h.createProject.mockImplementationOnce(async (input) => {
+      const runtime = {
+        handleFrame: vi.fn(async () => {}),
+        close: vi.fn(async () => closeGate.promise),
+      } satisfies WorkbenchOwnerProjectRuntime;
+      h.runtimeRecords.push({ input, runtime });
+      return runtime;
+    });
+    await h.controller.handle({
+      type: 'workbench:open-project',
+      opId: 'open-drain',
+      definition: definitionWire(),
+    });
+    const token = h.opened().projectToken;
+    const runtime = h.runtime().runtime;
+    const terminal = {
+      type: 'rifty:owner-vfs-commit-ack' as const,
+      operationId: 'commit-before-close',
+      ok: true as const,
+      ack: {
+        operationId: 'commit-before-close',
+        ownerEpoch: 'owner-a',
+        treeRevision: 2,
+        versions: [
+          {
+            path: '/.rifty/workbench/v1/projects/project-a/tree/src/main.ts',
+            version: 'file-v2',
+          },
+        ],
+      },
+    };
+
+    const closing = h.controller.handle({
+      type: 'workbench:close-project',
+      opId: 'close-drain',
+      projectToken: token,
+    });
+    await waitUntil(() => runtime.close.mock.calls.length === 1);
+
+    await h.controller.handle({
+      type: 'workbench:project-vfs',
+      projectToken: token,
+      frame: { type: 'rifty:owner-vfs-commit-received', terminal },
+    });
+    await h.controller.handle({
+      type: 'workbench:project-vfs',
+      projectToken: token,
+      frame: { type: 'rifty:owner-vfs-commit-cleanup', terminal },
+    });
+    await h.controller.handle({
+      type: 'workbench:project-vfs',
+      projectToken: token,
+      frame: {
+        type: 'rifty:owner-vfs-durability',
+        barrierId: 'barrier-before-close',
+        ownerEpoch: 'owner-a',
+        treeRevision: 2,
+      },
+    });
+    await h.controller.handle(vfsMessage(token));
+
+    expect(runtime.handleFrame.mock.calls.map(([frame]) => frame)).toEqual([
+      { type: 'vfs', frame: { type: 'rifty:owner-vfs-commit-received', terminal } },
+      { type: 'vfs', frame: { type: 'rifty:owner-vfs-commit-cleanup', terminal } },
+      {
+        type: 'vfs',
+        frame: {
+          type: 'rifty:owner-vfs-durability',
+          barrierId: 'barrier-before-close',
+          ownerEpoch: 'owner-a',
+          treeRevision: 2,
+        },
+      },
+    ]);
+
+    closeGate.resolve();
+    await closing;
+    await h.controller.handle({
+      type: 'workbench:project-vfs',
+      projectToken: token,
+      frame: { type: 'rifty:owner-vfs-commit-cleanup', terminal },
+    });
+    expect(runtime.handleFrame).toHaveBeenCalledTimes(3);
+  });
+
   it('dispatches PTY control while an exec is pending and does not queue close behind the run', async () => {
     const h = harness();
     const execGate = deferred<void>();

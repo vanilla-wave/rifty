@@ -68,7 +68,7 @@ export interface WorkbenchProjectVfs {
   ): Promise<T>;
   /** FIFO-head prepare, package-authority reset, then recoverable whole-project replace. */
   recoverableProjectReplace<T>(
-    prepare: () => void | Promise<void>,
+    prepare: (armPointOfNoReturn: () => void) => void | Promise<void>,
     apply: () =>
       | WorkbenchRecoverableMutationResult<T>
       | Promise<WorkbenchRecoverableMutationResult<T>>,
@@ -584,7 +584,7 @@ export function createWorkbenchProjectVfs(
   };
 
   const recoverableProjectReplace = async <T>(
-    prepare: () => void | Promise<void>,
+    prepare: (armPointOfNoReturn: () => void) => void | Promise<void>,
     apply: () =>
       | WorkbenchRecoverableMutationResult<T>
       | Promise<WorkbenchRecoverableMutationResult<T>>,
@@ -595,10 +595,13 @@ export function createWorkbenchProjectVfs(
     const operation = (async () => {
       let outcome: MutationOutcome<T> | undefined;
       let armed = false;
+      const armPointOfNoReturn = (): void => {
+        armed = true;
+      };
       try {
         await activePackageMutations.reset({ root: projectRoot }, async () => {
-          await prepare();
-          armed = true;
+          await prepare(armPointOfNoReturn);
+          armPointOfNoReturn();
           return {
             status: 'ready',
             resetDependencyTree: true,

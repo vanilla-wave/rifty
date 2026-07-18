@@ -901,8 +901,8 @@ describe('owner-resident Playground session tools', () => {
     expect(vfsFailures).toEqual([]);
   });
 
-  // Fault class: torn-state × stale-state. Once an import has persisted its
-  // roll-forward phase, no user continuation may observe or mutate the torn tree.
+  // Fault class: torn-state × quota-perm-fail × observable-order. Once an
+  // import starts its durable roll-forward marker, no continuation may proceed.
   it('fatally fences Cmd-S, SCM status, and export after an armed archive import fails', async () => {
     const fs = new DurableOwnerFs();
     const vfs = new SyncMirrorVfs();
@@ -1006,9 +1006,8 @@ describe('owner-resident Playground session tools', () => {
       return response.response;
     };
 
-    // Preparation is six persisted primitives for this exact archive; ordinal
-    // seven is the first live-tree promotion effect after phase=promoting.
-    fs.armPersistFailure(7, 'quota-report');
+    // Ordinal five is the phase=promoting durable marker itself.
+    fs.armPersistFailure(5, 'quota-report');
     const importResponse = await request(
       {
         type: 'archive:import',
@@ -1022,6 +1021,12 @@ describe('owner-resident Playground session tools', () => {
 
     expect(importResponse.ok).toBe(false);
     expect(fs.didInjectFailure).toBe(true);
+    expect(fs.trace.find(({ outcome }) => outcome === 'injected-failure')?.primitive).toMatchObject(
+      {
+        kind: 'write',
+        path: ARCHIVE_TRANSACTION_PHASE,
+      },
+    );
     expect(owner.authority.statSyncOrNull(ARCHIVE_TRANSACTION_PHASE)?.isFile).toBe(true);
     expect(timeline).toEqual(['fatal-frame', 'fatal-callback', 'import-response']);
     expect(fatalFailures).toHaveLength(1);

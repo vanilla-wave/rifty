@@ -690,6 +690,17 @@ export function createWorkbenchOwnerController(
       fenceProjectInput(project);
       return enqueue(() => performClose(message, project));
     }
+    const fencedProject = active;
+    if (
+      isProjectInputMessage(message) &&
+      fencedProject !== null &&
+      !fencedProject.acceptingInput &&
+      fencedProject.token === message.projectToken
+    ) {
+      return isProjectDrainMessage(message)
+        ? performProjectInput(message, fencedProject)
+        : Promise.resolve();
+    }
     if (shutdownRequested) {
       if (isProjectInputMessage(message) && isExpectedPostFenceToken(message.projectToken)) {
         return Promise.resolve();
@@ -748,6 +759,16 @@ function isProjectInputMessage(
     message.type === 'workbench:project-pty' ||
     message.type === 'workbench:project-preview' ||
     message.type === 'workbench:project-vfs'
+  );
+}
+
+/** Completion legs for work admitted before the lifecycle fence; never new work. */
+function isProjectDrainMessage(message: ProjectInputMessage): boolean {
+  if (message.type !== 'workbench:project-vfs') return false;
+  return (
+    message.frame.type === 'rifty:owner-vfs-commit-received' ||
+    message.frame.type === 'rifty:owner-vfs-commit-cleanup' ||
+    message.frame.type === 'rifty:owner-vfs-durability'
   );
 }
 

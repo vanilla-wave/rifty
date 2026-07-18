@@ -8,6 +8,68 @@ function harness() {
   return { client, sent };
 }
 
+function captureThrown(operation: () => void): unknown {
+  try {
+    operation();
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
+
+function deliverChunk(
+  client: ReturnType<typeof createPtyClient>,
+  sid: string,
+  rid: string,
+  data = 'late',
+): void {
+  client.onFrame({
+    type: 'pty:chunk',
+    sid,
+    rid,
+    stream: 'stdout',
+    seq: 1,
+    data: new TextEncoder().encode(data),
+  });
+}
+
+type ExecFrame = Extract<PageToOwnerFrame, { type: 'pty:exec' }>;
+
+function execFrames(sent: readonly PageToOwnerFrame[]): readonly ExecFrame[] {
+  return sent.filter((frame): frame is ExecFrame => frame.type === 'pty:exec');
+}
+
+function startRun(
+  client: ReturnType<typeof createPtyClient>,
+  sent: PageToOwnerFrame[],
+  sid: string,
+  onChunk: (chunk: string) => void = () => {},
+): { readonly frame: ExecFrame; readonly promise: Promise<number> } {
+  const promise = client.exec(sid, 'command', { cols: 80, rows: 24, isTTY: true, onChunk });
+  const frame = execFrames(sent).at(-1);
+  if (frame === undefined) throw new Error(`missing exec frame for ${sid}`);
+  return { frame, promise };
+}
+
+function deliverExit(client: ReturnType<typeof createPtyClient>, frame: ExecFrame, code = 0): void {
+  client.onFrame({
+    type: 'pty:exit',
+    sid: frame.sid,
+    rid: frame.rid,
+    code,
+    exit: code === 130 ? { code: null, signal: 'SIGINT' } : { code, signal: null },
+    cwd: '/',
+    env: {},
+  });
+}
+
+function expectCorrelationMismatch(error: unknown, type: string, received: string): void {
+  expect(error).toMatchObject({
+    name: 'PtyProtocolInvariantError',
+    message: expect.stringMatching(new RegExp(`${type}.*correlation.*${received}`, 'i')),
+  });
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -128,107 +190,112 @@ describe('pty-client', () => {
     await expect(next).resolves.toBe(0);
   });
 
-  it('routes chunks to matching runs in different sessions (rid correlation)', async () => {
+  it('binds output and exit to the exact sid/rid across sessions', async () => {
     const { client, sent } = harness();
-    const aChunks: string[] = [];
-    const bChunks: string[] = [];
-    const a = client.exec('s1', 'cmd-a', {
-      cols: 80,
-      rows: 24,
-      isTTY: true,
-      onChunk: (c) => aChunks.push(c),
-    });
-    const b = client.exec('s2', 'cmd-b', {
-      cols: 80,
-      rows: 24,
-      isTTY: true,
-      onChunk: (c) => bChunks.push(c),
-    });
-    const execs = sent.filter(
-      (f): f is Extract<PageToOwnerFrame, { type: 'pty:exec' }> => f.type === 'pty:exec',
+    const firstChunks: string[] = [];
+    const secondChunks: string[] = [];
+    const first = startRun(client, sent, 's1', (chunk) => firstChunks.push(chunk));
+    const second = startRun(client, sent, 's2', (chunk) => secondChunks.push(chunk));
+
+    const chunkMismatch = captureThrown(() =>
+      deliverChunk(client, second.frame.sid, first.frame.rid, 'crossed'),
     );
-    const ridA = execs[0]!.rid;
-    const ridB = execs[1]!.rid;
-    expect(ridA).not.toBe(ridB);
-    client.onFrame({
-      type: 'pty:chunk',
-      sid: 's2',
-      rid: ridB,
-      stream: 'stdout',
-      seq: 0,
-      data: new TextEncoder().encode('B'),
-    });
-    client.onFrame({
-      type: 'pty:chunk',
-      sid: 's1',
-      rid: ridA,
-      stream: 'stdout',
-      seq: 0,
-      data: new TextEncoder().encode('A'),
-    });
-    client.onFrame({
-      type: 'pty:exit',
-      sid: 's1',
-      rid: ridA,
-      code: 0,
-      exit: { code: 0, signal: null },
-      cwd: '/',
-      env: {},
-    });
-    client.onFrame({
-      type: 'pty:exit',
-      sid: 's2',
-      rid: ridB,
-      code: 0,
-      exit: { code: 0, signal: null },
-      cwd: '/',
-      env: {},
-    });
-    await Promise.all([a, b]);
-    expect(aChunks.join('')).toBe('A');
-    expect(bChunks.join('')).toBe('B');
+    const exitMismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:exit',
+        sid: second.frame.sid,
+        rid: first.frame.rid,
+        code: 0,
+        exit: { code: 0, signal: null },
+        cwd: '/',
+        env: {},
+      }),
+    );
+    deliverChunk(client, first.frame.sid, first.frame.rid, 'A');
+    deliverChunk(client, second.frame.sid, second.frame.rid, 'B');
+    deliverExit(client, first.frame);
+    deliverExit(client, second.frame);
+    await Promise.all([first.promise, second.promise]);
+
+    expectCorrelationMismatch(chunkMismatch, 'pty:chunk', second.frame.sid);
+    expectCorrelationMismatch(exitMismatch, 'pty:exit', second.frame.sid);
+    expect(firstChunks).toEqual(['A']);
+    expect(secondChunks).toEqual(['B']);
   });
 
-  // Regression (CI dev-server-ready marker flake): the owner emits the
-  // "[vite] dev server ready" line from an async listen() message that can land
-  // AFTER the run's pty:exit when a restart aborted the run. The run is gone, so
-  // rid correlation finds nothing — but the marker is real output for the
-  // session's terminal and must NOT be silently dropped (it was: the e2e read an
-  // empty/short buffer and timed out). It lands via the session's trailing sink.
-  it('delivers a chunk arriving after pty:exit to the session terminal (marker race)', async () => {
+  it('delivers admitted output that arrives after pty:exit to the exact run sink', async () => {
     const { client, sent } = harness();
     const chunks: string[] = [];
-    const p = client.exec('s1', 'vite', {
-      cols: 80,
-      rows: 24,
-      isTTY: true,
-      onChunk: (c) => chunks.push(c),
-    });
-    const rid = (
-      sent.find((f) => f.type === 'pty:exec') as Extract<PageToOwnerFrame, { type: 'pty:exec' }>
-    ).rid;
-    // Run exits first (Ctrl-C / restart abort, code 130) ...
-    client.onFrame({
-      type: 'pty:exit',
-      sid: 's1',
-      rid,
-      code: 130,
-      exit: { code: null, signal: 'SIGINT' },
-      cwd: '/',
-      env: {},
-    });
-    await expect(p).resolves.toBe(130);
-    // ... then the readiness marker arrives late for the now-gone run.
-    client.onFrame({
-      type: 'pty:chunk',
-      sid: 's1',
-      rid,
-      stream: 'stdout',
-      seq: 1,
-      data: new TextEncoder().encode('[vite] dev server ready on port 5174\n'),
-    });
-    expect(chunks.join('')).toContain('[vite] dev server ready on port 5174');
+    const run = startRun(client, sent, 's1', (chunk) => chunks.push(chunk));
+    client.onFrame({ type: 'pty:run-ready', sid: run.frame.sid, rid: run.frame.rid });
+    deliverExit(client, run.frame, 130);
+    await expect(run.promise).resolves.toBe(130);
+    const mismatch = captureThrown(() => deliverChunk(client, 'sibling', run.frame.rid));
+    deliverChunk(client, run.frame.sid, run.frame.rid, 'late output\n');
+
+    expectCorrelationMismatch(mismatch, 'pty:chunk', 'sibling');
+    expect(chunks.join('')).toBe('late output\n');
   });
+
+  it('never publishes output authority when exit wins before admission', async () => {
+    const { client, sent } = harness();
+    const chunks: string[] = [];
+    const run = startRun(client, sent, 'not-admitted', (chunk) => chunks.push(chunk));
+    deliverExit(client, run.frame);
+    await run.promise;
+    deliverChunk(client, run.frame.sid, run.frame.rid);
+
+    expect(chunks).toEqual([]);
+  });
+
+  it('retires stale output authority when a newer run is admitted', async () => {
+    const { client, sent } = harness();
+    const firstChunks: string[] = [];
+    const secondChunks: string[] = [];
+    const first = startRun(client, sent, 's1', (chunk) => firstChunks.push(chunk));
+    client.onFrame({ type: 'pty:run-ready', sid: first.frame.sid, rid: first.frame.rid });
+    deliverExit(client, first.frame);
+    await first.promise;
+
+    const second = startRun(client, sent, 's1', (chunk) => secondChunks.push(chunk));
+    client.onFrame({ type: 'pty:run-ready', sid: second.frame.sid, rid: second.frame.rid });
+    deliverChunk(client, first.frame.sid, first.frame.rid, 'stale');
+    deliverExit(client, second.frame);
+    await second.promise;
+
+    expect(firstChunks).toEqual([]);
+    expect(secondChunks).toEqual([]);
+  });
+
+  it.each(['close', 'disconnect'] as const)(
+    'retires admitted output authority on %s',
+    async (settlement) => {
+      const { client, sent } = harness();
+      const chunks: string[] = [];
+      const run = startRun(client, sent, 'retired', (chunk) => chunks.push(chunk));
+      client.onFrame({ type: 'pty:run-ready', sid: run.frame.sid, rid: run.frame.rid });
+
+      if (settlement === 'disconnect') {
+        client.disconnect();
+        await expect(run.promise).rejects.toThrow(/owner died/i);
+      } else {
+        const closing = client.closeSession(run.frame.sid);
+        const close = sent.find(
+          (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+            frame.type === 'pty:close',
+        )!;
+        client.onFrame({ type: 'pty:close-ack', sid: close.sid, opId: close.opId, ok: true });
+        await closing;
+      }
+
+      deliverChunk(client, run.frame.sid, run.frame.rid, 'retired');
+      if (settlement === 'close') {
+        deliverExit(client, run.frame);
+        await run.promise;
+      }
+      expect(chunks).toEqual([]);
+    },
+  );
 
   it('caches cwd/env from pty:exit (snapshot reflects last exit)', async () => {
     const { client, sent } = harness();
@@ -530,11 +597,13 @@ describe('pty-client', () => {
     const siblingExec = execs[1]!;
 
     expect(starts).toEqual([]);
-    client.onFrame({
-      type: 'pty:run-ready',
-      sid: 's2',
-      rid: firstExec.rid,
-    });
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:run-ready',
+        sid: 's2',
+        rid: firstExec.rid,
+      }),
+    );
     expect(starts).toEqual([]);
 
     client.onFrame({ type: 'pty:run-ready', sid: 's2', rid: siblingExec.rid });
@@ -554,6 +623,7 @@ describe('pty-client', () => {
       });
     }
     await Promise.all([first, sibling]);
+    expectCorrelationMismatch(mismatch, 'pty:run-ready', 's2');
   });
 
   it.each(['stop', 'close', 'owner death'] as const)(
@@ -656,6 +726,15 @@ describe('pty-client', () => {
       ),
     ).resolves.toBe('pending');
 
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:resize-ack',
+        sid: 'sibling',
+        rid: 'sibling-run',
+        opId: frame.opId,
+        ok: true,
+      } as never),
+    );
     client.onFrame({
       type: 'pty:resize-ack',
       sid: 's1',
@@ -664,6 +743,7 @@ describe('pty-client', () => {
       ok: true,
     } as never);
     await expect(resized).resolves.toBeUndefined();
+    expectCorrelationMismatch(mismatch, 'pty:resize-ack', 'sibling');
     client.onFrame({
       type: 'pty:exit',
       sid: 's1',
@@ -693,12 +773,14 @@ describe('pty-client', () => {
       cols: 100,
       rows: 30,
     });
-    client.onFrame({
-      type: 'pty:session-resize-ack',
-      sid: 'sibling',
-      opId: first.opId,
-      ok: true,
-    });
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:session-resize-ack',
+        sid: 'sibling',
+        opId: first.opId,
+        ok: true,
+      }),
+    );
     client.onFrame({
       type: 'pty:session-resize-ack',
       sid: 's1',
@@ -719,6 +801,7 @@ describe('pty-client', () => {
       error: 'RangeError: owner rejected exact idle size',
     });
     await expect(rejected).rejects.toThrow('owner rejected exact idle size');
+    expectCorrelationMismatch(mismatch, 'pty:session-resize-ack', 'sibling');
 
     const accepted = client.resizeSession('s1', 120, 40);
     const second = sent.filter(
@@ -818,6 +901,15 @@ describe('pty-client', () => {
     expect(sent.some((frame) => frame.type === 'pty:stdin-eof')).toBe(false);
 
     const firstFrame = sent.at(-1) as unknown as { opId: string };
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:stdin-ack',
+        sid: 'sibling',
+        rid: 'sibling-run',
+        opId: firstFrame.opId,
+        ok: true,
+      } as never),
+    );
     client.onFrame({
       type: 'pty:stdin-ack',
       sid: 's1',
@@ -826,6 +918,7 @@ describe('pty-client', () => {
       ok: true,
     } as never);
     await first;
+    expectCorrelationMismatch(mismatch, 'pty:stdin-ack', 'sibling');
     await Promise.resolve();
     const stdinFrames = sent.filter((frame) => frame.type === 'pty:stdin');
     expect(stdinFrames).toHaveLength(2);
@@ -1134,8 +1227,17 @@ describe('pty-client', () => {
     ).resolves.toBe('pending');
 
     const frame = frames[0] as unknown as { opId: string };
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:close-ack',
+        sid: 'sibling',
+        opId: frame.opId,
+        ok: true,
+      } as never),
+    );
     client.onFrame({ type: 'pty:close-ack', sid: 's1', opId: frame.opId, ok: true } as never);
     await expect(first).resolves.toBeUndefined();
+    expectCorrelationMismatch(mismatch, 'pty:close-ack', 'sibling');
     expect(client.snapshot('s1')).toEqual({ cwd: '/', env: {} });
   });
 

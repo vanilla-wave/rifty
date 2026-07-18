@@ -1,10 +1,11 @@
 import {
+  EMPTY_COMMIT_MESSAGE_ERROR,
   type GitIdentity,
   type GitPorcelainXY,
   type LogEntry,
+  commitRefusal,
   type makeGit,
   porcelainStatusLines,
-  requireSupportedStatusEntries,
 } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import type { Vfs } from '@riftydev/vfs';
@@ -327,7 +328,9 @@ export async function createPlaygroundScmAdapter(
     },
 
     async commit(message) {
-      requireSupportedStatusEntries(await git.status());
+      if (message === '') throw new Error(EMPTY_COMMIT_MESSAGE_ERROR);
+      const refusal = await commitRefusal(git);
+      if (refusal !== null) throw new Error(refusal);
       const oid = await git.commit({
         message,
         author: commitIdentity,

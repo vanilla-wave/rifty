@@ -37,6 +37,13 @@ class PtyAckTimeoutError extends Error {
   }
 }
 
+class PtyProtocolInvariantError extends Error {
+  constructor(frameType: OwnerToPageFrame['type'], received: string, expected: string) {
+    super(`${frameType} correlation mismatch: received ${received}; expected ${expected}`);
+    this.name = 'PtyProtocolInvariantError';
+  }
+}
+
 export interface ExecOptions {
   readonly cols: number;
   readonly rows: number;
@@ -108,13 +115,8 @@ type SessionState = {
   /** Initial-open/admission/close outcome unknown; close is the only recovery operation. */
   fence?: Error;
   close?: PendingClose;
-  /**
-   * The most recent run's `onChunk`, kept so a `pty:chunk` that arrives AFTER its
-   * run's `pty:exit` (the owner emitting late — e.g. the dev-server readiness
-   * marker from an async `listen()` message that lands after a restart aborted
-   * the run) still reaches the session's terminal instead of being dropped.
-   */
-  trailingSink?: ExecOptions['onChunk'];
+  /** Last admitted run authorized to deliver output after its exit. */
+  trailing?: { readonly rid: string; readonly sink: ExecOptions['onChunk'] };
 };
 
 export interface PtyClientDeps {
@@ -256,6 +258,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
 
   function fenceSession(s: SessionState, error: Error): Error {
     s.fence ??= error;
+    s.trailing = undefined;
     return s.fence;
   }
 
@@ -287,6 +290,115 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     if (!s || s.closed || s.close || s.fence) return undefined;
     const run = runs.get(rid);
     return run?.sid === sid && !run.admissionCallbackFailed ? run : undefined;
+  }
+
+  function acceptsRunCorrelation(state: SessionState | undefined): state is SessionState {
+    return !disconnected && state !== undefined && !state.closed && state.fence === undefined;
+  }
+
+  function retireTrailing(state: SessionState, rid?: string): void {
+    if (rid === undefined || state.trailing?.rid === rid) state.trailing = undefined;
+  }
+
+  function runSid(rid: string): string | undefined {
+    const active = runs.get(rid);
+    if (active && acceptsRunCorrelation(sessions.get(active.sid))) return active.sid;
+    for (const [sid, state] of sessions) {
+      if (acceptsRunCorrelation(state) && state.trailing?.rid === rid) return sid;
+    }
+    return undefined;
+  }
+
+  function stdinCorrelation(
+    opId: string,
+  ): { readonly sid: string; readonly rid: string } | undefined {
+    for (const run of runs.values()) {
+      if (run.stdinInFlight?.opId === opId) return run;
+    }
+    return undefined;
+  }
+
+  function closeCorrelation(opId: string): { readonly sid: string } | undefined {
+    for (const [sid, state] of sessions) {
+      if (state.close?.opId === opId) return { sid };
+    }
+    return undefined;
+  }
+
+  function assertCorrelation(
+    frameType: OwnerToPageFrame['type'],
+    received: string,
+    expected: string | undefined,
+  ): void {
+    if (expected !== undefined && received !== expected) {
+      throw new PtyProtocolInvariantError(frameType, received, expected);
+    }
+  }
+
+  function assertFrameCorrelation(frame: OwnerToPageFrame): void {
+    switch (frame.type) {
+      case 'pty:run-ready':
+      case 'pty:chunk':
+      case 'pty:exit': {
+        const expectedSid = runSid(frame.rid);
+        assertCorrelation(
+          frame.type,
+          `${frame.sid}/${frame.rid}`,
+          expectedSid === undefined ? undefined : `${expectedSid}/${frame.rid}`,
+        );
+        return;
+      }
+      case 'pty:resize-ack': {
+        const expectedSid = runSid(frame.rid);
+        assertCorrelation(
+          frame.type,
+          `${frame.sid}/${frame.rid}/${frame.opId}`,
+          expectedSid === undefined ? undefined : `${expectedSid}/${frame.rid}/${frame.opId}`,
+        );
+        const pending = resizes.get(frame.opId);
+        assertCorrelation(
+          frame.type,
+          `${frame.sid}/${frame.rid}/${frame.opId}`,
+          pending === undefined ? undefined : `${pending.sid}/${pending.rid}/${frame.opId}`,
+        );
+        return;
+      }
+      case 'pty:stdin-ack': {
+        const expectedSid = runSid(frame.rid);
+        assertCorrelation(
+          frame.type,
+          `${frame.sid}/${frame.rid}/${frame.opId}`,
+          expectedSid === undefined ? undefined : `${expectedSid}/${frame.rid}/${frame.opId}`,
+        );
+        const pending = stdinCorrelation(frame.opId);
+        assertCorrelation(
+          frame.type,
+          `${frame.sid}/${frame.rid}/${frame.opId}`,
+          pending === undefined ? undefined : `${pending.sid}/${pending.rid}/${frame.opId}`,
+        );
+        return;
+      }
+      case 'pty:session-resize-ack': {
+        const pending = sessionResizes.get(frame.opId);
+        assertCorrelation(
+          frame.type,
+          `${frame.sid}/${frame.opId}`,
+          pending === undefined ? undefined : `${pending.sid}/${frame.opId}`,
+        );
+        return;
+      }
+      case 'pty:close-ack': {
+        const pending = closeCorrelation(frame.opId);
+        assertCorrelation(
+          frame.type,
+          `${frame.sid}/${frame.opId}`,
+          pending === undefined ? undefined : `${pending.sid}/${frame.opId}`,
+        );
+        return;
+      }
+      default:
+        return;
+    }
   }
 
   function rejectResizes(sid: string, rid: string, error: Error): void {
@@ -421,13 +533,11 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       };
       runs.set(rid, run);
       s.activeRid = rid;
-      // Remember this run's sink so late chunks (owner output racing past
-      // pty:exit) still land in this session's terminal (see trailingSink).
-      s.trailingSink = opts.onChunk;
       armDeadline(run, `pty:run-ready for ${sid}/${rid}`, (error) => {
         if (runs.get(rid) !== run || run.admitted) return;
         runs.delete(rid);
         if (s.activeRid === rid) s.activeRid = null;
+        retireTrailing(s, rid);
         const fence = fenceSession(s, error);
         run.stdinEnded = true;
         rejectStdin(run, fence);
@@ -452,6 +562,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       } catch (error) {
         runs.delete(rid);
         if (s.activeRid === rid) s.activeRid = null;
+        retireTrailing(s, rid);
         disarmDeadline(run);
         reject(error instanceof Error ? error : new Error(String(error)));
         return;
@@ -714,6 +825,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       return s ? { cwd: s.cwd, env: s.env } : { cwd: '/', env: {} };
     },
     onFrame(frame: OwnerToPageFrame): void {
+      assertFrameCorrelation(frame);
       switch (frame.type) {
         case 'pty:ready': {
           const s = sessions.get(frame.sid);
@@ -736,6 +848,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           }
           disarmDeadline(run);
           run.admitted = true;
+          s.trailing = { rid: run.rid, sink: run.onChunk };
           try {
             run.onStart?.(frame.rid);
           } catch (error) {
@@ -755,15 +868,12 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         }
         case 'pty:chunk': {
           const run = runs.get(frame.rid);
-          // Active run → its onChunk. A chunk that arrives AFTER its run's
-          // pty:exit (late owner output — the dev-server readiness marker from an
-          // async listen() message racing past a restart-abort) → the session's
-          // trailing sink, so it still reaches the terminal instead of vanishing
-          // (the CI marker flake: `[vite] dev server ready` dropped at this seam).
-          (run?.onChunk ?? sessions.get(frame.sid)?.trailingSink)?.(
-            dec.decode(frame.data),
-            frame.stream,
-          );
+          const state = sessions.get(frame.sid);
+          const sink = acceptsRunCorrelation(state)
+            ? (run?.onChunk ??
+              (state.trailing?.rid === frame.rid ? state.trailing.sink : undefined))
+            : undefined;
+          sink?.(dec.decode(frame.data), frame.stream);
           return;
         }
         case 'pty:exit': {
@@ -783,6 +893,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
               s.env = frame.env;
               run.resolve(result);
             } catch (caught) {
+              retireTrailing(s, frame.rid);
               run.reject(caught instanceof Error ? caught : new Error(String(caught)));
             }
           }
@@ -829,6 +940,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           if (frame.ok) {
             s.closed = true;
             s.activeRid = null;
+            retireTrailing(s);
             s.cwd = '/';
             s.env = {};
             const error = new Error(`ClosedHandleError: pty session ${frame.sid} is closed`);
@@ -887,6 +999,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         }
         s.activeRid = null;
         s.closed = true;
+        retireTrailing(s);
       }
       for (const [id, pending] of devConfigs) {
         devConfigs.delete(id);

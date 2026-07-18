@@ -40,6 +40,19 @@
 
 ### Fixed (finite Node Workbench review)
 
+- Persistence health now reports only owner-completed flush failures; transport
+  rejection and observation timeout keep their exact provenance instead of
+  masquerading as storage loss.
+- Archive replacement arms its fatal fence before the durable promoting marker,
+  and environment teardown drains only VFS completion frames admitted before
+  the fence while rejecting all new project work.
+- PTY frames and acknowledgements now correlate the complete session, run, and
+  operation identity; late output remains scoped to its admitted run and is
+  retired on replacement, close, fence, or owner disconnect.
+- Workbench SCM now shares Git's commit-refusal ordering with the shell, including
+  empty messages, clean trees, unstaged changes, and untracked-only trees.
+- Missing owner health transport now fails loudly instead of presenting a
+  healthy no-op subscription.
 - An unknown Git statusMatrix code now degrades only its path: SCM keeps and
   publishes supported siblings, shows the gap with a non-porcelain `!` badge,
   keeps the owner available, and reports retryable degraded SCM health. Gap
@@ -56,7 +69,7 @@
   instead of aborting chooser reconciliation or sandbox reset.
 - Removed the retired page-side workspace, save, reset, file, terminal, and
   dev-server orchestration implementations and their test-only terminal
-  manager; the companion remains the single production state owner.
+  manager; the companion remains the single production state owner (ADR-0292).
 - Workspace archives now round-trip observable Git history and Files-visible
   nested `.rifty` bytes. Root `.rifty` authority and derived trees remain
   excluded; pre-0286 source-only V1 imports keep destination Git (ADR-0286).

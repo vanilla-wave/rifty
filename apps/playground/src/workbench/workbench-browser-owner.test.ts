@@ -1122,7 +1122,11 @@ describe('browser Workbench owner transport', () => {
         type: 'rifty:owner-vfs-durability-ack',
         barrierId: firstBarrier.frame.barrierId,
         ok: false,
-        error: { kind: 'error', name: 'Error', message: 'private OPFS quota detail' },
+        error: {
+          kind: 'error',
+          name: 'PersistFailureError',
+          message: 'private OPFS quota detail',
+        },
       },
     });
     await expect(writing).rejects.toBeInstanceOf(ProjectFileOperationError);

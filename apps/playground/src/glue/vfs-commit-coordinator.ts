@@ -142,6 +142,11 @@ function hasAppliedEvidence(error: Error): boolean {
   return error instanceof VfsCommitAppliedError || error instanceof VfsCommitTimeoutError;
 }
 
+/** Clone-safe proof that the owner completed its flush and found persistence failures. */
+function isCompletedFlushPersistenceFailure(error: Error): boolean {
+  return error.name === 'PersistFailureError';
+}
+
 function assertAck(ack: HostCommitAck, operationId: string, ownerEpoch: OwnerEpoch): HostCommitAck {
   if (ack.operationId !== operationId) {
     throw new VfsCommitProtocolError(
@@ -350,6 +355,7 @@ export function createVfsCommitCoordinator(
         };
 
         const publishDurabilityFailed = (error: Error): void => {
+          if (!isCompletedFlushPersistenceFailure(error)) return;
           const applied = ack;
           const owner = operationState.owner;
           if (applied === null || owner === null) return;

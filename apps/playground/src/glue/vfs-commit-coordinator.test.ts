@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   HostCommitAck,
   HostCommitRequest,
@@ -8,6 +8,7 @@ import type {
 import { VfsCommitAppliedError, VfsCommitProtocolError } from './owner-vfs-protocol.ts';
 import {
   type VfsCommitOwner,
+  VfsCommitTimeoutError,
   VfsOwnerExitedError,
   createVfsCommitCoordinator,
 } from './vfs-commit-coordinator.ts';
@@ -24,6 +25,12 @@ function deferred<T>() {
 
 function snapshot(ownerEpoch: string, treeRevision: number): OwnerVfsRevisionFrame {
   return { ownerEpoch, treeRevision };
+}
+
+function persistenceFailure(message: string): Error {
+  const error = new Error(message);
+  error.name = 'PersistFailureError';
+  return error;
 }
 
 async function settleMicrotasks(): Promise<void> {
@@ -340,7 +347,7 @@ describe('VfsCommitCoordinator', () => {
   // not remain visible only to a later explicit Save.
   it('reports an automatic durability failure and proves recovery at the same applied revision', async () => {
     const ownerClosed = deferred<unknown>();
-    const durabilityFailure = new Error('OPFS quota exhausted');
+    const durabilityFailure = persistenceFailure('OPFS quota exhausted');
     const events: Array<
       | { readonly status: 'failed'; readonly recover: () => Promise<void> }
       | { readonly status: 'proved' }
@@ -404,13 +411,108 @@ describe('VfsCommitCoordinator', () => {
     expect(events.map((event) => event.status)).toEqual(['failed', 'proved']);
   });
 
+  // Fault class: provenance-lie × sibling-drift. Only a completed owner flush
+  // proves persistence provenance; transport failures stay operation-local.
+  it.each([
+    {
+      name: 'synchronous transport throw',
+      fail(): Promise<OwnerVfsDurabilityReceipt> {
+        throw new Error('durability transport threw');
+      },
+    },
+    {
+      name: 'asynchronous transport rejection',
+      fail: () => Promise.reject(new Error('durability transport rejected')),
+    },
+  ])('does not report $name as persistence degradation', async ({ fail }) => {
+    const ownerClosed = deferred<unknown>();
+    const events: string[] = [];
+    let listener = (_frame: OwnerVfsRevisionFrame): void => {};
+    const coordinator = createVfsCommitCoordinator({
+      captureOwner: () => ({
+        ownerEpoch: 'owner-a',
+        isAlive: () => true,
+        closed: ownerClosed.promise,
+        applyHostCommit(request) {
+          return Promise.resolve({
+            operationId: request.operationId,
+            ownerEpoch: 'owner-a',
+            treeRevision: 8,
+            versions: [],
+          });
+        },
+        durabilityBarrier() {
+          return fail();
+        },
+      }),
+      subscribeSnapshots(next) {
+        listener = next;
+        return () => {};
+      },
+      timeoutMs: 1_000,
+      onDurabilityState: (event) => events.push(event.status),
+    });
+
+    const committed = coordinator.commit({ kind: 'mkdir', path: '/next', expectedVersion: null });
+    await settleMicrotasks();
+    listener(snapshot('owner-a', 8));
+    await expect(committed).rejects.toBeInstanceOf(VfsCommitAppliedError);
+    expect(events).toEqual([]);
+  });
+
+  it('does not report a durability observation timeout as persistence degradation', async () => {
+    vi.useFakeTimers();
+    try {
+      const ownerClosed = deferred<unknown>();
+      const durable = deferred<OwnerVfsDurabilityReceipt>();
+      const events: string[] = [];
+      let listener = (_frame: OwnerVfsRevisionFrame): void => {};
+      const coordinator = createVfsCommitCoordinator({
+        captureOwner: () => ({
+          ownerEpoch: 'owner-a',
+          isAlive: () => true,
+          closed: ownerClosed.promise,
+          applyHostCommit(request) {
+            return Promise.resolve({
+              operationId: request.operationId,
+              ownerEpoch: 'owner-a',
+              treeRevision: 8,
+              versions: [],
+            });
+          },
+          durabilityBarrier: () => durable.promise,
+        }),
+        subscribeSnapshots(next) {
+          listener = next;
+          return () => {};
+        },
+        timeoutMs: 10,
+        onDurabilityState: (event) => events.push(event.status),
+      });
+
+      const committed = coordinator.commit({
+        kind: 'mkdir',
+        path: '/timed-out',
+        expectedVersion: null,
+      });
+      const outcome = committed.catch((error: unknown) => error);
+      await settleMicrotasks();
+      listener(snapshot('owner-a', 8));
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(outcome).resolves.toBeInstanceOf(VfsCommitTimeoutError);
+      expect(events).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Fault class: observable-order. Durability completions may arrive out of
   // revision order; an older proof cannot erase a newer failed high-water mark.
   it('retains a newer durability failure when an older barrier succeeds later', async () => {
     const ownerClosed = deferred<unknown>();
     const olderDurability = deferred<OwnerVfsDurabilityReceipt>();
     const newerDurability = deferred<OwnerVfsDurabilityReceipt>();
-    const newerFailure = new Error('revision 10 durability failed');
+    const newerFailure = persistenceFailure('revision 10 durability failed');
     const events: Array<
       | { readonly status: 'failed'; readonly recover: () => Promise<void> }
       | { readonly status: 'proved' }
@@ -483,7 +585,7 @@ describe('VfsCommitCoordinator', () => {
   it('ignores an older durability failure after a newer revision is proved', async () => {
     const ownerClosed = deferred<unknown>();
     const olderDurability = deferred<OwnerVfsDurabilityReceipt>();
-    const olderFailure = new Error('revision 9 durability failed late');
+    const olderFailure = persistenceFailure('revision 9 durability failed late');
     const events: string[] = [];
     const listeners = new Set<(frame: OwnerVfsRevisionFrame) => void>();
     let nextRevision = 8;
@@ -532,7 +634,7 @@ describe('VfsCommitCoordinator', () => {
 
   it('records an exact durability proof before rejecting snapshot cleanup', async () => {
     const ownerClosed = deferred<unknown>();
-    const durabilityFailure = new Error('revision 9 durability failed');
+    const durabilityFailure = persistenceFailure('revision 9 durability failed');
     const cleanupFailure = new Error('snapshot unsubscribe failed');
     const listeners = new Set<(frame: OwnerVfsRevisionFrame) => void>();
     const events: string[] = [];
@@ -650,12 +752,12 @@ describe('VfsCommitCoordinator', () => {
     for (const listener of listeners) listener(snapshot('owner-a', 10));
     await settleMicrotasks();
 
-    olderDurability.reject(new Error('revision 9 durability failed'));
+    olderDurability.reject(persistenceFailure('revision 9 durability failed'));
     await older;
     const olderFailure = events[0];
     if (olderFailure?.status !== 'failed') throw new Error('missing revision 9 recovery');
 
-    newerDurability.reject(new Error('revision 10 durability failed'));
+    newerDurability.reject(persistenceFailure('revision 10 durability failed'));
     await newer;
     expect(events.map((event) => event.status)).toEqual(['failed', 'failed']);
 

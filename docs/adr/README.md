@@ -160,13 +160,13 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0184 | Hoist commit-refusal classifier to git facade |
 | 0185 | Owner-backed SCM and file-manager bridges |
 | 0187 | Install-stamp durability via write-through FIFO order plus verified stamps |
-| 0197 | Playground orchestration extracted as solid-reactive headless core behind injected ports |
 | 0243 | Visible Vite config ownership via durable root-local seed claim |
 | 0261 | Root-bound serialized install trust claims and non-transferable claim ingress |
 | 0281 | Cmd+S is a workspace durability barrier |
 | 0285 | Expose one Workbench health and recovery authority |
 | 0286 | Workspace archives round-trip observable Git and nested dot-rifty state |
 | 0284 | Git status entries preserve per-path classification gaps |
+| 0292 | Workbench authorities replace Solid orchestration core |
 
 ### toolchain-build
 
@@ -281,6 +281,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0260 | 0276 | shared guard law retained; closed vocabulary gains applied-evidence semantic replacement |
 | 0277 | 0278 | finite plans/catalog/TS/SCM/archive grafted; terminal state and owner preview registry added |
 | 0179 | 0284 | git-facade ownership retained; scalar result replaced by ordered rows plus explicit path gaps |
+| 0197 | 0292 | Solid testability motive retained; Workbench companion now owns lifecycle and semantic test seams |
 
 ## Corrections (active)
 

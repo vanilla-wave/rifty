@@ -413,6 +413,21 @@ describe('Workbench owner port startup contract', () => {
 });
 
 describe('Workbench semantic owner close contract', () => {
+  // Fault class: provenance-lie. Missing health transport cannot be represented
+  // as a healthy no-op subscription.
+  it('loudly rejects a missing physical owner health channel', async () => {
+    const h = harness();
+    const opening = h.port.start(ownerInput());
+    h.ready.resolve(undefined);
+    const { owner } = await opening;
+
+    expect(() => owner.subscribeHealth(() => {})).toThrow(/owner health.*unavailable/i);
+
+    const closing = owner.close();
+    h.closed.resolve(0);
+    await closing;
+  });
+
   it('rejects one stable close promise when physical owner exit stays hung', async () => {
     vi.useFakeTimers();
     try {

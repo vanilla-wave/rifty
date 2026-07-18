@@ -1,4 +1,5 @@
 import {
+  EMPTY_COMMIT_MESSAGE_ERROR,
   type GitIdentity,
   type GitPorcelainXY,
   type LogEntry,
@@ -192,6 +193,34 @@ async function harness(): Promise<ScmHarness> {
   await write(vfs, DISCARD, WORKING_DISCARD);
   await write(vfs, UNTRACKED, UNTRACKED_BYTES);
 
+  const scm = await createPlaygroundScmAdapter({
+    projectRoot: PROJECT_ROOT,
+    vfs,
+    git,
+    commitIdentity: COMMIT_IDENTITY,
+  });
+  return { vfs, git, scm };
+}
+
+async function commitRefusalHarness(
+  state: 'clean' | 'staged' | 'unstaged' | 'untracked',
+): Promise<ScmHarness> {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir(PROJECT_ROOT, { recursive: true });
+  const git = makeGit({ fs: vfsToGitFs(vfs), dir: PROJECT_ROOT });
+  await git.init();
+  await write(vfs, '/tracked.txt', Uint8Array.from([1]));
+  await git.add('tracked.txt');
+  await git.commit({
+    message: 'seed commit refusal states',
+    author: COMMIT_IDENTITY,
+    committer: COMMIT_IDENTITY,
+  });
+  if (state === 'staged' || state === 'unstaged') {
+    await write(vfs, '/tracked.txt', Uint8Array.from([2]));
+  }
+  if (state === 'staged') await git.add('tracked.txt');
+  if (state === 'untracked') await write(vfs, '/untracked.txt', Uint8Array.from([3]));
   const scm = await createPlaygroundScmAdapter({
     projectRoot: PROJECT_ROOT,
     vfs,
@@ -428,6 +457,28 @@ describe('Playground SCM real-backend Contract+RED', () => {
       /git\.status-matrix\.999/,
     );
     expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('refuses an empty commit message before consulting staged state', async () => {
+    const h = await commitRefusalHarness('staged');
+    const headBefore = await h.git.resolveRef('HEAD');
+
+    await expect(h.scm.commit('')).rejects.toThrow(EMPTY_COMMIT_MESSAGE_ERROR);
+
+    expect(await h.git.resolveRef('HEAD')).toBe(headBefore);
+  });
+
+  it.each([
+    ['clean', 'nothing to commit, working tree clean'],
+    ['unstaged', 'no changes added to commit'],
+    ['untracked', 'nothing added to commit but untracked files present'],
+  ] as const)('shares the shell commit refusal for a %s tree', async (state, refusal) => {
+    const h = await commitRefusalHarness(state);
+    const headBefore = await h.git.resolveRef('HEAD');
+
+    await expect(h.scm.commit(`${state} refusal`)).rejects.toThrow(refusal);
+
+    expect(await h.git.resolveRef('HEAD')).toBe(headBefore);
   });
 
   it.each([

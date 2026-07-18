@@ -246,7 +246,10 @@ function createSemanticOwner(raw: RawWorkspaceOwnerHandle): WorkbenchOwnerHandle
       if (typeof listener !== 'function') {
         throw new TypeError('Workbench owner health listener must be a function');
       }
-      return raw.subscribeHealth?.(listener) ?? (() => {});
+      if (raw.subscribeHealth === undefined) {
+        throw new Error('Workspace owner health subscription is unavailable');
+      }
+      return raw.subscribeHealth(listener);
     },
 
     close(): Promise<void> {

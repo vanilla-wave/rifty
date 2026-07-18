@@ -390,9 +390,10 @@ export async function createOwnerPlaygroundArchive(
           let staged: readonly ArchiveStageFile[] | null = null;
           await settleArchiveOperation(options.owner.authority, options.projectRoot, () =>
             options.projectVfs.recoverableProjectReplace(
-              async () => {
+              async (armPointOfNoReturn) => {
                 await beginArchiveTransaction(options.projectRoot, options.owner.authority, paths);
                 await materializeStage(options.projectRoot, options.owner.authority, paths, files);
+                armPointOfNoReturn();
                 await durableWrite(
                   options.owner.authority,
                   options.projectRoot,
