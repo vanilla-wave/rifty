@@ -1,7 +1,5 @@
 import { type GitIdentity, type LogEntry, type makeGit, porcelainXY } from '@riftydev/git';
 import type { Vfs } from '@riftydev/vfs';
-import { scmDiffPlan } from '../../glue/scm-diff-plan.ts';
-import type { ScmResourceRow } from '../../glue/scm-status.ts';
 import { assertProjectPath, toOwnerProjectPath } from '../project-file-boundary.ts';
 
 export interface PlaygroundScmChange {
@@ -26,6 +24,11 @@ export interface PlaygroundScmDiff {
   readonly modified: PlaygroundScmBlob;
 }
 
+export interface PlaygroundScmDiffSources {
+  readonly original: 'head' | 'index' | 'empty';
+  readonly modified: 'index' | 'working' | 'empty';
+}
+
 export interface PlaygroundScm {
   snapshot(): PlaygroundScmSnapshot;
   subscribe(listener: (snapshot: PlaygroundScmSnapshot) => void): () => void;
@@ -42,6 +45,48 @@ export interface PlaygroundScmAuthority {
   readonly vfs: Vfs;
   readonly git: ReturnType<typeof makeGit>;
   readonly commitIdentity: GitIdentity;
+}
+
+/** Select exact Git/VFS blobs from the public status code and semantic area. */
+export function selectPlaygroundScmDiffSources(
+  change: Pick<PlaygroundScmChange, 'code' | 'area'>,
+): PlaygroundScmDiffSources {
+  const { area, code } = change;
+  if (
+    (area !== 'staged' && area !== 'working') ||
+    typeof code !== 'string' ||
+    (code !== '??' && !/^[ MAD]{2}$/.test(code))
+  ) {
+    throw new TypeError('Invalid SCM diff input');
+  }
+
+  const index = code[0] ?? ' ';
+  const worktree = code[1] ?? ' ';
+  const hasIndexChange = index !== ' ' && index !== '?';
+  const hasWorkingChange = code === '??' || worktree !== ' ';
+  if ((area === 'staged' && !hasIndexChange) || (area === 'working' && !hasWorkingChange)) {
+    throw new TypeError('Invalid SCM diff input');
+  }
+
+  const hasHeadBlob = code !== '??' && index !== 'A';
+  if (area === 'staged') {
+    return Object.freeze({
+      original: hasHeadBlob ? 'head' : 'empty',
+      modified: index === 'D' ? 'empty' : 'index',
+    });
+  }
+
+  const original: PlaygroundScmDiffSources['original'] = hasIndexChange
+    ? index === 'D'
+      ? 'empty'
+      : 'index'
+    : hasHeadBlob
+      ? 'head'
+      : 'empty';
+  return Object.freeze({
+    original,
+    modified: worktree === 'D' ? 'empty' : 'working',
+  });
 }
 
 function cloneIdentity(identity: GitIdentity): GitIdentity {
@@ -100,24 +145,6 @@ function changesFromStatus(
   staged.sort(byPath);
   working.sort(byPath);
   return Object.freeze([...staged, ...working]);
-}
-
-function badgeFor(change: PlaygroundScmChange): ScmResourceRow['badge'] {
-  if (change.code === '??') return 'U';
-  const status = change.area === 'staged' ? change.code[0] : change.code[1];
-  if (status === 'A') return 'A';
-  if (status === 'D') return 'D';
-  return 'M';
-}
-
-function diffRow(change: PlaygroundScmChange): ScmResourceRow {
-  return {
-    path: change.path,
-    relativePath: change.path.slice(1),
-    code: change.code,
-    side: change.area === 'staged' ? 'index' : 'worktree',
-    badge: badgeFor(change),
-  };
 }
 
 function frozenBlob(
@@ -242,10 +269,10 @@ export async function createPlaygroundScmAdapter(
       ) {
         throw new TypeError('SCM change is not from the current snapshot');
       }
-      const plan = scmDiffPlan(diffRow(change));
+      const sources = selectPlaygroundScmDiffSources(change);
       const [original, modified] = await Promise.all([
-        readBlob(plan.original, publicPath, relative),
-        readBlob(plan.modified, publicPath, relative),
+        readBlob(sources.original, publicPath, relative),
+        readBlob(sources.modified, publicPath, relative),
       ]);
       return Object.freeze({ original, modified });
     },
