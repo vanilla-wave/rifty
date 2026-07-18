@@ -33,7 +33,7 @@ import type {
   TextEdit,
   WorkspaceEdit,
 } from '@riftydev/ts-language-service/lsp-types';
-import { createBrowserOpenPlaygroundWorkbench } from './internal/browser-workbench-composition.ts';
+import { createBrowserOpenPlaygroundWorkbench } from './internal/browser-playground-workbench-composition.ts';
 import type { Workbench, WorkbenchOptions, WorkbenchProjectOpenOptions } from './open-workbench.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
 import type { ProjectDefinition } from './project-definition.ts';
