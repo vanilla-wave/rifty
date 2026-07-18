@@ -769,6 +769,28 @@ describe('openWorkbench controlling service-worker proof', () => {
 });
 
 describe('openWorkbench project operation admission', () => {
+  it('exposes runtime-asset admin and claims clear synchronously against project admission', async () => {
+    const h = harness();
+    const workbench = await h.open(validOptions());
+    const runtimeAssets = (
+      workbench as unknown as {
+        readonly runtimeAssets?: {
+          inspect(): Promise<unknown>;
+          clear(): Promise<unknown>;
+        };
+      }
+    ).runtimeAssets;
+
+    expect(runtimeAssets).toBeDefined();
+    if (runtimeAssets === undefined) return;
+    const clearing = runtimeAssets.clear();
+    await expect(workbench.openProject(definition('clear-race'))).rejects.toBeInstanceOf(
+      ProjectBusyError,
+    );
+    await clearing;
+    await workbench.close();
+  });
+
   it('claims open synchronously so open/open admits only the first call', async () => {
     const h = harness();
     const workbench = await h.open(validOptions());

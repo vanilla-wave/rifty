@@ -179,6 +179,47 @@ function ownerMessage(value: unknown): unknown {
 }
 
 describe('Workbench owner protocol', () => {
+  it('admits only the exact runtime-asset admin request and terminal shapes', () => {
+    expect(
+      pageMessage({ type: 'workbench:runtime-assets-inspect', opId: 'assets-inspect-1' }),
+    ).toEqual({ type: 'workbench:runtime-assets-inspect', opId: 'assets-inspect-1' });
+    expect(pageMessage({ type: 'workbench:runtime-assets-clear', opId: 'assets-clear-1' })).toEqual({
+      type: 'workbench:runtime-assets-clear',
+      opId: 'assets-clear-1',
+    });
+
+    const inspection = {
+      storageClass: 'opfs-best-effort',
+      entryCount: 4,
+      storedBytes: 1024,
+      verifiedObjectCount: 1,
+      verifiedObjectBytes: 512,
+      readySetCount: 1,
+    };
+    expect(
+      ownerMessage({
+        type: 'workbench:runtime-assets-inspected',
+        opId: 'assets-inspect-1',
+        inspection,
+      }),
+    ).toEqual({
+      type: 'workbench:runtime-assets-inspected',
+      opId: 'assets-inspect-1',
+      inspection,
+    });
+    expect(
+      ownerMessage({
+        type: 'workbench:runtime-assets-cleared',
+        opId: 'assets-clear-1',
+        inspection: { ...inspection, entryCount: 0, storedBytes: 0 },
+      }),
+    ).toEqual({
+      type: 'workbench:runtime-assets-cleared',
+      opId: 'assets-clear-1',
+      inspection: { ...inspection, entryCount: 0, storedBytes: 0 },
+    });
+  });
+
   it('carries clone-safe typed boot control instead of process env binding', () => {
     expect(pageMessage({ type: 'workbench:initialize', config: BOOT_CONFIG })).toEqual({
       type: 'workbench:initialize',

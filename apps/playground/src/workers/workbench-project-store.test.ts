@@ -108,6 +108,31 @@ describe('Workbench project store', () => {
     );
   });
 
+  it('does not let an asset-only persistence failure cross-poison project durability', async () => {
+    const h = harness();
+    const report: PersistFailureReport = {
+      failures: [
+        {
+          path: '/.rifty/workbench/v1/runtime-assets/v1/objects/deadbeef',
+          op: 'write',
+          message: 'asset quota exceeded',
+        },
+      ],
+      total: 1,
+      anyFailure: (predicate) =>
+        predicate('/.rifty/workbench/v1/runtime-assets/v1/objects/deadbeef'),
+    };
+    h.authority.flush = async () => report;
+
+    await expect(
+      h.store.waitForDurability({
+        projectKey: 'alpha',
+        revision: h.authority.treeRevision,
+      } as never),
+    ).resolves.toBeUndefined();
+  });
+
+
   it('binds stage ids to their project key and rejects traversal-shaped inputs', async () => {
     const h = harness();
     const stage = await h.store.beginStage('alpha');
