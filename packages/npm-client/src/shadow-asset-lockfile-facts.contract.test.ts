@@ -164,8 +164,35 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
       esbuild: 'npm:@esbuild/wasi-preview1@0.28.0',
     });
 
+    expect(installed.lockfile.rifty?.shadowSubstitutions.applied).toEqual([]);
     expect(shadowAssetPlanFromLockfileBytes(installed.lockfileBytes)).toEqual(
       EMPTY_SHADOW_ASSET_PLAN,
+    );
+  });
+
+  it.each([
+    ['runtime adapter', { runtimeAdapterId: 'rifty.runtime-adapter.other.v1' }, /runtime adapter/i],
+    ['recipe id', { substitutionId: 'rifty.shadow-substitution.other.v1' }, /substitutionRecipe/],
+    ['public name', { publicName: 'not-esbuild' }, /recipe\/publicName/i],
+  ])('rejects %s drift in persisted recipe evidence', async (_label, change, expected) => {
+    const installed = await installEsbuild();
+    const trace = installed.lockfile.rifty?.shadowSubstitutions;
+    const first = trace?.applied[0];
+    if (trace === undefined || first === undefined) {
+      throw new Error('fixture expected one applied shadow substitution');
+    }
+    const lockfile = {
+      ...installed.lockfile,
+      rifty: {
+        shadowSubstitutions: {
+          ...trace,
+          applied: [{ ...first, ...change }],
+        },
+      },
+    };
+
+    expect(() => shadowAssetPlanFromLockfileBytes(enc.encode(JSON.stringify(lockfile)))).toThrow(
+      expected,
     );
   });
 
