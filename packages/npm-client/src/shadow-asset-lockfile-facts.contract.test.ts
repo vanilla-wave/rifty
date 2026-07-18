@@ -254,6 +254,22 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
     );
   });
 
+  it('accepts bin metadata that the lockfile writer deliberately preserves', () => {
+    const lockfile = buildLockfile('root', '1.0.0', [
+      {
+        name: 'vite',
+        version: '8.0.16',
+        dependencies: {},
+        files: {},
+        bin: { '': 'ignored.js', vite: 'bin/vite.js' },
+      },
+    ]);
+
+    expect(shadowAssetPlanFromLockfileBytes(enc.encode(JSON.stringify(lockfile)))).toBe(
+      EMPTY_SHADOW_ASSET_PLAN,
+    );
+  });
+
   it('returns the canonical empty plan for an asset-free v3 lockfile', () => {
     const bytes = enc.encode(
       JSON.stringify({

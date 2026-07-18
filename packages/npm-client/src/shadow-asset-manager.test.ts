@@ -4,8 +4,13 @@ import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import { canonicalShadowDigest } from './canonical-shadow-json.ts';
 import type { InstallTreeResult } from './installer.ts';
+import { RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL } from './linker.ts';
 import { RegistryClient } from './registry.ts';
-import { EMPTY_SHADOW_ASSET_PLAN } from './shadow-asset-plan.ts';
+import {
+  EMPTY_SHADOW_ASSET_PLAN,
+  appliedBuiltinShadowSubstitution,
+  planBuiltinShadowAssets,
+} from './shadow-asset-plan.ts';
 import {
   ShadowAssetError,
   ShadowAssetInstallError,
@@ -201,6 +206,49 @@ describe('ShadowAssetManager', () => {
           assetId: 'foreign-runtime',
         }),
     ).toThrowError(TypeError);
+  });
+
+  it('rejects post-tree evidence whose lockfile trace and plan disagree', () => {
+    const applied = appliedBuiltinShadowSubstitution('esbuild', '^0.28.0', '0.28.0');
+    if (applied === null) throw new Error('fixture expected the builtin esbuild substitution');
+    const required = planBuiltinShadowAssets([applied]);
+    const treeResult = (trace: ShadowAssetPlan['substitutions']): InstallTreeResult => ({
+      packages: [],
+      lockfile: {
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {},
+        rifty: {
+          shadowSubstitutions: {
+            protocol: RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL,
+            applied: trace,
+          },
+        },
+      },
+      conflicts: [],
+      provenance: { resolution: 'metadata', packages: [] },
+    });
+    const failure = (plan: ShadowAssetPlan) => ({
+      message: 'asset persistence failed',
+      requiredSetDigest: plan.requiredSetDigest,
+      phase: 'persist' as const,
+      transports: [],
+      recovery: 'clear-and-retry' as const,
+    });
+
+    expect(
+      () => new ShadowAssetInstallError(treeResult([]), required, failure(required)),
+    ).toThrow(/lockfile trace.*plan/i);
+    expect(
+      () =>
+        new ShadowAssetInstallError(
+          treeResult(required.substitutions),
+          EMPTY_SHADOW_ASSET_PLAN,
+          failure(EMPTY_SHADOW_ASSET_PLAN),
+        ),
+    ).toThrow(/lockfile trace.*plan/i);
   });
 
   it('joins the real STD RegistryClient/tarball-cache adapter to MemoryVfs readiness', async () => {
