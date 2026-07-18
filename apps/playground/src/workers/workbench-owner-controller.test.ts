@@ -606,8 +606,9 @@ describe('Workbench owner controller', () => {
   });
 
   // Fault classes: provenance-lie × observable-order. The close fence rejects
-  // new project work, but completion legs admitted before it still drain.
-  it('drains admitted VFS completion frames after the close fence while rejecting new work', async () => {
+  // new durability work, while exact commit receipt/cleanup candidates still
+  // reach the VFS authority that validates their retained terminal identity.
+  it('drains correlated VFS receipts after the close fence while rejecting new work', async () => {
     const h = harness();
     const closeGate = deferred<void>();
     h.createProject.mockImplementationOnce(async (input) => {
@@ -674,15 +675,6 @@ describe('Workbench owner controller', () => {
     expect(runtime.handleFrame.mock.calls.map(([frame]) => frame)).toEqual([
       { type: 'vfs', frame: { type: 'rifty:owner-vfs-commit-received', terminal } },
       { type: 'vfs', frame: { type: 'rifty:owner-vfs-commit-cleanup', terminal } },
-      {
-        type: 'vfs',
-        frame: {
-          type: 'rifty:owner-vfs-durability',
-          barrierId: 'barrier-before-close',
-          ownerEpoch: 'owner-a',
-          treeRevision: 2,
-        },
-      },
     ]);
 
     closeGate.resolve();
@@ -692,7 +684,7 @@ describe('Workbench owner controller', () => {
       projectToken: token,
       frame: { type: 'rifty:owner-vfs-commit-cleanup', terminal },
     });
-    expect(runtime.handleFrame).toHaveBeenCalledTimes(3);
+    expect(runtime.handleFrame).toHaveBeenCalledTimes(2);
   });
 
   it('dispatches PTY control while an exec is pending and does not queue close behind the run', async () => {

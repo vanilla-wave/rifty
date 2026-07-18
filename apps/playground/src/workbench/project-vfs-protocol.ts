@@ -347,6 +347,12 @@ function inspectOwnerVfsError(value: unknown): OwnerVfsErrorFrame {
       exact(error, ['kind', 'name', 'message', 'operationId'], 'owner project VFS operation reuse');
       nonEmptyString(error.operationId, 'owner project VFS reused operation id');
       break;
+    case 'persistence-failure':
+      exact(error, ['kind', 'name', 'message'], 'owner project VFS persistence failure');
+      if (error.name !== 'PersistFailureError') {
+        throw invalid('owner project VFS persistence failure name');
+      }
+      break;
     case 'version-conflict':
       exact(
         error,

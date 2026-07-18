@@ -767,8 +767,7 @@ function isProjectDrainMessage(message: ProjectInputMessage): boolean {
   if (message.type !== 'workbench:project-vfs') return false;
   return (
     message.frame.type === 'rifty:owner-vfs-commit-received' ||
-    message.frame.type === 'rifty:owner-vfs-commit-cleanup' ||
-    message.frame.type === 'rifty:owner-vfs-durability'
+    message.frame.type === 'rifty:owner-vfs-commit-cleanup'
   );
 }
 

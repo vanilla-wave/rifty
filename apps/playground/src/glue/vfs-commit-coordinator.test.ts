@@ -5,7 +5,11 @@ import type {
   OwnerVfsDurabilityReceipt,
   OwnerVfsRevisionFrame,
 } from './owner-vfs-protocol.ts';
-import { VfsCommitAppliedError, VfsCommitProtocolError } from './owner-vfs-protocol.ts';
+import {
+  VfsCommitAppliedError,
+  VfsCommitProtocolError,
+  VfsPersistenceFailureError,
+} from './owner-vfs-protocol.ts';
 import {
   type VfsCommitOwner,
   VfsCommitTimeoutError,
@@ -28,9 +32,7 @@ function snapshot(ownerEpoch: string, treeRevision: number): OwnerVfsRevisionFra
 }
 
 function persistenceFailure(message: string): Error {
-  const error = new Error(message);
-  error.name = 'PersistFailureError';
-  return error;
+  return new VfsPersistenceFailureError(message);
 }
 
 async function settleMicrotasks(): Promise<void> {
@@ -423,6 +425,14 @@ describe('VfsCommitCoordinator', () => {
     {
       name: 'asynchronous transport rejection',
       fail: () => Promise.reject(new Error('durability transport rejected')),
+    },
+    {
+      name: 'generic error spoofing the legacy persistence name',
+      fail: () => {
+        const error = new Error('transport supplied an untrusted error name');
+        error.name = 'PersistFailureError';
+        return Promise.reject(error);
+      },
     },
   ])('does not report $name as persistence degradation', async ({ fail }) => {
     const ownerClosed = deferred<unknown>();

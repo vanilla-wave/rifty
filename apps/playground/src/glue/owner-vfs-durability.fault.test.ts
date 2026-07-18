@@ -12,7 +12,7 @@ import type {
   OwnerVfsDurabilityReceipt,
   OwnerVfsRevisionFrame,
 } from './owner-vfs-protocol.ts';
-import { VfsCommitAppliedError } from './owner-vfs-protocol.ts';
+import { VfsCommitAppliedError, VfsPersistenceFailureError } from './owner-vfs-protocol.ts';
 import { SnapshotFs } from './snapshot-fs.ts';
 import { type VfsCommitOwner, createVfsCommitCoordinator } from './vfs-commit-coordinator.ts';
 import { collectSnapshot } from './vfs-snapshot-port.ts';
@@ -160,7 +160,10 @@ describe('owner VFS durability integrated faults', () => {
     const rejected = await outcome;
     expect(rejected.ok).toBe(false);
     if (rejected.ok) throw new Error('expected durability rejection');
-    expect(rejected.error).toBeInstanceOf(VfsCommitAppliedError);
+    if (!(rejected.error instanceof VfsCommitAppliedError)) {
+      throw new Error('expected applied commit failure');
+    }
+    expect(rejected.error.cause).toBeInstanceOf(VfsPersistenceFailureError);
     expect(rejected.error).toMatchObject({
       applied: { ownerEpoch: 'owner-opfs', treeRevision: 1 },
       cause: {
@@ -203,7 +206,10 @@ describe('owner VFS durability integrated faults', () => {
     const rejected = await outcome;
     expect(rejected.ok).toBe(false);
     if (rejected.ok) throw new Error('expected durability rejection');
-    expect(rejected.error).toBeInstanceOf(VfsCommitAppliedError);
+    if (!(rejected.error instanceof VfsCommitAppliedError)) {
+      throw new Error('expected applied commit failure');
+    }
+    expect(rejected.error.cause).toBeInstanceOf(VfsPersistenceFailureError);
     expect(rejected.error).toMatchObject({
       applied: { ownerEpoch: 'owner-opfs', treeRevision: 1 },
       cause: {

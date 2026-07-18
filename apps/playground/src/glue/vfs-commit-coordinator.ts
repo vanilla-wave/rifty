@@ -7,7 +7,11 @@ import type {
   OwnerVfsRevisionFrame,
   TreeRevision,
 } from './owner-vfs-protocol.ts';
-import { VfsCommitAppliedError, VfsCommitProtocolError } from './owner-vfs-protocol.ts';
+import {
+  VfsCommitAppliedError,
+  VfsCommitProtocolError,
+  VfsPersistenceFailureError,
+} from './owner-vfs-protocol.ts';
 
 export type VfsCommitStage = 'reflection' | 'durability';
 
@@ -142,9 +146,9 @@ function hasAppliedEvidence(error: Error): boolean {
   return error instanceof VfsCommitAppliedError || error instanceof VfsCommitTimeoutError;
 }
 
-/** Clone-safe proof that the owner completed its flush and found persistence failures. */
+/** Decoded only from the owner wire's completed-flush outcome. */
 function isCompletedFlushPersistenceFailure(error: Error): boolean {
-  return error.name === 'PersistFailureError';
+  return error instanceof VfsPersistenceFailureError;
 }
 
 function assertAck(ack: HostCommitAck, operationId: string, ownerEpoch: OwnerEpoch): HostCommitAck {

@@ -1123,7 +1123,7 @@ describe('browser Workbench owner transport', () => {
         barrierId: firstBarrier.frame.barrierId,
         ok: false,
         error: {
-          kind: 'error',
+          kind: 'persistence-failure',
           name: 'PersistFailureError',
           message: 'private OPFS quota detail',
         },
