@@ -7,6 +7,7 @@ const c: ParityCase = {
       'fallback.foo.bar': 'this source must not execute',
       'data.json': 'this is deliberately invalid JSON',
       'config.ts': 'const uncompiled: never = "must not execute";\n',
+      'message.txt': 'raw text must not bypass the current js hook',
       '.hidden': 'this source must not execute',
       'dir.with.dot/plain': 'this source must not execute',
     },
@@ -35,6 +36,7 @@ const c: ParityCase = {
       require.extensions['.js'] = hook('js-fallback');
       const compiled = require('./config.ts');
       results.push(compiled);
+      results.push(require('./message.txt'));
       require.extensions['.hidden'] = hook('wrong-hidden');
       require.extensions['.with.dot/plain'] = hook('wrong-parent');
       results.push(require('./.hidden'));
@@ -52,7 +54,7 @@ const c: ParityCase = {
     }
   `,
   expected:
-    '[{"label":"long","receiver":true,"filename":"multi.foo.bar"},{"label":"short","receiver":true,"filename":"fallback.foo.bar"},{"label":"json","receiver":true,"filename":"data.json"},{"label":"js-fallback","receiver":true,"filename":"config.ts"},{"label":"js-fallback","receiver":true,"filename":".hidden"},{"label":"js-fallback","receiver":true,"filename":"plain"},true]\n',
+    '[{"label":"long","receiver":true,"filename":"multi.foo.bar"},{"label":"short","receiver":true,"filename":"fallback.foo.bar"},{"label":"json","receiver":true,"filename":"data.json"},{"label":"js-fallback","receiver":true,"filename":"config.ts"},{"label":"js-fallback","receiver":true,"filename":"message.txt"},{"label":"js-fallback","receiver":true,"filename":".hidden"},{"label":"js-fallback","receiver":true,"filename":"plain"},true]\n',
 };
 
 export default c;

@@ -79,7 +79,7 @@ describe('CJS extension hooks', () => {
     });
   });
 
-  it.each(['.ts', '.tsx', '.jsx', '.cjs', '.json', '.txt', '.coffee', '.foo.bar'])(
+  it.each(['.ts', '.tsx', '.jsx', '.cjs', '.json', '.node', '.txt', '.coffee', '.foo.bar'])(
     'dispatches a registered %s suffix like Node',
     (extension) => {
       const vfs = new MemoryFsSync();
@@ -172,6 +172,84 @@ describe('CJS extension hooks', () => {
     expect(loader.require('./main.js', '/work/entry.js')).toEqual({
       compiled: true,
       receiver: true,
+    });
+  });
+
+  it('routes resolver-owned text through the current .js fallback', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/package.json': JSON.stringify({ type: 'commonjs' }),
+      '/work/main.js': `
+        const defaultLoader = require.extensions['.js'];
+        require.extensions['.js'] = function (module, filename) {
+          module.exports = {
+            receiver: this === require.extensions,
+            filename: filename.slice(filename.lastIndexOf('/') + 1),
+          };
+        };
+        try {
+          module.exports = require('./message.txt');
+        } finally {
+          require.extensions['.js'] = defaultLoader;
+        }
+      `,
+      '/work/message.txt': 'raw text must not bypass the current js hook',
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    expect(loader.require('./main.js', '/work/entry.js')).toEqual({
+      receiver: true,
+      filename: 'message.txt',
+    });
+  });
+
+  it('starts with Node default extension keys and a callable native-addon ceiling', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/main.js': `
+        const surface = {
+          keys: Object.keys(require.extensions),
+          nativeType: typeof require.extensions['.node'],
+        };
+        let missing;
+        let failure;
+        try { require('./missing.node'); }
+        catch (error) { missing = { name: error.name, code: error.code }; }
+        try { require('./addon.node'); }
+        catch (error) { failure = { name: error.name, feature: error.feature }; }
+        const nativeLoader = require.extensions['.node'];
+        require.extensions['.node'] = function (module, filename) {
+          module.exports = {
+            receiver: this === require.extensions,
+            filename: filename.slice(filename.lastIndexOf('/') + 1),
+          };
+        };
+        try {
+          module.exports = {
+            surface,
+            missing,
+            failure,
+            retried: require('./addon.node'),
+          };
+        } finally {
+          require.extensions['.node'] = nativeLoader;
+        }
+      `,
+      '/work/addon.node': 'module.exports = "must not execute as JavaScript";\n',
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    expect(loader.require('./main.js', '/work/entry.js')).toEqual({
+      surface: {
+        keys: ['.js', '.json', '.node'],
+        nativeType: 'function',
+      },
+      missing: { name: 'ModuleLoadError', code: 'MODULE_NOT_FOUND' },
+      failure: {
+        name: 'NotImplementedError',
+        feature: 'module-loader.native-addon',
+      },
+      retried: { receiver: true, filename: 'addon.node' },
     });
   });
 

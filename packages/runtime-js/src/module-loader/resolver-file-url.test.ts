@@ -15,5 +15,15 @@ describe('resolver file: URL imports', () => {
       default: number;
     };
     expect(ns.default).toBe(42);
+    await expect(loader.import('FiLe:///app/mod.mjs', '/app/entry.mjs')).resolves.toBe(ns);
+  });
+
+  it.each(['data:', 'DaTa:'])('keeps unsupported %s URLs on the same loud boundary', async (scheme) => {
+    const vfs = new MemoryFsSync();
+    const loader = createModuleLoader(vfs, { cwd: '/app' });
+
+    await expect(
+      loader.import(`${scheme}text/javascript,export default 42`, '/app/entry.mjs'),
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_PROTOCOL' });
   });
 });

@@ -4,6 +4,7 @@ const c: ParityCase = {
   setup: {
     files: {
       'a/b.js': ';\n',
+      'value.cjs': 'module.exports = 42;\n',
     },
   },
   code: `
@@ -26,12 +27,15 @@ const c: ParityCase = {
 
     capture('fs', () => readFileSync(encodedSlash));
     capture('module', () => createRequire(encodedSlash));
+    const mixedCaseBase = pathToFileURL('./entry.cjs').href.replace(/^file:/, 'FiLe:');
+    capture('module-case', () => createRequire(mixedCaseBase)('./value.cjs'));
     console.warn = () => {};
     capture('worker', () => new Worker(encodedSlash));
   `,
   expected: [
     'fs:ERR_INVALID_FILE_URL_PATH',
     'module:ERR_INVALID_ARG_VALUE',
+    'module-case:LOADED',
     'worker:ERR_INVALID_FILE_URL_PATH',
     '',
   ].join('\n'),
