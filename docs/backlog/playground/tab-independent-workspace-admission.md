@@ -6,8 +6,8 @@ created: 2026-07-18
 why: Workbench already has stable origin storage and a single-page Web Lock, but a fresh competing Playground tab shows a generic boot-failure toast and independent-tab continuity has no app-level acceptance proof.
 user_story: As a developer editing a local Node project in rifty, I want a new tab to reopen my Saved files after the prior tab closes, while a simultaneous tab tells me where the active editor is instead of looking broken.
 blocked_by: []
-sources: [ADR-0263, ADR-0278, ADR-0281, ADR-0293]
-code: [apps/playground/src/main.tsx, apps/playground/src/adapters/playground-app.tsx, apps/playground/src/adapters/playground-workbench-host.ts, apps/playground/src/workbench/open-workbench.ts, apps/playground/src/workbench/errors.ts]
+sources: [ADR-0263, ADR-0278, ADR-0281, ADR-0292, ADR-0293]
+code: [apps/playground/src/main.tsx, apps/playground/src/adapters/playground-app.tsx, apps/playground/src/adapters/playground-page-entry.ts, apps/playground/src/adapters/playground-workbench-host.ts, apps/playground/src/workbench/open-workbench.ts, apps/playground/src/workbench/errors.ts]
 ---
 
 ## Context
@@ -114,6 +114,8 @@ the typed occupied outcome; unsupported browser capabilities remain loud at
 - ADR-0293 fixes typed origin contention, first-party translation, entry order,
   ownership transfer, notice/reload UX, and deliberate absence of multi-tab
   editing.
+- ADR-0292 keeps the page-entry adapter one-shot and presentation-specific; it
+  returns no controller and owns no project/session/run state.
 - ADR-0263 remains the one-lock, one-Workbench storage/lifecycle authority.
 - ADR-0278/0282 own existing selected legacy adoption; this capability neither
   depends on nor expands it.

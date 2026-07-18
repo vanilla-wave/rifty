@@ -42,7 +42,7 @@ export const ALLOWLIST = [
   {
     file: 'apps/playground/src/App.test.ts',
     count: 40,
-    digest: '304a5436a0e2',
+    digest: 'f4aaffe99107',
     why: 'browser App imports xterm; residual pins only client JSX/composition bindings, including admitted Workbench handoff and persistence-risk beforeunload wiring; semantic lifecycle and diagnostics behavior lives in adapter contracts + browser e2e',
   },
   {

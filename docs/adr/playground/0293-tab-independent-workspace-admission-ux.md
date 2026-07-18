@@ -49,10 +49,13 @@ a second workspace id/path would likewise fork the already-stable catalog.
    replaces the cold-boot skeleton with a standalone `role=alert` notice and
    constructs neither terminal persistence nor App. The Workbench's lock-null
    path already starts no owner, project runtime, or writable Workbench store.
-5. **Ownership transfers exactly once.** Before App mount, the entry coordinator
-   owns the opened Workbench and closes it if terminal construction or mount
-   fails. After successful mount, App runtime owns and closes it. Cleanup
-   failures aggregate with the triggering failure rather than hiding either.
+5. **Ownership transfers exactly once.** Before App mount, the one-shot
+   first-party page-entry adapter owns the opened Workbench and closes it if
+   terminal construction or mount fails. After successful mount, App runtime
+   owns and closes it. Cleanup failures aggregate with the triggering failure
+   rather than hiding either. The adapter returns no lifecycle controller,
+   survives no successful mount, and owns no ProjectSession/run state; it is
+   not the orchestration core retired by ADR-0292.
 6. **The lease follows the Workbench, not a ProjectSession.** Project close,
    reset, save, or switch never releases it. A contender never auto-promotes;
    after the owner tab closes, explicit Reload is the only retry.
@@ -67,6 +70,9 @@ a second workspace id/path would likewise fork the already-stable catalog.
 This corrects ADR-0263's generic “contention rejects” clause only: origin
 contention now has a stable public error prototype; its one-lock/one-Workbench
 lifetime and every other ADR-0263 decision stand.
+
+This does not correct ADR-0292. Admission handoff is finite first-party page
+composition; executable lifecycle and teardown semantics remain in Workbench.
 
 ## Reference contract
 
