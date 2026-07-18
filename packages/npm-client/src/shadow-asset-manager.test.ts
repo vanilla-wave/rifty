@@ -578,6 +578,49 @@ describe('ShadowAssetManager', () => {
     expect(await manager.admin.inspectUsage()).toMatchObject({ readySetCount: 0 });
   });
 
+  it('preserves per-descriptor fill provenance for cap-distinct contracts sharing one hash', async () => {
+    const { plan, tgz } = fixture();
+    const descriptor = plan.assets[0]!;
+    const assets: ShadowAssetPlan['assets'] = [
+      { ...descriptor, id: 'runtime-a' },
+      { ...descriptor, id: 'runtime-b', maxTarballBytes: descriptor.maxTarballBytes + 1 },
+    ];
+    const capDistinct: ShadowAssetPlan = {
+      requiredSetDigest: canonicalShadowDigest({
+        schema: 1,
+        substitutions: plan.substitutions,
+        assets,
+      }),
+      substitutions: plan.substitutions,
+      assets,
+    };
+    const acquire = vi.fn(async (requests: readonly ShadowAssetSourceRequest[]) =>
+      requests.map((request) => ({
+        request,
+        bytes: tgz.slice(),
+        fillTransport: 'standard' as const,
+        fillCache:
+          request.maxTarballBytes === descriptor.maxTarballBytes
+            ? ('network' as const)
+            : ('tarball' as const),
+      })),
+    );
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: { acquire, close: async () => undefined },
+    });
+
+    const result = await manager.installer.ensure(capDistinct);
+    expect(result.kind).toBe('ready');
+    if (result.kind !== 'ready') throw new Error('expected ready');
+    expect(result.receipt.assets.map(({ id, fillCache }) => ({ id, fillCache }))).toEqual([
+      { id: 'runtime-a', fillCache: 'network' },
+      { id: 'runtime-b', fillCache: 'tarball' },
+    ]);
+    expect(acquire).toHaveBeenCalledTimes(1);
+    expect(acquire.mock.calls[0]?.[0]).toHaveLength(2);
+  });
+
   it('replays and forwards object-flight progress to sibling sets and runtime readers', async () => {
     const { plan, tgz } = fixture();
     const sibling = siblingPlan(plan, '1.0.0');
