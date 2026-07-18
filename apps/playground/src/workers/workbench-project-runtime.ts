@@ -40,6 +40,7 @@ import {
   createProjectTerminalNamespace,
 } from './project-terminal-namespace.ts';
 import { type PtyServer, createPtyServer } from './pty-server.ts';
+import { runtimeAssetPublicError } from './runtime-asset-public-error.ts';
 import { createPreviewScope } from './vite-cli-prep.ts';
 
 export interface WorkbenchProjectRuntimeOptions {
@@ -178,14 +179,19 @@ export function createWorkbenchProjectRuntime(
     options.runtimeAssetReader === undefined
       ? undefined
       : Object.freeze({
-          reserve: (admissionOptions?: Readonly<{ signal?: AbortSignal }>) =>
-            options.packageState.reserveChildAdmission(
-              {
-                root: projectRoot,
-                slug: options.packageConfig.slug,
-              },
-              admissionOptions,
-            ),
+          reserve: async (admissionOptions?: Readonly<{ signal?: AbortSignal }>) => {
+            try {
+              return await options.packageState.reserveChildAdmission(
+                {
+                  root: projectRoot,
+                  slug: options.packageConfig.slug,
+                },
+                admissionOptions,
+              );
+            } catch (error) {
+              throw runtimeAssetPublicError(error) ?? error;
+            }
+          },
           runtimeReader: options.runtimeAssetReader,
         });
 

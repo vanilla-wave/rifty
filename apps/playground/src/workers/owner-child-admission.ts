@@ -105,6 +105,20 @@ async function awaitChildAndSessionSettlement(
   }
 }
 
+function createSessionSettlement(session: PreparedSession): () => Promise<void> {
+  let settlement: Promise<void> | null = null;
+  return () => {
+    if (settlement !== null) return settlement;
+    try {
+      settlement = Promise.resolve(session.dispose());
+    } catch (error) {
+      settlement = Promise.reject(error);
+    }
+    void settlement.catch(() => {});
+    return settlement;
+  };
+}
+
 /**
  * One child-admission transaction. After the FIFO reservation resolves, session
  * creation, physical spawn, supervision attachment, and commit stay synchronous.
@@ -140,8 +154,10 @@ export async function admitOwnerChild<Handle extends OwnerChildAdmissionHandle, 
   let physicalExit: Promise<void> | undefined;
   let physicalExited = false;
   let detachAbort = (): void => {};
+  let disposeSession = createSessionSettlement(NO_SESSION);
   try {
     session = dependencies.prepareSession(reservation, authority);
+    disposeSession = createSessionSettlement(session);
     options.beforeSpawn?.();
     handle = options.spawn(session.capabilityPorts);
     physicalExit = createSupervisedPromise<void>((resolve) => {
@@ -153,7 +169,7 @@ export async function admitOwnerChild<Handle extends OwnerChildAdmissionHandle, 
 
     let abortBound = false;
     const onAbort = (): void => {
-      void session.dispose();
+      void disposeSession();
     };
     if (options.signal !== undefined) {
       abortBound = true;
@@ -165,26 +181,20 @@ export async function admitOwnerChild<Handle extends OwnerChildAdmissionHandle, 
       };
       if (options.signal.aborted) onAbort();
     }
-    const settleSession = (): void => {
+    const settleOnExit = (): void => {
       detachAbort();
-      void session.dispose();
+      void disposeSession();
     };
-    void physicalExit.then(settleSession, settleSession);
+    void physicalExit.then(settleOnExit, settleOnExit);
 
-    const lifecycle = Object.freeze({ dispose: session.dispose });
+    const lifecycle = Object.freeze({ dispose: disposeSession });
     const result = options.supervise(handle, lifecycle);
     reservation.commit();
     return result as Awaited<Result>;
   } catch (error) {
     const failures: unknown[] = [];
     detachAbort();
-    let sessionSettlement: Promise<void>;
-    try {
-      sessionSettlement = session.dispose();
-    } catch (disposeError) {
-      failures.push(disposeError);
-      sessionSettlement = Promise.resolve();
-    }
+    const sessionSettlement = disposeSession();
     if (handle === undefined) {
       try {
         reservation.abortBeforeSpawn(error);
@@ -199,19 +209,16 @@ export async function admitOwnerChild<Handle extends OwnerChildAdmissionHandle, 
       throw aggregateLifecycleFailure(error, failures, 'owner child failed before physical spawn');
     }
 
-    let canAwaitPhysicalExit = physicalExit !== undefined;
     try {
       const killed = handle.kill('SIGTERM');
       if (killed === false && !physicalExited) {
         failures.push(new Error('owner child closed without an exit event'));
-        canAwaitPhysicalExit = false;
       }
     } catch (killError) {
       failures.push(killError);
-      if (!physicalExited) canAwaitPhysicalExit = false;
     }
     const exited =
-      canAwaitPhysicalExit && physicalExit !== undefined
+      physicalExit !== undefined
         ? awaitChildAndSessionSettlement(physicalExit, sessionSettlement)
         : sessionSettlement;
     try {

@@ -1714,15 +1714,40 @@ class ShadowAssetManagerImpl implements ShadowAssetManager {
     signal: AbortSignal,
   ): Promise<ShadowAssetEnsureResult> {
     throwIfAborted(signal);
+    for (let index = 0; index < plan.assets.length; index += 1) {
+      throwIfAborted(signal);
+      const asset = plan.assets[index]!;
+      emit({
+        phase: 'cache-check',
+        assetId: asset.id,
+        assetIndex: index,
+        assetCount: plan.assets.length,
+      });
+    }
+    const verifiedReceiptAssets = new Set<number>();
     const hit = await waitWithSignal(
-      this.#lookupReceipt(plan.requiredSetDigest, plan).catch(() => null),
+      this.#lookupReceipt(plan.requiredSetDigest, plan, (asset, index) => {
+        throwIfAborted(signal);
+        verifiedReceiptAssets.add(index);
+        if (asset.id !== plan.assets[index]?.id) {
+          throw new Error('verified receipt asset order does not match its exact plan');
+        }
+      }).catch(() => null),
       signal,
     );
     if (hit) {
       for (let index = 0; index < plan.assets.length; index += 1) {
         const asset = plan.assets[index]!;
+        if (!verifiedReceiptAssets.has(index)) {
+          throw shadowFailure(
+            plan,
+            'verify',
+            new Error(`ready receipt omitted object verification for ${asset.id}`),
+            asset.id,
+          );
+        }
         emit({
-          phase: 'cache-check',
+          phase: 'verify',
           assetId: asset.id,
           assetIndex: index,
           assetCount: plan.assets.length,
@@ -1755,12 +1780,6 @@ class ShadowAssetManagerImpl implements ShadowAssetManager {
       for (let index = 0; index < plan.assets.length; index += 1) {
         throwIfAborted(signal);
         const descriptor = plan.assets[index]!;
-        emit({
-          phase: 'cache-check',
-          assetId: descriptor.id,
-          assetIndex: index,
-          assetCount: plan.assets.length,
-        });
         const existingObject = await waitWithSignal(
           this.#readVerifiedObject(descriptor).catch(() => null),
           signal,
@@ -1772,6 +1791,12 @@ class ShadowAssetManagerImpl implements ShadowAssetManager {
           );
           if (prior) {
             provenance.set(descriptor.id, prior);
+            emit({
+              phase: 'verify',
+              assetId: descriptor.id,
+              assetIndex: index,
+              assetCount: plan.assets.length,
+            });
             continue;
           }
         }
@@ -2051,7 +2076,9 @@ class ShadowAssetManagerImpl implements ShadowAssetManager {
     return freezeDeep(receipt) as ShadowAssetReadyReceipt;
   }
 
-  async #readVerifiedObject(descriptor: ShadowAssetDescriptor): Promise<Uint8Array | null> {
+  async #readVerifiedObject(
+    descriptor: Pick<ShadowAssetDescriptor, 'id' | 'memberSha256' | 'memberSize'>,
+  ): Promise<Uint8Array | null> {
     const bytes = await this.#storage.read({ kind: 'object', sha256: descriptor.memberSha256 });
     if (bytes === null) return null;
     if (
@@ -2097,6 +2124,7 @@ class ShadowAssetManagerImpl implements ShadowAssetManager {
   async #lookupReceipt(
     requiredSetDigest: string,
     expectedPlan?: ShadowAssetPlan,
+    onVerifiedAsset?: (asset: ShadowAssetReadyReceipt['assets'][number], index: number) => void,
   ): Promise<ShadowAssetReadyReceipt | null> {
     if (!SHA256.test(requiredSetDigest)) throw new TypeError('invalid requiredSetDigest');
     if (this.#unacknowledgedReadySets.has(requiredSetDigest)) return null;
@@ -2118,15 +2146,10 @@ class ShadowAssetManagerImpl implements ShadowAssetManager {
       return null;
     }
     if (expectedPlan && !receiptMatchesPlan(receipt, expectedPlan)) return null;
-    for (const asset of receipt.assets) {
-      const bytes = await this.#storage.read({ kind: 'object', sha256: asset.memberSha256 });
-      if (
-        !bytes ||
-        bytes.byteLength !== asset.memberSize ||
-        sha256Hex(bytes) !== asset.memberSha256
-      ) {
-        return null;
-      }
+    for (let index = 0; index < receipt.assets.length; index += 1) {
+      const asset = receipt.assets[index]!;
+      if ((await this.#readVerifiedObject(asset)) === null) return null;
+      onVerifiedAsset?.(asset, index);
     }
     return receipt;
   }

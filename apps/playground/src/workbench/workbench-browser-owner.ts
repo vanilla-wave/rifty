@@ -251,7 +251,9 @@ function createRuntimeAssetProgressProtocol(
       if (progress.phase === 'ready') {
         if (
           assets.size !== assetCount ||
-          [...assets.values()].some((asset) => asset.phase === 'fetch')
+          [...assets.values()].some(
+            (asset) => asset.phase !== 'verify' && asset.phase !== 'persist',
+          )
         ) {
           throw invalid('declared ready before every asset completed');
         }
