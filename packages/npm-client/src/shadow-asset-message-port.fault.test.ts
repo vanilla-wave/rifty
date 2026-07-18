@@ -43,6 +43,23 @@ function readFrame(
   };
 }
 
+function progressFrame(
+  requestId: number,
+  fixture: ReturnType<typeof smallPortFixture>,
+): Readonly<Record<string, unknown>> {
+  return {
+    protocol: 'rifty.shadow-assets/v1',
+    type: 'progress',
+    requestId,
+    progress: {
+      phase: 'cache-check',
+      assetId: fixture.plan.assets[0]!.id,
+      assetIndex: 0,
+      assetCount: 1,
+    },
+  };
+}
+
 function stalledReader(
   onOptions?: (options: ShadowAssetReadOptions) => void,
 ): ShadowAssetRuntimeReader {
@@ -249,6 +266,39 @@ describe('shadow asset MessagePort corrupt-input faults', () => {
     }
   });
 
+  it('server rejects a newly admitted request id lower than its monotonic high-water mark', async () => {
+    const api = shadowAssetPortApi();
+    const fixture = smallPortFixture();
+    let serverSignal: AbortSignal | undefined;
+    const channel = new MessageChannel();
+    const inbox = new PortInbox(channel.port2);
+    const reader = stalledReader((options) => {
+      serverSignal = options.signal;
+    });
+    const readVerified = vi.spyOn(reader, 'readVerified');
+    const server = api.startShadowAssetPortServer({
+      port: channel.port1,
+      plan: fixture.plan,
+      reader,
+    });
+    try {
+      channel.port2.postMessage(readFrame(2, fixture));
+      await vi.waitFor(() => expect(serverSignal).toBeInstanceOf(AbortSignal));
+      channel.port2.postMessage(readFrame(1, fixture));
+      const terminal = await inbox.until((frame) => frameType(frame) === 'error');
+      expect(terminal).toMatchObject({
+        requestId: 2,
+        error: { code: 'ESHADOWASSETPORT', phase: 'decode' },
+      });
+      await vi.waitFor(() => expect(serverSignal?.aborted).toBe(true));
+      expect(readVerified).toHaveBeenCalledTimes(1);
+    } finally {
+      await server.dispose();
+      inbox.dispose();
+      closeChannel(channel);
+    }
+  });
+
   it.each([
     [
       'accessor',
@@ -291,6 +341,41 @@ describe('shadow asset MessagePort corrupt-input faults', () => {
 });
 
 describe('shadow asset MessagePort bounded lifecycle faults', () => {
+  it('rejects null read options instead of treating them as defaults', async () => {
+    const api = shadowAssetPortApi();
+    const fixture = smallPortFixture();
+    const channel = new MessageChannel();
+    const post = vi.spyOn(channel.port1, 'postMessage');
+    const client = api.createShadowAssetPortClient({ port: channel.port1, plan: fixture.plan });
+    try {
+      const pending = client.readVerified(fixture.plan.assets[0]!.id, null as never);
+      void pending.catch(() => undefined);
+      await Promise.resolve();
+      expect(post.mock.calls.filter(([frame]) => frameType(frame) === 'read')).toHaveLength(0);
+      await expect(pending).rejects.toBeInstanceOf(TypeError);
+    } finally {
+      await client.dispose();
+      closeChannel(channel);
+    }
+  });
+
+  it('returns a rejected promise for an empty asset id without throwing synchronously', async () => {
+    const api = shadowAssetPortApi();
+    const fixture = smallPortFixture();
+    const channel = new MessageChannel();
+    const client = api.createShadowAssetPortClient({ port: channel.port1, plan: fixture.plan });
+    try {
+      let pending: Promise<Uint8Array> | undefined;
+      expect(() => {
+        pending = client.readVerified('');
+      }).not.toThrow();
+      await expect(pending).rejects.toBeInstanceOf(TypeError);
+    } finally {
+      await client.dispose();
+      closeChannel(channel);
+    }
+  });
+
   it('starts the server deadline before read admission and aborts a stalled reader', async () => {
     const api = shadowAssetPortApi();
     const fixture = smallPortFixture();
@@ -398,6 +483,28 @@ describe('shadow asset MessagePort bounded lifecycle faults', () => {
     }
   });
 
+  it('fences new client reads synchronously when disposal is claimed', async () => {
+    const api = shadowAssetPortApi();
+    const fixture = smallPortFixture();
+    const channel = new MessageChannel();
+    const post = vi.spyOn(channel.port1, 'postMessage');
+    const client = api.createShadowAssetPortClient({ port: channel.port1, plan: fixture.plan });
+    try {
+      const disposal = client.dispose();
+      const read = client.readVerified(fixture.plan.assets[0]!.id);
+
+      await expect(read).rejects.toMatchObject({
+        code: 'ESHADOWASSETPORT',
+        phase: 'dispose',
+      });
+      await disposal;
+      expect(post.mock.calls.filter(([frame]) => frameType(frame) === 'read')).toHaveLength(0);
+      expect(post.mock.calls.filter(([frame]) => frameType(frame) === 'dispose')).toHaveLength(1);
+    } finally {
+      closeChannel(channel);
+    }
+  });
+
   it('server dispose emits one terminal error, aborts reads, removes listeners, and closes once', async () => {
     const api = shadowAssetPortApi();
     const fixture = smallPortFixture();
@@ -429,6 +536,27 @@ describe('shadow asset MessagePort bounded lifecycle faults', () => {
       expect(close).toHaveBeenCalledTimes(1);
     } finally {
       inbox.dispose();
+      closeChannel(channel);
+    }
+  });
+
+  it('fences synchronously dispatched server reads when disposal is claimed', async () => {
+    const api = shadowAssetPortApi();
+    const fixture = smallPortFixture();
+    const channel = new MessageChannel();
+    const readVerified = vi.fn(stalledReader().readVerified);
+    const server = api.startShadowAssetPortServer({
+      port: channel.port1,
+      plan: fixture.plan,
+      reader: { readVerified },
+    });
+    try {
+      const disposal = server.dispose();
+      channel.port1.dispatchEvent(new MessageEvent('message', { data: readFrame(1, fixture) }));
+
+      await disposal;
+      expect(readVerified).not.toHaveBeenCalled();
+    } finally {
       closeChannel(channel);
     }
   });
@@ -498,6 +626,7 @@ describe('shadow asset MessagePort bounded lifecycle faults', () => {
         requestId: request.requestId,
         type: 'cancel',
       });
+      channel.port2.postMessage(progressFrame(request.requestId, fixture));
       channel.port2.postMessage(resultFrame(request.requestId, fixture));
 
       const survivor = client.readVerified(fixture.plan.assets[0]!.id);
@@ -508,6 +637,96 @@ describe('shadow asset MessagePort bounded lifecycle faults', () => {
     } finally {
       await client.dispose();
       inbox.dispose();
+      closeChannel(channel);
+    }
+  });
+
+  it('ignores queued progress after a local deadline and preserves the next request', async () => {
+    const api = shadowAssetPortApi();
+    const fixture = smallPortFixture();
+    const channel = new MessageChannel();
+    const inbox = new PortInbox(channel.port2);
+    const client = api.createShadowAssetPortClient({ port: channel.port1, plan: fixture.plan });
+    try {
+      const timedOut = client.readVerified(fixture.plan.assets[0]!.id, { deadlineMs: 20 });
+      const request = (await inbox.next()) as { requestId: number };
+      await expect(timedOut).rejects.toMatchObject({ phase: 'deadline' });
+      await inbox.until((frame) => frameType(frame) === 'cancel');
+      channel.port2.postMessage(progressFrame(request.requestId, fixture));
+
+      const survivor = client.readVerified(fixture.plan.assets[0]!.id);
+      const next = (await inbox.next()) as { requestId: number };
+      channel.port2.postMessage(resultFrame(next.requestId, fixture));
+      await expect(survivor).resolves.toEqual(fixture.bytes);
+    } finally {
+      await client.dispose();
+      inbox.dispose();
+      closeChannel(channel);
+    }
+  });
+
+  it('isolates a throwing local progress observer like the direct runtime reader', async () => {
+    const api = shadowAssetPortApi();
+    const fixture = smallPortFixture();
+    const channel = new MessageChannel();
+    const clientPost = vi.spyOn(channel.port2, 'postMessage');
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = api.startShadowAssetPortServer({
+      port: channel.port1,
+      plan: fixture.plan,
+      reader: {
+        readVerified: async (_assetId, options) => {
+          options?.onProgress?.({
+            phase: 'verify',
+            assetId: fixture.plan.assets[0]!.id,
+            assetIndex: 0,
+            assetCount: 1,
+          });
+          return fixture.bytes.slice();
+        },
+      },
+    });
+    const client = api.createShadowAssetPortClient({ port: channel.port2, plan: fixture.plan });
+    try {
+      await expect(
+        client.readVerified(fixture.plan.assets[0]!.id, {
+          onProgress: () => {
+            throw new Error('presentation failed');
+          },
+        }),
+      ).resolves.toEqual(fixture.bytes);
+      expect(clientPost.mock.calls.filter(([frame]) => frameType(frame) === 'cancel')).toHaveLength(
+        0,
+      );
+      expect(warning).toHaveBeenCalledTimes(1);
+    } finally {
+      warning.mockRestore();
+      await Promise.all([client.dispose(), server.dispose()]);
+      closeChannel(channel);
+    }
+  });
+
+  it('copies through an intrinsic-safe path before transferring reader-owned bytes', async () => {
+    const api = shadowAssetPortApi();
+    const fixture = smallPortFixture();
+    const readerBytes = fixture.bytes.slice();
+    Object.defineProperty(readerBytes, 'slice', {
+      configurable: true,
+      value: () => readerBytes,
+    });
+    const channel = new MessageChannel();
+    const server = api.startShadowAssetPortServer({
+      port: channel.port1,
+      plan: fixture.plan,
+      reader: { readVerified: async () => readerBytes },
+    });
+    const client = api.createShadowAssetPortClient({ port: channel.port2, plan: fixture.plan });
+    try {
+      await expect(client.readVerified(fixture.plan.assets[0]!.id)).resolves.toEqual(fixture.bytes);
+      expect(readerBytes.byteLength).toBe(fixture.bytes.byteLength);
+      expect(readerBytes).toEqual(fixture.bytes);
+    } finally {
+      await Promise.all([client.dispose(), server.dispose()]);
       closeChannel(channel);
     }
   });
