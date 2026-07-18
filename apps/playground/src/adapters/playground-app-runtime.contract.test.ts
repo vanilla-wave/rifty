@@ -399,4 +399,15 @@ describe('Playground App semantic runtime', () => {
     expect(h.events).toEqual(['session:close:scratch', 'workbench:close']);
     expect(h.runtime.current()).toBeNull();
   });
+
+  it('coalesces repeated App cleanup onto one Workbench close', async () => {
+    const h = harness();
+
+    const first = h.runtime.close();
+    const second = h.runtime.close();
+
+    expect(second).toBe(first);
+    await first;
+    expect(h.events).toEqual(['workbench:close']);
+  });
 });

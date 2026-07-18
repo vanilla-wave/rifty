@@ -58,13 +58,13 @@ async function expectExactReopenedScratch(
   });
 }
 
-test('a live second tab is directed to the owner, then reloads the exact Saved bytes after close', async ({
+test('occupied reload and a later fresh tab both reopen the exact Saved bytes', async ({
   page: owner,
   context,
   browserName,
 }) => {
   test.skip(browserName !== 'chromium', 'Workbench Web Locks and OPFS are Chromium-only');
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
 
   const marker = `tab-continuity-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const source = [
@@ -116,4 +116,12 @@ test('a live second tab is directed to the owner, then reloads the exact Saved b
     null,
   );
   await expectExactReopenedScratch(contender, marker, source);
+
+  await contender.close();
+  const fresh = await context.newPage();
+  await fresh.goto('/');
+  expect(await fresh.evaluate((key) => sessionStorage.getItem(key), LEGACY_WORKSPACE_KEY)).toBe(
+    null,
+  );
+  await expectExactReopenedScratch(fresh, marker, source);
 });

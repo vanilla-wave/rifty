@@ -31,7 +31,9 @@ While that page is live, a newly created independent Chromium tab shows that
 the workspace is open elsewhere and starts no Workbench owner. They return to
 the original tab, close it, then explicitly Reload the waiting tab. The same
 active Scratch and byte-exact `/src/main.js` reopen; no workspace selector,
-import, Save-as-Project, or Git commit is involved.
+import, Save-as-Project, or Git commit is involved. They then close that admitted
+page and open a brand-new tab; the same active Scratch and bytes reopen again
+with empty page-session metadata.
 
 ## Acceptance
 
@@ -51,6 +53,10 @@ import, Save-as-Project, or Git commit is involved.
   `role=alert`, Reload, no `.rf-app`, no terminal, and zero page Workers.
 - Closing A does not auto-promote B. Explicit Reload reopens the same active
   Scratch and exact public project bytes in B.
+- Closing the admitted page and creating a later independent
+  `context.newPage()` with empty session metadata reopens the same active
+  Scratch and byte-exact file; continuity cannot depend on reusing a waiting
+  browsing context.
 - Existing two-page browser-unit proof still shows one origin lock, zero owner
   construction on the loser, crash release, and successful retry.
 - Project switches retain the Workbench claim; only Workbench close or document
