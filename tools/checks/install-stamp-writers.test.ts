@@ -7,9 +7,7 @@ import {
 const FILE = 'apps/playground/src/glue/example.ts';
 
 function operations(source: string, file = FILE): string[] {
-  return findInstallStampWriterViolations(source, file).map(
-    (violation) => violation.operation,
-  );
+  return findInstallStampWriterViolations(source, file).map((violation) => violation.operation);
 }
 
 describe('install-stamp one-writer gate', () => {
@@ -97,7 +95,7 @@ describe('install-stamp one-writer gate', () => {
   });
 
   it('tracks the post-tree finalizer wrapper only through exact acquisition adapters', () => {
-    expect(operations(`finalizePackageInstallResult(installed, { root });`)).toEqual([
+    expect(operations('finalizePackageInstallResult(installed, { root });')).toEqual([
       'finalizePackageInstallResult',
     ]);
     expect(

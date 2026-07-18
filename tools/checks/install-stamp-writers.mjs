@@ -22,11 +22,17 @@ const NO_NAMES = new Set();
 const PACKAGE_TREE_HELPERS = new Set([
   'clearProjectTree',
   'finalizePackageInstallFiles',
+  'finalizePackageInstallResult',
   'prepareProjectInstallTree',
   'restoreDepSnapshot',
   'seedTemplateNodeModulesFiles',
 ]);
 const PACKAGE_TREE_CONTEXTS = new Map([
+  [
+    'apps/playground/src/workers/package-install-finalizer.ts',
+    new Set(['finalizePackageInstallResult']),
+  ],
+  ['apps/playground/src/glue/npm-shell-command.ts', new Set(['install'])],
   [
     'apps/playground/src/glue/project-deps.ts',
     new Set(['clearProjectTree', 'prepareProjectInstallTree', 'prepareEnsure', 'restoreSnapshot']),
