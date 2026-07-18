@@ -1,8 +1,25 @@
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { globalProcessManager } from '@riftydev/kernel';
-import { type InstallOptions, type InstallResult, RegistryClient } from '@riftydev/npm-client';
+import {
+  type InstallOptions,
+  type InstallResult,
+  type Packument,
+  RegistryClient,
+  type ShadowAssetManager,
+  type ShadowAssetSource,
+  createMemoryShadowAssetStorage,
+  createShadowAssetManager,
+  install as npmClientInstall,
+  shadowAssetPlanFromLockfileBytes,
+} from '@riftydev/npm-client';
+import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import {
   MemoryFsSync,
@@ -49,6 +66,7 @@ import { createWorkbenchProjectComposition } from './workbench-project-compositi
 import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
 import { createWorkbenchProjectStore } from './workbench-project-store.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
+import { createNpmPackageRuntimeAssetPort } from './workbench-runtime-assets.ts';
 
 const VITE_PORT = 6_127;
 const OWNER_TOKEN = 'first-materialization-owner';
@@ -95,6 +113,229 @@ interface Timeline {
 
 interface OwnerHarnessOptions {
   readonly beforeInstallReturn?: (options: InstallOptions) => Promise<void>;
+  readonly createInstall?: (timeline: Timeline) => InstallFn;
+  readonly registry?: RegistryClient;
+  readonly runtimeAssetManager?: ShadowAssetManager;
+}
+
+const require = createRequire(import.meta.url);
+const ESBUILD_WASM_PACKAGE_ROOT = dirname(require.resolve('esbuild-wasm/package.json'));
+let publishedEsbuildWasmTarballPromise: Promise<Uint8Array> | undefined;
+
+function concatBytes(...parts: readonly Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.byteLength;
+  }
+  return result;
+}
+
+function writeTarString(target: Uint8Array, value: string, offset: number, length: number): void {
+  target.set(encoder.encode(value).subarray(0, length), offset);
+}
+
+function tarHeader(path: string, size: number): Uint8Array {
+  const header = new Uint8Array(512);
+  writeTarString(header, path, 0, 100);
+  writeTarString(header, '0000644', 100, 7);
+  writeTarString(header, '0000000', 108, 7);
+  writeTarString(header, '0000000', 116, 7);
+  writeTarString(header, size.toString(8).padStart(11, '0'), 124, 11);
+  header[135] = 0x20;
+  writeTarString(header, '00000000000', 136, 11);
+  header[147] = 0x20;
+  header.fill(0x20, 148, 156);
+  header[156] = '0'.charCodeAt(0);
+  writeTarString(header, 'ustar', 257, 6);
+  writeTarString(header, '00', 263, 2);
+  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  writeTarString(header, checksum.toString(8).padStart(6, '0'), 148, 6);
+  header[154] = 0;
+  header[155] = 0x20;
+  return header;
+}
+
+function fixturePackageTarball(
+  manifest: Readonly<Record<string, unknown>>,
+  files: Readonly<Record<string, string>> = {},
+): Uint8Array {
+  const manifestBytes = encoder.encode(JSON.stringify(manifest));
+  const entries = [
+    { path: 'package/package.json', bytes: manifestBytes },
+    ...Object.entries(files).map(([path, content]) => ({
+      path: `package/${path}`,
+      bytes: encoder.encode(content),
+    })),
+  ];
+  const archive: Uint8Array[] = [];
+  for (const entry of entries) {
+    const padded = new Uint8Array(Math.ceil(entry.bytes.byteLength / 512) * 512);
+    padded.set(entry.bytes);
+    archive.push(tarHeader(entry.path, entry.bytes.byteLength), padded);
+  }
+  archive.push(new Uint8Array(1024));
+  return new Uint8Array(gzipSync(concatBytes(...archive)));
+}
+
+function runNpmPack(packageRoot: string, destination: string, cache: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'npm',
+      ['pack', packageRoot, '--pack-destination', destination, '--json'],
+      {
+        env: {
+          ...process.env,
+          npm_config_cache: cache,
+          npm_config_update_notifier: 'false',
+        },
+        maxBuffer: 1024 * 1024,
+      },
+      (error) => {
+        if (error) reject(error);
+        else resolve();
+      },
+    );
+  });
+}
+
+function publishedEsbuildWasmTarball(): Promise<Uint8Array> {
+  publishedEsbuildWasmTarballPromise ??= (async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), 'rifty-esbuild-wasm-pack-'));
+    const destination = join(tempRoot, 'pack');
+    const cache = join(tempRoot, 'cache');
+    try {
+      await Promise.all([mkdir(destination), mkdir(cache)]);
+      await runNpmPack(ESBUILD_WASM_PACKAGE_ROOT, destination, cache);
+      return new Uint8Array(await readFile(join(destination, 'esbuild-wasm-0.28.0.tgz')));
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  })();
+  return publishedEsbuildWasmTarballPromise;
+}
+
+const VITE_SEVEN_MANIFEST = Object.freeze({
+  name: 'vite',
+  version: '7.3.6',
+  dependencies: Object.freeze({ esbuild: '^0.27.0 || ^0.28.0' }),
+  bin: Object.freeze({ vite: 'bin/vite.js' }),
+});
+const ESBUILD_ALIAS_MANIFEST = Object.freeze({
+  name: '@esbuild/wasi-preview1',
+  version: '0.28.0',
+  cpu: Object.freeze(['wasm']),
+});
+
+class ViteSevenRegistry extends RegistryClient {
+  constructor() {
+    super({ baseUrl: '/unused', fetch: async () => new Response(null, { status: 599 }) });
+  }
+
+  override async getPackument(name: string): Promise<Packument> {
+    if (name === 'vite') {
+      return {
+        name,
+        'dist-tags': { latest: VITE_SEVEN_MANIFEST.version },
+        versions: {
+          [VITE_SEVEN_MANIFEST.version]: {
+            name: VITE_SEVEN_MANIFEST.name,
+            version: VITE_SEVEN_MANIFEST.version,
+            dependencies: { ...VITE_SEVEN_MANIFEST.dependencies },
+            bin: { ...VITE_SEVEN_MANIFEST.bin },
+            dist: { tarball: 'fixture://vite/7.3.6' },
+          },
+        },
+      };
+    }
+    if (name === ESBUILD_ALIAS_MANIFEST.name) {
+      return {
+        name,
+        'dist-tags': { latest: ESBUILD_ALIAS_MANIFEST.version },
+        versions: {
+          [ESBUILD_ALIAS_MANIFEST.version]: {
+            name: ESBUILD_ALIAS_MANIFEST.name,
+            version: ESBUILD_ALIAS_MANIFEST.version,
+            cpu: [...ESBUILD_ALIAS_MANIFEST.cpu],
+            dist: { tarball: 'fixture://esbuild-alias/0.28.0' },
+          },
+        },
+      };
+    }
+    throw new Error(`Vite 7 fixture registry received unexpected packument ${name}`);
+  }
+
+  override async getTarball(url: string): Promise<Uint8Array> {
+    if (url === 'fixture://vite/7.3.6') {
+      return fixturePackageTarball(VITE_SEVEN_MANIFEST, {
+        'bin/vite.js': '#!/usr/bin/env node\n',
+      });
+    }
+    if (url === 'fixture://esbuild-alias/0.28.0') {
+      return fixturePackageTarball(ESBUILD_ALIAS_MANIFEST);
+    }
+    throw new Error(`Vite 7 fixture registry received unexpected tarball ${url}`);
+  }
+}
+
+interface ViteSevenRuntimeAssets {
+  readonly manager: ShadowAssetManager;
+  readonly registry: RegistryClient;
+  readonly entered: Promise<void>;
+  attempts(): number;
+  release(): void;
+}
+
+function viteSevenRuntimeAssets(
+  options: {
+    readonly gateFirst?: boolean;
+    readonly failFirst?: boolean;
+  } = {},
+): ViteSevenRuntimeAssets {
+  const descriptor = builtinShadowAssetCatalog.assets[0];
+  if (descriptor === undefined) throw new Error('builtin catalog omitted the Vite 7 runtime asset');
+  const entered = deferred();
+  const release = deferred();
+  let attempts = 0;
+  const source: ShadowAssetSource = {
+    acquire: async (requests) => {
+      attempts += 1;
+      entered.resolve();
+      if (options.gateFirst === true && attempts === 1) await release.promise;
+      if (options.failFirst === true && attempts === 1) {
+        throw new Error('injected first runtime-asset source failure');
+      }
+      const bytes = await publishedEsbuildWasmTarball();
+      return requests.map((request) => {
+        if (
+          request.name !== descriptor.source.name ||
+          request.version !== descriptor.source.version ||
+          request.integrity !== descriptor.source.integrity ||
+          request.maxTarballBytes !== descriptor.maxTarballBytes
+        ) {
+          throw new Error('Vite 7 runtime-asset source received a non-canonical request');
+        }
+        return Object.freeze({
+          request: Object.freeze({ ...request }),
+          bytes: bytes.slice(),
+          fillTransport: 'standard' as const,
+          fillCache: 'network' as const,
+        });
+      });
+    },
+    close: async () => undefined,
+  };
+  return {
+    manager: createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source,
+    }),
+    registry: new ViteSevenRegistry(),
+    entered: entered.promise,
+    attempts: () => attempts,
+    release: release.resolve,
+  };
 }
 
 function installResult(name: string, version: string): InstallResult {
@@ -151,6 +392,24 @@ function realInstallBoundary(
       );
       options.onPackage?.({ name, version, cacheHit: false });
       await beforeReturn?.(options);
+      timeline.events.push(`install:end:${options.cwd}`);
+      return result;
+    } finally {
+      timeline.activeInstalls -= 1;
+    }
+  };
+}
+
+function npmClientInstallBoundary(timeline: Timeline): InstallFn {
+  return async (input) => {
+    if (typeof input !== 'object') throw new Error('Expected InstallOptions');
+    const options = input as InstallOptions;
+    timeline.events.push(`install:start:${options.cwd}`);
+    timeline.installs.push(options);
+    timeline.activeInstalls += 1;
+    timeline.maxActiveInstalls = Math.max(timeline.maxActiveInstalls, timeline.activeInstalls);
+    try {
+      const result = await npmClientInstall(options);
       timeline.events.push(`install:end:${options.cwd}`);
       return result;
     } finally {
@@ -903,6 +1162,11 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     },
   );
   setSyncMirror(authority, { async: pair.vfs });
+  const runtimeAssetManager = options.runtimeAssetManager;
+  const runtimeAssets =
+    runtimeAssetManager === undefined
+      ? undefined
+      : createNpmPackageRuntimeAssetPort(runtimeAssetManager);
   const packageState = createOwnerPackageState({
     vfs: new SyncMirrorVfs(),
     fsSync: authority,
@@ -910,11 +1174,16 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     flush: () => authority.flush(),
     nodeWorkerRuntimeEnv: NODE_WORKER_RUNTIME_ENV,
     log: (line) => timeline.events.push(`owner-log:${line}`),
-    registry: new RegistryClient({
-      baseUrl: 'https://playground.test/registry',
-      fetch: async () => new Response('', { status: 599 }),
-    }),
-    install: realInstallBoundary(timeline, options.beforeInstallReturn),
+    registry:
+      options.registry ??
+      new RegistryClient({
+        baseUrl: 'https://playground.test/registry',
+        fetch: async () => new Response('', { status: 599 }),
+      }),
+    ...(runtimeAssets === undefined ? {} : { runtimeAssets }),
+    install:
+      options.createInstall?.(timeline) ??
+      realInstallBoundary(timeline, options.beforeInstallReturn),
     resolverUrl: () => undefined,
     resolverBundleBaseUrl: () => undefined,
     resolverPin: () => undefined,
@@ -974,6 +1243,11 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
           packageConfig: config,
           authority,
           packageState,
+          ...(runtimeAssetManager === undefined
+            ? {}
+            : {
+                runtimeAssetReader: (plan) => runtimeAssetManager.runtimeReader(plan),
+              }),
           nodeEntryWorkerUrl: NODE_ENTRY_WORKER_URL,
           devServerWorkerUrl: DEV_SERVER_WORKER_URL,
           nodeWorkerRuntimeEnv: NODE_WORKER_RUNTIME_ENV,
@@ -1082,12 +1356,17 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     async close() {
       await packageState.quiesce();
       await materializer.close();
+      await runtimeAssetManager?.close();
     },
   };
 }
 
-async function waitForChild(harness: OwnerHarness, at: number): Promise<ChildWorker> {
-  await vi.waitFor(() => expect(harness.children.length).toBeGreaterThan(at));
+async function waitForChild(
+  harness: OwnerHarness,
+  at: number,
+  timeout = 1_000,
+): Promise<ChildWorker> {
+  await vi.waitFor(() => expect(harness.children.length).toBeGreaterThan(at), { timeout });
   const child = harness.children[at];
   if (child === undefined) throw new Error(`Missing child ${String(at)}`);
   return child;
@@ -1138,41 +1417,201 @@ afterEach(() => {
 });
 
 describe('Workbench companion first materialization Contract+RED', () => {
-  it('holds a deferred Vite 7 child behind visible runtime-asset readiness', async () => {
+  it.each(['cold', 'rejected-snapshot'] as const)(
+    'holds a deferred Vite 7 %s child behind real manager readiness, then consumes first success once',
+    async (variant) => {
+      const rejectedFixture = snapshotFixtureFromBytes(encoder.encode('{"version":1}'));
+      const snapshot = {
+        snapshotId: rejectedFixture.snapshotId,
+        assetUrl: 'https://playground.test/snapshots/vite-seven-rejected.json.gz',
+        templateId: 'vite-seven-rejected-v1',
+      } as const;
+      const fetchSnapshot = vi.fn(async () => {
+        if (variant === 'cold') {
+          throw new Error('kind:install must not fetch a dependency snapshot');
+        }
+        return gzipResponse(rejectedFixture.bytes);
+      });
+      vi.stubGlobal('fetch', fetchSnapshot);
+      const assets = viteSevenRuntimeAssets({ gateFirst: true });
+      const h = ownerHarness({
+        registry: assets.registry,
+        runtimeAssetManager: assets.manager,
+        createInstall: npmClientInstallBoundary,
+      });
+      const definition = viteDefinition(
+        variant === 'cold' ? { kind: 'install' } : { kind: 'snapshot', snapshot },
+        `vite-seven-runtime-assets-${variant}`,
+        '7.3.6',
+      );
+
+      const materialized = await h.open(definition);
+      expect.soft(isDeferredInstallPlan(materialized.acquisition)).toBe(true);
+      expect.soft(h.timeline.installs).toEqual([]);
+      expect.soft(h.children).toEqual([]);
+      expect.soft(assets.attempts()).toBe(0);
+
+      const session = await h.session(definition, materialized);
+      const run = session.run();
+      await assets.entered;
+      const beforeReady = await settlePromptly(run.exited);
+      const beforeRelease = [...h.timeline.events];
+      expect.soft(beforeReady).toEqual({ status: 'pending' });
+      expect.soft(h.children).toEqual([]);
+      expect
+        .soft(beforeRelease.some((event) => event.includes('runtime asset 1/1 fetch')))
+        .toBe(true);
+      expect.soft(beforeRelease.some((event) => event.startsWith('child:spawn:'))).toBe(false);
+
+      assets.release();
+      const child = await waitForChild(h, 0, 10_000);
+      child.finish(`vite: seven ${variant} output\n`);
+      await run.exited;
+      await run.close();
+      await session.close();
+
+      const secondMaterialized = await h.open(definition);
+      const secondPlan = secondMaterialized.acquisition as ProjectAcquisitionPlan;
+      const beforeSecondRun = h.timeline.events.length;
+      const secondSession = await h.session(definition, secondMaterialized);
+      const secondRun = secondSession.run();
+      const secondChild = await waitForChild(h, 1, 10_000);
+      secondChild.finish(`vite: seven ${variant} warm output\n`);
+      await secondRun.exited;
+      await secondRun.close();
+      await secondSession.close();
+
+      const root = projectRoot(definition);
+      const directPlan = shadowAssetPlanFromLockfileBytes(
+        h.authority.readFileBytesSync(`${root}/package-lock.json`),
+      );
+      const managerReceipt = await assets.manager.installer.inspectReceipt(
+        directPlan.requiredSetDigest,
+      );
+      const epoch = h.packageState.readPackageTreeEpoch({
+        root,
+        slug: definition.storageSegment,
+      });
+      await h.close();
+
+      if (variant === 'cold') expect.soft(fetchSnapshot).not.toHaveBeenCalled();
+      else expect.soft(fetchSnapshot).toHaveBeenCalledTimes(1);
+      expect.soft(h.timeline.installs).toHaveLength(1);
+      expect.soft(assets.attempts()).toBe(1);
+      expect.soft(secondPlan).toMatchObject({
+        kind: 'ready',
+        provenance: { outcome: 'existing' },
+      });
+      expect.soft(directPlan.assets).toHaveLength(1);
+      expect.soft(directPlan.substitutions).toMatchObject([
+        {
+          publicName: 'esbuild',
+          requestedRange: '^0.27.0 || ^0.28.0',
+          resolvedPublicVersion: '0.28.0',
+        },
+      ]);
+      expect.soft(directPlan.assets[0]).toMatchObject({
+        id: 'esbuild-wasm@0.28.0/package/esbuild.wasm',
+        memberSize: 13_918_738,
+      });
+      expect.soft(managerReceipt).not.toBeNull();
+      expect.soft(epoch.readiness).toEqual({
+        kind: 'ready',
+        plan: directPlan,
+        receipt: managerReceipt,
+      });
+
+      const visibleInstall = eventIndex(h.timeline.events, 'terminal:stdout:$ npm install');
+      const cacheCheck = eventIndex(h.timeline.events, 'runtime asset 1/1 cache-check');
+      const fetch = eventIndex(h.timeline.events, 'runtime asset 1/1 fetch');
+      const verify = eventIndex(h.timeline.events, 'runtime asset 1/1 verify');
+      const persist = eventIndex(h.timeline.events, 'runtime asset 1/1 persist');
+      const ready = eventIndex(h.timeline.events, 'runtime assets ready: 1');
+      const spawn = eventIndex(h.timeline.events, 'child:spawn:');
+      expect(cacheCheck).toBeGreaterThan(visibleInstall);
+      expect(fetch).toBeGreaterThan(cacheCheck);
+      expect(verify).toBeGreaterThan(fetch);
+      expect(persist).toBeGreaterThan(verify);
+      expect(ready).toBeGreaterThan(persist);
+      expect(spawn).toBeGreaterThan(ready);
+      expect(h.timeline.events.slice(beforeSecondRun)).toContain(`exec:vite --port ${VITE_PORT}`);
+      expect(h.timeline.events.slice(beforeSecondRun).join('\n')).not.toContain('$ npm install');
+      expect(h.timeline.events.slice(beforeSecondRun).join('\n')).not.toContain('runtime asset');
+    },
+    15_000,
+  );
+
+  it('keeps failed Vite 7 readiness retryable and consumes only the first successful run', async () => {
     const fetchSnapshot = vi.fn(async () => {
       throw new Error('kind:install must not fetch a dependency snapshot');
     });
     vi.stubGlobal('fetch', fetchSnapshot);
-    const h = ownerHarness();
+    const assets = viteSevenRuntimeAssets({ failFirst: true });
+    const h = ownerHarness({
+      registry: assets.registry,
+      runtimeAssetManager: assets.manager,
+      createInstall: npmClientInstallBoundary,
+    });
     const definition = viteDefinition(
       { kind: 'install' },
-      'vite-seven-runtime-assets',
+      'vite-seven-runtime-assets-retry',
       '7.3.6',
     );
 
     const materialized = await h.open(definition);
-    expect.soft(h.timeline.installs).toEqual([]);
-    expect.soft(h.children).toEqual([]);
-
     const session = await h.session(definition, materialized);
-    const run = session.run();
-    const child = await waitForChild(h, 0);
-    child.finish('vite: seven output\n');
-    await run.exited;
-    await run.close();
+    const failedRun = session.run();
+    await expect(failedRun.exited).resolves.toEqual({ code: 1, signal: null });
+    await failedRun.close();
+    expect.soft(h.children).toEqual([]);
+    expect.soft(h.timeline.installs).toHaveLength(1);
+    expect.soft(assets.attempts(), h.timeline.events.join('\n')).toBe(1);
+
+    const beforeRetry = h.timeline.events.length;
+    const retry = session.run();
+    const retryChild = await waitForChild(h, 0, 10_000).catch((error: unknown) => {
+      throw new Error(h.timeline.events.join('\n'), { cause: error });
+    });
+    retryChild.finish('vite: seven retry output\n');
+    await retry.exited;
+    await retry.close();
     await session.close();
+
+    const warmMaterialized = await h.open(definition);
+    const beforeWarmRun = h.timeline.events.length;
+    const warmSession = await h.session(definition, warmMaterialized);
+    const warmRun = warmSession.run();
+    const warmChild = await waitForChild(h, 1, 10_000);
+    warmChild.finish('vite: seven retry warm output\n');
+    await warmRun.exited;
+    await warmRun.close();
+    await warmSession.close();
     await h.close();
 
-    const visibleInstall = eventIndex(h.timeline.events, 'terminal:stdout:$ npm install');
-    const cacheCheck = eventIndex(h.timeline.events, 'runtime asset 1/1 cache-check');
-    const verify = eventIndex(h.timeline.events, 'runtime asset 1/1 verify');
-    const ready = eventIndex(h.timeline.events, 'runtime assets ready: 1');
-    const spawn = eventIndex(h.timeline.events, 'child:spawn:');
-    expect(cacheCheck).toBeGreaterThan(visibleInstall);
-    expect(verify).toBeGreaterThan(cacheCheck);
-    expect(ready).toBeGreaterThan(verify);
-    expect(spawn).toBeGreaterThan(ready);
-  });
+    const retryEvents = h.timeline.events.slice(beforeRetry);
+    const successfulRetryEvents = h.timeline.events.slice(beforeRetry, beforeWarmRun);
+    expect.soft(fetchSnapshot).not.toHaveBeenCalled();
+    expect.soft(assets.attempts()).toBe(2);
+    expect.soft(h.timeline.installs).toHaveLength(1);
+    expect
+      .soft(h.timeline.events.filter((event) => event.includes('terminal:stdout:$ npm install')))
+      .toHaveLength(1);
+    expect.soft(retryEvents.join('\n')).not.toContain('terminal:stdout:$ npm install');
+    const retryCacheCheck = eventIndex(successfulRetryEvents, 'runtime asset 1/1 cache-check');
+    const retryFetch = eventIndex(successfulRetryEvents, 'runtime asset 1/1 fetch');
+    const retryVerify = eventIndex(successfulRetryEvents, 'runtime asset 1/1 verify');
+    const retryPersist = eventIndex(successfulRetryEvents, 'runtime asset 1/1 persist');
+    const retryReady = eventIndex(successfulRetryEvents, 'runtime assets ready: 1');
+    const retrySpawn = eventIndex(successfulRetryEvents, 'child:spawn:');
+    expect(retryFetch).toBeGreaterThan(retryCacheCheck);
+    expect(retryVerify).toBeGreaterThan(retryFetch);
+    expect(retryPersist).toBeGreaterThan(retryVerify);
+    expect(retryReady).toBeGreaterThan(retryPersist);
+    expect(retrySpawn).toBeGreaterThan(retryReady);
+    expect(h.timeline.events.slice(beforeWarmRun)).toContain(`exec:vite --port ${VITE_PORT}`);
+    expect(h.timeline.events.slice(beforeWarmRun).join('\n')).not.toContain('npm install');
+    expect(h.timeline.events.slice(beforeWarmRun).join('\n')).not.toContain('runtime asset');
+  }, 15_000);
 
   it('runs a cold install visibly on the default PTY, preserves the Vite port, then reuses the warm claim', async () => {
     const fetchSnapshot = vi.fn(async () => {
