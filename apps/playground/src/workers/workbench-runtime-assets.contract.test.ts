@@ -97,7 +97,13 @@ function lockfileBytes(plan: ShadowAssetPlan): Uint8Array {
       rifty: {
         shadowSubstitutions: {
           protocol: 'rifty.lockfile-shadow-substitutions/v1',
-          applied: plan.substitutions,
+          applied: plan.substitutions.map((substitution) => ({
+            publicName: substitution.publicName,
+            requestedRange: substitution.requestedRange,
+            resolvedPublicVersion: substitution.resolvedPublicVersion,
+            runtimeAdapterId: substitution.runtimeAdapterId,
+            substitutionId: substitution.substitutionId,
+          })),
         },
       },
     }),
