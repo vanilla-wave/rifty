@@ -131,6 +131,8 @@ function realInstallBoundary(
     timeline.activeInstalls += 1;
     timeline.maxActiveInstalls = Math.max(timeline.maxActiveInstalls, timeline.activeInstalls);
     try {
+      const result = installResult(name, version);
+      options.onTreeMutationStart?.();
       await options.vfs.mkdir(`${options.cwd}/node_modules/${name}`, { recursive: true });
       await options.vfs.writeFile(
         `${options.cwd}/node_modules/${name}/package.json`,
@@ -143,10 +145,14 @@ function realInstallBoundary(
           '#!/usr/bin/env node\n',
         );
       }
+      await options.vfs.writeFile(
+        `${options.cwd}/package-lock.json`,
+        JSON.stringify(result.lockfile, null, 2),
+      );
       options.onPackage?.({ name, version, cacheHit: false });
       await beforeReturn?.(options);
       timeline.events.push(`install:end:${options.cwd}`);
-      return installResult(name, version);
+      return result;
     } finally {
       timeline.activeInstalls -= 1;
     }
@@ -242,6 +248,10 @@ function bakedSnapshot(
     encoder.encode('{"name":"vite","version":"8.0.16"}\n'),
   );
   fs.writeFileSync(`${root}/node_modules/.bin/vite`, encoder.encode('#!/usr/bin/env node\n'));
+  fs.writeFileSync(
+    `${root}/package-lock.json`,
+    encoder.encode(JSON.stringify(installResult('vite', '8.0.16').lockfile, null, 2)),
+  );
   return buildDepSnapshot(fs, root, {
     templateId,
     deps: dependencyMap(packageJsonText),
