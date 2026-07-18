@@ -8,6 +8,42 @@ function harness() {
   return { client, sent };
 }
 
+type FirstMaterializationEvidence = {
+  readonly sid: string;
+  readonly rid: string;
+};
+
+function firstMaterializationHarness(
+  onFirstMaterializationConsumed?: (evidence: FirstMaterializationEvidence) => void,
+) {
+  const sent: PageToOwnerFrame[] = [];
+  const client = createPtyClient({
+    send: (frame) => sent.push(frame),
+    ...(onFirstMaterializationConsumed === undefined ? {} : { onFirstMaterializationConsumed }),
+  });
+  const run = client.exec('materialization-session', 'vite', {
+    cols: 80,
+    rows: 24,
+    isTTY: true,
+    onChunk: () => {},
+  });
+  const exec = sent.find(
+    (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> => frame.type === 'pty:exec',
+  )!;
+  const exit = () => {
+    client.onFrame({
+      type: 'pty:exit',
+      sid: exec.sid,
+      rid: exec.rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+  };
+  return { client, exec, exit, run };
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -355,6 +391,126 @@ describe('pty-client', () => {
       });
     }
     await Promise.all([first, sibling]);
+  });
+
+  it('publishes first-materialization evidence with the exact admitted project run identity', async () => {
+    const evidence: FirstMaterializationEvidence[] = [];
+    const { client, exec, exit, run } = firstMaterializationHarness((value) => {
+      evidence.push(value);
+    });
+
+    client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+    client.onFrame({
+      type: 'pty:first-materialization-consumed',
+      sid: exec.sid,
+      rid: exec.rid,
+    });
+
+    expect(evidence).toEqual([{ sid: exec.sid, rid: exec.rid }]);
+    exit();
+    await expect(run).resolves.toBe(0);
+  });
+
+  it('rejects first-materialization evidence for an unknown or mismatched run identity', async () => {
+    const callback = vi.fn();
+    const { client, exec, exit, run } = firstMaterializationHarness(callback);
+    client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+
+    for (const frame of [
+      {
+        type: 'pty:first-materialization-consumed' as const,
+        sid: exec.sid,
+        rid: `${exec.rid}-unknown`,
+      },
+      {
+        type: 'pty:first-materialization-consumed' as const,
+        sid: `${exec.sid}-sibling`,
+        rid: exec.rid,
+      },
+    ]) {
+      expect(() => client.onFrame(frame)).toThrow(
+        /pty:first-materialization-consumed.*admitted.*run/i,
+      );
+    }
+    expect(callback).not.toHaveBeenCalled();
+
+    exit();
+    await expect(run).resolves.toBe(0);
+  });
+
+  it('rejects first-materialization evidence before owner admission', async () => {
+    const callback = vi.fn();
+    const { client, exec, exit, run } = firstMaterializationHarness(callback);
+
+    expect(() =>
+      client.onFrame({
+        type: 'pty:first-materialization-consumed',
+        sid: exec.sid,
+        rid: exec.rid,
+      }),
+    ).toThrow(/pty:first-materialization-consumed.*admitted.*run/i);
+    expect(callback).not.toHaveBeenCalled();
+
+    client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+    exit();
+    await expect(run).resolves.toBe(0);
+  });
+
+  it('rejects late first-materialization evidence after the admitted run exits', async () => {
+    const callback = vi.fn();
+    const { client, exec, exit, run } = firstMaterializationHarness(callback);
+    client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+    exit();
+    await expect(run).resolves.toBe(0);
+
+    expect(() =>
+      client.onFrame({
+        type: 'pty:first-materialization-consumed',
+        sid: exec.sid,
+        rid: exec.rid,
+      }),
+    ).toThrow(/pty:first-materialization-consumed.*admitted.*run/i);
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('rejects valid first-materialization evidence when the project callback is missing', async () => {
+    const { client, exec, exit, run } = firstMaterializationHarness();
+    client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+
+    expect(() =>
+      client.onFrame({
+        type: 'pty:first-materialization-consumed',
+        sid: exec.sid,
+        rid: exec.rid,
+      }),
+    ).toThrow(/pty:first-materialization-consumed.*callback/i);
+
+    exit();
+    await expect(run).resolves.toBe(0);
+  });
+
+  it('propagates a project callback failure on duplicate first-materialization evidence', async () => {
+    const callbackFailure = new Error('duplicate first materialization evidence');
+    let callbackCount = 0;
+    const callback = vi.fn(() => {
+      callbackCount += 1;
+      if (callbackCount === 2) throw callbackFailure;
+    });
+    const { client, exec, exit, run } = firstMaterializationHarness(callback);
+    const frame = {
+      type: 'pty:first-materialization-consumed' as const,
+      sid: exec.sid,
+      rid: exec.rid,
+    };
+    client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+
+    client.onFrame(frame);
+    expect(() => client.onFrame(frame)).toThrow(callbackFailure);
+    expect(callback).toHaveBeenNthCalledWith(1, { sid: exec.sid, rid: exec.rid });
+    expect(callback).toHaveBeenNthCalledWith(2, { sid: exec.sid, rid: exec.rid });
+
+    exit();
+    await expect(run).resolves.toBe(0);
   });
 
   it.each(['stop', 'close', 'owner death'] as const)(
