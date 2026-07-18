@@ -270,6 +270,21 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
     );
   });
 
+  it('does not impose non-empty identity strings that the lockfile writer does not require', () => {
+    const lockfile = buildLockfile('', '', [
+      {
+        name: 'vite',
+        version: '',
+        dependencies: {},
+        files: {},
+      },
+    ]);
+
+    expect(shadowAssetPlanFromLockfileBytes(enc.encode(JSON.stringify(lockfile)))).toBe(
+      EMPTY_SHADOW_ASSET_PLAN,
+    );
+  });
+
   it('returns the canonical empty plan for an asset-free v3 lockfile', () => {
     const bytes = enc.encode(
       JSON.stringify({

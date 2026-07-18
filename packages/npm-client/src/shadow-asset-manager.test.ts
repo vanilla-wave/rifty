@@ -249,6 +249,14 @@ describe('ShadowAssetManager', () => {
           failure(EMPTY_SHADOW_ASSET_PLAN),
         ),
     ).toThrow(/lockfile trace.*plan/i);
+    expect(
+      () =>
+        new ShadowAssetInstallError(
+          treeResult([...required.substitutions, ...required.substitutions]),
+          required,
+          failure(required),
+        ),
+    ).toThrow(/canonical/i);
   });
 
   it('joins the real STD RegistryClient/tarball-cache adapter to MemoryVfs readiness', async () => {
