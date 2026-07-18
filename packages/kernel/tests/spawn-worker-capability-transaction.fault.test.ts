@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProcessManager } from '../src/process-manager.ts';
+import { createSabRing } from '../src/ipc/sab-ring.ts';
 import {
   type WorkerLike,
   clearKernelDispatcher,
@@ -204,6 +205,33 @@ describe('spawnKernelWorker capability resource transaction', () => {
     expect(thrown).toBe(attachError);
     expect(detach).not.toHaveBeenCalled();
     expect(dispatcher.getAttachmentCount()).toBe(0);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(cap.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('rolls back the exact new ring when a sibling detach hides the aggregate count delta', () => {
+    const cap = capability();
+    const dispatcher = getKernelDispatcher();
+    const sibling = createSabRing({ payloadCapacity: 64 }).ring;
+    dispatcher.attach(sibling);
+    const originalAttach = dispatcher.attach.bind(dispatcher);
+    const attachError = new Error('dispatcher-attach-collided-with-sibling-detach');
+    vi.spyOn(dispatcher, 'attach').mockImplementation((ring) => {
+      originalAttach(ring);
+      dispatcher.detach(sibling);
+      throw attachError;
+    });
+
+    let thrown: unknown;
+    try {
+      spawnWithCapability(cap.channel.port2);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBe(attachError);
+    expect(dispatcher.getAttachmentCount()).toBe(0);
+    expect(dispatcher.getActiveTimerCount()).toBe(0);
     expect(worker.terminate).toHaveBeenCalledTimes(1);
     expect(cap.close).toHaveBeenCalledTimes(1);
   });

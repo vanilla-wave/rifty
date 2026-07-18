@@ -169,6 +169,22 @@ describe('SyncRpcDispatcher — backstop is uncounted infra (ADR-0152 §5, keepa
   });
 });
 
+describe('SyncRpcDispatcher attachment transaction', () => {
+  it('removes the exact ring when setup throws after publication', () => {
+    const dispatcher = new SyncRpcDispatcher();
+    const internal = dispatcher as unknown as { ensureTimer(): void };
+    const failure = new Error('dispatcher timer setup failed');
+    vi.spyOn(internal, 'ensureTimer').mockImplementation(() => {
+      throw failure;
+    });
+    const { ring } = createSabRing({ payloadCapacity: 64 });
+
+    expect(() => dispatcher.attach(ring)).toThrow(failure);
+    expect(dispatcher.getAttachmentCount()).toBe(0);
+    expect(dispatcher.getActiveTimerCount()).toBe(0);
+  });
+});
+
 describe('SyncRpcDispatcher — busy-poll fallback when waitAsync is absent (ADR-0084 #17)', () => {
   it('falls back to setInterval poll and still round-trips a request/reply', async () => {
     // Stub waitAsync away so the dispatcher constructs in busy-poll mode.
