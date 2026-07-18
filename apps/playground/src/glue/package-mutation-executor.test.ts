@@ -336,6 +336,7 @@ describe('package mutation routing', () => {
     for (const project of [nested, outer, other]) {
       fsSync.mkdirSync(`${project.root}/node_modules/pkg`, { recursive: true });
       fsSync.writeFileSync(`${project.root}/package.json`, enc.encode(PACKAGE_JSON));
+      fsSync.writeFileSync(`${project.root}/package-lock.json`, enc.encode(PACKAGE_LOCK));
       const claim = await stampAuthority.demote(project);
       await stampAuthority.promote(
         { ...project, packageJsonText: PACKAGE_JSON },
@@ -374,6 +375,7 @@ describe('package mutation routing', () => {
       };
       fsSync.mkdirSync(`${nested.root}/node_modules/pkg`, { recursive: true });
       fsSync.writeFileSync(`${nested.root}/package.json`, enc.encode(PACKAGE_JSON));
+      fsSync.writeFileSync(`${nested.root}/package-lock.json`, enc.encode(PACKAGE_LOCK));
       const stamps = createInstallStampAuthority({ vfs, fsSync });
       const claim = await stamps.demote(nested);
       const promoted = await stamps.promote(
@@ -400,6 +402,7 @@ describe('package mutation routing', () => {
     pair.fsSync.mkdirSync(`${nestedRoot}/node_modules/pkg`, { recursive: true });
     pair.fsSync.writeFileSync(`${ROOT}/package.json`, enc.encode(PACKAGE_JSON));
     pair.fsSync.writeFileSync(`${nestedRoot}/package.json`, enc.encode(PACKAGE_JSON));
+    pair.fsSync.writeFileSync(`${nestedRoot}/package-lock.json`, enc.encode(PACKAGE_LOCK));
     const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(
       pair.fsSync,
       { ownerEpoch: 'whole-root-reset' },
@@ -525,7 +528,11 @@ describe('package mutation routing', () => {
     [
       'wrong-root',
       `${JSON.stringify(
-        createInstallStamp('/other', PACKAGE_JSON, { slug: 'other', packages: 1 }),
+        createInstallStamp('/other', PACKAGE_JSON, {
+          slug: 'other',
+          packages: 1,
+          lockfileSha256: '0'.repeat(64),
+        }),
       )}\n`,
     ],
   ])('revokes a physical %s claim that cannot supply trusted project metadata', (_case, bytes) => {
@@ -634,6 +641,7 @@ describe('package mutation routing', () => {
     for (const project of [descendant, actual, outer]) {
       fsSync.mkdirSync(`${project.root}/node_modules/pkg`, { recursive: true });
       fsSync.writeFileSync(`${project.root}/package.json`, enc.encode(PACKAGE_JSON));
+      fsSync.writeFileSync(`${project.root}/package-lock.json`, enc.encode(PACKAGE_LOCK));
       const claim = await stampAuthority.demote(project);
       await stampAuthority.promote(
         { ...project, packageJsonText: PACKAGE_JSON },

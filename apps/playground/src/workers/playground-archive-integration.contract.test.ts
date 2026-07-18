@@ -344,12 +344,16 @@ async function harness(
   const git = makeGit({ fs: vfsToGitFs(vfs), dir: PROJECT_ROOT });
   if (seed && owner.authority.statSyncOrNull(PROJECT_ROOT) === null) {
     write(owner.authority, `${PROJECT_ROOT}/package.json`, PACKAGE_JSON);
+    const packageLock =
+      '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
+    write(owner.authority, `${PROJECT_ROOT}/package-lock.json`, packageLock);
     write(owner.authority, `${PROJECT_ROOT}/src/main.ts`, ORIGINAL_SOURCE);
     write(owner.authority, `${PROJECT_ROOT}/src/old.ts`, 'export const old = true;\n');
     write(owner.authority, `${PROJECT_ROOT}/node_modules/kleur/index.js`, 'module.exports = {};\n');
     const stamp = createInstallStamp(PROJECT_ROOT, PACKAGE_JSON, {
       slug: 'project-a',
       packages: 1,
+      lockfileSha256: '086b429649fca60876a3947ec1b825a13f1266a2cd6753b1b5acdac27261f149',
     });
     if (stamp === null) throw new Error('Archive contract could not construct its package claim');
     owner.installStampClaims.write(
@@ -360,7 +364,7 @@ async function harness(
     await owner.authority.flush();
     write(owner.authority, `${PROJECT_ROOT}/.gitignore`, 'node_modules/\n.rifty/\n');
     await git.init();
-    for (const path of ['.gitignore', 'package.json', 'src/main.ts', 'src/old.ts']) {
+    for (const path of ['.gitignore', 'package.json', 'package-lock.json', 'src/main.ts', 'src/old.ts']) {
       await git.add(path);
     }
     await git.commit({

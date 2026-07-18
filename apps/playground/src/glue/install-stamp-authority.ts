@@ -17,6 +17,7 @@ import {
   parseInstallStamp,
   readInstallStamp,
   reportHasFailure,
+  sha256Hex,
   stampTrusted,
 } from './install-stamp.ts';
 
@@ -244,6 +245,38 @@ async function readText(io: StampIo, path: string): Promise<string | null> {
   }
 }
 
+async function readBytes(io: StampIo, path: string): Promise<Uint8Array | null> {
+  if (io.fsSync) {
+    if (!io.fsSync.existsSync(path)) return null;
+    try {
+      return io.fsSync.readFileBytesSync(path);
+    } catch {
+      return null;
+    }
+  }
+  if (!(await io.vfs.exists(path))) return null;
+  try {
+    return await io.vfs.readFile(path);
+  } catch {
+    return null;
+  }
+}
+
+function bytesEqual(left: Uint8Array | null, right: Uint8Array | null): boolean {
+  if (left === null || right === null || left.byteLength !== right.byteLength) return false;
+  return left.every((byte, index) => byte === right[index]);
+}
+
+async function lockfileHash(io: StampIo, root: string): Promise<string | null> {
+  const bytes = await readBytes(io, joinPath(root, 'package-lock.json'));
+  if (bytes === null) return null;
+  try {
+    return await sha256Hex(bytes);
+  } catch {
+    return null;
+  }
+}
+
 function readTextSync(fsSync: InstallStampAuthoritySyncFs, path: string): string | null {
   if (!fsSync.existsSync(path)) return null;
   try {
@@ -326,10 +359,16 @@ async function removeStamp(io: StampIo, root: string): Promise<void> {
   await io.vfs.rm(path, { force: true });
 }
 
-function pendingStamp(identity: InstallStampIdentity, epoch: string, packages = 0): InstallStamp {
+function pendingStamp(
+  identity: InstallStampIdentity,
+  epoch: string,
+  lockfileSha256: string,
+  packages = 0,
+): InstallStamp {
   const stamp = createInstallStamp(identity.root, identity.packageJsonText, {
     slug: identity.slug,
     packages,
+    lockfileSha256,
     durability: 'pending',
     epoch,
   });
@@ -337,10 +376,15 @@ function pendingStamp(identity: InstallStampIdentity, epoch: string, packages = 
   return stamp;
 }
 
-function trustedStamp(identity: InstallStampIdentity, packages: number): InstallStamp {
+function trustedStamp(
+  identity: InstallStampIdentity,
+  packages: number,
+  lockfileSha256: string,
+): InstallStamp {
   const stamp = createInstallStamp(identity.root, identity.packageJsonText, {
     slug: identity.slug,
     packages,
+    lockfileSha256,
   });
   if (!stamp) throw new Error('install stamp identity is not valid package.json');
   return stamp;
@@ -364,6 +408,16 @@ async function classifyCheck(
     return { result, diskPhase: 'pending', stamp };
   }
   const currentText = await readText(io, joinPath(input.root, 'package.json'));
+  const lockfileBefore = await readBytes(io, joinPath(input.root, 'package-lock.json'));
+  let currentLockfileHash: string | null = null;
+  if (lockfileBefore !== null) {
+    try {
+      currentLockfileHash = await sha256Hex(lockfileBefore);
+    } catch {
+      currentLockfileHash = null;
+    }
+  }
+  const lockfileAfter = await readBytes(io, joinPath(input.root, 'package-lock.json'));
   const treeExists = await pathExists(io, installTreeDir(input.root));
   let expectedCovered = true;
   if (input.expectedPackageJsonText !== undefined) {
@@ -376,6 +430,8 @@ async function classifyCheck(
     treeExists &&
     currentText !== null &&
     stamp.packageJsonText === currentText &&
+    currentLockfileHash === stamp.lockfileSha256 &&
+    bytesEqual(lockfileBefore, lockfileAfter) &&
     expectedCovered;
   return {
     result: matches ? { status: 'trusted', stamp } : { status: 'absent' },
@@ -401,21 +457,8 @@ function classifyCheckSync(
         : { status: 'absent' };
     return { result, diskPhase: 'pending', stamp };
   }
-  const currentText = readTextSync(fsSync, joinPath(input.root, 'package.json'));
-  let expectedCovered = true;
-  if (input.expectedPackageJsonText !== undefined) {
-    const expected = effectiveDepsFromPackageJsonText(input.expectedPackageJsonText);
-    const current = currentText === null ? null : effectiveDepsFromPackageJsonText(currentText);
-    expectedCovered = expected !== null && current !== null && depsInclude(current, expected);
-  }
-  const matches =
-    (input.slug === undefined || input.slug === stamp.slug) &&
-    fsSync.existsSync(installTreeDir(input.root)) &&
-    currentText !== null &&
-    stamp.packageJsonText === currentText &&
-    expectedCovered;
   return {
-    result: matches ? { status: 'trusted', stamp } : { status: 'absent' },
+    result: { status: 'absent' },
     diskPhase: 'trusted',
     stamp,
   };
@@ -510,8 +553,10 @@ export function createInstallStampAuthority(options: {
     if (state.phase === 'pending') return pendingForInput(state, input);
     if (state.phase === 'absent') return { status: 'absent' };
     const classified = classifyCheckSync(io.fsSync, input);
-    if (state.phase === 'unknown') updatePhaseFromStamp(state, classified.stamp);
-    else if (classified.diskPhase !== 'trusted') state.phase = classified.diskPhase;
+    if (classified.diskPhase !== 'trusted') {
+      if (state.phase === 'unknown') updatePhaseFromStamp(state, classified.stamp);
+      else state.phase = classified.diskPhase;
+    }
     return classified.result;
   };
 
@@ -533,6 +578,8 @@ export function createInstallStampAuthority(options: {
       const trustedPrior = prior && stampTrusted(prior) ? prior : null;
       const currentText = await readText(io, joinPath(input.root, 'package.json'));
       const packageJsonText = currentText ?? prior?.packageJsonText;
+      const currentLockfileHash = await lockfileHash(io, input.root);
+      const markerExists = await pathExists(io, installStampPath(input.root));
       const dependencyTreeExists =
         prior !== null || (await pathExists(io, installTreeDir(input.root)));
       const flush = options.flush;
@@ -572,12 +619,16 @@ export function createInstallStampAuthority(options: {
       };
       let wrotePending = false;
       let pendingWriteFailed = false;
-      if (packageJsonText !== undefined && dependencyTreeExists) {
+      if (
+        packageJsonText !== undefined &&
+        currentLockfileHash !== null &&
+        dependencyTreeExists
+      ) {
         try {
           await writeRawStamp(
             io,
             input.root,
-            pendingStamp({ ...input, packageJsonText }, epoch),
+            pendingStamp({ ...input, packageJsonText }, epoch, currentLockfileHash),
             true,
           );
           wrotePending = true;
@@ -586,6 +637,11 @@ export function createInstallStampAuthority(options: {
           pendingWriteFailed = true;
           await removeAndProve('install-stamp pending claim write failed', error);
         }
+      } else if (trustedPrior) {
+        pendingWriteFailed = true;
+        await removeAndProve('install-stamp pending claim has no exact lockfile identity');
+      } else if (markerExists) {
+        await removeStamp(io, input.root);
       }
       if (state.epoch === epoch) state.materialized = wrotePending;
 
@@ -642,38 +698,42 @@ export function createInstallStampAuthority(options: {
     if (state.epoch !== epoch) return { status: 'stale' };
     if (state.slug !== identity.slug) return { status: 'refused', reason: 'claim-replaced' };
 
-    // Project restore replaces node_modules synchronously, including the
-    // pending file. Re-materialise the SAME epoch before yielding to its
-    // background drain: the initial demote still owns mutation-time fencing;
-    // issuing a new post-mutation epoch would let an interleaved writer win by
-    // wall-clock luck. The sync owner surface makes this visible immediately.
-    if (
-      io.fsSync &&
-      readStampSync(io.fsSync, identity.root) === null &&
-      io.fsSync.existsSync(installTreeDir(identity.root))
-    ) {
-      const pending = pendingStamp(identity, epoch, packages);
-      writeRawStampSync(
-        io,
-        identity.root,
-        enc.encode(`${JSON.stringify(pending, null, 2)}\n`),
-        true,
-      );
-      state.materialized = true;
-    }
-
     const admitted = await enqueue(state, async () => {
-      if (state.epoch !== epoch || state.slug !== identity.slug) return false;
+      if (state.epoch !== epoch || state.slug !== identity.slug) return 'claim-replaced' as const;
       let stamp = await readStamp(io, identity.root);
       const treeExists = await pathExists(io, installTreeDir(identity.root));
       if (stamp === null && treeExists) {
-        await writeRawStamp(io, identity.root, pendingStamp(identity, epoch, packages), true);
+        const currentLockfileHash = await lockfileHash(io, identity.root);
+        if (currentLockfileHash === null) return 'identity-drift' as const;
+        if (state.epoch !== epoch || state.slug !== identity.slug) {
+          return 'claim-replaced' as const;
+        }
+        if (!(await pathExists(io, installTreeDir(identity.root)))) {
+          return 'tree-missing' as const;
+        }
+        if (state.epoch !== epoch || state.slug !== identity.slug) {
+          return 'claim-replaced' as const;
+        }
+        await writeRawStamp(
+          io,
+          identity.root,
+          pendingStamp(identity, epoch, currentLockfileHash, packages),
+          false,
+        );
         stamp = await readStamp(io, identity.root);
         state.materialized = true;
       }
-      return isCurrentPendingClaim(state, stamp, epoch);
+      return isCurrentPendingClaim(state, stamp, epoch)
+        ? ('admitted' as const)
+        : ('claim-replaced' as const);
     });
-    if (!admitted) {
+    if (admitted === 'identity-drift') {
+      return { status: 'refused', reason: 'identity-drift' };
+    }
+    if (admitted === 'tree-missing') {
+      return { status: 'refused', reason: 'tree-missing' };
+    }
+    if (admitted !== 'admitted') {
       return state.epoch === epoch
         ? { status: 'refused', reason: 'claim-replaced' }
         : { status: 'stale' };
@@ -707,13 +767,31 @@ export function createInstallStampAuthority(options: {
         state.phase = 'pending';
         return { kind: 'claim-failed' as const, report: proofReport };
       }
-      const currentText = await readText(io, joinPath(identity.root, 'package.json'));
+      const packageJsonPath = joinPath(identity.root, 'package.json');
+      const lockfilePath = joinPath(identity.root, 'package-lock.json');
+      const currentText = await readText(io, packageJsonPath);
+      const lockfileBefore = await readBytes(io, lockfilePath);
+      let currentLockfileHash: string | null = null;
+      if (lockfileBefore !== null) {
+        try {
+          currentLockfileHash = await sha256Hex(lockfileBefore);
+        } catch {
+          currentLockfileHash = null;
+        }
+      }
+      const currentTextAfterHash = await readText(io, packageJsonPath);
+      const lockfileAfterHash = await readBytes(io, lockfilePath);
       const treeExists = await pathExists(io, installTreeDir(identity.root));
       const pending = await readStamp(io, identity.root);
       if (state.epoch !== epoch || state.slug !== identity.slug) {
         return { kind: 'stale' as const };
       }
-      if (currentText !== identity.packageJsonText) {
+      if (
+        currentText !== identity.packageJsonText ||
+        currentTextAfterHash !== identity.packageJsonText ||
+        currentLockfileHash === null ||
+        !bytesEqual(lockfileBefore, lockfileAfterHash)
+      ) {
         state.phase = 'pending';
         return { kind: 'identity-drift' as const };
       }
@@ -727,7 +805,19 @@ export function createInstallStampAuthority(options: {
       if (!isCurrentPendingClaim(state, pending, epoch)) {
         return { kind: 'claim-replaced' as const };
       }
-      const stamp = trustedStamp(identity, packages);
+      const commitText = await readText(io, packageJsonPath);
+      const commitLockfile = await readBytes(io, lockfilePath);
+      if (state.epoch !== epoch || state.slug !== identity.slug) {
+        return { kind: 'stale' as const };
+      }
+      if (
+        commitText !== identity.packageJsonText ||
+        !bytesEqual(lockfileAfterHash, commitLockfile)
+      ) {
+        state.phase = 'pending';
+        return { kind: 'identity-drift' as const };
+      }
+      const stamp = trustedStamp(identity, packages, currentLockfileHash);
       try {
         await writeRawStamp(io, identity.root, stamp, false);
       } catch (error) {

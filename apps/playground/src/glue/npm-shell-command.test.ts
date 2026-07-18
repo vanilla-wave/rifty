@@ -72,7 +72,9 @@ function makeStubInstall(responder: (deps: Record<string, string>) => InstallRes
       dependencies = raw.dependencies ?? {};
     }
     calls.push({ root: rootName, deps: { ...dependencies }, cwd: installOpts.cwd });
-    return responder(dependencies);
+    const result = responder(dependencies);
+    await writeResultLockfile(installOpts.vfs, installOpts.cwd, result);
+    return result;
   };
   return { install, calls };
 }
@@ -118,6 +120,10 @@ const fakeRegistry = new RegistryClient({
 interface Recorded {
   stdout: string[];
   stderr: string[];
+}
+
+async function writeResultLockfile(vfs: Vfs, cwd: string, result: InstallResult): Promise<void> {
+  await vfs.writeFile(`${cwd}/package-lock.json`, JSON.stringify(result.lockfile, null, 2));
 }
 
 async function runShell(shell: Shell, line: string): Promise<{ exitCode: number; rec: Recorded }> {
@@ -1005,8 +1011,11 @@ describe('npm-shell-command — save flags + lifecycle aliases', () => {
         vfs,
         registry: fakeRegistry,
         install: async (arg1) => {
-          seenPrefer = (arg1 as InstallOptions).prefer;
-          return emptyResult();
+          const opts = arg1 as InstallOptions;
+          seenPrefer = opts.prefer;
+          const result = emptyResult();
+          await writeResultLockfile(opts.vfs, opts.cwd, result);
+          return result;
         },
       }),
     );
@@ -1231,7 +1240,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const stamp = JSON.parse(
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { version: number; deps: Record<string, string>; packages: number };
-    expect(stamp.version).toBe(3);
+    expect(stamp.version).toBe(4);
     expect(stamp.deps).toEqual({ lodash: '^4.17.0' });
     expect(stamp.packages).toBe(2);
   });
@@ -1650,7 +1659,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     expect(exitCode).toBe(0);
     expect(rec.stdout.join('')).toContain('npm: installed 2 package(s)');
     expect(rec.stdout.join('')).toContain('NEXT'); // the chained command ran
-    expect(flushCalls).toBe(1); // tree drain issued in background…
+    await vi.waitFor(() => expect(flushCalls).toBe(1)); // tree drain issued in background…
     expect(await trustedStamp(vfs)).toBeNull(); // …and the TRUSTED stamp is GATED on it
     releaseFlush();
     await vi.waitFor(async () => {
@@ -1759,6 +1768,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
 
     const first = await runShell(shell, 'npm install lodash@^4.17.0');
     expect(first.exitCode).toBe(0); // resolved with its sequence still in flight
+    await vi.waitFor(() => expect(flushCalls).toBe(1));
 
     // Install #2 proceeds immediately (never parked behind #1's drain) and
     // its own sequence stamps the tree.
@@ -1782,15 +1792,14 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
     });
-    let hangNext = true;
+    let flushCalls = 0;
     const makeDeps = () => ({
       vfs,
       registry: fakeRegistry,
       install: makeStubInstall(() => twoPackageResult()).install,
       flush: async () => {
-        const hang = hangNext;
-        hangNext = false;
-        if (hang) await flushGate; // only terminal A's tree drain hangs
+        flushCalls += 1;
+        if (flushCalls === 1) await flushGate; // only terminal A's tree drain hangs
         return { failures: [], total: 0 };
       },
     });
@@ -1801,6 +1810,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
 
     const a = await runShell(shellA, 'npm install lodash@^4.17.0');
     expect(a.exitCode).toBe(0); // A's sequence still in flight
+    await vi.waitFor(() => expect(flushCalls).toBe(1));
 
     const b = await runShell(shellB, 'npm install ms@^2.1.3');
     expect(b.exitCode).toBe(0);
@@ -1944,9 +1954,12 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     let slug = 'preset-a';
-    const install: InstallFn = async () => {
+    const install: InstallFn = async (arg1) => {
       slug = 'preset-b'; // the active preset changes while the install runs
-      return twoPackageResult();
+      const opts = arg1 as InstallOptions;
+      const result = twoPackageResult();
+      await writeResultLockfile(opts.vfs, opts.cwd, result);
+      return result;
     };
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
@@ -2127,10 +2140,13 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       releaseSecondInstall = r;
     });
     let installCalls = 0;
-    const install: InstallFn = async () => {
+    const install: InstallFn = async (arg1) => {
       installCalls += 1;
       if (installCalls === 2) await secondInstallGate; // #2 parked mid-tree-write
-      return twoPackageResult();
+      const opts = arg1 as InstallOptions;
+      const result = twoPackageResult();
+      await writeResultLockfile(opts.vfs, opts.cwd, result);
+      return result;
     };
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
@@ -2219,8 +2235,14 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     null,
     2,
   )}\n`;
+  const TRUSTED_PACKAGE_LOCK =
+    '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
   const TRUSTED_SEED = `${JSON.stringify(
-    createInstallStamp('/proj', TRUSTED_PACKAGE_JSON, { slug: '', packages: 2 }),
+    createInstallStamp('/proj', TRUSTED_PACKAGE_JSON, {
+      slug: '',
+      packages: 2,
+      lockfileSha256: '086b429649fca60876a3947ec1b825a13f1266a2cd6753b1b5acdac27261f149',
+    }),
     null,
     2,
   )}\n`;
@@ -2228,6 +2250,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
   async function seedTrustedProject(vfs: MemoryVfs): Promise<void> {
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     await vfs.writeFile('/proj/package.json', TRUSTED_PACKAGE_JSON);
+    await vfs.writeFile('/proj/package-lock.json', TRUSTED_PACKAGE_LOCK);
     await vfs.writeFile(STAMP, TRUSTED_SEED);
   }
 
@@ -2618,9 +2641,11 @@ describe('npm-shell-command — cwd package identity', () => {
           await vfs.rm(`${root}/node_modules`, { recursive: true, force: true });
           await vfs.mkdir(`${root}/node_modules/${request.project.slug}`, { recursive: true });
           await vfs.writeFile(`${root}/package.json`, packageJsonText);
+          const result = singletonResult(request.project.slug, '1.0.0');
+          await writeResultLockfile(vfs, root, result);
           await vfs.writeFile(`${root}/node_modules/${request.project.slug}/package.json`, '{}\n');
           return {
-            result: singletonResult(request.project.slug, '1.0.0'),
+            result,
             packageJsonText,
           };
         },
@@ -2678,6 +2703,7 @@ describe('npm-shell-command — cwd package identity', () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir(`${nestedRoot}/node_modules`, { recursive: true });
     await vfs.writeFile(`${outerRoot}/package.json`, outerPackageJson);
+    await writeResultLockfile(vfs, outerRoot, emptyResult());
     await vfs.writeFile(`${nestedRoot}/package.json`, nestedPackageJson);
     const stamps = createInstallStampAuthority({ vfs });
     const outerProject = {
@@ -2702,7 +2728,9 @@ describe('npm-shell-command — cwd package identity', () => {
           installedProject = request.project;
           await vfs.mkdir(`${nestedRoot}/node_modules/vite`, { recursive: true });
           await vfs.writeFile(`${nestedRoot}/node_modules/vite/package.json`, '{}\n');
-          return { result: emptyResult(), packageJsonText: nestedPackageJson };
+          const result = emptyResult();
+          await writeResultLockfile(vfs, nestedRoot, result);
+          return { result, packageJsonText: nestedPackageJson };
         },
         reset: async () => {},
         switchProject: async () => {},

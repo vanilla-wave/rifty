@@ -59,7 +59,14 @@ describe('git owner RPC bridge', () => {
         op: 'restore',
         pathspecs: ['package.json'],
       }),
-    ).toBe('manifest');
+    ).toBe('package-only');
+    expect(
+      classifyGitOwnerPackageImpact({
+        id: 'lockfile',
+        op: 'restore',
+        pathspecs: ['package-lock.json'],
+      }),
+    ).toBe('package-only');
     expect(
       classifyGitOwnerPackageImpact({
         id: 'derived',

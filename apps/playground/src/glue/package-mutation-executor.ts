@@ -144,7 +144,7 @@ export function createPackageMutationExecutor(
   };
 }
 
-export type PackageMutationImpact = 'none' | 'manifest' | 'tree';
+export type PackageMutationImpact = 'none' | 'package-only' | 'tree';
 
 function containsPath(container: string, path: string): boolean {
   const normalizedContainer = normalizePath(container);
@@ -157,10 +157,17 @@ function containsPath(container: string, path: string): boolean {
 export function packageMutationImpactForPath(path: string, root: string): PackageMutationImpact {
   const normalized = normalizePath(path);
   const packageJson = normalizePath(`${root}/package.json`);
+  const packageLock = normalizePath(`${root}/package-lock.json`);
   const nodeModules = normalizePath(`${root}/node_modules`);
-  if (normalized === packageJson) return 'manifest';
+  if (normalized === packageJson || normalized === packageLock) return 'package-only';
   if (containsPath(nodeModules, normalized)) return 'tree';
-  if (containsPath(normalized, packageJson) || containsPath(normalized, nodeModules)) return 'tree';
+  if (
+    containsPath(normalized, packageJson) ||
+    containsPath(normalized, packageLock) ||
+    containsPath(normalized, nodeModules)
+  ) {
+    return 'tree';
+  }
   return 'none';
 }
 
@@ -169,7 +176,7 @@ export function combinePackageMutationImpact(
   right: PackageMutationImpact,
 ): PackageMutationImpact {
   if (left === 'tree' || right === 'tree') return 'tree';
-  if (left === 'manifest' || right === 'manifest') return 'manifest';
+  if (left === 'package-only' || right === 'package-only') return 'package-only';
   return 'none';
 }
 
@@ -223,7 +230,7 @@ export function packageMutationTransitionsForProjects(
   const transitions: PackageMutationTransition[] = [];
   for (const project of byRoot.values()) {
     const impact = classifyVfsMutationIntentsPackageImpact(intents, project.root);
-    if (impact === 'manifest') transitions.push({ mode: 'demote', project });
+    if (impact === 'package-only') transitions.push({ mode: 'demote', project });
     else if (impact === 'tree') transitions.push({ mode: 'revoke', root: project.root });
   }
   return sortTransitions(transitions);
@@ -253,7 +260,8 @@ function addPathDerivedStampRoots(path: string, roots: Set<string>): void {
     if (segments[index] !== 'node_modules') continue;
     roots.add(index === 0 ? '/' : `/${segments.slice(0, index).join('/')}`);
   }
-  if (basename(normalized) === 'package.json') roots.add(dirname(normalized));
+  const name = basename(normalized);
+  if (name === 'package.json' || name === 'package-lock.json') roots.add(dirname(normalized));
 }
 
 function scanStampRoots(fs: FsSync, path: string, roots: Set<string>): void {

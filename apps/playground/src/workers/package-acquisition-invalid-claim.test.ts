@@ -15,6 +15,7 @@ import {
 const ROOT = '/projects/app';
 const NESTED_ROOT = `${ROOT}/node_modules/nested`;
 const PACKAGE_JSON = '{"name":"app","dependencies":{"vite":"^5.4.0"}}\n';
+const PACKAGE_LOCK = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
 const NESTED_PACKAGE_JSON = '{"name":"nested"}\n';
 const enc = new TextEncoder();
 
@@ -51,7 +52,11 @@ interface InvalidClaimFixture {
 }
 
 function validStamp(root: string) {
-  const stamp = createInstallStamp(root, PACKAGE_JSON, { slug: 'legacy', packages: 1 });
+  const stamp = createInstallStamp(root, PACKAGE_JSON, {
+    slug: 'legacy',
+    packages: 1,
+    lockfileSha256: '0'.repeat(64),
+  });
   if (!stamp) throw new Error(`could not construct install stamp for ${root}`);
   return stamp;
 }
@@ -108,6 +113,7 @@ describe('package acquisition invalid physical claim acceptance', () => {
         mutations.push(operation);
         clearProjectTree(owner, ROOT);
         owner.writeFileSync(`${ROOT}/package.json`, enc.encode(PACKAGE_JSON));
+        owner.writeFileSync(`${ROOT}/package-lock.json`, enc.encode(PACKAGE_LOCK));
         owner.mkdirSync(`${ROOT}/node_modules/vite`, { recursive: true });
         owner.writeFileSync(`${ROOT}/node_modules/vite/package.json`, enc.encode('{}\n'));
       };
@@ -171,7 +177,7 @@ describe('package acquisition invalid physical claim acceptance', () => {
       } else {
         expect(owner.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(true);
         await expect(readInstallStamp(pair.vfs, ROOT)).resolves.toMatchObject({
-          version: 3,
+          version: 4,
           root: ROOT,
           slug: PROJECT.slug,
           installArtifactIdentity,

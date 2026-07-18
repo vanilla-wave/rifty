@@ -47,13 +47,19 @@ async function tick(ms = 20): Promise<void> {
 }
 
 describe('serveVfsWrites + sendVfsWrite', () => {
-  it('classifies manifest, guarded-tree, and ancestor mutations directionally', () => {
+  it('classifies package identity, guarded-tree, and ancestor mutations directionally', () => {
     expect(
       classifyVfsWriteFramePackageImpact(
         { type: 'write', path: '/workspace/package.json', data: enc.encode('{}') },
         '/workspace',
       ),
-    ).toBe('manifest');
+    ).toBe('package-only');
+    expect(
+      classifyVfsWriteFramePackageImpact(
+        { type: 'write', path: '/workspace/package-lock.json', data: enc.encode('{}') },
+        '/workspace',
+      ),
+    ).toBe('package-only');
     expect(
       classifyVfsWriteFramePackageImpact(
         { type: 'write', path: '/workspace/node_modules/pkg/index.js', data: enc.encode('x') },

@@ -26,7 +26,7 @@ import {
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 
 export interface InstallStamp {
-  readonly version: 3;
+  readonly version: 4;
   /** Canonical absolute project root this claim was minted for. */
   readonly root: string;
   /** Project identity (preset slug) the tree was installed for — the reuse key. */
@@ -40,6 +40,8 @@ export interface InstallStamp {
   readonly deps: Readonly<Record<string, string>>;
   /** `result.packages.length` of the install that produced the tree. */
   readonly packages: number;
+  /** SHA-256 over exact stored `<root>/package-lock.json` bytes. */
+  readonly lockfileSha256: string;
   /** Pending boot/restore stamps are visible for diagnostics but never trusted. */
   readonly durability?: 'pending';
   /** Authority-issued per-claim fence; present only while pending. */
@@ -158,6 +160,7 @@ export function depsEqual(
 export interface InstallStampPayload {
   readonly slug: string;
   readonly packages: number;
+  readonly lockfileSha256: string;
   readonly durability?: 'pending';
   readonly epoch?: string;
 }
@@ -170,17 +173,19 @@ export function createInstallStamp(
 ): InstallStamp | null {
   if (!isAbsolute(root)) return null;
   if (!Number.isSafeInteger(payload.packages) || payload.packages < 0) return null;
+  if (!/^[0-9a-f]{64}$/.test(payload.lockfileSha256)) return null;
   const canonicalRoot = normalizePath(root);
   const deps = effectiveDepsFromPackageJsonText(packageJsonText);
   if (!deps) return null;
   const stamp = {
-    version: 3,
+    version: 4,
     root: canonicalRoot,
     slug: payload.slug,
     packageJsonText,
     installArtifactIdentity,
     deps,
     packages: payload.packages,
+    lockfileSha256: payload.lockfileSha256,
   } satisfies Omit<InstallStamp, 'durability' | 'epoch'>;
   if (payload.durability === 'pending') {
     if (typeof payload.epoch !== 'string' || payload.epoch.length === 0) return null;
@@ -203,11 +208,27 @@ export function parseInstallStamp(value: unknown, root: string): InstallStamp | 
     installArtifactIdentity?: unknown;
     deps?: unknown;
     packages?: unknown;
+    lockfileSha256?: unknown;
     durability?: unknown;
     epoch?: unknown;
   };
+  const trustedKeys = [
+    'version',
+    'root',
+    'slug',
+    'packageJsonText',
+    'installArtifactIdentity',
+    'deps',
+    'packages',
+    'lockfileSha256',
+  ];
+  const pending = raw.durability === 'pending';
+  const expectedKeys = pending ? [...trustedKeys, 'durability', 'epoch'] : trustedKeys;
+  const actualKeys = Object.keys(raw);
   if (
-    raw.version !== 3 ||
+    actualKeys.length !== expectedKeys.length ||
+    !expectedKeys.every((key) => Object.hasOwn(raw, key)) ||
+    raw.version !== 4 ||
     typeof raw.root !== 'string' ||
     !isAbsolute(raw.root) ||
     normalizePath(raw.root) !== raw.root ||
@@ -218,7 +239,9 @@ export function parseInstallStamp(value: unknown, root: string): InstallStamp | 
     !/^sha256:[0-9a-f]{64}$/.test(raw.installArtifactIdentity) ||
     typeof raw.packages !== 'number' ||
     !Number.isSafeInteger(raw.packages) ||
-    raw.packages < 0
+    raw.packages < 0 ||
+    typeof raw.lockfileSha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(raw.lockfileSha256)
   ) {
     return null;
   }
@@ -235,13 +258,14 @@ export function parseInstallStamp(value: unknown, root: string): InstallStamp | 
     return null;
   }
   return {
-    version: 3,
+    version: 4,
     root: raw.root,
     slug: raw.slug,
     packageJsonText: raw.packageJsonText,
     installArtifactIdentity: raw.installArtifactIdentity,
     deps,
     packages: raw.packages,
+    lockfileSha256: raw.lockfileSha256,
     ...(raw.durability === 'pending' ? { durability: 'pending' as const } : {}),
     ...(typeof raw.epoch === 'string' ? { epoch: raw.epoch } : {}),
   };
@@ -273,6 +297,25 @@ export function stampTrusted(stamp: InstallStamp): boolean {
   );
 }
 
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const input = new Uint8Array(bytes.byteLength);
+  input.set(bytes);
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
+  let hex = '';
+  for (const byte of digest) hex += byte.toString(16).padStart(2, '0');
+  return hex;
+}
+
+async function lockfileMatches(vfs: Vfs, root: string, expectedHash: string): Promise<boolean> {
+  const path = joinPath(root, 'package-lock.json');
+  if (!(await vfs.exists(path))) return false;
+  try {
+    return (await sha256Hex(await vfs.readFile(path))) === expectedHash;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The skip predicate: stamp present, its slug matches the project being booted,
  * `node_modules/` exists, and deps still match package.json (freshness guard).
@@ -290,6 +333,7 @@ export async function installStampSatisfied(
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   const packageJsonText = await readPackageJsonText(vfs, root);
   if (packageJsonText === null || stamp.packageJsonText !== packageJsonText) return null;
+  if (!(await lockfileMatches(vfs, root, stamp.lockfileSha256))) return null;
   return stamp;
 }
 
@@ -318,6 +362,7 @@ export async function installStampSatisfiedForPackageJson(
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   if (stamp.packageJsonText !== currentText) return null;
+  if (!(await lockfileMatches(vfs, root, stamp.lockfileSha256))) return null;
   return stamp;
 }
 
@@ -355,7 +400,7 @@ export function installStampSatisfiedForPackageJsonSync(
   if (stamp.slug !== slug) return null;
   if (!fs.existsSync(joinPath(root, 'node_modules'))) return null;
   if (stamp.packageJsonText !== currentText) return null;
-  return stamp;
+  return null;
 }
 
 function readTextSyncOrNull(fs: InstallStampSyncFs, path: string): string | null {

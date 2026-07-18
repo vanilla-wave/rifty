@@ -19,6 +19,8 @@ const BASE_PACKAGE_JSON = `${JSON.stringify({
   version: '1.0.0',
   dependencies: { vite: '5.4.21' },
 })}\n`;
+const BASE_PACKAGE_LOCK =
+  '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
 const config: BootstrapConfig = {
   runtime: 'vite',
   root: ROOT,
@@ -49,7 +51,10 @@ function installResult(): InstallResult {
   };
 }
 
-afterEach(resetSyncMirror);
+afterEach(() => {
+  resetSyncMirror();
+  vi.unstubAllGlobals();
+});
 
 async function packageMutationHarness(ownerEpoch: string) {
   const pair = createMemoryFs();
@@ -157,6 +162,7 @@ it('preserves a trusted user-extended tree when the first dev config replaces hi
   const cowsayBin = `${ROOT}/node_modules/.bin/cowsay`;
   authority.mkdirSync(`${ROOT}/node_modules/.bin`, { recursive: true });
   authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(extendedPackageJson));
+  authority.writeFileSync(`${ROOT}/package-lock.json`, new TextEncoder().encode(BASE_PACKAGE_LOCK));
   authority.writeFileSync(cowsayBin, new TextEncoder().encode('#!/usr/bin/env node\n'));
 
   const seedStamps = createInstallStampAuthority({
@@ -227,6 +233,60 @@ it('preserves a trusted user-extended tree when the first dev config replaces hi
   ).resolves.toMatchObject({ status: 'trusted' });
 });
 
+it('starts bounded warm-boot prefetch until async lockfile verification restores trust', async () => {
+  const pair = createMemoryFs();
+  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+    ownerEpoch: 'owner-package-v4-prefetch-test',
+    initialRoots: ['/'],
+  });
+  setSyncMirror(authority, { async: pair.vfs });
+  authority.mkdirSync(`${ROOT}/node_modules/vite`, { recursive: true });
+  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(BASE_PACKAGE_JSON));
+  authority.writeFileSync(`${ROOT}/package-lock.json`, new TextEncoder().encode(BASE_PACKAGE_LOCK));
+  const seeded = createInstallStampAuthority({
+    vfs: pair.vfs,
+    fsSync: authority,
+    claimIo: installStampClaims,
+  });
+  const claim = await seeded.demote({ root: ROOT, slug: 'scratch' });
+  await expect(
+    seeded.promote(
+      { root: ROOT, slug: 'scratch', packageJsonText: BASE_PACKAGE_JSON },
+      { epoch: claim.epoch, packages: 1 },
+    ),
+  ).resolves.toMatchObject({ status: 'trusted' });
+  const fetchSpy = vi.fn(async () => new Response('bundle'));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  createOwnerPackageState({
+    initial: { cfg: config, templateId: 'vite', slug: 'scratch', fromScratch: true },
+    primeInitialPrefetch: true,
+    vfs: new SyncMirrorVfs(),
+    fsSync: authority,
+    installStampClaims,
+    flush: async () => ({ failures: [], total: 0 }),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry: new RegistryClient({
+      baseUrl: '/unused',
+      fetch: async () => new Response('', { status: 599 }),
+    }),
+    resolverUrl: () => 'http://eddy.test',
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  const restarted = createInstallStampAuthority({
+    vfs: pair.vfs,
+    fsSync: authority,
+    claimIo: installStampClaims,
+  });
+  await expect(restarted.check({ root: ROOT, slug: 'scratch' })).resolves.toMatchObject({
+    status: 'trusted',
+  });
+});
+
 it('reasserts template node_modules inside the package authority without preserving stale trust', async () => {
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
@@ -236,6 +296,7 @@ it('reasserts template node_modules inside the package authority without preserv
   setSyncMirror(authority, { async: pair.vfs });
   authority.mkdirSync(ROOT, { recursive: true });
   authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(BASE_PACKAGE_JSON));
+  authority.writeFileSync(`${ROOT}/package-lock.json`, new TextEncoder().encode(BASE_PACKAGE_LOCK));
   const seedPath = `${ROOT}/node_modules/@rifty/example-types/index.d.ts`;
   const seedConfig: BootstrapConfig = {
     ...config,

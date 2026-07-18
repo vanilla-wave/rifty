@@ -20,7 +20,7 @@ import {
 
 const ROOT = '/workspace';
 const LOCKFILE_TEXT = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
-const LOCKFILE_SHA256 = '260f55f93f20704a2a8dd2e904823db6c87368709eac469eec504788bc087ffd';
+const LOCKFILE_SHA256 = '086b429649fca60876a3947ec1b825a13f1266a2cd6753b1b5acdac27261f149';
 
 async function seedProject(
   vfs: MemoryVfs,

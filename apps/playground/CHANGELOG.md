@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed (honest install stamps)
+
+- Install-stamp v4 binds trust to exact stored `package-lock.json` bytes;
+  async checks and final promotion rehash under race fences, while sync boot
+  checks conservatively prefetch until verification completes.
+- Exact `package.json` and `package-lock.json` mutations now share one
+  `package-only` demotion class across owner writer adapters.
+
 ### Added (app-local Workbench contract)
 
 - Companion hosts now supply the dedicated TypeScript Worker explicitly;

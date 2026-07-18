@@ -1532,7 +1532,8 @@ describe('install-stamp authority async fencing', () => {
     ).resolves.toMatchObject({ status: 'refused', reason: 'write-failed' });
     expect(a.checkSync({ root: ROOT, slug: 'scratch' })).toMatchObject({ status: 'pending' });
     const restarted = createInstallStampAuthority({ vfs: pair.vfs, fsSync: pair.fsSync });
-    expect(restarted.checkSync({ root: ROOT, slug: 'scratch' })).toMatchObject({
+    expect(restarted.checkSync({ root: ROOT, slug: 'scratch' })).toEqual({ status: 'absent' });
+    await expect(restarted.check({ root: ROOT, slug: 'scratch' })).resolves.toMatchObject({
       status: 'trusted',
       stamp: { packageJsonText: PACKAGE_JSON },
     });
