@@ -367,4 +367,39 @@ describe('CJS extension hooks', () => {
       );
     },
   );
+
+  it('keeps the synchronous transform ceiling after an extension accessor poisons endsWith', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/package.json': JSON.stringify({ type: 'commonjs' }),
+      '/work/main.js': `
+        const descriptor = Object.getOwnPropertyDescriptor(require.extensions, '.ts');
+        const originalEndsWith = String.prototype.endsWith;
+        Object.defineProperty(require.extensions, '.ts', {
+          configurable: true,
+          enumerable: true,
+          get() {
+            String.prototype.endsWith = null;
+            return 0;
+          },
+        });
+        let failure;
+        try { require('./target.ts'); }
+        catch (error) { failure = { name: error.name, feature: error.feature }; }
+        finally {
+          String.prototype.endsWith = originalEndsWith;
+          if (descriptor) Object.defineProperty(require.extensions, '.ts', descriptor);
+          else delete require.extensions['.ts'];
+        }
+        module.exports = failure;
+      `,
+      '/work/target.ts': 'const answer: number = 42;\n',
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    expect(loader.require('./main.js', '/work/entry.js')).toEqual({
+      name: 'NotImplementedError',
+      feature: 'module-loader.ts-via-require',
+    });
+  });
 });
