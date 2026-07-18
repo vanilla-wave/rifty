@@ -1,8 +1,33 @@
 import { type Page, expect, test } from '@playwright/test';
-import { openShellTerminal, pickStarter, readActiveProjectText } from './helpers/playground.ts';
+import {
+  openShellTerminal,
+  pickStarter,
+  runTerminalLineSettled,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 const OWNER_TIMEOUT = 90_000;
 const LEGACY_WORKSPACE_KEY = 'rifty.workspaceId';
+let projectByteReadSequence = 0;
+
+async function readActiveMainByteNotation(page: Page): Promise<string> {
+  const marker = `__rifty_tab_bytes_${String(Date.now())}_${String(++projectByteReadSequence)}__`;
+  const begin = `${marker}begin`;
+  const end = `${marker}end`;
+  await runTerminalLineSettled(
+    page,
+    `printf '${begin}\\n'; cat -A './src/main.js'; printf '\\n${end}\\n'`,
+    OWNER_TIMEOUT,
+  );
+  const buffer = await terminalBuffer(page);
+  const start = buffer.lastIndexOf(begin);
+  const finish = start < 0 ? -1 : buffer.indexOf(end, start + begin.length);
+  if (start < 0 || finish < 0) throw new Error('Project byte-read markers missing');
+  return buffer
+    .slice(start + begin.length, finish)
+    .replace(/^\r?\n/u, '')
+    .replace(/\r?\n$/u, '');
+}
 
 async function setOpenEditorValue(page: Page, path: string, text: string): Promise<void> {
   await expect
@@ -52,10 +77,7 @@ async function expectExactReopenedScratch(
   });
 
   await openShellTerminal(page);
-  await expect(readActiveProjectText(page, './src/main.js', OWNER_TIMEOUT)).resolves.toEqual({
-    exists: true,
-    text: expected,
-  });
+  await expect(readActiveMainByteNotation(page)).resolves.toBe(expected.replaceAll('\n', '$\r\n'));
 }
 
 test('occupied reload and a later fresh tab both reopen the exact Saved bytes', async ({
@@ -72,6 +94,7 @@ test('occupied reload and a later fresh tab both reopen the exact Saved bytes', 
     "const target = document.getElementById('app');",
     "if (!target) throw new Error('missing preview root');",
     'target.textContent = marker;',
+    '',
   ].join('\n');
 
   await owner.goto('/');

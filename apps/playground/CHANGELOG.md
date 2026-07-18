@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed (tab-independent workspace admission, ADR-0293)
+
+- A competing tab now gets a directed occupied-workspace screen instead of an
+  editable-looking failure, while Chromium acceptance proves that exact
+  `Saved` bytes reopen in both the explicitly reloaded tab and a later fresh tab.
+
 ### Added (app-local Workbench contract)
 
 - Companion hosts now supply the dedicated TypeScript Worker explicitly;
@@ -596,11 +602,9 @@
   browser-unit Playwright config writes HTML to `playwright-report/browser-unit`;
   the regression test now pins the browser-unit JOB's upload (a bare
   `path: playwright-report` check passed on the unrelated e2e lane).
-- **Multi-tab gap kept explicit, not silently dropped.** The premature empty
-  `multi-tab-story` epic is replaced by a discovery item
-  (`docs/backlog/playground/multi-tab-undefined-behavior.md`): the
-  two-tab / two-owner-over-one-OPFS silent-corruption risk stays a tracked,
-  loud gap (two live backlog items defer to it) instead of a bare deletion.
+- **Multi-tab writes are now refused visibly.** The Workbench's origin lock
+  prevents a second owner, and ADR-0293 maps that contention to a directed
+  occupied-tab screen while keeping multi-tab editing explicitly out of scope.
 
 ### Added (PR #113 review round 3)
 

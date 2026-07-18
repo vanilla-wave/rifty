@@ -3,7 +3,8 @@ import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { getRegistryProxyPrefix } from '../glue/registry-fetch.ts';
 import { getEddyBundleBaseUrl, getResolverUrl } from '../glue/resolver-config.ts';
 import type { PlaygroundWorkbench, PlaygroundWorkbenchOptions } from '../workbench/playground.ts';
-import { openPlaygroundWorkbench } from '../workbench/playground.ts';
+import { type OpenPlaygroundWorkbench, openPlaygroundWorkbench } from '../workbench/playground.ts';
+import { WorkbenchOriginOccupiedError } from '../workbench/public.ts';
 import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&url';
 import kernelWorkerUrl from '../workers/kernel-worker-entry.ts?worker&url';
 import nodeWorkerUrl from '../workers/node-entry-bootstrap.ts?worker&url';
@@ -69,10 +70,32 @@ export function playgroundWorkbenchOptions(): PlaygroundWorkbenchOptions {
 }
 
 export interface OpenedPlaygroundAppWorkbench {
+  readonly status: 'opened';
   readonly workbench: PlaygroundWorkbench;
 }
 
-export async function openPlaygroundAppWorkbench(): Promise<OpenedPlaygroundAppWorkbench> {
-  const workbench = await openPlaygroundWorkbench(playgroundWorkbenchOptions());
-  return Object.freeze({ workbench });
+export interface OccupiedPlaygroundAppWorkbench {
+  readonly status: 'occupied';
 }
+
+export type PlaygroundAppWorkbenchOpenOutcome =
+  | OpenedPlaygroundAppWorkbench
+  | OccupiedPlaygroundAppWorkbench;
+
+export function createOpenPlaygroundAppWorkbench(
+  open: OpenPlaygroundWorkbench,
+): () => Promise<PlaygroundAppWorkbenchOpenOutcome> {
+  return async () => {
+    try {
+      const workbench = await open(playgroundWorkbenchOptions());
+      return Object.freeze({ status: 'opened' as const, workbench });
+    } catch (error) {
+      if (error instanceof WorkbenchOriginOccupiedError) {
+        return Object.freeze({ status: 'occupied' as const });
+      }
+      throw error;
+    }
+  };
+}
+
+export const openPlaygroundAppWorkbench = createOpenPlaygroundAppWorkbench(openPlaygroundWorkbench);

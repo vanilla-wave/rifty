@@ -3,7 +3,10 @@
 // isolation. Missing headers must fail loud, not yield a black screen. ADR-0002 / D-001.
 import { render } from 'solid-js/web';
 import { App } from './App.tsx';
+import { mountPlaygroundPage } from './adapters/playground-page-entry.ts';
+import { openPlaygroundAppWorkbench } from './adapters/playground-workbench-host.ts';
 import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
+import { WorkspaceOccupied } from './components/WorkspaceOccupied.tsx';
 import { installPlaygroundNodeWorkerRuntime } from './glue/playground-node-worker-runtime.ts';
 import { createTerminalPersistence } from './glue/terminal-persistence.ts';
 // xterm's stylesheet is required for terminal scrolling (`.xterm-viewport` position +
@@ -38,13 +41,18 @@ async function renderApp(): Promise<void> {
   const root = document.getElementById('app');
   if (!root) throw new Error('Missing #app root element');
 
-  // ADR-0013 — pick OPFS vs memory + register the SW before the UI sees the
-  // runtime. Pipeline: re-assert COI (defence-in-depth), init VFS (memory
-  // fallback on failure), register `/sw.js` (banner on failure, not fatal).
-  const bootResult = await bootstrapPlayground();
-  const terminalPersistence = await createTerminalPersistence(WORKSPACE);
-  // Drop the index.html cold-boot skeleton before mounting (Solid's render into a
-  // non-empty container would otherwise leave the skeleton behind the app).
-  root.replaceChildren();
-  render(() => <App boot={bootResult} terminalPersistence={terminalPersistence} />, root);
+  await mountPlaygroundPage({
+    bootstrapPlayground,
+    openPlaygroundAppWorkbench,
+    createTerminalPersistence: () => createTerminalPersistence(WORKSPACE),
+    mountOccupied() {
+      root.replaceChildren();
+      render(() => <WorkspaceOccupied onReload={() => globalThis.location.reload()} />, root);
+    },
+    mountApp(props) {
+      // Drop the index.html cold-boot skeleton only after Workbench admission.
+      root.replaceChildren();
+      render(() => <App {...props} />, root);
+    },
+  });
 }
