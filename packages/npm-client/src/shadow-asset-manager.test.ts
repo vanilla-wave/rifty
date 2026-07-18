@@ -461,6 +461,76 @@ describe('ShadowAssetManager', () => {
     expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).toBeNull();
   });
 
+  it.each(['clear', 'close'] as const)(
+    'awaits a detached cancelled producer before %s mutates the manager lifetime',
+    async (operation) => {
+      const { plan } = fixture();
+      const events: string[] = [];
+      let admitted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        admitted = resolve;
+      });
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const acquire = vi.fn(async (): Promise<never> => {
+        admitted();
+        await gate;
+        events.push('acquire-settled');
+        throw new Error('cancelled producer settled late');
+      });
+      const inner = createMemoryShadowAssetStorage();
+      const write = vi.spyOn(inner, 'write');
+      const storage: ShadowAssetStorage = {
+        storageClass: inner.storageClass,
+        read: (entry) => inner.read(entry),
+        write: (entry, bytes) => inner.write(entry, bytes),
+        remove: (entry) => inner.remove(entry),
+        inspect: () => inner.inspect(),
+        clear: async () => {
+          events.push('storage-clear');
+          await inner.clear();
+        },
+        close: async () => {
+          events.push('storage-close');
+          await inner.close();
+        },
+      };
+      const manager = createShadowAssetManager({
+        storage,
+        source: {
+          acquire,
+          close: async () => {
+            events.push('source-close');
+          },
+        },
+      });
+      const controller = new AbortController();
+      const ensuring = manager.installer.ensure(plan, { signal: controller.signal });
+      void ensuring.catch(() => undefined);
+      await started;
+      controller.abort();
+      await expect(ensuring).rejects.toMatchObject({ name: 'AbortError' });
+
+      const lifetime =
+        operation === 'clear' ? manager.admin.clearCache().then(() => undefined) : manager.close();
+      void lifetime.catch(() => undefined);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(events).toEqual([]);
+
+      release();
+      await expect(lifetime).resolves.toBeUndefined();
+      expect(events).toEqual(
+        operation === 'clear'
+          ? ['acquire-settled', 'storage-clear']
+          : ['acquire-settled', 'source-close', 'storage-close'],
+      );
+      expect(write).not.toHaveBeenCalled();
+    },
+  );
+
   it('starts a fresh object producer when retry follows a sole-cancelled flight', async () => {
     const { plan, tgz } = fixture();
     let admitted!: () => void;

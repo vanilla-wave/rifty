@@ -772,10 +772,14 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
               } catch (error) {
                 if (warned) return;
                 warned = true;
-                console.warn(
-                  `[package-acquisition] runtime-asset progress observer failed for ${input.project.projectId}`,
-                  error,
-                );
+                try {
+                  console.warn(
+                    `[package-acquisition] runtime-asset progress observer failed for ${input.project.projectId}`,
+                    error,
+                  );
+                } catch {
+                  // Presentation cannot become a package-state owner.
+                }
               }
             },
           };
