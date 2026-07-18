@@ -38,10 +38,11 @@ describe('Playground App admitted Workbench ownership', () => {
     expect((failure as AggregateError).errors).toEqual([trigger, cleanup]);
   });
 
-  it('creates the runtime from that Workbench and coalesces later cleanup onto the runtime', async () => {
+  it('creates the runtime from that Workbench and delegates repeated cleanup to it', async () => {
     const admittedClose = vi.fn(async (): Promise<void> => {});
     const admitted = workbench(admittedClose);
-    const runtimeClose = vi.fn(async (): Promise<void> => {});
+    const closing = Promise.resolve();
+    const runtimeClose = vi.fn(() => closing);
     const created = runtime(runtimeClose);
     const createRuntime = vi.fn((received: PlaygroundWorkbench) => {
       expect(received).toBe(admitted);
@@ -56,7 +57,7 @@ describe('Playground App admitted Workbench ownership', () => {
     expect(second).toBe(first);
     await first;
     expect(createRuntime).toHaveBeenCalledTimes(1);
-    expect(runtimeClose).toHaveBeenCalledTimes(1);
+    expect(runtimeClose).toHaveBeenCalledTimes(2);
     expect(admittedClose).not.toHaveBeenCalled();
   });
 

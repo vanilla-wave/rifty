@@ -10,33 +10,37 @@ export interface PlaygroundAppWorkbenchOwnership {
   close(): Promise<void>;
 }
 
-/** One-way custody transfer: admitted Workbench -> App runtime -> one close. */
+type CloseOwner = Pick<PlaygroundWorkbench, 'close'> | Pick<PlaygroundAppRuntime, 'close'>;
+
+type WorkbenchCustody =
+  | { readonly state: 'workbench'; readonly owner: PlaygroundWorkbench }
+  | { readonly state: 'runtime'; readonly owner: PlaygroundAppRuntime }
+  | { readonly state: 'closed'; readonly owner: CloseOwner };
+
+/** One-way custody transfer: admitted Workbench -> App runtime -> closed transfer. */
 export function createPlaygroundAppWorkbenchOwnership(
   workbench: PlaygroundWorkbench,
 ): PlaygroundAppWorkbenchOwnership {
-  let resource: Pick<PlaygroundWorkbench, 'close'> | Pick<PlaygroundAppRuntime, 'close'> =
-    workbench;
-  let runtimeCreated = false;
-  let closePromise: Promise<void> | null = null;
+  let custody: WorkbenchCustody = { state: 'workbench', owner: workbench };
 
   const close = (): Promise<void> => {
-    if (closePromise !== null) return closePromise;
+    const owner = custody.owner;
+    custody = { state: 'closed', owner };
     try {
-      closePromise = resource.close();
+      return owner.close();
     } catch (error) {
-      closePromise = Promise.reject(error);
+      return Promise.reject(error);
     }
-    void closePromise.catch(() => {});
-    return closePromise;
   };
 
   return Object.freeze({
     createRuntime(create: (workbench: PlaygroundWorkbench) => PlaygroundAppRuntime) {
-      if (runtimeCreated) throw new Error('Playground App runtime already exists');
-      if (closePromise !== null) throw new Error('Playground App Workbench ownership is closing');
-      const runtime = create(workbench);
-      resource = runtime;
-      runtimeCreated = true;
+      if (custody.state === 'runtime') throw new Error('Playground App runtime already exists');
+      if (custody.state === 'closed') {
+        throw new Error('Playground App Workbench ownership is closing');
+      }
+      const runtime = create(custody.owner);
+      custody = { state: 'runtime', owner: runtime };
       return runtime;
     },
     fail(trigger: unknown) {
