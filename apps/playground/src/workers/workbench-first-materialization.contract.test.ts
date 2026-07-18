@@ -1219,6 +1219,7 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
       packageJsonBytes: authority.readFileBytesSync(`${materialized.projectRoot}/package.json`),
     });
     let pty = createPtyClient({ send: () => {} });
+    let auxiliaryTerminalSequence = 0;
     let alive = true;
     let resolveClosed!: (reason: unknown) => void;
     const closed = new Promise<unknown>((resolve) => {
@@ -1258,6 +1259,9 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
               timeline.events.push(
                 `pty:${frame.stream}:${decoder.decode(frame.data).replaceAll('\n', '\\n')}`,
               );
+            }
+            if (frame.type === 'pty:run-ready') {
+              timeline.events.push(`pty:run-ready:${frame.sid}:${frame.rid}`);
             }
             pty.onFrame(frame);
           },
@@ -1324,7 +1328,14 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
       runtime,
       terminal,
       createTerminal: () => {
-        throw new Error('First-materialization contract uses exactly the default terminal');
+        const opened = createProjectTerminal({
+          id: `workbench-auxiliary-terminal-${String(++auxiliaryTerminalSequence)}`,
+          port,
+        });
+        opened.attach((chunk, stream) => {
+          timeline.events.push(`terminal:${stream}:${chunk.replaceAll('\n', '\\n')}`);
+        });
+        return opened;
       },
       async closeOwner() {
         const results = await Promise.allSettled([
@@ -1659,6 +1670,118 @@ describe('Workbench companion first materialization Contract+RED', () => {
     expect(firstViteOutput).toBeGreaterThan(firstSpawn);
     expect(h.timeline.events.slice(beforeSecondRun)).toContain(`exec:vite --port ${VITE_PORT}`);
     expect(h.timeline.events.slice(beforeSecondRun).join('\n')).not.toContain('npm: installing');
+  });
+
+  // Fault class: observable-order. Deferred acquisition belongs to the
+  // project owner, so an earlier successful public terminal install must be
+  // visible before the primary runtime chooses its later command line.
+  it('consumes root first materialization from a public auxiliary terminal before the primary run', async () => {
+    const fetchSnapshot = vi.fn(async () => {
+      throw new Error('kind:install must not fetch a dependency snapshot');
+    });
+    vi.stubGlobal('fetch', fetchSnapshot);
+    const h = ownerHarness();
+    const definition = viteDefinition({ kind: 'install' }, 'vite-auxiliary-first');
+
+    const materialized = await h.open(definition);
+    const session = await h.session(definition, materialized);
+    const auxiliary = session.terminals.open();
+    const auxiliaryRun = auxiliary.run('npm install');
+    await auxiliaryRun.ready;
+    await expect(auxiliaryRun.exited).resolves.toEqual({ code: 0, signal: null });
+    await auxiliaryRun.close();
+
+    const beforePrimaryRun = h.timeline.events.length;
+    const primaryRun = session.run();
+    const child = await waitForChild(h, 0);
+    child.finish('vite: auxiliary-first output\n');
+    await primaryRun.exited;
+    await primaryRun.close();
+    await session.close();
+    await h.close();
+
+    const primaryEvents = h.timeline.events.slice(beforePrimaryRun);
+    expect.soft(fetchSnapshot).not.toHaveBeenCalled();
+    expect.soft(h.timeline.installs).toHaveLength(1);
+    expect(primaryEvents.filter((event) => event.startsWith('exec:'))).toEqual([
+      `exec:vite --port ${VITE_PORT}`,
+    ]);
+    expect(primaryEvents.join('\n')).not.toContain('npm install');
+  });
+
+  // Fault class: concurrent-same-key. Every already-admitted consumer of one
+  // project latch observes the first successful settlement, independent of
+  // which terminal performed it.
+  it('shares concurrent auxiliary consumption with the admitted primary run and every future run', async () => {
+    const releaseInstall = deferred();
+    let gateInstall = false;
+    let timeline: Timeline | null = null;
+    const fetchSnapshot = vi.fn(async () => {
+      throw new Error('kind:install must not fetch a dependency snapshot');
+    });
+    vi.stubGlobal('fetch', fetchSnapshot);
+    const h = ownerHarness({
+      beforeInstallReturn: async () => {
+        if (!gateInstall) return;
+        timeline?.events.push('install:gate');
+        await releaseInstall.promise;
+      },
+    });
+    timeline = h.timeline;
+    const definition = viteDefinition({ kind: 'install' }, 'vite-auxiliary-concurrent');
+
+    const materialized = await h.open(definition);
+    const session = await h.session(definition, materialized);
+    gateInstall = true;
+    const auxiliary = session.terminals.open();
+    const auxiliaryRun = auxiliary.run('npm install');
+    await auxiliaryRun.ready;
+    await vi.waitFor(() => expect(h.timeline.events).toContain('install:gate'));
+
+    const primaryRun = session.run();
+    await vi.waitFor(() =>
+      expect(h.timeline.events.filter((event) => event.startsWith('pty:run-ready:'))).toHaveLength(
+        2,
+      ),
+    );
+    const beforeReleaseEvents = [...h.timeline.events];
+    const primaryBeforeRelease = await settlePromptly(primaryRun.exited);
+    const installsBeforeRelease = h.timeline.installs.length;
+    const childrenBeforeRelease = h.children.length;
+    gateInstall = false;
+    releaseInstall.resolve();
+
+    const child = await waitForChild(h, 0);
+    child.finish('vite: concurrent auxiliary output\n');
+    await Promise.all([auxiliaryRun.exited, primaryRun.exited]);
+    await Promise.all([auxiliaryRun.close(), primaryRun.close()]);
+
+    const beforeFutureRun = h.timeline.events.length;
+    const futureRun = session.run();
+    const futureChild = await waitForChild(h, 1);
+    futureChild.finish('vite: concurrent auxiliary warm output\n');
+    await futureRun.exited;
+    await futureRun.close();
+    await session.close();
+    await h.close();
+
+    expect.soft(primaryBeforeRelease).toEqual({ status: 'pending' });
+    expect.soft(installsBeforeRelease).toBe(1);
+    expect.soft(childrenBeforeRelease).toBe(0);
+    expect.soft(fetchSnapshot).not.toHaveBeenCalled();
+    expect.soft(h.timeline.installs).toHaveLength(1);
+    expect(beforeReleaseEvents.filter((event) => event.startsWith('exec:'))).toEqual([
+      'exec:npm install',
+      `exec:npm install && vite --port ${VITE_PORT}`,
+    ]);
+    expect(beforeReleaseEvents.filter((event) => event.startsWith('pty:run-ready:'))).toHaveLength(
+      2,
+    );
+    const futureEvents = h.timeline.events.slice(beforeFutureRun);
+    expect(futureEvents.filter((event) => event.startsWith('exec:'))).toEqual([
+      `exec:vite --port ${VITE_PORT}`,
+    ]);
+    expect(futureEvents.join('\n')).not.toContain('npm install');
   });
 
   it('runs a fresh Node CLI install on the same default PTY before spawning the CLI child', async () => {
