@@ -1,15 +1,21 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
+import { canonicalShadowDigest } from './canonical-shadow-json.ts';
+import { RegistryClient } from './registry.ts';
 import {
   ShadowAssetError,
+  type ShadowAssetPlan,
   ShadowAssetReadError,
+  type ShadowAssetSource,
+  type ShadowAssetSourceRequest,
+  type ShadowAssetStorage,
   createMemoryShadowAssetStorage,
   createShadowAssetManager,
-  type ShadowAssetPlan,
-  type ShadowAssetSource,
-  type ShadowAssetStorage,
+  createStandardShadowAssetSource,
 } from './shadow-assets.ts';
+import { VfsTarballCache } from './tarball-cache.ts';
 
 const encoder = new TextEncoder();
 
@@ -46,30 +52,32 @@ function fixture(entries = [{ name: 'package/runtime.wasm', bytes: encoder.encod
   const unpacked = tar(entries);
   const tgz = new Uint8Array(gzipSync(unpacked));
   const member = entries[0]?.bytes ?? new Uint8Array();
+  const substitutions: ShadowAssetPlan['substitutions'] = [
+    {
+      catalog: { id: 'test.catalog', digest: '2'.repeat(64) },
+      publicName: 'native-tool',
+      requestedRange: '^1',
+      resolvedPublicVersion: '1.0.0',
+      substitutionId: 'test.substitution',
+      runtimeAdapterId: 'test.adapter',
+      builtin: true,
+    },
+  ];
+  const assets: ShadowAssetPlan['assets'] = [
+    {
+      id: 'runtime',
+      source: { name: 'runtime-source', version: '1.0.0', integrity: sri(tgz) },
+      member: 'package/runtime.wasm',
+      memberSha256: sha256(member),
+      memberSize: member.byteLength,
+      maxTarballBytes: tgz.byteLength,
+      maxUnpackedBytes: unpacked.byteLength,
+    },
+  ];
   const plan: ShadowAssetPlan = {
-    requiredSetDigest: '1'.repeat(64),
-    substitutions: [
-      {
-        catalog: { id: 'test.catalog', digest: '2'.repeat(64) },
-        publicName: 'native-tool',
-        requestedRange: '^1',
-        resolvedPublicVersion: '1.0.0',
-        substitutionId: 'test.substitution',
-        runtimeAdapterId: 'test.adapter',
-        builtin: true,
-      },
-    ],
-    assets: [
-      {
-        id: 'runtime',
-        source: { name: 'runtime-source', version: '1.0.0', integrity: sri(tgz) },
-        member: 'package/runtime.wasm',
-        memberSha256: sha256(member),
-        memberSize: member.byteLength,
-        maxTarballBytes: tgz.byteLength,
-        maxUnpackedBytes: unpacked.byteLength,
-      },
-    ],
+    requiredSetDigest: canonicalShadowDigest({ schema: 1, substitutions, assets }),
+    substitutions,
+    assets,
   };
   return { member, plan, tgz };
 }
@@ -77,7 +85,7 @@ function fixture(entries = [{ name: 'package/runtime.wasm', bytes: encoder.encod
 function source(bytes: Uint8Array): ShadowAssetSource & { acquire: ReturnType<typeof vi.fn> } {
   return {
     acquire: vi.fn(async (requests) =>
-      requests.map((request) => ({
+      requests.map((request: ShadowAssetSourceRequest) => ({
         request,
         bytes: bytes.slice(),
         fillTransport: 'standard' as const,
@@ -89,11 +97,97 @@ function source(bytes: Uint8Array): ShadowAssetSource & { acquire: ReturnType<ty
 }
 
 describe('ShadowAssetManager', () => {
+  it('joins the real STD RegistryClient/tarball-cache adapter to MemoryVfs readiness', async () => {
+    const { member, plan, tgz } = fixture();
+    const network = vi.fn(async (url: string | URL) => {
+      const href = String(url);
+      if (href === '/registry/runtime-source') {
+        return new Response(
+          JSON.stringify({
+            name: 'runtime-source',
+            versions: {
+              '1.0.0': {
+                name: 'runtime-source',
+                version: '1.0.0',
+                dist: {
+                  tarball: '/runtime-source.tgz',
+                  integrity: plan.assets[0]!.source.integrity,
+                },
+              },
+            },
+          }),
+        );
+      }
+      if (href === '/runtime-source.tgz') return new Response(tgz);
+      return new Response(null, { status: 404 });
+    });
+    const registry = new RegistryClient({ baseUrl: '/registry', fetch: network, maxRetries: 0 });
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: createStandardShadowAssetSource({
+        registry,
+        tarballCache: new VfsTarballCache(new MemoryVfs()),
+      }),
+    });
+    await expect(manager.installer.ensure(plan)).resolves.toMatchObject({ kind: 'ready' });
+    expect(await manager.runtimeReader(plan).readVerified('runtime')).toEqual(member);
+    await manager.installer.ensure(plan);
+    expect(
+      network.mock.calls.filter(([url]) => String(url) === '/runtime-source.tgz'),
+    ).toHaveLength(1);
+
+    await manager.admin.clearCache();
+    await expect(manager.installer.ensure(plan)).resolves.toMatchObject({ kind: 'ready' });
+    expect(await manager.runtimeReader(plan).readVerified('runtime')).toEqual(member);
+    expect(
+      network.mock.calls.filter(([url]) => String(url) === '/runtime-source.tgz'),
+    ).toHaveLength(1);
+    expect(
+      network.mock.calls.filter(([url]) => String(url) === '/registry/runtime-source'),
+    ).toHaveLength(1);
+  });
+
+  it('returns canonical not-required without admitting source work', async () => {
+    const assetSource = source(new Uint8Array());
+    const substitutions: ShadowAssetPlan['substitutions'] = [];
+    const assets: ShadowAssetPlan['assets'] = [];
+    const plan: ShadowAssetPlan = {
+      requiredSetDigest: canonicalShadowDigest({ schema: 1, substitutions, assets }),
+      substitutions,
+      assets,
+    };
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: assetSource,
+    });
+
+    await expect(manager.installer.ensure(plan)).resolves.toEqual({ kind: 'not-required', plan });
+    expect(assetSource.acquire).not.toHaveBeenCalled();
+  });
+
+  it('MemoryVfs storage snapshots writes, owns reads, and reports semantic usage', async () => {
+    const storage = createMemoryShadowAssetStorage();
+    const entry = { kind: 'object' as const, sha256: 'a'.repeat(64) };
+    const input = new Uint8Array([1, 2, 3]);
+    await storage.write(entry, input);
+    input[0] = 9;
+    const first = await storage.read(entry);
+    expect(first).toEqual(new Uint8Array([1, 2, 3]));
+    first![1] = 9;
+    expect(await storage.read(entry)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(await storage.inspect()).toEqual({
+      entryCount: 1,
+      storedBytes: 3,
+      entries: [{ entry, byteLength: 3 }],
+    });
+  });
+
   it('publishes a verified receipt, serves owned bytes, and re-verifies a hit without source I/O', async () => {
     const { member, plan, tgz } = fixture();
     const assetSource = source(tgz);
+    const storage = createMemoryShadowAssetStorage();
     const manager = createShadowAssetManager({
-      storage: createMemoryShadowAssetStorage(),
+      storage,
       source: assetSource,
     });
 
@@ -106,6 +200,15 @@ describe('ShadowAssetManager', () => {
       fillCache: 'network',
     });
     expect(first.receipt.receiptSha256).toMatch(/^[0-9a-f]{64}$/);
+    const storedReceipt = await storage.read({
+      kind: 'receipt',
+      sha256: first.receipt.receiptSha256,
+    });
+    expect(storedReceipt).not.toBeNull();
+    expect(sha256(storedReceipt!)).toBe(first.receipt.receiptSha256);
+    expect(JSON.parse(new TextDecoder().decode(storedReceipt!))).not.toHaveProperty(
+      'receiptSha256',
+    );
     expect(await manager.runtimeReader(plan).readVerified('runtime')).toEqual(member);
 
     const second = await manager.installer.ensure(plan);
@@ -123,7 +226,7 @@ describe('ShadowAssetManager', () => {
     const assetSource = source(tgz);
     assetSource.acquire.mockImplementationOnce(async (requests) => {
       await gate;
-      return requests.map((request) => ({
+      return requests.map((request: ShadowAssetSourceRequest) => ({
         request,
         bytes: tgz.slice(),
         fillTransport: 'standard' as const,
@@ -139,6 +242,103 @@ describe('ShadowAssetManager', () => {
     release();
     await expect(Promise.all([left, right])).resolves.toHaveLength(2);
     expect(assetSource.acquire).toHaveBeenCalledTimes(1);
+  });
+
+  it('single-flights the same missing object across different required-set receipts', async () => {
+    const { plan, tgz } = fixture();
+    const substitutions = plan.substitutions.map((substitution) => ({
+      ...substitution,
+      requestedRange: '1.0.0',
+    }));
+    const sibling: ShadowAssetPlan = {
+      requiredSetDigest: canonicalShadowDigest({
+        schema: 1,
+        substitutions,
+        assets: plan.assets,
+      }),
+      substitutions,
+      assets: plan.assets,
+    };
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const assetSource = source(tgz);
+    assetSource.acquire.mockImplementationOnce(async (requests) => {
+      await gate;
+      return requests.map((request: ShadowAssetSourceRequest) => ({
+        request,
+        bytes: tgz.slice(),
+        fillTransport: 'standard' as const,
+        fillCache: 'network' as const,
+      }));
+    });
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: assetSource,
+    });
+    const first = manager.installer.ensure(plan);
+    const second = manager.installer.ensure(sibling);
+    release();
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(assetSource.acquire).toHaveBeenCalledTimes(1);
+    expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).not.toBeNull();
+    expect(await manager.installer.inspectReceipt(sibling.requiredSetDigest)).not.toBeNull();
+  });
+
+  it('emits canonical progress after each boundary and isolates observer failure', async () => {
+    const { plan, tgz } = fixture();
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: source(tgz),
+    });
+    const progress: string[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await manager.installer.ensure(plan, {
+      onProgress: (event) => {
+        progress.push(event.phase);
+        if (event.phase === 'verify') throw new Error('observer fault');
+      },
+    });
+    expect(progress).toEqual(['cache-check', 'fetch', 'verify', 'persist', 'ready']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('observer fault'));
+    warn.mockRestore();
+  });
+
+  it('publishes temp, object, read-back, receipt, and ready in one acknowledged order', async () => {
+    const { plan, tgz } = fixture();
+    const inner = createMemoryShadowAssetStorage();
+    const events: string[] = [];
+    let started = false;
+    const storage: ShadowAssetStorage = {
+      storageClass: inner.storageClass,
+      read: async (entry) => {
+        if (started) events.push(`read:${entry.kind}`);
+        return await inner.read(entry);
+      },
+      write: async (entry, bytes) => {
+        if (entry.kind === 'temp') started = true;
+        if (started) events.push(`write:${entry.kind}`);
+        await inner.write(entry, bytes);
+      },
+      remove: async (entry) => {
+        if (started) events.push(`remove:${entry.kind}`);
+        await inner.remove(entry);
+      },
+      inspect: () => inner.inspect(),
+      clear: () => inner.clear(),
+      close: () => inner.close(),
+    };
+    const manager = createShadowAssetManager({ storage, source: source(tgz) });
+    await manager.installer.ensure(plan);
+    expect(events).toEqual([
+      'write:temp',
+      'write:object',
+      'read:object',
+      'remove:temp',
+      'write:receipt',
+      'write:ready',
+    ]);
   });
 
   it('rejects duplicate exact members without publishing an object or ready claim', async () => {
