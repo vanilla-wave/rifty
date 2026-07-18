@@ -1,8 +1,16 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import {
+  EMPTY_SHADOW_ASSET_PLAN,
   RegistryClient,
   type ShadowAssetInstaller,
+  type ShadowAssetManager,
   type ShadowAssetPlan,
   type ShadowAssetReadyReceipt,
+  type ShadowAssetSource,
+  type ShadowAssetStorage,
+  createMemoryShadowAssetStorage,
+  createShadowAssetManager,
   planBuiltinShadowAssets,
 } from '@riftydev/npm-client';
 import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
@@ -65,6 +73,7 @@ interface AttestedOwnerPackageState extends OwnerPackageState {
   ): void;
   reserveChildAdmission(
     project: Readonly<{ root: string; slug: string }>,
+    options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<OwnerChildAdmissionReservation>;
 }
 
@@ -87,8 +96,30 @@ interface Harness {
   readonly owner: ReturnType<typeof createOwnerVfsAuthorityComposition>['authority'];
   readonly config: OwnerPackageConfig;
   readonly plan: ShadowAssetPlan;
-  readonly receipt: ShadowAssetReadyReceipt;
+  readonly receipt?: ShadowAssetReadyReceipt;
   readonly ensureCalls: ShadowAssetPlan[];
+}
+
+interface HarnessOptions {
+  readonly assetPlan?: ShadowAssetPlan;
+  readonly installer?: ShadowAssetInstaller;
+  readonly expectedActivationFailure?: unknown;
+}
+
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  resolve(value: T): void;
+  reject(error: unknown): void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((accept, decline) => {
+    resolve = accept;
+    reject = decline;
+  });
+  return { promise, resolve, reject };
 }
 
 function plan(): ShadowAssetPlan {
@@ -146,7 +177,7 @@ function bootstrapConfig(root = ROOT): BootstrapConfig {
   };
 }
 
-async function harness(ownerEpoch: string): Promise<Harness> {
+async function harness(ownerEpoch: string, harnessOptions: HarnessOptions = {}): Promise<Harness> {
   const pair = createMemoryFs();
   const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
     ownerEpoch,
@@ -175,9 +206,16 @@ async function harness(ownerEpoch: string): Promise<Harness> {
     slug: PROJECT.slug,
     fromScratch: true,
   };
-  const assetPlan = plan();
-  const readyReceipt = receipt(assetPlan);
+  const assetPlan = harnessOptions.assetPlan ?? plan();
+  const readyReceipt = assetPlan.assets.length === 0 ? undefined : receipt(assetPlan);
   const ensureCalls: ShadowAssetPlan[] = [];
+  const installer: ShadowAssetInstaller = harnessOptions.installer ?? {
+    ensure: async (received) => {
+      if (!readyReceipt) return { kind: 'not-required', plan: received };
+      return { kind: 'ready', plan: received, receipt: readyReceipt };
+    },
+    inspectReceipt: async () => null,
+  };
   const state = createAttestedOwnerPackageState({
     initial: config,
     primeInitialPrefetch: false,
@@ -196,17 +234,149 @@ async function harness(ownerEpoch: string): Promise<Harness> {
     resolverPin: () => undefined,
     runtimeAssets: {
       installer: {
-        ensure: async (received) => {
+        ensure: async (received, options) => {
           ensureCalls.push(received);
-          return { kind: 'ready', plan: received, receipt: readyReceipt };
+          return installer.ensure(received, options);
         },
-        inspectReceipt: async () => null,
+        inspectReceipt: (requiredSetDigest) => installer.inspectReceipt(requiredSetDigest),
       },
       produce: async () => ({ plan: assetPlan }),
     },
   });
-  await state.activateAndEnsure(config);
-  return { state, owner, config, plan: assetPlan, receipt: readyReceipt, ensureCalls };
+  let activationFailed = false;
+  try {
+    await state.activateAndEnsure(config);
+  } catch (error) {
+    if (error !== harnessOptions.expectedActivationFailure) throw error;
+    activationFailed = true;
+  }
+  if (harnessOptions.expectedActivationFailure !== undefined && !activationFailed) {
+    throw new Error('fixture expected activation to fail');
+  }
+  return {
+    state,
+    owner,
+    config,
+    plan: assetPlan,
+    ...(readyReceipt === undefined ? {} : { receipt: readyReceipt }),
+    ensureCalls,
+  };
+}
+
+function reserveChildAdmissionWithSignal(
+  state: OwnerPackageState,
+  project: Readonly<{ root: string; slug: string }>,
+  signal: AbortSignal,
+): ReturnType<OwnerPackageState['reserveChildAdmission']> {
+  return state.reserveChildAdmission(project, { signal });
+}
+
+async function realManagerFlight(assetPlan: ShadowAssetPlan): Promise<{
+  readonly manager: ShadowAssetManager;
+  readonly entered: Promise<void>;
+  release(): void;
+}> {
+  const asset = assetPlan.assets[0];
+  if (!asset) throw new Error('fixture expected one runtime asset');
+  const inner = createMemoryShadowAssetStorage();
+  const wasm = new Uint8Array(
+    await readFile(new URL('../../node_modules/esbuild-wasm/esbuild.wasm', import.meta.url)),
+  );
+  await inner.write({ kind: 'object', sha256: asset.memberSha256 }, wasm);
+  const firstSubstitution = assetPlan.substitutions[0];
+  if (!firstSubstitution) throw new Error('fixture expected one runtime substitution');
+  const receiptPayload = {
+    assets: assetPlan.assets.map((candidate) => ({
+      fillCache: 'network' as const,
+      fillTransport: 'standard' as const,
+      id: candidate.id,
+      member: candidate.member,
+      memberSha256: candidate.memberSha256,
+      memberSize: candidate.memberSize,
+      source: {
+        integrity: candidate.source.integrity,
+        name: candidate.source.name,
+        version: candidate.source.version,
+      },
+    })),
+    catalog: {
+      digest: firstSubstitution.catalog.digest,
+      id: firstSubstitution.catalog.id,
+    },
+    requiredSetDigest: assetPlan.requiredSetDigest,
+    schema: 1 as const,
+    storageClass: inner.storageClass,
+    substitutions: assetPlan.substitutions.map((substitution) => ({
+      builtin: substitution.builtin,
+      catalog: {
+        digest: substitution.catalog.digest,
+        id: substitution.catalog.id,
+      },
+      publicName: substitution.publicName,
+      requestedRange: substitution.requestedRange,
+      resolvedPublicVersion: substitution.resolvedPublicVersion,
+      runtimeAdapterId: substitution.runtimeAdapterId,
+      substitutionId: substitution.substitutionId,
+    })),
+  };
+  const receiptBytes = enc.encode(JSON.stringify(receiptPayload));
+  const receiptSha256 = createHash('sha256').update(receiptBytes).digest('hex');
+  await inner.write({ kind: 'receipt', sha256: receiptSha256 }, receiptBytes);
+  await inner.write(
+    { kind: 'ready', requiredSetDigest: assetPlan.requiredSetDigest },
+    enc.encode(
+      JSON.stringify({
+        receiptSha256,
+        requiredSetDigest: assetPlan.requiredSetDigest,
+        schema: 1,
+      }),
+    ),
+  );
+  const entered = deferred<void>();
+  const released = deferred<void>();
+  const storage: ShadowAssetStorage = {
+    storageClass: inner.storageClass,
+    read: async (entry) => {
+      if (entry.kind === 'object' && entry.sha256 === asset.memberSha256) {
+        entered.resolve();
+        await released.promise;
+      }
+      return inner.read(entry);
+    },
+    write: (entry, bytes) => inner.write(entry, bytes),
+    remove: (entry) => inner.remove(entry),
+    inspect: () => inner.inspect(),
+    clear: () => inner.clear(),
+    close: () => inner.close(),
+  };
+  const source: ShadowAssetSource = {
+    acquire: async () => {
+      throw new Error('verified object fixture unexpectedly acquired source bytes');
+    },
+    close: async () => undefined,
+  };
+  return {
+    manager: createShadowAssetManager({ storage, source }),
+    entered: entered.promise,
+    release: () => released.resolve(),
+  };
+}
+
+function pendingEpochInstaller(
+  manager: ShadowAssetManager,
+  initialFailure: Error,
+  entered?: Deferred<void>,
+): ShadowAssetInstaller {
+  let calls = 0;
+  return {
+    ensure: async (assetPlan, options) => {
+      calls += 1;
+      if (calls === 1) throw initialFailure;
+      entered?.resolve();
+      return manager.installer.ensure(assetPlan, options);
+    },
+    inspectReceipt: (requiredSetDigest) => manager.installer.inspectReceipt(requiredSetDigest),
+  };
 }
 
 afterEach(() => {
@@ -401,5 +571,128 @@ describe('child reservation owns package FIFO settlement', () => {
       name: 'PackageTreeUnattestedError',
       code: 'EUNATTESTEDPACKAGETREE',
     });
+  });
+});
+
+describe('child reservation cancellation fault matrix', () => {
+  it.each([
+    { name: 'ready', assetPlan: undefined },
+    { name: 'not-required', assetPlan: EMPTY_SHADOW_ASSET_PLAN },
+  ])('rejects a pre-aborted $name reservation without changing its epoch', async (entry) => {
+    const h = await harness(`asset-reservation-pre-abort-${entry.name}`, {
+      ...(entry.assetPlan === undefined ? {} : { assetPlan: entry.assetPlan }),
+    });
+    const before = h.state.readPackageTreeEpoch(PROJECT);
+    const abort = new AbortController();
+    abort.abort();
+
+    const outcome = await reserveChildAdmissionWithSignal(h.state, PROJECT, abort.signal).then(
+      (reservation) => {
+        reservation.commit();
+        return { kind: 'resolved' as const };
+      },
+      (error: unknown) => ({ kind: 'rejected' as const, error }),
+    );
+    await h.state.quiesce();
+
+    expect(outcome).toMatchObject({ kind: 'rejected', error: { name: 'AbortError' } });
+    expect(h.state.readPackageTreeEpoch(PROJECT)).toEqual(before);
+  });
+
+  it('rejects a pre-aborted pending reservation before admitting real manager work', async () => {
+    const assetPlan = plan();
+    const flight = await realManagerFlight(assetPlan);
+    const initialFailure = new Error('fixture leaves runtime-asset readiness pending');
+    const h = await harness('asset-reservation-pre-abort-pending', {
+      assetPlan,
+      installer: pendingEpochInstaller(flight.manager, initialFailure),
+      expectedActivationFailure: initialFailure,
+    });
+    const abort = new AbortController();
+    abort.abort();
+    const reservation = reserveChildAdmissionWithSignal(h.state, PROJECT, abort.signal);
+    const settlement = reservation.then(
+      (held) => ({ kind: 'resolved' as const, held }),
+      (error: unknown) => ({ kind: 'rejected' as const, error }),
+    );
+    const first = await Promise.race([
+      settlement,
+      flight.entered.then(() => ({ kind: 'manager-work-entered' as const })),
+    ]);
+
+    flight.release();
+    const eventual = await settlement;
+    if (eventual.kind === 'resolved') eventual.held.commit();
+    await h.state.quiesce();
+    const finalEpoch = h.state.readPackageTreeEpoch(PROJECT);
+    await flight.manager.close();
+
+    expect(first).toMatchObject({ kind: 'rejected', error: { name: 'AbortError' } });
+    expect(finalEpoch.readiness).toEqual({ kind: 'pending', plan: assetPlan });
+  });
+
+  it('cancels only the pending child waiter while a same-plan manager waiter completes', async () => {
+    const assetPlan = plan();
+    const flight = await realManagerFlight(assetPlan);
+    const initialFailure = new Error('fixture leaves runtime-asset readiness pending');
+    const childEnsureEntered = deferred<void>();
+    const h = await harness('asset-reservation-mid-flight-abort', {
+      assetPlan,
+      installer: pendingEpochInstaller(flight.manager, initialFailure, childEnsureEntered),
+      expectedActivationFailure: initialFailure,
+    });
+    const survivor = flight.manager.installer.ensure(assetPlan);
+    await flight.entered;
+    const abort = new AbortController();
+    const reservation = reserveChildAdmissionWithSignal(h.state, PROJECT, abort.signal);
+    const settlement = reservation.then(
+      (held) => ({ kind: 'resolved' as const, held }),
+      (error: unknown) => ({ kind: 'rejected' as const, error }),
+    );
+    await childEnsureEntered.promise;
+    let mutationApplied = false;
+    const mutation = h.state.mutations.guardedMutation(
+      [{ kind: 'write', path: `${ROOT}/package.json` }],
+      async () => {
+        mutationApplied = true;
+      },
+    );
+    let quiesced = false;
+    const quiesce = h.state.quiesce().then(() => {
+      quiesced = true;
+    });
+
+    abort.abort();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const beforeProducerRelease = {
+      mutationApplied,
+      quiesced,
+      epoch: h.state.readPackageTreeEpoch(PROJECT),
+    };
+    const childOutcomeBeforeRelease = await Promise.race([
+      settlement,
+      Promise.resolve({ kind: 'still-pending' as const }),
+    ]);
+
+    flight.release();
+    const eventual = await settlement;
+    if (eventual.kind === 'resolved') eventual.held.commit();
+    const survivorResult = await survivor;
+    await mutation;
+    await quiesce;
+    const finalEpoch = h.state.readPackageTreeEpoch(PROJECT);
+    await flight.manager.close();
+
+    expect(childOutcomeBeforeRelease).toMatchObject({
+      kind: 'rejected',
+      error: { name: 'AbortError' },
+    });
+    expect(beforeProducerRelease).toEqual({
+      mutationApplied: true,
+      quiesced: true,
+      epoch: expect.objectContaining({ readiness: { kind: 'pending', plan: assetPlan } }),
+    });
+    expect(survivorResult).toMatchObject({ kind: 'ready', plan: assetPlan });
+    expect(finalEpoch.readiness).toEqual({ kind: 'pending', plan: assetPlan });
   });
 });
