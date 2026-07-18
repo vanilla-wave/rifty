@@ -10,9 +10,9 @@ items: []
 
 ## Outcome
 
-Vite remains a forcing consumer and compatibility target, not a platform domain concept. Generic kernel, runtime, VFS, npm, shell, terminal, and Workbench production behavior is expressed in Node, filesystem, process, module, network, and storage semantics. Knowledge unique to Vite stays in its concrete template/integration edge.
+Vite remains a forcing consumer and compatibility target, not a platform domain concept. Generic kernel, runtime, VFS, npm, shell, terminal, and Workbench production behavior is expressed in Node, filesystem, process, module, network, and storage semantics. Knowledge unique to Vite stays in an explicit concrete integration edge. The existing `projects.vite`, `VitePlaygroundPlan`, and Playground companion APIs are such edges under ADR-0263/0278; this draft does not supersede them.
 
-Tests, parity evidence, compatibility docs, and concrete templates may name Vite. Generic production control flow, public API, wire shapes, and persisted identity do not depend on that name. A Vite failure either exposes a real platform gap that is fixed at its semantic owner, remains an honest compatibility gap, or is handled inside the concrete integration; it does not create a Vite-shaped platform capability.
+Tests, parity evidence, compatibility docs, concrete templates, and explicit Vite integration APIs may name Vite. Generic platform-internal production control flow, cross-tool public contracts, worker wire shapes, and persisted owner/project identity do not depend on that name. A Vite failure either exposes a real platform gap that is fixed at its semantic owner, remains an honest compatibility gap, or is handled inside the concrete integration; it does not create a Vite branch in a generic platform mechanism.
 
 ## User scenario
 
@@ -24,9 +24,10 @@ Not split yet. Refinement starts with an inventory of package-specific productio
 
 ## Draft gates
 
-- Map allowed concrete integration locations and forbidden generic surfaces: public API, wire schema, persisted identity, and production control flow.
+- Map allowed concrete integration locations, including the ADR-0263/0278 public factory/plan/companion APIs, and forbidden generic platform-internal surfaces: cross-tool contracts, worker wire schema, persisted owner/project identity, and production control flow.
 - Classify existing Vite mentions: compatibility evidence and concrete templates may be valid; generic behavior or data dependencies are leaks.
 - Derive each replacement from the actual Node, filesystem, process, module, network, or storage contract.
 - Add mechanical boundary checks for dependencies and contracts, not a repository-wide ban on the word `vite`.
 - Do not use consumer count or adapter count as a design proxy; this epic must not encourage dummy adapters or parallel workarounds to justify an interface.
+- Require a superseding ADR before refinement removes or reshapes any recorded public Vite integration contract.
 - Keep user-visible de-gluing in `preset-deglue`; this epic owns knowledge direction and contract cleanup.
