@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as kernelPublic from '../src/index.ts';
 import {
   KERNEL_ENTRY_BOOTSTRAP_KEY,
   type KernelEntryBootstrapEnvelope,
@@ -29,6 +30,16 @@ const sourceEntryCannotCarryBootstrap: WorkerEntryDescriptor = {
   bootstrap: { protocol: 'test:forbidden', payload: null },
 };
 void sourceEntryCannotCarryBootstrap;
+
+interface CapabilityPublicApi {
+  readonly KERNEL_ENTRY_CAPABILITY_PORTS_KEY: string;
+  publishKernelEntryCapabilityPorts(
+    ports: Readonly<Record<string, MessagePort>> | null | undefined,
+  ): void;
+  readKernelEntryCapabilityPorts(): Readonly<Record<string, MessagePort>>;
+}
+
+const capabilityApi = kernelPublic as unknown as CapabilityPublicApi;
 
 function makeSpec(entry: WorkerEntryDescriptor): WorkerSpawnSpec {
   return {
@@ -81,6 +92,9 @@ describe('entry-scoped bootstrap envelope', () => {
 
   afterEach(() => {
     Reflect.deleteProperty(globalThis, KERNEL_ENTRY_BOOTSTRAP_KEY);
+    if (typeof capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY === 'string') {
+      Reflect.deleteProperty(globalThis, capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY);
+    }
     clearWorkerFactoryForTests();
     clearKernelWorkerUrl();
     clearKernelDispatcher();
@@ -188,5 +202,78 @@ describe('entry-scoped bootstrap envelope', () => {
     );
 
     expect(seen).toEqual([null]);
+  });
+
+  it('publishes a frozen null-prototype capability snapshot before pre-entry and entry', async () => {
+    const alpha = new MessageChannel();
+    const beta = new MessageChannel();
+    const seen: Readonly<Record<string, MessagePort>>[] = [];
+
+    const outcome = await runEntryLifecycle(
+      makeSpec({
+        kind: 'url',
+        url: 'https://example.invalid/capability-entry.js',
+        capabilityPorts: {
+          'test.alpha': alpha.port2,
+          'Test.Beta': beta.port2,
+        },
+      } as WorkerEntryDescriptor),
+      makeDeps({
+        preEntryHook: () => {
+          seen.push(capabilityApi.readKernelEntryCapabilityPorts());
+        },
+        runEntry: async () => {
+          seen.push(capabilityApi.readKernelEntryCapabilityPorts());
+        },
+      }),
+    );
+
+    expect(outcome).toEqual({ threw: false, code: 0 });
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toBe(seen[1]);
+    expect(Object.getPrototypeOf(seen[0])).toBeNull();
+    expect(Object.isFrozen(seen[0])).toBe(true);
+    expect(Object.entries(seen[0] ?? {})).toEqual([
+      ['test.alpha', alpha.port2],
+      ['Test.Beta', beta.port2],
+    ]);
+    expect(kernelPublic.readKernelEntryBootstrap()).toBeNull();
+
+    alpha.port1.close();
+    alpha.port2.close();
+    beta.port1.close();
+    beta.port2.close();
+  });
+
+  it('publishes frozen empty capabilities for absent URL and source entries, clearing stale state', async () => {
+    const stale = new MessageChannel();
+    capabilityApi.publishKernelEntryCapabilityPorts({ stale: stale.port2 });
+    const seen: Readonly<Record<string, MessagePort>>[] = [];
+
+    await runEntryLifecycle(
+      makeSpec({ kind: 'url', url: 'https://example.invalid/plain-entry.js' }),
+      makeDeps({
+        preEntryHook: () => seen.push(capabilityApi.readKernelEntryCapabilityPorts()),
+      }),
+    );
+    await runEntryLifecycle(
+      makeSpec({ kind: 'source', code: 'void 0;', sourceUrl: '/source-entry.js' }),
+      makeDeps({
+        preEntryHook: () => seen.push(capabilityApi.readKernelEntryCapabilityPorts()),
+      }),
+    );
+
+    expect(seen).toHaveLength(2);
+    for (const value of seen) {
+      expect(Object.keys(value)).toEqual([]);
+      expect(Object.getPrototypeOf(value)).toBeNull();
+      expect(Object.isFrozen(value)).toBe(true);
+    }
+    expect(Object.keys(globalThis)).not.toContain(
+      capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
+    );
+
+    stale.port1.close();
+    stale.port2.close();
   });
 });

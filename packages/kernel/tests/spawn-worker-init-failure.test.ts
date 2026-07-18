@@ -20,9 +20,10 @@ class ThrowingInitWorker implements WorkerLike {
   readonly terminate = vi.fn();
   readonly addEventListener = vi.fn();
   readonly removeEventListener = vi.fn();
+  transferLength: number | undefined;
 
   postMessage(_message: unknown, transfer?: ReadonlyArray<Transferable>): void {
-    expect(transfer).toHaveLength(4);
+    this.transferLength = transfer?.length;
     throw this.postError;
   }
 }
@@ -45,6 +46,8 @@ describe('spawnKernelWorker init transaction', () => {
 
   it('rolls back worker, dispatcher ring, and every port when init cannot be cloned', () => {
     const closePort = vi.spyOn(MessagePort.prototype, 'close');
+    const firstCapability = new MessageChannel();
+    const secondCapability = new MessageChannel();
     const dispatcher = getKernelDispatcher();
     let thrown: unknown;
 
@@ -55,6 +58,10 @@ describe('spawnKernelWorker init transaction', () => {
             kind: 'url',
             url: '/entry.js',
             bootstrap: { protocol: 'test/v1', payload: () => undefined },
+            capabilityPorts: {
+              'test.first': firstCapability.port2,
+              'test.second': secondCapability.port2,
+            },
           },
           argv: ['rifty', '/entry.js'],
           env: {},
@@ -67,10 +74,13 @@ describe('spawnKernelWorker init transaction', () => {
     }
 
     expect(thrown).toBe(worker.postError);
+    expect(worker.transferLength).toBe(6);
     expect(worker.terminate).toHaveBeenCalledTimes(1);
     expect(worker.addEventListener).not.toHaveBeenCalled();
     expect(dispatcher.getAttachmentCount()).toBe(0);
     expect(dispatcher.getActiveTimerCount()).toBe(0);
-    expect(closePort).toHaveBeenCalledTimes(8);
+    expect(closePort).toHaveBeenCalledTimes(10);
+    firstCapability.port1.close();
+    secondCapability.port1.close();
   });
 });

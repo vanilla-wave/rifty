@@ -17,14 +17,19 @@ function fakePort(): MessagePort & { close: ReturnType<typeof vi.fn> } {
 
 function makeSpec(serve: boolean | undefined): {
   spec: WorkerSpawnSpec;
-  ports: Record<keyof WorkerStdioPorts, ReturnType<typeof vi.fn>>;
+  ports: Record<keyof WorkerStdioPorts | 'capability', ReturnType<typeof vi.fn>>;
 } {
   const stdout = fakePort();
   const stderr = fakePort();
   const stdin = fakePort();
   const ipc = fakePort();
+  const capability = fakePort();
   const spec = {
-    entry: { kind: 'source', code: '', sourceUrl: 'x' },
+    entry: {
+      kind: 'url',
+      url: 'https://example.invalid/entry.js',
+      capabilityPorts: { 'test.capability': capability },
+    },
     argv: [],
     env: {},
     cwd: '/',
@@ -36,7 +41,13 @@ function makeSpec(serve: boolean | undefined): {
   } as unknown as WorkerSpawnSpec;
   return {
     spec,
-    ports: { stdout: stdout.close, stderr: stderr.close, stdin: stdin.close, ipc: ipc.close },
+    ports: {
+      stdout: stdout.close,
+      stderr: stderr.close,
+      stdin: stdin.close,
+      ipc: ipc.close,
+      capability: capability.close,
+    },
   };
 }
 
@@ -61,6 +72,7 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
     expect(target.close).not.toHaveBeenCalled();
     expect(ports.stdout).not.toHaveBeenCalled();
     expect(ports.ipc).not.toHaveBeenCalled();
+    expect(ports.capability).not.toHaveBeenCalled();
   });
 
   it('reaps a run-to-completion worker (no serve): exit message + close ports + self.close', () => {
@@ -78,11 +90,12 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
     expect(ports.stderr).toHaveBeenCalledTimes(1);
     expect(ports.stdin).toHaveBeenCalledTimes(1);
     expect(ports.ipc).toHaveBeenCalledTimes(1);
+    expect(ports.capability).toHaveBeenCalledTimes(1);
   });
 
   it('reaps a serve worker that THREW during setup (a crash must not linger)', () => {
     const target = fakeTarget();
-    const { spec } = makeSpec(true);
+    const { spec, ports } = makeSpec(true);
 
     finalizeWorkerEntry(target as unknown as DedicatedWorkerGlobalScope, spec, {
       threw: true,
@@ -91,6 +104,7 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
 
     expect(target.postMessage).toHaveBeenCalledWith({ type: 'exit', code: 1 });
     expect(target.close).toHaveBeenCalledTimes(1);
+    expect(ports.capability).toHaveBeenCalledTimes(1);
   });
 
   it('reaps an explicit serve:false worker', () => {
