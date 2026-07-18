@@ -6,8 +6,10 @@ import {
 
 const FILE = 'apps/playground/src/glue/example.ts';
 
-function operations(source: string): string[] {
-  return findInstallStampWriterViolations(source, FILE).map((violation) => violation.operation);
+function operations(source: string, file = FILE): string[] {
+  return findInstallStampWriterViolations(source, file).map(
+    (violation) => violation.operation,
+  );
 }
 
 describe('install-stamp one-writer gate', () => {
@@ -92,6 +94,32 @@ describe('install-stamp one-writer gate', () => {
         bootstrap,
       ).map((violation) => violation.operation),
     ).toEqual(['clearProjectTree', 'finalizePackageInstallFiles', 'prepareProjectInstallTree']);
+  });
+
+  it('tracks the post-tree finalizer wrapper only through exact acquisition adapters', () => {
+    expect(operations(`finalizePackageInstallResult(installed, { root });`)).toEqual([
+      'finalizePackageInstallResult',
+    ]);
+    expect(
+      operations(
+        `
+          async function finalizePackageInstallResult(installed, options) {
+            await finalizePackageInstallFiles(options);
+            return installed;
+          }
+        `,
+        'apps/playground/src/workers/package-install-finalizer.ts',
+      ),
+    ).toEqual([]);
+    expect(
+      operations(
+        `
+          const install = async () => finalizePackageInstallResult(installed, { root });
+          const finalize = async () => finalizePackageInstallResult(installed, { root });
+        `,
+        'apps/playground/src/glue/npm-shell-command.ts',
+      ),
+    ).toEqual(['finalizePackageInstallResult']);
   });
 
   it('rejects both operands of move/copy mutations', () => {
