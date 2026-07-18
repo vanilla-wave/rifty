@@ -6,9 +6,11 @@ import { PRESETS, type Preset } from '../presets.ts';
 import { EXPRESS_SQLITE_SERVER_SOURCE } from '../templates/express-sqlite.ts';
 import { resolveProjectSpec } from '../templates/registry.ts';
 import {
-  GROUP_FOR_CATEGORY,
   amendStarterGeneratedBaseline,
   ensureStarterInitialCommit,
+} from './git-initial-baseline.ts';
+import {
+  GROUP_FOR_CATEGORY,
   groupForPreset,
   seedFilesForStarter,
   starterById,

@@ -12,9 +12,8 @@ import { describe, expect, it } from 'vitest';
 import {
   amendStarterGeneratedBaseline,
   ensureStarterInitialCommit,
-  seedFilesForStarter,
-  starterById,
-} from './starter.ts';
+} from './git-initial-baseline.ts';
+import { seedFilesForStarter, starterById } from './starter.ts';
 
 const FINAL_LOCKFILE = '{"lockfileVersion":3,"packages":{}}\n';
 

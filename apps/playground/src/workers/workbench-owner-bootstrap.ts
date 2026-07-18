@@ -10,11 +10,11 @@ import {
   createStandardShadowAssetSource,
 } from '@riftydev/npm-client';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import { ensureStarterInitialCommit } from '../glue/git-initial-baseline.ts';
 import { resolveOwnerGitCommitIdentity } from '../glue/git-owner-port.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
-import { ensureStarterInitialCommit } from '../glue/starter.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { serializeWorkbenchOwnerError } from '../workbench/errors.ts';
 import {

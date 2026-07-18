@@ -53,6 +53,10 @@ import {
 } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import { flushSyncMirror } from '../glue/flush-sync-mirror.ts';
+import {
+  amendStarterGeneratedBaseline,
+  ensureStarterInitialCommit,
+} from '../glue/git-initial-baseline.ts';
 import { gitOwnerMutationIntents, serveGitOwnerRpc } from '../glue/git-owner-port.ts';
 import { serveGitStatusFeed } from '../glue/git-status-feed.ts';
 import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
@@ -91,12 +95,7 @@ import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
-import {
-  amendStarterGeneratedBaseline,
-  ensureStarterInitialCommit,
-  seedFilesForStarter,
-  starterById,
-} from '../glue/starter.ts';
+import { seedFilesForStarter, starterById } from '../glue/starter.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { stampTsLspOwner, tsLspOwnerMatches } from '../glue/ts-lsp-owner-scope.ts';
 import {
