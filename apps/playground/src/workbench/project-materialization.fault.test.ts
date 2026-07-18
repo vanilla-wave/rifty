@@ -27,6 +27,10 @@ interface AcquisitionRequest {
   readonly definition: unknown;
 }
 
+interface AcquisitionEnsureOptions {
+  readonly signal?: AbortSignal;
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (error: unknown) => void;
@@ -185,11 +189,35 @@ function materializationHarness() {
     waitForDurability,
   };
 
-  const ensure = vi.fn(async (request: AcquisitionRequest) => {
+  const ensure = vi.fn(async (request: AcquisitionRequest, options?: AcquisitionEnsureOptions) => {
     events.push(`ensure:${request.projectKey}`);
     const held = acquisitionGate;
     acquisitionGate = undefined;
-    if (held !== undefined) await held.promise;
+    if (held !== undefined) {
+      const signal = options?.signal;
+      if (signal === undefined) {
+        await held.promise;
+      } else {
+        await new Promise<void>((resolve, reject) => {
+          const aborted = (): void => reject(signal.reason);
+          if (signal.aborted) {
+            aborted();
+            return;
+          }
+          signal.addEventListener('abort', aborted, { once: true });
+          void held.promise.then(
+            () => {
+              signal.removeEventListener('abort', aborted);
+              resolve();
+            },
+            (error: unknown) => {
+              signal.removeEventListener('abort', aborted);
+              reject(error);
+            },
+          );
+        });
+      }
+    }
     return { outcome: 'existing' as const, identity: `tree:${request.projectKey}` };
   });
   const acquisition = { ensure };
@@ -527,7 +555,7 @@ describe('project materializer close faults', () => {
     await expect(h.materializer.open(definition)).rejects.toBeInstanceOf(ClosedHandleError);
   });
 
-  it('close during install waits for acquisition, rejects open, and keeps the valid seed', async () => {
+  it('close during install aborts its acquisition waiter and keeps the valid seed', async () => {
     const h = materializationHarness();
     const gate = h.holdNextAcquisition();
     const definition = viteDefinition('close-during-install');
@@ -537,16 +565,18 @@ describe('project materializer close faults', () => {
     expect(h.records.has(projectKey)).toBe(true);
 
     const closing = h.materializer.close();
-    expect(
-      await settledOr(
-        closing.then(() => 'closed'),
-        'pending',
-      ),
-    ).toBe('pending');
+    const closeBeforeRelease = await Promise.race([
+      closing.then(() => 'closed' as const),
+      new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 25)),
+    ]);
+    const acquisitionOptions = h.acquisition.ensure.mock.calls[0]?.[1];
     gate.resolve();
 
     await expect(opening).rejects.toBeInstanceOf(ClosedHandleError);
     await expect(closing).resolves.toBeUndefined();
+    expect(closeBeforeRelease).toBe('closed');
+    expect(acquisitionOptions?.signal).toBeInstanceOf(AbortSignal);
+    expect(acquisitionOptions?.signal?.aborted).toBe(true);
     expect(h.records.has(projectKey)).toBe(true);
     expect(h.stages.size).toBe(0);
 
