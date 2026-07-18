@@ -27,7 +27,7 @@ const c: ParityCase = {
 
     capture('fs', () => readFileSync(encodedSlash));
     capture('module', () => createRequire(encodedSlash));
-    const mixedCaseBase = pathToFileURL('./entry.cjs').href.replace(/^file:/, 'FiLe:');
+    const mixedCaseBase = pathToFileURL(__filename).href.replace(/^file:/, 'FiLe:');
     capture('module-case', () => createRequire(mixedCaseBase)('./value.cjs'));
     console.warn = () => {};
     capture('worker', () => new Worker(encodedSlash));

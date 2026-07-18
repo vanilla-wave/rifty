@@ -119,6 +119,12 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   cjsExtensions['.json'] = (module, filename) => {
     module.exports = JSON.parse(readResolvedById(filename).source) as Record<string, unknown>;
   };
+  cjsExtensions['.node'] = (_module, filename) => {
+    throw new NotImplementedError(
+      'module-loader.native-addon',
+      `cannot load native addon ${filename} in the browser runtime`,
+    );
+  };
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   // Node keeps CJS execution records (`require.cache`) and ESM ModuleJobs as

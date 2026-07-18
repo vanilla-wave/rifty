@@ -4,6 +4,7 @@ import type { Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { fileURLFromResolvedPath } from '../internal/posix-file-url.ts';
+import { hasURLScheme } from '../internal/url-scheme.ts';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
@@ -1819,7 +1820,7 @@ export async function executeEsm(
     // without validating the builtin exists (existence is enforced only at import
     // time) — `import.meta.resolve('node:zlibbbb')` → `'node:zlibbbb'`. So don't
     // route `node:` through the resolver, which throws on an unregistered builtin.
-    if (spec.startsWith('node:')) return spec;
+    if (hasURLScheme(spec, 'node')) return spec;
     const dep = deps.resolve(spec, resolved.id, true);
     return dep.kind === 'builtin' ? dep.id : fileURLFromResolvedPath(dep.id).href;
   };

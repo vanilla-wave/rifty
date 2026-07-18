@@ -6,6 +6,7 @@ import {
   fileURLToPathPosix,
   hasEncodedPathSeparator,
 } from '../internal/posix-file-url.ts';
+import { hasURLScheme } from '../internal/url-scheme.ts';
 import { ModuleLoadError } from './errors.ts';
 import {
   type TsconfigPathResolution,
@@ -161,7 +162,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
         }
         return { id: `node:${name}`, kind: 'builtin', source: '', packageRoot: null };
       }
-      if (specifier.startsWith('data:')) {
+      if (hasURLScheme(specifier, 'data')) {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
           specifier,
@@ -169,7 +170,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
           opts.fromFile,
         );
       }
-      if (specifier.startsWith('file:')) {
+      if (hasURLScheme(specifier, 'file')) {
         const filePath = fileUrlToVfsPath(specifier, opts.fromFile);
         const resolved = resolveAsFileOrDir(vfs, pkgCache, filePath);
         if (resolved === null) {

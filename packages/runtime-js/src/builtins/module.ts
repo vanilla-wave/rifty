@@ -14,6 +14,7 @@
 import { NotImplementedError, isBuiltinSpecifier, listBuiltins } from '@riftydev/io';
 import { isAbsolute } from '@riftydev/vfs';
 import { fileURLToPathPosix } from '../internal/posix-file-url.ts';
+import { hasURLScheme } from '../internal/url-scheme.ts';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 
 interface RequireFn {
@@ -48,7 +49,7 @@ export function createRequire(from: string | URL): RequireFn {
 function createRequirePath(value: string | URL): string {
   try {
     if (typeof value !== 'string') return fileURLToPathPosix(value);
-    if (value.startsWith('file:')) return fileURLToPathPosix(value);
+    if (hasURLScheme(value, 'file')) return fileURLToPathPosix(value);
     if (isAbsolute(value)) return value;
   } catch {
     // Node presents every invalid createRequire base through one public code.

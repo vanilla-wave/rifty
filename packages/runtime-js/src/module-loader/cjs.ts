@@ -9,6 +9,8 @@ import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 
+const reflectApplyPrimordial = Reflect.apply;
+
 /**
  * Reject a `.ts`/`.tsx`/`.jsx` that reached the CJS path with a directed
  * {@link NotImplementedError}, instead of feeding raw TS to `new Function`
@@ -1885,34 +1887,33 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
     existing = undefined;
   }
 
-  const registeredExtension = findRegisteredExtension(resolved.id, deps.extensions);
-  const selectedKey = registeredExtension ?? '.js';
-  const selectedExtension: unknown = deps.extensions[selectedKey];
-  if (registeredExtension === undefined && selectedExtension === deps.defaultJsExtension) {
-    assertNotTsCjs(resolved.id);
-  }
-
   const record = existing ?? registry.getOrCreate(resolved.id, resolved.kind);
   const moduleObject = createCjsModule(deps);
   record.cjsModule = moduleObject;
   record.exports = moduleObject.exports;
 
-  if (resolved.kind === 'text' && registeredExtension === undefined) {
-    // Text-asset import (ADR-0067): the module value IS the raw file contents.
-    // `require('./f.txt')` returns the string; ESM `import x from './f.txt'`
-    // routes here, then `cjsNamespaceFor` maps the non-object export to
-    // `default`.
-    moduleObject.exports = resolved.source as unknown as Record<string, unknown>;
-    record.exports = moduleObject.exports;
-    record.state = 'loaded';
-    return record.exports;
-  }
-
   try {
+    const registeredExtension = findRegisteredExtension(resolved.id, deps.extensions);
+    const selectedKey = registeredExtension ?? '.js';
+    const selectedExtension: unknown = deps.extensions[selectedKey];
+    const usesLoaderDefaultJs =
+      registeredExtension === undefined && selectedExtension === deps.defaultJsExtension;
+
+    if (usesLoaderDefaultJs) assertNotTsCjs(resolved.id);
+
+    if (resolved.kind === 'text' && usesLoaderDefaultJs) {
+      // Text-asset import (ADR-0067): the module value IS the raw file contents.
+      // A replaced `.js` owns Node's otherwise-unregistered suffix fallback.
+      moduleObject.exports = resolved.source as unknown as Record<string, unknown>;
+      record.exports = moduleObject.exports;
+      record.state = 'loaded';
+      return record.exports;
+    }
+
     if (typeof selectedExtension !== 'function') {
       throw new TypeError(`require.extensions[${JSON.stringify(selectedKey)}] is not a function`);
     }
-    selectedExtension.call(deps.extensions, moduleObject, resolved.id);
+    reflectApplyPrimordial(selectedExtension, deps.extensions, [moduleObject, resolved.id]);
   } catch (error) {
     failCjsRecord(registry, record, error);
   }
