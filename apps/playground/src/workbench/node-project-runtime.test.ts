@@ -44,7 +44,9 @@ async function settledOr<T>(promise: Promise<T>, pending: T): Promise<T> {
 type ExecCall = {
   readonly sid: string;
   readonly line: string;
-  readonly options: ProjectTerminalExecOptions;
+  readonly options: ProjectTerminalExecOptions & {
+    readonly onFirstMaterializationConsumed?: () => void;
+  };
   readonly result: Deferred<{ readonly exitCode: number; readonly exit: ProcessExit }>;
 };
 
@@ -92,6 +94,12 @@ class PtyBoundary {
     const call = this.execCalls[index];
     if (call === undefined) throw new Error(`missing exec call ${index}`);
     call.options.onStart?.(rid);
+  }
+
+  consumeFirstMaterialization(index: number): void {
+    const call = this.execCalls[index];
+    if (call === undefined) throw new Error(`missing exec call ${index}`);
+    call.options.onFirstMaterializationConsumed?.();
   }
 
   exit(index: number, exit: ProcessExit, exitCode = exit.code ?? 130): void {
@@ -279,6 +287,7 @@ describe('Node server project runtime Contract+RED', () => {
     expect(h.pty.execCalls[0]?.line).toBe('npm install && npm run dev');
 
     h.pty.admit(0, 'run-install');
+    h.pty.consumeFirstMaterialization(0);
     await settleMicrotasks();
     h.pty.exit(0, { code: 0, signal: null });
     h.previews.swProofs[0]?.resolve();
@@ -408,6 +417,7 @@ describe('Node CLI project runtime Contract+RED', () => {
     expect(h.pty.execCalls[0]?.line).toContain('npm install && node ');
 
     h.pty.admit(0, 'run-install');
+    h.pty.consumeFirstMaterialization(0);
     h.pty.exit(0, { code: 0, signal: null });
     await first.close();
 

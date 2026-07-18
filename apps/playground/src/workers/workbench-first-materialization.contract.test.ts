@@ -1465,7 +1465,7 @@ describe('Workbench companion first materialization Contract+RED', () => {
 
       assets.release();
       const child = await waitForChild(h, 0, 10_000);
-      child.finish(`vite: seven ${variant} output\n`);
+      child.finish(`vite: seven ${variant} output\n`, { code: 7, signal: null });
       await run.exited;
       await run.close();
       const beforeSecondRun = h.timeline.events.length;
