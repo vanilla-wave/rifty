@@ -6,7 +6,6 @@ import type {
   TsResponseMessage,
 } from '@riftydev/ts-language-service/protocol';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
-import { createTsLanguageServiceClient } from '../../glue/ts-ls-client.ts';
 import {
   ClosedHandleError,
   type SerializedWorkbenchOwnerError,
@@ -32,6 +31,7 @@ import {
   createPlaygroundScmArchiveTools,
 } from './playground-session-tool-coordinator.ts';
 import { createPlaygroundTypeScriptAdapter } from './playground-typescript.ts';
+import { createTsLanguageServiceClient } from './typescript-relay-client.ts';
 
 const PAGE_REQUEST = 'workbench:playground-session-tools-request' as const;
 const PAGE_TS_REQUEST = 'workbench:playground-session-tools-ts-request' as const;

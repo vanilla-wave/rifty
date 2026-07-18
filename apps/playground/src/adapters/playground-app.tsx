@@ -45,12 +45,12 @@ import { starterById } from '../glue/starter.ts';
 import { pathFromTerminalFileLink } from '../glue/terminal-links.ts';
 import type { TerminalPersistence } from '../glue/terminal-persistence.ts';
 import { createTsDiagnosticsSync } from '../glue/ts-diagnostics-sync.ts';
-import { lspToMonacoMarkers } from '../glue/ts-ls-client.ts';
 import {
   clearTsLsInitDiagnostics,
   shouldPublishTsLsInitDiagnostic,
   upsertTsLsInitDiagnostic,
 } from '../glue/ts-ls-init-diagnostic.ts';
+import { lspToMonacoMarkers } from '../glue/ts-ls-monaco-markers.ts';
 import type { TsLanguageServiceProvidersHandle } from '../glue/ts-ls-monaco-providers.ts';
 import { createEditorOpQueue } from '../orchestration/editor-op-queue.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset } from '../presets.ts';

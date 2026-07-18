@@ -11,9 +11,9 @@ import type {
 import * as monaco from 'monaco-editor';
 import { describe, expect, it } from 'vitest';
 import { type TestModel, __monacoTestState } from './test-monaco-editor.ts';
-import type { TsLanguageServiceClient } from './ts-ls-client.ts';
 import {
   type EditorPathBridge,
+  type TsLanguageServiceProviderClient,
   type TsLanguageServiceProvidersHandle,
   applyWorkspaceTextEdit,
   registerTsLanguageServiceProviders,
@@ -31,27 +31,25 @@ function fakeModel(): TestModel {
   };
 }
 
-function clientWithMethods(methods: Record<string, unknown>): TsLanguageServiceClient {
+function clientWithMethods(methods: Record<string, unknown>): TsLanguageServiceProviderClient {
   return {
-    dispose() {},
     ...methods,
-  } as unknown as TsLanguageServiceClient;
+  } as unknown as TsLanguageServiceProviderClient;
 }
 
-function rejectingClient(error: Error): TsLanguageServiceClient {
+function rejectingClient(error: Error): TsLanguageServiceProviderClient {
   const reject = (): Promise<never> => Promise.reject(error);
   return new Proxy<Record<PropertyKey, unknown>>(
     {},
     {
-      get(_target, prop) {
-        if (prop === 'dispose') return () => undefined;
+      get() {
         return reject;
       },
     },
-  ) as unknown as TsLanguageServiceClient;
+  ) as unknown as TsLanguageServiceProviderClient;
 }
 
-function disposedClient(): TsLanguageServiceClient {
+function disposedClient(): TsLanguageServiceProviderClient {
   return rejectingClient(new Error(DISPOSED_CLIENT_ERROR));
 }
 
@@ -328,7 +326,9 @@ function completionModel(
 }
 
 /** Code-action client with quiet defaults; override the method under test. */
-function codeActionClient(overrides: Record<string, unknown> = {}): TsLanguageServiceClient {
+function codeActionClient(
+  overrides: Record<string, unknown> = {},
+): TsLanguageServiceProviderClient {
   return clientWithMethods({
     getCodeFixes: () => Promise.resolve([]),
     getCombinedCodeFix: () => Promise.resolve({ changes: {} }),

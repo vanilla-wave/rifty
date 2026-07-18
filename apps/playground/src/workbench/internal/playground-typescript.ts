@@ -6,8 +6,9 @@ import type {
   Location,
   WorkspaceEdit,
 } from '@riftydev/ts-language-service/lsp-types';
-import type { TsLanguageServiceClient } from '../../glue/ts-ls-client.ts';
+import type { PlaygroundTypeScript as PublicPlaygroundTypeScript } from '../playground.ts';
 import { toOwnerProjectPath, toProjectPath } from '../project-file-boundary.ts';
+import type { TsLanguageServiceClient } from './typescript-relay-client.ts';
 
 const PLAYGROUND_TYPESCRIPT_METHODS = [
   'open',
@@ -45,7 +46,10 @@ const PLAYGROUND_TYPESCRIPT_METHODS = [
 type PlaygroundTypeScriptMethod = (typeof PLAYGROUND_TYPESCRIPT_METHODS)[number];
 
 /** Finite semantic TypeScript surface. Owner paths never cross this boundary. */
-export type PlaygroundTypeScript = Pick<TsLanguageServiceClient, PlaygroundTypeScriptMethod>;
+export type PlaygroundTypeScriptAdapter = Pick<
+  PublicPlaygroundTypeScript,
+  PlaygroundTypeScriptMethod
+>;
 
 export interface PlaygroundTypeScriptAuthority {
   readonly projectRoot: string;
@@ -120,11 +124,11 @@ function mapCodeActions(
 /** Translate the finite public path namespace at one semantic chokepoint. */
 export function createPlaygroundTypeScriptAdapter(
   authority: PlaygroundTypeScriptAuthority,
-): PlaygroundTypeScript {
+): PlaygroundTypeScriptAdapter {
   const { client, projectRoot } = authority;
   const ownerPath = (path: string): string => toOwnerProjectPath(projectRoot, path);
 
-  const typescript: PlaygroundTypeScript = {
+  const typescript: PlaygroundTypeScriptAdapter = {
     async open(path, text) {
       await client.open(ownerPath(path), text);
     },

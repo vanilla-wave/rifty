@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTsLanguageServiceClient } from './ts-ls-client.ts';
+import { createTsLanguageServiceClient } from './typescript-relay-client.ts';
 
 describe('createTsLanguageServiceClient hard-ceil frames', () => {
   it('ignores late responses from a disposed client instead of matching a new client request id', async () => {

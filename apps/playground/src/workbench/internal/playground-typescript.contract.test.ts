@@ -19,14 +19,15 @@ import {
 import type { FsSync } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { PlaygroundTypeScript as PublicPlaygroundTypeScript } from '../playground.ts';
+import {
+  type PlaygroundTypeScriptAdapter,
+  createPlaygroundTypeScriptAdapter,
+} from './playground-typescript.ts';
 import {
   type TsLanguageServiceClient,
   createTsLanguageServiceClient,
-} from '../../glue/ts-ls-client.ts';
-import {
-  type PlaygroundTypeScript,
-  createPlaygroundTypeScriptAdapter,
-} from './playground-typescript.ts';
+} from './typescript-relay-client.ts';
 
 const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 const OWNER_FILE = `${PROJECT_ROOT}/src/main.ts`;
@@ -158,7 +159,7 @@ const METHOD_NAMES = Object.freeze([
 ] as const);
 
 type PlaygroundTypeScriptMethod = (typeof METHOD_NAMES)[number];
-type ExpectedPlaygroundTypeScript = Pick<TsLanguageServiceClient, PlaygroundTypeScriptMethod>;
+type ExpectedPlaygroundTypeScript = Pick<PublicPlaygroundTypeScript, PlaygroundTypeScriptMethod>;
 type Responder = (request: TsRequest) => TsResponse;
 
 function emptyResponse(request: TsRequest): TsResponse {
@@ -259,7 +260,7 @@ function emptyResponse(request: TsRequest): TsResponse {
 }
 
 function harness(responder: Responder = emptyResponse): {
-  readonly typescript: PlaygroundTypeScript;
+  readonly typescript: PlaygroundTypeScriptAdapter;
   readonly requests: TsRequest[];
   close(): void;
 } {
@@ -289,7 +290,7 @@ function harness(responder: Responder = emptyResponse): {
   };
 }
 
-async function callEveryMethod(typescript: PlaygroundTypeScript): Promise<void> {
+async function callEveryMethod(typescript: PlaygroundTypeScriptAdapter): Promise<void> {
   await Promise.all([
     typescript.open(PUBLIC_FILE, 'export const opened = 11;'),
     typescript.update(PUBLIC_FILE, 'export const updated = 29;'),
@@ -681,7 +682,7 @@ describe('Playground TypeScript finite contract', () => {
   }, 30_000);
 
   it('has exactly the initial public method set in both types and runtime', () => {
-    expectTypeOf<PlaygroundTypeScript>().toEqualTypeOf<ExpectedPlaygroundTypeScript>();
+    expectTypeOf<PlaygroundTypeScriptAdapter>().toEqualTypeOf<ExpectedPlaygroundTypeScript>();
     const h = harness();
 
     expect(Object.keys(h.typescript).sort()).toEqual([...METHOD_NAMES].sort());
@@ -856,7 +857,7 @@ describe('Playground TypeScript result path boundary', () => {
           { uri: FOREIGN_FILE, range },
         ],
       }),
-      invoke: (typescript: PlaygroundTypeScript) =>
+      invoke: (typescript: PlaygroundTypeScriptAdapter) =>
         typescript.getTypeDefinition(PUBLIC_FILE, position),
     },
     {
@@ -872,7 +873,7 @@ describe('Playground TypeScript result path boundary', () => {
           ],
         },
       }),
-      invoke: (typescript: PlaygroundTypeScript) =>
+      invoke: (typescript: PlaygroundTypeScriptAdapter) =>
         typescript.getDefinitionLinks(PUBLIC_FILE, position),
     },
     {
@@ -883,7 +884,7 @@ describe('Playground TypeScript result path boundary', () => {
         kind: 'workspaceEdit',
         edit: ownerWorkspaceEdit(FOREIGN_FILE),
       }),
-      invoke: (typescript: PlaygroundTypeScript) =>
+      invoke: (typescript: PlaygroundTypeScriptAdapter) =>
         typescript.getRenameEdits(PUBLIC_FILE, position, 'next'),
     },
     {
@@ -894,7 +895,7 @@ describe('Playground TypeScript result path boundary', () => {
         kind: 'workspaceEdit',
         edit: { ...ownerWorkspaceEdit(), newFiles: [OWNER_SECONDARY_FILE, FOREIGN_FILE] },
       }),
-      invoke: (typescript: PlaygroundTypeScript) =>
+      invoke: (typescript: PlaygroundTypeScriptAdapter) =>
         typescript.getRenameEdits(PUBLIC_FILE, position, 'next'),
     },
     {
@@ -905,7 +906,7 @@ describe('Playground TypeScript result path boundary', () => {
         kind: 'workspaceEdit',
         edit: { ...ownerWorkspaceEdit(), renameLocation: { uri: FOREIGN_FILE, range } },
       }),
-      invoke: (typescript: PlaygroundTypeScript) =>
+      invoke: (typescript: PlaygroundTypeScriptAdapter) =>
         typescript.getRenameEdits(PUBLIC_FILE, position, 'next'),
     },
     {
@@ -916,7 +917,7 @@ describe('Playground TypeScript result path boundary', () => {
         kind: 'workspaceEdit',
         edit: { ...ownerWorkspaceEdit(), renameFilename: FOREIGN_FILE },
       }),
-      invoke: (typescript: PlaygroundTypeScript) =>
+      invoke: (typescript: PlaygroundTypeScriptAdapter) =>
         typescript.getRenameEdits(PUBLIC_FILE, position, 'next'),
     },
     {
@@ -927,7 +928,7 @@ describe('Playground TypeScript result path boundary', () => {
         kind: 'codeActions',
         codeActions: [{ title: 'foreign', edit: ownerWorkspaceEdit(FOREIGN_FILE) }],
       }),
-      invoke: (typescript: PlaygroundTypeScript) =>
+      invoke: (typescript: PlaygroundTypeScriptAdapter) =>
         typescript.getCodeFixes(PUBLIC_FILE, range, [2304]),
     },
     {
@@ -941,7 +942,7 @@ describe('Playground TypeScript result path boundary', () => {
           additionalTextEditChanges: ownerWorkspaceEdit(FOREIGN_FILE),
         },
       }),
-      invoke: (typescript: PlaygroundTypeScript) =>
+      invoke: (typescript: PlaygroundTypeScriptAdapter) =>
         typescript.getCompletionDetails(PUBLIC_FILE, position, 'foreign'),
     },
   ])('rejects the whole $family result when one nested owner path is foreign', async (testCase) => {

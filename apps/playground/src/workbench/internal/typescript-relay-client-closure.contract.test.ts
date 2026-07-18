@@ -71,9 +71,7 @@ describe('Workbench TypeScript relay source closure', () => {
         /^glue\/ts-ls-(?:client|request-id|monaco)/u.test(path),
     );
     const forbiddenBareSpecifiers = [...closure.bareSpecifiers]
-      .filter(
-        (specifier) => specifier === 'monaco-editor' || specifier === 'solid-js',
-      )
+      .filter((specifier) => specifier === 'monaco-editor' || specifier === 'solid-js')
       .sort();
 
     expect({

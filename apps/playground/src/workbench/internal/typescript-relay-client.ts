@@ -1,73 +1,65 @@
 /**
- * Page-side TS language-service client (ADR-0166 P1.9b).
+ * Correlated TypeScript language-service client (ADR-0166 P1.9b).
  *
- * An id-correlated request/response client over the page↔owner↔LS relay
- * (realVite.ts `sendTsLsp` / `onTsLsp`). There is no direct page→LS channel — the
- * LS is a grandchild the owner spawned — so every request envelope travels to the
- * owner, which forwards it to its LS child; the LS reply travels back the same way.
+ * An id-correlated request/response client over the page↔owner↔LS relay.
+ * The LS is an owner grandchild, so every page request and response crosses the
+ * Workbench session-tools relay.
  *
- * Correlation machinery mirrors {@link ./node-modules-port.ts}: a monotonic `id`,
- * a `pending` map of `{resolve,reject,timer}`, a per-request timeout that REJECTS
- * (never a silent hang — the extra page→owner→LS hop means a dropped frame must
- * surface loud), and `dispose()` that rejects every in-flight call. Inbound frames
- * are routed via `onTsLsp` filtered by `isTsResponseMessage`.
- *
- * The `lspToMonacoMarkers` mapper converts the service's LSP {@link Diagnostic}
- * (0-based line/character, severity 1..4) to Monaco's `IMarkerData` (1-based
- * line/column, `MarkerSeverity`).
+ * Realm-wide monotonic ids prevent late frames from matching a replacement
+ * client. Per-request timeouts and `dispose()` reject every affected call.
+ * Inbound frames are filtered by `isTsResponseMessage` before correlation.
  */
 
-import {
-  type CallHierarchyIncomingCall,
-  type CallHierarchyItem,
-  type CallHierarchyOutgoingCall,
-  type ClassificationFormat,
-  type ClassifiedSpan,
-  type CodeAction,
-  type CodeFixOptions,
-  type CombinedCodeFixOptions,
-  type CompletionDetailsOptions,
-  type CompletionItem,
-  type CompletionList,
-  type CompletionOptions,
-  type DefinitionLinks,
-  type Diagnostic,
-  DiagnosticSeverity,
-  type DocCommentTemplateOptions,
-  type DocumentHighlight,
-  type DocumentSymbol,
-  type EmitOutput,
-  type EncodedClassifications,
-  type FileRenameEditsOptions,
-  type FoldingRange,
-  type FormattingOptions,
-  type Hover,
-  type InlayHint,
-  type InlayHintOptions,
-  type LinkedEditingRanges,
-  type Location,
-  type MoveToRefactoringFileSuggestions,
-  type NavigationBarItem,
-  type OrganizeImportsOptions,
-  type PasteEditsOptions,
-  type Position,
-  type PrepareRenameResult,
-  type QuickInfoOptions,
-  type Range,
-  type RefactorEditOptions,
-  type RefactorOptions,
-  type ReferenceContext,
-  type RenameOptions,
-  type SelectionRange,
-  type SignatureHelp,
-  type SignatureHelpOptions,
-  type SymbolInformation,
-  type TextEdit,
-  type TextInsertion,
-  type TodoComment,
-  type TodoCommentDescriptor,
-  type WorkspaceEdit,
-  type WorkspaceSymbolOptions,
+import type {
+  CallHierarchyIncomingCall,
+  CallHierarchyItem,
+  CallHierarchyOutgoingCall,
+  ClassificationFormat,
+  ClassifiedSpan,
+  CodeAction,
+  CodeFixOptions,
+  CombinedCodeFixOptions,
+  CompletionDetailsOptions,
+  CompletionItem,
+  CompletionList,
+  CompletionOptions,
+  DefinitionLinks,
+  Diagnostic,
+  DocCommentTemplateOptions,
+  DocumentHighlight,
+  DocumentSymbol,
+  EmitOutput,
+  EncodedClassifications,
+  FileRenameEditsOptions,
+  FoldingRange,
+  FormattingOptions,
+  Hover,
+  InlayHint,
+  InlayHintOptions,
+  LinkedEditingRanges,
+  Location,
+  MoveToRefactoringFileSuggestions,
+  NavigationBarItem,
+  OrganizeImportsOptions,
+  PasteEditsOptions,
+  Position,
+  PrepareRenameResult,
+  QuickInfoOptions,
+  Range,
+  RefactorEditOptions,
+  RefactorOptions,
+  ReferenceContext,
+  RenameOptions,
+  SelectionRange,
+  SignatureHelp,
+  SignatureHelpOptions,
+  SymbolInformation,
+  TextEdit,
+  TextInsertion,
+  TodoComment,
+  TodoCommentDescriptor,
+  WorkspaceEdit,
+  WorkspaceSymbolOptions,
 } from '@riftydev/ts-language-service/lsp-types';
 import {
   TS_IPC_TYPE,
@@ -75,15 +67,13 @@ import {
   type TsResponse,
   isTsResponseMessage,
 } from '@riftydev/ts-language-service/protocol';
-import type * as monaco from 'monaco-editor';
-import { nextTsLspRequestId } from './ts-ls-request-id.ts';
 
-const MONACO_MARKER_SEVERITY = {
-  Error: 8,
-  Warning: 4,
-  Info: 2,
-  Hint: 1,
-} as const satisfies Record<'Error' | 'Warning' | 'Info' | 'Hint', monaco.MarkerSeverity>;
+// Old and new page clients can briefly share one relay; ids cannot restart per client.
+let nextRequestId = 0;
+
+function nextTsLspRequestId(): number {
+  return ++nextRequestId;
+}
 
 /** Relay seam the client posts requests on / subscribes responses through. */
 export interface TsLspRelay {
@@ -1089,38 +1079,4 @@ function errorFrom(error: {
     (err as Error & { feature?: string }).feature = error.feature;
   }
   return err;
-}
-
-/** LSP severity (1=Error..4=Hint) → Monaco `MarkerSeverity`. */
-function toMarkerSeverity(severity: DiagnosticSeverity): monaco.MarkerSeverity {
-  switch (severity) {
-    case DiagnosticSeverity.Error:
-      return MONACO_MARKER_SEVERITY.Error;
-    case DiagnosticSeverity.Warning:
-      return MONACO_MARKER_SEVERITY.Warning;
-    case DiagnosticSeverity.Information:
-      return MONACO_MARKER_SEVERITY.Info;
-    case DiagnosticSeverity.Hint:
-      return MONACO_MARKER_SEVERITY.Hint;
-    default:
-      return MONACO_MARKER_SEVERITY.Error;
-  }
-}
-
-/**
- * Map the service's LSP diagnostics to Monaco markers. LSP positions are 0-based
- * (line, character); Monaco markers are 1-based (lineNumber, column). The `+1` on
- * each coordinate is the whole translation. `code`/`source`/`message` carry over.
- */
-export function lspToMonacoMarkers(diags: readonly Diagnostic[]): monaco.editor.IMarkerData[] {
-  return diags.map((d) => ({
-    severity: toMarkerSeverity(d.severity),
-    message: d.message,
-    startLineNumber: d.range.start.line + 1,
-    startColumn: d.range.start.character + 1,
-    endLineNumber: d.range.end.line + 1,
-    endColumn: d.range.end.character + 1,
-    code: d.code === undefined ? undefined : String(d.code),
-    source: d.source,
-  }));
 }
