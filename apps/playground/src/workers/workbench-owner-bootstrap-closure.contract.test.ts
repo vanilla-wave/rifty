@@ -75,4 +75,26 @@ describe('Workbench owner bootstrap source closure', () => {
       ),
     ).toEqual([]);
   });
+
+  it('receives registry configuration explicitly without an ambient owner fallback', () => {
+    const closure = sourceClosure(new URL('./workbench-owner-bootstrap.ts', import.meta.url));
+    const ambientRegistrySources = [...closure.files]
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8');
+        return (
+          source.includes('import.meta.env.VITE_RIFTY_REGISTRY_URL') ||
+          source.includes('getRegistryBaseUrl')
+        );
+      })
+      .map((path) => relative(fileURLToPath(new URL('../', import.meta.url)), path))
+      .sort();
+    const packageStateSource = readFileSync(
+      fileURLToPath(new URL('./owner-package-state.ts', import.meta.url)),
+      'utf8',
+    );
+
+    expect(ambientRegistrySources).toEqual([]);
+    expect(packageStateSource).toContain('readonly registry: RegistryClient;');
+    expect(packageStateSource).not.toContain('createProxiedRegistryClient');
+  });
 });
