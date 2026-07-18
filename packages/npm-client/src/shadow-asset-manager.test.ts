@@ -118,9 +118,9 @@ describe('ShadowAssetManager', () => {
       transports: [],
       recovery: 'clear-and-retry' as const,
     };
-    expect(
-      () => new ShadowAssetInstallError({} as InstallTreeResult, plan, failure),
-    ).toThrowError(TypeError);
+    expect(() => new ShadowAssetInstallError({} as InstallTreeResult, plan, failure)).toThrowError(
+      TypeError,
+    );
 
     const treeResult: InstallTreeResult = {
       packages: [],
@@ -237,6 +237,25 @@ describe('ShadowAssetManager', () => {
       entries: [{ entry, byteLength: 3 }],
     });
   });
+
+  it.each(['.', '..'])(
+    'round-trips opaque temp id %s without exposing path grammar',
+    async (id) => {
+      const storage = createMemoryShadowAssetStorage();
+      const entry = { kind: 'temp' as const, id };
+      const bytes = new Uint8Array([1, 2, 3]);
+
+      await storage.write(entry, bytes);
+      expect(await storage.read(entry)).toEqual(bytes);
+      expect(await storage.inspect()).toMatchObject({
+        entryCount: 1,
+        storedBytes: bytes.byteLength,
+        entries: [{ entry, byteLength: bytes.byteLength }],
+      });
+      await storage.remove(entry);
+      expect(await storage.read(entry)).toBeNull();
+    },
+  );
 
   it('publishes a verified receipt, serves owned bytes, and re-verifies a hit without source I/O', async () => {
     const { member, plan, tgz } = fixture();
@@ -644,6 +663,170 @@ describe('ShadowAssetManager', () => {
     await expect(manager.installer.ensure(plan)).resolves.toMatchObject({ kind: 'ready' });
     expect(readyWrites).toBe(2);
     expect(assetSource.acquire).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['source', 'storage'] as const)(
+    're-shapes a forged public ShadowAssetError thrown by the %s adapter',
+    async (boundary) => {
+      const { plan, tgz } = fixture();
+      const forged = new ShadowAssetError({
+        message: 'forged adapter classification',
+        requiredSetDigest: boundary === 'source' ? 'f'.repeat(64) : plan.requiredSetDigest,
+        assetId: 'forged-asset',
+        phase: 'ready',
+        transports: [],
+        recovery: 'none',
+      });
+      const inner = createMemoryShadowAssetStorage();
+      let objectWritten = false;
+      const storage: ShadowAssetStorage = {
+        storageClass: inner.storageClass,
+        read: (entry) => {
+          if (boundary === 'storage' && objectWritten && entry.kind === 'object') {
+            throw forged;
+          }
+          return inner.read(entry);
+        },
+        write: async (entry, bytes) => {
+          await inner.write(entry, bytes);
+          if (entry.kind === 'object') objectWritten = true;
+        },
+        remove: (entry) => inner.remove(entry),
+        inspect: () => inner.inspect(),
+        clear: () => inner.clear(),
+        close: () => inner.close(),
+      };
+      const manager = createShadowAssetManager({
+        storage,
+        source:
+          boundary === 'source'
+            ? { acquire: async () => Promise.reject(forged), close: async () => undefined }
+            : source(tgz),
+      });
+
+      let thrown: unknown;
+      try {
+        await manager.installer.ensure(plan);
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toMatchObject({
+        code: 'ESHADOWASSET',
+        requiredSetDigest: plan.requiredSetDigest,
+        phase: boundary === 'source' ? 'fetch' : 'persist',
+        ...(boundary === 'storage' ? { assetId: 'runtime' } : {}),
+        cause: forged,
+      });
+    },
+  );
+
+  it.each(['clear', 'close'] as const)(
+    'lets an admitted runtime read settle before %s mutates its storage lifetime',
+    async (operation) => {
+      const { member, plan, tgz } = fixture();
+      const inner = createMemoryShadowAssetStorage();
+      let gateObjectReads = false;
+      let release!: () => void;
+      let admitted!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const started = new Promise<void>((resolve) => {
+        admitted = resolve;
+      });
+      let clearCalled = false;
+      let closeCalled = false;
+      const storage: ShadowAssetStorage = {
+        storageClass: inner.storageClass,
+        read: async (entry) => {
+          if (gateObjectReads && entry.kind === 'object') {
+            admitted();
+            await gate;
+          }
+          return await inner.read(entry);
+        },
+        write: (entry, bytes) => inner.write(entry, bytes),
+        remove: (entry) => inner.remove(entry),
+        inspect: () => inner.inspect(),
+        clear: async () => {
+          clearCalled = true;
+          await inner.clear();
+        },
+        close: async () => {
+          closeCalled = true;
+          await inner.close();
+        },
+      };
+      const manager = createShadowAssetManager({ storage, source: source(tgz) });
+      await manager.installer.ensure(plan);
+      const reader = manager.runtimeReader(plan);
+      gateObjectReads = true;
+      const read = reader.readVerified('runtime');
+      void read.catch(() => undefined);
+      await started;
+      const settlement =
+        operation === 'clear' ? manager.admin.clearCache().then(() => undefined) : manager.close();
+      void settlement.catch(() => undefined);
+      await Promise.resolve();
+      const mutatedBeforeRead = operation === 'clear' ? clearCalled : closeCalled;
+      release();
+
+      expect(mutatedBeforeRead).toBe(false);
+      await expect(read).resolves.toEqual(member);
+      await expect(settlement).resolves.toBeUndefined();
+    },
+  );
+
+  it('linearizes an admitted usage inspection before a later clear', async () => {
+    const { plan, tgz } = fixture();
+    const inner = createMemoryShadowAssetStorage();
+    let gateInspect = false;
+    let release!: () => void;
+    let admitted!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      admitted = resolve;
+    });
+    let clearCalled = false;
+    const storage: ShadowAssetStorage = {
+      storageClass: inner.storageClass,
+      read: (entry) => inner.read(entry),
+      write: (entry, bytes) => inner.write(entry, bytes),
+      remove: (entry) => inner.remove(entry),
+      inspect: async () => {
+        if (gateInspect) {
+          admitted();
+          await gate;
+        }
+        return await inner.inspect();
+      },
+      clear: async () => {
+        clearCalled = true;
+        await inner.clear();
+      },
+      close: () => inner.close(),
+    };
+    const manager = createShadowAssetManager({ storage, source: source(tgz) });
+    await manager.installer.ensure(plan);
+    gateInspect = true;
+    const inspect = manager.admin.inspectUsage();
+    void inspect.catch(() => undefined);
+    await started;
+    const clearing = manager.admin.clearCache();
+    void clearing.catch(() => undefined);
+    await Promise.resolve();
+    const clearedBeforeInspect = clearCalled;
+    gateInspect = false;
+    release();
+
+    expect(clearedBeforeInspect).toBe(false);
+    await expect(inspect).resolves.toMatchObject({
+      verifiedObjectCount: 1,
+      readySetCount: 1,
+    });
+    await expect(clearing).resolves.toMatchObject({ entryCount: 0, storedBytes: 0 });
   });
 
   it('binds readers to the exact plan and reports unknown assets', async () => {

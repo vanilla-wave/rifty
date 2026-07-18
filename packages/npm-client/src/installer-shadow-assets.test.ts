@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
-import { install } from './installer.ts';
+import { type InstallOptions, install } from './installer.ts';
 import { type Packument, RegistryClient } from './registry.ts';
 import {
   type ShadowAssetEnsureResult,
@@ -146,6 +146,83 @@ describe('install shadow-asset authority boundary', () => {
       expect('shadowAssets' in result).toBe(false);
       expect(assets.ensure).not.toHaveBeenCalled();
       expect(result.provenance.resolution).toBe(resolution);
+    },
+  );
+
+  it.each([
+    ['null options', null],
+    ['extra option', { extra: true }],
+    ['fake signal', { signal: {} }],
+    ['fake progress callback', { onProgress: 1 }],
+  ])(
+    'rejects malformed shadow-asset %s before the tree mutation barrier',
+    async (_label, value) => {
+      const vfs = await project();
+      const barrier = vi.fn();
+      const assets = installer();
+      const shadowAssets = {
+        installer: assets,
+        options: value,
+      } as unknown as NonNullable<InstallOptions['shadowAssets']>;
+
+      await expect(
+        install(
+          'root',
+          '1.0.0',
+          { esbuild: '^0.28.0' },
+          {
+            vfs,
+            cwd: '/project',
+            registry: new InstallRegistry(),
+            shadowAssets,
+            onTreeMutationStart: barrier,
+          },
+        ),
+      ).rejects.toBeInstanceOf(TypeError);
+      expect(barrier).not.toHaveBeenCalled();
+      expect(await vfs.exists('/project/node_modules')).toBe(false);
+      expect(await vfs.exists('/project/package-lock.json')).toBe(false);
+    },
+  );
+
+  it.each(['plan', 'receipt', 'receipt-hash'] as const)(
+    'rejects a same-digest ready result with drifted %s evidence',
+    async (fault) => {
+      const vfs = await project();
+      const assets = installer(async (plan) => {
+        const result = ready(plan);
+        if (fault === 'plan') {
+          return { ...result, plan: { ...plan, assets: [] } };
+        }
+        if (fault === 'receipt') {
+          return { ...result, receipt: { ...result.receipt, assets: [] } };
+        }
+        return {
+          ...result,
+          receipt: { ...result.receipt, receiptSha256: 'f'.repeat(64) },
+        };
+      });
+
+      let thrown: unknown;
+      try {
+        await install(
+          'root',
+          '1.0.0',
+          { esbuild: '^0.28.0' },
+          {
+            vfs,
+            cwd: '/project',
+            registry: new InstallRegistry(),
+            shadowAssets: { installer: assets },
+          },
+        );
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(ShadowAssetInstallError);
+      expect(thrown).toMatchObject({ code: 'ESHADOWASSET', phase: 'ready' });
+      expect(await vfs.exists('/project/package-lock.json')).toBe(true);
     },
   );
 
