@@ -8,6 +8,7 @@ import {
   ProjectDefinitionMismatchError,
   ProjectFileOperationError,
   RuntimeAssetError,
+  type RuntimeAssetProgress,
 } from './errors.ts';
 import type { PageToPlaygroundOwnerMessage } from './internal/playground-owner-protocol.ts';
 import { definePlaygroundProject } from './internal/playground-project-definition.ts';
@@ -45,6 +46,26 @@ const companionInput: WorkbenchOwnerStartInput = Object.freeze({
   legacyWorkspacePrefix: '/workspaces/vite',
   playgroundUrlContext,
 });
+const runtimeAssetA = 'esbuild-wasm@0.28.0/package/esbuild.wasm';
+const runtimeAssetB = 'esbuild-wasm@0.28.0/package/esbuild.worker.js';
+
+function assetProgress(
+  phase: 'cache-check' | 'fetch' | 'verify' | 'persist',
+  assetIndex: number,
+  assetCount: number,
+  assetId = runtimeAssetA,
+): RuntimeAssetProgress {
+  return { phase, assetId, assetIndex, assetCount };
+}
+
+function readyProgress(assetCount: number): RuntimeAssetProgress {
+  return {
+    phase: 'ready',
+    requiredSetDigest: 'b'.repeat(64),
+    assetCount,
+    storageClass: 'memory-session',
+  };
+}
 
 type PageToPhysicalOwnerMessage = PageToWorkbenchOwnerMessage | PageToPlaygroundOwnerMessage;
 
@@ -119,6 +140,57 @@ async function settleMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+}
+
+type ProgressOpenKind = 'generic' | 'companion';
+
+async function beginProgressOpen(kind: ProgressOpenKind, worker: FakeOwnerWorker) {
+  const raw = startBrowserWorkspaceOwner(
+    kind === 'generic' ? input : companionInput,
+    dependencies(worker),
+  );
+  worker.emit('message', {
+    type: 'workbench:owner-ready',
+    storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+  });
+  if (kind === 'companion') {
+    worker.emit('message', {
+      type: 'workbench:playground-ready',
+      catalog: {
+        active: { kind: 'scratch' },
+        scratch: { starterId: 'vite', dirty: false, editedAt: '2026-07-18T00:00:00.000Z' },
+        projects: [],
+      },
+    });
+  }
+  await raw.ready;
+  if (kind === 'generic') {
+    const opening = raw.openProject(
+      inspectProjectDefinition(projects.vite({ id: 'strict-progress', files: {} })),
+    );
+    const request = sentOf(worker, 'workbench:open-project').at(-1);
+    if (request === undefined) throw new Error('missing generic progress open request');
+    return { raw, opening: opening as Promise<unknown>, opId: request.opId };
+  }
+  const companion = raw.playground;
+  if (companion === undefined) throw new Error('missing Playground companion handle');
+  const opening = companion.openProject(
+    definePlaygroundProject(
+      {
+        kind: 'vite',
+        id: 'scratch',
+        starterId: 'vite',
+        templateId: 'vite',
+        files: {},
+        firstMaterialization: { kind: 'install' },
+        port: 4173,
+      },
+      playgroundUrlContext,
+    ),
+  );
+  const request = sentPlaygroundOf(worker, 'workbench:playground-open-project').at(-1);
+  if (request === undefined) throw new Error('missing companion progress open request');
+  return { raw, opening: opening as Promise<unknown>, opId: request.opId };
 }
 
 function dependencies(worker: FakeOwnerWorker) {
@@ -216,6 +288,258 @@ describe('browser Workbench owner transport', () => {
       env: {},
       cwd: '/',
       serve: false,
+    });
+  });
+
+  it('owns one generic open callback page-side and isolates its failures from later phases', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await raw.ready;
+      const callback = vi.fn((_progress: RuntimeAssetProgress) => {
+        throw new Error('page observer failed');
+      });
+      const opening = raw.openProject(
+        inspectProjectDefinition(projects.vite({ id: 'progress', files: {} })),
+        { onRuntimeAssetProgress: callback },
+      );
+      const request = sentOf(worker, 'workbench:open-project')[0];
+      if (request === undefined) throw new Error('missing progress open request');
+      expect(request).not.toHaveProperty('onRuntimeAssetProgress');
+
+      for (const progress of [
+        assetProgress('cache-check', 0, 1),
+        assetProgress('fetch', 0, 1),
+        assetProgress('verify', 0, 1),
+        assetProgress('persist', 0, 1),
+      ]) {
+        worker.emit('message', {
+          type: 'workbench:runtime-assets-progress',
+          opId: request.opId,
+          progress,
+        });
+      }
+
+      expect(callback).toHaveBeenCalledTimes(4);
+      expect(callback.mock.calls[0]?.[0]).toEqual(assetProgress('cache-check', 0, 1));
+      expect(Object.isFrozen(callback.mock.calls[0]?.[0])).toBe(true);
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(warning.mock.calls[0]?.[0]).toContain(request.opId);
+      expect(worker.killedWith).toBeNull();
+
+      worker.emit('message', {
+        type: 'workbench:failure',
+        opId: request.opId,
+        error: { name: 'Error', message: 'open stopped by fixture' },
+      });
+      await expect(opening).rejects.toThrow('open stopped by fixture');
+      raw.close();
+      worker.emit('exit', 0, null);
+      await raw.closed;
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  it('routes companion open progress through the same page-owned observer', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(companionInput, dependencies(worker));
+    const companion = raw.playground;
+    if (companion === undefined) throw new Error('missing Playground companion handle');
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    worker.emit('message', {
+      type: 'workbench:playground-ready',
+      catalog: {
+        active: { kind: 'scratch' },
+        scratch: { starterId: 'vite', dirty: false, editedAt: '2026-07-18T00:00:00.000Z' },
+        projects: [],
+      },
+    });
+    await raw.ready;
+    const callback = vi.fn();
+    const definition = definePlaygroundProject(
+      {
+        kind: 'vite',
+        id: 'scratch',
+        starterId: 'vite',
+        templateId: 'vite',
+        files: {},
+        firstMaterialization: { kind: 'install' },
+        port: 4173,
+      },
+      playgroundUrlContext,
+    );
+    const opening = companion.openProject(definition, { onRuntimeAssetProgress: callback });
+    const request = sentPlaygroundOf(worker, 'workbench:playground-open-project')[0];
+    if (request === undefined) throw new Error('missing Playground progress open request');
+    expect(request).not.toHaveProperty('onRuntimeAssetProgress');
+
+    for (const progress of [assetProgress('cache-check', 0, 1), readyProgress(1)]) {
+      worker.emit('message', {
+        type: 'workbench:runtime-assets-progress',
+        opId: request.opId,
+        progress,
+      });
+    }
+    expect(callback.mock.calls.map(([progress]) => progress)).toEqual([
+      assetProgress('cache-check', 0, 1),
+      readyProgress(1),
+    ]);
+
+    worker.emit('message', {
+      type: 'workbench:failure',
+      opId: request.opId,
+      error: { name: 'Error', message: 'companion open stopped by fixture' },
+    });
+    await expect(opening).rejects.toThrow('companion open stopped by fixture');
+    raw.close();
+    worker.emit('exit', 0, null);
+    await raw.closed;
+  });
+
+  it('fails the owner protocol for progress from an unknown operation', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+    const opening = raw.openProject(
+      inspectProjectDefinition(projects.vite({ id: 'strict-progress', files: {} })),
+    );
+    const request = sentOf(worker, 'workbench:open-project')[0];
+    if (request === undefined) throw new Error('missing strict progress open request');
+    worker.emit('message', {
+      type: 'workbench:runtime-assets-progress',
+      opId: 'never-issued',
+      progress: assetProgress('cache-check', 0, 1),
+    });
+
+    expect(worker.killedWith).toBe('SIGTERM');
+    await expect(opening).rejects.toThrow(/runtime-asset progress/i);
+    await expect(raw.closed).rejects.toThrow(/runtime-asset progress/i);
+  });
+
+  describe.each(['generic', 'companion'] as const)('%s open progress protocol', (kind) => {
+    it.each([
+      {
+        name: 'first phase is not cache-check',
+        before: [assetProgress('verify', 0, 1)],
+      },
+      {
+        name: 'one asset identity is reused at two indexes',
+        before: [
+          assetProgress('cache-check', 0, 2, runtimeAssetA),
+          assetProgress('cache-check', 1, 2, runtimeAssetA),
+        ],
+      },
+      {
+        name: 'persist skips verify',
+        before: [
+          assetProgress('cache-check', 0, 1),
+          assetProgress('fetch', 0, 1),
+          assetProgress('persist', 0, 1),
+        ],
+      },
+      {
+        name: 'asset index is out of range',
+        before: [assetProgress('cache-check', 1, 1, runtimeAssetB)],
+      },
+      {
+        name: 'asset index is missing',
+        before: [
+          {
+            phase: 'cache-check',
+            assetId: runtimeAssetA,
+            assetCount: 1,
+          },
+        ],
+      },
+      {
+        name: 'ready arrives before every index was checked',
+        before: [assetProgress('cache-check', 0, 2), readyProgress(2)],
+      },
+      {
+        name: 'project-opened terminates a partial trace without ready',
+        before: [assetProgress('cache-check', 0, 1)],
+        terminal: 'opened' as const,
+      },
+      {
+        name: 'one phase is duplicated',
+        before: [assetProgress('cache-check', 0, 1), assetProgress('cache-check', 0, 1)],
+      },
+      {
+        name: 'progress arrives after a failed terminal',
+        before: [],
+        terminal: 'failure' as const,
+        after: [assetProgress('cache-check', 0, 1)],
+      },
+      {
+        name: 'progress follows ready',
+        before: [
+          assetProgress('cache-check', 0, 1),
+          readyProgress(1),
+          assetProgress('fetch', 0, 1),
+        ],
+      },
+    ])('rejects corrupt-input: $name', async ({ before, terminal, after = [] }) => {
+      const worker = new FakeOwnerWorker();
+      const { raw, opening, opId } = await beginProgressOpen(kind, worker);
+      void opening.catch(() => undefined);
+      for (const progress of before) {
+        worker.emit('message', {
+          type: 'workbench:runtime-assets-progress',
+          opId,
+          progress,
+        });
+      }
+      if (terminal === 'failure') {
+        worker.emit('message', {
+          type: 'workbench:failure',
+          opId,
+          error: { name: 'Error', message: 'open stopped by fixture' },
+        });
+        await expect(opening).rejects.toThrow('open stopped by fixture');
+      } else if (terminal === 'opened') {
+        worker.emit(
+          'message',
+          kind === 'generic'
+            ? {
+                type: 'workbench:project-opened',
+                opId,
+                projectToken: 'partial-generic-token',
+                projectRoot: '/owner-born/partial-generic',
+              }
+            : {
+                type: 'workbench:playground-project-opened',
+                opId,
+                projectToken: 'partial-companion-token',
+                projectRoot: '/owner-born/partial-companion',
+                acquisition: { kind: 'install', snapshotFailures: [] },
+                runtime: { kind: 'vite', port: 4173 },
+                initialScmSnapshot: { history: [], changes: [] },
+              },
+        );
+      }
+      for (const progress of after) {
+        worker.emit('message', {
+          type: 'workbench:runtime-assets-progress',
+          opId,
+          progress,
+        });
+      }
+
+      expect(worker.killedWith).toBe('SIGTERM');
+      await expect(raw.closed).rejects.toThrow(/runtime[- ]asset progress|assetIndex/i);
     });
   });
 
