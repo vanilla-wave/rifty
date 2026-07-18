@@ -55,7 +55,8 @@ describe('builtin shadow-asset catalog', () => {
   });
 
   it('rejects malformed descriptors and source packages colliding with builtin substitution names', () => {
-    expect(() =>
+    let thrown: unknown;
+    try {
       createBuiltinShadowAssetCatalog({
         schema: 1,
         id: 'test.catalog',
@@ -71,7 +72,20 @@ describe('builtin shadow-asset catalog', () => {
             maxUnpackedBytes: 0,
           },
         ],
-      }),
-    ).toMatchObject({ code: 'ESHADOWASSETSOURCE' });
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({ code: 'ESHADOWASSETSOURCE' });
+
+    const malformed = {
+      ...structuredClone(builtinShadowAssetCatalog),
+      assets: builtinShadowAssetCatalog.assets.map((asset, index) =>
+        index === 0
+          ? { ...asset, source: { ...asset.source, name: 'safe-source', integrity: 'sha512-AAAA' } }
+          : asset,
+      ),
+    };
+    expect(() => createBuiltinShadowAssetCatalog(malformed)).toThrow(/integrity/);
   });
 });

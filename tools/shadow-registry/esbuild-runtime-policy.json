@@ -9,12 +9,17 @@
   },
   "source": {
     "package": "esbuild-wasm",
+    "version": "0.28.0",
+    "integrity": "sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg==",
+    "maxTarballBytes": 3845798,
+    "maxUnpackedBytes": 14483968,
     "member": "package/lib/browser.js",
     "sha256": "b882a5ffb3bf170c0d8f40c0832cc5dca00830400314bb9455dea5d6f58c2a10"
   },
   "wasm": {
     "member": "package/esbuild.wasm",
-    "sha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b"
+    "sha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b",
+    "bytes": 13918738
   },
   "validationSource": {
     "package": "esbuild",

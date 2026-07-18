@@ -2,7 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Builtin shadow-asset catalog (ADR-0249).** Clone-safe generated data pins
+  the exact `esbuild-wasm@0.28.0/package/esbuild.wasm` source SRI, member hash,
+  sizes, caps, stable substitution/adapter ids, and canonical catalog digest;
+  the drift command re-downloads and verifies the real npm tarball.
+
 ### Changed
+
+- Install-artifact identity projects only tree/runtime-JS policy. Runtime-asset
+  SRI, member hash/size, and archive caps move independently through the
+  required-set digest.
 
 - Baked dependency snapshot ids are SHA-256 of the exact uncompressed
   serialized bytes; the drift gate rejects missing, malformed, or stale ids.

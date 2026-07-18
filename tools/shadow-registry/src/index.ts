@@ -21,10 +21,7 @@
  * the two packages (npm-client depends on this one for the data table). The
  * structural compatibility is asserted in npm-client's tests.
  */
-export interface OverrideMap {
-  /** Map from package name (or `parent>child`) to replacement target. */
-  [key: string]: string;
-}
+export { bakedOverrides, type OverrideMap } from './index-data.ts';
 
 /**
  * Built-in package substitutions. Source of truth for what the npm installer
@@ -34,16 +31,13 @@ export interface OverrideMap {
  * Add an entry here when a popular npm package ships native bindings that
  * cannot load in a browser realm AND a drop-in pure-JS alternative exists.
  */
-export const bakedOverrides: OverrideMap = {
-  // bcrypt's native bindings don't load in the browser; bcryptjs is a drop-in.
-  bcrypt: 'bcryptjs',
-  // Real esbuild's registry package runs a native-binary postinstall. The
-  // installer materializes the `esbuild` import name from the shim below.
-  esbuild: '@esbuild/wasi-preview1@0.28.0',
-  // Vite 8 imports lightningcss lazily. The native package loads `.node`
-  // bindings; lightningcss-wasm ships the same NAPI surface backed by WASM.
-  lightningcss: 'lightningcss-wasm@1.32.0',
-};
+export {
+  builtinShadowAssetCatalog,
+  type BuiltinShadowAssetCatalog,
+  type BuiltinShadowAssetSubstitution,
+  type ShadowAssetDescriptor,
+  type ShadowAssetSourceDescriptor,
+} from './shadow-asset-catalog.ts';
 
 // MUST equal the bakedOverrides trigger pin: the alias package.json + the
 // shim's `version` export claim this — a drifted static value would lie to

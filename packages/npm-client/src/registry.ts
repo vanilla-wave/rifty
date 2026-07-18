@@ -155,6 +155,7 @@ export class RegistryClient {
   private async fetchBytesWithRetry(
     url: string,
     label: string,
+    maxBytes?: number,
   ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; response: Response }> {
     let lastNetworkError: unknown;
     for (let attempt = 0; ; attempt += 1) {
@@ -169,6 +170,7 @@ export class RegistryClient {
         if (response.ok) {
           bytes = await drainBodyBounded(response, {
             stallTimeoutMs: this.stallTimeoutMs,
+            ...(maxBytes === undefined ? {} : { maxBytes }),
             label,
           });
         } else {
@@ -201,8 +203,11 @@ export class RegistryClient {
     return JSON.parse(packumentDecoder.decode(result.bytes)) as Packument;
   }
 
-  async getTarball(tarballUrl: string): Promise<Uint8Array> {
-    const result = await this.fetchBytesWithRetry(tarballUrl, `tarball ${tarballUrl}`);
+  async getTarball(tarballUrl: string, maxBytes?: number): Promise<Uint8Array> {
+    if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes <= 0)) {
+      throw new TypeError('tarball maxBytes must be a positive safe integer');
+    }
+    const result = await this.fetchBytesWithRetry(tarballUrl, `tarball ${tarballUrl}`, maxBytes);
     if (!result.ok) throw new Error(`Failed to fetch tarball: ${result.response.status}`);
     return result.bytes;
   }

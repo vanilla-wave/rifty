@@ -5,7 +5,7 @@ title: Avoid redundant warm Eddy prefetch when v4 trust needs async hashing
 created: 2026-07-17
 why: v4's synchronous boot hint cannot hash exact lockfile bytes with WebCrypto, so it conservatively misses and may start a bounded Eddy prefetch that the later async trust check proves unnecessary
 user_story: As a returning Workbench user with a trusted dependency tree, I want boot to avoid downloading a speculative dependency bundle that the project will not consume
-blocked_by: [distribution/workbench-install-stamp-v4, distribution/workbench-runtime-asset-cutover]
+blocked_by: [distribution/workbench-runtime-asset-cutover]
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/playground/0261-root-bound-serialized-install-trust-claims-and-non-transferable-claim-ingress.md, docs/adr/npm-client/0194-eddy-v1-2-stateless-bundle-store-shared-resolve-caches-learned-pins.md]
 code: [apps/playground/src/glue/install-prefetch.ts, apps/playground/src/glue/install-stamp-authority.ts, packages/npm-client/src/eddy-prefetch.ts]
 ---

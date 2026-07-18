@@ -28,6 +28,8 @@ export interface FetchSpec {
    * against it; mismatch → throws `EINTEGRITY`. When absent, the computed
    * integrity is returned for the caller to persist. */
   readonly integrity?: string;
+  /** Descriptor-owned compressed-byte ceiling for runtime-asset sources. */
+  readonly maxBytes?: number;
 }
 
 export interface FetchAndUnpackResult {
@@ -40,7 +42,7 @@ export interface FetchAndUnpackResult {
 
 export interface FetchAndUnpackCtx {
   readonly cache: TarballCache;
-  readonly getTarball: (url: string) => Promise<Uint8Array>;
+  readonly getTarball: (url: string, maxBytes?: number) => Promise<Uint8Array>;
 }
 
 /**
@@ -57,11 +59,19 @@ export async function fetchAndUnpackToCache(
   if (spec.integrity) {
     const cached = await ctx.cache.get(spec.name, spec.version, spec.integrity);
     if (cached) {
+      if (spec.maxBytes !== undefined && cached.byteLength > spec.maxBytes) {
+        throw new Error(
+          `Cached tarball for ${spec.name}@${spec.version} exceeded ${spec.maxBytes} bytes`,
+        );
+      }
       return { bytes: cached, cacheHit: true, integrity: spec.integrity };
     }
   }
 
-  const bytes = await ctx.getTarball(spec.resolved);
+  const bytes = await ctx.getTarball(spec.resolved, spec.maxBytes);
+  if (spec.maxBytes !== undefined && bytes.byteLength > spec.maxBytes) {
+    throw new Error(`Tarball for ${spec.name}@${spec.version} exceeded ${spec.maxBytes} bytes`);
+  }
   // Match the algorithm declared by `spec.integrity` so the comparison is
   // apples-to-apples; default sha512 (what modern npm packuments produce)
   // when no expected integrity is supplied.

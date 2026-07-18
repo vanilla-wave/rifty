@@ -6,7 +6,7 @@ created: 2026-07-15
 why: supervised Workers need verified multi-megabyte asset bytes, but neither the 1MiB SAB sync-RPC nor guest Node IPC owns this protocol
 user_story: As a supervised runtime Worker, I want a dedicated capability session that returns verified asset bytes or a bounded typed error
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-asset-manager]
+blocked_by: []
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/kernel/0266-opaque-named-capability-ports-on-worker-bootstrap.md]
 code: [packages/npm-client/src/index.ts]
 ---

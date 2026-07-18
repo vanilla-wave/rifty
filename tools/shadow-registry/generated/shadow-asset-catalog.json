@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "rifty.shadow-assets.builtin.v1",
+  "digest": "4d01c62407126c22b0de104d66da51b4224c456d658cf876920667d3de86fbaa",
+  "substitutions": [
+    {
+      "id": "rifty.shadow-substitution.esbuild-wasi-preview1.v1",
+      "publicName": "esbuild",
+      "builtin": true,
+      "runtimeAdapterId": "rifty.runtime-adapter.esbuild-vite.v1",
+      "versions": {
+        "0.28.0": ["esbuild-wasm@0.28.0/package/esbuild.wasm"]
+      }
+    }
+  ],
+  "assets": [
+    {
+      "id": "esbuild-wasm@0.28.0/package/esbuild.wasm",
+      "source": {
+        "name": "esbuild-wasm",
+        "version": "0.28.0",
+        "integrity": "sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg=="
+      },
+      "member": "package/esbuild.wasm",
+      "memberSha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b",
+      "memberSize": 13918738,
+      "maxTarballBytes": 3845798,
+      "maxUnpackedBytes": 14483968
+    }
+  ]
+}

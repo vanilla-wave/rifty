@@ -5,7 +5,7 @@ title: Honest builtin shadow runtime delivery
 created: 2026-07-13
 value: Vite 7 installs and executes npm-proven esbuild bytes without host WASM or a redundant alias payload, with storage-qualified readiness and measured STD/Eddy cost
 user_story: As a browser-IDE user with a Vite project, I want cold install to fetch and execute esbuild's exact runtime bytes once with npm-grade provenance, but today it downloads an unused alias while the executed WASM arrives outside npm as an app-bundle asset
-items: [npm-client/shadow-asset-catalog-plan, npm-client/shadow-asset-manager, npm-client/shadow-asset-message-port, kernel/worker-capability-ports, distribution/workbench-install-stamp-v4, distribution/workbench-runtime-asset-storage, distribution/workbench-runtime-asset-acquisition, distribution/workbench-runtime-asset-cutover, npm-client/esbuild-alias-override-retirement, distribution/workbench-runtime-asset-cold-bench, npm-client/eddy-batch-asset-closure]
+items: [npm-client/shadow-asset-message-port, distribution/workbench-runtime-asset-acquisition, distribution/workbench-runtime-asset-cutover, npm-client/esbuild-alias-override-retirement, distribution/workbench-runtime-asset-cold-bench, npm-client/eddy-batch-asset-closure]
 ---
 
 ## Outcome
@@ -111,25 +111,9 @@ inheritance or a host-esbuild fallback remains forbidden.
 
 ## Items
 
-- `npm-client/shadow-asset-catalog-plan` — clone-safe builtin descriptors,
-  installer-neutral typed applied-substitution record with npm-client as its
-  sole v0 producer, exact planner, and independent tree/set identities (ready;
-  unblocked).
-- `npm-client/shadow-asset-manager` — path-neutral deep manager, verified
-  store/publish/receipts, STD transport, and structured install outcome (ready;
-  blocked by catalog/plan).
 - `npm-client/shadow-asset-message-port` — exact-plan async protocol over a
   real `MessageChannel`; bounded reads/errors/cancel/dispose without spawn
-  wiring (ready; blocked by manager).
-- `kernel/worker-capability-ports` — protocol-opaque ports on URL entries,
-  separate from `KernelProcessSpec` and ADR-0267 bootstrap, with
-  failure-atomic lifecycle cleanup (ready; unblocked).
-- `distribution/workbench-install-stamp-v4` — exact lockfile-byte claim,
-  package-only demotion, async trust, and conservative sync prefetch result
-  (ready; unblocked).
-- `distribution/workbench-runtime-asset-storage` — app-local owner-private
-  semantic store, scoped durability, manager lifetime, and public inspect/clear
-  recovery (ready; blocked by manager).
+  wiring (ready; unblocked).
 - `distribution/workbench-runtime-asset-acquisition` — one package-FIFO
   readiness authority for generic/companion timing, mutation epochs, post-tree
   failure, and exact-plan child admission (ready; blocked by v4, storage,

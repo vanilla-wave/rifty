@@ -6,7 +6,7 @@ import {
   viteRootWatchPatchPolicy,
 } from '../../../apps/playground/src/workers/vite-cli-install-policy.ts';
 import { bakedOverrides, internalsShims } from '../src/index.ts';
-import { identityForRecipe } from '../src/install-artifact-recipe.ts';
+import { identityForRecipe, installArtifactTreePolicy } from '../src/install-artifact-recipe.ts';
 
 const policyUrl = new URL('../esbuild-runtime-policy.json', import.meta.url);
 const runtimeManifestUrl = new URL('../generated/esbuild-runtime-manifest.json', import.meta.url);
@@ -52,13 +52,14 @@ export async function buildInstallArtifactIdentityFile(): Promise<InstallArtifac
 }
 
 export async function buildInstallArtifactRecipe() {
+  const esbuildRuntimePolicy = await readJson(policyUrl);
   return {
-    schema: 2,
+    schema: 3,
     bakedOverrides,
     internalsShims,
     viteCliActionPatch: viteCliActionPatchPolicy,
     viteRootWatchPatch: viteRootWatchPatchPolicy,
-    esbuildRuntimePolicy: await readJson(policyUrl),
+    esbuildRuntimePolicy: installArtifactTreePolicy(esbuildRuntimePolicy),
     esbuildRuntimeOutput: await readRuntimeOutputIdentity(),
   };
 }

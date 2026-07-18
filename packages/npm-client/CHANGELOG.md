@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Verified shadow runtime assets (ADR-0249).** Builtin substitutions now
+  produce one exact pre-tree `ShadowAssetPlan`; `ShadowAssetManager` owns
+  bounded STD acquisition, exact-member verification, semantic MemoryVfs
+  persistence, immutable receipts, scoped readers, cache admin, and lifecycle.
+  Non-empty installs require readiness, expose it in `InstallResult`, and retain
+  typed tree evidence on post-tree asset failure. `onTreeMutationStart` fences
+  the first possible tree write.
+
 - `serializePackageJson()` provides one canonical byte spelling for finite
   plain-data manifests shared by host plans, Workbench definitions, and snapshot
   tooling; lossy object shapes, accessors, cycles, and unsupported JSON leaves

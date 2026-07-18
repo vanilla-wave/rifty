@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
+import { readyShadowAssetInstaller } from './_test-fixtures/shadow-assets.ts';
 import {
   TAR_TRAILER,
   buildHeader,
@@ -232,7 +233,11 @@ describe('install — package.json defaults', () => {
       }),
     );
 
-    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry: new FakeRegistry(db),
+    });
 
     expect(result.lockfile.name).toBe('app');
     expect(result.lockfile.version).toBe('2.3.4');
@@ -259,7 +264,11 @@ describe('install — package.json defaults', () => {
       }),
     );
 
-    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry: new FakeRegistry(db),
+    });
 
     expect(result.packages.map((p) => p.name)).toEqual(['dep']);
     expect(await vfs.exists('/proj/node_modules/dep/package.json')).toBe(true);
@@ -534,7 +543,12 @@ describe('install — package.json defaults', () => {
       }),
     );
 
-    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry: new FakeRegistry(db),
+      shadowAssets: { installer: readyShadowAssetInstaller },
+    });
 
     expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual([
       '@esbuild/wasi-preview1@0.28.0',
@@ -584,12 +598,22 @@ describe('install — package.json defaults', () => {
 
     // First install: live-resolve redirects esbuild → the pinned
     // @esbuild/wasi-preview1 and writes the lockfile (no node_modules/esbuild).
-    const first = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    const first = await install({
+      vfs,
+      cwd: '/proj',
+      registry: new FakeRegistry(db),
+      shadowAssets: { installer: readyShadowAssetInstaller },
+    });
     expect(first.lockfile.packages['node_modules/@esbuild/wasi-preview1']?.version).toBe('0.28.0');
     expect(first.lockfile.packages['node_modules/esbuild']).toBeUndefined();
 
     // Second install: the lockfile fast path replays. Must NOT throw EBROKENLOCK.
-    const second = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    const second = await install({
+      vfs,
+      cwd: '/proj',
+      registry: new FakeRegistry(db),
+      shadowAssets: { installer: readyShadowAssetInstaller },
+    });
     expect(second.packages.map((p) => `${p.name}@${p.version}`).sort()).toEqual([
       '@esbuild/wasi-preview1@0.28.0',
       'host@1.0.0',

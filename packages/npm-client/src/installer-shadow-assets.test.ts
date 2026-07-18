@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
+import { canonicalShadowDigest } from './canonical-shadow-json.ts';
 import { type InstallOptions, install } from './installer.ts';
 import { type Packument, RegistryClient } from './registry.ts';
 import {
@@ -53,25 +53,28 @@ class FailingOptionalEsbuildRegistry extends InstallRegistry {
 function ready(plan: ShadowAssetPlan): Extract<ShadowAssetEnsureResult, { kind: 'ready' }> {
   const catalog = plan.substitutions[0]?.catalog;
   if (!catalog) throw new Error('expected non-empty plan');
+  const payload = {
+    schema: 1 as const,
+    requiredSetDigest: plan.requiredSetDigest,
+    catalog,
+    storageClass: 'memory-session' as const,
+    substitutions: plan.substitutions,
+    assets: plan.assets.map((asset) => ({
+      id: asset.id,
+      source: asset.source,
+      member: asset.member,
+      memberSha256: asset.memberSha256,
+      memberSize: asset.memberSize,
+      fillTransport: 'standard' as const,
+      fillCache: 'network' as const,
+    })),
+  };
   return {
     kind: 'ready',
     plan,
     receipt: {
-      schema: 1,
-      receiptSha256: createHash('sha256').update(plan.requiredSetDigest).digest('hex'),
-      requiredSetDigest: plan.requiredSetDigest,
-      catalog,
-      storageClass: 'memory-session',
-      substitutions: plan.substitutions,
-      assets: plan.assets.map((asset) => ({
-        id: asset.id,
-        source: asset.source,
-        member: asset.member,
-        memberSha256: asset.memberSha256,
-        memberSize: asset.memberSize,
-        fillTransport: 'standard',
-        fillCache: 'network',
-      })),
+      ...payload,
+      receiptSha256: canonicalShadowDigest(payload),
     },
   };
 }

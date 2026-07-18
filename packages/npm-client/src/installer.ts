@@ -31,6 +31,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 import { discardBody, fetchHeadersBounded } from './bounded-fetch.ts';
+import { canonicalShadowJson } from './canonical-shadow-json.ts';
 import { closureHashOf } from './closure-hash.ts';
 import {
   DEFAULT_BUNDLE_STALL_MS,
@@ -69,6 +70,19 @@ import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './link
 import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
+import {
+  type AppliedShadowSubstitution,
+  appliedBuiltinShadowSubstitution,
+  planBuiltinShadowAssets,
+} from './shadow-asset-plan.ts';
+import {
+  type ShadowAssetEnsureOptions,
+  type ShadowAssetEnsureResult,
+  ShadowAssetError,
+  ShadowAssetInstallError,
+  type ShadowAssetInstaller,
+  validateShadowAssetReadyResult,
+} from './shadow-assets.ts';
 import {
   applyInternalsShims,
   assertShimSupported,
@@ -186,6 +200,13 @@ export interface InstallOptions {
    * (`StartEddyPrefetchOptions.stallTimeoutMs`). Inert without `resolverUrl`.
    */
   resolverStallTimeoutMs?: number;
+  /** Least-authority runtime-asset readiness group for this one install. */
+  shadowAssets?: Readonly<{
+    installer: ShadowAssetInstaller;
+    options?: ShadowAssetEnsureOptions;
+  }>;
+  /** Authority fence immediately before {@link link} can first mutate. */
+  onTreeMutationStart?: () => void;
 }
 
 /** Payload for {@link InstallOptions.onPackage}. */
@@ -230,7 +251,7 @@ type PinnedPackage = ResolvedPackage & {
   installPath: string;
 };
 
-export interface InstallResult {
+export interface InstallTreeResult {
   packages: ResolvedPackage[];
   lockfile: Lockfile;
   /** Retained for shape compat; always empty since M11 nests conflicts (ADR-0042). */
@@ -274,6 +295,11 @@ export interface InstallResult {
   resolvedVia?: 'get' | 'post';
 }
 
+export interface InstallResult extends InstallTreeResult {
+  /** Present exactly for a non-empty ready shadow-asset plan. */
+  readonly shadowAssets?: Extract<ShadowAssetEnsureResult, { kind: 'ready' }>;
+}
+
 /**
  * Source-of-truth fields a `ResolutionSource` returns for a single (name,
  * range, parent) request; {@link pinToPackage} adapts it (+ tarball bytes) into
@@ -296,6 +322,8 @@ interface ResolvedPin {
    *  layout regardless of visit order; when undefined, the walk computes
    *  first-wins-flat + nest-on-conflict placement. */
   readonly installPath?: string;
+  /** Exact builtin substitution proven only after this pin materializes. */
+  readonly appliedShadowSubstitution?: AppliedShadowSubstitution;
 }
 
 interface NormalizedInstallRequest {
@@ -370,6 +398,7 @@ export async function install(
     optionalDependencies,
     opts,
   } = request;
+  const configuredShadowAssets = validateInstallShadowAssetGroupConfig(opts.shadowAssets);
   const tarballCache: TarballCache = opts.tarballCache ?? new VfsTarballCache(opts.vfs);
   const fetchCtx: FetchAndUnpackCtx = {
     cache: tarballCache,
@@ -440,6 +469,10 @@ export async function install(
         cacheHits.set(`${event.name}@${event.version}`, event.cacheHit);
         opts.onPackage?.(event);
       },
+      (pin) => {
+        if (pin.appliedShadowSubstitution) substitutions.applied(pin.appliedShadowSubstitution);
+        substitutions.materialized(pin.name, pin.version);
+      },
     );
   } catch (error) {
     if (eddyFallbackReason !== undefined) {
@@ -455,6 +488,7 @@ export async function install(
     throw error;
   }
   const packages = [...resolved.values()];
+  const shadowAssetPlan = substitutions.plan();
   const provenancePackages: InstallPackageProvenance[] = [];
   const seenProvenance = new Set<string>();
   for (const pkg of packages) {
@@ -476,6 +510,8 @@ export async function install(
   // warn output is identical whichever path the install took.
   warnUnsatisfiedPeers(packages);
   opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, packages));
+  const shadowAssetGroup = requireInstallShadowAssetGroup(configuredShadowAssets, shadowAssetPlan);
+  opts.onTreeMutationStart?.();
   await link(opts.vfs, opts.cwd, packages);
   // ADR-0188: install-time internals shims into the actual installed dirs —
   // AFTER link so tarball bytes never clobber a shim. Both paths (+ eddy).
@@ -483,7 +519,7 @@ export async function install(
   const lockfile = buildLockfile(rootName, normalizedRootVersion, packages);
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
-  return {
+  const treeResult: InstallTreeResult = {
     packages,
     lockfile,
     conflicts: [],
@@ -497,6 +533,129 @@ export async function install(
     ...(eddyResolvedAt === undefined ? {} : { resolvedAt: eddyResolvedAt }),
     ...(eddyResolvedVia === undefined ? {} : { resolvedVia: eddyResolvedVia }),
   };
+  if (shadowAssetPlan.assets.length === 0) return treeResult;
+  try {
+    const ready = validateShadowAssetReadyResult(
+      shadowAssetPlan,
+      await shadowAssetGroup!.installer.ensure(shadowAssetPlan, shadowAssetGroup!.options),
+    );
+    return { ...treeResult, shadowAssets: ready };
+  } catch (error) {
+    const failure =
+      error instanceof ShadowAssetError
+        ? {
+            message: error.message,
+            requiredSetDigest: shadowAssetPlan.requiredSetDigest,
+            ...(error.assetId !== undefined &&
+            shadowAssetPlan.assets.some((asset) => asset.id === error.assetId)
+              ? { assetId: error.assetId }
+              : {}),
+            phase: error.phase,
+            transports: error.transports,
+            recovery: error.recovery,
+            ...(error.usedBytes === undefined ? {} : { usedBytes: error.usedBytes }),
+            ...(error.requiredBytes === undefined ? {} : { requiredBytes: error.requiredBytes }),
+            cause: error,
+          }
+        : {
+            message: error instanceof Error ? error.message : String(error),
+            requiredSetDigest: shadowAssetPlan.requiredSetDigest,
+            phase: 'ready' as const,
+            transports: [],
+            recovery: 'retry' as const,
+            cause: error,
+          };
+    throw new ShadowAssetInstallError(treeResult, shadowAssetPlan, failure);
+  }
+}
+
+function validateInstallShadowAssetGroupConfig(
+  group: InstallOptions['shadowAssets'],
+): InstallOptions['shadowAssets'] {
+  if (group === undefined) return undefined;
+  if (
+    group === null ||
+    typeof group !== 'object' ||
+    Object.getPrototypeOf(group) !== Object.prototype
+  ) {
+    throw new TypeError('InstallOptions.shadowAssets must contain a ShadowAssetInstaller');
+  }
+  if (Object.getOwnPropertySymbols(group).length !== 0) {
+    throw new TypeError('InstallOptions.shadowAssets has symbols');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(group);
+  const keys = Object.keys(descriptors).sort();
+  if (
+    keys.length < 1 ||
+    keys.length > 2 ||
+    keys[0] !== 'installer' ||
+    (keys.length === 2 && keys[1] !== 'options')
+  ) {
+    throw new TypeError('InstallOptions.shadowAssets has extra or missing fields');
+  }
+  for (const descriptor of Object.values(descriptors)) {
+    if (!('value' in descriptor)) throw new TypeError('InstallOptions.shadowAssets has accessors');
+  }
+  const installer = descriptors.installer?.value as unknown;
+  if (
+    installer === null ||
+    typeof installer !== 'object' ||
+    Object.getPrototypeOf(installer) !== Object.prototype ||
+    Object.getOwnPropertySymbols(installer).length !== 0
+  ) {
+    throw new TypeError('InstallOptions.shadowAssets must contain a ShadowAssetInstaller');
+  }
+  const installerDescriptors = Object.getOwnPropertyDescriptors(installer);
+  const installerKeys = Object.keys(installerDescriptors).sort();
+  if (
+    installerKeys.length !== 2 ||
+    installerKeys[0] !== 'ensure' ||
+    installerKeys[1] !== 'inspectReceipt' ||
+    !('value' in installerDescriptors.ensure!) ||
+    !('value' in installerDescriptors.inspectReceipt!) ||
+    typeof installerDescriptors.ensure.value !== 'function' ||
+    typeof installerDescriptors.inspectReceipt.value !== 'function'
+  ) {
+    throw new TypeError('InstallOptions.shadowAssets must contain a ShadowAssetInstaller');
+  }
+  const options = descriptors.options?.value as unknown;
+  if (options !== undefined) {
+    if (
+      options === null ||
+      typeof options !== 'object' ||
+      Object.getPrototypeOf(options) !== Object.prototype ||
+      Object.getOwnPropertySymbols(options).length !== 0
+    ) {
+      throw new TypeError('InstallOptions.shadowAssets.options must be a plain object');
+    }
+    const optionDescriptors = Object.getOwnPropertyDescriptors(options);
+    for (const [key, descriptor] of Object.entries(optionDescriptors)) {
+      if (key !== 'signal' && key !== 'onProgress') {
+        throw new TypeError(`InstallOptions.shadowAssets.options has unexpected ${key}`);
+      }
+      if (!('value' in descriptor)) {
+        throw new TypeError('InstallOptions.shadowAssets.options has accessors');
+      }
+    }
+    const signal = optionDescriptors.signal?.value as unknown;
+    const onProgress = optionDescriptors.onProgress?.value as unknown;
+    if (signal !== undefined && !(signal instanceof AbortSignal)) {
+      throw new TypeError('InstallOptions.shadowAssets.options.signal must be AbortSignal');
+    }
+    if (onProgress !== undefined && typeof onProgress !== 'function') {
+      throw new TypeError('InstallOptions.shadowAssets.options.onProgress must be a function');
+    }
+  }
+  return group;
+}
+
+function requireInstallShadowAssetGroup(
+  group: InstallOptions['shadowAssets'],
+  plan: ReturnType<typeof planBuiltinShadowAssets>,
+): InstallOptions['shadowAssets'] {
+  if (plan.assets.length === 0) return undefined;
+  if (group === undefined) throw new NotImplementedError('npm.install.shadowAssets');
+  return group;
 }
 
 /** Compute and contain the complete tarball target set before link mutates. */
@@ -1147,22 +1306,49 @@ function declineEddy(
  */
 interface SubstitutionReporter {
   redirect(source: string, range: string | null, target: string, version: string): void;
+  applied(value: AppliedShadowSubstitution): void;
+  materialized(name: string, version: string): void;
   line(text: string): void;
+  plan(): ReturnType<typeof planBuiltinShadowAssets>;
 }
 
 function createSubstitutionReporter(sink: (line: string) => void): SubstitutionReporter {
   const seen = new Set<string>();
+  const seenApplied = new Set<string>();
+  const candidates = new Map<string, AppliedShadowSubstitution[]>();
+  const applied: AppliedShadowSubstitution[] = [];
   return {
     redirect(source, range, target, version): void {
       const key = `${source}@${range ?? '*'}→${target}@${version}`;
       if (seen.has(key)) return;
       seen.add(key);
+      const record = appliedBuiltinShadowSubstitution(source, range, version);
+      if (record) {
+        const targetKey = `${target}@${version}`;
+        const values = candidates.get(targetKey) ?? [];
+        values.push(record);
+        candidates.set(targetKey, values);
+      }
       sink(
         `npm: ${source}@${range ?? '*'} → ${target}@${version} (substituted from shadow registry, ADR-0051)`,
       );
     },
+    applied(value): void {
+      const key = canonicalShadowJson(value);
+      if (seenApplied.has(key)) return;
+      seenApplied.add(key);
+      applied.push(value);
+    },
+    materialized(name, version): void {
+      const key = `${name}@${version}`;
+      for (const value of candidates.get(key) ?? []) this.applied(value);
+      candidates.delete(key);
+    },
     line(text): void {
       sink(text);
+    },
+    plan() {
+      return planBuiltinShadowAssets(applied);
     },
   };
 }
@@ -1270,6 +1456,7 @@ async function walkAndPin(
   rootName: string,
   fetchCtx: FetchAndUnpackCtx,
   onPackage?: (event: InstallProgressEvent) => void,
+  onMaterialized?: (pin: ResolvedPin) => void,
 ): Promise<Map<string, PinnedPackage>> {
   // Determinism-vs-throughput invariant (#24, perf-audit 2026-06-05): the
   // placement walk (resolve -> choosePlacement -> flatByName claim -> recurse)
@@ -1347,7 +1534,10 @@ async function walkAndPin(
       if (installPath === `node_modules/${pin.name}` && !flatByName.has(pin.name)) {
         flatByName.set(pin.name, pin.version);
       }
-      if (scheduled.has(installPath)) return;
+      if (scheduled.has(installPath)) {
+        if (pinned.has(installPath)) onMaterialized?.(pin);
+        return;
+      }
       scheduled.add(installPath);
       const claimedFlat = flatSlotFreeBefore && installPath === `node_modules/${pin.name}`;
 
@@ -1419,10 +1609,9 @@ async function walkAndPin(
           throw err;
         }
         if (!pinned.has(installPath)) {
-          pinned.set(
-            installPath,
-            await pinToPackage(pin, result.bytes, result.integrity, installPath),
-          );
+          const pkg = await pinToPackage(pin, result.bytes, result.integrity, installPath);
+          pinned.set(installPath, pkg);
+          onMaterialized?.(pin);
         }
       } else {
         fetchTasks.push({ promise: p, pin, installPath, optional });
@@ -1496,10 +1685,14 @@ async function walkAndPin(
       throw outcome.reason;
     }
     if (pinned.has(task.installPath)) continue;
-    pinned.set(
+    const pkg = await pinToPackage(
+      task.pin,
+      outcome.value.bytes,
+      outcome.value.integrity,
       task.installPath,
-      await pinToPackage(task.pin, outcome.value.bytes, outcome.value.integrity, task.installPath),
     );
+    pinned.set(task.installPath, pkg);
+    onMaterialized?.(task.pin);
   }
   return pinned;
 }
@@ -1648,6 +1841,10 @@ function createLockfileSource(
         );
       }
       // ADR-0188: replay prints the same substitution line live-resolve does.
+      const appliedShadowSubstitution =
+        override && override.source === 'baked' && override.name !== name
+          ? (appliedBuiltinShadowSubstitution(name, range, entry.version) ?? undefined)
+          : undefined;
       if (override && override.source === 'baked' && override.name !== name) {
         substitutions.redirect(name, range, effectiveName, entry.version);
       }
@@ -1662,6 +1859,7 @@ function createLockfileSource(
         // Optionals already filtered at lockfile-write time.
         optionalDependencies: {},
         installPath,
+        ...(appliedShadowSubstitution === undefined ? {} : { appliedShadowSubstitution }),
       };
     },
   };
@@ -1774,6 +1972,10 @@ function createRegistrySource(
       }
 
       // ADR-0188: baked redirects are never silent — user-visible provenance.
+      const appliedShadowSubstitution =
+        override && override.source === 'baked' && override.name !== name
+          ? (appliedBuiltinShadowSubstitution(name, range, pick) ?? undefined)
+          : undefined;
       if (override && override.source === 'baked' && override.name !== name) {
         substitutions.redirect(name, range, effectiveName, pick);
       }
@@ -1808,6 +2010,7 @@ function createRegistrySource(
         bin: manifest.bin,
         peerDependencies: manifest.peerDependencies,
         optionalDependencies: manifest.optionalDependencies ?? {},
+        ...(appliedShadowSubstitution === undefined ? {} : { appliedShadowSubstitution }),
       };
     },
   };

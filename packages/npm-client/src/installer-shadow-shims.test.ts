@@ -7,6 +7,7 @@
 import { internalsShims } from '@riftydev/shadow-registry';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readyShadowAssetInstaller } from './_test-fixtures/shadow-assets.ts';
 import {
   TAR_TRAILER,
   buildHeader,
@@ -258,6 +259,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         vfs,
         cwd: '/proj',
         registry,
+        shadowAssets: { installer: readyShadowAssetInstaller },
         onSubstitution: (line) => fresh.push(line),
       },
     );
@@ -278,6 +280,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         vfs,
         cwd: '/proj',
         registry,
+        shadowAssets: { installer: readyShadowAssetInstaller },
         onSubstitution: (line) => replay.push(line),
       },
     );
@@ -299,6 +302,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         vfs,
         cwd: '/proj',
         registry,
+        shadowAssets: { installer: readyShadowAssetInstaller },
         onSubstitution: (line) => fresh.push(line),
       },
     );
@@ -315,6 +319,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         vfs,
         cwd: '/proj',
         registry,
+        shadowAssets: { installer: readyShadowAssetInstaller },
         onSubstitution: (line) => replay.push(line),
       },
     );
@@ -354,7 +359,17 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
-    await install('root', '1.0.0', { esbuild: '^0.28.0' }, { vfs, cwd: '/proj', registry });
+    await install(
+      'root',
+      '1.0.0',
+      { esbuild: '^0.28.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        shadowAssets: { installer: readyShadowAssetInstaller },
+      },
+    );
     const aliasBefore = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
     const packument = vi.spyOn(registry, 'getPackument');
     const lines: string[] = [];
@@ -398,7 +413,17 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
-    await install('root', '1.0.0', { viteish: '1.0.0' }, { vfs, cwd: '/proj', registry });
+    await install(
+      'root',
+      '1.0.0',
+      { viteish: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        shadowAssets: { installer: readyShadowAssetInstaller },
+      },
+    );
     const lockfile = JSON.parse(await readText(vfs, '/proj/package-lock.json')) as {
       packages: Record<string, { dependencies?: Record<string, string> }>;
     };
@@ -511,7 +536,17 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await install('root', '1.0.0', { esbuild: '^0.28.0' }, { vfs, cwd: '/proj', registry });
+    await install(
+      'root',
+      '1.0.0',
+      { esbuild: '^0.28.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        shadowAssets: { installer: readyShadowAssetInstaller },
+      },
+    );
     expect(warn.mock.calls.map((c) => String(c[0]))).toContain(REDIRECT_LINE);
   });
 

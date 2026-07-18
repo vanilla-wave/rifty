@@ -1,10 +1,10 @@
-import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import { NotImplementedError } from '@riftydev/io';
+import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import { describe, expect, it } from 'vitest';
 import {
+  type AppliedShadowSubstitution,
   EMPTY_SHADOW_ASSET_PLAN,
   planBuiltinShadowAssets,
-  type AppliedShadowSubstitution,
 } from './shadow-asset-plan.ts';
 
 function applied(overrides: Partial<AppliedShadowSubstitution> = {}): AppliedShadowSubstitution {
@@ -49,9 +49,9 @@ describe('builtin shadow-asset planner', () => {
     expect(() =>
       planBuiltinShadowAssets([applied({ resolvedPublicVersion: '0.29.0' })]),
     ).toThrowError(NotImplementedError);
-    expect(() =>
-      planBuiltinShadowAssets([applied({ resolvedPublicVersion: '0.29.0' })]),
-    ).toThrow(/shadow-registry\.esbuild@0\.29\.0\.assets/);
+    expect(() => planBuiltinShadowAssets([applied({ resolvedPublicVersion: '0.29.0' })])).toThrow(
+      /shadow-registry\.esbuild@0\.29\.0\.assets/,
+    );
   });
 
   it('rejects catalog and provenance drift rather than inferring from installed names', () => {
