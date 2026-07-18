@@ -3,7 +3,7 @@ import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import { type Packument, RegistryClient } from './registry.ts';
 import { type ShadowAssetSourceRequest, createStandardShadowAssetSource } from './shadow-assets.ts';
-import { VfsTarballCache } from './tarball-cache.ts';
+import { VfsTarballCache, parseIntegrityAlgorithm } from './tarball-cache.ts';
 
 function integrity(bytes: Uint8Array): string {
   return `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
@@ -101,6 +101,14 @@ describe('standard shadow asset source', () => {
         signal: new AbortController().signal,
       }),
     ).rejects.toThrow(/duplicate/);
+  });
+
+  it('preserves public algorithm-prefix parsing for a valid unpadded sha512 SRI', () => {
+    const padded = integrity(new TextEncoder().encode('unpadded-public-sri'));
+    const unpadded = padded.replace(/=+$/, '');
+
+    expect(unpadded).not.toBe(padded);
+    expect(parseIntegrityAlgorithm(unpadded)).toBe('sha512');
   });
 
   it('rejects malformed SRI bytes before cache or registry work', async () => {

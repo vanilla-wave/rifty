@@ -461,6 +461,52 @@ describe('ShadowAssetManager', () => {
     expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).toBeNull();
   });
 
+  it('starts a fresh object producer when retry follows a sole-cancelled flight', async () => {
+    const { plan, tgz } = fixture();
+    let admitted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      admitted = resolve;
+    });
+    let settleCancelledProducer!: () => void;
+    const cancelledProducer = new Promise<never>((_resolve, reject) => {
+      settleCancelledProducer = () => reject(new Error('cancelled producer settled late'));
+    });
+    let acquireCalls = 0;
+    const acquire = vi.fn(async (requests: readonly ShadowAssetSourceRequest[]) => {
+      acquireCalls += 1;
+      if (acquireCalls === 1) {
+        admitted();
+        return await cancelledProducer;
+      }
+      return requests.map((request) => ({
+        request,
+        bytes: tgz.slice(),
+        fillTransport: 'standard' as const,
+        fillCache: 'network' as const,
+      }));
+    });
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: { acquire, close: async () => undefined },
+    });
+    const controller = new AbortController();
+    const cancelled = manager.installer.ensure(plan, { signal: controller.signal });
+    void cancelled.catch(() => undefined);
+    await started;
+    controller.abort();
+    await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' });
+
+    const retry = manager.installer.ensure(plan);
+    void retry.catch(() => undefined);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(acquire).toHaveBeenCalledTimes(2);
+      await expect(retry).resolves.toMatchObject({ kind: 'ready' });
+    } finally {
+      settleCancelledProducer();
+    }
+  });
+
   it('single-flights the same missing object across different required-set receipts', async () => {
     const { plan, tgz } = fixture();
     const substitutions = plan.substitutions.map((substitution) => ({
@@ -501,6 +547,35 @@ describe('ShadowAssetManager', () => {
     expect(assetSource.acquire).toHaveBeenCalledTimes(1);
     expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).not.toBeNull();
     expect(await manager.installer.inspectReceipt(sibling.requiredSetDigest)).not.toBeNull();
+  });
+
+  it('verifies every member contract before sharing one content-hash object', async () => {
+    const { plan, tgz } = fixture();
+    const descriptor = plan.assets[0]!;
+    const assets: ShadowAssetPlan['assets'] = [
+      { ...descriptor, id: 'runtime-a' },
+      { ...descriptor, id: 'runtime-b', member: 'package/missing.wasm' },
+    ];
+    const conflicting: ShadowAssetPlan = {
+      requiredSetDigest: canonicalShadowDigest({
+        schema: 1,
+        substitutions: plan.substitutions,
+        assets,
+      }),
+      substitutions: plan.substitutions,
+      assets,
+    };
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: source(tgz),
+    });
+
+    await expect(manager.installer.ensure(conflicting)).rejects.toMatchObject({
+      code: 'ESHADOWASSET',
+      phase: 'verify',
+    });
+    expect(await manager.installer.inspectReceipt(conflicting.requiredSetDigest)).toBeNull();
+    expect(await manager.admin.inspectUsage()).toMatchObject({ readySetCount: 0 });
   });
 
   it('replays and forwards object-flight progress to sibling sets and runtime readers', async () => {
