@@ -20,16 +20,33 @@
  * `tests/integration/npm-shell-eddy-glue.test.ts` (real npm-client + real eddy
  * server over the fixture registry).
  */
-import type { InstallOptions, InstallResult } from '@riftydev/npm-client';
+import type {
+  InstallOptions,
+  InstallResult,
+  ShadowAssetEnsureOptions,
+  ShadowAssetPlan,
+  ShadowAssetProgress,
+  ShadowAssetReadyReceipt,
+} from '@riftydev/npm-client';
 import {
+  EMPTY_SHADOW_ASSET_PLAN,
   RegistryClient,
+  ShadowAssetError,
   canonicalEddyRequestKey,
   eddyRequestFromPackageJson,
+  planBuiltinShadowAssets,
 } from '@riftydev/npm-client';
+import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import { type CommandContext, type ProcessExit, Shell } from '@riftydev/shell';
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
-import { createPackageAcquisitionAuthority } from '../workers/package-acquisition-authority.ts';
+import { PackageTreeUnattestedError } from '../workers/owner-package-state.ts';
+import {
+  type PackageAcquisitionAdapter,
+  type PackageAcquisitionAuthority,
+  type PackageRuntimeAssetPort,
+  createPackageAcquisitionAuthority,
+} from '../workers/package-acquisition-authority.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import { createInstallStamp } from './install-stamp.ts';
@@ -134,6 +151,159 @@ async function runShell(shell: Shell, line: string): Promise<{ exitCode: number;
     },
   });
   return { exitCode: r.exitCode, rec };
+}
+
+function terminalRuntimeAssetPlan(): ShadowAssetPlan {
+  return planBuiltinShadowAssets([
+    {
+      catalog: {
+        id: builtinShadowAssetCatalog.id,
+        digest: builtinShadowAssetCatalog.digest,
+      },
+      publicName: 'esbuild',
+      requestedRange: '^0.28.0',
+      resolvedPublicVersion: '0.28.0',
+      substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+      runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
+      builtin: true,
+    },
+  ]);
+}
+
+function terminalRuntimeAssetReceipt(plan: ShadowAssetPlan): ShadowAssetReadyReceipt {
+  const catalog = plan.substitutions[0]?.catalog;
+  if (catalog === undefined) throw new Error('terminal runtime-asset fixture requires a plan');
+  return Object.freeze({
+    schema: 1,
+    receiptSha256: 'b'.repeat(64),
+    requiredSetDigest: plan.requiredSetDigest,
+    catalog,
+    storageClass: 'memory-session',
+    substitutions: plan.substitutions,
+    assets: plan.assets.map((asset) =>
+      Object.freeze({
+        id: asset.id,
+        source: asset.source,
+        member: asset.member,
+        memberSha256: asset.memberSha256,
+        memberSize: asset.memberSize,
+        fillTransport: 'standard' as const,
+        fillCache: 'network' as const,
+      }),
+    ),
+  });
+}
+
+type TerminalRuntimeAssetEnsure = PackageRuntimeAssetPort['installer']['ensure'];
+
+async function terminalRuntimeAssetHarness(
+  plans: readonly ShadowAssetPlan[] = [terminalRuntimeAssetPlan()],
+): Promise<{
+  readonly authority: PackageAcquisitionAuthority;
+  readonly ensureCalls: Array<{
+    readonly plan: ShadowAssetPlan;
+    readonly options?: ShadowAssetEnsureOptions;
+  }>;
+  readonly createShell: () => Shell;
+  readonly setEnsure: (ensure: TerminalRuntimeAssetEnsure) => void;
+}> {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/proj', { recursive: true });
+  await vfs.writeFile(
+    '/proj/package.json',
+    '{"name":"demo","version":"0.0.0","dependencies":{"vite":"7.3.6"}}\n',
+  );
+  const stamps = createInstallStampAuthority({ vfs });
+  let produceIndex = 0;
+  const ensureCalls: Array<{
+    readonly plan: ShadowAssetPlan;
+    readonly options?: ShadowAssetEnsureOptions;
+  }> = [];
+  let ensureImplementation: TerminalRuntimeAssetEnsure = async (plan, options) => {
+    const asset = plan.assets[0];
+    if (asset === undefined) throw new Error('manager ensure must not receive an empty plan');
+    options?.onProgress?.({
+      phase: 'cache-check',
+      assetId: asset.id,
+      assetIndex: 0,
+      assetCount: plan.assets.length,
+    });
+    options?.onProgress?.({
+      phase: 'fetch',
+      assetId: asset.id,
+      assetIndex: 0,
+      assetCount: plan.assets.length,
+    });
+    options?.onProgress?.({
+      phase: 'verify',
+      assetId: asset.id,
+      assetIndex: 0,
+      assetCount: plan.assets.length,
+    });
+    options?.onProgress?.({
+      phase: 'persist',
+      assetId: asset.id,
+      assetIndex: 0,
+      assetCount: plan.assets.length,
+    });
+    options?.onProgress?.({
+      phase: 'ready',
+      requiredSetDigest: plan.requiredSetDigest,
+      assetCount: plan.assets.length,
+      storageClass: 'memory-session',
+    });
+    return { kind: 'ready', plan, receipt: terminalRuntimeAssetReceipt(plan) };
+  };
+  const runtimeAssets: PackageRuntimeAssetPort = {
+    installer: {
+      ensure: async (plan, options) => {
+        ensureCalls.push({ plan, ...(options === undefined ? {} : { options }) });
+        return ensureImplementation(plan, options);
+      },
+      inspectReceipt: async () => null,
+    },
+    produce: async () => {
+      const plan = plans[produceIndex] ?? plans.at(-1);
+      produceIndex += 1;
+      if (plan === undefined) throw new Error('terminal runtime-asset fixture has no plan');
+      return { plan };
+    },
+  };
+  const adapter: PackageAcquisitionAdapter = {
+    planSnapshotRestore: async () => ({ status: 'rejected', reason: 'not requested' }),
+    install: async (request) => {
+      await vfs.mkdir(`${request.project.root}/node_modules/vite`, { recursive: true });
+      await vfs.writeFile(`${request.project.root}/node_modules/vite/package.json`, '{}\n');
+      const result = singletonResult('vite', '7.3.6');
+      await writeResultLockfile(vfs, request.project.root, result);
+      return {
+        result,
+        packageJsonText: await vfs.readFileText(`${request.project.root}/package.json`),
+      };
+    },
+    reset: async () => {},
+    switchProject: async () => {},
+  };
+  const authority = createPackageAcquisitionAuthority({ stamps, adapter, runtimeAssets });
+  return {
+    authority,
+    ensureCalls,
+    createShell: () => {
+      const shell = new Shell({ cwd: '/proj' });
+      shell.registerCommand(
+        'npm',
+        createNpmShellCommand({
+          vfs,
+          registry: fakeRegistry,
+          packageAcquisitionAuthority: authority,
+        }),
+      );
+      return shell;
+    },
+    setEnsure(ensure) {
+      ensureImplementation = ensure;
+    },
+  };
 }
 
 describe('npm-shell-command — happy path', () => {
@@ -770,6 +940,21 @@ describe('npm-shell-command — happy path', () => {
 });
 
 describe('npm-shell-command — error mapping', () => {
+  async function makeShellRejecting(error: unknown): Promise<Shell> {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      '{"name":"demo","version":"0.0.0","dependencies":{"a":"1.0.0"}}\n',
+    );
+    const install: InstallFn = async () => {
+      throw error;
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    return shell;
+  }
+
   async function makeShellWithThrow(
     code: string,
     extra: Record<string, unknown>,
@@ -830,6 +1015,193 @@ describe('npm-shell-command — error mapping', () => {
     const { exitCode, rec } = await runShell(shell, 'npm install x');
     expect(exitCode).toBe(1);
     expect(rec.stderr.join('')).toContain('install failed: boom');
+  });
+
+  it('renders a fixed runtime-asset phase diagnostic without transport, URL, digest, or cause', async () => {
+    const privateUrl = 'https://registry.private.test/asset?owner-token=secret';
+    const privateTransport = 'eddy request exposed owner routing';
+    const privateCause = new Error('private OPFS root /.rifty/runtime-assets');
+    const error = new ShadowAssetError({
+      message: `fetch failed for ${privateUrl}`,
+      requiredSetDigest: 'a'.repeat(64),
+      assetId: 'esbuild-wasm@0.28.0/package/esbuild.wasm',
+      phase: 'fetch',
+      transports: [{ transport: 'eddy', message: privateTransport }],
+      recovery: 'retry',
+      cause: privateCause,
+    });
+    const shell = await makeShellRejecting(error);
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(1);
+    expect(rec.stderr.join('')).toBe('npm: install failed: Runtime asset fetch failed (retry)\n');
+    const terminal = `${rec.stdout.join('')}\n${rec.stderr.join('')}`;
+    expect(terminal).not.toContain(privateUrl);
+    expect(terminal).not.toContain(privateTransport);
+    expect(terminal).not.toContain(privateCause.message);
+    expect(terminal).not.toContain(error.requiredSetDigest);
+  });
+
+  it('renders unattested private tree identity as a fixed retryable readiness diagnostic', async () => {
+    const privateRoot = '/.rifty/workbench/v1/projects/private-owner/tree';
+    const privateSlug = 'owner-private-project-slug';
+    const shell = await makeShellRejecting(
+      new PackageTreeUnattestedError({ root: privateRoot, slug: privateSlug }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(1);
+    expect(rec.stderr.join('')).toBe(
+      'npm: install failed: Runtime asset readiness failed (retry)\n',
+    );
+    const terminal = `${rec.stdout.join('')}\n${rec.stderr.join('')}`;
+    expect(terminal).not.toContain(privateRoot);
+    expect(terminal).not.toContain(privateSlug);
+    expect(terminal).not.toContain('EUNATTESTEDPACKAGETREE');
+  });
+});
+
+describe('npm-shell-command — runtime-asset waiter ownership', () => {
+  it.each([
+    ['bare install', 'npm install'],
+    ['named install', 'npm install vite@7.3.6'],
+    ['i alias', 'npm i vite@7.3.6'],
+    ['add alias', 'npm add vite@7.3.6'],
+  ] as const)('binds signal and deterministic progress for %s', async (_label, command) => {
+    const h = await terminalRuntimeAssetHarness();
+    const shell = h.createShell();
+    const plan = terminalRuntimeAssetPlan();
+    const assetId = plan.assets[0]?.id;
+    if (assetId === undefined) throw new Error('expected terminal runtime asset');
+
+    const { exitCode, rec } = await runShell(shell, command);
+
+    expect(exitCode).toBe(0);
+    expect(h.ensureCalls).toHaveLength(1);
+    const options = h.ensureCalls[0]?.options;
+    expect(options?.signal).toBeInstanceOf(AbortSignal);
+    expect(options?.onProgress).toEqual(expect.any(Function));
+    expect(rec.stdout.join('')).toBe(
+      [
+        `npm: runtime asset 1/1 cache-check: ${assetId}`,
+        `npm: runtime asset 1/1 fetch: ${assetId}`,
+        `npm: runtime asset 1/1 verify: ${assetId}`,
+        `npm: runtime asset 1/1 persist: ${assetId}`,
+        'npm: runtime assets ready: 1 (memory-session)',
+        '',
+      ].join('\n'),
+    );
+    expect(rec.stderr).toEqual([]);
+  });
+
+  it('renders progress only on its terminal and drops emissions after operation settlement', async () => {
+    const plan = terminalRuntimeAssetPlan();
+    const asset = plan.assets[0];
+    if (asset === undefined) throw new Error('expected terminal runtime asset');
+    const h = await terminalRuntimeAssetHarness([plan, EMPTY_SHADOW_ASSET_PLAN]);
+    let lateProgress: ((progress: ShadowAssetProgress) => void) | undefined;
+    h.setEnsure(async (received, options) => {
+      lateProgress = options?.onProgress;
+      options?.onProgress?.({
+        phase: 'cache-check',
+        assetId: asset.id,
+        assetIndex: 0,
+        assetCount: 1,
+      });
+      options?.onProgress?.({
+        phase: 'ready',
+        requiredSetDigest: received.requiredSetDigest,
+        assetCount: 1,
+        storageClass: 'memory-session',
+      });
+      return { kind: 'ready', plan: received, receipt: terminalRuntimeAssetReceipt(received) };
+    });
+    const terminalA = h.createShell();
+    const terminalB = h.createShell();
+
+    const first = await runShell(terminalA, 'npm install');
+    const second = await runShell(terminalB, 'npm install');
+    const firstBeforeLate = first.rec.stdout.join('');
+    const secondBeforeLate = second.rec.stdout.join('');
+    if (lateProgress === undefined)
+      throw new Error('terminal waiter did not receive progress sink');
+
+    lateProgress({
+      phase: 'fetch',
+      assetId: asset.id,
+      assetIndex: 0,
+      assetCount: 1,
+    });
+
+    expect(first.exitCode).toBe(0);
+    expect(second.exitCode).toBe(0);
+    expect(firstBeforeLate).toBe(
+      `npm: runtime asset 1/1 cache-check: ${asset.id}\nnpm: runtime assets ready: 1 (memory-session)\n`,
+    );
+    expect(secondBeforeLate).toBe('');
+    expect(first.rec.stdout.join('')).toBe(firstBeforeLate);
+    expect(second.rec.stdout.join('')).toBe(secondBeforeLate);
+  });
+
+  it('keeps an empty plan silent and never calls the manager installer', async () => {
+    const h = await terminalRuntimeAssetHarness([EMPTY_SHADOW_ASSET_PLAN]);
+    const shell = h.createShell();
+
+    const result = await runShell(shell, 'npm add vite@8.0.16');
+
+    expect(result.exitCode).toBe(0);
+    expect(h.ensureCalls).toEqual([]);
+    expect(result.rec).toEqual({ stdout: [], stderr: [] });
+  });
+
+  it('forwards Ctrl+C to only the readiness waiter while the shared producer continues', async () => {
+    const h = await terminalRuntimeAssetHarness();
+    const plan = terminalRuntimeAssetPlan();
+    let markEnsureEntered!: () => void;
+    const ensureEntered = new Promise<void>((resolve) => {
+      markEnsureEntered = resolve;
+    });
+    let releaseProducer!: (receipt: ShadowAssetReadyReceipt) => void;
+    const producer = new Promise<ShadowAssetReadyReceipt>((resolve) => {
+      releaseProducer = resolve;
+    });
+    let waiterAborted = false;
+    let producerSettled = false;
+    h.setEnsure(
+      (received, options) =>
+        new Promise((resolve, reject) => {
+          markEnsureEntered();
+          const signal = options?.signal;
+          const onAbort = (): void => {
+            waiterAborted = true;
+            reject(signal?.reason ?? new Error('runtime-asset waiter aborted'));
+          };
+          signal?.addEventListener('abort', onAbort, { once: true });
+          void producer.then((receipt) => {
+            producerSettled = true;
+            signal?.removeEventListener('abort', onAbort);
+            resolve({ kind: 'ready', plan: received, receipt });
+          });
+        }),
+    );
+    const shell = h.createShell();
+    const hostAbort = new AbortController();
+    const running = shell.run('npm install', { signal: hostAbort.signal });
+    await ensureEntered;
+
+    hostAbort.abort();
+    const result = await running;
+    await Promise.resolve();
+    const waiterAbortedAtSettlement = waiterAborted;
+    const producerSettledAtSettlement = producerSettled;
+    releaseProducer(terminalRuntimeAssetReceipt(plan));
+    await h.authority.quiesce();
+
+    expect(result.exitCode).toBe(130);
+    expect(waiterAbortedAtSettlement).toBe(true);
+    expect(producerSettledAtSettlement).toBe(false);
   });
 });
 

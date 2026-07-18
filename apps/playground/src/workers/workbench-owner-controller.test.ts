@@ -1,4 +1,11 @@
+import {
+  EMPTY_SHADOW_ASSET_PLAN,
+  type InstallTreeResult,
+  ShadowAssetError,
+  ShadowAssetInstallError,
+} from '@riftydev/npm-client';
 import { describe, expect, it, vi } from 'vitest';
+import { RuntimeAssetError, deserializeWorkbenchOwnerError } from '../workbench/errors.ts';
 import type { PlaygroundOwnerToPageMessage } from '../workbench/internal/playground-owner-protocol.ts';
 import {
   definePlaygroundProject,
@@ -14,7 +21,11 @@ import {
   projectDefinitionWire,
   projects,
 } from '../workbench/project-definition.ts';
-import type { ProjectMaterializer } from '../workbench/project-materialization.ts';
+import type {
+  ProjectAcquisitionOptions,
+  ProjectMaterializer,
+} from '../workbench/project-materialization.ts';
+import { PackageTreeUnattestedError } from './owner-package-state.ts';
 import type { PlaygroundProjectAuthority } from './playground-project-authority.ts';
 import {
   type WorkbenchOwnerProjectRuntime,
@@ -80,6 +91,91 @@ function runtimeAssetsAdmin() {
   };
 }
 
+function rawShadowAssetFailure(phase: 'fetch' | 'persist') {
+  const privateUrl = 'https://registry.private.test/esbuild/-/esbuild.tgz?token=owner-secret';
+  const privateTransport = 'owner transport rejected private URL';
+  const privateCause = new Error('owner OPFS path /.rifty/private/object');
+  return {
+    privateCause,
+    privateTransport,
+    privateUrl,
+    error: new ShadowAssetError({
+      message: `${phase} failed at ${privateUrl}`,
+      requiredSetDigest: 'a'.repeat(64),
+      assetId: 'esbuild-wasm@0.28.0/package/esbuild.wasm',
+      phase,
+      transports: [{ transport: 'eddy', message: privateTransport }],
+      recovery: phase === 'fetch' ? 'retry' : 'clear-and-retry',
+      usedBytes: 2048,
+      requiredBytes: 4096,
+      cause: privateCause,
+    }),
+  };
+}
+
+function rawShadowAssetInstallFailure() {
+  const raw = rawShadowAssetFailure('persist');
+  const treeResult: InstallTreeResult = {
+    packages: [],
+    lockfile: {
+      name: 'private-project-name',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {},
+    },
+    conflicts: [],
+    provenance: { resolution: 'metadata', packages: [] },
+  };
+  return {
+    ...raw,
+    error: new ShadowAssetInstallError(treeResult, EMPTY_SHADOW_ASSET_PLAN, {
+      message: raw.error.message,
+      requiredSetDigest: EMPTY_SHADOW_ASSET_PLAN.requiredSetDigest,
+      phase: 'persist',
+      transports: [{ transport: 'eddy', message: raw.privateTransport }],
+      recovery: 'clear-and-retry',
+      usedBytes: 2048,
+      requiredBytes: 4096,
+      cause: raw.privateCause,
+    }),
+  };
+}
+
+function expectPublicRuntimeAssetFailure(
+  message: WorkbenchOwnerToPageMessage | undefined,
+  expected: Readonly<{
+    phase: 'fetch' | 'persist' | 'ready';
+    recovery: 'retry' | 'clear-and-retry';
+    requiredSetDigest?: string;
+    assetId?: string;
+    usedBytes?: number;
+    requiredBytes?: number;
+  }>,
+): void {
+  expect(message).toEqual({
+    type: 'workbench:failure',
+    opId: expect.any(String),
+    error: {
+      name: 'RuntimeAssetError',
+      code: 'ESHADOWASSET',
+      message: `Runtime asset ${expected.phase === 'ready' ? 'readiness' : expected.phase} failed`,
+      phase: expected.phase,
+      recovery: expected.recovery,
+      ...(expected.requiredSetDigest === undefined
+        ? {}
+        : { requiredSetDigest: expected.requiredSetDigest }),
+      ...(expected.assetId === undefined ? {} : { assetId: expected.assetId }),
+      ...(expected.usedBytes === undefined ? {} : { usedBytes: expected.usedBytes }),
+      ...(expected.requiredBytes === undefined ? {} : { requiredBytes: expected.requiredBytes }),
+    },
+  });
+  if (message?.type !== 'workbench:failure') throw new Error('expected owner failure');
+  const restored = deserializeWorkbenchOwnerError(message.error);
+  expect(restored).toBeInstanceOf(RuntimeAssetError);
+  expect(restored).toMatchObject(expected);
+}
+
 interface RuntimeRecord {
   readonly input: WorkbenchOwnerProjectRuntimeInput;
   readonly runtime: WorkbenchOwnerProjectRuntime & {
@@ -94,14 +190,19 @@ function harness(options: { readonly generateProjectToken?: () => string } = {})
   const runtimeRecords: RuntimeRecord[] = [];
   let tokenNumber = 0;
 
-  const materializerOpen = vi.fn(async (definition: Parameters<ProjectMaterializer['open']>[0]) => {
-    events.push(`materialize:${definition.id}`);
-    return Object.freeze({
-      projectKey: definition.storageSegment,
-      projectRoot: `/.rifty/workbench/v1/projects/${definition.storageSegment}/tree`,
-      acquisition: Object.freeze({ provenance: 'registry' }),
-    });
-  });
+  const materializerOpen = vi.fn(
+    async (
+      definition: Parameters<ProjectMaterializer['open']>[0],
+      _options?: ProjectAcquisitionOptions,
+    ) => {
+      events.push(`materialize:${definition.id}`);
+      return Object.freeze({
+        projectKey: definition.storageSegment,
+        projectRoot: `/.rifty/workbench/v1/projects/${definition.storageSegment}/tree`,
+        acquisition: Object.freeze({ provenance: 'registry' }),
+      });
+    },
+  );
   const materializerDelete = vi.fn(async (id: string) => {
     events.push(`delete:${id}`);
   });
@@ -401,6 +502,115 @@ describe('Workbench owner controller', () => {
     expect(JSON.stringify(h.sent)).not.toContain(rawDetail);
   });
 
+  it('projects a generic-open ShadowAssetError through the exact public prototype', async () => {
+    const h = harness();
+    const raw = rawShadowAssetFailure('fetch');
+    h.materializerOpen.mockRejectedValueOnce(raw.error);
+
+    await h.controller.handle({
+      type: 'workbench:open-project',
+      opId: 'generic-asset-failure',
+      definition: definitionWire(),
+    });
+
+    expectPublicRuntimeAssetFailure(h.sent.at(-1), {
+      phase: 'fetch',
+      recovery: 'retry',
+      requiredSetDigest: raw.error.requiredSetDigest,
+      assetId: raw.error.assetId,
+      usedBytes: 2048,
+      requiredBytes: 4096,
+    });
+    const wire = JSON.stringify(h.sent);
+    expect(wire).not.toContain(raw.privateUrl);
+    expect(wire).not.toContain(raw.privateTransport);
+    expect(wire).not.toContain(raw.privateCause.message);
+  });
+
+  it('projects a companion-open ShadowAssetInstallError without its tree or transport evidence', async () => {
+    const raw = rawShadowAssetInstallFailure();
+    const urlContext = Object.freeze({
+      apiBaseUrl: 'https://playground.test/app/',
+      clientUrl: 'https://playground.test/app/index.html',
+    });
+    const definition = definePlaygroundProject(
+      {
+        kind: 'vite',
+        id: 'asset-failure',
+        starterId: 'starter-a',
+        templateId: 'vite-v1',
+        files: { '/package.json': '{"scripts":{"dev":"vite"}}\n' },
+        port: 5174,
+        firstMaterialization: { kind: 'install' },
+      },
+      urlContext,
+    );
+    const coreMessages: WorkbenchOwnerToPageMessage[] = [];
+    const companionMessages: PlaygroundOwnerToPageMessage[] = [];
+    const authority = {
+      openProject: vi.fn(async () => {
+        throw raw.error;
+      }),
+    } as unknown as PlaygroundProjectAuthority;
+    const controller = createWorkbenchOwnerController({
+      closeAuthority: async () => {},
+      runtimeAssets: runtimeAssetsAdmin(),
+      createProject: async () => {
+        throw new Error('companion runtime must not start after asset failure');
+      },
+      send: (message) => coreMessages.push(structuredClone(message)),
+      playground: {
+        urlContext,
+        authority,
+        send: (message) => companionMessages.push(structuredClone(message)),
+      },
+    });
+
+    await controller.handle({
+      type: 'workbench:playground-open-project',
+      opId: 'companion-asset-failure',
+      definition: playgroundProjectDefinitionWire(definition),
+    });
+
+    expectPublicRuntimeAssetFailure(coreMessages.at(-1), {
+      phase: 'persist',
+      recovery: 'clear-and-retry',
+      requiredSetDigest: raw.error.requiredSetDigest,
+      usedBytes: 2048,
+      requiredBytes: 4096,
+    });
+    expect(companionMessages).toEqual([]);
+    const wire = JSON.stringify(coreMessages);
+    expect(wire).not.toContain('private-project-name');
+    expect(wire).not.toContain(raw.privateUrl);
+    expect(wire).not.toContain(raw.privateTransport);
+    expect(wire).not.toContain(raw.privateCause.message);
+  });
+
+  it('projects unattested package-tree identity as safe retryable readiness failure', async () => {
+    const h = harness();
+    const privateRoot = '/.rifty/workbench/v1/projects/private-owner/tree';
+    const privateSlug = 'owner-private-project-slug';
+    h.materializerOpen.mockRejectedValueOnce(
+      new PackageTreeUnattestedError({ root: privateRoot, slug: privateSlug }),
+    );
+
+    await h.controller.handle({
+      type: 'workbench:open-project',
+      opId: 'generic-unattested-failure',
+      definition: definitionWire(),
+    });
+
+    expectPublicRuntimeAssetFailure(h.sent.at(-1), {
+      phase: 'ready',
+      recovery: 'retry',
+    });
+    const wire = JSON.stringify(h.sent);
+    expect(wire).not.toContain(privateRoot);
+    expect(wire).not.toContain(privateSlug);
+    expect(wire).not.toContain('EUNATTESTEDPACKAGETREE');
+  });
+
   it('routes companion open/catalog through one authority and releases it after runtime teardown', async () => {
     const urlContext = Object.freeze({
       apiBaseUrl: 'https://playground.test/app/',
@@ -486,6 +696,7 @@ describe('Workbench owner controller', () => {
         cwd: '/stale',
         env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
       }),
+      { onRuntimeAssetProgress: expect.any(Function) },
     );
     expect(companionMessages).toEqual([
       {
@@ -616,6 +827,43 @@ describe('Workbench owner controller', () => {
       type: 'workbench:failure',
       error: { name: 'TypeError', message: 'Invalid owner boot config' },
     });
+  });
+
+  it('binds runtime-asset progress to the exact generic open before publication', async () => {
+    const h = harness();
+    h.materializerOpen.mockImplementationOnce(async (definition, options) => {
+      options?.onRuntimeAssetProgress?.({
+        phase: 'verify',
+        assetId: 'esbuild-wasm@0.28.0/package/esbuild.wasm',
+        assetIndex: 0,
+        assetCount: 1,
+      });
+      return Object.freeze({
+        projectKey: definition.storageSegment,
+        projectRoot: `/.rifty/workbench/v1/projects/${definition.storageSegment}/tree`,
+        acquisition: Object.freeze({ provenance: 'registry' }),
+      });
+    });
+
+    await h.controller.handle({
+      type: 'workbench:open-project',
+      opId: 'open-progress',
+      definition: definitionWire(),
+    });
+
+    expect(h.sent.slice(0, 2)).toEqual([
+      {
+        type: 'workbench:runtime-assets-progress',
+        opId: 'open-progress',
+        progress: {
+          phase: 'verify',
+          assetId: 'esbuild-wasm@0.28.0/package/esbuild.wasm',
+          assetIndex: 0,
+          assetCount: 1,
+        },
+      },
+      expect.objectContaining({ type: 'workbench:project-opened', opId: 'open-progress' }),
+    ]);
   });
 
   it('is the sole token gate and wrapper for PTY, preview, and Project VFS frames', async () => {
