@@ -25,6 +25,10 @@ import { EMPTY_COMMIT_MESSAGE_ERROR, commitRefusal } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import { channelNameFor } from '@riftydev/net';
 import { type VfsMutationIntent, normalizePath } from '@riftydev/vfs';
+import {
+  readOwnerGitEnvironment,
+  resolveOwnerGitCommitIdentity,
+} from '../workers/owner-git-commit-identity.ts';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 import { createOwnerRequestSettlements } from './owner-request-settlements.ts';
 import {
@@ -33,6 +37,8 @@ import {
 } from './package-mutation-executor.ts';
 
 type Git = ReturnType<typeof makeGit>;
+
+export { resolveOwnerGitCommitIdentity };
 
 export const GIT_OWNER_RPC_TYPE = 'rifty:git';
 
@@ -246,36 +252,7 @@ function isBlobShowObject(result: GitOwnerResult): result is BlobShowObject {
   );
 }
 
-const DEFAULT_AUTHOR_NAME = 'rifty';
-const DEFAULT_AUTHOR_EMAIL = 'rifty@localhost';
-
-function ownerEnv(): Record<string, string> {
-  if (typeof globalThis.process?.env !== 'object') return {};
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(globalThis.process.env)) {
-    if (value !== undefined) out[key] = value;
-  }
-  return out;
-}
-
-async function identityFrom(git: Git, env: Record<string, string>): Promise<GitIdentity> {
-  const name = env.GIT_AUTHOR_NAME ?? (await git.getConfig('user.name')) ?? DEFAULT_AUTHOR_NAME;
-  const email = env.GIT_AUTHOR_EMAIL ?? (await git.getConfig('user.email')) ?? DEFAULT_AUTHOR_EMAIL;
-  const date = env.GIT_AUTHOR_DATE;
-  const timestamp =
-    date !== undefined && /^\d+$/.test(date) ? Number(date) : Math.floor(Date.now() / 1000);
-  return { name, email, timestamp, timezoneOffset: 0 };
-}
-
-/** Shared owner-realm identity resolution for semantic SCM and the legacy RPC adapter. */
-export function resolveOwnerGitCommitIdentity(
-  git: Git,
-  env: Record<string, string> = ownerEnv(),
-): Promise<GitIdentity> {
-  return identityFrom(git, env);
-}
-
-function committerFrom(env: Record<string, string>, author: GitIdentity): GitIdentity {
+function committerFrom(env: Readonly<Record<string, string>>, author: GitIdentity): GitIdentity {
   const name = env.GIT_COMMITTER_NAME ?? author.name;
   const email = env.GIT_COMMITTER_EMAIL ?? author.email;
   const date = env.GIT_COMMITTER_DATE;
@@ -323,7 +300,7 @@ async function dispatchGitOwnerRequest(
         const refusal = await commitRefusal(git);
         if (refusal !== null) throw new Error(refusal);
       }
-      const env = ownerEnv();
+      const env = readOwnerGitEnvironment();
       const author = await resolveOwnerGitCommitIdentity(git, env);
       return git.commit({
         message: request.message,

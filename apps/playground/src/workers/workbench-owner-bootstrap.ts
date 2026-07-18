@@ -11,7 +11,6 @@ import {
 } from '@riftydev/npm-client';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { ensureStarterInitialCommit } from '../glue/git-initial-baseline.ts';
-import { resolveOwnerGitCommitIdentity } from '../glue/git-owner-port.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -34,6 +33,7 @@ import {
   createProjectMaterializer,
 } from '../workbench/project-materialization.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
+import { resolveOwnerGitCommitIdentity } from './owner-git-commit-identity.ts';
 import { createOwnerPackageState } from './owner-package-state.ts';
 import {
   type PlaygroundProjectAuthority,
