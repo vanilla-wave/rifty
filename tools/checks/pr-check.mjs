@@ -72,6 +72,8 @@ const TASKS = [
   'check:compat-drift',
   'check:esbuild-runtime-drift',
   'check:install-artifact-drift',
+  'check:shadow-asset-catalog-drift',
+  'check:shadow-asset-real-acceptance',
   'check:snapshot-artifact-drift',
   'check:source-grep',
   'check:install-stamp-writers',

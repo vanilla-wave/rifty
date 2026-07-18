@@ -45,6 +45,8 @@
     "esbuild-runtime:generate": "tsx tools/shadow-registry/tools/generate-esbuild-runtime.ts --write",
     "check:esbuild-runtime-drift": "tsx tools/shadow-registry/tools/generate-esbuild-runtime.ts --check",
     "check:install-artifact-drift": "tsx tools/shadow-registry/tools/generate-install-artifact-identity.ts --check",
+    "check:shadow-asset-catalog-drift": "pnpm --filter @riftydev/shadow-registry shadow-assets:check",
+    "check:shadow-asset-real-acceptance": "tsx tools/checks/shadow-asset-real-acceptance.ts",
     "check:snapshot-artifact-drift": "tsx tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts",
     "check:compat-drift": "node tools/compat-matrix-generator/cli.js && git diff --exit-code -- docs/public/compat",
     "adr:new": "node tools/adr/new.mjs",

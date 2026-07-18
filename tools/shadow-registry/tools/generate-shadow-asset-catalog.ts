@@ -9,6 +9,7 @@ const execFile = promisify(execFileCallback);
 const policyUrl = new URL('../esbuild-runtime-policy.json', import.meta.url);
 const outputUrl = new URL('../generated/shadow-asset-catalog.json', import.meta.url);
 const CATALOG_FETCH_STALL_MS = 10_000;
+const NPM_METADATA_TIMEOUT_MS = 30_000;
 
 interface RuntimePolicy {
   readonly version: string;
@@ -71,7 +72,7 @@ async function npmMetadata(name: string, version: string): Promise<NpmViewResult
   const { stdout } = await execFile(
     'npm',
     ['view', `${name}@${version}`, 'dist.tarball', 'dist.integrity', '--json'],
-    { maxBuffer: 1024 * 1024 },
+    { killSignal: 'SIGKILL', maxBuffer: 1024 * 1024, timeout: NPM_METADATA_TIMEOUT_MS },
   );
   const parsed = JSON.parse(stdout) as NpmViewResult;
   if (typeof parsed['dist.tarball'] !== 'string' || typeof parsed['dist.integrity'] !== 'string') {
