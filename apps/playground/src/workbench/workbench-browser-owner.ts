@@ -14,6 +14,7 @@ import {
   ClosedHandleError,
   ProjectBusyError,
   type RuntimeAssetCacheInspection,
+  type RuntimeAssetProgress,
   deserializeWorkbenchOwnerError,
 } from './errors.ts';
 import {
@@ -48,6 +49,10 @@ import {
   createNodeCliProjectRuntime,
   createNodeServerProjectRuntime,
 } from './node-project-runtime.ts';
+import {
+  type WorkbenchProjectOpenOptions,
+  ownWorkbenchProjectOpenOptions,
+} from './open-workbench.ts';
 import {
   type OwnerProjectToken,
   type PageToWorkbenchOwnerMessage,
@@ -131,9 +136,20 @@ interface Deferred<T> {
   readonly settled: () => boolean;
 }
 
+interface RuntimeAssetProgressProtocol {
+  accept(progress: RuntimeAssetProgress): void;
+  assertSuccessfulTerminal(): void;
+}
+
 type PendingOperation =
-  | (Deferred<OpenedProject> & { readonly kind: 'open' })
-  | (Deferred<OpenedPlaygroundProject> & { readonly kind: 'playground-open' })
+  | (Deferred<OpenedProject> & {
+      readonly kind: 'open';
+      readonly runtimeAssetProgress: RuntimeAssetProgressProtocol;
+    })
+  | (Deferred<OpenedPlaygroundProject> & {
+      readonly kind: 'playground-open';
+      readonly runtimeAssetProgress: RuntimeAssetProgressProtocol;
+    })
   | (Deferred<PlaygroundCatalogSnapshot> & { readonly kind: 'playground-catalog' })
   | (Deferred<void> & { readonly kind: 'close'; readonly projectToken: OwnerProjectToken })
   | (Deferred<void> & { readonly kind: 'delete'; readonly id: string })
@@ -191,6 +207,97 @@ function deferred<T>(): Deferred<T> {
 
 function errorFrom(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
+}
+
+function createRuntimeAssetProgressProtocol(
+  opId: string,
+  callback?: (progress: RuntimeAssetProgress) => void,
+): RuntimeAssetProgressProtocol {
+  type AssetPhase = Exclude<RuntimeAssetProgress['phase'], 'ready'>;
+  const assets = new Map<number, Readonly<{ assetId: string; phase: AssetPhase }>>();
+  const assetIndexes = new Map<string, number>();
+  let assetCount: number | null = null;
+  let ready = false;
+  let callbackFailureLogged = false;
+
+  const invalid = (detail: string): Error =>
+    new Error(`Runtime-asset progress ${detail} for ${opId}`);
+
+  const notify = (progress: RuntimeAssetProgress): void => {
+    if (callback === undefined) return;
+    try {
+      callback(progress);
+    } catch (error) {
+      if (callbackFailureLogged) return;
+      callbackFailureLogged = true;
+      try {
+        console.warn(
+          `[workbench] runtime-asset progress callback failed for operation ${opId}`,
+          error,
+        );
+      } catch {
+        // An observer and its logger cannot own the pending operation.
+      }
+    }
+  };
+
+  return Object.freeze({
+    accept(progress: RuntimeAssetProgress): void {
+      if (ready) throw invalid('followed ready');
+      if (assetCount !== null && progress.assetCount !== assetCount) {
+        throw invalid('assetCount changed');
+      }
+      assetCount ??= progress.assetCount;
+      if (progress.phase === 'ready') {
+        if (
+          assets.size !== assetCount ||
+          [...assets.values()].some((asset) => asset.phase === 'fetch')
+        ) {
+          throw invalid('declared ready before every asset completed');
+        }
+        ready = true;
+        notify(progress);
+        return;
+      }
+
+      const previous = assets.get(progress.assetIndex);
+      if (previous === undefined) {
+        if (progress.phase !== 'cache-check') throw invalid('did not start with cache-check');
+        const existingIndex = assetIndexes.get(progress.assetId);
+        if (existingIndex !== undefined) {
+          throw invalid(
+            `reused assetId ${progress.assetId} at indexes ${String(existingIndex)} and ${String(
+              progress.assetIndex,
+            )}`,
+          );
+        }
+        assetIndexes.set(progress.assetId, progress.assetIndex);
+      } else {
+        if (previous.assetId !== progress.assetId) throw invalid('asset identity changed');
+        if (!isRuntimeAssetProgressTransition(previous.phase, progress.phase)) {
+          throw invalid(`duplicated, skipped, or regressed phase ${progress.phase}`);
+        }
+      }
+      assets.set(
+        progress.assetIndex,
+        Object.freeze({ assetId: progress.assetId, phase: progress.phase }),
+      );
+      notify(progress);
+    },
+    assertSuccessfulTerminal(): void {
+      if (assetCount !== null && !ready) throw invalid('ended without ready');
+    },
+  });
+}
+
+function isRuntimeAssetProgressTransition(
+  previous: Exclude<RuntimeAssetProgress['phase'], 'ready'>,
+  next: Exclude<RuntimeAssetProgress['phase'], 'ready'>,
+): boolean {
+  if (previous === 'cache-check') return next === 'fetch' || next === 'verify';
+  if (previous === 'fetch') return next === 'verify';
+  if (previous === 'verify') return next === 'persist';
+  return false;
 }
 
 function createOperationId(): string {
@@ -364,6 +471,9 @@ export function startBrowserWorkspaceOwner(
     if (operation === undefined || operation.kind !== kind) {
       throw new Error(`Unexpected Workbench owner ${kind} response for ${opId}`);
     }
+    if (operation.kind === 'open' || operation.kind === 'playground-open') {
+      operation.runtimeAssetProgress.assertSuccessfulTerminal();
+    }
     pending.delete(opId);
     return operation as Extract<PendingOperation, { readonly kind: K }>;
   };
@@ -437,6 +547,19 @@ export function startBrowserWorkspaceOwner(
             projectToken: message.projectToken,
             projectRoot: message.projectRoot,
           });
+          return;
+        }
+        case 'workbench:runtime-assets-progress': {
+          const operation = pending.get(message.opId);
+          if (
+            operation === undefined ||
+            (operation.kind !== 'open' && operation.kind !== 'playground-open')
+          ) {
+            throw new Error(
+              `Unexpected Workbench owner runtime-asset progress for ${message.opId}`,
+            );
+          }
+          operation.runtimeAssetProgress.accept(message.progress);
           return;
         }
         case 'workbench:project-closed': {
@@ -1033,6 +1156,10 @@ export function startBrowserWorkspaceOwner(
             const operation = {
               ...deferred<OpenedPlaygroundProject>(),
               kind: 'playground-open' as const,
+              runtimeAssetProgress: createRuntimeAssetProgressProtocol(
+                opId,
+                ownedOptions.onRuntimeAssetProgress,
+              ),
             };
             const opened = await request<OpenedPlaygroundProject>(operation, {
               type: 'workbench:playground-open-project',
@@ -1085,10 +1212,21 @@ export function startBrowserWorkspaceOwner(
       }
       return storage;
     },
-    async openProject<TReady>(definition: InspectedProjectDefinition<TReady>) {
+    async openProject<TReady>(
+      definition: InspectedProjectDefinition<TReady>,
+      projectOptions?: WorkbenchProjectOpenOptions,
+    ) {
       if (activeProject !== null) throw new ProjectBusyError('Workbench owner project');
+      const ownedOptions = ownWorkbenchProjectOpenOptions(projectOptions);
       const opId = dependencies.operationId();
-      const operation = { ...deferred<OpenedProject>(), kind: 'open' as const };
+      const operation = {
+        ...deferred<OpenedProject>(),
+        kind: 'open' as const,
+        runtimeAssetProgress: createRuntimeAssetProgressProtocol(
+          opId,
+          ownedOptions.onRuntimeAssetProgress,
+        ),
+      };
       const opened = await request<OpenedProject>(operation, {
         type: 'workbench:open-project',
         opId,

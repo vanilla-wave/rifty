@@ -663,7 +663,10 @@ describe('child reservation cancellation fault matrix', () => {
     });
 
     abort.abort();
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const queueProgress = await Promise.race([
+      Promise.all([mutation, quiesce]).then(() => 'progressed' as const),
+      new Promise<'stalled'>((resolve) => setTimeout(resolve, 1_000, 'stalled')),
+    ]);
     const beforeProducerRelease = {
       mutationApplied,
       quiesced,
@@ -687,6 +690,7 @@ describe('child reservation cancellation fault matrix', () => {
       kind: 'rejected',
       error: { name: 'AbortError' },
     });
+    expect(queueProgress).toBe('progressed');
     expect(beforeProducerRelease).toEqual({
       mutationApplied: true,
       quiesced: true,

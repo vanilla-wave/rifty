@@ -212,7 +212,7 @@ export function createPlaygroundWorkbenchFacade(
       }
       const opened =
         options.openProject === undefined
-          ? await options.workbench.openProject(definition)
+          ? await options.workbench.openProject(definition, ownedOptions)
           : await options.openProject(definition, ownedOptions);
       return wrapSession(opened);
     },

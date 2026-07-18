@@ -1,5 +1,10 @@
 import type { InstallAcquisitionProvenance } from '@riftydev/npm-client';
-import { ClosedHandleError, ProjectDefinitionMismatchError } from './errors.ts';
+import {
+  ClosedHandleError,
+  ProjectDefinitionMismatchError,
+  type RuntimeAssetProgress,
+} from './errors.ts';
+import { createProjectAcquisitionWaiterScope } from './project-acquisition-waiters.ts';
 import { type InspectedProjectDefinition, projectStorageSegment } from './project-definition.ts';
 
 export { ClosedHandleError, ProjectDefinitionMismatchError } from './errors.ts';
@@ -64,8 +69,20 @@ export interface ProjectAcquisitionRequest {
   readonly definition: InspectedProjectDefinition;
 }
 
+export interface ProjectAcquisitionOptions {
+  readonly onRuntimeAssetProgress?: (progress: RuntimeAssetProgress) => void;
+}
+
+export interface ProjectAcquisitionEnsureOptions extends ProjectAcquisitionOptions {
+  /** Owner-local waiter lifetime; aborting it must not cancel another manager waiter. */
+  readonly signal?: AbortSignal;
+}
+
 export interface ProjectAcquisitionPort<TAcquisition = unknown> {
-  ensure(request: ProjectAcquisitionRequest): Promise<TAcquisition>;
+  ensure(
+    request: ProjectAcquisitionRequest,
+    options?: ProjectAcquisitionEnsureOptions,
+  ): Promise<TAcquisition>;
 }
 
 export interface ProjectMaterializerDependencies<TAcquisition = unknown> {
@@ -80,8 +97,13 @@ export interface MaterializedProject<TAcquisition = unknown> {
 }
 
 export interface ProjectMaterializer<TAcquisition = unknown> {
-  open(definition: InspectedProjectDefinition): Promise<MaterializedProject<TAcquisition>>;
+  open(
+    definition: InspectedProjectDefinition,
+    options?: ProjectAcquisitionOptions,
+  ): Promise<MaterializedProject<TAcquisition>>;
   delete(id: string): Promise<void>;
+  /** Owner-local shutdown fence; leaves the materializer reusable until close. */
+  cancelActiveAcquisition(reason?: unknown): void;
   close(): Promise<void>;
 }
 
@@ -94,6 +116,7 @@ export function createProjectMaterializer<TAcquisition>(
   let operationTail = Promise.resolve();
   let closePromise: Promise<void> | null = null;
   const unresolvedStageCleanup = new Map<string, unknown>();
+  const acquisitionWaiters = createProjectAcquisitionWaiterScope();
 
   const closedError = (cause?: unknown): ClosedHandleError =>
     new ClosedHandleError('Project materializer', cause);
@@ -116,7 +139,7 @@ export function createProjectMaterializer<TAcquisition>(
   };
 
   const materializer: ProjectMaterializer<TAcquisition> = {
-    open(definition) {
+    open(definition, options) {
       return enqueue(async () => {
         const projectKey = definition.storageSegment;
         const existing = await owner.readProject(projectKey);
@@ -184,11 +207,21 @@ export function createProjectMaterializer<TAcquisition>(
           }
         }
 
-        const acquisitionResult = await acquisition.ensure({
-          projectKey,
-          projectRoot,
-          definition,
-        });
+        const request = { projectKey, projectRoot, definition };
+        let acquisitionResult: TAcquisition;
+        try {
+          acquisitionResult = await acquisitionWaiters.ensure(acquisition, request, {
+            ...(options?.onRuntimeAssetProgress === undefined
+              ? {}
+              : { onRuntimeAssetProgress: options.onRuntimeAssetProgress }),
+          });
+        } catch (error) {
+          if (closing || closed) {
+            if (error instanceof ClosedHandleError) throw error;
+            throw closedError(error);
+          }
+          throw error;
+        }
         throwIfClosing();
         return Object.freeze({
           projectKey,
@@ -212,9 +245,14 @@ export function createProjectMaterializer<TAcquisition>(
       });
     },
 
+    cancelActiveAcquisition(reason = closedError()) {
+      acquisitionWaiters.cancel(reason);
+    },
+
     close() {
       if (closePromise !== null) return closePromise;
       closing = true;
+      acquisitionWaiters.cancel(closedError());
       closePromise = operationTail.then(() => {
         closed = true;
         const failures = [...unresolvedStageCleanup.values()];

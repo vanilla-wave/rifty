@@ -17,8 +17,10 @@ import type {
   PlaygroundProjectCatalog,
   PlaygroundProjectRef,
 } from '../workbench/playground.ts';
+import { createProjectAcquisitionWaiterScope } from '../workbench/project-acquisition-waiters.ts';
 import { projectStorageSegment } from '../workbench/project-definition.ts';
 import type {
+  ProjectAcquisitionOptions,
   ProjectAcquisitionPlan,
   ProjectAcquisitionPort,
 } from '../workbench/project-materialization.ts';
@@ -250,6 +252,7 @@ export interface PlaygroundProjectAuthority {
   openProject(
     definition: ProjectDefinition<unknown>,
     initialTerminalState?: ProjectTerminalSnapshot,
+    options?: ProjectAcquisitionOptions,
   ): Promise<OpenedPlaygroundProject>;
   recordMutation(input: {
     readonly kind: PlaygroundProjectMutationKind;
@@ -257,6 +260,8 @@ export interface PlaygroundProjectAuthority {
     readonly treeRevision: number;
   }): Promise<void>;
   treeRevision(): number;
+  /** Owner-local shutdown fence; leaves catalog state untouched. */
+  cancelActiveAcquisition(reason?: unknown): void;
   close(): Promise<void>;
 }
 
@@ -2175,6 +2180,7 @@ export async function createPlaygroundProjectAuthority(
   const listeners = new Set<(value: PlaygroundCatalogSnapshot) => void>();
   let companionScope: CapturedPlaygroundUrlContext | null = null;
   let operationTail = Promise.resolve();
+  const acquisitionWaiters = createProjectAcquisitionWaiterScope();
   let closed = false;
   let closing = false;
   let closePromise: Promise<void> | null = null;
@@ -2577,6 +2583,7 @@ export async function createPlaygroundProjectAuthority(
     openProject(
       definitionValue: ProjectDefinition<unknown>,
       initialTerminalStateValue?: ProjectTerminalSnapshot,
+      options?: ProjectAcquisitionOptions,
     ) {
       const initialTerminalState =
         initialTerminalStateValue === undefined
@@ -2614,11 +2621,8 @@ export async function createPlaygroundProjectAuthority(
         }
         const projectKey = projectStorageSegment(selected);
         const root = `${container}/tree`;
-        const acquisitionResult = await acquisition.ensure({
-          projectKey,
-          projectRoot: root,
-          definition,
-        });
+        const request = { projectKey, projectRoot: root, definition };
+        const acquisitionResult = await acquisitionWaiters.ensure(acquisition, request, options);
         const acknowledgedInitialTerminalState =
           initialTerminalState === undefined
             ? undefined
@@ -2683,9 +2687,14 @@ export async function createPlaygroundProjectAuthority(
 
     treeRevision: () => authority.treeRevision,
 
+    cancelActiveAcquisition(reason = new Error('Playground project acquisition is closed')) {
+      acquisitionWaiters.cancel(reason);
+    },
+
     close() {
       if (closePromise !== null) return closePromise;
       closing = true;
+      acquisitionWaiters.cancel(new Error('Playground project authority is closed'));
       closePromise = operationTail.then(() => {
         if (live !== null) throw new ProjectBusyError('Playground project');
         listeners.clear();

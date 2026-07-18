@@ -79,6 +79,9 @@ function makeFakeSpawn(): {
       }
       if (event === 'message') onMessage = listener as (message: unknown) => void;
     },
+    once: (_event, listener) => {
+      onExit = listener;
+    },
     resize: () => true,
     kill: (signal) => {
       killed = signal ?? 'SIGTERM';
@@ -259,6 +262,9 @@ describe('createBinExecutor', () => {
       },
       on: (ev, l) => {
         if (ev === 'exit') exitCb = l as (code?: unknown, signal?: unknown) => void;
+      },
+      once: (_event, listener) => {
+        exitCb = listener;
       },
       resize: () => true,
       kill: () => {

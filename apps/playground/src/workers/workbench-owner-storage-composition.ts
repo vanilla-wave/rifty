@@ -9,6 +9,8 @@ import {
   type OwnerVfsAuthorityComposition,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import { createWorkbenchConstructionTransaction } from './workbench-construction-transaction.ts';
+import { assertCleanDurability } from './workbench-owner-close.ts';
 import {
   type WorkbenchOwnerStorageRetention,
   createWorkbenchRuntimeAssetStorage,
@@ -51,16 +53,25 @@ export async function createWorkbenchOwnerStorageComposition(
   persistence: OwnerStoragePersistence,
   dependencies: WorkbenchOwnerStorageCompositionDependencies = defaultDependencies(),
 ): Promise<WorkbenchOwnerStorageComposition> {
-  const storage = await dependencies.installStorage(persistence);
-  const retention =
-    storage.backend === 'opfs'
-      ? await dependencies.probeRetention()
-      : Object.freeze({ available: false as const });
-  const owner = dependencies.createOwner();
-  dependencies.attachAsyncMirror(owner.authority);
-  const runtimeAssets = dependencies.createRuntimeAssets(
-    owner.authority,
-    workbenchRuntimeAssetStorageClass(storage, retention),
-  );
-  return Object.freeze({ storage, retention, owner, runtimeAssets });
+  const transaction = createWorkbenchConstructionTransaction();
+  try {
+    const storage = await dependencies.installStorage(persistence);
+    const retention =
+      storage.backend === 'opfs'
+        ? await dependencies.probeRetention()
+        : Object.freeze({ available: false as const });
+    const owner = dependencies.createOwner();
+    transaction.own(async () => assertCleanDurability(await owner.authority.flush()));
+    dependencies.attachAsyncMirror(owner.authority);
+    const runtimeAssets = dependencies.createRuntimeAssets(
+      owner.authority,
+      workbenchRuntimeAssetStorageClass(storage, retention),
+    );
+    transaction.own(() => runtimeAssets.close());
+    const composition = Object.freeze({ storage, retention, owner, runtimeAssets });
+    transaction.commit();
+    return composition;
+  } catch (error) {
+    return transaction.rollback(error, 'Workbench owner storage construction and cleanup failed');
+  }
 }

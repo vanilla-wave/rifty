@@ -13,8 +13,18 @@
 
 ### Added (app-local Workbench contract)
 
+- Supervised Node, installed-bin, and dev-server children now reserve exact
+  runtime-asset readiness before physical spawn, receive one fresh opaque port
+  only for an attested plan, and hold cleanup through observed physical exit.
+- Generic and companion project opens now own one page-local runtime-asset
+  progress callback; the exact non-terminal owner frame stays operation-bound,
+  and observer failures cannot affect acquisition. Shutdown cancels only its
+  active waiter, and late progress stays fenced.
 - Package acquisition now joins exact trusted/snapshot lockfile evidence and
   fresh install evidence to runtime-asset readiness on its existing FIFO.
+- Post-tree asset failure finalizes exact template-owned files before stamp or
+  readiness publication; failed readiness retries the promoted tree without a
+  second physical install and consumes first-materialization state only on success.
 - Workbench runtime assets now use one owner-private semantic cache with honest
   OPFS retention classification, scope-aware durability, exact public
   inspection/clear recovery, sanitized failures, and root-serialized lifecycle.

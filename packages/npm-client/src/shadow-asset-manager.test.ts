@@ -231,7 +231,12 @@ describe('ShadowAssetManager', () => {
         version: '1.0.0',
         lockfileVersion: 3,
         requires: true,
-        packages: {},
+        packages: {
+          'node_modules/@esbuild/wasi-preview1': {
+            version: '0.28.0',
+            dependencies: {},
+          },
+        },
         rifty: {
           shadowSubstitutions: {
             protocol: RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL,
@@ -250,9 +255,9 @@ describe('ShadowAssetManager', () => {
       recovery: 'clear-and-retry' as const,
     });
 
-    expect(
-      () => new ShadowAssetInstallError(treeResult([]), required, failure(required)),
-    ).toThrow(/lockfile trace.*plan/i);
+    expect(() => new ShadowAssetInstallError(treeResult([]), required, failure(required))).toThrow(
+      /lockfile trace.*plan/i,
+    );
     expect(
       () =>
         new ShadowAssetInstallError(

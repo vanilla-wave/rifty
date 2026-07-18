@@ -19,8 +19,7 @@ const BASE_PACKAGE_JSON = `${JSON.stringify({
   version: '1.0.0',
   dependencies: { vite: '5.4.21' },
 })}\n`;
-const BASE_PACKAGE_LOCK =
-  '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
+const BASE_PACKAGE_LOCK = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
 const config: BootstrapConfig = {
   runtime: 'vite',
   root: ROOT,

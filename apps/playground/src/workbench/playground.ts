@@ -34,7 +34,7 @@ import type {
   WorkspaceEdit,
 } from '@riftydev/ts-language-service/lsp-types';
 import { createBrowserOpenPlaygroundWorkbench } from './internal/browser-workbench-composition.ts';
-import type { Workbench, WorkbenchOptions } from './open-workbench.ts';
+import type { Workbench, WorkbenchOptions, WorkbenchProjectOpenOptions } from './open-workbench.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
 import type { ProjectDefinition } from './project-definition.ts';
 import type { ProjectSession } from './project-session.ts';
@@ -42,7 +42,7 @@ import type { ProjectTerminalSnapshot } from './project-terminal.ts';
 
 export type { ProjectTerminalSnapshot } from './project-terminal.ts';
 
-export interface PlaygroundProjectOpenOptions {
+export interface PlaygroundProjectOpenOptions extends WorkbenchProjectOpenOptions {
   readonly initialTerminalState?: ProjectTerminalSnapshot;
 }
 

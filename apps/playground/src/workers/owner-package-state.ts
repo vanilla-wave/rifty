@@ -1,5 +1,10 @@
 import { NotImplementedError } from '@riftydev/io';
-import type { RegistryClient } from '@riftydev/npm-client';
+import type {
+  RegistryClient,
+  ShadowAssetEnsureOptions,
+  ShadowAssetPlan,
+  ShadowAssetReadyReceipt,
+} from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand, ShellCommandResult } from '@riftydev/shell';
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import { normalizePath } from '@riftydev/vfs';
@@ -51,9 +56,17 @@ import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
   type AcquisitionProvenance,
   type PackageAcquisitionProject,
+  type PackageRuntimeAssetPort,
+  type PackageTreeRuntimeAssetReadiness,
   createPackageAcquisitionAuthority,
 } from './package-acquisition-authority.ts';
-import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
+import {
+  finalizePackageInstallFiles,
+  finalizePackageInstallResult,
+} from './package-install-finalizer.ts';
+import { PackageTreeUnattestedError } from './package-tree-unattested-error.ts';
+
+export { PackageTreeUnattestedError };
 
 const enc = new TextEncoder();
 
@@ -87,6 +100,8 @@ export interface OwnerPackageStateOptions {
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   readonly log: (line: string) => void;
   readonly registry?: RegistryClient;
+  /** Exact npm-client facts producer plus the storage-owned readiness installer. */
+  readonly runtimeAssets?: PackageRuntimeAssetPort;
   /** Test seam at the external registry/install boundary. */
   readonly install?: InstallFn;
   readonly resolverUrl?: () => string | undefined;
@@ -99,10 +114,23 @@ export interface OwnerPackageState {
   /** Register, activate, and install/reuse one exact project through one FIFO admission. */
   activateAndEnsure(
     config: FirstMaterializationOwnerPackageConfig,
+    runtimeAssets?: ShadowAssetEnsureOptions,
   ): Promise<ProjectAcquisitionPlan>;
-  activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
+  activateAndEnsure(
+    config: OwnerPackageConfig,
+    runtimeAssets?: ShadowAssetEnsureOptions,
+  ): Promise<AcquisitionProvenance>;
   /** Settle package commands and durability work admitted before this call. */
   quiesce(): Promise<void>;
+  /** Read only the exact active owner project; epoch evidence never crosses owner IPC. */
+  readPackageTreeEpoch(project: OwnerPackageTreeProject): OwnerPackageTreeEpoch;
+  /** Idempotent acquisition-token barrier before the first installed-tree write. */
+  beginTreeMutation(project: OwnerPackageTreeProject, acquisitionToken: object): void;
+  /** Hold the package FIFO across synchronous physical child spawn and supervision attach. */
+  reserveChildAdmission(
+    project: OwnerPackageTreeProject,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<OwnerChildAdmissionReservation>;
   /** Registers the terminal-facing config and starts its optional prefetch. */
   configure(config: OwnerPackageConfig): void;
   /** Restore an instant config without ever turning boot into an implicit install. */
@@ -116,6 +144,38 @@ export interface OwnerPackageState {
     runScript: (name: string, command: string, ctx: CommandContext) => Promise<ShellCommandResult>,
     options?: OwnerNpmCommandOptions,
   ): ShellCommand;
+}
+
+export interface OwnerPackageTreeProject {
+  readonly root: string;
+  readonly slug: string;
+}
+
+export type OwnerPackageTreeReadiness =
+  | Readonly<{ kind: 'unavailable' }>
+  | Readonly<{ kind: 'not-required' }>
+  | Readonly<{ kind: 'pending'; plan: ShadowAssetPlan }>
+  | Readonly<{
+      kind: 'ready';
+      plan: ShadowAssetPlan;
+      receipt: ShadowAssetReadyReceipt;
+    }>;
+
+export interface OwnerPackageTreeEpoch {
+  readonly project: OwnerPackageTreeProject;
+  readonly sequence: number;
+  readonly readiness: OwnerPackageTreeReadiness;
+}
+
+export interface OwnerChildAdmissionReservation {
+  readonly readiness: Extract<OwnerPackageTreeReadiness, { kind: 'not-required' | 'ready' }>;
+  commit(): void;
+  abortBeforeSpawn(error: unknown): void;
+  abortAfterChildSettlement(error: unknown, exited: Promise<unknown>): Promise<void>;
+}
+
+interface FirstMaterializationState {
+  readonly consumptions: Set<object>;
 }
 
 function configKey(root: string, slug: string): string {
@@ -167,9 +227,89 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   let configured = options.initial;
   let activeProject = options.initial ? packageProject(options.initial) : null;
   let activeTemplateId: string | null = null;
-  const firstMaterializationPhases = new Map<string, 'preparing' | 'deferred' | 'consuming'>();
+  let packageTreeSequence = 0;
+  let packageTreeEpoch: OwnerPackageTreeEpoch | null = null;
+  const treeMutationTokens = new WeakMap<object, string>();
+  const firstMaterializations = new Map<string, FirstMaterializationState>();
+
+  const canonicalTreeProject = (project: OwnerPackageTreeProject): OwnerPackageTreeProject =>
+    Object.freeze({ root: normalizePath(project.root), slug: project.slug });
+  const treeProjectMatches = (
+    left: OwnerPackageTreeProject,
+    right: OwnerPackageTreeProject,
+  ): boolean => left.root === right.root && left.slug === right.slug;
+  const freezeReadiness = (readiness: OwnerPackageTreeReadiness): OwnerPackageTreeReadiness => {
+    switch (readiness.kind) {
+      case 'unavailable':
+      case 'not-required':
+        return Object.freeze({ kind: readiness.kind });
+      case 'pending':
+        return Object.freeze({ kind: 'pending', plan: readiness.plan });
+      case 'ready':
+        return Object.freeze({
+          kind: 'ready',
+          plan: readiness.plan,
+          receipt: readiness.receipt,
+        });
+    }
+  };
+  const replacePackageTreeEpoch = (
+    project: OwnerPackageTreeProject,
+    readiness: OwnerPackageTreeReadiness,
+  ): OwnerPackageTreeEpoch => {
+    if (
+      !Number.isSafeInteger(packageTreeSequence) ||
+      packageTreeSequence >= Number.MAX_SAFE_INTEGER
+    ) {
+      throw new RangeError('owner package-tree epoch sequence exhausted');
+    }
+    const next = Object.freeze({
+      project: canonicalTreeProject(project),
+      sequence: packageTreeSequence + 1,
+      readiness: freezeReadiness(readiness),
+    });
+    packageTreeSequence = next.sequence;
+    packageTreeEpoch = next;
+    return next;
+  };
+  const readPackageTreeEpoch = (project: OwnerPackageTreeProject): OwnerPackageTreeEpoch => {
+    const epoch = packageTreeEpoch;
+    if (
+      epoch === null ||
+      normalizePath(project.root) !== project.root ||
+      !treeProjectMatches(epoch.project, project)
+    ) {
+      throw new Error(`package-tree epoch project mismatch for ${project.slug} at ${project.root}`);
+    }
+    return epoch;
+  };
+  const beginTreeMutation = (project: OwnerPackageTreeProject, acquisitionToken: object): void => {
+    if (typeof acquisitionToken !== 'object' || acquisitionToken === null) {
+      throw new TypeError('package-tree mutation requires an acquisition token object');
+    }
+    const epoch = readPackageTreeEpoch(project);
+    const key = configKey(epoch.project.root, epoch.project.slug);
+    const prior = treeMutationTokens.get(acquisitionToken);
+    if (prior !== undefined) {
+      if (prior !== key) throw new Error('package-tree mutation token belongs to another project');
+      return;
+    }
+    replacePackageTreeEpoch(epoch.project, { kind: 'unavailable' });
+    treeMutationTokens.set(acquisitionToken, key);
+  };
+  const publishTreeReadiness = (
+    project: OwnerPackageTreeProject,
+    readiness: PackageTreeRuntimeAssetReadiness,
+  ): void => {
+    const epoch = readPackageTreeEpoch(project);
+    replacePackageTreeEpoch(epoch.project, readiness);
+  };
+  const publishUnavailableProject = (project: OwnerPackageTreeProject): void => {
+    replacePackageTreeEpoch(project, { kind: 'unavailable' });
+  };
   if (options.initial) {
     configs.set(configKey(options.initial.cfg.root, options.initial.slug), options.initial);
+    publishUnavailableProject(packageProject(options.initial));
   }
 
   const registry = options.registry ?? createProxiedRegistryClient();
@@ -274,6 +414,9 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   const packages = createPackageAcquisitionAuthority({
     stamps,
     stampTransition: { flush: options.flush },
+    ...(options.runtimeAssets ? { runtimeAssets: options.runtimeAssets } : {}),
+    beginTreeMutation,
+    publishTreeReadiness,
     resolveTreeGuards: (root, knownProjects) =>
       discoverPackageAcquisitionGuardTransitions(options.fsSync, knownProjects, root),
     observe: (event) => {
@@ -283,17 +426,29 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         );
       }
     },
-    captureDeferredTerminalReuse: () => {
-      if (activeProject === null) return false;
+    captureDeferredTerminalConsumption: () => {
+      if (activeProject === null) return null;
       const key = configKey(activeProject.root, activeProject.slug);
-      const phase = firstMaterializationPhases.get(key);
-      if (phase === 'preparing' || phase === 'consuming') return true;
-      if (phase === 'deferred') firstMaterializationPhases.set(key, 'consuming');
-      return false;
+      const state = firstMaterializations.get(key);
+      if (!state) return null;
+      const token = Object.freeze({});
+      state.consumptions.add(token);
+      let settled = false;
+      return Object.freeze({
+        reuseTrustedClaim: true as const,
+        settle: (outcome: 'success' | 'failure'): void => {
+          if (settled) throw new Error('deferred terminal consumption already settled');
+          settled = true;
+          state.consumptions.delete(token);
+          if (firstMaterializations.get(key) !== state) return;
+          if (outcome === 'success') firstMaterializations.delete(key);
+        },
+      });
     },
     adapter: {
       prepareEnsure: async (command, execution) => {
         if (!command.replaceTreeOnMiss) return;
+        execution.beginTreeMutation();
         if (execution.phase === 'snapshot-rejected') {
           clearProjectTree(options.fsSync, command.project.root);
           options.fsSync.writeFileSync(
@@ -309,7 +464,11 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           priorTrustedTree: false,
         });
       },
-      planSnapshotRestore: async ({ project, snapshot }) => {
+      planSnapshotRestore: async ({
+        project,
+        snapshot,
+        beginTreeMutation: beginSnapshotMutation,
+      }) => {
         const payload = snapshot.payload as DepSnapshotV2 | undefined;
         if (!payload) return { status: 'rejected', reason: 'snapshot-payload-missing' };
         try {
@@ -319,6 +478,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             status: 'ready',
             packages: payload.packages,
             apply: async () => {
+              beginSnapshotMutation();
               prepared.apply();
               seedTemplateNodeModulesFiles(
                 options.fsSync,
@@ -343,14 +503,29 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         );
         if (parsed.status === 'rejected') throw new Error(parsed.message.trimEnd());
         const config = configs.get(configKey(request.project.root, request.project.slug));
+        const acquisitionNpmDeps: NpmShellCommandDeps = {
+          ...baseNpmDeps,
+          ...(execution.beginTreeMutation
+            ? { onTreeMutationStart: execution.beginTreeMutation }
+            : {}),
+          ...(options.runtimeAssets
+            ? {
+                shadowAssets: {
+                  installer: options.runtimeAssets.installer,
+                  ...(request.runtimeAssets ? { options: request.runtimeAssets } : {}),
+                },
+              }
+            : {}),
+        };
         const operationDeps: NpmShellCommandDeps = config
           ? {
-              ...baseNpmDeps,
+              ...acquisitionNpmDeps,
               prepareInstall: async (ctx, info) => {
                 if (!config.fromScratch || !info.fullInstall) return;
                 if (normalizePath(ctx.cwd) !== normalizePath(request.project.root)) return;
                 if (info.priorTrustedTree) return;
                 if (info.priorSessionSlug === request.project.slug) return;
+                execution.beginTreeMutation?.();
                 prepareProjectInstallTree(options.fsSync, request.project.root, {
                   packageJsonText: config.cfg.packageJson,
                   currentSlug: request.project.slug,
@@ -366,7 +541,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                   ? installPrefetch
                   : undefined,
             }
-          : baseNpmDeps;
+          : acquisitionNpmDeps;
         const sink = {
           write: (chunk: string | Uint8Array): void => options.log(decodeChunk(chunk)),
         };
@@ -390,55 +565,42 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           const packageSpecs = request.argv.length === 0 ? '' : ` ${request.argv.join(' ')}`;
           context.stdout.write(`$ npm install${packageSpecs}\n`);
         }
-        const firstMaterializationKey =
-          config !== undefined && hasFirstMaterialization(config)
-            ? configKey(config.cfg.root, config.slug)
-            : null;
-        if (
-          firstMaterializationKey !== null &&
-          firstMaterializationPhases.get(firstMaterializationKey) === 'deferred'
-        ) {
-          firstMaterializationPhases.set(firstMaterializationKey, 'consuming');
-        }
-        try {
-          const installed = await executeNpmInstallOperation(
-            parsed.request,
-            context,
-            operationDeps,
-            execution,
-          );
-          if (installed.status !== 'noop') {
-            await finalizePackageInstallFiles({
-              root: request.project.root,
-              ...(config
-                ? {
-                    seedTemplateFiles: () =>
-                      seedTemplateNodeModulesFiles(
-                        options.fsSync,
-                        config.cfg.root,
-                        templateNodeModulesFiles(config),
-                      ),
-                  }
-                : {}),
-            });
-          }
-          if (firstMaterializationKey !== null) {
-            firstMaterializationPhases.delete(firstMaterializationKey);
-          }
-          return installed;
-        } catch (error) {
-          if (firstMaterializationKey !== null) {
-            firstMaterializationPhases.set(firstMaterializationKey, 'deferred');
-          }
-          throw error;
-        }
+        const installed = await executeNpmInstallOperation(
+          parsed.request,
+          context,
+          operationDeps,
+          execution,
+        );
+        return finalizePackageInstallResult(installed, {
+          root: request.project.root,
+          ...(config
+            ? {
+                seedTemplateFiles: () =>
+                  seedTemplateNodeModulesFiles(
+                    options.fsSync,
+                    config.cfg.root,
+                    templateNodeModulesFiles(config),
+                  ),
+              }
+            : {}),
+        });
       },
       reset: async (command) => clearProjectTree(options.fsSync, command.target.root),
-      switchProject: async (command) => {
+      switchProject: async (command, execution) => {
         if (command.resetPackages) {
           if (command.packageJsonText === undefined) {
             throw new NotImplementedError('package-acquisition.project-switch.package-json');
           }
+        }
+        const destination = canonicalTreeProject(command.to);
+        if (
+          packageTreeEpoch === null ||
+          !treeProjectMatches(packageTreeEpoch.project, destination)
+        ) {
+          publishUnavailableProject(destination);
+        }
+        if (command.resetPackages) {
+          execution.beginTreeMutation();
           clearProjectTree(options.fsSync, command.to.root);
           options.fsSync.writeFileSync(
             normalizePath(`${command.to.root}/package.json`),
@@ -459,6 +621,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       if (!activeProject) throw new Error('package acquisition project is not active');
       return activeProject;
     },
+    beginTreeMutation,
   });
 
   const reassertTemplateNodeModules = async (config: OwnerPackageConfig): Promise<void> => {
@@ -513,10 +676,15 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
 
   function activateAndEnsure(
     config: FirstMaterializationOwnerPackageConfig,
+    runtimeAssets?: ShadowAssetEnsureOptions,
   ): Promise<ProjectAcquisitionPlan>;
-  function activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
   function activateAndEnsure(
     config: OwnerPackageConfig,
+    runtimeAssets?: ShadowAssetEnsureOptions,
+  ): Promise<AcquisitionProvenance>;
+  function activateAndEnsure(
+    config: OwnerPackageConfig,
+    runtimeAssets?: ShadowAssetEnsureOptions,
   ): Promise<ProjectAcquisitionPlan | AcquisitionProvenance> {
     if (!hasFirstMaterialization(config)) {
       return packages.dispatch({
@@ -526,12 +694,16 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         to: packageProject(config),
         packageJsonText: config.cfg.packageJson,
         replaceTreeOnMiss: true,
+        ...(runtimeAssets === undefined ? {} : { runtimeAssets }),
       });
     }
 
     const materialization = config.firstMaterialization;
     const key = configKey(config.cfg.root, config.slug);
-    firstMaterializationPhases.set(key, 'preparing');
+    const firstMaterialization: FirstMaterializationState = {
+      consumptions: new Set(),
+    };
+    firstMaterializations.set(key, firstMaterialization);
     const prepared = packages.dispatch({
       type: 'prepare-first-materialization',
       register: () => configure(config),
@@ -570,13 +742,18 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
               },
             },
       replaceTreeOnMiss: true,
+      ...(runtimeAssets === undefined ? {} : { runtimeAssets }),
     });
     void prepared.then(
       (plan) => {
-        if (plan.kind === 'install') firstMaterializationPhases.set(key, 'deferred');
-        else firstMaterializationPhases.delete(key);
+        if (firstMaterializations.get(key) !== firstMaterialization) return;
+        if (plan.kind !== 'install') firstMaterializations.delete(key);
       },
-      () => firstMaterializationPhases.delete(key),
+      () => {
+        if (firstMaterializations.get(key) === firstMaterialization) {
+          firstMaterializations.delete(key);
+        }
+      },
     );
     return prepared;
   }
@@ -610,6 +787,85 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     if (!config.fromScratch) await restore(config);
   };
 
+  const reserveChildAdmission = async (
+    project: OwnerPackageTreeProject,
+    admissionOptions: Readonly<{ signal?: AbortSignal }> = {},
+  ): Promise<OwnerChildAdmissionReservation> => {
+    const signal = admissionOptions.signal;
+    const throwIfAdmissionAborted = (): void => {
+      if (signal?.aborted) {
+        throw new DOMException('The operation was aborted', 'AbortError');
+      }
+    };
+    throwIfAdmissionAborted();
+    type AttestedReadiness = Extract<OwnerPackageTreeReadiness, { kind: 'not-required' | 'ready' }>;
+    const held = await packages.reserveChildAdmission<AttestedReadiness>(async () => {
+      throwIfAdmissionAborted();
+      let epoch: OwnerPackageTreeEpoch;
+      try {
+        epoch = readPackageTreeEpoch(project);
+      } catch {
+        throw new PackageTreeUnattestedError(project);
+      }
+      if (epoch.readiness.kind === 'unavailable') {
+        throw new PackageTreeUnattestedError(project);
+      }
+      if (epoch.readiness.kind === 'pending') {
+        const runtimeAssets = options.runtimeAssets;
+        if (!runtimeAssets) throw new PackageTreeUnattestedError(project);
+        const pendingSequence = epoch.sequence;
+        const pendingPlan = epoch.readiness.plan;
+        const ensured = await runtimeAssets.installer.ensure(
+          pendingPlan,
+          signal === undefined ? undefined : { signal },
+        );
+        throwIfAdmissionAborted();
+        if (
+          ensured.kind !== 'ready' ||
+          ensured.plan.requiredSetDigest !== pendingPlan.requiredSetDigest
+        ) {
+          throw new Error('child admission runtime-asset readiness did not attest its exact plan');
+        }
+        let current: OwnerPackageTreeEpoch;
+        try {
+          current = readPackageTreeEpoch(project);
+        } catch {
+          throw new PackageTreeUnattestedError(project);
+        }
+        if (
+          current.sequence !== pendingSequence ||
+          current.readiness.kind !== 'pending' ||
+          current.readiness.plan.requiredSetDigest !== pendingPlan.requiredSetDigest
+        ) {
+          throw new PackageTreeUnattestedError(project);
+        }
+        publishTreeReadiness(project, {
+          kind: 'ready',
+          plan: pendingPlan,
+          receipt: ensured.receipt,
+        });
+        epoch = readPackageTreeEpoch(project);
+      }
+      if (epoch.readiness.kind !== 'not-required' && epoch.readiness.kind !== 'ready') {
+        throw new PackageTreeUnattestedError(project);
+      }
+      return epoch.readiness;
+    });
+    try {
+      throwIfAdmissionAborted();
+    } catch (error) {
+      held.abortBeforeSpawn(error);
+      throw error;
+    }
+    return Object.freeze({
+      readiness: held.snapshot,
+      commit: (): void => held.commit(),
+      abortBeforeSpawn: (error: unknown): void => held.abortBeforeSpawn(error),
+      abortAfterChildSettlement: (error: unknown, exited: Promise<unknown>): Promise<void> =>
+        held.abortAfterChildSettlement(error, exited),
+    });
+  };
+
   if (options.primeInitialPrefetch) {
     if (!options.initial) throw new Error('initial package config required to prime prefetch');
     primePrefetch(options.initial);
@@ -619,6 +875,9 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     mutations,
     activateAndEnsure,
     quiesce: () => packages.quiesce(),
+    readPackageTreeEpoch,
+    beginTreeMutation,
+    reserveChildAdmission,
     configure,
     restore,
     transition,
@@ -644,8 +903,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         }
 
         const key = configKey(config.cfg.root, config.slug);
-        const firstDependencyArrival =
-          firstMaterializationPhases.has(key) && isBareInstallCommand(args);
+        const firstDependencyArrival = firstMaterializations.has(key) && isBareInstallCommand(args);
         const packageJsonPath = normalizePath(`${config.cfg.root}/package.json`);
         const packageLockPath = normalizePath(`${config.cfg.root}/package-lock.json`);
         const priorTreeRevision = options.fsSync.treeRevision;

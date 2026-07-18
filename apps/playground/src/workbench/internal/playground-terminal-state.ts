@@ -89,11 +89,41 @@ export function ownPlaygroundProjectOpenOptions(value: unknown): PlaygroundProje
     throw new TypeError('Playground project open options must be a plain object');
   }
   const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => key !== 'initialTerminalState') || keys.length > 1) {
+  if (
+    keys.some((key) => key !== 'initialTerminalState' && key !== 'onRuntimeAssetProgress') ||
+    keys.length > 2
+  ) {
     throw new TypeError('Playground project open options have invalid keys');
   }
   if (keys.length === 0) return Object.freeze({});
-  const descriptor = Object.getOwnPropertyDescriptor(value, 'initialTerminalState');
+  let initialTerminalState: ProjectTerminalSnapshot | undefined;
+  if (keys.includes('initialTerminalState')) {
+    const descriptor = optionDataProperty(value, 'initialTerminalState');
+    if (descriptor !== undefined) {
+      initialTerminalState = ownProjectTerminalSnapshot(descriptor);
+    }
+  }
+  let onRuntimeAssetProgress: PlaygroundProjectOpenOptions['onRuntimeAssetProgress'];
+  if (keys.includes('onRuntimeAssetProgress')) {
+    const descriptor = optionDataProperty(value, 'onRuntimeAssetProgress');
+    if (descriptor !== undefined && typeof descriptor !== 'function') {
+      throw new TypeError(
+        'Playground project open options.onRuntimeAssetProgress must be a function',
+      );
+    }
+    onRuntimeAssetProgress = descriptor as typeof onRuntimeAssetProgress;
+  }
+  return Object.freeze({
+    ...(initialTerminalState === undefined ? {} : { initialTerminalState }),
+    ...(onRuntimeAssetProgress === undefined ? {} : { onRuntimeAssetProgress }),
+  });
+}
+
+function optionDataProperty(
+  value: object,
+  key: 'initialTerminalState' | 'onRuntimeAssetProgress',
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
   if (
     descriptor === undefined ||
     descriptor.enumerable !== true ||
@@ -102,11 +132,10 @@ export function ownPlaygroundProjectOpenOptions(value: unknown): PlaygroundProje
     !Object.hasOwn(descriptor, 'value')
   ) {
     throw new TypeError(
-      'Playground project open options.initialTerminalState must be an enumerable data property',
+      `Playground project open options.${key} must be an enumerable data property`,
     );
   }
-  if (descriptor.value === undefined) return Object.freeze({});
-  return Object.freeze({ initialTerminalState: ownProjectTerminalSnapshot(descriptor.value) });
+  return descriptor.value;
 }
 
 /** Public cwd → exact physical session root; stale directories reset to root, env unchanged. */

@@ -15,7 +15,7 @@
  * unit tests drive a fake handle — the real Worker is an e2e-only boundary.
  */
 
-import type { BinExecutor, CommandContext } from '@riftydev/shell';
+import type { BinExecutor, CommandContext, ProcessExit } from '@riftydev/shell';
 import { type ForegroundWritable, runForegroundChild } from './run-foreground-child.ts';
 
 /** Read-side of a worker stdio stream (subset of `@riftydev/io` `Readable`). */
@@ -35,6 +35,7 @@ export interface BinWorkerHandle {
   stdin(): ForegroundWritable;
   on(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
+  once(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
   send?(message: unknown): unknown;
   resize(cols: number, rows: number): unknown;
   kill(signal?: string): unknown;
@@ -71,6 +72,41 @@ export interface BinExecutorDeps {
   readonly onExit?: (req: BinSpawnRequest, ctx: CommandContext) => void;
 }
 
+/** Build the exact owner-neutral request before any physical spawn. */
+export function prepareBinSpawnRequest(
+  binPath: string,
+  args: readonly string[],
+  ctx: CommandContext,
+  prepareRequest?: BinExecutorDeps['prepareRequest'],
+): BinSpawnRequest {
+  const baseRequest: BinSpawnRequest = {
+    shimPath: binPath,
+    args,
+    env: ctx.env,
+    cwd: ctx.cwd,
+    isTTY: ctx.isTTY === true,
+    cols: ctx.cols,
+    rows: ctx.rows,
+  };
+  return prepareRequest?.(baseRequest, ctx) ?? baseRequest;
+}
+
+/** Attach the shared bin supervision after a host has physically spawned it. */
+export function superviseBinWorker(
+  deps: Pick<BinExecutorDeps, 'onSpawn' | 'onMessage' | 'onExit'>,
+  req: BinSpawnRequest,
+  handle: BinWorkerHandle,
+  ctx: CommandContext,
+  onTerminate?: () => void,
+): Promise<ProcessExit> {
+  deps.onSpawn?.(req, handle, ctx);
+  return runForegroundChild(handle, ctx, {
+    onMessage: deps.onMessage ? (message) => deps.onMessage?.(req, message, ctx) : undefined,
+    onExit: deps.onExit ? () => deps.onExit?.(req, ctx) : undefined,
+    ...(onTerminate === undefined ? {} : { onTerminate }),
+  });
+}
+
 /** Build a {@link BinExecutor} over an injected node-entry worker spawn. */
 export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
   // `async` so a synchronous `spawn` throw (a host-boundary failure) surfaces as
@@ -84,22 +120,9 @@ export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
     // + settle-on-exit, incl. the exit-before-pre-abort ordering) is shared with
     // the owner `node <file>` executor via run-foreground-child. Server-capable
     // bins can also surface child IPC through the optional hooks.
-    const baseRequest: BinSpawnRequest = {
-      shimPath: binPath,
-      args,
-      env: ctx.env,
-      cwd: ctx.cwd,
-      isTTY: ctx.isTTY === true,
-      cols: ctx.cols,
-      rows: ctx.rows,
-    };
-    const req = deps.prepareRequest?.(baseRequest, ctx) ?? baseRequest;
+    const req = prepareBinSpawnRequest(binPath, args, ctx, deps.prepareRequest);
     deps.onStart?.(req, ctx);
     const handle = deps.spawn(req);
-    deps.onSpawn?.(req, handle, ctx);
-    return runForegroundChild(handle, ctx, {
-      onMessage: deps.onMessage ? (message) => deps.onMessage?.(req, message, ctx) : undefined,
-      onExit: deps.onExit ? () => deps.onExit?.(req, ctx) : undefined,
-    });
+    return superviseBinWorker(deps, req, handle, ctx);
   };
 }

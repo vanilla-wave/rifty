@@ -128,12 +128,12 @@ export function createBrowserOpenPlaygroundWorkbench(): OpenPlaygroundWorkbench 
       }
       return pendingBoot.urlContext;
     },
-    openOwnerProject: ({ owner: workbenchOwner, definition }) => {
+    openOwnerProject: ({ owner: workbenchOwner, definition, options }) => {
       const playground = workbenchOwner.playground;
       if (playground === undefined) {
         return Promise.reject(new Error('Workbench owner omitted the Playground companion'));
       }
-      return playground.openProject(definition);
+      return playground.openProject(definition, options);
     },
   });
 

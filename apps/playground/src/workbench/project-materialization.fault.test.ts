@@ -310,11 +310,14 @@ describe('project materialization', () => {
     );
     expect(durabilityIndex).toBeGreaterThan(promoteIndex);
     expect(acquisitionIndex).toBeGreaterThan(durabilityIndex);
-    expect(h.acquisition.ensure).toHaveBeenCalledWith({
-      projectKey,
-      projectRoot: h.project(projectKey).projectRoot,
-      definition,
-    });
+    expect(h.acquisition.ensure).toHaveBeenCalledWith(
+      {
+        projectKey,
+        projectRoot: h.project(projectKey).projectRoot,
+        definition,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it('reopens the same identity without overlaying user mutations', async () => {

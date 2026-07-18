@@ -1,4 +1,3 @@
-import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import { describe, expect, it } from 'vitest';
 import { closureHashOf } from './closure-hash.ts';
 import { type Lockfile, RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL } from './linker.ts';
@@ -88,16 +87,11 @@ describe('closureHashOf', () => {
           protocol: RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL,
           applied: [
             {
-              catalog: {
-                id: builtinShadowAssetCatalog.id,
-                digest: builtinShadowAssetCatalog.digest,
-              },
               publicName: 'esbuild',
               requestedRange: '^0.28.0',
               resolvedPublicVersion: '0.28.0',
-              substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
               runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
-              builtin: true,
+              substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
             },
           ],
         },

@@ -29,6 +29,7 @@ import {
   type PackageRuntimeAssetPort,
   createPackageAcquisitionAuthority,
 } from './package-acquisition-authority.ts';
+import { postTreePackageFinalizationFailure } from './package-install-finalizer.ts';
 
 const ROOT = '/project';
 const PROJECT = Object.freeze({ root: ROOT, slug: 'scratch' });
@@ -339,10 +340,7 @@ describe('owner post-tree runtime-asset commit order', () => {
     const assetPlan = plan();
     const assetError = shadowFailure(installResult(), assetPlan);
     const finalizerError = new Error('template seed parent is not a directory');
-    const postTreeFailure = new AggregateError(
-      [assetError, finalizerError],
-      'runtime-asset failure and package-tree finalization both failed',
-    );
+    const postTreeFailure = postTreePackageFinalizationFailure(assetError, finalizerError);
     const project: PackageAcquisitionProject = {
       projectId: 'scratch',
       root: ROOT,
@@ -381,8 +379,8 @@ describe('owner post-tree runtime-asset commit order', () => {
     expect.soft(await readInstallStamp(postTreeVfs, ROOT)).toBeNull();
 
     const preTreeFailure = new AggregateError(
-      [new Error('registry DNS failed'), new Error('registry returned 503')],
-      'ordinary registry fallback failed',
+      [assetError, finalizerError],
+      postTreeFailure.message,
     );
     const preTreeVfs = new MemoryVfs();
     await preTreeVfs.mkdir(ROOT, { recursive: true });

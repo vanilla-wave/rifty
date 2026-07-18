@@ -1,4 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
+import type { ShadowAssetPlan, ShadowAssetRuntimeReader } from '@riftydev/npm-client';
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import {
   type BinExecutor,
@@ -16,6 +17,7 @@ import { formatProjectPersistenceFailure } from '../workbench/project-file-bound
 import { createDevServerController } from './dev-server-controller.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
 import { readNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
+import type { OwnerChildAdmissionAuthority } from './owner-child-admission.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
@@ -50,6 +52,8 @@ export interface WorkbenchProjectRuntimeOptions {
   readonly nodeEntryWorkerUrl: string;
   readonly devServerWorkerUrl: string;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
+  /** Storage-owned exact-plan reader; presence enables package-FIFO child admission. */
+  readonly runtimeAssetReader?: (plan: ShadowAssetPlan) => ShadowAssetRuntimeReader;
   /** Project VFS owns package FIFO, semantic evidence, and reply publication. */
   readonly mutationGuard: VfsMutationGuard;
   /** Owner-applied VFS state must precede every observable PTY completion. */
@@ -170,10 +174,26 @@ export function createWorkbenchProjectRuntime(
   let binSequence = 0;
   let nodeSequence = 0;
   let closePromise: Promise<void> | undefined;
+  const childAdmission: OwnerChildAdmissionAuthority | undefined =
+    options.runtimeAssetReader === undefined
+      ? undefined
+      : Object.freeze({
+          reserve: (admissionOptions?: Readonly<{ signal?: AbortSignal }>) =>
+            options.packageState.reserveChildAdmission(
+              {
+                root: projectRoot,
+                slug: options.packageConfig.slug,
+              },
+              admissionOptions,
+            ),
+          runtimeReader: options.runtimeAssetReader,
+        });
 
   const ownerNodeExecutor = createOwnerChildNodeExecutor(
     options.nodeEntryWorkerUrl,
     options.nodeWorkerRuntimeEnv,
+    undefined,
+    childAdmission,
   );
   const devServer =
     options.packageConfig.cfg.runtime === 'node-server'
@@ -183,6 +203,8 @@ export function createWorkbenchProjectRuntime(
           const child = createOwnerChildDevServer(
             options.devServerWorkerUrl,
             readNodeWorkerRuntimeConfig(options.nodeWorkerRuntimeEnv, 'workbench-project-runtime'),
+            undefined,
+            childAdmission,
           );
           return createDevServerController({
             lifecycle: previews,
@@ -230,6 +252,7 @@ export function createWorkbenchProjectRuntime(
         previews,
       }),
       (request) => ({ ...request, remoteFsRoot: projectRoot }),
+      childAdmission,
     );
     const executeInstalledBin: BinExecutor = async (binPath, args, ctx) => {
       await options.packageState.reassertTemplateNodeModules(options.packageConfig);

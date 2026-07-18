@@ -128,6 +128,9 @@ function controllableBinSpawn() {
           onExit = listener as (code?: unknown, signal?: unknown) => void;
         }
       },
+      once: (_event, listener) => {
+        onExit = listener;
+      },
       resize: () => true,
       kill: () => true,
     }),

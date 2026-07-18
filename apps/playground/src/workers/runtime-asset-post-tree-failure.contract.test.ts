@@ -46,7 +46,26 @@ function treeResult(): InstallResult {
       version: '1.0.0',
       lockfileVersion: 3,
       requires: true,
-      packages: {},
+      packages: {
+        'node_modules/@esbuild/wasi-preview1': {
+          version: '0.28.0',
+          dependencies: {},
+        },
+      },
+      rifty: {
+        shadowSubstitutions: {
+          protocol: 'rifty.lockfile-shadow-substitutions/v1',
+          applied: [
+            {
+              publicName: 'esbuild',
+              requestedRange: '^0.28.0',
+              resolvedPublicVersion: '0.28.0',
+              runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
+              substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+            },
+          ],
+        },
+      },
     },
     conflicts: [],
     provenance: {

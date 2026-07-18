@@ -16,7 +16,7 @@ import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { ensureStarterInitialCommit } from '../glue/starter.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import { runtimeAssetError, serializeWorkbenchOwnerError } from '../workbench/errors.ts';
+import { serializeWorkbenchOwnerError } from '../workbench/errors.ts';
 import {
   type PlaygroundOwnerToPageMessage,
   inspectPlaygroundOwnerToPageMessage,
@@ -35,20 +35,27 @@ import {
 } from '../workbench/project-materialization.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { createOwnerPackageState } from './owner-package-state.ts';
-import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
   type PlaygroundProjectAuthority,
   createPlaygroundProjectAuthority,
 } from './playground-project-authority.ts';
 import { createOwnerPlaygroundSessionTools } from './playground-session-tools-owner.ts';
+import {
+  type WorkbenchConstructionLease,
+  createWorkbenchConstructionTransaction,
+} from './workbench-construction-transaction.ts';
 import { createWorkbenchOwnerChildVfsMutationGuard } from './workbench-owner-child-vfs.ts';
+import {
+  assertCleanDurability,
+  createCompanionOwnerClose,
+  withOwnerClose,
+} from './workbench-owner-close.ts';
 import {
   type WorkbenchOwnerProjectRuntime,
   type WorkbenchOwnerProjectRuntimeOutput,
   createWorkbenchOwnerController,
 } from './workbench-owner-controller.ts';
 import { createWorkbenchOwnerStorageComposition } from './workbench-owner-storage-composition.ts';
-import { workbenchFinalDurabilityError } from './workbench-owner-storage.ts';
 import {
   workbenchFirstMaterializationPackageConfig,
   workbenchPackageConfig,
@@ -57,6 +64,7 @@ import { createWorkbenchProjectComposition } from './workbench-project-compositi
 import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
 import { createWorkbenchProjectStore } from './workbench-project-store.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
+import { createNpmPackageRuntimeAssetPort } from './workbench-runtime-assets.ts';
 import {
   type KernelIpc,
   installBundleLocalBuffer,
@@ -100,107 +108,12 @@ function sendPlaygroundOwnerMessage(ipc: KernelIpc, message: PlaygroundOwnerToPa
   ipc.send(inspectPlaygroundOwnerToPageMessage(message));
 }
 
-function assertCleanDurability(report: Awaited<ReturnType<OwnerVfsAuthority['flush']>>): void {
-  const failure = workbenchFinalDurabilityError(report);
-  if (failure !== null) throw failure;
-}
-
 function playgroundTypeScriptWorkerUrl(config: WorkbenchOwnerBootConfig): string {
   const url = config.deployment.workers.typescript;
   if (url === undefined) {
     throw new Error('Playground session tools require deployment.workers.typescript');
   }
   return url;
-}
-
-function withOwnerClose(
-  materializer: ProjectMaterializer,
-  packageQuiesce: () => Promise<void>,
-  runtimeAssetsClose: () => Promise<void>,
-  authority: OwnerVfsAuthority,
-): ProjectMaterializer {
-  let closePromise: Promise<void> | null = null;
-  return Object.freeze({
-    open: (definition: Parameters<ProjectMaterializer['open']>[0]) => materializer.open(definition),
-    delete: (id: string) => materializer.delete(id),
-    close() {
-      if (closePromise !== null) return closePromise;
-      closePromise = (async () => {
-        const failures: unknown[] = [];
-        try {
-          await materializer.close();
-        } catch (error) {
-          failures.push(error);
-        }
-        try {
-          await packageQuiesce();
-        } catch (error) {
-          failures.push(error);
-        }
-        try {
-          await runtimeAssetsClose();
-        } catch (error) {
-          failures.push(runtimeAssetError('close', error));
-        }
-        try {
-          assertCleanDurability(await authority.flush());
-        } catch (error) {
-          failures.push(error);
-        }
-        if (failures.length === 1) throw failures[0];
-        if (failures.length > 1) {
-          throw new AggregateError(failures, 'Workbench owner authority close failed');
-        }
-      })();
-      return closePromise;
-    },
-  });
-}
-
-function createCompanionOwnerClose(
-  authority: PlaygroundProjectAuthority,
-  unsubscribeCatalog: () => void,
-  packageQuiesce: () => Promise<void>,
-  runtimeAssetsClose: () => Promise<void>,
-  vfsAuthority: OwnerVfsAuthority,
-): () => Promise<void> {
-  let closePromise: Promise<void> | null = null;
-  return () => {
-    if (closePromise !== null) return closePromise;
-    closePromise = (async () => {
-      const failures: unknown[] = [];
-      try {
-        unsubscribeCatalog();
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        await authority.close();
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        await packageQuiesce();
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        await runtimeAssetsClose();
-      } catch (error) {
-        failures.push(runtimeAssetError('close', error));
-      }
-      try {
-        assertCleanDurability(await vfsAuthority.flush());
-      } catch (error) {
-        failures.push(error);
-      }
-      if (failures.length === 1) throw failures[0];
-      if (failures.length > 1) {
-        throw new AggregateError(failures, 'Playground owner authority close failed');
-      }
-    })();
-    return closePromise;
-  };
 }
 
 function firstMessage(raw: unknown, ipc: KernelIpc): WorkbenchOwnerBootConfig | null {
@@ -240,30 +153,39 @@ async function bootstrap(): Promise<void> {
   const config = firstMessage(await inbox.take(), ipc);
   if (config === null) return;
 
-  const storageComposition = await createWorkbenchOwnerStorageComposition(
-    config.storage.persistence,
-  );
-  const {
-    storage,
-    owner: ownerComposition,
-    runtimeAssets: runtimeAssetStorage,
-  } = storageComposition;
-  const { authority, appliedMutations, installStampClaims } = ownerComposition;
-  const registry = createProxiedRegistryClient({
-    proxyPrefix: config.packageAcquisition.registryUrl,
-  });
-  const runtimeAssetManager = createShadowAssetManager({
-    storage: runtimeAssetStorage,
-    source: createStandardShadowAssetSource({
+  const construction = createWorkbenchConstructionTransaction();
+  try {
+    const storageComposition = await createWorkbenchOwnerStorageComposition(
+      config.storage.persistence,
+    );
+    const {
+      storage,
+      owner: ownerComposition,
+      runtimeAssets: runtimeAssetStorage,
+    } = storageComposition;
+    const { authority, appliedMutations, installStampClaims } = ownerComposition;
+    const authorityOwnership = construction.own(async () =>
+      assertCleanDurability(await authority.flush()),
+    );
+    const storageOwnership = construction.own(() => runtimeAssetStorage.close());
+    const registry = createProxiedRegistryClient({
+      proxyPrefix: config.packageAcquisition.registryUrl,
+    });
+    const source = createStandardShadowAssetSource({
       registry,
       tarballCache: new VfsTarballCache(new SyncMirrorVfs()),
-    }),
-  });
+    });
+    const sourceOwnership = construction.own(() => source.close());
+    const runtimeAssetManager = createShadowAssetManager({
+      storage: runtimeAssetStorage,
+      source,
+    });
+    const runtimeAssetManagerOwnership = construction.transfer(
+      [sourceOwnership, storageOwnership],
+      () => runtimeAssetManager.close(),
+    );
+    const packageRuntimeAssets = createNpmPackageRuntimeAssetPort(runtimeAssetManager);
 
-  let packageQuiesceForCleanup: (() => Promise<void>) | null = null;
-  let partialAuthorityCloseForCleanup: (() => Promise<void>) | null = null;
-  let finalAuthorityCloseForCleanup: (() => Promise<void>) | null = null;
-  try {
     const nodeWorkerRuntimeEnv = installNodeWorkerRuntimeConfig({
       kernelWorkerUrl: config.deployment.workers.kernel,
       nodeEntryWorkerUrl: config.deployment.workers.node,
@@ -281,30 +203,41 @@ async function bootstrap(): Promise<void> {
       nodeWorkerRuntimeEnv,
       log: (line) => globalThis.process.stdout.write(line),
       registry,
+      runtimeAssets: packageRuntimeAssets,
       resolverUrl: () => eddy?.resolverUrl,
       resolverBundleBaseUrl: () => eddy?.bundleBaseUrl,
       resolverPin: (templateId) => eddy?.presetPins[templateId],
     });
-    packageQuiesceForCleanup = () => packageState.quiesce();
+    const packageStateOwnership = construction.own(() => packageState.quiesce());
     let materializer: ProjectMaterializer | undefined;
     let playgroundAuthority: PlaygroundProjectAuthority | undefined;
     let initialPlaygroundCatalog: PlaygroundCatalogSnapshot | undefined;
     let closeAuthority: (() => Promise<void>) | undefined;
+    let closeAuthorityOwnership: WorkbenchConstructionLease | undefined;
     if (config.playgroundUrlContext === undefined) {
       const projectStore = createWorkbenchProjectStore(authority);
       const coreMaterializer = createProjectMaterializer({
         owner: projectStore,
         acquisition: {
-          ensure: (request) =>
+          ensure: (request, options) =>
             packageState.activateAndEnsure(
               workbenchPackageConfig(request.definition, request.projectRoot, {
                 packageJsonBytes: authority.readFileBytesSync(
                   `${request.projectRoot}/package.json`,
                 ),
               }),
+              options === undefined
+                ? undefined
+                : {
+                    ...(options.signal === undefined ? {} : { signal: options.signal }),
+                    ...(options.onRuntimeAssetProgress === undefined
+                      ? {}
+                      : { onProgress: options.onRuntimeAssetProgress }),
+                  },
             ),
         },
       });
+      const coreMaterializerOwnership = construction.own(() => coreMaterializer.close());
       materializer = withOwnerClose(
         coreMaterializer,
         () => packageState.quiesce(),
@@ -312,7 +245,15 @@ async function bootstrap(): Promise<void> {
         authority,
       );
       closeAuthority = () => (materializer as ProjectMaterializer).close();
-      finalAuthorityCloseForCleanup = closeAuthority;
+      closeAuthorityOwnership = construction.transfer(
+        [
+          coreMaterializerOwnership,
+          packageStateOwnership,
+          runtimeAssetManagerOwnership,
+          authorityOwnership,
+        ],
+        closeAuthority,
+      );
     } else {
       playgroundAuthority = await createPlaygroundProjectAuthority({
         authority,
@@ -324,18 +265,27 @@ async function bootstrap(): Promise<void> {
         now: () => new Date().toISOString(),
         createStageId: () => globalThis.crypto.randomUUID(),
         acquisition: {
-          ensure: (request) =>
+          ensure: (request, options) =>
             packageState.activateAndEnsure(
               workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
                 packageJsonBytes: authority.readFileBytesSync(
                   `${request.projectRoot}/package.json`,
                 ),
               }),
+              options === undefined
+                ? undefined
+                : {
+                    ...(options.signal === undefined ? {} : { signal: options.signal }),
+                    ...(options.onRuntimeAssetProgress === undefined
+                      ? {}
+                      : { onProgress: options.onRuntimeAssetProgress }),
+                  },
             ),
         },
       });
-      partialAuthorityCloseForCleanup = () =>
-        (playgroundAuthority as PlaygroundProjectAuthority).close();
+      const playgroundAuthorityOwnership = construction.own(() =>
+        (playgroundAuthority as PlaygroundProjectAuthority).close(),
+      );
       let initialReplay = true;
       const unsubscribeCatalog = playgroundAuthority.subscribeCatalog((catalog) => {
         if (initialReplay) {
@@ -348,23 +298,7 @@ async function bootstrap(): Promise<void> {
           catalog,
         });
       });
-      partialAuthorityCloseForCleanup = async () => {
-        const failures: unknown[] = [];
-        try {
-          unsubscribeCatalog();
-        } catch (error) {
-          failures.push(error);
-        }
-        try {
-          await (playgroundAuthority as PlaygroundProjectAuthority).close();
-        } catch (error) {
-          failures.push(error);
-        }
-        if (failures.length === 1) throw failures[0];
-        if (failures.length > 1) {
-          throw new AggregateError(failures, 'Playground partial authority cleanup failed');
-        }
-      };
+      const catalogSubscriptionOwnership = construction.own(unsubscribeCatalog);
       if (initialReplay || initialPlaygroundCatalog === undefined) {
         throw new Error('Playground authority did not replay its initial catalog');
       }
@@ -375,7 +309,16 @@ async function bootstrap(): Promise<void> {
         () => runtimeAssetManager.close(),
         authority,
       );
-      finalAuthorityCloseForCleanup = closeAuthority;
+      closeAuthorityOwnership = construction.transfer(
+        [
+          catalogSubscriptionOwnership,
+          playgroundAuthorityOwnership,
+          packageStateOwnership,
+          runtimeAssetManagerOwnership,
+          authorityOwnership,
+        ],
+        closeAuthority,
+      );
     }
 
     let activeProjectRoot: string | null = null;
@@ -444,6 +387,7 @@ async function bootstrap(): Promise<void> {
                 }),
                 authority,
                 packageState,
+                runtimeAssetReader: (plan) => runtimeAssetManager.runtimeReader(plan),
                 nodeEntryWorkerUrl: config.deployment.workers.node,
                 devServerWorkerUrl: config.deployment.workers.devServer,
                 nodeWorkerRuntimeEnv,
@@ -561,6 +505,12 @@ async function bootstrap(): Promise<void> {
         });
       },
     });
+    if (closeAuthorityOwnership === undefined) {
+      throw new Error('Workbench owner close ownership was not constructed');
+    }
+    construction.transfer([closeAuthorityOwnership], () =>
+      controller.handle({ type: 'workbench:shutdown' }),
+    );
 
     const fatal = new Promise<never>((_resolve, reject) => {
       rejectOwnerLifetime = reject;
@@ -605,42 +555,9 @@ async function bootstrap(): Promise<void> {
       if (failures.length === 1) throw failures[0];
       throw new AggregateError(failures, 'Workbench owner failed and cleanup also failed');
     }
+    construction.commit();
   } catch (error) {
-    const failures: unknown[] = [error];
-    if (finalAuthorityCloseForCleanup !== null) {
-      try {
-        await finalAuthorityCloseForCleanup();
-      } catch (cleanupError) {
-        if (!failures.includes(cleanupError)) failures.push(cleanupError);
-      }
-    } else {
-      if (partialAuthorityCloseForCleanup !== null) {
-        try {
-          await partialAuthorityCloseForCleanup();
-        } catch (cleanupError) {
-          failures.push(cleanupError);
-        }
-      }
-      if (packageQuiesceForCleanup !== null) {
-        try {
-          await packageQuiesceForCleanup();
-        } catch (cleanupError) {
-          failures.push(cleanupError);
-        }
-      }
-      try {
-        await runtimeAssetManager.close();
-      } catch (cleanupError) {
-        failures.push(runtimeAssetError('close', cleanupError));
-      }
-      try {
-        assertCleanDurability(await authority.flush());
-      } catch (cleanupError) {
-        failures.push(cleanupError);
-      }
-    }
-    if (failures.length === 1) throw failures[0];
-    throw new AggregateError(failures, 'Workbench owner boot and cleanup failed');
+    return construction.rollback(error, 'Workbench owner boot and cleanup failed');
   }
 }
 

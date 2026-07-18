@@ -2,8 +2,8 @@ import type { ShadowAssetAdmin } from '@riftydev/npm-client';
 import {
   ClosedHandleError,
   ProjectBusyError,
+  type RuntimeAssetProgress,
   runtimeAssetError,
-  serializeWorkbenchOwnerError,
 } from '../workbench/errors.ts';
 import {
   type PageToPlaygroundOwnerMessage,
@@ -41,6 +41,7 @@ import type {
   PlaygroundProjectAuthority,
   PlaygroundProjectMutationKind,
 } from './playground-project-authority.ts';
+import { serializeRuntimeAssetOwnerError } from './runtime-asset-public-error.ts';
 
 type ProjectPtyInput = Extract<
   PageToWorkbenchOwnerMessage,
@@ -208,7 +209,7 @@ export function createWorkbenchOwnerController(
   };
 
   const sendFailure = (failure: unknown, opId?: string): void => {
-    const error = serializeWorkbenchOwnerError(failure);
+    const error = serializeRuntimeAssetOwnerError(failure);
     send(
       opId === undefined
         ? { type: 'workbench:failure', error }
@@ -228,8 +229,16 @@ export function createWorkbenchOwnerController(
   const closedOwnerError = (): ClosedHandleError => new ClosedHandleError('Workbench owner');
   const inactiveTokenError = (): Error => new Error('Workbench project token is not active');
   const poisonedError = (): Error => {
-    const detail = serializeWorkbenchOwnerError(poison).message;
+    const detail = serializeRuntimeAssetOwnerError(poison).message;
     return new Error(`Workbench owner lifecycle is poisoned: ${detail}`);
+  };
+
+  const cancelActiveAcquisition = (reason: unknown): void => {
+    if (materializer !== undefined) {
+      materializer.cancelActiveAcquisition(reason);
+      return;
+    }
+    playground?.authority.cancelActiveAcquisition(reason);
   };
 
   const mintProjectToken = (): OwnerProjectToken => {
@@ -240,6 +249,13 @@ export function createWorkbenchOwnerController(
     issuedTokens.add(token);
     return token;
   };
+
+  const runtimeAssetProgressSink =
+    (opId: string) =>
+    (progress: RuntimeAssetProgress): void => {
+      if (shutdownRequested) return;
+      send({ type: 'workbench:runtime-assets-progress', opId, progress });
+    };
 
   const closeProjectRuntime = (project: ActiveProject): Promise<void> => {
     project.acceptingInput = false;
@@ -310,7 +326,9 @@ export function createWorkbenchOwnerController(
       // Recompute derived identity/storage data at the controller boundary even
       // when the physical bootstrap already applied the protocol inspector.
       const definition = inspectProjectDefinitionWire(message.definition);
-      const materialized = await materializer.open(definition);
+      const materialized = await materializer.open(definition, {
+        onRuntimeAssetProgress: runtimeAssetProgressSink(message.opId),
+      });
       if (shutdownRequested) throw closedOwnerError();
 
       const token = mintProjectToken();
@@ -396,6 +414,7 @@ export function createWorkbenchOwnerController(
       opened = await playground.authority.openProject(
         localDefinition,
         message.initialTerminalState,
+        { onRuntimeAssetProgress: runtimeAssetProgressSink(message.opId) },
       );
       if (shutdownRequested) throw closedOwnerError();
       const projectRoot = opened.projectRoot;
@@ -640,9 +659,16 @@ export function createWorkbenchOwnerController(
     if (shutdownPromise !== null) return shutdownPromise;
     shutdownRequested = true;
     if (active !== null) active.acceptingInput = false;
+    let cancellationFailure: unknown;
+    try {
+      cancelActiveAcquisition(closedOwnerError());
+    } catch (error) {
+      cancellationFailure = error;
+    }
 
     shutdownPromise = enqueue(async () => {
       const failures: unknown[] = [];
+      if (cancellationFailure !== undefined) failures.push(cancellationFailure);
       const project = active;
       if (project !== null) {
         try {

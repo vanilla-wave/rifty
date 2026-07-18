@@ -351,7 +351,10 @@ describe('post-tree runtime-asset readiness uses the package FIFO', () => {
     const authority = createRuntimeAssetAwareAuthority({
       stamps,
       runtimeAssets: runtime.port,
-      captureDeferredTerminalReuse: () => true,
+      captureDeferredTerminalConsumption: () => ({
+        reuseTrustedClaim: true,
+        settle: () => {},
+      }),
       adapter: adapterWith({
         install: async () => {
           installs += 1;

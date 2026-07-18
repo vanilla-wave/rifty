@@ -45,6 +45,20 @@ export class StdinClosedError extends Error {
 
 export type RuntimeAssetStorageClass = 'opfs-persisted' | 'opfs-best-effort' | 'memory-session';
 
+export type RuntimeAssetProgress =
+  | Readonly<{
+      phase: 'cache-check' | 'fetch' | 'verify' | 'persist';
+      assetId: string;
+      assetIndex: number;
+      assetCount: number;
+    }>
+  | Readonly<{
+      phase: 'ready';
+      requiredSetDigest: string;
+      assetCount: number;
+      storageClass: RuntimeAssetStorageClass;
+    }>;
+
 export type RuntimeAssetFailurePhase =
   | 'cache-check'
   | 'fetch'

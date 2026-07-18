@@ -8,6 +8,7 @@ import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import {
   type RuntimeAssetCacheInspection,
   type RuntimeAssetFailurePhase,
+  type RuntimeAssetProgress,
   type RuntimeAssetRecovery,
   type RuntimeAssetStorageClass,
   type SerializedWorkbenchOwnerError,
@@ -134,6 +135,11 @@ export type WorkbenchOwnerToPageMessage =
       readonly projectToken: OwnerProjectToken;
     }
   | { readonly type: 'workbench:project-deleted'; readonly opId: string; readonly id: string }
+  | {
+      readonly type: 'workbench:runtime-assets-progress';
+      readonly opId: string;
+      readonly progress: RuntimeAssetProgress;
+    }
   | {
       readonly type: 'workbench:runtime-assets-inspected';
       readonly opId: string;
@@ -374,6 +380,14 @@ export function inspectWorkbenchOwnerToPageMessage(value: unknown): WorkbenchOwn
         type: message.type,
         opId: nonEmptyString(message.opId, 'project-deleted opId'),
         id: nonEmptyString(message.id, 'project-deleted id'),
+      });
+    }
+    case 'workbench:runtime-assets-progress': {
+      exactDataProperties(message, ['type', 'opId', 'progress'], 'runtime-assets-progress message');
+      return Object.freeze({
+        type: message.type,
+        opId: nonEmptyString(message.opId, 'runtime-assets-progress opId'),
+        progress: inspectRuntimeAssetProgress(message.progress),
       });
     }
     case 'workbench:runtime-assets-inspected':
@@ -721,16 +735,9 @@ function inspectRuntimeAssetInspection(value: unknown): RuntimeAssetCacheInspect
     ],
     'runtime asset cache inspection',
   );
-  const storageClass = inspection.storageClass;
-  if (
-    storageClass !== 'opfs-persisted' &&
-    storageClass !== 'opfs-best-effort' &&
-    storageClass !== 'memory-session'
-  ) {
-    throw invalid('runtime asset storage class');
-  }
+  const storageClass = runtimeAssetStorageClass(inspection.storageClass);
   return Object.freeze({
-    storageClass: storageClass as RuntimeAssetStorageClass,
+    storageClass,
     entryCount: nonNegativeInteger(inspection.entryCount, 'runtime asset entryCount'),
     storedBytes: nonNegativeInteger(inspection.storedBytes, 'runtime asset storedBytes'),
     verifiedObjectCount: nonNegativeInteger(
@@ -743,6 +750,55 @@ function inspectRuntimeAssetInspection(value: unknown): RuntimeAssetCacheInspect
     ),
     readySetCount: nonNegativeInteger(inspection.readySetCount, 'runtime asset readySetCount'),
   });
+}
+
+function inspectRuntimeAssetProgress(value: unknown): RuntimeAssetProgress {
+  const progress = record(value, 'runtime asset progress');
+  const phase = dataProperty(progress, 'phase', 'runtime asset progress');
+  if (phase === 'cache-check' || phase === 'fetch' || phase === 'verify' || phase === 'persist') {
+    exactDataProperties(
+      progress,
+      ['phase', 'assetId', 'assetIndex', 'assetCount'],
+      'runtime asset progress',
+    );
+    const assetCount = positiveInteger(progress.assetCount, 'runtime asset progress assetCount');
+    const assetIndex = nonNegativeInteger(progress.assetIndex, 'runtime asset progress assetIndex');
+    if (assetIndex >= assetCount) throw invalid('runtime asset progress assetIndex');
+    return Object.freeze({
+      phase,
+      assetId: nonEmptyString(progress.assetId, 'runtime asset progress assetId'),
+      assetIndex,
+      assetCount,
+    });
+  }
+  if (phase === 'ready') {
+    exactDataProperties(
+      progress,
+      ['phase', 'requiredSetDigest', 'assetCount', 'storageClass'],
+      'runtime asset progress',
+    );
+    const requiredSetDigest = nonEmptyString(
+      progress.requiredSetDigest,
+      'runtime asset progress requiredSetDigest',
+    );
+    if (!/^[a-f0-9]{64}$/.test(requiredSetDigest)) {
+      throw invalid('runtime asset progress requiredSetDigest');
+    }
+    return Object.freeze({
+      phase,
+      requiredSetDigest,
+      assetCount: positiveInteger(progress.assetCount, 'runtime asset progress assetCount'),
+      storageClass: runtimeAssetStorageClass(progress.storageClass),
+    });
+  }
+  throw invalid('runtime asset progress phase');
+}
+
+function runtimeAssetStorageClass(value: unknown): RuntimeAssetStorageClass {
+  if (value === 'opfs-persisted' || value === 'opfs-best-effort' || value === 'memory-session') {
+    return value;
+  }
+  throw invalid('runtime asset storage class');
 }
 
 function runtimeAssetPhase(value: unknown): RuntimeAssetFailurePhase {
@@ -843,6 +899,35 @@ function exact(value: Record<string, unknown>, expected: readonly string[], labe
   if (!exactMatch(value, expected)) throw invalid(label);
 }
 
+function exactDataProperties(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  label: string,
+): void {
+  const keys = Reflect.ownKeys(value);
+  if (
+    keys.length !== expected.length ||
+    keys.some((key) => typeof key !== 'string' || !expected.includes(key))
+  ) {
+    throw invalid(label);
+  }
+  for (const key of expected) dataProperty(value, key, label);
+}
+
+function dataProperty(value: Record<string, unknown>, key: string, label: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  if (
+    descriptor === undefined ||
+    descriptor.enumerable !== true ||
+    descriptor.get !== undefined ||
+    descriptor.set !== undefined ||
+    !Object.hasOwn(descriptor, 'value')
+  ) {
+    throw invalid(label);
+  }
+  return descriptor.value;
+}
+
 function exactMatch(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value);
   return (
@@ -919,6 +1004,11 @@ function dimension(value: unknown, label: string): number {
 
 function nonNegativeInteger(value: unknown, label: string): number {
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw invalid(label);
+  return value as number;
+}
+
+function positiveInteger(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0) throw invalid(label);
   return value as number;
 }
 

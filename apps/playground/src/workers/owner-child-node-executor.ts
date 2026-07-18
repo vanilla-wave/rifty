@@ -5,12 +5,17 @@
  * which the owner forwards into the preview registry. Spawn injected (real
  * `globalProcessManager.spawnWorker` in prod; fake in unit tests).
  */
-import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import {
+  type KernelEntryCapabilityPorts,
+  type SpawnWorkerSpec,
+  globalProcessManager,
+} from '@riftydev/kernel';
 import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { type ForegroundWritable, runForegroundChild } from '../glue/run-foreground-child.ts';
+import { type OwnerChildAdmissionAuthority, admitOwnerChild } from './owner-child-admission.ts';
 
 export function buildNodeChildSpawnSpec(
   entry: string,
@@ -24,17 +29,21 @@ export function buildNodeChildSpawnSpec(
   rows = 24,
   previewScope?: string,
   remoteFsRoot?: string,
+  capabilityPorts?: KernelEntryCapabilityPorts,
 ): SpawnWorkerSpec {
   return {
-    entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
-      kind: 'program',
-      bin: false,
-      remoteFs: true,
-      ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
-      nodeServe: true,
-      ...(previewScope === undefined ? {} : { previewScope }),
-      terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
-    }),
+    entry: {
+      ...buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+        nodeServe: true,
+        ...(previewScope === undefined ? {} : { previewScope }),
+        terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
+      }),
+      ...(capabilityPorts === undefined ? {} : { capabilityPorts }),
+    },
     argv: ['rifty', entry, ...args],
     // serve:true → kernel keeps it alive; the entry-scoped bootstrap owns the
     // run-vs-serve decision (ADR-0155) without changing observable guest env.
@@ -54,6 +63,7 @@ export interface NodeChildHandle {
   stdin(): ForegroundWritable;
   on(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
+  once(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
   send(message: unknown): unknown;
   resize(cols: number, rows: number): unknown;
   kill(signal?: string): unknown;
@@ -90,34 +100,45 @@ export function createOwnerChildNodeExecutor(
     // (mirrors owner-child-bin-executor).
     return h;
   },
+  admission?: OwnerChildAdmissionAuthority,
 ): OwnerNodeExecutor {
   // `async` so a synchronous `spawn` throw (the kind guard / host-boundary
   // failure) surfaces as a rejected promise, not a sync throw. The spawn + the
   // shared driver's listener registration run before the first suspension.
   return async (entry, args, ctx, hooks) => {
-    const handle = spawn(
-      buildNodeChildSpawnSpec(
-        entry,
-        args,
-        ctx.env,
-        ctx.cwd,
-        nodeEntryUrl,
-        nodeWorkerRuntimeEnv,
-        ctx.isTTY === true,
-        ctx.cols ?? 80,
-        ctx.rows ?? 24,
-        hooks.previewScope,
-        hooks.remoteFsRoot,
-      ),
-    );
-    // Shared foreground driver (stream/abort/exit). A server child posts
-    // `rifty:node-listening` → register a preview slot; the slot is removed on
-    // exit. (run-foreground-child owns the exit-before-pre-abort ordering.)
-    return runForegroundChild(handle, ctx, {
-      onMessage: (m) => {
-        if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports, m.previewScope);
-      },
-      onExit: () => hooks.onExit(hooks.sid),
+    return admitOwnerChild({
+      ...(admission === undefined ? {} : { authority: admission }),
+      ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
+      spawn: (capabilityPorts) =>
+        spawn(
+          buildNodeChildSpawnSpec(
+            entry,
+            args,
+            ctx.env,
+            ctx.cwd,
+            nodeEntryUrl,
+            nodeWorkerRuntimeEnv,
+            ctx.isTTY === true,
+            ctx.cols ?? 80,
+            ctx.rows ?? 24,
+            hooks.previewScope,
+            hooks.remoteFsRoot,
+            capabilityPorts,
+          ),
+        ),
+      // Shared foreground driver (stream/abort/exit). A server child posts
+      // `rifty:node-listening` → register a preview slot; the slot is removed on
+      // exit. (run-foreground-child owns the exit-before-pre-abort ordering.)
+      supervise: (handle, lifecycle) =>
+        runForegroundChild(handle, ctx, {
+          onMessage: (m) => {
+            if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports, m.previewScope);
+          },
+          onExit: () => hooks.onExit(hooks.sid),
+          onTerminate: () => {
+            void lifecycle.dispose();
+          },
+        }),
     });
   };
 }

@@ -21,6 +21,7 @@ describe('Workbench owner bootstrap materializer composition', () => {
     const materializer = {
       open,
       delete: vi.fn(async () => undefined),
+      cancelActiveAcquisition: vi.fn(),
       close: vi.fn(async () => undefined),
     } satisfies ProjectMaterializer;
     const wrapped = withOwnerClose(
@@ -41,5 +42,10 @@ describe('Workbench owner bootstrap materializer composition', () => {
     expect(open.mock.calls[0]?.[0]).toBe(definition);
     expect(open.mock.calls[0]?.[1]).toBe(options);
     expect(open.mock.calls[0]?.[1]?.onRuntimeAssetProgress).toBe(callback);
+
+    const reason = new Error('owner-local cancellation');
+    wrapped.cancelActiveAcquisition(reason);
+    expect(materializer.cancelActiveAcquisition).toHaveBeenCalledOnce();
+    expect(materializer.cancelActiveAcquisition).toHaveBeenCalledWith(reason);
   });
 });

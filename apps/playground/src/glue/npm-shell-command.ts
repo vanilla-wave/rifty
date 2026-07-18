@@ -37,6 +37,8 @@ import {
   type InstallOptions,
   type InstallResult,
   type RegistryClient,
+  ShadowAssetInstallError,
+  type ShadowAssetProgress,
   canonicalEddyRequestKey,
   eddyRequestFromPackageJson,
   install as realInstall,
@@ -55,6 +57,11 @@ import {
   type PackageInstallExecution,
   createPackageAcquisitionAuthority,
 } from '../workers/package-acquisition-authority.ts';
+import {
+  finalizePackageInstallResult,
+  postTreePackageFinalizationFailure,
+} from '../workers/package-install-finalizer.ts';
+import { runtimeAssetPublicError } from '../workers/runtime-asset-public-error.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import {
   type InstallStampAuthority,
@@ -85,6 +92,10 @@ export interface NpmShellCommandDeps {
   readonly install?: InstallFn;
   /** Host-owned all-target namespace preflight, before the installer links bytes. */
   readonly assertPortablePaths?: InstallOptions['assertPortablePaths'];
+  /** One install's exact runtime-asset installer/progress group. */
+  readonly shadowAssets?: InstallOptions['shadowAssets'];
+  /** Owner epoch fence immediately before npm-client can first mutate the tree. */
+  readonly onTreeMutationStart?: InstallOptions['onTreeMutationStart'];
   /** Translate a fully parsed terminal invocation into the owner's storage namespace. */
   readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
   /** Pre-install tree preparation (e.g. the from-scratch clean-start
@@ -191,6 +202,7 @@ interface ProjectPackageJson {
   readonly dependencies: Record<string, string>;
   readonly devDependencies: Record<string, string>;
   readonly optionalDependencies: Record<string, string>;
+  readonly formatting: 'compact' | 'pretty';
 }
 
 const DEFAULT_PROJECT_NAME = 'rifty-project';
@@ -360,6 +372,7 @@ async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJso
       dependencies: {},
       devDependencies: {},
       optionalDependencies: {},
+      formatting: 'pretty',
     };
   }
   const text = await vfs.readFileText(path);
@@ -385,6 +398,7 @@ async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJso
     dependencies,
     devDependencies,
     optionalDependencies,
+    formatting: text.trim().includes('\n') ? 'pretty' : 'compact',
   };
 }
 
@@ -439,7 +453,9 @@ async function writePackageJson(vfs: Vfs, cwd: string, pkg: ProjectPackageJson):
   const path = `${cwd}/package.json`;
   // Stable formatting: re-installs with an unchanged dep set produce
   // byte-identical output, so the shell's diff-before-write keeps mtimes stable.
-  await vfs.writeFile(path, `${JSON.stringify(pkg.raw, null, 2)}\n`);
+  const text =
+    pkg.formatting === 'compact' ? JSON.stringify(pkg.raw) : JSON.stringify(pkg.raw, null, 2);
+  await vfs.writeFile(path, `${text}\n`);
 }
 
 async function runPackageScript(
@@ -579,7 +595,13 @@ export function createNpmPackageAcquisitionAuthority(
                 throw new Error('terminal package acquisition requires its shell context');
               })())
             : { cwd: request.project.root, env: {}, stdout: sink, stderr: sink };
-        return executeNpmInstallOperation(parsed.request, context, deps, execution);
+        const installed = await executeNpmInstallOperation(
+          parsed.request,
+          context,
+          deps,
+          execution,
+        );
+        return finalizePackageInstallResult(installed, { root: request.project.root });
       },
       reset: async () => {
         throw new NotImplementedError('package-acquisition.reset');
@@ -604,6 +626,11 @@ async function runInstall(
   }
 
   const root = normalizePath(ctx.cwd);
+  let acceptsRuntimeAssetProgress = true;
+  const onRuntimeAssetProgress = (progress: ShadowAssetProgress): void => {
+    if (!acceptsRuntimeAssetProgress || ctx.signal?.aborted) return;
+    reportRuntimeAssetProgress(ctx, progress);
+  };
   try {
     await packages.dispatch({
       type: 'terminal-install',
@@ -619,6 +646,9 @@ async function runInstall(
       argv: specs,
       context: ctx,
       onPromotion: (result) => reportInstallStampPromotion(ctx, result),
+      ...(packages.supportsRuntimeAssetReadiness === true
+        ? { runtimeAssets: { signal: ctx.signal, onProgress: onRuntimeAssetProgress } }
+        : {}),
     });
     return 0;
   } catch (error) {
@@ -636,6 +666,8 @@ async function runInstall(
       return 1;
     }
     return reportInstallError(error instanceof PackageAcquisitionError ? error.cause : error, ctx);
+  } finally {
+    acceptsRuntimeAssetProgress = false;
   }
 }
 
@@ -716,6 +748,7 @@ export async function executeNpmInstallOperation(
       dependencies,
       devDependencies,
       optionalDependencies: pkg.optionalDependencies,
+      formatting: pkg.formatting,
     };
     await writePackageJson(deps.vfs, ctx.cwd, next);
   }
@@ -770,6 +803,8 @@ export async function executeNpmInstallOperation(
       cwd: ctx.cwd,
       registry: deps.registry,
       ...(deps.assertPortablePaths ? { assertPortablePaths: deps.assertPortablePaths } : {}),
+      ...(deps.shadowAssets ? { shadowAssets: deps.shadowAssets } : {}),
+      ...(deps.onTreeMutationStart ? { onTreeMutationStart: deps.onTreeMutationStart } : {}),
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
       ...(prefer ? { prefer } : {}),
       ...(resolverClosureHash ? { resolverClosureHash } : {}),
@@ -847,6 +882,22 @@ export async function executeNpmInstallOperation(
     );
     return { result, packageJsonText: packageJsonTextAtInstall };
   } catch (err) {
+    if (err instanceof ShadowAssetInstallError) {
+      try {
+        if (!(await deps.vfs.exists(packageJsonPath))) {
+          throw new Error('post-tree install has no package.json');
+        }
+        const packageJsonText = await deps.vfs.readFileText(packageJsonPath);
+        return {
+          status: 'post-tree-failure',
+          treeResult: err.treeResult,
+          packageJsonText,
+          error: err,
+        };
+      } catch (outcomeError) {
+        throw postTreePackageFinalizationFailure(err, outcomeError);
+      }
+    }
     if (pkgSpecs.length > 0) {
       if (previousPackageJson) {
         await deps.vfs.writeFile(packageJsonPath, previousPackageJson);
@@ -945,11 +996,28 @@ function reportInstallStampPromotion(
   }
 }
 
+function reportRuntimeAssetProgress(ctx: CommandContext, progress: ShadowAssetProgress): void {
+  if (progress.phase === 'ready') {
+    ctx.stdout.write(
+      `npm: runtime assets ready: ${progress.assetCount} (${progress.storageClass})\n`,
+    );
+    return;
+  }
+  ctx.stdout.write(
+    `npm: runtime asset ${progress.assetIndex + 1}/${progress.assetCount} ${progress.phase}: ${progress.assetId}\n`,
+  );
+}
+
 /**
  * Map known installer error codes to single-line stderr output. Unknown errors
  * fall through with the raw message so the operator still sees what happened.
  */
 function reportInstallError(err: unknown, ctx: CommandContext): number {
+  const assetError = runtimeAssetPublicError(err);
+  if (assetError !== null) {
+    ctx.stderr.write(`npm: install failed: ${assetError.message} (${assetError.recovery})\n`);
+    return 1;
+  }
   const e = err as Error & {
     code?: string;
     packageName?: string;

@@ -56,6 +56,10 @@ export interface PackageMutationExecutorOptions {
   readonly fs: FsSync;
   readonly assertPortablePaths: (paths: readonly string[]) => void;
   readonly activeProject: () => PackageAcquisitionProject;
+  readonly beginTreeMutation?: (
+    project: PackageAcquisitionProject,
+    acquisitionToken: object,
+  ) => void;
 }
 
 /** One adapter from every owner writer into the package-acquisition FIFO. */
@@ -99,24 +103,59 @@ export function createPackageMutationExecutor(
       intents: PackageMutationIntents,
       mutate: () => Promise<T>,
       check?: PackageEditPreflight<T>,
-    ) =>
-      settled<T>(
+    ) => {
+      let resolvedIntents: readonly VfsMutationIntent[] | null = null;
+      return settled<T>(
         (settle) =>
           options.packages.dispatch({
             type: 'guarded-mutation',
             ...(check ? { preflight: () => preflight(check, settle) } : {}),
-            resolveTransitions: () =>
-              transitions(typeof intents === 'function' ? intents() : intents),
+            resolveTransitions: () => {
+              resolvedIntents = typeof intents === 'function' ? intents() : intents;
+              return transitions(resolvedIntents);
+            },
+            ...(options.beginTreeMutation
+              ? {
+                  beginTreeMutation: (acquisitionToken: object): void => {
+                    if (resolvedIntents === null) {
+                      throw new Error('guarded package mutation has no resolved intent set');
+                    }
+                    const project = options.activeProject();
+                    if (
+                      classifyVfsMutationIntentsPackageImpact(resolvedIntents, project.root) ===
+                      'tree'
+                    ) {
+                      options.beginTreeMutation?.(project, acquisitionToken);
+                    }
+                  },
+                }
+              : {}),
             mutate: async () => settle(await mutate()),
           }),
         'guarded package mutation did not settle',
-      ),
+      );
+    },
     reset: (target, prepare) =>
       options.packages.dispatch({
         type: 'reset',
         target,
         prepare,
         resolveTransitions: () => transitions([{ kind: 'rm', path: target.root }]),
+        ...(options.beginTreeMutation
+          ? {
+              beginTreeMutation: (acquisitionToken: object): void => {
+                const project = options.activeProject();
+                if (
+                  classifyVfsMutationIntentsPackageImpact(
+                    [{ kind: 'rm', path: target.root }],
+                    project.root,
+                  ) === 'tree'
+                ) {
+                  options.beginTreeMutation?.(project, acquisitionToken);
+                }
+              },
+            }
+          : {}),
       }),
     packageJsonEdit: <T>(
       target: PackageMutationTarget,

@@ -5,6 +5,7 @@ import {
   ClosedHandleError,
   ProjectBusyError,
   type RuntimeAssetCacheInspection,
+  type RuntimeAssetProgress,
   isRetryableProjectClosePreflightError,
 } from './errors.ts';
 import {
@@ -69,10 +70,17 @@ export interface WorkbenchRuntimeAssets {
   clear(): Promise<RuntimeAssetCacheInspection>;
 }
 
+export interface WorkbenchProjectOpenOptions {
+  readonly onRuntimeAssetProgress?: (progress: RuntimeAssetProgress) => void;
+}
+
 export interface Workbench {
   readonly runtimeAssets: WorkbenchRuntimeAssets;
   snapshot(): WorkbenchSnapshot;
-  openProject<TReady>(definition: ProjectDefinition<TReady>): Promise<ProjectSession<TReady>>;
+  openProject<TReady>(
+    definition: ProjectDefinition<TReady>,
+    options?: WorkbenchProjectOpenOptions,
+  ): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
   close(): Promise<void>;
 }
@@ -86,6 +94,28 @@ export interface WorkbenchInternals {
   rawSession<TReady>(session: ProjectSession<TReady>): ProjectSession<TReady>;
   registerBeforeClose(session: ProjectSession<unknown>, hook: () => Promise<void>): void;
   deleteProjectWithOwner(id: string, deleteOwner: () => Promise<void>): Promise<void>;
+}
+
+export function ownWorkbenchProjectOpenOptions(value: unknown): WorkbenchProjectOpenOptions {
+  if (value === undefined) return Object.freeze({});
+  const options = exactPlainObject(value, 'Workbench project open options');
+  const keys = Reflect.ownKeys(options);
+  if (keys.some((key) => key !== 'onRuntimeAssetProgress') || keys.length > 1) {
+    throw new TypeError('Workbench project open options have invalid keys');
+  }
+  if (keys.length === 0) return Object.freeze({});
+  const callback = enumerableDataProperty(
+    options,
+    'onRuntimeAssetProgress',
+    'Workbench project open options.onRuntimeAssetProgress',
+  );
+  if (callback === undefined) return Object.freeze({});
+  if (typeof callback !== 'function') {
+    throw new TypeError('Workbench project open options.onRuntimeAssetProgress must be a function');
+  }
+  return Object.freeze({
+    onRuntimeAssetProgress: callback as (progress: RuntimeAssetProgress) => void,
+  });
 }
 
 const workbenchInternals = new WeakMap<object, WorkbenchInternals>();
@@ -139,6 +169,7 @@ export interface OpenWorkbenchDependencies {
     readonly owner: WorkbenchOwnerHandle;
     readonly definition: ProjectDefinition<TReady>;
     readonly inspected: InspectedProjectDefinition<TReady>;
+    readonly options: WorkbenchProjectOpenOptions;
   }) => Promise<ProjectSession<TReady>>;
   readonly timers: ServiceWorkerControlTimers;
 }
@@ -349,6 +380,7 @@ function createWorkbench(
 
   const openTrackedProject = <TReady>(
     definition: ProjectDefinition<TReady>,
+    options: WorkbenchProjectOpenOptions,
     explicitOwnerOpen?: (
       inspected: InspectedProjectDefinition<TReady>,
     ) => Promise<ProjectSession<TReady>>,
@@ -364,8 +396,8 @@ function createWorkbench(
     const ownerPromise = Promise.resolve().then(() => {
       if (explicitOwnerOpen !== undefined) return explicitOwnerOpen(inspected);
       return openOwnerProject === undefined
-        ? owner.openProject(inspected)
-        : openOwnerProject({ owner, definition, inspected });
+        ? owner.openProject(inspected, options)
+        : openOwnerProject({ owner, definition, inspected, options });
     });
     const opening = { kind: 'opening', ownerPromise } as const;
     state = opening;
@@ -460,8 +492,17 @@ function createWorkbench(
     runtimeAssets,
     snapshot: () => snapshot,
 
-    openProject<TReady>(definition: ProjectDefinition<TReady>): Promise<ProjectSession<TReady>> {
-      return openTrackedProject(definition);
+    openProject<TReady>(
+      definition: ProjectDefinition<TReady>,
+      options?: WorkbenchProjectOpenOptions,
+    ): Promise<ProjectSession<TReady>> {
+      let ownedOptions: WorkbenchProjectOpenOptions;
+      try {
+        ownedOptions = ownWorkbenchProjectOpenOptions(options);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      return openTrackedProject(definition, ownedOptions);
     },
 
     deleteProject(id: string): Promise<void> {
@@ -521,7 +562,7 @@ function createWorkbench(
         if (typeof openOwner !== 'function') {
           return Promise.reject(new TypeError('Workbench owner opener must be a function'));
         }
-        return openTrackedProject(definition, openOwner);
+        return openTrackedProject(definition, Object.freeze({}), openOwner);
       },
       rawSession<TReady>(session: ProjectSession<TReady>): ProjectSession<TReady> {
         const raw =
@@ -800,6 +841,33 @@ function record(value: unknown, path: string): Record<string, unknown> {
     throw new TypeError(`${path} must be an object`);
   }
   return value as Record<string, unknown>;
+}
+
+function exactPlainObject(value: unknown, path: string): Record<string, unknown> {
+  const object = record(value, path);
+  const prototype = Object.getPrototypeOf(object);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError(`${path} must be a plain object`);
+  }
+  return object;
+}
+
+function enumerableDataProperty(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  if (
+    descriptor === undefined ||
+    descriptor.enumerable !== true ||
+    descriptor.get !== undefined ||
+    descriptor.set !== undefined ||
+    !Object.hasOwn(descriptor, 'value')
+  ) {
+    throw new TypeError(`${path} must be an enumerable data property`);
+  }
+  return descriptor.value;
 }
 
 function nonEmptyString(value: unknown, path: string): string {

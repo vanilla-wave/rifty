@@ -23,6 +23,7 @@ export type {
   RuntimeAssetCacheInspection,
   RuntimeAssetFailure,
   RuntimeAssetFailurePhase,
+  RuntimeAssetProgress,
   RuntimeAssetRecovery,
   RuntimeAssetStorageClass,
 } from './errors.ts';
@@ -30,6 +31,7 @@ export type {
   StoragePersistence,
   Workbench,
   WorkbenchOptions,
+  WorkbenchProjectOpenOptions,
   WorkbenchSnapshot,
   WorkbenchStorageSnapshot,
   WorkbenchRuntimeAssets,

@@ -3,7 +3,12 @@ import { SW_FRAME_VERSION, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { SnapshotFs } from '../../glue/snapshot-fs.ts';
 import { createVfsCommitCoordinator } from '../../glue/vfs-commit-coordinator.ts';
-import { ClosedHandleError, DirtyProjectDocumentError, ProjectBusyError } from '../errors.ts';
+import {
+  ClosedHandleError,
+  DirtyProjectDocumentError,
+  ProjectBusyError,
+  type RuntimeAssetProgress,
+} from '../errors.ts';
 import {
   type OpenWorkbenchDependencies,
   type Workbench,
@@ -116,6 +121,7 @@ type ExpectedProjectTerminalSnapshot = {
 
 type ExpectedPlaygroundProjectOpenOptions = {
   readonly initialTerminalState?: ProjectTerminalSnapshot;
+  readonly onRuntimeAssetProgress?: (progress: RuntimeAssetProgress) => void;
 };
 
 type ExpectedPlaygroundTerminalStateRestoreInput = {

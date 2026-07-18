@@ -5,7 +5,11 @@ import {
   ShadowAssetInstallError,
 } from '@riftydev/npm-client';
 import { describe, expect, it, vi } from 'vitest';
-import { RuntimeAssetError, deserializeWorkbenchOwnerError } from '../workbench/errors.ts';
+import {
+  RuntimeAssetError,
+  deserializeWorkbenchOwnerError,
+  runtimeAssetMessage,
+} from '../workbench/errors.ts';
 import type { PlaygroundOwnerToPageMessage } from '../workbench/internal/playground-owner-protocol.ts';
 import {
   definePlaygroundProject,
@@ -159,7 +163,7 @@ function expectPublicRuntimeAssetFailure(
     error: {
       name: 'RuntimeAssetError',
       code: 'ESHADOWASSET',
-      message: `Runtime asset ${expected.phase === 'ready' ? 'readiness' : expected.phase} failed`,
+      message: runtimeAssetMessage(expected.phase),
       phase: expected.phase,
       recovery: expected.recovery,
       ...(expected.requiredSetDigest === undefined
@@ -209,9 +213,11 @@ function harness(options: { readonly generateProjectToken?: () => string } = {})
   const materializerClose = vi.fn(async () => {
     events.push('materializer-close');
   });
+  const cancelActiveAcquisition = vi.fn();
   const materializer: ProjectMaterializer = {
     open: materializerOpen,
     delete: materializerDelete,
+    cancelActiveAcquisition,
     close: materializerClose,
   };
 
@@ -251,6 +257,7 @@ function harness(options: { readonly generateProjectToken?: () => string } = {})
     materializerOpen,
     materializerDelete,
     materializerClose,
+    cancelActiveAcquisition,
     runtimeAssets,
     createProject,
     runtime(index = 0): RuntimeRecord {
@@ -551,6 +558,7 @@ describe('Workbench owner controller', () => {
       openProject: vi.fn(async () => {
         throw raw.error;
       }),
+      cancelActiveAcquisition: vi.fn(),
     } as unknown as PlaygroundProjectAuthority;
     const controller = createWorkbenchOwnerController({
       closeAuthority: async () => {},
@@ -646,6 +654,7 @@ describe('Workbench owner controller', () => {
       openProject: vi.fn(async () => openedProject),
       recordMutation: vi.fn(async () => {}),
       rename: vi.fn(async () => ({ active: null, scratch: null, projects: [] })),
+      cancelActiveAcquisition: vi.fn(),
     } as unknown as PlaygroundProjectAuthority;
     const coreMessages: WorkbenchOwnerToPageMessage[] = [];
     const companionMessages: PlaygroundOwnerToPageMessage[] = [];

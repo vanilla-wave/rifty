@@ -1,5 +1,6 @@
 import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import type { RuntimeAssetCacheInspection } from './errors.ts';
+import type { WorkbenchProjectOpenOptions } from './open-workbench.ts';
 import type {
   PlaygroundProjectCatalog,
   PlaygroundProjectOpenOptions,
@@ -64,6 +65,7 @@ export interface RawWorkspaceOwnerHandle {
   storageSnapshot(): unknown;
   openProject<TReady>(
     definition: InspectedProjectDefinition<TReady>,
+    options?: WorkbenchProjectOpenOptions,
   ): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
   inspectRuntimeAssets(): Promise<RuntimeAssetCacheInspection>;
@@ -76,6 +78,7 @@ export interface RawWorkspaceOwnerHandle {
 export interface WorkbenchOwnerHandle {
   openProject<TReady>(
     definition: InspectedProjectDefinition<TReady>,
+    options?: WorkbenchProjectOpenOptions,
   ): Promise<ProjectSession<TReady>>;
   deleteProject(id: string): Promise<void>;
   inspectRuntimeAssets(): Promise<RuntimeAssetCacheInspection>;
@@ -186,8 +189,9 @@ function createSemanticOwner(raw: RawWorkspaceOwnerHandle): WorkbenchOwnerHandle
   return Object.freeze({
     openProject<TReady>(
       definition: InspectedProjectDefinition<TReady>,
+      options?: WorkbenchProjectOpenOptions,
     ): Promise<ProjectSession<TReady>> {
-      return raw.openProject(definition);
+      return raw.openProject(definition, options);
     },
 
     deleteProject(id: string): Promise<void> {

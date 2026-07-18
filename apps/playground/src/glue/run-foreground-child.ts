@@ -48,12 +48,40 @@ export interface ForegroundChildOpts {
   readonly onMessage?: (message: unknown) => void;
   /** Run once on exit, BEFORE the promise resolves (e.g. preview-registry remove). */
   readonly onExit?: () => void;
+  /** Fence owner-private child resources immediately before the first kill request. */
+  readonly onTerminate?: () => void;
 }
 
 const decoder = new TextDecoder();
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+export function createSupervisedPromise<T>(
+  attach: (resolve: (value: T) => void, reject: (error: unknown) => void) => void,
+): Promise<T> {
+  let synchronousFailure: { readonly error: unknown } | undefined;
+  const pending = new Promise<T>((resolve, reject) => {
+    let attaching = true;
+    const rejectDuringSupervision = (error: unknown): void => {
+      if (attaching && synchronousFailure === undefined) synchronousFailure = { error };
+      reject(error);
+    };
+    try {
+      attach(resolve, rejectDuringSupervision);
+    } catch (error) {
+      synchronousFailure = { error };
+      reject(error);
+    } finally {
+      attaching = false;
+    }
+  });
+  if (synchronousFailure !== undefined) {
+    void pending.catch(() => {});
+    throw synchronousFailure.error;
+  }
+  return pending;
 }
 
 function writeChildStdin(destination: ForegroundWritable, chunk: Uint8Array): Promise<void> {
@@ -148,7 +176,7 @@ export function runForegroundChild(
   ctx: CommandContext,
   opts: ForegroundChildOpts = {},
 ): Promise<ProcessExit> {
-  return new Promise<ProcessExit>((resolve, reject) => {
+  return createSupervisedPromise<ProcessExit>((resolve, reject) => {
     // Stop surfacing output once the run is aborted OR has exited: chunks the
     // kernel buffers between `kill` and teardown must not land in the terminal
     // AFTER the foreground run already resolved (shell exit 130).
@@ -213,6 +241,11 @@ export function runForegroundChild(
     const requestKill = (): void => {
       if (killSent || exited) return;
       killSent = true;
+      try {
+        opts.onTerminate?.();
+      } catch (error) {
+        lifecycleErrors.push(asError(error));
+      }
       try {
         if (handle.kill('SIGTERM') === false && !exited) {
           failWithoutExit(new Error('foreground child closed without an exit event'));
