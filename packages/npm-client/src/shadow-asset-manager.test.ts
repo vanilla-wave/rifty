@@ -6,6 +6,7 @@ import { canonicalShadowDigest } from './canonical-shadow-json.ts';
 import type { InstallTreeResult } from './installer.ts';
 import { RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL } from './linker.ts';
 import { RegistryClient } from './registry.ts';
+import type { LockfileAppliedShadowSubstitution } from './shadow-asset-lockfile-trace.ts';
 import {
   EMPTY_SHADOW_ASSET_PLAN,
   appliedBuiltinShadowSubstitution,
@@ -212,7 +213,18 @@ describe('ShadowAssetManager', () => {
     const applied = appliedBuiltinShadowSubstitution('esbuild', '^0.28.0', '0.28.0');
     if (applied === null) throw new Error('fixture expected the builtin esbuild substitution');
     const required = planBuiltinShadowAssets([applied]);
-    const treeResult = (trace: ShadowAssetPlan['substitutions']): InstallTreeResult => ({
+    const requiredTrace: readonly LockfileAppliedShadowSubstitution[] = [
+      {
+        publicName: applied.publicName,
+        requestedRange: applied.requestedRange,
+        resolvedPublicVersion: applied.resolvedPublicVersion,
+        runtimeAdapterId: applied.runtimeAdapterId,
+        substitutionId: applied.substitutionId,
+      },
+    ];
+    const treeResult = (
+      trace: readonly LockfileAppliedShadowSubstitution[],
+    ): InstallTreeResult => ({
       packages: [],
       lockfile: {
         name: 'root',
@@ -244,7 +256,7 @@ describe('ShadowAssetManager', () => {
     expect(
       () =>
         new ShadowAssetInstallError(
-          treeResult(required.substitutions),
+          treeResult(requiredTrace),
           EMPTY_SHADOW_ASSET_PLAN,
           failure(EMPTY_SHADOW_ASSET_PLAN),
         ),
@@ -252,11 +264,60 @@ describe('ShadowAssetManager', () => {
     expect(
       () =>
         new ShadowAssetInstallError(
-          treeResult([...required.substitutions, ...required.substitutions]),
+          treeResult([...requiredTrace, ...requiredTrace]),
           required,
           failure(required),
         ),
     ).toThrow(/canonical/i);
+  });
+
+  it.each([
+    ['missing', {}],
+    [
+      'wrong-version',
+      { 'node_modules/@esbuild/wasi-preview1': { version: '0.28.1', dependencies: {} } },
+    ],
+  ])('rejects post-tree evidence with a %s materialized recipe target', (_label, packages) => {
+    const applied = appliedBuiltinShadowSubstitution('esbuild', '^0.28.0', '0.28.0');
+    if (applied === null) throw new Error('fixture expected the builtin esbuild substitution');
+    const plan = planBuiltinShadowAssets([applied]);
+    const treeResult: InstallTreeResult = {
+      packages: [],
+      lockfile: {
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages,
+        rifty: {
+          shadowSubstitutions: {
+            protocol: RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL,
+            applied: [
+              {
+                publicName: applied.publicName,
+                requestedRange: applied.requestedRange,
+                resolvedPublicVersion: applied.resolvedPublicVersion,
+                runtimeAdapterId: applied.runtimeAdapterId,
+                substitutionId: applied.substitutionId,
+              },
+            ],
+          },
+        },
+      },
+      conflicts: [],
+      provenance: { resolution: 'metadata', packages: [] },
+    };
+
+    expect(
+      () =>
+        new ShadowAssetInstallError(treeResult, plan, {
+          message: 'asset persistence failed',
+          requiredSetDigest: plan.requiredSetDigest,
+          phase: 'persist',
+          transports: [],
+          recovery: 'clear-and-retry',
+        }),
+    ).toThrow(/materialized.*target/i);
   });
 
   it('joins the real STD RegistryClient/tarball-cache adapter to MemoryVfs readiness', async () => {
