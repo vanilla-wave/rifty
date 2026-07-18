@@ -5,7 +5,7 @@ title: Workbench runtime-asset retention, GC, and quota recovery
 created: 2026-07-17
 why: the owner-private content store retains verified objects and receipts until whole-cache clear, so version updates and more substituted packages can accumulate bytes with no selective safe reclamation
 user_story: As a browser-IDE user, I want old runtime assets reclaimed before they exhaust origin quota without deleting bytes used by my runnable projects, but today recovery is an all-cache clear followed by redownload
-blocked_by: [distribution/workbench-runtime-asset-storage]
+blocked_by: []
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/backlog/vfs/storage-pressure-and-eviction-ux.md, docs/backlog/playground/project-node-modules-quota-gc.md]
 code: [packages/workbench/src]
 ---

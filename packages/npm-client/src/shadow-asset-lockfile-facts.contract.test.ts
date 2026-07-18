@@ -238,10 +238,7 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
         'node_modules/@esbuild/wasi-preview1': { version: '0.28.0', dependencies: {} },
       },
     ],
-    [
-      'public dependency edge',
-      { '': { version: '1.0.0', dependencies: { esbuild: '0.28.0' } } },
-    ],
+    ['public dependency edge', { '': { version: '1.0.0', dependencies: { esbuild: '0.28.0' } } }],
     [
       'baked-target dependency edge',
       {
