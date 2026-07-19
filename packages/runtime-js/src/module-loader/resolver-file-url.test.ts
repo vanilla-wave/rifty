@@ -18,6 +18,29 @@ describe('resolver file: URL imports', () => {
     await expect(loader.import('FiLe:///app/mod.mjs', '/app/entry.mjs')).resolves.toBe(ns);
   });
 
+  it('keeps CJS require()/require.resolve() path-only for URL-like specifiers', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/app/real.js': 'module.exports = 42;\n',
+      '/app/main.js': `
+        const out = [];
+        const urlish = ['file:///app/real.js', 'FiLe:///app/real.js', 'data:text/javascript,1'];
+        for (const specifier of urlish) {
+          try { require(specifier); out.push('LOADED'); }
+          catch (error) { out.push(error.code); }
+          try { require.resolve(specifier); out.push('FOUND'); }
+          catch (error) { out.push(error.code); }
+        }
+        module.exports = out;
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/app' });
+
+    expect(loader.require('./main.js', '/app/entry.js')).toEqual(
+      Array.from({ length: 6 }, () => 'MODULE_NOT_FOUND'),
+    );
+  });
+
   it.each(['data:', 'DaTa:'])(
     'keeps unsupported %s URLs on the same loud boundary',
     async (scheme) => {

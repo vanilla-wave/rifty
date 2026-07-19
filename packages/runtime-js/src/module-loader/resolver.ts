@@ -162,7 +162,11 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
         }
         return { id: `node:${name}`, kind: 'builtin', source: '', packageRoot: null };
       }
-      if (hasURLScheme(specifier, 'data')) {
+      // URL specifiers are an ESM-only language. Node CJS require()/resolve()
+      // treats any URL-like string as a path/package name → MODULE_NOT_FOUND
+      // (parity modules/require-url-specifier-strings), so both scheme branches
+      // stay behind the esm flag and CJS falls through to the bare walk.
+      if (opts.esm && hasURLScheme(specifier, 'data')) {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
           specifier,
@@ -170,7 +174,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
           opts.fromFile,
         );
       }
-      if (hasURLScheme(specifier, 'file')) {
+      if (opts.esm && hasURLScheme(specifier, 'file')) {
         const filePath = fileUrlToVfsPath(specifier, opts.fromFile);
         const resolved = resolveAsFileOrDir(vfs, pkgCache, filePath);
         if (resolved === null) {

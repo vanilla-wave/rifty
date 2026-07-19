@@ -19,6 +19,13 @@
 
 ### Fixed
 
+- **CJS specifiers stay path-only.** `require()`/`require.resolve()` of a
+  URL-like string (`file:`, `FiLe:`, `data:`, any scheme) now falls through to
+  Node's `MODULE_NOT_FOUND` instead of resolving or throwing
+  `UNSUPPORTED_PROTOCOL`; the resolver's URL-scheme dispatch is gated to ESM,
+  where WHATWG case-insensitive semantics apply (parity
+  `modules/require-url-specifier-strings`).
+
 - Node-entry program and worker-thread bootstrap metadata can carry one
   validated host-only remote-FS root. Nested `worker_threads` and recursive
   Node entries inherit it while guest argv, cwd, and environment stay public.

@@ -429,6 +429,8 @@ export function isMarkedAsUncloneable(object: unknown): boolean {
 
 function normalizeWorkerScript(script: WorkerScript): string {
   const raw = typeof script === 'string' ? script : script.href;
+  // TODO(backlog: runtime-js/worker-string-file-url-err-worker-path): Node
+  // throws ERR_WORKER_PATH for string file: URLs; only URL objects decode.
   if (raw.startsWith('file://')) return fileURLToPathPosix(raw);
   return raw;
 }
