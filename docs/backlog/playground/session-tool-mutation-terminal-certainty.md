@@ -5,7 +5,7 @@ title: Session-tool mutations retain one terminal outcome across transport timeo
 created: 2026-07-19
 why: SCM and archive requests lose their page correlation at 60 seconds while the owner may still apply the operation, and duplicate request ids are rejected instead of replaying the terminal result
 user_story: As a developer staging, committing, discarding, or importing a project under load, I want one exact result that survives a delayed response, but today an applied mutation can be shown as failed and a retry can conflict or duplicate intent.
-epic: workbench-stabilization
+epic: workbench-fault-honesty
 blocked_by: []
 sources: [PR-153-post-merge-audit, ADR-0278, fault-classes]
 code: [apps/playground/src/workbench/internal/playground-session-tools-transport.ts, apps/playground/src/workers/playground-session-tools-owner.ts, apps/playground/src/workbench/internal/playground-session-tool-coordinator.ts]

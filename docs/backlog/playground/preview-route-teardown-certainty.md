@@ -5,7 +5,7 @@ title: Preview registry retains route authority until teardown is certain
 created: 2026-07-19
 why: the registry deletes a mounted route handle before calling teardown, so a thrown service-worker cleanup loses the only exact teardown authority while the stale route may remain live
 user_story: As a developer switching or closing a project, I want every old preview route gone before the next environment opens, but today the UI can forget a route that the service worker still serves.
-epic: workbench-stabilization
+epic: workbench-fault-honesty
 blocked_by: []
 sources: [PR-153-post-merge-audit, ADR-0271, ADR-0278, fault-classes]
 code: [apps/playground/src/workbench/internal/playground-preview-registry.ts, apps/playground/src/glue/preview-port-wiring.ts, apps/playground/src/glue/preview-bridge-wiring.ts]

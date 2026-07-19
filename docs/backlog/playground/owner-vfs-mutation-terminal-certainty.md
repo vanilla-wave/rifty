@@ -5,7 +5,7 @@ title: Owner VFS mutations retain one terminal outcome across transport timeout
 created: 2026-07-19
 why: the page drops a conditional VFS commit correlation at its ACK timeout, so a write can apply later while the editor has already received a definitive failure
 user_story: As a developer saving a file under a slow owner, I want the save to converge to the exact committed or rejected result, but today the UI can report failure before a valid late terminal arrives.
-epic: workbench-stabilization
+epic: workbench-fault-honesty
 blocked_by: []
 sources: [PR-153-post-merge-audit, ADR-0273, fault-classes]
 code: [apps/playground/src/glue/owner-vfs-client.ts, apps/playground/src/workers/owner-vfs-authority.ts, apps/playground/src/workbench/project-documents.ts]

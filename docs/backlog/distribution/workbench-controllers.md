@@ -23,7 +23,7 @@ lifecycle as Node servers and Node CLIs. A Vite host resolves asset URLs in its
 own composition root; there is no `@riftydev/workbench-vite` package and no
 Vite plugin/query/env dependency inside Workbench.
 
-`workbench-stabilization` owns the four linked live-lifecycle fault contracts;
+`workbench-fault-honesty` owns the four linked live-lifecycle fault contracts;
 they are prerequisites to this item's package extraction and acceptance seal,
 not a second controller implementation.
 

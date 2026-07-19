@@ -5,7 +5,7 @@ title: Session-tool persistence failures degrade Workbench health
 created: 2026-07-19
 why: SCM and archive operations can fail owner persistence without projecting that failure into Workbench health, while document saves and explicit awaitDurability already do
 user_story: As a developer whose browser storage fails during a Git action or archive import, I want Workbench to warn that reload may lose the change, but today the session-tool error can leave global health showing healthy.
-epic: workbench-stabilization
+epic: workbench-fault-honesty
 blocked_by: []
 sources: [PR-153-post-merge-audit, ADR-0278, fault-honest-opfs-persistence]
 code: [apps/playground/src/workbench/internal/playground-workbench.ts, apps/playground/src/workbench/internal/playground-session-tools-transport.ts, apps/playground/src/workers/playground-session-tools-owner.ts, apps/playground/src/workers/playground-archive-integration.ts, apps/playground/src/workbench/workbench-browser-owner.ts]
