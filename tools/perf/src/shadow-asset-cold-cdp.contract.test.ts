@@ -15,6 +15,12 @@ class FakeCdpSession {
     | Error
     | Promise<{ readonly body: string; readonly base64Encoded: boolean }>
   >();
+  readonly streams = new Map<
+    string,
+    | { readonly bufferedData: string }
+    | Error
+    | Array<{ readonly bufferedData: string } | Error>
+  >();
   readonly #handlers = new Map<string, Set<CdpHandler>>();
 
   on(event: string, handler: CdpHandler) {
@@ -34,8 +40,15 @@ class FakeCdpSession {
   async send(method: string, params?: Record<string, unknown>) {
     this.calls.push(params === undefined ? { method } : { method, params });
     if (method === 'Network.enable') return {};
-    if (method !== 'Network.getResponseBody') throw new Error(`unexpected CDP command ${method}`);
     const requestId = String(params?.requestId);
+    if (method === 'Network.streamResourceContent') {
+      const configured = this.streams.get(requestId);
+      const result = Array.isArray(configured) ? configured.shift() : configured;
+      if (result instanceof Error) throw result;
+      if (result === undefined) throw new Error(`streaming unsupported for ${requestId}`);
+      return result;
+    }
+    if (method !== 'Network.getResponseBody') throw new Error(`unexpected CDP command ${method}`);
     const result = this.bodies.get(requestId);
     if (result instanceof Error) throw result;
     if (result === undefined) throw new Error(`missing body for ${requestId}`);
@@ -124,18 +137,41 @@ describe('standard shadow-asset CDP response recorder', () => {
 
   it('enables Network and records exact decoded text and binary response-body bytes', async () => {
     const session = new FakeCdpSession();
-    const text = '{"name":"esbuild-wasm"}';
+    const textStart = '{"name":';
+    const textEnd = '"esbuild-wasm"}';
+    const text = `${textStart}${textEnd}`;
     const binary = Uint8Array.from([0, 255, 1, 254]);
-    session.bodies.set('packument', { body: text, base64Encoded: false });
-    session.bodies.set('tarball', {
-      body: Buffer.from(binary).toString('base64'),
-      base64Encoded: true,
+    session.streams.set('packument', {
+      bufferedData: Buffer.from(textStart).toString('base64'),
+    });
+    session.streams.set('tarball', {
+      bufferedData: Buffer.from(binary.slice(0, 2)).toString('base64'),
     });
 
     const recorder = await startCdpResponseRecorder(fakePage(session));
     session.emit('Network.responseReceived', cdpResponse('packument', packumentUrl));
+    session.emit('Network.dataReceived', {
+      requestId: 'packument',
+      dataLength: Buffer.byteLength(textStart),
+    });
+    await Promise.resolve();
+    session.emit('Network.dataReceived', {
+      requestId: 'packument',
+      dataLength: Buffer.byteLength(textEnd),
+      data: Buffer.from(textEnd).toString('base64'),
+    });
     session.emit('Network.loadingFinished', { requestId: 'packument' });
     session.emit('Network.responseReceived', cdpResponse('tarball', tarballUrl));
+    session.emit('Network.dataReceived', {
+      requestId: 'tarball',
+      dataLength: 2,
+    });
+    await Promise.resolve();
+    session.emit('Network.dataReceived', {
+      requestId: 'tarball',
+      dataLength: 2,
+      data: Buffer.from(binary.slice(2)).toString('base64'),
+    });
     session.emit('Network.loadingFinished', { requestId: 'tarball' });
 
     await expect(recorder.stop()).resolves.toEqual([
@@ -163,10 +199,79 @@ describe('standard shadow-asset CDP response recorder', () => {
     ]);
     expect(session.calls).toEqual([
       { method: 'Network.enable' },
-      { method: 'Network.getResponseBody', params: { requestId: 'packument' } },
-      { method: 'Network.getResponseBody', params: { requestId: 'tarball' } },
+      { method: 'Network.streamResourceContent', params: { requestId: 'packument' } },
+      { method: 'Network.streamResourceContent', params: { requestId: 'tarball' } },
       { method: 'detach' },
     ]);
+  });
+
+  it('refuses a streamed response whose dataReceived chunk omits data', async () => {
+    const session = new FakeCdpSession();
+    session.streams.set('missing-data', { bufferedData: '' });
+    session.bodies.set('missing-data', { body: 'hidden fallback', base64Encoded: false });
+    const recorder = await startCdpResponseRecorder(fakePage(session));
+
+    session.emit('Network.responseReceived', cdpResponse('missing-data', packumentUrl));
+    await Promise.resolve();
+    await Promise.resolve();
+    session.emit('Network.dataReceived', { requestId: 'missing-data', dataLength: 4 });
+    session.emit('Network.loadingFinished', { requestId: 'missing-data' });
+
+    await expect(recorder.stop()).resolves.toEqual([
+      expect.objectContaining({
+        complete: false,
+        bodyBytes: 0,
+        error: 'Network.streamResourceContent failed: Network.dataReceived omitted streamed data',
+      }),
+    ]);
+    expect(session.calls).not.toContainEqual({
+      method: 'Network.getResponseBody',
+      params: { requestId: 'missing-data' },
+    });
+  });
+
+  it('retries stream setup at responseReceived when requestWillBeSent was too early', async () => {
+    const session = new FakeCdpSession();
+    const text = '{"name":"esbuild-wasm"}';
+    session.streams.set('stream-race', [
+      new Error('Request with the provided ID does not exists'),
+      { bufferedData: '' },
+    ]);
+    const recorder = await startCdpResponseRecorder(fakePage(session));
+
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'stream-race',
+      request: { url: packumentUrl },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    session.emit('Network.responseReceived', cdpResponse('stream-race', packumentUrl));
+    await Promise.resolve();
+    await Promise.resolve();
+    session.emit('Network.dataReceived', {
+      requestId: 'stream-race',
+      dataLength: Buffer.byteLength(text),
+      data: Buffer.from(text).toString('base64'),
+    });
+    session.emit('Network.loadingFinished', { requestId: 'stream-race' });
+
+    await expect(recorder.stop()).resolves.toEqual([
+      expect.objectContaining({
+        complete: true,
+        bodyBytes: Buffer.byteLength(text),
+        bodyText: text,
+      }),
+    ]);
+    expect(session.calls).toContainEqual({
+      method: 'Network.streamResourceContent',
+      params: { requestId: 'stream-race' },
+    });
+    expect(
+      session.calls.filter(
+        ({ method, params }) =>
+          method === 'Network.streamResourceContent' && params?.requestId === 'stream-race',
+      ),
+    ).toHaveLength(2);
   });
 
   it('records requestServedFromCache and prefetch-cache provenance', async () => {
@@ -287,11 +392,15 @@ describe('standard shadow-asset CDP response recorder', () => {
     await Promise.resolve();
     expect(session.calls).toEqual([
       { method: 'Network.enable' },
-      { method: 'Network.getResponseBody', params: { requestId: 'pending' } },
+      { method: 'Network.streamResourceContent', params: { requestId: 'pending' } },
     ]);
 
     resolveBody?.({ body: '{}', base64Encoded: false });
     await expect(firstStop).resolves.toEqual(await secondStop);
+    expect(session.calls).toContainEqual({
+      method: 'Network.getResponseBody',
+      params: { requestId: 'pending' },
+    });
     expect(session.calls.at(-1)).toEqual({ method: 'detach' });
     expect(session.calls.filter(({ method }) => method === 'detach')).toHaveLength(1);
   });
