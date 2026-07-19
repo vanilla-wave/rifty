@@ -1084,6 +1084,16 @@ function exactDist(packument, source, label) {
   }
 }
 
+function tarballSourceCandidates(registryUrl, distTarballUrl) {
+  const dist = new URL(distTarballUrl);
+  const proxy = new URL(registryUrl);
+  const proxyBasePath = proxy.pathname.replace(/\/+$/u, '');
+  proxy.pathname = `${proxyBasePath}${dist.pathname}`;
+  proxy.search = dist.search;
+  proxy.hash = '';
+  return new Set([dist.href, proxy.href]);
+}
+
 function sourceResponse(record, source) {
   return {
     source,
@@ -1127,7 +1137,16 @@ export function finalizeStandardAssetSourceResponses({ registryUrl, source, capt
   if (tarballUrls.size !== 1) {
     return refuse(`${label} successful packuments disagree on tarball URL`);
   }
-  const [expectedTarballUrl] = tarballUrls;
+  const [distTarballUrl] = tarballUrls;
+  const candidates = tarballSourceCandidates(registryUrl, distTarballUrl);
+  const matchedCandidates = new Set(
+    captured.filter((record) => candidates.has(record?.url)).map((record) => record.url),
+  );
+  if (matchedCandidates.size > 1) {
+    return refuse(`${label} matched multiple tarball source candidates`);
+  }
+  if (matchedCandidates.size === 0) return refuse(`${label} has no exact tarball response`);
+  const [expectedTarballUrl] = matchedCandidates;
   const tarballs = captured.filter((record) => record?.url === expectedTarballUrl);
   if (tarballs.length === 0) return refuse(`${label} has no exact tarball response`);
   if (!tarballs.some(successfulTarball)) {
