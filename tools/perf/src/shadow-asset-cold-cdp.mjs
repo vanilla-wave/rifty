@@ -96,20 +96,481 @@ function cdpSessionPort(session) {
   return session;
 }
 
+const NETWORK_EVENTS = Object.freeze([
+  'Network.requestWillBeSent',
+  'Network.responseReceived',
+  'Network.loadingFinished',
+  'Network.loadingFailed',
+]);
+const NETWORK_BODY_BUFFERS = Object.freeze({
+  maxTotalBufferSize: 256 * 1024 * 1024,
+  maxResourceBufferSize: 128 * 1024 * 1024,
+});
+const DISCOVERED_NETWORK_TARGET_TYPES = new Set(['shared_worker', 'service_worker']);
+
+function targetSessionError(value) {
+  const message =
+    value !== null && typeof value === 'object' && typeof value.message === 'string'
+      ? value.message
+      : 'unknown target protocol error';
+  return new Error(`CDP target session failed: ${message}`);
+}
+
+class TargetMessageSession {
+  #detached = false;
+  #failure;
+  #listeners = new Map();
+  #nextCommandId = 0;
+  #pending = new Map();
+  #root;
+  #sessionId;
+
+  constructor(root, sessionId, failure) {
+    this.#root = root;
+    this.#sessionId = sessionId;
+    this.#failure = failure;
+  }
+
+  get sessionId() {
+    return this.#sessionId;
+  }
+
+  on(event, listener) {
+    const listeners = this.#listeners.get(event) ?? new Set();
+    listeners.add(listener);
+    this.#listeners.set(event, listeners);
+  }
+
+  off(event, listener) {
+    this.#listeners.get(event)?.delete(listener);
+  }
+
+  send(method, params) {
+    if (this.#detached) return Promise.reject(new Error('CDP target session is detached'));
+    const id = ++this.#nextCommandId;
+    return new Promise((resolve, reject) => {
+      this.#pending.set(id, { reject, resolve });
+      void this.#root
+        .send('Target.sendMessageToTarget', {
+          sessionId: this.#sessionId,
+          message: JSON.stringify({ id, method, params: params ?? {} }),
+        })
+        .catch((error) => {
+          this.#pending.delete(id);
+          reject(error);
+        });
+    });
+  }
+
+  receive(message) {
+    if (this.#detached) return;
+    let value;
+    try {
+      value = JSON.parse(message);
+    } catch (error) {
+      this.#fail(new Error('CDP target emitted malformed protocol JSON', { cause: error }));
+      return;
+    }
+    if (Number.isSafeInteger(value?.id)) {
+      const pending = this.#pending.get(value.id);
+      if (pending === undefined) return;
+      this.#pending.delete(value.id);
+      if (value.error !== undefined) pending.reject(targetSessionError(value.error));
+      else pending.resolve(value.result ?? {});
+      return;
+    }
+    if (typeof value?.method !== 'string') {
+      this.#fail(new Error('CDP target emitted a protocol message without method or id'));
+      return;
+    }
+    for (const listener of this.#listeners.get(value.method) ?? []) {
+      try {
+        listener(value.params ?? {});
+      } catch (error) {
+        this.#fail(error);
+      }
+    }
+  }
+
+  markDetached() {
+    if (this.#detached) return;
+    this.#detached = true;
+    const error = new Error('CDP target detached before pending commands settled');
+    for (const pending of this.#pending.values()) pending.reject(error);
+    this.#pending.clear();
+  }
+
+  async detach() {
+    if (this.#detached) return;
+    await this.#root.send('Target.detachFromTarget', { sessionId: this.#sessionId });
+    this.markDetached();
+  }
+
+  #fail(error) {
+    const normalized = error instanceof Error ? error : new Error(String(error));
+    this.#failure(normalized);
+    this.markDetached();
+  }
+}
+
+function namespacedRequestId(sessionKey, requestId) {
+  return `${sessionKey}\u0000${requestId}`;
+}
+
+class BrowserTargetNetworkSession {
+  #attachmentOperations = new Set();
+  #attachmentTargets = new Set();
+  #contextId;
+  #failures = [];
+  #listeners = new Map();
+  #networkEnabled = false;
+  #networkEnabledSessions = new WeakSet();
+  #pageSession;
+  #requestRoutes = new Map();
+  #root;
+  #sessionBindings = new Map();
+  #sessions = new Map();
+  #sessionsByTarget = new Map();
+  #stopping = false;
+  #waitingForDebugger = new Set();
+
+  constructor({ contextId, pageSession, pageTargetId, root }) {
+    this.#contextId = contextId;
+    this.#pageSession = pageSession;
+    this.#root = root;
+    this.#addSession(`page:${pageTargetId}`, pageSession);
+  }
+
+  async start() {
+    this.#pageSession.on('Target.attachedToTarget', this.#onAutoAttachedTarget);
+    this.#pageSession.on('Target.detachedFromTarget', this.#onDetachedFromTarget);
+    this.#pageSession.on('Target.receivedMessageFromTarget', this.#onTargetMessage);
+    this.#root.on('Target.targetCreated', this.#onTargetCreated);
+    this.#root.on('Target.targetDestroyed', this.#onTargetDestroyed);
+    this.#root.on('Target.detachedFromTarget', this.#onDetachedFromTarget);
+    this.#root.on('Target.receivedMessageFromTarget', this.#onTargetMessage);
+    await this.#pageSession.send('Target.setAutoAttach', {
+      autoAttach: true,
+      waitForDebuggerOnStart: true,
+      flatten: false,
+      filter: [{ type: 'worker' }, { exclude: true }],
+    });
+    await this.#root.send('Target.setDiscoverTargets', { discover: true });
+    const result = await this.#root.send('Target.getTargets');
+    for (const targetInfo of result?.targetInfos ?? []) this.#scheduleAttachment(targetInfo);
+    await this.#drainAttachments();
+    this.#throwFailures('CDP target discovery failed');
+    return this;
+  }
+
+  on(event, listener) {
+    const listeners = this.#listeners.get(event) ?? new Set();
+    listeners.add(listener);
+    this.#listeners.set(event, listeners);
+  }
+
+  off(event, listener) {
+    this.#listeners.get(event)?.delete(listener);
+  }
+
+  async send(method, params) {
+    if (method === 'Network.enable') {
+      this.#networkEnabled = true;
+      await this.#drainAttachments();
+      await Promise.all(
+        [...this.#sessions.values()].map((session) => this.#enableSession(session)),
+      );
+      await this.#drainAttachments();
+      this.#throwFailures('CDP target Network enable failed');
+      return {};
+    }
+    if (method === 'Network.getResponseBody') {
+      const route = this.#requestRoutes.get(params?.requestId);
+      if (route === undefined) throw new Error('CDP response body request has no target route');
+      return route.session.send(method, { requestId: route.requestId });
+    }
+    throw new Error(`unsupported multiplexed CDP command ${method}`);
+  }
+
+  async detach() {
+    if (this.#stopping) return;
+    this.#stopping = true;
+    this.#root.off('Target.targetCreated', this.#onTargetCreated);
+    this.#root.off('Target.targetDestroyed', this.#onTargetDestroyed);
+    const cleanupFailures = [];
+    await this.#drainAttachments();
+    for (const session of [...this.#waitingForDebugger]) {
+      try {
+        await this.#resumeSession(session);
+      } catch (error) {
+        cleanupFailures.push(error);
+      }
+    }
+    try {
+      await this.#pageSession.send('Target.setAutoAttach', {
+        autoAttach: false,
+        waitForDebuggerOnStart: false,
+        flatten: false,
+      });
+    } catch (error) {
+      cleanupFailures.push(error);
+    }
+    try {
+      await this.#root.send('Target.setDiscoverTargets', { discover: false });
+    } catch (error) {
+      cleanupFailures.push(error);
+    }
+    for (const [key, session] of this.#sessions) {
+      if (session === this.#pageSession) continue;
+      try {
+        await session.detach();
+      } catch (error) {
+        cleanupFailures.push(new Error(`failed to detach CDP target ${key}`, { cause: error }));
+      }
+    }
+    this.#pageSession.off('Target.attachedToTarget', this.#onAutoAttachedTarget);
+    this.#pageSession.off('Target.detachedFromTarget', this.#onDetachedFromTarget);
+    this.#pageSession.off('Target.receivedMessageFromTarget', this.#onTargetMessage);
+    this.#root.off('Target.detachedFromTarget', this.#onDetachedFromTarget);
+    this.#root.off('Target.receivedMessageFromTarget', this.#onTargetMessage);
+    try {
+      await this.#pageSession.detach();
+    } catch (error) {
+      cleanupFailures.push(error);
+    }
+    try {
+      await this.#root.detach();
+    } catch (error) {
+      cleanupFailures.push(error);
+    }
+    cleanupFailures.push(...this.#failures);
+    if (cleanupFailures.length > 0) {
+      throw new AggregateError(cleanupFailures, 'CDP target recorder cleanup failed');
+    }
+  }
+
+  #addSession(key, session) {
+    if (this.#sessions.has(key)) return;
+    this.#sessions.set(key, session);
+    const bindings = new Map();
+    for (const event of NETWORK_EVENTS) {
+      const binding = (payload) => {
+        if (typeof payload?.requestId !== 'string') return;
+        const requestId = namespacedRequestId(key, payload.requestId);
+        this.#requestRoutes.set(requestId, {
+          requestId: payload.requestId,
+          session,
+        });
+        const routed = { ...payload, rawRequestId: payload.requestId, requestId };
+        for (const listener of this.#listeners.get(event) ?? []) listener(routed);
+      };
+      bindings.set(event, binding);
+      session.on(event, binding);
+    }
+    this.#sessionBindings.set(session, bindings);
+  }
+
+  #removeSession(key, session) {
+    const bindings = this.#sessionBindings.get(session);
+    if (bindings !== undefined) {
+      for (const [event, binding] of bindings) session.off(event, binding);
+      this.#sessionBindings.delete(session);
+    }
+    this.#waitingForDebugger.delete(session);
+    this.#sessions.delete(key);
+  }
+
+  async #enableSession(session) {
+    if (this.#networkEnabledSessions.has(session)) {
+      await this.#resumeSession(session);
+      return;
+    }
+    let failure;
+    try {
+      await session.send('Network.enable', NETWORK_BODY_BUFFERS);
+      this.#networkEnabledSessions.add(session);
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      await this.#resumeSession(session);
+    } catch (error) {
+      failure =
+        failure === undefined
+          ? error
+          : new AggregateError([failure, error], 'CDP worker setup and resume failed');
+    }
+    if (failure !== undefined) throw failure;
+  }
+
+  async #resumeSession(session) {
+    if (!this.#waitingForDebugger.delete(session)) return;
+    await session.send('Runtime.runIfWaitingForDebugger');
+  }
+
+  #scheduleAttachment(targetInfo) {
+    if (
+      this.#stopping ||
+      targetInfo?.browserContextId !== this.#contextId ||
+      !DISCOVERED_NETWORK_TARGET_TYPES.has(targetInfo?.type) ||
+      typeof targetInfo?.targetId !== 'string' ||
+      this.#sessionsByTarget.has(targetInfo.targetId) ||
+      this.#attachmentTargets.has(targetInfo.targetId)
+    ) {
+      return;
+    }
+    const targetId = targetInfo.targetId;
+    this.#attachmentTargets.add(targetId);
+    const operation = (async () => {
+      const attached = await this.#root.send('Target.attachToTarget', {
+        targetId,
+        flatten: false,
+      });
+      if (typeof attached?.sessionId !== 'string') {
+        throw new Error(`CDP target ${targetId} attachment omitted sessionId`);
+      }
+      const session = new TargetMessageSession(this.#root, attached.sessionId, (error) =>
+        this.#failures.push(error),
+      );
+      this.#sessionsByTarget.set(targetId, session);
+      this.#addSession(`target:${targetId}`, session);
+      if (this.#networkEnabled) await this.#enableSession(session);
+    })()
+      .catch((error) => {
+        this.#failures.push(
+          new Error(`failed to attach CDP network target ${targetId}`, { cause: error }),
+        );
+      })
+      .finally(() => {
+        this.#attachmentOperations.delete(operation);
+        this.#attachmentTargets.delete(targetId);
+      });
+    this.#attachmentOperations.add(operation);
+  }
+
+  async #drainAttachments() {
+    while (this.#attachmentOperations.size > 0) {
+      await Promise.all([...this.#attachmentOperations]);
+    }
+  }
+
+  #throwFailures(message) {
+    if (this.#failures.length === 0) return;
+    throw new AggregateError([...this.#failures], message);
+  }
+
+  #onTargetCreated = (event) => this.#scheduleAttachment(event?.targetInfo);
+
+  #onAutoAttachedTarget = (event) => {
+    const targetInfo = event?.targetInfo;
+    if (
+      this.#stopping ||
+      targetInfo?.type !== 'worker' ||
+      typeof targetInfo?.targetId !== 'string' ||
+      typeof event?.sessionId !== 'string' ||
+      this.#sessionsByTarget.has(targetInfo.targetId)
+    ) {
+      return;
+    }
+    const targetId = targetInfo.targetId;
+    const session = new TargetMessageSession(this.#pageSession, event.sessionId, (error) =>
+      this.#failures.push(error),
+    );
+    this.#sessionsByTarget.set(targetId, session);
+    this.#addSession(`target:${targetId}`, session);
+    if (event?.waitingForDebugger === true) this.#waitingForDebugger.add(session);
+    if (!this.#networkEnabled) return;
+    const operation = this.#enableSession(session)
+      .catch((error) => {
+        this.#failures.push(
+          new Error(`failed to enable auto-attached Worker target ${targetId}`, { cause: error }),
+        );
+      })
+      .finally(() => this.#attachmentOperations.delete(operation));
+    this.#attachmentOperations.add(operation);
+  };
+
+  #onTargetDestroyed = (event) => {
+    const targetId = event?.targetId;
+    if (typeof targetId !== 'string') return;
+    const session = this.#sessionsByTarget.get(targetId);
+    if (session === undefined) return;
+    this.#sessionsByTarget.delete(targetId);
+    this.#removeSession(`target:${targetId}`, session);
+    session.markDetached();
+  };
+
+  #onDetachedFromTarget = (event) => {
+    if (typeof event?.sessionId !== 'string') return;
+    for (const [targetId, session] of this.#sessionsByTarget) {
+      if (session.sessionId !== event.sessionId) continue;
+      this.#sessionsByTarget.delete(targetId);
+      this.#removeSession(`target:${targetId}`, session);
+      session.markDetached();
+      break;
+    }
+  };
+
+  #onTargetMessage = (event) => {
+    if (typeof event?.sessionId !== 'string' || typeof event?.message !== 'string') return;
+    for (const session of this.#sessionsByTarget.values()) {
+      if (session.sessionId === event.sessionId) {
+        session.receive(event.message);
+        return;
+      }
+    }
+  };
+}
+
+async function cdpNetworkSession(page) {
+  const context = typeof page?.context === 'function' ? page.context() : null;
+  if (context === null || typeof context.newCDPSession !== 'function') {
+    throw new TypeError('Playwright page must expose context().newCDPSession()');
+  }
+  const pageSession = cdpSessionPort(await context.newCDPSession(page));
+  const browser = typeof context.browser === 'function' ? context.browser() : null;
+  if (browser === null || typeof browser?.newBrowserCDPSession !== 'function') return pageSession;
+
+  let target;
+  let root;
+  let multiplexed;
+  try {
+    target = await pageSession.send('Target.getTargetInfo');
+    root = cdpSessionPort(await browser.newBrowserCDPSession());
+    const targetInfo = target?.targetInfo;
+    if (
+      typeof targetInfo?.targetId !== 'string' ||
+      typeof targetInfo?.browserContextId !== 'string'
+    ) {
+      throw new Error('page CDP target omitted browser-context identity');
+    }
+    multiplexed = new BrowserTargetNetworkSession({
+      contextId: targetInfo.browserContextId,
+      pageSession,
+      pageTargetId: targetInfo.targetId,
+      root,
+    });
+    return await multiplexed.start();
+  } catch (error) {
+    if (multiplexed !== undefined) await multiplexed.detach().catch(() => {});
+    else {
+      await root?.detach().catch(() => {});
+      await pageSession.detach().catch(() => {});
+    }
+    throw error;
+  }
+}
+
 /**
  * Record complete CDP response bodies without projecting away retries,
  * redirects, or failures. stop() drains every body command before detaching.
  */
 export async function startCdpResponseRecorder(page, options = {}) {
-  const context = typeof page?.context === 'function' ? page.context() : null;
-  if (context === null || typeof context.newCDPSession !== 'function') {
-    throw new TypeError('Playwright page must expose context().newCDPSession()');
-  }
   const captureUrl = options.captureUrl ?? (() => true);
   if (typeof captureUrl !== 'function') {
     throw new TypeError('CDP response recorder captureUrl must be a function');
   }
-  const session = cdpSessionPort(await context.newCDPSession(page));
+  const session = cdpSessionPort(await cdpNetworkSession(page));
   const captured = [];
   const active = new Map();
   const requestUrls = new Map();
@@ -127,6 +588,9 @@ export async function startCdpResponseRecorder(page, options = {}) {
     delete record.bodyText;
     appendError(record, message);
   };
+
+  const publicRequestId = (event) =>
+    typeof event?.rawRequestId === 'string' ? event.rawRequestId : event.requestId;
 
   const track = (requestId, url) => {
     if (tracked.has(requestId)) return true;
@@ -157,7 +621,7 @@ export async function startCdpResponseRecorder(page, options = {}) {
             'response lifecycle was replaced before Network.loadingFinished/loadingFailed',
           );
         }
-        const record = responseRecord(requestId, redirect);
+        const record = responseRecord(publicRequestId(event), redirect);
         retainIncomplete(
           record,
           'redirect response body is unavailable through an unambiguous CDP lifecycle',
@@ -179,7 +643,7 @@ export async function startCdpResponseRecorder(page, options = {}) {
         'response lifecycle was replaced before Network.loadingFinished/loadingFailed',
       );
     }
-    const record = responseRecord(event.requestId, event.response);
+    const record = responseRecord(publicRequestId(event), event.response);
     captured.push(record);
     active.set(event.requestId, record);
     responseMetadata.add(record);
@@ -206,7 +670,7 @@ export async function startCdpResponseRecorder(page, options = {}) {
     if (!tracked.has(requestId)) return;
     let record = active.get(requestId);
     if (record === undefined) {
-      record = responseRecord(requestId, { url: requestUrls.get(requestId) });
+      record = responseRecord(publicRequestId(event), { url: requestUrls.get(requestId) });
       captured.push(record);
     }
     active.delete(requestId);
@@ -221,7 +685,7 @@ export async function startCdpResponseRecorder(page, options = {}) {
     if (!tracked.has(requestId)) return;
     let record = active.get(requestId);
     if (record === undefined) {
-      record = responseRecord(requestId, { url: requestUrls.get(requestId) });
+      record = responseRecord(publicRequestId(event), { url: requestUrls.get(requestId) });
       captured.push(record);
     }
     active.delete(requestId);
