@@ -519,6 +519,64 @@ describe('standard shadow-asset CDP response recorder', () => {
     expect(session.calls.at(-1)).toEqual({ method: 'detach' });
     expect(session.calls.filter(({ method }) => method === 'detach')).toHaveLength(1);
   });
+
+  it('waits for the selected active request terminal event without blocking on sibling traffic', async () => {
+    const session = new FakeCdpSession();
+    const exactPostData = JSON.stringify({
+      dependencies: { 'esbuild-wasm': '0.28.0' },
+      optionalDependencies: {},
+    });
+    session.streams.set('exact', { bufferedData: Buffer.from('bundle').toString('base64') });
+    session.streams.set('ordinary', { bufferedData: '' });
+    const recorder = await startCdpResponseRecorder(fakePage(session), {
+      awaitTerminalRequest: (request: Record<string, unknown>) =>
+        request.postData === exactPostData,
+      captureUrl: (url: string) => url === 'https://eddy.example/resolve',
+      terminalDrainTimeoutMs: 1_000,
+    });
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'ordinary',
+      request: {
+        url: 'https://eddy.example/resolve',
+        method: 'POST',
+        postData: JSON.stringify({ dependencies: { vite: '7.3.6' } }),
+      },
+    });
+    session.emit(
+      'Network.responseReceived',
+      cdpResponse('ordinary', 'https://eddy.example/resolve'),
+    );
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'exact',
+      request: {
+        url: 'https://eddy.example/resolve',
+        method: 'POST',
+        postData: exactPostData,
+      },
+    });
+    session.emit(
+      'Network.responseReceived',
+      cdpResponse('exact', 'https://eddy.example/resolve'),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const stopping = recorder.stop();
+    await Promise.resolve();
+    expect(session.calls).not.toContainEqual({ method: 'detach' });
+
+    session.emit('Network.dataReceived', {
+      requestId: 'exact',
+      dataLength: Buffer.byteLength('bundle'),
+    });
+    session.emit('Network.loadingFinished', { requestId: 'exact' });
+
+    await expect(stopping).resolves.toEqual([
+      expect.objectContaining({ requestId: 'ordinary', complete: false }),
+      expect.objectContaining({ requestId: 'exact', complete: true }),
+    ]);
+    expect(session.calls.at(-1)).toEqual({ method: 'detach' });
+  });
 });
 
 const registryUrl = 'https://registry.example/npm-registry';
