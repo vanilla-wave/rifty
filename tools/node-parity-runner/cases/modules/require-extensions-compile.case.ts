@@ -1,17 +1,16 @@
 import type { ParityCase } from '../../src/types.ts';
 
-// Vite's CJS config loader temporarily replaces the .js extension hook and
-// feeds Rolldown's bundled output through Module._compile. The original source
-// is intentionally invalid CJS so success proves the hook, not the file, ran.
+// Package loaders temporarily replace the .js extension hook and feed generated
+// output through Module._compile. Invalid original source proves the hook ran.
 const c: ParityCase = {
   setup: {
     files: {
-      'vite.config.js': 'export default { source: "original" };\n',
+      'config.js': 'export default { source: "original" };\n',
       'dep.js': 'module.exports = "dep";\n',
     },
   },
   code: `
-    const target = require.resolve('./vite.config.js');
+    const target = require.resolve('./config.js');
     const defaultLoader = require.extensions['.js'];
     require.extensions['.js'] = (module, filename) => {
       if (filename === target) {
@@ -25,7 +24,7 @@ const c: ParityCase = {
     };
     delete require.cache[target];
     try {
-      const loaded = require('./vite.config.js');
+      const loaded = require('./config.js');
       console.log(loaded.source + ':' + loaded.dep);
     } finally {
       require.extensions['.js'] = defaultLoader;

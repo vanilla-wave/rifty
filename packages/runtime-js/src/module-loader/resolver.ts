@@ -1,6 +1,12 @@
 import type { FsSync } from '@riftydev/vfs';
 import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { ensureRuntimeJsBuiltinsRegistered, isBuiltinSpecifier } from '../builtins/index.ts';
+import {
+  URLConstructor,
+  fileURLToPathPosix,
+  hasEncodedPathSeparator,
+} from '../internal/posix-file-url.ts';
+import { hasURLScheme } from '../internal/url-scheme.ts';
 import { ModuleLoadError } from './errors.ts';
 import {
   type TsconfigPathResolution,
@@ -156,7 +162,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
         }
         return { id: `node:${name}`, kind: 'builtin', source: '', packageRoot: null };
       }
-      if (specifier.startsWith('data:')) {
+      if (hasURLScheme(specifier, 'data')) {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
           specifier,
@@ -164,7 +170,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
           opts.fromFile,
         );
       }
-      if (specifier.startsWith('file:')) {
+      if (hasURLScheme(specifier, 'file')) {
         const filePath = fileUrlToVfsPath(specifier, opts.fromFile);
         const resolved = resolveAsFileOrDir(vfs, pkgCache, filePath);
         if (resolved === null) {
@@ -252,7 +258,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
 function fileUrlToVfsPath(specifier: string, fromFile: string): string {
   let url: URL;
   try {
-    url = new URL(specifier);
+    url = new URLConstructor(specifier);
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
     throw new ModuleLoadError(
@@ -270,15 +276,14 @@ function fileUrlToVfsPath(specifier: string, fromFile: string): string {
       fromFile,
     );
   }
-  if (url.host !== '' && url.host !== 'localhost') {
-    throw new ModuleLoadError(
-      'UNSUPPORTED_PROTOCOL',
-      specifier,
-      `file:// host '${url.host}' is not supported in the VFS resolver.`,
-      fromFile,
-    );
+  if (hasEncodedPathSeparator(url.pathname, true)) {
+    const error = new TypeError(
+      `Invalid module "${url.pathname}" must not include encoded "/" or "\\" characters imported from ${fromFile}`,
+    ) as TypeError & { code: string };
+    error.code = 'ERR_INVALID_MODULE_SPECIFIER';
+    throw error;
   }
-  const pathname = decodeURIComponent(url.pathname);
+  const pathname = fileURLToPathPosix(url);
   return normalizePath(pathname.startsWith('/') ? pathname : `/${pathname}`);
 }
 

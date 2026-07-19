@@ -12,6 +12,9 @@
  * registered itself).
  */
 import { NotImplementedError, isBuiltinSpecifier, listBuiltins } from '@riftydev/io';
+import { isAbsolute } from '@riftydev/vfs';
+import { fileURLToPathPosix } from '../internal/posix-file-url.ts';
+import { hasURLScheme } from '../internal/url-scheme.ts';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 
 interface RequireFn {
@@ -39,22 +42,23 @@ export function createRequire(from: string | URL): RequireFn {
       'no loader registered — runtime-js worker bootstrap missing',
     );
   }
-  const fromPath = typeof from === 'string' ? stringToPath(from) : urlToPath(from);
+  const fromPath = createRequirePath(from);
   return impl(fromPath) as RequireFn;
 }
 
-function stringToPath(value: string): string {
-  if (!value.startsWith('file:')) return value;
+function createRequirePath(value: string | URL): string {
   try {
-    return urlToPath(new URL(value));
+    if (typeof value !== 'string') return fileURLToPathPosix(value);
+    if (hasURLScheme(value, 'file')) return fileURLToPathPosix(value);
+    if (isAbsolute(value)) return value;
   } catch {
-    return value;
+    // Node presents every invalid createRequire base through one public code.
   }
-}
-
-function urlToPath(url: URL): string {
-  if (url.protocol === 'file:') return decodeURIComponent(url.pathname);
-  return url.href;
+  const error = new TypeError(
+    'The argument filename must be a file URL object, file URL string, or absolute path string',
+  ) as TypeError & { code: string };
+  error.code = 'ERR_INVALID_ARG_VALUE';
+  throw error;
 }
 
 export function builtinModules(): string[] {
