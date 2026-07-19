@@ -7,8 +7,12 @@
 - A competing tab now gets a directed occupied-workspace screen instead of an
   editable-looking failure, while Chromium acceptance proves that exact
   `Saved` bytes reopen in both the explicitly reloaded tab and a later fresh tab.
-- Workbench admission failures keep the persistent Retry/Reload recovery
-  surface even though admission now precedes terminal and App construction.
+- Every fatal page-entry outcome (boot probe, non-contention admission failure,
+  terminal persistence, App mount) now replaces the cold-boot skeleton with a
+  standalone failure notice carrying the causes and an explicit Reload —
+  previously a fatal admission failure left the boot spinner up forever with
+  the error only in the console (Chromium acceptance injects an absent
+  Web Locks capability).
 
 ### Added (app-local Workbench contract)
 

@@ -3,10 +3,10 @@
 // isolation. Missing headers must fail loud, not yield a black screen. ADR-0002 / D-001.
 import { render } from 'solid-js/web';
 import { App } from './App.tsx';
-import { PlaygroundBootFailureBanner } from './adapters/playground-health-ui.tsx';
 import { mountPlaygroundPage } from './adapters/playground-page-entry.ts';
 import { openPlaygroundAppWorkbench } from './adapters/playground-workbench-host.ts';
-import { assertCrossOriginIsolated, bootstrapPlayground, reasonOf } from './boot.ts';
+import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
+import { BootFailure } from './components/BootFailure.tsx';
 import { WorkspaceOccupied } from './components/WorkspaceOccupied.tsx';
 import { installPlaygroundNodeWorkerRuntime } from './glue/playground-node-worker-runtime.ts';
 import { createTerminalPersistence } from './glue/terminal-persistence.ts';
@@ -50,24 +50,17 @@ async function renderApp(): Promise<void> {
       root.replaceChildren();
       render(() => <WorkspaceOccupied onReload={() => globalThis.location.reload()} />, root);
     },
-    mountBootFailed(error) {
-      const reload = (): void => globalThis.location.reload();
-      root.replaceChildren();
-      render(
-        () => (
-          <PlaygroundBootFailureBanner
-            summary={reasonOf(error)}
-            onRetry={reload}
-            onReload={reload}
-          />
-        ),
-        root,
-      );
-    },
     mountApp(props) {
       // Drop the index.html cold-boot skeleton only after Workbench admission.
       root.replaceChildren();
       render(() => <App {...props} />, root);
+    },
+    mountFatal(error) {
+      root.replaceChildren();
+      render(
+        () => <BootFailure error={error} onReload={() => globalThis.location.reload()} />,
+        root,
+      );
     },
   });
 }

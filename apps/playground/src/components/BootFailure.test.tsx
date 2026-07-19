@@ -32,7 +32,9 @@ describe('BootFailure', () => {
   });
 
   it('shows a non-Error rejection value instead of hiding it', () => {
-    const html = renderToString(() => BootFailure({ error: 'owner boot refused', onReload: () => {} }));
+    const html = renderToString(() =>
+      BootFailure({ error: 'owner boot refused', onReload: () => {} }),
+    );
 
     expect(html).toContain('owner boot refused');
   });

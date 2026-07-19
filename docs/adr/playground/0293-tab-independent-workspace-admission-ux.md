@@ -42,17 +42,14 @@ a second workspace id/path would likewise fork the already-stable catalog.
 3. **The first-party host translates, the generic Workbench rejects.** The
    Playground host maps only `WorkbenchOriginOccupiedError` to the closed
    `opened | occupied` outcome used by its entry coordinator. Other failures
-   propagate unchanged to that coordinator, which preserves ADR-0285's
-   persistent `boot-failed` Retry/Reload surface. `@riftydev/workbench` does
-   not own UI.
+   propagate unchanged to that coordinator, which paints them (decision 9).
+   `@riftydev/workbench` does not own UI.
 4. **Admission precedes mutable page surfaces.** Normal entry order is the
    existing COI/runtime install -> non-authoritative boot probe ->
    `openPlaygroundWorkbench()` -> terminal persistence -> App. An occupied page
    replaces the cold-boot skeleton with a standalone `role=alert` notice and
    constructs neither terminal persistence nor App. The Workbench's lock-null
    path already starts no owner, project runtime, or writable Workbench store.
-   A non-contention Workbench boot failure instead mounts the shared health
-   failure surface before returning; Retry reloads into a fresh admission.
 5. **Ownership transfers exactly once.** Before App mount, the one-shot
    first-party page-entry adapter owns the opened Workbench and closes it if
    terminal construction or mount fails. After successful mount, App runtime
@@ -70,6 +67,15 @@ a second workspace id/path would likewise fork the already-stable catalog.
 8. **Multi-tab editing is not a product goal.** Concurrent editing, read-only
    view, takeover, handoff, fork, cross-tab terminal/runtime control, and
    automatic retry are not exposed. A second live page is refused visibly.
+9. **Every fatal page-entry outcome is painted by the same coordinator.** Any
+   failure of the entry transaction — boot probe, non-contention admission
+   failure, terminal persistence, App mount — replaces the cold-boot skeleton
+   with a standalone failure notice (causes + explicit Reload) after the
+   admitted Workbench, if any, is closed; the original error still propagates.
+   The skeleton is never a terminal state. The COI guard keeps its earlier
+   bespoke banner: it fires before this coordinator exists. ADR-0285's health
+   authority remains the recovery surface once an App exists; before one does,
+   explicit Reload is the only retry (decision 6).
 
 This corrects ADR-0263's generic “contention rejects” clause only: origin
 contention now has a stable public error prototype; its one-lock/one-Workbench
@@ -95,6 +101,9 @@ repository's Playwright/Chromium lockfile.
 - Cold boot keeps the existing HTML skeleton until Workbench admission and
   owner boot finish; this avoids flashing an editable-looking App before the
   origin claim is known.
+- A fatal admission failure (SW proof, owner boot, storage/permission, absent
+  capability) is refused as visibly as contention: a failure notice with the
+  causes, never a spinner that outlives the error.
 - Memory fallback remains visibly ephemeral. Cross-document durability is
   claimed only when the admitted Workbench reports durable OPFS storage.
 - A future multi-tab/read-only/takeover design must supersede this ADR and the

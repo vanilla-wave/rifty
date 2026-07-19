@@ -244,7 +244,7 @@ export function PlaygroundHealthBanner(props: {
   );
 }
 
-export function PlaygroundBootFailureBanner(props: {
+function PlaygroundBootFailureBanner(props: {
   readonly summary: string;
   readonly onRetry: () => void;
   readonly onReload: () => void;
