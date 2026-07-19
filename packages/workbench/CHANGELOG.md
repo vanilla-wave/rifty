@@ -4,6 +4,10 @@
 
 ### Added
 
+- Existing Eddy package-acquisition config now selects npm-client's builtin
+  runtime-asset batch source inside the owner; STD fallback and one
+  manager/store/writer remain unchanged (ADR-0299).
+
 - Initial sealed Workbench root, Playground companion, and five explicit worker
   deployment entries (ADR-0263, ADR-0282).
 

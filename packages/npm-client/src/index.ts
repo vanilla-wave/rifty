@@ -42,6 +42,10 @@ export {
   EDDY_STORE_DURABLE_HEADER,
   type EddyRequestBody,
 } from './eddy-request.ts';
+export {
+  createBuiltinEddyShadowAssetSource,
+  type BuiltinEddyShadowAssetSourceOptions,
+} from './eddy-shadow-asset-source.ts';
 export { link, buildLockfile, type ResolvedPackage, type Lockfile } from './linker.ts';
 export { closureHashOf, canonicalClosureJson } from './closure-hash.ts';
 export { serializePackageJson } from './package-json.ts';

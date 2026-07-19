@@ -1,3 +1,4 @@
+import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import {
   DEFAULT_FETCH_MAX_BYTES,
   DEFAULT_FETCH_STALL_MS,
@@ -44,6 +45,11 @@ export interface EddyShadowAssetSourceOptions {
   readonly warn?: (line: string) => void;
 }
 
+export type BuiltinEddyShadowAssetSourceOptions = Omit<
+  EddyShadowAssetSourceOptions,
+  'sourceRequests'
+>;
+
 function identityKey(request: Pick<ShadowAssetSourceRequest, 'name' | 'version'>): string {
   return `${request.name}\0${request.version}`;
 }
@@ -77,6 +83,28 @@ function sameRequest(left: ShadowAssetSourceRequest, right: ShadowAssetSourceReq
     left.maxTarballBytes === right.maxTarballBytes
   );
 }
+
+const builtinSourceRequests: readonly ShadowAssetSourceRequest[] = (() => {
+  const byIdentity = new Map<string, ShadowAssetSourceRequest>();
+  for (const descriptor of builtinShadowAssetCatalog.assets) {
+    const request = Object.freeze({
+      ...descriptor.source,
+      maxTarballBytes: descriptor.maxTarballBytes,
+    });
+    assertRequest(request);
+    const key = identityKey(request);
+    const prior = byIdentity.get(key);
+    if (prior !== undefined && !sameRequest(prior, request)) {
+      throw new TypeError(`builtin assets disagree on source ${request.name}@${request.version}`);
+    }
+    byIdentity.set(key, request);
+  }
+  return Object.freeze(
+    [...byIdentity.values()].sort((left, right) =>
+      identityKey(left) < identityKey(right) ? -1 : identityKey(left) > identityKey(right) ? 1 : 0,
+    ),
+  );
+})();
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
@@ -431,4 +459,17 @@ export function createEddyShadowAssetSource(
   options: EddyShadowAssetSourceOptions,
 ): ShadowAssetSource {
   return new EddyShadowAssetSource(options);
+}
+
+/** Closed builtin composition; not an external source-set SPI (ADR-0299). */
+export function createBuiltinEddyShadowAssetSource(
+  options: BuiltinEddyShadowAssetSourceOptions,
+): ShadowAssetSource {
+  if (options === null || typeof options !== 'object') {
+    throw new TypeError('builtin Eddy shadow asset source options must be an object');
+  }
+  if ('sourceRequests' in options) {
+    throw new TypeError('builtin Eddy shadow asset sources are not caller-configurable');
+  }
+  return createEddyShadowAssetSource({ ...options, sourceRequests: builtinSourceRequests });
 }

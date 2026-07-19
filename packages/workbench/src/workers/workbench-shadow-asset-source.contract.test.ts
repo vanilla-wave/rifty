@@ -53,12 +53,10 @@ describe('Workbench owner shadow-asset source composition', () => {
       warn: (line) => warnings.push(line),
     });
 
-    const failure = await source
-      .acquire([request], { signal: new AbortController().signal })
-      .then(
-        () => null,
-        (error: unknown) => error,
-      );
+    const failure = await source.acquire([request], { signal: new AbortController().signal }).then(
+      () => null,
+      (error: unknown) => error,
+    );
 
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors).toHaveLength(2);

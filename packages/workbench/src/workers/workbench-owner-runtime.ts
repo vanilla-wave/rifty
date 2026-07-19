@@ -2,11 +2,7 @@
 
 import { makeGit, vfsToGitFs } from '@riftydev/git';
 import { getKernelDispatcher } from '@riftydev/kernel';
-import {
-  VfsTarballCache,
-  createShadowAssetManager,
-  createStandardShadowAssetSource,
-} from '@riftydev/npm-client';
+import { VfsTarballCache, createShadowAssetManager } from '@riftydev/npm-client';
 import { ensureStarterInitialCommit } from '../glue/git-initial-baseline.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
@@ -63,6 +59,7 @@ import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
 import { createWorkbenchProjectStore } from './workbench-project-store.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 import { createNpmPackageRuntimeAssetPort } from './workbench-runtime-assets.ts';
+import { createWorkbenchShadowAssetSource } from './workbench-shadow-asset-source.ts';
 import type { KernelIpc } from './worker-runtime-globals.ts';
 
 interface Inbox {
@@ -159,9 +156,12 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     const registry = createProxiedRegistryClient({
       proxyPrefix: config.packageAcquisition.registryUrl,
     });
-    const source = createStandardShadowAssetSource({
+    const eddy = config.packageAcquisition.eddy;
+    const source = createWorkbenchShadowAssetSource({
       registry,
       tarballCache: new VfsTarballCache(new SyncMirrorVfs()),
+      ...(eddy === undefined ? {} : { eddy }),
+      warn: (line) => globalThis.process.stdout.write(`${line}\n`),
     });
     const sourceOwnership = construction.own(() => source.close());
     const runtimeAssetManager = createShadowAssetManager({
@@ -181,7 +181,6 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     });
     installSqliteWasmSyncProvider(config.deployment.wasm.sqlite);
 
-    const eddy = config.packageAcquisition.eddy;
     const packageState = createOwnerPackageState({
       vfs: new SyncMirrorVfs(),
       fsSync: authority,

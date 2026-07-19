@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Builtin Eddy shadow-asset source composition (ADR-0299).** One public
+  factory derives the closed builtin source set inside npm-client, owns learned
+  pins, batches exact misses, and preserves bounded Eddy -> STD fallback through
+  one source lifecycle; it is not an external source-set SPI.
+
 - **Honest synthesized esbuild delegates (ADR-0298).** Public metadata selects
   `esbuild@0.28.0`, then one immutable recipe materializes its Vite delegate
   without a package tarball. Exact lockfile markers, replay, placement, Eddy,
