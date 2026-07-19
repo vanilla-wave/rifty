@@ -57,7 +57,7 @@ describe('bench aggregate core', () => {
         coldStartSamples: [610, 620, 600],
         install: { status: 'requires proxy' },
       });
-      expect(art.schemaVersion).toBe(2);
+      expect(art.schemaVersion).toBe(3);
       expect(art.generatedAt).toBe('2026-07-01T00:00:00.000Z');
       expect(art.runner.runs).toBe(3);
       expect(art.metrics.coldStartToInteractiveMs.status).toBe('measured');
@@ -232,8 +232,207 @@ describe('bench aggregate core', () => {
     });
 
     it('bumps the schema version for the new metric', () => {
-      expect(SCHEMA_VERSION).toBe(2);
+      expect(SCHEMA_VERSION).toBe(3);
     });
+  });
+});
+
+const SHADOW_ASSET_CACHE_REGIME =
+  'fresh-context-empty-store-and-tarball;warm-proxy-origin';
+const SHADOW_ASSET_DIGEST = 'a'.repeat(64);
+const SHADOW_ASSET_MEMBER_BYTES = 13_918_738;
+
+function shadowAssetRun(durationMs, overrides = {}) {
+  return {
+    durationMs,
+    requiredSetDigest: SHADOW_ASSET_DIGEST,
+    storageClass: 'opfs-persisted',
+    fillTransport: 'standard',
+    fillCache: 'network',
+    memberBytes: SHADOW_ASSET_MEMBER_BYTES,
+    responseBodyBytes: {
+      packumentDecoded: 650,
+      tarball: 5_057_200,
+      total: 5_057_850,
+    },
+    transport: {
+      mode: 'auto',
+      origins: {
+        'https://registry.example': { protocol: 'h2', requests: 2 },
+      },
+    },
+    ...overrides,
+  };
+}
+
+function shadowAssetArtifact(standard, eddy) {
+  return buildArtifact({
+    generatedAt: '2026-07-18T00:00:00.000Z',
+    runs: 5,
+    coldStartSamples: [1, 2, 3, 4, 5],
+    install: { status: 'requires proxy' },
+    shadowAssetCold: {
+      standard,
+      ...(eddy === undefined ? {} : { eddy }),
+    },
+    stepMs: 100,
+  });
+}
+
+function measuredShadowAssetRow(runs, overrides = {}) {
+  return {
+    status: 'measured',
+    registryUrl: 'https://registry.example/npm-registry',
+    cacheRegime: SHADOW_ASSET_CACHE_REGIME,
+    runs,
+    ...overrides,
+  };
+}
+
+describe('schema-v3 shadowAssetColdFillMs', () => {
+  it('always reserves standard as an explicit unmeasured row when the phase is off', () => {
+    const artifact = buildArtifact({
+      generatedAt: '2026-07-18T00:00:00.000Z',
+      runs: 5,
+      coldStartSamples: [1, 2, 3, 4, 5],
+      install: { status: 'requires proxy' },
+    });
+
+    expect(artifact.schemaVersion).toBe(3);
+    expect(artifact.metrics.shadowAssetColdFillMs).toEqual({
+      standard: { status: 'unmeasured', note: '--shadow-asset-cold off' },
+    });
+  });
+
+  it('derives exactly five samples, median, display, and uniform facts from complete runs', () => {
+    const runs = [511, 409, 455, 477, 433].map((duration) => shadowAssetRun(duration));
+    const row = shadowAssetArtifact(measuredShadowAssetRow(runs)).metrics.shadowAssetColdFillMs
+      .standard;
+
+    expect(row).toMatchObject({
+      status: 'measured',
+      count: 5,
+      samples: [511, 409, 455, 477, 433],
+      median: 455,
+      displayMs: 500,
+      requiredSetDigest: SHADOW_ASSET_DIGEST,
+      storageClass: 'opfs-persisted',
+      fillTransport: 'standard',
+      fillCache: 'network',
+      memberBytes: SHADOW_ASSET_MEMBER_BYTES,
+      registryUrl: 'https://registry.example/npm-registry',
+      cacheRegime: SHADOW_ASSET_CACHE_REGIME,
+    });
+    expect(row.runs.map((run) => run.durationMs)).toEqual(row.samples);
+  });
+
+  it('refuses four-of-five as one unmeasured row with no partial samples or median', () => {
+    const row = shadowAssetArtifact(
+      measuredShadowAssetRow([100, 110, 120, 130].map((duration) => shadowAssetRun(duration))),
+    ).metrics.shadowAssetColdFillMs.standard;
+
+    expect(row).toEqual({
+      status: 'unmeasured',
+      note: expect.stringMatching(/exactly 5.*received 4/i),
+    });
+    expect(row.samples).toBeUndefined();
+    expect(row.median).toBeUndefined();
+  });
+
+  it.each([
+    ['mixed digest', (runs) => runs.with(4, shadowAssetRun(140, { requiredSetDigest: 'b'.repeat(64) }))],
+    ['mixed storage', (runs) => runs.with(4, shadowAssetRun(140, { storageClass: 'memory-session' }))],
+    ['wrong cache', (runs) => runs.with(4, shadowAssetRun(140, { fillCache: 'storage' }))],
+    ['wrong source', (runs) => runs.with(4, shadowAssetRun(140, { fillTransport: 'eddy' }))],
+  ])('refuses %s instead of aggregating heterogeneous evidence', (_name, mutate) => {
+    const runs = [100, 110, 120, 130, 140].map((duration) => shadowAssetRun(duration));
+    const row = shadowAssetArtifact(measuredShadowAssetRow(mutate(runs))).metrics
+      .shadowAssetColdFillMs.standard;
+
+    expect(row.status).toBe('unmeasured');
+    expect(row.samples).toBeUndefined();
+  });
+
+  it.each([
+    [
+      'unsafe response bytes',
+      shadowAssetRun(100, {
+        responseBodyBytes: {
+          packumentDecoded: Number.MAX_SAFE_INTEGER + 1,
+          tarball: 1,
+          total: Number.MAX_SAFE_INTEGER + 2,
+        },
+      }),
+    ],
+    [
+      'impossible response total',
+      shadowAssetRun(100, {
+        responseBodyBytes: { packumentDecoded: 650, tarball: 5_057_200, total: 5_000_000 },
+      }),
+    ],
+    [
+      'wrong member size',
+      shadowAssetRun(100, { memberBytes: SHADOW_ASSET_MEMBER_BYTES - 1 }),
+    ],
+    [
+      'unknown protocol on a used origin',
+      shadowAssetRun(100, {
+        transport: {
+          mode: 'auto',
+          origins: { 'https://registry.example': { protocol: 'unknown', requests: 2 } },
+        },
+      }),
+    ],
+    [
+      'no used remote origin',
+      shadowAssetRun(100, {
+        transport: {
+          mode: 'auto',
+          origins: { 'https://registry.example': { protocol: 'h2', requests: 0 } },
+        },
+      }),
+    ],
+  ])('refuses corrupt proof: %s', (_name, corrupt) => {
+    const runs = [corrupt, ...[110, 120, 130, 140].map((duration) => shadowAssetRun(duration))];
+    const row = shadowAssetArtifact(measuredShadowAssetRow(runs)).metrics.shadowAssetColdFillMs
+      .standard;
+
+    expect(row.status).toBe('unmeasured');
+    expect(row.runs).toBeUndefined();
+  });
+
+  it('preserves explicit unmeasured evidence without leaking stale measured fields', () => {
+    expect(
+      shadowAssetArtifact({
+        status: 'unmeasured',
+        note: 'run 3 capability progress duplicated verify',
+        samples: [1, 2],
+      }).metrics.shadowAssetColdFillMs.standard,
+    ).toEqual({
+      status: 'unmeasured',
+      note: 'run 3 capability progress duplicated verify',
+    });
+  });
+
+  it('emits speedupX only for two complete matched measured rows', () => {
+    const standardRuns = [500, 510, 520, 530, 540].map((duration) => shadowAssetRun(duration));
+    const eddyRuns = [250, 255, 260, 265, 270].map((duration) =>
+      shadowAssetRun(duration, { fillTransport: 'eddy' }),
+    );
+    const matched = shadowAssetArtifact(
+      measuredShadowAssetRow(standardRuns),
+      measuredShadowAssetRow(eddyRuns, {
+        resolverUrl: 'https://eddy.example',
+        expectedFillTransport: 'eddy',
+      }),
+    ).metrics.shadowAssetColdFillMs;
+    expect(matched.speedupX).toBe(2);
+
+    const incomplete = shadowAssetArtifact(
+      measuredShadowAssetRow(standardRuns),
+      { status: 'unmeasured', note: 'Eddy bundle missed one asset' },
+    ).metrics.shadowAssetColdFillMs;
+    expect(incomplete.speedupX).toBeUndefined();
   });
 });
 
