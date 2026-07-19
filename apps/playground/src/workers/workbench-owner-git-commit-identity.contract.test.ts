@@ -1,7 +1,7 @@
 import { makeGit, vfsToGitFs } from '@riftydev/git';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveOwnerGitCommitIdentity } from '../glue/git-owner-port.ts';
+import { resolveOwnerGitCommitIdentity } from './owner-git-commit-identity.ts';
 
 const CLOCK_MS = 1_700_000_123_987;
 

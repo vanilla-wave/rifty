@@ -73,14 +73,6 @@ describe('Workbench owner bootstrap source closure', () => {
     });
   });
 
-  it('keeps the legacy Git RPC adapter on the shared owner identity seam', () => {
-    const legacyPortPath = fileURLToPath(new URL('../glue/git-owner-port.ts', import.meta.url));
-
-    expect(staticImportSpecifiers(legacyPortPath)).toContain(
-      '../workers/owner-git-commit-identity.ts',
-    );
-  });
-
   it('uses the framework-free Git baseline without importing Playground seed policy', () => {
     const srcRoot = fileURLToPath(new URL('../', import.meta.url));
     const closure = sourceClosure(new URL('./workbench-owner-bootstrap.ts', import.meta.url));
@@ -117,20 +109,6 @@ describe('Workbench owner bootstrap source closure', () => {
       })
       .map((path) => relative(fileURLToPath(new URL('../', import.meta.url)), path))
       .sort();
-    const packageStateSource = readFileSync(
-      fileURLToPath(new URL('./owner-package-state.ts', import.meta.url)),
-      'utf8',
-    );
-
     expect(ambientPackageConfigSources).toEqual([]);
-    expect(packageStateSource).toContain('readonly registry: RegistryClient;');
-    expect(packageStateSource).toContain('readonly resolverUrl: () => string | undefined;');
-    expect(packageStateSource).toContain(
-      'readonly resolverBundleBaseUrl: () => string | undefined;',
-    );
-    expect(packageStateSource).toContain(
-      'readonly resolverPin: (templateId: string) => string | undefined;',
-    );
-    expect(packageStateSource).not.toContain('createProxiedRegistryClient');
   });
 });

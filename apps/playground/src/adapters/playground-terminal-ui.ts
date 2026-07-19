@@ -6,7 +6,15 @@ import type {
   ProjectTerminal,
   ProjectTerminalRun,
 } from '../workbench/public.ts';
-import type { TerminalSessionSnapshot } from './terminal-manager.ts';
+
+export interface TerminalSessionSnapshot {
+  readonly id: string;
+  readonly title: string;
+  readonly cwd: string;
+  readonly env: Record<string, string>;
+  readonly status: 'idle' | 'running';
+  readonly exitCode?: number;
+}
 
 const MAX_PENDING_CHARS = 1_000_000;
 const OMITTED_OUTPUT = '[earlier terminal output omitted before the panel mounted]\n';

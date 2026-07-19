@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed (Workbench extraction)
+
+- Playground now consumes one sealed Workbench lifecycle; the superseded raw
+  owner bootstrap, bridge/controller stack, and duplicate project coordinators
+  are removed before package extraction.
+
 ### Fixed (honest install stamps)
 
 - Install-stamp v4 binds trust to exact stored `package-lock.json` bytes;

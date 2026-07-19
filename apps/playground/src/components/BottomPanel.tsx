@@ -10,7 +10,7 @@ import type {
 } from '@riftydev/terminal';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import type { TerminalSessionSnapshot } from '../adapters/terminal-manager.ts';
+import type { TerminalSessionSnapshot } from '../adapters/playground-terminal-ui.ts';
 import { ProblemsPanel } from './ProblemsPanel.tsx';
 import { type TerminalDims, type TerminalModeHint, TerminalPanel } from './TerminalPanel.tsx';
 

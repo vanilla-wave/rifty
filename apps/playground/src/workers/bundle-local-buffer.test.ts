@@ -77,7 +77,6 @@ describe('kind:url child bootstraps reinstall the bundle-local global Buffer', (
   for (const file of [
     'dev-server-child-bootstrap.ts',
     'node-entry-bootstrap.ts',
-    'real-vite-bootstrap.ts',
     'ts-lsp-worker-entry.ts',
   ]) {
     it(`${file} imports and calls installBundleLocalBuffer`, () => {

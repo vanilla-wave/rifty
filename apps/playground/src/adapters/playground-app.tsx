@@ -84,9 +84,9 @@ import { savePlaygroundSession } from './playground-save.ts';
 import { playgroundScmDiffPresentation } from './playground-scm-diff-presentation.ts';
 import { selectPlaygroundSidebarView } from './playground-sidebar-view.ts';
 import { type PlaygroundTerminalUi, createPlaygroundTerminalUi } from './playground-terminal-ui.ts';
+import type { TerminalSessionSnapshot } from './playground-terminal-ui.ts';
 import type { PlaygroundTsDevHooksHandle } from './playground-ts-dev-hooks.ts';
 import { openPlaygroundAppWorkbench } from './playground-workbench-host.ts';
-import type { TerminalSessionSnapshot } from './terminal-manager.ts';
 import { useLayout } from './useLayout.ts';
 import { useMode } from './useMode.ts';
 

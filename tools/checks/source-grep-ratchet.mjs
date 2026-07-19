@@ -83,12 +83,6 @@ export const ALLOWLIST = [
   },
 
   {
-    file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts',
-    count: 12,
-    digest: '0c9f1de026ac',
-    why: 'worker-only owner entry; residual = zero-vite-name-dispatch pins, prod-bundle registrar pins, ready-vs-bridge ORDER + setProcessCwd (not page-observable); withViteCliArgs/Env moved to vite-cli-prep (behavioral tests there incl. ADR-0161 hmr-off); heirs in tests/browser-unit + e2e',
-  },
-  {
     file: 'apps/playground/src/workers/bundle-local-buffer.test.ts',
     count: 5,
     digest: '48a01d0768ed',
