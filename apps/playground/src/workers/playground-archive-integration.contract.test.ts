@@ -6,7 +6,6 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { InstallStampAuthorityError } from '../glue/install-stamp-authority.ts';
 import { createInstallStamp } from '../glue/install-stamp.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
 import type { ProjectDocumentInvalidation } from '../workbench/errors.ts';
 import { createPlaygroundScmAdapter } from '../workbench/internal/playground-scm.ts';
 import type {
@@ -101,7 +100,7 @@ const IMPORT_ARCHIVE = JSON.stringify({
   ],
 } satisfies ArchiveV1);
 
-const bootstrapConfig: BootstrapConfig = {
+const bootstrapConfig: OwnerPackageConfig['cfg'] = {
   runtime: 'node-cli',
   root: PROJECT_ROOT,
   entryPath: `${PROJECT_ROOT}/src/main.ts`,

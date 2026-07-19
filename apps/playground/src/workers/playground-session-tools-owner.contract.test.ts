@@ -3,7 +3,6 @@ import { RegistryClient } from '@riftydev/npm-client';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
 import { ClosedHandleError } from '../workbench/errors.ts';
 import type {
   OwnerPlaygroundSessionToolsFrame,
@@ -29,7 +28,7 @@ const COMMIT_IDENTITY: GitIdentity = Object.freeze({
   timestamp: 1_700_000_000,
   timezoneOffset: 0,
 });
-const BOOTSTRAP_CONFIG: BootstrapConfig = Object.freeze({
+const BOOTSTRAP_CONFIG: OwnerPackageConfig['cfg'] = Object.freeze({
   runtime: 'node-cli',
   root: PROJECT_ROOT,
   entryPath: SOURCE,

@@ -15,7 +15,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { readInstallStamp, stampTrusted } from '../glue/install-stamp.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
 import {
   type FirstMaterializationOwnerPackageConfig,
   createOwnerPackageState,
@@ -140,7 +139,7 @@ function shadowFailure(installed: InstallResult, assetPlan: ShadowAssetPlan) {
   });
 }
 
-function bootstrapConfig(): BootstrapConfig {
+function bootstrapConfig(): FirstMaterializationOwnerPackageConfig['cfg'] {
   return {
     runtime: 'vite',
     root: ROOT,

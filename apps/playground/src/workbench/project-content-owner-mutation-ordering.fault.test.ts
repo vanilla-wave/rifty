@@ -3,7 +3,6 @@ import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import type { HostCommitRequest } from '../glue/owner-vfs-protocol.ts';
 import { collectSnapshot } from '../glue/vfs-snapshot-port.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
 import {
   type OwnerPackageConfig,
   createOwnerPackageState,
@@ -26,7 +25,7 @@ const TARGET = `${ROOT}/src/renamed.ts`;
 const OWNER_EPOCH = 'owner-mutation-ordering';
 const encoder = new TextEncoder();
 const packageJson = '{"name":"owner-mutation-ordering","version":"1.0.0"}\n';
-const bootstrapConfig: BootstrapConfig = {
+const bootstrapConfig: OwnerPackageConfig['cfg'] = {
   runtime: 'node-cli',
   root: ROOT,
   entryPath: SOURCE,

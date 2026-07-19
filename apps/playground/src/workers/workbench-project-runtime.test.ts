@@ -9,7 +9,6 @@ import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/in
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
 import {
   type OwnerPackageConfig,
   type OwnerPackageMutationKind,
@@ -44,7 +43,7 @@ const PACKAGE_JSON = `${JSON.stringify({
   devDependencies: { vite: '8.0.16' },
 })}\n`;
 
-const bootstrapConfig: BootstrapConfig = {
+const bootstrapConfig: OwnerPackageConfig['cfg'] = {
   runtime: 'vite',
   root: ROOT,
   port: 5173,

@@ -3,7 +3,6 @@ import { Shell } from '@riftydev/shell';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
 import {
   type OwnerPackageConfig,
   createOwnerPackageState,
@@ -38,7 +37,7 @@ const GIT_ENV = Object.freeze({
 });
 
 const packageJson = '{"name":"terminal-git-ordering","version":"1.0.0"}\n';
-const bootstrapConfig: BootstrapConfig = {
+const bootstrapConfig: OwnerPackageConfig['cfg'] = {
   runtime: 'node-cli',
   root: ROOT,
   entryPath: SOURCE_A,

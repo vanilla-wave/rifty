@@ -20,7 +20,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
 import { type OwnerChildAdmissionHandle, admitOwnerChild } from './owner-child-admission.ts';
 import {
   type OwnerPackageConfig,
@@ -164,7 +163,7 @@ function receipt(assetPlan: ShadowAssetPlan): ShadowAssetReadyReceipt {
   });
 }
 
-function bootstrapConfig(root = ROOT): BootstrapConfig {
+function bootstrapConfig(root = ROOT): OwnerPackageConfig['cfg'] {
   return {
     runtime: 'vite',
     root,

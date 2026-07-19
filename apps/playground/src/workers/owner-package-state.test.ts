@@ -5,7 +5,6 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
 import {
   type FirstMaterializationOwnerPackageConfig,
   type OwnerPackageConfig,
@@ -20,7 +19,7 @@ const BASE_PACKAGE_JSON = `${JSON.stringify({
   dependencies: { vite: '5.4.21' },
 })}\n`;
 const BASE_PACKAGE_LOCK = '{"name":"app","lockfileVersion":3,"requires":true,"packages":{}}\n';
-const config: BootstrapConfig = {
+const config: OwnerPackageConfig['cfg'] = {
   runtime: 'vite',
   root: ROOT,
   port: 5173,
@@ -391,7 +390,7 @@ it('reasserts template node_modules inside the package authority without preserv
   authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(BASE_PACKAGE_JSON));
   authority.writeFileSync(`${ROOT}/package-lock.json`, new TextEncoder().encode(BASE_PACKAGE_LOCK));
   const seedPath = `${ROOT}/node_modules/@rifty/example-types/index.d.ts`;
-  const seedConfig: BootstrapConfig = {
+  const seedConfig: OwnerPackageConfig['cfg'] = {
     ...config,
     seedFiles: { [seedPath]: 'declare const example: true;\n' },
   };

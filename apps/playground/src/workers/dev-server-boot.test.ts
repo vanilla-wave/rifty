@@ -1,7 +1,6 @@
 import { listPorts } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { type NodeServerProjectSpec, resolveBootstrapConfig } from '../templates/project-spec.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 
@@ -25,32 +24,28 @@ function makeSinks(): BootAttempt {
   };
 }
 
-const NODE_SERVER_SPEC: NodeServerProjectSpec = {
-  id: 'bu-node-server',
-  displayName: 'browser-unit node server',
-  runtime: 'node-server',
-  install: {},
-  entry: {
-    relativePath: '/src/server.js',
-    content: [
-      "import { createServer } from 'node:http';",
-      "console.log('bu-entry-console-routed');",
-      "const server = createServer((req, res) => { res.end('ok'); });",
-      'server.listen(Number(process.env.PORT));',
-      '',
-    ].join('\n'),
-  },
-  defaultPort: 4471,
-  estimatedBootSeconds: 0,
-  extraFiles: {},
-};
+const NODE_SERVER_ENTRY = [
+  "import { createServer } from 'node:http';",
+  "console.log('bu-entry-console-routed');",
+  "const server = createServer((req, res) => { res.end('ok'); });",
+  'server.listen(Number(process.env.PORT));',
+  '',
+].join('\n');
 
-const NEVER_LISTENS_SPEC: NodeServerProjectSpec = {
-  ...NODE_SERVER_SPEC,
-  id: 'bu-node-server-silent',
-  entry: { relativePath: '/src/server.js', content: 'export const neverListens = true;\n' },
-  defaultPort: 4472,
-};
+function nodeServerConfig(root: string, port: number, entry: string): NodeServerPackageConfig {
+  const entryPath = `${root}/src/server.js`;
+  return {
+    runtime: 'node-server',
+    root,
+    port,
+    entryPath,
+    packageName: 'bu-node-server',
+    packageVersion: '0.0.0',
+    installDeps: {},
+    packageJson: '{"name":"bu-node-server","version":"0.0.0","type":"module"}\n',
+    seedFiles: { [entryPath]: entry },
+  };
+}
 
 const realConsole = globalThis.console;
 const realPortEnv = process.env.PORT;
@@ -69,8 +64,7 @@ afterEach(() => {
 describe('node-server boot', () => {
   it('runs the entry, routes console, waits for listen, and serves preview', async () => {
     const root = '/bu-devboot/server';
-    const cfg = resolveBootstrapConfig(NODE_SERVER_SPEC, NODE_SERVER_SPEC.defaultPort, root);
-    if (cfg.runtime !== 'node-server') throw new Error('expected node-server config');
+    const cfg = nodeServerConfig(root, 4471, NODE_SERVER_ENTRY);
     const sinks = makeSinks();
 
     const handle = await bootDevServer({
@@ -133,8 +127,7 @@ describe('node-server boot', () => {
 
   it('fails loudly when the entry never starts listening on the routed port', async () => {
     const root = '/bu-devboot/silent';
-    const cfg = resolveBootstrapConfig(NEVER_LISTENS_SPEC, NEVER_LISTENS_SPEC.defaultPort, root);
-    if (cfg.runtime !== 'node-server') throw new Error('expected node-server config');
+    const cfg = nodeServerConfig(root, 4472, 'export const neverListens = true;\n');
     const sinks = makeSinks();
 
     vi.useFakeTimers();

@@ -3,7 +3,6 @@ import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import type { HostCommitRequest } from '../glue/owner-vfs-protocol.ts';
 import { collectSnapshot } from '../glue/vfs-snapshot-port.ts';
-import type { BootstrapConfig } from '../templates/project-spec.ts';
 import { ClosedHandleError } from '../workbench/errors.ts';
 import type {
   OwnerProjectVfsFrame,
@@ -18,7 +17,7 @@ const OUTSIDE = '/.rifty/workbench/v1/projects/project-b/tree';
 const OWNER_EPOCH = 'workbench-project-vfs-test';
 const encoder = new TextEncoder();
 const packageJson = '{"name":"project-a","version":"1.0.0"}\n';
-const bootstrapConfig: BootstrapConfig = {
+const bootstrapConfig: OwnerPackageConfig['cfg'] = {
   runtime: 'node-cli',
   root: ROOT,
   entryPath: `${ROOT}/src/main.ts`,
