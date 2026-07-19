@@ -4,6 +4,7 @@ import { pinPublicEsbuild0280 } from './pinned-public-esbuild.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const childEntryUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/runtime-asset-public-vite-entry.ts`;
+const capabilityNonProjectionUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/workbench-runtime-asset-capability-non-projection.ts`;
 
 test('public Vite 7 cold open attests assets before its real child is published', async ({
   page,
@@ -320,5 +321,63 @@ test('public Vite 7 cold open attests assets before its real child is published'
     verifiedObjectBytes: 0,
     readySetCount: 0,
   });
+  expect(pinnedEsbuildRequests).toHaveLength(1);
+});
+
+test('a non-empty runtime-asset capability stays outside every ordinary guest projection', async ({
+  page,
+}) => {
+  test.setTimeout(420_000);
+  await gotoHarness(page);
+  const pinnedEsbuildRequests = await pinPublicEsbuild0280(page);
+
+  const result = await page.evaluate(async (fixtureUrl) => {
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    return fixture.runRuntimeAssetCapabilityNonProjection();
+  }, capabilityNonProjectionUrl);
+
+  expect(result.previewStatus).toBe(200);
+  expect(result.stdoutProjection).toMatchObject({
+    cwd: '/',
+    processSpecKeys: ['argv', 'cwd', 'env', 'pid', 'ppid', 'stdio'],
+    processSpecStdioKeys: ['ipc', 'stderr', 'stdin', 'stdout'],
+    ambientCapabilityGlobalPresent: false,
+    ambientCapabilityKeys: [],
+    forkIpc: { sendType: 'function' },
+  });
+  expect(result.previewProjection).toEqual(result.stdoutProjection);
+  expect(result.closeExit).toEqual({ code: null, signal: 'SIGTERM' });
+  expect(result.runtimeAssets).toMatchObject({
+    storageClass: 'memory-session',
+    verifiedObjectCount: 1,
+    verifiedObjectBytes: 13_918_738,
+    readySetCount: 1,
+  });
+
+  const publicProjection = JSON.stringify({
+    stdoutProjection: result.stdoutProjection,
+    previewProjection: result.previewProjection,
+    output: result.output,
+    previewBody: result.previewBody,
+    filesSnapshot: result.filesSnapshot,
+    archive: result.archive,
+  });
+  for (const privateToken of [
+    'rifty.shadow-assets.v1',
+    'rifty.shadow-assets/v1',
+    'requiredSetDigest',
+    'receiptSha256',
+    '/.rifty/shadow-assets/v1',
+    '/.rifty/workbench/v1/runtime-assets/v1',
+    result.requiredSetDigest,
+  ]) {
+    expect(publicProjection, `guest projection exposed ${privateToken}`).not.toContain(
+      privateToken,
+    );
+  }
+  expect(result.archive.length).toBeLessThan(result.runtimeAssets.verifiedObjectBytes);
+  expect(result.filesSnapshot.entries.some((entry) => entry.path.startsWith('/.rifty/'))).toBe(
+    false,
+  );
   expect(pinnedEsbuildRequests).toHaveLength(1);
 });

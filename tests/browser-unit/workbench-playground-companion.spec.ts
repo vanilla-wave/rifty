@@ -1,10 +1,14 @@
 import { type Page, expect, test } from '@playwright/test';
 import { gotoHarness, seedLegacyWorkspace } from './fixtures.ts';
+import { pinPublicEsbuild0280 } from './pinned-public-esbuild.ts';
 
 const OUTPUT_MARKER = 'WORKBENCH_COMPANION_KLEUR_OK';
 const ARGUMENT_MARKER = '--from-companion';
 const SELECTED_LEGACY_WORKSPACE_ID = 'selected legacy /tab?';
 const DECOY_LEGACY_WORKSPACE_ID = 'decoy legacy /tab?';
+const workspacePath = process.cwd().replaceAll('\\', '/');
+const coldViteCompanionFixtureUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/workbench-playground-cold-vite-acceptance.ts`;
+const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 
 async function seedLegacyCatalog(
   page: Page,
@@ -262,6 +266,61 @@ test('Playground companion installs and executes a Node CLI through one real Wor
   expect(
     registryRequests.some((url) => /\/npm-registry\/kleur(?:\/|$)/u.test(new URL(url).pathname)),
   ).toBe(true);
+});
+
+test('Playground companion defers cold Vite install and runtime assets to its default terminal run', async ({
+  page,
+}) => {
+  test.setTimeout(600_000);
+  await gotoHarness(page);
+  const pinnedEsbuildRequests = await pinPublicEsbuild0280(page);
+  const registryRequests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/npm-registry/')) {
+      registryRequests.push(request.url());
+    }
+  });
+
+  const result = await page.evaluate(async (fixtureUrl) => {
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    return fixture.runColdViteCompanion();
+  }, coldViteCompanionFixtureUrl);
+
+  expect(result.plan).toEqual({ kind: 'vite', materializationKind: 'install', port: 5174 });
+  expect(result.lifecycle).toEqual(['open-resolved', 'run-created', 'preview-ready']);
+  expect(result.terminalSnapshot).toEqual({ cwd: '/', env: {} });
+  expect(result.viteVersion).toBe('7.3.6');
+  expect(result.preview.port).toBe(5174);
+  expect(result.previewStatus).toBe(200);
+  expect(result.previewBody).toContain('<div id="app">');
+  expect(result.guestCapabilityProjection).toEqual({ present: false, keys: [] });
+  expect(result.closeExit).toEqual({ code: null, signal: 'SIGTERM' });
+
+  const output = result.output.replace(ANSI_SGR, '');
+  const assetId = 'esbuild-wasm@0.28.0/package/esbuild.wasm';
+  const assetProgress = [
+    `npm: runtime asset 1/1 cache-check: ${assetId}`,
+    `npm: runtime asset 1/1 fetch: ${assetId}`,
+    `npm: runtime asset 1/1 verify: ${assetId}`,
+    `npm: runtime asset 1/1 persist: ${assetId}`,
+    'npm: runtime assets ready: 1 (memory-session)',
+  ];
+  expect(output.split(/\r?\n/u).filter((line) => line.startsWith('npm: runtime asset'))).toEqual(
+    assetProgress,
+  );
+  const ordered = ['$ npm install', ...assetProgress, 'VITE v7.3.6'];
+  let previous = -1;
+  for (const marker of ordered) {
+    const index = output.indexOf(marker);
+    expect(index, `Missing terminal marker ${marker}:\n${output}`).toBeGreaterThan(previous);
+    previous = index;
+  }
+
+  expect(pinnedEsbuildRequests).toHaveLength(1);
+  const registryPaths = registryRequests.map((url) => new URL(url).pathname);
+  expect(registryPaths).toContain('/npm-registry/esbuild-wasm');
+  expect(registryPaths).toContain('/npm-registry/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz');
+  expect(registryPaths.some((path) => path.includes('@esbuild/wasi-preview1'))).toBe(false);
 });
 
 test('terminal snapshots and the semantic preview registry round-trip through exact project runs', async ({
