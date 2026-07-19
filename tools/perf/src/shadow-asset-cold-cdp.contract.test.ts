@@ -91,10 +91,7 @@ describe('standard shadow-asset CDP response recorder', () => {
       requestId: 'unrelated',
       request: { url: `${registryUrl}/vite` },
     });
-    session.emit(
-      'Network.responseReceived',
-      cdpResponse('unrelated', `${registryUrl}/vite`),
-    );
+    session.emit('Network.responseReceived', cdpResponse('unrelated', `${registryUrl}/vite`));
     session.emit('Network.loadingFinished', { requestId: 'unrelated' });
     session.emit('Network.requestWillBeSent', {
       requestId: 'asset',
@@ -169,6 +166,31 @@ describe('standard shadow-asset CDP response recorder', () => {
       { method: 'Network.getResponseBody', params: { requestId: 'packument' } },
       { method: 'Network.getResponseBody', params: { requestId: 'tarball' } },
       { method: 'detach' },
+    ]);
+  });
+
+  it('records requestServedFromCache and prefetch-cache provenance', async () => {
+    const session = new FakeCdpSession();
+    session.bodies.set('cached', { body: '{}', base64Encoded: false });
+    const recorder = await startCdpResponseRecorder(fakePage(session));
+
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'cached',
+      request: { url: packumentUrl },
+    });
+    session.emit('Network.requestServedFromCache', { requestId: 'cached' });
+    session.emit(
+      'Network.responseReceived',
+      cdpResponse('cached', packumentUrl, { fromPrefetchCache: true }),
+    );
+    session.emit('Network.loadingFinished', { requestId: 'cached' });
+
+    await expect(recorder.stop()).resolves.toEqual([
+      expect.objectContaining({
+        requestId: 'cached',
+        requestServedFromCache: true,
+        fromPrefetchCache: true,
+      }),
     ]);
   });
 
@@ -320,11 +342,7 @@ describe('standard shadow-asset CDP response finalization', () => {
     const result = finalizeStandardAssetSourceResponses({
       registryUrl,
       source,
-      captured: [
-        response('https://registry.example/npm-registry/vite', '{}'),
-        response(tarballUrl, new Uint8Array([1, 2, 3])),
-        response(packumentUrl, body),
-      ],
+      captured: [response(tarballUrl, new Uint8Array([1, 2, 3])), response(packumentUrl, body)],
     });
 
     expect(result).toEqual({
@@ -349,6 +367,93 @@ describe('standard shadow-asset CDP response finalization', () => {
           fromServiceWorker: false,
         },
       ],
+    });
+  });
+
+  it.each([
+    ['non-2xx', { status: 404 }],
+    ['incomplete', { complete: false, bodyBytes: 0 }],
+  ])('rejects %s exact tarball evidence', (_label, overrides) => {
+    const result = finalizeStandardAssetSourceResponses({
+      registryUrl,
+      source,
+      captured: [
+        response(packumentUrl, packumentBody()),
+        response(tarballUrl, new Uint8Array([1, 2, 3]), overrides),
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      note: 'esbuild-wasm@0.28.0 has no complete successful 2xx exact tarball response',
+    });
+  });
+
+  it('retains a tracked redirect lifecycle whose URL leaves the exact tarball', () => {
+    const requestId = 'tarball-redirect';
+    const redirectUrl = 'https://cdn.example/opaque/retry';
+    const result = finalizeStandardAssetSourceResponses({
+      registryUrl,
+      source,
+      captured: [
+        response(packumentUrl, packumentBody()),
+        response(redirectUrl, new Uint8Array(), {
+          requestId,
+          status: 302,
+          complete: false,
+          bodyBytes: 0,
+        }),
+        response(tarballUrl, new Uint8Array([1, 2, 3]), { requestId }),
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) return;
+    expect(result.sourceResponses.map(({ source: kind, url }) => [kind, url])).toEqual([
+      ['packument', packumentUrl],
+      ['tarball', redirectUrl],
+      ['tarball', tarballUrl],
+    ]);
+  });
+
+  it('refuses a captured lifecycle that cannot be classified without guessing', () => {
+    const unclassifiedUrl = 'https://registry.example/npm-registry/vite';
+    const result = finalizeStandardAssetSourceResponses({
+      registryUrl,
+      source,
+      captured: [
+        response(packumentUrl, packumentBody()),
+        response(tarballUrl, new Uint8Array([1])),
+        response(unclassifiedUrl, '{}'),
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      note: `esbuild-wasm@0.28.0 has unclassified captured response lifecycle ${unclassifiedUrl}`,
+    });
+  });
+
+  it.each([
+    [
+      'Network.requestServedFromCache',
+      { requestServedFromCache: true },
+      'Network.requestServedFromCache',
+    ],
+    ['response.fromPrefetchCache', { fromPrefetchCache: true }, 'response.fromPrefetchCache'],
+  ])('refuses %s source provenance', (_label, overrides, signal) => {
+    const result = finalizeStandardAssetSourceResponses({
+      registryUrl,
+      source,
+      captured: [
+        response(packumentUrl, packumentBody()),
+        response(tarballUrl, new Uint8Array([1]), overrides),
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      note: `esbuild-wasm@0.28.0 tarball response was served from cache (${signal})`,
     });
   });
 
