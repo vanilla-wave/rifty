@@ -162,3 +162,43 @@ export function packedAliasBoundaryProof(input) {
     }),
   });
 }
+
+function stableJson(value) {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value))
+      throw new TypeError('packed alias proof contains a non-finite number');
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  const object = record(value, 'packed alias proof value');
+  return `{${Object.keys(object)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`)
+    .join(',')}}`;
+}
+
+function canonicalAliasProof(value) {
+  const proof = record(value, 'packed alias proof');
+  if (!Array.isArray(proof.responses)) {
+    throw new TypeError('packed alias proof responses must be an array');
+  }
+  const rebuilt = packedAliasBoundaryProof({
+    registryOrigin: proof.registryOrigin,
+    responses: proof.responses,
+  });
+  const byResponse = (left, right) => stableJson(left).localeCompare(stableJson(right));
+  const declared = { ...proof, responses: [...proof.responses].sort(byResponse) };
+  const canonical = { ...rebuilt, responses: [...rebuilt.responses].sort(byResponse) };
+  if (stableJson(declared) !== stableJson(canonical)) {
+    throw new Error('packed alias proof summary does not match its complete response ledger');
+  }
+  return stableJson(canonical);
+}
+
+/** Compare exact response multisets; parallel completion order is not evidence. */
+export function packedAliasProofMatches(expected, actual) {
+  return canonicalAliasProof(expected) === canonicalAliasProof(actual);
+}

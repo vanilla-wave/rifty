@@ -1,0 +1,492 @@
+{
+  "schema": 1,
+  "boundary": {
+    "registryOrigin": "http://127.0.0.1:54321",
+    "transport": "standard",
+    "storageClass": "memory-session",
+    "cacheRegime": "fresh temp consumer and npm cache;fresh Chromium context",
+    "journey": "cold open through preview and native HMR ready"
+  },
+  "before": {
+    "commit": "4a04b76aacd456d0131b396be1f590797f71093f",
+    "snapshot": {
+      "sha256": "7233a01db2259171e0607bbb9891ddc7efe78369f59077e44675300cccca7aa5",
+      "bytes": 10029632
+    },
+    "proof": {
+      "schema": 1,
+      "registryOrigin": "http://127.0.0.1:54321",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/vite",
+          "kind": "packument",
+          "packageName": "vite",
+          "status": 200,
+          "bodyBytes": 4375
+        },
+        {
+          "method": "GET",
+          "path": "/@esbuild%2Fwasi-preview1",
+          "kind": "packument",
+          "packageName": "@esbuild/wasi-preview1",
+          "status": 200,
+          "bodyBytes": 627
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/vite-7.3.6.tgz",
+          "kind": "tarball",
+          "packageName": "vite",
+          "status": 200,
+          "bodyBytes": 541902
+        },
+        {
+          "method": "GET",
+          "path": "/fdir",
+          "kind": "packument",
+          "packageName": "fdir",
+          "status": 200,
+          "bodyBytes": 2475
+        },
+        {
+          "method": "GET",
+          "path": "/picomatch",
+          "kind": "packument",
+          "packageName": "picomatch",
+          "status": 200,
+          "bodyBytes": 1797
+        },
+        {
+          "method": "GET",
+          "path": "/postcss",
+          "kind": "packument",
+          "packageName": "postcss",
+          "status": 200,
+          "bodyBytes": 2357
+        },
+        {
+          "method": "GET",
+          "path": "/rollup",
+          "kind": "packument",
+          "packageName": "rollup",
+          "status": 200,
+          "bodyBytes": 11042
+        },
+        {
+          "method": "GET",
+          "path": "/tinyglobby",
+          "kind": "packument",
+          "packageName": "tinyglobby",
+          "status": 200,
+          "bodyBytes": 1760
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/fdir-6.5.0.tgz",
+          "kind": "tarball",
+          "packageName": "fdir",
+          "status": 200,
+          "bodyBytes": 9810
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/picomatch-4.0.5.tgz",
+          "kind": "tarball",
+          "packageName": "picomatch",
+          "status": 200,
+          "bodyBytes": 24079
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/%40esbuild%2Fwasi-preview1-0.28.0.tgz",
+          "kind": "tarball",
+          "packageName": "@esbuild/wasi-preview1",
+          "status": 200,
+          "bodyBytes": 5057200
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/postcss-8.5.19.tgz",
+          "kind": "tarball",
+          "packageName": "postcss",
+          "status": 200,
+          "bodyBytes": 50956
+        },
+        {
+          "method": "GET",
+          "path": "/nanoid",
+          "kind": "packument",
+          "packageName": "nanoid",
+          "status": 200,
+          "bodyBytes": 2036
+        },
+        {
+          "method": "GET",
+          "path": "/picocolors",
+          "kind": "packument",
+          "packageName": "picocolors",
+          "status": 200,
+          "bodyBytes": 783
+        },
+        {
+          "method": "GET",
+          "path": "/source-map-js",
+          "kind": "packument",
+          "packageName": "source-map-js",
+          "status": 200,
+          "bodyBytes": 2560
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/nanoid-3.3.16.tgz",
+          "kind": "tarball",
+          "packageName": "nanoid",
+          "status": 200,
+          "bodyBytes": 5628
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/picocolors-1.1.1.tgz",
+          "kind": "tarball",
+          "packageName": "picocolors",
+          "status": 200,
+          "bodyBytes": 2651
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/source-map-js-1.2.1.tgz",
+          "kind": "tarball",
+          "packageName": "source-map-js",
+          "status": 200,
+          "bodyBytes": 35340
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/rollup-4.62.2.tgz",
+          "kind": "tarball",
+          "packageName": "rollup",
+          "status": 200,
+          "bodyBytes": 570509
+        },
+        {
+          "method": "GET",
+          "path": "/@types%2Festree",
+          "kind": "packument",
+          "packageName": "@types/estree",
+          "status": 200,
+          "bodyBytes": 982
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/%40types%2Festree-1.0.9.tgz",
+          "kind": "tarball",
+          "packageName": "@types/estree",
+          "status": 200,
+          "bodyBytes": 5831
+        },
+        {
+          "method": "GET",
+          "path": "/@rollup%2Fwasm-node",
+          "kind": "packument",
+          "packageName": "@rollup/wasm-node",
+          "status": 200,
+          "bodyBytes": 4688
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/%40rollup%2Fwasm-node-4.62.2.tgz",
+          "kind": "tarball",
+          "packageName": "@rollup/wasm-node",
+          "status": 200,
+          "bodyBytes": 809371
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/tinyglobby-0.2.17.tgz",
+          "kind": "tarball",
+          "packageName": "tinyglobby",
+          "status": 200,
+          "bodyBytes": 7852
+        },
+        {
+          "method": "GET",
+          "path": "/esbuild-wasm",
+          "kind": "packument",
+          "packageName": "esbuild-wasm",
+          "status": 200,
+          "bodyBytes": 690
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/esbuild-wasm-0.28.0.tgz",
+          "kind": "tarball",
+          "packageName": "esbuild-wasm",
+          "status": 200,
+          "bodyBytes": 3845798
+        }
+      ],
+      "totalResponseBodyBytes": 11003099
+    }
+  },
+  "after": {
+    "commit": "0ec8fdc53a5de616c93597ca4bb3e2dabef2fd8c",
+    "snapshot": {
+      "sha256": "c67b34cd13cbbe30819d67568869300b0a4c5452227bf9cd4ded1c0a9d27cc1b",
+      "bytes": 3193701
+    },
+    "proof": {
+      "schema": 2,
+      "registryOrigin": "http://127.0.0.1:54321",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/vite",
+          "packageName": "vite",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 4375
+        },
+        {
+          "method": "GET",
+          "path": "/esbuild",
+          "packageName": "esbuild",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 3913
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/vite-7.3.6.tgz",
+          "packageName": "vite",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 541902
+        },
+        {
+          "method": "GET",
+          "path": "/fdir",
+          "packageName": "fdir",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 2475
+        },
+        {
+          "method": "GET",
+          "path": "/picomatch",
+          "packageName": "picomatch",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 1797
+        },
+        {
+          "method": "GET",
+          "path": "/postcss",
+          "packageName": "postcss",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 2357
+        },
+        {
+          "method": "GET",
+          "path": "/rollup",
+          "packageName": "rollup",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 11042
+        },
+        {
+          "method": "GET",
+          "path": "/tinyglobby",
+          "packageName": "tinyglobby",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 1760
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/fdir-6.5.0.tgz",
+          "packageName": "fdir",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 9810
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/picomatch-4.0.5.tgz",
+          "packageName": "picomatch",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 24079
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/postcss-8.5.19.tgz",
+          "packageName": "postcss",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 50956
+        },
+        {
+          "method": "GET",
+          "path": "/nanoid",
+          "packageName": "nanoid",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 2036
+        },
+        {
+          "method": "GET",
+          "path": "/picocolors",
+          "packageName": "picocolors",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 783
+        },
+        {
+          "method": "GET",
+          "path": "/source-map-js",
+          "packageName": "source-map-js",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 2560
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/nanoid-3.3.16.tgz",
+          "packageName": "nanoid",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 5628
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/picocolors-1.1.1.tgz",
+          "packageName": "picocolors",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 2651
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/source-map-js-1.2.1.tgz",
+          "packageName": "source-map-js",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 35340
+        },
+        {
+          "method": "GET",
+          "path": "/@types%2Festree",
+          "packageName": "@types/estree",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 982
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/rollup-4.62.2.tgz",
+          "packageName": "rollup",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 570509
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/%40types%2Festree-1.0.9.tgz",
+          "packageName": "@types/estree",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 5831
+        },
+        {
+          "method": "GET",
+          "path": "/@rollup%2Fwasm-node",
+          "packageName": "@rollup/wasm-node",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 4688
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/%40rollup%2Fwasm-node-4.62.2.tgz",
+          "packageName": "@rollup/wasm-node",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 809371
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/tinyglobby-0.2.17.tgz",
+          "packageName": "tinyglobby",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 7852
+        },
+        {
+          "method": "GET",
+          "path": "/esbuild-wasm",
+          "packageName": "esbuild-wasm",
+          "kind": "packument",
+          "status": 200,
+          "bodyBytes": 690
+        },
+        {
+          "method": "GET",
+          "path": "/-/tarballs/esbuild-wasm-0.28.0.tgz",
+          "packageName": "esbuild-wasm",
+          "kind": "tarball",
+          "status": 200,
+          "bodyBytes": 3845798
+        }
+      ],
+      "totalResponseBodyBytes": 5949185,
+      "publicEsbuild": {
+        "packument": {
+          "responses": 1,
+          "bodyBytes": 3913
+        },
+        "tarball": {
+          "responses": 0,
+          "bodyBytes": 0
+        }
+      },
+      "retiredAlias": {
+        "packument": {
+          "responses": 0,
+          "bodyBytes": 0
+        },
+        "tarball": {
+          "responses": 0,
+          "bodyBytes": 0
+        },
+        "totalBodyBytes": 0
+      },
+      "runtimeAssetSource": {
+        "packument": {
+          "responses": 1,
+          "bodyBytes": 690
+        },
+        "tarball": {
+          "responses": 1,
+          "bodyBytes": 3845798
+        }
+      }
+    }
+  },
+  "delta": {
+    "beforeResponseBodyBytes": 11003099,
+    "afterResponseBodyBytes": 5949185,
+    "removedResponseBodyBytes": 5053914,
+    "components": {
+      "retiredAliasRemoved": 5057827,
+      "publicEsbuildPackumentAdded": 3913,
+      "otherResponseBodiesBefore": 5945272,
+      "otherResponseBodiesAfter": 5945272
+    }
+  },
+  "latency": {
+    "status": "unmeasured",
+    "note": "paired byte-audit runs did not record matched latency samples"
+  }
+}

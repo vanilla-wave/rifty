@@ -23,6 +23,7 @@ import ts from 'typescript';
 import {
   PACKED_VITE_JOURNEYS,
   packedAliasBoundaryProof,
+  packedAliasProofMatches,
   snapshotPackageNeedsRegistryTarball,
 } from './workbench-packed-consumer-browser-contract.mjs';
 import {
@@ -51,6 +52,7 @@ const SHADOW_ASSET_CATALOG = resolve(
   REPO_ROOT,
   'tools/shadow-registry/generated/shadow-asset-catalog.json',
 );
+const ALIAS_RESPONSE_BYTE_PROOF = resolve(FIXTURE_ROOT, 'alias-response-byte-proof.json');
 const KEEP_TEMP = process.argv.includes('--keep');
 const SERVE_SHADOW_ASSET_COLD = process.argv.includes('--serve-shadow-asset-cold');
 const FIXED_REGISTRY_PORT = optionalLoopbackPort(process.env.RIFTY_PACKED_CONSUMER_REGISTRY_PORT);
@@ -1259,6 +1261,17 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       registryOrigin: registry.origin,
       responses: aliasBoundaryResponses,
     });
+    if (FIXED_REGISTRY_PORT !== 0) {
+      const committed = await readJson(ALIAS_RESPONSE_BYTE_PROOF);
+      if (!packedAliasProofMatches(committed.after?.proof, aliasBoundaryProof)) {
+        throw new Error(
+          `Packed alias after proof differs from committed fixed-origin evidence: ${JSON.stringify({
+            expected: committed.after?.proof,
+            actual: aliasBoundaryProof,
+          })}`,
+        );
+      }
+    }
     console.log(`RIFTY_PACKED_ALIAS_BOUNDARY=${JSON.stringify(aliasBoundaryProof)}`);
     await context.close();
     console.log(
