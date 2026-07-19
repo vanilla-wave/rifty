@@ -8,7 +8,10 @@ import {
   createShadowAssetManager,
   planBuiltinShadowAssets,
 } from '@riftydev/npm-client';
-import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
+import {
+  builtinShadowAssetCatalog,
+  builtinSyntheticPackageRecipes,
+} from '@riftydev/shadow-registry';
 import { describe, expect, it, vi } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import type { PackageAcquisitionProject } from './package-acquisition-authority.ts';
@@ -31,7 +34,7 @@ function assetPlan(): ShadowAssetPlan {
       publicName: 'esbuild',
       requestedRange: '^0.28.0',
       resolvedPublicVersion: '0.28.0',
-      substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+      substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
       runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
       builtin: true,
     },
@@ -92,7 +95,18 @@ function lockfileBytes(plan: ShadowAssetPlan): Uint8Array {
       requires: true,
       packages: {
         '': { version: '1.0.0' },
-        'node_modules/@esbuild/wasi-preview1': { version: '0.28.0' },
+        'node_modules/esbuild': {
+          version: '0.28.0',
+          dependencies: {},
+          rifty: {
+            materialization: {
+              protocol: 'rifty.lockfile-package-materialization/v1',
+              kind: 'synthesized-shadow-delegate',
+              substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
+              recipeSha256: builtinSyntheticPackageRecipes[0]!.recipeSha256,
+            },
+          },
+        },
       },
       rifty: {
         shadowSubstitutions: {

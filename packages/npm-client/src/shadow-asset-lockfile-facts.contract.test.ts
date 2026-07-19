@@ -1,5 +1,8 @@
 import { NotImplementedError } from '@riftydev/io';
-import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
+import {
+  builtinShadowAssetCatalog,
+  builtinSyntheticPackageRecipes,
+} from '@riftydev/shadow-registry';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { readyShadowAssetInstaller } from './_test-fixtures/shadow-assets.ts';
@@ -21,7 +24,7 @@ class AliasRegistry extends RegistryClient {
   }
 
   override async getPackument(name: string): Promise<Packument> {
-    const version = name === '@esbuild/wasi-preview1' ? '0.28.0' : '1.0.0';
+    const version = name === 'esbuild' || name === '@esbuild/wasi-preview1' ? '0.28.0' : '1.0.0';
     return {
       name,
       'dist-tags': { latest: version },
@@ -109,7 +112,7 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
         requestedRange: '^0.28.0',
         resolvedPublicVersion: '0.28.0',
         runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
-        substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+        substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
       },
     ]);
     expect(shadowAssetPlanFromLockfileBytes(installed.lockfileBytes)).toEqual(installed.plan);
@@ -121,7 +124,7 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
       requestedRange: '^0.28.0',
       resolvedPublicVersion: '0.28.0',
       runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
-      substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+      substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
     };
     const bytes = enc.encode(
       JSON.stringify({
@@ -131,9 +134,17 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
         requires: true,
         packages: {
           '': { version: '1.0.0', dependencies: { esbuild: '0.28.0' } },
-          'node_modules/@esbuild/wasi-preview1': {
+          'node_modules/esbuild': {
             version: '0.28.0',
             dependencies: {},
+            rifty: {
+              materialization: {
+                protocol: 'rifty.lockfile-package-materialization/v1',
+                kind: 'synthesized-shadow-delegate',
+                substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
+                recipeSha256: builtinSyntheticPackageRecipes[0]!.recipeSha256,
+              },
+            },
           },
         },
         rifty: {
@@ -199,8 +210,8 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
   it('rejects trace/tree drift instead of trusting an unattested target coincidence', async () => {
     const installed = await installEsbuild();
     const parsed = JSON.parse(new TextDecoder().decode(installed.lockfileBytes)) as Lockfile;
-    const target = parsed.packages['node_modules/@esbuild/wasi-preview1'];
-    if (target === undefined) throw new Error('fixture expected the esbuild alias target');
+    const target = parsed.packages['node_modules/esbuild'];
+    if (target === undefined) throw new Error('fixture expected the esbuild recipe target');
     target.version = '0.28.1';
 
     expect(() => shadowAssetPlanFromLockfileBytes(enc.encode(JSON.stringify(parsed)))).toThrow(

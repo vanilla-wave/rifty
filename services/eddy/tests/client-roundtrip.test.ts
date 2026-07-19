@@ -20,12 +20,14 @@ import {
 } from '@riftydev/npm-client';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readyShadowAssetInstaller } from '../../../packages/npm-client/src/_test-fixtures/shadow-assets.ts';
 import {
   LOCAL_REGISTRY_BASE_URL,
   makeLocalFetcher,
 } from '../../../tests/integration/fixtures/local-registry.ts';
 import { resolveBundle } from '../src/index.ts';
 import { type EddyServer, createEddyServer } from '../src/server.ts';
+import { makeSyntheticRegistry } from './synthetic-registry.ts';
 
 function makeRegistry() {
   const { fetch, calls } = makeLocalFetcher();
@@ -69,6 +71,16 @@ async function buildBundleFor(deps: Record<string, string>): Promise<Uint8Array>
   return built.bytes;
 }
 
+async function buildSyntheticEsbuildBundle(): Promise<Uint8Array> {
+  const synthetic = makeSyntheticRegistry([{ name: 'esbuild', version: '0.28.0' }]);
+  const built = await resolveBundle(
+    { dependencies: { esbuild: '^0.28.0' } },
+    { registryBaseUrl: synthetic.baseUrl, fetch: synthetic.fetch },
+  );
+  if (built.kind !== 'bundle') throw new Error(`setup: expected bundle, got ${built.feature}`);
+  return built.bytes;
+}
+
 let eddy: EddyServer;
 let eddyUrl: string;
 
@@ -87,6 +99,115 @@ afterEach(async () => {
 const DEPS = { debug: '^4.4.1', 'diamond-conflict-parent': '1.0.0' };
 
 describe('eddy client opt-in — fast path + auto-fallback', () => {
+  it('adopts a synthesized delegate with zero client-registry traffic and honest provenance', async () => {
+    const bytes = await buildSyntheticEsbuildBundle();
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/octet-stream' });
+      res.end(Buffer.from(bytes));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, { esbuild: '^0.28.0' });
+      const synthetic = makeSyntheticRegistry([{ name: 'esbuild', version: '0.28.0' }]);
+      const registryCalls: string[] = [];
+      const registry = new RegistryClient({
+        baseUrl: synthetic.baseUrl,
+        fetch: async (url, init) => {
+          registryCalls.push(url);
+          return synthetic.fetch(url, init);
+        },
+      });
+      const packageEvents: unknown[] = [];
+      const lines: string[] = [];
+
+      const result = await install({
+        vfs,
+        cwd: '/app',
+        registry,
+        resolverUrl: raw.url,
+        shadowAssets: { installer: readyShadowAssetInstaller },
+        onPackage: (event) => packageEvents.push(event),
+        onSubstitution: (line) => lines.push(line),
+      });
+
+      expect(result.source).toBe('eddy');
+      expect(registryCalls).toEqual([]);
+      expect(packageEvents).toEqual([]);
+      expect(result.provenance).toMatchObject({
+        resolution: 'lockfile',
+        packages: [{ name: 'esbuild', version: '0.28.0', transport: 'synthesized' }],
+      });
+      expect(result.provenance.eddyFallback).toBeUndefined();
+      expect(lines).toEqual([
+        'npm: esbuild@^0.28.0 → esbuild@0.28.0 (synthesized delegate from shadow registry, ADR-0298)',
+      ]);
+      expect(await vfs.exists('/app/node_modules/esbuild/lib/main.cjs')).toBe(true);
+      expect(await vfs.exists('/app/node_modules/@esbuild/wasi-preview1')).toBe(false);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it.each([
+    [
+      'drifted digest',
+      (marker: Record<string, unknown>) => Object.assign(marker, { recipeSha256: '0'.repeat(64) }),
+    ],
+    [
+      'unsupported protocol',
+      (marker: Record<string, unknown>) =>
+        Object.assign(marker, { protocol: 'rifty.lockfile-package-materialization/v999' }),
+    ],
+  ] as const)(
+    'declines %s before staging, visibly falls back to STD, and never claims hidden Eddy bytes',
+    async (_label, mutate) => {
+      const contents = unpackEddyBundle(await buildSyntheticEsbuildBundle());
+      const lockfile = JSON.parse(contents.lockfileText) as {
+        packages: Record<string, { rifty?: { materialization?: Record<string, unknown> } }>;
+      };
+      const marker = lockfile.packages['node_modules/esbuild']?.rifty?.materialization;
+      if (!marker) throw new Error('setup: synthetic marker absent');
+      mutate(marker);
+      contents.lockfileText = JSON.stringify(lockfile, null, 2);
+      contents.manifest.asOf.closureHash = await closureHashOf(lockfile as never);
+      const poisoned = packEddyBundle(contents);
+      const raw = await startRaw((_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/octet-stream' });
+        res.end(Buffer.from(poisoned));
+      });
+      try {
+        const vfs = new MemoryVfs();
+        await writePackageJson(vfs, { esbuild: '^0.28.0' });
+        const synthetic = makeSyntheticRegistry([{ name: 'esbuild', version: '0.28.0' }]);
+        const registryCalls: string[] = [];
+        const result = await install({
+          vfs,
+          cwd: '/app',
+          registry: new RegistryClient({
+            baseUrl: synthetic.baseUrl,
+            fetch: async (url, init) => {
+              registryCalls.push(url);
+              return synthetic.fetch(url, init);
+            },
+          }),
+          resolverUrl: raw.url,
+          shadowAssets: { installer: readyShadowAssetInstaller },
+          onSubstitution: () => {},
+        });
+
+        expect(result.source).toBe('standard');
+        expect(result.provenance.eddyFallback?.reason).toMatch(/materialization|recipe|protocol/i);
+        expect(registryCalls).toEqual(['synthetic:/esbuild']);
+        expect(result.provenance.packages).toEqual([
+          { name: 'esbuild', version: '0.28.0', transport: 'synthesized' },
+        ]);
+        expect(await vfs.exists('/app/node_modules/esbuild/lib/main.cjs')).toBe(true);
+      } finally {
+        await closeServer(raw.server);
+      }
+    },
+  );
+
   it('fast path produces a tree+lockfile identical to a standard install, with zero own-registry traffic', async () => {
     // Standard reference.
     const stdVfs = new MemoryVfs();

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { bakedOverrides, internalsShims } from './index.ts';
+import { bakedOverrides, builtinSyntheticPackageRecipes, internalsShims } from './index.ts';
+
+const esbuildRecipe = builtinSyntheticPackageRecipes[0]!;
 
 describe('shadow-registry', () => {
   it('bakedOverrides contains the bcrypt → bcryptjs entry', () => {
     expect(bakedOverrides.bcrypt).toBe('bcryptjs');
   });
 
-  it('bakedOverrides replaces esbuild with the WASI artifact', () => {
-    expect(bakedOverrides.esbuild).toBe('@esbuild/wasi-preview1@0.28.0');
+  it('bakedOverrides no longer redirects esbuild through an alias package', () => {
+    expect(bakedOverrides.esbuild).toBeUndefined();
   });
 
   it('bakedOverrides replaces lightningcss with the WASM artifact', () => {
@@ -15,11 +17,7 @@ describe('shadow-registry', () => {
   });
 
   it('internalsShims are keyed by installed trigger with package-relative file paths', () => {
-    expect(Object.keys(internalsShims).sort()).toEqual([
-      '@esbuild/wasi-preview1',
-      'lightningcss-wasm',
-      'rollup',
-    ]);
+    expect(Object.keys(internalsShims).sort()).toEqual(['lightningcss-wasm', 'rollup']);
     for (const shim of Object.values(internalsShims)) {
       expect(shim.range.length).toBeGreaterThan(0);
       for (const rel of Object.keys(shim.files)) {
@@ -50,12 +48,11 @@ describe('shadow-registry', () => {
     expect(internalsShims.rollup?.companions).toEqual(['@rollup/wasm-node']);
   });
 
-  it('esbuild alias materializes one CJS overlay over the realm runtime slot', () => {
-    const shim = internalsShims['@esbuild/wasi-preview1'];
-    expect(shim?.into).toBe('esbuild');
-    expect(shim?.files['package.json']).toContain('"esbuild"');
-    expect(Object.keys(shim?.files ?? {}).sort()).toEqual(['lib/main.cjs', 'package.json']);
-    const main = shim?.files['lib/main.cjs'] ?? '';
+  it('esbuild recipe materializes one CJS delegate over the realm runtime slot', () => {
+    expect(esbuildRecipe.publicName).toBe('esbuild');
+    expect(esbuildRecipe.files['package.json']).toContain('"esbuild"');
+    expect(Object.keys(esbuildRecipe.files).sort()).toEqual(['lib/main.cjs', 'package.json']);
+    const main = esbuildRecipe.files['lib/main.cjs'] ?? '';
     expect(main).toContain('globalThis.__rifty?.esbuild');
     expect(main).toContain('module.exports = esbuild');
     expect(main).not.toContain('__riftyEsbuildTransform');
@@ -63,19 +60,14 @@ describe('shadow-registry', () => {
     expect(main).not.toContain('Object.assign');
   });
 
-  it('esbuild alias version matches the bakedOverrides trigger pin exactly (no lying metadata)', () => {
-    const shim = internalsShims['@esbuild/wasi-preview1'];
-    const pinned = bakedOverrides.esbuild?.split('@').at(-1);
-    const pkg = JSON.parse(shim?.files['package.json'] ?? '{}') as { version?: string };
-    // Static package metadata must equal the installed trigger pin.
-    expect(pkg.version).toBe(pinned);
-    expect(shim?.apiVersion).toBe(pinned);
-    expect(shim?.range).toBe(pinned);
+  it('esbuild recipe version equals its static package metadata', () => {
+    const pkg = JSON.parse(esbuildRecipe.files['package.json'] ?? '{}') as { version?: string };
+    expect(pkg.version).toBe(esbuildRecipe.version);
+    expect(esbuildRecipe.version).toBe('0.28.0');
   });
 
   it('esbuild main/import/require/default resolve to the same CJS module id', () => {
-    const shim = internalsShims['@esbuild/wasi-preview1'];
-    const pkg = JSON.parse(shim?.files['package.json'] ?? '{}') as {
+    const pkg = JSON.parse(esbuildRecipe.files['package.json'] ?? '{}') as {
       main?: string;
       module?: string;
       type?: string;
@@ -102,14 +94,14 @@ describe('shadow-registry', () => {
   });
 });
 
-describe('esbuild CJS overlay behavior', () => {
+describe('esbuild synthesized CJS delegate behavior', () => {
   type RiftyTestGlobal = typeof globalThis & {
     __rifty?: { esbuild?: unknown };
     __riftyEsbuildTransform?: unknown;
   };
 
   function loadCjsShim(): unknown {
-    const cjs = internalsShims['@esbuild/wasi-preview1']?.files['lib/main.cjs'] ?? '';
+    const cjs = esbuildRecipe.files['lib/main.cjs'] ?? '';
     const module: { exports: unknown } = { exports: {} };
     new Function('module', 'exports', cjs)(module, module.exports);
     return module.exports;

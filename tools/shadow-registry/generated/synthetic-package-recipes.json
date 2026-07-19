@@ -1,0 +1,18 @@
+[
+  {
+    "substitutionId": "rifty.shadow-substitution.esbuild-synthesized-delegate.v2",
+    "publicName": "esbuild",
+    "version": "0.28.0",
+    "runtimeAdapterId": "rifty.runtime-adapter.esbuild-vite.v1",
+    "kind": "synthesized-shadow-delegate",
+    "dependencies": {},
+    "optionalDependencies": {},
+    "peerDependencies": {},
+    "bin": {},
+    "files": {
+      "lib/main.cjs": "const esbuild = globalThis.__rifty?.esbuild;\nif (esbuild == null) {\n  throw new Error('rifty invariant: esbuild runtime slot is not initialized');\n}\nmodule.exports = esbuild;\n",
+      "package.json": "{\n  \"name\": \"esbuild\",\n  \"version\": \"0.28.0\",\n  \"main\": \"./lib/main.cjs\",\n  \"module\": \"./lib/main.cjs\",\n  \"type\": \"commonjs\",\n  \"exports\": {\n    \".\": {\n      \"import\": \"./lib/main.cjs\",\n      \"require\": \"./lib/main.cjs\",\n      \"default\": \"./lib/main.cjs\"\n    }\n  }\n}"
+    },
+    "recipeSha256": "6d98d08d0bcf2f25526e72d642d1e807090dc5bbf5fe3102372de4a069a3ad67"
+  }
+]

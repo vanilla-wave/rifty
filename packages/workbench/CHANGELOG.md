@@ -9,6 +9,9 @@
 
 ### Fixed
 
+- Vite 7 installs now consume the public `esbuild@0.28.0` synthesized delegate
+  and its exact runtime-asset plan; active fixtures no longer depend on the
+  retired `@esbuild/wasi-preview1` alias package (ADR-0298).
 - Route the package root through the repository-wide `src/index.ts` public seam;
   owner construction fault proof now runs the real ephemeral ownership graph
   through its Worker-IPC seam instead of replacing Workbench and rifty modules.

@@ -5,7 +5,7 @@ import {
   viteCliActionPatchPolicy,
   viteRootWatchPatchPolicy,
 } from '../../../packages/workbench/src/workers/vite-cli-install-policy.ts';
-import { bakedOverrides, internalsShims } from '../src/index.ts';
+import { bakedOverrides, builtinSyntheticPackageRecipes, internalsShims } from '../src/index.ts';
 import { identityForRecipe, installArtifactTreePolicy } from '../src/install-artifact-recipe.ts';
 
 const policyUrl = new URL('../esbuild-runtime-policy.json', import.meta.url);
@@ -54,9 +54,14 @@ export async function buildInstallArtifactIdentityFile(): Promise<InstallArtifac
 export async function buildInstallArtifactRecipe() {
   const esbuildRuntimePolicy = await readJson(policyUrl);
   return {
-    schema: 3,
+    schema: 4,
     bakedOverrides,
     internalsShims,
+    packageMaterialization: {
+      protocol: 'rifty.lockfile-package-materialization/v1',
+      kinds: ['synthesized-shadow-delegate'],
+    },
+    builtinSyntheticPackageRecipes,
     viteCliActionPatch: viteCliActionPatchPolicy,
     viteRootWatchPatch: viteRootWatchPatchPolicy,
     esbuildRuntimePolicy: installArtifactTreePolicy(esbuildRuntimePolicy),

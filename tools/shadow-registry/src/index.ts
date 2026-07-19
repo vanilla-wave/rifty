@@ -38,40 +38,10 @@ export {
   type ShadowAssetDescriptor,
   type ShadowAssetSourceDescriptor,
 } from './shadow-asset-catalog.ts';
-
-// MUST equal the bakedOverrides trigger pin: the alias package.json + the
-// shim's `version` export claim this — a drifted static value would lie to
-// version-sniffing consumers. The exact-pin `range` below enforces the couple
-// (a bumped override outside it loud-throws at install until this moves too).
-const SHIM_ESBUILD_VERSION = '0.28.0';
-
-// One CJS overlay publishes the upstream-derived runtime object unchanged.
-// Every package condition shares this file, preserving import/require identity.
-const SHIM_ESBUILD_CJS = `const esbuild = globalThis.__rifty?.esbuild;
-if (esbuild == null) {
-  throw new Error('rifty invariant: esbuild runtime slot is not initialized');
-}
-module.exports = esbuild;
-`;
-
-const SHIM_ESBUILD_PACKAGE_JSON = JSON.stringify(
-  {
-    name: 'esbuild',
-    version: SHIM_ESBUILD_VERSION,
-    main: './lib/main.cjs',
-    module: './lib/main.cjs',
-    type: 'commonjs',
-    exports: {
-      '.': {
-        import: './lib/main.cjs',
-        require: './lib/main.cjs',
-        default: './lib/main.cjs',
-      },
-    },
-  },
-  null,
-  2,
-);
+export {
+  builtinSyntheticPackageRecipes,
+  type BuiltinSyntheticPackageRecipe,
+} from './synthetic-package-recipes.ts';
 
 const SHIM_LIGHTNINGCSS_VERSION = '1.32.0';
 
@@ -164,18 +134,6 @@ export const internalsShims: Record<string, InternalsShim> = {
     range: '^4.0.0',
     companions: ['@rollup/wasm-node'],
     files: { 'dist/native.js': ROLLUP_NATIVE_SHIM },
-  },
-  // Materialize the `esbuild` import name over the realm's exact runtime API.
-  // EXACT-pin range: the alias files statically claim SHIM_ESBUILD_VERSION —
-  // any trigger version drift must loud-throw, not ship a lying package.json.
-  '@esbuild/wasi-preview1': {
-    range: '0.28.0',
-    into: 'esbuild',
-    apiVersion: SHIM_ESBUILD_VERSION,
-    files: {
-      'package.json': SHIM_ESBUILD_PACKAGE_JSON,
-      'lib/main.cjs': SHIM_ESBUILD_CJS,
-    },
   },
   // Same for `lightningcss` → lightningcss-wasm (pure re-export delegates).
   'lightningcss-wasm': {

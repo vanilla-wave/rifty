@@ -24,6 +24,117 @@ function nonRootPackages(lf: Lockfile): Record<string, unknown> {
 }
 
 describe('eddy resolveBundle — parity with a client live-resolve (vendored tarballs)', () => {
+  it('harvests a synthesized esbuild row without a tarball and preserves its exact lockfile marker', async () => {
+    const synthetic = makeSyntheticRegistry([{ name: 'esbuild', version: '0.28.0' }]);
+    const calls: string[] = [];
+    const result = await resolveBundle(
+      { dependencies: { esbuild: '^0.28.0' } },
+      {
+        registryBaseUrl: synthetic.baseUrl,
+        fetch: async (url, init) => {
+          calls.push(url);
+          return synthetic.fetch(url, init);
+        },
+      },
+    );
+
+    expect(result.kind).toBe('bundle');
+    if (result.kind !== 'bundle') return;
+    const contents = unpackEddyBundle(result.bytes);
+    const lockfile = JSON.parse(contents.lockfileText) as Lockfile;
+    expect(contents.manifest.tarballs).toEqual([]);
+    expect(contents.tarballs).toEqual([]);
+    expect(calls.filter((url) => url.includes('tarball/'))).toEqual([]);
+    expect(calls.filter((url) => !url.includes('tarball/'))).toEqual(['synthetic:/esbuild']);
+    expect(lockfile.packages['node_modules/esbuild']).toMatchObject({
+      version: '0.28.0',
+      rifty: {
+        materialization: {
+          protocol: 'rifty.lockfile-package-materialization/v1',
+          kind: 'synthesized-shadow-delegate',
+          substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
+          recipeSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+      },
+    });
+    expect(lockfile.packages['node_modules/esbuild']).not.toHaveProperty('resolved');
+    expect(lockfile.packages['node_modules/esbuild']).not.toHaveProperty('integrity');
+  });
+
+  it('carries user overrides only and harvests ordinary esbuild tarball bytes for a same-name override', async () => {
+    const synthetic = makeSyntheticRegistry([{ name: 'esbuild', version: '0.28.0' }]);
+    const result = await resolveBundle(
+      {
+        dependencies: { esbuild: '^0.28.0' },
+        overrides: { esbuild: 'esbuild@0.28.0' },
+      },
+      { registryBaseUrl: synthetic.baseUrl, fetch: synthetic.fetch },
+    );
+
+    expect(result.kind).toBe('bundle');
+    if (result.kind !== 'bundle') return;
+    const contents = unpackEddyBundle(result.bytes);
+    const lockfile = JSON.parse(contents.lockfileText) as Lockfile;
+    expect(contents.manifest.tarballs.map(({ name, version }) => ({ name, version }))).toEqual([
+      { name: 'esbuild', version: '0.28.0' },
+    ]);
+    expect(lockfile.packages['node_modules/esbuild']?.resolved).toContain('synthetic:tarball/');
+    expect(
+      (lockfile.packages['node_modules/esbuild'] as { rifty?: unknown }).rifty,
+    ).toBeUndefined();
+    expect(lockfile.rifty?.shadowSubstitutions.applied).toEqual([]);
+  });
+
+  it('harvests mixed ordinary and synthesized esbuild coordinates without collapsing either materialization', async () => {
+    const synthetic = makeSyntheticRegistry([
+      {
+        name: 'synth-parent',
+        version: '1.0.0',
+        dependencies: { esbuild: '0.28.0' },
+      },
+      {
+        name: 'registry-parent',
+        version: '1.0.0',
+        dependencies: { esbuild: '0.28.0' },
+      },
+      { name: 'esbuild', version: '0.28.0' },
+    ]);
+    const result = await resolveBundle(
+      {
+        dependencies: { 'synth-parent': '1.0.0', 'registry-parent': '1.0.0' },
+        overrides: { 'registry-parent>esbuild': 'esbuild@0.28.0' },
+      },
+      { registryBaseUrl: synthetic.baseUrl, fetch: synthetic.fetch },
+    );
+
+    expect(result.kind).toBe('bundle');
+    if (result.kind !== 'bundle') return;
+    const contents = unpackEddyBundle(result.bytes);
+    const lockfile = JSON.parse(contents.lockfileText) as Lockfile;
+    const syntheticEntry = lockfile.packages['node_modules/esbuild'];
+    const registryEntry = lockfile.packages['node_modules/registry-parent/node_modules/esbuild'];
+
+    expect(syntheticEntry).toMatchObject({
+      version: '0.28.0',
+      rifty: {
+        materialization: {
+          protocol: 'rifty.lockfile-package-materialization/v1',
+          kind: 'synthesized-shadow-delegate',
+          substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
+        },
+      },
+    });
+    expect(syntheticEntry).not.toHaveProperty('resolved');
+    expect(registryEntry?.resolved).toContain('synthetic:tarball/');
+    expect(registryEntry).not.toHaveProperty('rifty');
+    expect(
+      contents.manifest.tarballs.filter(
+        ({ name, version }) => name === 'esbuild' && version === '0.28.0',
+      ),
+    ).toHaveLength(1);
+    expect(lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
+  });
+
   it('reproduces the diamond closure byte-for-byte in the bundle lockfile', async () => {
     const deps = { debug: '^4.4.1', 'diamond-conflict-parent': '1.0.0' };
 

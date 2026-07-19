@@ -21,6 +21,13 @@
   POST now emits `x-eddy-store-durable`; deep-canonical closure hash is upstream-
   registry-URL independent.
 
+### Changed
+
+- **Synthetic package materialization remains explicit in Eddy (ADR-0298).**
+  Resolution uses npm-client's exact recipe and lockfile marker, omits a
+  tarball only for that proven row, preserves mixed ordinary/synthetic
+  coordinates, and declines corrupt or unsupported evidence before staging.
+
 ### Fixed
 
 - **S3 object paths keep base64 `/` raw for signed PUTs.** Yandex Object

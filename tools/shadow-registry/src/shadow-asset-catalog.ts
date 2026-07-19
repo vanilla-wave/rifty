@@ -109,7 +109,10 @@ function freezeRecord<T extends object>(value: T): Readonly<T> {
 export function createBuiltinShadowAssetCatalog(
   definition: BuiltinShadowAssetCatalogDefinition,
 ): BuiltinShadowAssetCatalog {
-  const collisions = sourcePackageNames();
+  const collisions = new Set(sourcePackageNames());
+  for (const substitution of definition.substitutions) {
+    collisions.add(substitution.publicName);
+  }
   for (const asset of definition.assets) {
     if (collisions.has(asset.source.name)) throw sourceCollision(asset.source.name);
   }

@@ -233,20 +233,21 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
   });
 });
 
-describe('install-time shadow shims — alias packages + substitution lines', () => {
+describe('shadow substitutions — synthesized esbuild + ordinary user aliases', () => {
   async function esbuildDb() {
     return db(
+      ['esbuild', await makeEntry('esbuild', '0.28.0')],
+      ['esbuild', await makeEntry('esbuild', '0.21.5')],
       ['@esbuild/wasi-preview1', await makeEntry('@esbuild/wasi-preview1', '0.28.0')],
       ['viteish', await makeEntry('viteish', '1.0.0', { esbuild: '^0.28.0' })],
       ['viteish-old', await makeEntry('viteish-old', '1.0.0', { esbuild: '0.21.5' })],
     );
   }
 
-  const REDIRECT_LINE =
-    'npm: esbuild@^0.28.0 → @esbuild/wasi-preview1@0.28.0 (substituted from shadow registry, ADR-0051)';
-  const PATCH_LINE = 'npm: esbuild@0.28.0 internals patched from shadow registry';
+  const SYNTHESIS_LINE =
+    'npm: esbuild@^0.28.0 → esbuild@0.28.0 (synthesized delegate from shadow registry, ADR-0298)';
 
-  it('materializes the esbuild alias package next to the redirect target (fresh + replay, byte-identical)', async () => {
+  it('materializes the synthesized esbuild delegate on fresh + replay, byte-identically', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -264,11 +265,10 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
       },
     );
 
-    const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
-    expect(aliasMain).toContain('__rifty?.esbuild');
+    const delegateMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
+    expect(delegateMain).toContain('__rifty?.esbuild');
     expect(await readText(vfs, '/proj/node_modules/esbuild/package.json')).toContain('"esbuild"');
-    expect(fresh).toContain(REDIRECT_LINE);
-    expect(fresh).toContain(PATCH_LINE);
+    expect(fresh).toEqual([SYNTHESIS_LINE]);
 
     // Replay (lockfile fast path): same lines, byte-identical shim files.
     const replay: string[] = [];
@@ -284,12 +284,11 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => replay.push(line),
       },
     );
-    expect(replay).toContain(REDIRECT_LINE);
-    expect(replay).toContain(PATCH_LINE);
-    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasMain);
+    expect(replay).toEqual([SYNTHESIS_LINE]);
+    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(delegateMain);
   });
 
-  it('prints the redirect + patch lines for a TRANSITIVE baked override on fresh AND replay', async () => {
+  it('prints the synthesis line for a transitive request on fresh and replay', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -306,8 +305,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => fresh.push(line),
       },
     );
-    expect(fresh).toContain(REDIRECT_LINE);
-    expect(fresh).toContain(PATCH_LINE);
+    expect(fresh).toContain(SYNTHESIS_LINE);
     expect(await vfs.exists('/proj/node_modules/esbuild/lib/main.cjs')).toBe(true);
 
     const replay: string[] = [];
@@ -323,8 +321,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => replay.push(line),
       },
     );
-    expect(replay).toContain(REDIRECT_LINE);
-    expect(replay).toContain(PATCH_LINE);
+    expect(replay).toContain(SYNTHESIS_LINE);
   });
 
   const UNSUPPORTED_REQUEST = '0.21.5';
@@ -333,7 +330,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     feature: `shadow-registry.esbuild@${UNSUPPORTED_REQUEST}`,
   };
 
-  it('refuses a direct baked substitution when the fresh request excludes exact esbuild 0.28.0', async () => {
+  it('refuses a selected public version outside the exact synthetic recipe', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const lines: string[] = [];
@@ -355,7 +352,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
   });
 
-  it('refuses a direct baked substitution on replay when the new request excludes exact esbuild 0.28.0', async () => {
+  it('re-resolves when a new direct request excludes the locked synthetic version', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -370,7 +367,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         shadowAssets: { installer: readyShadowAssetInstaller },
       },
     );
-    const aliasBefore = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
+    const synthesizedBefore = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
     const packument = vi.spyOn(registry, 'getPackument');
     const lines: string[] = [];
 
@@ -382,12 +379,12 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         { vfs, cwd: '/proj', registry, onSubstitution: (line) => lines.push(line) },
       ),
     ).rejects.toMatchObject(unsupportedRequestError);
-    expect(packument).not.toHaveBeenCalled();
+    expect(packument).toHaveBeenCalledWith('esbuild');
     expect(lines).toEqual([]);
-    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasBefore);
+    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(synthesizedBefore);
   });
 
-  it('refuses a transitive baked substitution when the fresh request excludes exact esbuild 0.28.0', async () => {
+  it('refuses a transitive selected version outside the exact synthetic recipe', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const lines: string[] = [];
@@ -409,7 +406,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
   });
 
-  it('refuses a transitive baked substitution from an old lockfile whose request excludes exact esbuild 0.28.0', async () => {
+  it('rejects a transitive lockfile range drift before rewriting the synthesized tree', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -432,7 +429,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
       throw new Error('test setup: viteish lockfile dependencies missing');
     viteish.dependencies.esbuild = UNSUPPORTED_REQUEST;
     await vfs.writeFile('/proj/package-lock.json', JSON.stringify(lockfile));
-    const aliasBefore = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
+    const synthesizedBefore = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
     const packument = vi.spyOn(registry, 'getPackument');
     const lines: string[] = [];
 
@@ -443,13 +440,13 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         { viteish: '1.0.0' },
         { vfs, cwd: '/proj', registry, onSubstitution: (line) => lines.push(line) },
       ),
-    ).rejects.toMatchObject(unsupportedRequestError);
+    ).rejects.toMatchObject({ code: 'EBROKENLOCK' });
     expect(packument).not.toHaveBeenCalled();
     expect(lines).toEqual([]);
-    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasBefore);
+    expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(synthesizedBefore);
   });
 
-  it('allows an explicit user target at 0.28.0 to replace an otherwise-incompatible source request on fresh and replay', async () => {
+  it('keeps an explicit user alias target ordinary on fresh and replay', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -468,8 +465,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => fresh.push(line),
       },
     );
-    expect(fresh.filter((line) => line.includes('substituted from shadow registry'))).toEqual([]);
-    expect(fresh).toContain(PATCH_LINE);
+    expect(fresh).toEqual([]);
 
     const replay: string[] = [];
     await install(
@@ -484,9 +480,9 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => replay.push(line),
       },
     );
-    expect(replay.filter((line) => line.includes('substituted from shadow registry'))).toEqual([]);
-    expect(replay).toContain(PATCH_LINE);
-    expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
+    expect(replay).toEqual([]);
+    expect(await vfs.exists('/proj/node_modules/@esbuild/wasi-preview1/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
   });
 
   it('prints a redirect line for a plain baked redirect without an internals shim (bcrypt)', async () => {
@@ -547,32 +543,28 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         shadowAssets: { installer: readyShadowAssetInstaller },
       },
     );
-    expect(warn.mock.calls.map((c) => String(c[0]))).toContain(REDIRECT_LINE);
+    expect(warn.mock.calls.map((c) => String(c[0]))).toContain(SYNTHESIS_LINE);
   });
 
-  it('keeps an explicit user target at 0.29.0 loud because it is outside the alias shim range', async () => {
+  it('keeps an explicit user alias target at 0.29.0 on the ordinary package path', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(
       db(['@esbuild/wasi-preview1', await makeEntry('@esbuild/wasi-preview1', '0.29.0')]),
     );
-    await expect(
-      install(
-        'root',
-        '1.0.0',
-        { esbuild: '*' },
-        {
-          vfs,
-          cwd: '/proj',
-          registry,
-          overrides: { esbuild: '@esbuild/wasi-preview1@0.29.0' },
-        },
-      ),
-    ).rejects.toMatchObject({
-      name: 'NotImplementedError',
-      feature: 'shadow-registry.esbuild@0.29.0',
-      message: expect.stringContaining('shadow-registry.esbuild@0.29.0'),
-    });
+    const result = await install(
+      'root',
+      '1.0.0',
+      { esbuild: '*' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        overrides: { esbuild: '@esbuild/wasi-preview1@0.29.0' },
+      },
+    );
+    expect(result.lockfile.packages['node_modules/@esbuild/wasi-preview1']?.version).toBe('0.29.0');
+    expect(result.lockfile.rifty?.shadowSubstitutions.applied).toEqual([]);
   });
 });
 

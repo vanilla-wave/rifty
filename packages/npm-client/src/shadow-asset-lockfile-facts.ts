@@ -1,5 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
+import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import type { Lockfile } from './linker.ts';
+import { packageMaterializationFromLockfileEntry } from './package-materialization.ts';
 import {
   lockfileShadowSubstitutionRecipe,
   lockfileShadowSubstitutionRecipes,
@@ -144,18 +146,115 @@ function assertTraceTargets(lockfile: Lockfile, plan: ShadowAssetPlan): void {
     if (
       recipe === null ||
       recipe.publicName !== applied.publicName ||
-      !Object.entries(lockfile.packages).some(
-        ([path, entry]) =>
-          packageNameFromPath(path) === recipe.materialization.name &&
-          isPlainObject(entry) &&
-          entry.version === applied.resolvedPublicVersion,
-      )
+      !Object.entries(lockfile.packages).some(([path, entry]) => {
+        if (
+          packageNameFromPath(path) !== recipe.materialization.name ||
+          !isPlainObject(entry) ||
+          entry.version !== applied.resolvedPublicVersion
+        ) {
+          return false;
+        }
+        const state = packageMaterializationFromLockfileEntry(entry);
+        return (
+          state.kind === 'synthesized-shadow-delegate' &&
+          state.recipe.substitutionId === applied.substitutionId
+        );
+      })
     ) {
-      throw new TypeError(
-        `shadow substitution ${applied.publicName}@${applied.resolvedPublicVersion} has no matching lockfile materialized recipe target`,
+      throw Object.assign(
+        new Error(
+          `EBROKENLOCK: shadow substitution ${applied.publicName}@${applied.resolvedPublicVersion} has no matching package materialization. Delete the lockfile and re-install.`,
+        ),
+        { code: 'EBROKENLOCK' as const, reason: 'trace-materialization-disagreement' as const },
       );
     }
   }
+  for (const [path, entry] of Object.entries(lockfile.packages)) {
+    if (path === '') continue;
+    const state = packageMaterializationFromLockfileEntry(entry);
+    if (state.kind !== 'synthesized-shadow-delegate') continue;
+    if (packageNameFromPath(path) !== state.recipe.publicName) {
+      throw Object.assign(
+        new Error(
+          `EBROKENLOCK: package materialization at ${path} does not match recipe package ${state.recipe.publicName}. Delete the lockfile and re-install.`,
+        ),
+        { code: 'EBROKENLOCK' as const, reason: 'materialization-path-disagreement' as const },
+      );
+    }
+    const matchingTrace = plan.substitutions.some(
+      (applied) =>
+        applied.substitutionId === state.recipe.substitutionId &&
+        applied.publicName === state.recipe.publicName &&
+        applied.resolvedPublicVersion === state.recipe.version &&
+        applied.runtimeAdapterId === state.recipe.runtimeAdapterId,
+    );
+    if (!matchingTrace) {
+      throw Object.assign(
+        new Error(
+          `EBROKENLOCK: package materialization at ${path} has no matching shadow substitution trace. Delete the lockfile and re-install.`,
+        ),
+        { code: 'EBROKENLOCK' as const, reason: 'materialization-trace-disagreement' as const },
+      );
+    }
+  }
+}
+
+/** Historical active evidence forces live resolve; it is never hydrated as current policy. */
+export function lockfileHasHistoricalShadowSubstitution(lockfile: Lockfile): boolean {
+  const trace = traceOf(lockfile);
+  let historical = false;
+  if (trace !== null) {
+    if (!isPlainObject(trace)) return false;
+    exactKeys(trace, ['applied', 'protocol'], 'shadow substitution lockfile trace');
+    if (
+      trace.protocol !== 'rifty.lockfile-shadow-substitutions/v1' ||
+      !Array.isArray(trace.applied)
+    ) {
+      return false;
+    }
+    for (const value of trace.applied) {
+      if (!isPlainObject(value)) return false;
+      exactKeys(
+        value,
+        [
+          'publicName',
+          'requestedRange',
+          'resolvedPublicVersion',
+          'runtimeAdapterId',
+          'substitutionId',
+        ],
+        'lockfile applied shadow substitution',
+      );
+      if (typeof value.substitutionId !== 'string') return false;
+      const recipe = lockfileShadowSubstitutionRecipe(value.substitutionId);
+      if (recipe === null) return false;
+      if (
+        !builtinShadowRecipeIsActive(value.substitutionId, value.publicName, value.runtimeAdapterId)
+      ) {
+        historical = true;
+      }
+    }
+  }
+  for (const [path, entry] of Object.entries(lockfile.packages)) {
+    if (path === '') continue;
+    if (packageMaterializationFromLockfileEntry(entry).kind === 'historical') historical = true;
+  }
+  return historical;
+}
+
+function builtinShadowRecipeIsActive(
+  substitutionId: string,
+  publicName: unknown,
+  runtimeAdapterId: unknown,
+): boolean {
+  const active = builtinShadowAssetCatalog.substitutions.find(
+    (candidate) => candidate.id === substitutionId,
+  );
+  return (
+    active !== undefined &&
+    active.publicName === publicName &&
+    active.runtimeAdapterId === runtimeAdapterId
+  );
 }
 
 /** Object-level producer shared by exact bytes and post-tree evidence. */

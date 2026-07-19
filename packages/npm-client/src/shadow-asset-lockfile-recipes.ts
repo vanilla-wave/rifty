@@ -14,6 +14,11 @@ export const lockfileShadowSubstitutionRecipes: readonly Readonly<LockfileShadow
       publicName: 'esbuild',
       materialization: Object.freeze({ kind: 'package' as const, name: '@esbuild/wasi-preview1' }),
     }),
+    Object.freeze({
+      substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
+      publicName: 'esbuild',
+      materialization: Object.freeze({ kind: 'package' as const, name: 'esbuild' }),
+    }),
   ]);
 
 for (const substitution of builtinShadowAssetCatalog.substitutions) {

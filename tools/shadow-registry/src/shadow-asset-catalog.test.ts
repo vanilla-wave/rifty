@@ -23,7 +23,7 @@ describe('builtin shadow-asset catalog', () => {
     expect(catalog.id).toBe('rifty.shadow-assets.builtin.v1');
     expect(catalog.substitutions).toEqual([
       {
-        id: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+        id: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
         publicName: 'esbuild',
         builtin: true,
         runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
@@ -60,7 +60,7 @@ describe('builtin shadow-asset catalog', () => {
       createBuiltinShadowAssetCatalog({
         schema: 1,
         id: 'test.catalog',
-        substitutions: [],
+        substitutions: structuredClone(builtinShadowAssetCatalog.substitutions),
         assets: [
           {
             id: 'bad',

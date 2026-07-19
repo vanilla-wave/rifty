@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import { builtinSyntheticPackageRecipes } from '@riftydev/shadow-registry';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import { canonicalShadowDigest } from './canonical-shadow-json.ts';
@@ -28,6 +29,21 @@ import {
 import { VfsTarballCache } from './tarball-cache.ts';
 
 const encoder = new TextEncoder();
+
+function syntheticEntry(version = '0.28.0') {
+  return {
+    version,
+    dependencies: {},
+    rifty: {
+      materialization: {
+        protocol: 'rifty.lockfile-package-materialization/v1' as const,
+        kind: 'synthesized-shadow-delegate' as const,
+        substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
+        recipeSha256: builtinSyntheticPackageRecipes[0]!.recipeSha256,
+      },
+    },
+  };
+}
 
 function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -231,12 +247,7 @@ describe('ShadowAssetManager', () => {
         version: '1.0.0',
         lockfileVersion: 3,
         requires: true,
-        packages: {
-          'node_modules/@esbuild/wasi-preview1': {
-            version: '0.28.0',
-            dependencies: {},
-          },
-        },
+        packages: trace.length === 0 ? {} : { 'node_modules/esbuild': syntheticEntry() },
         rifty: {
           shadowSubstitutions: {
             protocol: RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL,
@@ -278,10 +289,7 @@ describe('ShadowAssetManager', () => {
 
   it.each([
     ['missing', {}],
-    [
-      'wrong-version',
-      { 'node_modules/@esbuild/wasi-preview1': { version: '0.28.1', dependencies: {} } },
-    ],
+    ['wrong-version', { 'node_modules/esbuild': syntheticEntry('0.28.1') }],
   ])('rejects post-tree evidence with a %s materialized recipe target', (_label, packages) => {
     const applied = appliedBuiltinShadowSubstitution('esbuild', '^0.28.0', '0.28.0');
     if (applied === null) throw new Error('fixture expected the builtin esbuild substitution');
@@ -322,7 +330,7 @@ describe('ShadowAssetManager', () => {
           transports: [],
           recovery: 'clear-and-retry',
         }),
-    ).toThrow(/materialized.*target/i);
+    ).toThrow(/EBROKENLOCK|package materialization/i);
   });
 
   it('joins the real STD RegistryClient/tarball-cache adapter to MemoryVfs readiness', async () => {

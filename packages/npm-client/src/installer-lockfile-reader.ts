@@ -6,7 +6,12 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
 import type { Lockfile, LockfileEntry } from './linker.ts';
+import { packageMaterializationFromLockfileEntry } from './package-materialization.ts';
 import { matchesRange } from './semver.ts';
+import {
+  lockfileHasHistoricalShadowSubstitution,
+  shadowAssetPlanFromLockfileFacts,
+} from './shadow-asset-lockfile-facts.ts';
 
 export async function readExistingLockfile(vfs: Vfs, cwd: string): Promise<Lockfile | null> {
   const path = joinPath(cwd, 'package-lock.json');
@@ -166,6 +171,21 @@ export function bundleCompletenessGap(
   request: Record<string, string>,
   tarballs: ReadonlyArray<{ name: string; version: string; integrity: string }>,
 ): string | null {
+  try {
+    if (lockfileHasHistoricalShadowSubstitution(lockfile)) {
+      return 'bundle lockfile contains a historical package materialization';
+    }
+    shadowAssetPlanFromLockfileFacts(lockfile);
+  } catch (error) {
+    const feature = (error as { feature?: unknown })?.feature;
+    const detail =
+      typeof feature === 'string'
+        ? feature
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    return `bundle lockfile materialization validation failed: ${detail}`;
+  }
   const integrityByNameVersion = new Map<string, string>();
   for (const t of tarballs) integrityByNameVersion.set(`${t.name}@${t.version}`, t.integrity);
   const reachable = lockfileSubgraph(lockfile, Object.keys(request));
@@ -173,6 +193,23 @@ export function bundleCompletenessGap(
     if (path === '') continue; // the root project is not a tarball
     const name = lockfilePathBareName(path);
     if (!reachable.has(name)) continue;
+    let materialization: ReturnType<typeof packageMaterializationFromLockfileEntry>;
+    try {
+      materialization = packageMaterializationFromLockfileEntry(entry);
+    } catch (error) {
+      const feature = (error as { feature?: unknown })?.feature;
+      return `bundle lockfile materialization validation failed: ${
+        typeof feature === 'string'
+          ? feature
+          : error instanceof Error
+            ? error.message
+            : String(error)
+      }`;
+    }
+    if (materialization.kind === 'historical') {
+      return `bundle lockfile entry ${path} uses historical package materialization`;
+    }
+    if (materialization.kind === 'synthesized-shadow-delegate') continue;
     if (!entry.version || !entry.resolved || !entry.integrity) {
       return `bundle lockfile entry ${path} lacks replay fields (resolved/integrity)`;
     }

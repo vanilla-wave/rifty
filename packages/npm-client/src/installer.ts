@@ -23,9 +23,7 @@
  *     applies overrides per node.
  *
  * The fast-path/live-path choice is made once pre-flight (see {@link
- * chooseSource}); the walk doesn't care which source it drives. {@link
- * pinToPackage} is the single adapter from a resolved pin + tarball bytes to a
- * `PinnedPackage`.
+ * chooseSource}); both converge on one package-materialization seam.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -61,6 +59,7 @@ import {
 import {
   bundleCompletenessGap,
   lockfileCovers,
+  lockfilePathBareName,
   lockfileSubgraph,
   pinnedEntryForParent,
   readExistingLockfile,
@@ -68,8 +67,24 @@ import {
 } from './installer-lockfile-reader.ts';
 import { type Lockfile, type ResolvedPackage, buildInstallLockfile, link } from './linker.ts';
 import { type OverrideMap, resolveOverride } from './overrides.ts';
+import {
+  type PackageMaterialization,
+  type RegistryPackageBytes,
+  builtinSyntheticPackageMaterialization,
+  lockfileMaterializationMatchesCurrentPolicy,
+  materializePackage,
+  packageMaterializationFromLockfileEntry,
+  packageMaterializationKey,
+  packageMaterializationTransport,
+  registryPackageMaterialization,
+  synthesizedSubstitutionLine,
+} from './package-materialization.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
+import {
+  lockfileHasHistoricalShadowSubstitution,
+  shadowAssetPlanFromLockfileFacts,
+} from './shadow-asset-lockfile-facts.ts';
 import {
   type AppliedShadowSubstitution,
   appliedBuiltinShadowSubstitution,
@@ -95,7 +110,7 @@ import {
   computeIntegrity,
   parseIntegrityAlgorithm,
 } from './tarball-cache.ts';
-import { extractTarGz, parseTarEntries } from './unpacker.ts';
+import { parseTarEntries } from './unpacker.ts';
 import { Semaphore } from './utils/semaphore.ts';
 
 /**
@@ -158,11 +173,9 @@ export interface InstallOptions {
   prefer?: 'cached' | 'online';
   /**
    * Substitution-provenance sink (ADR-0188). One complete line per
-   * shadow-registry substitution — baked redirects (`npm: esbuild@^0.28.0 →
-   * @esbuild/wasi-preview1@0.28.0 (substituted from shadow registry, ADR-0051)`)
-   * and internals-shim applications (`npm: rollup@4.62.2 internals patched
-   * from shadow registry`) — on fresh install AND lockfile replay. User
-   * `overrides` do not report (the user authored those). Default:
+   * shadow-registry substitution — synthesized delegates, baked redirects,
+   * and internals-shim applications — on fresh install AND lockfile replay.
+   * User `overrides` do not report (the user authored those). Default:
    * `console.warn` — a substitution is never silent.
    */
   onSubstitution?: (line: string) => void;
@@ -221,7 +234,7 @@ export interface InstallProgressEvent {
 }
 
 export type InstallResolution = 'lockfile' | 'metadata';
-export type PackageTransport = 'cache' | 'eddy' | 'registry';
+export type PackageTransport = 'cache' | 'eddy' | 'registry' | 'synthesized';
 
 export interface InstallPackageProvenance {
   readonly name: string;
@@ -249,6 +262,7 @@ type PinnedPackage = ResolvedPackage & {
   integrity?: string;
   peerDependencies?: Record<string, string>;
   installPath: string;
+  materialization: PackageMaterialization;
 };
 
 export interface InstallTreeResult {
@@ -308,8 +322,7 @@ export interface InstallResult extends InstallTreeResult {
 interface ResolvedPin {
   readonly name: string;
   readonly version: string;
-  readonly resolved: string;
-  readonly integrity?: string;
+  readonly materialization: PackageMaterialization;
   readonly dependencies: Record<string, string>;
   readonly bin?: string | Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
@@ -456,7 +469,7 @@ export async function install(
     substitutions,
   );
 
-  const cacheHits = new Map<string, boolean>();
+  const acquisitionCacheHits = new Map<string, boolean>();
   let resolved: Map<string, PinnedPackage>;
   try {
     resolved = await walkAndPin(
@@ -465,13 +478,26 @@ export async function install(
       plan.optionalDependencies,
       rootName,
       fetchCtx,
-      (event) => {
-        cacheHits.set(`${event.name}@${event.version}`, event.cacheHit);
-        opts.onPackage?.(event);
-      },
+      opts.onPackage,
       (pin) => {
-        if (pin.appliedShadowSubstitution) substitutions.applied(pin.appliedShadowSubstitution);
+        if (pin.appliedShadowSubstitution) {
+          if (pin.materialization.kind === 'synthesized-shadow-delegate') {
+            substitutions.synthesized(
+              pin.appliedShadowSubstitution.requestedRange,
+              pin.appliedShadowSubstitution.resolvedPublicVersion,
+            );
+          }
+          substitutions.applied(pin.appliedShadowSubstitution);
+        }
         substitutions.materialized(pin.name, pin.version);
+      },
+      (pin, cacheHit) => {
+        if (cacheHit !== null) {
+          acquisitionCacheHits.set(
+            packageMaterializationKey(pin.name, pin.version, pin.materialization),
+            cacheHit,
+          );
+        }
       },
     );
   } catch (error) {
@@ -492,17 +518,14 @@ export async function install(
   const provenancePackages: InstallPackageProvenance[] = [];
   const seenProvenance = new Set<string>();
   for (const pkg of packages) {
-    const key = `${pkg.name}@${pkg.version}`;
+    const key = packageMaterializationKey(pkg.name, pkg.version, pkg.materialization);
     if (seenProvenance.has(key)) continue;
     seenProvenance.add(key);
-    const cacheHit = cacheHits.get(key);
-    if (cacheHit === undefined) {
-      throw new Error(`install provenance missing fetch result for ${key}`);
-    }
+    const cacheHit = acquisitionCacheHits.get(key) ?? null;
     provenancePackages.push({
       name: pkg.name,
       version: pkg.version,
-      transport: cacheHit ? (source === 'eddy' ? 'eddy' : 'cache') : 'registry',
+      transport: packageMaterializationTransport(pkg.materialization, cacheHit, source),
     });
   }
 
@@ -520,7 +543,7 @@ export async function install(
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
   const treeResult: InstallTreeResult = {
-    packages,
+    packages: packages.map(({ materialization: _materialization, ...pkg }) => pkg),
     lockfile,
     conflicts: [],
     provenance: {
@@ -903,6 +926,8 @@ function hasLockfileFastPath(
   opts: InstallOptions,
 ): boolean {
   if (!existingLockfile) return false;
+  if (lockfileHasHistoricalShadowSubstitution(existingLockfile)) return false;
+  shadowAssetPlanFromLockfileFacts(existingLockfile);
   const request = {
     ...applyOverridesToRequest(dependencies, rootName, opts.overrides),
     ...applyOverridesToRequest(optionalDependencies, rootName, opts.overrides),
@@ -1308,6 +1333,7 @@ interface SubstitutionReporter {
   redirect(source: string, range: string | null, target: string, version: string): void;
   applied(value: AppliedShadowSubstitution): void;
   materialized(name: string, version: string): void;
+  synthesized(range: string | null, version: string): void;
   line(text: string): void;
   plan(): ReturnType<typeof planBuiltinShadowAssets>;
 }
@@ -1343,6 +1369,12 @@ function createSubstitutionReporter(sink: (line: string) => void): SubstitutionR
       const key = `${name}@${version}`;
       for (const value of candidates.get(key) ?? []) this.applied(value);
       candidates.delete(key);
+    },
+    synthesized(range, version): void {
+      const text = synthesizedSubstitutionLine(range, version);
+      if (seen.has(text)) return;
+      seen.add(text);
+      sink(text);
     },
     line(text): void {
       sink(text);
@@ -1393,6 +1425,15 @@ function chooseSource(
     opts.overrides,
   );
   if (existingLockfile) {
+    if (lockfileHasHistoricalShadowSubstitution(existingLockfile)) {
+      return {
+        source: createRegistrySource(opts, substitutions),
+        resolution: 'metadata',
+        dependencies,
+        optionalDependencies,
+      };
+    }
+    shadowAssetPlanFromLockfileFacts(existingLockfile);
     // TODO(backlog: npm-client/lockfile-fast-path-failed-optionals) — a root
     // optional that failed resolution is absent from the lockfile, so including
     // optionals here defeats the fast path on every subsequent install.
@@ -1457,6 +1498,7 @@ async function walkAndPin(
   fetchCtx: FetchAndUnpackCtx,
   onPackage?: (event: InstallProgressEvent) => void,
   onMaterialized?: (pin: ResolvedPin) => void,
+  onAcquired?: (pin: ResolvedPin, cacheHit: boolean | null) => void,
 ): Promise<Map<string, PinnedPackage>> {
   // Determinism-vs-throughput invariant (#24, perf-audit 2026-06-05): the
   // placement walk (resolve -> choosePlacement -> flatByName claim -> recurse)
@@ -1479,17 +1521,17 @@ async function walkAndPin(
   const sem = new Semaphore(FETCH_CONCURRENCY);
 
   /** What's installed at `node_modules/<name>` (the hoisted slot). */
-  const flatByName = new Map<string, string /* version */>();
+  const flatByName = new Map<string, Readonly<{ version: string; materializationKey: string }>>();
   /** Every installed copy, keyed by install path. */
   const pinned = new Map<string, PinnedPackage>();
   /** Install paths already scheduled this walk (synchronous path-level dedup,
    * replaces `pinned.has` since `pinned` is now populated at the await site). */
   const scheduled = new Set<string>();
   /** Collapse concurrent same-(name,version) fetches to one network call. */
-  const inFlight = new Map<string, Promise<FetchAndUnpackResult>>();
+  const inFlight = new Map<string, Promise<FetchAndUnpackResult | null>>();
   /** Deferred fetch tasks; `optional` carries the warn descriptor (or null). */
   const fetchTasks: Array<{
-    promise: Promise<FetchAndUnpackResult>;
+    promise: Promise<FetchAndUnpackResult | null>;
     pin: ResolvedPin;
     installPath: string;
     optional: { depName: string; depRange: string; parentName: string } | null;
@@ -1532,7 +1574,10 @@ async function walkAndPin(
       // Only one source drives a given install today, but the bookkeeping is
       // cheap and removes a foot-gun in a hypothetical mixed run.
       if (installPath === `node_modules/${pin.name}` && !flatByName.has(pin.name)) {
-        flatByName.set(pin.name, pin.version);
+        flatByName.set(pin.name, {
+          version: pin.version,
+          materializationKey: packageMaterializationKey(pin.name, pin.version, pin.materialization),
+        });
       }
       if (scheduled.has(installPath)) {
         if (pinned.has(installPath)) onMaterialized?.(pin);
@@ -1544,27 +1589,32 @@ async function walkAndPin(
       // Defer the fetch through the bounded semaphore; dedupe concurrent
       // same-(name,version) fetches (flat + nested same-version, or two parents
       // racing the same version) to a single network call.
-      const key = `${pin.name}@${pin.version}`;
+      const key = packageMaterializationKey(pin.name, pin.version, pin.materialization);
       let p = inFlight.get(key);
       if (!p) {
-        p = sem.run(() =>
-          fetchAndUnpackToCache(
-            {
-              name: pin.name,
-              version: pin.version,
-              resolved: pin.resolved,
-              integrity: pin.integrity,
-            },
-            fetchCtx,
-          ),
-        );
-        if (onPackage) {
+        const materialization = pin.materialization;
+        p =
+          materialization.kind === 'registry'
+            ? sem.run(() =>
+                fetchAndUnpackToCache(
+                  {
+                    name: pin.name,
+                    version: pin.version,
+                    resolved: materialization.resolved,
+                    integrity: materialization.expectedIntegrity,
+                  },
+                  fetchCtx,
+                ),
+              )
+            : Promise.resolve(null);
+        if (onPackage && pin.materialization.kind === 'registry') {
           // Fire on the dedup'd promise: once per unique (name, version), only
           // on success (ADR-0134). `inFlight` stores the hooked promise so a
           // second visitor of the same key never double-fires.
           const hook = onPackage;
           const { name: pinName, version: pinVersion } = pin;
           p = p.then((result) => {
+            if (result === null) throw new TypeError('registry acquisition returned no bytes');
             try {
               hook({ name: pinName, version: pinVersion, cacheHit: result.cacheHit });
             } catch (err) {
@@ -1577,6 +1627,10 @@ async function walkAndPin(
             return result;
           });
         }
+        p = p.then((result) => {
+          onAcquired?.(pin, result?.cacheHit ?? null);
+          return result;
+        });
         inFlight.set(key, p);
       }
 
@@ -1595,7 +1649,7 @@ async function walkAndPin(
       if (isOptionalBoundary) {
         // Awaits here (and pins on success) instead of deferring to `fetchTasks`,
         // so a rejection skips the subtree before it is walked.
-        let result: FetchAndUnpackResult;
+        let result: FetchAndUnpackResult | null;
         try {
           result = await p;
         } catch (err) {
@@ -1609,7 +1663,7 @@ async function walkAndPin(
           throw err;
         }
         if (!pinned.has(installPath)) {
-          const pkg = await pinToPackage(pin, result.bytes, result.integrity, installPath);
+          const pkg = await pinToPackage(pin, result, installPath);
           pinned.set(installPath, pkg);
           onMaterialized?.(pin);
         }
@@ -1685,12 +1739,7 @@ async function walkAndPin(
       throw outcome.reason;
     }
     if (pinned.has(task.installPath)) continue;
-    const pkg = await pinToPackage(
-      task.pin,
-      outcome.value.bytes,
-      outcome.value.integrity,
-      task.installPath,
-    );
+    const pkg = await pinToPackage(task.pin, outcome.value, task.installPath);
     pinned.set(task.installPath, pkg);
     onMaterialized?.(task.pin);
   }
@@ -1723,14 +1772,15 @@ function warnOptional(
 function choosePlacement(
   pin: ResolvedPin,
   parentInstallPath: string,
-  flatByName: Map<string, string>,
+  flatByName: Map<string, Readonly<{ version: string; materializationKey: string }>>,
 ): string {
-  const flatVersion = flatByName.get(pin.name);
-  if (flatVersion === undefined) {
-    flatByName.set(pin.name, pin.version);
+  const flat = flatByName.get(pin.name);
+  const materializationKey = packageMaterializationKey(pin.name, pin.version, pin.materialization);
+  if (flat === undefined) {
+    flatByName.set(pin.name, { version: pin.version, materializationKey });
     return `node_modules/${pin.name}`;
   }
-  if (flatVersion === pin.version) {
+  if (flat.version === pin.version && flat.materializationKey === materializationKey) {
     return `node_modules/${pin.name}`;
   }
   return `${parentInstallPath}/node_modules/${pin.name}`;
@@ -1743,25 +1793,12 @@ function choosePlacement(
  */
 async function pinToPackage(
   pin: ResolvedPin,
-  bytes: Uint8Array,
-  integrity: string,
+  result: FetchAndUnpackResult | null,
   installPath: string,
 ): Promise<PinnedPackage> {
-  const files = await extractTarGz(bytes);
-  const pkg: PinnedPackage = {
-    name: pin.name,
-    version: pin.version,
-    files,
-    dependencies: pin.dependencies,
-    bin: pin.bin,
-    resolved: pin.resolved,
-    integrity,
-    installPath,
-  };
-  if (pin.peerDependencies && Object.keys(pin.peerDependencies).length > 0) {
-    pkg.peerDependencies = pin.peerDependencies;
-  }
-  return pkg;
+  const registryBytes: RegistryPackageBytes | undefined =
+    result === null ? undefined : { bytes: result.bytes, integrity: result.integrity };
+  return await materializePackage({ ...pin, installPath }, registryBytes);
 }
 
 /**
@@ -1772,8 +1809,8 @@ async function pinToPackage(
  * lockfile key>` so the walk reproduces the recorded layout regardless of visit
  * order.
  *
- * Throws `EBROKENLOCK` on a missing or malformed (no `resolved`/`integrity`)
- * entry: the contract is "lockfile is authoritative or it's an error".
+ * Throws `EBROKENLOCK` on a missing or malformed registry/recipe entry: the
+ * contract is "lockfile is authoritative or it's an error".
  * Returning `null` would leave a partial set that reads as network slowness.
  */
 function createLockfileSource(
@@ -1785,13 +1822,11 @@ function createLockfileSource(
     async resolve(name, range, ctx): Promise<ResolvedPin> {
       // Apply the same shadow/user override the live-resolve source does
       // (`createRegistrySource`, ADR-0015 baked table + user `overrides`) BEFORE
-      // the lockfile lookup. The writer stores a redirect under its TARGET key
-      // (`esbuild` → `@esbuild/wasi-preview1`), leaving no `node_modules/esbuild`
-      // entry, so replaying the SOURCE name verbatim would miss the pin and throw
-      // EBROKENLOCK — the exact break eddy's pre-seeded lockfile hit on vite →
-      // esbuild. `subgraphFreeOfOverrideDivergence` cannot pre-empt it: the
-      // source name has no entry, so `lockfileSubgraph` never surfaces it.
-      const { override, effectiveName } = resolveEffectivePackageRequest(
+      // the lockfile lookup. A redirect is stored under its target key, so
+      // replaying the source name verbatim would miss the pin and throw
+      // EBROKENLOCK. `subgraphFreeOfOverrideDivergence` cannot pre-empt it when
+      // the source name has no entry for `lockfileSubgraph` to surface.
+      const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
         name,
         range,
         ctx.parentName,
@@ -1807,7 +1842,17 @@ function createLockfileSource(
         );
       }
       const { entry, installPath } = hit;
-      if (!entry.resolved || !entry.integrity) {
+      const materializationState = packageMaterializationFromLockfileEntry(entry);
+      if (materializationState.kind === 'historical') {
+        throw new Error('rifty invariant: historical materialization reached lockfile replay');
+      }
+      if (
+        materializationState.kind === 'synthesized-shadow-delegate' &&
+        override?.source === 'user'
+      ) {
+        throw new Error('rifty invariant: user override reached builtin lockfile materialization');
+      }
+      if (materializationState.kind === 'registry' && (!entry.resolved || !entry.integrity)) {
         throw Object.assign(
           new Error(
             `EBROKENLOCK: lockfile entry for '${effectiveName}' at '${installPath}' is malformed (missing ${
@@ -1818,6 +1863,18 @@ function createLockfileSource(
             code: 'EBROKENLOCK',
             packageName: effectiveName,
             reason: 'malformed-entry' as const,
+          },
+        );
+      }
+      if (!rangeIsUnconstrained(effectiveRange) && !matchesRange(entry.version, effectiveRange)) {
+        throw Object.assign(
+          new Error(
+            `EBROKENLOCK: '${effectiveName}@${effectiveRange}' resolves to ${entry.version} at '${installPath}', which no longer satisfies the recorded dependency edge. Delete the lockfile and re-install.`,
+          ),
+          {
+            code: 'EBROKENLOCK',
+            packageName: effectiveName,
+            reason: 'dependency-range-drift' as const,
           },
         );
       }
@@ -1842,22 +1899,39 @@ function createLockfileSource(
       }
       // ADR-0188: replay prints the same substitution line live-resolve does.
       const appliedShadowSubstitution =
-        override && override.source === 'baked' && override.name !== name
+        materializationState.kind === 'synthesized-shadow-delegate'
           ? (appliedBuiltinShadowSubstitution(name, range, entry.version) ?? undefined)
-          : undefined;
+          : override && override.source === 'baked' && override.name !== name
+            ? (appliedBuiltinShadowSubstitution(name, range, entry.version) ?? undefined)
+            : undefined;
       if (override && override.source === 'baked' && override.name !== name) {
         substitutions.redirect(name, range, effectiveName, entry.version);
       }
       return {
         name: effectiveName,
         version: entry.version,
-        resolved: entry.resolved,
-        integrity: entry.integrity,
-        dependencies: entry.dependencies ?? {},
-        bin: entry.bin,
-        peerDependencies: entry.peerDependencies,
-        // Optionals already filtered at lockfile-write time.
-        optionalDependencies: {},
+        materialization:
+          materializationState.kind === 'registry'
+            ? registryPackageMaterialization(entry.resolved!, entry.integrity!)
+            : materializationState,
+        dependencies:
+          materializationState.kind === 'registry'
+            ? (entry.dependencies ?? {})
+            : { ...materializationState.recipe.dependencies },
+        bin:
+          materializationState.kind === 'registry'
+            ? entry.bin
+            : { ...materializationState.recipe.bin },
+        peerDependencies:
+          materializationState.kind === 'registry'
+            ? entry.peerDependencies
+            : { ...materializationState.recipe.peerDependencies },
+        // Registry optionals were filtered at lockfile-write time; synthetic
+        // optionals are immutable recipe data and currently empty.
+        optionalDependencies:
+          materializationState.kind === 'registry'
+            ? {}
+            : { ...materializationState.recipe.optionalDependencies },
         installPath,
         ...(appliedShadowSubstitution === undefined ? {} : { appliedShadowSubstitution }),
       };
@@ -1971,13 +2045,34 @@ function createRegistrySource(
         throw new Error(`Packument missing version manifest ${effectiveName}@${pick}`);
       }
 
+      // ADR-0298: public metadata owns selection; only then may the exact
+      // selected coordinate enter the immutable builtin recipe. Any user
+      // override (including same-name) keeps the ordinary tarball path.
+      const syntheticMaterialization =
+        override === null ? builtinSyntheticPackageMaterialization(effectiveName, pick) : null;
+
       // ADR-0188: baked redirects are never silent — user-visible provenance.
       const appliedShadowSubstitution =
-        override && override.source === 'baked' && override.name !== name
+        syntheticMaterialization !== null
           ? (appliedBuiltinShadowSubstitution(name, range, pick) ?? undefined)
-          : undefined;
+          : override && override.source === 'baked' && override.name !== name
+            ? (appliedBuiltinShadowSubstitution(name, range, pick) ?? undefined)
+            : undefined;
       if (override && override.source === 'baked' && override.name !== name) {
         substitutions.redirect(name, range, effectiveName, pick);
+      }
+
+      if (syntheticMaterialization !== null) {
+        return {
+          name: effectiveName,
+          version: pick,
+          materialization: syntheticMaterialization,
+          dependencies: { ...syntheticMaterialization.recipe.dependencies },
+          bin: { ...syntheticMaterialization.recipe.bin },
+          peerDependencies: { ...syntheticMaterialization.recipe.peerDependencies },
+          optionalDependencies: { ...syntheticMaterialization.recipe.optionalDependencies },
+          ...(appliedShadowSubstitution === undefined ? {} : { appliedShadowSubstitution }),
+        };
       }
 
       // ADR-0051. A shadow override already redirected to a trusted pure-JS
@@ -2004,8 +2099,7 @@ function createRegistrySource(
       return {
         name: effectiveName,
         version: pick,
-        resolved: manifest.dist.tarball,
-        integrity: expectedIntegrity,
+        materialization: registryPackageMaterialization(manifest.dist.tarball, expectedIntegrity),
         dependencies: manifest.dependencies ?? {},
         bin: manifest.bin,
         peerDependencies: manifest.peerDependencies,
@@ -2069,16 +2163,28 @@ function subgraphFreeOfOverrideDivergence(
 ): boolean {
   if (hasParentScopedOverride(overrides)) return false;
   const subgraph = lockfileSubgraph(lockfile, [...topLevelPins.keys()]);
-  for (const name of subgraph) {
+  for (const [path, entry] of Object.entries(lockfile.packages)) {
+    if (path === '') continue;
+    const name = lockfilePathBareName(path);
+    if (!subgraph.has(name)) continue;
     const override = resolveOverride(name, undefined, overrides);
+    const materialization = packageMaterializationFromLockfileEntry(entry);
+    if (
+      !lockfileMaterializationMatchesCurrentPolicy(
+        name,
+        materialization,
+        override?.source === 'user',
+      )
+    ) {
+      return false;
+    }
     if (!override) continue;
     // Redirect to a different name → the lockfile would need that name pinned.
     if (override.name !== name) return false;
     // Same name, narrower range: if the locked version no longer satisfies it,
     // replay would silently differ from live-resolve.
     if (override.range) {
-      const entry = lockfile.packages[`node_modules/${name}`];
-      if (!entry || !matchesRange(entry.version, override.range)) return false;
+      if (!matchesRange(entry.version, override.range)) return false;
     }
   }
   return true;

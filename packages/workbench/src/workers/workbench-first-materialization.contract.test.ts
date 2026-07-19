@@ -224,10 +224,9 @@ const VITE_SEVEN_MANIFEST = Object.freeze({
   dependencies: Object.freeze({ esbuild: '^0.27.0 || ^0.28.0' }),
   bin: Object.freeze({ vite: 'bin/vite.js' }),
 });
-const ESBUILD_ALIAS_MANIFEST = Object.freeze({
-  name: '@esbuild/wasi-preview1',
+const ESBUILD_MANIFEST = Object.freeze({
+  name: 'esbuild',
   version: '0.28.0',
-  cpu: Object.freeze(['wasm']),
 });
 
 class ViteSevenRegistry extends RegistryClient {
@@ -251,16 +250,15 @@ class ViteSevenRegistry extends RegistryClient {
         },
       };
     }
-    if (name === ESBUILD_ALIAS_MANIFEST.name) {
+    if (name === ESBUILD_MANIFEST.name) {
       return {
         name,
-        'dist-tags': { latest: ESBUILD_ALIAS_MANIFEST.version },
+        'dist-tags': { latest: ESBUILD_MANIFEST.version },
         versions: {
-          [ESBUILD_ALIAS_MANIFEST.version]: {
-            name: ESBUILD_ALIAS_MANIFEST.name,
-            version: ESBUILD_ALIAS_MANIFEST.version,
-            cpu: [...ESBUILD_ALIAS_MANIFEST.cpu],
-            dist: { tarball: 'fixture://esbuild-alias/0.28.0' },
+          [ESBUILD_MANIFEST.version]: {
+            name: ESBUILD_MANIFEST.name,
+            version: ESBUILD_MANIFEST.version,
+            dist: { tarball: 'fixture://esbuild/0.28.0' },
           },
         },
       };
@@ -274,8 +272,8 @@ class ViteSevenRegistry extends RegistryClient {
         'bin/vite.js': '#!/usr/bin/env node\n',
       });
     }
-    if (url === 'fixture://esbuild-alias/0.28.0') {
-      return fixturePackageTarball(ESBUILD_ALIAS_MANIFEST);
+    if (url === 'fixture://esbuild/0.28.0') {
+      throw new Error('Vite 7 synthetic esbuild must not request a tarball');
     }
     throw new Error(`Vite 7 fixture registry received unexpected tarball ${url}`);
   }

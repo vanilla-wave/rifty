@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Honest synthesized esbuild delegates (ADR-0298).** Public metadata selects
+  `esbuild@0.28.0`, then one immutable recipe materializes its Vite delegate
+  without a package tarball. Exact lockfile markers, replay, placement, Eddy,
+  and acquisition provenance distinguish synthesized bytes from ordinary
+  same-coordinate packages; user overrides retain the standard verified path.
+
 - **Immutable runtime-adapter-bound shadow capability client (ADR-0296).**
   Admitted children can verify builtin adapter bytes without receiving or
   reconstructing the parent exact plan; the unchanged server plan and child

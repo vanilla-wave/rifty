@@ -5,6 +5,5 @@ export interface OverrideMap {
 
 export const bakedOverrides: OverrideMap = {
   bcrypt: 'bcryptjs',
-  esbuild: '@esbuild/wasi-preview1@0.28.0',
   lightningcss: 'lightningcss-wasm@1.32.0',
 };

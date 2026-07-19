@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Generated synthetic-package recipes (ADR-0298).** The root data surface
+  exports the exact immutable `esbuild@0.28.0` delegate recipe and digest; the
+  retired alias override and alias-keyed shim no longer affect active policy.
+
 - **Builtin shadow-asset catalog (ADR-0249).** Clone-safe generated data pins
   the exact `esbuild-wasm@0.28.0/package/esbuild.wasm` source SRI, member hash,
   sizes, caps, stable substitution/adapter ids, and canonical catalog digest;

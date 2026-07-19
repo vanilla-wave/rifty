@@ -20,7 +20,7 @@ import {
 } from './esbuild-contract-probe.ts';
 import fixture from './fixtures/esbuild-0.28.0-contract.json';
 import policyFixture from './fixtures/esbuild-0.28.0-guest-policy-prerequisites.json';
-import { internalsShims } from './index.ts';
+import { builtinSyntheticPackageRecipes } from './index.ts';
 
 const expected = fixture as unknown as EsbuildContractTranscript;
 const expectedPolicy = policyFixture as unknown as EsbuildGuestPolicyTranscript;
@@ -37,12 +37,12 @@ interface NegativeTextPluginBuild {
 async function loadCurrentShimPackage(
   runtime: EsbuildContractApi,
 ): Promise<EsbuildContractModules> {
-  const shim = internalsShims['@esbuild/wasi-preview1'];
-  if (!shim) throw new Error('esbuild contract: current shim package is missing');
+  const recipe = builtinSyntheticPackageRecipes.find((entry) => entry.publicName === 'esbuild');
+  if (!recipe) throw new Error('esbuild contract: current synthetic package recipe is missing');
   const container = mkdtempSync(join(tmpdir(), '.rifty-esbuild-overlay-contract-'));
   try {
     const packageRoot = `${container}/node_modules/esbuild`;
-    for (const [path, contents] of Object.entries(shim.files)) {
+    for (const [path, contents] of Object.entries(recipe.files)) {
       const target = `${packageRoot}/${path}`;
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, contents);

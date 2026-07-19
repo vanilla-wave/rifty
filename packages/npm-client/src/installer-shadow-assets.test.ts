@@ -20,7 +20,7 @@ class InstallRegistry extends RegistryClient {
   }
 
   override async getPackument(name: string): Promise<Packument> {
-    const version = name === '@esbuild/wasi-preview1' ? '0.28.0' : '1.0.0';
+    const version = name === 'esbuild' ? '0.28.0' : '1.0.0';
     return {
       name,
       'dist-tags': { latest: version },
@@ -42,11 +42,9 @@ class InstallRegistry extends RegistryClient {
 }
 
 class FailingOptionalEsbuildRegistry extends InstallRegistry {
-  override async getTarball(url: string): Promise<Uint8Array> {
-    if (url.includes(encodeURIComponent('@esbuild/wasi-preview1'))) {
-      throw new Error('optional esbuild target tarball unavailable');
-    }
-    return await super.getTarball(url);
+  override async getPackument(name: string): Promise<Packument> {
+    if (name === 'esbuild') throw new Error('optional esbuild packument unavailable');
+    return await super.getPackument(name);
   }
 }
 
@@ -111,46 +109,22 @@ async function optionalEsbuildProject(): Promise<MemoryVfs> {
 }
 
 describe('install shadow-asset authority boundary', () => {
-  it.each(['metadata', 'lockfile'] as const)(
-    'does not plan a fresh %s optional builtin substitution whose target never enters the tree',
-    async (resolution) => {
-      const vfs = await optionalEsbuildProject();
-      if (resolution === 'lockfile') {
-        await vfs.writeFile(
-          '/project/package-lock.json',
-          new TextEncoder().encode(
-            JSON.stringify({
-              name: 'root',
-              version: '1.0.0',
-              lockfileVersion: 3,
-              requires: true,
-              packages: {
-                '': { version: '1.0.0' },
-                'node_modules/@esbuild/wasi-preview1': {
-                  version: '0.28.0',
-                  resolved: `fake://${encodeURIComponent('@esbuild/wasi-preview1')}/0.28.0`,
-                  integrity: `sha512-${Buffer.alloc(64).toString('base64')}`,
-                },
-              },
-            }),
-          ),
-        );
-      }
-      const assets = installer();
+  it('does not plan an optional builtin substitution when public selection fails', async () => {
+    const vfs = await optionalEsbuildProject();
+    const assets = installer();
 
-      const result = await install({
-        vfs,
-        cwd: '/project',
-        registry: new FailingOptionalEsbuildRegistry(),
-        shadowAssets: { installer: assets },
-      });
+    const result = await install({
+      vfs,
+      cwd: '/project',
+      registry: new FailingOptionalEsbuildRegistry(),
+      shadowAssets: { installer: assets },
+    });
 
-      expect(result.packages).toEqual([]);
-      expect('shadowAssets' in result).toBe(false);
-      expect(assets.ensure).not.toHaveBeenCalled();
-      expect(result.provenance.resolution).toBe(resolution);
-    },
-  );
+    expect(result.packages).toEqual([]);
+    expect('shadowAssets' in result).toBe(false);
+    expect(assets.ensure).not.toHaveBeenCalled();
+    expect(result.provenance.resolution).toBe('metadata');
+  });
 
   it.each([
     ['null options', null],
@@ -414,9 +388,7 @@ describe('install shadow-asset authority boundary', () => {
     expect(thrown).toBeInstanceOf(ShadowAssetInstallError);
     expect(thrown).toMatchObject({ code: 'ESHADOWASSET', phase: 'persist' });
     expect((thrown as ShadowAssetInstallError).treeResult.packages).not.toHaveLength(0);
-    expect(await vfs.exists('/project/node_modules/@esbuild/wasi-preview1/package.json')).toBe(
-      true,
-    );
+    expect(await vfs.exists('/project/node_modules/esbuild/package.json')).toBe(true);
     expect(await vfs.exists('/project/package-lock.json')).toBe(true);
   });
 

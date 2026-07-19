@@ -163,7 +163,7 @@ function terminalRuntimeAssetPlan(): ShadowAssetPlan {
       publicName: 'esbuild',
       requestedRange: '^0.28.0',
       resolvedPublicVersion: '0.28.0',
-      substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+      substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
       runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
       builtin: true,
     },

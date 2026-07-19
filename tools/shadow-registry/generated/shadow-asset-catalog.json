@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "id": "rifty.shadow-assets.builtin.v1",
-  "digest": "4d01c62407126c22b0de104d66da51b4224c456d658cf876920667d3de86fbaa",
+  "digest": "a8cde13aad656425a74c6dc5c20a7af2744e763cf0dbaf306d6574c22edde49c",
   "substitutions": [
     {
-      "id": "rifty.shadow-substitution.esbuild-wasi-preview1.v1",
+      "id": "rifty.shadow-substitution.esbuild-synthesized-delegate.v2",
       "publicName": "esbuild",
       "builtin": true,
       "runtimeAdapterId": "rifty.runtime-adapter.esbuild-vite.v1",

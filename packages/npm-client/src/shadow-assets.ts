@@ -2,6 +2,10 @@ import { MemoryVfs } from '@riftydev/vfs';
 import { canonicalShadowDigest, canonicalShadowJson, sha256Hex } from './canonical-shadow-json.ts';
 import { fetchAndUnpackToCache } from './fetch-and-unpack.ts';
 import type { InstallTreeResult } from './installer.ts';
+import {
+  lockfilePackageMaterialization,
+  packageMaterializationFromLockfileEntry,
+} from './package-materialization.ts';
 import type { RegistryClient } from './registry.ts';
 import { shadowAssetPlanFromLockfileFacts } from './shadow-asset-lockfile-facts.ts';
 import {
@@ -297,7 +301,7 @@ function snapshotInstallTreeResult(value: InstallTreeResult): InstallTreeResult 
     exactFailureObject(
       entry,
       ['version'],
-      ['bin', 'dependencies', 'integrity', 'peerDependencies', 'resolved'],
+      ['bin', 'dependencies', 'integrity', 'peerDependencies', 'resolved', 'rifty'],
       `InstallTreeResult.lockfile.packages.${path}`,
     );
     assertMessage(entry.version, `InstallTreeResult.lockfile.packages.${path}.version`);
@@ -331,6 +335,15 @@ function snapshotInstallTreeResult(value: InstallTreeResult): InstallTreeResult 
     }
     if ('bin' in entry) {
       cloned.bin = snapshotBin(entry.bin, `InstallTreeResult.lockfile.packages.${path}.bin`);
+    }
+    if ('rifty' in entry) {
+      const materialization = packageMaterializationFromLockfileEntry(entry);
+      if (materialization.kind !== 'synthesized-shadow-delegate') {
+        throw new TypeError(
+          `InstallTreeResult.lockfile.packages.${path}.rifty is not an active synthetic materialization`,
+        );
+      }
+      cloned.rifty = lockfilePackageMaterialization(materialization);
     }
     lockPackages[path] = Object.freeze(cloned);
   }
@@ -389,7 +402,8 @@ function snapshotInstallTreeResult(value: InstallTreeResult): InstallTreeResult 
     if (
       entry.transport !== 'cache' &&
       entry.transport !== 'eddy' &&
-      entry.transport !== 'registry'
+      entry.transport !== 'registry' &&
+      entry.transport !== 'synthesized'
     ) {
       throw new TypeError(`InstallTreeResult.provenance.packages[${index}].transport is invalid`);
     }

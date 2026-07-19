@@ -10,6 +10,11 @@
 
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 import {
+  type LockfilePackageMaterialization,
+  type PackageMaterialization,
+  lockfilePackageMaterialization,
+} from './package-materialization.ts';
+import {
   type ShadowSubstitutionLockfileTrace,
   createShadowSubstitutionLockfileTrace,
 } from './shadow-asset-lockfile-trace.ts';
@@ -153,12 +158,22 @@ export interface LockfileEntry {
    * tooling (readers ignore unknown fields).
    */
   peerDependencies?: Record<string, string>;
+  /** Exact non-tarball byte provenance; absent means ordinary resolved/integrity replay. */
+  rifty?: Readonly<{ readonly materialization: LockfilePackageMaterialization }>;
 }
 
 interface BuildLockfileOptions {
   /** Present (including empty) when npm-client owns the exact applied trace. */
   readonly shadowAssetPlan?: ShadowAssetPlan;
 }
+
+type LockfileInputPackage = ResolvedPackage & {
+  resolved?: string;
+  integrity?: string;
+  peerDependencies?: Record<string, string>;
+  /** Package-private; honored only by the installer-owned builder. */
+  materialization?: PackageMaterialization;
+};
 
 /**
  * Build a v3 lockfile from the resolved package set. Each non-root entry
@@ -170,11 +185,7 @@ interface BuildLockfileOptions {
 function buildLockfileWithOptions(
   rootName: string,
   rootVersion: string,
-  packages: readonly (ResolvedPackage & {
-    resolved?: string;
-    integrity?: string;
-    peerDependencies?: Record<string, string>;
-  })[],
+  packages: readonly LockfileInputPackage[],
   options: BuildLockfileOptions = {},
 ): Lockfile {
   // Root entry lists only FLAT (hoisted) deps, matching npm's lockfile
@@ -205,8 +216,16 @@ function buildLockfileWithOptions(
       version: p.version,
       dependencies: p.dependencies,
     };
-    if (p.resolved) entry.resolved = p.resolved;
-    if (p.integrity) entry.integrity = p.integrity;
+    const materialization =
+      options.shadowAssetPlan === undefined || p.materialization === undefined
+        ? undefined
+        : lockfilePackageMaterialization(p.materialization);
+    if (materialization === undefined) {
+      if (p.resolved) entry.resolved = p.resolved;
+      if (p.integrity) entry.integrity = p.integrity;
+    } else {
+      entry.rifty = materialization;
+    }
     if (p.bin) entry.bin = p.bin;
     if (p.peerDependencies && Object.keys(p.peerDependencies).length > 0) {
       entry.peerDependencies = p.peerDependencies;
@@ -236,11 +255,7 @@ export function buildLockfile(
 export function buildInstallLockfile(
   rootName: string,
   rootVersion: string,
-  packages: readonly (ResolvedPackage & {
-    resolved?: string;
-    integrity?: string;
-    peerDependencies?: Record<string, string>;
-  })[],
+  packages: readonly LockfileInputPackage[],
   shadowAssetPlan: ShadowAssetPlan,
 ): Lockfile {
   return buildLockfileWithOptions(rootName, rootVersion, packages, {

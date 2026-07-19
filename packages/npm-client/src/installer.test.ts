@@ -514,7 +514,7 @@ describe('install — package.json defaults', () => {
     expect(await vfs.exists('/proj/node_modules/with-prepare/package.json')).toBe(true);
   });
 
-  it('uses the baked esbuild override before the registry lifecycle gate when the request admits 0.28.0', async () => {
+  it('uses builtin esbuild synthesis before the registry lifecycle gate after public selection', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set(
       'esbuild',
@@ -525,13 +525,6 @@ describe('install — package.json defaults', () => {
         ],
       ]),
     );
-    db.set(
-      '@esbuild/wasi-preview1',
-      new Map([
-        ['0.28.0', await makeEntry('@esbuild/wasi-preview1', '0.28.0', {}, { cpu: ['wasm'] })],
-      ]),
-    );
-
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     await vfs.writeFile(
@@ -550,27 +543,15 @@ describe('install — package.json defaults', () => {
       shadowAssets: { installer: readyShadowAssetInstaller },
     });
 
-    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual([
-      '@esbuild/wasi-preview1@0.28.0',
-    ]);
-    expect(await vfs.exists('/proj/node_modules/@esbuild/wasi-preview1/package.json')).toBe(true);
-    // ADR-0188: the installer now materializes the `esbuild` import name from
-    // the shadow-registry alias shim (was a playground boot-overlay concern).
+    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual(['esbuild@0.28.0']);
+    expect(await vfs.exists('/proj/node_modules/@esbuild/wasi-preview1')).toBe(false);
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
     expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.cjs')).toContain(
       '__rifty?.esbuild',
     );
   });
 
-  it('replays a transitive baked-override dep on the fast path without EBROKENLOCK', async () => {
-    // Regression (eddy fast-install, ADR-0182): a shadow-override target
-    // (esbuild → @esbuild/wasi-preview1) is stored in the lockfile under the
-    // TARGET key; the override SOURCE name (`esbuild`, here a transitive dep of
-    // `host`) has no entry of its own. `lockfileSubgraph` drops `esbuild` (no
-    // entry), so `subgraphFreeOfOverrideDivergence` never sees its redirect and
-    // the lockfile fast path is taken — the replay source must ALSO apply the
-    // override, else it looks up bare `esbuild`, misses, and throws
-    // EBROKENLOCK. Exactly the break the live eddy bundle hit on vite → esbuild.
+  it('replays a transitive synthesized delegate on the fast path without EBROKENLOCK', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { esbuild: '^0.28.0' })]]));
     db.set(
@@ -582,13 +563,6 @@ describe('install — package.json defaults', () => {
         ],
       ]),
     );
-    db.set(
-      '@esbuild/wasi-preview1',
-      new Map([
-        ['0.28.0', await makeEntry('@esbuild/wasi-preview1', '0.28.0', {}, { cpu: ['wasm'] })],
-      ]),
-    );
-
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     await vfs.writeFile(
@@ -596,16 +570,15 @@ describe('install — package.json defaults', () => {
       JSON.stringify({ name: 'app', version: '1.0.0', dependencies: { host: '1.0.0' } }),
     );
 
-    // First install: live-resolve redirects esbuild → the pinned
-    // @esbuild/wasi-preview1 and writes the lockfile (no node_modules/esbuild).
+    // First install writes the explicit synthetic materialization marker.
     const first = await install({
       vfs,
       cwd: '/proj',
       registry: new FakeRegistry(db),
       shadowAssets: { installer: readyShadowAssetInstaller },
     });
-    expect(first.lockfile.packages['node_modules/@esbuild/wasi-preview1']?.version).toBe('0.28.0');
-    expect(first.lockfile.packages['node_modules/esbuild']).toBeUndefined();
+    expect(first.lockfile.packages['node_modules/esbuild']?.version).toBe('0.28.0');
+    expect(first.lockfile.packages['node_modules/esbuild']?.rifty).toBeDefined();
 
     // Second install: the lockfile fast path replays. Must NOT throw EBROKENLOCK.
     const second = await install({
@@ -615,7 +588,7 @@ describe('install — package.json defaults', () => {
       shadowAssets: { installer: readyShadowAssetInstaller },
     });
     expect(second.packages.map((p) => `${p.name}@${p.version}`).sort()).toEqual([
-      '@esbuild/wasi-preview1@0.28.0',
+      'esbuild@0.28.0',
       'host@1.0.0',
     ]);
   });

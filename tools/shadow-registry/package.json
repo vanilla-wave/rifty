@@ -44,8 +44,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsup",
-    "shadow-assets:generate": "tsx tools/generate-shadow-asset-catalog.ts --write",
-    "shadow-assets:check": "tsx tools/generate-shadow-asset-catalog.ts --check"
+    "shadow-assets:generate": "tsx tools/generate-shadow-asset-catalog.ts --write && tsx tools/generate-synthetic-package-recipes.ts --write",
+    "shadow-assets:check": "tsx tools/generate-shadow-asset-catalog.ts --check && tsx tools/generate-synthetic-package-recipes.ts --check"
   },
   "devDependencies": {
     "@riftydev/vfs": "workspace:*",

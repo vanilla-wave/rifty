@@ -11,10 +11,14 @@ import {
   type EddyBundleManifestV1,
   type EddyBundleTarballEntry,
   type Fetcher,
+  type InstallTreeResult,
   type PackumentCacheLike,
   RegistryClient,
+  ShadowAssetInstallError,
+  type ShadowAssetInstaller,
   type TarballCache,
   VfsTarballCache,
+  bundleCompletenessGap,
   closureHashOf,
   install,
   packEddyBundle,
@@ -60,6 +64,18 @@ export type EddyResolveResult =
 
 const ROOT = '/work';
 
+/** Eddy needs the resolved tree, never a false runtime-asset readiness claim. */
+class EddyTreeHarvestBoundary extends Error {}
+
+const treeHarvestShadowAssetInstaller: ShadowAssetInstaller = {
+  async ensure() {
+    throw new EddyTreeHarvestBoundary('Eddy harvest stops at the verified package tree');
+  },
+  async inspectReceipt() {
+    return null;
+  },
+};
+
 export async function resolveBundle(
   req: EddyResolveRequest,
   deps: EddyResolverDeps,
@@ -82,17 +98,22 @@ export async function resolveBundle(
     : undefined;
   const registry = new RegistryClient({ baseUrl: deps.registryBaseUrl, fetch: deps.fetch });
 
-  let result: Awaited<ReturnType<typeof install>>;
+  let result: InstallTreeResult;
   try {
     result = await install({
       vfs,
       cwd: ROOT,
       registry,
       tarballCache,
+      shadowAssets: { installer: treeHarvestShadowAssetInstaller },
       ...(packumentCache ? { packumentCache } : {}),
     });
   } catch (err) {
-    return declineFor(err);
+    if (err instanceof ShadowAssetInstallError && err.cause instanceof EddyTreeHarvestBoundary) {
+      result = err.treeResult;
+    } else {
+      return declineFor(err);
+    }
   }
 
   // One tarball per unique (name@version); harvest the original gzip bytes the
@@ -102,16 +123,13 @@ export async function resolveBundle(
   const tarballs: Array<{ entry: EddyBundleTarballEntry; bytes: Uint8Array }> = [];
   for (const pkg of result.packages) {
     const key = `${pkg.name}@${pkg.version}`;
+    const integrity = (pkg as { integrity?: string }).integrity;
+    // Candidate selection is intentionally permissive here; the exact
+    // lockfile marker/completeness gate below is the sole authority that may
+    // prove a missing tarball is synthesized rather than corrupt.
+    if (!integrity) continue;
     if (seen.has(key)) continue;
     seen.add(key);
-    const integrity = (pkg as { integrity?: string }).integrity;
-    if (!integrity) {
-      return {
-        kind: 'unsupported',
-        feature: 'integrity-missing',
-        message: `no integrity for ${key}`,
-      };
-    }
     const bytes = await tarballCache.get(pkg.name, pkg.version, integrity);
     if (!bytes) {
       return {
@@ -124,6 +142,16 @@ export async function resolveBundle(
     const entry: EddyBundleTarballEntry = { file, name: pkg.name, version: pkg.version, integrity };
     entries.push(entry);
     tarballs.push({ entry, bytes });
+  }
+
+  const rootDependencies = result.lockfile.packages['']?.dependencies ?? {};
+  const completenessGap = bundleCompletenessGap(result.lockfile, rootDependencies, entries);
+  if (completenessGap !== null) {
+    return {
+      kind: 'unsupported',
+      feature: 'bundle-incomplete',
+      message: completenessGap,
+    };
   }
 
   const manifest: EddyBundleManifestV1 = {

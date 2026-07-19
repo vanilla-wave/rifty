@@ -113,7 +113,7 @@ async function buildCatalog(): Promise<unknown> {
     id: 'rifty.shadow-assets.builtin.v1',
     substitutions: [
       {
-        id: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+        id: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
         publicName: 'esbuild',
         builtin: true as const,
         runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',

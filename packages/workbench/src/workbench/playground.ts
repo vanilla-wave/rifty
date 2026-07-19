@@ -1,4 +1,3 @@
-import type { LogEntry } from '@riftydev/git';
 import type {
   CodeAction,
   CodeFixOptions,
@@ -238,7 +237,24 @@ export interface PlaygroundScmChange {
 
 export interface PlaygroundScmSnapshot {
   readonly branch?: string;
-  readonly history: readonly LogEntry[];
+  readonly history: readonly {
+    oid: string;
+    message: string;
+    author: {
+      name: string;
+      email: string;
+      timestamp: number;
+      timezoneOffset: number;
+    };
+    committer: {
+      name: string;
+      email: string;
+      timestamp: number;
+      timezoneOffset: number;
+    };
+    tree: string;
+    parents: string[];
+  }[];
   readonly changes: readonly PlaygroundScmChange[];
 }
 
