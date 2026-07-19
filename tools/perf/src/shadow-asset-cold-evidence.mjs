@@ -290,6 +290,18 @@ function looksLikeStandardSource(url, registry, sourceName) {
   return (path.includes(plain) || path.includes(encoded)) && path.endsWith('.tgz');
 }
 
+function exactShadowSourcePostData(source) {
+  return JSON.stringify({
+    dependencies: { [source.name]: source.version },
+    optionalDependencies: {},
+  });
+}
+
+function looksLikeBundleSource(url, bundle) {
+  const prefix = `${bundle.href.replace(/\/+$/u, '')}/bundle/`;
+  return url.href.startsWith(prefix);
+}
+
 function cacheSource(response) {
   if (response.fromDiskCache === true) return 'response.fromDiskCache';
   if (response.fromDiskCache !== false) return 'response.fromDiskCache proof absent';
@@ -304,12 +316,46 @@ function eddyNetworkEvidence(responses, endpoints, source) {
   if (!Array.isArray(responses) || responses.length === 0) {
     return { error: 'Eddy fill has no CDP asset-source response evidence' };
   }
-  if (responses.length !== 1) {
+  const expectedPostData = exactShadowSourcePostData(source);
+  const exact = [];
+  for (const [index, response] of responses.entries()) {
+    const label = `Eddy asset-source response ${index + 1}`;
+    if (!plainRecord(response)) return { error: `${label} must be an object` };
+    const url = absoluteHttpEndpoint(response.url);
+    if (url === null) return { error: `${label} URL must be absolute http(s)` };
+    if (looksLikeStandardSource(url, endpoints.registry, source.name)) {
+      return { error: 'Eddy cold fill fell back to the standard registry source' };
+    }
+    if (looksLikeBundleSource(url, endpoints.bundle)) {
+      return {
+        error: 'Eddy cold fill used a learned or configured bundle GET instead of cold POST',
+      };
+    }
+    if (url.href === endpoints.resolver.href) {
+      if (typeof response.postData !== 'string') {
+        return { error: 'Eddy cold fill captured a resolver lifecycle without request body proof' };
+      }
+      try {
+        const parsed = JSON.parse(response.postData);
+        if (!plainRecord(parsed)) throw new TypeError('request body must be an object');
+      } catch {
+        return { error: 'Eddy cold fill captured a malformed resolver request body' };
+      }
+    }
+    if (
+      url.href === endpoints.resolver.href &&
+      response.method === 'POST' &&
+      response.postData === expectedPostData
+    ) {
+      exact.push(response);
+    }
+  }
+  if (exact.length !== 1) {
     return {
-      error: `Eddy cold fill requires one unambiguous resolver lifecycle; captured ${responses.length}`,
+      error: `Eddy cold fill requires one byte-exact canonical resolver POST; captured ${exact.length}`,
     };
   }
-  const response = responses[0];
+  const response = exact[0];
   if (!plainRecord(response)) return { error: 'Eddy asset-source response must be an object' };
   if (typeof response.requestId !== 'string' || response.requestId.length === 0) {
     return { error: 'Eddy asset-source response lacks a CDP request lifecycle' };
@@ -386,6 +432,9 @@ export function buildStandardShadowAssetColdRun(input) {
 export function buildEddyShadowAssetColdRun(input) {
   const page = pageEvidence(input, 'Eddy fill', true);
   if (page.error) return refuse(page.error);
+  if (input.shadowSourceCacheRegime !== 'fresh-owner-empty-tarball-cache') {
+    return refuse('Eddy fill lacks the exact fresh-owner empty-tarball-cache premise');
+  }
   const endpoints = eddyEndpoints(input.endpoints);
   if (endpoints.error) return refuse(endpoints.error);
   const network = eddyNetworkEvidence(
