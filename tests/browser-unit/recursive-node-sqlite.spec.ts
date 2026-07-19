@@ -90,6 +90,70 @@ process.stdout.write(stdout);
   }
 });
 
+// Fault class: false-fallback — a recursive Vite child must not inherit the parent's endpoint.
+test('recursive Vite 7 fails at the missing shadow capability before import or fallback', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-recursive-vite-shadow-capability',
+    template: 'vite',
+    setup: 'instant',
+    starter: 'recursive-vite-shadow-capability',
+    hiddenEmptyBoot: false,
+  });
+
+  let observeRecursiveNetwork = false;
+  const recursiveAssetRequests: string[] = [];
+  page.on('request', (request) => {
+    if (!observeRecursiveNetwork) return;
+    const path = new URL(request.url()).pathname;
+    if (path.includes('esbuild') || path.includes('wasi-preview1')) {
+      recursiveAssetRequests.push(path);
+    }
+  });
+
+  try {
+    const admitted = await execLine(page, 'vite --version');
+    expect(admitted.exit, admitted.out).toBe(0);
+    expect(admitted.out).toContain('vite/7.3.6');
+
+    await writeOwnerFile(
+      page,
+      '/scratch/recursive-vite-settlement.mjs',
+      `process.stdout.write('RECURSIVE_SETTLED');\n`,
+    );
+    await writeOwnerFile(
+      page,
+      '/scratch/recursive-vite-parent.mjs',
+      `import { execSync } from 'node:child_process';
+try {
+  execSync('node node_modules/.bin/vite --version', { cwd: '/', env: { CHILD_ONLY: 'exact' } });
+  process.stdout.write('RECURSIVE_VITE_UNEXPECTED_SUCCESS\\n');
+} catch (error) {
+  process.stdout.write('RECURSIVE_VITE_FAILURE|' + error.message.replaceAll('\\n', ' ') + '\\n');
+}
+process.stdout.write(execSync('node recursive-vite-settlement.mjs', { cwd: '/', env: {} }));
+`,
+    );
+
+    observeRecursiveNetwork = true;
+    const result = await execLine(page, 'node recursive-vite-parent.mjs');
+    observeRecursiveNetwork = false;
+
+    expect(result.exit, result.out).toBe(0);
+    expect(result.out).toContain('RECURSIVE_VITE_FAILURE|');
+    expect(result.out).toContain('NotImplementedError');
+    expect(result.out).toContain('vite.esbuild.shadowAssets');
+    expect(result.out).not.toContain('esbuild runtime slot is not initialized');
+    expect(result.out).toContain('RECURSIVE_SETTLED');
+    expect(recursiveAssetRequests).toEqual([]);
+  } finally {
+    await closeOwner(page);
+  }
+});
+
 test('kernel Worker matches Node context and relays owner FS, execSync, and sqlite', async ({
   page,
 }) => {
