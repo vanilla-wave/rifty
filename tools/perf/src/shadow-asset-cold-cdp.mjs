@@ -8,6 +8,61 @@ function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+const LEDGER_DIAGNOSTIC_RECORDS = 8;
+const LEDGER_DIAGNOSTIC_MAX_LENGTH = 4_096;
+
+function boundedDiagnosticString(value, maxLength) {
+  if (typeof value !== 'string') return undefined;
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
+}
+
+function diagnosticUrl(value) {
+  const bounded = boundedDiagnosticString(value, 160);
+  if (bounded === undefined) return undefined;
+  try {
+    const url = new URL(bounded);
+    if (url.username !== '') url.username = '<redacted>';
+    if (url.password !== '') url.password = '<redacted>';
+    if (url.search !== '') url.search = '?<redacted>';
+    return url.href;
+  } catch {
+    return bounded;
+  }
+}
+
+function diagnosticRecord(record) {
+  const value = record !== null && typeof record === 'object' ? record : {};
+  return {
+    requestId: boundedDiagnosticString(value.requestId, 48),
+    lifecycleId: boundedDiagnosticString(value.lifecycleId, 64),
+    method: boundedDiagnosticString(value.method, 16),
+    url: diagnosticUrl(value.url),
+    status: typeof value.status === 'number' ? value.status : undefined,
+    protocol: boundedDiagnosticString(value.protocol, 16),
+    bodyBytes: typeof value.bodyBytes === 'number' ? value.bodyBytes : undefined,
+    complete: value.complete === true,
+    fromDiskCache: value.fromDiskCache === true,
+    fromServiceWorker: value.fromServiceWorker === true,
+    requestServedFromCache: value.requestServedFromCache === true,
+    fromPrefetchCache: value.fromPrefetchCache === true,
+    error: boundedDiagnosticString(value.error, 120),
+  };
+}
+
+/** Bounded metadata-only ledger for refusal diagnostics; never includes response bodies. */
+export function describeCapturedResponseLedger(captured) {
+  if (!Array.isArray(captured)) throw new TypeError('captured CDP responses must be an array');
+  const records = captured.slice(0, LEDGER_DIAGNOSTIC_RECORDS).map(diagnosticRecord);
+  const prefix = `captured=${captured.length}; shown=${records.length}; ledger=`;
+  const omitted = Math.max(0, captured.length - records.length);
+  const suffix = `; omitted=${omitted}`;
+  const available = LEDGER_DIAGNOSTIC_MAX_LENGTH - prefix.length - suffix.length;
+  const serialized = JSON.stringify(records);
+  const ledger =
+    serialized.length <= available ? serialized : `${serialized.slice(0, available - 1)}…`;
+  return `${prefix}${ledger}${suffix}`;
+}
+
 function responseRecord(requestId, response, lifecycleId = requestId, method = 'unknown') {
   return {
     requestId,
