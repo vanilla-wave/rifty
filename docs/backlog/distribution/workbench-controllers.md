@@ -25,7 +25,9 @@ Vite plugin/query/env dependency inside Workbench.
 
 `workbench-fault-honesty` owns the four linked live-lifecycle fault contracts;
 they are prerequisites to this item's package extraction and acceptance seal,
-not a second controller implementation.
+not a second controller implementation. The gate holds delivery steps 6–7
+(extraction + seal) only; app-local steps 1–5 proceed in parallel with those
+items.
 
 PR #136 is an implementation quarry only. Port individual RED tests and useful
 mechanisms onto current `main`; do not refactor or cherry-pick its 391-file

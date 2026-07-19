@@ -1,22 +1,21 @@
 ---
 area: runtime-js
 status: draft
-title: Custom require.extensions hooks participate in explicit and extensionless loading
+title: Custom require.extensions hooks participate in extensionless resolution
 created: 2026-07-19
-why: current main dispatches CJS through a hardcoded .js hook and resolves a fixed suffix list, so registered custom extensions do not load like Node; PR #155 proposes only the explicit-suffix slice
-user_story: As a developer running a register-style Node package such as a CoffeeScript loader, I want explicit and extensionless local requires to use its registered hook, but today the same package cannot load its custom source files like Node.
+why: ADR-0294 landed explicit custom-suffix dispatch, but the resolver still probes a fixed suffix list, so an extensionless require of a registered custom source file diverges from Node
+user_story: As a developer running a register-style Node package such as a CoffeeScript loader, I want `require('./target')` to consult its registered hook like Node does, but today only the explicit `require('./target.coffee')` form loads through it.
 blocked_by: []
-sources: [PR-155-scope, Node-v24-module-parity]
+sources: [ADR-0294, Node-v24-module-parity]
 code: [packages/runtime-js/src/module-loader/loader.ts, packages/runtime-js/src/module-loader/cjs.ts, packages/runtime-js/src/module-loader/resolver.ts]
 ---
 
 ## Context
 
-Node dispatches an explicit custom suffix through the matching active `require.extensions` hook and consults active hook keys when resolving an extensionless file: after registering `.coffee`, both `require('./target.coffee')` and `require('./target')` can compile through that hook. Current `main` still dispatches runnable CJS through `.js` and resolves a fixed suffix list, so both forms diverge. PR #155 is an unmerged generic slice for explicit custom-suffix loading and active `.js` behavior; its contract intentionally does not claim extensionless candidates. This item records the complete current Node contract and must rebase on #155's actual merge state before becoming `ready`.
+PR #155 (ADR-0294) shipped explicit-suffix dispatch: explicit CJS files use the longest truthy registered basename suffix, then the current `.js`; parity `modules/require-extensions-*` pins that surface. The residual gap is resolution: `resolver.ts` probes a fixed `DEFAULT_EXTENSIONS` list and never consults active hook keys, so after registering `.coffee`, `require('./target')` misses where Node compiles through the hook.
 
 ## Refinement path
 
-- RED parity against Node v24 for registration order, replacement, deletion, multiple matching files, explicit suffix, extensionless file, directory/package fallback, and loader-local versus `createRequire` views.
-- If #155 lands, retain its explicit-suffix rows as controls and refine the extensionless residual; if it does not, keep both explicit and extensionless behavior in this one semantic resolver/dispatch contract instead of assuming an unmerged prerequisite.
+- RED parity against Node v24 for extensionless file versus directory/package fallback, registration order, replacement, deletion, multiple matching files, and loader-local versus `createRequire` views; keep #155's explicit-suffix rows as controls.
 - Determine the exact snapshot/live relationship between resolution candidate order and the mutable hook table; preserve Node's observable order without a hardcoded CoffeeScript suffix.
 - Sweep cache and invalidation after a hook table change. Unsupported native `.node` loading remains a loud separate ceiling and must not be faked through this path.

@@ -84,10 +84,11 @@ const TOMBSTONES = new Set([
   'docs/compat/opencode-tool-ceiling.md',
   'docs/compat/browsers.md',
   'docs/public/compat/browsers.md',
-  // completed backlog items removed on close (record = the ADR + code; ADR bodies still cite them)
+  // closed backlog items removed on close — done or retired (record = adr/README removed-list + code)
   'docs/backlog/playground/terminal-node-command.md', // done → ADR-0154
   'docs/backlog/playground/preset-switch-port-flip-window.md', // retired → Workbench closes old session before next open
   'docs/backlog/playground/per-project-persistent-port.md', // retired → no current Workbench port-identity fault
+  'docs/backlog/playground/editor-same-path-write-serialization.md', // retired → per-path chain in createPlaygroundDocumentWriter
   'docs/backlog/runtime-js/execsync-node-entry-loader.md', // done → ADR-0137/0143/0150 + code
   'docs/backlog/runtime-js/readline-createinterface-line-question.md', // done → runtime-js readline subset + conformance
   'docs/backlog/net/cross-realm-listen-eaddrinuse.md', // done → ADR-0186 + code (ADR-0180 D5 still cites it)

@@ -34,3 +34,4 @@ Further refinement starts with an inventory of package-specific production depen
 - Do not use consumer count or adapter count as a design proxy; this epic must not encourage dummy adapters or parallel workarounds to justify an interface.
 - Require a superseding ADR before refinement removes or reshapes any recorded public Vite integration contract.
 - Keep user-visible de-gluing in `preset-deglue`; this epic owns knowledge direction and contract cleanup.
+- Interim guard until refinement: do not grow the leak surface. No new Vite fields, branches, or data dependencies in generic platform internals (cross-tool contracts, worker wire, persisted owner/project identity, production control flow); new Vite needs land at the ADR-0263/0278 integration edges or wait for this epic. Existing mentions await classification, not expansion.

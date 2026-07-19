@@ -13,6 +13,8 @@ code: [apps/playground/src/workers/real-vite-bootstrap.ts]
 
 Vite templates self-reload via the HMR bridge + module invalidation (ADR-0097/0126). Node-server templates (ADR-0130) `loader.import` the entry ONCE; `handleVfsWrite` publishes snapshots but nothing restarts the program. Restart today = re-run the dev script (kills + respawns the worker, loses the in-memory sqlite DB — see net/sqlite-opfs-persistence).
 
+Premise predates the Workbench migration (cites ADR-0130 paths); re-verify the entry lifecycle against the current `ProjectRuntime` before refine. Next mainline candidate after `workbench-stabilization`.
+
 ## Options or Next
 
 1. Watch entry + project files in the worker; on change, tear bridges, re-import entry in a FRESH worker (nodemon semantics). Needs loader cache reset → simplest honest unit is full worker respawn driven from the page (restartDevServer already exists).

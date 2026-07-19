@@ -31,3 +31,4 @@ They introduce a runtime error in `vite.config.ts` and run the real `npm run dev
 - `vite-knowledge-boundary` owns package-specific knowledge direction. Vite may appear in acceptance evidence, never in generic source-map production behavior.
 - `runtime-js/process-module-loader-surface` owns public source-map enable APIs; `runtime-js/worker-stack-remap-error-overlay` owns worker/runtime-phase propagation and overlay UI.
 - Successful project switching already performs a full old-session stop before a fresh open. Failed teardown during that transition belongs to `workbench-fault-honesty`.
+- `playground/node-server-restart-on-edit` is the next mainline candidate, deliberately outside this wave: it adds watch/restart capability rather than repairing an existing flow, and its premise predates the Workbench migration — re-audit before refine.
