@@ -26,6 +26,11 @@ const NATIVE_THEN = Promise.prototype.then;
 const ORIGINAL_PROCESS = (globalThis as { process?: unknown }).process;
 const ORIGINAL_BUFFER = (globalThis as { Buffer?: unknown }).Buffer;
 const ORIGINAL_GLOBAL_DESCRIPTOR = Object.getOwnPropertyDescriptor(globalThis, 'global');
+const HOST_RUNTIME = Object.freeze({
+  RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js',
+  RIFTY_NODE_ENTRY_WORKER_URL: 'https://host.test/node-entry.js',
+  RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
+});
 
 function spec(env: Record<string, string> = {}): WorkerSpawnSpec {
   const port = (): MessagePort => new MessageChannel().port1;
@@ -66,11 +71,11 @@ describe('pre-entry gate (ADR-0157)', () => {
   });
 
   it('Node-entry bootstrap outranks a guest __RIFTY_WASI_WASM_URL key', () => {
-    const entry = buildNodeEntryWorkerEntry(
-      'https://host.test/node-entry.js',
-      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
-      { kind: 'worker-thread', remoteFs: true, threadId: 7 },
-    );
+    const entry = buildNodeEntryWorkerEntry('https://host.test/node-entry.js', HOST_RUNTIME, {
+      kind: 'worker-thread',
+      remoteFs: true,
+      threadId: 7,
+    });
     publishKernelEntryBootstrap(entry.bootstrap ?? null);
     Reflect.deleteProperty(globalThis, 'global');
 
@@ -108,23 +113,19 @@ describe('pre-entry gate (ADR-0157)', () => {
   });
 
   it('Node-entry terminal bootstrap ignores colliding guest env without rewriting it', () => {
-    const entry = buildNodeEntryWorkerEntry(
-      'https://host.test/node-entry.js',
-      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
-      {
-        kind: 'program',
-        bin: true,
-        remoteFs: true,
-        nodeServe: true,
-        terminal: {
-          stdinIsTTY: false,
-          stdoutIsTTY: true,
-          stderrIsTTY: true,
-          cols: 132,
-          rows: 43,
-        },
+    const entry = buildNodeEntryWorkerEntry('https://host.test/node-entry.js', HOST_RUNTIME, {
+      kind: 'program',
+      bin: true,
+      remoteFs: true,
+      nodeServe: true,
+      terminal: {
+        stdinIsTTY: false,
+        stdoutIsTTY: true,
+        stderrIsTTY: true,
+        cols: 132,
+        rows: 43,
       },
-    );
+    });
     publishKernelEntryBootstrap(entry.bootstrap ?? null);
     installNodeRuntime(
       spec({
@@ -151,17 +152,13 @@ describe('pre-entry gate (ADR-0157)', () => {
 
   it('keeps process argv/cwd public when the host launch carries a private remote-FS root', () => {
     const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
-    const entry = buildNodeEntryWorkerEntry(
-      'https://host.test/node-entry.js',
-      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
-      {
-        kind: 'program',
-        bin: false,
-        remoteFs: true,
-        remoteFsRoot,
-        nodeServe: true,
-      },
-    );
+    const entry = buildNodeEntryWorkerEntry('https://host.test/node-entry.js', HOST_RUNTIME, {
+      kind: 'program',
+      bin: false,
+      remoteFs: true,
+      remoteFsRoot,
+      nodeServe: true,
+    });
     publishKernelEntryBootstrap(entry.bootstrap ?? null);
     const publicSpec = {
       ...spec({ USER_VALUE: 'kept' }),

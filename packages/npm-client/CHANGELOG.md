@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Immutable runtime-adapter-bound shadow capability client (ADR-0296).**
+  Admitted children can verify builtin adapter bytes without receiving or
+  reconstructing the parent exact plan; the unchanged server plan and child
+  catalog binding intersect at the existing MessagePort protocol.
+
 - **Exact lockfile shadow facts (ADR-0295).** npm-client persists canonical,
   asset-revision-independent applied-recipe evidence, including explicit empty
   provenance, and exposes a strict exact-byte producer for trusted/snapshot

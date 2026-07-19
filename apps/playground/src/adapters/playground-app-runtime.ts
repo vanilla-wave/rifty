@@ -4,7 +4,7 @@ import type {
   PlaygroundProjectRef,
   PlaygroundSessionTools,
   PlaygroundWorkbench,
-} from '../workbench/playground.ts';
+} from '@riftydev/workbench/playground';
 import {
   ClosedHandleError,
   DirtyProjectDocumentError,
@@ -12,7 +12,7 @@ import {
   ProjectDocumentSaveInProgressError,
   type ProjectSession,
   type ProjectTerminalSnapshot,
-} from '../workbench/public.ts';
+} from '@riftydev/workbench';
 
 export interface PlaygroundAppProjectContext {
   readonly plan: PlaygroundProjectPlan;

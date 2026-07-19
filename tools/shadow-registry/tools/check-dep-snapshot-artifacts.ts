@@ -1,16 +1,16 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import identityFile from '../../../apps/playground/src/generated/install-artifact-identity.json';
-import { serializeDepSnapshot } from '../../../apps/playground/src/glue/dep-snapshot.ts';
-import { effectiveDepsFromPackageJsonText } from '../../../apps/playground/src/glue/install-stamp.ts';
+import identityFile from '../../../packages/workbench/src/generated/install-artifact-identity.json';
+import { serializeDepSnapshot } from '../../../packages/workbench/src/glue/dep-snapshot.ts';
+import { effectiveDepsFromPackageJsonText } from '../../../packages/workbench/src/glue/install-stamp.ts';
 import { buildProjectPackageJson } from '../../../apps/playground/src/templates/project-spec.ts';
 import { allProjectSpecs } from '../../../apps/playground/src/templates/registry.ts';
 import {
   applyViteCliActionPatch,
   applyViteRootWatchPatch,
   viteRootWatchPatchPolicy,
-} from '../../../apps/playground/src/workers/vite-cli-install-policy.ts';
+} from '../../../packages/workbench/src/workers/vite-cli-install-policy.ts';
 import { internalsShims } from '../src/index.ts';
 import { assertSnapshotArtifactCurrent } from '../src/snapshot-artifact-check.ts';
 

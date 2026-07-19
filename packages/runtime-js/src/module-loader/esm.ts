@@ -1749,9 +1749,10 @@ export async function executeEsm(
       // The generated body reaches its export `Object.defineProperty`/`Object.keys`
       // machinery through this binding (esm-ast.ts RUNTIME_OBJECT_BINDING), so a
       // module shadowing the global with `export const Object = …` (opencode's
-      // config/permission.ts) can't break codegen. Kept on the `return` line so
-      // body line numbering (snippetForBody) is unchanged.
-      `const ${helper.runtimeObject} = Object; return (async () => {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} };\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
+      // config/permission.ts) can't break codegen. ESM is always strict: the
+      // directive keeps top-level `this` and bare-call receivers faithful. Kept
+      // on the `return` line so body line numbering (snippetForBody) is unchanged.
+      `"use strict"; const ${helper.runtimeObject} = Object; return (async () => {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} };\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
     ) as typeof factory;
   } catch (err) {
     const msg = (err as Error).message ?? String(err);

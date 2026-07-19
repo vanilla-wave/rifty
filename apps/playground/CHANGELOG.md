@@ -4,6 +4,8 @@
 
 ### Changed (Workbench extraction)
 
+- Playground no longer imports or depends on the esbuild WASM package for
+  Workbench boot; the sealed Workbench capability path owns Vite 7 preparation.
 - Playground now consumes one sealed Workbench lifecycle; the superseded raw
   owner bootstrap, bridge/controller stack, and duplicate project coordinators
   are removed before package extraction.
@@ -16,6 +18,11 @@
   awaits only exact pending admission; durability proof remains detached.
 - Exact `package.json` and `package-lock.json` mutations now share one
   `package-only` demotion class across owner writer adapters.
+
+### Fixed (baked dependency snapshots)
+
+- Snapshot baking now acquires required shadow runtime assets through the real
+  npm-client manager before publishing current Workbench installer identities.
 
 ### Added (app-local Workbench contract)
 

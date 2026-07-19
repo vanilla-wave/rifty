@@ -75,6 +75,7 @@ const TASKS = [
   'check:shadow-asset-catalog-drift',
   'check:shadow-asset-real-acceptance',
   'check:snapshot-artifact-drift',
+  'check:publish-config-drift',
   'check:source-grep',
   'check:install-stamp-writers',
   'backlog:check',

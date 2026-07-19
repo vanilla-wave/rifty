@@ -1,14 +1,16 @@
-import esbuildWasmUrl from 'esbuild-wasm/esbuild.wasm?url';
+import devServerWorkerUrl from '@riftydev/workbench/dev-server-worker?worker&url';
+import kernelWorkerUrl from '@riftydev/workbench/kernel-worker?worker&url';
+import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
+import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
+import type {
+  PlaygroundWorkbench,
+  PlaygroundWorkbenchOptions,
+} from '@riftydev/workbench/playground';
+import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
+import typescriptWorkerUrl from '@riftydev/workbench/typescript-worker?worker&url';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { getRegistryProxyPrefix } from '../glue/registry-config.ts';
 import { getEddyBundleBaseUrl, getResolverUrl } from '../glue/resolver-config.ts';
-import type { PlaygroundWorkbench, PlaygroundWorkbenchOptions } from '../workbench/playground.ts';
-import { openPlaygroundWorkbench } from '../workbench/playground.ts';
-import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&url';
-import kernelWorkerUrl from '../workers/kernel-worker-entry.ts?worker&url';
-import nodeWorkerUrl from '../workers/node-entry-bootstrap.ts?worker&url';
-import typescriptWorkerUrl from '../workers/ts-lsp-worker-entry.ts?worker&url';
-import ownerWorkerUrl from '../workers/workbench-owner-bootstrap.ts?worker&url';
 
 function presetPins(value: unknown): Readonly<Record<string, string>> | undefined {
   if (value === undefined || value === '') return undefined;
@@ -49,7 +51,7 @@ export function playgroundWorkbenchOptions(): PlaygroundWorkbenchOptions {
         typescript: typescriptWorkerUrl,
       }),
       serviceWorker: Object.freeze({ url: '/sw.js', scope: '/' }),
-      wasm: Object.freeze({ sqlite: sqlWasmUrl, esbuild: esbuildWasmUrl }),
+      wasm: Object.freeze({ sqlite: sqlWasmUrl }),
       previewProbeTimeoutMs: 30_000,
     }),
     packageAcquisition: Object.freeze({

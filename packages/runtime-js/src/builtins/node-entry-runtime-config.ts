@@ -1,7 +1,13 @@
 import { type WorkerEntryDescriptor, readKernelEntryBootstrap } from '@riftydev/kernel';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 
-export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v1' as const;
+export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v2' as const;
+
+export interface NodeEntryHostRuntime {
+  readonly RIFTY_KERNEL_WORKER_URL: string;
+  readonly RIFTY_NODE_ENTRY_WORKER_URL: string;
+  readonly RIFTY_SQLITE_WASM_URL: string;
+}
 
 export interface NodeEntryTerminalBootstrap {
   readonly stdinIsTTY: boolean;
@@ -34,7 +40,7 @@ export interface NodeEntryWorkerThreadLaunch {
 export type NodeEntryLaunch = NodeEntryProgramLaunch | NodeEntryWorkerThreadLaunch;
 
 export interface NodeEntryBootstrapPayload {
-  readonly hostRuntime: Readonly<Record<string, string>>;
+  readonly hostRuntime: NodeEntryHostRuntime;
   readonly launch: NodeEntryLaunch;
 }
 
@@ -42,7 +48,7 @@ type NodeEntryWorkerEntry = Extract<WorkerEntryDescriptor, { readonly kind: 'url
 
 interface NodeEntryWorkerConfig {
   readonly url: string;
-  readonly hostRuntime: Readonly<Record<string, string>> | null;
+  readonly hostRuntime: NodeEntryHostRuntime | null;
 }
 
 let nodeEntryWorkerConfig: NodeEntryWorkerConfig | null = null;
@@ -84,18 +90,24 @@ function optionalOwnField(record: Record<string, unknown>, field: string): unkno
   return Object.prototype.hasOwnProperty.call(record, field) ? record[field] : undefined;
 }
 
-function snapshotHostRuntime(value: unknown): Readonly<Record<string, string>> {
+const HOST_RUNTIME_FIELDS = [
+  'RIFTY_KERNEL_WORKER_URL',
+  'RIFTY_NODE_ENTRY_WORKER_URL',
+  'RIFTY_SQLITE_WASM_URL',
+] as const;
+
+function snapshotHostRuntime(value: unknown): NodeEntryHostRuntime {
   const record = objectRecord(value, 'node-entry host runtime');
-  const entries = Object.entries(record);
-  if (entries.length === 0) {
-    throw new TypeError('node-entry host runtime must contain reserved RIFTY_* values');
-  }
-  const snapshot: Record<string, string> = {};
-  for (const [key, entry] of entries) {
-    if (!key.startsWith('RIFTY_') || typeof entry !== 'string' || entry.length === 0) {
-      throw new TypeError(
-        'node-entry host runtime must map reserved RIFTY_* keys to non-empty strings',
-      );
+  assertAllowedOwnFields(record, HOST_RUNTIME_FIELDS, 'node-entry host runtime');
+  const snapshot: Record<(typeof HOST_RUNTIME_FIELDS)[number], string> = {
+    RIFTY_KERNEL_WORKER_URL: '',
+    RIFTY_NODE_ENTRY_WORKER_URL: '',
+    RIFTY_SQLITE_WASM_URL: '',
+  };
+  for (const key of HOST_RUNTIME_FIELDS) {
+    const entry = requiredOwnField(record, key, 'node-entry host runtime');
+    if (typeof entry !== 'string' || entry.length === 0) {
+      throw new TypeError(`node-entry host runtime.${key} must be a non-empty string`);
     }
     snapshot[key] = entry;
   }
@@ -238,7 +250,7 @@ function snapshotPayload(value: unknown): NodeEntryBootstrapPayload {
 /** Build a complete URL entry without consulting process-global host configuration. */
 export function buildNodeEntryWorkerEntry(
   url: string | URL,
-  hostRuntime: Readonly<Record<string, string>>,
+  hostRuntime: NodeEntryHostRuntime,
   launch: NodeEntryLaunch,
 ): NodeEntryWorkerEntry {
   const payload = snapshotPayload({ hostRuntime, launch });
@@ -296,7 +308,7 @@ export function readNodeEntryBootstrapIfPresent(): NodeEntryBootstrapPayload | n
 /** Atomically install the node-entry URL and its out-of-band host snapshot. */
 export function configureNodeEntryWorkerRuntime(
   url: string | URL,
-  hostRuntime: Readonly<Record<string, string>>,
+  hostRuntime: NodeEntryHostRuntime,
 ): void {
   const nextUrl = snapshotUrl(url);
   const nextHostRuntime = snapshotHostRuntime(hostRuntime);

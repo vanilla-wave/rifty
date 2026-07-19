@@ -16,6 +16,7 @@ import {
   bootOwner,
   closeOwner,
   execLine,
+  execLineUntil,
   gotoHarness,
   readOwnerFile,
   writeOwnerFile,
@@ -63,34 +64,23 @@ interface PublicationEvidence {
   readonly legacyBridgeAbsent: boolean;
 }
 
-interface InfoEnvelope {
-  readonly health: {
-    readonly token: string;
-    readonly mode: 'info';
-    readonly kind: 'info-no-start';
-    readonly schema: 3;
-    readonly launcherReached: true;
-    readonly runtimeNotPublished: boolean;
-    readonly legacyBridgeAbsent: boolean;
-    readonly rowIds: readonly [];
-  };
-}
-
 interface ContractPaths {
   readonly dir: string;
   readonly devRunner: string;
   readonly buildRunner: string;
   readonly previewRunner: string;
   readonly optimizeRunner: string;
-  readonly infoRunner: string;
+  readonly devConfig: string;
+  readonly buildConfig: string;
+  readonly previewConfig: string;
+  readonly optimizeConfig: string;
   readonly devResult: string;
   readonly buildResult: string;
   readonly previewResult: string;
   readonly optimizeResult: string;
-  readonly infoResult: string;
 }
 
-const VITE_BIN = '/scratch/node_modules/.bin/vite';
+const LOGICAL_VITE_BIN = '/node_modules/.bin/vite';
 const expectedContract = JSON.parse(
   readFileSync(
     fileURLToPath(
@@ -117,21 +107,32 @@ const shadowRequire = createRequire(
   new URL('../../tools/shadow-registry/package.json', import.meta.url),
 );
 const hostEsbuild = shadowRequire('esbuild') as HostEsbuild;
+const FIXTURE_ROOT = '/scratch';
+
+function guestPath(path: string): string {
+  if (path === FIXTURE_ROOT) return '/';
+  if (!path.startsWith(`${FIXTURE_ROOT}/`)) {
+    throw new TypeError(`Contract path is outside the sealed fixture root: ${path}`);
+  }
+  return path.slice(FIXTURE_ROOT.length);
+}
 
 function pathsFor(token: string): ContractPaths {
-  const dir = `/scratch/.rifty-esbuild-contract-${token}`;
+  const dir = `${FIXTURE_ROOT}/.rifty-esbuild-contract-${token}`;
   return {
     dir,
     devRunner: `${dir}/dev-full.cjs`,
     buildRunner: `${dir}/build-module.mjs`,
     previewRunner: `${dir}/preview-module.mjs`,
     optimizeRunner: `${dir}/optimize-module.mjs`,
-    infoRunner: `${dir}/info-no-start.cjs`,
+    devConfig: `${dir}/dev.config.mjs`,
+    buildConfig: `${dir}/build.config.mjs`,
+    previewConfig: `${dir}/preview.config.mjs`,
+    optimizeConfig: `${dir}/optimize.config.mjs`,
     devResult: `${dir}/dev-full.json`,
     buildResult: `${dir}/build-module.json`,
     previewResult: `${dir}/preview-module.json`,
     optimizeResult: `${dir}/optimize-module.json`,
-    infoResult: `${dir}/info-no-start.json`,
   };
 }
 
@@ -186,60 +187,60 @@ function makeContractWorkspace(root) {
 }
 
 function devRunner(bundle: string, token: string, paths: ContractPaths): string {
-  const parityRoot = `${paths.dir}/dev-parity-workspace`;
-  const policyRoot = `${paths.dir}/dev-policy-workspace`;
+  const parityRoot = `${guestPath(paths.dir)}/dev-parity-workspace`;
+  const policyRoot = `${guestPath(paths.dir)}/dev-policy-workspace`;
   const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:dev\n`;
-  return `${bundle}
+  return `import { createRequire } from 'node:module';
+${bundle}
 const runtimeRealmBeforeImport = globalThis.__rifty;
 const runtimeSlotPresentBeforeImport =
   runtimeRealmBeforeImport !== undefined && Reflect.has(runtimeRealmBeforeImport, 'esbuild');
 const runtimeBeforeImport = runtimeRealmBeforeImport?.esbuild;
 const legacyBridgeAbsentBeforeImport = !Reflect.has(globalThis, '__riftyEsbuildTransform');
+const require = createRequire(import.meta.url);
 const cjs = require('esbuild');
-module.exports.__promise = (async () => {
-  const esm = await import('esbuild');
-  const esmAgain = await import('esbuild');
-  const fs = require('node:fs');
-  const path = require('node:path');
-  ${workspaceFactory()}
-  const modules = {
-    cjs,
-    esm,
-    esmDefaultIsCjsOuter: esm.default === cjs,
-    esmNamespaceStable: esmAgain === esm,
-  };
-  const parity = await RiftyEsbuildContractProbe.probeEsbuildContract(
-    modules,
-    makeContractWorkspace(${JSON.stringify(parityRoot)}),
-  );
-  const policy = await RiftyEsbuildContractProbe.probeEsbuildGuestPolicy(
-    modules,
-    makeContractWorkspace(${JSON.stringify(policyRoot)}),
-  );
-  fs.writeFileSync(
-    ${JSON.stringify(paths.devResult)},
-    JSON.stringify({
-      health: {
-        token: ${JSON.stringify(token)},
-        mode: 'dev',
-        kind: 'full',
-        schema: parity.schema,
-        version: parity.version,
-        parityRowIds: Object.keys(parity.rows),
-        policySchema: policy.schema,
-        policyRowIds: Object.keys(policy.rows),
-      },
-      publication: {
-        slotPresentBeforeImport: runtimeSlotPresentBeforeImport,
-        slotEqualsCjsOuter: runtimeBeforeImport === cjs,
-        legacyBridgeAbsent: legacyBridgeAbsentBeforeImport,
-      },
-      parity,
-      policy,
-    }),
-  );
-  globalThis.process.stdout.write(${JSON.stringify(completion)});
-})();
+const esm = await import('esbuild');
+const esmAgain = await import('esbuild');
+const fs = require('node:fs');
+const path = require('node:path');
+${workspaceFactory()}
+const modules = {
+  cjs,
+  esm,
+  esmDefaultIsCjsOuter: esm.default === cjs,
+  esmNamespaceStable: esmAgain === esm,
+};
+const parity = await RiftyEsbuildContractProbe.probeEsbuildContract(
+  modules,
+  makeContractWorkspace(${JSON.stringify(parityRoot)}),
+);
+const policy = await RiftyEsbuildContractProbe.probeEsbuildGuestPolicy(
+  modules,
+  makeContractWorkspace(${JSON.stringify(policyRoot)}),
+);
+fs.writeFileSync(
+  ${JSON.stringify(guestPath(paths.devResult))},
+  JSON.stringify({
+    health: {
+      token: ${JSON.stringify(token)},
+      mode: 'dev',
+      kind: 'full',
+      schema: parity.schema,
+      version: parity.version,
+      parityRowIds: Object.keys(parity.rows),
+      policySchema: policy.schema,
+      policyRowIds: Object.keys(policy.rows),
+    },
+    publication: {
+      slotPresentBeforeImport: runtimeSlotPresentBeforeImport,
+      slotEqualsCjsOuter: runtimeBeforeImport === cjs,
+      legacyBridgeAbsent: legacyBridgeAbsentBeforeImport,
+    },
+    parity,
+    policy,
+  }),
+);
+globalThis.process.stdout.write(${JSON.stringify(completion)});
 `;
 }
 
@@ -297,34 +298,9 @@ globalThis.process.stdout.write(${JSON.stringify(completion)});
 `;
 }
 
-function infoRunner(token: string, paths: ContractPaths): string {
-  const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:info\n`;
-  return `const fs = require('node:fs');
-const runtimeRealm = globalThis.__rifty;
-const runtimeNotPublished =
-  runtimeRealm === undefined || !Reflect.has(runtimeRealm, 'esbuild');
-const legacyBridgeAbsent = !Reflect.has(globalThis, '__riftyEsbuildTransform');
-fs.writeFileSync(
-  ${JSON.stringify(paths.infoResult)},
-  JSON.stringify({
-    health: {
-      token: ${JSON.stringify(token)},
-      mode: 'info',
-      kind: 'info-no-start',
-      schema: 3,
-      launcherReached: true,
-      runtimeNotPublished,
-      legacyBridgeAbsent,
-      rowIds: [],
-    },
-  }),
-);
-globalThis.process.stdout.write(${JSON.stringify(completion)});
-`;
-}
-
-function launcher(target: string): string {
-  return `#!/usr/bin/env node\nimport(${JSON.stringify(target)});\n`;
+function configLauncher(target: string): string {
+  const name = target.slice(target.lastIndexOf('/') + 1);
+  return `import './${name}';\nexport default {};\n`;
 }
 
 function parseResult<T>(
@@ -335,29 +311,43 @@ function parseResult<T>(
   return JSON.parse(result.text) as T;
 }
 
+async function reacquireAttestedTree(page: Page, afterMode: string): Promise<void> {
+  const result = await execLine(page, 'npm install');
+  expect(result.exit, `${afterMode} tree reacquisition: ${result.out}`).toBe(0);
+}
+
 async function runContractHarness(page: Page): Promise<{
   readonly dev: FullEnvelope;
   readonly build: ModuleEnvelope;
   readonly preview: ModuleEnvelope;
   readonly optimize: ModuleEnvelope;
-  readonly info: InfoEnvelope;
 }> {
   const token = randomUUID();
   const paths = pathsFor(token);
   const bundle = await bundleProbe();
-  const original = await readOwnerFile(page, VITE_BIN);
-  expect(original.ok, original.error).toBe(true);
 
   await writeOwnerFile(page, paths.devRunner, devRunner(bundle, token, paths));
   await writeOwnerFile(
     page,
     paths.buildRunner,
-    moduleRunner(bundle, token, 'build', `${paths.dir}/build-workspace`, paths.buildResult),
+    moduleRunner(
+      bundle,
+      token,
+      'build',
+      `${guestPath(paths.dir)}/build-workspace`,
+      guestPath(paths.buildResult),
+    ),
   );
   await writeOwnerFile(
     page,
     paths.previewRunner,
-    moduleRunner(bundle, token, 'preview', `${paths.dir}/preview-workspace`, paths.previewResult),
+    moduleRunner(
+      bundle,
+      token,
+      'preview',
+      `${guestPath(paths.dir)}/preview-workspace`,
+      guestPath(paths.previewResult),
+    ),
   );
   await writeOwnerFile(
     page,
@@ -366,60 +356,63 @@ async function runContractHarness(page: Page): Promise<{
       bundle,
       token,
       'optimize',
-      `${paths.dir}/optimize-workspace`,
-      paths.optimizeResult,
+      `${guestPath(paths.dir)}/optimize-workspace`,
+      guestPath(paths.optimizeResult),
     ),
   );
-  await writeOwnerFile(page, paths.infoRunner, infoRunner(token, paths));
+  await writeOwnerFile(page, paths.devConfig, configLauncher(paths.devRunner));
+  await writeOwnerFile(page, paths.buildConfig, configLauncher(paths.buildRunner));
+  await writeOwnerFile(page, paths.previewConfig, configLauncher(paths.previewRunner));
+  await writeOwnerFile(page, paths.optimizeConfig, configLauncher(paths.optimizeRunner));
 
-  let dev: Awaited<ReturnType<typeof execLine>>;
-  let build: Awaited<ReturnType<typeof execLine>>;
-  let preview: Awaited<ReturnType<typeof execLine>>;
-  let optimize: Awaited<ReturnType<typeof execLine>>;
-  let info: Awaited<ReturnType<typeof execLine>>;
-  try {
-    await writeOwnerFile(page, VITE_BIN, launcher(paths.devRunner));
-    dev = await execLine(page, 'vite');
-    await writeOwnerFile(page, VITE_BIN, launcher(paths.buildRunner));
-    build = await execLine(page, 'vite build');
-    await writeOwnerFile(page, VITE_BIN, launcher(paths.previewRunner));
-    preview = await execLine(page, 'vite preview');
-    await writeOwnerFile(page, VITE_BIN, launcher(paths.optimizeRunner));
-    optimize = await execLine(page, 'vite optimize --force');
-    await writeOwnerFile(page, VITE_BIN, launcher(paths.infoRunner));
-    info = await execLine(page, 'vite --version');
-  } finally {
-    await writeOwnerFile(page, VITE_BIN, original.text);
-  }
+  const devMarker = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:dev`;
+  const previewMarker = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:preview`;
+  const dev = await execLineUntil(page, `vite --config ${guestPath(paths.devConfig)}`, devMarker);
+  // Vite's default ESM config loader writes node_modules/.vite-temp. The
+  // install authority correctly revokes that mutable tree; use its public
+  // recovery before the next independent mode instead of weakening trust.
+  await reacquireAttestedTree(page, 'dev');
+  const build = await execLine(page, `vite build --config ${guestPath(paths.buildConfig)}`);
+  await reacquireAttestedTree(page, 'build');
+  const preview = await execLineUntil(
+    page,
+    `vite preview --config ${guestPath(paths.previewConfig)}`,
+    previewMarker,
+  );
+  await reacquireAttestedTree(page, 'preview');
+  const optimize = await execLine(
+    page,
+    `vite optimize --force --config ${guestPath(paths.optimizeConfig)}`,
+  );
+  await reacquireAttestedTree(page, 'optimize');
 
   const devFile = await readOwnerFile(page, paths.devResult);
   const buildFile = await readOwnerFile(page, paths.buildResult);
   const previewFile = await readOwnerFile(page, paths.previewResult);
   const optimizeFile = await readOwnerFile(page, paths.optimizeResult);
-  const infoFile = await readOwnerFile(page, paths.infoResult);
-  const restored = await readOwnerFile(page, VITE_BIN);
   const cleanup = await execLine(page, `rm -rf ${paths.dir}`);
 
   expect(hostEsbuild.version).toBe('0.28.0');
   for (const [mode, result] of [
-    ['dev', dev],
     ['build', build],
-    ['preview', preview],
     ['optimize', optimize],
-    ['info', info],
   ] as const) {
     expect(result.exit, `${mode}: ${result.out}`).toBe(0);
     expect(result.out).toContain(`RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:${mode}`);
   }
-  expect(restored.ok, restored.error).toBe(true);
-  expect(restored.text).toBe(original.text);
+  for (const [mode, result] of [
+    ['dev', dev],
+    ['preview', preview],
+  ] as const) {
+    expect(result.exit, `${mode}: ${result.out}`).toEqual({ code: null, signal: 'SIGTERM' });
+    expect(result.out).toContain(`RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:${mode}`);
+  }
   expect(cleanup.exit, cleanup.out).toBe(0);
 
   const devEnvelope = parseResult<FullEnvelope>(devFile, 'dev full');
   const buildEnvelope = parseResult<ModuleEnvelope>(buildFile, 'build module');
   const previewEnvelope = parseResult<ModuleEnvelope>(previewFile, 'preview module');
   const optimizeEnvelope = parseResult<ModuleEnvelope>(optimizeFile, 'optimize module');
-  const infoEnvelope = parseResult<InfoEnvelope>(infoFile, 'info no-start');
 
   expect(devEnvelope.health).toEqual({
     token,
@@ -463,23 +456,11 @@ async function runContractHarness(page: Page): Promise<{
     ]);
     expect(Object.keys(envelope.module)).toEqual(Object.keys(expectedContract.rows.module));
   }
-  expect(infoEnvelope.health).toEqual({
-    token,
-    mode: 'info',
-    kind: 'info-no-start',
-    schema: 3,
-    launcherReached: true,
-    runtimeNotPublished: true,
-    legacyBridgeAbsent: true,
-    rowIds: [],
-  });
-
   return {
     dev: devEnvelope,
     build: buildEnvelope,
     preview: previewEnvelope,
     optimize: optimizeEnvelope,
-    info: infoEnvelope,
   };
 }
 
@@ -541,7 +522,7 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
   try {
     const which = await execLine(page, 'which vite');
     expect(which).toMatchObject({ exit: 0 });
-    expect(which.out).toContain(VITE_BIN);
+    expect(which.out).toContain(LOGICAL_VITE_BIN);
     const version = await execLine(page, 'vite --version');
     expect(version).toMatchObject({ exit: 0 });
     expect(version.out).toContain('vite/7.3.6');
@@ -579,7 +560,7 @@ document.getElementById('app').textContent = __RIFTY_CONFIG_MARKER__ + ':' + pc.
     await writeOwnerFile(
       page,
       '/scratch/.rifty-prebundle-consumer.mjs',
-      `import pc from './node_modules/.vite/deps/picocolors.js';
+      `import pc from './.rifty-prebundle-picocolors.mjs';
 globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
 `,
     );
@@ -620,6 +601,9 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
       page,
       '/scratch/node_modules/.vite/deps/picocolors.js.map',
     );
+    expect(prebundle.ok, prebundle.error).toBe(true);
+    await writeOwnerFile(page, '/scratch/.rifty-prebundle-picocolors.mjs', prebundle.text);
+    await reacquireAttestedTree(page, 'default optimize');
     const prebundleUse = await execLine(page, 'node .rifty-prebundle-consumer.mjs');
     const build = await execLine(page, 'vite build');
     const distMarker = await execLine(page, 'grep -R config-helper-marker dist');

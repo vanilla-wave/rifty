@@ -4,14 +4,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   viteCliActionPatchPolicy,
   viteRootWatchPatchPolicy,
-} from '../../../apps/playground/src/workers/vite-cli-install-policy.ts';
+} from '../../../packages/workbench/src/workers/vite-cli-install-policy.ts';
 import { bakedOverrides, internalsShims } from '../src/index.ts';
 import { identityForRecipe, installArtifactTreePolicy } from '../src/install-artifact-recipe.ts';
 
 const policyUrl = new URL('../esbuild-runtime-policy.json', import.meta.url);
 const runtimeManifestUrl = new URL('../generated/esbuild-runtime-manifest.json', import.meta.url);
 const outputUrl = new URL(
-  '../../../apps/playground/src/generated/install-artifact-identity.json',
+  '../../../packages/workbench/src/generated/install-artifact-identity.json',
   import.meta.url,
 );
 

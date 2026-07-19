@@ -7,7 +7,7 @@ import type {
   PlaygroundFirstMaterialization,
   PlaygroundProjectPlan,
   VitePlaygroundPlan,
-} from '../workbench/playground.ts';
+} from '@riftydev/workbench/playground';
 
 const SEED_ROOT = '/__rifty_playground_plan__';
 

@@ -3,7 +3,7 @@ import type {
   PlaygroundScmBlob,
   PlaygroundScmChange,
   PlaygroundScmDiff,
-} from '../workbench/playground.ts';
+} from '@riftydev/workbench/playground';
 import { playgroundScmDiffPresentation } from './playground-scm-diff-presentation.ts';
 
 function blob(source: PlaygroundScmBlob['source']): PlaygroundScmBlob {

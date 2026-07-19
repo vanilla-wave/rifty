@@ -107,9 +107,11 @@ export {
 export {
   SHADOW_ASSET_CAPABILITY,
   ShadowAssetPortError,
+  createBuiltinShadowAssetPortClient,
   createShadowAssetPortClient,
   startShadowAssetPortServer,
   type ShadowAssetPortClient,
+  type BuiltinShadowAssetRuntimeBinding,
   type ShadowAssetPortFailure,
   type ShadowAssetPortFailurePhase,
   type ShadowAssetPortServer,

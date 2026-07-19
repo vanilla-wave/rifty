@@ -19,6 +19,13 @@
 
 ### Fixed
 
+- Node-entry v2 now accepts only the exact kernel, node-entry, and SQLite host
+  runtime fields. Owner-recursive `execSync` snapshots one validated private
+  `remoteFsRoot` for preflight and nested launch, while first-require defaults
+  cannot replace an explicit host-owned handler (ADR-0297).
+- ESM module factories now run in strict mode, preserving Node's `undefined`
+  top-level and bare-call receivers, including esbuild plugin `setup` callbacks.
+
 - Node-entry program and worker-thread bootstrap metadata can carry one
   validated host-only remote-FS root. Nested `worker_threads` and recursive
   Node entries inherit it while guest argv, cwd, and environment stay public.

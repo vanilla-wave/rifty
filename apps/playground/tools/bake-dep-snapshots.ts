@@ -14,10 +14,20 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { RegistryClient, install } from '@riftydev/npm-client';
+import {
+  RegistryClient,
+  VfsTarballCache,
+  createMemoryShadowAssetStorage,
+  createShadowAssetManager,
+  createStandardShadowAssetSource,
+  install,
+} from '@riftydev/npm-client';
 import { createMemoryFs } from '@riftydev/vfs/internal';
-import { buildDepSnapshot, serializeDepSnapshot } from '../src/glue/dep-snapshot.ts';
-import { readEffectiveDeps } from '../src/glue/install-stamp.ts';
+import {
+  buildDepSnapshot,
+  serializeDepSnapshot,
+} from '../../../packages/workbench/src/glue/dep-snapshot.ts';
+import { readEffectiveDeps } from '../../../packages/workbench/src/glue/install-stamp.ts';
 import { buildProjectPackageJson } from '../src/templates/project-spec.ts';
 import { allProjectSpecs } from '../src/templates/registry.ts';
 import { assertRollupWasmNodeLockstep } from '../src/templates/rollup-lockstep.ts';
@@ -53,29 +63,44 @@ for (const spec of baked) {
     baseUrl: registryBaseUrl,
     fetch: (input, init) => fetch(input, init),
   });
-  const result = await install({ vfs, cwd: ROOT, registry });
-  assertRollupWasmNodeLockstep(spec.id, result.lockfile);
-
-  const deps = await readEffectiveDeps(vfs, ROOT);
-  if (!deps) throw new Error(`bake(${spec.id}): package.json unreadable after install`);
-  const snapshot = buildDepSnapshot(fsSync, ROOT, {
-    templateId: spec.id,
-    deps,
-    packages: result.packages.length,
+  const tarballCache = new VfsTarballCache(vfs);
+  const runtimeAssets = createShadowAssetManager({
+    storage: createMemoryShadowAssetStorage(),
+    source: createStandardShadowAssetSource({ registry, tarballCache }),
   });
+  try {
+    const result = await install({
+      vfs,
+      cwd: ROOT,
+      registry,
+      tarballCache,
+      shadowAssets: { installer: runtimeAssets.installer },
+    });
+    assertRollupWasmNodeLockstep(spec.id, result.lockfile);
 
-  const json = serializeDepSnapshot(snapshot);
-  const gz = gzipSync(Buffer.from(json), { level: 9 });
-  const outPath = join(publicDir, ...url.replace(/^\/+/, '').split('/'));
-  outputs.push({
-    id: spec.id,
-    assetUrl: url,
-    serializedBytes: Buffer.from(json),
-    compressedBytes: gz,
-  });
-  console.log(
-    `  ${spec.id}: ${result.packages.length} packages, ${(json.length / 1e6).toFixed(1)} MB json → ${(gz.length / 1e6).toFixed(1)} MB gz → ${outPath}`,
-  );
+    const deps = await readEffectiveDeps(vfs, ROOT);
+    if (!deps) throw new Error(`bake(${spec.id}): package.json unreadable after install`);
+    const snapshot = buildDepSnapshot(fsSync, ROOT, {
+      templateId: spec.id,
+      deps,
+      packages: result.packages.length,
+    });
+
+    const json = serializeDepSnapshot(snapshot);
+    const gz = gzipSync(Buffer.from(json), { level: 9 });
+    const outPath = join(publicDir, ...url.replace(/^\/+/, '').split('/'));
+    outputs.push({
+      id: spec.id,
+      assetUrl: url,
+      serializedBytes: Buffer.from(json),
+      compressedBytes: gz,
+    });
+    console.log(
+      `  ${spec.id}: ${result.packages.length} packages, ${(json.length / 1e6).toFixed(1)} MB json → ${(gz.length / 1e6).toFixed(1)} MB gz → ${outPath}`,
+    );
+  } finally {
+    await runtimeAssets.close();
+  }
 }
 
 await emitBakedSnapshotOutputs(outputs, {

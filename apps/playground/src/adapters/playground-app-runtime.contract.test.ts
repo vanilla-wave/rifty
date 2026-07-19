@@ -4,14 +4,14 @@ import type {
   PlaygroundProjectPlan,
   PlaygroundSessionTools,
   PlaygroundWorkbench,
-} from '../workbench/playground.ts';
+} from '@riftydev/workbench/playground';
 import {
   DirtyProjectDocumentError,
   type ProjectDefinition,
   ProjectDocumentSaveInProgressError,
   type ProjectSession,
   type ProjectTerminalSnapshot,
-} from '../workbench/public.ts';
+} from '@riftydev/workbench';
 import { createPlaygroundAppRuntime } from './playground-app-runtime.ts';
 
 const EMPTY_CATALOG: PlaygroundCatalogSnapshot = Object.freeze({

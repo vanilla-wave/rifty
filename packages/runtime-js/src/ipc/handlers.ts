@@ -22,6 +22,8 @@ import type { SyncRpcDispatcher } from '@riftydev/kernel';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { type NodeEntryRunner, makeRecursiveRunner } from './recursive-runner.ts';
 
+const installedDispatchers = new WeakSet<SyncRpcDispatcher>();
+
 /** Argument shape the runtime-js `execSync` shim writes into the request. */
 export interface ExecSyncPayload {
   /**
@@ -56,6 +58,8 @@ export interface InstallRuntimeJsExecSyncOptions {
    * in-process loader-run). Defaults to {@link makeRecursiveRunner} (browser).
    */
   readonly runWorker?: NodeEntryRunner;
+  /** Host-private physical root behind the recursive child's public `/`. */
+  readonly remoteFsRoot?: () => string | undefined;
 }
 
 /**
@@ -100,11 +104,21 @@ export function installRuntimeJsExecSyncHandler(
         code: 'ENOENT',
       });
     }
+    const remoteFsRoot = options.remoteFsRoot?.();
+    if (
+      remoteFsRoot !== undefined &&
+      (remoteFsRoot === '/' ||
+        !isAbsolute(remoteFsRoot) ||
+        normalizePath(remoteFsRoot) !== remoteFsRoot)
+    ) {
+      throw new TypeError('execSync remoteFsRoot must be an absolute normalized non-root path');
+    }
     const result = await runWorker({
       entryPath: scriptPath,
       argv: ['rifty', scriptPath, ...tokens.slice(2)],
       env: payload.opts.env,
       cwd,
+      ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
     });
     if (result.exitCode !== 0) {
       // Surface the child's stderr in the failure message (Node's `execSync`
@@ -125,6 +139,17 @@ export function installRuntimeJsExecSyncHandler(
     // non-UTF-8 byte to U+FFFD before framing (a real Node-parity bug).
     return result.stdout;
   });
+  installedDispatchers.add(dispatcher);
+}
+
+/** Install the default realm handler only when no explicit runtime-js owner did. */
+export function ensureRuntimeJsExecSyncHandler(
+  dispatcher: SyncRpcDispatcher,
+  resolveScript: ScriptResolver,
+  options: InstallRuntimeJsExecSyncOptions = {},
+): void {
+  if (installedDispatchers.has(dispatcher)) return;
+  installRuntimeJsExecSyncHandler(dispatcher, resolveScript, options);
 }
 
 function coerceExecSyncPayload(v: unknown): ExecSyncPayload {

@@ -1,3 +1,5 @@
+import { NotImplementedError } from '@riftydev/io';
+import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import { sha256Hex } from './canonical-shadow-json.ts';
 import type { ShadowAssetDescriptor, ShadowAssetPlan } from './shadow-asset-plan.ts';
 import {
@@ -84,6 +86,16 @@ export interface ShadowAssetPortServer {
 
 export interface ShadowAssetPortClient extends ShadowAssetRuntimeReader {
   dispose(): Promise<void>;
+}
+
+export interface BuiltinShadowAssetRuntimeBinding {
+  readonly runtimeAdapterId: string;
+  readonly resolvedPublicVersion: string;
+}
+
+interface ShadowAssetClientExpectation {
+  readonly assets: readonly ShadowAssetDescriptor[];
+  readonly requiredSetDigest?: string;
 }
 
 interface ShadowAssetCauseEnvelope {
@@ -255,6 +267,52 @@ function assertPort(value: unknown): asserts value is MessagePort {
   }
 }
 
+function builtinRuntimeBindingAssets(
+  value: BuiltinShadowAssetRuntimeBinding,
+): readonly ShadowAssetDescriptor[] {
+  exactPlainObject(
+    value,
+    ['resolvedPublicVersion', 'runtimeAdapterId'],
+    [],
+    'BuiltinShadowAssetRuntimeBinding',
+  );
+  assertNonEmptyString(value.runtimeAdapterId, 'BuiltinShadowAssetRuntimeBinding.runtimeAdapterId');
+  assertNonEmptyString(
+    value.resolvedPublicVersion,
+    'BuiltinShadowAssetRuntimeBinding.resolvedPublicVersion',
+  );
+
+  const assetIds = new Set<string>();
+  for (const substitution of builtinShadowAssetCatalog.substitutions) {
+    if (substitution.runtimeAdapterId !== value.runtimeAdapterId) continue;
+    for (const assetId of substitution.versions[value.resolvedPublicVersion] ?? []) {
+      assetIds.add(assetId);
+    }
+  }
+  if (assetIds.size === 0) {
+    throw new NotImplementedError(
+      `shadow-registry.${value.runtimeAdapterId}@${value.resolvedPublicVersion}.assets`,
+      'unknown runtime adapter binding',
+    );
+  }
+
+  const catalogAssets = new Map(
+    builtinShadowAssetCatalog.assets.map((descriptor) => [descriptor.id, descriptor]),
+  );
+  return Object.freeze(
+    [...assetIds].sort().map((assetId) => {
+      const descriptor = catalogAssets.get(assetId);
+      if (!descriptor) {
+        throw new TypeError(`builtin runtime adapter binding names unknown asset ${assetId}`);
+      }
+      return Object.freeze({
+        ...descriptor,
+        source: Object.freeze({ ...descriptor.source }),
+      });
+    }),
+  );
+}
+
 function abortError(): DOMException {
   return new DOMException('The operation was aborted', 'AbortError');
 }
@@ -317,13 +375,20 @@ function decodeTerminalHeader(
   return { requestId: value.requestId, record: value };
 }
 
-function snapshotProgress(value: unknown, plan: ShadowAssetPlan): ShadowAssetProgress {
+function snapshotProgress(
+  value: unknown,
+  expectation: ShadowAssetClientExpectation,
+): ShadowAssetProgress {
   exactPlainObject(
     value,
     ['assetCount', 'phase'],
     ['assetId', 'assetIndex', 'requiredSetDigest', 'storageClass'],
     'shadow asset progress',
   );
+  if (!Number.isSafeInteger(value.assetCount) || (value.assetCount as number) < 0) {
+    throw new TypeError('shadow asset progress has invalid asset count');
+  }
+  const assetCount = value.assetCount as number;
   if (value.phase === 'ready') {
     exactPlainObject(
       value,
@@ -331,10 +396,14 @@ function snapshotProgress(value: unknown, plan: ShadowAssetPlan): ShadowAssetPro
       [],
       'shadow asset ready progress',
     );
-    if (value.requiredSetDigest !== plan.requiredSetDigest) {
+    assertSha256(value.requiredSetDigest, 'shadow asset ready progress requiredSetDigest');
+    if (
+      expectation.requiredSetDigest !== undefined &&
+      value.requiredSetDigest !== expectation.requiredSetDigest
+    ) {
       throw new TypeError('shadow asset ready progress has a drifted digest');
     }
-    if (value.assetCount !== plan.assets.length) {
+    if (expectation.requiredSetDigest !== undefined && assetCount !== expectation.assets.length) {
       throw new TypeError('shadow asset ready progress has a drifted asset count');
     }
     if (
@@ -346,7 +415,7 @@ function snapshotProgress(value: unknown, plan: ShadowAssetPlan): ShadowAssetPro
     return Object.freeze({
       phase: 'ready',
       requiredSetDigest: value.requiredSetDigest,
-      assetCount: value.assetCount,
+      assetCount,
       storageClass: value.storageClass as ShadowAssetStorageClass,
     });
   }
@@ -364,29 +433,39 @@ function snapshotProgress(value: unknown, plan: ShadowAssetPlan): ShadowAssetPro
   ) {
     throw new TypeError('shadow asset progress has invalid phase');
   }
-  if (value.assetCount !== plan.assets.length) {
+  if (expectation.requiredSetDigest !== undefined && assetCount !== expectation.assets.length) {
     throw new TypeError('shadow asset progress has a drifted asset count');
   }
   if (
     !Number.isSafeInteger(value.assetIndex) ||
     (value.assetIndex as number) < 0 ||
-    (value.assetIndex as number) >= plan.assets.length
+    (value.assetIndex as number) >= assetCount
   ) {
     throw new TypeError('shadow asset progress has invalid asset index');
   }
-  const descriptor = plan.assets[value.assetIndex as number];
-  if (!descriptor || value.assetId !== descriptor.id) {
-    throw new TypeError('shadow asset progress has a drifted asset id');
+  let assetId: string;
+  if (expectation.requiredSetDigest === undefined) {
+    assertNonEmptyString(value.assetId, 'shadow asset progress asset id');
+    assetId = value.assetId;
+  } else {
+    const descriptor = expectation.assets[value.assetIndex as number];
+    if (!descriptor || value.assetId !== descriptor.id) {
+      throw new TypeError('shadow asset progress has a drifted asset id');
+    }
+    assetId = descriptor.id;
   }
   return Object.freeze({
     phase: value.phase,
-    assetId: descriptor.id,
+    assetId,
     assetIndex: value.assetIndex as number,
-    assetCount: plan.assets.length,
+    assetCount,
   });
 }
 
-function decodeProgressFrame(value: unknown, plan: ShadowAssetPlan): ProgressFrame {
+function decodeProgressFrame(
+  value: unknown,
+  expectation: ShadowAssetClientExpectation,
+): ProgressFrame {
   exactPlainObject(
     value,
     ['progress', 'protocol', 'requestId', 'type'],
@@ -401,7 +480,7 @@ function decodeProgressFrame(value: unknown, plan: ShadowAssetPlan): ProgressFra
     protocol: SHADOW_ASSET_PROTOCOL,
     type: 'progress',
     requestId: value.requestId,
-    progress: snapshotProgress(value.progress, plan),
+    progress: snapshotProgress(value.progress, expectation),
   };
 }
 
@@ -669,7 +748,7 @@ interface ClientPending {
 
 class ShadowAssetPortClientImpl implements ShadowAssetPortClient {
   readonly #port: MessagePort;
-  readonly #plan: ShadowAssetPlan;
+  readonly #expectation: ShadowAssetClientExpectation;
   readonly #assets: ReadonlyMap<string, ShadowAssetDescriptor>;
   readonly #pending = new Map<number, ClientPending>();
   #lastIssued = 0;
@@ -682,7 +761,7 @@ class ShadowAssetPortClientImpl implements ShadowAssetPortClient {
     try {
       const type = frameDiscriminator(event.data);
       if (type === 'progress') {
-        this.#handleProgress(decodeProgressFrame(event.data, this.#plan));
+        this.#handleProgress(decodeProgressFrame(event.data, this.#expectation));
         return;
       }
       if (type === 'result' || type === 'error') {
@@ -708,14 +787,46 @@ class ShadowAssetPortClientImpl implements ShadowAssetPortClient {
     this.#failSession(portError('closed', 'Shadow asset port closed'));
   };
 
-  constructor(port: MessagePort, plan: ShadowAssetPlan) {
+  constructor(port: MessagePort, expectation: ShadowAssetClientExpectation) {
     this.#port = port;
-    this.#plan = plan;
-    this.#assets = new Map(plan.assets.map((asset) => [asset.id, asset]));
-    port.addEventListener('message', this.#onMessage);
-    port.addEventListener('messageerror', this.#onMessageError);
-    port.addEventListener('close', this.#onClose);
-    port.start();
+    this.#expectation = expectation;
+    this.#assets = new Map(expectation.assets.map((asset) => [asset.id, asset]));
+    try {
+      port.addEventListener('message', this.#onMessage);
+      port.addEventListener('messageerror', this.#onMessageError);
+      port.addEventListener('close', this.#onClose);
+      port.start();
+    } catch (error) {
+      const cleanupFailures: unknown[] = [];
+      try {
+        port.removeEventListener('message', this.#onMessage);
+      } catch (cleanupError) {
+        cleanupFailures.push(cleanupError);
+      }
+      try {
+        port.removeEventListener('messageerror', this.#onMessageError);
+      } catch (cleanupError) {
+        cleanupFailures.push(cleanupError);
+      }
+      try {
+        port.removeEventListener('close', this.#onClose);
+      } catch (cleanupError) {
+        cleanupFailures.push(cleanupError);
+      }
+      try {
+        port.close();
+      } catch (cleanupError) {
+        cleanupFailures.push(cleanupError);
+      }
+      this.#closed = true;
+      if (cleanupFailures.length !== 0) {
+        throw new AggregateError(
+          [error, ...cleanupFailures],
+          'shadow asset client startup and rollback failed',
+        );
+      }
+      throw error;
+    }
   }
 
   readVerified(assetId: string, options?: ShadowAssetReadOptions): Promise<Uint8Array> {
@@ -1182,5 +1293,20 @@ export function createShadowAssetPortClient(
   exactPlainObject(options, ['plan', 'port'], [], 'createShadowAssetPortClient options');
   assertPort(options.port);
   const plan = snapshotShadowAssetPlan(options.plan);
-  return new ShadowAssetPortClientImpl(options.port, plan);
+  return new ShadowAssetPortClientImpl(options.port, {
+    assets: plan.assets,
+    requiredSetDigest: plan.requiredSetDigest,
+  });
+}
+
+export function createBuiltinShadowAssetPortClient(
+  options: Readonly<{
+    port: MessagePort;
+    binding: BuiltinShadowAssetRuntimeBinding;
+  }>,
+): ShadowAssetPortClient {
+  exactPlainObject(options, ['binding', 'port'], [], 'createBuiltinShadowAssetPortClient options');
+  const assets = builtinRuntimeBindingAssets(options.binding);
+  assertPort(options.port);
+  return new ShadowAssetPortClientImpl(options.port, { assets });
 }

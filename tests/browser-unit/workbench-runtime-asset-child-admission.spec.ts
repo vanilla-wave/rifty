@@ -6,6 +6,7 @@ const kernelModuleUrl = `/@fs${workspacePath}/packages/kernel/src/index.ts`;
 const npmClientModuleUrl = `/@fs${workspacePath}/packages/npm-client/src/index.ts`;
 const shadowRegistryModuleUrl = `/@fs${workspacePath}/tools/shadow-registry/src/index.ts`;
 const capabilityEntryUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/runtime-asset-capability-entry.ts`;
+const ownerChildNodeExecutorUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/workbench-owner-child-node-executor.ts`;
 
 test('a real supervised child transfers its exact admitted asset peer and cleans the session', async ({
   page,
@@ -13,7 +14,7 @@ test('a real supervised child transfers its exact admitted asset peer and cleans
   await gotoHarness(page);
 
   const result = await page.evaluate(
-    async ({ entryUrl, kernelUrl, npmClientUrl, shadowRegistryUrl }) => {
+    async ({ entryUrl, kernelUrl, nodeExecutorUrl, npmClientUrl, shadowRegistryUrl }) => {
       interface ShadowAssetPlan {
         readonly requiredSetDigest: string;
         readonly substitutions: readonly Readonly<Record<string, unknown>>[];
@@ -124,7 +125,7 @@ test('a real supervised child transfers its exact admitted asset peer and cleans
 
       const [kernel, nodeExecutor, npmClient, shadowRegistry] = await Promise.all([
         import(kernelUrl),
-        import('/src/workers/owner-child-node-executor.ts'),
+        import(nodeExecutorUrl),
         import(npmClientUrl),
         import(shadowRegistryUrl),
       ]);
@@ -227,7 +228,6 @@ test('a real supervised child transfers its exact admitted asset peer and cleans
           RIFTY_KERNEL_WORKER_URL: 'unused:kernel',
           RIFTY_NODE_ENTRY_WORKER_URL: 'unused:node-entry',
           RIFTY_SQLITE_WASM_URL: 'unused:sqlite',
-          RIFTY_ESBUILD_WASM_URL: 'unused:esbuild',
         },
         (spec) => {
           if (spec.entry.kind !== 'url') throw new Error('expected URL child entry');
@@ -366,6 +366,7 @@ test('a real supervised child transfers its exact admitted asset peer and cleans
     {
       entryUrl: capabilityEntryUrl,
       kernelUrl: kernelModuleUrl,
+      nodeExecutorUrl: ownerChildNodeExecutorUrl,
       npmClientUrl: npmClientModuleUrl,
       shadowRegistryUrl: shadowRegistryModuleUrl,
     },

@@ -1,4 +1,4 @@
-import type { PlaygroundScmChange, PlaygroundScmDiff } from '../workbench/playground.ts';
+import type { PlaygroundScmChange, PlaygroundScmDiff } from '@riftydev/workbench/playground';
 
 export interface PlaygroundScmDiffPresentation {
   readonly title: string;

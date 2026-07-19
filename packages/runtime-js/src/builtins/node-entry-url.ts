@@ -9,6 +9,7 @@
  */
 
 import {
+  type NodeEntryHostRuntime,
   configureNodeEntryWorkerRuntime,
   getConfiguredNodeEntryWorkerUrl,
   resetNodeEntryWorkerRuntime,
@@ -20,6 +21,7 @@ export {
   buildNodeEntryWorkerEntry,
   readNodeEntryBootstrap,
   type NodeEntryBootstrapPayload,
+  type NodeEntryHostRuntime,
   type NodeEntryLaunch,
   type NodeEntryProgramLaunch,
   type NodeEntryTerminalBootstrap,
@@ -34,7 +36,7 @@ export function setNodeEntryWorkerUrl(url: string | URL): void {
 /** Atomically inject the URL plus host-owned out-of-band bootstrap values. */
 export function configureNodeEntryWorker(
   url: string | URL,
-  runtimeConfig: Readonly<Record<string, string>>,
+  runtimeConfig: NodeEntryHostRuntime,
 ): void {
   configureNodeEntryWorkerRuntime(url, runtimeConfig);
 }

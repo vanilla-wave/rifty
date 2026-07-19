@@ -29,6 +29,7 @@ import type { NodeEntryRunner } from './recursive-runner.ts';
 function installAndCapture(
   resolveScript: (path: string) => Uint8Array | null,
   runWorker?: NodeEntryRunner,
+  remoteFsRoot?: () => string | undefined,
 ): (payload: unknown) => unknown | Promise<unknown> {
   const dispatcher = new SyncRpcDispatcher();
   let captured: ((payload: unknown) => unknown | Promise<unknown>) | null = null;
@@ -39,11 +40,10 @@ function installAndCapture(
     if (m === 'execSync') captured = h;
     originalRegister(m, h);
   };
-  installRuntimeJsExecSyncHandler(
-    dispatcher,
-    resolveScript,
-    runWorker === undefined ? {} : { runWorker },
-  );
+  installRuntimeJsExecSyncHandler(dispatcher, resolveScript, {
+    ...(runWorker === undefined ? {} : { runWorker }),
+    ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+  });
   if (captured === null) throw new Error('installAndCapture: execSync handler not registered');
   return captured;
 }
@@ -133,6 +133,47 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
     expect(captured.cwd).toBe('/srv');
     expect(captured.env).toEqual({ FOO: 'bar' });
   });
+
+  it('snapshots one validated host-private remote root into the recursive run', async () => {
+    let rootReads = 0;
+    let receivedRoot: string | undefined;
+    const handler = installAndCapture(
+      () => new Uint8Array(),
+      async (spec) => {
+        receivedRoot = spec.remoteFsRoot;
+        return { stdout: new Uint8Array(), exitCode: 0 };
+      },
+      () => {
+        rootReads += 1;
+        return '/.rifty/projects/a/tree';
+      },
+    );
+
+    await handler({ cmd: 'node /run.js', opts: { cwd: '/', env: {} } });
+
+    expect(rootReads).toBe(1);
+    expect(receivedRoot).toBe('/.rifty/projects/a/tree');
+  });
+
+  it.each(['/', 'relative/root', '/not/normalized/../root'])(
+    'rejects invalid host-private remote root %j before recursive spawn',
+    async (remoteFsRoot) => {
+      let runs = 0;
+      const handler = installAndCapture(
+        () => new Uint8Array(),
+        async () => {
+          runs += 1;
+          return { stdout: new Uint8Array(), exitCode: 0 };
+        },
+        () => remoteFsRoot,
+      );
+
+      await expect(handler({ cmd: 'node /run.js', opts: { cwd: '/', env: {} } })).rejects.toThrow(
+        /remoteFsRoot.*absolute normalized non-root/i,
+      );
+      expect(runs).toBe(0);
+    },
+  );
 
   it('coerces malformed payloads', async () => {
     const handler = installAndCapture(() => null);

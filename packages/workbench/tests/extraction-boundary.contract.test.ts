@@ -118,6 +118,7 @@ const WORKER_FILES = [
   'node-entry-bootstrap.ts',
   'node-entry-remote-fs.ts',
   'node-entry-resolve.ts',
+  'node-entry-vite-runtime.ts',
   'node-program-lifecycle.ts',
   'node-worker-runtime-config.ts',
   'owner-child-admission.ts',
@@ -233,13 +234,11 @@ function moduleReferences(path: string, sourceText: string): readonly ModuleRefe
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
       references.push({ importer: path, specifier: node.moduleSpecifier.text, isStatic: true });
-    } else if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length === 1 &&
-      ts.isStringLiteral(node.arguments[0])
-    ) {
-      references.push({ importer: path, specifier: node.arguments[0].text, isStatic: false });
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const argument = node.arguments[0];
+      if (node.arguments.length === 1 && argument !== undefined && ts.isStringLiteral(argument)) {
+        references.push({ importer: path, specifier: argument.text, isStatic: false });
+      }
     }
     ts.forEachChild(node, visit);
   }
@@ -360,10 +359,10 @@ function resolvedExportEntries(): readonly string[] {
 }
 
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the exact 137-file production move without test-decoupling sources', () => {
-    expect(EXPECTED_APP_PRODUCTION_FILES).toHaveLength(137);
-    expect(new Set(EXPECTED_APP_PRODUCTION_FILES).size).toBe(137);
-    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(137);
+  it('pins the exact 138-file production move without test-decoupling sources', () => {
+    expect(EXPECTED_APP_PRODUCTION_FILES).toHaveLength(138);
+    expect(new Set(EXPECTED_APP_PRODUCTION_FILES).size).toBe(138);
+    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(138);
     expect(EXPECTED_APP_PRODUCTION_FILES.filter((path) => !isProductionSource(path))).toEqual([]);
   });
 

@@ -4,7 +4,7 @@ import {
   isProductionTypeScript,
 } from './install-stamp-writers.mjs';
 
-const FILE = 'apps/playground/src/glue/example.ts';
+const FILE = 'packages/workbench/src/glue/example.ts';
 
 function operations(source: string, file = FILE): string[] {
   return findInstallStampWriterViolations(source, file).map((violation) => violation.operation);
@@ -72,7 +72,7 @@ describe('install-stamp one-writer gate', () => {
   });
 
   it('allows package-tree primitives only inside acquisition adapter callbacks', () => {
-    const bootstrap = 'apps/playground/src/workers/owner-package-state.ts';
+    const bootstrap = 'packages/workbench/src/workers/owner-package-state.ts';
     expect(
       findInstallStampWriterViolations(
         `
@@ -106,7 +106,7 @@ describe('install-stamp one-writer gate', () => {
             return installed;
           }
         `,
-        'apps/playground/src/workers/package-install-finalizer.ts',
+        'packages/workbench/src/workers/package-install-finalizer.ts',
       ),
     ).toEqual([]);
     expect(
@@ -115,7 +115,7 @@ describe('install-stamp one-writer gate', () => {
           const install = async () => finalizePackageInstallResult(installed, { root });
           const finalize = async () => finalizePackageInstallResult(installed, { root });
         `,
-        'apps/playground/src/glue/npm-shell-command.ts',
+        'packages/workbench/src/glue/npm-shell-command.ts',
       ),
     ).toEqual(['finalizePackageInstallResult']);
   });
@@ -148,16 +148,16 @@ describe('install-stamp one-writer gate', () => {
     expect(
       findInstallStampWriterViolations(
         'vfs.writeFile(installStampPath(root), bytes)',
-        'apps/playground/src/glue/install-stamp-authority.ts',
+        'packages/workbench/src/glue/install-stamp-authority.ts',
       ),
     ).toEqual([]);
-    expect(isProductionTypeScript('apps/playground/src/a.test.ts')).toBe(false);
-    expect(isProductionTypeScript('apps/playground/src/a.spec.tsx')).toBe(false);
+    expect(isProductionTypeScript('packages/workbench/src/a.test.ts')).toBe(false);
+    expect(isProductionTypeScript('packages/workbench/src/a.spec.tsx')).toBe(false);
     expect(isProductionTypeScript(FILE)).toBe(true);
   });
 
   it('allows only the Owner construction-local claim capability, not ordinary writes', () => {
-    const owner = 'apps/playground/src/workers/owner-vfs-authority.ts';
+    const owner = 'packages/workbench/src/workers/owner-vfs-authority.ts';
     expect(
       findInstallStampWriterViolations(
         `

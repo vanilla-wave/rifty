@@ -206,7 +206,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
             readonly devServer: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -227,7 +227,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
         readonly node: string;
         readonly devServer: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
     type LifecycleProbe = {
       __recordWorkbenchLifecycle(event: string): Promise<void>;
@@ -401,7 +401,7 @@ if (import.meta.hot) import.meta.hot.accept();
       };
     };
 
-    const publicEntryUrl: string = '/src/workbench/public.ts';
+    const publicEntryUrl: string = '/src/browser-unit/workbench-public-entry.ts';
     const [publicEntryModule, hostAssetsModule] = await Promise.all([
       import(/* @vite-ignore */ publicEntryUrl),
       import('/src/browser-unit/workbench-vite-host-assets.ts'),

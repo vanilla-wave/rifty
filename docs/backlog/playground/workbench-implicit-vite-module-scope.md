@@ -5,8 +5,8 @@ title: Workbench implicit Vite project lost its pre-split ESM package scope
 created: 2026-07-15
 why: the old project package builder emitted type:module, while projects.vite() now adds Vite without choosing a package type
 user_story: As a Workbench consumer running Node .js scripts inside an implicit Vite project, I want the same module classification the pre-split project had, but today those scripts classify as CommonJS unless I supply package.json.type myself.
-sources: [PR-136-recut, commit-9e6ba393, apps/playground/src/workbench/project-definition.ts]
-code: [apps/playground/src/workbench/project-definition.ts]
+sources: [PR-136-recut, commit-9e6ba393, packages/workbench/src/workbench/project-definition.ts]
+code: [packages/workbench/src/workbench/project-definition.ts]
 ---
 
 ## Context

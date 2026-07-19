@@ -61,8 +61,8 @@ import type {
   PlaygroundProjectPlan,
   PlaygroundScmChange,
   PlaygroundScmSnapshot,
-} from '../workbench/playground.ts';
-import type { ProjectTerminalSnapshot } from '../workbench/public.ts';
+} from '@riftydev/workbench/playground';
+import type { ProjectTerminalSnapshot } from '@riftydev/workbench';
 import {
   type PlaygroundAppProjectContext,
   type PlaygroundAppRuntime,

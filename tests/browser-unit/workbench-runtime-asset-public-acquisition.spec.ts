@@ -66,7 +66,7 @@ test('public Vite 7 cold open attests assets before its real child is published'
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     }
     interface PublicEntry {
       openWorkbench(options: {
@@ -132,7 +132,7 @@ test('public Vite 7 cold open attests assets before its real child is published'
       inspection.readySetCount === 0;
 
     const [publicModule, hostModule] = await Promise.all([
-      import('/src/workbench/public.ts'),
+      import('/src/browser-unit/workbench-public-entry.ts'),
       import('/src/browser-unit/workbench-vite-host-assets.ts'),
     ]);
     const publicEntry = publicModule as unknown as PublicEntry;

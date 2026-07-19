@@ -31,7 +31,11 @@ const PROGRAM_LAUNCH = {
   },
 };
 
-const HOST_RUNTIME = { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' };
+const HOST_RUNTIME = {
+  RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js',
+  RIFTY_NODE_ENTRY_WORKER_URL: 'https://host.test/node.js',
+  RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
+};
 const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 
 describe('node-entry host bootstrap config', () => {
@@ -41,10 +45,7 @@ describe('node-entry host bootstrap config', () => {
   });
 
   it('snapshots host runtime values out of band from the guest environment', () => {
-    const hostRuntime = {
-      RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js',
-      RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
-    };
+    const hostRuntime = { ...HOST_RUNTIME };
     configureNodeEntryWorker('https://host.test/node.js', hostRuntime);
     hostRuntime.RIFTY_SQLITE_WASM_URL = 'https://mutated.test/sqlite.wasm';
 
@@ -54,10 +55,7 @@ describe('node-entry host bootstrap config', () => {
       bootstrap: {
         protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
         payload: {
-          hostRuntime: {
-            RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js',
-            RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
-          },
+          hostRuntime: HOST_RUNTIME,
           launch: PROGRAM_LAUNCH,
         },
       },
@@ -66,18 +64,19 @@ describe('node-entry host bootstrap config', () => {
 
   it('builds an explicit URL + host snapshot + fresh launch without global configuration', () => {
     expect(
-      buildNodeEntryWorkerEntry(
-        'https://host.test/node.js',
-        { RIFTY_ESBUILD_WASM_URL: 'https://host.test/esbuild.wasm' },
-        { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
-      ),
+      buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        nodeServe: false,
+      }),
     ).toMatchObject({
       kind: 'url',
       url: 'https://host.test/node.js',
       bootstrap: {
         protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
         payload: {
-          hostRuntime: { RIFTY_ESBUILD_WASM_URL: 'https://host.test/esbuild.wasm' },
+          hostRuntime: HOST_RUNTIME,
           launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
         },
       },
@@ -190,12 +189,17 @@ describe('node-entry host bootstrap config', () => {
   });
 
   it('keeps the previous URL and host snapshot paired when replacement validation fails', () => {
-    configureNodeEntryWorker('https://host.test/node-a.js', {
+    const runtimeA = {
+      ...HOST_RUNTIME,
+      RIFTY_NODE_ENTRY_WORKER_URL: 'https://host.test/node-a.js',
       RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite-a.wasm',
-    });
+    };
+    configureNodeEntryWorker('https://host.test/node-a.js', runtimeA);
 
     expect(() =>
       configureNodeEntryWorker('https://host.test/node-b.js', {
+        ...HOST_RUNTIME,
+        RIFTY_NODE_ENTRY_WORKER_URL: 'https://host.test/node-b.js',
         RIFTY_SQLITE_WASM_URL: '',
       }),
     ).toThrow(/host runtime/i);
@@ -205,7 +209,7 @@ describe('node-entry host bootstrap config', () => {
       url: 'https://host.test/node-a.js',
       bootstrap: {
         payload: {
-          hostRuntime: { RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite-a.wasm' },
+          hostRuntime: runtimeA,
         },
       },
     });
@@ -220,6 +224,8 @@ describe('node-entry host bootstrap config', () => {
 
   it('invalidates the host snapshot when the URL-only compatibility seam is used', () => {
     configureNodeEntryWorker('https://host.test/node-a.js', {
+      ...HOST_RUNTIME,
+      RIFTY_NODE_ENTRY_WORKER_URL: 'https://host.test/node-a.js',
       RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite-a.wasm',
     });
     setNodeEntryWorkerUrl('https://host.test/node-b.js');
@@ -236,7 +242,7 @@ describe('node-entry host bootstrap config', () => {
     publishKernelEntryBootstrap({
       protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
       payload: {
-        hostRuntime: { RIFTY_KERNEL_WORKER_URL: 'kernel.js' },
+        hostRuntime: HOST_RUNTIME,
         launch: { kind: 'program', bin: 'yes' },
       },
     });
@@ -318,14 +324,10 @@ describe('node-entry host bootstrap config', () => {
 
   it('rejects invalid terminal metadata before a worker is spawned', () => {
     expect(() =>
-      buildNodeEntryWorkerEntry(
-        'https://host.test/node.js',
-        { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
-        {
-          ...PROGRAM_LAUNCH,
-          terminal: { ...PROGRAM_LAUNCH.terminal, cols: 0 },
-        },
-      ),
+      buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+        ...PROGRAM_LAUNCH,
+        terminal: { ...PROGRAM_LAUNCH.terminal, cols: 0 },
+      }),
     ).toThrow(/terminal.*cols.*positive/i);
   });
 
@@ -339,11 +341,10 @@ describe('node-entry host bootstrap config', () => {
     }) as NodeEntryTerminalBootstrap;
 
     expect(() =>
-      buildNodeEntryWorkerEntry(
-        'https://host.test/node.js',
-        { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
-        { ...PROGRAM_LAUNCH, terminal: inherited },
-      ),
+      buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+        ...PROGRAM_LAUNCH,
+        terminal: inherited,
+      }),
     ).toThrow(/terminal.*missing field/i);
   });
 
@@ -364,11 +365,7 @@ describe('node-entry host bootstrap config', () => {
     const inherited = Object.create(launch) as typeof launch;
 
     expect(() =>
-      buildNodeEntryWorkerEntry(
-        'https://host.test/node.js',
-        { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
-        inherited,
-      ),
+      buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, inherited),
     ).toThrow(/launch.*missing field/i);
   });
 });

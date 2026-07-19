@@ -6,7 +6,7 @@ created: 2026-06-22
 why: every `?worker&url` entry (kernel-worker-entry, dev-server-child-bootstrap, node-entry-bootstrap, real-vite-bootstrap) is self-contained, so `@riftydev/io`'s `Buffer` class (and any other shared runtime class) is emitted ONCE PER bundle. A `kind:'url'` child is `import()`ed INTO the kernel worker realm AFTER the pre-entry hook set `globalThis.Buffer` from the kernel-worker-entry copy — so the global Buffer ≠ the child's `require('buffer')` Buffer. etag (reads the global) then rejects a buffer express built → res.json crash. Patched per-realm (installBundleLocalBuffer), but that is whack-a-mole: every future child bundle must remember, and ANY shared class compared by identity across realms (instanceof) has the same latent hazard.
 user_story: As a rifty maintainer I want one `@riftydev/io` Buffer class shared across worker bundles loaded into one realm, so cross-realm `Buffer.isBuffer`/`instanceof` is correct by construction — not by each child bundle remembering to reinstall the global.
 sources: [ADR-0030, ADR-0071]
-code: [apps/playground/vite.config.ts, apps/playground/src/workers/worker-runtime-globals.ts, apps/playground/src/workers/dev-server-child-bootstrap.ts, apps/playground/src/workers/node-entry-bootstrap.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
+code: [apps/playground/vite.config.ts, packages/workbench/src/workers/worker-runtime-globals.ts, packages/workbench/src/workers/dev-server-child-bootstrap.ts, packages/workbench/src/workers/node-entry-bootstrap.ts]
 ---
 
 ## Context

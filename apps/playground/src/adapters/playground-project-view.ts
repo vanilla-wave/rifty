@@ -3,14 +3,14 @@ import type { FileExplorerMutations } from '../components/FileExplorer.tsx';
 import type { EditorApi } from '../components/editor-host-core.ts';
 import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
 import { NODE_MODULES_MAX_CONTENT_BYTES } from '../glue/node-modules-model.ts';
-import type { PlaygroundScm } from '../workbench/playground.ts';
+import type { PlaygroundScm } from '@riftydev/workbench/playground';
 import type {
   ProjectDocument,
   ProjectDocuments,
   ProjectFileEntry,
   ProjectFiles,
   ProjectFilesSnapshot,
-} from '../workbench/public.ts';
+} from '@riftydev/workbench';
 
 interface CachedFile {
   readonly version: string;

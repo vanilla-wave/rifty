@@ -1,11 +1,11 @@
 import type { ProcessExit } from '@riftydev/shell';
 import { describe, expect, it, vi } from 'vitest';
-import type { ProjectRun, ProjectSession } from '../workbench/project-session.ts';
+import type { ProjectRun, ProjectSession } from '@riftydev/workbench';
 import type {
   ProjectTerminal,
   ProjectTerminalRun,
   ProjectTerminalSnapshot,
-} from '../workbench/project-terminal.ts';
+} from '@riftydev/workbench';
 import { createPlaygroundTerminalUi } from './playground-terminal-ui.ts';
 
 function deferred<T>() {

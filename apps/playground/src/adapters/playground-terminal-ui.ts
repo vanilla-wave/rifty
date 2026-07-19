@@ -5,7 +5,7 @@ import type {
   ProjectSession,
   ProjectTerminal,
   ProjectTerminalRun,
-} from '../workbench/public.ts';
+} from '@riftydev/workbench';
 
 export interface TerminalSessionSnapshot {
   readonly id: string;

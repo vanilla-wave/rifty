@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { canonicalShadowDigest } from './canonical-shadow-json.ts';
 import {
+  BUILTIN_ESBUILD_ASSET_ID,
+  BUILTIN_ESBUILD_RUNTIME_BINDING,
   PortInbox,
+  builtinShadowAssetPortApi,
   closeChannel,
   frameType,
   realEsbuildWasmBytes,
@@ -12,6 +16,7 @@ import {
 import {
   SHADOW_ASSET_MAX_READ_DEADLINE_MS,
   ShadowAssetError,
+  type ShadowAssetPlan,
   type ShadowAssetProgress,
   ShadowAssetReadError,
   type ShadowAssetReadOptions,
@@ -27,13 +32,14 @@ function successfulReader(bytes: Uint8Array): ShadowAssetRuntimeReader {
 }
 
 describe('shadow asset MessagePort public contract', () => {
-  it('exports only the named capability, factories, and nominal port error adapter surface', () => {
+  it('exports the named capability, plan/server factories, builtin client initializer, and port error', () => {
     const exports = shadowAssetPortExports();
 
     expect(exports.SHADOW_ASSET_CAPABILITY).toBe('rifty.shadow-assets.v1');
     expect(exports.ShadowAssetPortError).toBeTypeOf('function');
     expect(exports.startShadowAssetPortServer).toBeTypeOf('function');
     expect(exports.createShadowAssetPortClient).toBeTypeOf('function');
+    expect(exports.createBuiltinShadowAssetPortClient).toBeTypeOf('function');
   });
 
   it('constructs one exact snapshotted ShadowAssetPortError shape', () => {
@@ -130,11 +136,262 @@ describe('shadow asset MessagePort public contract', () => {
   });
 });
 
+function siblingPlan(plan: ShadowAssetPlan, requestedRange: string): ShadowAssetPlan {
+  const substitutions = plan.substitutions.map((substitution) => ({
+    ...substitution,
+    requestedRange,
+  }));
+  return {
+    requiredSetDigest: canonicalShadowDigest({ schema: 1, substitutions, assets: plan.assets }),
+    substitutions,
+    assets: plan.assets,
+  };
+}
+
+function planWithoutRuntimeAssets(plan: ShadowAssetPlan): ShadowAssetPlan {
+  const assets: ShadowAssetPlan['assets'] = [];
+  return {
+    requiredSetDigest: canonicalShadowDigest({
+      schema: 1,
+      substitutions: plan.substitutions,
+      assets,
+    }),
+    substitutions: plan.substitutions,
+    assets,
+  };
+}
+
+describe('shadow asset MessagePort builtin runtime binding', () => {
+  it('intersects the child binding with the server exact plan', async () => {
+    const api = builtinShadowAssetPortApi();
+    const fixture = smallPortFixture();
+    const channel = new MessageChannel();
+    const server = api.startShadowAssetPortServer({
+      port: channel.port1,
+      plan: planWithoutRuntimeAssets(fixture.plan),
+      reader: successfulReader(fixture.bytes),
+    });
+    const client = api.createBuiltinShadowAssetPortClient({
+      port: channel.port2,
+      binding: BUILTIN_ESBUILD_RUNTIME_BINDING,
+    });
+    try {
+      await expect(client.readVerified(BUILTIN_ESBUILD_ASSET_ID)).rejects.toMatchObject({
+        name: 'ShadowAssetReadError',
+        code: 'ESHADOWASSETREAD',
+        assetId: BUILTIN_ESBUILD_ASSET_ID,
+        reason: 'unknown-asset',
+      });
+    } finally {
+      await Promise.all([client.dispose(), server.dispose()]);
+      closeChannel(channel);
+    }
+  });
+
+  it('verifies result bytes against the immutable binding descriptor', async () => {
+    const api = builtinShadowAssetPortApi();
+    const channel = new MessageChannel();
+    const inbox = new PortInbox(channel.port2);
+    const client = api.createBuiltinShadowAssetPortClient({
+      port: channel.port1,
+      binding: BUILTIN_ESBUILD_RUNTIME_BINDING,
+    });
+    try {
+      const read = client.readVerified(BUILTIN_ESBUILD_ASSET_ID);
+      const frame = (await inbox.next()) as { readonly requestId: number };
+      channel.port2.postMessage({
+        protocol: 'rifty.shadow-assets/v1',
+        type: 'result',
+        requestId: frame.requestId,
+        assetId: BUILTIN_ESBUILD_ASSET_ID,
+        sha256: '0'.repeat(64),
+        bytes: new ArrayBuffer(0),
+      });
+
+      await expect(read).rejects.toMatchObject({
+        name: 'ShadowAssetPortError',
+        code: 'ESHADOWASSETPORT',
+        phase: 'decode',
+      });
+    } finally {
+      await client.dispose();
+      inbox.dispose();
+      closeChannel(channel);
+    }
+  });
+
+  it('validates opaque parent plan progress without inventing its digest, count, or order', async () => {
+    const api = builtinShadowAssetPortApi();
+    const channel = new MessageChannel();
+    const inbox = new PortInbox(channel.port2);
+    const client = api.createBuiltinShadowAssetPortClient({
+      port: channel.port1,
+      binding: BUILTIN_ESBUILD_RUNTIME_BINDING,
+    });
+    const progress: ShadowAssetProgress[] = [];
+    try {
+      const read = client.readVerified(BUILTIN_ESBUILD_ASSET_ID, {
+        onProgress: (event) => progress.push(event),
+      });
+      const frame = (await inbox.next()) as { readonly requestId: number };
+      channel.port2.postMessage({
+        protocol: 'rifty.shadow-assets/v1',
+        type: 'progress',
+        requestId: frame.requestId,
+        progress: {
+          phase: 'fetch',
+          assetId: 'another-builtin@1.0.0/package/runtime.wasm',
+          assetIndex: 0,
+          assetCount: 2,
+        },
+      });
+      channel.port2.postMessage({
+        protocol: 'rifty.shadow-assets/v1',
+        type: 'progress',
+        requestId: frame.requestId,
+        progress: {
+          phase: 'ready',
+          requiredSetDigest: 'a'.repeat(64),
+          assetCount: 2,
+          storageClass: 'memory-session',
+        },
+      });
+      channel.port2.postMessage({
+        protocol: 'rifty.shadow-assets/v1',
+        type: 'error',
+        requestId: frame.requestId,
+        error: {
+          name: 'ShadowAssetReadError',
+          code: 'ESHADOWASSETREAD',
+          message: 'fixture stops after progress',
+          assetId: BUILTIN_ESBUILD_ASSET_ID,
+          reason: 'unknown-asset',
+        },
+      });
+
+      await expect(read).rejects.toMatchObject({ code: 'ESHADOWASSETREAD' });
+      expect(progress).toEqual([
+        {
+          phase: 'fetch',
+          assetId: 'another-builtin@1.0.0/package/runtime.wasm',
+          assetIndex: 0,
+          assetCount: 2,
+        },
+        {
+          phase: 'ready',
+          requiredSetDigest: 'a'.repeat(64),
+          assetCount: 2,
+          storageClass: 'memory-session',
+        },
+      ]);
+    } finally {
+      await client.dispose();
+      inbox.dispose();
+      closeChannel(channel);
+    }
+  });
+
+  it('rejects a malformed parent ready digest in binding mode', async () => {
+    const api = builtinShadowAssetPortApi();
+    const channel = new MessageChannel();
+    const inbox = new PortInbox(channel.port2);
+    const client = api.createBuiltinShadowAssetPortClient({
+      port: channel.port1,
+      binding: BUILTIN_ESBUILD_RUNTIME_BINDING,
+    });
+    try {
+      const read = client.readVerified(BUILTIN_ESBUILD_ASSET_ID);
+      const frame = (await inbox.next()) as { readonly requestId: number };
+      channel.port2.postMessage({
+        protocol: 'rifty.shadow-assets/v1',
+        type: 'progress',
+        requestId: frame.requestId,
+        progress: {
+          phase: 'ready',
+          requiredSetDigest: 'not-a-digest',
+          assetCount: 1,
+          storageClass: 'memory-session',
+        },
+      });
+
+      await expect(read).rejects.toMatchObject({
+        name: 'ShadowAssetPortError',
+        code: 'ESHADOWASSETPORT',
+        phase: 'decode',
+      });
+    } finally {
+      await client.dispose();
+      inbox.dispose();
+      closeChannel(channel);
+    }
+  });
+
+  it('rejects plan/digest smuggling and unknown bindings before adopting the port', () => {
+    const api = builtinShadowAssetPortApi();
+    const channel = new MessageChannel();
+    const start = vi.spyOn(channel.port1, 'start');
+    try {
+      expect(() =>
+        api.createBuiltinShadowAssetPortClient({
+          port: channel.port1,
+          binding: BUILTIN_ESBUILD_RUNTIME_BINDING,
+          plan: smallPortFixture().plan,
+        } as never),
+      ).toThrowError(TypeError);
+      expect(() =>
+        api.createBuiltinShadowAssetPortClient({
+          port: channel.port1,
+          binding: {
+            ...BUILTIN_ESBUILD_RUNTIME_BINDING,
+            requiredSetDigest: '0'.repeat(64),
+          },
+        } as never),
+      ).toThrowError(TypeError);
+      expect(() =>
+        api.createBuiltinShadowAssetPortClient({
+          port: channel.port1,
+          binding: {
+            runtimeAdapterId: 'missing.runtime-adapter',
+            resolvedPublicVersion: '1.0.0',
+          },
+        }),
+      ).toThrow(/runtime adapter binding/i);
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      closeChannel(channel);
+    }
+  });
+
+  it('rolls back one adopted client port when startup throws', () => {
+    const api = builtinShadowAssetPortApi();
+    const channel = new MessageChannel();
+    const failure = new Error('client port start failed');
+    const start = vi.spyOn(channel.port1, 'start').mockImplementation(() => {
+      throw failure;
+    });
+    const close = vi.spyOn(channel.port1, 'close');
+    try {
+      expect(() =>
+        api.createBuiltinShadowAssetPortClient({
+          port: channel.port1,
+          binding: BUILTIN_ESBUILD_RUNTIME_BINDING,
+        }),
+      ).toThrow(failure);
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      closeChannel(channel);
+    }
+  });
+});
+
 describe('shadow asset MessagePort parity', () => {
-  it('transfers the real 13,918,738-byte esbuild member through one real MessageChannel', async () => {
-    const api = shadowAssetPortApi();
+  it('transfers the real member from a sibling exact plan through one immutable binding', async () => {
+    const api = builtinShadowAssetPortApi();
     const fixture = tarballPortFixture(realEsbuildWasmBytes());
+    const parentPlan = siblingPlan(fixture.plan, '^0.28.0');
     expect(fixture.bytes.byteLength).toBe(13_918_738);
+    expect(parentPlan.requiredSetDigest).not.toBe(fixture.plan.requiredSetDigest);
     const manager = createShadowAssetManager({
       storage: createMemoryShadowAssetStorage(),
       source: fixture.source,
@@ -153,10 +410,13 @@ describe('shadow asset MessagePort parity', () => {
     const post = vi.spyOn(channel.port1, 'postMessage');
     const server = api.startShadowAssetPortServer({
       port: channel.port1,
-      plan: fixture.plan,
+      plan: parentPlan,
       reader,
     });
-    const client = api.createShadowAssetPortClient({ port: channel.port2, plan: fixture.plan });
+    const binding = { ...BUILTIN_ESBUILD_RUNTIME_BINDING };
+    const client = api.createBuiltinShadowAssetPortClient({ port: channel.port2, binding });
+    binding.runtimeAdapterId = 'mutated-after-construction';
+    binding.resolvedPublicVersion = '99.0.0';
     try {
       const received = await client.readVerified(fixture.plan.assets[0]!.id);
       expect(received).toEqual(direct);

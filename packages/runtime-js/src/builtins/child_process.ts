@@ -24,7 +24,7 @@ import {
   globalProcessManager,
   isSabIpcSupported,
 } from '@riftydev/kernel';
-import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
+import { ensureRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { execScript } from './child_process-exec.ts';
 import { execSync } from './child_process-sync.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -49,7 +49,7 @@ import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 /** Install the runtime-js `'execSync'` handler on the current kernel dispatcher
  * (idempotent; #26 PART B — called by the child_process builtin factory). */
 export function ensureExecSyncHandlerInstalled(): void {
-  installRuntimeJsExecSyncHandler(getKernelDispatcher(), (path) => {
+  ensureRuntimeJsExecSyncHandler(getKernelDispatcher(), (path) => {
     const mirror = syncMirror();
     if (!mirror.existsSync(path)) return null;
     return mirror.readFileBytesSync(path);

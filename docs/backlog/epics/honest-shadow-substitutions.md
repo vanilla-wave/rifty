@@ -117,8 +117,8 @@ inheritance or a host-esbuild fallback remains forbidden.
   controllers).
 - `npm-client/esbuild-alias-override-retirement` — remove the exact measured
   alias response bytes while retaining an exact delegate and honest lockfile
-  provenance (draft; blocked by cutover; synthesis is the preferred candidate,
-  not ratified until its provenance ADR makes the item ready; the epic cannot
+  provenance (ready; blocked by cutover; ADR-0298 fixes synthesis, marker,
+  replay, provenance, and the matched fixed-origin measurement; the epic cannot
   close before it lands).
 - `distribution/workbench-runtime-asset-cold-bench` — committed real-Chromium
   STD cold-fill proof over the final public Workbench composition (ready;

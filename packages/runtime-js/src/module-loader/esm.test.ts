@@ -31,3 +31,27 @@ describe('executeEsm TS-on-import strip step', () => {
     );
   });
 });
+
+describe('executeEsm ESM strict-mode semantics', () => {
+  it('keeps top-level and bare-call receivers undefined without changing method receivers', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/main.mjs': `
+export const topLevelThis = this;
+export function receiver() { return this; }
+const owner = { receiver };
+export const bareCallThis = receiver();
+export const methodCallThis = owner.receiver() === owner;
+`,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    const namespace = await loader.import('./main.mjs', '/work/__entry__.mjs');
+    const receiver = namespace.receiver as () => unknown;
+
+    expect(namespace.topLevelThis).toBeUndefined();
+    expect(namespace.bareCallThis).toBeUndefined();
+    expect(receiver()).toBeUndefined();
+    expect(namespace.methodCallThis).toBe(true);
+  });
+});

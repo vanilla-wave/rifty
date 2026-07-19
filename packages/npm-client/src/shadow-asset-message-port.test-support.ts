@@ -44,6 +44,18 @@ export interface ShadowAssetPortClientLike extends ShadowAssetRuntimeReader {
   dispose(): Promise<void>;
 }
 
+export interface BuiltinShadowAssetRuntimeBindingLike {
+  readonly runtimeAdapterId: string;
+  readonly resolvedPublicVersion: string;
+}
+
+export const BUILTIN_ESBUILD_RUNTIME_BINDING: BuiltinShadowAssetRuntimeBindingLike = Object.freeze({
+  runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
+  resolvedPublicVersion: '0.28.0',
+});
+
+export const BUILTIN_ESBUILD_ASSET_ID = 'esbuild-wasm@0.28.0/package/esbuild.wasm';
+
 interface ShadowAssetPortApi {
   readonly SHADOW_ASSET_CAPABILITY: 'rifty.shadow-assets.v1';
   readonly ShadowAssetPortError: new (failure: ShadowAssetPortFailure) => ShadowAssetPortErrorLike;
@@ -58,6 +70,15 @@ interface ShadowAssetPortApi {
     options: Readonly<{
       port: MessagePort;
       plan: ShadowAssetPlan;
+    }>,
+  ) => ShadowAssetPortClientLike;
+}
+
+interface BuiltinShadowAssetPortApi extends ShadowAssetPortApi {
+  readonly createBuiltinShadowAssetPortClient: (
+    options: Readonly<{
+      port: MessagePort;
+      binding: BuiltinShadowAssetRuntimeBindingLike;
     }>,
   ) => ShadowAssetPortClientLike;
 }
@@ -78,6 +99,16 @@ export function shadowAssetPortApi(): ShadowAssetPortApi {
     throw new Error(`shadow asset MessagePort public API is missing: ${missing.join(', ')}`);
   }
   return candidate as unknown as ShadowAssetPortApi;
+}
+
+export function builtinShadowAssetPortApi(): BuiltinShadowAssetPortApi {
+  const candidate = shadowAssetPortExports();
+  if (!('createBuiltinShadowAssetPortClient' in candidate)) {
+    throw new Error(
+      'shadow asset MessagePort public API is missing: createBuiltinShadowAssetPortClient',
+    );
+  }
+  return candidate as unknown as BuiltinShadowAssetPortApi;
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -169,7 +200,7 @@ export function tarballPortFixture(bytes: Uint8Array): Readonly<{
   });
 }
 
-export function realEsbuildWasmBytes(): Uint8Array {
+export function realEsbuildWasmBytes(): Uint8Array<ArrayBuffer> {
   const shadowRegistryRequire = createRequire(
     new URL('../../../tools/shadow-registry/package.json', import.meta.url),
   );

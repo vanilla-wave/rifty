@@ -43,6 +43,8 @@ export interface NodeEntryRunSpec {
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
   readonly cwd: string;
+  /** Host-private physical root mounted as `/` in the recursive child. */
+  readonly remoteFsRoot?: string;
 }
 
 /** Captured stdout bytes and child exit code the runner resolves with. */
@@ -105,6 +107,7 @@ export function makeRecursiveRunner(): NodeEntryRunner {
       kind: 'program',
       bin: false,
       remoteFs: true,
+      ...(spec.remoteFsRoot === undefined ? {} : { remoteFsRoot: spec.remoteFsRoot }),
       nodeServe: false,
     });
     const nestedPid = nextNestedPid++;

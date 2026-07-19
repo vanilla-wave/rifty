@@ -5,6 +5,12 @@ Date: 2026-07
 
 > Correction 2026-07-13 (ADR-0226): the bridge-backed dual-entry esbuild facade is replaced by one install-time CJS overlay that reads the exact Worker-owned runtime slot. Rollup companions, install-time application, version gates, alias placement, and substitution provenance remain unchanged.
 
+> Correction 2026-07-19 (ADR-0298): builtin esbuild no longer uses the
+> `@esbuild/wasi-preview1` redirect as a trigger or a post-link alias overlay.
+> Normal public version selection now produces an explicitly marked synthesized
+> delegate inside the link pass. Rollup/lightningcss shims, user-override
+> precedence, loud version gates, and visible substitution provenance stand.
+
 > TL;DR: shadow-registry internals shims move from playground boot-overlay to the npm-client install path — `install()` writes them into the ACTUAL installed package dir (nested/hoisted-aware), version-range-gated with a loud `NotImplementedError` outside the proven range; `rollup` gets a same-version companion pin (`@rollup/wasm-node`) injected into the dep walk so ONE mode-independent `dist/native.js` (real WASM parser) replaces the dev-stub/build split; every shadow substitution prints an `npm:`-prefixed provenance line naming the shadow registry, on fresh install AND lockfile replay.
 
 ## Context

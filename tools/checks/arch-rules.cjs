@@ -98,17 +98,20 @@ const forbidden = [
     },
   },
   {
-    name: 'playground-app-uses-sealed-workbench-entrypoints',
+    name: 'workbench-package-uses-sealed-entrypoints',
     severity: 'error',
     comment:
-      'ADR-0282: App production modules survive extraction by importing Workbench only through public.ts/playground.ts',
+      'ADR-0282: foreign production modules reach Workbench only through its seven package entrypoints',
     from: {
-      path: '(?:^|/)playground/src/',
-      pathNot: '(?:^|/)playground/src/(?:workbench|workers)/',
+      // Repo build tools own baked/generated artifact checks and may consume
+      // the package-private serializers they prove. They are not shipped
+      // production modules and cannot create an embedder import path.
+      pathNot: ['(?:^|/)workbench/src/', '(?:^|/)tools/'],
     },
     to: {
-      path: '(?:^|/)playground/src/workbench/',
-      pathNot: '(?:^|/)playground/src/workbench/(?:public|playground|project-vfs-contract)\\.ts$',
+      path: '(?:^|/)workbench/src/',
+      pathNot:
+        '(?:^|/)workbench/src/(?:workbench/(?:public|playground)|workers/(?:workbench-owner-bootstrap|kernel-worker-entry|node-entry-bootstrap|dev-server-child-bootstrap|ts-lsp-worker-entry))\\.ts$',
     },
   },
   {

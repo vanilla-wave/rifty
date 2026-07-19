@@ -6,7 +6,7 @@ created: 2026-07-16
 why: live Vite repeatedly writes node_modules/.vite-temp after npm install, correctly revoking the whole-tree claim, marking a fresh Scratch UNSAVED, and forcing the next project reopen to reacquire an otherwise usable dependency tree
 user_story: As a playground user, I want untouched Vite projects to stay visibly clean and switching back to remain fast and offline-capable, without weakening dependency-tree trust.
 sources: [PR-136-recut, ADR-0261, ADR-0279]
-code: [apps/playground/src/glue/package-mutation-executor.ts, apps/playground/src/workers/package-acquisition-authority.ts, apps/playground/src/workers/workbench-project-vfs.ts]
+code: [packages/workbench/src/glue/package-mutation-executor.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/workers/workbench-project-vfs.ts]
 ---
 
 ## Context

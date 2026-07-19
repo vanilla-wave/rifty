@@ -1,0 +1,155 @@
+import { NotImplementedError } from '@riftydev/io';
+import {
+  type KernelEntryCapabilityPorts,
+  publishKernelEntryCapabilityPorts,
+} from '@riftydev/kernel';
+import { SHADOW_ASSET_CAPABILITY, ShadowAssetReadError } from '@riftydev/npm-client';
+import {
+  type MemoryFsSync,
+  createMemoryFs,
+  resetSyncMirror,
+  setSyncMirror,
+} from '@riftydev/vfs/internal';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ViteCliPreparation } from './vite-cli-prep.ts';
+import { prepareViteCliAcquisitionFiles } from './vite-cli-prep.ts';
+
+const CLI_PATH = '/app/node_modules/vite/dist/node/cli.js';
+const CONFIG_PATH = '/app/node_modules/vite/dist/node/chunks/config.js';
+const PACKAGE_PATH = '/app/node_modules/vite/package.json';
+const VITE_PREPARATION: ViteCliPreparation = Object.freeze({
+  root: '/app',
+  mode: 'build',
+  executedBinPath: '/app/node_modules/.bin/vite',
+} as ViteCliPreparation);
+const ESBUILD_ASSET_ID = 'esbuild-wasm@0.28.0/package/esbuild.wasm';
+const MODULE_PATH = './node-entry-vite-runtime.ts';
+
+const CLI_SOURCE = [
+  'class TestCac {',
+  '  runMatchedCommand() { return Promise.resolve(); }',
+  '  parse() { this.runMatchedCommand(); }',
+  '}',
+].join('\n');
+
+const WATCH_SOURCE = [
+  'const EMPTY_STR = "";',
+  'const ONE_DOT = ".";',
+  'const TWO_DOTS = "..";',
+  'class TestDirEntry {',
+  '  constructor() { this.items = new Set(); }',
+  '  add(item) {',
+  '    const { items } = this;',
+  '    if (!items) return;',
+  '    if (item !== ONE_DOT && item !== TWO_DOTS) items.add(item);',
+  '  }',
+  '}',
+].join('\n');
+
+interface NodeEntryViteRuntimeApi {
+  readonly prepareViteCliForNodeEntry: (preparation: ViteCliPreparation) => Promise<void>;
+}
+
+async function api(): Promise<NodeEntryViteRuntimeApi> {
+  return (await import(/* @vite-ignore */ MODULE_PATH)) as NodeEntryViteRuntimeApi;
+}
+
+async function bootVite(version: string): Promise<MemoryFsSync> {
+  const { vfs, fsSync } = createMemoryFs();
+  setSyncMirror(fsSync, { async: vfs });
+  fsSync.loadFixture({
+    '/app/package.json': '{}',
+    [CLI_PATH]: CLI_SOURCE,
+    [CONFIG_PATH]: WATCH_SOURCE,
+    [PACKAGE_PATH]: JSON.stringify({ name: 'vite', version }),
+  });
+  await prepareViteCliAcquisitionFiles('/app');
+  return fsSync;
+}
+
+function publishCapabilities(ports: KernelEntryCapabilityPorts): void {
+  publishKernelEntryCapabilityPorts(ports);
+}
+
+function nextMessage(port: MessagePort): Promise<unknown> {
+  return new Promise((resolve) => {
+    port.addEventListener('message', (event) => resolve(event.data), { once: true });
+    port.start();
+  });
+}
+
+afterEach(() => {
+  publishKernelEntryCapabilityPorts(null);
+  resetSyncMirror();
+});
+
+describe('node-entry Vite capability-only runtime', () => {
+  it('gates Vite 8 before adopting or starting a supplied capability port', async () => {
+    await bootVite('8.0.16');
+    const channel = new MessageChannel();
+    const start = vi.spyOn(channel.port2, 'start');
+    const post = vi.spyOn(channel.port2, 'postMessage');
+    publishCapabilities({ [SHADOW_ASSET_CAPABILITY]: channel.port2 });
+    try {
+      await (await api()).prepareViteCliForNodeEntry(VITE_PREPARATION);
+      expect(start).not.toHaveBeenCalled();
+      expect(post).not.toHaveBeenCalled();
+    } finally {
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  it('loud-throws for Vite 7 when admission supplied no capability', async () => {
+    await bootVite('7.3.6');
+    publishCapabilities({});
+
+    const failure = await (await api()).prepareViteCliForNodeEntry(VITE_PREPARATION).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(NotImplementedError);
+    expect(failure).toMatchObject({ feature: 'vite.esbuild.shadowAssets' });
+  });
+
+  it('preserves a typed read failure and disposes the client exactly once after preparation', async () => {
+    await bootVite('7.3.6');
+    const channel = new MessageChannel();
+    publishCapabilities({ [SHADOW_ASSET_CAPABILITY]: channel.port2 });
+    const first = nextMessage(channel.port1);
+    const preparation = (await api()).prepareViteCliForNodeEntry(VITE_PREPARATION);
+    preparation.catch(() => {});
+    try {
+      const read = (await first) as { readonly requestId: number; readonly assetId: string };
+      expect(read.assetId).toBe(ESBUILD_ASSET_ID);
+      const disposed = nextMessage(channel.port1);
+      channel.port1.postMessage({
+        protocol: 'rifty.shadow-assets/v1',
+        type: 'error',
+        requestId: read.requestId,
+        error: {
+          name: 'ShadowAssetReadError',
+          code: 'ESHADOWASSETREAD',
+          message: 'contract wrong-plan failure',
+          assetId: ESBUILD_ASSET_ID,
+          reason: 'unknown-asset',
+        },
+      });
+
+      await expect(preparation).rejects.toBeInstanceOf(ShadowAssetReadError);
+      await expect(disposed).resolves.toEqual({
+        protocol: 'rifty.shadow-assets/v1',
+        type: 'dispose',
+      });
+      await expect(
+        Promise.race([
+          nextMessage(channel.port1),
+          Promise.resolve().then(() => 'no-second-dispose'),
+        ]),
+      ).resolves.toBe('no-second-dispose');
+    } finally {
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+});

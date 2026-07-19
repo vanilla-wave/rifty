@@ -93,5 +93,8 @@
     "@riftydev/shell": "workspace:*",
     "@riftydev/ts-language-service": "workspace:*",
     "@riftydev/vfs": "workspace:*"
+  },
+  "devDependencies": {
+    "@riftydev/shadow-registry": "workspace:*"
   }
 }

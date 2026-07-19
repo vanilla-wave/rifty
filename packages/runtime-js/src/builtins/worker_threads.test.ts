@@ -47,6 +47,11 @@ type NodeEntryUrlContract = typeof nodeEntryUrl & {
 const { resetNodeEntryWorkerUrl, setNodeEntryWorkerUrl } = nodeEntryUrl;
 const configureNodeEntryWorker = (nodeEntryUrl as NodeEntryUrlContract).configureNodeEntryWorker;
 const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const HOST_RUNTIME = Object.freeze({
+  RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+  RIFTY_NODE_ENTRY_WORKER_URL: 'https://rifty.test/node-entry.js',
+  RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
+});
 
 beforeEach(() => {
   _resetFallbackWarnState();
@@ -169,9 +174,7 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
-      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
-    });
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', HOST_RUNTIME);
     const parent = new NodeProcess();
 
     await withProcessGlobal(parent, async () => {
@@ -204,9 +207,7 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
-      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
-    });
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', HOST_RUNTIME);
     const parent = new NodeProcess();
 
     await withProcessGlobal(parent, async () => {
@@ -228,9 +229,7 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
-      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
-    });
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', HOST_RUNTIME);
     const parent = new NodeProcess();
 
     await withProcessGlobal(parent, async () => {
@@ -257,9 +256,7 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
-      RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
-    });
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', HOST_RUNTIME);
     const parent = new NodeProcess();
     parent.env.PARENT_ONLY = 'parent';
     parent.env.RIFTY_SQLITE_WASM_URL = 'https://parent.test/sqlite.wasm';
@@ -282,15 +279,11 @@ globalThis.onmessage = ({ data }) => {
         RIFTY_SQLITE_WASM_URL: 'https://parent.test/sqlite.wasm',
       });
       expect(capturedSpec?.entry).toEqual(
-        buildNodeEntryWorkerEntry(
-          'https://rifty.test/node-entry.js',
-          { RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm' },
-          {
-            kind: 'worker-thread',
-            remoteFs: true,
-            threadId: worker.threadId,
-          },
-        ),
+        buildNodeEntryWorkerEntry('https://rifty.test/node-entry.js', HOST_RUNTIME, {
+          kind: 'worker-thread',
+          remoteFs: true,
+          threadId: worker.threadId,
+        }),
       );
       await worker.terminate();
     });
@@ -306,12 +299,10 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
-      RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js',
-    });
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', HOST_RUNTIME);
     const parentEntry = buildNodeEntryWorkerEntry(
       'https://rifty.test/node-entry.js',
-      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+      HOST_RUNTIME,
       {
         kind: 'program',
         bin: false,
@@ -361,11 +352,7 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
-      RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
-      RIFTY_REMOTE_FS: 'host-poison',
-      RIFTY_WORKER_THREADS: 'host-poison',
-    });
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', HOST_RUNTIME);
     const parent = new NodeProcess();
     parent.env.PARENT_ONLY = 'parent';
     setProcessCwd('/project');
@@ -400,19 +387,11 @@ globalThis.onmessage = ({ data }) => {
         RIFTY_WORKER_THREADS: 'user-poison',
       });
       expect(capturedSpec?.entry).toEqual(
-        buildNodeEntryWorkerEntry(
-          'https://rifty.test/node-entry.js',
-          {
-            RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm',
-            RIFTY_REMOTE_FS: 'host-poison',
-            RIFTY_WORKER_THREADS: 'host-poison',
-          },
-          {
-            kind: 'worker-thread',
-            remoteFs: true,
-            threadId: worker.threadId,
-          },
-        ),
+        buildNodeEntryWorkerEntry('https://rifty.test/node-entry.js', HOST_RUNTIME, {
+          kind: 'worker-thread',
+          remoteFs: true,
+          threadId: worker.threadId,
+        }),
       );
       expect(sent).toEqual([{ __emnapi__: { type: 'load' } }]);
 
@@ -462,9 +441,7 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
-      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
-    });
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', HOST_RUNTIME);
 
     const worker = new Worker('/workspace/w.mjs', { workerData: new Date(0) });
     const error = await new Promise<unknown>((resolve) => {
@@ -489,9 +466,7 @@ globalThis.onmessage = ({ data }) => {
 
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
-      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
-    });
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', HOST_RUNTIME);
 
     const worker = new Worker('/workspace/w.mjs', { workerData: { z: -0 } });
     const error = await new Promise<unknown>((resolve) => {
@@ -520,7 +495,7 @@ globalThis.onmessage = ({ data }) => {
     publishKernelEntryBootstrap({
       protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
       payload: {
-        hostRuntime: { RIFTY_KERNEL_WORKER_URL: 'kernel.js' },
+        hostRuntime: HOST_RUNTIME,
         launch: {
           kind: 'worker-thread',
           remoteFs: true,

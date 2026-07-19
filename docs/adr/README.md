@@ -67,6 +67,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0269 | shared require.extensions compile hooks for CJS loaders |
 | 0270 | worker_threads.Worker parent events are EventEmitter-only |
 | 0272 | Late typed process terminal bootstrap |
+| 0297 | Bind owner-recursive execSync to active remote FS root |
 
 ### runtime-wasi
 
@@ -133,6 +134,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0258 | Structured install acquisition provenance |
 | 0283 | Canonical package manifest serialization |
 | 0295 | Persist exact applied shadow substitution facts in lockfiles |
+| 0296 | Bind child shadow-asset clients to immutable runtime adapters |
+| 0298 | Synthesize esbuild delegates with explicit lockfile materialization provenance |
 
 ### playground
 
@@ -332,6 +335,7 @@ superseded.
 | 0194 §8 learned-pin 30-min hard-TTL clause | 0261 | freshness is SWR: fresh <1800s, stale from 1800s to <24h, dropped at 24h |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |
 | 0188 bridge-backed dual esbuild entries | 0226 / note 2026-07-13 | one install-time CJS overlay reads the exact Worker-owned runtime slot; other 0188 installer/shim/provenance clauses stand |
+| 0188 esbuild baked-redirect trigger and post-link alias-overlay clauses | 0298 / note 2026-07-19 | normal public selection produces an explicitly marked synthesized delegate in the link pass; rollup/lightningcss and visible-provenance clauses stand |
 | 0237 non-undefined runtime signal clause | 0239 / note 2026-07-12 | falsy signal is absent; invalid signal errors preserve Node acquisition order; valid supported signal stays a pre-lock loud gap |
 | 0261 install-claim schema + asset-policy identity/promotion clauses | 0249 / note 2026-07-15 | v4 adds exact lockfile digest; asset-only pins do not invalidate the tree; post-tree asset failure promotes only after finalization |
 | 0263 host-resolved esbuild WASM + sealed-root/open-options clauses | 0249 / note 2026-07-15 | final join retains only host-owned SQLite; root progress options compose with companion terminal state and ADR-0278 cold timing |

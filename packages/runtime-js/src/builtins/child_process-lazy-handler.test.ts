@@ -18,6 +18,7 @@
 import { loadBuiltin, registerBuiltin } from '@riftydev/io';
 import { type SyncRpcHandler, clearKernelDispatcher, getKernelDispatcher } from '@riftydev/kernel';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 
 // Importing the barrel registers every builtin factory as a side effect.
 import './index.ts';
@@ -96,6 +97,17 @@ describe('#26 PART B — execSync handler installs on first child_process requir
     ).rejects.toMatchObject({
       code: 'EUNSUPPORTED',
     });
+  });
+
+  it('does not replace an explicit host-owned handler on first child_process require', () => {
+    const dispatcher = getKernelDispatcher();
+    installRuntimeJsExecSyncHandler(dispatcher, () => new Uint8Array(), {
+      runWorker: async () => ({ stdout: new Uint8Array(), exitCode: 0 }),
+    });
+    const afterExplicitInstall = watchDispatcher();
+
+    expect(loadBuiltin('child_process')).not.toBeNull();
+    expect(afterExplicitInstall.installed.has('execSync')).toBe(false);
   });
 
   it('does not re-run the factory on a second cached require', () => {

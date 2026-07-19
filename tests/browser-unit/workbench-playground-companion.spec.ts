@@ -1,11 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
-import {
-  bootOwner,
-  closeOwner,
-  flushOwnerDurable,
-  gotoHarness,
-  writeOwnerFile,
-} from './fixtures.ts';
+import { gotoHarness, seedLegacyWorkspace } from './fixtures.ts';
 
 const OUTPUT_MARKER = 'WORKBENCH_COMPANION_KLEUR_OK';
 const ARGUMENT_MARKER = '--from-companion';
@@ -20,53 +14,7 @@ async function seedLegacyCatalog(
     readonly marker: string;
   },
 ): Promise<void> {
-  await bootOwner(page, {
-    workspaceId: input.workspaceId,
-    template: 'hidden-empty',
-    root: '/projects/project-a',
-    slug: 'project-a',
-    starter: 'starter-a',
-    hiddenEmptyBoot: true,
-  });
-  try {
-    await writeOwnerFile(
-      page,
-      '/projects/project-a/package.json',
-      '{"name":"legacy-project-a","private":true,"type":"module"}\n',
-    );
-    await writeOwnerFile(page, '/projects/project-a/legacy-marker.txt', `${input.marker}:a`);
-    await writeOwnerFile(
-      page,
-      '/projects/project-b/package.json',
-      '{"name":"legacy-project-b","private":true,"type":"module"}\n',
-    );
-    await writeOwnerFile(page, '/projects/project-b/legacy-marker.txt', `${input.marker}:b`);
-    await writeOwnerFile(
-      page,
-      '/.rifty-project-index.json',
-      `${JSON.stringify({
-        activeId: 'project-a',
-        scratch: null,
-        projects: [
-          {
-            id: 'project-a',
-            name: `${input.label} A`,
-            starter: 'starter-a',
-            editedAt: '2026-07-01T01:00:00.000Z',
-          },
-          {
-            id: 'project-b',
-            name: `${input.label} B`,
-            starter: 'starter-b',
-            editedAt: '2026-07-02T02:00:00.000Z',
-          },
-        ],
-      })}\n`,
-    );
-    await flushOwnerDurable(page);
-  } finally {
-    await closeOwner(page);
-  }
+  await seedLegacyWorkspace(page, input);
 }
 
 test('Playground companion installs and executes a Node CLI through one real Workbench owner', async ({
@@ -146,7 +94,7 @@ test('Playground companion installs and executes a Node CLI through one real Wor
               readonly typescript: string;
             };
             readonly serviceWorker: { readonly url: string; readonly scope: string };
-            readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+            readonly wasm: { readonly sqlite: string };
             readonly previewProbeTimeoutMs: number;
           };
           readonly packageAcquisition: { readonly registryUrl: string };
@@ -161,7 +109,7 @@ test('Playground companion installs and executes a Node CLI through one real Wor
           readonly devServer: string;
           readonly typescript: string;
         };
-        readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+        readonly wasm: { readonly sqlite: string };
       };
 
       const withTimeout = <T>(
@@ -186,7 +134,7 @@ test('Playground companion installs and executes a Node CLI through one real Wor
           );
         });
 
-      const companionEntryUrl = '/src/workbench/playground.ts';
+      const companionEntryUrl = '/src/browser-unit/workbench-playground-entry.ts';
       const [companionModule, hostAssetsModule] = await Promise.all([
         import(/* @vite-ignore */ companionEntryUrl),
         import('/src/browser-unit/workbench-vite-host-assets.ts'),
@@ -399,7 +347,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -414,7 +362,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const PRIMARY_PORT = 43_170;
@@ -473,7 +421,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
       );
 
     const [companionModule, hostAssetsModule] = await Promise.all([
-      import(/* @vite-ignore */ '/src/workbench/playground.ts'),
+      import(/* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'),
       import('/src/browser-unit/workbench-vite-host-assets.ts'),
     ]);
     const companionEntry = companionModule as unknown as CompanionEntry;
@@ -827,7 +775,7 @@ test('real instant Vite preset keeps mapper port 5174 through snapshot restore a
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -842,7 +790,7 @@ test('real instant Vite preset keeps mapper port 5174 through snapshot restore a
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
@@ -863,7 +811,7 @@ test('real instant Vite preset keeps mapper port 5174 through snapshot restore a
         );
       });
 
-    const companionEntryUrl = '/src/workbench/playground.ts';
+    const companionEntryUrl = '/src/browser-unit/workbench-playground-entry.ts';
     const mapperUrl = '/src/adapters/playground-project-plan.ts';
     const [companionModule, mapperModule, presetsModule, starterModule, hostAssetsModule] =
       await Promise.all([
@@ -1007,7 +955,10 @@ test('real instant Vite preset keeps mapper port 5174 through snapshot restore a
   expect(result.viteManifest).toEqual({ name: 'vite', version: expect.stringMatching(/^7\./u) });
   expect(result.closeExit).toEqual({ code: null, signal: 'SIGTERM' });
   expect(result.output).not.toContain('npm: installing');
-  expect(registryRequests).toEqual([]);
+  expect(registryRequests.map((url) => new URL(url).pathname)).toEqual([
+    '/npm-registry/esbuild-wasm',
+    '/npm-registry/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz',
+  ]);
   expect(snapshotRequests).toHaveLength(1);
 });
 
@@ -1089,7 +1040,7 @@ test('selected historical workspace migrates through one physical Workbench owne
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -1104,7 +1055,7 @@ test('selected historical workspace migrates through one physical Workbench owne
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
@@ -1191,7 +1142,9 @@ test('selected historical workspace migrates through one physical Workbench owne
     let workbench: PlaygroundWorkbench | null = null;
     let session: ProjectSession | null = null;
     try {
-      const companionModule = await import(/* @vite-ignore */ '/src/workbench/playground.ts');
+      const companionModule = await import(
+        /* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'
+      );
       const companionEntry = companionModule as unknown as CompanionEntry;
       workbench = await withTimeout(
         companionEntry.openPlaygroundWorkbench({
@@ -1358,7 +1311,7 @@ test('forSession TypeScript uses the real owner service and returns only project
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -1374,7 +1327,7 @@ test('forSession TypeScript uses the real owner service and returns only project
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
@@ -1397,7 +1350,7 @@ test('forSession TypeScript uses the real owner service and returns only project
 
     const [companionModule, mapperModule, presetsModule, starterModule, hostAssetsModule] =
       await Promise.all([
-        import(/* @vite-ignore */ '/src/workbench/playground.ts'),
+        import(/* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'),
         import(/* @vite-ignore */ '/src/adapters/playground-project-plan.ts'),
         import('/src/presets.ts'),
         import('/src/glue/starter.ts'),
