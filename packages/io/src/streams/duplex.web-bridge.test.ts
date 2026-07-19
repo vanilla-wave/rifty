@@ -1,9 +1,40 @@
 import { describe, expect, it } from 'vitest';
 import { Buffer } from '../buffer.ts';
-import { Duplex } from './duplex.ts';
+import { Duplex, type DuplexWebPair } from './duplex.ts';
+import type { Readable } from './readable.ts';
 import { Transform } from './transform.ts';
 
 const tick = (ms = 30): Promise<void> => new Promise((res) => setTimeout(res, ms));
+
+function assertDuplexStaticTypeContract(
+  DuplexConstructor: typeof Duplex,
+  pair: { readable: ReadableStream<unknown>; writable: WritableStream<unknown> },
+): void {
+  const duplex: Duplex = new DuplexConstructor();
+  const readable: Readable = duplex;
+  const webPair: DuplexWebPair = DuplexConstructor.toWeb(duplex);
+  const fromWeb: Duplex = DuplexConstructor.fromWeb(pair);
+  const from: Duplex = DuplexConstructor.from([]);
+  const defaultMaxListeners: number = DuplexConstructor.defaultMaxListeners;
+  const captureRejectionSymbol: symbol = DuplexConstructor.captureRejectionSymbol;
+  class ExternalDuplex extends Duplex {}
+  const externalReadable: Readable = new ExternalDuplex();
+  const transformReadable: Readable = new Transform();
+
+  // @ts-expect-error — Node Duplex.fromWeb requires a { readable, writable } pair.
+  DuplexConstructor.fromWeb(pair.readable);
+  void [
+    readable,
+    webPair,
+    fromWeb,
+    from,
+    defaultMaxListeners,
+    captureRejectionSymbol,
+    externalReadable,
+    transformReadable,
+  ];
+}
+void assertDuplexStaticTypeContract;
 
 function collectToEnd(stream: Duplex, label: string): Promise<unknown[]> {
   return new Promise((resolve, reject) => {

@@ -103,6 +103,13 @@
 
 ### Fixed
 
+- **Packed `Duplex` declarations compile with `skipLibCheck:false`.** A private
+  constructor carrier omits only the three Duplex-owned statics from the
+  inherited TypeScript side, so `Readable.toWeb(): ReadableStream` and
+  `Duplex.toWeb(): { readable, writable }` keep their exact Node shapes without
+  TS2417 or a suppression. Runtime constructor/prototype inheritance remains
+  exactly `Duplex → Readable`; packed-consumer typecheck and Node parity cover it.
+
 - **Node stream source protocol converges on one owner (ADR-0237–0239).**
   `Readable` now dispatches late-bound `_read`, keeps demand latched until
   `push`, bounds filtered refill, normalizes covered byte chunks once, and

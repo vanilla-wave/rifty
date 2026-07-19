@@ -16,6 +16,14 @@ const c: ParityCase = {
     'toweb-writable:true',
     'toweb-roundtrip:T:a',
     'bare-allowhalfopen:true',
+    'duplex-name:Duplex',
+    'duplex-instance-readable:true',
+    'duplex-constructor-parent:true',
+    'duplex-prototype-parent:true',
+    'duplex-instance-constructor:true',
+    'duplex-own-statics:true',
+    'duplex-distinct-statics:true',
+    'duplex-inherited-static:true',
     'fromweb-instance:true',
     'fromweb-allowhalfopen-default:false',
     'fromweb-allowhalfopen-true:true',
@@ -48,7 +56,7 @@ const c: ParityCase = {
   ].join('\n'),
   code: `
     const { Buffer } = require('node:buffer');
-    const { Duplex, Transform } = require('node:stream');
+    const { Duplex, Readable, Transform } = require('node:stream');
     (async () => {
       // toWeb shape + round-trip.
       const d = new Transform({ objectMode: true, transform(c, e, cb) { cb(null, 'T:' + c); } });
@@ -65,6 +73,26 @@ const c: ParityCase = {
       // bare Duplex allowHalfOpen default.
       const bare = new Duplex({ read() {}, write(c, e, cb) { cb(); } });
       console.log('bare-allowhalfopen:' + bare.allowHalfOpen);
+      console.log('duplex-name:' + Duplex.name);
+      console.log('duplex-instance-readable:' + (bare instanceof Readable));
+      console.log('duplex-constructor-parent:' + (Object.getPrototypeOf(Duplex) === Readable));
+      console.log(
+        'duplex-prototype-parent:' +
+        (Object.getPrototypeOf(Duplex.prototype) === Readable.prototype),
+      );
+      console.log('duplex-instance-constructor:' + (bare.constructor === Duplex));
+      console.log(
+        'duplex-own-statics:' +
+        ['from', 'fromWeb', 'toWeb'].every((name) => Object.hasOwn(Duplex, name)),
+      );
+      console.log(
+        'duplex-distinct-statics:' +
+        ['from', 'fromWeb', 'toWeb'].every((name) => Duplex[name] !== Readable[name]),
+      );
+      console.log(
+        'duplex-inherited-static:' +
+        (Duplex.defaultMaxListeners === Readable.defaultMaxListeners),
+      );
 
       // fromWeb instance + allowHalfOpen defaults.
       const readableA = new ReadableStream({ start(c) { c.enqueue('x'); c.close(); } });

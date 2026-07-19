@@ -84,14 +84,19 @@ export interface DuplexFromWebOptions {
   decodeStrings?: boolean;
 }
 
-// @ts-expect-error TS2417 — `Duplex.toWeb` returns a `{ readable, writable }`
-// PAIR while the inherited `Readable.toWeb` returns a bare `ReadableStream`; this
-// divergence is Node's real API and is genuinely inexpressible under TS's
-// class-static-side assignability check (a return-type covariance violation, not
-// fixable by widening). Runtime + unit + parity tests are the real guard.
-// TODO(backlog: runtime-js/duplex-static-toweb-ts-clash) — replace with a
-// non-inherited carrier so this suppression can be removed.
-export class Duplex extends Readable {
+/**
+ * Keep runtime inheritance exactly `Readable` while declaring Duplex's three
+ * Node-specific statics on its own side. Their signatures intentionally differ
+ * from Readable's; exposing them through one TS static side makes emitted d.ts
+ * consumers fail TS2417.
+ */
+type ReadableDuplexBaseConstructor = Omit<typeof Readable, 'from' | 'fromWeb' | 'toWeb'> &
+  (new (
+    options?: ReadableOptions,
+  ) => Readable);
+const ReadableForDuplex: ReadableDuplexBaseConstructor = Readable;
+
+export class Duplex extends ReadableForDuplex {
   /** Internal `Writable` side. Exposed for tests/debugging only — drive the duplex via `d.write`/`d.end`. */
   readonly writableSide: Writable;
   /** Node's `allowHalfOpen` — see {@link DuplexOptions}. */
@@ -255,7 +260,7 @@ export class Duplex extends Readable {
    * `Duplex.toWeb`, v17): the readable side becomes a `ReadableStream` and the
    * writable side a `WritableStream`, reusing `Readable.toWeb` / `Writable.toWeb`.
    */
-  static override toWeb(duplex: Duplex): DuplexWebPair {
+  static toWeb(duplex: Duplex): DuplexWebPair {
     return {
       readable: Readable.toWeb(duplex),
       writable: Writable.toWeb(duplex),
@@ -274,15 +279,8 @@ export class Duplex extends Readable {
    * `new Duplex()` (Node parity); `{ allowHalfOpen: true }` is honored. A
    * non-WHATWG pair throws a synchronous `TypeError` (`ERR_INVALID_ARG_TYPE`).
    */
-  static override fromWeb(
-    // The union (vs a bare pair type) keeps the static side compatible with the
-    // inherited `Readable.fromWeb(stream: ReadableStream)` — TS's class-static
-    // assignability check requires it. A bare `ReadableStream` is rejected at
-    // runtime by the guard below (Node's `Duplex.fromWeb` ALSO throws
-    // `ERR_INVALID_ARG_TYPE` for it — so this is honest, not a widened lie).
-    pair:
-      | { readable: ReadableStream<unknown>; writable: WritableStream<unknown> }
-      | ReadableStream<unknown>,
+  static fromWeb(
+    pair: { readable: ReadableStream<unknown>; writable: WritableStream<unknown> },
     options: DuplexFromWebOptions = {},
   ): Duplex {
     const { reader, writer, config } = acquireDuplexFromWeb(pair, options);
@@ -366,7 +364,7 @@ export class Duplex extends Readable {
    * Returns an `instanceof Duplex` (Node's internal `Duplexify` class NAME is
    * deliberately NOT replicated — out of scope).
    */
-  static override from(src: unknown, options: DuplexOptions = {}): Duplex {
+  static from(src: unknown, options: DuplexOptions = {}): Duplex {
     // `{ readable, writable }` pair (Node stream halves, not WHATWG).
     if (isStreamHalvesPair(src)) {
       return duplexFromHalves(src.readable, src.writable, options);
