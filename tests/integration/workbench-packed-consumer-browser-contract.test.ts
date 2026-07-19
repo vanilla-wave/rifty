@@ -4,6 +4,7 @@ import {
   PACKED_VITE_JOURNEYS,
   PACKED_WORKBENCH_EXPORTS,
   packedAliasBoundaryProof,
+  snapshotPackageNeedsRegistryTarball,
 } from './workbench-packed-consumer-browser-contract.mjs';
 
 const fixtureUrl = new URL('./fixtures/workbench-vite-consumer/src/main.ts', import.meta.url);
@@ -44,6 +45,41 @@ describe('packed Workbench browser acceptance contract', () => {
     expect(runner).toContain('--serve-shadow-asset-cold');
     expect(runner).toContain('shadow-asset-cold.html');
     expect(runner).toContain('RIFTY_SHADOW_ASSET_COLD_HOST=');
+  });
+
+  it('never republishes a synthesized snapshot delegate as a registry tarball', () => {
+    expect(
+      snapshotPackageNeedsRegistryTarball({
+        version: '0.28.0',
+        resolved: 'http://registry.test/esbuild-0.28.0.tgz',
+        integrity: 'sha512-registry',
+      }),
+    ).toBe(true);
+    expect(
+      snapshotPackageNeedsRegistryTarball({
+        version: '0.28.0',
+        dependencies: {},
+        rifty: {
+          materialization: {
+            protocol: 'rifty.lockfile-package-materialization/v1',
+            kind: 'synthesized-shadow-delegate',
+            substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
+            recipeSha256: '6d98d08d0bcf2f25526e72d642d1e807090dc5bbf5fe3102372de4a069a3ad67',
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(() =>
+      snapshotPackageNeedsRegistryTarball({
+        version: '0.28.0',
+        rifty: {
+          materialization: {
+            protocol: 'rifty.lockfile-package-materialization/v2',
+            kind: 'synthesized-shadow-delegate',
+          },
+        },
+      }),
+    ).toThrow(/snapshot package materialization/i);
   });
 
   it('records exact response-body proof for the retired alias boundary', () => {
