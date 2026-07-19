@@ -4,7 +4,8 @@
  */
 import { inspect as inspectImpl } from '../repl/inspect.ts';
 import { deepStrictEqual } from './assert.ts';
-import { NodeProcess, riftyProcess } from './process.ts';
+import { isRuntimeOwnedNodeProcess } from './process-brand.ts';
+import { type NodeProcess, riftyProcess } from './process.ts';
 import { types as utilTypes } from './util-types.ts';
 
 export const inspect = inspectImpl;
@@ -14,7 +15,7 @@ export const inspect = inspectImpl;
 // no-spec singleton. Falls back to `riftyProcess` (REPL / in-process harness).
 function activeProcess(): NodeProcess {
   const proc = (globalThis as { process?: unknown }).process;
-  return proc instanceof NodeProcess ? proc : riftyProcess;
+  return isRuntimeOwnedNodeProcess(proc) ? (proc as NodeProcess) : riftyProcess;
 }
 
 export function format(fmt: unknown, ...args: unknown[]): string {

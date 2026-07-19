@@ -27,7 +27,8 @@ import { dgram, dns, readline, tls, http2 } from './null-net-stubs.ts';
 import osModule from './os.ts';
 import pathModule from './path.ts';
 import perfHooksModule from './perf_hooks.ts';
-import { NodeProcess, riftyProcess } from './process.ts';
+import { isRuntimeOwnedNodeProcess } from './process-brand.ts';
+import { type NodeProcess, riftyProcess } from './process.ts';
 import querystringModule from './querystring.ts';
 import streamWebModule from './stream-web.ts';
 import streamModule, { streamConsumers } from './stream.ts';
@@ -59,7 +60,7 @@ let runtimeJsBuiltinsRegistered = false;
 export function refreshRuntimeJsProcessBuiltin(): void {
   registerBuiltin('process', () => {
     const live = (globalThis as { process?: unknown }).process;
-    return live instanceof NodeProcess ? live : riftyProcess;
+    return isRuntimeOwnedNodeProcess(live) ? (live as NodeProcess) : riftyProcess;
   });
 }
 
