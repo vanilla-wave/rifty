@@ -1627,7 +1627,7 @@ class ShadowAssetManagerImpl implements ShadowAssetManager {
         const key = objectFlightKey(candidate.descriptor);
         if (this.#objectFlights.get(key) === candidate) this.#objectFlights.delete(key);
       }
-      batch.controller.abort();
+      if ([...batch.flights].some((candidate) => !candidate.settled)) batch.controller.abort();
     }
     const key = objectFlightKey(flight.descriptor);
     if (flight.settled && flight.consumers.size === 0 && this.#objectFlights.get(key) === flight) {

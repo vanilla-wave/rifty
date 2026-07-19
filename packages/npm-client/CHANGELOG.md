@@ -72,6 +72,9 @@
 
 ### Fixed
 
+- Successful shadow-asset object batches no longer abort their source signal
+  when the last settled consumer releases; unfinished sole producers still abort.
+
 - Package tarball ingress now rejects absolute/parent-traversal members before
   linking and exposes one host batch preflight over every actual package target.
   Rifty uses that preflight to reject reserved install claims before the first
