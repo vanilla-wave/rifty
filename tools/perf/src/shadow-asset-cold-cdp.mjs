@@ -100,15 +100,20 @@ function cdpSessionPort(session) {
  * Record complete CDP response bodies without projecting away retries,
  * redirects, or failures. stop() drains every body command before detaching.
  */
-export async function startCdpResponseRecorder(page) {
+export async function startCdpResponseRecorder(page, options = {}) {
   const context = typeof page?.context === 'function' ? page.context() : null;
   if (context === null || typeof context.newCDPSession !== 'function') {
     throw new TypeError('Playwright page must expose context().newCDPSession()');
+  }
+  const captureUrl = options.captureUrl ?? (() => true);
+  if (typeof captureUrl !== 'function') {
+    throw new TypeError('CDP response recorder captureUrl must be a function');
   }
   const session = cdpSessionPort(await context.newCDPSession(page));
   const captured = [];
   const active = new Map();
   const requestUrls = new Map();
+  const tracked = new Set();
   const responseMetadata = new WeakSet();
   const pending = new Set();
   let stopping = false;
@@ -123,9 +128,20 @@ export async function startCdpResponseRecorder(page) {
     appendError(record, message);
   };
 
+  const track = (requestId, url) => {
+    if (tracked.has(requestId)) return true;
+    if (typeof url !== 'string' || captureUrl(url) !== true) return false;
+    tracked.add(requestId);
+    return true;
+  };
+
   const onRequestWillBeSent = (event) => {
     if (stopping || typeof event?.requestId !== 'string') return;
     const requestId = event.requestId;
+    const requestUrl = typeof event.request?.url === 'string' ? event.request.url : undefined;
+    const redirectUrl =
+      typeof event.redirectResponse?.url === 'string' ? event.redirectResponse.url : undefined;
+    if (!track(requestId, requestUrl) && !track(requestId, redirectUrl)) return;
     if (event.redirectResponse !== undefined) {
       const redirect = event.redirectResponse;
       const prior = active.get(requestId);
@@ -150,11 +166,12 @@ export async function startCdpResponseRecorder(page) {
       }
       active.delete(requestId);
     }
-    if (typeof event.request?.url === 'string') requestUrls.set(requestId, event.request.url);
+    if (requestUrl !== undefined) requestUrls.set(requestId, requestUrl);
   };
 
   const onResponseReceived = (event) => {
     if (stopping || typeof event?.requestId !== 'string') return;
+    if (!track(event.requestId, event.response?.url)) return;
     const prior = active.get(event.requestId);
     if (prior !== undefined) {
       retainIncomplete(
@@ -186,6 +203,7 @@ export async function startCdpResponseRecorder(page) {
   const onLoadingFinished = (event) => {
     if (stopping || typeof event?.requestId !== 'string') return;
     const requestId = event.requestId;
+    if (!tracked.has(requestId)) return;
     let record = active.get(requestId);
     if (record === undefined) {
       record = responseRecord(requestId, { url: requestUrls.get(requestId) });
@@ -200,6 +218,7 @@ export async function startCdpResponseRecorder(page) {
   const onLoadingFailed = (event) => {
     if (stopping || typeof event?.requestId !== 'string') return;
     const requestId = event.requestId;
+    if (!tracked.has(requestId)) return;
     let record = active.get(requestId);
     if (record === undefined) {
       record = responseRecord(requestId, { url: requestUrls.get(requestId) });
