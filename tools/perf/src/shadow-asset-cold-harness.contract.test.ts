@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runStandardShadowAssetColdContexts } from './shadow-asset-cold-harness.mjs';
+import {
+  runShadowAssetColdContexts,
+  runStandardShadowAssetColdContexts,
+} from './shadow-asset-cold-harness.mjs';
 
 const expected = Object.freeze({
   assetId: 'esbuild-wasm@0.28.0/package/esbuild.wasm',
@@ -161,5 +164,117 @@ describe('standard shadow-asset cold context harness', () => {
       note: 'standard shadow-asset cold run 1/5: browser context was reused',
     });
     expect(createContext).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('mode-labelled shadow-asset cold context harness', () => {
+  it('runs the fixed isolated regime for Eddy without standard-labelled diagnostics', async () => {
+    const events: string[] = [];
+    const contexts = Array.from({ length: 6 }, (_, contextIndex) => ({
+      async measure() {
+        events.push(`measure:${contextIndex}`);
+        return { contextIndex };
+      },
+      async close() {
+        events.push(`close:${contextIndex}`);
+      },
+    }));
+    const createContext = vi.fn(async () => contexts[createContext.mock.calls.length - 1]);
+
+    await expect(
+      runShadowAssetColdContexts({
+        mode: 'eddy',
+        createContext,
+        buildRun: ({ contextIndex }: { readonly contextIndex: number }) => ({
+          ok: true as const,
+          run: { contextIndex },
+        }),
+      }),
+    ).resolves.toEqual({
+      status: 'measured',
+      runs: [1, 2, 3, 4, 5].map((contextIndex) => ({ contextIndex })),
+    });
+    expect(createContext.mock.calls).toEqual([
+      [{ kind: 'warmup' }],
+      [{ kind: 'measured', index: 0 }],
+      [{ kind: 'measured', index: 1 }],
+      [{ kind: 'measured', index: 2 }],
+      [{ kind: 'measured', index: 3 }],
+      [{ kind: 'measured', index: 4 }],
+    ]);
+    expect(events).toEqual(
+      Array.from({ length: 6 }, (_, contextIndex) => [
+        `measure:${contextIndex}`,
+        `close:${contextIndex}`,
+      ]).flat(),
+    );
+  });
+
+  it('closes every Eddy context and refuses the whole row under measured failures', async () => {
+    const measured: number[] = [];
+    const closed: number[] = [];
+    const createContext = vi.fn(async ({ index }: { readonly index?: number }) => ({
+      async measure() {
+        if (index === undefined) return { index: -1 };
+        measured.push(index);
+        if (index === 1) throw new Error('Eddy request failed');
+        return { index };
+      },
+      async close() {
+        if (index !== undefined) closed.push(index);
+        if (index === 3) throw new Error('Eddy context close failed');
+      },
+    }));
+
+    const result = await runShadowAssetColdContexts({
+      mode: 'eddy',
+      createContext,
+      buildRun: ({ index }: { readonly index: number }) => ({
+        ok: true as const,
+        run: { index },
+      }),
+    });
+
+    expect(result).toEqual({
+      status: 'unmeasured',
+      note: [
+        'Eddy shadow-asset cold run 2/5: Eddy request failed',
+        'Eddy shadow-asset cold run 4/5: Eddy context close failed',
+      ].join('; '),
+    });
+    expect(measured).toEqual([0, 1, 2, 3, 4]);
+    expect(closed).toEqual([0, 1, 2, 3, 4]);
+    expect('runs' in result).toBe(false);
+  });
+
+  it('labels an Eddy warm-up refusal as Eddy', async () => {
+    await expect(
+      runShadowAssetColdContexts({
+        mode: 'eddy',
+        createContext: async () => ({
+          async measure() {
+            throw new Error('resolver unavailable');
+          },
+          async close() {},
+        }),
+        buildRun: () => ({ ok: true as const, run: {} }),
+      }),
+    ).resolves.toEqual({
+      status: 'unmeasured',
+      note: 'Eddy shadow-asset cold warm-up: resolver unavailable',
+    });
+  });
+
+  it('rejects unsupported diagnostic modes before creating a context', async () => {
+    const createContext = vi.fn();
+
+    await expect(
+      runShadowAssetColdContexts({
+        mode: 'fallback',
+        createContext,
+        buildRun: () => ({ ok: true as const, run: {} }),
+      }),
+    ).rejects.toThrow("mode must be 'standard' or 'eddy'");
+    expect(createContext).not.toHaveBeenCalled();
   });
 });
