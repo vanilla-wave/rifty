@@ -281,7 +281,7 @@ describe('standard shadow-asset CDP response recorder', () => {
 
     session.emit('Network.requestWillBeSent', {
       requestId: 'cached',
-      request: { url: packumentUrl },
+      request: { url: packumentUrl, method: 'POST' },
     });
     session.emit('Network.requestServedFromCache', { requestId: 'cached' });
     session.emit(
@@ -293,6 +293,7 @@ describe('standard shadow-asset CDP response recorder', () => {
     await expect(recorder.stop()).resolves.toEqual([
       expect.objectContaining({
         requestId: 'cached',
+        method: 'POST',
         requestServedFromCache: true,
         fromPrefetchCache: true,
       }),
