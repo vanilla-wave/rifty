@@ -28,7 +28,7 @@ describe('packed shadow-asset cold entry contract', () => {
     const entryPath = resolve(fixtureRoot, 'src/shadow-asset-cold-entry.ts');
     const source = await readFile(entryPath, 'utf8');
 
-    expect(staticImports(source, entryPath)).toEqual(['./shadow-asset-cold.ts']);
+    expect(staticImports(source, entryPath)).toEqual(['./shadow-asset-cold']);
     expect(source).toContain('__RIFTY_SHADOW_ASSET_COLD__');
     expect(source).not.toContain('__RIFTY_PACKED_WORKBENCH__');
   });

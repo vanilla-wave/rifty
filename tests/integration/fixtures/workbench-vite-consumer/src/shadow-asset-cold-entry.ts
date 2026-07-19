@@ -1,7 +1,7 @@
 import {
   type ShadowAssetColdPageEvidence,
   measureStandardShadowAssetCold,
-} from './shadow-asset-cold.ts';
+} from './shadow-asset-cold';
 
 export interface ShadowAssetColdPagePort {
   measure(registryUrl: string): Promise<ShadowAssetColdPageEvidence>;
