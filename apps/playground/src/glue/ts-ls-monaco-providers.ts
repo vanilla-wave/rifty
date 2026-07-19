@@ -56,8 +56,8 @@ import {
   type SymbolKind as LspSymbolKind,
   type TypeScriptFormatCodeSettings as LspTypeScriptFormatCodeSettings,
 } from '@riftydev/ts-language-service/lsp-types';
-import * as monaco from 'monaco-editor';
 import type { PlaygroundTypeScript } from '@riftydev/workbench/playground';
+import * as monaco from 'monaco-editor';
 import { lspToMonacoRange, monacoToLspPosition, monacoToLspRange } from './lsp-position.ts';
 
 /** Semantic query surface consumed by Monaco; transport/lifecycle stay outside this seam. */

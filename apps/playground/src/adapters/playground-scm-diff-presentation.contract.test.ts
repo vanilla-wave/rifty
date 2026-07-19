@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
 import type {
   PlaygroundScmBlob,
   PlaygroundScmChange,
   PlaygroundScmDiff,
 } from '@riftydev/workbench/playground';
+import { describe, expect, it } from 'vitest';
 import { playgroundScmDiffPresentation } from './playground-scm-diff-presentation.ts';
 
 function blob(source: PlaygroundScmBlob['source']): PlaygroundScmBlob {

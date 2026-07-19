@@ -90,11 +90,7 @@ export const ALLOWLIST = [
   },
 ];
 
-export const SCAN_ROOTS = [
-  'apps/playground/src',
-  'packages/workbench/src',
-  'tests/browser-unit',
-];
+export const SCAN_ROOTS = ['apps/playground/src', 'packages/workbench/src', 'tests/browser-unit'];
 /** Window after a binding's `=` in which the readFileSync target path must
  *  appear — covers the multi-line `fileURLToPath(new URL('…', import.meta.url))`
  *  formatting without swallowing the whole file. */

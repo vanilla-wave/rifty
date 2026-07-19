@@ -1,10 +1,3 @@
-import type {
-  PlaygroundCatalogSnapshot,
-  PlaygroundProjectPlan,
-  PlaygroundProjectRef,
-  PlaygroundSessionTools,
-  PlaygroundWorkbench,
-} from '@riftydev/workbench/playground';
 import {
   ClosedHandleError,
   DirtyProjectDocumentError,
@@ -13,6 +6,13 @@ import {
   type ProjectSession,
   type ProjectTerminalSnapshot,
 } from '@riftydev/workbench';
+import type {
+  PlaygroundCatalogSnapshot,
+  PlaygroundProjectPlan,
+  PlaygroundProjectRef,
+  PlaygroundSessionTools,
+  PlaygroundWorkbench,
+} from '@riftydev/workbench/playground';
 
 export interface PlaygroundAppProjectContext {
   readonly plan: PlaygroundProjectPlan;

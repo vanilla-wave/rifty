@@ -148,6 +148,7 @@ const WORKER_FILES = [
   'vite-cli-prep.ts',
   'vite-esbuild-runtime.ts',
   'workbench-construction-transaction.ts',
+  'workbench-entry-capabilities.ts',
   'workbench-owner-bootstrap.ts',
   'workbench-owner-child-vfs.ts',
   'workbench-owner-close.ts',
@@ -161,6 +162,7 @@ const WORKER_FILES = [
   'workbench-project-store.ts',
   'workbench-project-vfs.ts',
   'workbench-runtime-assets.ts',
+  'workbench-shadow-asset-source.ts',
   'worker-runtime-globals.ts',
 ] as const;
 
@@ -363,10 +365,10 @@ function resolvedExportEntries(): readonly string[] {
 }
 
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the exact 138-file production move without test-decoupling sources', () => {
-    expect(EXPECTED_APP_PRODUCTION_FILES).toHaveLength(138);
-    expect(new Set(EXPECTED_APP_PRODUCTION_FILES).size).toBe(138);
-    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(140);
+  it('pins the exact 140-file production move without test-decoupling sources', () => {
+    expect(EXPECTED_APP_PRODUCTION_FILES).toHaveLength(140);
+    expect(new Set(EXPECTED_APP_PRODUCTION_FILES).size).toBe(140);
+    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(142);
     expect(EXPECTED_APP_PRODUCTION_FILES.filter((path) => !isProductionSource(path))).toEqual([]);
   });
 

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { ShadowAssetSourceRequest } from './shadow-assets.ts';
 import {
   ShadowAssetSourceCollisionError,
   assertShadowAssetEddySourceCompatibility,
   eddyRequestForShadowAssetSources,
 } from './eddy-shadow-asset-request.ts';
+import type { ShadowAssetSourceRequest } from './shadow-assets.ts';
 
 function source(
   name: string,

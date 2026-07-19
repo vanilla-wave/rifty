@@ -5,6 +5,14 @@ import {
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
+import type { ProjectTerminalSnapshot } from '@riftydev/workbench';
+import type {
+  PlaygroundCatalogSnapshot,
+  PlaygroundPreview,
+  PlaygroundProjectPlan,
+  PlaygroundScmChange,
+  PlaygroundScmSnapshot,
+} from '@riftydev/workbench/playground';
 import type * as monaco from 'monaco-editor';
 import { Show, createMemo, createSignal, lazy, onCleanup, onMount } from 'solid-js';
 import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from '../boot.ts';
@@ -55,14 +63,6 @@ import type { TsLanguageServiceProvidersHandle } from '../glue/ts-ls-monaco-prov
 import { createEditorOpQueue } from '../orchestration/editor-op-queue.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset } from '../presets.ts';
 import { resolveProjectSpec } from '../templates/registry.ts';
-import type {
-  PlaygroundCatalogSnapshot,
-  PlaygroundPreview,
-  PlaygroundProjectPlan,
-  PlaygroundScmChange,
-  PlaygroundScmSnapshot,
-} from '@riftydev/workbench/playground';
-import type { ProjectTerminalSnapshot } from '@riftydev/workbench';
 import {
   type PlaygroundAppProjectContext,
   type PlaygroundAppRuntime,

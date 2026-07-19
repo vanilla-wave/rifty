@@ -1,9 +1,4 @@
 import { type VfsDirent, dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
-import type { FileExplorerMutations } from '../components/FileExplorer.tsx';
-import type { EditorApi } from '../components/editor-host-core.ts';
-import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
-import { NODE_MODULES_MAX_CONTENT_BYTES } from '../glue/node-modules-model.ts';
-import type { PlaygroundScm } from '@riftydev/workbench/playground';
 import type {
   ProjectDocument,
   ProjectDocuments,
@@ -11,6 +6,11 @@ import type {
   ProjectFiles,
   ProjectFilesSnapshot,
 } from '@riftydev/workbench';
+import type { PlaygroundScm } from '@riftydev/workbench/playground';
+import type { FileExplorerMutations } from '../components/FileExplorer.tsx';
+import type { EditorApi } from '../components/editor-host-core.ts';
+import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
+import { NODE_MODULES_MAX_CONTENT_BYTES } from '../glue/node-modules-model.ts';
 
 interface CachedFile {
   readonly version: string;

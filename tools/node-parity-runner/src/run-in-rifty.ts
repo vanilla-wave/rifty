@@ -634,9 +634,7 @@ async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
       receivedHostRuntimeKeys.some(
         (key) => typeof key !== 'string' || !Object.hasOwn(hostRuntime, key),
       ) ||
-      expectedHostRuntimeKeys.some(
-        (key) => receivedHostRuntime[key] !== hostRuntime[key],
-      )
+      expectedHostRuntimeKeys.some((key) => receivedHostRuntime[key] !== hostRuntime[key])
     ) {
       throw new TypeError('worker-env parity init has an inexact v2 host-runtime record');
     }

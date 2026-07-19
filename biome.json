@@ -24,6 +24,7 @@
       ".arch-fixtures/**",
       ".claude/**",
       "apps/playground/src/workers/generated/**",
+      "packages/workbench/src/workers/generated/**",
       "packages/ts-language-service/vendor/**"
     ]
   },

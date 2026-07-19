@@ -37,9 +37,7 @@ describe('starter git baseline', () => {
       stdout: '',
       stderr: '',
     });
-    expect((await sh.run('git log --oneline')).stdout).toMatch(
-      /^[0-9a-f]{7} Initial commit\n$/,
-    );
+    expect((await sh.run('git log --oneline')).stdout).toMatch(/^[0-9a-f]{7} Initial commit\n$/);
 
     await vfs.writeFile(`${root}/src/main.js`, 'console.log("edited");\n');
     const dirty = await sh.run('git status --porcelain');
@@ -55,9 +53,7 @@ describe('starter git baseline', () => {
 
     await ensureStarterInitialCommit(vfs, root);
 
-    expect(await vfs.readFileText(`${root}/.git/refs/heads/main`)).toMatch(
-      /^[0-9a-f]{40}\n$/,
-    );
+    expect(await vfs.readFileText(`${root}/.git/refs/heads/main`)).toMatch(/^[0-9a-f]{40}\n$/);
   });
 
   it('folds a generated lockfile into the single initial commit', async () => {
@@ -75,9 +71,7 @@ describe('starter git baseline', () => {
       stdout: '',
       stderr: '',
     });
-    expect((await sh.run('git log --oneline')).stdout).toMatch(
-      /^[0-9a-f]{7} Initial commit\n$/,
-    );
+    expect((await sh.run('git log --oneline')).stdout).toMatch(/^[0-9a-f]{7} Initial commit\n$/);
     expect((await sh.run('git show HEAD:package-lock.json')).stdout).toBe(
       '{"lockfileVersion":3}\n',
     );

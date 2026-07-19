@@ -53,7 +53,11 @@ function exactKeys(value, expected, label) {
 function validatedCatalog(value) {
   if (!plainRecord(value)) throw new TypeError('shadow-asset cold catalog must be an object');
   const { digest, ...payload } = value;
-  if (typeof digest !== 'string' || !SHA256.test(digest) || sha256(canonicalJson(payload)) !== digest) {
+  if (
+    typeof digest !== 'string' ||
+    !SHA256.test(digest) ||
+    sha256(canonicalJson(payload)) !== digest
+  ) {
     throw new TypeError('shadow-asset cold catalog digest does not match its content');
   }
   if (
@@ -100,13 +104,7 @@ function exactApplied(lockfile) {
   const applied = trace.applied[0];
   exactKeys(
     applied,
-    [
-      'publicName',
-      'requestedRange',
-      'resolvedPublicVersion',
-      'runtimeAdapterId',
-      'substitutionId',
-    ],
+    ['publicName', 'requestedRange', 'resolvedPublicVersion', 'runtimeAdapterId', 'substitutionId'],
     'lockfile applied substitution',
   );
   if (

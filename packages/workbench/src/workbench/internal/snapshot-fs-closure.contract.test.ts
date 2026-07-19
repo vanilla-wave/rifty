@@ -94,8 +94,8 @@ describe('Workbench SnapshotFs source closure', () => {
         staticImportSpecifiers(importer).map((specifier) => ({ importer, specifier })),
       )
       .filter(({ specifier }) => specifier.endsWith('/snapshot-fs.ts'))
-      .filter(({ importer, specifier }) =>
-        resolveRelativeSource(importer, specifier) !== internalEntry,
+      .filter(
+        ({ importer, specifier }) => resolveRelativeSource(importer, specifier) !== internalEntry,
       )
       .map(({ importer, specifier }) => `${relative(srcRoot, importer)} -> ${specifier}`)
       .sort();

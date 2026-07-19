@@ -1,6 +1,3 @@
-import { type Starter, seedFilesForStarter } from '../glue/starter.ts';
-import type { PresetSetup } from '../presets.ts';
-import { resolveProjectSpec } from '../templates/registry.ts';
 import type {
   NodeCliPlaygroundPlan,
   NodeServerPlaygroundPlan,
@@ -8,6 +5,9 @@ import type {
   PlaygroundProjectPlan,
   VitePlaygroundPlan,
 } from '@riftydev/workbench/playground';
+import { type Starter, seedFilesForStarter } from '../glue/starter.ts';
+import type { PresetSetup } from '../presets.ts';
+import { resolveProjectSpec } from '../templates/registry.ts';
 
 const SEED_ROOT = '/__rifty_playground_plan__';
 

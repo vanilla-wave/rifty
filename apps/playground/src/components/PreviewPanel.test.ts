@@ -2,11 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { renderToString } from 'solid-js/web';
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import {
-  type PreviewPanelEntry,
-  PreviewPanel,
-  reconcileSelectedPort,
-} from './PreviewPanel.tsx';
+import { PreviewPanel, type PreviewPanelEntry, reconcileSelectedPort } from './PreviewPanel.tsx';
 
 // Read ONLY for the two residual client-only pins below (keyed remount +
 // no-location.reload) — everything else is behavioral or tsc-gated.

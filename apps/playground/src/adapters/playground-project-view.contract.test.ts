@@ -1,12 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { PlaygroundScm, PlaygroundScmChange } from '@riftydev/workbench/playground';
 import type { ProjectDocument, ProjectDocuments } from '@riftydev/workbench';
-import type {
-  ProjectFileRead,
-  ProjectFiles,
-  ProjectFilesSnapshot,
-} from '@riftydev/workbench';
+import type { ProjectFileRead, ProjectFiles, ProjectFilesSnapshot } from '@riftydev/workbench';
 import type { ProjectFileEntry } from '@riftydev/workbench';
+import type { PlaygroundScm, PlaygroundScmChange } from '@riftydev/workbench/playground';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createPlaygroundDocumentWriter,
   createPlaygroundFileMutations,
