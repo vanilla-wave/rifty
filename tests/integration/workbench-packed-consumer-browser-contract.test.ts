@@ -179,6 +179,36 @@ describe('packed Workbench browser acceptance contract', () => {
     expect(measurement.latency).toMatchObject({ status: 'unmeasured' });
   });
 
+  it('binds the historical repacked alias SRI to its exact response paths', async () => {
+    const measurement = JSON.parse(await readFile(aliasByteProofUrl, 'utf8'));
+    expect(measurement.before.repackedAlias).toEqual({
+      packageName: '@esbuild/wasi-preview1',
+      version: '0.28.0',
+      packumentPath: '/@esbuild%2Fwasi-preview1',
+      tarballPath: '/-/tarballs/%40esbuild%2Fwasi-preview1-0.28.0.tgz',
+      integrity:
+        'sha512-OiVq6QwMpllcFsNXJMr4vpZMCVK5tJE5zRonRiBTgIMIYq1+9OJDFKk+DcFd/9r1jthZcO7Bk7maaVDZjG2DVg==',
+    });
+    const aliasResponses = measurement.before.proof.responses.filter(
+      (response: { readonly packageName: string }) =>
+        response.packageName === measurement.before.repackedAlias.packageName,
+    );
+    expect(aliasResponses).toEqual([
+      expect.objectContaining({
+        path: measurement.before.repackedAlias.packumentPath,
+        kind: 'packument',
+        status: 200,
+        bodyBytes: 627,
+      }),
+      expect.objectContaining({
+        path: measurement.before.repackedAlias.tarballPath,
+        kind: 'tarball',
+        status: 200,
+        bodyBytes: 5_057_200,
+      }),
+    ]);
+  });
+
   it('matches a complete response ledger independent of parallel completion order', () => {
     const response = (packageName: string, kind: 'packument' | 'tarball', bodyBytes: number) => ({
       method: 'GET',
