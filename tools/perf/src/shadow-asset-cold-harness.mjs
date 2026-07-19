@@ -8,6 +8,12 @@ function unmeasured(note) {
   return { status: 'unmeasured', note };
 }
 
+function modeLabel(mode) {
+  if (mode === 'standard') return 'standard';
+  if (mode === 'eddy') return 'Eddy';
+  throw new TypeError("mode must be 'standard' or 'eddy'");
+}
+
 function contextPort(value) {
   if (
     value === null ||
@@ -42,24 +48,25 @@ async function settleWarmup(createContext, seen) {
 }
 
 /**
- * Run the fixed standard cold-fill regime. The adapter owns Chromium details;
- * this boundary owns the non-negotiable topology: one discarded context, five
- * fresh measured contexts, mandatory close, and no partial result.
+ * Run the fixed cold-fill regime. The adapter owns Chromium details; this
+ * boundary owns the non-negotiable topology: one discarded context, five fresh
+ * measured contexts, mandatory close, and no partial result.
  */
-export async function runStandardShadowAssetColdContexts({ createContext, buildRun }) {
+export async function runShadowAssetColdContexts({ mode, createContext, buildRun }) {
+  const rowLabel = `${modeLabel(mode)} shadow-asset cold`;
   if (typeof createContext !== 'function') throw new TypeError('createContext must be a function');
   if (typeof buildRun !== 'function') throw new TypeError('buildRun must be a function');
 
   const seen = new Set();
   const warmupFailure = await settleWarmup(createContext, seen);
   if (warmupFailure !== null) {
-    return unmeasured(`standard shadow-asset cold warm-up: ${warmupFailure}`);
+    return unmeasured(`${rowLabel} warm-up: ${warmupFailure}`);
   }
 
   const runs = [];
   const failures = [];
   for (let index = 0; index < MEASURED_CONTEXT_COUNT; index += 1) {
-    const label = `standard shadow-asset cold run ${index + 1}/${MEASURED_CONTEXT_COUNT}`;
+    const label = `${rowLabel} run ${index + 1}/${MEASURED_CONTEXT_COUNT}`;
     let context;
     let raw;
     let failure = null;
@@ -96,8 +103,12 @@ export async function runStandardShadowAssetColdContexts({ createContext, buildR
   if (failures.length > 0) return unmeasured(failures.join('; '));
   if (runs.length !== MEASURED_CONTEXT_COUNT) {
     return unmeasured(
-      `standard shadow-asset cold produced ${runs.length}/${MEASURED_CONTEXT_COUNT} complete runs`,
+      `${rowLabel} produced ${runs.length}/${MEASURED_CONTEXT_COUNT} complete runs`,
     );
   }
   return { status: 'measured', runs };
+}
+
+export function runStandardShadowAssetColdContexts({ createContext, buildRun }) {
+  return runShadowAssetColdContexts({ mode: 'standard', createContext, buildRun });
 }

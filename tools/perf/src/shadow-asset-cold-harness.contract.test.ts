@@ -50,9 +50,7 @@ describe('standard shadow-asset cold context harness', () => {
       run: measuredRun(index),
     }));
 
-    await expect(
-      runStandardShadowAssetColdContexts({ createContext, buildRun }),
-    ).resolves.toEqual({
+    await expect(runStandardShadowAssetColdContexts({ createContext, buildRun })).resolves.toEqual({
       status: 'measured',
       runs: [1, 2, 3, 4, 5].map(measuredRun),
     });
