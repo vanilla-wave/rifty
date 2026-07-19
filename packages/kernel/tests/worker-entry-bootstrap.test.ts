@@ -36,6 +36,7 @@ interface CapabilityPublicApi {
   publishKernelEntryCapabilityPorts(
     ports: Readonly<Record<string, MessagePort>> | null | undefined,
   ): void;
+  consumeKernelEntryCapabilityPorts(): Readonly<Record<string, MessagePort>>;
   readKernelEntryCapabilityPorts(): Readonly<Record<string, MessagePort>>;
 }
 
@@ -280,6 +281,81 @@ describe('entry-scoped bootstrap envelope', () => {
     capability.port2.close();
   });
 
+  it('atomically consumes the capability snapshot before returning its live ports', () => {
+    const capability = new MessageChannel();
+    capabilityApi.publishKernelEntryCapabilityPorts({ 'test.consume': capability.port2 });
+
+    const peeked = capabilityApi.readKernelEntryCapabilityPorts();
+    const consumed = capabilityApi.consumeKernelEntryCapabilityPorts();
+
+    expect(Object.entries(peeked)).toEqual([['test.consume', capability.port2]]);
+    expect(Object.entries(consumed)).toEqual([['test.consume', capability.port2]]);
+    expect(Object.getPrototypeOf(consumed)).toBeNull();
+    expect(Object.isFrozen(consumed)).toBe(true);
+    expect(Object.getOwnPropertyNames(globalThis)).not.toContain(
+      capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
+    );
+    expect(capabilityApi.readKernelEntryCapabilityPorts()).toEqual({});
+    expect(capabilityApi.consumeKernelEntryCapabilityPorts()).toEqual({});
+
+    capability.port1.close();
+    capability.port2.close();
+  });
+
+  it('loud-fails consumption before returning authority when publication deletion fails', () => {
+    const capability = new MessageChannel();
+    capabilityApi.publishKernelEntryCapabilityPorts({ 'test.consume': capability.port2 });
+    const originalDeleteProperty = Reflect.deleteProperty;
+    const deletion = vi.spyOn(Reflect, 'deleteProperty').mockImplementation((target, key) => {
+      if (target === globalThis && key === capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY) {
+        return false;
+      }
+      return originalDeleteProperty(target, key);
+    });
+
+    try {
+      expect(() => capabilityApi.consumeKernelEntryCapabilityPorts()).toThrow(
+        'kernel entry capability publication could not be consumed',
+      );
+      expect(capabilityApi.readKernelEntryCapabilityPorts()['test.consume']).toBe(capability.port2);
+    } finally {
+      deletion.mockRestore();
+      Reflect.deleteProperty(globalThis, capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY);
+      capability.port1.close();
+      capability.port2.close();
+    }
+  });
+
+  it('rejects a corrupt accessor publication without invoking it', () => {
+    const getter = vi.fn(() => Object.freeze(Object.create(null)));
+    Object.defineProperty(globalThis, capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY, {
+      get: getter,
+      configurable: true,
+    });
+
+    expect(() => capabilityApi.consumeKernelEntryCapabilityPorts()).toThrow(
+      'kernel entry capability publication must be a data property',
+    );
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  it.each([{}, null, undefined] as const)(
+    'canonicalizes empty or absent capability publication %j to no global property',
+    (value) => {
+      const stale = new MessageChannel();
+      capabilityApi.publishKernelEntryCapabilityPorts({ stale: stale.port2 });
+
+      capabilityApi.publishKernelEntryCapabilityPorts(value);
+
+      expect(Object.getOwnPropertyNames(globalThis)).not.toContain(
+        capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
+      );
+      expect(capabilityApi.readKernelEntryCapabilityPorts()).toEqual({});
+      stale.port1.close();
+      stale.port2.close();
+    },
+  );
+
   it('publishes frozen empty capabilities for absent URL and source entries, clearing stale state', async () => {
     const stale = new MessageChannel();
     capabilityApi.publishKernelEntryCapabilityPorts({ stale: stale.port2 });
@@ -304,7 +380,9 @@ describe('entry-scoped bootstrap envelope', () => {
       expect(Object.getPrototypeOf(value)).toBeNull();
       expect(Object.isFrozen(value)).toBe(true);
     }
-    expect(Object.keys(globalThis)).not.toContain(capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY);
+    expect(Object.getOwnPropertyNames(globalThis)).not.toContain(
+      capabilityApi.KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
+    );
 
     stale.port1.close();
     stale.port2.close();

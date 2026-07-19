@@ -57,12 +57,12 @@ test('URL entry round-trips a protocol-opaque capability port', async ({ page })
       });
 
       try {
-        await Promise.race([ready, exited]);
+        const readyFrame = await Promise.race([ready, exited]);
         const echoed = receive('echo');
         const payload = { text: 'opaque-capability-round-trip', sequence: 17 };
         channel.port1.postMessage(payload);
         const frame = await Promise.race([echoed, exited]);
-        return { frame, stderr };
+        return { frame, readyFrame, stderr };
       } finally {
         spawned.terminate();
         channel.port1.close();
@@ -74,6 +74,10 @@ test('URL entry round-trips a protocol-opaque capability port', async ({ page })
   expect(result.frame).toEqual({
     kind: 'echo',
     payload: { text: 'opaque-capability-round-trip', sequence: 17 },
+  });
+  expect(result.readyFrame).toEqual({
+    kind: 'ready',
+    ambientCapabilityGlobalPresent: false,
   });
   expect(result.stderr).toBe('');
 });

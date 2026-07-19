@@ -28,7 +28,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
 | 0045 | Worker-process IPC — fork-mode `send` / `'message'` / `disconnect` over a parent↔child MessagePort |
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
-| 0266 | Opaque named capability ports on Worker entries |
+| 0300 | One-shot consumption of opaque Worker entry capabilities |
 
 ### runtime-js
 
@@ -285,6 +285,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0231 | 0267 | host bootstrap leaves guest `process.env`; recursive-worker context grafted |
 | 0260 | 0276 | shared guard law retained; closed vocabulary gains applied-evidence semantic replacement |
 | 0277 | 0278 | finite plans/catalog/TS/SCM/archive grafted; terminal state and owner preview registry added |
+| 0266 | 0300 | generic transfer/rollback retained; ambient repeated-read lifetime replaced by privileged one-shot consumption |
 
 ## Corrections (active)
 
