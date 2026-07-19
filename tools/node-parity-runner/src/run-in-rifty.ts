@@ -605,6 +605,11 @@ async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
 
   let nativeWorkerConstructions = 0;
   let validatedInitMessages = 0;
+  const hostRuntime = Object.freeze({
+    RIFTY_KERNEL_WORKER_URL: 'parity://kernel-worker',
+    RIFTY_NODE_ENTRY_WORKER_URL: 'parity://node-entry',
+    RIFTY_SQLITE_WASM_URL: 'parity://sqlite.wasm',
+  });
 
   function validateInitMessage(message: unknown): void {
     const init = message as Partial<WorkerInitMessage> | null;
@@ -613,14 +618,27 @@ async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
       throw new TypeError('worker-env parity requires a URL kernel init message');
     }
     const envelope = entry.bootstrap;
-    if (envelope?.protocol !== 'rifty.node-entry/v1') {
+    if (envelope?.protocol !== 'rifty.node-entry/v2') {
       throw new TypeError('worker-env parity requires the typed node-entry bootstrap protocol');
     }
     const payload = envelope.payload as
       | { readonly hostRuntime?: Readonly<Record<string, unknown>> }
       | undefined;
-    if (payload?.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only') {
-      throw new TypeError('worker-env parity init is missing its out-of-band host marker');
+    const receivedHostRuntime = payload?.hostRuntime;
+    const expectedHostRuntimeKeys = Object.keys(hostRuntime) as Array<keyof typeof hostRuntime>;
+    const receivedHostRuntimeKeys =
+      receivedHostRuntime === undefined ? [] : Reflect.ownKeys(receivedHostRuntime);
+    if (
+      receivedHostRuntime === undefined ||
+      receivedHostRuntimeKeys.length !== expectedHostRuntimeKeys.length ||
+      receivedHostRuntimeKeys.some(
+        (key) => typeof key !== 'string' || !Object.hasOwn(hostRuntime, key),
+      ) ||
+      expectedHostRuntimeKeys.some(
+        (key) => receivedHostRuntime[key] !== hostRuntime[key],
+      )
+    ) {
+      throw new TypeError('worker-env parity init has an inexact v2 host-runtime record');
     }
     validatedInitMessages++;
   }
@@ -718,10 +736,8 @@ async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
       value: true,
       configurable: true,
     });
-    setKernelWorkerUrl('parity://kernel-worker');
-    configureNodeEntryWorker('parity://node-entry', {
-      RIFTY_PARITY_HOST_BOOTSTRAP: 'host-only',
-    });
+    setKernelWorkerUrl(hostRuntime.RIFTY_KERNEL_WORKER_URL);
+    configureNodeEntryWorker(hostRuntime.RIFTY_NODE_ENTRY_WORKER_URL, hostRuntime);
     setWorkerFactoryForTests(() => new NativeKernelWorkerAdapter());
   } catch (error) {
     failure = error;

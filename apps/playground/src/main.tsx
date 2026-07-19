@@ -4,7 +4,6 @@
 import { render } from 'solid-js/web';
 import { App } from './App.tsx';
 import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
-import { installPlaygroundNodeWorkerRuntime } from './glue/playground-node-worker-runtime.ts';
 import { createTerminalPersistence } from './glue/terminal-persistence.ts';
 // xterm's stylesheet is required for terminal scrolling (`.xterm-viewport` position +
 // absolute row layout). Imported here (not via index.html <link>) so Vite bundles it in
@@ -18,15 +17,12 @@ const WORKSPACE = '/workspace';
 // is painted as early as possible.
 assertCrossOriginIsolated();
 
-// ADR-0267 — install the worker URLs + WASM assets every recursive Node realm
-// receives through its entry-scoped bootstrap; guest process.env stays user-owned.
-installPlaygroundNodeWorkerRuntime();
-
 // e2e-only: the execSync-over-SAB harness (tests/e2e/execsync-sab.spec.ts).
 // Gated on `#test=execsync` so normal playground boot is untouched. Runs in the
-// page realm (which owns the kernel dispatcher), spawns a guest worker, and
-// paints the byte-exact execSync result into the DOM. Lazy-imported so the
-// harness chunk never loads on a normal page.
+// page realm (which owns the kernel dispatcher), installs its own explicit
+// worker fixture, spawns a guest worker, and paints the byte-exact execSync
+// result into the DOM. Lazy-imported so the harness chunk never loads on a
+// normal page.
 if (location.hash.includes('test=execsync')) {
   const { runExecSyncHarness } = await import('./execsync-harness.ts');
   await runExecSyncHarness();

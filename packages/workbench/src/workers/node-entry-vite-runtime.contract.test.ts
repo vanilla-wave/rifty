@@ -100,17 +100,25 @@ describe('node-entry Vite capability-only runtime', () => {
     }
   });
 
-  it('loud-throws for Vite 7 when admission supplied no capability', async () => {
-    await bootVite('7.3.6');
-    publishCapabilities({});
+  it.each(['dev', 'build', 'preview', 'optimize', 'info'] as const)(
+    'loud-throws for Vite 7 %s before import when admission supplied no capability',
+    async (mode) => {
+      await bootVite('7.3.6');
+      publishCapabilities({});
 
-    const failure = await (await api()).prepareViteCliForNodeEntry(VITE_PREPARATION).then(
-      () => null,
-      (error: unknown) => error,
-    );
-    expect(failure).toBeInstanceOf(NotImplementedError);
-    expect(failure).toMatchObject({ feature: 'vite.esbuild.shadowAssets' });
-  });
+      const failure = await (await api())
+        .prepareViteCliForNodeEntry({
+          ...VITE_PREPARATION,
+          mode,
+        })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(failure).toBeInstanceOf(NotImplementedError);
+      expect(failure).toMatchObject({ feature: 'vite.esbuild.shadowAssets' });
+    },
+  );
 
   it('preserves a typed read failure and disposes the client exactly once after preparation', async () => {
     await bootVite('7.3.6');

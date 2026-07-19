@@ -36,7 +36,7 @@ export interface ViteCliPreparation {
 export interface PlannedViteCliPreparation {
   readonly preparation: ViteCliPreparation;
   readonly packageRoot: string;
-  readonly runtimeDecision: ViteEsbuildRuntimeDecision | 'skip-info';
+  readonly runtimeDecision: ViteEsbuildRuntimeDecision;
 }
 
 /** Derive one complete Vite preparation from the executed entry + real argv. */
@@ -160,10 +160,7 @@ export async function prepareViteCliAcquisitionFiles(
 export function planViteCliPreparation(options: ViteCliPreparation): PlannedViteCliPreparation {
   const preparation = Object.freeze({ ...options });
   const packageRoot = vitePackageRoot(preparation.root, preparation.executedBinPath);
-  const runtimeDecision =
-    preparation.mode === 'info'
-      ? 'skip-info'
-      : decideViteEsbuildRuntime({ fs: syncMirror(), packageRoot });
+  const runtimeDecision = decideViteEsbuildRuntime({ fs: syncMirror(), packageRoot });
   return Object.freeze({ preparation, packageRoot, runtimeDecision });
 }
 
@@ -175,12 +172,6 @@ export async function prepareViteCli(
   validateCliActionPatch(packageRoot);
   validateRootWatchPatch(packageRoot);
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
-  if (runtimeDecision === 'skip-info') {
-    if (shadowAssets !== undefined) {
-      throw new TypeError('Vite info preparation must not receive shadow assets');
-    }
-    return;
-  }
   if (runtimeDecision === 'skip-rolldown' && shadowAssets !== undefined) {
     throw new TypeError('Vite 8 preparation must not receive shadow assets');
   }

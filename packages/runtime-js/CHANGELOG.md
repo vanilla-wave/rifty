@@ -22,7 +22,9 @@
 - Node-entry v2 now accepts only the exact kernel, node-entry, and SQLite host
   runtime fields. Owner-recursive `execSync` snapshots one validated private
   `remoteFsRoot` for preflight and nested launch, while first-require defaults
-  cannot replace an explicit host-owned handler (ADR-0297).
+  cannot replace an explicit host-owned handler (ADR-0297). The physical
+  `worker_threads` parity oracle now emits and validates that same exact v2
+  record, closing the final v1 fixture drift.
 - ESM module factories now run in strict mode, preserving Node's `undefined`
   top-level and bare-call receivers, including esbuild plugin `setup` callbacks.
 

@@ -29,14 +29,17 @@ import {
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
+  setKernelWorkerUrl,
 } from '@riftydev/kernel';
 import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
 import {
+  configureNodeEntryWorker,
   getNodeEntryWorkerUrl,
   setNodeEntryWorkerUrl,
 } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { installRuntimeJsExecSyncHandler } from '@riftydev/runtime-js/ipc/exec-sync-handler';
 import { syncMirror } from '@riftydev/vfs';
+import { playgroundWorkbenchOptions } from './adapters/playground-workbench-host.ts';
 
 const dec = new TextDecoder();
 
@@ -120,6 +123,19 @@ function paint(result: HarnessResult): void {
  */
 export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): Promise<void> {
   try {
+    // Explicit e2e fixture ownership: normal Playground boot configures workers
+    // only through Workbench. This gated harness reuses that public deployment
+    // composition because it deliberately exercises the lower-level page
+    // dispatcher without opening a Workbench.
+    const deployment = playgroundWorkbenchOptions().deployment;
+    const hostRuntime = Object.freeze({
+      RIFTY_KERNEL_WORKER_URL: deployment.workers.kernel,
+      RIFTY_NODE_ENTRY_WORKER_URL: deployment.workers.node,
+      RIFTY_SQLITE_WASM_URL: deployment.wasm.sqlite,
+    });
+    setKernelWorkerUrl(hostRuntime.RIFTY_KERNEL_WORKER_URL);
+    configureNodeEntryWorker(hostRuntime.RIFTY_NODE_ENTRY_WORKER_URL, hostRuntime);
+
     // Page-realm VFS: `syncMirror()` returns the default in-memory mirror on the
     // main thread (no initBackend — OPFS sync is worker-only and would throw
     // here; memory is all the handler resolver needs to serve the seeded scripts).
@@ -128,15 +144,13 @@ export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): 
     }
     const kernelWorkerUrl = getKernelWorkerUrl();
     if (kernelWorkerUrl === null) {
-      throw new Error('getKernelWorkerUrl() is null — main.tsx must call setKernelWorkerUrl first');
+      throw new Error('getKernelWorkerUrl() is null after execSync harness runtime setup');
     }
     // ADR-0137: the recursive `execSync` child now spawns a node-entry `kind:'url'`
-    // child (shebang strip + relative imports), so the page realm must have the
-    // node-entry bootstrap URL wired (main.tsx setNodeEntryWorkerUrl).
+    // child (shebang strip + relative imports), so the page realm must retain
+    // the exact node-entry bootstrap snapshot installed above.
     if (getNodeEntryWorkerUrl() === null) {
-      throw new Error(
-        'getNodeEntryWorkerUrl() is null — main.tsx must call setNodeEntryWorkerUrl first',
-      );
+      throw new Error('getNodeEntryWorkerUrl() is null after execSync harness runtime setup');
     }
     if (options.fault === 'missing-node-entry-runtime-config') {
       // Fault injection uses the public compatibility seam: URL remains

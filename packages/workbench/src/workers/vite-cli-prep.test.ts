@@ -26,6 +26,10 @@ const CONFIG_PATH = '/app/node_modules/vite/dist/node/chunks/config.js';
 const VITE_PACKAGE_JSON = '/app/node_modules/vite/package.json';
 const VITE_BIN = '/app/node_modules/.bin/vite';
 
+function viteManifest(version: string): string {
+  return JSON.stringify({ name: 'vite', version });
+}
+
 async function prepareVite(
   mode: 'dev' | 'build' | 'preview' | 'optimize' | 'info',
   bin = VITE_BIN,
@@ -261,7 +265,10 @@ describe('prepareViteCliAcquisitionFiles — rooted Chokidar catalog', () => {
 
 describe('prepareViteCli — trusted child preparation is read-only', () => {
   it('performs zero VFS writes on the first child launch over a prepared trusted tree', async () => {
-    const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    const fsSync = bootFs({
+      [CLI_PATH]: CAC_CALL_SITE,
+      [VITE_PACKAGE_JSON]: viteManifest('8.0.16'),
+    });
     await prepareViteCliAcquisitionFiles('/app');
     const prepared = readText(fsSync, CLI_PATH);
     const writes = captureWritePaths(fsSync);
@@ -274,7 +281,10 @@ describe('prepareViteCli — trusted child preparation is read-only', () => {
   });
 
   it('loud-rejects an unprepared trusted CLI without silently patching it', async () => {
-    const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    const fsSync = bootFs({
+      [CLI_PATH]: CAC_CALL_SITE,
+      [VITE_PACKAGE_JSON]: viteManifest('8.0.16'),
+    });
     const writes = captureWritePaths(fsSync);
 
     await expect(prepareVite('info')).rejects.toThrow(/before promotion/i);
@@ -284,7 +294,7 @@ describe('prepareViteCli — trusted child preparation is read-only', () => {
   });
 
   it('loud-rejects a missing executed CLI without creating node_modules bytes', async () => {
-    const fsSync = bootFs();
+    const fsSync = bootFs({ [VITE_PACKAGE_JSON]: viteManifest('8.0.16') });
     const writes = captureWritePaths(fsSync);
 
     await expect(prepareVite('info')).rejects.toThrow(/missing prepared CLI/i);
@@ -479,13 +489,11 @@ describe('prepareViteBinSpawnRequest — host-only preview correlation', () => {
 });
 
 describe('Vite esbuild runtime startup policy', () => {
-  const manifest = (version: string): string => JSON.stringify({ name: 'vite', version });
-
   it('starts only exact Vite 7.3.6 and resolves a hoisted package from the executed shim', async () => {
     const hoistedCli = '/workspace/node_modules/vite/dist/node/cli.js';
     const fsSync = bootFs({
       '/workspace/packages/app/package.json': '{}',
-      '/workspace/node_modules/vite/package.json': manifest('7.3.6'),
+      '/workspace/node_modules/vite/package.json': viteManifest('7.3.6'),
       [hoistedCli]: CAC_CALL_SITE,
     });
     const bin = '/workspace/node_modules/.bin/vite';
@@ -499,7 +507,7 @@ describe('Vite esbuild runtime startup policy', () => {
   it('skips Vite 8 Rolldown without fetching, compiling, starting, or publishing', async () => {
     const fsSync = bootFs({
       [CLI_PATH]: CAC_CALL_SITE,
-      [VITE_PACKAGE_JSON]: manifest('8.0.0-beta.3'),
+      [VITE_PACKAGE_JSON]: viteManifest('8.0.0-beta.3'),
     });
     const savedFetch = globalThis.fetch;
     let fetchCalls = 0;
@@ -522,8 +530,28 @@ describe('Vite esbuild runtime startup policy', () => {
     }
   });
 
-  it('info mode validates prepared files but never consults or starts the esbuild runtime', async () => {
-    const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+  it('Vite 7 info mode requires the same verified runtime capability before import', async () => {
+    bootFs({
+      [CLI_PATH]: CAC_CALL_SITE,
+      [VITE_PACKAGE_JSON]: viteManifest('7.3.6'),
+    });
+    await prepareViteCliAcquisitionFiles('/app');
+
+    expect(
+      planViteCliPreparation({ root: '/app', mode: 'info', executedBinPath: VITE_BIN })
+        .runtimeDecision,
+    ).toBe('start');
+    await expect(prepareVite('info')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'vite.esbuild.shadowAssets',
+    });
+  });
+
+  it('Vite 8 info mode validates prepared files without consulting esbuild assets', async () => {
+    const fsSync = bootFs({
+      [CLI_PATH]: CAC_CALL_SITE,
+      [VITE_PACKAGE_JSON]: viteManifest('8.0.16'),
+    });
     const savedFetch = globalThis.fetch;
     let fetchCalls = 0;
     globalThis.fetch = () => {
@@ -544,7 +572,7 @@ describe('Vite esbuild runtime startup policy', () => {
   });
 
   it('loud-fails unpinned esbuild-consuming Vite before fetching wasm', async () => {
-    bootFs({ [CLI_PATH]: CAC_CALL_SITE, [VITE_PACKAGE_JSON]: manifest('7.3.5') });
+    bootFs({ [CLI_PATH]: CAC_CALL_SITE, [VITE_PACKAGE_JSON]: viteManifest('7.3.5') });
     const savedFetch = globalThis.fetch;
     let fetchCalls = 0;
     globalThis.fetch = () => {

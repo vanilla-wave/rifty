@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * The wasm BINARY ships from the playground's sql.js copy
- * (`sql.js/dist/sql-wasm.wasm?url` in glue/playground-node-worker-runtime.ts) while the JS
+ * (`sql.js/dist/sql-wasm.wasm?url` in adapters/playground-workbench-host.ts) while the JS
  * glue executing it ships from @riftydev/net's copy (the `node:sqlite`
  * engine). Nothing else enforces the pairing — a one-sided bump silently runs
  * mismatched glue+wasm. Pin the declared ranges equal.
