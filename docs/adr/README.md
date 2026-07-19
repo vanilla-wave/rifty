@@ -136,6 +136,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0295 | Persist exact applied shadow substitution facts in lockfiles |
 | 0296 | Bind child shadow-asset clients to immutable runtime adapters |
 | 0298 | Synthesize esbuild delegates with explicit lockfile materialization provenance |
+| 0299 | Expose builtin Eddy shadow asset source composition |
 
 ### playground
 
