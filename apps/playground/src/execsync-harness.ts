@@ -30,12 +30,13 @@ import {
   globalProcessManager,
   isSabIpcSupported,
 } from '@riftydev/kernel';
+import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
 import {
   getNodeEntryWorkerUrl,
   setNodeEntryWorkerUrl,
 } from '@riftydev/runtime-js/builtins/node-entry-url';
+import { installRuntimeJsExecSyncHandler } from '@riftydev/runtime-js/ipc/exec-sync-handler';
 import { syncMirror } from '@riftydev/vfs';
-import { installOwnerSyncRuntimeHandlers } from './glue/owner-sync-runtime-handlers.ts';
 
 const dec = new TextDecoder();
 
@@ -163,7 +164,11 @@ export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): 
     // ENOENT. This is the owner's role the real workspace owner plays.
     // Page test harness, workspace owner, and relay child share this exact
     // authoritative-VFS registration recipe.
-    installOwnerSyncRuntimeHandlers(getKernelDispatcher(), () => mirror);
+    const dispatcher = getKernelDispatcher();
+    installRuntimeJsFsHandlers(dispatcher, () => mirror);
+    installRuntimeJsExecSyncHandler(dispatcher, (path) =>
+      mirror.existsSync(path) ? mirror.readFileBytesSync(path) : null,
+    );
 
     // Bundled as its own worker chunk by Vite (string URL form).
     const guestUrl = new URL('./workers/execsync-harness-guest.ts', import.meta.url).toString();

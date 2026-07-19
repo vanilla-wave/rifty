@@ -28,11 +28,16 @@
 
 import { channelNameFor } from '@riftydev/net';
 import { joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
+import {
+  NODE_MODULES_MAX_CONTENT_BYTES,
+  type NodeModulesBridge,
+  type NodeModulesDirEntry,
+} from './node-modules-model.ts';
 import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 
 /** Files at/under this many bytes ship their content; larger reply size only.
  *  Matches {@link ./vfs-snapshot-port.ts}'s `SNAPSHOT_MAX_CONTENT_BYTES`. */
-export const NODE_MODULES_MAX_CONTENT_BYTES = 128 * 1024;
+export { NODE_MODULES_MAX_CONTENT_BYTES } from './node-modules-model.ts';
 
 /** Synthetic channel URL keyed by dev-server port — a distinct synthetic host
  *  so it never cross-talks with the write / snapshot / preview-port bridges. */
@@ -40,11 +45,7 @@ export function nodeModulesChannelUrl(key: OwnerBridgeKey): string {
   return ownerBridgeChannelUrl('vfs-nodemods', key);
 }
 
-export interface NodeModulesDirEntry {
-  readonly name: string;
-  readonly kind: 'file' | 'dir';
-  readonly size: number;
-}
+export type { NodeModulesBridge, NodeModulesDirEntry } from './node-modules-model.ts';
 
 export type NodeModulesRequestFrame =
   | { readonly type: 'nm-readdir-req'; readonly requestId: string; readonly path: string }
@@ -198,15 +199,6 @@ interface Waiter {
   resolve(value: NodeModulesReplyValue): void;
   reject(err: Error): void;
   timer: ReturnType<typeof setTimeout>;
-}
-
-export interface NodeModulesBridge {
-  /** List one directory level under `node_modules`. Rejects on error/timeout. */
-  readdir(path: string): Promise<readonly NodeModulesDirEntry[]>;
-  /** Read one file under `node_modules`; `content` is null when over the cap. */
-  readFile(path: string): Promise<{ readonly size: number; readonly content: Uint8Array | null }>;
-  /** Reject all in-flight reads and close the channel. Idempotent. */
-  dispose(): void;
 }
 
 /**

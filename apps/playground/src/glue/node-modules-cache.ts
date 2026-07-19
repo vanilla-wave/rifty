@@ -11,7 +11,7 @@
  * No LRU eviction: dropped on mode-leave and per-dir listings are small (revisit
  * only if a session expands thousands of dirs).
  */
-import type { NodeModulesBridge, NodeModulesDirEntry } from './node-modules-port.ts';
+import type { NodeModulesBridge, NodeModulesDirEntry } from './node-modules-model.ts';
 
 export class NodeModulesCache {
   /** path → in-flight/settled listing promise (the coalescing key). */

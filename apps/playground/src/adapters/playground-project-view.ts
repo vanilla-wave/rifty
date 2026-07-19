@@ -2,7 +2,7 @@ import { type VfsDirent, dirname, isAbsolute, normalizePath } from '@riftydev/vf
 import type { FileExplorerMutations } from '../components/FileExplorer.tsx';
 import type { EditorApi } from '../components/editor-host-core.ts';
 import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
-import { NODE_MODULES_MAX_CONTENT_BYTES } from '../glue/node-modules-port.ts';
+import { NODE_MODULES_MAX_CONTENT_BYTES } from '../glue/node-modules-model.ts';
 import type { PlaygroundScm } from '../workbench/playground.ts';
 import type {
   ProjectDocument,

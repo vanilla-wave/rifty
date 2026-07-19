@@ -5,7 +5,7 @@
  */
 import type { VfsDirent } from '@riftydev/vfs';
 import { basename, joinPath } from '@riftydev/vfs';
-import type { NodeModulesDirEntry } from './node-modules-port.ts';
+import type { NodeModulesDirEntry } from './node-modules-model.ts';
 
 export interface TreeChild {
   /** Absolute VFS path. */
