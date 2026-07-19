@@ -23,6 +23,7 @@ import ts from 'typescript';
 import {
   PACKED_VITE_JOURNEYS,
   packedAliasBoundaryProof,
+  snapshotPackageNeedsRegistryTarball,
 } from './workbench-packed-consumer-browser-contract.mjs';
 import {
   findInstalledPackage,
@@ -468,7 +469,7 @@ async function materializeSnapshotPackages(snapshotRoot, snapshotSource) {
         `Packed consumer snapshot contains duplicate ${name}: ${existing.version}, ${entry.version}`,
       );
     }
-    expected.set(name, { version: entry.version, integrity: entry.integrity });
+    expected.set(name, entry);
   }
 
   const manifestCandidates = new Map();
@@ -548,8 +549,9 @@ async function browserRegistryPackages(options) {
     );
     const versions = new Map();
     for (const [name, installedPackage] of snapshotPackages) {
-      const coordinate = `${name}@${installedPackage.manifest.version}`;
       versions.set(name, installedPackage.manifest.version);
+      if (!snapshotPackageNeedsRegistryTarball(installedPackage.source)) continue;
+      const coordinate = `${name}@${installedPackage.manifest.version}`;
       const existing = coordinates.get(coordinate);
       if (
         existing !== undefined &&
@@ -582,11 +584,9 @@ async function browserRegistryPackages(options) {
     addPackage(await registryPackage(installedPackage.name, installedPackage, tarball, undefined));
   }
 
-  // ADR-0298 selects the exact public esbuild version from its real packument
-  // before npm-client admits the local synthesized delegate. The committed
-  // Vite 7 snapshot predates synthesis and therefore contains only the former
-  // alias package, so publish the independently pinned public package as the
-  // selection oracle. Its tarball route must remain unused by the journey.
+  // ADR-0298 selects exact public metadata before local synthesis. Snapshot
+  // delegates are excluded above; publish the independent selection oracle.
+  // Its tarball route must remain unused by the journey.
   const publicEsbuild = await findInstalledPackage('esbuild', SHADOW_REGISTRY_ROOT).then(
     async (dir) => ({ dir, manifest: await readJson(resolve(dir, 'package.json')) }),
   );

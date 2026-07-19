@@ -30,6 +30,32 @@ function record(value, label) {
   return value;
 }
 
+/** True only when a baked snapshot row represents registry-backed package bytes. */
+export function snapshotPackageNeedsRegistryTarball(value) {
+  const entry = record(value, 'snapshot package lockfile entry');
+  if (entry.rifty === undefined) return true;
+  const rifty = record(entry.rifty, 'snapshot package rifty metadata');
+  if (rifty.materialization === undefined) return true;
+  const marker = record(rifty.materialization, 'snapshot package materialization');
+  const fields = Object.keys(marker).sort();
+  if (
+    fields.length !== 4 ||
+    fields[0] !== 'kind' ||
+    fields[1] !== 'protocol' ||
+    fields[2] !== 'recipeSha256' ||
+    fields[3] !== 'substitutionId' ||
+    marker.protocol !== 'rifty.lockfile-package-materialization/v1' ||
+    marker.kind !== 'synthesized-shadow-delegate' ||
+    typeof marker.substitutionId !== 'string' ||
+    marker.substitutionId.length === 0 ||
+    typeof marker.recipeSha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(marker.recipeSha256)
+  ) {
+    throw new Error('unsupported packed snapshot package materialization');
+  }
+  return false;
+}
+
 function ledgerResponse(value, index, registryOrigin) {
   const response = record(value, `packed alias response ${index + 1}`);
   const fields = Object.keys(response).sort();
