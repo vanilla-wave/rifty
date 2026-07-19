@@ -851,10 +851,7 @@ export async function startCdpResponseRecorder(page, options = {}) {
       if (!Number.isSafeInteger(stream.dataBytes)) {
         throw new RangeError('Network.dataReceived body size is unsafe');
       }
-      if (typeof event.data !== 'string') {
-        if (stream.enabled) throw new Error('Network.dataReceived omitted streamed data');
-        return;
-      }
+      if (typeof event.data !== 'string') return;
       const chunk = strictBase64Bytes(event.data);
       if (chunk.byteLength !== event.dataLength) {
         throw new Error('Network.dataReceived streamed bytes do not match dataLength');
