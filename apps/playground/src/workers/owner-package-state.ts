@@ -44,7 +44,6 @@ import {
   seedTemplateNodeModulesFiles,
   templateNodeModulesSeedMutationIntents,
 } from '../glue/project-deps.ts';
-import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import type { ProjectPackageConfig } from '../workbench/internal/project-package-config.ts';
 import type {
   ProjectAcquisitionPlan,
@@ -104,9 +103,9 @@ export interface OwnerPackageStateOptions {
   readonly runtimeAssets?: PackageRuntimeAssetPort;
   /** Test seam at the external registry/install boundary. */
   readonly install?: InstallFn;
-  readonly resolverUrl?: () => string | undefined;
-  readonly resolverBundleBaseUrl?: () => string | undefined;
-  readonly resolverPin?: (templateId: string) => string | undefined;
+  readonly resolverUrl: () => string | undefined;
+  readonly resolverBundleBaseUrl: () => string | undefined;
+  readonly resolverPin: (templateId: string) => string | undefined;
 }
 
 export interface OwnerPackageState {
@@ -313,9 +312,9 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   }
 
   const registry = options.registry;
-  const resolverUrl = options.resolverUrl ?? getResolverUrl;
-  const resolverBundleBaseUrl = options.resolverBundleBaseUrl ?? getEddyBundleBaseUrl;
-  const resolverPin = options.resolverPin ?? getEddyPin;
+  const resolverUrl = options.resolverUrl;
+  const resolverBundleBaseUrl = options.resolverBundleBaseUrl;
+  const resolverPin = options.resolverPin;
   const stamps = createInstallStampAuthority({
     vfs: options.vfs,
     fsSync: options.fsSync,

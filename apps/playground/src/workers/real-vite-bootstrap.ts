@@ -94,6 +94,7 @@ import {
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { getRegistryProxyPrefix } from '../glue/registry-config.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
+import { getEddyBundleBaseUrl, getEddyPin, getResolverUrl } from '../glue/resolver-config.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { withSlowProgress } from '../glue/slow-progress.ts';
@@ -344,6 +345,9 @@ async function bootShellOwner(opts: {
     nodeWorkerRuntimeEnv: opts.nodeWorkerRuntimeEnv,
     log,
     registry,
+    resolverUrl: getResolverUrl,
+    resolverBundleBaseUrl: getEddyBundleBaseUrl,
+    resolverPin: getEddyPin,
   });
   const packageMutations = packageState.mutations;
   installOwnerSyncRuntimeHandlers(getKernelDispatcher(), syncMirror, (intents, apply) =>

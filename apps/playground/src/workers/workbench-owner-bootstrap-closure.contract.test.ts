@@ -125,7 +125,9 @@ describe('Workbench owner bootstrap source closure', () => {
     expect(ambientPackageConfigSources).toEqual([]);
     expect(packageStateSource).toContain('readonly registry: RegistryClient;');
     expect(packageStateSource).toContain('readonly resolverUrl: () => string | undefined;');
-    expect(packageStateSource).toContain('readonly resolverBundleBaseUrl: () => string | undefined;');
+    expect(packageStateSource).toContain(
+      'readonly resolverBundleBaseUrl: () => string | undefined;',
+    );
     expect(packageStateSource).toContain(
       'readonly resolverPin: (templateId: string) => string | undefined;',
     );
