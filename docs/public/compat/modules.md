@@ -21,15 +21,15 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | `node:module` helpers | ⚠️ | `createRequire`, `builtinModules`, `isBuiltin`, `Module.*` mirrors, and compile-cache status constants are implemented. Compile-cache persistence is an explicit browser ceiling: `enableCompileCache()` returns `FAILED` with a message (never fake `ENABLED`), `getCompileCacheDir()` returns `undefined`, and `flushCompileCache()` is a quiet no-op. Parity case `modules/module-builtins-surface` pins the matching constants/function surface; conformance pins the unavailable-cache ceiling. |
 | `file:` URL imports | ✅ | Absolute `file://` specifiers resolve through the VFS loader, including percent-decoding and query/hash stripping; used by ESM config/package-tooling paths |
 | `data:` URL imports | ❌ | Throws `UNSUPPORTED_PROTOCOL` |
-| ESM static `import` | ✅ | Named, default, namespace, side-effect-only |
-| ESM `export` named / default / re-export | ✅ | |
-| ESM `export * from` | ✅ | |
+| ESM static `import` | ⚠️ | Basic named, default, namespace, and side-effect-only imports work; missing-export validation and cyclic TDZ/SCC behavior diverge from Node. Tracked in `backlog/runtime-js/esm-module-job-graph-parity`. |
+| ESM `export` named / default / re-export | ⚠️ | Basic declarations and re-exports work; a re-export of a missing source name is not rejected at Node's link boundary. Tracked in `backlog/runtime-js/esm-module-job-graph-parity`. |
+| ESM `export * from` | ⚠️ | Direct acyclic re-export works; ambiguity exclusion and cyclic fixed-point behavior diverge from Node. Tracked in `backlog/runtime-js/esm-module-job-graph-parity`. |
 | ESM `export * as ns from` | ✅ | |
 | ESM dynamic `import()` | ✅ | |
 | ESM top-level `await` | ✅ | |
 | ESM live bindings (named import + re-export) | ✅ | Via member access into source-module namespace |
 | CJS cycles (half-populated exports visible) | ✅ | |
-| ESM cycles (mutating exports visible) | ✅ | |
+| ESM cycles (mutating exports visible) | ⚠️ | Simple cycles work; SCC-wide sticky failure, one-time evaluation, and some cyclic re-exports diverge from Node. Tracked in `backlog/runtime-js/esm-module-job-graph-parity`. |
 | CJS → ESM outer + namespace identity | ✅ | `default` and `module.exports` are the exact CJS outer; one namespace per loaded record; rifty coherent invalidation replaces record + namespace together. Parity: `modules/cjs-esm-namespace`, `modules/cjs-cycle-import-of-inflight` |
 | CJS → ESM named exports + reflection | ❌ | Values snapshot, but names come from runtime enumerable own keys rather than Node's static analysis, and descriptors are not Module Namespace exotic descriptors; tracked in `backlog/runtime-js/cjs-esm-static-named-exports` |
 | CJS ↔ ESM interop (CJS requiring ESM) | ⚠️ | Throws — use `import()` (Node parity) |
@@ -39,6 +39,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | `require()` of a `.ts`/`.tsx` module (CJS scope) | ❌ | Throws `NotImplementedError('module-loader.ts-via-require')`; the esbuild type-strip is async, so a sync `require()` cannot transform it — load `.ts` as ESM via `import()` under a `type:module` scope (ADR-0052) |
 | `require.resolve` | ✅ | |
 | `require.extensions['.js']` / `module._compile` | ⚠️ | Loader-local and `createRequire` views share one callable JavaScript hook; replacement source executes on the same module object with filename-relative resolution (ADR-0269, parity `modules/require-extensions-compile`). Custom JSON loaders are not yet supported; native `.node` addons remain out of scope. |
+| Custom `require.extensions` suffixes | ❌ | Current main neither dispatches explicit custom suffixes nor includes active hook keys in extensionless resolution. Tracked in `backlog/runtime-js/require-extensions-extensionless-resolution`; PR #155 proposes the explicit-suffix slice only. |
 | `import.meta.url` | ✅ | File URL for the resolved ESM module id; supports `new URL('./x', import.meta.url)` |
 | `import.meta.resolve(spec)` | ✅ | Real loader resolution (v20.6, sync). Any `node:` specifier returned verbatim (not validated at resolve time); files → `file://<abs>`; a bare/relative miss throws the resolver's `MODULE_NOT_FOUND`. Was a stub returning a wrong `file://` URL for bare specifiers |
 | Import attributes (`with { type: 'json' }`) | ❌ | Deferred until needed |

@@ -86,6 +86,8 @@ const TOMBSTONES = new Set([
   'docs/public/compat/browsers.md',
   // completed backlog items removed on close (record = the ADR + code; ADR bodies still cite them)
   'docs/backlog/playground/terminal-node-command.md', // done → ADR-0154
+  'docs/backlog/playground/preset-switch-port-flip-window.md', // retired → Workbench closes old session before next open
+  'docs/backlog/playground/per-project-persistent-port.md', // retired → no current Workbench port-identity fault
   'docs/backlog/runtime-js/execsync-node-entry-loader.md', // done → ADR-0137/0143/0150 + code
   'docs/backlog/runtime-js/readline-createinterface-line-question.md', // done → runtime-js readline subset + conformance
   'docs/backlog/net/cross-realm-listen-eaddrinuse.md', // done → ADR-0186 + code (ADR-0180 D5 still cites it)

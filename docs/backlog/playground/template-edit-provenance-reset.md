@@ -29,7 +29,7 @@ So a user cannot: see which files are THEIR edits, revert one file to the templa
 - Make the switch-vs-reload retention rule explicit in the UI (confirm on switch when the user has edits).
 - Genuine design fork: where the baseline lives (owner is the single store → likely an owner-held read-only baseline tree) and its persistence (OPFS) — its own ADR when taken.
 
-Related but distinct: `distribution/create-rifty-template` (scaffolding a host), `baked-snapshot-regeneration` (dep snapshot), `preset-switch-port-flip-window`.
+Related but distinct: `distribution/create-rifty-template` (scaffolding a host), `baked-snapshot-regeneration` (dep snapshot).
 
 ## Reversibility
 

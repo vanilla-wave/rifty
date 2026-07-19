@@ -6,6 +6,7 @@ created: 2026-06-08
 why: embedders need one package that owns real project lifecycle, files, packages, terminals, and preview; exporting playground controllers would export their coordination burden and keep Vite above the correct seam
 user_story: As a SaaS developer embedding rifty with my own UI, I want to provide project files and call `.run()` on a durable browser project, while Workbench owns the real Node/VFS/PTY lifecycle and exposes no playground or Vite-host internals.
 epic: embeddable-dev-loop
+blocked_by: [playground/owner-vfs-mutation-terminal-certainty, playground/session-tool-mutation-terminal-certainty, playground/preview-route-teardown-certainty, playground/workbench-persistence-health-propagation]
 sources: [ADR-0263, ADR-0273, ADR-0275, ADR-0276, ADR-0264, ADR-0225, ADR-0230, ADR-0267, ADR-0078, ADR-0135, ADR-0185, ADR-0293]
 code: [apps/playground/src/glue, apps/playground/src/orchestration, apps/playground/src/templates, apps/playground/src/workers, packages/kernel/src, packages/runtime-js/src]
 ---
@@ -21,6 +22,10 @@ Vite is the first ready preset, built over the same internal `ProjectRuntime`
 lifecycle as Node servers and Node CLIs. A Vite host resolves asset URLs in its
 own composition root; there is no `@riftydev/workbench-vite` package and no
 Vite plugin/query/env dependency inside Workbench.
+
+`workbench-stabilization` owns the four linked live-lifecycle fault contracts;
+they are prerequisites to this item's package extraction and acceptance seal,
+not a second controller implementation.
 
 PR #136 is an implementation quarry only. Port individual RED tests and useful
 mechanisms onto current `main`; do not refactor or cherry-pick its 391-file

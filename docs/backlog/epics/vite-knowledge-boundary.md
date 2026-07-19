@@ -5,7 +5,7 @@ title: Keep Vite knowledge out of generic platform contracts
 created: 2026-07-18
 value: Vite projects work through faithful Node, filesystem, process, and storage behavior without turning Vite into a Rifty platform concept.
 user_story: As a developer running Vite or another ordinary npm tool, I want fixes to improve the real platform behavior the tool exercises, but today a Vite workaround can change generic runtime, Workbench, install, or persistence contracts.
-items: []
+items: [playground/vite-temp-install-claim-churn, playground/workbench-implicit-vite-module-scope]
 ---
 
 ## Outcome
@@ -20,7 +20,10 @@ A user opens a Vite project and runs `npm install && npm run dev`; the installed
 
 ## Items
 
-Not split yet. Refinement starts with an inventory of package-specific production dependencies, then cuts children by the real semantic owner that can remove each leak.
+- `playground/vite-temp-install-claim-churn` (draft) — classify real Vite config-loader temp mutations without weakening whole-tree install trust or adding a Vite carrier to generic owners.
+- `playground/workbench-implicit-vite-module-scope` (draft) — resolve the public `projects.vite()` package-scope behavior recorded by the Workbench split.
+
+Further refinement starts with an inventory of package-specific production dependencies, then cuts children by the real semantic owner that can remove each leak.
 
 ## Draft gates
 
