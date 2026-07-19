@@ -60,6 +60,7 @@ const GLUE_FILES = [
 
 const WORKBENCH_FILES = [
   'errors.ts',
+  'health.ts',
   'internal/browser-playground-workbench-composition.ts',
   'internal/browser-workbench-composition.ts',
   'internal/node-command.ts',
@@ -81,6 +82,7 @@ const WORKBENCH_FILES = [
   'internal/snapshot-fs.ts',
   'internal/typescript-relay-client.ts',
   'internal/vite-project-policy.ts',
+  'internal/workbench-health-authority.ts',
   'node-project-runtime.ts',
   'open-workbench.ts',
   'owner-protocol.ts',
@@ -365,10 +367,10 @@ function resolvedExportEntries(): readonly string[] {
 }
 
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the exact 140-file production move without test-decoupling sources', () => {
-    expect(EXPECTED_APP_PRODUCTION_FILES).toHaveLength(140);
-    expect(new Set(EXPECTED_APP_PRODUCTION_FILES).size).toBe(140);
-    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(142);
+  it('pins the exact 142-file production move without test-decoupling sources', () => {
+    expect(EXPECTED_APP_PRODUCTION_FILES).toHaveLength(142);
+    expect(new Set(EXPECTED_APP_PRODUCTION_FILES).size).toBe(142);
+    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(144);
     expect(EXPECTED_APP_PRODUCTION_FILES.filter((path) => !isProductionSource(path))).toEqual([]);
   });
 
