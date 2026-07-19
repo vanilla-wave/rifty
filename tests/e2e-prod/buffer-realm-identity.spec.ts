@@ -1,88 +1,40 @@
-import { type Page, expect, test } from '@playwright/test';
-import {
-  bootProjectFiles,
-  expectTerminalContains,
-  expectViteDevServerReady,
-  openShellTerminal,
-  runTerminalLine,
-  terminalBuffer,
-} from '../e2e/helpers/playground.ts';
+import { expect, test } from '@playwright/test';
 
 /**
  * PROD-build regression for the dual-copy `Buffer` etag crash (express + sqlite
  * preset: `res.json` → `TypeError: argument entity must be string, Buffer, or
- * fs.Stats`). This is PROD-ONLY by nature, so it lives here — the dev e2e cannot
- * see it: under `pnpm dev` a child entry's `import()` shares the realm's single
- * served ESM module instance, so there is only one `@riftydev/io` `Buffer` class.
+ * fs.Stats`). This is PROD-ONLY by nature: under `pnpm dev` a child entry's
+ * `import()` shares the realm's single served ESM module instance, while every
+ * production `?worker&url` node-entry chunk carries its own `Buffer` copy.
  *
- * In a PRODUCTION build every `?worker&url` child entry is self-contained → each
- * carries its OWN `Buffer` copy. The kernel pre-entry hook sets `globalThis.Buffer`
- * from the kernel-worker-entry bundle's copy; a child runs AFTER that with a
- * DIFFERENT copy. A package reading the GLOBAL `Buffer` (etag's `Buffer.isBuffer`)
- * then rejects a buffer the child's `import('node:buffer')` built → the throw.
- *
- * No network needed: this drives the SAME node-entry child realm + the SAME
- * mechanism via a `node <file>` script that asks the exact question etag asks —
- * does the GLOBAL Buffer recognise a buffer built from this realm's `node:buffer`?
- * The express/sqlite preset shares the identical root + fix (installBundleLocalBuffer),
- * but cannot install express offline in `pnpm preview` (no npm proxy).
+ * The dependency-free execSync harness already drives that exact production
+ * node-entry bootstrap + module-loader boundary. Its recursive
+ * `node buffer-identity.mjs` asks the same question etag asks: does the GLOBAL
+ * Buffer recognise a buffer built by this realm's `node:buffer` module? This
+ * avoids coupling the proof to an unrelated live Vite tree: Vite's config
+ * loader correctly revokes that tree's package attestation when it writes
+ * `node_modules/.vite-temp`.
  *
  * RED before the fix: `global-isBuffer=false`. GREEN after: `global-isBuffer=true`.
- * Requires cross-origin isolation (owner is SAB-IPC-gated) — chromium only.
+ * Requires cross-origin isolation for the real SAB execSync path — chromium only.
  */
-
-// Echo-confirm a typed line (a keystroke landing during a snapshot re-render is
-// silently dropped). Copied from node-command.spec.ts — same hazard, same guard.
-function echoRe(line: string): RegExp {
-  return new RegExp(`> ${line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
-}
-async function runLineConfirmed(page: Page, line: string): Promise<void> {
-  const re = echoRe(line);
-  const echoed = async (): Promise<boolean> => re.test(await terminalBuffer(page));
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (await echoed()) return;
-    await runTerminalLine(page, line);
-    try {
-      await expect.poll(echoed, { timeout: 6_000, intervals: [300, 600, 1_000] }).toBe(true);
-      return;
-    } catch {
-      /* echo dropped in a re-render — retry */
-    }
-  }
-  throw new Error(`command line never echoed after retries: ${line}`);
-}
-
 test.describe('production build — child-realm global Buffer matches its module loader', () => {
   test('a node script: globalThis.Buffer recognises a node:buffer-built buffer (etag check)', async ({
     page,
     browserName,
   }) => {
-    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
-    test.setTimeout(180_000);
-    await bootProjectFiles(page);
+    test.skip(browserName !== 'chromium', 'execSync over SAB needs a COI Worker — chromium only');
+    await page.goto('/#test=execsync');
 
-    // Cross-origin isolation must be live on the prod headers (owner is SAB-gated).
     expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(true);
+    const harness = page.locator('[data-testid="execsync-harness"]');
+    await expect(harness).toBeVisible({ timeout: 20_000 });
 
-    // Let the real dev server settle before typing; restored terminal history
-    // is not a readiness oracle.
-    await expectViteDevServerReady(page, 5173, 120_000);
-    await openShellTerminal(page);
-
-    // ESM (seeded workspace package.json is `type: module`): build a buffer from
-    // THIS realm's `node:buffer` (what express's require('buffer') resolves to) and
-    // ask the GLOBAL Buffer to recognise it — exactly etag's `Buffer.isBuffer(chunk)`.
-    const src =
-      'import { Buffer as B } from "node:buffer"; ' +
-      'const chunk = B.from("hi", "utf8"); ' +
-      'console.log("BUF-CHECK global-isBuffer=" + globalThis.Buffer.isBuffer(chunk) + " same=" + (globalThis.Buffer === B));';
-    // The public terminal cwd is the active project root; owner storage paths
-    // are intentionally unreachable from shell commands.
-    await runLineConfirmed(page, `echo '${src}' > buftest.js`);
-    await runLineConfirmed(page, 'node buftest.js');
-
-    // GREEN: the realigned global recognises the realm's buffer. (RED before the
-    // fix prints `global-isBuffer=false` — the dual-copy mismatch that crashed etag.)
-    await expectTerminalContains(page, 'BUF-CHECK global-isBuffer=true same=true', 30_000);
+    const detail = (await page.locator('[data-testid="execsync-detail"]').textContent()) ?? '';
+    const buffer = page.locator('[data-testid="execsync-buffer"]');
+    await expect(buffer, `harness detail: ${detail}`).toContainText(
+      'BUF-CHECK global-isBuffer=true same=true',
+    );
+    await expect(harness).toHaveAttribute('data-status', 'pass');
   });
 });

@@ -40,6 +40,7 @@ import {
 import { installRuntimeJsExecSyncHandler } from '@riftydev/runtime-js/ipc/exec-sync-handler';
 import { syncMirror } from '@riftydev/vfs';
 import { playgroundWorkbenchOptions } from './adapters/playground-workbench-host.ts';
+import execSyncHarnessGuestUrl from './workers/execsync-harness-guest.ts?worker&url';
 
 const dec = new TextDecoder();
 
@@ -53,6 +54,15 @@ const CHILD_BINARY_SCRIPT = 'globalThis.process.stdout.write(new Uint8Array([0xf
 /** Child writing a plain ASCII marker — proves the blocking round-trip returns
  *  the child's captured stdout. */
 const CHILD_BLOCKED_SCRIPT = "globalThis.process.stdout.write('blocked-result');";
+
+const CHILD_BUFFER_IDENTITY_SCRIPT = `import { Buffer as B } from 'node:buffer';
+const chunk = B.from('hi', 'utf8');
+globalThis.process.stdout.write(
+  'BUF-CHECK global-isBuffer=' + globalThis.Buffer.isBuffer(chunk) +
+  ' same=' + (globalThis.Buffer === B),
+);
+`;
+const CHILD_BUFFER_IDENTITY_RESULT = 'BUF-CHECK global-isBuffer=true same=true';
 
 // ADR-0137 acceptance — `execSync('node /scripts/build.js')` where build.js (a)
 // starts with a `#!` shebang (must be STRIPPED — not a SyntaxError, not echoed),
@@ -87,6 +97,8 @@ interface HarnessResult {
   readonly blocked: string;
   /** ADR-0137 loader acceptance result (`built:demo-pkg`), or '' on miss. */
   readonly loader: string;
+  /** Production node-entry bundle/global Buffer identity result, or '' on miss. */
+  readonly buffer: string;
   readonly configError: string;
   readonly detail: string;
 }
@@ -109,6 +121,7 @@ function paint(result: HarnessResult): void {
   root.appendChild(mk('execsync-hex', 'hex', result.hex));
   root.appendChild(mk('execsync-blocked', 'blocked', result.blocked));
   root.appendChild(mk('execsync-loader', 'loader', result.loader));
+  root.appendChild(mk('execsync-buffer', 'buffer', result.buffer));
   root.appendChild(mk('execsync-config-error', 'config-error', result.configError));
   root.appendChild(mk('execsync-detail', 'detail', result.detail));
 
@@ -168,6 +181,7 @@ export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): 
     mirror.mkdirSync('/scripts', { recursive: true });
     mirror.writeFileSync('/scripts/package.json', enc.encode(ACCEPTANCE_PACKAGE_JSON));
     mirror.writeFileSync('/scripts/build.js', enc.encode(ACCEPTANCE_BUILD_SCRIPT));
+    mirror.writeFileSync('/scripts/buffer-identity.mjs', enc.encode(CHILD_BUFFER_IDENTITY_SCRIPT));
     mirror.writeFileSync('/scripts/config.js', enc.encode(ACCEPTANCE_CONFIG_SCRIPT));
     mirror.writeFileSync('/scripts/pkg.json', enc.encode(ACCEPTANCE_PKG_JSON));
 
@@ -184,13 +198,10 @@ export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): 
       mirror.existsSync(path) ? mirror.readFileBytesSync(path) : null,
     );
 
-    // Bundled as its own worker chunk by Vite (string URL form).
-    const guestUrl = new URL('./workers/execsync-harness-guest.ts', import.meta.url).toString();
-
     const handle = globalProcessManager.spawnWorker(
       'execsync-harness-guest',
       {
-        entry: { kind: 'url', url: guestUrl },
+        entry: { kind: 'url', url: execSyncHarnessGuestUrl },
         argv: ['rifty', 'execsync-harness-guest'],
         env: {
           // Forward the real kernel-worker URL: the guest re-publishes it so its
@@ -225,6 +236,7 @@ export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): 
     const hex = matchLine(stdout, 'HEX');
     const blocked = matchLine(stdout, 'BLOCKED');
     const loader = matchLine(stdout, 'LOADER');
+    const buffer = matchLine(stdout, 'BUFFER');
     const configError = matchLine(stdout, 'CONFIG_ERROR');
     const guestErr = matchLine(stdout, 'ERROR');
 
@@ -234,18 +246,20 @@ export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): 
         : exitCode === 0 &&
           hex === 'fffe00' &&
           blocked === 'blocked-result' &&
-          loader === 'built:demo-pkg';
+          loader === 'built:demo-pkg' &&
+          buffer === CHILD_BUFFER_IDENTITY_RESULT;
     paint({
       status: ok ? 'pass' : 'fail',
       hex,
       blocked,
       loader,
+      buffer,
       configError,
       detail: ok
         ? options.fault === 'missing-node-entry-runtime-config'
           ? 'real SAB execSync rejected missing recursive bootstrap config before spawn'
           : 'real SAB + Atomics.waitAsync + v2 binary frame + node-entry loader round-trip'
-        : `exit=${exitCode} configError=${configError} guestErr=${guestErr} stderr=${stderr.trim().slice(0, 400)}`,
+        : `exit=${exitCode} buffer=${buffer} configError=${configError} guestErr=${guestErr} stderr=${stderr.trim().slice(0, 400)}`,
     });
   } catch (err) {
     paint({
@@ -253,6 +267,7 @@ export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): 
       hex: '',
       blocked: '',
       loader: '',
+      buffer: '',
       configError: '',
       detail: err instanceof Error ? (err.stack ?? err.message) : String(err),
     });

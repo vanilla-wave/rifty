@@ -12,6 +12,8 @@
   and Node-entry runtime snapshot. The gated execSync e2e fixture reuses the
   public Workbench deployment composition and owns its explicit lower-level
   setup.
+- The gated execSync fixture now emits a real production Worker chunk, preserves
+  per-spawn runtime env, and proves node-entry bundle/global `Buffer` identity.
 - Playground now consumes one sealed Workbench lifecycle; the superseded raw
   owner bootstrap, bridge/controller stack, and duplicate project coordinators
   are removed before package extraction.
