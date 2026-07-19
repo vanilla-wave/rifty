@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertPreservedStandardShadowAssetColdOutput,
   parseShadowAssetColdOptions,
   preserveStandardShadowAssetColdInput,
   shadowAssetColdHostEnv,
@@ -228,6 +229,29 @@ describe('Eddy cold standard artifact preservation', () => {
     const { artifact, standard } = completeSchemaV3Artifact();
 
     expect(preserveStandardShadowAssetColdInput(artifact, eddyOptions)).toBe(standard);
+  });
+
+  it('accepts only an output artifact whose standard row is byte-for-byte unchanged', () => {
+    const { artifact, standard } = completeSchemaV3Artifact();
+    const rebuilt = structuredClone(artifact);
+
+    expect(assertPreservedStandardShadowAssetColdOutput(rebuilt, standard)).toBeUndefined();
+
+    rebuilt.metrics.shadowAssetColdFillMs.standard.samples[2] += 1;
+    expect(() => assertPreservedStandardShadowAssetColdOutput(rebuilt, standard)).toThrow(
+      /preserve.*standard.*verbatim/i,
+    );
+  });
+
+  it('rejects a semantically equal standard row whose serialized field order changed', () => {
+    const { artifact, standard } = completeSchemaV3Artifact();
+    const { status, ...tail } = artifact.metrics.shadowAssetColdFillMs.standard;
+    artifact.metrics.shadowAssetColdFillMs.standard = { ...tail, status };
+
+    expect(artifact.metrics.shadowAssetColdFillMs.standard).toEqual(standard);
+    expect(() => assertPreservedStandardShadowAssetColdOutput(artifact, standard)).toThrow(
+      /preserve.*standard.*verbatim/i,
+    );
   });
 
   it.each([
