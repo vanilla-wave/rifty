@@ -99,14 +99,20 @@ describe('Workbench owner bootstrap source closure', () => {
     ).toEqual([]);
   });
 
-  it('receives registry configuration explicitly without an ambient owner fallback', () => {
+  it('receives package-acquisition configuration explicitly without ambient App env', () => {
     const closure = sourceClosure(new URL('./workbench-owner-bootstrap.ts', import.meta.url));
-    const ambientRegistrySources = [...closure.files]
+    const ambientPackageConfigSources = [...closure.files]
       .filter((path) => {
         const source = readFileSync(path, 'utf8');
         return (
           source.includes('import.meta.env.VITE_RIFTY_REGISTRY_URL') ||
-          source.includes('getRegistryBaseUrl')
+          source.includes('getRegistryBaseUrl') ||
+          source.includes('import.meta.env.VITE_RIFTY_RESOLVER_URL') ||
+          source.includes('import.meta.env.VITE_RIFTY_EDDY_BUNDLE_URL') ||
+          source.includes('import.meta.env.VITE_RIFTY_EDDY_PINS') ||
+          source.includes('getResolverUrl') ||
+          source.includes('getEddyBundleBaseUrl') ||
+          source.includes('getEddyPin')
         );
       })
       .map((path) => relative(fileURLToPath(new URL('../', import.meta.url)), path))
@@ -116,8 +122,13 @@ describe('Workbench owner bootstrap source closure', () => {
       'utf8',
     );
 
-    expect(ambientRegistrySources).toEqual([]);
+    expect(ambientPackageConfigSources).toEqual([]);
     expect(packageStateSource).toContain('readonly registry: RegistryClient;');
+    expect(packageStateSource).toContain('readonly resolverUrl: () => string | undefined;');
+    expect(packageStateSource).toContain('readonly resolverBundleBaseUrl: () => string | undefined;');
+    expect(packageStateSource).toContain(
+      'readonly resolverPin: (templateId: string) => string | undefined;',
+    );
     expect(packageStateSource).not.toContain('createProxiedRegistryClient');
   });
 });
