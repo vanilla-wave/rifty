@@ -148,3 +148,30 @@ test('occupied reload and a later fresh tab both reopen the exact Saved bytes', 
   );
   await expectExactReopenedScratch(fresh, marker, source);
 });
+
+test('a fatal admission failure paints the standalone failure notice, never the eternal skeleton', async ({
+  context,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'Workbench Web Locks and OPFS are Chromium-only');
+
+  await context.addInitScript(() => {
+    Object.defineProperty(globalThis.navigator, 'locks', { value: undefined, configurable: true });
+  });
+  const page = await context.newPage();
+  const pageWorkers: string[] = [];
+  page.on('worker', (worker) => pageWorkers.push(worker.url()));
+  await page.goto('/');
+
+  const fatal = page.getByTestId('boot-failure');
+  await expect(fatal).toBeVisible({ timeout: 30_000 });
+  await expect(fatal).toHaveAttribute('role', 'alert');
+  await expect(fatal.getByRole('heading', { name: 'Playground failed to start' })).toBeVisible();
+  await expect(fatal).toContainText('Workbench requires Web Locks');
+  await expect(fatal.getByRole('button', { name: 'Reload' })).toBeVisible();
+  await expect(page.locator('#rf-boot')).toHaveCount(0);
+  await expect(page.locator('.rf-app')).toHaveCount(0);
+  await expect(page.locator('[data-testid="terminal"]')).toHaveCount(0);
+  expect(pageWorkers).toEqual([]);
+  expect(page.workers()).toEqual([]);
+});
