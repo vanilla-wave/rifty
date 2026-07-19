@@ -5,8 +5,7 @@ title: Owner-brokered runtime-asset admission for recursive Node children
 created: 2026-07-17
 why: a directly supervised child receives a fresh exact-plan runtime-asset capability, but a recursive Worker that needs the same substituted tool cannot inherit or mint one safely
 user_story: As a developer running a Node tool that spawns a nested Worker using esbuild, I want the nested process to receive the same attested runtime bytes, but today it loud-fails because only direct Workbench children are owner-admitted
-blocked_by: [distribution/workbench-runtime-asset-cutover]
-sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/kernel/0266-opaque-named-capability-ports-on-worker-bootstrap.md, docs/adr/runtime-js/0267-entry-scoped-host-bootstrap-metadata-for-recursive-node-workers.md]
+sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/kernel/0300-one-shot-consumption-of-opaque-worker-entry-capabilities.md, docs/adr/runtime-js/0267-entry-scoped-host-bootstrap-metadata-for-recursive-node-workers.md]
 code: [packages/workbench/src, packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/ipc/recursive-runner.ts]
 ---
 
@@ -14,7 +13,7 @@ code: [packages/workbench/src, packages/runtime-js/src/builtins/worker_threads.t
 
 ADR-0249 admission gives each direct owner-supervised URL child a fresh
 `rifty.shadow-assets.v1` session scoped to its attested plan. ADR-0267 propagates
-host bootstrap metadata to recursive Node Workers, but ADR-0266 capability
+host bootstrap metadata to recursive Node Workers, but ADR-0300 capability
 ports are intentionally not inherited. An unadmitted recursive Vite 7 consumer
 therefore loud-throws `NotImplementedError('vite.esbuild.shadowAssets')`.
 

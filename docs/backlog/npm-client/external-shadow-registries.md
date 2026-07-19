@@ -5,7 +5,6 @@ title: External shadow catalogs and runtime adapters as construction-time public
 created: 2026-07-13
 why: bakedOverrides/internalsShims are module-level exports; an embedder cannot add their own substitution without forking the repo
 user_story: As an embedder shipping rifty in my product, I want to declare my own package substitution (trigger, overlay files, pinned assets) at API construction, but today the registry is compiled in
-blocked_by: [distribution/workbench-runtime-asset-cutover]
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/backlog/epics/embeddable-dev-loop.md, docs/adr/npm-client/0188-install-time-shadow-internals-shims-with-companion-pins-and-substitution-provenance.md]
 code: [tools/shadow-registry/src/index.ts, packages/npm-client/src/shadow-shims.ts, packages/npm-client/src/overrides.ts, src/index.ts]
 ---

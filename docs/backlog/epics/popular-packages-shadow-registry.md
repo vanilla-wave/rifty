@@ -10,12 +10,11 @@ items: [npm-client/sass-embedded-substitution]
 
 ## Context
 
-`honest-shadow-substitutions` delivers the generic runtime-asset plane and one
-production proof: esbuild for Vite 7. Broader package coverage is a distinct
-user-value outcome, not evidence required to make esbuild delivery honest.
-Compatibility research and child refinement may proceed in parallel, but this
-epic's implementation starts only after that delivery plane and esbuild proof
-land; it reuses them rather than creating a second manager, store, or protocol.
+The completed honest shadow-substitution work delivered the generic runtime-
+asset plane and one production proof: esbuild for Vite 7. Broader package
+coverage is a distinct user-value outcome, not evidence required to make
+esbuild delivery honest. This epic reuses that landed plane and proof rather
+than creating a second manager, store, or protocol.
 
 Each child names one real package/version and one real program that consumes it.
 It first proves the package-facing API, lifecycle, errors, and output against a
