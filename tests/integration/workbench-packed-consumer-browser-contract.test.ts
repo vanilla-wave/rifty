@@ -49,6 +49,7 @@ describe('packed Workbench browser acceptance contract', () => {
   it('records exact response-body proof for the retired alias boundary', () => {
     const response = (packageName: string, kind: 'packument' | 'tarball', bodyBytes: number) => ({
       method: 'GET',
+      path: `/${encodeURIComponent(packageName)}/${kind}`,
       packageName,
       kind,
       status: 200,
@@ -65,8 +66,15 @@ describe('packed Workbench browser acceptance contract', () => {
         ],
       }),
     ).toEqual({
-      schema: 1,
+      schema: 2,
       registryOrigin: 'http://127.0.0.1:54321',
+      responses: [
+        response('vite', 'packument', 800),
+        response('esbuild', 'packument', 612),
+        response('esbuild-wasm', 'packument', 645),
+        response('esbuild-wasm', 'tarball', 5_057_200),
+      ],
+      totalResponseBodyBytes: 5_059_257,
       publicEsbuild: {
         packument: { responses: 1, bodyBytes: 612 },
         tarball: { responses: 0, bodyBytes: 0 },
@@ -84,14 +92,52 @@ describe('packed Workbench browser acceptance contract', () => {
   });
 
   it.each([
-    ['alias packument survived', { packageName: '@esbuild/wasi-preview1', kind: 'packument' }],
-    ['alias tarball survived', { packageName: '@esbuild/wasi-preview1', kind: 'tarball' }],
-    ['public esbuild tarball survived', { packageName: 'esbuild', kind: 'tarball' }],
-  ])('refuses when %s', (_label, forbidden) => {
-    const required = [
-      { method: 'GET', packageName: 'esbuild', kind: 'packument', status: 200, bodyBytes: 612 },
+    ['non-object', null],
+    [
+      'untracked POST',
+      {
+        method: 'POST',
+        path: '/vite',
+        packageName: 'vite',
+        kind: 'packument',
+        status: 200,
+        bodyBytes: 800,
+      },
+    ],
+    [
+      'untracked response without a path',
       {
         method: 'GET',
+        packageName: 'vite',
+        kind: 'packument',
+        status: 200,
+        bodyBytes: 800,
+      },
+    ],
+    [
+      'untracked partial response',
+      {
+        method: 'GET',
+        path: '/vite',
+        packageName: 'vite',
+        kind: 'packument',
+        status: 206,
+        bodyBytes: 800,
+      },
+    ],
+  ])('refuses malformed %s instead of dropping it from the ledger', (_label, malformed) => {
+    const required = [
+      {
+        method: 'GET',
+        path: '/esbuild',
+        packageName: 'esbuild',
+        kind: 'packument',
+        status: 200,
+        bodyBytes: 612,
+      },
+      {
+        method: 'GET',
+        path: '/esbuild-wasm',
         packageName: 'esbuild-wasm',
         kind: 'packument',
         status: 200,
@@ -99,6 +145,91 @@ describe('packed Workbench browser acceptance contract', () => {
       },
       {
         method: 'GET',
+        path: '/-/tarballs/esbuild-wasm-0.28.0.tgz',
+        packageName: 'esbuild-wasm',
+        kind: 'tarball',
+        status: 200,
+        bodyBytes: 5_057_200,
+      },
+    ];
+
+    expect(() =>
+      packedAliasBoundaryProof({
+        registryOrigin: 'http://127.0.0.1:54321',
+        responses: [...required, malformed],
+      }),
+    ).toThrow(/response|ledger|complete/i);
+  });
+
+  it('refuses a response-body total that exceeds the safe-integer boundary', () => {
+    const required = [
+      {
+        method: 'GET',
+        path: '/esbuild',
+        packageName: 'esbuild',
+        kind: 'packument',
+        status: 200,
+        bodyBytes: 612,
+      },
+      {
+        method: 'GET',
+        path: '/esbuild-wasm',
+        packageName: 'esbuild-wasm',
+        kind: 'packument',
+        status: 200,
+        bodyBytes: 645,
+      },
+      {
+        method: 'GET',
+        path: '/-/tarballs/esbuild-wasm-0.28.0.tgz',
+        packageName: 'esbuild-wasm',
+        kind: 'tarball',
+        status: 200,
+        bodyBytes: 5_057_200,
+      },
+      {
+        method: 'GET',
+        path: '/vite',
+        packageName: 'vite',
+        kind: 'packument',
+        status: 200,
+        bodyBytes: Number.MAX_SAFE_INTEGER,
+      },
+    ];
+
+    expect(() =>
+      packedAliasBoundaryProof({
+        registryOrigin: 'http://127.0.0.1:54321',
+        responses: required,
+      }),
+    ).toThrow(/safe integer|total/i);
+  });
+
+  it.each([
+    ['alias packument survived', { packageName: '@esbuild/wasi-preview1', kind: 'packument' }],
+    ['alias tarball survived', { packageName: '@esbuild/wasi-preview1', kind: 'tarball' }],
+    ['public esbuild tarball survived', { packageName: 'esbuild', kind: 'tarball' }],
+  ])('refuses when %s', (_label, forbidden) => {
+    const required = [
+      {
+        method: 'GET',
+        path: '/esbuild',
+        packageName: 'esbuild',
+        kind: 'packument',
+        status: 200,
+        bodyBytes: 612,
+      },
+      {
+        method: 'GET',
+        path: '/esbuild-wasm',
+        packageName: 'esbuild-wasm',
+        kind: 'packument',
+        status: 200,
+        bodyBytes: 645,
+      },
+      {
+        method: 'GET',
+        path: '/-/tarballs/esbuild-wasm-0.28.0.tgz',
         packageName: 'esbuild-wasm',
         kind: 'tarball',
         status: 200,
@@ -108,7 +239,16 @@ describe('packed Workbench browser acceptance contract', () => {
     expect(() =>
       packedAliasBoundaryProof({
         registryOrigin: 'http://127.0.0.1:54321',
-        responses: [...required, { method: 'GET', status: 200, bodyBytes: 1, ...forbidden }],
+        responses: [
+          ...required,
+          {
+            method: 'GET',
+            path: '/forbidden',
+            status: 200,
+            bodyBytes: 1,
+            ...forbidden,
+          },
+        ],
       }),
     ).toThrow(/forbidden|retired alias/i);
   });
