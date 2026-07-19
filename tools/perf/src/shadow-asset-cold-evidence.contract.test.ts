@@ -21,6 +21,8 @@ interface SourceResponse {
   readonly complete: boolean;
   readonly fromDiskCache: boolean;
   readonly fromServiceWorker: boolean;
+  readonly fromPrefetchCache?: boolean;
+  readonly requestServedFromCache?: boolean;
 }
 
 interface EvidenceFixture {
@@ -308,6 +310,24 @@ describe('standard shadow-asset cold run evidence', () => {
       }),
     ],
     [
+      'prefetch cache hit',
+      fixture({
+        sourceResponses: fixture().sourceResponses.map((response) => ({
+          ...response,
+          fromPrefetchCache: true,
+        })),
+      }),
+    ],
+    [
+      'Network cache event',
+      fixture({
+        sourceResponses: fixture().sourceResponses.map((response) => ({
+          ...response,
+          requestServedFromCache: true,
+        })),
+      }),
+    ],
+    [
       'incomplete CDP body',
       fixture({
         sourceResponses: fixture().sourceResponses.map((response, index) =>
@@ -405,6 +425,18 @@ describe('Eddy shadow-asset cold run evidence', () => {
     ['no response', []],
     ['retry', [eddyResponse(), eddyResponse({ requestId: 'worker\0eddy-2' })]],
     [
+      'mixed Eddy and STD fallback',
+      [
+        eddyResponse(),
+        eddyResponse({
+          requestId: 'worker\0standard-1',
+          method: 'GET',
+          url: 'https://registry.example/npm-registry/esbuild-wasm',
+          bodyBytes: 650,
+        }),
+      ],
+    ],
+    [
       'redirect lifecycle',
       [
         eddyResponse({ complete: false, status: 307 }),
@@ -418,6 +450,8 @@ describe('Eddy shadow-asset cold run evidence', () => {
     ['learned-pin GET', [eddyResponse({ method: 'GET' })]],
     ['wrong resolver URL', [eddyResponse({ url: 'https://foreign.example/resolve' })]],
     ['unknown protocol', [eddyResponse({ protocol: 'unknown' })]],
+    ['missing disk-cache proof', [eddyResponse({ fromDiskCache: undefined as never })]],
+    ['missing service-worker proof', [eddyResponse({ fromServiceWorker: undefined as never })]],
     ['disk cache', [eddyResponse({ fromDiskCache: true })]],
     ['service worker cache', [eddyResponse({ fromServiceWorker: true })]],
     ['prefetch cache', [eddyResponse({ fromPrefetchCache: true })]],
@@ -459,9 +493,11 @@ describe('Eddy shadow-asset cold run evidence', () => {
       }),
     ],
   ])('refuses STD fallback or non-cold source traffic: %s', (_label, response) => {
-    expect(
-      buildEddyShadowAssetColdRun(eddyFixture({ sourceResponses: [eddyResponse(), response] })),
-    ).toMatchObject({ ok: false });
+    expect(buildEddyShadowAssetColdRun(eddyFixture({ sourceResponses: [response] }))).toMatchObject(
+      {
+        ok: false,
+      },
+    );
   });
 
   it.each([

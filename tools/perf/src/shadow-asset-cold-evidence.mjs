@@ -15,10 +15,7 @@ function nonNegativeSafeInteger(value) {
 
 function positiveProtocol(value) {
   return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value !== 'unknown' &&
-    value !== 'unreachable'
+    typeof value === 'string' && value.length > 0 && value !== 'unknown' && value !== 'unreachable'
   );
 }
 
@@ -27,6 +24,16 @@ function responseOrigin(value) {
   try {
     const url = new URL(value);
     return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+function absoluteHttpEndpoint(value) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url : null;
   } catch {
     return null;
   }
@@ -45,7 +52,9 @@ function zeroInspection(value) {
 
 function exactProgressSequence(entries, expected) {
   if (!Array.isArray(entries)) return { error: 'progress evidence must be an array' };
-  const phases = entries.map((entry) => (plainRecord(entry?.progress) ? entry.progress.phase : null));
+  const phases = entries.map((entry) =>
+    plainRecord(entry?.progress) ? entry.progress.phase : null,
+  );
   const withPersist = ['cache-check', 'fetch', 'verify', 'persist', 'ready'];
   const withoutPersist = ['cache-check', 'fetch', 'verify', 'ready'];
   if (
@@ -57,7 +66,7 @@ function exactProgressSequence(entries, expected) {
     };
   }
 
-  let previousAt = -Infinity;
+  let previousAt = Number.NEGATIVE_INFINITY;
   for (const [index, entry] of entries.entries()) {
     if (
       !plainRecord(entry) ||
@@ -121,7 +130,12 @@ function networkEvidence(responses) {
       return { error: `${label} has an unknown source classification` };
     }
     if (response.complete !== true) return { error: `${label} body evidence is incomplete` };
-    if (response.fromDiskCache === true || response.fromServiceWorker === true) {
+    if (
+      response.fromDiskCache === true ||
+      response.fromServiceWorker === true ||
+      response.fromPrefetchCache === true ||
+      response.requestServedFromCache === true
+    ) {
       return { error: `${label} was a cache hit instead of network fill` };
     }
     if (!nonNegativeSafeInteger(response.bodyBytes)) {
@@ -167,10 +181,9 @@ function networkEvidence(responses) {
   };
 }
 
-/** Build one measured STD run only from complete page/storage/CDP/cleanup proof. */
-export function buildStandardShadowAssetColdRun(input) {
+function canonicalExpected(input, label, requireSource) {
   if (!plainRecord(input) || !plainRecord(input.expected)) {
-    return refuse('standard fill evidence must contain canonical expected facts');
+    return { error: `${label} evidence must contain canonical expected facts` };
   }
   const expected = input.expected;
   if (
@@ -181,20 +194,39 @@ export function buildStandardShadowAssetColdRun(input) {
     !Number.isSafeInteger(expected.memberBytes) ||
     expected.memberBytes <= 0
   ) {
-    return refuse('standard fill canonical expected facts are invalid');
+    return { error: `${label} canonical expected facts are invalid` };
   }
+  if (
+    requireSource &&
+    (!plainRecord(expected.source) ||
+      typeof expected.source.name !== 'string' ||
+      expected.source.name.length === 0 ||
+      typeof expected.source.version !== 'string' ||
+      expected.source.version.length === 0 ||
+      typeof expected.source.integrity !== 'string' ||
+      expected.source.integrity.length === 0)
+  ) {
+    return { error: `${label} canonical source descriptor is invalid` };
+  }
+  return { value: expected };
+}
+
+function pageEvidence(input, label, requireSource = false) {
+  const canonical = canonicalExpected(input, label, requireSource);
+  if (canonical.error) return canonical;
+  const expected = canonical.value;
   if (!zeroInspection(input.preInspection)) {
-    return refuse('standard fill pre-open storage is not semantically empty');
+    return { error: `${label} pre-open storage is not semantically empty` };
   }
 
   const progress = exactProgressSequence(input.progress, expected);
-  if (progress.error) return refuse(progress.error);
+  if (progress.error) return progress;
   if (
     typeof input.openResolvedAtMs !== 'number' ||
     !Number.isFinite(input.openResolvedAtMs) ||
     input.openResolvedAtMs < progress.value.readyAtMs
   ) {
-    return refuse('standard fill ready progress did not precede project-open settlement');
+    return { error: `${label} ready progress did not precede project-open settlement` };
   }
 
   const post = input.postInspection;
@@ -205,35 +237,173 @@ export function buildStandardShadowAssetColdRun(input) {
     post.verifiedObjectBytes !== expected.memberBytes ||
     post.readySetCount !== 1
   ) {
-    return refuse('standard fill post-open storage does not prove one exact ready object/set');
+    return { error: `${label} post-open storage does not prove one exact ready object/set` };
   }
   if (
     !plainRecord(input.preInspection) ||
     input.preInspection.storageClass !== progress.value.storageClass
   ) {
-    return refuse('standard fill storage class changed across the measured operation');
+    return { error: `${label} storage class changed across the measured operation` };
   }
-
-  const network = networkEvidence(input.sourceResponses);
-  if (network.error) return refuse(network.error);
   if (
     !plainRecord(input.cleanup) ||
     input.cleanup.projectClosed !== true ||
     input.cleanup.workbenchClosed !== true ||
     input.cleanup.lockReacquired !== true
   ) {
-    return refuse('standard fill cleanup or origin Web Lock reacquisition failed');
+    return { error: `${label} cleanup or origin Web Lock reacquisition failed` };
   }
+
+  return {
+    value: {
+      durationMs: progress.value.readyAtMs - progress.value.startedAtMs,
+      requiredSetDigest: expected.requiredSetDigest,
+      storageClass: progress.value.storageClass,
+      memberBytes: expected.memberBytes,
+      expected,
+    },
+  };
+}
+
+function eddyEndpoints(value) {
+  if (!plainRecord(value)) return { error: 'Eddy fill endpoints must be an object' };
+  const registry = absoluteHttpEndpoint(value.registryUrl);
+  if (registry === null) return { error: 'Eddy fill registry URL must be absolute http(s)' };
+  const resolver = absoluteHttpEndpoint(value.resolverUrl);
+  if (resolver === null) return { error: 'Eddy fill resolver URL must be absolute http(s)' };
+  const bundle = absoluteHttpEndpoint(value.bundleUrl);
+  if (bundle === null) return { error: 'Eddy fill bundle URL must be absolute http(s)' };
+  return { value: { bundle, registry, resolver } };
+}
+
+function packagePath(name) {
+  return encodeURIComponent(name).replace('%40', '@');
+}
+
+function looksLikeStandardSource(url, registry, sourceName) {
+  const base = registry.href.replace(/\/$/u, '');
+  const packument = `${base}/${packagePath(sourceName)}`;
+  if (url.href === packument) return true;
+  const path = url.pathname.toLowerCase();
+  const plain = sourceName.toLowerCase();
+  const encoded = encodeURIComponent(sourceName).toLowerCase();
+  return (path.includes(plain) || path.includes(encoded)) && path.endsWith('.tgz');
+}
+
+function cacheSource(response) {
+  if (response.fromDiskCache === true) return 'response.fromDiskCache';
+  if (response.fromDiskCache !== false) return 'response.fromDiskCache proof absent';
+  if (response.fromServiceWorker === true) return 'response.fromServiceWorker';
+  if (response.fromServiceWorker !== false) return 'response.fromServiceWorker proof absent';
+  if (response.fromPrefetchCache === true) return 'response.fromPrefetchCache';
+  if (response.requestServedFromCache === true) return 'Network.requestServedFromCache';
+  return null;
+}
+
+function eddyNetworkEvidence(responses, endpoints, source) {
+  if (!Array.isArray(responses) || responses.length === 0) {
+    return { error: 'Eddy fill has no CDP asset-source response evidence' };
+  }
+  if (responses.length !== 1) {
+    return {
+      error: `Eddy cold fill requires one unambiguous resolver lifecycle; captured ${responses.length}`,
+    };
+  }
+  const response = responses[0];
+  if (!plainRecord(response)) return { error: 'Eddy asset-source response must be an object' };
+  if (typeof response.requestId !== 'string' || response.requestId.length === 0) {
+    return { error: 'Eddy asset-source response lacks a CDP request lifecycle' };
+  }
+  if (
+    response.lifecycleId !== undefined &&
+    (typeof response.lifecycleId !== 'string' || response.lifecycleId.length === 0)
+  ) {
+    return { error: 'Eddy asset-source response lifecycleId is invalid' };
+  }
+  const url = absoluteHttpEndpoint(response.url);
+  if (url === null) return { error: 'Eddy asset-source response URL is not absolute http(s)' };
+  if (looksLikeStandardSource(url, endpoints.registry, source.name)) {
+    return { error: 'Eddy cold fill fell back to the standard registry source' };
+  }
+  if (url.href !== endpoints.resolver.href) {
+    return { error: 'Eddy cold fill response did not use the exact configured resolver URL' };
+  }
+  if (response.method !== 'POST') {
+    return { error: 'Eddy cold fill lacks the exact empty-pin resolver POST' };
+  }
+  if (!Number.isSafeInteger(response.status) || response.status < 200 || response.status >= 300) {
+    return { error: 'Eddy cold fill resolver POST is not a successful 2xx response' };
+  }
+  if (response.complete !== true) {
+    return { error: 'Eddy cold fill resolver POST body evidence is incomplete' };
+  }
+  const cache = cacheSource(response);
+  if (cache !== null) {
+    return { error: `Eddy cold fill resolver POST lacks clean network provenance (${cache})` };
+  }
+  if (!nonNegativeSafeInteger(response.bodyBytes) || response.bodyBytes === 0) {
+    return { error: 'Eddy cold fill bundle bodyBytes must be a positive safe integer' };
+  }
+  if (!positiveProtocol(response.protocol)) {
+    return { error: 'Eddy cold fill resolver origin lacks positive CDP protocol evidence' };
+  }
+  return {
+    value: {
+      responseBodyBytes: { bundle: response.bodyBytes, total: response.bodyBytes },
+      transport: {
+        mode: 'auto',
+        origins: {
+          [url.origin]: { protocol: response.protocol, requests: 1 },
+        },
+      },
+    },
+  };
+}
+
+/** Build one measured STD run only from complete page/storage/CDP/cleanup proof. */
+export function buildStandardShadowAssetColdRun(input) {
+  const page = pageEvidence(input, 'standard fill');
+  if (page.error) return refuse(page.error);
+  const network = networkEvidence(input.sourceResponses);
+  if (network.error) return refuse(network.error);
 
   return {
     ok: true,
     run: {
-      durationMs: progress.value.readyAtMs - progress.value.startedAtMs,
-      requiredSetDigest: expected.requiredSetDigest,
-      storageClass: progress.value.storageClass,
+      durationMs: page.value.durationMs,
+      requiredSetDigest: page.value.requiredSetDigest,
+      storageClass: page.value.storageClass,
       fillTransport: 'standard',
       fillCache: 'network',
-      memberBytes: expected.memberBytes,
+      memberBytes: page.value.memberBytes,
+      responseBodyBytes: network.value.responseBodyBytes,
+      transport: network.value.transport,
+    },
+  };
+}
+
+/** Build one measured Eddy run only from exact empty-pin POST + shared page proof. */
+export function buildEddyShadowAssetColdRun(input) {
+  const page = pageEvidence(input, 'Eddy fill', true);
+  if (page.error) return refuse(page.error);
+  const endpoints = eddyEndpoints(input.endpoints);
+  if (endpoints.error) return refuse(endpoints.error);
+  const network = eddyNetworkEvidence(
+    input.sourceResponses,
+    endpoints.value,
+    page.value.expected.source,
+  );
+  if (network.error) return refuse(network.error);
+
+  return {
+    ok: true,
+    run: {
+      durationMs: page.value.durationMs,
+      requiredSetDigest: page.value.requiredSetDigest,
+      storageClass: page.value.storageClass,
+      fillTransport: 'eddy',
+      fillCache: 'bundle',
+      memberBytes: page.value.memberBytes,
       responseBodyBytes: network.value.responseBodyBytes,
       transport: network.value.transport,
     },
