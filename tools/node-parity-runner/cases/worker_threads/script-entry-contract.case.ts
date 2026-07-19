@@ -19,11 +19,16 @@ const c: ParityCase = {
 
     console.warn = () => {};
     const terminations = [];
+    let baselineThreadId;
+    const relativeThreadId = (threadId) => {
+      baselineThreadId ??= threadId;
+      return threadId - baselineThreadId;
+    };
     function capture(label, entry) {
       try {
         const worker = new Worker(entry);
         worker.on('error', () => {});
-        console.log(label + ':RETURN:' + worker.threadId);
+        console.log(label + ':RETURN:' + relativeThreadId(worker.threadId));
         terminations.push(Promise.resolve(worker.terminate()));
       } catch (error) {
         console.log(label + ':' + error.name + ':' + error.code);
@@ -35,7 +40,7 @@ const c: ParityCase = {
         let worker;
         try {
           worker = new Worker(entry);
-          console.log(label + ':RETURN:' + worker.threadId);
+          console.log(label + ':RETURN:' + relativeThreadId(worker.threadId));
         } catch (error) {
           console.log(label + ':' + error.name + ':' + error.code);
           resolveRun(label + ':ERROR');
@@ -53,6 +58,7 @@ const c: ParityCase = {
       });
     }
 
+    capture('data-url', new URL('data:text/javascript,0'));
     capture('bare', 'worker.js');
     capture('file-string', 'file:///app/sub/worker.js');
     capture('file-string-mixed', 'FiLe:///app/sub/worker.js');
@@ -60,7 +66,6 @@ const c: ParityCase = {
     capture('https-string', 'https://example.test/worker.js');
     capture('https-url', new URL('https://example.test/worker.js'));
     capture('invalid-object', {});
-    capture('data-url', new URL('data:text/javascript,0'));
 
     const fileUrl = pathToFileURL(resolve('worker.mjs'));
     const urlShape = {
@@ -84,6 +89,7 @@ const c: ParityCase = {
     void Promise.all(terminations);
   `,
   expected: [
+    'data-url:RETURN:0',
     'bare:TypeError:ERR_WORKER_PATH',
     'file-string:TypeError:ERR_WORKER_PATH',
     'file-string-mixed:TypeError:ERR_WORKER_PATH',
@@ -91,11 +97,10 @@ const c: ParityCase = {
     'https-string:TypeError:ERR_WORKER_PATH',
     'https-url:TypeError:ERR_INVALID_URL_SCHEME',
     'invalid-object:TypeError:ERR_INVALID_ARG_TYPE',
-    'data-url:RETURN:1',
-    'url-shape:RETURN:2',
-    'absolute:RETURN:3',
-    'dot-relative:RETURN:4',
-    'dotdot-relative:RETURN:5',
+    'url-shape:RETURN:1',
+    'absolute:RETURN:2',
+    'dot-relative:RETURN:3',
+    'dotdot-relative:RETURN:4',
     'messages:["url-shape:sub","absolute:sub","dot-relative:sub","dotdot-relative:parent"]',
     '',
   ].join('\n'),
