@@ -4,11 +4,16 @@ import {
   PACKED_VITE_JOURNEYS,
   PACKED_WORKBENCH_EXPORTS,
   packedAliasBoundaryProof,
+  packedAliasProofMatches,
   snapshotPackageNeedsRegistryTarball,
 } from './workbench-packed-consumer-browser-contract.mjs';
 
 const fixtureUrl = new URL('./fixtures/workbench-vite-consumer/src/main.ts', import.meta.url);
 const runnerUrl = new URL('./workbench-packed-consumer.mjs', import.meta.url);
+const aliasByteProofUrl = new URL(
+  './fixtures/workbench-vite-consumer/alias-response-byte-proof.json',
+  import.meta.url,
+);
 
 describe('packed Workbench browser acceptance contract', () => {
   it('uses all seven published exports from the clean external consumer', async () => {
@@ -125,6 +130,85 @@ describe('packed Workbench browser acceptance contract', () => {
         tarball: { responses: 1, bodyBytes: 5_057_200 },
       },
     });
+  });
+
+  it('pins the matched whole-journey before/after byte delta and complete ledgers', async () => {
+    const measurement = JSON.parse(await readFile(aliasByteProofUrl, 'utf8'));
+    const before = measurement.before.proof;
+    const after = measurement.after.proof;
+    const total = (responses: readonly { readonly bodyBytes: number }[]) =>
+      responses.reduce((sum, response) => sum + response.bodyBytes, 0);
+    const packageBytes = (
+      responses: readonly { readonly packageName: string; readonly bodyBytes: number }[],
+      packageName: string,
+    ) =>
+      responses
+        .filter((response) => response.packageName === packageName)
+        .reduce((sum, response) => sum + response.bodyBytes, 0);
+
+    expect(measurement.boundary).toEqual({
+      registryOrigin: 'http://127.0.0.1:54321',
+      transport: 'standard',
+      storageClass: 'memory-session',
+      cacheRegime: 'fresh temp consumer and npm cache;fresh Chromium context',
+      journey: 'cold open through preview and native HMR ready',
+    });
+    expect(total(before.responses)).toBe(before.totalResponseBodyBytes);
+    expect(total(after.responses)).toBe(after.totalResponseBodyBytes);
+    expect(
+      packedAliasBoundaryProof({
+        registryOrigin: measurement.boundary.registryOrigin,
+        responses: after.responses,
+      }),
+    ).toEqual(after);
+    expect(packageBytes(before.responses, '@esbuild/wasi-preview1')).toBe(5_057_827);
+    expect(packageBytes(after.responses, '@esbuild/wasi-preview1')).toBe(0);
+    expect(packageBytes(before.responses, 'esbuild')).toBe(0);
+    expect(packageBytes(after.responses, 'esbuild')).toBe(3_913);
+    expect(measurement.delta).toEqual({
+      beforeResponseBodyBytes: 11_003_099,
+      afterResponseBodyBytes: 5_949_185,
+      removedResponseBodyBytes: 5_053_914,
+      components: {
+        retiredAliasRemoved: 5_057_827,
+        publicEsbuildPackumentAdded: 3_913,
+        otherResponseBodiesBefore: 5_945_272,
+        otherResponseBodiesAfter: 5_945_272,
+      },
+    });
+    expect(measurement.latency).toMatchObject({ status: 'unmeasured' });
+  });
+
+  it('matches a complete response ledger independent of parallel completion order', () => {
+    const response = (packageName: string, kind: 'packument' | 'tarball', bodyBytes: number) => ({
+      method: 'GET',
+      path: `/${encodeURIComponent(packageName)}/${kind}`,
+      packageName,
+      kind,
+      status: 200,
+      bodyBytes,
+    });
+    const responses = [
+      response('vite', 'packument', 800),
+      response('esbuild', 'packument', 612),
+      response('esbuild-wasm', 'packument', 645),
+      response('esbuild-wasm', 'tarball', 5_057_200),
+    ];
+    const expected = packedAliasBoundaryProof({
+      registryOrigin: 'http://127.0.0.1:54321',
+      responses,
+    });
+    const reordered = packedAliasBoundaryProof({
+      registryOrigin: 'http://127.0.0.1:54321',
+      responses: [responses[0], responses[1], responses[3], responses[2]],
+    });
+    const changed = packedAliasBoundaryProof({
+      registryOrigin: 'http://127.0.0.1:54321',
+      responses: [...responses.slice(0, -1), response('esbuild-wasm', 'tarball', 5_057_201)],
+    });
+
+    expect(packedAliasProofMatches(expected, reordered)).toBe(true);
+    expect(packedAliasProofMatches(expected, changed)).toBe(false);
   });
 
   it.each([
