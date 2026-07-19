@@ -5,9 +5,7 @@ describe('packed shadow-asset cold host readiness', () => {
   it('ignores non-marker output and accepts one exact loopback origin marker', () => {
     expect(hostOriginFromLine('$ pnpm build')).toBeNull();
     expect(
-      hostOriginFromLine(
-        'RIFTY_SHADOW_ASSET_COLD_HOST={"origin":"http://127.0.0.1:43127"}',
-      ),
+      hostOriginFromLine('RIFTY_SHADOW_ASSET_COLD_HOST={"origin":"http://127.0.0.1:43127"}'),
     ).toBe('http://127.0.0.1:43127');
   });
 

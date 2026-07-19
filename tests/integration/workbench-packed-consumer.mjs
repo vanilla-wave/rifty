@@ -48,6 +48,7 @@ const SHADOW_ASSET_CATALOG = resolve(
   'tools/shadow-registry/generated/shadow-asset-catalog.json',
 );
 const KEEP_TEMP = process.argv.includes('--keep');
+const SERVE_SHADOW_ASSET_COLD = process.argv.includes('--serve-shadow-asset-cold');
 const FIXED_REGISTRY_PORT = optionalLoopbackPort(process.env.RIFTY_PACKED_CONSUMER_REGISTRY_PORT);
 const WORKER_ENTRIES = [
   'owner-worker.js',
@@ -57,10 +58,26 @@ const WORKER_ENTRIES = [
   'typescript-worker.js',
 ];
 const TYPESCRIPT_HOST_BUILTINS = new Set(['os', 'path', 'perf_hooks', 'fs']);
-const unknownArguments = process.argv.slice(2).filter((argument) => argument !== '--keep');
+const unknownArguments = process.argv
+  .slice(2)
+  .filter((argument) => argument !== '--keep' && argument !== '--serve-shadow-asset-cold');
 if (unknownArguments.length > 0) {
   throw new Error(`Unknown packed-consumer arguments: ${unknownArguments.join(', ')}`);
 }
+
+const hostTermination = SERVE_SHADOW_ASSET_COLD
+  ? new Promise((resolveTermination) => {
+      const terminate = (signal) => {
+        process.off('SIGTERM', onSigterm);
+        process.off('SIGINT', onSigint);
+        resolveTermination(signal);
+      };
+      const onSigterm = () => terminate('SIGTERM');
+      const onSigint = () => terminate('SIGINT');
+      process.once('SIGTERM', onSigterm);
+      process.once('SIGINT', onSigint);
+    })
+  : null;
 
 const MAX_CAPTURED_OUTPUT = 1024 * 1024;
 const gunzipAsync = promisify(gunzip);
@@ -900,6 +917,26 @@ async function waitForHmrBridge(app, timeoutMs) {
   throw new Error('Packed Workbench preview HMR bridge did not open');
 }
 
+async function serveShadowAssetColdHost(consumerRoot) {
+  if (hostTermination === null) {
+    throw new Error('packed cold host termination boundary was not initialized');
+  }
+  const previewPort = await reserveLoopbackPort();
+  const origin = `http://127.0.0.1:${previewPort}`;
+  const preview = startProcess(
+    resolve(consumerRoot, 'node_modules/.bin/vite'),
+    ['preview', '--host', '127.0.0.1', '--port', String(previewPort), '--strictPort'],
+    { cwd: consumerRoot },
+  );
+  try {
+    await waitForHttp(`${origin}/shadow-asset-cold.html`, preview, 60_000);
+    console.log(`RIFTY_SHADOW_ASSET_COLD_HOST=${JSON.stringify({ origin })}`);
+    await hostTermination;
+  } finally {
+    await preview.stop();
+  }
+}
+
 async function writePackedConsumerManifest(consumerRoot, tarballs) {
   const manifestPath = resolve(consumerRoot, 'package.json');
   const manifest = await readJson(manifestPath);
@@ -1226,15 +1263,23 @@ async function main() {
     await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
     await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
     await stat(resolve(consumerRoot, 'dist/index.html'));
-    const registryPackages = await browserRegistryPackages({
-      snapshotRoot: browserRegistryPackageRoot,
-      tarballRoot: browserRegistryTarballRoot,
-      npmCacheRoot: browserRegistryPackCacheRoot,
-    });
-    await runChromiumJourney(consumerRoot, registryPackages);
-    console.log(
-      `Packed Workbench consumer passed offline: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, TypeScript, Vite production build, Chromium`,
-    );
+    await stat(resolve(consumerRoot, 'dist/shadow-asset-cold.html'));
+    if (SERVE_SHADOW_ASSET_COLD) {
+      await serveShadowAssetColdHost(consumerRoot);
+      console.log(
+        `Packed Workbench cold host stopped cleanly: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs`,
+      );
+    } else {
+      const registryPackages = await browserRegistryPackages({
+        snapshotRoot: browserRegistryPackageRoot,
+        tarballRoot: browserRegistryTarballRoot,
+        npmCacheRoot: browserRegistryPackCacheRoot,
+      });
+      await runChromiumJourney(consumerRoot, registryPackages);
+      console.log(
+        `Packed Workbench consumer passed offline: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, TypeScript, Vite production build, Chromium`,
+      );
+    }
   } finally {
     if (KEEP_TEMP) console.log(`Kept packed-consumer temp directory: ${tempRoot}`);
     else await rm(tempRoot, { recursive: true, force: true });
