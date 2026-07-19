@@ -18,6 +18,14 @@ import {
 
 const encoder = new TextEncoder();
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 function entry(
   path: string,
   kind: ProjectFileEntry['kind'],
@@ -386,6 +394,61 @@ describe('Playground logical project view', () => {
 });
 
 describe('Playground editor Documents binding', () => {
+  // Fault class: observable-order + provenance-lie.
+  it('serializes same-path writes so a slower first save cannot restore stale bytes', async () => {
+    const firstSaveStarted = deferred<void>();
+    const releaseFirstSave = deferred<void>();
+    let editorText = 'const x = 0;\n';
+    let ownerText = editorText;
+    let saveOrdinal = 0;
+    const replace = vi.fn((data: string | Uint8Array) => {
+      editorText = typeof data === 'string' ? data : new TextDecoder().decode(data);
+    });
+    const save = vi.fn(async () => {
+      const savedText = editorText;
+      saveOrdinal += 1;
+      if (saveOrdinal === 1) {
+        firstSaveStarted.resolve(undefined);
+        await releaseFirstSave.promise;
+      }
+      ownerText = savedText;
+    });
+    const document = {
+      path: '/src/main.ts',
+      snapshot: vi.fn(() => ({
+        path: '/src/main.ts',
+        bytes: encoder.encode(editorText),
+        version: 'v1',
+        dirty: false,
+        closed: false,
+        staleReason: null,
+        conflict: null,
+      })),
+      replace,
+      save,
+      close: vi.fn(async () => {}),
+    } satisfies ProjectDocument;
+    const documents = { open: vi.fn(async () => document) } satisfies ProjectDocuments;
+    const writer = createPlaygroundDocumentWriter(documents);
+
+    await writer.open('/src/main.ts');
+    const firstWrite = writer.write('/src/main.ts', 'const x = 1;\n');
+    await firstSaveStarted.promise;
+    const secondWrite = writer.write('/src/main.ts', 'const x = 2;\n');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(1);
+
+    releaseFirstSave.resolve(undefined);
+    await Promise.all([firstWrite, secondWrite]);
+
+    expect(replace).toHaveBeenNthCalledWith(2, 'const x = 2;\n');
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(ownerText).toBe('const x = 2;\n');
+  });
+
   it('keeps one public document per path and saves the exact editor text', async () => {
     const replace = vi.fn();
     const save = vi.fn(async () => {});
