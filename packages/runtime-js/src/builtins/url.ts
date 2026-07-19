@@ -4,7 +4,14 @@
  * `resolve` functions are still used by older packages.
  */
 
-export const URL = globalThis.URL;
+import {
+  URLConstructor,
+  fileURLFromResolvedPath,
+  fileURLToPathPosix,
+} from '../internal/posix-file-url.ts';
+import { resolve as resolvePath } from './path.ts';
+
+export const URL = URLConstructor;
 export const URLSearchParams = globalThis.URLSearchParams;
 
 /**
@@ -50,7 +57,7 @@ export function parse(
   _slashesDenoteHost = false,
 ): UrlObject {
   try {
-    const u = new globalThis.URL(input);
+    const u = new URL(input);
     const searchRaw = u.search ? u.search.slice(1) : '';
     return {
       protocol: u.protocol,
@@ -149,21 +156,22 @@ export function format(o: UrlObject): string {
 
 export function resolve(from: string, to: string): string {
   try {
-    return new globalThis.URL(to, from).href;
+    return new URL(to, from).href;
   } catch {
     return to;
   }
 }
 
 export function pathToFileURL(p: string): URL {
-  const abs = p.startsWith('/') ? p : `/${p}`;
-  return new globalThis.URL(`file://${abs}`);
+  let resolved = resolvePath(p);
+  if (p.length > 0 && p[p.length - 1] === '/' && resolved[resolved.length - 1] !== '/') {
+    resolved += '/';
+  }
+  return fileURLFromResolvedPath(resolved);
 }
 
 export function fileURLToPath(u: URL | string): string {
-  const url = typeof u === 'string' ? new globalThis.URL(u) : u;
-  if (url.protocol !== 'file:') throw new TypeError('Expected file: URL');
-  return decodeURIComponent(url.pathname);
+  return fileURLToPathPosix(u);
 }
 
 const url = {

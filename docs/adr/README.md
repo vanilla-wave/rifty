@@ -63,9 +63,9 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0239 | fromWeb arguments have one staged validation owner |
 | 0240 | Writable completion separates internal and public phases |
 | 0267 | Entry-scoped host bootstrap metadata for recursive Node workers |
-| 0269 | shared require.extensions compile hooks for CJS loaders |
 | 0270 | worker_threads.Worker parent events are EventEmitter-only |
 | 0272 | Late typed process terminal bootstrap |
+| 0294 | Node-compatible require.extensions suffix dispatch |
 
 ### runtime-wasi
 
@@ -283,6 +283,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0277 | 0278 | finite plans/catalog/TS/SCM/archive grafted; terminal state and owner preview registry added |
 | 0179 | 0284 | git-facade ownership retained; scalar result replaced by ordered rows plus explicit path gaps |
 | 0197 | 0292 | Solid testability motive retained; Workbench companion now owns lifecycle and semantic test seams |
+| 0269 | 0294 | shared table and `_compile` retained; `.js`-only dispatch replaced by Node suffix selection |
 
 ## Corrections (active)
 

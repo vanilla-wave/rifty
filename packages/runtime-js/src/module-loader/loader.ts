@@ -4,7 +4,7 @@ import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
-import { type CjsExtensions, type CjsRequire, executeCjs } from './cjs.ts';
+import { type CjsExtensionHook, type CjsExtensions, type CjsRequire, executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
 import { type TransformSourceHook, executeEsm } from './esm.ts';
@@ -112,8 +112,18 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     autoDiscoverTsconfigPaths: opts.autoDiscoverTsconfigPaths,
   });
   const cjsExtensions = Object.create(null) as CjsExtensions;
-  cjsExtensions['.js'] = (module, filename) => {
+  const defaultJsExtension: CjsExtensionHook = (module, filename) => {
     module._compile(readResolvedById(filename).source, filename);
+  };
+  cjsExtensions['.js'] = defaultJsExtension;
+  cjsExtensions['.json'] = (module, filename) => {
+    module.exports = JSON.parse(readResolvedById(filename).source) as Record<string, unknown>;
+  };
+  cjsExtensions['.node'] = (_module, filename) => {
+    throw new NotImplementedError(
+      'module-loader.native-addon',
+      `cannot load native addon ${filename} in the browser runtime`,
+    );
   };
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
@@ -251,6 +261,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     registry,
     resolver,
     extensions: cjsExtensions,
+    defaultJsExtension,
     makeRequire,
     workspace,
     sourceMaps,
