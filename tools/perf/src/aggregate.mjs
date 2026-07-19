@@ -5,8 +5,17 @@
  * measured samples and writes the JSON artifact.
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 const DEFAULT_STEP_MS = 100;
+const SHADOW_ASSET_RUN_COUNT = 5;
+const SHADOW_ASSET_MEMBER_BYTES = 13_918_738;
+const SHADOW_ASSET_CACHE_REGIME =
+  'fresh-context-empty-store-and-tarball;warm-proxy-origin';
+const SHADOW_ASSET_STORAGE_CLASSES = new Set([
+  'opfs-persisted',
+  'opfs-best-effort',
+  'memory-session',
+]);
 
 /** Median of a non-empty numeric array (mean of the two middles when even). */
 export function median(values) {
@@ -36,6 +45,253 @@ export function summarize(samples, stepMs = DEFAULT_STEP_MS) {
   };
 }
 
+function shadowAssetUnmeasured(note) {
+  return { status: 'unmeasured', note };
+}
+
+function plainRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function nonNegativeSafeInteger(value) {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function positiveProtocol(protocol) {
+  return (
+    typeof protocol === 'string' &&
+    protocol.length > 0 &&
+    protocol !== 'unknown' &&
+    protocol !== 'unreachable'
+  );
+}
+
+function remoteOrigin(value) {
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.origin === value
+      ? url.origin
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function registryOrigin(value) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizedShadowAssetRun(run, index, expectedFillTransport, expectedFillCache) {
+  const label = `shadow asset cold run ${index + 1}`;
+  if (!plainRecord(run)) return { error: `${label} must be an object` };
+  if (typeof run.durationMs !== 'number' || !Number.isFinite(run.durationMs) || run.durationMs < 0) {
+    return { error: `${label} durationMs must be a non-negative finite number` };
+  }
+  if (typeof run.requiredSetDigest !== 'string' || run.requiredSetDigest.length === 0) {
+    return { error: `${label} requiredSetDigest must be a non-empty string` };
+  }
+  if (!SHADOW_ASSET_STORAGE_CLASSES.has(run.storageClass)) {
+    return { error: `${label} storageClass is invalid` };
+  }
+  if (run.fillTransport !== expectedFillTransport) {
+    return {
+      error: `${label} fillTransport must be ${expectedFillTransport}; received ${String(run.fillTransport)}`,
+    };
+  }
+  if (run.fillCache !== expectedFillCache) {
+    return {
+      error: `${label} fillCache must be ${expectedFillCache}; received ${String(run.fillCache)}`,
+    };
+  }
+  if (run.memberBytes !== SHADOW_ASSET_MEMBER_BYTES) {
+    return {
+      error: `${label} memberBytes must be ${SHADOW_ASSET_MEMBER_BYTES}; received ${String(run.memberBytes)}`,
+    };
+  }
+
+  const response = run.responseBodyBytes;
+  if (!plainRecord(response)) return { error: `${label} responseBodyBytes must be an object` };
+  for (const field of ['packumentDecoded', 'tarball', 'total']) {
+    if (!nonNegativeSafeInteger(response[field])) {
+      return { error: `${label} responseBodyBytes.${field} must be a non-negative safe integer` };
+    }
+  }
+  if (
+    expectedFillTransport === 'standard' &&
+    (response.packumentDecoded === 0 || response.tarball === 0)
+  ) {
+    return { error: `${label} standard packument and tarball response bytes must be positive` };
+  }
+  if (response.total < response.packumentDecoded + response.tarball) {
+    return {
+      error: `${label} responseBodyBytes.total is smaller than packumentDecoded + tarball`,
+    };
+  }
+
+  const transport = run.transport;
+  if (!plainRecord(transport) || transport.mode !== 'auto' || !plainRecord(transport.origins)) {
+    return { error: `${label} transport must contain mode auto and an origins record` };
+  }
+  const origins = {};
+  let usedOrigins = 0;
+  for (const [origin, evidence] of Object.entries(transport.origins)) {
+    if (remoteOrigin(origin) === null) return { error: `${label} transport origin is invalid: ${origin}` };
+    if (!plainRecord(evidence) || !nonNegativeSafeInteger(evidence.requests)) {
+      return { error: `${label} transport evidence for ${origin} has invalid requests` };
+    }
+    if (typeof evidence.protocol !== 'string' || evidence.protocol.length === 0) {
+      return { error: `${label} transport evidence for ${origin} has no protocol` };
+    }
+    if (evidence.requests > 0) {
+      usedOrigins += 1;
+      if (!positiveProtocol(evidence.protocol)) {
+        return {
+          error: `${label} used origin ${origin} lacks positive protocol evidence (${evidence.protocol})`,
+        };
+      }
+    }
+    origins[origin] = { protocol: evidence.protocol, requests: evidence.requests };
+  }
+  if (usedOrigins === 0) return { error: `${label} has no used remote origin` };
+
+  return {
+    value: {
+      durationMs: run.durationMs,
+      requiredSetDigest: run.requiredSetDigest,
+      storageClass: run.storageClass,
+      fillTransport: run.fillTransport,
+      fillCache: run.fillCache,
+      memberBytes: run.memberBytes,
+      responseBodyBytes: {
+        packumentDecoded: response.packumentDecoded,
+        tarball: response.tarball,
+        total: response.total,
+      },
+      transport: { mode: 'auto', origins },
+    },
+  };
+}
+
+function buildShadowAssetColdRow(input, expectedFillTransport, stepMs, label) {
+  if (!plainRecord(input) || input.status !== 'measured') {
+    const note =
+      plainRecord(input) && typeof input.note === 'string' && input.note.length > 0
+        ? input.note
+        : `${label} was not measured`;
+    return shadowAssetUnmeasured(note);
+  }
+  if (!Array.isArray(input.runs) || input.runs.length !== SHADOW_ASSET_RUN_COUNT) {
+    return shadowAssetUnmeasured(
+      `${label} requires exactly ${SHADOW_ASSET_RUN_COUNT} complete runs; received ${Array.isArray(input.runs) ? input.runs.length : 0}`,
+    );
+  }
+  if (input.cacheRegime !== SHADOW_ASSET_CACHE_REGIME) {
+    return shadowAssetUnmeasured(
+      `${label} cacheRegime must be ${SHADOW_ASSET_CACHE_REGIME}`,
+    );
+  }
+  const registry = registryOrigin(input.registryUrl);
+  if (registry === null) {
+    return shadowAssetUnmeasured(`${label} registryUrl must be an absolute http(s) URL`);
+  }
+  const expectedFillCache = 'network';
+  const runs = [];
+  for (const [index, raw] of input.runs.entries()) {
+    const normalized = normalizedShadowAssetRun(
+      raw,
+      index,
+      expectedFillTransport,
+      expectedFillCache,
+    );
+    if (normalized.error) return shadowAssetUnmeasured(normalized.error);
+    runs.push(normalized.value);
+  }
+
+  const first = runs[0];
+  if (!first) return shadowAssetUnmeasured(`${label} has no complete run`);
+  for (const [index, run] of runs.entries()) {
+    if (run.requiredSetDigest !== first.requiredSetDigest) {
+      return shadowAssetUnmeasured(`${label} run ${index + 1} has a mixed required-set digest`);
+    }
+    if (run.storageClass !== first.storageClass) {
+      return shadowAssetUnmeasured(`${label} run ${index + 1} has a mixed storage class`);
+    }
+    if ((run.transport.origins[registry]?.requests ?? 0) === 0) {
+      return shadowAssetUnmeasured(
+        `${label} run ${index + 1} has no measured request for registry origin ${registry}`,
+      );
+    }
+  }
+
+  const summary = summarize(
+    runs.map((run) => run.durationMs),
+    stepMs,
+  );
+  return {
+    ...summary,
+    requiredSetDigest: first.requiredSetDigest,
+    storageClass: first.storageClass,
+    fillTransport: expectedFillTransport,
+    fillCache: expectedFillCache,
+    memberBytes: SHADOW_ASSET_MEMBER_BYTES,
+    registryUrl: input.registryUrl,
+    ...(typeof input.resolverUrl === 'string' && input.resolverUrl.length > 0
+      ? { resolverUrl: input.resolverUrl }
+      : {}),
+    ...(typeof input.bundleUrl === 'string' && input.bundleUrl.length > 0
+      ? { bundleUrl: input.bundleUrl }
+      : {}),
+    cacheRegime: SHADOW_ASSET_CACHE_REGIME,
+    runs,
+  };
+}
+
+function matchedShadowAssetColdRows(standard, eddy) {
+  return (
+    standard.status === 'measured' &&
+    eddy.status === 'measured' &&
+    standard.count === SHADOW_ASSET_RUN_COUNT &&
+    eddy.count === SHADOW_ASSET_RUN_COUNT &&
+    standard.requiredSetDigest === eddy.requiredSetDigest &&
+    standard.storageClass === eddy.storageClass &&
+    standard.memberBytes === eddy.memberBytes &&
+    standard.cacheRegime === eddy.cacheRegime
+  );
+}
+
+function buildShadowAssetColdMetric(input, stepMs) {
+  const standardInput =
+    plainRecord(input) && Object.hasOwn(input, 'standard')
+      ? input.standard
+      : { status: 'unmeasured', note: '--shadow-asset-cold off' };
+  const standard = buildShadowAssetColdRow(
+    standardInput,
+    'standard',
+    stepMs,
+    'shadow asset cold standard row',
+  );
+  const metric = { standard };
+  if (plainRecord(input) && input.eddy !== undefined) {
+    const eddy = buildShadowAssetColdRow(
+      input.eddy,
+      'eddy',
+      stepMs,
+      'shadow asset cold Eddy row',
+    );
+    metric.eddy = eddy;
+    if (matchedShadowAssetColdRows(standard, eddy)) {
+      metric.speedupX = Math.round((standard.median / eddy.median) * 100) / 100;
+    }
+  }
+  return metric;
+}
+
 /**
  * Assemble the committed benchmark artifact. `coldStartSamples` is always
  * measured; `install` is either a measured record or a non-measured one
@@ -56,6 +312,7 @@ export function buildArtifact({
   coldStartSamples,
   install,
   presetBoot,
+  shadowAssetCold,
   stepMs = DEFAULT_STEP_MS,
 }) {
   return {
@@ -65,6 +322,7 @@ export function buildArtifact({
     metrics: {
       coldStartToInteractiveMs: summarize(coldStartSamples, stepMs),
       npmInstallToFirstViteResponseMs: buildInstallMetric(install, stepMs),
+      shadowAssetColdFillMs: buildShadowAssetColdMetric(shadowAssetCold, stepMs),
       ...(presetBoot !== undefined
         ? { presetBootToPreviewLiveMs: buildPresetBootMetric(presetBoot, stepMs, runs) }
         : {}),
