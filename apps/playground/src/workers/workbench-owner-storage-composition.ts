@@ -1,7 +1,6 @@
 import type { ShadowAssetStorage } from '@riftydev/npm-client';
 import { syncMirror } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
-import { probeStoragePersistence } from '../glue/storage-status.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type { OwnerStoragePersistence, OwnerStorageSnapshot } from './owner-storage.ts';
 import {
@@ -11,6 +10,7 @@ import {
 } from './owner-vfs-authority.ts';
 import { createWorkbenchConstructionTransaction } from './workbench-construction-transaction.ts';
 import { assertCleanDurability } from './workbench-owner-close.ts';
+import { probeWorkbenchOwnerStorageRetention } from './workbench-owner-storage-retention.ts';
 import {
   type WorkbenchOwnerStorageRetention,
   createWorkbenchRuntimeAssetStorage,
@@ -39,7 +39,7 @@ export interface WorkbenchOwnerStorageCompositionDependencies {
 function defaultDependencies(): WorkbenchOwnerStorageCompositionDependencies {
   return Object.freeze({
     installStorage: installWorkbenchOwnerStorage,
-    probeRetention: probeStoragePersistence,
+    probeRetention: () => probeWorkbenchOwnerStorageRetention(globalThis.navigator?.storage),
     createOwner: () =>
       createOwnerVfsAuthorityComposition(syncMirror(), { initialRoots: ['/', '/.rifty'] }),
     attachAsyncMirror: (authority: OwnerVfsAuthority) =>
