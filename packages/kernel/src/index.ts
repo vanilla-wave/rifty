@@ -94,6 +94,7 @@ export {
   type KernelProcessStdioPorts,
   type KernelSyncApi,
   type KernelSyncCall,
+  consumeKernelEntryCapabilityPorts,
   publishKernelEntryBootstrap,
   publishKernelEntryCapabilityPorts,
   publishKernelProcessSpec,

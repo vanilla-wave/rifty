@@ -13,6 +13,10 @@
 
 ### Fixed
 
+- Privileged Node and dev-server bootstraps now consume entry capability ports
+  before importing ordinary VFS guest code; unused and unknown endpoints close
+  before handoff instead of remaining recoverable through an ambient global
+  (ADR-0300).
 - Recursive program entries now classify the two canonical installed Vite CLI
   paths before guest import. An unadmitted Vite 7 child loud-throws
   `vite.esbuild.shadowAssets` instead of bypassing the non-inherited capability.

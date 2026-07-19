@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Entry capability authority is one-shot before guest import (ADR-0300).**
+  `consumeKernelEntryCapabilityPorts()` validates and removes the ambient
+  publication before returning live ports; absent and empty records now leave
+  no reflective global property.
 - **Kernel worker URL configuration now survives duplicate bundles.**
   `setKernelWorkerUrl()` publishes one host-realm slot, so a Workbench bundle
   and a direct kernel import cannot split into configured/unconfigured copies.

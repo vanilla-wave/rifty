@@ -28,6 +28,10 @@ import type { DevServerHandle } from './dev-server-controller.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { ProjectTerminalFsSync } from './project-terminal-namespace.ts';
 import {
+  closeUnusedWorkbenchEntryCapabilities,
+  consumeWorkbenchEntryCapabilities,
+} from './workbench-entry-capabilities.ts';
+import {
   type KernelIpc,
   installBundleLocalBuffer,
   installRuntimeGlobals,
@@ -83,6 +87,8 @@ async function bootstrapDevServerChild(): Promise<void> {
   const send = (message: unknown): void => {
     kernelIpc.send?.(message);
   };
+
+  closeUnusedWorkbenchEntryCapabilities(consumeWorkbenchEntryCapabilities());
 
   try {
     const handle: DevServerHandle = await bootDevServer({

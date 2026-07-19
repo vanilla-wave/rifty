@@ -18,12 +18,12 @@
  *      decode the opaque payload.
  *   4. {@link KernelEntryCapabilityPorts} — an entry-scoped frozen map of
  *      opaque MessagePort capabilities, transported separately from process
- *      identity and higher-runtime bootstrap metadata (ADR-0266).
+ *      identity and higher-runtime bootstrap metadata (ADR-0300).
  *
  * Values live on `globalThis` under string keys (cross-bundle sharing — no
  * module identity to rely on across the Worker boundary). The `publish*` /
- * `read*` helpers are the only sanctioned API; reaching into `globalThis[...]`
- * directly is untyped and leaks `any`.
+ * `read*` / `consume*` helpers are the only sanctioned API; reaching into
+ * `globalThis[...]` directly is untyped and leaks `any`.
  */
 
 /** Type of the in-Worker sync call shim. Narrow so callers stay `any`-free. */
@@ -248,8 +248,9 @@ export function snapshotKernelEntryCapabilityPorts(value: unknown): KernelEntryC
 }
 
 /**
- * Publish this URL entry's capability snapshot. Absence publishes the shared
- * frozen empty value, clearing stale state in reused test hosts.
+ * Publish this URL entry's capability snapshot. Absence or an empty record
+ * removes stale publication; no own global property represents canonical
+ * absence (ADR-0300).
  */
 export function publishKernelEntryCapabilityPorts(
   ports: KernelEntryCapabilityPorts | null | undefined,
@@ -258,6 +259,12 @@ export function publishKernelEntryCapabilityPorts(
     ports === null || ports === undefined
       ? EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS
       : snapshotKernelEntryCapabilityPorts(ports);
+  if (Object.keys(snapshot).length === 0) {
+    if (!Reflect.deleteProperty(globalThis, KERNEL_ENTRY_CAPABILITY_PORTS_KEY)) {
+      throw new TypeError('kernel entry capability publication could not be cleared');
+    }
+    return;
+  }
   Object.defineProperty(globalThis, KERNEL_ENTRY_CAPABILITY_PORTS_KEY, {
     value: snapshot,
     writable: false,
@@ -269,4 +276,22 @@ export function publishKernelEntryCapabilityPorts(
 /** Read this entry's capabilities; absence is a frozen empty null-prototype map. */
 export function readKernelEntryCapabilityPorts(): KernelEntryCapabilityPorts {
   return asGlobal()[KERNEL_ENTRY_CAPABILITY_PORTS_KEY] ?? EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS;
+}
+
+/**
+ * Atomically adopt this entry's capabilities and remove their ambient global
+ * publication before less-privileged guest code runs (ADR-0300).
+ */
+export function consumeKernelEntryCapabilityPorts(): KernelEntryCapabilityPorts {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, KERNEL_ENTRY_CAPABILITY_PORTS_KEY);
+  if (descriptor === undefined) return EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS;
+  if (!('value' in descriptor)) {
+    throw new TypeError('kernel entry capability publication must be a data property');
+  }
+
+  const snapshot = snapshotKernelEntryCapabilityPorts(descriptor.value);
+  if (!Reflect.deleteProperty(globalThis, KERNEL_ENTRY_CAPABILITY_PORTS_KEY)) {
+    throw new TypeError('kernel entry capability publication could not be consumed');
+  }
+  return Object.keys(snapshot).length === 0 ? EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS : snapshot;
 }

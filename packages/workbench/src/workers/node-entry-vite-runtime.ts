@@ -1,5 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
-import { readKernelEntryCapabilityPorts } from '@riftydev/kernel';
+import type { KernelEntryCapabilityPorts } from '@riftydev/kernel';
 import {
   SHADOW_ASSET_CAPABILITY,
   type ShadowAssetPortClient,
@@ -11,6 +11,7 @@ import {
   planViteCliPreparation,
   prepareViteCli,
 } from './vite-cli-prep.ts';
+import { closeUnusedWorkbenchEntryCapabilities } from './workbench-entry-capabilities.ts';
 
 const VITE_ESBUILD_RUNTIME_BINDING = Object.freeze({
   runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
@@ -49,15 +50,44 @@ async function prepareAndDispose(
   if (disposalFailed) throw disposalFailure;
 }
 
-/** Prepare one Node-entry Vite CLI before its entry import. */
-export async function prepareViteCliForNodeEntry(preparation: ViteCliPreparation): Promise<void> {
-  const plan = planViteCliPreparation(preparation);
+function failAfterCapabilityClose(
+  capabilities: KernelEntryCapabilityPorts,
+  failure: unknown,
+): never {
+  try {
+    closeUnusedWorkbenchEntryCapabilities(capabilities);
+  } catch (closeFailure) {
+    throw new AggregateError(
+      [failure, closeFailure],
+      'Vite preparation planning and capability close failed',
+    );
+  }
+  throw failure;
+}
+
+/** Prepare one Node-entry Vite CLI after privileged capability consumption. */
+export async function prepareViteCliForNodeEntry(
+  preparation: ViteCliPreparation,
+  capabilities: KernelEntryCapabilityPorts,
+): Promise<void> {
+  let plan: PlannedViteCliPreparation;
+  try {
+    plan = planViteCliPreparation(preparation);
+  } catch (error) {
+    failAfterCapabilityClose(capabilities, error);
+  }
   if (plan.runtimeDecision !== 'start') {
+    if (Object.keys(capabilities).length !== 0) {
+      failAfterCapabilityClose(
+        capabilities,
+        new Error('Vite without the esbuild runtime received an unexpected entry capability'),
+      );
+    }
     await prepareViteCli(plan);
     return;
   }
 
-  const port = readKernelEntryCapabilityPorts()[SHADOW_ASSET_CAPABILITY];
+  const port = capabilities[SHADOW_ASSET_CAPABILITY];
   if (port === undefined) {
     throw new NotImplementedError('vite.esbuild.shadowAssets');
   }

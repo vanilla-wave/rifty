@@ -11,7 +11,11 @@ test('URL entry round-trips a protocol-opaque capability port', async ({ page })
 
   const result = await page.evaluate(
     async ({ entryUrl, kernelUrl }) => {
-      const kernel = await import(kernelUrl);
+      const [hostAssets, kernel] = await Promise.all([
+        import('/src/browser-unit/workbench-vite-host-assets.ts'),
+        import(kernelUrl),
+      ]);
+      kernel.setKernelWorkerUrl(hostAssets.workbenchViteHostAssets.workers.kernel);
       const channel = new MessageChannel();
       channel.port1.start();
 

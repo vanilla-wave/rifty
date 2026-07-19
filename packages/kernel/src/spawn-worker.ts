@@ -215,7 +215,7 @@ export function spawnKernelWorker(
 
   // Validation is the adoption point: malformed input allocates nothing and
   // remains caller-owned. After this returns, every supplied child endpoint is
-  // part of the spawn resource transaction (ADR-0266).
+  // part of the spawn resource transaction (ADR-0300).
   const normalizedEntry = normalizeWorkerEntryDescriptor(spec.entry);
   const capabilityPorts: readonly MessagePort[] =
     normalizedEntry.kind === 'url' && normalizedEntry.capabilityPorts !== undefined

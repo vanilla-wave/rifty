@@ -13,6 +13,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ViteCliPreparation } from './vite-cli-prep.ts';
 import { prepareViteCliAcquisitionFiles } from './vite-cli-prep.ts';
+import { consumeWorkbenchEntryCapabilities } from './workbench-entry-capabilities.ts';
 
 const CLI_PATH = '/app/node_modules/vite/dist/node/cli.js';
 const CONFIG_PATH = '/app/node_modules/vite/dist/node/chunks/config.js';
@@ -47,7 +48,10 @@ const WATCH_SOURCE = [
 ].join('\n');
 
 interface NodeEntryViteRuntimeApi {
-  readonly prepareViteCliForNodeEntry: (preparation: ViteCliPreparation) => Promise<void>;
+  readonly prepareViteCliForNodeEntry: (
+    preparation: ViteCliPreparation,
+    capabilities: KernelEntryCapabilityPorts,
+  ) => Promise<void>;
 }
 
 async function api(): Promise<NodeEntryViteRuntimeApi> {
@@ -67,8 +71,9 @@ async function bootVite(version: string): Promise<MemoryFsSync> {
   return fsSync;
 }
 
-function publishCapabilities(ports: KernelEntryCapabilityPorts): void {
+function consumeCapabilities(ports: KernelEntryCapabilityPorts): KernelEntryCapabilityPorts {
   publishKernelEntryCapabilityPorts(ports);
+  return consumeWorkbenchEntryCapabilities();
 }
 
 function nextMessage(port: MessagePort): Promise<unknown> {
@@ -84,19 +89,32 @@ afterEach(() => {
 });
 
 describe('node-entry Vite capability-only runtime', () => {
-  it('gates Vite 8 before adopting or starting a supplied capability port', async () => {
+  it('prepares Vite 8 with the canonical empty capability set', async () => {
+    await bootVite('8.0.16');
+
+    await expect(
+      (await api()).prepareViteCliForNodeEntry(VITE_PREPARATION, consumeCapabilities({})),
+    ).resolves.toBeUndefined();
+  });
+
+  it('closes and loud-fails a supplied capability for Vite 8', async () => {
     await bootVite('8.0.16');
     const channel = new MessageChannel();
     const start = vi.spyOn(channel.port2, 'start');
     const post = vi.spyOn(channel.port2, 'postMessage');
-    publishCapabilities({ [SHADOW_ASSET_CAPABILITY]: channel.port2 });
+    const close = vi.spyOn(channel.port2, 'close');
     try {
-      await (await api()).prepareViteCliForNodeEntry(VITE_PREPARATION);
+      await expect(
+        (await api()).prepareViteCliForNodeEntry(
+          VITE_PREPARATION,
+          consumeCapabilities({ [SHADOW_ASSET_CAPABILITY]: channel.port2 }),
+        ),
+      ).rejects.toThrow('Vite without the esbuild runtime received an unexpected entry capability');
       expect(start).not.toHaveBeenCalled();
       expect(post).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
     } finally {
       channel.port1.close();
-      channel.port2.close();
     }
   });
 
@@ -104,13 +122,16 @@ describe('node-entry Vite capability-only runtime', () => {
     'loud-throws for Vite 7 %s before import when admission supplied no capability',
     async (mode) => {
       await bootVite('7.3.6');
-      publishCapabilities({});
+      const capabilities = consumeCapabilities({});
 
       const failure = await (await api())
-        .prepareViteCliForNodeEntry({
-          ...VITE_PREPARATION,
-          mode,
-        })
+        .prepareViteCliForNodeEntry(
+          {
+            ...VITE_PREPARATION,
+            mode,
+          },
+          capabilities,
+        )
         .then(
           () => null,
           (error: unknown) => error,
@@ -120,12 +141,28 @@ describe('node-entry Vite capability-only runtime', () => {
     },
   );
 
+  it('closes a consumed capability when Vite planning fails before runtime selection', async () => {
+    await bootVite('7.3.6');
+    const channel = new MessageChannel();
+    const close = vi.spyOn(channel.port2, 'close');
+    const capabilities = consumeCapabilities({ [SHADOW_ASSET_CAPABILITY]: channel.port2 });
+
+    await expect(
+      (await api()).prepareViteCliForNodeEntry(
+        { ...VITE_PREPARATION, executedBinPath: '/not-an-installed-vite-entry' },
+        capabilities,
+      ),
+    ).rejects.toThrow('vite CLI preparation expected an installed Vite entry');
+    expect(close).toHaveBeenCalledTimes(1);
+    channel.port1.close();
+  });
+
   it('preserves a typed read failure and disposes the client exactly once after preparation', async () => {
     await bootVite('7.3.6');
     const channel = new MessageChannel();
-    publishCapabilities({ [SHADOW_ASSET_CAPABILITY]: channel.port2 });
+    const capabilities = consumeCapabilities({ [SHADOW_ASSET_CAPABILITY]: channel.port2 });
     const first = nextMessage(channel.port1);
-    const preparation = (await api()).prepareViteCliForNodeEntry(VITE_PREPARATION);
+    const preparation = (await api()).prepareViteCliForNodeEntry(VITE_PREPARATION, capabilities);
     preparation.catch(() => {});
     try {
       const read = (await first) as { readonly requestId: number; readonly assetId: string };

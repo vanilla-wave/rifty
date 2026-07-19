@@ -48,6 +48,10 @@ import {
   readNodeWorkerRuntimeConfig,
 } from './node-worker-runtime-config.ts';
 import { viteCliPreparationFromArgs } from './vite-cli-prep.ts';
+import {
+  closeUnusedWorkbenchEntryCapabilities,
+  consumeWorkbenchEntryCapabilities,
+} from './workbench-entry-capabilities.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
@@ -111,8 +115,11 @@ const vitePreparation =
         executedBinPath: entryPath,
       })
     : null;
+const entryCapabilities = consumeWorkbenchEntryCapabilities();
 if (vitePreparation !== null) {
-  await prepareViteCliForNodeEntry(vitePreparation);
+  await prepareViteCliForNodeEntry(vitePreparation, entryCapabilities);
+} else {
+  closeUnusedWorkbenchEntryCapabilities(entryCapabilities);
 }
 
 // `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so

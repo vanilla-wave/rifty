@@ -79,7 +79,7 @@ export type WorkerEntryDescriptor =
       readonly url: string;
       /** Entry-scoped higher-runtime metadata; kernel transports it opaquely. */
       readonly bootstrap?: KernelEntryBootstrapEnvelope;
-      /** Entry-scoped protocol-opaque endpoints (ADR-0266). */
+      /** Entry-scoped protocol-opaque endpoints (ADR-0300). */
       readonly capabilityPorts?: KernelEntryCapabilityPorts;
     };
 
