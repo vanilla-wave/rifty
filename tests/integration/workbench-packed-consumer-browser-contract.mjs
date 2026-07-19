@@ -14,7 +14,14 @@ export const PACKED_VITE_JOURNEYS = Object.freeze([
 ]);
 
 const ALIAS = '@esbuild/wasi-preview1';
-const TRACKED_PACKAGES = new Set([ALIAS, 'esbuild', 'esbuild-wasm']);
+const RESPONSE_FIELDS = Object.freeze([
+  'bodyBytes',
+  'kind',
+  'method',
+  'packageName',
+  'path',
+  'status',
+]);
 
 function record(value, label) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -23,11 +30,18 @@ function record(value, label) {
   return value;
 }
 
-function trackedResponse(value, index) {
+function ledgerResponse(value, index, registryOrigin) {
   const response = record(value, `packed alias response ${index + 1}`);
-  if (!TRACKED_PACKAGES.has(response.packageName)) return null;
+  const fields = Object.keys(response).sort();
   if (
+    fields.length !== RESPONSE_FIELDS.length ||
+    fields.some((field, fieldIndex) => field !== RESPONSE_FIELDS[fieldIndex]) ||
     response.method !== 'GET' ||
+    typeof response.path !== 'string' ||
+    !response.path.startsWith('/') ||
+    new URL(response.path, registryOrigin).origin !== registryOrigin ||
+    typeof response.packageName !== 'string' ||
+    response.packageName.length === 0 ||
     (response.kind !== 'packument' && response.kind !== 'tarball') ||
     response.status !== 200 ||
     !Number.isSafeInteger(response.bodyBytes) ||
@@ -35,7 +49,14 @@ function trackedResponse(value, index) {
   ) {
     throw new Error(`packed alias response ${index + 1} lacks complete successful GET body proof`);
   }
-  return response;
+  return Object.freeze({
+    method: response.method,
+    path: response.path,
+    packageName: response.packageName,
+    kind: response.kind,
+    status: response.status,
+    bodyBytes: response.bodyBytes,
+  });
 }
 
 function summary(responses, packageName, kind) {
@@ -72,10 +93,16 @@ export function packedAliasBoundaryProof(input) {
   if (!Array.isArray(options.responses)) {
     throw new TypeError('packed alias boundary responses must be an array');
   }
-  const responses = options.responses.flatMap((response, index) => {
-    const tracked = trackedResponse(response, index);
-    return tracked === null ? [] : [tracked];
-  });
+  const responses = Object.freeze(
+    options.responses.map((response, index) => ledgerResponse(response, index, origin.origin)),
+  );
+  let totalResponseBodyBytes = 0;
+  for (const response of responses) {
+    totalResponseBodyBytes += response.bodyBytes;
+    if (!Number.isSafeInteger(totalResponseBodyBytes)) {
+      throw new Error('packed alias response-body total must be a safe integer');
+    }
+  }
   const publicPackument = summary(responses, 'esbuild', 'packument');
   const publicTarball = summary(responses, 'esbuild', 'tarball');
   const aliasPackument = summary(responses, ALIAS, 'packument');
@@ -93,8 +120,10 @@ export function packedAliasBoundaryProof(input) {
   requireExactOne(assetPackument, 'runtime asset packument proof');
   requireExactOne(assetTarball, 'runtime asset tarball proof');
   return Object.freeze({
-    schema: 1,
+    schema: 2,
     registryOrigin: origin.origin,
+    responses,
+    totalResponseBodyBytes,
     publicEsbuild: Object.freeze({ packument: publicPackument, tarball: publicTarball }),
     retiredAlias: Object.freeze({
       packument: aliasPackument,
