@@ -20,7 +20,10 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 import ts from 'typescript';
-import { PACKED_VITE_JOURNEYS } from './workbench-packed-consumer-browser-contract.mjs';
+import {
+  PACKED_VITE_JOURNEYS,
+  packedAliasBoundaryProof,
+} from './workbench-packed-consumer-browser-contract.mjs';
 import {
   findInstalledPackage,
   resolveDeclaredCatalogAsset,
@@ -1252,16 +1255,11 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         );
       }
     }
-    const forbiddenSelectionRequests = aliasBoundaryResponses.filter(
-      (response) =>
-        response.packageName === '@esbuild/wasi-preview1' ||
-        (response.packageName === 'esbuild' && response.kind === 'tarball'),
-    );
-    if (forbiddenSelectionRequests.length > 0) {
-      throw new Error(
-        `Packed Workbench fetched forbidden esbuild package bytes: ${JSON.stringify(forbiddenSelectionRequests)}`,
-      );
-    }
+    const aliasBoundaryProof = packedAliasBoundaryProof({
+      registryOrigin: registry.origin,
+      responses: aliasBoundaryResponses,
+    });
+    console.log(`RIFTY_PACKED_ALIAS_BOUNDARY=${JSON.stringify(aliasBoundaryProof)}`);
     await context.close();
     console.log(
       `Packed Workbench Chromium passed: Vite 7.3.6 dev/build/optimize/preview + HMR; default Vite 8.0.16 dev/build/preview with zero runtime-asset progress; ${phases.join(' -> ')}`,

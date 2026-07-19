@@ -47,11 +47,13 @@ describe('packed Workbench browser acceptance contract', () => {
   });
 
   it('records exact response-body proof for the retired alias boundary', () => {
-    const response = (
-      packageName: string,
-      kind: 'packument' | 'tarball',
-      bodyBytes: number,
-    ) => ({ method: 'GET', packageName, kind, status: 200, bodyBytes });
+    const response = (packageName: string, kind: 'packument' | 'tarball', bodyBytes: number) => ({
+      method: 'GET',
+      packageName,
+      kind,
+      status: 200,
+      bodyBytes,
+    });
     expect(
       packedAliasBoundaryProof({
         registryOrigin: 'http://127.0.0.1:54321',
@@ -106,10 +108,7 @@ describe('packed Workbench browser acceptance contract', () => {
     expect(() =>
       packedAliasBoundaryProof({
         registryOrigin: 'http://127.0.0.1:54321',
-        responses: [
-          ...required,
-          { method: 'GET', status: 200, bodyBytes: 1, ...forbidden },
-        ],
+        responses: [...required, { method: 'GET', status: 200, bodyBytes: 1, ...forbidden }],
       }),
     ).toThrow(/forbidden|retired alias/i);
   });
