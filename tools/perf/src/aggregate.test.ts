@@ -465,6 +465,62 @@ describe('schema-v3 shadowAssetColdFillMs', () => {
     expect(incomplete.speedupX).toBeUndefined();
   });
 
+  it.each([
+    [
+      'requiredSetDigest',
+      (runs) =>
+        measuredShadowAssetRow(
+          runs.map((run) => ({ ...run, requiredSetDigest: 'b'.repeat(64) })),
+          { resolverUrl: 'https://eddy.example' },
+        ),
+    ],
+    [
+      'storageClass',
+      (runs) =>
+        measuredShadowAssetRow(
+          runs.map((run) => ({ ...run, storageClass: 'memory-session' })),
+          { resolverUrl: 'https://eddy.example' },
+        ),
+    ],
+    [
+      'memberBytes',
+      (runs) =>
+        measuredShadowAssetRow(
+          runs.map((run) => ({ ...run, memberBytes: SHADOW_ASSET_MEMBER_BYTES - 1 })),
+          { resolverUrl: 'https://eddy.example' },
+        ),
+    ],
+    [
+      'cacheRegime',
+      (runs) =>
+        measuredShadowAssetRow(runs, {
+          resolverUrl: 'https://eddy.example',
+          cacheRegime: 'fresh-context-empty-store-and-tarball;cold-proxy-origin',
+        }),
+    ],
+  ])(
+    'refuses an unmatched Eddy %s boundary while preserving standard verbatim',
+    (field, eddyInput) => {
+      const standardInput = measuredShadowAssetRow(
+        [500, 510, 520, 530, 540].map((duration) => shadowAssetRun(duration)),
+      );
+      const preservedStandard = shadowAssetArtifact(standardInput).metrics.shadowAssetColdFillMs
+        .standard;
+      const eddyRuns = [250, 255, 260, 265, 270].map((duration) =>
+        eddyShadowAssetRun(duration),
+      );
+      const metric = shadowAssetArtifact(standardInput, eddyInput(eddyRuns)).metrics
+        .shadowAssetColdFillMs;
+
+      expect(JSON.stringify(metric.standard)).toBe(JSON.stringify(preservedStandard));
+      expect(metric.eddy).toEqual({
+        status: 'unmeasured',
+        note: expect.stringMatching(new RegExp(`match.*standard boundary.*${field}`, 'i')),
+      });
+      expect(metric.speedupX).toBeUndefined();
+    },
+  );
+
   it('refuses registry-shaped bytes or registry-only traffic as Eddy evidence', () => {
     const standardRuns = [500, 510, 520, 530, 540].map((duration) => shadowAssetRun(duration));
     const registryShaped = [250, 255, 260, 265, 270].map((duration) =>
