@@ -36,4 +36,12 @@ describe('packed Workbench browser acceptance contract', () => {
     expect(fixture).toContain('openDefaultVite8');
     expect(fixture).toContain('vite8RuntimeAssetProgress');
   });
+
+  it('holds the same tarball-installed production host for the cold benchmark route', async () => {
+    const runner = await readFile(runnerUrl, 'utf8');
+
+    expect(runner).toContain('--serve-shadow-asset-cold');
+    expect(runner).toContain('shadow-asset-cold.html');
+    expect(runner).toContain('RIFTY_SHADOW_ASSET_COLD_HOST=');
+  });
 });
