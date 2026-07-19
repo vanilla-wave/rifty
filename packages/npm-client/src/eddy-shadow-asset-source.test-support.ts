@@ -7,8 +7,8 @@ import {
   packEddyBundle,
 } from './eddy-bundle.ts';
 import type { Lockfile } from './linker.ts';
-import { RegistryClient, type Fetcher, type Packument } from './registry.ts';
-import { createStandardShadowAssetSource, type ShadowAssetSourceRequest } from './shadow-assets.ts';
+import { type Fetcher, type Packument, RegistryClient } from './registry.ts';
+import { type ShadowAssetSourceRequest, createStandardShadowAssetSource } from './shadow-assets.ts';
 import { VfsTarballCache, computeIntegrity } from './tarball-cache.ts';
 
 export interface AssetFixture {
@@ -90,10 +90,7 @@ export async function eddyBundleFixture(
   return { bytes: packEddyBundle(contents), closureHash, contents, lockfile };
 }
 
-export function responseForBundle(
-  fixture: EddyBundleFixture,
-  durable = false,
-): Response {
+export function responseForBundle(fixture: EddyBundleFixture, durable = false): Response {
   return new Response(fixture.bytes.slice(), {
     status: 200,
     headers: durable ? { 'x-eddy-store-durable': '1' } : undefined,

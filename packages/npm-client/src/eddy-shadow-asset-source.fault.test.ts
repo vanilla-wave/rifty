@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { packEddyBundle } from './eddy-bundle.ts';
-import { createEddyShadowAssetSource } from './eddy-shadow-asset-source.ts';
 import {
   assetFixture,
   eddyBundleFixture,
   realStandardSource,
   responseForBundle,
 } from './eddy-shadow-asset-source.test-support.ts';
+import { createEddyShadowAssetSource } from './eddy-shadow-asset-source.ts';
 import { computeIntegrity } from './tarball-cache.ts';
 
 describe('Eddy shadow-asset source fault matrix', () => {
@@ -152,9 +152,7 @@ describe('Eddy shadow-asset source fault matrix', () => {
     });
 
     expect(result).toMatchObject({ fillTransport: 'standard' });
-    expect(calls).toEqual([
-      `https://eddy.test/resolve/bundle/${encodeURIComponent(expectedPin)}`,
-    ]);
+    expect(calls).toEqual([`https://eddy.test/resolve/bundle/${encodeURIComponent(expectedPin)}`]);
     expect(learnedPins.get(canonicalEddyRequestKey(sourceBody))).toBe(expectedPin);
   });
 

@@ -265,6 +265,28 @@ function shadowAssetRun(durationMs, overrides = {}) {
   };
 }
 
+function eddyShadowAssetRun(durationMs, overrides = {}) {
+  return {
+    durationMs,
+    requiredSetDigest: SHADOW_ASSET_DIGEST,
+    storageClass: 'opfs-persisted',
+    fillTransport: 'eddy',
+    fillCache: 'bundle',
+    memberBytes: SHADOW_ASSET_MEMBER_BYTES,
+    responseBodyBytes: {
+      bundle: 5_058_900,
+      total: 5_058_900,
+    },
+    transport: {
+      mode: 'auto',
+      origins: {
+        'https://eddy.example': { protocol: 'h2', requests: 1 },
+      },
+    },
+    ...overrides,
+  };
+}
+
 function shadowAssetArtifact(standard, eddy) {
   return buildArtifact({
     generatedAt: '2026-07-18T00:00:00.000Z',
@@ -417,22 +439,69 @@ describe('schema-v3 shadowAssetColdFillMs', () => {
   it('emits speedupX only for two complete matched measured rows', () => {
     const standardRuns = [500, 510, 520, 530, 540].map((duration) => shadowAssetRun(duration));
     const eddyRuns = [250, 255, 260, 265, 270].map((duration) =>
-      shadowAssetRun(duration, { fillTransport: 'eddy' }),
+      eddyShadowAssetRun(duration),
     );
     const matched = shadowAssetArtifact(
       measuredShadowAssetRow(standardRuns),
       measuredShadowAssetRow(eddyRuns, {
         resolverUrl: 'https://eddy.example',
-        expectedFillTransport: 'eddy',
       }),
     ).metrics.shadowAssetColdFillMs;
     expect(matched.speedupX).toBe(2);
+    expect(matched.eddy).toMatchObject({
+      status: 'measured',
+      fillTransport: 'eddy',
+      fillCache: 'bundle',
+    });
+    expect(matched.eddy.runs[0].responseBodyBytes).toEqual({
+      bundle: 5_058_900,
+      total: 5_058_900,
+    });
 
     const incomplete = shadowAssetArtifact(
       measuredShadowAssetRow(standardRuns),
       { status: 'unmeasured', note: 'Eddy bundle missed one asset' },
     ).metrics.shadowAssetColdFillMs;
     expect(incomplete.speedupX).toBeUndefined();
+  });
+
+  it('refuses registry-shaped bytes or registry-only traffic as Eddy evidence', () => {
+    const standardRuns = [500, 510, 520, 530, 540].map((duration) => shadowAssetRun(duration));
+    const registryShaped = [250, 255, 260, 265, 270].map((duration) =>
+      shadowAssetRun(duration, { fillTransport: 'eddy' }),
+    );
+    const metric = shadowAssetArtifact(
+      measuredShadowAssetRow(standardRuns),
+      measuredShadowAssetRow(registryShaped, { resolverUrl: 'https://eddy.example' }),
+    ).metrics.shadowAssetColdFillMs;
+
+    expect(metric.eddy).toEqual({
+      status: 'unmeasured',
+      note: expect.stringMatching(/fillCache must be bundle|bundle response/i),
+    });
+    expect(metric.speedupX).toBeUndefined();
+  });
+
+  it('requires every measured Eddy run to use its configured resolver or bundle origin', () => {
+    const standardRuns = [500, 510, 520, 530, 540].map((duration) => shadowAssetRun(duration));
+    const wrongOrigin = [250, 255, 260, 265, 270].map((duration) =>
+      eddyShadowAssetRun(duration, {
+        transport: {
+          mode: 'auto',
+          origins: { 'https://other.example': { protocol: 'h2', requests: 1 } },
+        },
+      }),
+    );
+    const metric = shadowAssetArtifact(
+      measuredShadowAssetRow(standardRuns),
+      measuredShadowAssetRow(wrongOrigin, { resolverUrl: 'https://eddy.example' }),
+    ).metrics.shadowAssetColdFillMs;
+
+    expect(metric.eddy).toEqual({
+      status: 'unmeasured',
+      note: expect.stringMatching(/no measured request.*Eddy origin/i),
+    });
+    expect(metric.speedupX).toBeUndefined();
   });
 });
 

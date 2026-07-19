@@ -4,13 +4,13 @@ import {
   ShadowAssetSourceCollisionError,
   eddyRequestForShadowAssetSources,
 } from './eddy-shadow-asset-request.ts';
-import { createEddyShadowAssetSource } from './eddy-shadow-asset-source.ts';
 import {
   assetFixture,
   eddyBundleFixture,
   realStandardSource,
   responseForBundle,
 } from './eddy-shadow-asset-source.test-support.ts';
+import { createEddyShadowAssetSource } from './eddy-shadow-asset-source.ts';
 
 describe('Eddy shadow-asset source contract', () => {
   it('rejects a builtin trigger at construction before Eddy or STD can touch the wire', async () => {
@@ -86,9 +86,7 @@ describe('Eddy shadow-asset source contract', () => {
     expect(standard.calls).toEqual([]);
     const body = eddyRequestForShadowAssetSources([zRuntime.request, esbuildWasm.request]);
     expect(body).not.toBeNull();
-    expect(learnedPins).toEqual(
-      new Map([[canonicalEddyRequestKey(body!), bundle.closureHash]]),
-    );
+    expect(learnedPins).toEqual(new Map([[canonicalEddyRequestKey(body!), bundle.closureHash]]));
   });
 
   it('does not learn an unproved POST and never reuses a learned pin for another missing set', async () => {
