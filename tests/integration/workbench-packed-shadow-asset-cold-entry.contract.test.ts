@@ -33,11 +33,12 @@ describe('packed shadow-asset cold entry contract', () => {
     expect(source).not.toContain('__RIFTY_PACKED_WORKBENCH__');
   });
 
-  it('imports only the public Workbench root and published runtime subpaths', async () => {
+  it('imports only its pure options helper plus public runtime paths', async () => {
     const modulePath = resolve(fixtureRoot, 'src/shadow-asset-cold.ts');
     const source = await readFile(modulePath, 'utf8');
 
     expect(staticImports(source, modulePath)).toEqual([
+      './shadow-asset-cold-options',
       '@riftydev/service-worker/sw?worker&url',
       '@riftydev/workbench',
       '@riftydev/workbench/dev-server-worker?worker&url',
@@ -48,5 +49,8 @@ describe('packed shadow-asset cold entry contract', () => {
     ]);
     expect(source).not.toContain('@riftydev/workbench/playground');
     expect(source).not.toContain('typescript-worker');
+
+    const optionsPath = resolve(fixtureRoot, 'src/shadow-asset-cold-options.ts');
+    expect(staticImports(await readFile(optionsPath, 'utf8'), optionsPath)).toEqual([]);
   });
 });

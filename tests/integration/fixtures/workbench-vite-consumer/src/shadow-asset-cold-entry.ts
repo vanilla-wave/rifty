@@ -1,10 +1,11 @@
 import {
+  type ShadowAssetColdMeasurementOptions,
   type ShadowAssetColdPageEvidence,
-  measureStandardShadowAssetCold,
+  measureShadowAssetCold,
 } from './shadow-asset-cold';
 
 export interface ShadowAssetColdPagePort {
-  measure(registryUrl: string): Promise<ShadowAssetColdPageEvidence>;
+  measure(options: ShadowAssetColdMeasurementOptions): Promise<ShadowAssetColdPageEvidence>;
 }
 
 declare global {
@@ -14,7 +15,7 @@ declare global {
 }
 
 window.__RIFTY_SHADOW_ASSET_COLD__ = Object.freeze({
-  measure: measureStandardShadowAssetCold,
+  measure: measureShadowAssetCold,
 });
 
 const status = document.querySelector('#status');

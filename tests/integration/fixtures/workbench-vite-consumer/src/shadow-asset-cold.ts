@@ -12,6 +12,12 @@ import kernelWorkerUrl from '@riftydev/workbench/kernel-worker?worker&url';
 import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
 import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import {
+  type ShadowAssetColdMeasurementOptions,
+  shadowAssetColdPackageAcquisition,
+} from './shadow-asset-cold-options';
+
+export type { ShadowAssetColdMeasurementOptions } from './shadow-asset-cold-options';
 
 const WORKBENCH_LOCK = 'rifty:workbench:v1';
 
@@ -29,14 +35,6 @@ export interface ShadowAssetColdPageEvidence {
     readonly workbenchClosed: boolean;
     readonly lockReacquired: boolean;
   }>;
-}
-
-function absoluteRegistryUrl(value: string): string {
-  const url = new URL(value);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new TypeError('shadow-asset cold registry URL must use http(s)');
-  }
-  return url.href.replace(/\/$/u, '');
 }
 
 function viteFiles(): Readonly<Record<string, string>> {
@@ -62,10 +60,10 @@ function failure(error: unknown): Error {
 }
 
 /** One page-owned measured operation; Node owns context/CDP isolation. */
-export async function measureStandardShadowAssetCold(
-  registryUrlInput: string,
+export async function measureShadowAssetCold(
+  options: ShadowAssetColdMeasurementOptions,
 ): Promise<ShadowAssetColdPageEvidence> {
-  const registryUrl = absoluteRegistryUrl(registryUrlInput);
+  const packageAcquisition = shadowAssetColdPackageAcquisition(options);
   const progress: Array<{ readonly atMs: number; readonly progress: RuntimeAssetProgress }> = [];
   let workbench: Workbench | null = null;
   let project: ProjectSession<unknown> | null = null;
@@ -91,7 +89,7 @@ export async function measureStandardShadowAssetCold(
         wasm: { sqlite: sqlWasmUrl },
         previewProbeTimeoutMs: 30_000,
       },
-      packageAcquisition: { registryUrl },
+      packageAcquisition,
       storage: { persistence: 'preferred' },
     });
     preInspection = await workbench.runtimeAssets.inspect();
