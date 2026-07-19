@@ -6,7 +6,7 @@ created: 2026-07-17
 why: verified runtime assets are not a shipped capability while Vite can still read a host-supplied esbuild URL or one recursive Node entry can decode the obsolete bootstrap
 user_story: As a Workbench Vite user, I want the Vite process to execute only the esbuild bytes proven by package acquisition, but today deployment configuration still supplies an unrelated host WASM asset.
 epic: honest-shadow-substitutions
-blocked_by: [distribution/workbench-runtime-asset-acquisition, distribution/workbench-controllers]
+blocked_by: [distribution/workbench-controllers]
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/kernel/0266-opaque-named-capability-ports-on-worker-bootstrap.md, docs/adr/runtime-js/0267-entry-scoped-host-bootstrap-metadata-for-recursive-node-workers.md, docs/adr/distribution/0263-workbench-playground-companion-subpath.md, docs/adr/toolchain-build/0226-upstream-derived-filesystem-enabled-esbuild-runtime.md]
 code: [packages/workbench/package.json, packages/workbench/src, packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/runtime-js/src/builtins/node-entry-url.ts, packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/ipc/recursive-runner.ts, apps/playground/package.json, apps/playground/src/adapters/playground-workbench-host.ts, apps/playground/src/browser-unit/workbench-vite-host-assets.ts, apps/playground/src/glue/playground-node-worker-runtime.ts, pnpm-lock.yaml, tests/browser-unit, tests/e2e, tests/e2e-prod, tests/integration/fixtures/workbench-vite-consumer]
 ---

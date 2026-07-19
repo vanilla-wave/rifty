@@ -5,7 +5,7 @@ title: Playground runtime-asset cache status and recovery UI
 created: 2026-07-17
 why: Workbench exposes sanitized asset progress, inspection, and clear recovery, but the first-party Playground has no visible cache status or recovery control
 user_story: As a Playground user whose runtime-asset fetch or persistence failed, I want to see what happened and perform the supported recovery flow without writing host code, but today only terminal output and the Workbench API expose it
-blocked_by: [distribution/workbench-runtime-asset-acquisition]
+blocked_by: []
 sources: [docs/adr/npm-client/0249-shadow-runtime-assets-install-through-the-npm-pipeline-into-a-workbench-content-store.md, docs/adr/distribution/0278-playground-companion-terminal-state-and-preview-registry.md, docs/backlog/vfs/storage-pressure-and-eviction-ux.md, docs/backlog/playground/diagnostics-hub.md]
 code: [apps/playground/src/components, apps/playground/src/adapters/playground-workbench-host.ts]
 ---
