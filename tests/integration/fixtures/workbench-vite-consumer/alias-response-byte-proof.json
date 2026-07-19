@@ -13,6 +13,13 @@
       "sha256": "7233a01db2259171e0607bbb9891ddc7efe78369f59077e44675300cccca7aa5",
       "bytes": 10029632
     },
+    "repackedAlias": {
+      "packageName": "@esbuild/wasi-preview1",
+      "version": "0.28.0",
+      "packumentPath": "/@esbuild%2Fwasi-preview1",
+      "tarballPath": "/-/tarballs/%40esbuild%2Fwasi-preview1-0.28.0.tgz",
+      "integrity": "sha512-OiVq6QwMpllcFsNXJMr4vpZMCVK5tJE5zRonRiBTgIMIYq1+9OJDFKk+DcFd/9r1jthZcO7Bk7maaVDZjG2DVg=="
+    },
     "proof": {
       "schema": 1,
       "registryOrigin": "http://127.0.0.1:54321",
