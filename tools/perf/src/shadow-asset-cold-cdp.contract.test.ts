@@ -274,6 +274,23 @@ describe('standard shadow-asset CDP response recorder', () => {
     ).toHaveLength(2);
   });
 
+  it('refuses a lifecycle first observed after requestWillBeSent', async () => {
+    const session = new FakeCdpSession();
+    session.bodies.set('late-attach', { body: '{}', base64Encoded: false });
+    const recorder = await startCdpResponseRecorder(fakePage(session));
+
+    session.emit('Network.responseReceived', cdpResponse('late-attach', packumentUrl));
+    session.emit('Network.loadingFinished', { requestId: 'late-attach' });
+
+    await expect(recorder.stop()).resolves.toEqual([
+      expect.objectContaining({
+        requestId: 'late-attach',
+        complete: false,
+        error: 'response lifecycle began before CDP capture was ready',
+      }),
+    ]);
+  });
+
   it('records requestServedFromCache and prefetch-cache provenance', async () => {
     const session = new FakeCdpSession();
     session.bodies.set('cached', { body: '{}', base64Encoded: false });
