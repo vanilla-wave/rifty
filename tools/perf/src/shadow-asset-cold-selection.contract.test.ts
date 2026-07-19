@@ -129,7 +129,7 @@ describe('finite public esbuild selection oracle', () => {
     await expect(
       handler?.({
         request: () => ({ method: () => 'GET' }),
-        fetch: async () => ({ ok: () => false, status: () => 503 }),
+        fetch: async () => ({ ok: () => false, status: () => 503, json: vi.fn() }),
         fulfill,
       }),
     ).rejects.toThrow(/503/);
