@@ -165,7 +165,9 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       // URL specifiers are an ESM-only language. Node CJS require()/resolve()
       // treats any URL-like string as a path/package name → MODULE_NOT_FOUND
       // (parity modules/require-url-specifier-strings), so both scheme branches
-      // stay behind the esm flag and CJS falls through to the bare walk.
+      // stay behind the esm flag and CJS falls through to the bare walk —
+      // including ADR-0066 aliases/baseUrl: tsconfig-paths in real Node matches
+      // URL-like bare names the same way (resolver-file-url.test.ts).
       if (opts.esm && hasURLScheme(specifier, 'data')) {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',

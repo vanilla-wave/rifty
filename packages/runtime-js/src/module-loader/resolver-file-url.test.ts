@@ -41,6 +41,52 @@ describe('resolver file: URL imports', () => {
     );
   });
 
+  // Oracle: Node 24.16 + tsconfig-paths@4 (`tsconfig-paths/register`) resolves
+  // URL-like CJS bare names through exact aliases, `*` wildcards, and baseUrl —
+  // the extension must not special-case them out of the bare fall-through.
+  it('lets explicit alias patterns match URL-like CJS bare names', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/app/mapped-exact.js': 'module.exports = "exact";\n',
+      '/app/star/file:/w.js': 'module.exports = "star";\n',
+      '/app/main.js': `
+        const out = {
+          exact: require('file:///exact.js'),
+          exactResolved: require.resolve('file:///exact.js'),
+          star: require('file:///w.js'),
+        };
+        try { require('data:text/javascript,1'); out.data = 'LOADED'; }
+        catch (error) { out.data = error.code; }
+        module.exports = out;
+      `,
+    });
+    const loader = createModuleLoader(vfs, {
+      cwd: '/app',
+      paths: { 'file:///exact.js': '/app/mapped-exact.js', '*': '/app/star/*' },
+    });
+
+    expect(loader.require('./main.js', '/app/entry.js')).toEqual({
+      exact: 'exact',
+      exactResolved: '/app/mapped-exact.js',
+      star: 'star',
+      // `*` matched but '/app/star/data:text/javascript,1' is a miss — same
+      // attempt-then-MODULE_NOT_FOUND as tsconfig-paths.
+      data: 'MODULE_NOT_FOUND',
+    });
+  });
+
+  it('lets auto-discovered baseUrl resolve URL-like CJS bare names', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/app/tsconfig.json': JSON.stringify({ compilerOptions: { baseUrl: '.' } }),
+      '/app/file:/bu.js': 'module.exports = "bu";\n',
+      '/app/main.js': "module.exports = require('file:///bu.js');\n",
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/app', autoDiscoverTsconfigPaths: true });
+
+    expect(loader.require('./main.js', '/app/entry.js')).toBe('bu');
+  });
+
   it.each(['data:', 'DaTa:'])(
     'keeps unsupported %s URLs on the same loud boundary',
     async (scheme) => {
