@@ -425,21 +425,40 @@ describe('Eddy shadow-asset cold run evidence', () => {
   it.each([
     ['missing exact body', [eddyResponse({ postData: undefined })]],
     ['malformed exact body', [eddyResponse({ postData: '{not-json' })]],
-    [
-      'duplicate exact body',
-      [eddyResponse(), eddyResponse({ requestId: 'worker\0eddy-retry' })],
-    ],
+    ['duplicate exact body', [eddyResponse(), eddyResponse({ requestId: 'worker\0eddy-retry' })]],
   ])('refuses shadow-source POST provenance: %s', (_label, sourceResponses) => {
     expect(buildEddyShadowAssetColdRun(eddyFixture({ sourceResponses }))).toMatchObject({
       ok: false,
     });
   });
 
-  it('requires the exact fresh-owner empty-tarball-cache run premise', () => {
+  it('refuses a malformed extra response beside the exact shadow-source POST', () => {
     expect(
       buildEddyShadowAssetColdRun(
-        eddyFixture({ shadowSourceCacheRegime: 'warm-owner' as never }),
+        eddyFixture({ sourceResponses: [eddyResponse(), null as never] }),
       ),
+    ).toMatchObject({ ok: false });
+  });
+
+  it.each(['not-an-absolute-url', 'file:///tmp/eddy-bundle'])(
+    'refuses an extra response whose URL is not absolute http(s): %s',
+    (url) => {
+      expect(
+        buildEddyShadowAssetColdRun(
+          eddyFixture({
+            sourceResponses: [
+              eddyResponse(),
+              eddyResponse({ requestId: 'worker\0corrupt-extra', url }),
+            ],
+          }),
+        ),
+      ).toMatchObject({ ok: false });
+    },
+  );
+
+  it('requires the exact fresh-owner empty-tarball-cache run premise', () => {
+    expect(
+      buildEddyShadowAssetColdRun(eddyFixture({ shadowSourceCacheRegime: 'warm-owner' as never })),
     ).toMatchObject({ ok: false });
   });
 
