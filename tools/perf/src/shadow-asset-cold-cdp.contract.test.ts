@@ -214,9 +214,41 @@ describe('standard shadow-asset CDP response recorder', () => {
     ]);
   });
 
-  it('refuses a streamed response whose dataReceived chunk omits data', async () => {
+  it('accepts buffered bytes whose queued dataReceived event omits duplicate data', async () => {
     const session = new FakeCdpSession();
-    session.streams.set('missing-data', { bufferedData: '' });
+    const buffered = '{"name":"esbuild-wasm"}';
+    session.streams.set('buffered-data', {
+      bufferedData: Buffer.from(buffered).toString('base64'),
+    });
+    const recorder = await startCdpResponseRecorder(fakePage(session));
+
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'buffered-data',
+      request: { url: packumentUrl, method: 'GET' },
+    });
+    session.emit('Network.responseReceived', cdpResponse('buffered-data', packumentUrl));
+    await Promise.resolve();
+    await Promise.resolve();
+    session.emit('Network.dataReceived', {
+      requestId: 'buffered-data',
+      dataLength: Buffer.byteLength(buffered),
+    });
+    session.emit('Network.loadingFinished', { requestId: 'buffered-data' });
+
+    await expect(recorder.stop()).resolves.toEqual([
+      expect.objectContaining({
+        complete: true,
+        bodyBytes: Buffer.byteLength(buffered),
+        bodyText: buffered,
+      }),
+    ]);
+  });
+
+  it('refuses when buffered and streamed bytes are smaller than summed dataLength', async () => {
+    const session = new FakeCdpSession();
+    session.streams.set('missing-data', {
+      bufferedData: Buffer.from('abc').toString('base64'),
+    });
     session.bodies.set('missing-data', { body: 'hidden fallback', base64Encoded: false });
     const recorder = await startCdpResponseRecorder(fakePage(session));
 
@@ -234,7 +266,8 @@ describe('standard shadow-asset CDP response recorder', () => {
       expect.objectContaining({
         complete: false,
         bodyBytes: 0,
-        error: 'Network.streamResourceContent failed: Network.dataReceived omitted streamed data',
+        error:
+          'Network.streamResourceContent failed: CDP streamed body bytes do not match Network.dataReceived total',
       }),
     ]);
     expect(session.calls).not.toContainEqual({
