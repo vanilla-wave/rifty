@@ -114,3 +114,15 @@ export function preserveStandardShadowAssetColdInput(artifact, eddyOptions) {
   }
   return standard;
 }
+
+/** Refuse an Eddy artifact if aggregation changed even the serialized STD row. */
+export function assertPreservedStandardShadowAssetColdOutput(artifact, preservedStandard) {
+  const output = artifact?.metrics?.shadowAssetColdFillMs?.standard;
+  if (
+    !plainRecord(output) ||
+    !plainRecord(preservedStandard) ||
+    JSON.stringify(output) !== JSON.stringify(preservedStandard)
+  ) {
+    throw new Error('Eddy shadow asset cold output must preserve the standard row verbatim');
+  }
+}
