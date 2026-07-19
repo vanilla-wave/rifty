@@ -3206,6 +3206,54 @@ body.rf-resizing iframe {
   padding-inline: 15px;
 }
 
+/* Failure tone: same standalone-notice surface, error accents + cause detail. */
+.rf-workspace-occupied--failure .rf-workspace-occupied__icon {
+  color: var(--rf-err);
+  background: var(--rf-err-bg);
+  border-color: var(--rf-err-border);
+}
+.rf-workspace-occupied--failure .rf-workspace-occupied__status-dot {
+  background: var(--rf-err);
+}
+.rf-workspace-occupied--failure .rf-workspace-occupied__eyebrow {
+  color: var(--rf-err);
+}
+.rf-boot-failure__cause {
+  margin-top: 13px;
+  padding: 10px 13px;
+  overflow-wrap: anywhere;
+  color: var(--rf-text-faint);
+  font: 400 11.5px / 1.6 var(--rf-font-mono);
+  background: var(--rf-bg-0);
+  border: 1px solid var(--rf-line-panel);
+  border-radius: var(--rf-r-sm);
+}
+.rf-boot-failure__cause ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.rf-boot-failure__actions {
+  display: flex;
+  grid-column: 2;
+  gap: 8px;
+  justify-self: start;
+  margin-top: 2px;
+}
+.rf-boot-failure__actions .rf-btn {
+  min-height: 34px;
+  padding-inline: 15px;
+}
+@media (max-width: 560px) {
+  .rf-boot-failure__actions {
+    grid-column: 1;
+    width: 100%;
+  }
+  .rf-boot-failure__actions .rf-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 560px) {
   .rf-workspace-occupied {
     padding: 14px;

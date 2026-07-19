@@ -3,10 +3,10 @@
 // isolation. Missing headers must fail loud, not yield a black screen. ADR-0002 / D-001.
 import { render } from 'solid-js/web';
 import { App } from './App.tsx';
-import { PlaygroundBootFailureBanner } from './adapters/playground-health-ui.tsx';
 import { mountPlaygroundPage } from './adapters/playground-page-entry.ts';
 import { openPlaygroundAppWorkbench } from './adapters/playground-workbench-host.ts';
-import { assertCrossOriginIsolated, bootstrapPlayground, reasonOf } from './boot.ts';
+import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
+import { BootFailure } from './components/BootFailure.tsx';
 import { WorkspaceOccupied } from './components/WorkspaceOccupied.tsx';
 import { installPlaygroundNodeWorkerRuntime } from './glue/playground-node-worker-runtime.ts';
 import { createTerminalPersistence } from './glue/terminal-persistence.ts';
@@ -42,32 +42,48 @@ async function renderApp(): Promise<void> {
   const root = document.getElementById('app');
   if (!root) throw new Error('Missing #app root element');
 
-  await mountPlaygroundPage({
-    bootstrapPlayground,
-    openPlaygroundAppWorkbench,
-    createTerminalPersistence: () => createTerminalPersistence(WORKSPACE),
-    mountOccupied() {
-      root.replaceChildren();
-      render(() => <WorkspaceOccupied onReload={() => globalThis.location.reload()} />, root);
-    },
-    mountBootFailed(error) {
-      const reload = (): void => globalThis.location.reload();
-      root.replaceChildren();
-      render(
-        () => (
-          <PlaygroundBootFailureBanner
-            summary={reasonOf(error)}
-            onRetry={reload}
-            onReload={reload}
-          />
-        ),
-        root,
-      );
-    },
-    mountApp(props) {
-      // Drop the index.html cold-boot skeleton only after Workbench admission.
-      root.replaceChildren();
-      render(() => <App {...props} />, root);
-    },
-  });
+  // Retry re-enters the same finite transaction, so each mount disposes the
+  // previous Solid root before painting into the shared #app container.
+  let disposePrevious: (() => void) | null = null;
+  const mount = (paint: () => ReturnType<typeof render>): void => {
+    disposePrevious?.();
+    root.replaceChildren();
+    disposePrevious = paint();
+  };
+
+  const startPageEntry = (): Promise<void> =>
+    mountPlaygroundPage({
+      bootstrapPlayground,
+      openPlaygroundAppWorkbench,
+      createTerminalPersistence: () => createTerminalPersistence(WORKSPACE),
+      mountOccupied() {
+        mount(() =>
+          render(() => <WorkspaceOccupied onReload={() => globalThis.location.reload()} />, root),
+        );
+      },
+      mountApp(props) {
+        // Drop the index.html cold-boot skeleton only after Workbench admission.
+        mount(() => render(() => <App {...props} />, root));
+      },
+      mountFatal(error) {
+        mount(() =>
+          render(
+            () => (
+              <BootFailure
+                error={error}
+                onRetry={() =>
+                  void startPageEntry().catch((retryFailure: unknown) =>
+                    console.error('[playground] page entry retry failed', retryFailure),
+                  )
+                }
+                onReload={() => globalThis.location.reload()}
+              />
+            ),
+            root,
+          ),
+        );
+      },
+    });
+
+  await startPageEntry();
 }
