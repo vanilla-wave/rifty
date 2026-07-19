@@ -95,6 +95,19 @@ const dependencyPolicyRules = [
     to: { path: '(?:^|/)solid-js(?:/|$)|(?:^|/)@solidjs/' },
   },
   {
+    name: 'playground-app-uses-sealed-workbench-entrypoints',
+    severity: 'error',
+    comment: 'ADR-0282: do not resurrect app-local Workbench implementation imports',
+    from: {
+      path: '(?:^|/)playground/src/',
+      pathNot: '(?:^|/)playground/src/(?:workbench|workers)/',
+    },
+    to: {
+      path: '(?:^|/)playground/src/workbench/',
+      pathNot: '(?:^|/)playground/src/workbench/(?:public|playground)\\.ts$',
+    },
+  },
+  {
     name: 'workbench-package-uses-sealed-entrypoints',
     severity: 'error',
     comment:
