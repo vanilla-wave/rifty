@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "generatedAt": "2026-07-19T08:20:59.482Z",
+  "generatedAt": "2026-07-19T09:02:13.694Z",
   "runner": {
     "runs": 5,
     "browser": "chromium",
@@ -11,24 +11,27 @@
       "status": "measured",
       "count": 5,
       "samples": [
-        1430,
-        1428,
-        398,
-        404,
-        402
+        454,
+        447,
+        1450,
+        445,
+        414
       ],
-      "median": 404,
+      "median": 447,
       "displayMs": 500
     },
     "npmInstallToFirstViteResponseMs": {
       "status": "unmeasured",
-      "note": "standard: proxy https://registry.rifty.dev/npm-registry configured but only 0/5 runs reached first Vite response — refusing a partial median: terminal never matched /VITE v[\\d.]+\\s+ready in \\d+ ms/ within 180000ms",
+      "note": "transport auto did not produce complete standard+eddy install samples — standard: standard: proxy https://registry.rifty.dev/npm-registry configured but only 0/5 runs reached first Vite response — refusing a partial median: terminal never matched /VITE v[\\d.]+\\s+ready in \\d+ ms/ within 180000ms; eddy: eddy: proxy https://registry.rifty.dev/npm-registry configured but only 0/5 runs reached first Vite response — refusing a partial median: terminal never matched /VITE v[\\d.]+\\s+ready in \\d+ ms/ within 180000ms",
       "transport": {
         "mode": "auto",
         "originProtocols": {
           "https://registry.rifty.dev": [
             "h2",
             "unreachable"
+          ],
+          "https://eddy.rifty.dev": [
+            "h3"
           ]
         },
         "runs": [
@@ -36,30 +39,50 @@
             "https://registry.rifty.dev": {
               "protocol": "unreachable",
               "requests": 40
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h3",
+              "requests": 2
+            }
+          },
+          {
+            "https://registry.rifty.dev": {
+              "protocol": "h2",
+              "requests": 43
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h3",
+              "requests": 2
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
               "requests": 40
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h3",
+              "requests": 2
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
               "requests": 40
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h3",
+              "requests": 2
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
               "requests": 40
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 40
+            },
+            "https://eddy.rifty.dev": {
+              "protocol": "h3",
+              "requests": 2
             }
           }
         ]
@@ -76,6 +99,79 @@
                 "https://registry.rifty.dev": [
                   "h2",
                   "unreachable"
+                ],
+                "https://eddy.rifty.dev": [
+                  "h2"
+                ]
+              },
+              "runs": [
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 40
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 40
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 40
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "unreachable",
+                    "requests": 40
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 4
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                }
+              ]
+            }
+          },
+          "eddy": {
+            "status": "unmeasured",
+            "note": "eddy: proxy https://registry.rifty.dev/npm-registry configured but only 0/5 runs reached first Vite response — refusing a partial median: terminal never matched /VITE v[\\d.]+\\s+ready in \\d+ ms/ within 180000ms",
+            "registryUrl": "https://registry.rifty.dev/npm-registry",
+            "resolverUrl": "https://eddy.rifty.dev",
+            "transport": {
+              "mode": "auto",
+              "originProtocols": {
+                "https://registry.rifty.dev": [
+                  "h2",
+                  "unreachable"
+                ],
+                "https://eddy.rifty.dev": [
+                  "h3"
                 ]
               },
               "runs": [
@@ -83,30 +179,50 @@
                   "https://registry.rifty.dev": {
                     "protocol": "unreachable",
                     "requests": 40
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 43
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
                   }
                 },
                 {
                   "https://registry.rifty.dev": {
                     "protocol": "h2",
                     "requests": 40
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
                   }
                 },
                 {
                   "https://registry.rifty.dev": {
                     "protocol": "h2",
                     "requests": 40
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
                   }
                 },
                 {
                   "https://registry.rifty.dev": {
                     "protocol": "h2",
                     "requests": 40
-                  }
-                },
-                {
-                  "https://registry.rifty.dev": {
-                    "protocol": "h2",
-                    "requests": 40
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
                   }
                 }
               ]
@@ -247,7 +363,137 @@
             }
           }
         ]
-      }
+      },
+      "eddy": {
+        "status": "measured",
+        "count": 5,
+        "samples": [
+          1517.005000114441,
+          2007.7750000953674,
+          2018.2300000190735,
+          1506.5149998664856,
+          1505.8799998760223
+        ],
+        "median": 1517.005000114441,
+        "displayMs": 1600,
+        "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+        "storageClass": "opfs-best-effort",
+        "fillTransport": "eddy",
+        "fillCache": "bundle",
+        "memberBytes": 13918738,
+        "registryUrl": "https://registry.rifty.dev/npm-registry",
+        "resolverUrl": "https://eddy.rifty.dev",
+        "bundleUrl": "https://eddy.rifty.dev",
+        "cacheRegime": "fresh-context-empty-store-and-tarball;warm-proxy-origin",
+        "runs": [
+          {
+            "durationMs": 1517.005000114441,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "eddy",
+            "fillCache": "bundle",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "bundle": 3850240,
+              "total": 3850240
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://eddy.rifty.dev": {
+                  "protocol": "h3",
+                  "requests": 1
+                }
+              }
+            }
+          },
+          {
+            "durationMs": 2007.7750000953674,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "eddy",
+            "fillCache": "bundle",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "bundle": 3850240,
+              "total": 3850240
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://eddy.rifty.dev": {
+                  "protocol": "h3",
+                  "requests": 1
+                }
+              }
+            }
+          },
+          {
+            "durationMs": 2018.2300000190735,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "eddy",
+            "fillCache": "bundle",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "bundle": 3850240,
+              "total": 3850240
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://eddy.rifty.dev": {
+                  "protocol": "h3",
+                  "requests": 1
+                }
+              }
+            }
+          },
+          {
+            "durationMs": 1506.5149998664856,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "eddy",
+            "fillCache": "bundle",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "bundle": 3850240,
+              "total": 3850240
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://eddy.rifty.dev": {
+                  "protocol": "h3",
+                  "requests": 1
+                }
+              }
+            }
+          },
+          {
+            "durationMs": 1505.8799998760223,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "eddy",
+            "fillCache": "bundle",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "bundle": 3850240,
+              "total": 3850240
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://eddy.rifty.dev": {
+                  "protocol": "h3",
+                  "requests": 1
+                }
+              }
+            }
+          }
+        ]
+      },
+      "speedupX": 0.89
     },
     "presetBootToPreviewLiveMs": [
       {
@@ -255,17 +501,17 @@
         "status": "measured",
         "count": 5,
         "samples": [
-          5485,
-          5570,
-          5510,
-          5189,
-          4298
+          5969,
+          4420,
+          5470,
+          5534,
+          4555
         ],
-        "median": 5485,
+        "median": 5470,
         "displayMs": 5500,
         "stages": {
-          "interactiveMs": 3687,
-          "viteReadyMs": 5384
+          "interactiveMs": 3648,
+          "viteReadyMs": 5431
         }
       },
       {
@@ -273,17 +519,17 @@
         "status": "measured",
         "count": 5,
         "samples": [
-          4447,
-          4399,
-          4372,
-          4453,
-          4399
+          4517,
+          5806,
+          4685,
+          4649,
+          4574
         ],
-        "median": 4399,
-        "displayMs": 4400,
+        "median": 4649,
+        "displayMs": 4700,
         "stages": {
-          "interactiveMs": 2608,
-          "viteReadyMs": 4349
+          "interactiveMs": 2701,
+          "viteReadyMs": 4548
         }
       }
     ]
