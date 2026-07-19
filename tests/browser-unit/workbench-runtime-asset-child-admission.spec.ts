@@ -123,12 +123,14 @@ test('a real supervised child transfers its exact admitted asset peer and cleans
         });
       }
 
-      const [kernel, nodeExecutor, npmClient, shadowRegistry] = await Promise.all([
+      const [hostAssets, kernel, nodeExecutor, npmClient, shadowRegistry] = await Promise.all([
+        import('/src/browser-unit/workbench-vite-host-assets.ts'),
         import(kernelUrl),
         import(nodeExecutorUrl),
         import(npmClientUrl),
         import(shadowRegistryUrl),
       ]);
+      kernel.setKernelWorkerUrl(hostAssets.workbenchViteHostAssets.workers.kernel);
       const catalog = shadowRegistry.builtinShadowAssetCatalog as Readonly<{
         id: string;
         digest: string;
@@ -139,7 +141,7 @@ test('a real supervised child transfers its exact admitted asset peer and cleans
           publicName: 'esbuild',
           requestedRange: '^0.28.0',
           resolvedPublicVersion: '0.28.0',
-          substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+          substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
           runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
           builtin: true,
         },

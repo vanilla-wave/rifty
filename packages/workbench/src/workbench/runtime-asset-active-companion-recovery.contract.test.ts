@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { gzipSync } from 'node:zlib';
 import {
   RegistryClient,
   type ShadowAssetPlan,
@@ -73,7 +72,6 @@ import type {
   WorkbenchOwnerPort,
 } from './workbench-owner-port.ts';
 
-const encoder = new TextEncoder();
 const URL_CONTEXT = Object.freeze({
   apiBaseUrl: 'https://playground.invalid/app/',
   clientUrl: 'https://playground.invalid/app/index.html',
@@ -84,44 +82,6 @@ const NODE_WORKER_RUNTIME_ENV = Object.freeze({
   RIFTY_NODE_ENTRY_WORKER_URL: 'https://playground.invalid/workers/node.js',
   RIFTY_SQLITE_WASM_URL: 'https://playground.invalid/sqlite.wasm',
 });
-
-function writeTarText(target: Uint8Array, text: string, offset: number, length: number): void {
-  target.set(encoder.encode(text).subarray(0, length), offset);
-}
-
-function tarHeader(name: string, size: number): Uint8Array {
-  const header = new Uint8Array(512);
-  writeTarText(header, name, 0, 100);
-  writeTarText(header, '0000644', 100, 7);
-  writeTarText(header, '0000000', 108, 7);
-  writeTarText(header, '0000000', 116, 7);
-  writeTarText(header, size.toString(8).padStart(11, '0'), 124, 11);
-  header[135] = 0x20;
-  writeTarText(header, '00000000000', 136, 11);
-  for (let index = 148; index < 156; index += 1) header[index] = 0x20;
-  header[156] = '0'.charCodeAt(0);
-  writeTarText(header, 'ustar', 257, 6);
-  writeTarText(header, '00', 263, 2);
-  let checksum = 0;
-  for (const byte of header) checksum += byte;
-  writeTarText(header, checksum.toString(8).padStart(6, '0'), 148, 6);
-  header[154] = 0;
-  header[155] = 0x20;
-  return header;
-}
-
-function tarball(name: string, bytes: Uint8Array, level = 6): Uint8Array {
-  const padding = new Uint8Array((512 - (bytes.byteLength % 512)) % 512);
-  const tar = new Uint8Array(512 + bytes.byteLength + padding.byteLength + 1024);
-  tar.set(tarHeader(name, bytes.byteLength));
-  tar.set(bytes, 512);
-  tar.set(padding, 512 + bytes.byteLength);
-  return new Uint8Array(gzipSync(tar, { level }));
-}
-
-function packageTarball(name: string, version: string): Uint8Array {
-  return tarball('package/package.json', encoder.encode(JSON.stringify({ name, version })));
-}
 
 const require = createRequire(
   new URL('../../../../tools/shadow-registry/package.json', import.meta.url),
@@ -218,7 +178,7 @@ function expectedPlan(): ShadowAssetPlan {
       publicName: 'esbuild',
       requestedRange: '^0.28.0',
       resolvedPublicVersion: '0.28.0',
-      substitutionId: 'rifty.shadow-substitution.esbuild-wasi-preview1.v1',
+      substitutionId: 'rifty.shadow-substitution.esbuild-synthesized-delegate.v2',
       runtimeAdapterId: 'rifty.runtime-adapter.esbuild-vite.v1',
       builtin: true,
     },
@@ -226,20 +186,19 @@ function expectedPlan(): ShadowAssetPlan {
 }
 
 function registry(): RegistryClient {
-  const packageBytes = packageTarball('@esbuild/wasi-preview1', '0.28.0');
-  const tarballUrl = 'https://registry.invalid/@esbuild/wasi-preview1/-/wasi-preview1-0.28.0.tgz';
+  const tarballUrl = 'https://registry.invalid/esbuild/-/esbuild-0.28.0.tgz';
   return new RegistryClient({
     baseUrl: 'https://registry.invalid',
     maxRetries: 0,
     fetch: async (url) => {
-      if (url === 'https://registry.invalid/@esbuild%2Fwasi-preview1') {
+      if (url === 'https://registry.invalid/esbuild') {
         return new Response(
           JSON.stringify({
-            name: '@esbuild/wasi-preview1',
+            name: 'esbuild',
             'dist-tags': { latest: '0.28.0' },
             versions: {
               '0.28.0': {
-                name: '@esbuild/wasi-preview1',
+                name: 'esbuild',
                 version: '0.28.0',
                 dist: { tarball: tarballUrl },
               },
@@ -247,9 +206,7 @@ function registry(): RegistryClient {
           }),
         );
       }
-      if (url === tarballUrl) {
-        return new Response(new Blob([packageBytes as unknown as BlobPart]));
-      }
+      if (url === tarballUrl) throw new Error('synthetic esbuild must not request a tarball');
       return new Response(null, { status: 404 });
     },
   });
