@@ -1,12 +1,12 @@
 import { serializePackageJson } from '@riftydev/npm-client';
+import { nodeProjectShellCommand } from './internal/node-command.ts';
+import { defineOwnEnumerableProperty } from './internal/own-property.ts';
 import {
   DEFAULT_VITE8_CONFIG_JS,
   DEFAULT_VITE8_CONFIG_PATH,
   DEFAULT_VITE8_VERSION,
   VITE_CONFIG_FILENAMES,
-} from '../vite-project-policy.ts';
-import { nodeProjectShellCommand } from './internal/node-command.ts';
-import { defineOwnEnumerableProperty } from './internal/own-property.ts';
+} from './internal/vite-project-policy.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
 
 declare const projectDefinitionReady: unique symbol;
