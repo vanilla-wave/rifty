@@ -9,7 +9,7 @@ const REPO_ROOT = resolve(PACKAGE_ROOT, '../..');
 const APP_SRC_ROOT = resolve(REPO_ROOT, 'apps/playground/src');
 
 const EXPORTED_SOURCE_ENTRIES = [
-  'src/workbench/public.ts',
+  'src/index.ts',
   'src/workbench/playground.ts',
   'src/workers/workbench-owner-bootstrap.ts',
   'src/workers/kernel-worker-entry.ts',
@@ -208,7 +208,11 @@ function packagePathFor(appPath: string): string {
   return `src/${appPath}`;
 }
 
-const EXPECTED_PACKAGE_PRODUCTION_FILES = EXPECTED_APP_PRODUCTION_FILES.map(packagePathFor).sort();
+const EXPECTED_PACKAGE_PRODUCTION_FILES = [
+  'src/index.ts',
+  'src/workers/workbench-owner-runtime.ts',
+  ...EXPECTED_APP_PRODUCTION_FILES.map(packagePathFor),
+].sort();
 
 function isProductionSource(path: string): boolean {
   return !/(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$/u.test(path);
@@ -362,7 +366,7 @@ describe('@riftydev/workbench extraction boundary', () => {
   it('pins the exact 138-file production move without test-decoupling sources', () => {
     expect(EXPECTED_APP_PRODUCTION_FILES).toHaveLength(138);
     expect(new Set(EXPECTED_APP_PRODUCTION_FILES).size).toBe(138);
-    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(138);
+    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(140);
     expect(EXPECTED_APP_PRODUCTION_FILES.filter((path) => !isProductionSource(path))).toEqual([]);
   });
 

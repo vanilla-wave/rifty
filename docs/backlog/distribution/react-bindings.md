@@ -6,7 +6,6 @@ created: 2026-07-10
 why: React is the anchor SaaS stack; without ready components every embedder hand-wires xterm/Monaco/preview glue — the threshold the epic exists to remove
 user_story: As a SaaS developer on React, I want `<RiftyProvider>` + `<RiftyEditor/>`/`<RiftyTerminal/>`/`<RiftyPreview/>` atoms I can place in my own layout and brand, but today only the internal Solid playground exists.
 epic: embeddable-dev-loop
-blocked_by: [distribution/workbench-controllers]
 sources: [ADR-0263, ADR-0273, DD-4]
 ---
 

@@ -5,7 +5,7 @@ title: M12 — AI-IDE product UI (chat + streamed tool-calls / diff / approve) o
 created: 2026-06-13
 why: the AI-IDE needs an agent-facing UI (chat, streaming tool calls, diff review, approve-gate, history) that generic rifty IDE atoms do not provide
 user_story: As a dev assembling an AI-IDE product on rifty's IDE atoms, I want a ready agent-facing surface — chat panel, streamed tool-call (`onUpdate`) rendering, diff with per-edit approve-gate, session history — wired to the harness events, but today only generic editor/terminal/preview/filetree atoms exist; this product UI is unbuilt.
-sources: [M12, docs/backlog/distribution/ai-ide-pi-agent-harness.md, docs/backlog/distribution/workbench-controllers.md, docs/backlog/distribution/framework-bindings-kit.md]
+sources: [M12, docs/backlog/distribution/ai-ide-pi-agent-harness.md, docs/adr/distribution/0263-workbench-playground-companion-subpath.md, docs/backlog/distribution/framework-bindings-kit.md]
 ---
 
 ## Context

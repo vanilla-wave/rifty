@@ -7,7 +7,9 @@
  * milestone claim pages stay deterministic and checked in.
  * TODO(backlog: toolchain-build/compat-matrix-test-result-sink)
  */
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { honestShadowSubstitutionGaps } from './honest-shadow-substitution-inventory.mjs';
+import { validateCompatEvidenceSources } from './source-evidence.mjs';
 
 const here = new URL('.', import.meta.url);
 const conformanceDir = new URL('../../tests/conformance/', here);
@@ -209,6 +211,25 @@ const viteCommandMatrix = {
     'Exact esbuild-backed claim is Vite 7.3.6 with esbuild 0.28.0; Vite 8 uses Rolldown and keeps HMR disabled in visible template config.',
     'Preview traffic traverses the same-origin Service Worker/owner bridge, so `preview.cors` and `preview.allowedHosts` need direct-Node differential proof.',
     'Fallback-port publication when the requested Vite port is busy still needs browser proof; no hidden `strictPort` force exists.',
+  ],
+};
+
+const honestShadowSubstitutionMatrix = {
+  file: 'honest-shadow-substitutions.md',
+  title: 'Compatibility matrix — honest shadow substitutions',
+  intro:
+    'Loud ceilings around the exact synthesized esbuild delegate, lockfile materialization protocol, Workbench owner, and its two Vite runtime adapters (ADR-0296/0298).',
+  rows: honestShadowSubstitutionGaps.map((entry) => [
+    entry.feature,
+    '❌',
+    `Gap \`${entry.gap}\` throws \`NotImplementedError('${entry.gap}')\`. ${entry.notes}`,
+  ]),
+  tests: [...new Set(honestShadowSubstitutionGaps.flatMap((entry) => entry.tests))].map(
+    (source) => `\`${source}\``,
+  ),
+  limitations: [
+    'Only the exact generated esbuild substitution recipe is claimed; unknown versions, marker protocols, recipe ids, and missing adapter capabilities fail loud.',
+    'Direct synthesized esbuild CLI execution is absent rather than a fake binary; the supported consumer is the Vite JavaScript import path after runtime-asset admission.',
   ],
 };
 
@@ -1005,6 +1026,7 @@ const matrices = [
   },
   esbuildMatrix,
   viteCommandMatrix,
+  honestShadowSubstitutionMatrix,
 ];
 
 async function listFilesRecursive(dir) {
@@ -1051,45 +1073,6 @@ ${bulletList(matrix.limitations)}
 `;
 }
 
-function sourcePathFromRendered(rendered) {
-  const match = /^`(.+)`$/.exec(rendered);
-  if (!match) throw new Error(`compat source must be a backticked path: ${rendered}`);
-  return match[1] ?? '';
-}
-
-async function sourceMatches(rendered) {
-  const source = sourcePathFromRendered(rendered);
-  if (!source.includes('*')) {
-    const url = new URL(source, rootDir);
-    try {
-      if ((await stat(url)).isFile()) return [source];
-    } catch {
-      throw new Error(`compat source does not exist: ${source}`);
-    }
-    throw new Error(`compat source is not a file: ${source}`);
-  }
-  if (!source.endsWith('*.case.ts')) {
-    throw new Error(`unsupported compat source glob: ${source}`);
-  }
-  const dir = new URL(source.slice(0, source.lastIndexOf('/') + 1), rootDir);
-  const entries = await readdir(dir, { withFileTypes: true });
-  const matches = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.case.ts'))
-    .map((entry) => `${source.slice(0, source.lastIndexOf('/') + 1)}${entry.name}`);
-  if (matches.length === 0) throw new Error(`compat source glob matched no files: ${source}`);
-  return matches;
-}
-
-async function validateMatrixSources() {
-  const seen = new Set();
-  for (const matrix of matrices) {
-    for (const source of matrix.tests) {
-      for (const match of await sourceMatches(source)) seen.add(match);
-    }
-  }
-  return seen.size;
-}
-
 function renderReadme() {
   return `# Compatibility matrices
 
@@ -1097,8 +1080,8 @@ These files are the public claim surface for rifty compatibility. Treat missing 
 undocumented, not supported. The point is honest fit: tested support, visible caveats, and loud
 unsupported rows.
 
-Each markdown here cites the covering tests in \`tests/conformance/\` and \`tests/integration/\` for a
-Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\`/\`esbuild-js-api.md\`/\`vite-command.md\` are rendered by \`pnpm compat:generate\`
+Each markdown here cites its covering repository tests for a Node-compatible area.
+\`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\`/\`esbuild-js-api.md\`/\`vite-command.md\`/\`honest-shadow-substitutions.md\` are rendered by \`pnpm compat:generate\`
 from static inventories whose cited test files are existence-checked, not re-run — deriving statuses
 from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-test-result-sink\`.
 
@@ -1113,6 +1096,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [esbuild-js-api.md](./esbuild-js-api.md) — exact esbuild 0.28.0 Final+GREEN over guest VFS, with explicit D4 loud gaps (ADR-0226)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [vite-command.md](./vite-command.md) — playground \`vite\` command through the installed \`.bin\` CLI (ADR-0174)
+- [honest-shadow-substitutions.md](./honest-shadow-substitutions.md) — exact synthesized delegates and their loud version/protocol/adapter ceilings (ADR-0296/0298)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)
@@ -1124,11 +1108,11 @@ ${legend}
 }
 
 await mkdir(matrixDir, { recursive: true });
-const sourceCount = await validateMatrixSources();
 await writeFile(new URL('README.md', matrixDir), renderReadme());
 for (const matrix of matrices) {
   await writeFile(new URL(matrix.file, matrixDir), renderMatrix(matrix));
 }
+const sourceCount = await validateCompatEvidenceSources(matrixDir, rootDir);
 
 const tests = await listFilesRecursive(conformanceDir);
 console.log(

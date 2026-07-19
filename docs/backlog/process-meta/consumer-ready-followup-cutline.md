@@ -28,8 +28,6 @@ Hard consumer contract follow-ups:
   results and normalized preview URL.
 - `distribution/public-api-ai-agent-contract-snapshot-restore` — public
   snapshot/restore/fork semantics.
-- `distribution/workbench-controllers` — `@riftydev/workbench` deep project
-  sessions.
 - `distribution/create-rifty-template` — one-command scaffold for host wiring.
 - `npm-client/prod-npm-registry-deploy-smoke` — explicit deploy approval and
   production registry proxy smoke.

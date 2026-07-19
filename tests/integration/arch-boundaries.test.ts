@@ -103,19 +103,22 @@ describe('check:arch layer boundaries', () => {
         "import '../../../workbench/src/workbench/internal/owner';\nexport const host = 1;\n",
       'playground/src/templates/project-spec.ts':
         "import '../../../workbench/src/workbench/project-definition';\nexport const spec = 1;\n",
+      'playground/src/browser-unit/legacy-public.ts':
+        "import '../../../workbench/src/workbench/public';\nexport const legacy = 1;\n",
       'workbench/src/workbench/internal/owner.ts': 'export const owner = 1;\n',
       'workbench/src/workbench/project-definition.ts': 'export const definition = 1;\n',
+      'workbench/src/workbench/public.ts': 'export const legacyPublic = 1;\n',
     });
     expect(
       ruleNames([root]).filter((name) => name === 'workbench-package-uses-sealed-entrypoints'),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
   });
 
   it('allows App extraction-boundary imports through sealed Workbench entrypoints', () => {
     const root = fixture({
       'playground/src/adapters/host.ts':
-        "import '../../../workbench/src/workbench/public';\nimport '../../../workbench/src/workbench/playground';\nimport '../../../workbench/src/workers/workbench-owner-bootstrap';\nexport const host = 1;\n",
-      'workbench/src/workbench/public.ts': 'export const publicApi = 1;\n',
+        "import '../../../workbench/src/index';\nimport '../../../workbench/src/workbench/playground';\nimport '../../../workbench/src/workers/workbench-owner-bootstrap';\nexport const host = 1;\n",
+      'workbench/src/index.ts': 'export const publicApi = 1;\n',
       'workbench/src/workbench/playground.ts': 'export const companion = 1;\n',
       'workbench/src/workers/workbench-owner-bootstrap.ts': 'export const owner = 1;\n',
     });

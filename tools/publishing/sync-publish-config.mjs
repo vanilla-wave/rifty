@@ -153,7 +153,6 @@ const SPEC = {
   },
   '@riftydev/workbench': {
     dir: 'packages/workbench',
-    sourceEntry: './src/workbench/public.ts',
     browserWorkerEntries: [
       'owner-worker',
       'kernel-worker',
@@ -209,7 +208,11 @@ const DESCRIPTIONS = {
 const dedupe = (a) => [...new Set(a)];
 
 function buildExportsAndEntries(orig, spec) {
-  const devExports = { ...(orig.exports ?? { '.': './src/index.ts' }), ...(spec.addExports ?? {}) };
+  const devExports = {
+    ...(orig.exports ?? {}),
+    '.': './src/index.ts',
+    ...(spec.addExports ?? {}),
+  };
   const pubExports = {};
   const entries = {};
   for (const [key, val] of Object.entries(devExports)) {
@@ -247,9 +250,9 @@ function rebuildPkg(orig, name, spec) {
     bugs: { url: `${REPO_URL}/issues` },
     keywords: dedupe([...BASE_KEYWORDS, ...(spec.keywords ?? [])]),
     sideEffects: spec.sideEffects,
-    main: spec.sourceEntry ?? './src/index.ts',
-    module: spec.sourceEntry ?? './src/index.ts',
-    types: spec.sourceEntry ?? './src/index.ts',
+    main: './src/index.ts',
+    module: './src/index.ts',
+    types: './src/index.ts',
     exports: devExports,
     files,
     publishConfig: {

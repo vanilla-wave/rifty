@@ -10,7 +10,7 @@ export default defineConfig(async () => {
     {
       name: 'public-api',
       entry: {
-        index: 'src/workbench/public.ts',
+        index: 'src/index.ts',
         playground: 'src/workbench/playground.ts',
       },
       format: ['esm'],

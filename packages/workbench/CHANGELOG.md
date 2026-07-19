@@ -9,6 +9,9 @@
 
 ### Fixed
 
+- Route the package root through the repository-wide `src/index.ts` public seam;
+  owner construction fault proof now runs the real ephemeral ownership graph
+  through its Worker-IPC seam instead of replacing Workbench and rifty modules.
 - Removed the host esbuild WASM URL and package dependency from the public
   Workbench seam. Node-entry v2 now admits a verified shadow-asset capability
   for every Vite 7 CLI mode, including info flags, before import; Vite 8 opens

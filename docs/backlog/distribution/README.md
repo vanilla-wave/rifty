@@ -17,7 +17,6 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 |---|---|---|---|
 | `public-api-ai-agent-contract-snapshot-restore.md` | parked | SDK API | residual disk-state snapshot/restore/fork API after ADR-0131 FS slice |
 | `public-api-ai-agent-exec-preview.md` | parked | SDK API | residual streamed exec + preview URL API after ADR-0131 FS slice |
-| `workbench-controllers.md` | ready | embeddable-dev-loop | build deep project sessions in safe slices; Playground dogfood, then mechanical package extraction + packed Chromium proof |
 | `workbench-guest-vfs-namespace.md` | draft | embeddable-dev-loop | decide one honest guest root; prevent active programs from reaching retained project/owner storage |
 | `react-bindings.md` | ready | embeddable-dev-loop | `@riftydev/react` provider + Terminal/Preview/Editor/FileTree/CapabilitiesGate atoms, headless+themeable (DD-4) |
 | `embed-host-vite-example.md` | ready | embeddable-dev-loop | reference Vite React host + `docs/public/` embedding doc + CI e2e on the built bundle |
@@ -33,7 +32,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 ## Dependency map
 
 ```
-A (publish, landed) ── B (umbrella/SDK, landed) ── C (deep workbench, ADR-0263) ── react-bindings ── embed-host-vite-example   [= epics/embeddable-dev-loop]
+A (publish, landed) ── B (umbrella/SDK, landed) ── C (deep workbench, landed) ── react-bindings ── embed-host-vite-example   [= epics/embeddable-dev-loop]
                               │                                          └── D residual (vue, <RiftyIDE/>, theme)
                               └── E1/E2 (template host config)          iframe-embed (draft, independent tier)
 ```
@@ -58,4 +57,4 @@ Developer-adoption epics live in `docs/backlog/epics/` (cross-area, user-value u
 - `epics/open-bolt-ai-sandbox-demo` — an open, client-side AI-sandbox reference (bolt.diy #2008).
 - `epics/wasi-in-browser-showcase` — surface the real-WASI-guest-over-shared-VFS capability.
 
-These pull the consumption EPICs above (create-rifty-template, workbench-controllers, exec/preview, snapshot/fork) as their downstream conversion path, but do not block on them.
+These pull the remaining consumption tracks above (create-rifty-template, exec/preview, snapshot/fork) as their downstream conversion path, but do not block on them.

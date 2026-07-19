@@ -111,7 +111,7 @@ const forbidden = [
     to: {
       path: '(?:^|/)workbench/src/',
       pathNot:
-        '(?:^|/)workbench/src/(?:workbench/(?:public|playground)|workers/(?:workbench-owner-bootstrap|kernel-worker-entry|node-entry-bootstrap|dev-server-child-bootstrap|ts-lsp-worker-entry))\\.ts$',
+        '(?:^|/)workbench/src/(?:index|workbench/playground|workers/(?:workbench-owner-bootstrap|kernel-worker-entry|node-entry-bootstrap|dev-server-child-bootstrap|ts-lsp-worker-entry))\\.ts$',
     },
   },
   {

@@ -33,7 +33,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tools/shadow-registry/src/esbuild-contract.test.ts`
 - `tools/shadow-registry/src/esbuild-generated-provenance.test.ts`
 - `packages/npm-client/src/installer-shadow-shims.test.ts`
-- `apps/playground/src/workers/vite-cli-prep.test.ts`
+- `packages/workbench/src/workers/vite-cli-prep.test.ts`
 - `tests/browser-unit/esbuild-vite-contract.spec.ts`
 
 ## Known Limitations

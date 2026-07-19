@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 const EXPECTED_DEV_EXPORTS = {
-  '.': './src/workbench/public.ts',
+  '.': './src/index.ts',
   './playground': './src/workbench/playground.ts',
   './owner-worker': './src/workers/workbench-owner-bootstrap.ts',
   './kernel-worker': './src/workers/kernel-worker-entry.ts',
@@ -26,6 +26,9 @@ const EXPECTED_PUBLISHED_EXPORTS = Object.fromEntries(
 
 interface WorkbenchManifest {
   readonly name: string;
+  readonly main: string;
+  readonly module: string;
+  readonly types: string;
   readonly sideEffects: readonly string[];
   readonly exports: Readonly<Record<string, string>>;
   readonly publishConfig: {
@@ -43,6 +46,11 @@ describe('@riftydev/workbench package surface', () => {
     const manifest = await readManifest();
 
     expect(manifest.name).toBe('@riftydev/workbench');
+    expect([manifest.main, manifest.module, manifest.types]).toEqual([
+      './src/index.ts',
+      './src/index.ts',
+      './src/index.ts',
+    ]);
     expect(manifest.exports).toEqual(EXPECTED_DEV_EXPORTS);
     expect(manifest.publishConfig.exports).toEqual(EXPECTED_PUBLISHED_EXPORTS);
     expect(manifest.sideEffects).toEqual([

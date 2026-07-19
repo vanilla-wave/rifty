@@ -5,8 +5,8 @@ title: Vite 8 preview URL, HMR-off, and isolation signposting
 created: 2026-06-21
 why: Installed Vite 8 prints its real CLI banner, but its guest-loopback URL is not the browser-visible `/preview/<port>/` route; HMR is visibly disabled and isolation headers differ from localhost without a user-facing explanation.
 user_story: As a developer comparing to `npm create vite`, I want the real banner plus a clear mapping to rifty's preview URL, HMR-off policy, and isolation headers instead of misleading loopback guidance.
-sources: [apps/playground/src/workers/vite-cli-prep.ts, apps/playground/public/sw.js, apps/playground/src/templates/vite8.ts, docs/adr/playground/0161-vite-8-disables-hmr-pending-socket-parity.md]
-code: [apps/playground/src/workers/vite-cli-prep.ts, apps/playground/src/templates/vite8.ts]
+sources: [packages/workbench/src/workers/vite-cli-prep.ts, apps/playground/public/sw.js, apps/playground/src/templates/vite8.ts, docs/adr/playground/0161-vite-8-disables-hmr-pending-socket-parity.md]
+code: [packages/workbench/src/workers/vite-cli-prep.ts, apps/playground/src/templates/vite8.ts]
 ---
 
 ## Context
