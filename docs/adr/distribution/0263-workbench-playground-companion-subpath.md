@@ -228,7 +228,7 @@ provenance. Arbitrary host snapshot URLs are never root configuration.
   dimensions, child, stop, close, and exit. Controls are owner-ACKed; siblings
   survive individual terminal close.
 - Logical Node IPC disconnect never closes physical process control; resize and
-  termination remain live until exit under ADR-0225/0230/0267.
+  termination remain live until exit under ADR-0225/0230/0231.
 - The owner PreviewRegistry is the sole producer of LIVE state. Workbench never
   synthesizes readiness.
 - Companion tools consume these same authorities; none owns a mirror, raw
