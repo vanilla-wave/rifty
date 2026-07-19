@@ -68,6 +68,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0272 | Late typed process terminal bootstrap |
 | 0294 | Node-compatible require.extensions suffix dispatch |
 | 0297 | Bind owner-recursive execSync to active remote FS root |
+| 0301 | Exact ESM module lexical bindings are path-and-byte attested |
 
 ### runtime-wasi
 
@@ -175,6 +176,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0284 | Git status entries preserve per-path classification gaps |
 | 0292 | Workbench authorities replace Solid orchestration core |
 | 0293 | Tab-independent workspace admission UX |
+| 0302 | Vite config cache has bounded generation capacity and no fallback |
 
 ### toolchain-build
 

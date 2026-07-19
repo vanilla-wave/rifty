@@ -7,7 +7,12 @@ import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-
 import { type CjsExtensionHook, type CjsExtensions, type CjsRequire, executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
-import { type TransformSourceHook, executeEsm } from './esm.ts';
+import { type TransformSourceHook, assertNoEsmFunctionRoutingCeiling, executeEsm } from './esm.ts';
+import {
+  type ExactEsmModuleBinding,
+  prepareExactEsmModuleBinding,
+  selectExactEsmModuleBinding,
+} from './exact-module-binding.ts';
 import { cjsNamespaceFor } from './interop.ts';
 import { type ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { PathAliases, ResolvedModule } from './resolver.ts';
@@ -15,6 +20,7 @@ import { type Resolver, createResolver } from './resolver.ts';
 import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
 
 export type { TransformSourceHook } from './esm.ts';
+export type { ExactEsmModuleBinding } from './exact-module-binding.ts';
 export type { PathAliases } from './resolver.ts';
 
 export interface ModuleLoaderOptions {
@@ -46,6 +52,8 @@ export interface ModuleLoaderOptions {
    * so vanilla Node-style resolution stays byte-stable.
    */
   readonly autoDiscoverTsconfigPaths?: boolean;
+  /** Host-only lexical imports for one exact path+raw-byte-attested ESM artifact. */
+  readonly exactEsmModuleBinding?: ExactEsmModuleBinding;
 }
 
 export interface ModuleLoader {
@@ -106,6 +114,14 @@ function loadBuiltinOrThrow(id: string): Record<string, unknown> {
 }
 
 export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoader {
+  const exactEsmModuleBinding = prepareExactEsmModuleBinding(
+    vfs,
+    opts.exactEsmModuleBinding,
+    (source, id) => {
+      assertNoEsmFunctionRoutingCeiling(source, id);
+      return transformEsm(source, id);
+    },
+  );
   const registry = new ModuleRegistry();
   const resolver = createResolver(vfs, {
     paths: opts.paths,
@@ -280,7 +296,8 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
         return cached.cjsModule?.exports ?? cached.exports;
       }
       const resolved = readResolvedById(id);
-      if (resolved.kind === 'esm') {
+      const exactBinding = selectExactEsmModuleBinding(exactEsmModuleBinding, resolved);
+      if (exactBinding !== undefined || resolved.kind === 'esm') {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
           id,
@@ -310,6 +327,16 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     // The registry short-circuit is replicated here (not only in the id path) so
     // direct callers (import/loadById/esm preload) keep dedup + cycle handling.
     async loadAsyncResolved(resolved: ResolvedModule): Promise<Record<string, unknown>> {
+      // Exact admission happens before any record, static import, or body. A
+      // fresh path/package/raw-byte proof deliberately bypasses resolver caches.
+      const exactBinding = selectExactEsmModuleBinding(exactEsmModuleBinding, resolved);
+      if (exactBinding !== undefined) {
+        const cached = registry.get(exactBinding.resolved.id);
+        if (cached && (cached.state === 'loaded' || cached.state === 'loading')) {
+          return cached.exports;
+        }
+        return executeEsm(exactBinding.resolved, { ...deps }, exactBinding);
+      }
       // A `node:` builtin reaches here when an ESM module statically imports it
       // (the preload carries the resolved `{kind:'builtin'}` record). Mirror the
       // id-path's `node:` short-circuit — builtins have no source to execute.
@@ -339,7 +366,8 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   function makeRequire(from: string): CjsRequire {
     const req = ((specifier: string): unknown => {
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: false });
-      if (resolved.kind === 'esm') {
+      const exactBinding = selectExactEsmModuleBinding(exactEsmModuleBinding, resolved);
+      if (exactBinding !== undefined || resolved.kind === 'esm') {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
           specifier,
@@ -364,6 +392,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   return {
     require(specifier, from = cwd) {
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: false });
+      const exactBinding = selectExactEsmModuleBinding(exactEsmModuleBinding, resolved);
       if (resolved.kind === 'builtin') {
         const builtin = loadBuiltin(resolved.id);
         if (!builtin)
@@ -374,7 +403,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
           );
         return builtin;
       }
-      if (resolved.kind === 'esm') {
+      if (exactBinding !== undefined || resolved.kind === 'esm') {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
           specifier,

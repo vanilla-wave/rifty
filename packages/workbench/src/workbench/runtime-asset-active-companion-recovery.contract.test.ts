@@ -366,6 +366,9 @@ async function harness(): Promise<Harness> {
           packageConfig,
           authority,
           packageState,
+          viteConfigTempCache: ownerComposition.viteConfigTempCache.createProject(
+            opened.projectRoot,
+          ),
           nodeEntryWorkerUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_NODE_ENTRY_WORKER_URL,
           devServerWorkerUrl: 'https://playground.invalid/workers/dev-server.js',
           nodeWorkerRuntimeEnv: NODE_WORKER_RUNTIME_ENV,

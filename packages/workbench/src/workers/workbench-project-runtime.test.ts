@@ -219,10 +219,11 @@ function harness(
   runtimeAssetReader?: WorkbenchProjectRuntimeOptions['runtimeAssetReader'],
 ) {
   const pair = createMemoryFs();
-  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+  const composition = createOwnerVfsAuthorityComposition(pair.fsSync, {
     ownerEpoch: 'workbench-project-runtime-test',
     initialRoots: ['/'],
   });
+  const { authority, installStampClaims } = composition;
   setSyncMirror(authority, { async: pair.vfs });
   authority.mkdirSync(`${ROOT}/src`, { recursive: true });
   authority.mkdirSync(`${ROOT}/node_modules/.bin`, { recursive: true });
@@ -270,6 +271,7 @@ function harness(
     packageConfig: activePackageConfig,
     authority,
     packageState,
+    viteConfigTempCache: composition.viteConfigTempCache.createProject(ROOT),
     nodeEntryWorkerUrl: NODE_ENTRY_WORKER_URL,
     devServerWorkerUrl: DEV_SERVER_WORKER_URL,
     nodeWorkerRuntimeEnv,
@@ -288,7 +290,13 @@ function harness(
   };
   const runtime = createWorkbenchProjectRuntime(runtimeOptions);
   runtimeRef.current = runtime;
-  return { authority, frames, packageState, runtime };
+  return {
+    authority,
+    frames,
+    packageState,
+    runtime,
+    viteConfigTempCache: composition.viteConfigTempCache,
+  };
 }
 
 afterEach(() => {
@@ -1031,23 +1039,29 @@ describe('Workbench project runtime', () => {
 
   it('rejects a package config whose root is not the owner-born project root', () => {
     const h = harness();
+    const viteConfigTempCache = h.viteConfigTempCache.createProject(ROOT);
 
-    expect(() =>
-      createWorkbenchProjectRuntime({
-        projectRoot: ROOT,
-        packageConfig: {
-          ...packageConfig,
-          cfg: { ...packageConfig.cfg, root: '/page-claimed-root' },
-        },
-        authority: h.authority,
-        packageState: h.packageState,
-        nodeEntryWorkerUrl: 'https://example.test/node-entry.js',
-        devServerWorkerUrl: 'https://example.test/dev-server.js',
-        nodeWorkerRuntimeEnv: NODE_WORKER_RUNTIME_ENV,
-        mutationGuard: async (_intents, apply) => await apply(),
-        publicationBarrier: async () => {},
-        send: () => {},
-      }),
-    ).toThrow(/project root/i);
+    try {
+      expect(() =>
+        createWorkbenchProjectRuntime({
+          projectRoot: ROOT,
+          packageConfig: {
+            ...packageConfig,
+            cfg: { ...packageConfig.cfg, root: '/page-claimed-root' },
+          },
+          authority: h.authority,
+          packageState: h.packageState,
+          viteConfigTempCache,
+          nodeEntryWorkerUrl: 'https://example.test/node-entry.js',
+          devServerWorkerUrl: 'https://example.test/dev-server.js',
+          nodeWorkerRuntimeEnv: NODE_WORKER_RUNTIME_ENV,
+          mutationGuard: async (_intents, apply) => await apply(),
+          publicationBarrier: async () => {},
+          send: () => {},
+        }),
+      ).toThrow(/project root/i);
+    } finally {
+      viteConfigTempCache.close();
+    }
   });
 });

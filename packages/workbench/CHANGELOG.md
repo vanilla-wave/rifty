@@ -13,6 +13,11 @@
 
 ### Fixed
 
+- Exact Vite 7.3.6 and 8.0.16 acquisition transforms now redirect only bundled-config
+  temp-file backing to an owner-private lexical capability. Vite retains upstream
+  bundle, naming, URL, import, and cleanup order; version, path, or anchor drift
+  loud-throws before install promotion. Direct and dev-server children receive
+  separate project-scoped generations that close before package quiescence.
 - Runtime-asset lifecycle contracts now use one integrity-checked vendored
   upstream tarball instead of reconstructing source bytes with environment-dependent
   `npm pack` output.

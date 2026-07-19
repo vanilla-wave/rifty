@@ -18,6 +18,7 @@ describe('install artifact identity', () => {
     ['shim bytes', { files: { main: 'before' } }, { files: { main: 'after' } }],
     ['runtime source', { policy: { sourceSha256: 'a' } }, { policy: { sourceSha256: 'b' } }],
     ['generated output', { output: null }, { output: { sha256: 'a'.repeat(64) } }],
+    ['Vite temp backing', { vite: { replacement: 'fsp' } }, { vite: { replacement: 'owner' } }],
   ])('changes when %s changes', (_label, before, after) => {
     expect(identityForRecipe(before)).not.toBe(identityForRecipe(after));
   });

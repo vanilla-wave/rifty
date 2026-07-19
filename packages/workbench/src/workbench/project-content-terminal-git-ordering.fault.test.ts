@@ -162,6 +162,7 @@ describe('terminal Git owner-applied ordering', () => {
       packageConfig,
       authority,
       packageState,
+      viteConfigTempCache: composition.viteConfigTempCache.createProject(ROOT),
       nodeEntryWorkerUrl: 'https://example.test/node-entry.js',
       devServerWorkerUrl: 'https://example.test/dev-server.js',
       nodeWorkerRuntimeEnv: NODE_WORKER_RUNTIME_ENV,

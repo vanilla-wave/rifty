@@ -533,6 +533,130 @@ export interface TransformResult {
   readonly staticImports: readonly string[];
   /** Collision-free helper identifiers used by the rewritten body. */
   readonly helpers: TransformHelperNames;
+  /** Original module-scope declarations, including static-import locals. */
+  readonly moduleBindings: readonly string[];
+}
+
+interface ModuleBindingNode {
+  readonly type: string;
+  readonly kind?: string;
+  readonly id?: ModuleBindingNode | null;
+  readonly local?: { readonly name?: string };
+  readonly declaration?: ModuleBindingNode | null;
+  readonly declarations?: readonly { readonly id: ModuleBindingNode }[];
+  readonly specifiers?: readonly { readonly local: { readonly name: string } }[];
+  readonly properties?: readonly ModuleBindingNode[];
+  readonly elements?: readonly (ModuleBindingNode | null)[];
+  readonly argument?: ModuleBindingNode;
+  readonly left?: ModuleBindingNode;
+  readonly value?: ModuleBindingNode;
+  readonly name?: string;
+  readonly [key: string]: unknown;
+}
+
+function collectModulePatternBindings(
+  node: ModuleBindingNode | null | undefined,
+  out: Set<string>,
+): void {
+  if (node === null || node === undefined) return;
+  switch (node.type) {
+    case 'Identifier':
+      if (node.name !== undefined) out.add(node.name);
+      return;
+    case 'ObjectPattern':
+      for (const property of node.properties ?? []) {
+        collectModulePatternBindings(
+          property.type === 'RestElement' ? property.argument : property.value,
+          out,
+        );
+      }
+      return;
+    case 'ArrayPattern':
+      for (const element of node.elements ?? []) collectModulePatternBindings(element, out);
+      return;
+    case 'RestElement':
+      collectModulePatternBindings(node.argument, out);
+      return;
+    case 'AssignmentPattern':
+      collectModulePatternBindings(node.left, out);
+      return;
+    default:
+      return;
+  }
+}
+
+function collectModuleDeclarationBindings(
+  node: ModuleBindingNode | null | undefined,
+  out: Set<string>,
+): void {
+  if (node === null || node === undefined) return;
+  switch (node.type) {
+    case 'ImportDeclaration':
+      for (const specifier of node.specifiers ?? []) out.add(specifier.local.name);
+      return;
+    case 'VariableDeclaration':
+      for (const declaration of node.declarations ?? []) {
+        collectModulePatternBindings(declaration.id, out);
+      }
+      return;
+    case 'FunctionDeclaration':
+    case 'ClassDeclaration':
+      collectModulePatternBindings(node.id, out);
+      return;
+    case 'ExportNamedDeclaration':
+    case 'ExportDefaultDeclaration':
+      collectModuleDeclarationBindings(node.declaration, out);
+      return;
+    default:
+      return;
+  }
+}
+
+/**
+ * `var` is function-scoped even when its declaration sits under module-level
+ * control flow. Stop at nested function/class scopes; their vars cannot collide
+ * with parameters of the module factory.
+ */
+function collectModuleHoistedVarBindings(node: unknown, out: Set<string>): void {
+  if (typeof node !== 'object' || node === null) return;
+  const candidate = node as ModuleBindingNode;
+  switch (candidate.type) {
+    case 'FunctionDeclaration':
+    case 'FunctionExpression':
+    case 'ArrowFunctionExpression':
+    case 'ClassDeclaration':
+    case 'ClassExpression':
+      return;
+    case 'VariableDeclaration':
+      if (candidate.kind === 'var') {
+        for (const declaration of candidate.declarations ?? []) {
+          collectModulePatternBindings(declaration.id, out);
+        }
+      }
+      return;
+    default:
+      break;
+  }
+  for (const key of Object.keys(candidate)) {
+    if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
+      continue;
+    }
+    const value = candidate[key];
+    if (Array.isArray(value)) {
+      for (const item of value) collectModuleHoistedVarBindings(item, out);
+    } else {
+      collectModuleHoistedVarBindings(value, out);
+    }
+  }
+}
+
+function collectModuleBindings(program: Program): readonly string[] {
+  const names = new Set<string>();
+  for (const node of program.body) {
+    collectModuleDeclarationBindings(node as unknown as ModuleBindingNode, names);
+    collectModuleHoistedVarBindings(node, names);
+  }
+  return [...names];
 }
 
 function uniqueHelperName(source: string, used: Set<string>, base: string): string {
@@ -589,6 +713,7 @@ export function transformEsm(source: string, id: string): TransformResult {
 
   const edits: Edit[] = [];
   const staticImports = new Set<string>();
+  const moduleBindings = collectModuleBindings(program);
   /** Map of local binding name (in the original source) → resolved import. */
   const importedBindings = new Map<string, ImportBinding>();
   const helpers = createHelperNames(source);
@@ -641,6 +766,7 @@ export function transformEsm(source: string, id: string): TransformResult {
     lineMap: [0, ...applied.lineMap],
     staticImports: [...staticImports],
     helpers,
+    moduleBindings,
   };
 }
 

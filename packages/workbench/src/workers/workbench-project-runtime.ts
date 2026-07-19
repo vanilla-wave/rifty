@@ -31,6 +31,7 @@ import type {
 } from './owner-package-state.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import { ownerVfsScopeHasFailure } from './owner-vfs-authority.ts';
+import type { OwnerViteConfigTempCacheProject } from './owner-vite-config-temp-cache.ts';
 import {
   createInstalledBinPreviewHooks,
   createNodePreviewRunHooks,
@@ -45,6 +46,7 @@ import {
 import { type PtyServer, createPtyServer } from './pty-server.ts';
 import { runtimeAssetPublicError } from './runtime-asset-public-error.ts';
 import { createPreviewScope } from './vite-cli-prep.ts';
+import { readPreparedViteConfigSource } from './vite-config-temp-patch.ts';
 
 export interface WorkbenchProjectRuntimeOptions {
   /** Materializer-owned root. Page claims and project ids are resolved before this seam. */
@@ -53,6 +55,8 @@ export interface WorkbenchProjectRuntimeOptions {
   readonly packageConfig: OwnerPackageConfig;
   readonly authority: OwnerVfsAuthority;
   readonly packageState: OwnerPackageState;
+  /** Owner-private cache generation scope for exact prepared Vite config loaders. */
+  readonly viteConfigTempCache: OwnerViteConfigTempCacheProject;
   readonly nodeEntryWorkerUrl: string;
   readonly devServerWorkerUrl: string;
   readonly nodeWorkerRuntimeEnv: NodeWorkerRuntimeEnv;
@@ -75,15 +79,16 @@ export interface WorkbenchProjectRuntime {
 }
 
 interface CloseFailure {
-  readonly phase: 'preview-fence' | 'pty' | 'packages' | 'durability';
+  readonly phase: 'preview-fence' | 'pty' | 'vite-config-cache' | 'packages' | 'durability';
   readonly error: unknown;
 }
 
 const CLOSE_PHASE_ORDER: Readonly<Record<CloseFailure['phase'], number>> = Object.freeze({
   pty: 0,
   'preview-fence': 1,
-  packages: 2,
-  durability: 3,
+  'vite-config-cache': 2,
+  packages: 3,
+  durability: 4,
 });
 
 function errorMessage(error: unknown): string {
@@ -196,8 +201,13 @@ export function createWorkbenchProjectRuntime(
             }
           },
           runtimeReader: options.runtimeAssetReader,
+          entryCapabilities: () => {
+            const prepared = readPreparedViteConfigSource(options.authority, projectRoot);
+            return prepared === null
+              ? undefined
+              : options.viteConfigTempCache.admit(prepared.relativeSourcePath);
+          },
         });
-
   const ownerNodeExecutor = createOwnerChildNodeExecutor(
     options.nodeEntryWorkerUrl,
     options.nodeWorkerRuntimeEnv,
@@ -408,6 +418,11 @@ export function createWorkbenchProjectRuntime(
         await ptyClosing;
       } catch (error) {
         failures.push({ phase: 'pty', error });
+      }
+      try {
+        options.viteConfigTempCache.close();
+      } catch (error) {
+        failures.push({ phase: 'vite-config-cache', error });
       }
       try {
         await options.packageState.quiesce();

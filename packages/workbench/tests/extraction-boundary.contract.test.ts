@@ -132,6 +132,7 @@ const WORKER_FILES = [
   'owner-storage.ts',
   'owner-vfs-applied-journal.ts',
   'owner-vfs-authority.ts',
+  'owner-vite-config-temp-cache.ts',
   'package-acquisition-authority.ts',
   'package-install-finalizer.ts',
   'package-tree-unattested-error.ts',
@@ -148,6 +149,10 @@ const WORKER_FILES = [
   'ts-lsp-worker-entry.ts',
   'vite-cli-install-policy.ts',
   'vite-cli-prep.ts',
+  'vite-config-temp-cache-client.ts',
+  'vite-config-temp-cache-protocol.ts',
+  'vite-config-temp-patch-policy.ts',
+  'vite-config-temp-patch.ts',
   'vite-esbuild-runtime.ts',
   'workbench-construction-transaction.ts',
   'workbench-entry-capabilities.ts',
@@ -367,10 +372,10 @@ function resolvedExportEntries(): readonly string[] {
 }
 
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the exact 142-file production move without test-decoupling sources', () => {
-    expect(EXPECTED_APP_PRODUCTION_FILES).toHaveLength(142);
-    expect(new Set(EXPECTED_APP_PRODUCTION_FILES).size).toBe(142);
-    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(144);
+  it('pins the exact 147-file production move without test-decoupling sources', () => {
+    expect(EXPECTED_APP_PRODUCTION_FILES).toHaveLength(147);
+    expect(new Set(EXPECTED_APP_PRODUCTION_FILES).size).toBe(147);
+    expect(new Set(EXPECTED_PACKAGE_PRODUCTION_FILES).size).toBe(149);
     expect(EXPECTED_APP_PRODUCTION_FILES.filter((path) => !isProductionSource(path))).toEqual([]);
   });
 

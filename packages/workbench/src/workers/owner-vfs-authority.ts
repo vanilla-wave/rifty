@@ -33,6 +33,10 @@ import {
   type OwnerVfsAppliedMutations,
   createOwnerVfsAppliedJournal,
 } from './owner-vfs-applied-journal.ts';
+import {
+  type OwnerViteConfigTempCacheAuthority,
+  createOwnerVfsViteConfigTempCache,
+} from './owner-vite-config-temp-cache.ts';
 
 interface TrackedEntry {
   readonly kind: 'file' | 'dir';
@@ -90,11 +94,13 @@ export interface OwnerVfsAuthorityComposition {
   readonly authority: OwnerVfsAuthority;
   readonly installStampClaims: InstallStampClaimIo;
   readonly appliedMutations: OwnerVfsAppliedMutations;
+  readonly viteConfigTempCache: OwnerViteConfigTempCacheAuthority;
 }
 
 interface OwnerVfsCompositionCapabilities {
   readonly installStampClaims: InstallStampClaimIo;
   readonly appliedMutations: OwnerVfsAppliedMutations;
+  readonly viteConfigTempCache: OwnerViteConfigTempCacheAuthority;
 }
 
 interface FlushableFsSync extends FsSync {
@@ -157,6 +163,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
   readonly #entries = new Map<string, TrackedEntry>();
   readonly #hostCommits = new Map<string, HostCommitRecord>();
   readonly #appliedJournal: OwnerVfsAppliedJournal;
+  readonly #viteConfigTempCache: OwnerViteConfigTempCacheAuthority;
   #treeRevision: TreeRevision = 0;
   #versionSequence = 0n;
   readonly ownerEpoch: OwnerEpoch;
@@ -170,6 +177,14 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     this.ownerEpoch = options.ownerEpoch ?? createOwnerEpoch();
     if (this.ownerEpoch.length === 0) throw new Error('owner VFS epoch must be non-empty');
     this.#appliedJournal = createOwnerVfsAppliedJournal(this.ownerEpoch);
+    const authority = this;
+    this.#viteConfigTempCache = createOwnerVfsViteConfigTempCache({
+      get treeRevision() {
+        return authority.treeRevision;
+      },
+      versionOf: (path) => this.versionOf(path),
+      readFileBytesSync: (path) => this.readFileBytesSync(path),
+    });
     this.#initialRoots = [...new Set((options.initialRoots ?? ['/']).map(normalizeOwnerPath))].sort(
       (left, right) => pathDepth(right) - pathDepth(left),
     );
@@ -191,6 +206,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
       Object.freeze({
         installStampClaims,
         appliedMutations: this.#appliedJournal.appliedMutations,
+        viteConfigTempCache: this.#viteConfigTempCache,
       }),
     );
   }

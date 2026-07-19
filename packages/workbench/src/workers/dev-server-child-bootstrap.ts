@@ -25,8 +25,11 @@ import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 import { readDevServerChildConfig } from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
+import { prepareViteProgrammaticForNodeEntry } from './node-entry-vite-runtime.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { ProjectTerminalFsSync } from './project-terminal-namespace.ts';
+import { installViteConfigTempCacheClient } from './vite-config-temp-cache-client.ts';
+import { VITE_CONFIG_TEMP_CACHE_CAPABILITY } from './vite-config-temp-cache-protocol.ts';
 import {
   closeUnusedWorkbenchEntryCapabilities,
   consumeWorkbenchEntryCapabilities,
@@ -88,7 +91,26 @@ async function bootstrapDevServerChild(): Promise<void> {
     kernelIpc.send?.(message);
   };
 
-  closeUnusedWorkbenchEntryCapabilities(consumeWorkbenchEntryCapabilities());
+  const entryCapabilities = consumeWorkbenchEntryCapabilities();
+  const { [VITE_CONFIG_TEMP_CACHE_CAPABILITY]: viteConfigTempCachePort, ...runtimeCapabilities } =
+    entryCapabilities;
+  const viteConfigTempCache =
+    viteConfigTempCachePort === undefined
+      ? undefined
+      : await installViteConfigTempCacheClient({
+          port: viteConfigTempCachePort,
+          call: syncApi.call,
+          base: remoteFs,
+        });
+  if (viteConfigTempCache === undefined) {
+    closeUnusedWorkbenchEntryCapabilities(runtimeCapabilities);
+  } else {
+    await prepareViteProgrammaticForNodeEntry(
+      c.cfg.root,
+      runtimeCapabilities,
+      viteConfigTempCache.vitePackageRoot,
+    );
+  }
 
   try {
     const handle: DevServerHandle = await bootDevServer({
@@ -96,6 +118,12 @@ async function bootstrapDevServerChild(): Promise<void> {
       previewScope: c.previewScope,
       publishSnapshot: () => send({ type: 'rifty:dev-snapshot' }),
       log: (chunk) => proc.stdout.write(chunk),
+      ...(viteConfigTempCache === undefined
+        ? {}
+        : {
+            loaderFs: viteConfigTempCache.loaderFs,
+            exactEsmModuleBinding: viteConfigTempCache.exactEsmModuleBinding,
+          }),
     });
     send({
       type: 'rifty:dev-ready',

@@ -5,6 +5,7 @@ import {
   viteCliActionPatchPolicy,
   viteRootWatchPatchPolicy,
 } from '../../../packages/workbench/src/workers/vite-cli-install-policy.ts';
+import { viteConfigTempPatchPolicy } from '../../../packages/workbench/src/workers/vite-config-temp-patch-policy.ts';
 import { bakedOverrides, builtinSyntheticPackageRecipes, internalsShims } from '../src/index.ts';
 import { identityForRecipe, installArtifactTreePolicy } from '../src/install-artifact-recipe.ts';
 
@@ -54,7 +55,7 @@ export async function buildInstallArtifactIdentityFile(): Promise<InstallArtifac
 export async function buildInstallArtifactRecipe() {
   const esbuildRuntimePolicy = await readJson(policyUrl);
   return {
-    schema: 4,
+    schema: 5,
     bakedOverrides,
     internalsShims,
     packageMaterialization: {
@@ -64,6 +65,7 @@ export async function buildInstallArtifactRecipe() {
     builtinSyntheticPackageRecipes,
     viteCliActionPatch: viteCliActionPatchPolicy,
     viteRootWatchPatch: viteRootWatchPatchPolicy,
+    viteConfigTempPatch: viteConfigTempPatchPolicy,
     esbuildRuntimePolicy: installArtifactTreePolicy(esbuildRuntimePolicy),
     esbuildRuntimeOutput: await readRuntimeOutputIdentity(),
   };

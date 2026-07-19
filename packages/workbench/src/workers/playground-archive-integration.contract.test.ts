@@ -297,6 +297,7 @@ function instrumentOwner(
   return Object.freeze({
     authority: composition.authority,
     appliedMutations: composition.appliedMutations,
+    viteConfigTempCache: composition.viteConfigTempCache,
     installStampClaims: Object.freeze({
       read: (root: string) => composition.installStampClaims.read(root),
       write: (root: string, data: Uint8Array, options: { readonly mkdirTree: boolean }) =>

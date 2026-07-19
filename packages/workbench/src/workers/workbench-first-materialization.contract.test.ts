@@ -58,6 +58,12 @@ import { createViteProjectRuntime } from '../workbench/vite-project-runtime.ts';
 import { type OwnerPackageState, createOwnerPackageState } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import type { AcquisitionProvenance, SnapshotFailure } from './package-acquisition-authority.ts';
+import {
+  applyViteCliActionPatch,
+  applyViteRootWatchPatch,
+  viteRootWatchPatchPolicy,
+} from './vite-cli-install-policy.ts';
+import { applyViteConfigTempPatch, viteConfigTempPatchPolicy } from './vite-config-temp-patch.ts';
 import { workbenchPackageConfig } from './workbench-package-config.ts';
 import { createWorkbenchProjectComposition } from './workbench-project-composition.ts';
 import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
@@ -181,6 +187,24 @@ const ESBUILD_MANIFEST = Object.freeze({
   name: 'esbuild',
   version: '0.28.0',
 });
+const VITE_CLI_SOURCE = 'class Cli { parse() { this.runMatchedCommand(); } }\n';
+
+function viteInstallFiles(
+  version: '7.3.6' | '8.0.16',
+  prepared: boolean,
+): Readonly<Record<string, string>> {
+  const policy = viteConfigTempPatchPolicy.sources.find(
+    (candidate) => candidate.version === version,
+  );
+  if (!policy) throw new Error(`Missing Vite ${version} acquisition policy`);
+  const chunk = `${viteRootWatchPatchPolicy.needle}\n${policy.upstreamBlock}`;
+  return Object.freeze({
+    'dist/node/cli.js': prepared ? applyViteCliActionPatch(VITE_CLI_SOURCE) : VITE_CLI_SOURCE,
+    [policy.relativeSourcePath]: prepared
+      ? applyViteConfigTempPatch(applyViteRootWatchPatch(chunk), version)
+      : chunk,
+  });
+}
 
 class ViteSevenRegistry extends RegistryClient {
   constructor() {
@@ -223,6 +247,7 @@ class ViteSevenRegistry extends RegistryClient {
     if (url === 'fixture://vite/7.3.6') {
       return fixturePackageTarball(VITE_SEVEN_MANIFEST, {
         'bin/vite.js': '#!/usr/bin/env node\n',
+        ...viteInstallFiles('7.3.6', false),
       });
     }
     if (url === 'fixture://esbuild/0.28.0') {
@@ -334,10 +359,22 @@ function realInstallBoundary(
       );
       if (name === 'vite') {
         await options.vfs.mkdir(`${options.cwd}/node_modules/.bin`, { recursive: true });
+        await options.vfs.mkdir(`${options.cwd}/node_modules/vite/dist/node/chunks`, {
+          recursive: true,
+        });
         await options.vfs.writeFile(
           `${options.cwd}/node_modules/.bin/vite`,
           '#!/usr/bin/env node\n',
         );
+        const supportedVersion = version === '7.3.6' || version === '8.0.16' ? version : null;
+        if (supportedVersion === null) {
+          throw new Error(`Test install received unsupported Vite version ${version}`);
+        }
+        for (const [relativePath, source] of Object.entries(
+          viteInstallFiles(supportedVersion, false),
+        )) {
+          await options.vfs.writeFile(`${options.cwd}/node_modules/vite/${relativePath}`, source);
+        }
       }
       await options.vfs.writeFile(
         `${options.cwd}/package-lock.json`,
@@ -471,6 +508,7 @@ function bakedSnapshot(
   const root = '/bake';
   const fs = new MemoryFsSync();
   fs.mkdirSync(`${root}/node_modules/vite`, { recursive: true });
+  fs.mkdirSync(`${root}/node_modules/vite/dist/node/chunks`, { recursive: true });
   fs.mkdirSync(`${root}/node_modules/.bin`, { recursive: true });
   fs.writeFileSync(`${root}/package.json`, encoder.encode(packageJsonText));
   fs.writeFileSync(
@@ -478,6 +516,9 @@ function bakedSnapshot(
     encoder.encode('{"name":"vite","version":"8.0.16"}\n'),
   );
   fs.writeFileSync(`${root}/node_modules/.bin/vite`, encoder.encode('#!/usr/bin/env node\n'));
+  for (const [relativePath, source] of Object.entries(viteInstallFiles('8.0.16', true))) {
+    fs.writeFileSync(`${root}/node_modules/vite/${relativePath}`, encoder.encode(source));
+  }
   fs.writeFileSync(
     `${root}/package-lock.json`,
     encoder.encode(JSON.stringify(installResult('vite', '8.0.16').lockfile, null, 2)),
@@ -1124,13 +1165,11 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     maxActiveInstalls: 0,
   };
   const pair = createMemoryFs();
-  const { authority, appliedMutations, installStampClaims } = createOwnerVfsAuthorityComposition(
-    pair.fsSync,
-    {
+  const { authority, appliedMutations, installStampClaims, viteConfigTempCache } =
+    createOwnerVfsAuthorityComposition(pair.fsSync, {
       ownerEpoch: 'first-materialization-test-owner',
       initialRoots: ['/'],
-    },
-  );
+    });
   setSyncMirror(authority, { async: pair.vfs });
   const runtimeAssetManager = options.runtimeAssetManager;
   const runtimeAssets =
@@ -1220,6 +1259,7 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
           packageConfig: config,
           authority,
           packageState,
+          viteConfigTempCache: viteConfigTempCache.createProject(materialized.projectRoot),
           ...(runtimeAssetManager === undefined
             ? {}
             : {

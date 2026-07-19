@@ -13,6 +13,11 @@ import {
   viteCliMode,
   viteCliPreparationFromArgs,
 } from './vite-cli-prep.ts';
+import {
+  readPreparedViteConfigSource,
+  viteConfigTempPatchApplied,
+  viteConfigTempPatchPolicy,
+} from './vite-config-temp-patch.ts';
 import { decideViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
 // Behavioral heirs of the retired vite-cli-prep source greps (epic
@@ -82,18 +87,43 @@ function clearEsbuildRuntimeSlot(): void {
 function bootFs(files: Record<string, string> = {}): MemoryFsSync {
   const { vfs, fsSync } = createMemoryFs();
   setSyncMirror(fsSync, { async: vfs });
-  const fixture = { '/app/package.json': '{}', ...files };
+  const fixture: Record<string, string> = { '/app/package.json': '{}', ...files };
   for (const path of Object.keys(fixture)) {
     const suffix = '/dist/node/cli.js';
     if (!path.endsWith(suffix) || !path.includes('/node_modules/vite/')) continue;
     const packageRoot = path.slice(0, -suffix.length);
-    const hasChunk = Object.keys(fixture).some((candidate) =>
-      candidate.startsWith(`${packageRoot}/dist/node/chunks/`),
+    const manifestPath = `${packageRoot}/package.json`;
+    const chunkPrefix = `${packageRoot}/dist/node/chunks/`;
+    const existingChunks = Object.keys(fixture).filter((candidate) =>
+      candidate.startsWith(chunkPrefix),
     );
-    if (!hasChunk) {
-      Object.assign(fixture, {
-        [`${packageRoot}/dist/node/chunks/config.js`]: CHOKIDAR_DIR_ENTRY_CALL_SITE,
-      });
+    if (fixture[manifestPath] === undefined) {
+      fixture[manifestPath] = viteManifest(
+        existingChunks.some((candidate) => candidate === `${chunkPrefix}node.js`)
+          ? '8.0.16'
+          : '7.3.6',
+      );
+    }
+    const version = (JSON.parse(fixture[manifestPath] ?? '{}') as { readonly version?: unknown })
+      .version;
+    const sourcePolicy = viteConfigTempPatchPolicy.sources.find(
+      (candidate) => candidate.version === version,
+    );
+    const fixturePolicy =
+      sourcePolicy ??
+      (typeof version === 'string' && version.startsWith('8.')
+        ? viteConfigTempPatchPolicy.sources[1]
+        : viteConfigTempPatchPolicy.sources[0]);
+    const sourcePath = `${packageRoot}/${fixturePolicy.relativeSourcePath}`;
+    if (existingChunks.length === 0) {
+      fixture[sourcePath] = `${CHOKIDAR_DIR_ENTRY_CALL_SITE}\n${fixturePolicy.upstreamBlock}`;
+      continue;
+    }
+    if (
+      fixture[sourcePath]?.includes('loadConfigFromBundledFile') !== true &&
+      fixture[sourcePath]?.includes('if (item !== ONE_DOT && item !== TWO_DOTS)') === true
+    ) {
+      fixture[sourcePath] = `${fixture[sourcePath]}\n${fixturePolicy.upstreamBlock}`;
     }
   }
   fsSync.loadFixture(fixture);
@@ -308,6 +338,44 @@ describe('prepareViteCli — trusted child preparation is read-only', () => {
 });
 
 describe('prepareViteCliAcquisitionFiles — real Vite config ownership', () => {
+  it.each([
+    ['7.3.6', 'dist/node/chunks/config.js'],
+    ['8.0.16', 'dist/node/chunks/node.js'],
+  ] as const)(
+    'prepares exact Vite %s backing before promotion and exposes attested bytes from %s',
+    async (version, relativeChunk) => {
+      const fsSync = bootFs({
+        [CLI_PATH]: CAC_CALL_SITE,
+        [VITE_PACKAGE_JSON]: viteManifest(version),
+      });
+
+      await prepareViteCliAcquisitionFiles('/app');
+
+      const path = `/app/node_modules/vite/${relativeChunk}`;
+      const source = readText(fsSync, path);
+      expect(viteConfigTempPatchApplied(source, version)).toBe(true);
+      expect(source).toContain('__riftyViteConfigTempFs.mkdir');
+      expect(source).toContain('__riftyViteConfigTempFs.writeFile');
+      expect(source).toContain('__riftyViteConfigTempFs.unlink');
+      expect(source).toContain('import(pathToFileURL(tempFileName).href)');
+      expect(readPreparedViteConfigSource(fsSync, '/app')?.relativeSourcePath).toBe(
+        `node_modules/vite/${relativeChunk}`,
+      );
+    },
+  );
+
+  it('loud-rejects an unsupported Vite artifact before promotion', async () => {
+    bootFs({
+      [CLI_PATH]: CAC_CALL_SITE,
+      [VITE_PACKAGE_JSON]: viteManifest('8.0.15'),
+    });
+
+    await expect(prepareViteCliAcquisitionFiles('/app')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'playground.vite-config-temp-cache',
+    });
+  });
+
   it('applies only the keepalive patch in preview mode', async () => {
     const oldPreviewNeedle = [
       'configFile: options.config,',
@@ -510,7 +578,7 @@ describe('Vite esbuild runtime startup policy', () => {
   it('skips Vite 8 Rolldown without fetching, compiling, starting, or publishing', async () => {
     const fsSync = bootFs({
       [CLI_PATH]: CAC_CALL_SITE,
-      [VITE_PACKAGE_JSON]: viteManifest('8.0.0-beta.3'),
+      [VITE_PACKAGE_JSON]: viteManifest('8.0.16'),
     });
     const savedFetch = globalThis.fetch;
     let fetchCalls = 0;
@@ -583,8 +651,10 @@ describe('Vite esbuild runtime startup policy', () => {
       return Promise.reject(new Error('version gate must run first'));
     };
     try {
-      await prepareViteCliAcquisitionFiles('/app');
-      await expect(prepareVite('dev')).rejects.toThrow('supports exact Vite 7.3.6; executed 7.3.5');
+      await expect(prepareViteCliAcquisitionFiles('/app')).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'playground.vite-config-temp-cache',
+      });
       expect(fetchCalls).toBe(0);
     } finally {
       globalThis.fetch = savedFetch;

@@ -30,11 +30,12 @@ v8.0.16 on Node v24.16.0.
 
 ## Deferred implementation
 
-The first cache redirection patch was rejected after adversarial review: a
-complete fix needs an authenticated, chunked capability shared by every Vite
-entry path in both legacy and Workbench owners, plus differential proof against
-unmodified Vite. Keep this item open; no partial path or synthetic loader closes
-the contract below.
+The first cache redirection patch was rejected after adversarial review. The
+production owner graph now has only Workbench; the former legacy owner is
+test-only. ADR-0301 replaces this item's provisional no-public-API assumption
+with one generic exact-artifact lexical-binding seam; the cache bearer and state
+remain private. Keep this item open until every reachable Vite entry path and
+the differential proof below are green.
 
 ## Acceptance
 
@@ -135,4 +136,5 @@ admission, generation identity, cleanup, and exclusion of every ordinary writer.
   the existing `vite-cli-prep` loud-anchor discipline. Artifact identity covers
   the prepared bytes.
 - Cache placement/capability is private Playground ownership and reversible:
-  no public API, external dependency, claim schema, or attested set changes.
+  no external dependency, claim schema, or attested set changes. ADR-0301 owns
+  the public generic loader seam; no cache-specific API or bearer is public.

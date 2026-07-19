@@ -3,6 +3,12 @@ import {
   consumeKernelEntryCapabilityPorts,
 } from '@riftydev/kernel';
 import { SHADOW_ASSET_CAPABILITY } from '@riftydev/npm-client';
+import { VITE_CONFIG_TEMP_CACHE_CAPABILITY } from './vite-config-temp-cache-protocol.ts';
+
+const WORKBENCH_CAPABILITIES = new Set([
+  SHADOW_ASSET_CAPABILITY,
+  VITE_CONFIG_TEMP_CACHE_CAPABILITY,
+]);
 
 function closeCapabilities(capabilities: KernelEntryCapabilityPorts): void {
   const failures: unknown[] = [];
@@ -34,7 +40,7 @@ function closeThenThrow(capabilities: KernelEntryCapabilityPorts, failure: Error
 /** Consume the kernel publication and admit only Workbench-owned protocols. */
 export function consumeWorkbenchEntryCapabilities(): KernelEntryCapabilityPorts {
   const capabilities = consumeKernelEntryCapabilityPorts();
-  const unknown = Object.keys(capabilities).filter((name) => name !== SHADOW_ASSET_CAPABILITY);
+  const unknown = Object.keys(capabilities).filter((name) => !WORKBENCH_CAPABILITIES.has(name));
   if (unknown.length !== 0) {
     closeThenThrow(
       capabilities,

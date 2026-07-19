@@ -14,7 +14,47 @@ import {
   loadTsconfigPathResolution,
 } from './tsconfig-paths.ts';
 
+const SafeMap = Map;
+const safeReflectApply = Reflect.apply.bind(Reflect);
+const mapGetPrimordial = SafeMap.prototype.get;
+const mapSetPrimordial = SafeMap.prototype.set;
+const mapClearPrimordial = SafeMap.prototype.clear;
+const jsonParsePrimordial = JSON.parse;
+const safeGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor.bind(Object);
+const stringEndsWithPrimordial = String.prototype.endsWith;
 const utf8 = new TextDecoder('utf-8');
+const textDecoderDecodePrimordial = TextDecoder.prototype.decode;
+
+function safeMapGet<K, V>(map: Map<K, V>, key: K): V | undefined {
+  return safeReflectApply(mapGetPrimordial, map, [key]) as V | undefined;
+}
+
+function safeMapSet<K, V>(map: Map<K, V>, key: K, value: V): void {
+  safeReflectApply(mapSetPrimordial, map, [key, value]);
+}
+
+function safeMapClear<K, V>(map: Map<K, V>): void {
+  safeReflectApply(mapClearPrimordial, map, []);
+}
+
+function safeDecode(bytes: Uint8Array): string {
+  return safeReflectApply(textDecoderDecodePrimordial, utf8, [bytes]) as string;
+}
+
+function safeJsonParse(source: string): unknown {
+  return safeReflectApply(jsonParsePrimordial, undefined, [source]);
+}
+
+function safeEndsWith(value: string, suffix: string): boolean {
+  return safeReflectApply(stringEndsWithPrimordial, value, [suffix]) as boolean;
+}
+
+function ownPackageType(pkg: unknown): string | undefined {
+  if (typeof pkg !== 'object' || pkg === null) return undefined;
+  const descriptor = safeGetOwnPropertyDescriptor(pkg, 'type');
+  if (descriptor === undefined || !('value' in descriptor)) return undefined;
+  return typeof descriptor.value === 'string' ? descriptor.value : undefined;
+}
 
 export type ModuleKind = 'cjs' | 'esm' | 'json' | 'builtin' | 'text';
 
@@ -129,21 +169,21 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
   // Cleared whole in `loader.invalidate()` (both arms) — `load-fixture` reload
   // overwrites package.json then invalidates, so a stale `type`/`main`/`exports`
   // would silently flip ESM/CJS classification. TODO(backlog: perf/loader-packagejson-parse-cache).
-  const pkgCache: PkgCache = new Map();
+  const pkgCache: PkgCache = new SafeMap();
   // Resolution memo (perf #15): key `esm\0fromDir\0specifier` -> resolved
   // file-id. NEVER caches not-found (guest writes / npm install create files
   // without firing invalidate) nor the PACKAGE_PATH_NOT_EXPORTED throw.
   // Cleared whole on ANY invalidate (input-keyed; cannot prune by resolved id).
   // TODO(backlog: perf/resolver-resolution-cache).
-  const resolveCache = new Map<string, string>();
-  const nearestTsconfigCache = new Map<string, string | null>();
-  const tsconfigResolutionCache = new Map<string, TsconfigPathResolution | null>();
+  const resolveCache = new SafeMap<string, string>();
+  const nearestTsconfigCache = new SafeMap<string, string | null>();
+  const tsconfigResolutionCache = new SafeMap<string, TsconfigPathResolution | null>();
   return {
     clearCaches() {
-      pkgCache.clear();
-      resolveCache.clear();
-      nearestTsconfigCache.clear();
-      tsconfigResolutionCache.clear();
+      safeMapClear(pkgCache);
+      safeMapClear(resolveCache);
+      safeMapClear(nearestTsconfigCache);
+      safeMapClear(tsconfigResolutionCache);
     },
     resolve(specifier, opts) {
       const fromFileStat = vfs.statSyncOrNull(opts.fromFile);
@@ -225,14 +265,14 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       // memo untouched so a later-created file resolves, and the
       // PACKAGE_PATH_NOT_EXPORTED throw propagates before any `set` is reached.
       const resolveKey = `${opts.esm ? 1 : 0}\0${fromDir}\0${specifier}`;
-      const cached = resolveCache.get(resolveKey);
+      const cached = safeMapGet(resolveCache, resolveKey);
       if (cached !== undefined) return readResolved(vfs, pkgCache, cached, opts.esm);
 
       const filePath = resolveSpecifierToFile(vfs, pkgCache, specifier, fromDir, opts.esm);
       if (filePath === null) {
         throw moduleNotFound(specifier, opts.fromFile, opts.esm);
       }
-      resolveCache.set(resolveKey, filePath);
+      safeMapSet(resolveCache, resolveKey, filePath);
       return readResolved(vfs, pkgCache, filePath, opts.esm);
     },
   };
@@ -240,16 +280,16 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
   function resolutionFor(fromDir: string): TsconfigPathResolution | undefined {
     if (explicitPaths !== undefined) return { paths: explicitPaths };
     if (!autoDiscoverTsconfigPaths) return undefined;
-    let configPath = nearestTsconfigCache.get(fromDir);
+    let configPath = safeMapGet(nearestTsconfigCache, fromDir);
     if (configPath === undefined) {
       configPath = findNearestTsconfig(vfs, fromDir);
-      nearestTsconfigCache.set(fromDir, configPath);
+      safeMapSet(nearestTsconfigCache, fromDir, configPath);
     }
     if (configPath === null) return undefined;
-    let resolution = tsconfigResolutionCache.get(configPath);
+    let resolution = safeMapGet(tsconfigResolutionCache, configPath);
     if (resolution === undefined) {
       resolution = loadTsconfigPathResolution(vfs, configPath);
-      tsconfigResolutionCache.set(configPath, resolution);
+      safeMapSet(tsconfigResolutionCache, configPath, resolution);
     }
     return resolution ?? undefined;
   }
@@ -442,7 +482,7 @@ function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | 
     if (
       specifier.length >= prefix.length + suffix.length &&
       specifier.startsWith(prefix) &&
-      specifier.endsWith(suffix)
+      safeEndsWith(specifier, suffix)
     ) {
       const baseLen = prefix.length;
       const trailerLen = suffix.length;
@@ -764,7 +804,7 @@ function findWildcard(
     if (
       subpath.length >= prefix.length + suffix.length &&
       subpath.startsWith(prefix) &&
-      subpath.endsWith(suffix)
+      safeEndsWith(subpath, suffix)
     ) {
       // Specificity: longer base wins, tie → longer trailer.
       if (
@@ -804,24 +844,24 @@ function substituteStar(node: ExportsField, star: string): ExportsField {
  * (keyed by absolute path), shared across all parse sites.
  */
 function cachedParse(vfs: FsSync, pkgCache: PkgCache, path: string): PackageJson | null {
-  const hit = pkgCache.get(path);
+  const hit = safeMapGet(pkgCache, path);
   if (hit !== undefined) return hit;
   let parsed: PackageJson;
   try {
-    parsed = JSON.parse(utf8.decode(vfs.readFileBytesSync(path))) as PackageJson;
+    parsed = safeJsonParse(safeDecode(vfs.readFileBytesSync(path))) as PackageJson;
   } catch {
     return null;
   }
-  pkgCache.set(path, parsed);
+  safeMapSet(pkgCache, path, parsed);
   return parsed;
 }
 
 function readPackageJson(vfs: FsSync, pkgCache: PkgCache, path: string): PackageJson {
-  const hit = pkgCache.get(path);
+  const hit = safeMapGet(pkgCache, path);
   if (hit !== undefined) return hit;
   try {
-    const parsed = JSON.parse(utf8.decode(vfs.readFileBytesSync(path))) as PackageJson;
-    pkgCache.set(path, parsed);
+    const parsed = safeJsonParse(safeDecode(vfs.readFileBytesSync(path))) as PackageJson;
+    safeMapSet(pkgCache, path, parsed);
     return parsed;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -866,11 +906,11 @@ function readResolved(
   filePath: string,
   _esm: boolean,
 ): ResolvedModule {
-  const raw = utf8.decode(vfs.readFileBytesSync(filePath));
+  const raw = safeDecode(vfs.readFileBytesSync(filePath));
   // One scope walk: feed its `type` into detectKind so the `.js`/`.ts`/`.tsx`
   // branch no longer re-walks/re-parses the same package.json (perf #4).
   const scope = findPackageScope(vfs, pkgCache, filePath);
-  const kind = detectKind(filePath, scope?.pkg.type);
+  const kind = detectKind(filePath, ownPackageType(scope?.pkg));
   // Node strips a leading `#!` shebang before compiling a JS module (CJS
   // `Module._compile` + the ESM loader). Match it for the compiled kinds so a
   // shebang'd entry — `node <script>`, a child_process spawn, or a
@@ -891,15 +931,17 @@ function readResolved(
 }
 
 function detectKind(filePath: string, scopeType: string | undefined): ModuleKind {
-  if (filePath.endsWith('.json')) return 'json';
-  if (TEXT_EXTENSIONS.some((ext) => filePath.endsWith(ext))) return 'text';
-  if (filePath.endsWith('.mjs')) return 'esm';
-  if (filePath.endsWith('.cjs')) return 'cjs';
+  if (safeEndsWith(filePath, '.json')) return 'json';
+  for (let index = 0; index < TEXT_EXTENSIONS.length; index += 1) {
+    if (safeEndsWith(filePath, TEXT_EXTENSIONS[index] as string)) return 'text';
+  }
+  if (safeEndsWith(filePath, '.mjs')) return 'esm';
+  if (safeEndsWith(filePath, '.cjs')) return 'cjs';
   if (
-    filePath.endsWith('.js') ||
-    filePath.endsWith('.ts') ||
-    filePath.endsWith('.tsx') ||
-    filePath.endsWith('.jsx')
+    safeEndsWith(filePath, '.js') ||
+    safeEndsWith(filePath, '.ts') ||
+    safeEndsWith(filePath, '.tsx') ||
+    safeEndsWith(filePath, '.jsx')
   ) {
     // `.ts`/`.tsx`/`.jsx` mirror the `.js` branch (ADR-0053): ESM under a `type:module`
     // scope, else CJS — as a TS-aware Node loader classifies by package scope.

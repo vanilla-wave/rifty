@@ -321,6 +321,47 @@ describe('owner child admission transaction', () => {
     expect(peers[0]).not.toBe(peers[1]);
   });
 
+  it('rejects a reserved capability collision before asset-server construction and aggregates cleanup', async () => {
+    const events: string[] = [];
+    const cleanupFailure = new Error('entry capability cleanup failed');
+    const channel = new MessageChannel();
+    const admissionAuthority = authority(plan(), events);
+    const runtimeReader = vi.fn(admissionAuthority.runtimeReader);
+    const collisionAuthority: OwnerChildAdmissionAuthority = {
+      ...admissionAuthority,
+      runtimeReader,
+      entryCapabilities: () => ({
+        capabilityPorts: Object.freeze({ [SHADOW_ASSET_CAPABILITY]: channel.port2 }),
+        dispose: () => {
+          events.push('entry-dispose');
+          channel.port2.close();
+          throw cleanupFailure;
+        },
+      }),
+    };
+
+    const outcome = await admitOwnerChild({
+      authority: collisionAuthority,
+      spawn: () => {
+        throw new Error('collision must fail before spawn');
+      },
+      supervise: () => {
+        throw new Error('collision must fail before supervision');
+      },
+    }).catch((error: unknown) => error);
+
+    expect(outcome).toBeInstanceOf(AggregateError);
+    expect((outcome as AggregateError).errors).toEqual([
+      expect.objectContaining({
+        message: `owner child capability collision: ${SHADOW_ASSET_CAPABILITY}`,
+      }),
+      cleanupFailure,
+    ]);
+    expect(runtimeReader).not.toHaveBeenCalled();
+    expect(events).toEqual(['reserve', 'entry-dispose', 'abort-before']);
+    channel.port1.close();
+  });
+
   it('aborts before spawn when the physical boundary throws', async () => {
     const events: string[] = [];
     const failure = new Error('spawn failed');

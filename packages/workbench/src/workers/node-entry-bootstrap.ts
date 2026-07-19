@@ -41,13 +41,18 @@ import { syncMirror } from '@riftydev/vfs';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { installNodeEntryRemoteFs } from './node-entry-remote-fs.ts';
-import { prepareViteCliForNodeEntry } from './node-entry-vite-runtime.ts';
+import {
+  prepareViteCliForNodeEntry,
+  prepareViteProgrammaticForNodeEntry,
+} from './node-entry-vite-runtime.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import {
   installNodeWorkerRuntimeConfig,
   readNodeWorkerRuntimeConfig,
 } from './node-worker-runtime-config.ts';
 import { viteCliPreparationFromArgs } from './vite-cli-prep.ts';
+import { installViteConfigTempCacheClient } from './vite-config-temp-cache-client.ts';
+import { VITE_CONFIG_TEMP_CACHE_CAPABILITY } from './vite-config-temp-cache-protocol.ts';
 import {
   closeUnusedWorkbenchEntryCapabilities,
   consumeWorkbenchEntryCapabilities,
@@ -116,11 +121,40 @@ const vitePreparation =
       })
     : null;
 const entryCapabilities = consumeWorkbenchEntryCapabilities();
+const { [VITE_CONFIG_TEMP_CACHE_CAPABILITY]: viteConfigTempCachePort, ...runtimeCapabilities } =
+  entryCapabilities;
+const viteConfigTempCache =
+  viteConfigTempCachePort === undefined
+    ? undefined
+    : await (() => {
+        const syncApi = readKernelSyncApi();
+        if (syncApi === null) {
+          viteConfigTempCachePort.close();
+          closeUnusedWorkbenchEntryCapabilities(runtimeCapabilities);
+          throw new Error(
+            'node-entry: Vite config temp-cache capability requires a kernel sync call',
+          );
+        }
+        return installViteConfigTempCacheClient({
+          port: viteConfigTempCachePort,
+          call: syncApi.call,
+          base: syncMirror(),
+        });
+      })();
 if (vitePreparation !== null) {
-  await prepareViteCliForNodeEntry(vitePreparation, entryCapabilities);
+  await prepareViteCliForNodeEntry(vitePreparation, runtimeCapabilities);
+} else if (viteConfigTempCache !== undefined) {
+  await prepareViteProgrammaticForNodeEntry(
+    proc.cwd(),
+    runtimeCapabilities,
+    viteConfigTempCache.vitePackageRoot,
+  );
 } else {
-  closeUnusedWorkbenchEntryCapabilities(entryCapabilities);
+  closeUnusedWorkbenchEntryCapabilities(runtimeCapabilities);
 }
+
+const loaderVfs = viteConfigTempCache?.loaderFs ?? syncMirror();
+const exactEsmModuleBinding = viteConfigTempCache?.exactEsmModuleBinding;
 
 // `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
@@ -147,10 +181,11 @@ if (nodeServe) {
   await runNodeProgramLifecycle({
     runEntry: () =>
       runNodeEntry({
-        vfs: syncMirror(),
+        vfs: loaderVfs,
         entryPath,
         cwd: proc.cwd(),
         bin,
+        ...(exactEsmModuleBinding === undefined ? {} : { exactEsmModuleBinding }),
       }),
     listPorts: () => listPorts(),
     onPortsChange: (cb) => onRegistryChange(cb),
@@ -172,10 +207,11 @@ if (nodeServe) {
   });
 } else {
   await runNodeEntry({
-    vfs: syncMirror(),
+    vfs: loaderVfs,
     entryPath,
     cwd: proc.cwd(),
     bin,
+    ...(exactEsmModuleBinding === undefined ? {} : { exactEsmModuleBinding }),
   });
   // Honor process.exitCode on a clean return (Node parity, ADR-0157 D4): the kernel
   // reaps a no-throw return as exit 0, so a `.bin`/execSync CLI that set a non-zero

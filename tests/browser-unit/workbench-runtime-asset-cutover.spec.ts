@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { VITE_CONFIG_TEMP_CACHE_CAPABILITY } from '../../packages/workbench/src/workers/vite-config-temp-cache-protocol.ts';
 import { gotoHarness } from './fixtures.ts';
 import { pinPublicEsbuild0280 } from './pinned-public-esbuild.ts';
 
@@ -121,11 +122,12 @@ test('default Vite 8 real Workers run dev/build/preview with an empty asset plan
   expect(proof.devHtml).toContain('/src/main.js');
   expect(proof.build.exit).toEqual({ code: 0, signal: null });
   expect(proof.previewHtml).toContain('/assets/');
-  expect(
-    [proof.devOutput, proof.build.output, proof.previewOutput]
-      .join('\n')
-      .match(/RIFTY_VITE8_CAPABILITY_KEYS:\[\]/gu),
-  ).toHaveLength(3);
+  const cacheCapabilityProof = `RIFTY_VITE8_CAPABILITY_KEYS:${JSON.stringify([
+    VITE_CONFIG_TEMP_CACHE_CAPABILITY,
+  ])}`;
+  for (const output of [proof.devOutput, proof.build.output, proof.previewOutput]) {
+    expect(output).toContain(cacheCapabilityProof);
+  }
   expect(esbuildRequests).toEqual([]);
 });
 

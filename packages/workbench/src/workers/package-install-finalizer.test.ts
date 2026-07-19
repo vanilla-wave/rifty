@@ -2,6 +2,7 @@ import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/in
 import { afterEach, describe, expect, it } from 'vitest';
 import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 import { viteCliActionPatchApplied, viteRootWatchPatchApplied } from './vite-cli-install-policy.ts';
+import { viteConfigTempPatchApplied, viteConfigTempPatchPolicy } from './vite-config-temp-patch.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -19,9 +20,14 @@ function seedViteFiles(
 ): { cli: string; watcher: string } {
   const cli = `${root}/node_modules/vite/dist/node/cli.js`;
   const watcher = `${root}/node_modules/vite/dist/node/chunks/config.js`;
+  const policy = viteConfigTempPatchPolicy.sources[0];
   fsSync.mkdirSync(`${root}/node_modules/vite/dist/node/chunks`, { recursive: true });
+  fsSync.writeFileSync(
+    `${root}/node_modules/vite/package.json`,
+    enc.encode(JSON.stringify({ name: 'vite', version: policy.version })),
+  );
   fsSync.writeFileSync(cli, enc.encode(CLI_SOURCE));
-  fsSync.writeFileSync(watcher, enc.encode(ROOT_WATCH_SOURCE));
+  fsSync.writeFileSync(watcher, enc.encode(`${ROOT_WATCH_SOURCE}\n${policy.upstreamBlock}`));
   return { cli, watcher };
 }
 
@@ -39,6 +45,9 @@ describe('finalizePackageInstallFiles', () => {
     expect(viteRootWatchPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)))).toBe(
       true,
     );
+    expect(
+      viteConfigTempPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)), '7.3.6'),
+    ).toBe(true);
   });
 
   it('seeds template files before preparing the installed Vite CLI', async () => {

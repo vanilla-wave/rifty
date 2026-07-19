@@ -10,8 +10,8 @@
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
-import { createModuleLoader } from '@riftydev/runtime-js/loader';
-import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
+import { type ExactEsmModuleBinding, createModuleLoader } from '@riftydev/runtime-js/loader';
+import { type FsSync, dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
 
@@ -70,6 +70,9 @@ export async function bootDevServer(opts: {
   readonly previewScope?: string;
   readonly publishSnapshot: () => void;
   readonly log: (chunk: string) => void;
+  /** Loader-only overlay; node:fs and snapshot publication retain syncMirror(). */
+  readonly loaderFs?: FsSync;
+  readonly exactEsmModuleBinding?: ExactEsmModuleBinding;
 }): Promise<DevServerHandle> {
   const { cfg, publishSnapshot, log } = opts;
   const { root, port } = cfg;
@@ -87,7 +90,12 @@ export async function bootDevServer(opts: {
   }
   publishSnapshot();
 
-  const loader = createModuleLoader(seedFs, { cwd: root });
+  const loader = createModuleLoader(opts.loaderFs ?? seedFs, {
+    cwd: root,
+    ...(opts.exactEsmModuleBinding === undefined
+      ? {}
+      : { exactEsmModuleBinding: opts.exactEsmModuleBinding }),
+  });
   __setCreateRequireImpl((from: string) => {
     const fromPath = from.startsWith('file://')
       ? decodeURIComponent(from.slice('file://'.length))

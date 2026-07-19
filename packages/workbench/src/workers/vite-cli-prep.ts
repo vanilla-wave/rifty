@@ -10,6 +10,10 @@ import {
   viteRootWatchPatchPolicy,
 } from './vite-cli-install-policy.ts';
 import {
+  prepareViteConfigTempSource,
+  validatePreparedViteConfigSource,
+} from './vite-config-temp-patch.ts';
+import {
   type ViteEsbuildRuntimeDecision,
   decideViteEsbuildRuntime,
   prepareViteEsbuildRuntime,
@@ -36,6 +40,12 @@ export interface ViteCliPreparation {
 
 export interface PlannedViteCliPreparation {
   readonly preparation: ViteCliPreparation;
+  readonly packageRoot: string;
+  readonly runtimeDecision: ViteEsbuildRuntimeDecision;
+}
+
+export interface PlannedViteProgrammaticPreparation {
+  readonly root: string;
   readonly packageRoot: string;
   readonly runtimeDecision: ViteEsbuildRuntimeDecision;
 }
@@ -159,7 +169,10 @@ export async function prepareViteCliAcquisitionFiles(
   executedBinPath?: string,
 ): Promise<void> {
   const packageRoot = vitePackageRoot(root, executedBinPath);
-  if (installCliActionPatch(packageRoot)) installRootWatchPatch(packageRoot);
+  if (installCliActionPatch(packageRoot)) {
+    installRootWatchPatch(packageRoot);
+    prepareViteConfigTempSource(syncMirror(), packageRoot);
+  }
 }
 
 export function planViteCliPreparation(options: ViteCliPreparation): PlannedViteCliPreparation {
@@ -169,6 +182,21 @@ export function planViteCliPreparation(options: ViteCliPreparation): PlannedVite
   return Object.freeze({ preparation, packageRoot, runtimeDecision });
 }
 
+/** Exact installed Vite runtime used when user code imports the API directly. */
+export function planViteProgrammaticPreparation(
+  rootValue: string,
+  packageRootValue?: string,
+): PlannedViteProgrammaticPreparation {
+  const root = normalizePath(rootValue);
+  const packageRoot =
+    packageRootValue === undefined ? vitePackageRoot(root) : normalizePath(packageRootValue);
+  return Object.freeze({
+    root,
+    packageRoot,
+    runtimeDecision: decideViteEsbuildRuntime({ fs: syncMirror(), packageRoot }),
+  });
+}
+
 export async function prepareViteCli(
   plan: PlannedViteCliPreparation,
   shadowAssets?: ShadowAssetRuntimeReader,
@@ -176,6 +204,7 @@ export async function prepareViteCli(
   const { packageRoot, preparation: options, runtimeDecision } = plan;
   validateCliActionPatch(packageRoot);
   validateRootWatchPatch(packageRoot);
+  validatePreparedViteConfigSource(syncMirror(), packageRoot);
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   if (runtimeDecision === 'skip-rolldown' && shadowAssets !== undefined) {
     throw new TypeError('Vite 8 preparation must not receive shadow assets');
@@ -185,6 +214,24 @@ export async function prepareViteCli(
     fs,
     cwd: options.root,
     decision: runtimeDecision,
+    ...(shadowAssets === undefined ? {} : { shadowAssets }),
+  });
+}
+
+/** Prepare the same installed runtime for `import('vite')`, without CLI globals. */
+export async function prepareViteProgrammaticApi(
+  plan: PlannedViteProgrammaticPreparation,
+  shadowAssets?: ShadowAssetRuntimeReader,
+): Promise<void> {
+  validateRootWatchPatch(plan.packageRoot);
+  validatePreparedViteConfigSource(syncMirror(), plan.packageRoot);
+  if (plan.runtimeDecision === 'skip-rolldown' && shadowAssets !== undefined) {
+    throw new TypeError('Vite 8 preparation must not receive shadow assets');
+  }
+  await prepareViteEsbuildRuntime({
+    fs: syncMirror(),
+    cwd: plan.root,
+    decision: plan.runtimeDecision,
     ...(shadowAssets === undefined ? {} : { shadowAssets }),
   });
 }

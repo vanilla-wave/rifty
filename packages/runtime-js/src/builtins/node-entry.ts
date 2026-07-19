@@ -20,7 +20,18 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
 import { ModuleLoadError } from '../module-loader/errors.ts';
-import { type ModuleLoader, createModuleLoader } from '../module-loader/loader.ts';
+import {
+  type ExactEsmModuleBinding,
+  type ModuleLoader,
+  type ModuleLoaderOptions,
+  createModuleLoader,
+} from '../module-loader/loader.ts';
+
+export type { ExactEsmModuleBinding } from '../module-loader/loader.ts';
+
+export type RunNodeEntryLoaderOptions = Omit<ModuleLoaderOptions, 'cwd'> & {
+  readonly cwd: string;
+};
 
 const utf8 = new TextDecoder();
 
@@ -93,8 +104,10 @@ export interface RunNodeEntryOptions {
   readonly cwd: string;
   /** `entryPath` is a `node_modules/.bin/<name>` launcher — run its target. */
   readonly bin?: boolean;
+  /** Host-only lexical imports for one exact path+raw-byte-attested ESM artifact. */
+  readonly exactEsmModuleBinding?: ExactEsmModuleBinding;
   /** Loader factory seam (tests inject; production uses the real loader). */
-  readonly createLoader?: (vfs: FsSync, opts: { cwd: string }) => ModuleLoader;
+  readonly createLoader?: (vfs: FsSync, opts: RunNodeEntryLoaderOptions) => ModuleLoader;
 }
 
 function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | null {
@@ -113,7 +126,12 @@ function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | nu
 
 /** Import the resolved Node entry (or a `.bin` launcher's target) via the loader. */
 export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
-  const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
+  const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, {
+    cwd: opts.cwd,
+    ...(opts.exactEsmModuleBinding === undefined
+      ? {}
+      : { exactEsmModuleBinding: opts.exactEsmModuleBinding }),
+  });
   try {
     if (opts.bin) {
       const shim = utf8.decode(opts.vfs.readFileBytesSync(opts.entryPath));

@@ -149,10 +149,12 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
       owner: ownerComposition,
       runtimeAssets: runtimeAssetStorage,
     } = storageComposition;
-    const { authority, appliedMutations, installStampClaims } = ownerComposition;
-    const authorityOwnership = construction.own(async () =>
-      assertCleanDurability(await authority.flush()),
-    );
+    const { authority, appliedMutations, installStampClaims, viteConfigTempCache } =
+      ownerComposition;
+    const authorityOwnership = construction.own(async () => {
+      viteConfigTempCache.close();
+      assertCleanDurability(await authority.flush());
+    });
     const storageOwnership = construction.own(() => runtimeAssetStorage.close());
     const registry = createProxiedRegistryClient({
       proxyPrefix: config.packageAcquisition.registryUrl,
@@ -230,6 +232,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         () => packageState.quiesce(),
         () => runtimeAssetManager.close(),
         authority,
+        () => viteConfigTempCache.close(),
       );
       closeAuthority = () => (materializer as ProjectMaterializer).close();
       closeAuthorityOwnership = construction.transfer(
@@ -301,6 +304,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         () => packageState.quiesce(),
         () => runtimeAssetManager.close(),
         authority,
+        () => viteConfigTempCache.close(),
       );
       closeAuthorityOwnership = construction.transfer(
         [
@@ -335,6 +339,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
       execSyncVfs: () => new ProjectTerminalFsSync(authority, requireActiveProjectRoot()),
       execSync: { remoteFsRoot: requireActiveProjectRoot },
     });
+    viteConfigTempCache.install(getKernelDispatcher());
 
     if (closeAuthority === undefined) {
       throw new Error('Workbench owner close authority was not constructed');
@@ -363,6 +368,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         activeProjectRoot = projectRoot;
         let runtime: ReturnType<typeof createWorkbenchProjectRuntime>;
         let projectVfs: ReturnType<typeof createWorkbenchProjectVfs>;
+        const projectViteConfigTempCache = viteConfigTempCache.createProject(projectRoot);
         try {
           const composition = await createWorkbenchProjectComposition({
             createVfs: () =>
@@ -386,6 +392,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
                 }),
                 authority,
                 packageState,
+                viteConfigTempCache: projectViteConfigTempCache,
                 runtimeAssetReader: (plan) => runtimeAssetManager.runtimeReader(plan),
                 nodeEntryWorkerUrl: config.deployment.workers.node,
                 devServerWorkerUrl: config.deployment.workers.devServer,
@@ -407,6 +414,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           runtime = composition.runtime;
           projectVfs = composition.vfs;
         } catch (error) {
+          projectViteConfigTempCache.close();
           activeProjectRoot = null;
           throw error;
         }

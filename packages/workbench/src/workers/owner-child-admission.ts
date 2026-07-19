@@ -12,6 +12,14 @@ import type { OwnerChildAdmissionReservation } from './owner-package-state.ts';
 export interface OwnerChildAdmissionAuthority {
   reserve(options?: Readonly<{ signal?: AbortSignal }>): Promise<OwnerChildAdmissionReservation>;
   runtimeReader(plan: ShadowAssetPlan): ShadowAssetRuntimeReader;
+  /** Optional owner-private entry capabilities, minted while the package FIFO is held. */
+  entryCapabilities?(): OwnerChildEntryCapabilitySession | undefined;
+}
+
+export interface OwnerChildEntryCapabilitySession {
+  readonly capabilityPorts: KernelEntryCapabilityPorts;
+  /** Preparation is synchronous; rollback must finish before the package FIFO moves. */
+  dispose(): void;
 }
 
 export interface OwnerChildAdmissionHandle {
@@ -60,31 +68,86 @@ function aggregateLifecycleFailure(
   return new AggregateError([original, ...failures], message);
 }
 
+function failAfterEntrySessionDispose(
+  session: OwnerChildEntryCapabilitySession,
+  failure: unknown,
+): never {
+  try {
+    session.dispose();
+  } catch (disposeError) {
+    throw new AggregateError(
+      [failure, disposeError],
+      'owner child capability preparation and rollback failed',
+    );
+  }
+  throw failure;
+}
+
 function prepareSession(
   reservation: OwnerChildAdmissionReservation,
   authority: OwnerChildAdmissionAuthority,
 ): PreparedSession {
-  if (reservation.readiness.kind === 'not-required') return NO_SESSION;
-  const { plan, receipt } = reservation.readiness;
-  if (receipt.requiredSetDigest !== plan.requiredSetDigest) {
-    throw new Error('child admission receipt does not attest its exact runtime-asset plan');
-  }
-  const channel = new MessageChannel();
-  let server: ShadowAssetPortServer;
+  const entrySession = authority.entryCapabilities?.();
+  let ports: Record<string, MessagePort>;
   try {
-    server = startShadowAssetPortServer({
-      plan,
-      port: channel.port1,
-      reader: authority.runtimeReader(plan),
-    });
+    ports = { ...(entrySession?.capabilityPorts ?? {}) };
   } catch (error) {
-    channel.port1.close();
-    channel.port2.close();
+    if (entrySession !== undefined) failAfterEntrySessionDispose(entrySession, error);
     throw error;
   }
+  if (entrySession !== undefined && ports[SHADOW_ASSET_CAPABILITY] !== undefined) {
+    failAfterEntrySessionDispose(
+      entrySession,
+      new Error(`owner child capability collision: ${SHADOW_ASSET_CAPABILITY}`),
+    );
+  }
+  let assetServer: ShadowAssetPortServer | undefined;
+  let assetPort: MessagePort | undefined;
+  try {
+    if (reservation.readiness.kind === 'ready') {
+      const { plan, receipt } = reservation.readiness;
+      if (receipt.requiredSetDigest !== plan.requiredSetDigest) {
+        throw new Error('child admission receipt does not attest its exact runtime-asset plan');
+      }
+      const channel = new MessageChannel();
+      try {
+        assetServer = startShadowAssetPortServer({
+          plan,
+          port: channel.port1,
+          reader: authority.runtimeReader(plan),
+        });
+        assetPort = channel.port2;
+      } catch (error) {
+        channel.port1.close();
+        channel.port2.close();
+        throw error;
+      }
+    }
+  } catch (error) {
+    if (entrySession !== undefined) failAfterEntrySessionDispose(entrySession, error);
+    throw error;
+  }
+  if (assetServer === undefined && entrySession === undefined) return NO_SESSION;
+  if (assetPort !== undefined) {
+    ports[SHADOW_ASSET_CAPABILITY] = assetPort;
+  }
   return Object.freeze({
-    capabilityPorts: Object.freeze({ [SHADOW_ASSET_CAPABILITY]: channel.port2 }),
-    dispose: () => server.dispose(),
+    capabilityPorts: Object.freeze(ports),
+    async dispose(): Promise<void> {
+      const outcomes = await Promise.allSettled([
+        ...(assetServer === undefined ? [] : [assetServer.dispose()]),
+        ...(entrySession === undefined
+          ? []
+          : [Promise.resolve().then(() => entrySession.dispose())]),
+      ]);
+      const failures = outcomes.flatMap((outcome) =>
+        outcome.status === 'rejected' ? [outcome.reason] : [],
+      );
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) {
+        throw new AggregateError(failures, 'owner child capability sessions failed to dispose');
+      }
+    },
   });
 }
 

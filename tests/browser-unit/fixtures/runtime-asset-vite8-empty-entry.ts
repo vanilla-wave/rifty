@@ -1,10 +1,16 @@
 /// <reference lib="webworker" />
 
 import { readKernelEntryCapabilityPorts } from '../../../packages/kernel/src/index.ts';
+import { readNodeEntryBootstrap } from '../../../packages/runtime-js/src/builtins/node-entry-url.ts';
+import { VITE_CONFIG_TEMP_CACHE_CAPABILITY } from '../../../packages/workbench/src/workers/vite-config-temp-cache-protocol.ts';
 
 const capabilityKeys = Object.keys(readKernelEntryCapabilityPorts());
-if (capabilityKeys.length !== 0) {
-  throw new Error(`default Vite 8 received capabilities: ${capabilityKeys.join(', ')}`);
+const launchKind = readNodeEntryBootstrap().launch.kind;
+const expectedCapabilityKeys = launchKind === 'program' ? [VITE_CONFIG_TEMP_CACHE_CAPABILITY] : [];
+if (JSON.stringify(capabilityKeys) !== JSON.stringify(expectedCapabilityKeys)) {
+  throw new Error(
+    `default Vite 8 ${launchKind} received capabilities: ${capabilityKeys.join(', ')}`,
+  );
 }
 
 const childProcess = (
@@ -12,6 +18,8 @@ const childProcess = (
     readonly process?: { readonly stdout?: { write(chunk: string): unknown } };
   }
 ).process;
-childProcess?.stdout?.write(`RIFTY_VITE8_CAPABILITY_KEYS:${JSON.stringify(capabilityKeys)}\n`);
+if (launchKind === 'program') {
+  childProcess?.stdout?.write(`RIFTY_VITE8_CAPABILITY_KEYS:${JSON.stringify(capabilityKeys)}\n`);
+}
 
 await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');

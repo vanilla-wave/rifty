@@ -8,6 +8,8 @@ import { hasURLScheme } from '../internal/url-scheme.ts';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
+import { type EsmFactory, createEsmFactory, invokeEsmFactory } from './esm-factory.ts';
+import type { SelectedExactEsmModuleBinding } from './exact-module-binding.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
 import type { ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule, Resolver } from './resolver.ts';
@@ -109,7 +111,7 @@ interface EsmFunctionGuardCtx {
 const functionRoutingAnalysisToken =
   /\bFunction\b|\bconstructor\b|\bglobalThis\b|\bglobal\b|\bObject\b|\bReflect\b|__define(?:Getter|Setter)__|\beval\b|\bwith\b/;
 
-function assertNoEsmFunctionRoutingCeiling(source: string, id: string): void {
+export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): void {
   if (!functionRoutingAnalysisToken.test(source)) return;
   let program: Program;
   try {
@@ -1652,6 +1654,7 @@ function unwrapGuardChain(node: unknown): unknown {
 export async function executeEsm(
   resolved: ResolvedModule,
   deps: EsmLoaderDeps,
+  exactBinding?: SelectedExactEsmModuleBinding,
 ): Promise<Record<string, unknown>> {
   const { registry } = deps;
   const existing = registry.get(resolved.id);
@@ -1670,8 +1673,8 @@ export async function executeEsm(
   // (no esbuild/runtime-wasi edge here, ADR-0052). Reaching a TS/JSX module with
   // NO hook throws a directed error rather than letting raw TS fall through to
   // acorn (opaque SYNTAX_ERROR) — no silent stub (feature-02 T3).
-  let source = resolved.source;
-  const tsLoader = tsLoaderForId(resolved.id);
+  let source = exactBinding?.source ?? resolved.source;
+  const tsLoader = exactBinding === undefined ? tsLoaderForId(resolved.id) : null;
   if (tsLoader) {
     if (!deps.transformSource) {
       throw new ModuleLoadError(
@@ -1688,11 +1691,12 @@ export async function executeEsm(
       workspace: deps.workspace,
     });
   }
-  assertNoEsmFunctionRoutingCeiling(source, resolved.id);
+  if (exactBinding === undefined) assertNoEsmFunctionRoutingCeiling(source, resolved.id);
 
   // Cached AST rewrite when the loader injected one (perf #16); the direct
   // import is the default so plain construction stays unchanged.
-  const transformed = (deps.transformEsm ?? transformEsm)(source, resolved.id);
+  const transformed =
+    exactBinding?.transformed ?? (deps.transformEsm ?? transformEsm)(source, resolved.id);
   deps.sourceMaps?.setGeneratedLineMap(resolved.id, transformed.lineMap);
   // Stash by file path so modules don't overwrite each other. Lives on the typed
   // owner table at `__rifty.esmStash` — see `internal/worker-globals.ts`.
@@ -1702,7 +1706,8 @@ export async function executeEsm(
   // Eagerly resolve static imports before the body runs: satisfies cycles (dep's
   // record is registered first) and gives deterministic load order.
   const importNamespaces = new Map<string, Record<string, unknown>>();
-  for (const spec of transformed.staticImports) {
+  for (let index = 0; index < transformed.staticImports.length; index += 1) {
+    const spec = transformed.staticImports[index] as string;
     const dep = deps.resolve(spec, resolved.id, true);
     // Carry the resolved record — `loadAsyncResolved` skips re-resolving it (#14).
     const ns = await deps.loadAsyncResolved(dep);
@@ -1719,43 +1724,9 @@ export async function executeEsm(
   // ESM (unlike CJS) does NOT inject `__dirname`/`__filename` as locals — Node
   // exposes them only on `import.meta`. Injecting them collided with user code
   // declaring `const __dirname` (Vite's `dep-BK3b2jBa.js`). `import_meta` only.
-  let factory: (
-    importer: (s: string) => Promise<Record<string, unknown>>,
-    importStatic: (s: string) => Record<string, unknown>,
-    slots: Record<string, unknown>,
-    resolveStatic: (s: string) => Record<string, unknown>,
-    rebuildExports: () => void,
-    __importMetaUrl: string,
-    __metaDirname: string,
-    __metaFilename: string,
-    __assetPath: (s: string) => string,
-    __metaResolve: (s: string) => string,
-    Function: FunctionConstructor,
-  ) => Promise<void>;
+  let factory: EsmFactory;
   try {
-    const helper = transformed.helpers;
-    factory = new Function(
-      helper.dynamicImport,
-      helper.importStatic,
-      helper.slots,
-      '__resolveStatic',
-      helper.rebuildExports,
-      helper.importMetaUrl,
-      helper.metaDirname,
-      helper.metaFilename,
-      helper.assetPath,
-      helper.metaResolve,
-      'Function',
-      // Bind the genuine global `Object` to a mangled name at FUNCTION scope
-      // (`new Function` body runs in global scope), outside the user-body arrow.
-      // The generated body reaches its export `Object.defineProperty`/`Object.keys`
-      // machinery through this binding (esm-ast.ts RUNTIME_OBJECT_BINDING), so a
-      // module shadowing the global with `export const Object = …` (opencode's
-      // config/permission.ts) can't break codegen. ESM is always strict: the
-      // directive keeps top-level `this` and bare-call receivers faithful. Kept
-      // on the `return` line so body line numbering (snippetForBody) is unchanged.
-      `"use strict"; const ${helper.runtimeObject} = Object; return (async () => {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} };\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
-    ) as typeof factory;
+    factory = exactBinding?.factory ?? createEsmFactory(transformed, resolved.id);
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
     // Stash the body globally to pull it out of Playwright while diagnosing
@@ -1826,22 +1797,23 @@ export async function executeEsm(
     return dep.kind === 'builtin' ? dep.id : fileURLFromResolvedPath(dep.id).href;
   };
   const routedConstructors = createFunctionImportRouting(dynamicImport, resolved.id);
+  const standardFactoryArguments = [
+    dynamicImport,
+    importStatic,
+    record.slots,
+    importStatic,
+    () => rebuildExports(record),
+    __importMetaUrl,
+    __metaDirname,
+    __metaFilename,
+    assetPath,
+    metaResolve,
+    routedConstructors.Function,
+  ] as const;
 
   try {
     await withStackRemapping(deps.sourceMaps, resolved.id, ESM_STACK_LINE_OFFSET, () =>
-      factory(
-        dynamicImport,
-        importStatic,
-        record.slots,
-        importStatic,
-        () => rebuildExports(record),
-        __importMetaUrl,
-        __metaDirname,
-        __metaFilename,
-        assetPath,
-        metaResolve,
-        routedConstructors.Function,
-      ),
+      invokeEsmFactory(factory, standardFactoryArguments, exactBinding?.importValues),
     );
   } catch (err) {
     record.state = 'errored';

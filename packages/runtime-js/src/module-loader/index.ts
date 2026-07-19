@@ -8,6 +8,11 @@
  * share one backing tree per Worker realm.
  */
 export { createModuleLoader } from './loader.ts';
-export type { ModuleLoader, ModuleLoaderOptions, TransformSourceHook } from './loader.ts';
+export type {
+  ExactEsmModuleBinding,
+  ModuleLoader,
+  ModuleLoaderOptions,
+  TransformSourceHook,
+} from './loader.ts';
 export type { PathAliases, ResolvedModule, ModuleKind } from './resolver.ts';
 export { ModuleLoadError } from './errors.ts';

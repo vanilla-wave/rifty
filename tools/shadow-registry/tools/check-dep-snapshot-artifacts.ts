@@ -11,6 +11,10 @@ import {
   applyViteRootWatchPatch,
   viteRootWatchPatchPolicy,
 } from '../../../packages/workbench/src/workers/vite-cli-install-policy.ts';
+import {
+  applyViteConfigTempPatch,
+  viteConfigTempPatchPolicy,
+} from '../../../packages/workbench/src/workers/vite-config-temp-patch.ts';
 import { internalsShims } from '../src/index.ts';
 import { assertSnapshotArtifactCurrent } from '../src/snapshot-artifact-check.ts';
 
@@ -43,14 +47,14 @@ async function main(): Promise<void> {
       deps,
       shims: internalsShims,
       canonicalize: serializeDepSnapshot,
-      validateInstallFiles: proveViteCliPatchInput,
+      validateInstallFiles: proveViteInstallPatchInput,
     });
   }
   console.log('snapshot artifacts: current');
 }
 
 const decoder = new TextDecoder();
-function proveViteCliPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
+export function proveViteInstallPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
   const cliPaths = [...files.keys()].filter(
     (path) =>
       path === 'vite/dist/node/cli.js' || path.endsWith('/node_modules/vite/dist/node/cli.js'),
@@ -90,6 +94,58 @@ function proveViteCliPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
       throw new Error(`${path} is not patchable by the current Vite root watcher transform`, {
         cause: error,
       });
+    }
+  }
+  const manifestPaths = [...files.keys()].filter(
+    (path) => path === 'vite/package.json' || path.endsWith('/node_modules/vite/package.json'),
+  );
+  if (manifestPaths.length === 0) throw new Error('snapshot contains no Vite manifest');
+  for (const manifestPath of manifestPaths) {
+    let manifest: { readonly name?: unknown; readonly version?: unknown };
+    try {
+      manifest = JSON.parse(decoder.decode(files.get(manifestPath))) as {
+        readonly name?: unknown;
+        readonly version?: unknown;
+      };
+    } catch (error) {
+      throw new Error(`${manifestPath} is not a valid Vite manifest`, { cause: error });
+    }
+    if (manifest.name !== 'vite' || typeof manifest.version !== 'string') {
+      throw new Error(`${manifestPath} is not an exact Vite manifest`);
+    }
+    const policy = viteConfigTempPatchPolicy.sources.find(
+      (candidate) => candidate.version === manifest.version,
+    );
+    if (!policy) {
+      throw new Error(`${manifestPath} has unsupported Vite version ${manifest.version}`);
+    }
+    const packageRoot = manifestPath.slice(0, -'/package.json'.length);
+    const expectedPath = `${packageRoot}/${policy.relativeSourcePath}`;
+    const packageChunks = chunkPaths.filter((path) =>
+      path.startsWith(`${packageRoot}/dist/node/chunks/`),
+    );
+    let anchors = 0;
+    for (const path of packageChunks) {
+      const source = decoder.decode(files.get(path));
+      for (const candidate of viteConfigTempPatchPolicy.sources) {
+        anchors += source.split(candidate.upstreamBlock).length - 1;
+        anchors += source.split(candidate.preparedBlock).length - 1;
+      }
+    }
+    if (anchors !== 1 || !files.has(expectedPath)) {
+      throw new Error(
+        `${manifestPath} must select one Vite config-temp input at ${expectedPath}; found ${anchors}`,
+      );
+    }
+    try {
+      applyViteConfigTempPatch(decoder.decode(files.get(expectedPath)), manifest.version);
+    } catch (error) {
+      throw new Error(
+        `${expectedPath} is not patchable by the current Vite config-temp transform`,
+        {
+          cause: error,
+        },
+      );
     }
   }
 }

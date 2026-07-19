@@ -131,6 +131,32 @@ describe('runNodeEntry', () => {
     expect(g.__script).toBe(1);
   });
 
+  it('threads one exact ESM lexical binding into the entry loader without a global', async () => {
+    const source = 'globalThis.__nodeEntryExactBinding = __hostEntryBinding.identity; export {};\n';
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/package.json': JSON.stringify({ type: 'module' }),
+      '/work/script.js': source,
+    });
+
+    await runNodeEntry({
+      vfs,
+      entryPath: '/work/script.js',
+      cwd: '/work',
+      exactEsmModuleBinding: {
+        path: '/work/script.js',
+        sourceBytes: new TextEncoder().encode(source),
+        imports: Object.freeze({
+          __hostEntryBinding: Object.freeze({ identity: 'entry-private' }),
+        }),
+      },
+    });
+
+    expect(g.__nodeEntryExactBinding).toBe('entry-private');
+    expect(Object.prototype.hasOwnProperty.call(globalThis, '__hostEntryBinding')).toBe(false);
+    g.__nodeEntryExactBinding = undefined;
+  });
+
   it('throws a loud, named error when a .bin shim is not a recognizable launcher (never a silent no-op)', async () => {
     const vfs = new MemoryFsSync();
     vfs.loadFixture({ '/proj/node_modules/.bin/weird': 'not a launcher\n' });

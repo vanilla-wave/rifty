@@ -4,6 +4,9 @@
 
 ### Added
 
+- One exact path+raw-byte-attested ESM artifact can receive host values as
+  eager lexical factory parameters; fresh package-kind drift fails before
+  dependencies or body, without globals or bootstrap bearers (ADR-0301).
 - Owner `fs.*` sync-RPC handlers now publish every write, mkdir, remove,
   metadata update, rename, and copy through the optional shared VFS mutation
   guard; async guards defer the reply while unguarded calls stay synchronous

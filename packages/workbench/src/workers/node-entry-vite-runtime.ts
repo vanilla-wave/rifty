@@ -7,9 +7,12 @@ import {
 } from '@riftydev/npm-client';
 import {
   type PlannedViteCliPreparation,
+  type PlannedViteProgrammaticPreparation,
   type ViteCliPreparation,
   planViteCliPreparation,
+  planViteProgrammaticPreparation,
   prepareViteCli,
+  prepareViteProgrammaticApi,
 } from './vite-cli-prep.ts';
 import { closeUnusedWorkbenchEntryCapabilities } from './workbench-entry-capabilities.ts';
 
@@ -18,14 +21,14 @@ const VITE_ESBUILD_RUNTIME_BINDING = Object.freeze({
   resolvedPublicVersion: '0.28.0',
 });
 
-async function prepareAndDispose(
-  plan: PlannedViteCliPreparation,
+async function runAndDispose(
   client: ShadowAssetPortClient,
+  prepare: (client: ShadowAssetPortClient) => Promise<void>,
 ): Promise<void> {
   let preparationFailed = false;
   let preparationFailure: unknown;
   try {
-    await prepareViteCli(plan, client);
+    await prepare(client);
   } catch (error) {
     preparationFailed = true;
     preparationFailure = error;
@@ -48,6 +51,33 @@ async function prepareAndDispose(
   }
   if (preparationFailed) throw preparationFailure;
   if (disposalFailed) throw disposalFailure;
+}
+
+async function preparePlannedVite(
+  plan: PlannedViteCliPreparation | PlannedViteProgrammaticPreparation,
+  capabilities: KernelEntryCapabilityPorts,
+  prepare: (shadowAssets?: ShadowAssetPortClient) => Promise<void>,
+): Promise<void> {
+  if (plan.runtimeDecision !== 'start') {
+    if (Object.keys(capabilities).length !== 0) {
+      failAfterCapabilityClose(
+        capabilities,
+        new Error('Vite without the esbuild runtime received an unexpected entry capability'),
+      );
+    }
+    await prepare();
+    return;
+  }
+
+  const port = capabilities[SHADOW_ASSET_CAPABILITY];
+  if (port === undefined) {
+    throw new NotImplementedError('vite.esbuild.shadowAssets');
+  }
+  const client = createBuiltinShadowAssetPortClient({
+    port,
+    binding: VITE_ESBUILD_RUNTIME_BINDING,
+  });
+  await runAndDispose(client, () => prepare(client));
 }
 
 function failAfterCapabilityClose(
@@ -76,24 +106,22 @@ export async function prepareViteCliForNodeEntry(
   } catch (error) {
     failAfterCapabilityClose(capabilities, error);
   }
-  if (plan.runtimeDecision !== 'start') {
-    if (Object.keys(capabilities).length !== 0) {
-      failAfterCapabilityClose(
-        capabilities,
-        new Error('Vite without the esbuild runtime received an unexpected entry capability'),
-      );
-    }
-    await prepareViteCli(plan);
-    return;
-  }
+  await preparePlannedVite(plan, capabilities, (client) => prepareViteCli(plan, client));
+}
 
-  const port = capabilities[SHADOW_ASSET_CAPABILITY];
-  if (port === undefined) {
-    throw new NotImplementedError('vite.esbuild.shadowAssets');
+/** Prepare direct `import('vite')` under the same admission and version gate. */
+export async function prepareViteProgrammaticForNodeEntry(
+  root: string,
+  capabilities: KernelEntryCapabilityPorts,
+  packageRoot?: string,
+): Promise<void> {
+  let plan: PlannedViteProgrammaticPreparation;
+  try {
+    plan = planViteProgrammaticPreparation(root, packageRoot);
+  } catch (error) {
+    failAfterCapabilityClose(capabilities, error);
   }
-  const client = createBuiltinShadowAssetPortClient({
-    port,
-    binding: VITE_ESBUILD_RUNTIME_BINDING,
-  });
-  await prepareAndDispose(plan, client);
+  await preparePlannedVite(plan, capabilities, (client) =>
+    prepareViteProgrammaticApi(plan, client),
+  );
 }

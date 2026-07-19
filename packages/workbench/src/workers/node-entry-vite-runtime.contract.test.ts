@@ -13,10 +13,10 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ViteCliPreparation } from './vite-cli-prep.ts';
 import { prepareViteCliAcquisitionFiles } from './vite-cli-prep.ts';
+import { viteConfigTempPatchPolicy } from './vite-config-temp-patch.ts';
 import { consumeWorkbenchEntryCapabilities } from './workbench-entry-capabilities.ts';
 
 const CLI_PATH = '/app/node_modules/vite/dist/node/cli.js';
-const CONFIG_PATH = '/app/node_modules/vite/dist/node/chunks/config.js';
 const PACKAGE_PATH = '/app/node_modules/vite/package.json';
 const VITE_PREPARATION: ViteCliPreparation = Object.freeze({
   root: '/app',
@@ -59,12 +59,16 @@ async function api(): Promise<NodeEntryViteRuntimeApi> {
 }
 
 async function bootVite(version: string): Promise<MemoryFsSync> {
+  const configPolicy = viteConfigTempPatchPolicy.sources.find(
+    (candidate) => candidate.version === version,
+  );
+  if (configPolicy === undefined) throw new Error(`missing Vite config policy for ${version}`);
   const { vfs, fsSync } = createMemoryFs();
   setSyncMirror(fsSync, { async: vfs });
   fsSync.loadFixture({
     '/app/package.json': '{}',
     [CLI_PATH]: CLI_SOURCE,
-    [CONFIG_PATH]: WATCH_SOURCE,
+    [`/app/node_modules/vite/${configPolicy.relativeSourcePath}`]: `${configPolicy.upstreamBlock}\n${WATCH_SOURCE}`,
     [PACKAGE_PATH]: JSON.stringify({ name: 'vite', version }),
   });
   await prepareViteCliAcquisitionFiles('/app');

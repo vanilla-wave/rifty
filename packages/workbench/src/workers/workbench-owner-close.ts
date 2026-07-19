@@ -16,6 +16,7 @@ export function withOwnerClose(
   packageQuiesce: () => Promise<void>,
   runtimeAssetsClose: () => Promise<void>,
   authority: OwnerVfsAuthority,
+  ownerPrivateClose?: () => void,
 ): ProjectMaterializer {
   let closePromise: Promise<void> | null = null;
   return Object.freeze({
@@ -42,6 +43,11 @@ export function withOwnerClose(
           failures.push(runtimeAssetError('close', error));
         }
         try {
+          ownerPrivateClose?.();
+        } catch (error) {
+          failures.push(error);
+        }
+        try {
           assertCleanDurability(await authority.flush());
         } catch (error) {
           failures.push(error);
@@ -62,6 +68,7 @@ export function createCompanionOwnerClose(
   packageQuiesce: () => Promise<void>,
   runtimeAssetsClose: () => Promise<void>,
   vfsAuthority: OwnerVfsAuthority,
+  ownerPrivateClose?: () => void,
 ): () => Promise<void> {
   let closePromise: Promise<void> | null = null;
   return () => {
@@ -87,6 +94,11 @@ export function createCompanionOwnerClose(
         await runtimeAssetsClose();
       } catch (error) {
         failures.push(runtimeAssetError('close', error));
+      }
+      try {
+        ownerPrivateClose?.();
+      } catch (error) {
+        failures.push(error);
       }
       try {
         assertCleanDurability(await vfsAuthority.flush());
