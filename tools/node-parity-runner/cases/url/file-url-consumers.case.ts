@@ -31,12 +31,14 @@ const c: ParityCase = {
     capture('module-case', () => createRequire(mixedCaseBase)('./value.cjs'));
     console.warn = () => {};
     capture('worker', () => new Worker(encodedSlash));
+    capture('worker-string', () => new Worker(new URL('a/b.js', base).href));
   `,
   expected: [
     'fs:ERR_INVALID_FILE_URL_PATH',
     'module:ERR_INVALID_ARG_VALUE',
     'module-case:LOADED',
     'worker:ERR_INVALID_FILE_URL_PATH',
+    'worker-string:ERR_WORKER_PATH',
     '',
   ].join('\n'),
 };
