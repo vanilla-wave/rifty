@@ -363,6 +363,49 @@ describe('standard shadow-asset CDP response recorder', () => {
     ]);
   });
 
+  it('retains the exact tracked request postData without exposing it in diagnostics', async () => {
+    const session = new FakeCdpSession();
+    const postData = JSON.stringify({
+      dependencies: { 'esbuild-wasm': '0.28.0' },
+      optionalDependencies: {},
+    });
+    session.streams.set('eddy-source', { bufferedData: Buffer.from('bundle').toString('base64') });
+    const recorder = await startCdpResponseRecorder(fakePage(session), {
+      captureUrl: (url: string) => url === 'https://eddy.example/resolve',
+    });
+
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'ignored',
+      request: {
+        url: 'https://foreign.example/resolve',
+        method: 'POST',
+        postData: 'UNTRACKED SECRET',
+      },
+    });
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'eddy-source',
+      request: { url: 'https://eddy.example/resolve', method: 'POST', postData },
+    });
+    session.emit(
+      'Network.responseReceived',
+      cdpResponse('eddy-source', 'https://eddy.example/resolve'),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    session.emit('Network.dataReceived', {
+      requestId: 'eddy-source',
+      dataLength: Buffer.byteLength('bundle'),
+    });
+    session.emit('Network.loadingFinished', { requestId: 'eddy-source' });
+
+    const captured = await recorder.stop();
+    expect(captured).toEqual([expect.objectContaining({ requestId: 'eddy-source', postData })]);
+    const diagnostic = describeCapturedResponseLedger(captured);
+    expect(diagnostic).not.toContain(postData);
+    expect(diagnostic).not.toContain('esbuild-wasm');
+    expect(diagnostic).not.toContain('UNTRACKED SECRET');
+  });
+
   it('preserves redirects, retries, loading failures, and body-collection failures in order', async () => {
     const session = new FakeCdpSession();
     session.bodies.set('retry', { body: 'retry body', base64Encoded: false });
@@ -498,6 +541,7 @@ describe('bounded shadow-asset CDP ledger diagnostics', () => {
       protocol: 'h2',
       bodyBytes: index,
       bodyText: 'SECRET RESPONSE BODY',
+      postData: 'SECRET REQUEST BODY',
       complete: index !== 0,
       fromDiskCache: false,
       fromServiceWorker: false,
@@ -512,6 +556,7 @@ describe('bounded shadow-asset CDP ledger diagnostics', () => {
     expect(diagnostic).toContain('body failed');
     expect(diagnostic).toContain('omitted=4');
     expect(diagnostic).not.toContain('SECRET RESPONSE BODY');
+    expect(diagnostic).not.toContain('SECRET REQUEST BODY');
     expect(diagnostic.length).toBeLessThanOrEqual(4_096);
   });
 });

@@ -47,6 +47,7 @@ interface EddySourceResponse {
   readonly requestId: string;
   readonly lifecycleId?: string;
   readonly method: string;
+  readonly postData?: string;
   readonly url: string;
   readonly status: number;
   readonly protocol: string;
@@ -72,7 +73,13 @@ interface EddyEvidenceFixture extends Omit<EvidenceFixture, 'expected' | 'source
     readonly bundleUrl: string;
   };
   readonly sourceResponses: readonly EddySourceResponse[];
+  readonly shadowSourceCacheRegime: 'fresh-owner-empty-tarball-cache';
 }
+
+const EDDY_SOURCE_POST_DATA = JSON.stringify({
+  dependencies: { 'esbuild-wasm': '0.28.0' },
+  optionalDependencies: {},
+});
 
 function progress(atMs: number, phase: string): TimedProgress {
   return {
@@ -145,6 +152,7 @@ function eddyResponse(overrides: Partial<EddySourceResponse> = {}): EddySourceRe
   return {
     requestId: 'worker\0eddy-1',
     method: 'POST',
+    postData: EDDY_SOURCE_POST_DATA,
     url: 'https://eddy.example/resolve',
     status: 200,
     protocol: 'h2',
@@ -174,6 +182,7 @@ function eddyFixture(overrides: Partial<EddyEvidenceFixture> = {}): EddyEvidence
       bundleUrl: 'https://eddy-cdn.example/eddy-bundles',
     },
     sourceResponses: [eddyResponse()],
+    shadowSourceCacheRegime: 'fresh-owner-empty-tarball-cache',
     ...overrides,
   };
 }
@@ -389,6 +398,49 @@ describe('Eddy shadow-asset cold run evidence', () => {
         },
       },
     });
+  });
+
+  it('credits only the byte-exact canonical shadow-source POST among ordinary resolver traffic', () => {
+    const sourceResponses = [
+      eddyResponse({
+        requestId: 'worker\0vite-prefetch',
+        postData: JSON.stringify({ dependencies: { vite: '7.3.6' }, optionalDependencies: {} }),
+      }),
+      eddyResponse(),
+      eddyResponse({
+        requestId: 'worker\0vite-direct',
+        postData: JSON.stringify({ optionalDependencies: {}, dependencies: { vite: '7.3.6' } }),
+      }),
+    ];
+
+    expect(buildEddyShadowAssetColdRun(eddyFixture({ sourceResponses }))).toMatchObject({
+      ok: true,
+      run: {
+        fillTransport: 'eddy',
+        transport: { origins: { 'https://eddy.example': { requests: 1 } } },
+      },
+    });
+  });
+
+  it.each([
+    ['missing exact body', [eddyResponse({ postData: undefined })]],
+    ['malformed exact body', [eddyResponse({ postData: '{not-json' })]],
+    [
+      'duplicate exact body',
+      [eddyResponse(), eddyResponse({ requestId: 'worker\0eddy-retry' })],
+    ],
+  ])('refuses shadow-source POST provenance: %s', (_label, sourceResponses) => {
+    expect(buildEddyShadowAssetColdRun(eddyFixture({ sourceResponses }))).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it('requires the exact fresh-owner empty-tarball-cache run premise', () => {
+    expect(
+      buildEddyShadowAssetColdRun(
+        eddyFixture({ shadowSourceCacheRegime: 'warm-owner' as never }),
+      ),
+    ).toMatchObject({ ok: false });
   });
 
   it.each([

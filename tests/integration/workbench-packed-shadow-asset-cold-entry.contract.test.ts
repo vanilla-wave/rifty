@@ -46,7 +46,7 @@ describe('packed shadow-asset cold entry contract', () => {
     expect(source).not.toContain('__RIFTY_PACKED_WORKBENCH__');
   });
 
-  it('prepares the public Workbench owner before project measurement and owns abort cleanup', async () => {
+  it('stops project measurement before the public close boundary owns Workbench cleanup', async () => {
     const modulePath = resolve(fixtureRoot, 'src/shadow-asset-cold.ts');
     const source = await readFile(modulePath, 'utf8');
     const prepare = exportedFunction(source, modulePath, 'prepareShadowAssetCold');
@@ -58,11 +58,11 @@ describe('packed shadow-asset cold entry contract', () => {
     expect(prepare).not.toContain('openProject(');
     expect(measure).toContain('openProject(');
     expect(measure).not.toContain('openWorkbench(');
-    expect(measure).toContain('workbenchClosed: released.workbenchClosed');
-    expect(measure).toContain('lockReacquired: released.lockReacquired');
-    expect(measure).not.toContain('cleanup = released');
+    expect(measure).not.toContain('closeWorkbenchBoundary(');
+    expect(measure).not.toContain('workbench.close()');
     expect(close).toContain('workbench.close()');
     expect(close).toContain('reacquireWorkbenchLock()');
+    expect(close).toContain('return Object.freeze(');
   });
 
   it('imports only its pure options helper plus public runtime paths', async () => {
