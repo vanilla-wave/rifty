@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { gotoHarness } from './fixtures.ts';
+import { pinPublicEsbuild0280 } from './pinned-public-esbuild.ts';
 
 const RETAINED_BYTES = 'retained-through-project-switch';
 const INITIAL_HMR_MARKER = 'workbench-public-files-v1';
@@ -11,6 +12,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
 }) => {
   test.setTimeout(300_000);
   await gotoHarness(page);
+  const pinnedEsbuildRequests = await pinPublicEsbuild0280(page);
 
   const workerAssets = await page.evaluate(async () => {
     const hostAssetsModule = await import('/src/browser-unit/workbench-vite-host-assets.ts');
@@ -1063,4 +1065,5 @@ if (import.meta.hot) import.meta.hot.accept();
   // Playwright observes Worker.close on the driver event loop; its callback
   // may run on either side of the page's already-settled close continuation.
   expect(ownerLifecycle.slice(5).sort()).toEqual(['owner-closed', 'workbench-closed']);
+  expect(pinnedEsbuildRequests).toHaveLength(1);
 });

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { gotoHarness } from './fixtures.ts';
+import { pinPublicEsbuild0280 } from './pinned-public-esbuild.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const childEntryUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/runtime-asset-public-vite-entry.ts`;
@@ -9,6 +10,7 @@ test('public Vite 7 cold open attests assets before its real child is published'
 }) => {
   test.setTimeout(300_000);
   await gotoHarness(page);
+  const pinnedEsbuildRequests = await pinPublicEsbuild0280(page);
 
   const result = await page.evaluate(async (fixtureUrl) => {
     type StorageClass = 'opfs-persisted' | 'opfs-best-effort' | 'memory-session';
@@ -318,4 +320,5 @@ test('public Vite 7 cold open attests assets before its real child is published'
     verifiedObjectBytes: 0,
     readySetCount: 0,
   });
+  expect(pinnedEsbuildRequests).toHaveLength(1);
 });

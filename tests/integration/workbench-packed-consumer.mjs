@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 import ts from 'typescript';
+import { PACKED_VITE_JOURNEYS } from './workbench-packed-consumer-browser-contract.mjs';
 import {
   findInstalledPackage,
   resolveDeclaredCatalogAsset,
@@ -30,10 +31,18 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const FIXTURE_ROOT = resolve(REPO_ROOT, 'tests/integration/fixtures/workbench-vite-consumer');
 const WORKBENCH_ROOT = resolve(REPO_ROOT, 'packages/workbench');
 const SHADOW_REGISTRY_ROOT = resolve(REPO_ROOT, 'tools/shadow-registry');
-const VITE_SNAPSHOT = resolve(
-  REPO_ROOT,
-  'apps/playground/public/snapshots/vite-node-modules.json.gz',
-);
+const VITE_SNAPSHOTS = Object.freeze([
+  Object.freeze({
+    templateId: 'vite',
+    version: PACKED_VITE_JOURNEYS[0].version,
+    path: resolve(REPO_ROOT, 'apps/playground/public/snapshots/vite-node-modules.json.gz'),
+  }),
+  Object.freeze({
+    templateId: 'vite8',
+    version: PACKED_VITE_JOURNEYS[1].version,
+    path: resolve(REPO_ROOT, 'apps/playground/public/snapshots/vite8-node-modules.json.gz'),
+  }),
+]);
 const SHADOW_ASSET_CATALOG = resolve(
   REPO_ROOT,
   'tools/shadow-registry/generated/shadow-asset-catalog.json',
@@ -420,11 +429,13 @@ function lockfilePackageName(path) {
   throw new Error(`Packed consumer snapshot requires a flat package tree: ${path}`);
 }
 
-async function materializeSnapshotPackages(snapshotRoot) {
-  const compressed = await readFile(VITE_SNAPSHOT);
+async function materializeSnapshotPackages(snapshotRoot, snapshotSource) {
+  const compressed = await readFile(snapshotSource.path);
   const snapshot = JSON.parse(String(await gunzipAsync(compressed)));
-  if (snapshot.version !== 2 || snapshot.templateId !== 'vite') {
-    throw new Error('Packed consumer requires the committed Vite snapshot v2');
+  if (snapshot.version !== 2 || snapshot.templateId !== snapshotSource.templateId) {
+    throw new Error(
+      `Packed consumer requires the committed ${snapshotSource.templateId} snapshot v2`,
+    );
   }
   const lockfile = JSON.parse(snapshot.lockfile);
   const expected = new Map();
@@ -478,6 +489,11 @@ async function materializeSnapshotPackages(snapshotRoot) {
     }
     packages.set(name, { ...matched, source });
   }
+  if (packages.get('vite')?.manifest.version !== snapshotSource.version) {
+    throw new Error(
+      `Committed ${snapshotSource.templateId} snapshot must contain vite@${snapshotSource.version}`,
+    );
+  }
   return packages;
 }
 
@@ -503,18 +519,73 @@ async function registryPackage(name, installedPackage, tarball, expectedIntegrit
 }
 
 async function browserRegistryPackages(options) {
-  const snapshotPackages = await materializeSnapshotPackages(options.snapshotRoot);
+  const coordinates = new Map();
+  const snapshotVersions = new Map();
+  for (const snapshotSource of VITE_SNAPSHOTS) {
+    const snapshotPackages = await materializeSnapshotPackages(
+      resolve(options.snapshotRoot, snapshotSource.templateId),
+      snapshotSource,
+    );
+    const versions = new Map();
+    for (const [name, installedPackage] of snapshotPackages) {
+      const coordinate = `${name}@${installedPackage.manifest.version}`;
+      versions.set(name, installedPackage.manifest.version);
+      const existing = coordinates.get(coordinate);
+      if (
+        existing !== undefined &&
+        (existing.source.integrity !== installedPackage.source.integrity ||
+          JSON.stringify(existing.manifest) !== JSON.stringify(installedPackage.manifest))
+      ) {
+        throw new Error(`Committed snapshots disagree on ${coordinate}`);
+      }
+      if (existing === undefined) coordinates.set(coordinate, { name, ...installedPackage });
+    }
+    snapshotVersions.set(snapshotSource.version, versions);
+  }
   const snapshotTarballs = await packInstalledPackages(
-    [...snapshotPackages.entries()],
+    [...coordinates.entries()],
     options.tarballRoot,
     options.npmCacheRoot,
   );
   const registryPackages = new Map();
-  for (const [name, installedPackage] of snapshotPackages) {
-    const tarball = snapshotTarballs.get(name);
-    if (tarball === undefined) throw new Error(`Missing snapshot tarball for ${name}`);
-    registryPackages.set(name, await registryPackage(name, installedPackage, tarball, undefined));
+  const addPackage = (entry) => {
+    const versions = registryPackages.get(entry.name) ?? new Map();
+    const version = entry.manifest.version;
+    if (versions.has(version))
+      throw new Error(`Duplicate registry package ${entry.name}@${version}`);
+    versions.set(version, entry);
+    registryPackages.set(entry.name, versions);
+  };
+  for (const [coordinate, installedPackage] of coordinates) {
+    const tarball = snapshotTarballs.get(coordinate);
+    if (tarball === undefined) throw new Error(`Missing snapshot tarball for ${coordinate}`);
+    addPackage(await registryPackage(installedPackage.name, installedPackage, tarball, undefined));
   }
+
+  // ADR-0298 selects the exact public esbuild version from its real packument
+  // before npm-client admits the local synthesized delegate. The committed
+  // Vite 7 snapshot predates synthesis and therefore contains only the former
+  // alias package, so publish the independently pinned public package as the
+  // selection oracle. Its tarball route must remain unused by the journey.
+  const publicEsbuild = await findInstalledPackage('esbuild', SHADOW_REGISTRY_ROOT).then(
+    async (dir) => ({ dir, manifest: await readJson(resolve(dir, 'package.json')) }),
+  );
+  if (publicEsbuild.manifest.name !== 'esbuild' || publicEsbuild.manifest.version !== '0.28.0') {
+    throw new Error(
+      `Packed consumer requires public esbuild@0.28.0 metadata; found ${String(publicEsbuild.manifest.name)}@${String(publicEsbuild.manifest.version)}`,
+    );
+  }
+  const publicEsbuildTarball = (
+    await packInstalledPackages(
+      [['esbuild', publicEsbuild]],
+      options.tarballRoot,
+      options.npmCacheRoot,
+    )
+  ).get('esbuild');
+  if (publicEsbuildTarball === undefined) {
+    throw new Error('Packed consumer failed to pack public esbuild selection metadata');
+  }
+  addPackage(await registryPackage('esbuild', publicEsbuild, publicEsbuildTarball, undefined));
 
   const catalog = await readJson(SHADOW_ASSET_CATALOG);
   const descriptor = catalog.assets?.find(
@@ -539,8 +610,7 @@ async function browserRegistryPackages(options) {
   if (esbuildTarball === undefined) {
     throw new Error(`Packed consumer failed to pack ${descriptor.source.name}`);
   }
-  registryPackages.set(
-    descriptor.source.name,
+  addPackage(
     await registryPackage(
       descriptor.source.name,
       esbuildWasm,
@@ -548,7 +618,7 @@ async function browserRegistryPackages(options) {
       esbuildWasm.expectedIntegrity,
     ),
   );
-  return registryPackages;
+  return { packages: registryPackages, snapshotVersions };
 }
 
 function listen(server, port = 0) {
@@ -583,9 +653,11 @@ function sendResponse(request, response, status, headers, body) {
   else response.end(body);
 }
 
-async function startBrowserRegistry(packages, port) {
+async function startBrowserRegistry(registrySource, port) {
   const requests = [];
   const responses = [];
+  const packages = registrySource.packages;
+  let activeJourneyVersion = PACKED_VITE_JOURNEYS[0].version;
   let origin = '';
   const tarballRoutes = new Map();
   const server = createServer((request, response) => {
@@ -632,30 +704,54 @@ async function startBrowserRegistry(packages, port) {
         sendResponse(request, response, 400, { 'Content-Type': 'application/json' }, '{}');
         return;
       }
-      const registryPackageEntry = packages.get(name);
-      if (registryPackageEntry === undefined) {
+      const registryPackageVersions = packages.get(name);
+      if (registryPackageVersions === undefined) {
         sendResponse(request, response, 404, { 'Content-Type': 'application/json' }, '{}');
         return;
       }
-      const version = registryPackageEntry.manifest.version;
-      const tarballPath = [...tarballRoutes.entries()].find(
-        ([, entry]) => entry === registryPackageEntry,
-      )?.[0];
-      if (tarballPath === undefined) throw new Error(`Missing registry tarball route for ${name}`);
-      const manifest = {
-        ...registryPackageEntry.manifest,
-        dist: {
-          tarball: `${origin}${tarballPath}`,
-          integrity: registryPackageEntry.integrity,
-          shasum: registryPackageEntry.shasum,
-        },
-      };
+      const activeSnapshotVersions = registrySource.snapshotVersions.get(activeJourneyVersion);
+      if (activeSnapshotVersions === undefined) {
+        throw new Error(`Unknown active packed journey ${activeJourneyVersion}`);
+      }
+      const activePackageVersion = activeSnapshotVersions.get(name);
+      const servedPackageVersions =
+        activePackageVersion === undefined
+          ? registryPackageVersions.size === 1
+            ? registryPackageVersions
+            : new Map()
+          : new Map([[activePackageVersion, registryPackageVersions.get(activePackageVersion)]]);
+      if ([...servedPackageVersions.values()].some((entry) => entry === undefined)) {
+        throw new Error(`Missing ${name}@${String(activePackageVersion)} for packed journey`);
+      }
+      if (servedPackageVersions.size === 0) {
+        sendResponse(request, response, 404, { 'Content-Type': 'application/json' }, '{}');
+        return;
+      }
+      const versions = {};
+      for (const [version, registryPackageEntry] of servedPackageVersions) {
+        const tarballPath = [...tarballRoutes.entries()].find(
+          ([, entry]) => entry === registryPackageEntry,
+        )?.[0];
+        if (tarballPath === undefined) {
+          throw new Error(`Missing registry tarball route for ${name}@${version}`);
+        }
+        versions[version] = {
+          ...registryPackageEntry.manifest,
+          dist: {
+            tarball: `${origin}${tarballPath}`,
+            integrity: registryPackageEntry.integrity,
+            shasum: registryPackageEntry.shasum,
+          },
+        };
+      }
+      const latest = [...servedPackageVersions.keys()].at(-1);
+      if (latest === undefined) throw new Error(`Empty registry package ${name}`);
       const body = Buffer.from(
         JSON.stringify({
           _id: name,
           name,
-          'dist-tags': { latest: version },
-          versions: { [version]: manifest },
+          'dist-tags': { latest },
+          versions,
         }),
       );
       responses.push({
@@ -691,15 +787,23 @@ async function startBrowserRegistry(packages, port) {
     throw new Error('Packed consumer registry did not bind a TCP port');
   }
   origin = `http://127.0.0.1:${address.port}`;
-  for (const [name, registryPackageEntry] of packages) {
-    const tarballPath = `/-/tarballs/${encodeURIComponent(name)}-${registryPackageEntry.manifest.version}.tgz`;
-    tarballRoutes.set(tarballPath, registryPackageEntry);
+  for (const [name, registryPackageVersions] of packages) {
+    for (const [version, registryPackageEntry] of registryPackageVersions) {
+      const tarballPath = `/-/tarballs/${encodeURIComponent(name)}-${version}.tgz`;
+      tarballRoutes.set(tarballPath, registryPackageEntry);
+    }
   }
   server.unref();
   return {
     origin,
     requests,
     responses,
+    activateJourney(version) {
+      if (!registrySource.snapshotVersions.has(version)) {
+        throw new Error(`Unknown packed Vite journey ${version}`);
+      }
+      activeJourneyVersion = version;
+    },
     async close() {
       server.closeAllConnections();
       await closeServer(server);
@@ -996,6 +1100,46 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       expectedSentinel: expectedHmrSentinel,
       ...hmrProof,
     });
+    const aliasBoundaryResponses = [...registry.responses];
+    const vite7 = await page.evaluate(async () =>
+      (await window.__RIFTY_PACKED_WORKBENCH__).runVite7BuildPreview(),
+    );
+    registry.activateJourney(PACKED_VITE_JOURNEYS[1].version);
+    const vite8RequestStart = registry.requests.length;
+    const vite8 = await page.evaluate(async () =>
+      (await window.__RIFTY_PACKED_WORKBENCH__).runDefaultVite8(),
+    );
+    const publishedCompanion = await page.evaluate(
+      async () => (await window.__RIFTY_PACKED_WORKBENCH__).publishedCompanion,
+    );
+    if (publishedCompanion !== 'function') {
+      throw new Error('Packed Workbench Playground companion export was not evaluated');
+    }
+    if (
+      !vite7.devHtml.includes('<div id="app">') ||
+      !vite7.previewHtml.includes('<div id="app">') ||
+      !vite8.devHtml.includes('<div id="app">') ||
+      !vite8.previewHtml.includes('<div id="app">')
+    ) {
+      throw new Error(
+        `Packed Vite browser matrix returned the wrong documents: ${JSON.stringify({ vite7, vite8 })}`,
+      );
+    }
+    if (vite8.vite8RuntimeAssetProgress.length !== 0) {
+      throw new Error(
+        `Packed default Vite 8 emitted runtime-asset progress: ${JSON.stringify(vite8.vite8RuntimeAssetProgress)}`,
+      );
+    }
+    const vite8Requests = registry.requests.slice(vite8RequestStart);
+    if (
+      vite8Requests.some(
+        (request) => request === 'GET /esbuild' || request.includes('esbuild-wasm'),
+      )
+    ) {
+      throw new Error(
+        `Packed default Vite 8 attempted an esbuild request: ${JSON.stringify(vite8Requests)}`,
+      );
+    }
     await page.evaluate(async () => (await window.__RIFTY_PACKED_WORKBENCH__).close());
     if (pageErrors.length > 0) {
       throw new Error(`Packed Workbench Chromium page errors:\n${pageErrors.join('\n')}`);
@@ -1007,8 +1151,10 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     }
     for (const expectedRequest of [
       'GET /vite',
+      'GET /esbuild',
       'GET /esbuild-wasm',
       'GET /-/tarballs/vite-7.3.6.tgz',
+      'GET /-/tarballs/vite-8.0.16.tgz',
       'GET /-/tarballs/esbuild-wasm-0.28.0.tgz',
     ]) {
       if (!registry.requests.includes(expectedRequest)) {
@@ -1017,23 +1163,19 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         );
       }
     }
-    const aliasResponses = registry.responses.filter(
-      (response) => response.packageName === '@esbuild/wasi-preview1',
+    const forbiddenSelectionRequests = aliasBoundaryResponses.filter(
+      (response) =>
+        response.packageName === '@esbuild/wasi-preview1' ||
+        (response.packageName === 'esbuild' && response.kind === 'tarball'),
     );
-    if (aliasResponses.length > 0) {
-      console.log(
-        `Packed Workbench alias control: ${JSON.stringify({
-          origin: registry.origin,
-          boundary: 'cold open through preview and native HMR ready',
-          storage: 'memory-session',
-          responses: aliasResponses,
-          totalBodyBytes: aliasResponses.reduce((total, response) => total + response.bodyBytes, 0),
-        })}`,
+    if (forbiddenSelectionRequests.length > 0) {
+      throw new Error(
+        `Packed Workbench fetched forbidden esbuild package bytes: ${JSON.stringify(forbiddenSelectionRequests)}`,
       );
     }
     await context.close();
     console.log(
-      `Packed Workbench Chromium passed: Vite 7.3.6 preview + HMR, ${phases.join(' -> ')}`,
+      `Packed Workbench Chromium passed: Vite 7.3.6 dev/build/optimize/preview + HMR; default Vite 8.0.16 dev/build/preview with zero runtime-asset progress; ${phases.join(' -> ')}`,
     );
   } catch (error) {
     throw new Error(
