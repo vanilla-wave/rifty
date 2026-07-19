@@ -72,6 +72,10 @@
 
 ### Fixed
 
+- Default-browser Eddy full-body requests now use bounded native XHR
+  progress/load completion, preserving a positive browser-network terminal;
+  injected and non-browser transports retain bounded fetch semantics.
+
 - Successful shadow-asset object batches no longer abort their source signal
   when the last settled consumer releases; unfinished sole producers still abort.
 

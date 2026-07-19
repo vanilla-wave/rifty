@@ -2,8 +2,7 @@ import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import {
   DEFAULT_FETCH_MAX_BYTES,
   DEFAULT_FETCH_STALL_MS,
-  drainBodyBounded,
-  fetchHeadersBounded,
+  requestBodyBounded,
 } from './bounded-fetch.ts';
 import { closureHashOf } from './closure-hash.ts';
 import { LOCKFILE_FILE, MANIFEST_FILE, unpackEddyBundle } from './eddy-bundle.ts';
@@ -286,7 +285,7 @@ class EddyShadowAssetSource implements ShadowAssetSource {
   readonly #configured = new Map<string, ShadowAssetSourceRequest>();
   readonly #standardSource: ShadowAssetSource;
   readonly #learnedPins: Map<string, string>;
-  readonly #fetchImpl: typeof fetch;
+  readonly #fetchImpl: typeof fetch | undefined;
   readonly #stallTimeoutMs: number;
   readonly #maxBundleBytes: number;
   readonly #warn: (line: string) => void;
@@ -341,7 +340,7 @@ class EddyShadowAssetSource implements ShadowAssetSource {
     this.#bundleBaseUrl = options.bundleBaseUrl ?? options.resolverUrl;
     this.#standardSource = options.standardSource;
     this.#learnedPins = options.learnedPins;
-    this.#fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.#fetchImpl = options.fetchImpl;
     this.#stallTimeoutMs = options.stallTimeoutMs ?? DEFAULT_FETCH_STALL_MS;
     this.#maxBundleBytes = options.maxBundleBytes ?? DEFAULT_FETCH_MAX_BYTES;
     this.#warn = options.warn ?? ((line) => console.warn(line));
@@ -408,22 +407,23 @@ class EddyShadowAssetSource implements ShadowAssetSource {
       throw new Error('learned Eddy closure pin is invalid');
     }
     const url = pin === undefined ? this.#resolverUrl : bundleUrlFor(this.#bundleBaseUrl, pin);
-    const response = await fetchHeadersBounded(
-      (boundSignal) =>
-        this.#fetchImpl(url, {
-          ...(pin === undefined ? { method: 'POST', body: JSON.stringify(body) } : {}),
-          signal: AbortSignal.any([boundSignal, signal]),
-        }),
-      this.#stallTimeoutMs,
-      `Eddy shadow asset ${pin === undefined ? 'POST' : 'GET'}`,
+    const response = await requestBodyBounded(
+      {
+        url,
+        method: pin === undefined ? 'POST' : 'GET',
+        ...(pin === undefined ? { body: JSON.stringify(body) } : {}),
+        signal,
+      },
+      {
+        stallTimeoutMs: this.#stallTimeoutMs,
+        maxBytes: this.#maxBundleBytes,
+        label: `Eddy shadow asset ${pin === undefined ? 'POST' : 'GET'} bundle`,
+      },
+      this.#fetchImpl,
     );
-    const bytes = await drainBodyBounded(response, {
-      stallTimeoutMs: this.#stallTimeoutMs,
-      maxBytes: this.#maxBundleBytes,
-      label: 'Eddy shadow asset bundle',
-    });
+    const bytes = response.bytes;
     if (signal.aborted) throw abortError();
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       throw new Error(`resolver returned HTTP ${response.status}`);
     }
     if ((response.headers.get('content-type') ?? '').includes('application/json')) {
