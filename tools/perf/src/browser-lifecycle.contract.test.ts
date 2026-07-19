@@ -14,7 +14,8 @@ describe('measured browser lifecycle', () => {
     const operation = withMeasuredBrowser(
       async () => ({ close }),
       async () => 'measured',
-    ).then(settled);
+    );
+    void operation.then(settled);
 
     await Promise.resolve();
     await Promise.resolve();
@@ -53,12 +54,9 @@ describe('measured browser lifecycle', () => {
     const launchFailure = new Error('launch failed');
     const run = vi.fn();
 
-    await expect(
-      withMeasuredBrowser(
-        async () => Promise.reject(launchFailure),
-        run,
-      ),
-    ).rejects.toBe(launchFailure);
+    await expect(withMeasuredBrowser(async () => Promise.reject(launchFailure), run)).rejects.toBe(
+      launchFailure,
+    );
     expect(run).not.toHaveBeenCalled();
   });
 });
