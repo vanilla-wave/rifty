@@ -605,8 +605,7 @@ describe('standard shadow-asset CDP response finalization', () => {
   it.each(['dist URL', 'configured proxy mapping'])(
     'accepts the exact tarball at its %s while preserving pathname and query',
     (candidate) => {
-      const upstream =
-        'https://upstream.example/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz?download=1';
+      const upstream = 'https://upstream.example/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz?download=1';
       const proxied = `${registryUrl}/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz?download=1`;
       const body = packumentBody({
         versions: {
@@ -635,8 +634,7 @@ describe('standard shadow-asset CDP response finalization', () => {
   );
 
   it('rejects a proxy candidate with the wrong path or query', () => {
-    const upstream =
-      'https://upstream.example/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz?download=1';
+    const upstream = 'https://upstream.example/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz?download=1';
     const body = packumentBody({
       versions: {
         [source.version]: {
