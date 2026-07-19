@@ -81,6 +81,78 @@ async function buildSyntheticEsbuildBundle(): Promise<Uint8Array> {
   return built.bytes;
 }
 
+interface EddyPostObservation {
+  readonly requestBody: Uint8Array;
+  readonly closureHash: Uint8Array;
+}
+
+async function probeProjectClosureWithShadowAssets(enabled: boolean): Promise<{
+  readonly wire: EddyPostObservation;
+  readonly outcome:
+    | { readonly kind: 'fulfilled'; readonly closureHash: string | undefined }
+    | { readonly kind: 'rejected'; readonly error: unknown };
+  readonly projectTreeExists: boolean;
+  readonly lockfileExists: boolean;
+}> {
+  // Available to expose accidental closure merging; never part of the project request.
+  const synthetic = makeSyntheticRegistry([
+    { name: 'esbuild', version: '0.28.0' },
+    { name: 'esbuild-wasm', version: '0.28.0' },
+  ]);
+  const server = createEddyServer({
+    registryBaseUrl: synthetic.baseUrl,
+    fetch: synthetic.fetch,
+    now: () => '2026-07-19T00:00:00.000Z',
+  });
+  await server.listen(0);
+  const resolverUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const vfs = new MemoryVfs();
+  await writePackageJson(vfs, { esbuild: '^0.28.0' });
+  const nativeFetch = globalThis.fetch;
+  const observations: EddyPostObservation[] = [];
+  vi.stubGlobal('fetch', async (input: URL | RequestInfo, init?: RequestInit) => {
+    const response = await nativeFetch(input, init);
+    if (String(input) !== resolverUrl || init?.method !== 'POST') return response;
+    if (typeof init.body !== 'string') {
+      throw new TypeError('project Eddy POST body must be a string');
+    }
+    const closureHash = response.headers.get('x-eddy-closure-hash');
+    if (closureHash === null) {
+      throw new Error('project Eddy response omitted x-eddy-closure-hash');
+    }
+    observations.push({
+      requestBody: new TextEncoder().encode(init.body),
+      closureHash: new TextEncoder().encode(closureHash),
+    });
+    return response;
+  });
+  try {
+    const outcome = await install({
+      vfs,
+      cwd: '/app',
+      registry: new RegistryClient({ baseUrl: synthetic.baseUrl, fetch: synthetic.fetch }),
+      resolverUrl,
+      ...(enabled ? { shadowAssets: { installer: readyShadowAssetInstaller } } : {}),
+      onSubstitution: () => undefined,
+    }).then(
+      (result) => ({ kind: 'fulfilled' as const, closureHash: result.closureHash }),
+      (error: unknown) => ({ kind: 'rejected' as const, error }),
+    );
+    if (observations.length !== 1) {
+      throw new Error(`expected one project Eddy POST, got ${observations.length}`);
+    }
+    return {
+      wire: observations[0] as EddyPostObservation,
+      outcome,
+      projectTreeExists: await vfs.exists('/app/node_modules'),
+      lockfileExists: await vfs.exists('/app/package-lock.json'),
+    };
+  } finally {
+    vi.unstubAllGlobals();
+    await server.close();
+  }
+}
+
 let eddy: EddyServer;
 let eddyUrl: string;
 
@@ -99,6 +171,27 @@ afterEach(async () => {
 const DEPS = { debug: '^4.4.1', 'diamond-conflict-parent': '1.0.0' };
 
 describe('eddy client opt-in — fast path + auto-fallback', () => {
+  it('keeps the project resolve body and closure byte-identical with shadow assets on and off', async () => {
+    const disabled = await probeProjectClosureWithShadowAssets(false);
+    const enabled = await probeProjectClosureWithShadowAssets(true);
+
+    expect
+      .soft(new TextDecoder().decode(enabled.wire.requestBody))
+      .toBe('{"dependencies":{"esbuild":"^0.28.0"},"optionalDependencies":{}}');
+    expect.soft(enabled.wire.requestBody).toEqual(disabled.wire.requestBody);
+    expect.soft(enabled.wire.closureHash).toEqual(disabled.wire.closureHash);
+    expect(enabled.outcome).toEqual({
+      kind: 'fulfilled',
+      closureHash: new TextDecoder().decode(enabled.wire.closureHash),
+    });
+    expect(disabled.outcome).toMatchObject({
+      kind: 'rejected',
+      error: { feature: 'npm.install.shadowAssets' },
+    });
+    expect(disabled.projectTreeExists).toBe(false);
+    expect(disabled.lockfileExists).toBe(false);
+  });
+
   it('adopts a synthesized delegate with zero client-registry traffic and honest provenance', async () => {
     const bytes = await buildSyntheticEsbuildBundle();
     const raw = await startRaw((_req, res) => {
