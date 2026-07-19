@@ -602,6 +602,93 @@ describe('standard shadow-asset CDP response finalization', () => {
     });
   });
 
+  it.each(['dist URL', 'configured proxy mapping'])(
+    'accepts the exact tarball at its %s while preserving pathname and query',
+    (candidate) => {
+      const upstream =
+        'https://upstream.example/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz?download=1';
+      const proxied = `${registryUrl}/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz?download=1`;
+      const body = packumentBody({
+        versions: {
+          [source.version]: {
+            name: source.name,
+            version: source.version,
+            dist: { tarball: upstream, integrity: source.integrity },
+          },
+        },
+      });
+      const selected = candidate === 'dist URL' ? upstream : proxied;
+
+      const result = finalizeStandardAssetSourceResponses({
+        registryUrl,
+        source,
+        captured: [response(packumentUrl, body), response(selected, new Uint8Array([1, 2, 3]))],
+      });
+
+      expect(result).toMatchObject({ ok: true });
+      if (!result.ok) return;
+      expect(result.sourceResponses.at(-1)).toMatchObject({
+        source: 'tarball',
+        url: selected,
+      });
+    },
+  );
+
+  it('rejects a proxy candidate with the wrong path or query', () => {
+    const upstream =
+      'https://upstream.example/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz?download=1';
+    const body = packumentBody({
+      versions: {
+        [source.version]: {
+          dist: { tarball: upstream, integrity: source.integrity },
+        },
+      },
+    });
+
+    for (const wrong of [
+      `${registryUrl}/other/-/esbuild-wasm-0.28.0.tgz?download=1`,
+      `${registryUrl}/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz?download=2`,
+    ]) {
+      expect(
+        finalizeStandardAssetSourceResponses({
+          registryUrl,
+          source,
+          captured: [response(packumentUrl, body), response(wrong, new Uint8Array([1]))],
+        }),
+      ).toEqual({
+        ok: false,
+        note: 'esbuild-wasm@0.28.0 has no exact tarball response',
+      });
+    }
+  });
+
+  it('rejects multiple direct/proxy tarball candidates instead of choosing one', () => {
+    const upstream = 'https://upstream.example/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz';
+    const proxied = `${registryUrl}/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz`;
+    const body = packumentBody({
+      versions: {
+        [source.version]: {
+          dist: { tarball: upstream, integrity: source.integrity },
+        },
+      },
+    });
+
+    expect(
+      finalizeStandardAssetSourceResponses({
+        registryUrl,
+        source,
+        captured: [
+          response(packumentUrl, body),
+          response(upstream, new Uint8Array([1])),
+          response(proxied, new Uint8Array([1])),
+        ],
+      }),
+    ).toEqual({
+      ok: false,
+      note: 'esbuild-wasm@0.28.0 matched multiple tarball source candidates',
+    });
+  });
+
   it('retains a tracked redirect lifecycle whose URL leaves the exact tarball', () => {
     const requestId = 'tarball-redirect';
     const redirectUrl = 'https://cdn.example/opaque/retry';
