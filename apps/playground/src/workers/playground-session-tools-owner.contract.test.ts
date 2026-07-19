@@ -3,6 +3,7 @@ import { RegistryClient } from '@riftydev/npm-client';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import type { BootstrapConfig } from '../templates/project-spec.ts';
 import { ClosedHandleError } from '../workbench/errors.ts';
 import type {
   OwnerPlaygroundSessionToolsFrame,
@@ -11,7 +12,7 @@ import type {
   PlaygroundSessionToolResult,
 } from '../workbench/internal/playground-session-tools-transport.ts';
 import type { OwnerProjectVfsFrame } from '../workbench/project-vfs-protocol.ts';
-import { createOwnerPackageState } from './owner-package-state.ts';
+import { type OwnerPackageConfig, createOwnerPackageState } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import { createOwnerPlaygroundSessionTools } from './playground-session-tools-owner.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
@@ -27,6 +28,22 @@ const COMMIT_IDENTITY: GitIdentity = Object.freeze({
   email: 'session-tools@rifty.test',
   timestamp: 1_700_000_000,
   timezoneOffset: 0,
+});
+const BOOTSTRAP_CONFIG: BootstrapConfig = Object.freeze({
+  runtime: 'node-cli',
+  root: PROJECT_ROOT,
+  entryPath: SOURCE,
+  packageName: 'project-a',
+  packageVersion: '1.0.0',
+  installDeps: Object.freeze({}),
+  packageJson: PACKAGE_JSON,
+  seedFiles: Object.freeze({}),
+});
+const PACKAGE_CONFIG: OwnerPackageConfig = Object.freeze({
+  cfg: BOOTSTRAP_CONFIG,
+  templateId: 'session-tools-contract',
+  slug: 'project-a',
+  fromScratch: true,
 });
 
 function write(
@@ -73,6 +90,7 @@ describe('owner-resident Playground session tools', () => {
     });
 
     const packages = createOwnerPackageState({
+      initial: PACKAGE_CONFIG,
       vfs,
       fsSync: owner.authority,
       installStampClaims: owner.installStampClaims,
