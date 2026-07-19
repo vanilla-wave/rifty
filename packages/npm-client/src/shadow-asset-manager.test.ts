@@ -4,6 +4,12 @@ import { builtinSyntheticPackageRecipes } from '@riftydev/shadow-registry';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import { canonicalShadowDigest } from './canonical-shadow-json.ts';
+import {
+  eddyBundleFixture,
+  realStandardSource,
+  responseForBundle,
+} from './eddy-shadow-asset-source.test-support.ts';
+import { createEddyShadowAssetSource } from './eddy-shadow-asset-source.ts';
 import type { InstallTreeResult } from './installer.ts';
 import { RIFTY_LOCKFILE_SHADOW_SUBSTITUTIONS_PROTOCOL } from './linker.ts';
 import { RegistryClient } from './registry.ts';
@@ -381,6 +387,61 @@ describe('ShadowAssetManager', () => {
     expect(
       network.mock.calls.filter(([url]) => String(url) === '/registry/runtime-source'),
     ).toHaveLength(1);
+  });
+
+  it('composes an exact Eddy bundle into immutable ready-receipt provenance', async () => {
+    const { member, plan, tgz } = fixture();
+    const descriptor = plan.assets[0]!;
+    const request: ShadowAssetSourceRequest = {
+      name: descriptor.source.name,
+      version: descriptor.source.version,
+      integrity: descriptor.source.integrity,
+      maxTarballBytes: descriptor.maxTarballBytes,
+    };
+    const bundle = await eddyBundleFixture([{ request, bytes: tgz }]);
+    const standard = realStandardSource({ request, bytes: tgz });
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: createEddyShadowAssetSource({
+        resolverUrl: 'https://eddy.test/resolve',
+        sourceRequests: [request],
+        standardSource: standard.source,
+        learnedPins: new Map(),
+        fetchImpl: async (input, init) => {
+          calls.push({ url: String(input), init });
+          return responseForBundle(bundle, true);
+        },
+      }),
+    });
+
+    const result = await manager.installer.ensure(plan);
+
+    expect(result.kind).toBe('ready');
+    if (result.kind !== 'ready') throw new Error('expected ready');
+    expect(result.receipt.assets[0]).toMatchObject({
+      id: 'runtime',
+      fillTransport: 'eddy',
+      fillCache: 'bundle',
+    });
+    expect(Object.isFrozen(result.receipt.assets[0])).toBe(true);
+    const inspected = await manager.installer.inspectReceipt(plan.requiredSetDigest);
+    expect(inspected).toEqual(result.receipt);
+    expect(inspected?.assets[0]).toMatchObject({
+      id: 'runtime',
+      fillTransport: 'eddy',
+      fillCache: 'bundle',
+    });
+    expect(Object.isFrozen(inspected?.assets[0])).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('https://eddy.test/resolve');
+    expect(calls[0]?.init?.method).toBe('POST');
+    expect(String(calls[0]?.init?.body)).toBe(
+      '{"dependencies":{"runtime-source":"1.0.0"},"optionalDependencies":{}}',
+    );
+    expect(standard.calls).toEqual([]);
+    await expect(manager.runtimeReader(plan).readVerified('runtime')).resolves.toEqual(member);
+    await manager.close();
   });
 
   it('returns canonical not-required without admitting source work', async () => {
