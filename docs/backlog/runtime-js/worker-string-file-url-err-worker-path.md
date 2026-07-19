@@ -1,10 +1,10 @@
 ---
 area: runtime-js
 status: draft
-title: Worker string file: URL must throw ERR_WORKER_PATH
+title: Worker string-script path contract (ERR_WORKER_PATH tail)
 created: 2026-07-19
-why: normalizeWorkerScript grants URL semantics to strings Node rejects
-user_story: As a Node-program author, I want `new Worker('file:///…')` (string) to throw ERR_WORKER_PATH like Node, but today rifty silently converts the string to a path and spawns it
+why: string Worker scripts skip Node's path validation beyond the file:-URL case
+user_story: As a Node-program author, I want `new Worker(<string>)` to enforce Node's path rules (ERR_WORKER_PATH, extension rules), but today rifty validates only file:-URL strings and treats every other string as a path
 blocked_by: []
 sources: []
 code:
@@ -13,14 +13,19 @@ code:
 
 ## Context
 
-Node 24.16: `new Worker(script)` with a STRING accepts only an absolute path or
-`./`/`../`-relative path; `'file:///abs/w.js'` (any ASCII casing) throws
-`ERR_WORKER_PATH`. URL semantics require a `URL` object (that side is already
-parity-pinned: `url/file-url-consumers` covers encoded-separator rejection).
-rifty's `normalizeWorkerScript` decodes `file://` strings into paths and spawns
-— URL semantics granted where Node rejects, same axis as the resolver esm-gate
-(parity `modules/require-url-specifier-strings`), different boundary.
+Closed in PR #159: a string `file:` URL (any ASCII casing) now throws Node's
+synchronous `ERR_WORKER_PATH` (parity `url/file-url-consumers`); URL objects
+keep decoding through the shared codec.
 
-Before fixing, sweep internal spawn sites: bootstrap/recursive-worker paths may
-feed `file://` strings through the same normalizer and must switch to `URL`
-objects or plain paths first.
+Remaining tail of Node 24.16's string contract, still divergent:
+- any other non-absolute, non-`./`/`../` string (bare junk, other schemes) →
+  Node `ERR_WORKER_PATH`; rifty treats it as a path and fails later with a
+  different error (or spawns).
+- relative `./`/`../` strings: Node resolves against `process.cwd()` — verify
+  rifty's same-realm and kernel spawn paths anchor identically.
+- extension rule: Node throws `ERR_WORKER_UNSUPPORTED_EXTENSION` for e.g. `.ts`.
+- URL objects with non-`file:` schemes: Node `ERR_WORKER_UNSUPPORTED_URL_SCHEME`;
+  rifty passes `href` through as a path.
+
+Before fixing, sweep internal spawn sites (bootstrap/recursive workers) for
+reliance on the lax forms.

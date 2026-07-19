@@ -26,6 +26,22 @@
   where WHATWG case-insensitive semantics apply (parity
   `modules/require-url-specifier-strings`).
 
+- **Bare walk gains Node's `LOAD_AS_FILE(DIR/X)` step.** A loose
+  `node_modules/<name>(.ext)` file with no package directory now resolves —
+  including a name that only looks like a URL scheme, e.g. `require('file:')` →
+  `node_modules/file:.js` (parity `modules/require-bare-file-package`).
+
+- **tsconfig `baseUrl` follows the TypeScript oracle for URL-rooted names.**
+  tsc treats `scheme://` specifiers as rooted, so baseUrl never prepends and the
+  lookup misses; the resolver now matches instead of following tsconfig-paths'
+  blind join. Exact/wildcard `paths` aliases keep matching URL-like bare names
+  (both oracles agree).
+
+- **Worker string scripts reject `file:` URLs like Node.** A string `file:` URL
+  (any ASCII casing) throws synchronous `ERR_WORKER_PATH`; URL objects keep
+  decoding. Remaining string-path contract: backlog
+  `runtime-js/worker-string-file-url-err-worker-path`.
+
 - Node-entry program and worker-thread bootstrap metadata can carry one
   validated host-only remote-FS root. Nested `worker_threads` and recursive
   Node entries inherit it while guest argv, cwd, and environment stay public.

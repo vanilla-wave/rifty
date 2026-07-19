@@ -211,7 +211,11 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
               : { status: 'no-match' };
           if (aliased.status === 'resolved')
             return readResolved(vfs, pkgCache, aliased.path, opts.esm);
-          if (aliased.status === 'no-match' && tsconfigResolution.baseUrl !== undefined) {
+          // TypeScript's `getRootLength` treats any `scheme://` name as rooted,
+          // so its baseUrl lookup never prepends and misses; tsconfig-paths@4
+          // joins blindly and would resolve. The ADR-0066/0170 oracle is tsc.
+          const urlRooted = specifier.includes('://');
+          if (aliased.status === 'no-match' && tsconfigResolution.baseUrl !== undefined && !urlRooted) {
             // TODO(backlog: runtime-js/tsconfig-baseurl-module-resolution): gate baseUrl bare-specifier fallback by TS moduleResolution parity.
             const baseUrlResolved = resolveAsFileOrDir(
               vfs,
@@ -534,6 +538,12 @@ function resolveBareSpecifier(
     const candidateDir = joinPath(dir, 'node_modules', name);
     if (vfs.statSyncOrNull(candidateDir)?.isDirectory) {
       const file = resolveInsidePackage(vfs, pkgCache, candidateDir, subpath, esm);
+      if (file) return file;
+    } else {
+      // Node LOAD_AS_FILE(DIR/X): a loose `node_modules/<X>(.ext)` file with no
+      // package directory loads — including a name that only LOOKS like a URL
+      // scheme (parity modules/require-bare-file-package).
+      const file = resolveAsFileOrDir(vfs, pkgCache, joinPath(candidateDir, subpath));
       if (file) return file;
     }
     if (dir === '/') break;

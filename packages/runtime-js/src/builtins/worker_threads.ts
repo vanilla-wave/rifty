@@ -17,6 +17,7 @@ import {
 } from '@riftydev/kernel';
 import { type FsSync, dirname } from '@riftydev/vfs';
 import { fileURLToPathPosix } from '../internal/posix-file-url.ts';
+import { hasURLScheme } from '../internal/url-scheme.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -428,9 +429,21 @@ export function isMarkedAsUncloneable(object: unknown): boolean {
 }
 
 function normalizeWorkerScript(script: WorkerScript): string {
-  const raw = typeof script === 'string' ? script : script.href;
-  // TODO(backlog: runtime-js/worker-string-file-url-err-worker-path): Node
-  // throws ERR_WORKER_PATH for string file: URLs; only URL objects decode.
+  if (typeof script === 'string') {
+    // Node string scripts are paths only — a file: URL string is a synchronous
+    // ERR_WORKER_PATH (parity url/file-url-consumers); only URL objects decode.
+    // Remaining string-path contract (relative/junk/extension rules):
+    // TODO(backlog: runtime-js/worker-string-file-url-err-worker-path).
+    if (hasURLScheme(script, 'file')) {
+      const error = new TypeError(
+        `The worker script or module filename must be an absolute path or a relative path starting with './' or '../'. Wrap file:// URLs with \`new URL\`. Received "${script}"`,
+      ) as TypeError & { code: string };
+      error.code = 'ERR_WORKER_PATH';
+      throw error;
+    }
+    return script;
+  }
+  const raw = script.href;
   if (raw.startsWith('file://')) return fileURLToPathPosix(raw);
   return raw;
 }
