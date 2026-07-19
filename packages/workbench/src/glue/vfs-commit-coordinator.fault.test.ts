@@ -391,6 +391,7 @@ describe('VfsCommitCoordinator fault contract', () => {
 
   it('rejects a durability receipt from another epoch or below the reflected revision', async () => {
     const closed = deferred<unknown>();
+    const protocolErrors: VfsCommitProtocolError[] = [];
     let receipt: OwnerVfsDurabilityReceipt = {
       ownerEpoch: 'owner-b',
       treeRevision: 8,
@@ -416,6 +417,7 @@ describe('VfsCommitCoordinator fault contract', () => {
         return () => {};
       },
       timeoutMs: 100,
+      reportProtocolError: (error: VfsCommitProtocolError) => protocolErrors.push(error),
     });
 
     const wrongOwner = await coordinator
@@ -426,6 +428,8 @@ describe('VfsCommitCoordinator fault contract', () => {
       applied: { ownerEpoch: 'owner-a', treeRevision: 8 },
       cause: expect.any(VfsCommitProtocolError),
     });
+    expect(protocolErrors).toHaveLength(1);
+    expect(protocolErrors[0]?.message).toMatch(/owner owner-b; expected owner-a/);
 
     receipt = { ownerEpoch: 'owner-a', treeRevision: 7, durability: 'durable' };
     const staleReceipt = await coordinator
@@ -436,5 +440,7 @@ describe('VfsCommitCoordinator fault contract', () => {
       applied: { ownerEpoch: 'owner-a', treeRevision: 8 },
       cause: expect.any(VfsCommitProtocolError),
     });
+    expect(protocolErrors).toHaveLength(2);
+    expect(protocolErrors[1]?.message).toMatch(/revision 7 is below 8/);
   });
 });

@@ -97,6 +97,7 @@ interface FakeSurface {
   readonly host: EditorHostSurface;
   editorModel(): monaco.editor.ITextModel | null;
   editorOptions(): { readonly readOnly?: boolean };
+  diffEditorOptions(): { readonly readOnly?: boolean };
   position(): monaco.IPosition | undefined;
   focusCount(): number;
   diffModel(): DiffPair | null;
@@ -128,9 +129,13 @@ function fakeSurface(): FakeSurface {
     },
   };
   let diffPair: DiffPair | null = null;
+  let diffOptions: { readOnly?: boolean } = {};
   const diffEditor = {
     setModel(next: DiffPair | null) {
       diffPair = next;
+    },
+    updateOptions(next: { readOnly?: boolean }) {
+      diffOptions = { ...diffOptions, ...next };
     },
   };
   let decorations: readonly monaco.editor.IModelDeltaDecoration[] = [];
@@ -150,6 +155,7 @@ function fakeSurface(): FakeSurface {
     },
     editorModel: () => model,
     editorOptions: () => options,
+    diffEditorOptions: () => diffOptions,
     position: () => position,
     focusCount: () => focusCount,
     diffModel: () => diffPair,
@@ -428,6 +434,7 @@ describe('editor-host-core working diff (Open Changes)', () => {
     expect(pair?.original.uri.scheme).toBe('rifty-git');
     expect(pair?.original.uri.query).toBe('ref=HEAD');
     expect(pair?.modified).toBe(mustModel(h.core, '/p/src/a.ts')); // live model, not a copy
+    expect(h.surface.diffEditorOptions().readOnly).toBe(false);
     expect(h.gitReads).toEqual([{ path: '/p/src/a.ts', ref: 'HEAD' }]);
     expect(h.active.at(-1)).toEqual({
       label: 'a.ts ↔ HEAD',
@@ -890,6 +897,7 @@ describe('editor-host-core blob compare (openTextDiff)', () => {
     expect(pair?.original.uri.scheme).toBe('rifty-compare-original');
     expect(pair?.modified.uri.scheme).toBe('rifty-compare-modified');
     expect(pair?.original.uri.query).toBe('id=cmp-1');
+    expect(h.surface.diffEditorOptions().readOnly).toBe(true);
   });
 
   it('re-opening the same compare id replaces the models and disposes the stale pair (single tab)', () => {

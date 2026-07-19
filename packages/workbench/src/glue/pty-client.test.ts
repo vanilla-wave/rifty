@@ -44,6 +44,68 @@ function firstMaterializationHarness(
   return { client, exec, exit, run };
 }
 
+function captureThrown(operation: () => void): unknown {
+  try {
+    operation();
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
+
+function deliverChunk(
+  client: ReturnType<typeof createPtyClient>,
+  sid: string,
+  rid: string,
+  data = 'late',
+): void {
+  client.onFrame({
+    type: 'pty:chunk',
+    sid,
+    rid,
+    stream: 'stdout',
+    seq: 1,
+    data: new TextEncoder().encode(data),
+  });
+}
+
+type ExecFrame = Extract<PageToOwnerFrame, { type: 'pty:exec' }>;
+
+function execFrames(sent: readonly PageToOwnerFrame[]): readonly ExecFrame[] {
+  return sent.filter((frame): frame is ExecFrame => frame.type === 'pty:exec');
+}
+
+function startRun(
+  client: ReturnType<typeof createPtyClient>,
+  sent: PageToOwnerFrame[],
+  sid: string,
+  onChunk: (chunk: string) => void = () => {},
+): { readonly frame: ExecFrame; readonly promise: Promise<number> } {
+  const promise = client.exec(sid, 'command', { cols: 80, rows: 24, isTTY: true, onChunk });
+  const frame = execFrames(sent).at(-1);
+  if (frame === undefined) throw new Error(`missing exec frame for ${sid}`);
+  return { frame, promise };
+}
+
+function deliverExit(client: ReturnType<typeof createPtyClient>, frame: ExecFrame, code = 0): void {
+  client.onFrame({
+    type: 'pty:exit',
+    sid: frame.sid,
+    rid: frame.rid,
+    code,
+    exit: code === 130 ? { code: null, signal: 'SIGINT' } : { code, signal: null },
+    cwd: '/',
+    env: {},
+  });
+}
+
+function expectCorrelationMismatch(error: unknown, type: string, received: string): void {
+  expect(error).toMatchObject({
+    name: 'PtyProtocolInvariantError',
+    message: expect.stringMatching(new RegExp(`${type}.*correlation.*${received}`, 'i')),
+  });
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -164,107 +226,112 @@ describe('pty-client', () => {
     await expect(next).resolves.toBe(0);
   });
 
-  it('routes chunks to matching runs in different sessions (rid correlation)', async () => {
+  it('binds output and exit to the exact sid/rid across sessions', async () => {
     const { client, sent } = harness();
-    const aChunks: string[] = [];
-    const bChunks: string[] = [];
-    const a = client.exec('s1', 'cmd-a', {
-      cols: 80,
-      rows: 24,
-      isTTY: true,
-      onChunk: (c) => aChunks.push(c),
-    });
-    const b = client.exec('s2', 'cmd-b', {
-      cols: 80,
-      rows: 24,
-      isTTY: true,
-      onChunk: (c) => bChunks.push(c),
-    });
-    const execs = sent.filter(
-      (f): f is Extract<PageToOwnerFrame, { type: 'pty:exec' }> => f.type === 'pty:exec',
+    const firstChunks: string[] = [];
+    const secondChunks: string[] = [];
+    const first = startRun(client, sent, 's1', (chunk) => firstChunks.push(chunk));
+    const second = startRun(client, sent, 's2', (chunk) => secondChunks.push(chunk));
+
+    const chunkMismatch = captureThrown(() =>
+      deliverChunk(client, second.frame.sid, first.frame.rid, 'crossed'),
     );
-    const ridA = execs[0]!.rid;
-    const ridB = execs[1]!.rid;
-    expect(ridA).not.toBe(ridB);
-    client.onFrame({
-      type: 'pty:chunk',
-      sid: 's2',
-      rid: ridB,
-      stream: 'stdout',
-      seq: 0,
-      data: new TextEncoder().encode('B'),
-    });
-    client.onFrame({
-      type: 'pty:chunk',
-      sid: 's1',
-      rid: ridA,
-      stream: 'stdout',
-      seq: 0,
-      data: new TextEncoder().encode('A'),
-    });
-    client.onFrame({
-      type: 'pty:exit',
-      sid: 's1',
-      rid: ridA,
-      code: 0,
-      exit: { code: 0, signal: null },
-      cwd: '/',
-      env: {},
-    });
-    client.onFrame({
-      type: 'pty:exit',
-      sid: 's2',
-      rid: ridB,
-      code: 0,
-      exit: { code: 0, signal: null },
-      cwd: '/',
-      env: {},
-    });
-    await Promise.all([a, b]);
-    expect(aChunks.join('')).toBe('A');
-    expect(bChunks.join('')).toBe('B');
+    const exitMismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:exit',
+        sid: second.frame.sid,
+        rid: first.frame.rid,
+        code: 0,
+        exit: { code: 0, signal: null },
+        cwd: '/',
+        env: {},
+      }),
+    );
+    deliverChunk(client, first.frame.sid, first.frame.rid, 'A');
+    deliverChunk(client, second.frame.sid, second.frame.rid, 'B');
+    deliverExit(client, first.frame);
+    deliverExit(client, second.frame);
+    await Promise.all([first.promise, second.promise]);
+
+    expectCorrelationMismatch(chunkMismatch, 'pty:chunk', second.frame.sid);
+    expectCorrelationMismatch(exitMismatch, 'pty:exit', second.frame.sid);
+    expect(firstChunks).toEqual(['A']);
+    expect(secondChunks).toEqual(['B']);
   });
 
-  // Regression (CI dev-server-ready marker flake): the owner emits the
-  // "[vite] dev server ready" line from an async listen() message that can land
-  // AFTER the run's pty:exit when a restart aborted the run. The run is gone, so
-  // rid correlation finds nothing — but the marker is real output for the
-  // session's terminal and must NOT be silently dropped (it was: the e2e read an
-  // empty/short buffer and timed out). It lands via the session's trailing sink.
-  it('delivers a chunk arriving after pty:exit to the session terminal (marker race)', async () => {
+  it('delivers admitted output that arrives after pty:exit to the exact run sink', async () => {
     const { client, sent } = harness();
     const chunks: string[] = [];
-    const p = client.exec('s1', 'vite', {
-      cols: 80,
-      rows: 24,
-      isTTY: true,
-      onChunk: (c) => chunks.push(c),
-    });
-    const rid = (
-      sent.find((f) => f.type === 'pty:exec') as Extract<PageToOwnerFrame, { type: 'pty:exec' }>
-    ).rid;
-    // Run exits first (Ctrl-C / restart abort, code 130) ...
-    client.onFrame({
-      type: 'pty:exit',
-      sid: 's1',
-      rid,
-      code: 130,
-      exit: { code: null, signal: 'SIGINT' },
-      cwd: '/',
-      env: {},
-    });
-    await expect(p).resolves.toBe(130);
-    // ... then the readiness marker arrives late for the now-gone run.
-    client.onFrame({
-      type: 'pty:chunk',
-      sid: 's1',
-      rid,
-      stream: 'stdout',
-      seq: 1,
-      data: new TextEncoder().encode('[vite] dev server ready on port 5174\n'),
-    });
-    expect(chunks.join('')).toContain('[vite] dev server ready on port 5174');
+    const run = startRun(client, sent, 's1', (chunk) => chunks.push(chunk));
+    client.onFrame({ type: 'pty:run-ready', sid: run.frame.sid, rid: run.frame.rid });
+    deliverExit(client, run.frame, 130);
+    await expect(run.promise).resolves.toBe(130);
+    const mismatch = captureThrown(() => deliverChunk(client, 'sibling', run.frame.rid));
+    deliverChunk(client, run.frame.sid, run.frame.rid, 'late output\n');
+
+    expectCorrelationMismatch(mismatch, 'pty:chunk', 'sibling');
+    expect(chunks.join('')).toBe('late output\n');
   });
+
+  it('never publishes output authority when exit wins before admission', async () => {
+    const { client, sent } = harness();
+    const chunks: string[] = [];
+    const run = startRun(client, sent, 'not-admitted', (chunk) => chunks.push(chunk));
+    deliverExit(client, run.frame);
+    await run.promise;
+    deliverChunk(client, run.frame.sid, run.frame.rid);
+
+    expect(chunks).toEqual([]);
+  });
+
+  it('retires stale output authority when a newer run is admitted', async () => {
+    const { client, sent } = harness();
+    const firstChunks: string[] = [];
+    const secondChunks: string[] = [];
+    const first = startRun(client, sent, 's1', (chunk) => firstChunks.push(chunk));
+    client.onFrame({ type: 'pty:run-ready', sid: first.frame.sid, rid: first.frame.rid });
+    deliverExit(client, first.frame);
+    await first.promise;
+
+    const second = startRun(client, sent, 's1', (chunk) => secondChunks.push(chunk));
+    client.onFrame({ type: 'pty:run-ready', sid: second.frame.sid, rid: second.frame.rid });
+    deliverChunk(client, first.frame.sid, first.frame.rid, 'stale');
+    deliverExit(client, second.frame);
+    await second.promise;
+
+    expect(firstChunks).toEqual([]);
+    expect(secondChunks).toEqual([]);
+  });
+
+  it.each(['close', 'disconnect'] as const)(
+    'retires admitted output authority on %s',
+    async (settlement) => {
+      const { client, sent } = harness();
+      const chunks: string[] = [];
+      const run = startRun(client, sent, 'retired', (chunk) => chunks.push(chunk));
+      client.onFrame({ type: 'pty:run-ready', sid: run.frame.sid, rid: run.frame.rid });
+
+      if (settlement === 'disconnect') {
+        client.disconnect();
+        await expect(run.promise).rejects.toThrow(/owner died/i);
+      } else {
+        const closing = client.closeSession(run.frame.sid);
+        const close = sent.find(
+          (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+            frame.type === 'pty:close',
+        )!;
+        client.onFrame({ type: 'pty:close-ack', sid: close.sid, opId: close.opId, ok: true });
+        await closing;
+      }
+
+      deliverChunk(client, run.frame.sid, run.frame.rid, 'retired');
+      if (settlement === 'close') {
+        deliverExit(client, run.frame);
+        await run.promise;
+      }
+      expect(chunks).toEqual([]);
+    },
+  );
 
   it('caches cwd/env from pty:exit (snapshot reflects last exit)', async () => {
     const { client, sent } = harness();
@@ -296,6 +363,7 @@ describe('pty-client', () => {
     });
     // snapshot reflects the seed BEFORE any command runs (no pty:exit yet)
     expect(client.snapshot('s1')).toEqual({ cwd: '/restored', env: { TERM: 'xterm' } });
+    client.onFrame({ type: 'pty:ready', sid: 's1' });
   });
 
   it('disconnect rejects a hung exec loudly instead of inventing a process exit', async () => {
@@ -305,9 +373,207 @@ describe('pty-client', () => {
     await expect(p).rejects.toThrow(/ClosedHandleError.*owner died/i);
   });
 
+  it('preserves one caller-owned disconnect cause across every pending and future operation', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const opening = client.openSession('opening');
+    const idleResize = client.resizeSession('idle-resize', 80, 24);
+    const devConfig = client.setDevConfig({
+      templateId: 'typescript',
+      slug: 'disconnect-provenance',
+      setup: 'instant',
+    });
+    const closing = client.closeSession('closing');
+    const running = client.exec('running', 'cat', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const exec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    );
+    if (exec === undefined) throw new Error('missing exec frame');
+    const writing = client.writeStdin('running', exec.rid, new Uint8Array([1]));
+    const ending = client.endStdin('running', exec.rid);
+    const resizing = client.resize('running', exec.rid, 100, 30);
+    const pending = [
+      opening,
+      idleResize,
+      devConfig,
+      closing,
+      running,
+      writing,
+      ending,
+      resizing,
+    ].map((operation) =>
+      operation.then(
+        () => null,
+        (error: unknown) => error,
+      ),
+    );
+    const disconnectCause = new Error('exact owner transport disconnect');
+
+    client.disconnect(disconnectCause);
+    client.disconnect(new Error('later disconnect must not replace the first cause'));
+
+    const future = [
+      client.openSession('future-open'),
+      client.resizeSession('future-resize', 80, 24),
+      client.closeSession('future-close'),
+      client.setDevConfig({
+        templateId: 'vite-react',
+        slug: 'future-config',
+        setup: 'from-scratch',
+      }),
+      client.exec('future-run', 'true', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      }),
+      client.writeStdin('future-run', 'future-rid', new Uint8Array([1])),
+      client.endStdin('future-run', 'future-rid'),
+    ].map((operation) =>
+      operation.then(
+        () => null,
+        (error: unknown) => error,
+      ),
+    );
+
+    const thrownBy = (operation: () => void): unknown => {
+      try {
+        operation();
+        return null;
+      } catch (error) {
+        return error;
+      }
+    };
+    const synchronous = [
+      thrownBy(() => client.resize('future-run', 'future-rid', 80, 24)),
+      thrownBy(() => client.signal('future-run', 'future-rid')),
+      thrownBy(() => client.requestDevServer()),
+      thrownBy(() => client.requestPreview()),
+    ];
+    const outcomes = [
+      ...(await Promise.all(pending)),
+      ...(await Promise.all(future)),
+      ...synchronous,
+    ];
+    expect(outcomes).toEqual(outcomes.map(() => disconnectCause));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   // Race a promise against a 50ms sentinel so a hang fails fast + deterministically.
   const settledOr = <T>(p: Promise<T>, pending: T): Promise<T> =>
     Promise.race([p, new Promise<T>((r) => setTimeout(() => r(pending), 50))]);
+
+  const ACK_TIMEOUT_MS = 60_000;
+
+  it('bounds initial session readiness, ignores its late frame, and fences only that session', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const opening = client.openSession('hung-open');
+    let failure: unknown;
+    void opening.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:ready.*hung-open.*60000ms/i),
+      }),
+    );
+    client.onFrame({ type: 'pty:ready', sid: 'hung-open' });
+    await expect(client.openSession('hung-open')).rejects.toBe(failure);
+    expect(
+      sent.filter((frame) => frame.type === 'pty:open' && frame.sid === 'hung-open'),
+    ).toHaveLength(1);
+
+    const sibling = client.openSession('healthy-open');
+    client.onFrame({ type: 'pty:ready', sid: 'healthy-open' });
+    await expect(sibling).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds run admission without timing out an admitted process lifetime', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const starts: string[] = [];
+    const hung = client.exec('hung-run', 'node server.js', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+      onStart: (rid) => starts.push(rid),
+    });
+    const hungFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )!;
+    let failure: unknown;
+    void hung.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:run-ready.*hung-run.*60000ms/i),
+      }),
+    );
+    client.onFrame({ type: 'pty:run-ready', sid: 'hung-run', rid: hungFrame.rid });
+    expect(starts).toEqual([]);
+    expect(() =>
+      client.exec('hung-run', 'must-not-overlap', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      }),
+    ).toThrow(/pty:run-ready.*hung-run/i);
+
+    let admittedOutcome = 'pending';
+    const admitted = client.exec('healthy-run', 'node long-lived.js', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    void admitted.then(
+      () => {
+        admittedOutcome = 'resolved';
+      },
+      () => {
+        admittedOutcome = 'rejected';
+      },
+    );
+    const admittedFrame = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )[1]!;
+    client.onFrame({ type: 'pty:run-ready', sid: 'healthy-run', rid: admittedFrame.rid });
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS * 2);
+    expect(admittedOutcome).toBe('pending');
+
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 'healthy-run',
+      rid: admittedFrame.rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    await expect(admitted).resolves.toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 
   it('claims one run per session synchronously', async () => {
     const { client, sent } = harness();
@@ -367,11 +633,13 @@ describe('pty-client', () => {
     const siblingExec = execs[1]!;
 
     expect(starts).toEqual([]);
-    client.onFrame({
-      type: 'pty:run-ready',
-      sid: 's2',
-      rid: firstExec.rid,
-    });
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:run-ready',
+        sid: 's2',
+        rid: firstExec.rid,
+      }),
+    );
     expect(starts).toEqual([]);
 
     client.onFrame({ type: 'pty:run-ready', sid: 's2', rid: siblingExec.rid });
@@ -391,6 +659,7 @@ describe('pty-client', () => {
       });
     }
     await Promise.all([first, sibling]);
+    expectCorrelationMismatch(mismatch, 'pty:run-ready', 's2');
   });
 
   it('publishes first-materialization evidence with the exact admitted project run identity', async () => {
@@ -613,6 +882,15 @@ describe('pty-client', () => {
       ),
     ).resolves.toBe('pending');
 
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:resize-ack',
+        sid: 'sibling',
+        rid: 'sibling-run',
+        opId: frame.opId,
+        ok: true,
+      } as never),
+    );
     client.onFrame({
       type: 'pty:resize-ack',
       sid: 's1',
@@ -621,6 +899,7 @@ describe('pty-client', () => {
       ok: true,
     } as never);
     await expect(resized).resolves.toBeUndefined();
+    expectCorrelationMismatch(mismatch, 'pty:resize-ack', 'sibling');
     client.onFrame({
       type: 'pty:exit',
       sid: 's1',
@@ -650,12 +929,14 @@ describe('pty-client', () => {
       cols: 100,
       rows: 30,
     });
-    client.onFrame({
-      type: 'pty:session-resize-ack',
-      sid: 'sibling',
-      opId: first.opId,
-      ok: true,
-    });
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:session-resize-ack',
+        sid: 'sibling',
+        opId: first.opId,
+        ok: true,
+      }),
+    );
     client.onFrame({
       type: 'pty:session-resize-ack',
       sid: 's1',
@@ -676,6 +957,7 @@ describe('pty-client', () => {
       error: 'RangeError: owner rejected exact idle size',
     });
     await expect(rejected).rejects.toThrow('owner rejected exact idle size');
+    expectCorrelationMismatch(mismatch, 'pty:session-resize-ack', 'sibling');
 
     const accepted = client.resizeSession('s1', 120, 40);
     const second = sent.filter(
@@ -775,6 +1057,15 @@ describe('pty-client', () => {
     expect(sent.some((frame) => frame.type === 'pty:stdin-eof')).toBe(false);
 
     const firstFrame = sent.at(-1) as unknown as { opId: string };
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:stdin-ack',
+        sid: 'sibling',
+        rid: 'sibling-run',
+        opId: firstFrame.opId,
+        ok: true,
+      } as never),
+    );
     client.onFrame({
       type: 'pty:stdin-ack',
       sid: 's1',
@@ -783,6 +1074,7 @@ describe('pty-client', () => {
       ok: true,
     } as never);
     await first;
+    expectCorrelationMismatch(mismatch, 'pty:stdin-ack', 'sibling');
     await Promise.resolve();
     const stdinFrames = sent.filter((frame) => frame.type === 'pty:stdin');
     expect(stdinFrames).toHaveLength(2);
@@ -825,6 +1117,252 @@ describe('pty-client', () => {
     await run;
   });
 
+  it.each(['data', 'eof'] as const)(
+    'bounds a hung stdin %s acknowledgement, ignores it late, and keeps process lifetime unbounded',
+    async (kind) => {
+      vi.useFakeTimers();
+      const { client, sent } = harness();
+      const run = client.exec('stdin-timeout', 'cat', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      });
+      const exec = sent.find(
+        (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+          frame.type === 'pty:exec',
+      )!;
+      client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+
+      const operation =
+        kind === 'data'
+          ? client.writeStdin(exec.sid, exec.rid, new Uint8Array([1]))
+          : client.endStdin(exec.sid, exec.rid);
+      const operationFrame = sent.find(
+        (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:stdin' | 'pty:stdin-eof' }> =>
+          frame.type === (kind === 'data' ? 'pty:stdin' : 'pty:stdin-eof'),
+      )!;
+      let failure: unknown;
+      void operation.catch((error: unknown) => {
+        failure = error;
+      });
+
+      await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+      expect(failure).toEqual(
+        expect.objectContaining({
+          name: 'PtyAckTimeoutError',
+          message: expect.stringMatching(/pty:stdin.*stdin-timeout.*60000ms/i),
+        }),
+      );
+      client.onFrame({
+        type: 'pty:stdin-ack',
+        sid: exec.sid,
+        rid: exec.rid,
+        opId: operationFrame.opId,
+        ok: true,
+      });
+
+      let runOutcome = 'pending';
+      void run.then(
+        () => {
+          runOutcome = 'resolved';
+        },
+        () => {
+          runOutcome = 'rejected';
+        },
+      );
+      await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+      expect(runOutcome).toBe('pending');
+      client.onFrame({
+        type: 'pty:exit',
+        sid: exec.sid,
+        rid: exec.rid,
+        code: 0,
+        exit: { code: 0, signal: null },
+        cwd: '/',
+        env: {},
+      });
+      await expect(run).resolves.toBe(0);
+
+      const next = client.exec(exec.sid, 'true', {
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+        onChunk: () => {},
+      });
+      const nextExec = sent.filter(
+        (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+          frame.type === 'pty:exec',
+      )[1]!;
+      client.onFrame({ type: 'pty:run-ready', sid: nextExec.sid, rid: nextExec.rid });
+      client.onFrame({
+        type: 'pty:exit',
+        sid: nextExec.sid,
+        rid: nextExec.rid,
+        code: 0,
+        exit: { code: 0, signal: null },
+        cwd: '/',
+        env: {},
+      });
+      await expect(next).resolves.toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('bounds active resize per opId, ignores a late ACK, and admits a subsequent resize', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const run = client.exec('resize-timeout', 'cat', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const exec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    )!;
+    client.onFrame({ type: 'pty:run-ready', sid: exec.sid, rid: exec.rid });
+    const first = client.resize(exec.sid, exec.rid, 100, 30);
+    const firstFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:resize' }> =>
+        frame.type === 'pty:resize',
+    )!;
+    let failure: unknown;
+    void first.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:resize-ack.*resize-timeout.*60000ms/i),
+      }),
+    );
+    client.onFrame({
+      type: 'pty:resize-ack',
+      sid: exec.sid,
+      rid: exec.rid,
+      opId: firstFrame.opId,
+      ok: true,
+    });
+
+    const second = client.resize(exec.sid, exec.rid, 120, 40);
+    const secondFrame = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:resize' }> =>
+        frame.type === 'pty:resize',
+    )[1]!;
+    client.onFrame({
+      type: 'pty:resize-ack',
+      sid: exec.sid,
+      rid: exec.rid,
+      opId: secondFrame.opId,
+      ok: true,
+    });
+    await expect(second).resolves.toBeUndefined();
+    client.onFrame({
+      type: 'pty:exit',
+      sid: exec.sid,
+      rid: exec.rid,
+      code: 0,
+      exit: { code: 0, signal: null },
+      cwd: '/',
+      env: {},
+    });
+    await run;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds idle resize per opId, ignores a late ACK, and admits a subsequent resize', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const first = client.resizeSession('idle-timeout', 100, 30);
+    const firstFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:session-resize' }> =>
+        frame.type === 'pty:session-resize',
+    )!;
+    let failure: unknown;
+    void first.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:session-resize-ack.*idle-timeout.*60000ms/i),
+      }),
+    );
+    client.onFrame({
+      type: 'pty:session-resize-ack',
+      sid: firstFrame.sid,
+      opId: firstFrame.opId,
+      ok: true,
+    });
+
+    const second = client.resizeSession(firstFrame.sid, 120, 40);
+    const secondFrame = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:session-resize' }> =>
+        frame.type === 'pty:session-resize',
+    )[1]!;
+    client.onFrame({
+      type: 'pty:session-resize-ack',
+      sid: secondFrame.sid,
+      opId: secondFrame.opId,
+      ok: true,
+    });
+    await expect(second).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds session close, ignores its late ACK, and permits an opId-correlated recovery close', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    const first = client.closeSession('close-timeout');
+    const firstFrame = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+        frame.type === 'pty:close',
+    )!;
+    let failure: unknown;
+    void first.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:close-ack.*close-timeout.*60000ms/i),
+      }),
+    );
+    client.onFrame({
+      type: 'pty:close-ack',
+      sid: firstFrame.sid,
+      opId: firstFrame.opId,
+      ok: true,
+    });
+
+    const recovery = client.closeSession(firstFrame.sid);
+    const recoveryFrame = sent.filter(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+        frame.type === 'pty:close',
+    )[1]!;
+    expect(recoveryFrame.opId).not.toBe(firstFrame.opId);
+    client.onFrame({
+      type: 'pty:close-ack',
+      sid: recoveryFrame.sid,
+      opId: recoveryFrame.opId,
+      ok: true,
+    });
+    await expect(recovery).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('keeps session state until idempotent close receives its owner ack', async () => {
     const { client, sent } = harness();
     const opening = client.openSession('s1', { cwd: '/kept', env: { A: '1' } });
@@ -845,8 +1383,17 @@ describe('pty-client', () => {
     ).resolves.toBe('pending');
 
     const frame = frames[0] as unknown as { opId: string };
+    const mismatch = captureThrown(() =>
+      client.onFrame({
+        type: 'pty:close-ack',
+        sid: 'sibling',
+        opId: frame.opId,
+        ok: true,
+      } as never),
+    );
     client.onFrame({ type: 'pty:close-ack', sid: 's1', opId: frame.opId, ok: true } as never);
     await expect(first).resolves.toBeUndefined();
+    expectCorrelationMismatch(mismatch, 'pty:close-ack', 'sibling');
     expect(client.snapshot('s1')).toEqual({ cwd: '/', env: {} });
   });
 
@@ -1146,29 +1693,54 @@ describe('pty-client', () => {
     await expect(ready).resolves.toBeUndefined();
   });
 
-  it('keeps an admitted dev config pending past the former readiness timeout', async () => {
+  it('bounds dev-config readiness and fences only the indeterminate config channel', async () => {
     vi.useFakeTimers();
-    const { client } = harness();
+    const { client, sent } = harness();
     const ready = client.setDevConfig({
       templateId: 'express-sqlite',
       slug: 'slow-config',
       setup: 'from-scratch',
     });
-    let outcome = 'pending';
-    void ready.then(
-      () => {
-        outcome = 'resolved';
-      },
-      () => {
-        outcome = 'rejected';
-      },
+    let failure: unknown;
+    void ready.catch((error: unknown) => {
+      failure = error;
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    const concurrent = client.setDevConfig({
+      templateId: 'typescript',
+      slug: 'also-indeterminate',
+      setup: 'instant',
+    });
+    let concurrentFailure: unknown;
+    void concurrent.catch((error: unknown) => {
+      concurrentFailure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS - 10_000 + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:dev-config-ready.*dc1.*60000ms/i),
+      }),
     );
-
-    await vi.advanceTimersByTimeAsync(60_001);
-    expect(outcome).toBe('pending');
-
+    expect(concurrentFailure).toBe(failure);
     client.onFrame({ type: 'pty:dev-config-ready', id: 'dc1' });
-    await expect(ready).resolves.toBeUndefined();
+    client.onFrame({ type: 'pty:dev-config-ready', id: 'dc2' });
+
+    await expect(
+      client.setDevConfig({
+        templateId: 'typescript',
+        slug: 'unsafe-reorder',
+        setup: 'instant',
+      }),
+    ).rejects.toBe(failure);
+    expect(sent.filter((frame) => frame.type === 'pty:dev-config')).toHaveLength(2);
+
+    const opening = client.openSession('config-timeout-sibling');
+    client.onFrame({ type: 'pty:ready', sid: 'config-timeout-sibling' });
+    await expect(opening).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('registers dev config settlement before a synchronous owner reply', async () => {

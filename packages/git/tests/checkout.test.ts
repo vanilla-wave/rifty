@@ -9,6 +9,7 @@ import { beforeEach, expect, it } from 'vitest';
 import { BranchExistsError, CheckoutConflictError, PathspecError } from '../src/errors.ts';
 import { vfsToGitFs } from '../src/fs-adapter.ts';
 import { type Git, makeGit } from '../src/git.ts';
+import { requireSupportedStatusEntries } from '../src/status.ts';
 
 const AUTHOR = {
   name: 'Test',
@@ -137,7 +138,7 @@ it('restores a path from a branch source, updating worktree + index, HEAD unchan
   expect(await g.currentBranch()).toBe('main'); // HEAD unchanged
   // I3 — the index is updated to the tree-ish blob (staged), not just the worktree.
   // statusMatrix row for f.txt: HEAD='one'(1), workdir='two'(2), stage='two'(2) → '122'.
-  const row = (await g.status()).find((s) => s.filepath === 'f.txt');
+  const row = requireSupportedStatusEntries(await g.status()).find((s) => s.filepath === 'f.txt');
   expect(row?.status).toBe('122');
 });
 

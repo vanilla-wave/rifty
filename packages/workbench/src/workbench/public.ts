@@ -12,6 +12,7 @@ export {
   RuntimeAssetError,
   StaleProjectDocumentError,
   StdinClosedError,
+  WorkbenchOriginOccupiedError,
 } from './errors.ts';
 export type {
   FileConflictDetails,
@@ -27,6 +28,12 @@ export type {
   RuntimeAssetRecovery,
   RuntimeAssetStorageClass,
 } from './errors.ts';
+export type {
+  WorkbenchHealth,
+  WorkbenchHealthIssue,
+  WorkbenchHealthSnapshot,
+  WorkbenchRecoveryScope,
+} from './health.ts';
 export type {
   StoragePersistence,
   Workbench,

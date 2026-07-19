@@ -76,6 +76,68 @@ function writeFixture(name, header, body) {
   console.log(`wrote ${path} (${Buffer.byteLength(bytes)} bytes)`);
 }
 
+function writeJsonFixture(name, value) {
+  const path = join(FIXTURES_DIR, name);
+  const bytes = `${JSON.stringify(value, null, 2)}\n`;
+  writeFileSync(path, bytes);
+  console.log(`wrote ${path} (${Buffer.byteLength(bytes)} bytes)`);
+}
+
+/**
+ * All relations isomorphic-git's statusMatrix can report for one path. Setup
+ * names state which bytes occupy HEAD, the index, and the worktree; real git
+ * supplies only the oracle's porcelain bytes.
+ */
+const STATUS_MATRIX_CASES = [
+  { code: '000', setup: [] },
+  { code: '003', setup: ['write-index', 'add', 'fs-rm'] },
+  { code: '020', setup: ['write-worktree'] },
+  { code: '022', setup: ['write-index', 'add'] },
+  { code: '023', setup: ['write-index', 'add', 'write-worktree'] },
+  { code: '100', setup: ['seed-head', 'remove-index', 'fs-rm'] },
+  { code: '101', setup: ['seed-head', 'fs-rm'] },
+  { code: '103', setup: ['seed-head', 'write-index', 'add', 'fs-rm'] },
+  { code: '110', setup: ['seed-head', 'remove-index'] },
+  { code: '111', setup: ['seed-head'] },
+  { code: '113', setup: ['seed-head', 'write-index', 'add', 'write-head'] },
+  { code: '120', setup: ['seed-head', 'remove-index', 'write-worktree'] },
+  { code: '121', setup: ['seed-head', 'write-worktree'] },
+  { code: '122', setup: ['seed-head', 'write-index', 'add'] },
+  { code: '123', setup: ['seed-head', 'write-index', 'add', 'write-worktree'] },
+];
+
+function replayStatusMatrixSetup(dir, setup) {
+  for (const operation of setup) {
+    switch (operation) {
+      case 'seed-head':
+        writeFileSync(join(dir, 'a.txt'), 'head\n');
+        git(dir, ['add', 'a.txt']);
+        git(dir, ['commit', '-q', '-m', 'base']);
+        break;
+      case 'write-head':
+        writeFileSync(join(dir, 'a.txt'), 'head\n');
+        break;
+      case 'write-index':
+        writeFileSync(join(dir, 'a.txt'), 'index\n');
+        break;
+      case 'write-worktree':
+        writeFileSync(join(dir, 'a.txt'), 'worktree\n');
+        break;
+      case 'add':
+        git(dir, ['add', 'a.txt']);
+        break;
+      case 'remove-index':
+        git(dir, ['rm', '-q', '--cached', 'a.txt']);
+        break;
+      case 'fs-rm':
+        rmSync(join(dir, 'a.txt'));
+        break;
+      default:
+        throw new Error(`unknown status-matrix setup operation: ${operation}`);
+    }
+  }
+}
+
 /** Fresh repo in a tmpdir with `main` as the default branch. */
 function freshRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'rifty-git-fix-'));
@@ -180,6 +242,49 @@ function main() {
         ),
         body,
       );
+    }
+
+    // --- status-staged-delete-recreated: one matrix path emits TWO rows ---
+    {
+      const dir = freshRepo();
+      tmps.push(dir);
+      writeFileSync(join(dir, 'a.txt'), 'one\n');
+      git(dir, ['add', 'a.txt']);
+      git(dir, ['commit', '-q', '-m', 'base']);
+      git(dir, ['rm', '-q', 'a.txt']);
+      writeFileSync(join(dir, 'a.txt'), 'recreated\n');
+      const body = git(dir, ['status', '--porcelain']);
+      writeFixture(
+        'status-staged-delete-recreated.porcelain',
+        provenance(
+          version,
+          'git status --porcelain',
+          'staged deletion plus a same-path untracked recreation',
+        ),
+        body,
+      );
+    }
+
+    // --- status-matrix: complete 15-state classifier oracle ---
+    {
+      const cases = STATUS_MATRIX_CASES.map(({ code, setup }) => {
+        const dir = freshRepo();
+        tmps.push(dir);
+        replayStatusMatrixSetup(dir, setup);
+        return {
+          code,
+          setup,
+          porcelain: git(dir, ['status', '--porcelain', '--', 'a.txt']),
+        };
+      });
+      writeJsonFixture('status-matrix.json', {
+        provenance: {
+          gitVersion: version,
+          locale: 'C',
+          command: 'git status --porcelain -- a.txt',
+        },
+        cases,
+      });
     }
 
     // --- log-oneline: 2 commits ---

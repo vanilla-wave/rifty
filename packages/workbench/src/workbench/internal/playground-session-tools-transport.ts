@@ -1,4 +1,4 @@
-import type { LogEntry } from '@riftydev/git';
+import { type LogEntry, isGitPorcelainXY, isGitStatusMatrixCode } from '@riftydev/git';
 import type {
   TsRequest,
   TsRequestMessage,
@@ -37,7 +37,15 @@ const PAGE_REQUEST = 'workbench:playground-session-tools-request' as const;
 const PAGE_TS_REQUEST = 'workbench:playground-session-tools-ts-request' as const;
 const OWNER_RESPONSE = 'workbench:playground-session-tools-response' as const;
 const OWNER_SCM_SNAPSHOT = 'workbench:playground-session-tools-scm-snapshot' as const;
+const OWNER_OPERATIONAL_HEALTH = 'workbench:playground-session-tools-operational-health' as const;
 const OWNER_TS_RESPONSE = 'workbench:playground-session-tools-ts-response' as const;
+
+export const PLAYGROUND_PERSISTENCE_FAILURE_NAME = 'PlaygroundPersistenceError' as const;
+
+/** Clone-safe discriminator for an owner-proved durability flush failure. */
+export function isPlaygroundPersistenceFailure(error: unknown): error is Error {
+  return error instanceof Error && error.name === PLAYGROUND_PERSISTENCE_FAILURE_NAME;
+}
 
 export type PlaygroundSessionToolOperation =
   | { readonly type: 'scm:refresh' }
@@ -66,6 +74,14 @@ export type PlaygroundSessionToolResponse =
   | { readonly ok: true; readonly result: PlaygroundSessionToolResult }
   | { readonly ok: false; readonly error: SerializedWorkbenchOwnerError };
 
+export type PlaygroundSessionToolsOperationalHealth =
+  | { readonly scope: 'scm'; readonly status: 'healthy' }
+  | {
+      readonly scope: 'scm';
+      readonly status: 'degraded';
+      readonly error: SerializedWorkbenchOwnerError;
+    };
+
 export type PagePlaygroundSessionToolsFrame =
   | {
       readonly type: typeof PAGE_REQUEST;
@@ -86,6 +102,10 @@ export type OwnerPlaygroundSessionToolsFrame =
   | {
       readonly type: typeof OWNER_SCM_SNAPSHOT;
       readonly snapshot: PlaygroundScmSnapshot;
+    }
+  | {
+      readonly type: typeof OWNER_OPERATIONAL_HEALTH;
+      readonly health: PlaygroundSessionToolsOperationalHealth;
     }
   | {
       readonly type: typeof OWNER_TS_RESPONSE;
@@ -263,10 +283,6 @@ function clonePlainData(value: unknown, label: string, ancestors = new Set<objec
 
   if (value instanceof Uint8Array) {
     if (Object.getPrototypeOf(value) !== Uint8Array.prototype) throw invalid(label);
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== value.length || keys.some((key, index) => key !== String(index))) {
-      throw invalid(label);
-    }
     return value.slice();
   }
   if (value instanceof ArrayBuffer) {
@@ -483,11 +499,21 @@ function cloneLogEntry(value: unknown): LogEntry {
 
 function cloneScmChange(value: unknown): PlaygroundScmChange {
   const record = plainRecord(value, 'SCM change');
-  exact(record, ['path', 'code', 'area'], 'SCM change');
   const path = assertProjectPath(stringField(record, 'path', 'SCM change path'));
+  if (Object.hasOwn(record, 'rawStatusMatrixCode')) {
+    exact(record, ['path', 'rawStatusMatrixCode'], 'SCM change');
+    const rawStatusMatrixCode = nonEmptyString(
+      record,
+      'rawStatusMatrixCode',
+      'SCM raw status matrix code',
+    );
+    if (isGitStatusMatrixCode(rawStatusMatrixCode)) throw invalid('SCM status matrix gap');
+    return Object.freeze({ path, rawStatusMatrixCode });
+  }
+  exact(record, ['path', 'code', 'area'], 'SCM change');
   const code = stringField(record, 'code', 'SCM change code');
   const area = stringField(record, 'area', 'SCM change area');
-  if (code.length !== 2 || (area !== 'staged' && area !== 'working')) {
+  if (!isGitPorcelainXY(code) || (area !== 'staged' && area !== 'working')) {
     throw invalid('SCM change');
   }
   return Object.freeze({ path, code, area });
@@ -508,6 +534,27 @@ export function inspectPlaygroundScmSnapshot(value: unknown): PlaygroundScmSnaps
       : {}),
     history: Object.freeze(history.map(cloneLogEntry)),
     changes: Object.freeze(changes.map(cloneScmChange)),
+  });
+}
+
+/** One shared derivation keeps initial, explicit, and automatic SCM health honest. */
+export function operationalHealthForScmSnapshot(
+  snapshot: PlaygroundScmSnapshot,
+): PlaygroundSessionToolsOperationalHealth {
+  const gaps = snapshot.changes.filter(
+    (change): change is Extract<PlaygroundScmChange, { readonly rawStatusMatrixCode: string }> =>
+      'rawStatusMatrixCode' in change,
+  );
+  const first = gaps[0];
+  if (first === undefined) return Object.freeze({ scope: 'scm', status: 'healthy' });
+  const remaining = gaps.length - 1;
+  return Object.freeze({
+    scope: 'scm',
+    status: 'degraded',
+    error: Object.freeze({
+      name: 'NotImplementedError',
+      message: `Not implemented: git.status-matrix.${first.rawStatusMatrixCode} for ${first.path}${remaining === 0 ? '' : ` (+${String(remaining)} more path${remaining === 1 ? '' : 's'})`}`,
+    }),
   });
 }
 
@@ -551,6 +598,26 @@ function cloneError(value: unknown): SerializedWorkbenchOwnerError {
     name: nonEmptyString(record, 'name', 'session tools error name'),
     message: stringField(record, 'message', 'session tools error message'),
   });
+}
+
+function cloneOperationalHealth(value: unknown): PlaygroundSessionToolsOperationalHealth {
+  const record = plainRecord(value, 'session tools operational health');
+  const scope = stringField(record, 'scope', 'session tools operational health scope');
+  const status = stringField(record, 'status', 'session tools operational health status');
+  if (scope !== 'scm') throw invalid('session tools operational health scope');
+  if (status === 'healthy') {
+    exact(record, ['scope', 'status'], 'session tools operational health');
+    return Object.freeze({ scope, status });
+  }
+  if (status === 'degraded') {
+    exact(record, ['scope', 'status', 'error'], 'session tools operational health');
+    return Object.freeze({
+      scope,
+      status,
+      error: cloneError(field(record, 'error', 'session tools operational health error')),
+    });
+  }
+  throw invalid('session tools operational health status');
 }
 
 function cloneOperation(value: unknown): PlaygroundSessionToolOperation {
@@ -708,6 +775,13 @@ export function inspectOwnerPlaygroundSessionToolsFrame(
       ),
     });
   }
+  if (type === OWNER_OPERATIONAL_HEALTH) {
+    exact(record, ['type', 'health'], 'owner session tools frame');
+    return Object.freeze({
+      type,
+      health: cloneOperationalHealth(field(record, 'health', 'session tools operational health')),
+    });
+  }
   if (type === OWNER_TS_RESPONSE) {
     exact(record, ['type', 'message'], 'owner session tools frame');
     return Object.freeze({
@@ -730,6 +804,7 @@ export interface BrowserPlaygroundSessionToolsOptions {
   readonly projectRoot: string;
   readonly documents: Pick<ProjectDocumentsController, 'awaitOwnerByteAdmission' | 'invalidate'>;
   readonly initialScmSnapshot: PlaygroundScmSnapshot;
+  readonly initialOperationalHealth: PlaygroundSessionToolsOperationalHealth;
   readonly previews: PlaygroundPreviewRegistry;
   readonly send: (frame: PagePlaygroundSessionToolsFrame) => boolean | undefined;
   readonly subscribe: (listener: (frame: unknown) => void) => () => void;
@@ -740,6 +815,9 @@ export interface BrowserPlaygroundSessionToolsOptions {
 
 export interface BrowserPlaygroundSessionToolsLifecycle {
   readonly tools: PlaygroundSessionTools;
+  subscribeOperationalHealth(
+    listener: (health: PlaygroundSessionToolsOperationalHealth) => void,
+  ): () => void;
   close(): Promise<void>;
 }
 
@@ -760,8 +838,12 @@ export function createBrowserPlaygroundSessionTools(
   const pending = new Map<string, PendingRequest>();
   const admitted = new Set<Promise<unknown>>();
   const scmListeners = new Set<(snapshot: PlaygroundScmSnapshot) => void>();
+  const operationalHealthListeners = new Set<
+    (health: PlaygroundSessionToolsOperationalHealth) => void
+  >();
   const tsListeners = new Set<(message: unknown) => void>();
   let scmSnapshot = inspectPlaygroundScmSnapshot(options.initialScmSnapshot);
+  let operationalHealth = cloneOperationalHealth(options.initialOperationalHealth);
   let accepting = true;
   let transportFailure: Error | null = null;
   let closePromise: Promise<void> | null = null;
@@ -794,6 +876,10 @@ export function createBrowserPlaygroundSessionTools(
   };
 
   const unsubscribe = options.subscribe((candidate) => {
+    if (candidate instanceof Error) {
+      failTransport(candidate);
+      return;
+    }
     let frame: OwnerPlaygroundSessionToolsFrame;
     try {
       frame = inspectOwnerPlaygroundSessionToolsFrame(candidate);
@@ -818,6 +904,16 @@ export function createBrowserPlaygroundSessionTools(
             listener(scmSnapshot);
           } catch {
             // One host listener cannot suppress sibling state delivery.
+          }
+        }
+        return;
+      case OWNER_OPERATIONAL_HEALTH:
+        operationalHealth = frame.health;
+        for (const listener of [...operationalHealthListeners]) {
+          try {
+            listener(operationalHealth);
+          } catch {
+            // One host listener cannot suppress sibling health delivery.
           }
         }
         return;
@@ -1038,6 +1134,24 @@ export function createBrowserPlaygroundSessionTools(
       }),
   });
 
+  const subscribeOperationalHealth = (
+    listener: (health: PlaygroundSessionToolsOperationalHealth) => void,
+  ): (() => void) => {
+    assertAccepting();
+    if (typeof listener !== 'function') {
+      throw new TypeError(
+        'Playground session tools operational health listener must be a function',
+      );
+    }
+    operationalHealthListeners.add(listener);
+    try {
+      listener(operationalHealth);
+    } catch {
+      // Initial delivery obeys sibling listener isolation.
+    }
+    return () => operationalHealthListeners.delete(listener);
+  };
+
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise;
     accepting = false;
@@ -1059,6 +1173,7 @@ export function createBrowserPlaygroundSessionTools(
         tsClient.dispose();
         unsubscribe();
         scmListeners.clear();
+        operationalHealthListeners.clear();
         tsListeners.clear();
         for (const [requestId, waiter] of pending) {
           pending.delete(requestId);
@@ -1071,5 +1186,5 @@ export function createBrowserPlaygroundSessionTools(
     return closePromise;
   };
 
-  return Object.freeze({ tools, close });
+  return Object.freeze({ tools, subscribeOperationalHealth, close });
 }

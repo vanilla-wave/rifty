@@ -29,6 +29,18 @@
 
 - Snapshot baking now acquires required shadow runtime assets through the real
   npm-client manager before publishing current Workbench installer identities.
+### Changed (tab-independent workspace admission, ADR-0293)
+
+- A competing tab now gets a directed occupied-workspace screen instead of an
+  editable-looking failure, while Chromium acceptance proves that exact
+  `Saved` bytes reopen in both the explicitly reloaded tab and a later fresh tab.
+- Every fatal page-entry outcome (boot probe, non-contention admission failure,
+  terminal persistence, App mount) now replaces the cold-boot skeleton with a
+  standalone `boot-failed` notice carrying the causes, a host-owned Retry that
+  re-runs the same entry transaction, and an explicit Reload — previously a
+  fatal admission failure left the boot spinner up forever with the error only
+  in the console (Chromium acceptance injects an absent Web Locks capability;
+  the existing owner-boot Retry e2e keeps passing unchanged).
 
 ### Added (app-local Workbench contract)
 
@@ -86,6 +98,39 @@
 
 ### Fixed (finite Node Workbench review)
 
+- Persistence health now reports only owner-completed flush failures; transport
+  rejection and observation timeout keep their exact provenance instead of
+  masquerading as storage loss.
+- Archive replacement arms its fatal fence before the durable promoting marker,
+  and environment teardown drains only VFS completion frames admitted before
+  the fence while rejecting all new project work.
+- PTY frames and acknowledgements now correlate the complete session, run, and
+  operation identity; late output remains scoped to its admitted run and is
+  retired on replacement, close, fence, or owner disconnect.
+- Workbench SCM now shares Git's commit-refusal ordering with the shell, including
+  empty messages, clean trees, unstaged changes, and untracked-only trees.
+- Missing owner health transport now fails loudly instead of presenting a
+  healthy no-op subscription.
+- An unknown Git statusMatrix code now degrades only its path: SCM keeps and
+  publishes supported siblings, shows the gap with a non-porcelain `!` badge,
+  keeps the owner available, and reports retryable degraded SCM health. Gap
+  actions throw loudly; root `.rifty` remains private while nested `.rifty`
+  paths remain ordinary project content (ADR-0284).
+- Workbench boot, owner exit, invariant, SCM, preview, and persistence failures
+  now stay visible with scoped retry/reload actions. Persistence risk clears only
+  after exact owner durability re-proof; the selected backend identity remains
+  truthful, and unresolved risk keeps the unload warning armed plus a distinct
+  marker on editable tabs without falsifying their local dirty state.
+- First-run project choice again opens before owner boot; every catalog publish
+  reconciles the persisted project-presence hint without flashing returning users.
+  Opaque-origin storage getters now degrade to unpersisted layout/launcher hints
+  instead of aborting chooser reconciliation or sandbox reset.
+- Removed the retired page-side workspace, save, reset, file, terminal, and
+  dev-server orchestration implementations and their test-only terminal
+  manager; the companion remains the single production state owner (ADR-0292).
+- Workspace archives now round-trip observable Git history and Files-visible
+  nested `.rifty` bytes. Root `.rifty` authority and derived trees remain
+  excluded; pre-0286 source-only V1 imports keep destination Git (ADR-0286).
 - Archive export and crash recovery now share finite iterative traversal,
   topology, path-depth, file, and byte budgets; corrupt durable stages reject
   before package or live-tree mutation. Archive import now closes replaced
@@ -99,7 +144,8 @@
   hides closing tabs before owner acknowledgement, and leaves remote teardown to
   the session lifecycle so switch/reset/delete cannot be blocked by duplicate UI
   closes. Legacy terminal persistence is reduced to exact project-rooted
-  `cwd`/`env` data before companion restore.
+  `cwd`/`env` data before companion restore; reload never auto-replays an
+  arbitrary command from the previous terminal session.
 - A stalled stream cancellation no longer hides an already-bounded snapshot or
   static-asset acquisition failure.
 - Cmd/Ctrl+S now awaits pending editor writes and a clean owner durability flush
@@ -125,6 +171,10 @@
   instead of expanding installed trees into the JSON journal, so Save preserves
   real `node_modules` trees without exceeding the browser string limit
   (ADR-0279).
+- The owner catalog now proves Scratch Save in ephemeral memory as a real
+  session-scoped project transaction; every catalog mutation survives each
+  persisted primitive cut and hard restart, replacing the retired page/index
+  lifecycle split.
 - Reopen package acquisition now reads the current owner-tree `package.json`,
   so user-added dependencies survive a revoked install claim and safe reinstall.
 - Resetting an inactive saved project now restores the catalog-active session
@@ -604,11 +654,9 @@
   browser-unit Playwright config writes HTML to `playwright-report/browser-unit`;
   the regression test now pins the browser-unit JOB's upload (a bare
   `path: playwright-report` check passed on the unrelated e2e lane).
-- **Multi-tab gap kept explicit, not silently dropped.** The premature empty
-  `multi-tab-story` epic is replaced by a discovery item
-  (`docs/backlog/playground/multi-tab-undefined-behavior.md`): the
-  two-tab / two-owner-over-one-OPFS silent-corruption risk stays a tracked,
-  loud gap (two live backlog items defer to it) instead of a bare deletion.
+- **Multi-tab writes are now refused visibly.** The Workbench's origin lock
+  prevents a second owner, and ADR-0293 maps that contention to a directed
+  occupied-tab screen while keeping multi-tab editing explicitly out of scope.
 
 ### Added (PR #113 review round 3)
 
@@ -1066,7 +1114,7 @@
   and a staged-then-re-edited file (`MM`) is orange/modified (was blue) — matching
   VS Code's green=added, orange=modified, red=deleted. The added-file dirty gutter
   no longer fires a spurious `HEAD:<newfile>` not-found error. Roots in
-  `@riftydev/git` `porcelainXY` completing the reachable code set.
+  `@riftydev/git` `porcelainStatusLines` completing the reachable code set.
 - **Discard now drops the open editor model.** `git restore` from the SCM panel
   closes the open tab for the path, so the discarded buffer can't be re-flushed to
   the owner on the next keystroke (silently resurrecting the change).

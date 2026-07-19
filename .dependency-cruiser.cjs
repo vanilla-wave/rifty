@@ -1,4 +1,4 @@
-/** check:arch — import-boundary enforcement. Rules: tools/checks/arch-rules.cjs */
-const { forbidden, options } = require('./tools/checks/arch-rules.cjs');
+/** check:arch pass 1 — emitted runtime topology. */
+const { runtimeOptions, runtimeTopologyRules } = require('./tools/checks/arch-rules.cjs');
 
-module.exports = { forbidden, options };
+module.exports = { forbidden: runtimeTopologyRules, options: runtimeOptions };

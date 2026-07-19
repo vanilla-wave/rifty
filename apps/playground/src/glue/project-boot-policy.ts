@@ -14,24 +14,43 @@ export function needsProjectChoiceOnBoot(index: ProjectIndex): boolean {
  */
 const PROJECT_PRESENCE_HINT_KEY = 'rifty.hasActiveProject';
 
-export function hasPersistedProjectHint(
-  storage: Storage | undefined = globalThis.localStorage,
-): boolean {
+export function shouldOpenInstantProjectChoice(input: {
+  readonly hasPersistedProject: boolean;
+  readonly requestedStarterId?: string;
+}): boolean {
+  return !input.hasPersistedProject && input.requestedStarterId === undefined;
+}
+
+export function hasPersistedProjectHint(storage?: Storage): boolean {
   try {
-    return storage?.getItem(PROJECT_PRESENCE_HINT_KEY) === '1';
+    return (storage ?? globalThis.localStorage)?.getItem(PROJECT_PRESENCE_HINT_KEY) === '1';
   } catch {
     return false; // private mode / storage denied → treat as first run
   }
 }
 
-export function recordProjectPresenceHint(
-  index: ProjectIndex,
-  storage: Storage | undefined = globalThis.localStorage,
-): void {
+export function recordProjectPresenceHint(index: ProjectIndex, storage?: Storage): void {
   try {
-    if (needsProjectChoiceOnBoot(index)) storage?.removeItem(PROJECT_PRESENCE_HINT_KEY);
-    else storage?.setItem(PROJECT_PRESENCE_HINT_KEY, '1');
+    const target = storage ?? globalThis.localStorage;
+    if (needsProjectChoiceOnBoot(index)) target?.removeItem(PROJECT_PRESENCE_HINT_KEY);
+    else target?.setItem(PROJECT_PRESENCE_HINT_KEY, '1');
   } catch {
     // storage denied → the next boot just falls back to index-driven timing
   }
+}
+
+export interface ProjectBootChoiceActions {
+  openStarterChoice(): void;
+  closeProjectChoice(): void;
+}
+
+/** Reconcile the speculative hint with every authoritative catalog publish. */
+export function reconcileProjectChoiceOnBoot(
+  index: ProjectIndex,
+  actions: ProjectBootChoiceActions,
+  storage?: Storage,
+): void {
+  recordProjectPresenceHint(index, storage);
+  if (needsProjectChoiceOnBoot(index)) actions.openStarterChoice();
+  else actions.closeProjectChoice();
 }

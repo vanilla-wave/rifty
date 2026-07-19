@@ -1086,6 +1086,88 @@ describe('Workbench owner controller', () => {
     expect(h.events).toContain('runtime-close:end');
   });
 
+  // Fault classes: provenance-lie × observable-order. The close fence rejects
+  // new durability work, while exact commit receipt/cleanup candidates still
+  // reach the VFS authority that validates their retained terminal identity.
+  it('drains correlated VFS receipts after the close fence while rejecting new work', async () => {
+    const h = harness();
+    const closeGate = deferred<void>();
+    h.createProject.mockImplementationOnce(async (input) => {
+      const runtime = {
+        handleFrame: vi.fn(async () => {}),
+        close: vi.fn(async () => closeGate.promise),
+      } satisfies WorkbenchOwnerProjectRuntime;
+      h.runtimeRecords.push({ input, runtime });
+      return runtime;
+    });
+    await h.controller.handle({
+      type: 'workbench:open-project',
+      opId: 'open-drain',
+      definition: definitionWire(),
+    });
+    const token = h.opened().projectToken;
+    const runtime = h.runtime().runtime;
+    const terminal = {
+      type: 'rifty:owner-vfs-commit-ack' as const,
+      operationId: 'commit-before-close',
+      ok: true as const,
+      ack: {
+        operationId: 'commit-before-close',
+        ownerEpoch: 'owner-a',
+        treeRevision: 2,
+        versions: [
+          {
+            path: '/.rifty/workbench/v1/projects/project-a/tree/src/main.ts',
+            version: 'file-v2',
+          },
+        ],
+      },
+    };
+
+    const closing = h.controller.handle({
+      type: 'workbench:close-project',
+      opId: 'close-drain',
+      projectToken: token,
+    });
+    await waitUntil(() => runtime.close.mock.calls.length === 1);
+
+    await h.controller.handle({
+      type: 'workbench:project-vfs',
+      projectToken: token,
+      frame: { type: 'rifty:owner-vfs-commit-received', terminal },
+    });
+    await h.controller.handle({
+      type: 'workbench:project-vfs',
+      projectToken: token,
+      frame: { type: 'rifty:owner-vfs-commit-cleanup', terminal },
+    });
+    await h.controller.handle({
+      type: 'workbench:project-vfs',
+      projectToken: token,
+      frame: {
+        type: 'rifty:owner-vfs-durability',
+        barrierId: 'barrier-before-close',
+        ownerEpoch: 'owner-a',
+        treeRevision: 2,
+      },
+    });
+    await h.controller.handle(vfsMessage(token));
+
+    expect(runtime.handleFrame.mock.calls.map(([frame]) => frame)).toEqual([
+      { type: 'vfs', frame: { type: 'rifty:owner-vfs-commit-received', terminal } },
+      { type: 'vfs', frame: { type: 'rifty:owner-vfs-commit-cleanup', terminal } },
+    ]);
+
+    closeGate.resolve();
+    await closing;
+    await h.controller.handle({
+      type: 'workbench:project-vfs',
+      projectToken: token,
+      frame: { type: 'rifty:owner-vfs-commit-cleanup', terminal },
+    });
+    expect(runtime.handleFrame).toHaveBeenCalledTimes(2);
+  });
+
   it('dispatches PTY control while an exec is pending and does not queue close behind the run', async () => {
     const h = harness();
     const execGate = deferred<void>();
@@ -1321,7 +1403,11 @@ describe('Workbench owner controller', () => {
 
     const shutdown = h.controller.handle({ type: 'workbench:shutdown' });
     expect(h.controller.handle({ type: 'workbench:shutdown' })).toBe(shutdown);
-    const lateFrame = h.controller.handle(ptyMessage(token, 'after-shutdown'));
+    const lateFrames = [
+      h.controller.handle(ptyMessage(token, 'after-shutdown')),
+      h.controller.handle(previewMessage(token)),
+      h.controller.handle(vfsMessage(token)),
+    ];
     const lateDelete = h.controller.handle({
       type: 'workbench:delete-project',
       opId: 'delete-after-shutdown',
@@ -1329,14 +1415,10 @@ describe('Workbench owner controller', () => {
     });
 
     expect(runtime.runtime.handleFrame).not.toHaveBeenCalled();
-    await Promise.all([lateFrame, lateDelete]);
-    expect(h.sent).toContainEqual({
-      type: 'workbench:failure',
-      error: {
-        name: 'ClosedHandleError',
-        message: 'ClosedHandleError: Workbench owner is closed',
-      },
-    });
+    await Promise.all([...lateFrames, lateDelete]);
+    expect(
+      h.sent.filter((message) => message.type === 'workbench:failure' && !('opId' in message)),
+    ).toEqual([]);
     expect(h.sent).toContainEqual({
       type: 'workbench:failure',
       opId: 'delete-after-shutdown',

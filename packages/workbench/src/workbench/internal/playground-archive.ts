@@ -1,10 +1,10 @@
 import type { FsSync } from '@riftydev/vfs';
-import { dirname, isAbsolute, normalizePath } from '@riftydev/vfs';
+import { isAbsolute, normalizePath } from '@riftydev/vfs';
 
 const MEBIBYTE = 1024 * 1024;
-const EXCLUDED_SEGMENTS = new Set(['node_modules', '.git', '.vite', 'dist', '.rifty']);
+const DERIVED_DIRECTORY_SEGMENTS = new Set(['node_modules', '.vite', 'dist']);
+const PRIVATE_ROOT_SEGMENT = '.rifty';
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-let importSequence = 0;
 
 export interface PlaygroundArchiveV1Limits {
   readonly maxJsonCodeUnits: number;
@@ -44,7 +44,6 @@ export interface PlaygroundArchiveImportCodec {
 export interface PreparedPlaygroundArchiveV1Import {
   /** Owner-private materialization view; every call returns fresh bytes. */
   decodedFiles(): readonly { readonly path: string; readonly bytes: Uint8Array }[];
-  apply(): void;
 }
 
 interface DecodedArchiveFile {
@@ -159,8 +158,13 @@ function assertPortableRelativePath(
   return segments;
 }
 
+function excludedArchiveSegment(segments: readonly string[]): string | undefined {
+  if (segments[0] === PRIVATE_ROOT_SEGMENT) return PRIVATE_ROOT_SEGMENT;
+  return segments.find((segment) => DERIVED_DIRECTORY_SEGMENTS.has(segment));
+}
+
 function assertNoReservedSegment(segments: readonly string[]): void {
-  const excluded = segments.find((segment) => EXCLUDED_SEGMENTS.has(segment));
+  const excluded = excludedArchiveSegment(segments);
   if (excluded !== undefined) {
     throw new TypeError(
       `Playground archive path uses reserved segment ${JSON.stringify(excluded)}`,
@@ -323,7 +327,7 @@ export function readBoundedPlaygroundArchiveTree(
     const path = childPath(frame.directory, child.name);
     const relative = relativePath(root, path);
     const segments = assertPortableRelativePath(relative, limits);
-    const reserved = segments.some((segment) => EXCLUDED_SEGMENTS.has(segment));
+    const reserved = excludedArchiveSegment(segments) !== undefined;
     if (reserved) {
       if (reservedPolicy === 'exclude') continue;
       assertNoReservedSegment(segments);
@@ -369,33 +373,6 @@ export function readBoundedPlaygroundArchiveTree(
   return Object.freeze(files);
 }
 
-function privateImportPaths(root: string): { readonly stage: string; readonly backup: string } {
-  importSequence += 1;
-  const base = `${dirname(root)}/.rifty-archive-v1-${String(importSequence)}`;
-  return { stage: `${base}-stage`, backup: `${base}-backup` };
-}
-
-function removeIfPresent(fs: FsSync, path: string): void {
-  if (fs.statSyncOrNull(path) !== null) fs.rmSync(path, { recursive: true, force: true });
-}
-
-function rollbackImport(
-  fs: FsSync,
-  root: string,
-  stage: string,
-  backup: string,
-  hadRoot: boolean,
-): void {
-  if (fs.statSyncOrNull(backup) !== null) {
-    removeIfPresent(fs, root);
-    fs.renameSync(backup, root);
-  } else if (!hadRoot) {
-    removeIfPresent(fs, root);
-  }
-  removeIfPresent(fs, stage);
-  removeIfPresent(fs, backup);
-}
-
 export function exportPlaygroundArchiveV1(
   fs: FsSync,
   rawRoot: string,
@@ -423,7 +400,7 @@ export function preparePlaygroundArchiveV1Import(
   codec: PlaygroundArchiveImportCodec = DEFAULT_IMPORT_CODEC,
 ): PreparedPlaygroundArchiveV1Import {
   assertLimits(limits);
-  const root = assertProjectRoot(fs, rawRoot, false);
+  assertProjectRoot(fs, rawRoot, false);
   if (typeof json !== 'string') throw new TypeError('Playground archive input must be a string');
   if (json.length > limits.maxJsonCodeUnits) {
     throw new RangeError('Playground archive JSON code-unit limit exceeded');
@@ -445,30 +422,5 @@ export function preparePlaygroundArchiveV1Import(
       Object.freeze(
         decoded.map(({ path, bytes }) => Object.freeze({ path, bytes: bytes.slice() })),
       ),
-    apply(): void {
-      const { stage, backup } = privateImportPaths(root);
-      const hadRoot = fs.statSyncOrNull(root) !== null;
-      try {
-        fs.mkdirSync(stage, { recursive: true });
-        for (const entry of decoded) {
-          const target = `${stage}/${entry.path}`;
-          fs.mkdirSync(dirname(target), { recursive: true });
-          fs.writeFileSync(target, entry.bytes.slice());
-        }
-        if (hadRoot) fs.renameSync(root, backup);
-        fs.renameSync(stage, root);
-        removeIfPresent(fs, backup);
-      } catch (error) {
-        try {
-          rollbackImport(fs, root, stage, backup, hadRoot);
-        } catch (rollbackError) {
-          throw new AggregateError(
-            [error, rollbackError],
-            'Playground archive import rollback failed',
-          );
-        }
-        throw error;
-      }
-    },
   });
 }

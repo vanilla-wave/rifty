@@ -45,6 +45,7 @@ export function createBrowserOpenWorkbench(options: BrowserWorkbenchCompositionO
         globalThis.navigator.serviceWorker.removeEventListener(type, listener),
     },
     owner,
+    reload: () => globalThis.location.reload(),
     ...(options.openOwnerProject === undefined
       ? {}
       : { openOwnerProject: options.openOwnerProject }),

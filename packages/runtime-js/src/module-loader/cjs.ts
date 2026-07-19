@@ -9,6 +9,32 @@ import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 
+const jsonStringifyPrimordial = JSON.stringify;
+const objectCreatePrimordial = Object.create;
+const objectDefinePropertyPrimordial = Object.defineProperty;
+const reflectApplyPrimordial = Reflect.apply;
+const stringEndsWithPrimordial = String.prototype.endsWith;
+const stringIndexOfPrimordial = String.prototype.indexOf;
+const stringLastIndexOfPrimordial = String.prototype.lastIndexOf;
+const stringSlicePrimordial = String.prototype.slice;
+const TypeErrorConstructor = TypeError;
+
+function stringEndsWith(value: string, suffix: string): boolean {
+  return reflectApplyPrimordial(stringEndsWithPrimordial, value, [suffix]) as boolean;
+}
+
+function stringIndexOf(value: string, search: string, fromIndex: number): number {
+  return reflectApplyPrimordial(stringIndexOfPrimordial, value, [search, fromIndex]) as number;
+}
+
+function stringLastIndexOf(value: string, search: string): number {
+  return reflectApplyPrimordial(stringLastIndexOfPrimordial, value, [search]) as number;
+}
+
+function stringSlice(value: string, start: number): string {
+  return reflectApplyPrimordial(stringSlicePrimordial, value, [start]) as string;
+}
+
 /**
  * Reject a `.ts`/`.tsx`/`.jsx` that reached the CJS path with a directed
  * {@link NotImplementedError}, instead of feeding raw TS to `new Function`
@@ -21,7 +47,7 @@ import type { Resolver } from './resolver.ts';
  * `docs/public/compat/modules.md` as not-supported.
  */
 function assertNotTsCjs(id: string): void {
-  if (id.endsWith('.ts') || id.endsWith('.tsx') || id.endsWith('.jsx')) {
+  if (stringEndsWith(id, '.ts') || stringEndsWith(id, '.tsx') || stringEndsWith(id, '.jsx')) {
     throw new NotImplementedError(
       'module-loader.ts-via-require',
       `require() of ${id} (TypeScript/JSX) is not supported: the esbuild transform is async, so a synchronous require() cannot transform it. A .ts/.tsx/.jsx is only loadable when its package scope is type:module (loads as ESM via import()).`,
@@ -34,6 +60,8 @@ export interface CjsLoaderDeps {
   readonly resolver: Resolver;
   /** Loader-owned mutable table shared by local require and createRequire. */
   readonly extensions: CjsExtensions;
+  /** Loader-owned `.js` identity; replacements own unregistered suffixes. */
+  readonly defaultJsExtension: CjsExtensionHook;
   /** Create a require bound to `fromFile`, including the shared extensions table. */
   makeRequire(fromFile: string): CjsRequire;
   /**
@@ -48,7 +76,7 @@ export interface CjsLoaderDeps {
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
 }
 
-export type CjsExtensionHook = (module: CjsModule, filename: string) => void;
+export type CjsExtensionHook = (this: CjsExtensions, module: CjsModule, filename: string) => void;
 export type CjsExtensions = Record<string, CjsExtensionHook>;
 
 export type CjsRequire = ((specifier: string) => unknown) & {
@@ -1841,8 +1869,8 @@ function compileCjsSource(
 }
 
 function createCjsModule(deps: CjsLoaderDeps): CjsModule {
-  const moduleObject = { exports: Object.create(null) } as CjsModule;
-  Object.defineProperty(moduleObject, '_compile', {
+  const moduleObject = { exports: objectCreatePrimordial(null) } as CjsModule;
+  objectDefinePropertyPrimordial(moduleObject, '_compile', {
     configurable: true,
     writable: true,
     value(source: string, filename: string): void {
@@ -1852,11 +1880,46 @@ function createCjsModule(deps: CjsLoaderDeps): CjsModule {
   return moduleObject;
 }
 
-export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
-  // Guard BEFORE touching the registry so repeated require() calls throw
-  // idempotently, not return a stale loading record (ADR-0052 D1 alt-C).
-  if (resolved.kind !== 'json') assertNotTsCjs(resolved.id);
+function findRegisteredExtension(filename: string, extensions: CjsExtensions): string | undefined {
+  const name = stringSlice(filename, stringLastIndexOf(filename, '/') + 1);
+  let startIndex = 0;
+  while (startIndex < name.length) {
+    const index = stringIndexOf(name, '.', startIndex);
+    if (index === -1) break;
+    startIndex = index + 1;
+    if (index === 0) continue;
+    const extension = stringSlice(name, index);
+    if ((extensions as Record<string, unknown>)[extension]) return extension;
+  }
+  return undefined;
+}
 
+interface CjsExtensionSelection {
+  readonly key: string;
+  readonly hook: unknown;
+  readonly usesLoaderDefaultJs: boolean;
+}
+
+function selectCjsExtension(filename: string, deps: CjsLoaderDeps): CjsExtensionSelection {
+  const registeredExtension = findRegisteredExtension(filename, deps.extensions);
+  const key = registeredExtension ?? '.js';
+  const hook: unknown = deps.extensions[key];
+  return {
+    key,
+    hook,
+    usesLoaderDefaultJs: registeredExtension === undefined && hook === deps.defaultJsExtension,
+  };
+}
+
+function assertCjsExtensionHook(hook: unknown, key: string): asserts hook is CjsExtensionHook {
+  if (typeof hook !== 'function') {
+    throw new TypeErrorConstructor(
+      `require.extensions[${jsonStringifyPrimordial(key)}] is not a function`,
+    );
+  }
+}
+
+export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
   const { registry } = deps;
   let existing = registry.get(resolved.id);
   if (existing && existing.state === 'loaded') return existing.exports;
@@ -1872,39 +1935,28 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
     registry.invalidate(resolved.id);
     existing = undefined;
   }
+
   const record = existing ?? registry.getOrCreate(resolved.id, resolved.kind);
   const moduleObject = createCjsModule(deps);
   record.cjsModule = moduleObject;
   record.exports = moduleObject.exports;
 
-  if (resolved.kind === 'json') {
-    try {
-      moduleObject.exports = JSON.parse(resolved.source) as Record<string, unknown>;
-    } catch (error) {
-      failCjsRecord(registry, record, error);
-    }
-    record.exports = moduleObject.exports;
-    record.state = 'loaded';
-    return record.exports;
-  }
-
-  if (resolved.kind === 'text') {
-    // Text-asset import (ADR-0067): the module value IS the raw file contents.
-    // `require('./f.txt')` returns the string; ESM `import x from './f.txt'`
-    // routes here, then `cjsNamespaceFor` maps the non-object export to
-    // `default`.
-    moduleObject.exports = resolved.source as unknown as Record<string, unknown>;
-    record.exports = moduleObject.exports;
-    record.state = 'loaded';
-    return record.exports;
-  }
-
   try {
-    const extension = deps.extensions['.js'];
-    if (typeof extension !== 'function') {
-      throw new TypeError("require.extensions['.js'] is not a function");
+    const selection = selectCjsExtension(resolved.id, deps);
+
+    if (selection.usesLoaderDefaultJs) assertNotTsCjs(resolved.id);
+
+    if (resolved.kind === 'text' && selection.usesLoaderDefaultJs) {
+      // Text-asset import (ADR-0067): the module value IS the raw file contents.
+      // A replaced `.js` owns Node's otherwise-unregistered suffix fallback.
+      moduleObject.exports = resolved.source as unknown as Record<string, unknown>;
+      record.exports = moduleObject.exports;
+      record.state = 'loaded';
+      return record.exports;
     }
-    extension(moduleObject, resolved.id);
+
+    assertCjsExtensionHook(selection.hook, selection.key);
+    reflectApplyPrimordial(selection.hook, deps.extensions, [moduleObject, resolved.id]);
   } catch (error) {
     failCjsRecord(registry, record, error);
   }

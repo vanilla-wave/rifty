@@ -123,7 +123,51 @@ async function expectPending(promise: Promise<unknown>): Promise<void> {
   expect(settled).toBe(false);
 }
 
+type PromiseSettlement =
+  | { readonly kind: 'resolved' }
+  | { readonly kind: 'rejected'; readonly error: unknown }
+  | { readonly kind: 'pending' };
+
+async function immediateSettlement(promise: Promise<unknown>): Promise<PromiseSettlement> {
+  return Promise.race([
+    promise.then<PromiseSettlement, PromiseSettlement>(
+      () => ({ kind: 'resolved' }),
+      (error: unknown) => ({ kind: 'rejected', error }),
+    ),
+    Promise.resolve().then(() => ({ kind: 'pending' }) as const),
+  ]);
+}
+
+function failureMessages(error: unknown): readonly string[] {
+  const failures = error instanceof AggregateError ? error.errors : [error];
+  return failures.map((failure) =>
+    failure instanceof Error ? `${failure.name}: ${failure.message}` : String(failure),
+  );
+}
+
 describe('Workbench owner port startup contract', () => {
+  // Fault class: unbounded-read. Raw owner readiness and raw owner exit are
+  // finite lifecycle observations owned by this one admission boundary.
+  it('times out and terminates a hung-but-alive physical owner before readiness', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness();
+      const opening = h.port.start(ownerInput());
+      void opening.catch(() => {});
+
+      await vi.runAllTimersAsync();
+
+      const outcome = await immediateSettlement(opening);
+      expect(outcome.kind).toBe('rejected');
+      if (outcome.kind !== 'rejected') return;
+      expect(failureMessages(outcome.error).join('\n')).toMatch(/owner.*ready.*timed out/i);
+      expect(h.close).toHaveBeenCalledTimes(1);
+      expect(h.storageSnapshot).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Fault class: provenance-lie. Storage comes from the admitted owner after
   // ready, never by re-deriving a snapshot from the requested page policy.
   it('awaits owner readiness and returns the exact owner-born storage snapshot', async () => {
@@ -387,6 +431,45 @@ describe('Workbench owner port startup contract', () => {
 });
 
 describe('Workbench semantic owner close contract', () => {
+  // Fault class: provenance-lie. Missing health transport cannot be represented
+  // as a healthy no-op subscription.
+  it('loudly rejects a missing physical owner health channel', async () => {
+    const h = harness();
+    const opening = h.port.start(ownerInput());
+    h.ready.resolve(undefined);
+    const { owner } = await opening;
+
+    expect(() => owner.subscribeHealth(() => {})).toThrow(/owner health.*unavailable/i);
+
+    const closing = owner.close();
+    h.closed.resolve(0);
+    await closing;
+  });
+
+  it('rejects one stable close promise when physical owner exit stays hung', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness();
+      const opening = h.port.start(ownerInput());
+      h.ready.resolve(undefined);
+      const { owner } = await opening;
+
+      const closing = owner.close();
+      void closing.catch(() => {});
+      expect(owner.close()).toBe(closing);
+      await vi.runAllTimersAsync();
+
+      const outcome = await immediateSettlement(closing);
+      expect(outcome.kind).toBe('rejected');
+      if (outcome.kind !== 'rejected') return;
+      expect(failureMessages(outcome.error).join('\n')).toMatch(/owner.*exit.*timed out/i);
+      expect(h.close).toHaveBeenCalledTimes(1);
+      expect(owner.close()).toBe(closing);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('returns one stable close promise, terminates once, and waits for physical exit', async () => {
     const h = harness();
     const opening = h.port.start(ownerInput());

@@ -170,6 +170,12 @@ deployment URLs, and registry configuration before effects. One page claim
 plus origin-wide exclusive Web Lock `rifty:workbench:v1` permits one Workbench
 and one active project in v0. Contention rejects; crash releases the Web Lock.
 
+**Correction 2026-07-18 (ADR-0293):** callback-null origin contention rejects
+with public `WorkbenchOriginOccupiedError`, so a host can distinguish the
+ordinary competing-page outcome without matching text. Same-page duplicate
+open and every capability/request/initialization failure remain fatal. The
+single claim and Workbench-lifetime lease are unchanged.
+
 ### Configuration and acquisition
 
 The stable root configuration remains:

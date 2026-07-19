@@ -1,5 +1,6 @@
 import { SW_FRAME_VERSION, SW_PING, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 import { describe, expect, it, vi } from 'vitest';
+import { ClosedHandleError, WorkbenchOriginOccupiedError } from './errors.ts';
 import { type WorkbenchStorageSnapshot, createOpenWorkbench } from './open-workbench.ts';
 import { createUnusedOwnerProjectHandles } from './project-content.test-fixture.ts';
 import { type InspectedProjectDefinition, projects } from './project-definition.ts';
@@ -155,6 +156,11 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     backend: 'opfs',
     durability: 'durable',
   });
+  let rejectOwnerClosed!: (error: unknown) => void;
+  const ownerClosed = new Promise<unknown>((_resolve, reject) => {
+    rejectOwnerClosed = reject;
+  });
+  const ownerHealthListeners = new Set<Parameters<OwnerHandle['subscribeHealth']>[0]>();
   let urlContext = URL_CONTEXT;
 
   const controller = {
@@ -218,6 +224,11 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     close: vi.fn(async (): Promise<void> => {}),
   };
   const ownerHandle: OwnerHandle = {
+    closed: ownerClosed,
+    subscribeHealth(listener) {
+      ownerHealthListeners.add(listener);
+      return () => ownerHealthListeners.delete(listener);
+    },
     openProject<TReady>(definition: InspectedProjectDefinition<TReady>) {
       return ownerHandleCalls.openProject(definition) as Promise<ProjectSession<TReady>>;
     },
@@ -249,6 +260,7 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
       });
     }),
   } satisfies OpenWorkbenchDependencies['owner'];
+  const reload = vi.fn();
 
   const dependencies = {
     urlContext: () => urlContext,
@@ -256,6 +268,7 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     locks: { request: sharedLocks.request },
     serviceWorker,
     owner,
+    reload,
     timers: {
       setTimeout: clock.setTimeout,
       clearTimeout: clock.clearTimeout,
@@ -273,6 +286,7 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     serviceWorker,
     storage,
     owner,
+    reload,
     ownerHandle: ownerHandleCalls,
     ownerProjectCloses,
     opfsBackend,
@@ -288,6 +302,19 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     },
     failOwnerStart(error: unknown) {
       ownerStartFailure = error;
+    },
+    failOwnerClosed(error: unknown) {
+      rejectOwnerClosed(error);
+    },
+    failOwnerInvariant(summary: string) {
+      for (const listener of [...ownerHealthListeners]) {
+        listener({ kind: 'fatal-invariant', summary });
+      }
+    },
+    failOwnerPersistence(recover: () => Promise<void>) {
+      for (const listener of [...ownerHealthListeners]) {
+        listener({ kind: 'persistence', status: 'degraded', recover });
+      }
     },
     setOwnerStorageSnapshot(snapshot: WorkbenchStorageSnapshot) {
       ownerStorageSnapshot = Object.freeze(snapshot);
@@ -830,7 +857,12 @@ describe('openWorkbench configuration and host admission', () => {
     const secondPage = harness(locks);
     const first = await firstPage.open(validOptions());
 
-    await expect(secondPage.open(validOptions())).rejects.toThrow(/Workbench.*busy|lock/i);
+    const contention = await secondPage.open(validOptions()).catch((error: unknown) => error);
+    expect(contention).toBeInstanceOf(WorkbenchOriginOccupiedError);
+    expect(contention).toMatchObject({
+      name: 'WorkbenchOriginOccupiedError',
+      message: expect.stringContaining('another page'),
+    });
     expect(secondPage.serviceWorker.register).not.toHaveBeenCalled();
     expect(secondPage.storage.openOpfs).not.toHaveBeenCalled();
     expect(secondPage.owner.start).not.toHaveBeenCalled();
@@ -840,6 +872,28 @@ describe('openWorkbench configuration and host admission', () => {
     expect(locks.held).toBe(true);
     await second.close();
   });
+
+  it.each(['throw', 'reject'] as const)(
+    'preserves a lock request %s as fatal instead of classifying it occupied',
+    async (kind) => {
+      const h = harness();
+      const cause = new DOMException('storage bucket denied', 'SecurityError');
+      h.locks.request.mockImplementationOnce(() => {
+        if (kind === 'throw') throw cause;
+        return Promise.reject(cause);
+      });
+
+      const failure = await h.open(validOptions()).catch((error: unknown) => error);
+
+      expect(failure).toBe(cause);
+      expect(failure).not.toBeInstanceOf(WorkbenchOriginOccupiedError);
+      expect(h.serviceWorker.register).not.toHaveBeenCalled();
+      expect(h.owner.start).not.toHaveBeenCalled();
+
+      const retried = await h.open(validOptions());
+      await retried.close();
+    },
+  );
 });
 
 describe('openWorkbench service-worker proof', () => {
@@ -914,6 +968,83 @@ describe('openWorkbench service-worker proof', () => {
 });
 
 describe('openWorkbench storage and project cardinality', () => {
+  it('publishes an unexpected physical owner exit as persistent unavailable health', async () => {
+    const h = harness();
+    const workbench = await h.open(validOptions());
+    const observed: string[] = [];
+    workbench.health.subscribe((snapshot) => observed.push(snapshot.disposition));
+
+    h.failOwnerClosed(new Error('worker exited with private transport detail'));
+    await waitUntil(() => workbench.health.snapshot().disposition === 'unavailable');
+
+    expect(workbench.health.snapshot()).toEqual({
+      disposition: 'unavailable',
+      issues: [
+        {
+          kind: 'unavailable',
+          scope: 'owner',
+          summary: 'Workbench owner exited unexpectedly',
+          recovery: 'reload',
+        },
+      ],
+    });
+    expect(observed).toEqual(['healthy', 'unavailable']);
+    expect(h.ownerHandle.close).not.toHaveBeenCalled();
+
+    await workbench.close();
+  });
+
+  it('publishes owner protocol corruption through the distinct fatal invariant adapter', async () => {
+    const h = harness();
+    const workbench = await h.open(validOptions());
+
+    h.failOwnerInvariant('Workbench protocol invariant failed');
+
+    expect(workbench.health.snapshot()).toEqual({
+      disposition: 'fatal',
+      issues: [
+        {
+          kind: 'fatal',
+          scope: 'invariant',
+          summary: 'Workbench protocol invariant failed',
+          recovery: 'reload',
+        },
+      ],
+    });
+    await expect(workbench.health.recover('reload')).resolves.toBeUndefined();
+    expect(h.reload).toHaveBeenCalledTimes(1);
+    await workbench.close();
+  });
+
+  it('publishes automatic project durability failure through the active health generation', async () => {
+    const h = harness();
+    const workbench = await h.open(validOptions());
+    const session = await workbench.openProject(
+      projects.vite({ id: 'project-a', files: { '/index.html': '<main>A</main>' } }),
+    );
+    const recover = vi.fn(async () => {});
+
+    h.failOwnerPersistence(recover);
+
+    expect(workbench.health.snapshot()).toEqual({
+      disposition: 'degraded',
+      issues: [
+        {
+          kind: 'degraded',
+          scope: 'persistence',
+          summary: 'Workspace persistence failed',
+          recovery: 'persistence',
+        },
+      ],
+    });
+    await expect(workbench.health.recover('persistence')).resolves.toBeUndefined();
+    expect(recover).toHaveBeenCalledTimes(1);
+    expect(workbench.health.snapshot()).toEqual({ disposition: 'healthy', issues: [] });
+
+    await session.close();
+    await workbench.close();
+  });
+
   it('required exposes the owner-selected durable OPFS snapshot and owner failures', async () => {
     const success = harness();
     const workbench = await success.open(validOptions());
@@ -1050,6 +1181,30 @@ describe('openWorkbench storage and project cardinality', () => {
       ),
     ).toBe('pending');
     await close;
+    expect(h.locks.held).toBe(false);
+  });
+
+  // Fault class: observable-order. Workbench close deliberately starts owner
+  // termination while admitted session teardown is still draining. A
+  // ClosedHandleError caused by that successful termination is cancellation,
+  // not a second close failure.
+  it('completes public Workbench close when owner termination cancels active teardown', async () => {
+    const h = harness();
+    const workbench = await h.open(validOptions());
+    await workbench.openProject(
+      projects.vite({ id: 'active', files: { '/index.html': '<h1>active</h1>' } }),
+    );
+    const closeProject = h.ownerProjectCloses[0];
+    if (closeProject === undefined) throw new Error('missing active project close');
+    closeProject.mockRejectedValueOnce(
+      new AggregateError(
+        [new ClosedHandleError('Workbench owner teardown')],
+        'owner termination cancelled session drains',
+      ),
+    );
+
+    await expect(workbench.close()).resolves.toBeUndefined();
+    expect(h.ownerHandle.close).toHaveBeenCalledTimes(1);
     expect(h.locks.held).toBe(false);
   });
 });

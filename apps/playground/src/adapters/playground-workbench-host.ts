@@ -1,8 +1,10 @@
+import { WorkbenchOriginOccupiedError } from '@riftydev/workbench';
 import devServerWorkerUrl from '@riftydev/workbench/dev-server-worker?worker&url';
 import kernelWorkerUrl from '@riftydev/workbench/kernel-worker?worker&url';
 import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
 import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
 import type {
+  OpenPlaygroundWorkbench,
   PlaygroundWorkbench,
   PlaygroundWorkbenchOptions,
 } from '@riftydev/workbench/playground';
@@ -71,10 +73,32 @@ export function playgroundWorkbenchOptions(): PlaygroundWorkbenchOptions {
 }
 
 export interface OpenedPlaygroundAppWorkbench {
+  readonly status: 'opened';
   readonly workbench: PlaygroundWorkbench;
 }
 
-export async function openPlaygroundAppWorkbench(): Promise<OpenedPlaygroundAppWorkbench> {
-  const workbench = await openPlaygroundWorkbench(playgroundWorkbenchOptions());
-  return Object.freeze({ workbench });
+export interface OccupiedPlaygroundAppWorkbench {
+  readonly status: 'occupied';
 }
+
+export type PlaygroundAppWorkbenchOpenOutcome =
+  | OpenedPlaygroundAppWorkbench
+  | OccupiedPlaygroundAppWorkbench;
+
+export function createOpenPlaygroundAppWorkbench(
+  open: OpenPlaygroundWorkbench,
+): () => Promise<PlaygroundAppWorkbenchOpenOutcome> {
+  return async () => {
+    try {
+      const workbench = await open(playgroundWorkbenchOptions());
+      return Object.freeze({ status: 'opened' as const, workbench });
+    } catch (error) {
+      if (error instanceof WorkbenchOriginOccupiedError) {
+        return Object.freeze({ status: 'occupied' as const });
+      }
+      throw error;
+    }
+  };
+}
+
+export const openPlaygroundAppWorkbench = createOpenPlaygroundAppWorkbench(openPlaygroundWorkbench);

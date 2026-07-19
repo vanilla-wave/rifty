@@ -1,7 +1,7 @@
 import type {
   PlaygroundScmBlob,
-  PlaygroundScmChange,
   PlaygroundScmDiff,
+  PlaygroundScmSupportedChange,
 } from '@riftydev/workbench/playground';
 import { describe, expect, it } from 'vitest';
 import { playgroundScmDiffPresentation } from './playground-scm-diff-presentation.ts';
@@ -10,8 +10,15 @@ function blob(source: PlaygroundScmBlob['source']): PlaygroundScmBlob {
   return Object.freeze({ source, bytes: new Uint8Array() });
 }
 
-function presentation(area: PlaygroundScmChange['area'], original: PlaygroundScmBlob['source']) {
-  const change: PlaygroundScmChange = Object.freeze({ path: '/README.md', code: 'MM', area });
+function presentation(
+  area: PlaygroundScmSupportedChange['area'],
+  original: PlaygroundScmBlob['source'],
+) {
+  const change: PlaygroundScmSupportedChange = Object.freeze({
+    path: '/README.md',
+    code: 'MM',
+    area,
+  });
   const diff: PlaygroundScmDiff = Object.freeze({
     original: blob(original),
     modified: blob(area === 'staged' ? 'index' : 'working'),

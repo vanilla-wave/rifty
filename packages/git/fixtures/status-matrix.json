@@ -1,0 +1,84 @@
+{
+  "provenance": {
+    "gitVersion": "2.50.1",
+    "locale": "C",
+    "command": "git status --porcelain -- a.txt"
+  },
+  "cases": [
+    {
+      "code": "000",
+      "setup": [],
+      "porcelain": ""
+    },
+    {
+      "code": "003",
+      "setup": ["write-index", "add", "fs-rm"],
+      "porcelain": "AD a.txt\n"
+    },
+    {
+      "code": "020",
+      "setup": ["write-worktree"],
+      "porcelain": "?? a.txt\n"
+    },
+    {
+      "code": "022",
+      "setup": ["write-index", "add"],
+      "porcelain": "A  a.txt\n"
+    },
+    {
+      "code": "023",
+      "setup": ["write-index", "add", "write-worktree"],
+      "porcelain": "AM a.txt\n"
+    },
+    {
+      "code": "100",
+      "setup": ["seed-head", "remove-index", "fs-rm"],
+      "porcelain": "D  a.txt\n"
+    },
+    {
+      "code": "101",
+      "setup": ["seed-head", "fs-rm"],
+      "porcelain": " D a.txt\n"
+    },
+    {
+      "code": "103",
+      "setup": ["seed-head", "write-index", "add", "fs-rm"],
+      "porcelain": "MD a.txt\n"
+    },
+    {
+      "code": "110",
+      "setup": ["seed-head", "remove-index"],
+      "porcelain": "D  a.txt\n?? a.txt\n"
+    },
+    {
+      "code": "111",
+      "setup": ["seed-head"],
+      "porcelain": ""
+    },
+    {
+      "code": "113",
+      "setup": ["seed-head", "write-index", "add", "write-head"],
+      "porcelain": "MM a.txt\n"
+    },
+    {
+      "code": "120",
+      "setup": ["seed-head", "remove-index", "write-worktree"],
+      "porcelain": "D  a.txt\n?? a.txt\n"
+    },
+    {
+      "code": "121",
+      "setup": ["seed-head", "write-worktree"],
+      "porcelain": " M a.txt\n"
+    },
+    {
+      "code": "122",
+      "setup": ["seed-head", "write-index", "add"],
+      "porcelain": "M  a.txt\n"
+    },
+    {
+      "code": "123",
+      "setup": ["seed-head", "write-index", "add", "write-worktree"],
+      "porcelain": "MM a.txt\n"
+    }
+  ]
+}

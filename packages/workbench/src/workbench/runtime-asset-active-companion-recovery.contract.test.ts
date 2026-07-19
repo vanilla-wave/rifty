@@ -55,6 +55,7 @@ import {
 import type {
   PlaygroundProjectOpenOptions,
   PlaygroundProjectPlan,
+  PlaygroundSessionTools,
   PlaygroundWorkbench,
   PlaygroundWorkbenchOptions,
 } from './playground.ts';
@@ -67,6 +68,7 @@ import {
   createProjectTerminal,
 } from './project-terminal.ts';
 import type {
+  PlaygroundOwnerSessionToolLifecycle,
   PlaygroundWorkbenchOwnerHandle,
   WorkbenchOwnerHandle,
   WorkbenchOwnerPort,
@@ -285,6 +287,30 @@ interface Harness {
   ownerClearCalls(): number;
 }
 
+function healthOnlySessionTools(): PlaygroundOwnerSessionToolLifecycle {
+  const unavailable = Object.freeze({});
+  return Object.freeze({
+    tools: Object.freeze({
+      typescript: unavailable as PlaygroundSessionTools['typescript'],
+      scm: unavailable as PlaygroundSessionTools['scm'],
+      archive: unavailable as PlaygroundSessionTools['archive'],
+      previews: unavailable as PlaygroundSessionTools['previews'],
+      awaitDurability: async () => {},
+    }),
+    subscribeOperationalHealth(
+      listener: Parameters<PlaygroundOwnerSessionToolLifecycle['subscribeOperationalHealth']>[0],
+    ) {
+      listener({ scope: 'scm', status: 'healthy' });
+      listener({ scope: 'preview', status: 'healthy' });
+      return () => {};
+    },
+    async recoverOperationalHealth() {
+      throw new Error('Recovery proof has no degraded session-tool scope');
+    },
+    close: async () => {},
+  });
+}
+
 async function harness(): Promise<Harness> {
   const pair = createMemoryFs();
   const ownerComposition = createOwnerVfsAuthorityComposition(pair.fsSync, {
@@ -498,13 +524,16 @@ async function harness(): Promise<Harness> {
       );
       return await createOwnerSession(definition, opened);
     },
-    sessionTools(): never {
-      throw new Error('Recovery proof does not open the independent TS/SCM/archive companion');
-    },
+    sessionTools: healthOnlySessionTools,
   });
   let ownerClosePromise: Promise<void> | null = null;
+  let resolveOwnerClosed!: (reason: unknown) => void;
+  const ownerClosed = new Promise<unknown>((resolve) => {
+    resolveOwnerClosed = resolve;
+  });
   let ownerClearCalls = 0;
   const ownerHandle: WorkbenchOwnerHandle = Object.freeze({
+    closed: ownerClosed,
     openProject: async () => {
       throw new Error('Recovery proof routes opens through the Playground companion');
     },
@@ -515,6 +544,7 @@ async function harness(): Promise<Harness> {
       return manager.admin.clearCache();
     },
     playground: playgroundHandle,
+    subscribeHealth: () => () => {},
     close() {
       ownerClosePromise ??= (async () => {
         await packageState.quiesce();
@@ -522,6 +552,7 @@ async function harness(): Promise<Harness> {
         await manager.close();
         await authority.flush();
       })();
+      void ownerClosePromise.then(resolveOwnerClosed, resolveOwnerClosed);
       return ownerClosePromise;
     },
   });

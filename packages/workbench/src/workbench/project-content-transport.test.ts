@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { HostCommitRequest } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
 import { ProjectFileOperationError } from './errors.ts';
@@ -42,6 +42,7 @@ function snapshot(
 
 function harness() {
   const sent: PageProjectVfsFrame[] = [];
+  const protocolErrors: VfsCommitProtocolError[] = [];
   let alive = true;
   let sequence = 0;
   const transport = createProjectContentTransport({
@@ -53,10 +54,12 @@ function harness() {
     isAlive: () => alive,
     generateRequestId: () => `transport-${String(++sequence)}`,
     commitTimeoutMs: 1_000,
+    reportProtocolError: (error) => protocolErrors.push(error),
   });
   return {
     transport,
     sent,
+    protocolErrors,
     setAlive(value: boolean) {
       alive = value;
     },
@@ -90,6 +93,28 @@ function commitFrame(sent: readonly PageProjectVfsFrame[]) {
 }
 
 describe('ProjectContentTransport', () => {
+  // Fault class: unbounded-read. Initial state and finite file reads share the
+  // project content correlation deadline and fence the transport on timeout.
+  it('loudly bounds a missing initial snapshot and a hung atomic read', async () => {
+    vi.useFakeTimers();
+    try {
+      const unopened = harness();
+      void unopened.transport.ready.catch(() => {});
+      await vi.advanceTimersByTimeAsync(1_000);
+      await expect(unopened.transport.ready).rejects.toThrow(/initial snapshot.*timed out/i);
+
+      const opened = harness();
+      opened.acceptSnapshot();
+      const content = await opened.transport.ready;
+      const reading = content.files.readFile('/src/main.ts');
+      void reading.catch(() => {});
+      await vi.advanceTimersByTimeAsync(1_000);
+      await expect(reading).rejects.toBeInstanceOf(ProjectFileOperationError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('requests and awaits the first exact snapshot', async () => {
     const h = harness();
     expect(h.sent).toEqual([{ type: 'workbench:project-vfs-snapshot-request' }]);
@@ -426,6 +451,8 @@ describe('ProjectContentTransport', () => {
       error: { name: 'OwnerStateError', message: 'state delivery failed' },
     });
 
+    expect(h.protocolErrors).toHaveLength(1);
+    expect(h.protocolErrors[0]).toBeInstanceOf(VfsCommitProtocolError);
     expect(document.snapshot()).toMatchObject({ staleReason: 'reset', closed: false });
     expect(content.files.snapshot().entries).toEqual([]);
     await expect(content.files.readFile('/src/main.ts')).rejects.toBeInstanceOf(

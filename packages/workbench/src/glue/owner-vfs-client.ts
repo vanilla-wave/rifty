@@ -49,6 +49,7 @@ export interface OwnerVfsClientOptions {
   readonly generateBarrierId?: () => string;
   readonly timers?: OwnerVfsClientTimers;
   readonly commitReplayMs?: number;
+  readonly commitAckTimeoutMs?: number;
   readonly commitReceiptRetryMs?: number;
   readonly durabilityAckTimeoutMs?: number;
   readonly reportProtocolError?: (error: VfsCommitProtocolError) => void;
@@ -60,7 +61,7 @@ export interface OwnerVfsClient {
   applyHostCommit(request: HostCommitRequest): Promise<HostCommitAck>;
   durabilityBarrier(treeRevision: TreeRevision): Promise<OwnerVfsDurabilityReceipt>;
   /** Certified transport exit: reject admitted work and stop every retry. */
-  disconnect(): void;
+  disconnect(error?: Error): void;
   /** Local teardown with one caller-owned error for pending and future work. */
   close(error?: Error): void;
 }
@@ -72,6 +73,7 @@ interface PendingCommit {
   readonly resolve: (ack: HostCommitAck) => void;
   readonly reject: (error: Error) => void;
   replayTimer: TimerHandle | null;
+  ackTimer: TimerHandle | null;
   candidate: OwnerVfsCommitTerminal | null;
 }
 
@@ -87,6 +89,7 @@ interface PendingDurability {
 }
 
 const DEFAULT_COMMIT_REPLAY_MS = 250;
+const DEFAULT_COMMIT_ACK_TIMEOUT_MS = 60_000;
 const DEFAULT_COMMIT_RECEIPT_RETRY_MS = 250;
 const DEFAULT_DURABILITY_ACK_TIMEOUT_MS = 35_000;
 
@@ -123,6 +126,11 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
     DEFAULT_COMMIT_REPLAY_MS,
     'owner VFS commit replay delay',
   );
+  const commitAckTimeoutMs = positiveDelay(
+    options.commitAckTimeoutMs,
+    DEFAULT_COMMIT_ACK_TIMEOUT_MS,
+    'owner VFS commit ack timeout',
+  );
   const commitReceiptRetryMs = positiveDelay(
     options.commitReceiptRetryMs,
     DEFAULT_COMMIT_RECEIPT_RETRY_MS,
@@ -141,6 +149,7 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
   const cleanups = new Map<string, PendingTerminalDelivery>();
   const durability = new Map<string, PendingDurability>();
   let disconnected = false;
+  let disconnectError: Error | null = null;
   let closedError: Error | null = null;
 
   const postReceipt = (operationId: string): void => {
@@ -238,6 +247,7 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
     if (!pending) return null;
     commits.delete(operationId);
     if (pending.replayTimer !== null) timers.clearTimeout(pending.replayTimer);
+    if (pending.ackTimer !== null) timers.clearTimeout(pending.ackTimer);
     stopReceipt(operationId);
     return pending;
   };
@@ -248,6 +258,10 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
     if (pending.replayTimer !== null) {
       timers.clearTimeout(pending.replayTimer);
       pending.replayTimer = null;
+    }
+    if (pending.ackTimer !== null) {
+      timers.clearTimeout(pending.ackTimer);
+      pending.ackTimer = null;
     }
     pending.candidate = candidate;
     receiveTerminal(candidate);
@@ -381,6 +395,7 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
 
   const unavailableCommit = (): Error | null => {
     if (closedError !== null) return closedError;
+    if (disconnectError !== null) return disconnectError;
     if (disconnected || !options.isAlive()) {
       return new Error('workspace owner has exited — conditional VFS commit was not applied.');
     }
@@ -414,15 +429,25 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
       resolveCommit = resolve;
       rejectCommit = reject;
     });
-    commits.set(request.operationId, {
+    const pending: PendingCommit = {
       request: ownedRequest,
       ownerEpoch,
       promise,
       resolve: resolveCommit,
       reject: rejectCommit,
       replayTimer: null,
+      ackTimer: null,
       candidate: null,
-    });
+    };
+    commits.set(request.operationId, pending);
+    pending.ackTimer = timers.setTimeout(() => {
+      const timedOut = takeCommit(request.operationId);
+      timedOut?.reject(
+        new Error(
+          `owner VFS commit ack timed out after ${String(commitAckTimeoutMs)}ms (${request.operationId})`,
+        ),
+      );
+    }, commitAckTimeoutMs);
     let sent = false;
     try {
       sent = options.send({ type: 'rifty:owner-vfs-commit', request: ownedRequest });
@@ -440,6 +465,7 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
 
   const unavailableDurability = (): Error | null => {
     if (closedError !== null) return closedError;
+    if (disconnectError !== null) return disconnectError;
     if (disconnected || !options.isAlive()) {
       return new Error('workspace owner has exited — VFS durability cannot be proven.');
     }
@@ -493,21 +519,26 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
     }
   };
 
-  const disconnect = (): void => {
+  const disconnect = (error?: Error): void => {
     if (disconnected || closedError !== null) return;
     disconnected = true;
+    disconnectError = error ?? null;
     for (const [operationId, pending] of commits) {
       commits.delete(operationId);
       if (pending.replayTimer !== null) timers.clearTimeout(pending.replayTimer);
+      if (pending.ackTimer !== null) timers.clearTimeout(pending.ackTimer);
       pending.reject(
-        new Error(`workspace owner exited before conditional VFS commit ack (${operationId})`),
+        error ??
+          new Error(`workspace owner exited before conditional VFS commit ack (${operationId})`),
       );
     }
     clearDeliveries();
     for (const [barrierId, pending] of durability) {
       durability.delete(barrierId);
       timers.clearTimeout(pending.timer);
-      pending.reject(new Error(`workspace owner exited before VFS durability ack (${barrierId})`));
+      pending.reject(
+        error ?? new Error(`workspace owner exited before VFS durability ack (${barrierId})`),
+      );
     }
   };
 
@@ -517,6 +548,7 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
     for (const [operationId, pending] of commits) {
       commits.delete(operationId);
       if (pending.replayTimer !== null) timers.clearTimeout(pending.replayTimer);
+      if (pending.ackTimer !== null) timers.clearTimeout(pending.ackTimer);
       pending.reject(error);
     }
     clearDeliveries();

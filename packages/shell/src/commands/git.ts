@@ -8,16 +8,17 @@
  * `status --porcelain` maps isomorphic-git's 3-char statusMatrix code
  * (`${head}${workdir}${stage}`) to git's two-column `XY` porcelain-v1 output.
  * The mapping was cross-checked against real git 2.50.1 (host) — see
- * {@link porcelainXY}.
+ * {@link porcelainStatusLines}.
  */
 import {
   EMPTY_COMMIT_MESSAGE_ERROR,
-  type StatusEntry,
+  type SupportedStatusEntry,
   assertSupportedTransport,
   commitRefusal,
   makeGit,
   pathspecMatch,
-  porcelainXY,
+  porcelainStatusLines,
+  requireSupportedStatusEntries,
   vfsToGitFs,
 } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
@@ -60,6 +61,11 @@ function commandVfs(ctx: CommandContext): Vfs | null {
  * (public API only — no deep import of package internals).
  */
 type Git = ReturnType<typeof makeGit>;
+
+/** One command-wide strict ingress: no status-dependent shell path acts on a gap. */
+async function strictStatus(g: Git): Promise<readonly SupportedStatusEntry[]> {
+  return requireSupportedStatusEntries(await g.status());
+}
 
 type PortablePathAssertion = NonNullable<CommandContext['assertPortablePaths']>;
 
@@ -114,28 +120,30 @@ function short(oid: string): string {
 }
 
 /** Render `git status --porcelain` v1: one `XY filepath` line per changed file. */
-function renderPorcelain(entries: StatusEntry[]): string {
+function renderPorcelain(entries: readonly SupportedStatusEntry[]): string {
   let out = '';
   for (const e of entries) {
-    const xy = porcelainXY(e.status);
-    if (xy === null) continue;
-    out += `${xy} ${e.filepath}\n`;
+    for (const xy of porcelainStatusLines(e.status)) out += `${xy} ${e.filepath}\n`;
   }
   return out;
 }
 
 /** Human-readable default `git status` summary (not byte-exact git). */
-function renderStatusSummary(branch: string | undefined, entries: StatusEntry[]): string {
+function renderStatusSummary(
+  branch: string | undefined,
+  entries: readonly SupportedStatusEntry[],
+): string {
   const lines: string[] = [];
   lines.push(`On branch ${branch ?? '(no branch)'}`);
-  const changed = entries.filter((e) => porcelainXY(e.status) !== null);
+  const changed = entries.flatMap((entry) =>
+    porcelainStatusLines(entry.status).map((xy) => ({ entry, xy })),
+  );
   if (changed.length === 0) {
     lines.push('nothing to commit, working tree clean');
     return `${lines.join('\n')}\n`;
   }
-  for (const e of changed) {
-    const xy = porcelainXY(e.status);
-    lines.push(`  ${xy} ${e.filepath}`);
+  for (const { entry, xy } of changed) {
+    lines.push(`  ${xy} ${entry.filepath}`);
   }
   return `${lines.join('\n')}\n`;
 }
@@ -172,7 +180,7 @@ function committerFrom(env: Record<string, string>, author: Identity): Identity 
 
 /** `git add` of `.` / `-A` — stage every changed path from the statusMatrix. */
 async function addAll(g: Git): Promise<void> {
-  const entries = await g.status();
+  const entries = await strictStatus(g);
   for (const e of entries) {
     // Skip unchanged (111) — adding it is a wasteful no-op; everything else
     // (untracked / modified / deleted) is a real change to stage.
@@ -192,7 +200,7 @@ async function addAll(g: Git): Promise<void> {
  * are NOT staged (head !== '1'); staged-new files stay as-is.
  */
 async function stageTrackedChanges(g: Git): Promise<void> {
-  const entries = await g.status();
+  const entries = await strictStatus(g);
   for (const e of entries) {
     if (e.status[0] !== '1') continue; // only files present in HEAD (tracked)
     if (e.status[1] === '0')
@@ -201,13 +209,13 @@ async function stageTrackedChanges(g: Git): Promise<void> {
   }
 }
 
-function isIndexDeletion(e: StatusEntry): boolean {
+function isIndexDeletion(e: SupportedStatusEntry): boolean {
   return e.status[0] === '1' && e.status[1] === '0';
 }
 
 async function stageStatusEntries(
   g: Git,
-  entries: StatusEntry[],
+  entries: readonly SupportedStatusEntry[],
   opts: { force?: boolean } = {},
 ): Promise<void> {
   for (const e of entries) {
@@ -296,7 +304,7 @@ function parseCommit(args: string[]): CommitPlan {
 async function doStatus(g: Git, args: string[], ctx: CommandContext): Promise<number> {
   const porcelain = args.includes('--porcelain') || args.includes('-s');
   try {
-    const entries = await g.status();
+    const entries = await strictStatus(g);
     if (porcelain) {
       ctx.stdout.write(renderPorcelain(entries));
     } else {
@@ -358,7 +366,7 @@ async function validateImplicitPathspecs(
   mappedPathspecs: string[],
   ctx: CommandContext,
 ): Promise<number | null> {
-  const entries = await g.status();
+  const entries = await strictStatus(g);
   for (let i = 0; i < mappedPathspecs.length; i++) {
     const spec = mappedPathspecs[i] as string;
     if (entries.some((entry) => pathspecMatch(entry.filepath, spec))) continue;
@@ -378,7 +386,7 @@ async function tokenMatchesWorktreePath(
   } catch {
     return false;
   }
-  return (await g.status()).some((entry) => pathspecMatch(entry.filepath, mapped));
+  return (await strictStatus(g)).some((entry) => pathspecMatch(entry.filepath, mapped));
 }
 
 async function tokenIsRevision(g: Git, token: string): Promise<boolean> {
@@ -500,7 +508,7 @@ async function doAdd(
   // path matched only by .gitignore → refuse unless `-f` (real git). Ignored
   // detection is via statusMatrix, which excludes .gitignore'd paths: a worktree
   // path that is neither tracked NOR surfaced as a status change IS ignored.
-  const [tracked, changed] = await Promise.all([g.listFiles(), g.status()]);
+  const [tracked, changed] = await Promise.all([g.listFiles(), strictStatus(g)]);
   const surfaced = (spec: string): boolean => changed.some((e) => pathspecMatch(e.filepath, spec));
   const resolved: { spec: string; exists: boolean }[] = [];
   for (const spec of pathspecs) {
@@ -1070,7 +1078,7 @@ async function doReset(
         ctx.stdout.write(`HEAD is now at ${short(head.oid)} ${subject}\n`);
       }
     } else if (mode === 'mixed') {
-      const unstaged = (await g.status()).filter(
+      const unstaged = (await strictStatus(g)).filter(
         (e) => e.status[0] === '1' && e.status[1] !== e.status[2],
       );
       if (unstaged.length > 0) {
@@ -1261,7 +1269,7 @@ async function doGitRm(
   if (specs.length === 0)
     return renderCheckoutError(new NotImplementedError('git.rm.no-pathspec'), ctx);
   const tracked = await g.listFiles();
-  const status = new Map((await g.status()).map((e) => [e.filepath, e.status]));
+  const status = new Map((await strictStatus(g)).map((e) => [e.filepath, e.status]));
   const removals = new Set<string>();
   for (const spec of specs) {
     const matches = tracked.filter((p) => pathspecMatch(p, spec));
@@ -1485,7 +1493,7 @@ async function readBlobAt(g: Git, rev: string, filepath: string): Promise<Uint8A
 }
 
 async function assertCleanForRevert(g: Git): Promise<void> {
-  const dirty = (await g.status()).filter((e) => e.status !== '111');
+  const dirty = (await strictStatus(g)).filter((e) => e.status !== '111');
   if (dirty.length > 0) throw new NotImplementedError('git.revert.dirty-worktree');
 }
 
@@ -2061,7 +2069,7 @@ async function doStash(
   }
   try {
     if (op === 'push') {
-      const tracked = (await g.status())
+      const tracked = (await strictStatus(g))
         .filter(({ status }) => status[0] !== '0' || status[2] !== '0')
         .map(({ filepath }) => filepath);
       assertRepoPaths(ctx.assertPortablePaths, root, tracked);

@@ -4,11 +4,13 @@ import {
   ProjectDocumentSaveInProgressError,
   type ProjectSession,
   type ProjectTerminalSnapshot,
+  type WorkbenchHealth,
+  type WorkbenchHealthSnapshot,
 } from '@riftydev/workbench';
 import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectPlan,
-  PlaygroundSessionTools,
+  PlaygroundSessionToolsView,
   PlaygroundWorkbench,
 } from '@riftydev/workbench/playground';
 import { describe, expect, it, vi } from 'vitest';
@@ -32,12 +34,30 @@ function plan(id: string, starterId = 'starter-a'): PlaygroundProjectPlan {
   });
 }
 
-function tools(): PlaygroundSessionTools {
+const HEALTHY = Object.freeze({
+  disposition: 'healthy',
+  issues: Object.freeze([]),
+}) satisfies WorkbenchHealthSnapshot;
+
+function health(): WorkbenchHealth {
   return Object.freeze({
-    typescript: {} as PlaygroundSessionTools['typescript'],
-    scm: {} as PlaygroundSessionTools['scm'],
-    archive: {} as PlaygroundSessionTools['archive'],
-    previews: {} as PlaygroundSessionTools['previews'],
+    snapshot: () => HEALTHY,
+    subscribe(listener: (snapshot: WorkbenchHealthSnapshot) => void) {
+      listener(HEALTHY);
+      return () => {};
+    },
+    recover: (scope: Parameters<WorkbenchHealth['recover']>[0]) =>
+      Promise.reject(new Error(`Workbench recovery scope ${scope} is not active`)),
+  });
+}
+
+function tools(): PlaygroundSessionToolsView {
+  return Object.freeze({
+    typescript: {} as PlaygroundSessionToolsView['typescript'],
+    scm: {} as PlaygroundSessionToolsView['scm'],
+    archive: {} as PlaygroundSessionToolsView['archive'],
+    previews: {} as PlaygroundSessionToolsView['previews'],
+    health: health(),
     awaitDurability: async () => {},
   });
 }
@@ -104,6 +124,7 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
         readySetCount: 0,
       }),
     }),
+    health: health(),
     snapshot: () => ({
       storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' } as const,
     }),
@@ -395,5 +416,16 @@ describe('Playground App semantic runtime', () => {
 
     expect(h.events).toEqual(['session:close:scratch', 'workbench:close']);
     expect(h.runtime.current()).toBeNull();
+  });
+
+  it('coalesces repeated App cleanup onto one Workbench close', async () => {
+    const h = harness();
+
+    const first = h.runtime.close();
+    const second = h.runtime.close();
+
+    expect(second).toBe(first);
+    await first;
+    expect(h.events).toEqual(['workbench:close']);
   });
 });

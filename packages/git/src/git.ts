@@ -28,6 +28,7 @@ import {
 } from './errors.ts';
 import { riftyGitHttp } from './http-plugin.ts';
 import { lineDiff } from './line-diff.ts';
+import { isGitStatusMatrixCode } from './status.ts';
 import type {
   CheckoutInput,
   CheckoutResult,
@@ -692,12 +693,12 @@ export function makeGit(opts: MakeGitOptions): Git {
     },
     async status() {
       const matrix = await git.statusMatrix({ fs, dir, refresh: false });
-      return matrix.map(
-        ([filepath, head, workdir, stage]): StatusEntry => ({
-          filepath,
-          status: `${head}${workdir}${stage}`,
-        }),
-      );
+      return matrix.map(([filepath, head, workdir, stage]): StatusEntry => {
+        const rawStatusMatrixCode = `${head}${workdir}${stage}`;
+        return isGitStatusMatrixCode(rawStatusMatrixCode)
+          ? { kind: 'supported', filepath, status: rawStatusMatrixCode }
+          : { kind: 'unsupported', filepath, rawStatusMatrixCode };
+      });
     },
     async commit({ message, author, committer, parents, amend }) {
       return git.commit({

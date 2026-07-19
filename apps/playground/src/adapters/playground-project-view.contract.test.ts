@@ -183,7 +183,7 @@ describe('Playground logical project view', () => {
     });
     const changes: readonly PlaygroundScmChange[] = Object.freeze([working, staged]);
     const diff = vi.fn(async (change: PlaygroundScmChange) =>
-      change.area === 'staged'
+      'area' in change && change.area === 'staged'
         ? Object.freeze({
             original: Object.freeze({ source: 'head' as const, bytes: encoder.encode('head\n') }),
             modified: Object.freeze({ source: 'index' as const, bytes: encoder.encode('index\n') }),
@@ -388,7 +388,15 @@ describe('Playground editor Documents binding', () => {
     const close = vi.fn(async () => {});
     const document = {
       path: '/src/main.ts',
-      snapshot: vi.fn(),
+      snapshot: vi.fn(() => ({
+        path: '/src/main.ts',
+        bytes: encoder.encode('const x = 0;\n'),
+        version: 'v1',
+        dirty: false,
+        closed: false,
+        staleReason: null,
+        conflict: null,
+      })),
       replace,
       save,
       close,
@@ -396,6 +404,7 @@ describe('Playground editor Documents binding', () => {
     const documents = { open: vi.fn(async () => document) } satisfies ProjectDocuments;
     const writer = createPlaygroundDocumentWriter(documents);
 
+    await expect(writer.open('/src/main.ts')).resolves.toMatchObject({ version: 'v1' });
     await writer.write('/src/main.ts', 'const x = 1;\n');
     await writer.write('/src/main.ts', 'const x = 2;\n');
     await writer.closeTree('/src');

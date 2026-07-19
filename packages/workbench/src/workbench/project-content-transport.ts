@@ -4,6 +4,7 @@ import type { HostCommitOperation } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
 import type {
   VfsCommitCoordinator,
+  VfsCommitDurabilityState,
   VfsCommitObservation,
   VfsCommitOwner,
   VfsCommitReceipt,
@@ -38,6 +39,7 @@ export interface ProjectContentTransportOptions {
   readonly commitTimeoutMs: number;
   readonly timers?: OwnerVfsClientTimers;
   readonly reportProtocolError?: (error: VfsCommitProtocolError) => void;
+  readonly onDurabilityState?: (state: VfsCommitDurabilityState) => void;
 }
 
 export interface ProjectContentTransport {
@@ -60,6 +62,7 @@ interface PendingFileRead {
   readonly ownerEpoch: OwnerEpoch;
   resolve(value: ProjectDocumentReadEntry): void;
   reject(error: Error): void;
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 interface PendingDirectoryRead {
@@ -68,6 +71,7 @@ interface PendingDirectoryRead {
   readonly ownerEpoch: OwnerEpoch;
   resolve(value: AtomicDirectoryRead): void;
   reject(error: Error): void;
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 type PendingRead = PendingFileRead | PendingDirectoryRead;
@@ -150,6 +154,12 @@ function documentMutation(
 export function createProjectContentTransport(
   options: ProjectContentTransportOptions,
 ): ProjectContentTransport {
+  const timers: OwnerVfsClientTimers =
+    options.timers ??
+    Object.freeze({
+      setTimeout: (callback: () => void, delayMs: number) => setTimeout(callback, delayMs),
+      clearTimeout: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
+    });
   const mirror = new SnapshotFs(options.projectRoot);
   const reads = new Map<string, PendingRead>();
   const pendingCommits = new Set<Promise<unknown>>();
@@ -165,6 +175,7 @@ export function createProjectContentTransport(
   let resolveReady: (content: ProjectContentController) => void = () => {};
   let rejectReady: (error: Error) => void = () => {};
   let readySettled = false;
+  let readyTimer: ReturnType<typeof setTimeout> | null = null;
   const ready = new Promise<ProjectContentController>((resolve, reject) => {
     resolveReady = resolve;
     rejectReady = reject;
@@ -204,6 +215,8 @@ export function createProjectContentTransport(
     },
     subscribeSnapshots: (listener) => mirror.subscribeRevisions(listener),
     timeoutMs: options.commitTimeoutMs,
+    reportProtocolError,
+    onDurabilityState: options.onDurabilityState,
   });
   const trackedCommitter: VfsCommitCoordinator = Object.freeze({
     commit(
@@ -247,7 +260,24 @@ export function createProjectContentTransport(
       throw new Error('Project VFS generated a duplicate or empty read request id');
     }
     reads.set(requestId, pending);
+    pending.timer = timers.setTimeout(() => {
+      if (reads.get(requestId) !== pending) return;
+      disconnect(
+        new Error(
+          `Project VFS ${pending.kind === 'file' ? 'read-file' : 'read-directory'} timed out after ${String(options.commitTimeoutMs)}ms (${requestId})`,
+        ),
+      );
+    }, options.commitTimeoutMs);
     return requestId;
+  };
+
+  const releaseRead = (requestId: string): PendingRead | undefined => {
+    const pending = reads.get(requestId);
+    if (pending === undefined) return undefined;
+    reads.delete(requestId);
+    if (pending.timer !== null) timers.clearTimeout(pending.timer);
+    pending.timer = null;
+    return pending;
   };
 
   const readVersionedFile = (path: string): Promise<ProjectDocumentReadEntry> => {
@@ -264,16 +294,17 @@ export function createProjectContentTransport(
         ownerEpoch: boundOwner,
         resolve,
         reject,
+        timer: null,
       };
       let requestId: string | null = null;
       try {
         requestId = claimRead(pending);
         if (!options.send({ type: 'workbench:project-vfs-read-file', requestId, path })) {
-          reads.delete(requestId);
+          releaseRead(requestId);
           reject(new Error(`Project VFS read-file send failed (${requestId})`));
         }
       } catch (error) {
-        if (requestId !== null) reads.delete(requestId);
+        if (requestId !== null) releaseRead(requestId);
         reject(toError(error));
       }
     });
@@ -293,27 +324,27 @@ export function createProjectContentTransport(
         ownerEpoch: boundOwner,
         resolve,
         reject,
+        timer: null,
       };
       let requestId: string | null = null;
       try {
         requestId = claimRead(pending);
         if (!options.send({ type: 'workbench:project-vfs-read-directory', requestId, path })) {
-          reads.delete(requestId);
+          releaseRead(requestId);
           reject(new Error(`Project VFS read-directory send failed (${requestId})`));
         }
       } catch (error) {
-        if (requestId !== null) reads.delete(requestId);
+        if (requestId !== null) releaseRead(requestId);
         reject(toError(error));
       }
     });
   };
 
   const acceptFileResult = (frame: ProjectVfsReadFileResult): void => {
-    const pending = reads.get(frame.requestId);
+    const pending = releaseRead(frame.requestId);
     if (pending === undefined) {
       throw new VfsCommitProtocolError('Project VFS read-file result has no matching request');
     }
-    reads.delete(frame.requestId);
     if (pending.kind !== 'file') {
       rejectProtocol(pending, 'Project VFS read-file result did not match its request');
       return;
@@ -339,11 +370,10 @@ export function createProjectContentTransport(
   };
 
   const acceptDirectoryResult = (frame: ProjectVfsReadDirectoryResult): void => {
-    const pending = reads.get(frame.requestId);
+    const pending = releaseRead(frame.requestId);
     if (pending === undefined) {
       throw new VfsCommitProtocolError('Project VFS read-directory result has no matching request');
     }
-    reads.delete(frame.requestId);
     if (pending.kind !== 'directory') {
       rejectProtocol(pending, 'Project VFS read-directory result did not match its request');
       return;
@@ -407,6 +437,8 @@ export function createProjectContentTransport(
       },
     });
     readySettled = true;
+    if (readyTimer !== null) timers.clearTimeout(readyTimer);
+    readyTimer = null;
     resolveReady(content);
   };
 
@@ -467,7 +499,12 @@ export function createProjectContentTransport(
       }
     }
     if (frame.type === 'workbench:project-vfs-fatal') {
-      disconnect(ownerReadError(frame.error));
+      const ownerFailure = ownerReadError(frame.error);
+      const invariant = new VfsCommitProtocolError(
+        `Project VFS owner reported fatal state: ${ownerFailure.name}: ${ownerFailure.message}`,
+      );
+      reportProtocolError(invariant);
+      disconnect(invariant);
       return;
     }
     if (client.accept(frame)) return;
@@ -497,16 +534,20 @@ export function createProjectContentTransport(
   const disconnect = (error: Error = new ClosedHandleError('Project content transport')): void => {
     if (closedError !== null) return;
     closedError = error;
+    if (readyTimer !== null) timers.clearTimeout(readyTimer);
+    readyTimer = null;
     if (!readySettled) {
       readySettled = true;
       rejectReady(error);
     }
     for (const [requestId, pending] of reads) {
       reads.delete(requestId);
+      if (pending.timer !== null) timers.clearTimeout(pending.timer);
+      pending.timer = null;
       pending.reject(error);
     }
     content?.invalidateAll('reset');
-    client.disconnect();
+    client.disconnect(error);
     if (!ownerClosed) {
       ownerClosed = true;
       resolveOwnerClosed(error);
@@ -516,6 +557,13 @@ export function createProjectContentTransport(
   };
 
   const transport = Object.freeze({ ready, accept, disconnect });
+  readyTimer = timers.setTimeout(() => {
+    disconnect(
+      new Error(
+        `Project VFS initial snapshot timed out after ${String(options.commitTimeoutMs)}ms`,
+      ),
+    );
+  }, options.commitTimeoutMs);
   try {
     if (!options.send({ type: 'workbench:project-vfs-snapshot-request' })) {
       disconnect(new Error('Project VFS snapshot request send failed'));

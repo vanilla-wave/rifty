@@ -11,7 +11,7 @@ import type {
   PlaygroundProjectCatalog,
   PlaygroundProjectOpenOptions,
   PlaygroundProjectPlan,
-  PlaygroundSessionTools,
+  PlaygroundSessionToolsView,
   PlaygroundTerminalStateRestoreInput,
   PlaygroundWorkbench,
   PlaygroundWorkbenchOptions,
@@ -20,17 +20,25 @@ import type {
 import type { PreviewHandle } from '../preview-readiness.ts';
 import type { ProjectDefinition } from '../project-definition.ts';
 import type { ProjectSession } from '../project-session.ts';
+import type {
+  PlaygroundOwnerOperationalHealth,
+  PlaygroundOwnerSessionToolLifecycle,
+} from '../workbench-owner-port.ts';
 import {
   type CapturedPlaygroundUrlContext,
   ownPlaygroundProjectPlan,
 } from './playground-project-definition.ts';
+import { isPlaygroundPersistenceFailure } from './playground-session-tools-transport.ts';
 import {
   ownPlaygroundProjectOpenOptions,
   restorePlaygroundTerminalState,
 } from './playground-terminal-state.ts';
+import type { WorkbenchHealthGeneration } from './workbench-health-authority.ts';
+
+type RawSessionToolLifecycle = PlaygroundOwnerSessionToolLifecycle;
 
 interface SessionToolLifecycle {
-  readonly tools: PlaygroundSessionTools;
+  readonly tools: PlaygroundSessionToolsView;
   close(): Promise<void>;
 }
 
@@ -44,7 +52,7 @@ export interface CreatePlaygroundWorkbenchFacadeOptions {
     definition: ProjectDefinition<TReady>,
     options: PlaygroundProjectOpenOptions,
   ) => Promise<ProjectSession<TReady>>;
-  readonly createSessionTools: (session: ProjectSession<unknown>) => SessionToolLifecycle;
+  readonly createSessionTools: (session: ProjectSession<unknown>) => RawSessionToolLifecycle;
   readonly registerBeforeClose: (
     session: ProjectSession<unknown>,
     hook: () => Promise<void>,
@@ -67,6 +75,7 @@ type OwnedSessionState = 'live' | 'closing' | 'closed';
 
 interface OwnedSession {
   readonly ownerSession: ProjectSession<unknown>;
+  readonly healthGeneration: WorkbenchHealthGeneration;
   state: OwnedSessionState;
   lifecycle: SessionToolLifecycle | null;
   toolCloseFailure: unknown | null;
@@ -83,6 +92,10 @@ function activeMatches(catalog: PlaygroundProjectCatalog, id: string): boolean {
   const active = catalog.snapshot().active;
   if (active?.kind === 'scratch') return id === 'scratch';
   return active?.kind === 'project' && active.id === id;
+}
+
+function operationalHealthSummary(scope: PlaygroundOwnerOperationalHealth['scope']): string {
+  return scope === 'scm' ? 'Source control refresh failed' : 'Preview routing failed';
 }
 
 export function createPlaygroundWorkbenchFacade(
@@ -132,14 +145,109 @@ export function createPlaygroundWorkbenchFacade(
     return definition;
   }
 
-  const wrapSession = <TReady>(raw: ProjectSession<TReady>): ProjectSession<TReady> => {
+  const connectSessionTools = async (state: OwnedSession): Promise<SessionToolLifecycle> => {
+    const raw = options.createSessionTools(state.ownerSession);
+    let unsubscribeHealth: () => void;
+    try {
+      unsubscribeHealth = raw.subscribeOperationalHealth((health) => {
+        if (health.status === 'healthy') {
+          state.healthGeneration.reporter.clear(health.scope);
+          return;
+        }
+        state.healthGeneration.reporter.degraded({
+          scope: health.scope,
+          summary: operationalHealthSummary(health.scope),
+          recover: () => raw.recoverOperationalHealth(health.scope),
+        });
+      });
+    } catch (error) {
+      try {
+        await raw.close();
+      } catch (closeError) {
+        throw new AggregateError(
+          [error, closeError],
+          'Playground session health subscription and tool cleanup failed',
+        );
+      }
+      throw error;
+    }
+    let lifecycleClose: Promise<void> | null = null;
+    return Object.freeze({
+      tools: Object.freeze({
+        typescript: raw.tools.typescript,
+        scm: raw.tools.scm,
+        archive: raw.tools.archive,
+        previews: raw.tools.previews,
+        health: state.healthGeneration.health,
+        async awaitDurability(): Promise<void> {
+          try {
+            await raw.tools.awaitDurability();
+            state.healthGeneration.reporter.clear('persistence');
+          } catch (error) {
+            if (isPlaygroundPersistenceFailure(error)) {
+              state.healthGeneration.reporter.degraded({
+                scope: 'persistence',
+                summary: 'Workspace persistence failed',
+                recover: () => raw.tools.awaitDurability(),
+              });
+            }
+            throw error;
+          }
+        },
+      }),
+      close(): Promise<void> {
+        if (lifecycleClose !== null) return lifecycleClose;
+        unsubscribeHealth();
+        try {
+          lifecycleClose = raw.close();
+        } catch (error) {
+          lifecycleClose = Promise.reject(error);
+        }
+        void lifecycleClose.catch(() => {});
+        return lifecycleClose;
+      },
+    });
+  };
+
+  const wrapSession = async <TReady>(
+    raw: ProjectSession<TReady>,
+  ): Promise<ProjectSession<TReady>> => {
+    const healthGeneration = workbenchInternals.healthGeneration(raw);
     const state: OwnedSession = {
       ownerSession: workbenchInternals.rawSession(raw),
+      healthGeneration,
       state: 'live',
       lifecycle: null,
       toolCloseFailure: null,
       closePromise: null,
     };
+    try {
+      state.lifecycle = await connectSessionTools(state);
+      options.registerBeforeClose(raw, async () => {
+        if (state.lifecycle === null) return;
+        try {
+          await state.lifecycle.close();
+        } catch (error) {
+          state.toolCloseFailure = error;
+        }
+      });
+    } catch (error) {
+      const failures: unknown[] = [error];
+      if (state.lifecycle !== null) {
+        try {
+          await state.lifecycle.close();
+        } catch (closeError) {
+          failures.push(closeError);
+        }
+      }
+      try {
+        await raw.close();
+      } catch (closeError) {
+        failures.push(closeError);
+      }
+      if (failures.length === 1) throw failures[0];
+      throw new AggregateError(failures, 'Playground session facade creation and cleanup failed');
+    }
     sessionStates.add(state);
 
     const wrapped = Object.freeze({
@@ -180,19 +288,12 @@ export function createPlaygroundWorkbenchFacade(
       },
     }) satisfies ProjectSession<TReady>;
     ownedSessions.set(wrapped, state);
-    options.registerBeforeClose(raw, async () => {
-      if (state.lifecycle === null) return;
-      try {
-        await state.lifecycle.close();
-      } catch (error) {
-        state.toolCloseFailure = error;
-      }
-    });
     return wrapped;
   };
 
   const facade: PlaygroundWorkbench = Object.freeze({
     runtimeAssets: options.workbench.runtimeAssets,
+    health: options.workbench.health,
     snapshot(): WorkbenchSnapshot {
       return options.workbench.snapshot();
     },
@@ -255,15 +356,13 @@ export function createPlaygroundWorkbenchFacade(
       catalog,
       restoreTerminalState: (input: PlaygroundTerminalStateRestoreInput) =>
         restorePlaygroundTerminalState(input, options.legacyWorkspacePrefix),
-      forSession<T>(session: ProjectSession<T>): PlaygroundSessionTools {
+      forSession<T>(session: ProjectSession<T>): PlaygroundSessionToolsView {
         assertOpen();
         const state =
           typeof session === 'object' && session !== null ? ownedSessions.get(session) : undefined;
         if (state === undefined) throw new TypeError('Foreign or forged Playground ProjectSession');
         if (state.state !== 'live') throw new ClosedHandleError('Playground ProjectSession');
-        if (state.lifecycle === null) {
-          state.lifecycle = options.createSessionTools(state.ownerSession);
-        }
+        if (state.lifecycle === null) throw new Error('Playground session tools are unavailable');
         return state.lifecycle.tools;
       },
     }),

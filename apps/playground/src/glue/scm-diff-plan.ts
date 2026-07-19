@@ -11,7 +11,6 @@ import type { ScmResourceRow } from './scm-status.ts';
 /** Tracked file with a HEAD blob to diff against (i.e. not a freshly-added file). */
 export function statusCodeHasHeadBlob(code: string | undefined): boolean {
   if (code === undefined) return true;
-  if (/^[0-3]{3}$/.test(code)) return code[0] !== '0'; // defensive: a raw matrix code
   return code !== '??' && code[0] !== 'A';
 }
 

@@ -175,6 +175,14 @@ export interface OwnerVfsDurabilityReceipt {
   readonly durability: 'durable' | 'ephemeral';
 }
 
+/** Owner completed its flush and reported unhealed persistence failures. */
+export class VfsPersistenceFailureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PersistFailureError';
+  }
+}
+
 export interface VfsVersionConflictDetails {
   readonly path: string;
   readonly expectedVersion: PathVersion | null;

@@ -3,6 +3,11 @@ import type { WorkerProcessHandle } from '@riftydev/kernel';
 import { SW_FRAME_VERSION, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type WorkbenchOwnerProjectRuntime,
+  type WorkbenchOwnerProjectRuntimeInput,
+  createWorkbenchOwnerController,
+} from '../workers/workbench-owner-controller.ts';
+import {
   DirtyProjectDocumentError,
   ProjectDefinitionMismatchError,
   ProjectFileOperationError,
@@ -18,9 +23,13 @@ import {
   inspectProjectDefinition,
   projects,
 } from './project-definition.ts';
+import type { ProjectMaterializer } from './project-materialization.ts';
 import type { VfsSnapshotEntry } from './project-vfs-contract.ts';
 import { startBrowserWorkspaceOwner, workbenchOwnerSpawnSpec } from './workbench-browser-owner.ts';
-import type { WorkbenchOwnerStartInput } from './workbench-owner-port.ts';
+import type {
+  WorkbenchOwnerHealthEvent,
+  WorkbenchOwnerStartInput,
+} from './workbench-owner-port.ts';
 
 const input: WorkbenchOwnerStartInput = Object.freeze({
   deployment: Object.freeze({
@@ -74,9 +83,12 @@ class FakeOwnerWorker extends EventEmitter {
   readonly sent: PageToPhysicalOwnerMessage[] = [];
   readonly output = new EventEmitter();
   killedWith: string | null = null;
+  receive: ((message: PageToPhysicalOwnerMessage) => void) | null = null;
 
   send(message: unknown): boolean {
-    this.sent.push(message as PageToPhysicalOwnerMessage);
+    const inspected = message as PageToPhysicalOwnerMessage;
+    this.sent.push(inspected);
+    this.receive?.(inspected);
     return true;
   }
 
@@ -281,6 +293,31 @@ async function acceptProjectSnapshot(
 }
 
 describe('browser Workbench owner transport', () => {
+  // Fault class: unbounded-read. Every finite opId request has one deadline at
+  // the correlation owner; an indeterminate mutation terminally fences owner state.
+  it('times out a hung finite owner request and terminates the indeterminate owner', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+      void raw.closed.catch(() => {});
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await raw.ready;
+
+      const deleting = raw.deleteProject('hung-delete');
+      void deleting.catch(() => {});
+      await vi.runAllTimersAsync();
+
+      await expect(deleting).rejects.toThrow(/owner.*delete.*timed out/i);
+      expect(worker.killedWith).toBe('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('spawns one run-to-completion owner with no config or binding in process env', () => {
     expect(workbenchOwnerSpawnSpec(input)).toEqual({
       entry: { kind: 'url', url: '/workers/workbench-owner.js' },
@@ -768,6 +805,8 @@ describe('browser Workbench owner transport', () => {
     const serviceWorker = new ControlledServiceWorkerContainer();
     const deps = { ...dependencies(worker), serviceWorker };
     const raw = startBrowserWorkspaceOwner(companionInput, deps);
+    const ownerHealth = vi.fn();
+    raw.subscribeHealth?.(ownerHealth);
     const companion = raw.playground;
     if (companion === undefined) throw new Error('missing Playground companion handle');
     worker.emit('message', {
@@ -902,9 +941,28 @@ describe('browser Workbench owner transport', () => {
       env: { AFTER: 'run' },
     });
 
+    worker.emit('message', {
+      type: 'workbench:playground-project-tools',
+      projectToken: 'playground-owner-token',
+      frame: {
+        type: 'workbench:playground-session-tools-operational-health',
+        health: {
+          scope: 'scm',
+          status: 'degraded',
+          error: { name: 'GitError', message: 'index read failed before page subscription' },
+        },
+      },
+    });
     const lifecycle = companion.sessionTools(project);
     expect(companion.sessionTools(project)).toBe(lifecycle);
     expect(() => companion.sessionTools({ ...project })).toThrow(TypeError);
+    const operationalHealth = vi.fn();
+    lifecycle.subscribeOperationalHealth(operationalHealth);
+    expect(operationalHealth).toHaveBeenCalledWith({
+      scope: 'scm',
+      status: 'degraded',
+      error: { name: 'GitError', message: 'index read failed before page subscription' },
+    });
     expect(lifecycle.tools.scm.snapshot()).toEqual({ history: [], changes: [] });
     const previewSnapshots: unknown[] = [];
     lifecycle.tools.previews.subscribe((snapshot) => previewSnapshots.push(snapshot));
@@ -950,6 +1008,54 @@ describe('browser Workbench owner transport', () => {
       'source',
     ]);
     expect(previewSnapshots).toHaveLength(2);
+    const previewFailure = new Error('transient route mount failure');
+    deps.mountPreview.mockImplementationOnce(() => {
+      throw previewFailure;
+    });
+    worker.emit('message', {
+      type: 'workbench:project-preview',
+      projectToken: 'playground-owner-token',
+      frame: {
+        type: 'pty:preview',
+        ports: [
+          {
+            port: 4300,
+            url: '/preview/4300/',
+            label: 'restarted preview',
+            source: 'preview',
+            sid: 'preview-restarted',
+            previewScope: 'scope-restarted',
+          },
+        ],
+      },
+    });
+    await vi.waitFor(() => {
+      expect(operationalHealth).toHaveBeenLastCalledWith({
+        scope: 'preview',
+        status: 'degraded',
+        error: { name: 'Error', message: previewFailure.message },
+      });
+    });
+    expect(lifecycle.tools.previews.snapshot()).toEqual([]);
+    expect(worker.killedWith).toBeNull();
+
+    const recoveringPreview = lifecycle.recoverOperationalHealth('preview');
+    await vi.waitFor(() => expect(serviceWorker.controller.messages).toHaveLength(2));
+    serviceWorker.pong(1);
+    await expect(recoveringPreview).resolves.toBeUndefined();
+    expect(operationalHealth).toHaveBeenLastCalledWith({
+      scope: 'preview',
+      status: 'healthy',
+    });
+    expect(lifecycle.tools.previews.snapshot()).toEqual([
+      {
+        port: 4300,
+        url: '/preview/4300/',
+        label: 'restarted preview',
+        source: 'preview',
+      },
+    ]);
+
     const refreshing = lifecycle.tools.scm.refresh();
     const toolsRequest = sentPlaygroundOf(worker, 'workbench:playground-project-tools').at(-1);
     if (
@@ -993,6 +1099,10 @@ describe('browser Workbench owner transport', () => {
       },
     });
     expect(worker.killedWith).toBe('SIGTERM');
+    expect(ownerHealth).toHaveBeenCalledWith({
+      kind: 'fatal-invariant',
+      summary: 'Workbench protocol invariant failed',
+    });
     await expect(raw.closed).rejects.toThrow('session tools data for a retired project');
   });
 
@@ -1179,6 +1289,134 @@ describe('browser Workbench owner transport', () => {
     expect(worker.killedWith).toBeNull();
   });
 
+  it('observable-order fault: a late VFS frame after the close fence cannot kill the owner or strand close', async () => {
+    const worker = new FakeOwnerWorker();
+    let releaseRuntimeClose!: () => void;
+    const runtimeCloseGate = new Promise<void>((resolve) => {
+      releaseRuntimeClose = resolve;
+    });
+    const runtimeClose = vi.fn(async () => runtimeCloseGate);
+    const materializer: ProjectMaterializer = {
+      open: vi.fn(async (definition) =>
+        Object.freeze({
+          projectKey: definition.storageSegment,
+          projectRoot: '/owner-born/project-a',
+          acquisition: Object.freeze({ provenance: 'registry' as const }),
+        }),
+      ),
+      delete: vi.fn(async () => {}),
+      cancelActiveAcquisition: vi.fn(),
+      close: vi.fn(async () => {}),
+    };
+    const controller = createWorkbenchOwnerController({
+      materializer,
+      runtimeAssets: {
+        inspectUsage: vi.fn(async () => ({
+          storageClass: 'memory-session' as const,
+          entryCount: 0,
+          storedBytes: 0,
+          verifiedObjectCount: 0,
+          verifiedObjectBytes: 0,
+          readySetCount: 0,
+        })),
+        clearCache: vi.fn(async () => ({
+          storageClass: 'memory-session' as const,
+          entryCount: 0,
+          storedBytes: 0,
+          verifiedObjectCount: 0,
+          verifiedObjectBytes: 0,
+          readySetCount: 0,
+        })),
+      },
+      createProject: vi.fn(
+        async (
+          runtimeInput: WorkbenchOwnerProjectRuntimeInput,
+        ): Promise<WorkbenchOwnerProjectRuntime> =>
+          Object.freeze({
+            handleFrame: vi.fn(async (message) => {
+              await Promise.resolve();
+              if (
+                message.type === 'vfs' &&
+                message.frame.type === 'workbench:project-vfs-snapshot-request'
+              ) {
+                runtimeInput.emit({
+                  type: 'vfs',
+                  frame: {
+                    type: 'workbench:project-vfs-snapshot',
+                    frame: {
+                      type: 'snapshot',
+                      root: runtimeInput.materialized.projectRoot,
+                      ownerEpoch: 'loopback-owner-epoch',
+                      treeRevision: 1,
+                      entries: [],
+                      nodeModulesPresent: false,
+                    },
+                  },
+                });
+              } else if (message.type === 'pty' && message.frame.type === 'pty:open') {
+                runtimeInput.emit({
+                  type: 'pty',
+                  frame: { type: 'pty:ready', sid: message.frame.sid },
+                });
+              } else if (message.type === 'pty' && message.frame.type === 'pty:close') {
+                runtimeInput.emit({
+                  type: 'pty',
+                  frame: {
+                    type: 'pty:close-ack',
+                    sid: message.frame.sid,
+                    opId: message.frame.opId,
+                    ok: true,
+                  },
+                });
+              }
+            }),
+            close: runtimeClose,
+          }),
+      ),
+      send(message) {
+        worker.emit('message', structuredClone(message));
+      },
+    });
+    worker.receive = (message) => {
+      if (message.type === 'workbench:initialize') return;
+      const operation = controller.handle(message);
+      void operation.catch(() => {});
+    };
+
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    void raw.closed.catch(() => {});
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+    const project = await raw.openProject(
+      inspectProjectDefinition(
+        projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+      ),
+    );
+
+    const closing = project.close();
+    await settleMicrotasks();
+    const closeRequest = sentOf(worker, 'workbench:close-project')[0];
+    if (closeRequest === undefined) throw new Error('missing close request');
+
+    await controller.handle({
+      type: 'workbench:project-vfs',
+      projectToken: closeRequest.projectToken,
+      frame: { type: 'workbench:project-vfs-snapshot-request' },
+    });
+    releaseRuntimeClose();
+    const closeFailure = await closing.then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect.soft(closeFailure).toBeNull();
+    expect.soft(worker.killedWith).toBeNull();
+    expect(runtimeClose).toHaveBeenCalledTimes(1);
+  });
+
   it('disconnects a lost admitted write after close-project ACK instead of waiting for timeout', async () => {
     const worker = new FakeOwnerWorker();
     const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
@@ -1263,6 +1501,223 @@ describe('browser Workbench owner transport', () => {
     raw.close();
     worker.emit('exit', 0, null);
     await raw.closed;
+  });
+
+  it('publishes automatic VFS durability failure and exact recovery without killing the owner', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    const health: WorkbenchOwnerHealthEvent[] = [];
+    raw.subscribeHealth?.((event) => health.push(event));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    const root = '/owner-born/project-a';
+    const ownerEpoch = 'epoch:owner-token-a';
+    const opening = raw.openProject(
+      inspectProjectDefinition(
+        projects.vite({ id: 'project-a', files: { '/src/main.ts': 'initial' } }),
+      ),
+    );
+    const openRequest = sentOf(worker, 'workbench:open-project')[0];
+    if (openRequest === undefined) throw new Error('missing open request');
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', root, [
+      { path: `${root}/src`, kind: 'dir', size: 0, version: 'dir-v1' },
+      {
+        path: `${root}/src/main.ts`,
+        kind: 'file',
+        size: 7,
+        content: encoder.encode('initial'),
+        version: 'file-v1',
+      },
+    ]);
+    const project = await opening;
+    const expectedVersion = project.files
+      .snapshot()
+      .entries.find((entry) => entry.path === '/src/main.ts')?.version;
+    if (expectedVersion === undefined) throw new Error('initial file version missing');
+
+    const writing = project.files.writeFile('/src/main.ts', encoder.encode('next'), {
+      expectedVersion,
+    });
+    const commit = sentOf(worker, 'workbench:project-vfs').find(
+      (message) => message.frame.type === 'rifty:owner-vfs-commit',
+    );
+    if (commit?.frame.type !== 'rifty:owner-vfs-commit') throw new Error('missing commit');
+    const request = commit.frame.request;
+    const terminal = {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: request.operationId,
+      ok: true,
+      ack: {
+        operationId: request.operationId,
+        ownerEpoch,
+        treeRevision: 2,
+        versions: [{ path: `${root}/src/main.ts`, version: 'file-v2' }],
+      },
+    } as const;
+    worker.emit('message', {
+      type: 'workbench:project-vfs',
+      projectToken: 'owner-token-a',
+      frame: terminal,
+    });
+    worker.emit('message', {
+      type: 'workbench:project-vfs',
+      projectToken: 'owner-token-a',
+      frame: { type: 'rifty:owner-vfs-commit-released', terminal },
+    });
+    worker.emit('message', {
+      type: 'workbench:project-vfs',
+      projectToken: 'owner-token-a',
+      frame: {
+        type: 'workbench:project-vfs-state',
+        fromTreeRevision: 1,
+        mutations: [],
+        frame: {
+          type: 'snapshot',
+          root,
+          ownerEpoch,
+          treeRevision: 2,
+          nodeModulesPresent: false,
+          entries: [
+            { path: `${root}/src`, kind: 'dir', size: 0, version: 'dir-v2' },
+            {
+              path: `${root}/src/main.ts`,
+              kind: 'file',
+              size: 4,
+              content: encoder.encode('next'),
+              version: 'file-v2',
+            },
+          ],
+        },
+      },
+    });
+    await settleMicrotasks();
+    const firstBarrier = sentOf(worker, 'workbench:project-vfs').find(
+      (message) => message.frame.type === 'rifty:owner-vfs-durability',
+    );
+    if (firstBarrier?.frame.type !== 'rifty:owner-vfs-durability') {
+      throw new Error('missing first durability barrier');
+    }
+    worker.emit('message', {
+      type: 'workbench:project-vfs',
+      projectToken: 'owner-token-a',
+      frame: {
+        type: 'rifty:owner-vfs-durability-ack',
+        barrierId: firstBarrier.frame.barrierId,
+        ok: false,
+        error: {
+          kind: 'persistence-failure',
+          name: 'PersistFailureError',
+          message: 'private OPFS quota detail',
+        },
+      },
+    });
+    await expect(writing).rejects.toBeInstanceOf(ProjectFileOperationError);
+    expect(worker.killedWith).toBeNull();
+    expect(health).toHaveLength(1);
+    const degraded = health[0];
+    if (degraded?.kind !== 'persistence' || degraded.status !== 'degraded') {
+      throw new Error('missing persistence degradation');
+    }
+
+    const recovering = degraded.recover();
+    await settleMicrotasks();
+    const barriers = sentOf(worker, 'workbench:project-vfs').filter(
+      (message) => message.frame.type === 'rifty:owner-vfs-durability',
+    );
+    const retry = barriers.at(-1);
+    if (retry?.frame.type !== 'rifty:owner-vfs-durability') {
+      throw new Error('missing recovery durability barrier');
+    }
+    expect(retry.frame.barrierId).not.toBe(firstBarrier.frame.barrierId);
+    worker.emit('message', {
+      type: 'workbench:project-vfs',
+      projectToken: 'owner-token-a',
+      frame: {
+        type: 'rifty:owner-vfs-durability-ack',
+        barrierId: retry.frame.barrierId,
+        ok: true,
+        receipt: { ownerEpoch, treeRevision: 2, durability: 'ephemeral' },
+      },
+    });
+    await expect(recovering).resolves.toBeUndefined();
+    expect(health.map((event) => [event.kind, 'status' in event ? event.status : null])).toEqual([
+      ['persistence', 'degraded'],
+      ['persistence', 'healthy'],
+    ]);
+
+    raw.close();
+    worker.emit('exit', 0, null);
+    await raw.closed;
+  });
+
+  it('routes impossible VFS commit correlation to fatal invariant health', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    void raw.closed.catch(() => {});
+    const health = vi.fn();
+    raw.subscribeHealth?.(health);
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    const root = '/owner-born/project-a';
+    const opening = raw.openProject(
+      inspectProjectDefinition(
+        projects.vite({ id: 'project-a', files: { '/src/main.ts': 'initial' } }),
+      ),
+    );
+    const openRequest = sentOf(worker, 'workbench:open-project')[0];
+    if (openRequest === undefined) throw new Error('missing open request');
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', root, [
+      { path: `${root}/src`, kind: 'dir', size: 0, version: 'dir-v1' },
+      {
+        path: `${root}/src/main.ts`,
+        kind: 'file',
+        size: 7,
+        content: encoder.encode('initial'),
+        version: 'file-v1',
+      },
+    ]);
+    const project = await opening;
+    const expectedVersion = project.files
+      .snapshot()
+      .entries.find((entry) => entry.path === '/src/main.ts')?.version;
+    if (expectedVersion === undefined) throw new Error('initial file version missing');
+    const writing = project.files.writeFile('/src/main.ts', encoder.encode('next'), {
+      expectedVersion,
+    });
+    void writing.catch(() => {});
+    const commit = sentOf(worker, 'workbench:project-vfs').find(
+      (message) => message.frame.type === 'rifty:owner-vfs-commit',
+    );
+    if (commit?.frame.type !== 'rifty:owner-vfs-commit') throw new Error('missing commit');
+    worker.emit('message', {
+      type: 'workbench:project-vfs',
+      projectToken: 'owner-token-a',
+      frame: {
+        type: 'rifty:owner-vfs-commit-ack',
+        operationId: commit.frame.request.operationId,
+        ok: true,
+        ack: {
+          operationId: commit.frame.request.operationId,
+          ownerEpoch: 'foreign-owner',
+          treeRevision: 2,
+          versions: [],
+        },
+      },
+    });
+
+    expect(health).toHaveBeenCalledWith({
+      kind: 'fatal-invariant',
+      summary: 'Workbench protocol invariant failed',
+    });
+    expect(worker.killedWith).toBe('SIGTERM');
   });
 
   it('keeps the project token and real files usable after dirty close preflight rejects', async () => {

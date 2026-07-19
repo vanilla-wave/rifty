@@ -50,6 +50,40 @@ describe('EditorTabs', () => {
     expect(html).toContain('aria-label="Close src/main.js"');
   });
 
+  it('marks editable tabs whose owner persistence is at risk without relabelling their bytes dirty', () => {
+    const html = renderToString(() =>
+      EditorTabs({
+        tabs: [
+          {
+            id: '/workspace/src/main.js',
+            kind: 'file',
+            title: 'src/main.js',
+            path: '/workspace/src/main.js',
+            dirty: false,
+          },
+          {
+            id: 'diff:HEAD:/workspace/src/main.js',
+            kind: 'diff',
+            title: 'main.js ↔ HEAD',
+            path: '/workspace/src/main.js',
+            originalTitle: 'HEAD',
+            modifiedTitle: 'main.js',
+            dirty: false,
+          },
+        ],
+        activeId: '/workspace/src/main.js',
+        onSelect: () => {},
+        onClose: () => {},
+        persistenceAtRisk: true,
+      }),
+    );
+
+    expect(html).toContain('data-persistence-risk="true"');
+    expect(html).toContain('aria-label="Workspace persistence at risk"');
+    expect(html).toContain('data-dirty="false"');
+    expect(html.match(/aria-label="Workspace persistence at risk"/g)).toHaveLength(1);
+  });
+
   it('renders diff tabs as closable open editors', () => {
     const html = renderToString(() =>
       EditorTabs({

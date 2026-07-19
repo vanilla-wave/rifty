@@ -1,4 +1,4 @@
-import { type GitIdentity, makeGit, vfsToGitFs } from '@riftydev/git';
+import { type GitIdentity, type StatusEntry, makeGit, vfsToGitFs } from '@riftydev/git';
 import { RegistryClient } from '@riftydev/npm-client';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
@@ -14,9 +14,13 @@ import type { OwnerProjectVfsFrame } from '../workbench/project-vfs-protocol.ts'
 import { type OwnerPackageConfig, createOwnerPackageState } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import { createOwnerPlaygroundSessionTools } from './playground-session-tools-owner.ts';
+import { DurableOwnerFs } from './test-fixtures/durable-owner-fs.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
 const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ARCHIVE_TRANSACTION_ROOT = '/.rifty/workbench/v1/projects/project-a/.playground-archive-v1';
+const ARCHIVE_TRANSACTION_STAGE = `${ARCHIVE_TRANSACTION_ROOT}/stage`;
+const ARCHIVE_TRANSACTION_PHASE = `${ARCHIVE_TRANSACTION_ROOT}/phase`;
 const SOURCE = `${PROJECT_ROOT}/src/main.ts`;
 const STAGED_DELETE = `${PROJECT_ROOT}/staged-delete.txt`;
 const PACKAGE_JSON = '{"name":"project-a","version":"1.0.0"}\n';
@@ -67,6 +71,107 @@ function archive(files: Readonly<Record<string, string>>): string {
 }
 
 describe('owner-resident Playground session tools', () => {
+  // Fault class: torn-state × stale-derived-state. Startup recovery owns the
+  // tree before any Git/SCM baseline may observe it.
+  it('rolls a durable promoting archive forward before computing the initial SCM snapshot', async () => {
+    const fs = new DurableOwnerFs();
+    const vfs = new SyncMirrorVfs();
+    const owner = createOwnerVfsAuthorityComposition(fs, {
+      ownerEpoch: 'session-tools-recovery-owner',
+      initialRoots: ['/', '/.rifty'],
+    });
+    setSyncMirror(owner.authority, { async: vfs });
+    write(owner.authority, `${PROJECT_ROOT}/package.json`, PACKAGE_JSON);
+    write(owner.authority, SOURCE, 'export const value = "original";\n');
+
+    const git = makeGit({ fs: vfsToGitFs(vfs), dir: PROJECT_ROOT });
+    await git.init();
+    await git.add('package.json');
+    await git.add('src/main.ts');
+    await git.commit({
+      message: 'initial',
+      author: COMMIT_IDENTITY,
+      committer: COMMIT_IDENTITY,
+    });
+    await owner.authority.flush();
+
+    const recoveredPackageJson = '{"name":"project-a","version":"2.0.0"}\n';
+    const recoveredSource = 'export const value = "recovered";\n';
+    write(owner.authority, `${ARCHIVE_TRANSACTION_STAGE}/package.json`, recoveredPackageJson);
+    write(owner.authority, `${ARCHIVE_TRANSACTION_STAGE}/src/main.ts`, recoveredSource);
+    write(
+      owner.authority,
+      `${ARCHIVE_TRANSACTION_STAGE}/src/imported.ts`,
+      'export const imported = true;\n',
+    );
+    write(owner.authority, ARCHIVE_TRANSACTION_PHASE, 'promoting\n');
+    await owner.authority.flush();
+
+    const packages = createOwnerPackageState({
+      initial: PACKAGE_CONFIG,
+      vfs,
+      fsSync: owner.authority,
+      installStampClaims: owner.installStampClaims,
+      flush: () => owner.authority.flush(),
+      nodeWorkerRuntimeEnv: {},
+      log: () => {},
+      registry: new RegistryClient({
+        baseUrl: 'https://registry.invalid/',
+        fetch: async () => new Response('', { status: 599 }),
+      }),
+      resolverUrl: () => undefined,
+      resolverBundleBaseUrl: () => undefined,
+      resolverPin: () => undefined,
+    });
+    const vfsFailures: Error[] = [];
+    const projectVfs = createWorkbenchProjectVfs({
+      projectRoot: PROJECT_ROOT,
+      authority: owner.authority,
+      appliedMutations: owner.appliedMutations,
+      packageMutations: packages.mutations,
+      durability: 'durable',
+      emit: () => {},
+      fatal: (error) => vfsFailures.push(error),
+    });
+    const backgroundFailures: Error[] = [];
+    const service = await createOwnerPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      owner,
+      packages,
+      projectVfs,
+      vfs,
+      git,
+      commitIdentity: COMMIT_IDENTITY,
+      tsWorkerUrl: 'ts-lsp-worker.js',
+      nodeWorkerRuntimeEnv: {},
+      spawnTsWorker: () => {
+        throw new Error('TS worker must remain lazy in the recovery contract');
+      },
+      send: () => undefined,
+      fatal: (error) => backgroundFailures.push(error),
+      log: () => {},
+    });
+
+    expect(service.initialScmSnapshot.changes).toEqual(
+      expect.arrayContaining([
+        { path: '/package.json', code: ' M', area: 'working' },
+        { path: '/src/main.ts', code: ' M', area: 'working' },
+        { path: '/src/imported.ts', code: '??', area: 'working' },
+      ]),
+    );
+    expect(owner.authority.statSyncOrNull(ARCHIVE_TRANSACTION_ROOT)).toBeNull();
+    expect(decoder.decode(owner.authority.readFileBytesSync(`${PROJECT_ROOT}/package.json`))).toBe(
+      recoveredPackageJson,
+    );
+    expect(decoder.decode(owner.authority.readFileBytesSync(SOURCE))).toBe(recoveredSource);
+
+    await service.close();
+    await packages.quiesce();
+    await projectVfs.close();
+    expect(backgroundFailures).toEqual([]);
+    expect(vfsFailures).toEqual([]);
+  });
+
   it('executes every SCM/archive sibling against real Git/VFS and returns owner-applied revisions', async () => {
     const fs = new MemoryFsSync();
     const vfs = new SyncMirrorVfs();
@@ -86,6 +191,13 @@ describe('owner-resident Playground session tools', () => {
       message: 'initial',
       author: COMMIT_IDENTITY,
       committer: COMMIT_IDENTITY,
+    });
+    let statusOverride: readonly StatusEntry[] | null = null;
+    const serviceGit = new Proxy(git, {
+      get(target, property, receiver) {
+        if (property === 'status') return () => statusOverride ?? target.status();
+        return Reflect.get(target, property, receiver) as unknown;
+      },
     });
 
     const packages = createOwnerPackageState({
@@ -126,7 +238,7 @@ describe('owner-resident Playground session tools', () => {
       packages,
       projectVfs,
       vfs,
-      git,
+      git: serviceGit,
       commitIdentity: COMMIT_IDENTITY,
       tsWorkerUrl: 'ts-lsp-worker.js',
       nodeWorkerRuntimeEnv: {},
@@ -167,6 +279,97 @@ describe('owner-resident Playground session tools', () => {
       return response.response.result;
     };
 
+    const pathGapStatus = Object.freeze([
+      Object.freeze({
+        kind: 'supported' as const,
+        filepath: 'src/main.ts',
+        status: '121' as const,
+      }),
+      Object.freeze({
+        kind: 'unsupported' as const,
+        filepath: 'src/future.ts',
+        rawStatusMatrixCode: '999',
+      }),
+    ] satisfies readonly StatusEntry[]);
+    statusOverride = pathGapStatus;
+    const beforeExplicitGap = frames.length;
+    await expect(call({ type: 'scm:refresh' })).resolves.toMatchObject({
+      type: 'scm:snapshot',
+      snapshot: {
+        changes: [
+          { path: '/src/future.ts', rawStatusMatrixCode: '999' },
+          { path: '/src/main.ts', code: ' M', area: 'working' },
+        ],
+      },
+    });
+    expect(frames.slice(beforeExplicitGap)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'workbench:playground-session-tools-scm-snapshot',
+          snapshot: expect.objectContaining({
+            changes: [
+              { path: '/src/future.ts', rawStatusMatrixCode: '999' },
+              { path: '/src/main.ts', code: ' M', area: 'working' },
+            ],
+          }),
+        }),
+        {
+          type: 'workbench:playground-session-tools-operational-health',
+          health: {
+            scope: 'scm',
+            status: 'degraded',
+            error: {
+              name: 'NotImplementedError',
+              message: 'Not implemented: git.status-matrix.999 for /src/future.ts',
+            },
+          },
+        },
+      ]),
+    );
+    expect(backgroundFailures).toEqual([]);
+
+    statusOverride = null;
+    await expect(call({ type: 'scm:refresh' })).resolves.toMatchObject({
+      type: 'scm:snapshot',
+    });
+    expect(frames.at(-2)).toEqual({
+      type: 'workbench:playground-session-tools-operational-health',
+      health: { scope: 'scm', status: 'healthy' },
+    });
+
+    statusOverride = pathGapStatus;
+    const beforeAutomaticGap = frames.length;
+    owner.authority.writeFileSync(SOURCE, encoder.encode('export const value = 1;\n'));
+    projectVfs.publishSnapshot();
+    await vi.waitFor(() => {
+      expect(frames.slice(beforeAutomaticGap)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'workbench:playground-session-tools-scm-snapshot',
+            snapshot: expect.objectContaining({
+              changes: expect.arrayContaining([
+                { path: '/src/future.ts', rawStatusMatrixCode: '999' },
+                { path: '/src/main.ts', code: ' M', area: 'working' },
+              ]),
+            }),
+          }),
+          expect.objectContaining({
+            type: 'workbench:playground-session-tools-operational-health',
+            health: expect.objectContaining({ scope: 'scm', status: 'degraded' }),
+          }),
+        ]),
+      );
+    });
+    expect(backgroundFailures).toEqual([]);
+    statusOverride = null;
+    await expect(call({ type: 'scm:refresh' })).resolves.toMatchObject({
+      type: 'scm:snapshot',
+    });
+    expect(frames.at(-2)).toEqual({
+      type: 'workbench:playground-session-tools-operational-health',
+      health: { scope: 'scm', status: 'healthy' },
+    });
+
     const beforeExternalMutation = frames.length;
     owner.authority.writeFileSync(SOURCE, encoder.encode('export const value = interim;\n'));
     projectVfs.publishSnapshot();
@@ -180,7 +383,8 @@ describe('owner-resident Playground session tools', () => {
             (frame) =>
               frame.type === 'workbench:playground-session-tools-scm-snapshot' &&
               frame.snapshot.changes.some(
-                (change) => change.path === '/src/main.ts' && change.area === 'working',
+                (change) =>
+                  change.path === '/src/main.ts' && 'area' in change && change.area === 'working',
               ),
           ),
       ).toBe(true);
@@ -443,6 +647,7 @@ describe('owner-resident Playground session tools', () => {
       '/.rifty/workbench/v1/catalog.json',
     );
     expect(durabilityFailure.response.error.message).not.toContain('3 unhealed');
+    expect(durabilityFailure.response.error.name).toBe('PlaygroundPersistenceError');
     flush.mockRestore();
 
     const beforeDuplicate = frames.length;
@@ -503,26 +708,375 @@ describe('owner-resident Playground session tools', () => {
       fatal: (error) => failedRefreshes.push(error),
       log: () => {},
     });
-    owner.authority.writeFileSync(
-      `${PROJECT_ROOT}/.git/index`,
-      encoder.encode('corrupt git index'),
-    );
+    const gitIndexPath = `${PROJECT_ROOT}/.git/index`;
+    const validGitIndex = owner.authority.readFileBytesSync(gitIndexPath).slice();
+    owner.authority.writeFileSync(gitIndexPath, encoder.encode('corrupt git index'));
     projectVfs.publishSnapshot();
-    await vi.waitFor(() => expect(failedRefreshes).toHaveLength(1));
-    await expect(
-      failedService.handle({
-        type: 'workbench:playground-session-tools-request',
-        requestId: 'after-background-failure',
-        operation: { type: 'scm:refresh' },
-      }),
-    ).rejects.toBeInstanceOf(ClosedHandleError);
-    await expect(failedService.close()).rejects.toBe(failedRefreshes[0]);
-    expect(failedRefreshFrames).toEqual([]);
+    await vi.waitFor(() => {
+      expect(
+        failedRefreshFrames.filter(
+          (frame) => frame.type === 'workbench:playground-session-tools-operational-health',
+        ),
+      ).toEqual([
+        {
+          type: 'workbench:playground-session-tools-operational-health',
+          health: {
+            scope: 'scm',
+            status: 'degraded',
+            error: expect.objectContaining({
+              name: expect.any(String),
+              message: expect.any(String),
+            }),
+          },
+        },
+      ]);
+    });
+    expect(failedRefreshes).toEqual([]);
+
+    // Fault class: false-fallback -> fatal escalation. One failed derived-state
+    // read degrades SCM only: unrelated work stays live and the same revision
+    // is not retried in a background spin.
+    await failedService.handle({
+      type: 'workbench:playground-session-tools-request',
+      requestId: 'after-background-failure',
+      operation: { type: 'durability:flush' },
+    });
+    expect(
+      failedRefreshFrames.filter(
+        (frame) => frame.type === 'workbench:playground-session-tools-operational-health',
+      ),
+    ).toHaveLength(1);
+    expect(
+      failedRefreshFrames.find(
+        (frame) =>
+          frame.type === 'workbench:playground-session-tools-response' &&
+          frame.requestId === 'after-background-failure',
+      ),
+    ).toMatchObject({ response: { ok: true, result: { type: 'durability:void' } } });
+
+    // The existing explicit full refresh is the recovery operation. Its
+    // successful read clears the replayed degraded state.
+    owner.authority.writeFileSync(gitIndexPath, validGitIndex);
+    await failedService.handle({
+      type: 'workbench:playground-session-tools-request',
+      requestId: 'recover-background-failure',
+      operation: { type: 'scm:refresh' },
+    });
+    await vi.waitFor(() => {
+      expect(failedRefreshFrames.at(-1)).toEqual({
+        type: 'workbench:playground-session-tools-operational-health',
+        health: { scope: 'scm', status: 'healthy' },
+      });
+    });
+    expect(failedRefreshes).toEqual([]);
+    await expect(failedService.close()).resolves.toBeUndefined();
 
     await packages.quiesce();
     await projectVfs.close();
     expect(backgroundFailures).toEqual([]);
     expect(vfsFailures).toEqual([]);
     expect(vfsFrames.length).toBeGreaterThan(0);
+  });
+
+  // Fault class: starvation/unbounded-read. Continuous publications
+  // may coalesce, but each automatic pass must yield the shared tail to explicit work.
+  it('requeues publication catch-up behind finite durability and SCM requests', async () => {
+    const fs = new MemoryFsSync();
+    const vfs = new SyncMirrorVfs();
+    const owner = createOwnerVfsAuthorityComposition(fs, {
+      ownerEpoch: 'session-tools-fairness-owner',
+      initialRoots: ['/', '/.rifty'],
+    });
+    setSyncMirror(owner.authority, { async: vfs });
+    write(owner.authority, `${PROJECT_ROOT}/package.json`, PACKAGE_JSON);
+    write(owner.authority, SOURCE, 'export const value = 1;\n');
+
+    const git = makeGit({ fs: vfsToGitFs(vfs), dir: PROJECT_ROOT });
+    await git.init();
+    await git.add('package.json');
+    await git.add('src/main.ts');
+    await git.commit({
+      message: 'initial',
+      author: COMMIT_IDENTITY,
+      committer: COMMIT_IDENTITY,
+    });
+
+    const packages = createOwnerPackageState({
+      initial: PACKAGE_CONFIG,
+      vfs,
+      fsSync: owner.authority,
+      installStampClaims: owner.installStampClaims,
+      flush: () => owner.authority.flush(),
+      nodeWorkerRuntimeEnv: {},
+      log: () => {},
+      registry: new RegistryClient({
+        baseUrl: 'https://registry.invalid/',
+        fetch: async () => new Response('', { status: 599 }),
+      }),
+      resolverUrl: () => undefined,
+      resolverBundleBaseUrl: () => undefined,
+      resolverPin: () => undefined,
+    });
+    const vfsFailures: Error[] = [];
+    const projectVfs = createWorkbenchProjectVfs({
+      projectRoot: PROJECT_ROOT,
+      authority: owner.authority,
+      appliedMutations: owner.appliedMutations,
+      packageMutations: packages.mutations,
+      durability: 'ephemeral',
+      emit: () => {},
+      fatal: (error) => vfsFailures.push(error),
+    });
+    projectVfs.publishSnapshot();
+
+    const timeline: string[] = [];
+    let readCount = 0;
+    let supersedingPublications = 3;
+    const controlledProjectVfs = {
+      ...projectVfs,
+      async readConsistent<T>(read: () => T | Promise<T>): Promise<T> {
+        const result = await projectVfs.readConsistent(read);
+        readCount += 1;
+        timeline.push(`read:${String(readCount)}`);
+        if (supersedingPublications > 0) {
+          supersedingPublications -= 1;
+          owner.authority.writeFileSync(
+            SOURCE,
+            encoder.encode(`export const value = ${String(readCount + 1)};\n`),
+          );
+          projectVfs.publishSnapshot();
+          timeline.push(`publish:${String(readCount)}`);
+        }
+        return result;
+      },
+    };
+    const frames: OwnerPlaygroundSessionToolsFrame[] = [];
+    const backgroundFailures: Error[] = [];
+    const service = await createOwnerPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      owner,
+      packages,
+      projectVfs: controlledProjectVfs,
+      vfs,
+      git,
+      commitIdentity: COMMIT_IDENTITY,
+      tsWorkerUrl: 'ts-lsp-worker.js',
+      nodeWorkerRuntimeEnv: {},
+      spawnTsWorker: () => {
+        throw new Error('TS worker must remain lazy in the fairness contract');
+      },
+      send(frame) {
+        frames.push(structuredClone(frame));
+        if (
+          frame.type === 'workbench:playground-session-tools-response' &&
+          (frame.requestId === 'finite-durability' || frame.requestId === 'finite-scm')
+        ) {
+          timeline.push(`response:${frame.requestId}`);
+        }
+        return undefined;
+      },
+      fatal: (error) => backgroundFailures.push(error),
+      log: () => {},
+    });
+
+    owner.authority.writeFileSync(SOURCE, encoder.encode('export const value = 2;\n'));
+    projectVfs.publishSnapshot();
+    const durability = service.handle({
+      type: 'workbench:playground-session-tools-request',
+      requestId: 'finite-durability',
+      operation: { type: 'durability:flush' },
+    });
+    const explicitScm = service.handle({
+      type: 'workbench:playground-session-tools-request',
+      requestId: 'finite-scm',
+      operation: { type: 'scm:refresh' },
+    });
+
+    await Promise.all([durability, explicitScm]);
+    await vi.waitFor(() => expect(readCount).toBeGreaterThanOrEqual(3));
+
+    expect(timeline.indexOf('response:finite-durability')).toBeLessThan(timeline.indexOf('read:2'));
+    expect(timeline.indexOf('response:finite-scm')).toBeLessThan(timeline.indexOf('read:3'));
+    expect(
+      frames.find(
+        (frame) =>
+          frame.type === 'workbench:playground-session-tools-response' &&
+          frame.requestId === 'finite-durability',
+      ),
+    ).toMatchObject({ response: { ok: true, result: { type: 'durability:void' } } });
+    expect(
+      frames.find(
+        (frame) =>
+          frame.type === 'workbench:playground-session-tools-response' &&
+          frame.requestId === 'finite-scm',
+      ),
+    ).toMatchObject({ response: { ok: true, result: { type: 'scm:snapshot' } } });
+
+    await service.close();
+    await packages.quiesce();
+    await projectVfs.close();
+    expect(backgroundFailures).toEqual([]);
+    expect(vfsFailures).toEqual([]);
+  });
+
+  // Fault class: torn-state × quota-perm-fail × observable-order. Once an
+  // import starts its durable roll-forward marker, no continuation may proceed.
+  it('fatally fences Cmd-S, SCM status, and export after an armed archive import fails', async () => {
+    const fs = new DurableOwnerFs();
+    const vfs = new SyncMirrorVfs();
+    const owner = createOwnerVfsAuthorityComposition(fs, {
+      ownerEpoch: 'session-tools-armed-import-owner',
+      initialRoots: ['/', '/.rifty'],
+    });
+    setSyncMirror(owner.authority, { async: vfs });
+    write(owner.authority, `${PROJECT_ROOT}/package.json`, PACKAGE_JSON);
+    write(owner.authority, SOURCE, 'export const value = "before import";\n');
+
+    const git = makeGit({ fs: vfsToGitFs(vfs), dir: PROJECT_ROOT });
+    await git.init();
+    await git.add('package.json');
+    await git.add('src/main.ts');
+    await git.commit({
+      message: 'initial',
+      author: COMMIT_IDENTITY,
+      committer: COMMIT_IDENTITY,
+    });
+    await owner.authority.flush();
+
+    const packages = createOwnerPackageState({
+      initial: PACKAGE_CONFIG,
+      vfs,
+      fsSync: owner.authority,
+      installStampClaims: owner.installStampClaims,
+      flush: () => owner.authority.flush(),
+      nodeWorkerRuntimeEnv: {},
+      log: () => {},
+      registry: new RegistryClient({
+        baseUrl: 'https://registry.invalid/',
+        fetch: async () => new Response('', { status: 599 }),
+      }),
+      resolverUrl: () => undefined,
+      resolverBundleBaseUrl: () => undefined,
+      resolverPin: () => undefined,
+    });
+    const timeline: string[] = [];
+    const vfsFrames: OwnerProjectVfsFrame[] = [];
+    const fatalFailures: Error[] = [];
+    const projectVfs = createWorkbenchProjectVfs({
+      projectRoot: PROJECT_ROOT,
+      authority: owner.authority,
+      appliedMutations: owner.appliedMutations,
+      packageMutations: packages.mutations,
+      durability: 'durable',
+      emit(frame) {
+        vfsFrames.push(structuredClone(frame));
+        if (frame.type === 'workbench:project-vfs-fatal') timeline.push('fatal-frame');
+      },
+      fatal(error) {
+        fatalFailures.push(error);
+        timeline.push('fatal-callback');
+      },
+    });
+    projectVfs.publishSnapshot();
+
+    const frames: OwnerPlaygroundSessionToolsFrame[] = [];
+    const service = await createOwnerPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      owner,
+      packages,
+      projectVfs,
+      vfs,
+      git,
+      commitIdentity: COMMIT_IDENTITY,
+      tsWorkerUrl: 'ts-lsp-worker.js',
+      nodeWorkerRuntimeEnv: {},
+      spawnTsWorker: () => {
+        throw new Error('TS worker must remain lazy in the armed import contract');
+      },
+      send(frame) {
+        frames.push(structuredClone(frame));
+        if (
+          frame.type === 'workbench:playground-session-tools-response' &&
+          frame.requestId === 'armed-import'
+        ) {
+          timeline.push('import-response');
+        }
+        return undefined;
+      },
+      fatal: (error) => fatalFailures.push(error),
+      log: () => {},
+    });
+    let requestSequence = 0;
+    const request = async (operation: PlaygroundSessionToolOperation, requestId?: string) => {
+      const id = requestId ?? `continuation-${String(++requestSequence)}`;
+      await service.handle({
+        type: 'workbench:playground-session-tools-request',
+        requestId: id,
+        operation,
+      });
+      const response = frames.find(
+        (candidate) =>
+          candidate.type === 'workbench:playground-session-tools-response' &&
+          candidate.requestId === id,
+      );
+      if (response?.type !== 'workbench:playground-session-tools-response') {
+        throw new Error(`missing owner response ${id}`);
+      }
+      return response.response;
+    };
+
+    // Ordinal five is the phase=promoting durable marker itself.
+    fs.armPersistFailure(5, 'quota-report');
+    const importResponse = await request(
+      {
+        type: 'archive:import',
+        archiveJson: archive({
+          'package.json': PACKAGE_JSON,
+          'src/imported.ts': 'export const imported = true;\n',
+        }),
+      },
+      'armed-import',
+    );
+
+    expect(importResponse.ok).toBe(false);
+    expect(fs.didInjectFailure).toBe(true);
+    expect(fs.trace.find(({ outcome }) => outcome === 'injected-failure')?.primitive).toMatchObject(
+      {
+        kind: 'write',
+        path: ARCHIVE_TRANSACTION_PHASE,
+      },
+    );
+    expect(owner.authority.statSyncOrNull(ARCHIVE_TRANSACTION_PHASE)?.isFile).toBe(true);
+    expect(timeline).toEqual(['fatal-frame', 'fatal-callback', 'import-response']);
+    expect(fatalFailures).toHaveLength(1);
+    expect(vfsFrames.map((frame) => frame.type)).toEqual([
+      'workbench:project-vfs-snapshot',
+      'workbench:project-vfs-fatal',
+    ]);
+
+    const fencedTree = fs.liveSnapshot();
+    const fencedRevision = owner.authority.treeRevision;
+    const continuationResponses = await Promise.all([
+      request({ type: 'durability:flush' }),
+      request({ type: 'scm:refresh' }),
+      request({ type: 'archive:export' }),
+    ]);
+
+    expect(continuationResponses.every((response) => !response.ok)).toBe(true);
+    for (const response of continuationResponses) {
+      if (response.ok) throw new Error(`fenced continuation returned ${response.result.type}`);
+      expect(response.error.message.length).toBeGreaterThan(0);
+    }
+    expect(owner.authority.treeRevision).toBe(fencedRevision);
+    expect(fs.liveSnapshot()).toEqual(fencedTree);
+    expect(vfsFrames.map((frame) => frame.type)).toEqual([
+      'workbench:project-vfs-snapshot',
+      'workbench:project-vfs-fatal',
+    ]);
+
+    fs.disarmPersistFailure();
+    await service.close();
+    await packages.quiesce();
+    await expect(projectVfs.close()).rejects.toBeInstanceOf(ClosedHandleError);
   });
 });

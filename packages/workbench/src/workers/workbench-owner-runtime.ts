@@ -28,6 +28,7 @@ import {
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { resolveOwnerGitCommitIdentity } from './owner-git-commit-identity.ts';
 import { createOwnerPackageState } from './owner-package-state.ts';
+import { recoverOwnerPlaygroundArchiveTransaction } from './playground-archive-integration.ts';
 import {
   type PlaygroundProjectAuthority,
   createPlaygroundProjectAuthority,
@@ -268,6 +269,12 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
                   },
             ),
         },
+        beforeOpenProject: (projectRoot) =>
+          recoverOwnerPlaygroundArchiveTransaction({
+            projectRoot,
+            owner: ownerComposition,
+            packages: packageState,
+          }),
       });
       const playgroundAuthorityOwnership = construction.own(() =>
         (playgroundAuthority as PlaygroundProjectAuthority).close(),

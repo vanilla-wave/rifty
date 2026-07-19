@@ -39,7 +39,9 @@ import {
 import {
   type BrowserPlaygroundSessionToolsLifecycle,
   type OwnerPlaygroundSessionToolsFrame,
+  type PlaygroundSessionToolsOperationalHealth,
   createBrowserPlaygroundSessionTools,
+  operationalHealthForScmSnapshot,
 } from './internal/playground-session-tools-transport.ts';
 import {
   ownPlaygroundProjectOpenOptions,
@@ -104,13 +106,17 @@ import {
 } from './service-worker-control.ts';
 import { createViteProjectRuntime } from './vite-project-runtime.ts';
 import {
+  type PlaygroundOwnerOperationalHealth,
+  type PlaygroundOwnerSessionToolLifecycle,
   type RawWorkspaceOwnerHandle,
+  type WorkbenchOwnerHealthEvent,
   type WorkbenchOwnerPort,
   type WorkbenchOwnerStartInput,
   createWorkbenchOwnerPort,
 } from './workbench-owner-port.ts';
 
 const PROJECT_VFS_COMMIT_TIMEOUT_MS = 60_000;
+const OWNER_OPERATION_TIMEOUT_MS = 60_000;
 
 interface BrowserOwnerDependencies {
   readonly spawnOwner: (input: WorkbenchOwnerStartInput) => WorkerProcessHandle;
@@ -171,6 +177,10 @@ interface ProjectTransport {
   readonly runtimeAcquisition: ProjectRuntimeAcquisition;
   readonly previews: BrowserPlaygroundPreviewAuthority;
   playgroundScmSnapshot(): PlaygroundScmSnapshot;
+  playgroundOperationalHealth(): PlaygroundSessionToolsOperationalHealth;
+  subscribeOperationalHealth(
+    listener: (health: PlaygroundOwnerOperationalHealth) => void,
+  ): () => void;
   subscribePlaygroundTools(listener: (frame: unknown) => void): () => void;
   acceptPty(frame: OwnerToPageFrame): void;
   acceptPreview(frame: PtyPreview): void;
@@ -182,7 +192,7 @@ interface ProjectTransport {
 interface PlaygroundSessionState {
   readonly transport: ProjectTransport;
   readonly content: ProjectContentController;
-  lifecycle: BrowserPlaygroundSessionToolsLifecycle | null;
+  lifecycle: PlaygroundOwnerSessionToolLifecycle | null;
 }
 
 function deferred<T>(): Deferred<T> {
@@ -380,7 +390,9 @@ export function startBrowserWorkspaceOwner(
   const closedState = deferred<void>();
   const pending = new Map<string, PendingOperation>();
   const issuedOperationIds = new Set<string>();
+  const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const catalogListeners = new Set<(snapshot: PlaygroundCatalogSnapshot) => void>();
+  const healthListeners = new Set<(event: WorkbenchOwnerHealthEvent) => void>();
   const playgroundSessions = new WeakMap<object, PlaygroundSessionState>();
   let storage: OwnerStorageSnapshot | null = null;
   let catalogSnapshot: PlaygroundCatalogSnapshot | null = null;
@@ -390,6 +402,7 @@ export function startBrowserWorkspaceOwner(
   let exited = false;
   let closeRequested = false;
   let protocolFailure: Error | null = null;
+  let invariantHealth: WorkbenchOwnerHealthEvent | null = null;
 
   const ownerClosed = closedState.promise;
 
@@ -420,6 +433,8 @@ export function startBrowserWorkspaceOwner(
   const rejectPending = (error: Error): void => {
     for (const operation of pending.values()) operation.reject(error);
     pending.clear();
+    for (const timer of pendingTimers.values()) clearTimeout(timer);
+    pendingTimers.clear();
   };
 
   const failProtocol = (failure: unknown): void => {
@@ -429,6 +444,32 @@ export function startBrowserWorkspaceOwner(
     rejectPending(protocolFailure);
     activeProject?.disconnect(protocolFailure);
     if (!exited) worker.kill('SIGTERM');
+  };
+
+  const failInvariant = (failure: unknown): void => {
+    if (protocolFailure !== null) return;
+    invariantHealth ??= Object.freeze({
+      kind: 'fatal-invariant',
+      summary: 'Workbench protocol invariant failed',
+    });
+    for (const listener of [...healthListeners]) {
+      try {
+        listener(invariantHealth);
+      } catch {
+        // Health observation cannot replace the authoritative protocol failure.
+      }
+    }
+    failProtocol(failure);
+  };
+
+  const publishHealth = (event: WorkbenchOwnerHealthEvent): void => {
+    for (const listener of [...healthListeners]) {
+      try {
+        listener(event);
+      } catch {
+        // Health observation cannot replace owner or project state.
+      }
+    }
   };
 
   const send = (message: PageToPhysicalOwnerMessage): void => {
@@ -461,10 +502,23 @@ export function startBrowserWorkspaceOwner(
     }
     issuedOperationIds.add(opId);
     pending.set(opId, operation);
+    const timer = setTimeout(() => {
+      if (pending.get(opId) !== operation) return;
+      pending.delete(opId);
+      pendingTimers.delete(opId);
+      const error = new Error(
+        `Workbench owner ${operation.kind} operation ${opId} timed out after ${String(OWNER_OPERATION_TIMEOUT_MS)}ms`,
+      );
+      operation.reject(error);
+      failProtocol(error);
+    }, OWNER_OPERATION_TIMEOUT_MS);
+    pendingTimers.set(opId, timer);
     try {
       send(message);
     } catch (error) {
       pending.delete(opId);
+      pendingTimers.delete(opId);
+      clearTimeout(timer);
       operation.reject(errorFrom(error));
     }
     return operation.promise as Promise<T>;
@@ -482,6 +536,9 @@ export function startBrowserWorkspaceOwner(
       operation.runtimeAssetProgress.assertSuccessfulTerminal();
     }
     pending.delete(opId);
+    const timer = pendingTimers.get(opId);
+    if (timer !== undefined) clearTimeout(timer);
+    pendingTimers.delete(opId);
     return operation as Extract<PendingOperation, { readonly kind: K }>;
   };
 
@@ -528,7 +585,7 @@ export function startBrowserWorkspaceOwner(
         }
         acceptPlaygroundMessage(inspectPlaygroundOwnerToPageMessage(raw));
       } catch (error) {
-        failProtocol(error);
+        failInvariant(error);
       }
       return;
     }
@@ -536,7 +593,7 @@ export function startBrowserWorkspaceOwner(
     try {
       message = inspectWorkbenchOwnerToPageMessage(raw);
     } catch (error) {
-      failProtocol(error);
+      failInvariant(error);
       return;
     }
     try {
@@ -616,7 +673,7 @@ export function startBrowserWorkspaceOwner(
         case 'workbench:failure': {
           const error = deserializeWorkbenchOwnerError(message.error);
           if (!('opId' in message)) {
-            failProtocol(error);
+            failInvariant(error);
             return;
           }
           const operation = pending.get(message.opId);
@@ -624,18 +681,21 @@ export function startBrowserWorkspaceOwner(
             throw new Error(`Unexpected Workbench owner failure for ${message.opId}`);
           }
           pending.delete(message.opId);
+          const timer = pendingTimers.get(message.opId);
+          if (timer !== undefined) clearTimeout(timer);
+          pendingTimers.delete(message.opId);
           operation.reject(error);
           return;
         }
       }
     } catch (error) {
-      failProtocol(error);
+      failInvariant(error);
     }
   };
 
   worker.on('message', acceptMessage);
   worker.on('messageerror', (event: unknown) => {
-    failProtocol(new Error(`Workbench owner IPC messageerror: ${String(event)}`));
+    failInvariant(new Error(`Workbench owner IPC messageerror: ${String(event)}`));
   });
   worker.on('exit', (rawCode?: unknown, rawSignal?: unknown) => {
     if (exited) return;
@@ -645,10 +705,12 @@ export function startBrowserWorkspaceOwner(
     const normal = closeRequested && code === 0 && signal === null && protocolFailure === null;
     const exitError =
       protocolFailure ??
-      new Error(
-        `Workbench owner exited${closeRequested ? '' : ' unexpectedly'} ` +
-          `(code ${String(code)}, signal ${String(signal)})`,
-      );
+      (normal
+        ? new ClosedHandleError('Workbench owner')
+        : new Error(
+            `Workbench owner exited${closeRequested ? '' : ' unexpectedly'} ` +
+              `(code ${String(code)}, signal ${String(signal)})`,
+          ));
     readyState.reject(exitError);
     rejectPending(exitError);
     activeProject?.disconnect(exitError);
@@ -704,9 +766,30 @@ export function startBrowserWorkspaceOwner(
     let disconnected = false;
     let currentPreview: readonly PreviewAdvertisement[] = Object.freeze([]);
     let currentScmSnapshot = initialScmSnapshot;
+    let currentOperationalHealth: PlaygroundSessionToolsOperationalHealth =
+      initialScmSnapshot === null
+        ? Object.freeze({ scope: 'scm', status: 'healthy' })
+        : operationalHealthForScmSnapshot(initialScmSnapshot);
+    let currentPreviewHealth: PlaygroundOwnerOperationalHealth = Object.freeze({
+      scope: 'preview',
+      status: 'healthy',
+    });
     const previewListeners = new Set<(entries: readonly PreviewAdvertisement[]) => void>();
     const playgroundToolListeners = new Set<(frame: unknown) => void>();
     const runtimeAcquisition = createProjectRuntimeAcquisitionController(acquisition);
+    const operationalHealthListeners = new Set<
+      (health: PlaygroundOwnerOperationalHealth) => void
+    >();
+
+    const publishOperationalHealth = (health: PlaygroundOwnerOperationalHealth): void => {
+      for (const listener of [...operationalHealthListeners]) {
+        try {
+          listener(health);
+        } catch {
+          // One health observer cannot suppress sibling state delivery.
+        }
+      }
+    };
 
     const assertCurrent = (): void => {
       if (
@@ -780,7 +863,19 @@ export function startBrowserWorkspaceOwner(
       mountRoute: (entry) =>
         dependencies.mountPreview(entry.port, entry.ownerToken, entry.previewScope),
       proveServiceWorkerControl: provePreviewControl,
-      onFailure: failProtocol,
+      onDegraded(error) {
+        currentPreviewHealth = Object.freeze({
+          scope: 'preview',
+          status: 'degraded',
+          error: Object.freeze({ name: error.name, message: error.message }),
+        });
+        publishOperationalHealth(currentPreviewHealth);
+      },
+      onHealthy() {
+        currentPreviewHealth = Object.freeze({ scope: 'preview', status: 'healthy' });
+        publishOperationalHealth(currentPreviewHealth);
+      },
+      onInvariant: failInvariant,
     });
 
     const terminalPort = Object.freeze({
@@ -819,6 +914,19 @@ export function startBrowserWorkspaceOwner(
         (activeProject === null || activeProject.token === opened.projectToken),
       generateRequestId: dependencies.operationId,
       commitTimeoutMs: PROJECT_VFS_COMMIT_TIMEOUT_MS,
+      reportProtocolError: failInvariant,
+      onDurabilityState(state) {
+        if (disconnected || exited || activeProject?.token !== opened.projectToken) return;
+        publishHealth(
+          state.status === 'proved'
+            ? Object.freeze({ kind: 'persistence', status: 'healthy' })
+            : Object.freeze({
+                kind: 'persistence',
+                status: 'degraded',
+                recover: state.recover,
+              }),
+        );
+      },
     });
 
     return {
@@ -836,6 +944,24 @@ export function startBrowserWorkspaceOwner(
         }
         return currentScmSnapshot;
       },
+      playgroundOperationalHealth() {
+        assertCurrent();
+        return currentOperationalHealth;
+      },
+      subscribeOperationalHealth(listener) {
+        assertCurrent();
+        if (typeof listener !== 'function') {
+          throw new TypeError('Playground operational health listener must be a function');
+        }
+        operationalHealthListeners.add(listener);
+        try {
+          listener(currentOperationalHealth);
+          listener(currentPreviewHealth);
+        } catch {
+          // Replay follows the same observer isolation as live delivery.
+        }
+        return () => operationalHealthListeners.delete(listener);
+      },
       subscribePlaygroundTools(listener) {
         assertCurrent();
         playgroundToolListeners.add(listener);
@@ -850,6 +976,11 @@ export function startBrowserWorkspaceOwner(
         }
         if (frame.type === 'workbench:playground-session-tools-scm-snapshot') {
           currentScmSnapshot = frame.snapshot;
+          currentOperationalHealth = operationalHealthForScmSnapshot(currentScmSnapshot);
+          publishOperationalHealth(currentOperationalHealth);
+        } else if (frame.type === 'workbench:playground-session-tools-operational-health') {
+          currentOperationalHealth = frame.health;
+          publishOperationalHealth(currentOperationalHealth);
         }
         for (const listener of [...playgroundToolListeners]) {
           try {
@@ -875,7 +1006,8 @@ export function startBrowserWorkspaceOwner(
           }
         }
         playgroundToolListeners.clear();
-        pty.disconnect();
+        operationalHealthListeners.clear();
+        pty.disconnect(error);
         content.disconnect(error);
       },
     };
@@ -911,6 +1043,8 @@ export function startBrowserWorkspaceOwner(
         timeoutMs: input.deployment.previewProbeTimeoutMs,
         subscribe: transport.previews.subscribeRouted,
         requestSnapshot: transport.previews.requestSnapshot,
+        // The registry admits only already-mounted, SW-control-proven routes.
+        // Readiness therefore observes that authority and adds only HTTP proof.
         mountRoute: () => () => {},
         proveServiceWorkerControl: async () => {},
         probe: async (url, signal) => {
@@ -1200,23 +1334,43 @@ export function startBrowserWorkspaceOwner(
             if (activeProject !== state.transport) {
               throw new ClosedHandleError('Playground ProjectSession');
             }
-            state.lifecycle ??= createBrowserPlaygroundSessionTools({
-              projectRoot: state.transport.projectRoot,
-              documents: state.content,
-              initialScmSnapshot: state.transport.playgroundScmSnapshot(),
-              previews: state.transport.previews.registry,
-              send(frame) {
-                if (activeProject !== state.transport) return false;
-                send({
-                  type: 'workbench:playground-project-tools',
-                  projectToken: state.transport.token,
-                  frame,
+            if (state.lifecycle === null) {
+              const core: BrowserPlaygroundSessionToolsLifecycle =
+                createBrowserPlaygroundSessionTools({
+                  projectRoot: state.transport.projectRoot,
+                  documents: state.content,
+                  initialScmSnapshot: state.transport.playgroundScmSnapshot(),
+                  initialOperationalHealth: state.transport.playgroundOperationalHealth(),
+                  previews: state.transport.previews.registry,
+                  send(frame) {
+                    if (activeProject !== state.transport) return false;
+                    send({
+                      type: 'workbench:playground-project-tools',
+                      projectToken: state.transport.token,
+                      frame,
+                    });
+                    return true;
+                  },
+                  subscribe: (listener) => state.transport.subscribePlaygroundTools(listener),
+                  generateRequestId: dependencies.operationId,
                 });
-                return true;
-              },
-              subscribe: (listener) => state.transport.subscribePlaygroundTools(listener),
-              generateRequestId: dependencies.operationId,
-            });
+              state.lifecycle = Object.freeze({
+                tools: core.tools,
+                subscribeOperationalHealth: (
+                  listener: (health: PlaygroundOwnerOperationalHealth) => void,
+                ) => state.transport.subscribeOperationalHealth(listener),
+                async recoverOperationalHealth(
+                  scope: PlaygroundOwnerOperationalHealth['scope'],
+                ): Promise<void> {
+                  if (scope === 'scm') {
+                    await core.tools.scm.refresh();
+                    return;
+                  }
+                  await state.transport.previews.recover();
+                },
+                close: () => core.close(),
+              });
+            }
             return state.lifecycle;
           },
         });
@@ -1283,6 +1437,20 @@ export function startBrowserWorkspaceOwner(
       });
     },
     ...(playgroundHandle === undefined ? {} : { playground: playgroundHandle }),
+    subscribeHealth(listener) {
+      if (typeof listener !== 'function') {
+        throw new TypeError('Workbench owner health listener must be a function');
+      }
+      healthListeners.add(listener);
+      if (invariantHealth !== null) {
+        try {
+          listener(invariantHealth);
+        } catch {
+          // Replay follows the same listener isolation as live delivery.
+        }
+      }
+      return () => healthListeners.delete(listener);
+    },
     close() {
       if (closeRequested || exited) return;
       closeRequested = true;

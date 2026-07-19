@@ -185,6 +185,7 @@ body {
 
 /* Shell: files panel | gap-splitter | main. */
 .rf-shell {
+  position: relative;
   flex: 1;
   display: grid;
   grid-template-columns: var(--rf-sidebar-w) var(--rf-split) minmax(0, 1fr);
@@ -197,6 +198,33 @@ body {
 }
 .rf-shell[data-sidebar="collapsed"] .rf-sidebar {
   border: none;
+}
+
+.rf-sidebar-recovery {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--rf-line-panel);
+  border-radius: var(--rf-r-sm);
+  background: var(--rf-panel);
+  color: var(--rf-text-dim);
+  font: 600 11px / 14px var(--rf-font-sans);
+  cursor: pointer;
+  box-shadow: var(--rf-shadow-toast);
+}
+.rf-sidebar-recovery:hover {
+  background: var(--rf-hover);
+  color: var(--rf-text);
+}
+.rf-sidebar-recovery:focus-visible {
+  outline: 2px solid var(--rf-accent);
+  outline-offset: 1px;
 }
 
 .rf-sidebar {
@@ -1150,6 +1178,17 @@ body {
 }
 .rf-tab__dot[data-dirty="true"] {
   background: var(--rf-accent);
+}
+.rf-tab__persistence-risk {
+  display: inline-grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1px solid var(--rf-warn);
+  border-radius: 50%;
+  color: var(--rf-warn);
+  font: 700 9px / 1 var(--rf-font-mono);
 }
 .rf-dirty-gutter {
   width: 3px !important;
@@ -2397,6 +2436,10 @@ body.rf-resizing iframe {
 .rf-banner__msg {
   flex: 1;
 }
+.rf-banner--health {
+  position: relative;
+  z-index: 220;
+}
 
 .rf-toast {
   position: fixed;
@@ -3055,6 +3098,190 @@ body.rf-resizing iframe {
 }
 
 /* ====================================================================== */
+/* Workspace admission (standalone occupied screen)                        */
+/* ====================================================================== */
+
+.rf-workspace-occupied {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(18px, 5vw, 56px);
+  overflow: auto;
+  background: radial-gradient(circle at 50% 20%, rgba(199, 240, 90, 0.065), transparent 34rem),
+    var(--rf-bg-0);
+  place-items: center;
+  isolation: isolate;
+}
+.rf-workspace-occupied::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 32px 32px;
+  content: "";
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent 85%);
+  pointer-events: none;
+}
+.rf-workspace-occupied__frame {
+  width: min(100%, 640px);
+  animation: rf-rise 0.32s var(--rf-ease) both;
+}
+.rf-workspace-occupied__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  margin-bottom: var(--rf-gap);
+  padding: 0 15px;
+  background: var(--rf-panel);
+  border: 1px solid var(--rf-line-panel);
+  border-radius: var(--rf-r-lg);
+}
+.rf-workspace-occupied__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--rf-text-faint);
+  font: 500 10.5px / 15px var(--rf-font-mono);
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+.rf-workspace-occupied__status-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--rf-accent);
+  border-radius: 50%;
+}
+.rf-workspace-occupied__panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 22px;
+  padding: clamp(26px, 5vw, 42px);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.018), transparent 54%), var(--rf-panel);
+  border: 1px solid var(--rf-line-panel);
+  border-radius: var(--rf-r-lg);
+}
+.rf-workspace-occupied__icon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  color: var(--rf-accent-text);
+  background: var(--rf-accent-sel);
+  border: 1px solid var(--rf-accent-border);
+  border-radius: var(--rf-r-lg);
+  place-items: center;
+}
+.rf-workspace-occupied__content {
+  min-width: 0;
+}
+.rf-workspace-occupied__eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--rf-accent-text);
+  font: 600 10.5px / 15px var(--rf-font-mono);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.rf-workspace-occupied h1 {
+  margin: 0;
+  color: var(--rf-text);
+  font: 600 clamp(20px, 4vw, 27px) / 1.25 var(--rf-font-sans);
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.rf-workspace-occupied p {
+  max-width: 48ch;
+  margin: 13px 0 0;
+  color: var(--rf-text-faint);
+  font: 400 12.5px / 1.7 var(--rf-font-sans);
+  text-wrap: pretty;
+}
+.rf-workspace-occupied__reload {
+  grid-column: 2;
+  justify-self: start;
+  min-height: 34px;
+  margin-top: 2px;
+  padding-inline: 15px;
+}
+
+/* Failure tone: same standalone-notice surface, error accents + cause detail. */
+.rf-workspace-occupied--failure .rf-workspace-occupied__icon {
+  color: var(--rf-err);
+  background: var(--rf-err-bg);
+  border-color: var(--rf-err-border);
+}
+.rf-workspace-occupied--failure .rf-workspace-occupied__status-dot {
+  background: var(--rf-err);
+}
+.rf-workspace-occupied--failure .rf-workspace-occupied__eyebrow {
+  color: var(--rf-err);
+}
+.rf-boot-failure__cause {
+  margin-top: 13px;
+  padding: 10px 13px;
+  overflow-wrap: anywhere;
+  color: var(--rf-text-faint);
+  font: 400 11.5px / 1.6 var(--rf-font-mono);
+  background: var(--rf-bg-0);
+  border: 1px solid var(--rf-line-panel);
+  border-radius: var(--rf-r-sm);
+}
+.rf-boot-failure__cause ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.rf-boot-failure__actions {
+  display: flex;
+  grid-column: 2;
+  gap: 8px;
+  justify-self: start;
+  margin-top: 2px;
+}
+.rf-boot-failure__actions .rf-btn {
+  min-height: 34px;
+  padding-inline: 15px;
+}
+@media (max-width: 560px) {
+  .rf-boot-failure__actions {
+    grid-column: 1;
+    width: 100%;
+  }
+  .rf-boot-failure__actions .rf-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .rf-workspace-occupied {
+    padding: 14px;
+  }
+  .rf-workspace-occupied__header {
+    padding-inline: 13px;
+  }
+  .rf-workspace-occupied__status {
+    font-size: 0;
+  }
+  .rf-workspace-occupied__panel {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    padding: 24px 22px;
+  }
+  .rf-workspace-occupied__icon {
+    width: 48px;
+    height: 48px;
+  }
+  .rf-workspace-occupied__reload {
+    grid-column: 1;
+    justify-content: center;
+    width: 100%;
+    margin-top: 3px;
+  }
+}
+
+/* ====================================================================== */
 /* Capabilities (fallback screen)                                          */
 /* ====================================================================== */
 
@@ -3120,14 +3347,8 @@ body.rf-resizing iframe {
   }
 }
 
-/* Narrow screens: drop the files panel, stack the preview below the editor. */
+/* Narrow screens: preserve explicit sidebar state; stack preview below editor. */
 @media (max-width: 880px) {
-  .rf-shell {
-    grid-template-columns: 0 0 minmax(0, 1fr);
-  }
-  .rf-shell .rf-sidebar {
-    border: none;
-  }
   .rf-editorarea[data-preview="on"] {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) var(--rf-split) minmax(0, 0.9fr);

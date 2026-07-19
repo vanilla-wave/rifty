@@ -23,6 +23,7 @@ import {
   type HostCommitRequest,
   OperationIdReuseError,
   type OwnerVfsDurabilityReceipt,
+  VfsPersistenceFailureError,
   VfsVersionConflictError,
 } from './owner-vfs-protocol.ts';
 
@@ -255,6 +256,12 @@ describe('owner VFS IPC', () => {
       ok: false,
       error: { kind: 'error', name: '', message: 'broken' },
     },
+    {
+      type: 'rifty:owner-vfs-durability-ack',
+      barrierId: 'barrier',
+      ok: false,
+      error: { kind: 'persistence-failure', name: 'Error', message: 'spoofed outcome' },
+    },
   ])('rejects malformed durability terminal sibling %#', (message) => {
     expect(isOwnerVfsDurabilityAckMessage(message)).toBe(false);
   });
@@ -270,6 +277,26 @@ describe('owner VFS IPC', () => {
 
     expect(isOwnerVfsCommitAckMessage(terminal)).toBe(true);
     expect(decodeOwnerVfsError(encoded)).toBeInstanceOf(OperationIdReuseError);
+  });
+
+  it('round-trips only the typed persistence outcome as trusted flush evidence', () => {
+    const trusted = encodeOwnerVfsError(new VfsPersistenceFailureError('owner flush failed'));
+    const spoofed = new Error('transport failed');
+    spoofed.name = 'PersistFailureError';
+    const untrusted = encodeOwnerVfsError(spoofed);
+
+    expect(trusted).toEqual({
+      kind: 'persistence-failure',
+      name: 'PersistFailureError',
+      message: 'owner flush failed',
+    });
+    expect(decodeOwnerVfsError(trusted)).toBeInstanceOf(VfsPersistenceFailureError);
+    expect(untrusted).toEqual({
+      kind: 'error',
+      name: 'PersistFailureError',
+      message: 'transport failed',
+    });
+    expect(decodeOwnerVfsError(untrusted)).not.toBeInstanceOf(VfsPersistenceFailureError);
   });
 
   it('correlates every NACK identity field to the exact request', () => {
@@ -954,6 +981,10 @@ describe('owner VFS IPC', () => {
       if (!isOwnerVfsDurabilityAckMessage(candidate)) throw new Error('malformed ack');
       expect(candidate.ok).toBe(false);
     }
+    expect(sent[2]).toMatchObject({
+      ok: false,
+      error: { kind: 'persistence-failure', name: 'PersistFailureError' },
+    });
     expect(sent).not.toContainEqual(expect.objectContaining({ ok: true }));
   });
 });

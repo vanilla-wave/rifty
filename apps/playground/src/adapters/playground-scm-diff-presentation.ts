@@ -1,4 +1,7 @@
-import type { PlaygroundScmChange, PlaygroundScmDiff } from '@riftydev/workbench/playground';
+import type {
+  PlaygroundScmDiff,
+  PlaygroundScmSupportedChange,
+} from '@riftydev/workbench/playground';
 
 export interface PlaygroundScmDiffPresentation {
   readonly title: string;
@@ -9,7 +12,7 @@ export interface PlaygroundScmDiffPresentation {
 /** One semantic label mapping for every staged/working SCM diff. */
 export function playgroundScmDiffPresentation(
   fileName: string,
-  change: PlaygroundScmChange,
+  change: PlaygroundScmSupportedChange,
   diff: PlaygroundScmDiff,
 ): PlaygroundScmDiffPresentation {
   const modifiedTitle = change.area === 'staged' ? 'Index' : 'Working Tree';

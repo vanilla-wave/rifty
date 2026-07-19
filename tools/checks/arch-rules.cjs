@@ -1,8 +1,7 @@
 /**
- * Architecture import-boundary rules for dependency-cruiser (check:arch).
- * Single source for: layer top-down direction, no cycles, no foreign src/internal,
- * solid-js only in playground (D-002). Consumed by .dependency-cruiser.cjs (CLI)
- * and tests/integration/arch-boundaries.test.ts (programmatic).
+ * Architecture rules for dependency-cruiser (check:arch). Runtime topology and
+ * compile-time dependency policy deliberately use separate graphs: erased type
+ * edges are access dependencies, but cannot form runtime cycles.
  *
  * Layer match is segment-based (`/<pkg>/`), so the same rules fire on real
  * `packages/<pkg>/src/...` and on test fixtures under any root.
@@ -29,7 +28,7 @@ const SERVICES = ['eddy'];
 
 // enhancedResolveOptions: honor package.json `exports` so cross-package subpath
 // imports (`@riftydev/vfs/internal`) resolve to src — madge could not (blindspot).
-const options = {
+const runtimeOptions = {
   tsConfig: { fileName: 'tsconfig.base.json' },
   doNotFollow: { path: 'node_modules' },
   // skip build output, coverage, type decls and tests — layering applies to
@@ -46,14 +45,22 @@ const options = {
   },
 };
 
-const forbidden = [
+const dependencyPolicyOptions = {
+  ...runtimeOptions,
+  tsPreCompilationDeps: 'specify',
+};
+
+const runtimeTopologyRules = [
   {
     name: 'no-circular',
     severity: 'error',
-    comment: 'no import cycles (incl. cross-package via subpath exports)',
+    comment: 'no runtime import cycles (incl. cross-package via subpath exports)',
     from: {},
     to: { circular: true },
   },
+];
+
+const dependencyPolicyRules = [
   // Layer direction: each tier must not import a strictly-higher tier (reverse import).
   ...TIERS.slice(0, -1).map((pkgs, i) => ({
     name: `no-reverse-import-${pkgs[0]}`,
@@ -86,16 +93,6 @@ const forbidden = [
     comment: 'D-002: solid-js only in apps/playground',
     from: { pathNot: '(?:^|/)playground/' },
     to: { path: '(?:^|/)solid-js(?:/|$)|(?:^|/)@solidjs/' },
-  },
-  {
-    name: 'no-ui-imports-in-playground-orchestration',
-    severity: 'error',
-    comment:
-      'ADR-0197: orchestration/* is the headless core — no xterm/monaco/components/adapters (node-vitest testability is the point)',
-    from: { path: '(?:^|/)playground/src/orchestration/' },
-    to: {
-      path: '(?:^|/)@xterm/|(?:^|/)monaco-editor(?:/|$)|(?:^|/)playground/src/(?:components|adapters)/|(?:^|/)playground/src/App\\.tsx$',
-    },
   },
   {
     name: 'workbench-package-uses-sealed-entrypoints',
@@ -143,4 +140,11 @@ const forbidden = [
   },
 ];
 
-module.exports = { TIERS, seg, options, forbidden };
+module.exports = {
+  TIERS,
+  seg,
+  runtimeOptions,
+  runtimeTopologyRules,
+  dependencyPolicyOptions,
+  dependencyPolicyRules,
+};

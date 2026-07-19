@@ -1,6 +1,8 @@
+import { RegistryClient } from '@riftydev/npm-client';
 import type { FsSync } from '@riftydev/vfs';
-import { MemoryFsSync } from '@riftydev/vfs/internal';
+import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { ProjectBusyError, ProjectDefinitionMismatchError } from '../workbench/errors.ts';
 import { createPlaygroundProjectCatalog } from '../workbench/internal/playground-project-catalog.ts';
 import { definePlaygroundProject } from '../workbench/internal/playground-project-definition.ts';
@@ -12,12 +14,15 @@ import type {
   PlaygroundProjectPlan,
   VitePlaygroundPlan,
 } from '../workbench/playground.ts';
+import type { ProjectAcquisitionRequest } from '../workbench/project-materialization.ts';
 import type { ProjectDefinition } from '../workbench/public.ts';
+import { type OwnerPackageConfig, createOwnerPackageState } from './owner-package-state.ts';
 import {
   type OwnerVfsAuthority,
   type OwnerVfsAuthorityComposition,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import { recoverOwnerPlaygroundArchiveTransaction } from './playground-archive-integration.ts';
 import {
   type PlaygroundProjectAuthority,
   createPlaygroundProjectAuthority,
@@ -38,6 +43,24 @@ const CAPTURED_URL_CONTEXT = Object.freeze({
 const EDITED_AT = '2026-07-16T12:00:00.000Z';
 const CATALOG_FILE = '/.rifty/workbench/playground/catalog.json';
 const CATALOG_TRANSACTION_FILE = '/.rifty/workbench/playground/transaction.json';
+const SCRATCH_ROOT = '/.rifty/workbench/v1/projects/scratch/tree';
+const SCRATCH_ARCHIVE_TRANSACTION = '/.rifty/workbench/v1/projects/scratch/.playground-archive-v1';
+const SCRATCH_PACKAGE_CONFIG: OwnerPackageConfig = Object.freeze({
+  cfg: Object.freeze({
+    runtime: 'vite',
+    root: SCRATCH_ROOT,
+    entryPath: `${SCRATCH_ROOT}/index.html`,
+    port: 5173,
+    packageName: 'scratch',
+    packageVersion: '0.0.0',
+    installDeps: Object.freeze({ vite: '8.0.0' }),
+    packageJson: '{"scripts":{"dev":"vite"},"devDependencies":{"vite":"8.0.0"}}\n',
+    seedFiles: Object.freeze({}),
+  }),
+  templateId: 'vite-template-v1',
+  slug: 'scratch',
+  fromScratch: true,
+});
 
 type OpenedProject = Awaited<ReturnType<PlaygroundProjectAuthority['openProject']>>;
 
@@ -98,6 +121,7 @@ interface CatalogHarness {
 async function harness(
   fs = new MemoryFsSync(),
   now: () => string = () => EDITED_AT,
+  persistence: 'required' | 'preferred' | 'ephemeral' = 'required',
 ): Promise<CatalogHarness> {
   const composition = createOwnerVfsAuthorityComposition(fs, {
     ownerEpoch: 'playground-catalog-contract-owner',
@@ -106,7 +130,7 @@ async function harness(
   let stageSequence = 0;
   const owner = await createPlaygroundProjectAuthority({
     ...composition,
-    persistence: 'required',
+    persistence,
     now,
     createStageId: () => `catalog-stage-${String(++stageSequence)}`,
     acquisition: Object.freeze({
@@ -135,6 +159,11 @@ function treeFiles(fs: FsSync, root: string): Readonly<Record<string, readonly n
   return Object.fromEntries(
     Object.entries(files).sort(([left], [right]) => left.localeCompare(right)),
   );
+}
+
+function writeText(authority: OwnerVfsAuthority, path: string, text: string): void {
+  authority.mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+  authority.writeFileSync(path, encoder.encode(text));
 }
 
 function expectFrozenSnapshot(snapshot: PlaygroundCatalogSnapshot): void {
@@ -240,6 +269,43 @@ describe('PlaygroundProjectCatalog public contract', () => {
     unsubscribe();
     await h.catalog.rename('project-a', 'Renamed');
     expect(observed.at(-1)).toBe(saved);
+    await h.owner.close();
+  });
+
+  it('saves Scratch as a real owner-backed session project in ephemeral storage', async () => {
+    const h = await harness(new MemoryFsSync(), () => EDITED_AT, 'ephemeral');
+    await h.catalog.createScratch({ definition: definition('scratch') });
+    const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
+    const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const editedBytes = encoder.encode('document.body.dataset.saved = "session";\n');
+    h.authority.writeFileSync(`${scratchRoot}/src/main.ts`, editedBytes);
+
+    const saved = await h.catalog.saveScratch({
+      id: 'project-a',
+      name: 'Project A',
+      definition: definition('project-a'),
+    });
+
+    expect(saved).toEqual({
+      active: { kind: 'project', id: 'project-a' },
+      scratch: null,
+      projects: [
+        {
+          id: 'project-a',
+          name: 'Project A',
+          starterId: 'starter-a',
+          editedAt: EDITED_AT,
+        },
+      ],
+    });
+    expect(h.fs.existsSync('/.rifty/workbench/v1/projects/scratch')).toBe(false);
+    expect(h.fs.readFileBytesSync(`${projectRoot}/src/main.ts`)).toEqual(editedBytes);
+    expect(h.fs.existsSync(CATALOG_FILE)).toBe(true);
+
+    const reopened = await h.owner.openProject(definition('project-a'));
+    expect(reopened.projectRoot).toBe(projectRoot);
+    expect(h.fs.readFileBytesSync(`${reopened.projectRoot}/src/main.ts`)).toEqual(editedBytes);
+    await close(reopened);
     await h.owner.close();
   });
 
@@ -991,6 +1057,101 @@ describe('Playground catalog single owner and busy gate', () => {
 });
 
 describe('Playground catalog crash recovery', () => {
+  // Fault class: torn-state × stale-derived-state. `openProject` is the first
+  // public owner seam that may construct package/runtime state after a crash.
+  it('rolls an armed archive forward before openProject acquisition reads the owner tree', async () => {
+    const durable = new DurableOwnerFs();
+    const seeded = await harness(durable);
+    await seeded.catalog.createScratch({ definition: definition('scratch') });
+    await seeded.authority.flush();
+    const recoveredPackageJson =
+      '{"name":"recovered","scripts":{"dev":"vite"},"devDependencies":{"vite":"8.0.0"}}\n';
+    writeText(
+      seeded.authority,
+      `${SCRATCH_ARCHIVE_TRANSACTION}/stage/package.json`,
+      recoveredPackageJson,
+    );
+    writeText(
+      seeded.authority,
+      `${SCRATCH_ARCHIVE_TRANSACTION}/stage/index.html`,
+      '<main>recovered</main>\n',
+    );
+    writeText(
+      seeded.authority,
+      `${SCRATCH_ARCHIVE_TRANSACTION}/stage/src/main.ts`,
+      'document.body.dataset.ready = "recovered";\n',
+    );
+    writeText(seeded.authority, `${SCRATCH_ARCHIVE_TRANSACTION}/phase`, 'promoting\n');
+    seeded.authority.rmSync(`${SCRATCH_ROOT}/package.json`, { force: true });
+    seeded.authority.rmSync(`${SCRATCH_ROOT}/src`, { recursive: true, force: true });
+    await seeded.authority.flush();
+
+    const fs = durable.restartFromDurableState();
+    const vfs = new SyncMirrorVfs();
+    setSyncMirror(fs, { async: vfs });
+    const composition = createOwnerVfsAuthorityComposition(fs, {
+      ownerEpoch: 'playground-open-recovery-owner',
+      initialRoots: ['/', '/.rifty'],
+    });
+    const packages = createOwnerPackageState({
+      initial: SCRATCH_PACKAGE_CONFIG,
+      vfs,
+      fsSync: composition.authority,
+      installStampClaims: composition.installStampClaims,
+      flush: () => composition.authority.flush(),
+      nodeWorkerRuntimeEnv: {},
+      log: () => {},
+      registry: new RegistryClient({
+        baseUrl: 'https://registry.invalid/',
+        fetch: async () => new Response('', { status: 599 }),
+      }),
+      resolverUrl: () => undefined,
+      resolverBundleBaseUrl: () => undefined,
+      resolverPin: () => undefined,
+    });
+    const timeline: string[] = [];
+    let stageSequence = 0;
+    const owner = await createPlaygroundProjectAuthority({
+      ...composition,
+      persistence: 'required',
+      now: () => EDITED_AT,
+      createStageId: () => `open-recovery-stage-${String(++stageSequence)}`,
+      beforeOpenProject: async (projectRoot) => {
+        timeline.push('recovery:start');
+        await recoverOwnerPlaygroundArchiveTransaction({
+          projectRoot,
+          owner: composition,
+          packages,
+        });
+        timeline.push('recovery:end');
+      },
+      acquisition: Object.freeze({
+        ensure: async ({ projectRoot }: ProjectAcquisitionRequest) => {
+          timeline.push('acquisition');
+          expect(projectRoot).toBe(SCRATCH_ROOT);
+          expect(composition.authority.statSyncOrNull(SCRATCH_ARCHIVE_TRANSACTION)).toBeNull();
+          expect(
+            decoder.decode(composition.authority.readFileBytesSync(`${projectRoot}/package.json`)),
+          ).toBe(recoveredPackageJson);
+          expect(decoder.decode(await vfs.readFile(`${projectRoot}/package.json`))).toBe(
+            recoveredPackageJson,
+          );
+          return Object.freeze({ kind: 'install' as const, snapshotFailures: [] });
+        },
+      }),
+    });
+
+    const opened = await owner.openProject(definition('scratch'));
+
+    expect(timeline).toEqual(['recovery:start', 'recovery:end', 'acquisition']);
+    expect(
+      decoder.decode(composition.authority.readFileBytesSync(`${SCRATCH_ROOT}/src/main.ts`)),
+    ).toBe('document.body.dataset.ready = "recovered";\n');
+    await opened.close();
+    await owner.close();
+    await packages.quiesce();
+  });
+
   it('removes an orphan staged-transaction tree when no journal owns it', async () => {
     const fs = new MemoryFsSync();
     const orphan = '/.rifty/workbench/playground/catalog-transactions/orphan/0-project/after';

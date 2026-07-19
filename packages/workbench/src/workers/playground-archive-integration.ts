@@ -6,8 +6,6 @@ import {
   preparePlaygroundArchiveV1Import,
   readBoundedPlaygroundArchiveTree,
 } from '../workbench/internal/playground-archive.ts';
-import type { PlaygroundArchive, PlaygroundScm } from '../workbench/playground.ts';
-import type { ProjectContentController } from '../workbench/project-content.ts';
 import { formatProjectPersistenceFailure } from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
 import {
@@ -21,10 +19,8 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 const PHASE_PROMOTING = 'promoting\n';
 const PHASE_COMMITTED = 'committed\n';
-const PRESERVED_ROOT_ENTRIES = new Set(['.git']);
 
 interface OwnerPlaygroundArchive {
-  settle(): Promise<void>;
   export(): Promise<string>;
   import(archiveJson: string, beforePublish: () => void): Promise<void>;
 }
@@ -36,10 +32,10 @@ export interface CreateOwnerPlaygroundArchiveOptions {
   readonly projectVfs: WorkbenchProjectVfs;
 }
 
-export interface CreatePlaygroundSessionArchiveOptions {
-  readonly owner: OwnerPlaygroundArchive;
-  readonly content: ProjectContentController;
-  readonly scm: PlaygroundScm;
+export interface RecoverOwnerPlaygroundArchiveTransactionOptions {
+  readonly projectRoot: string;
+  readonly owner: OwnerVfsAuthorityComposition;
+  readonly packages: OwnerPackageState;
 }
 
 interface ArchiveTransactionPaths {
@@ -216,13 +212,37 @@ async function durableRemove(
   await requireDurable(authority, projectRoot);
 }
 
-function readPhase(authority: OwnerVfsAuthority, paths: ArchiveTransactionPaths): string | null {
-  if (authority.statSyncOrNull(paths.phase)?.isFile !== true) return null;
-  try {
-    return decoder.decode(authority.readFileBytesSync(paths.phase));
-  } catch {
-    return null;
+type ArchiveTransactionState =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'unarmed' }
+  | { readonly kind: 'promoting' }
+  | { readonly kind: 'committed' };
+
+function inspectArchiveTransaction(
+  authority: OwnerVfsAuthority,
+  paths: ArchiveTransactionPaths,
+): ArchiveTransactionState {
+  const root = authority.statSyncOrNull(paths.root);
+  if (root === null) return Object.freeze({ kind: 'absent' });
+  if (!root.isDirectory) {
+    throw new Error('Playground archive transaction root is corrupt');
   }
+  const phaseEntry = authority.statSyncOrNull(paths.phase);
+  if (phaseEntry === null) return Object.freeze({ kind: 'unarmed' });
+  if (!phaseEntry.isFile) {
+    throw new Error('Playground archive recovery phase is not a file');
+  }
+  let phase: string;
+  try {
+    phase = decoder.decode(authority.readFileBytesSync(paths.phase));
+  } catch (error) {
+    throw new Error('Playground archive recovery phase is corrupt UTF-8', {
+      cause: error,
+    });
+  }
+  if (phase === PHASE_PROMOTING) return Object.freeze({ kind: 'promoting' });
+  if (phase === PHASE_COMMITTED) return Object.freeze({ kind: 'committed' });
+  throw new Error(`Playground archive recovery phase is unknown: ${JSON.stringify(phase)}`);
 }
 
 function stageFiles(
@@ -280,8 +300,12 @@ async function promoteStage(
   const children = [...authority.readdirSync(projectRoot)].sort((left, right) =>
     compareCodeUnits(left.name, right.name),
   );
+  // V1 archives produced before ADR-0286 contain no Git bytes. Keep their
+  // source-only import behavior; a current archive carrying `.git/*` replaces
+  // the repository as part of the exact workspace snapshot.
+  const replacesGit = staged.some(({ path }) => path === '.git' || path.startsWith('.git/'));
   for (const child of children) {
-    if (PRESERVED_ROOT_ENTRIES.has(child.name)) continue;
+    if (child.name === '.git' && !replacesGit) continue;
     await durableRemove(authority, projectRoot, `${projectRoot}/${child.name}`);
   }
 
@@ -310,33 +334,50 @@ async function recoverArchiveTransaction(
   packages: OwnerPackageState,
   paths: ArchiveTransactionPaths,
 ): Promise<void> {
-  if (owner.authority.statSyncOrNull(paths.root) === null) return;
-  let staged: readonly ArchiveStageFile[] | null = null;
-  await settleArchiveOperation(owner.authority, projectRoot, () =>
-    packages.mutations.reset({ root: projectRoot }, async () => {
-      const phase = readPhase(owner.authority, paths);
-      if (phase !== PHASE_PROMOTING) {
-        // A committed or unarmed stage has no live replacement left to recover.
+  await settleArchiveOperation(owner.authority, projectRoot, async () => {
+    const state = inspectArchiveTransaction(owner.authority, paths);
+    if (state.kind === 'absent') return;
+    if (state.kind === 'unarmed' || state.kind === 'committed') {
+      await durableRemove(owner.authority, projectRoot, paths.root);
+      return;
+    }
+    const staged = stageFiles(owner.authority, paths);
+    await packages.mutations.reset({ root: projectRoot }, async () => ({
+      status: 'ready',
+      resetDependencyTree: true,
+      mutate: async (resetDependencyTree) => {
+        if (resetDependencyTree === undefined) {
+          throw new Error('Playground archive recovery package reset is missing');
+        }
+        await resetDependencyTree();
+        await promoteStage(projectRoot, owner.authority, staged);
         await durableRemove(owner.authority, projectRoot, paths.root);
-        return { status: 'noop' };
-      }
-      staged = stageFiles(owner.authority, paths);
-      return {
-        status: 'ready',
-        resetDependencyTree: true,
-        mutate: async (resetDependencyTree) => {
-          if (resetDependencyTree === undefined) {
-            throw new Error('Playground archive recovery package reset is missing');
-          }
-          await resetDependencyTree();
-          if (staged === null) {
-            throw new Error('Playground archive recovery stage was not prepared');
-          }
-          await promoteStage(projectRoot, owner.authority, staged);
-          await durableRemove(owner.authority, projectRoot, paths.root);
-        },
-      };
-    }),
+      },
+    }));
+  });
+}
+
+async function beginArchiveTransaction(
+  projectRoot: string,
+  authority: OwnerVfsAuthority,
+  paths: ArchiveTransactionPaths,
+): Promise<void> {
+  const state = inspectArchiveTransaction(authority, paths);
+  if (state.kind === 'promoting') {
+    throw new Error(
+      'Playground archive import cannot replace an existing promoting transaction; reopen the project to recover it',
+    );
+  }
+  if (state.kind !== 'absent') await durableRemove(authority, projectRoot, paths.root);
+}
+
+/** Roll forward an armed archive before runtime, Git, SCM, or content reads. */
+export async function recoverOwnerPlaygroundArchiveTransaction(
+  options: RecoverOwnerPlaygroundArchiveTransactionOptions,
+): Promise<void> {
+  const paths = transactionPaths(options.projectRoot);
+  return publicArchiveBoundary(options.projectRoot, paths, () =>
+    recoverArchiveTransaction(options.projectRoot, options.owner, options.packages, paths),
   );
 }
 
@@ -351,10 +392,6 @@ export async function createOwnerPlaygroundArchive(
     await requireDurable(options.owner.authority, options.projectRoot);
 
     return Object.freeze({
-      settle: () =>
-        publicArchiveBoundary(options.projectRoot, paths, () =>
-          requireDurable(options.owner.authority, options.projectRoot),
-        ),
       export: () =>
         publicArchiveBoundary(options.projectRoot, paths, async () => {
           await options.packages.quiesce();
@@ -372,9 +409,10 @@ export async function createOwnerPlaygroundArchive(
           let staged: readonly ArchiveStageFile[] | null = null;
           await settleArchiveOperation(options.owner.authority, options.projectRoot, () =>
             options.projectVfs.recoverableProjectReplace(
-              async () => {
-                await durableRemove(options.owner.authority, options.projectRoot, paths.root);
+              async (armPointOfNoReturn) => {
+                await beginArchiveTransaction(options.projectRoot, options.owner.authority, paths);
                 await materializeStage(options.projectRoot, options.owner.authority, paths, files);
+                armPointOfNoReturn();
                 await durableWrite(
                   options.owner.authority,
                   options.projectRoot,
@@ -406,26 +444,5 @@ export async function createOwnerPlaygroundArchive(
           );
         }),
     });
-  });
-}
-
-export function createPlaygroundSessionArchive(
-  options: CreatePlaygroundSessionArchiveOptions,
-): PlaygroundArchive {
-  // Git/SCM construction may have completed owner writes after the owner-side
-  // archive was opened. Start draining them synchronously at composition time.
-  const ready = options.owner.settle();
-  return Object.freeze({
-    async export(): Promise<string> {
-      await ready;
-      await options.content.awaitOwnerByteAdmission({ kind: 'project' });
-      return options.owner.export();
-    },
-    async import(archiveJson: string): Promise<void> {
-      await ready;
-      await options.content.awaitOwnerByteAdmission({ kind: 'project' });
-      await options.owner.import(archiveJson, () => options.content.invalidateAll('reset'));
-      await options.scm.refresh();
-    },
   });
 }

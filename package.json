@@ -19,7 +19,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "check:arch": "depcruise packages apps tools services",
+    "check:arch": "node tools/checks/check-arch.mjs packages apps tools services",
     "check:parity-coverage": "node tools/checks/parity-coverage.mjs",
     "check:e2e-coverage": "node tools/checks/e2e-coverage.mjs",
     "check:source-grep": "node tools/checks/source-grep-ratchet.mjs",

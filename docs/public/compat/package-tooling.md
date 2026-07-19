@@ -28,6 +28,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/e2e/owner-shell-prettier-eslint.spec.ts`
 - `packages/workbench/src/glue/npm-shell-command.test.ts`
 - `packages/workbench/src/glue/pty-client.test.ts`
+- `apps/playground/src/adapters/playground-terminal-ui.contract.test.ts`
 - `packages/workbench/src/workbench/project-terminal.test.ts`
 - `packages/runtime-js/src/builtins/node-entry.test.ts`
 - `tests/conformance/builtins/util.test.ts`

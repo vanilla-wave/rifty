@@ -8,7 +8,7 @@ user_story: As a developer evaluating a repository in rifty, I want to paste its
 epic: from-intent-to-running-project
 blocked_by: [playground/project-ingress-transaction]
 sources: [M13, ADR-0165, ADR-0167, docs/public/compat/git.md]
-code: [packages/git/src/git.ts, packages/shell/src/commands/git.ts, apps/playground/src/glue/app-project-store.ts, apps/playground/src/orchestration/workspace-lifecycle.ts]
+code: [packages/git/src/git.ts, packages/shell/src/commands/git.ts, apps/playground/src/workers/playground-project-authority.ts, apps/playground/src/workbench/playground.ts]
 ---
 
 ## Context
