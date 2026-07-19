@@ -504,11 +504,9 @@ describe('schema-v3 shadowAssetColdFillMs', () => {
       const standardInput = measuredShadowAssetRow(
         [500, 510, 520, 530, 540].map((duration) => shadowAssetRun(duration)),
       );
-      const preservedStandard = shadowAssetArtifact(standardInput).metrics.shadowAssetColdFillMs
-        .standard;
-      const eddyRuns = [250, 255, 260, 265, 270].map((duration) =>
-        eddyShadowAssetRun(duration),
-      );
+      const preservedStandard =
+        shadowAssetArtifact(standardInput).metrics.shadowAssetColdFillMs.standard;
+      const eddyRuns = [250, 255, 260, 265, 270].map((duration) => eddyShadowAssetRun(duration));
       const metric = shadowAssetArtifact(standardInput, eddyInput(eddyRuns)).metrics
         .shadowAssetColdFillMs;
 

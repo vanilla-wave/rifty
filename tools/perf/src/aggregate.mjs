@@ -327,6 +327,53 @@ function matchedShadowAssetColdRows(standard, eddy) {
   );
 }
 
+function uniformShadowAssetColdBoundary(input) {
+  if (
+    !plainRecord(input) ||
+    input.status !== 'measured' ||
+    input.cacheRegime === undefined ||
+    !Array.isArray(input.runs) ||
+    input.runs.length !== SHADOW_ASSET_RUN_COUNT
+  ) {
+    return null;
+  }
+  const first = input.runs[0];
+  if (!plainRecord(first)) return null;
+  const boundary = {
+    requiredSetDigest: first.requiredSetDigest,
+    storageClass: first.storageClass,
+    memberBytes: first.memberBytes,
+    cacheRegime: input.cacheRegime,
+  };
+  if (
+    input.runs.some(
+      (run) =>
+        !plainRecord(run) ||
+        run.requiredSetDigest !== boundary.requiredSetDigest ||
+        run.storageClass !== boundary.storageClass ||
+        run.memberBytes !== boundary.memberBytes,
+    )
+  ) {
+    return null;
+  }
+  return boundary;
+}
+
+function refuseUnmatchedEddyBoundary(standard, eddy, standardInput, eddyInput) {
+  if (standard.status !== 'measured') return eddy;
+  const standardBoundary = uniformShadowAssetColdBoundary(standardInput);
+  const eddyBoundary = uniformShadowAssetColdBoundary(eddyInput);
+  if (standardBoundary === null || eddyBoundary === null) return eddy;
+  const mismatches = ['requiredSetDigest', 'storageClass', 'memberBytes', 'cacheRegime'].filter(
+    (field) => standardBoundary[field] !== eddyBoundary[field],
+  );
+  return mismatches.length === 0
+    ? eddy
+    : shadowAssetUnmeasured(
+        `Eddy shadow asset cold row does not match the measured standard boundary: ${mismatches.join(', ')}`,
+      );
+}
+
 function buildShadowAssetColdMetric(input, stepMs) {
   const standardInput =
     plainRecord(input) && Object.hasOwn(input, 'standard')
@@ -340,7 +387,12 @@ function buildShadowAssetColdMetric(input, stepMs) {
   );
   const metric = { standard };
   if (plainRecord(input) && input.eddy !== undefined) {
-    const eddy = buildShadowAssetColdRow(input.eddy, 'eddy', stepMs, 'shadow asset cold Eddy row');
+    const eddy = refuseUnmatchedEddyBoundary(
+      standard,
+      buildShadowAssetColdRow(input.eddy, 'eddy', stepMs, 'shadow asset cold Eddy row'),
+      standardInput,
+      input.eddy,
+    );
     metric.eddy = eddy;
     if (matchedShadowAssetColdRows(standard, eddy)) {
       metric.speedupX = Math.round((standard.median / eddy.median) * 100) / 100;
