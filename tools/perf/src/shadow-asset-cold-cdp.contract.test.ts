@@ -7,7 +7,8 @@ import {
 type CdpHandler = (event: Record<string, unknown>) => void;
 
 class FakeCdpSession {
-  readonly calls: Array<{ readonly method: string; readonly params?: Record<string, unknown> }> = [];
+  readonly calls: Array<{ readonly method: string; readonly params?: Record<string, unknown> }> =
+    [];
   readonly bodies = new Map<
     string,
     | { readonly body: string; readonly base64Encoded: boolean }
@@ -59,11 +60,7 @@ function fakePage(session: FakeCdpSession) {
   };
 }
 
-function cdpResponse(
-  requestId: string,
-  url: string,
-  overrides: Record<string, unknown> = {},
-) {
+function cdpResponse(requestId: string, url: string, overrides: Record<string, unknown> = {}) {
   return {
     requestId,
     response: {
@@ -193,15 +190,16 @@ describe('standard shadow-asset CDP response recorder', () => {
         url: tarballUrl,
         bodyBytes: 0,
         complete: false,
-        error:
-          'Network.getResponseBody failed: No resource with given identifier found',
+        error: 'Network.getResponseBody failed: No resource with given identifier found',
       }),
     ]);
   });
 
   it('waits for pending getResponseBody work before detaching and makes stop idempotent', async () => {
     const session = new FakeCdpSession();
-    let resolveBody: ((value: { readonly body: string; readonly base64Encoded: boolean }) => void) | undefined;
+    let resolveBody:
+      | ((value: { readonly body: string; readonly base64Encoded: boolean }) => void)
+      | undefined;
     session.bodies.set(
       'pending',
       new Promise((resolve) => {
@@ -250,11 +248,7 @@ function packumentBody(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function response(
-  url: string,
-  body: string | Uint8Array,
-  overrides: Record<string, unknown> = {},
-) {
+function response(url: string, body: string | Uint8Array, overrides: Record<string, unknown> = {}) {
   const bytes = typeof body === 'string' ? new TextEncoder().encode(body) : body;
   return {
     requestId: `request-${Math.random()}`,
@@ -404,9 +398,7 @@ describe('standard shadow-asset CDP response finalization', () => {
   });
 
   it('rejects missing exact source responses and conflicting tarball URLs', () => {
-    expect(
-      finalizeStandardAssetSourceResponses({ registryUrl, source, captured: [] }),
-    ).toEqual({
+    expect(finalizeStandardAssetSourceResponses({ registryUrl, source, captured: [] })).toEqual({
       ok: false,
       note: 'esbuild-wasm@0.28.0 has no exact standard packument response',
     });

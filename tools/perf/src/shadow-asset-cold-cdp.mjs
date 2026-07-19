@@ -1,5 +1,250 @@
+import { Buffer } from 'node:buffer';
+
 function refuse(note) {
   return { ok: false, note };
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function responseRecord(requestId, response) {
+  return {
+    requestId,
+    url: typeof response?.url === 'string' ? response.url : '',
+    status: typeof response?.status === 'number' ? response.status : 0,
+    protocol:
+      typeof response?.protocol === 'string' && response.protocol.length > 0
+        ? response.protocol
+        : 'unknown',
+    bodyBytes: 0,
+    complete: false,
+    fromDiskCache: response?.fromDiskCache === true,
+    fromServiceWorker: response?.fromServiceWorker === true,
+  };
+}
+
+function appendError(record, message) {
+  record.error =
+    typeof record.error === 'string' && record.error.length > 0
+      ? `${record.error}; ${message}`
+      : message;
+}
+
+function strictBase64Bytes(value) {
+  if (
+    value.length % 4 !== 0 ||
+    !/^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$/u.test(value)
+  ) {
+    throw new TypeError('CDP returned malformed base64 response body');
+  }
+  return Buffer.from(value, 'base64');
+}
+
+function decodedBody(result) {
+  if (
+    result === null ||
+    typeof result !== 'object' ||
+    typeof result.body !== 'string' ||
+    typeof result.base64Encoded !== 'boolean'
+  ) {
+    throw new TypeError('CDP returned an invalid Network.getResponseBody result');
+  }
+  if (!result.base64Encoded) {
+    return {
+      bytes: new TextEncoder().encode(result.body),
+      text: result.body,
+    };
+  }
+  const bytes = strictBase64Bytes(result.body);
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    // Binary response: exact byte count is the required evidence.
+  }
+  return { bytes, text };
+}
+
+function loadingFailure(event) {
+  const parts = [
+    `Network.loadingFailed: ${
+      typeof event?.errorText === 'string' && event.errorText.length > 0
+        ? event.errorText
+        : 'unknown network error'
+    }`,
+  ];
+  if (event?.canceled === true) parts.push('canceled');
+  if (typeof event?.blockedReason === 'string') parts.push(`blocked=${event.blockedReason}`);
+  if (event?.corsErrorStatus !== undefined) {
+    parts.push(`cors=${JSON.stringify(event.corsErrorStatus)}`);
+  }
+  return parts.join('; ');
+}
+
+function cdpSessionPort(session) {
+  if (
+    session === null ||
+    typeof session !== 'object' ||
+    typeof session.on !== 'function' ||
+    typeof session.off !== 'function' ||
+    typeof session.send !== 'function' ||
+    typeof session.detach !== 'function'
+  ) {
+    throw new TypeError('Playwright CDP session does not expose the required Network port');
+  }
+  return session;
+}
+
+/**
+ * Record complete CDP response bodies without projecting away retries,
+ * redirects, or failures. stop() drains every body command before detaching.
+ */
+export async function startCdpResponseRecorder(page) {
+  const context = typeof page?.context === 'function' ? page.context() : null;
+  if (context === null || typeof context.newCDPSession !== 'function') {
+    throw new TypeError('Playwright page must expose context().newCDPSession()');
+  }
+  const session = cdpSessionPort(await context.newCDPSession(page));
+  const captured = [];
+  const active = new Map();
+  const requestUrls = new Map();
+  const responseMetadata = new WeakSet();
+  const pending = new Set();
+  let stopping = false;
+  let stopPromise;
+
+  const retainIncomplete = (record, message) => {
+    record.bodyBytes = 0;
+    record.complete = false;
+    // A stale text body must never survive a later lifecycle failure.
+    // biome-ignore lint/performance/noDelete: record shape intentionally omits unavailable body text.
+    delete record.bodyText;
+    appendError(record, message);
+  };
+
+  const onRequestWillBeSent = (event) => {
+    if (stopping || typeof event?.requestId !== 'string') return;
+    const requestId = event.requestId;
+    if (event.redirectResponse !== undefined) {
+      const redirect = event.redirectResponse;
+      const prior = active.get(requestId);
+      if (prior !== undefined && prior.url === redirect?.url && prior.status === redirect?.status) {
+        retainIncomplete(
+          prior,
+          'redirect response body is unavailable through an unambiguous CDP lifecycle',
+        );
+      } else {
+        if (prior !== undefined) {
+          retainIncomplete(
+            prior,
+            'response lifecycle was replaced before Network.loadingFinished/loadingFailed',
+          );
+        }
+        const record = responseRecord(requestId, redirect);
+        retainIncomplete(
+          record,
+          'redirect response body is unavailable through an unambiguous CDP lifecycle',
+        );
+        captured.push(record);
+      }
+      active.delete(requestId);
+    }
+    if (typeof event.request?.url === 'string') requestUrls.set(requestId, event.request.url);
+  };
+
+  const onResponseReceived = (event) => {
+    if (stopping || typeof event?.requestId !== 'string') return;
+    const prior = active.get(event.requestId);
+    if (prior !== undefined) {
+      retainIncomplete(
+        prior,
+        'response lifecycle was replaced before Network.loadingFinished/loadingFailed',
+      );
+    }
+    const record = responseRecord(event.requestId, event.response);
+    captured.push(record);
+    active.set(event.requestId, record);
+    responseMetadata.add(record);
+  };
+
+  const collectBody = async (requestId, record) => {
+    try {
+      const body = decodedBody(await session.send('Network.getResponseBody', { requestId }));
+      record.bodyBytes = body.bytes.byteLength;
+      if (body.text !== undefined) record.bodyText = body.text;
+      if (responseMetadata.has(record)) {
+        record.complete = true;
+      } else {
+        appendError(record, 'Network.loadingFinished lacked Network.responseReceived metadata');
+      }
+    } catch (error) {
+      retainIncomplete(record, `Network.getResponseBody failed: ${errorMessage(error)}`);
+    }
+  };
+
+  const onLoadingFinished = (event) => {
+    if (stopping || typeof event?.requestId !== 'string') return;
+    const requestId = event.requestId;
+    let record = active.get(requestId);
+    if (record === undefined) {
+      record = responseRecord(requestId, { url: requestUrls.get(requestId) });
+      captured.push(record);
+    }
+    active.delete(requestId);
+    const operation = collectBody(requestId, record);
+    pending.add(operation);
+    void operation.finally(() => pending.delete(operation));
+  };
+
+  const onLoadingFailed = (event) => {
+    if (stopping || typeof event?.requestId !== 'string') return;
+    const requestId = event.requestId;
+    let record = active.get(requestId);
+    if (record === undefined) {
+      record = responseRecord(requestId, { url: requestUrls.get(requestId) });
+      captured.push(record);
+    }
+    active.delete(requestId);
+    retainIncomplete(record, loadingFailure(event));
+  };
+
+  const listeners = [
+    ['Network.requestWillBeSent', onRequestWillBeSent],
+    ['Network.responseReceived', onResponseReceived],
+    ['Network.loadingFinished', onLoadingFinished],
+    ['Network.loadingFailed', onLoadingFailed],
+  ];
+  for (const [event, listener] of listeners) session.on(event, listener);
+
+  try {
+    await session.send('Network.enable');
+  } catch (error) {
+    for (const [event, listener] of listeners) session.off(event, listener);
+    await session.detach().catch(() => {});
+    throw error;
+  }
+
+  return {
+    stop() {
+      if (stopPromise !== undefined) return stopPromise;
+      stopPromise = (async () => {
+        stopping = true;
+        for (const [event, listener] of listeners) session.off(event, listener);
+        while (pending.size > 0) await Promise.all([...pending]);
+        for (const record of active.values()) {
+          retainIncomplete(
+            record,
+            'response lifecycle stopped before Network.loadingFinished/loadingFailed',
+          );
+        }
+        active.clear();
+        await session.detach();
+        return Object.freeze(captured.map((record) => Object.freeze({ ...record })));
+      })();
+      return stopPromise;
+    },
+  };
 }
 
 function packumentUrl(registryUrl, packageName) {
