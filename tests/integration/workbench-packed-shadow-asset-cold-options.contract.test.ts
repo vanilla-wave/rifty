@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shadowAssetColdPackageAcquisition } from './shadow-asset-cold-options';
+import { shadowAssetColdPackageAcquisition } from './fixtures/workbench-vite-consumer/src/shadow-asset-cold-options';
 
 describe('packed shadow-asset cold acquisition options', () => {
   it('keeps standard mode registry-only', () => {
