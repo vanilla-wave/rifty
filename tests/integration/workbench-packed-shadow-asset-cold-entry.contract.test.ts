@@ -3,19 +3,13 @@ import { resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-const fixtureRoot = resolve(
-  import.meta.dirname,
-  'fixtures/workbench-vite-consumer',
-);
+const fixtureRoot = resolve(import.meta.dirname, 'fixtures/workbench-vite-consumer');
 
 function staticImports(source: string, fileName: string): readonly string[] {
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   const imports: string[] = [];
   for (const statement of file.statements) {
-    if (
-      ts.isImportDeclaration(statement) &&
-      ts.isStringLiteralLike(statement.moduleSpecifier)
-    ) {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteralLike(statement.moduleSpecifier)) {
       imports.push(statement.moduleSpecifier.text);
     }
   }

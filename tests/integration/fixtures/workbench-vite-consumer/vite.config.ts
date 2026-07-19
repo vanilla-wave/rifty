@@ -1,4 +1,8 @@
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
+
+const fixtureRoot = fileURLToPath(new URL('.', import.meta.url));
 
 const crossOriginIsolationHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -32,6 +36,12 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
     assetsInlineLimit: 0,
+    rollupOptions: {
+      input: {
+        main: resolve(fixtureRoot, 'index.html'),
+        shadowAssetCold: resolve(fixtureRoot, 'shadow-asset-cold.html'),
+      },
+    },
   },
   worker: {
     format: 'es',
