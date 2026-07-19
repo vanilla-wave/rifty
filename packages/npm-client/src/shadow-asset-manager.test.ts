@@ -656,6 +656,29 @@ describe('ShadowAssetManager', () => {
     expect(await manager.installer.inspectReceipt(plan.requiredSetDigest)).toBeNull();
   });
 
+  it('does not abort a successful producer when its last consumer releases', async () => {
+    const { plan, tgz } = fixture();
+    let producerSignal: AbortSignal | undefined;
+    const assetSource = source(tgz);
+    assetSource.acquire.mockImplementationOnce(async (requests, options) => {
+      producerSignal = options.signal;
+      return requests.map((request: ShadowAssetSourceRequest) => ({
+        request,
+        bytes: tgz.slice(),
+        fillTransport: 'eddy' as const,
+        fillCache: 'bundle' as const,
+      }));
+    });
+    const manager = createShadowAssetManager({
+      storage: createMemoryShadowAssetStorage(),
+      source: assetSource,
+    });
+
+    await expect(manager.installer.ensure(plan)).resolves.toMatchObject({ kind: 'ready' });
+    expect(producerSignal?.aborted).toBe(false);
+    await manager.close();
+  });
+
   it.each(['clear', 'close'] as const)(
     'awaits a detached cancelled producer before %s mutates the manager lifetime',
     async (operation) => {
