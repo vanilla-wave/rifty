@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PACKED_VITE_JOURNEYS,
   PACKED_WORKBENCH_EXPORTS,
+  packedAliasBoundaryProof,
 } from './workbench-packed-consumer-browser-contract.mjs';
 
 const fixtureUrl = new URL('./fixtures/workbench-vite-consumer/src/main.ts', import.meta.url);
@@ -43,5 +44,73 @@ describe('packed Workbench browser acceptance contract', () => {
     expect(runner).toContain('--serve-shadow-asset-cold');
     expect(runner).toContain('shadow-asset-cold.html');
     expect(runner).toContain('RIFTY_SHADOW_ASSET_COLD_HOST=');
+  });
+
+  it('records exact response-body proof for the retired alias boundary', () => {
+    const response = (
+      packageName: string,
+      kind: 'packument' | 'tarball',
+      bodyBytes: number,
+    ) => ({ method: 'GET', packageName, kind, status: 200, bodyBytes });
+    expect(
+      packedAliasBoundaryProof({
+        registryOrigin: 'http://127.0.0.1:54321',
+        responses: [
+          response('vite', 'packument', 800),
+          response('esbuild', 'packument', 612),
+          response('esbuild-wasm', 'packument', 645),
+          response('esbuild-wasm', 'tarball', 5_057_200),
+        ],
+      }),
+    ).toEqual({
+      schema: 1,
+      registryOrigin: 'http://127.0.0.1:54321',
+      publicEsbuild: {
+        packument: { responses: 1, bodyBytes: 612 },
+        tarball: { responses: 0, bodyBytes: 0 },
+      },
+      retiredAlias: {
+        packument: { responses: 0, bodyBytes: 0 },
+        tarball: { responses: 0, bodyBytes: 0 },
+        totalBodyBytes: 0,
+      },
+      runtimeAssetSource: {
+        packument: { responses: 1, bodyBytes: 645 },
+        tarball: { responses: 1, bodyBytes: 5_057_200 },
+      },
+    });
+  });
+
+  it.each([
+    ['alias packument survived', { packageName: '@esbuild/wasi-preview1', kind: 'packument' }],
+    ['alias tarball survived', { packageName: '@esbuild/wasi-preview1', kind: 'tarball' }],
+    ['public esbuild tarball survived', { packageName: 'esbuild', kind: 'tarball' }],
+  ])('refuses when %s', (_label, forbidden) => {
+    const required = [
+      { method: 'GET', packageName: 'esbuild', kind: 'packument', status: 200, bodyBytes: 612 },
+      {
+        method: 'GET',
+        packageName: 'esbuild-wasm',
+        kind: 'packument',
+        status: 200,
+        bodyBytes: 645,
+      },
+      {
+        method: 'GET',
+        packageName: 'esbuild-wasm',
+        kind: 'tarball',
+        status: 200,
+        bodyBytes: 5_057_200,
+      },
+    ];
+    expect(() =>
+      packedAliasBoundaryProof({
+        registryOrigin: 'http://127.0.0.1:54321',
+        responses: [
+          ...required,
+          { method: 'GET', status: 200, bodyBytes: 1, ...forbidden },
+        ],
+      }),
+    ).toThrow(/forbidden|retired alias/i);
   });
 });
