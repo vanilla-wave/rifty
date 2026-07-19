@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "generatedAt": "2026-07-07T18:13:41.204Z",
+  "schemaVersion": 3,
+  "generatedAt": "2026-07-19T08:20:59.482Z",
   "runner": {
     "runs": 5,
     "browser": "chromium",
@@ -11,161 +11,281 @@
       "status": "measured",
       "count": 5,
       "samples": [
-        1053,
-        1005,
-        864,
-        918,
-        857
+        1430,
+        1428,
+        398,
+        404,
+        402
       ],
-      "median": 918,
-      "displayMs": 1000
+      "median": 404,
+      "displayMs": 500
     },
     "npmInstallToFirstViteResponseMs": {
-      "status": "measured",
-      "count": 5,
-      "samples": [
-        2847,
-        2748,
-        2761,
-        2775,
-        2652
-      ],
-      "median": 2761,
-      "displayMs": 2800,
-      "registryUrl": "https://registry.rifty.dev/npm-registry",
-      "resolverUrl": "https://eddy.rifty.dev",
+      "status": "unmeasured",
+      "note": "standard: proxy https://registry.rifty.dev/npm-registry configured but only 0/5 runs reached first Vite response — refusing a partial median: terminal never matched /VITE v[\\d.]+\\s+ready in \\d+ ms/ within 180000ms",
       "transport": {
         "mode": "auto",
         "originProtocols": {
           "https://registry.rifty.dev": [
-            "h2"
-          ],
-          "https://eddy.rifty.dev": [
-            "h2"
+            "h2",
+            "unreachable"
           ]
         },
         "runs": [
           {
             "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 50
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
+              "protocol": "unreachable",
+              "requests": 40
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
-              "requests": 50
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
+              "requests": 40
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
-              "requests": 50
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
+              "requests": 40
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
-              "requests": 50
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
+              "requests": 40
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
-              "requests": 50
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
+              "requests": 40
             }
           }
         ]
       },
-      "baseline": {
+      "transportMatrix": {
+        "auto": {
+          "standard": {
+            "status": "unmeasured",
+            "note": "standard: proxy https://registry.rifty.dev/npm-registry configured but only 0/5 runs reached first Vite response — refusing a partial median: terminal never matched /VITE v[\\d.]+\\s+ready in \\d+ ms/ within 180000ms",
+            "registryUrl": "https://registry.rifty.dev/npm-registry",
+            "transport": {
+              "mode": "auto",
+              "originProtocols": {
+                "https://registry.rifty.dev": [
+                  "h2",
+                  "unreachable"
+                ]
+              },
+              "runs": [
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "unreachable",
+                    "requests": 40
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 40
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 40
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 40
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 40
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "shadowAssetColdFillMs": {
+      "standard": {
         "status": "measured",
         "count": 5,
         "samples": [
-          6511,
-          5474,
-          4873,
-          4772,
-          5180
+          1357.6900000572205,
+          1374.4400000572205,
+          1339.119999885559,
+          1360.954999923706,
+          1352.3450000286102
         ],
-        "median": 5180,
-        "displayMs": 5200,
-        "label": "standard"
-      },
-      "speedupX": 1.88
+        "median": 1357.6900000572205,
+        "displayMs": 1400,
+        "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+        "storageClass": "opfs-best-effort",
+        "fillTransport": "standard",
+        "fillCache": "network",
+        "memberBytes": 13918738,
+        "registryUrl": "https://registry.rifty.dev/npm-registry",
+        "cacheRegime": "fresh-context-empty-store-and-tarball;warm-proxy-origin",
+        "runs": [
+          {
+            "durationMs": 1357.6900000572205,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "standard",
+            "fillCache": "network",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "packumentDecoded": 1042853,
+              "tarball": 3845798,
+              "total": 4888651
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://registry.rifty.dev": {
+                  "protocol": "h2",
+                  "requests": 2
+                }
+              }
+            }
+          },
+          {
+            "durationMs": 1374.4400000572205,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "standard",
+            "fillCache": "network",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "packumentDecoded": 1042853,
+              "tarball": 3845798,
+              "total": 4888651
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://registry.rifty.dev": {
+                  "protocol": "h2",
+                  "requests": 2
+                }
+              }
+            }
+          },
+          {
+            "durationMs": 1339.119999885559,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "standard",
+            "fillCache": "network",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "packumentDecoded": 1042853,
+              "tarball": 3845798,
+              "total": 4888651
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://registry.rifty.dev": {
+                  "protocol": "h2",
+                  "requests": 2
+                }
+              }
+            }
+          },
+          {
+            "durationMs": 1360.954999923706,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "standard",
+            "fillCache": "network",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "packumentDecoded": 1042853,
+              "tarball": 3845798,
+              "total": 4888651
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://registry.rifty.dev": {
+                  "protocol": "h2",
+                  "requests": 2
+                }
+              }
+            }
+          },
+          {
+            "durationMs": 1352.3450000286102,
+            "requiredSetDigest": "d19061b2ff0ec9b9e1a10a13af199921ef4bef1954989749a5a8b56684279994",
+            "storageClass": "opfs-best-effort",
+            "fillTransport": "standard",
+            "fillCache": "network",
+            "memberBytes": 13918738,
+            "responseBodyBytes": {
+              "packumentDecoded": 1042853,
+              "tarball": 3845798,
+              "total": 4888651
+            },
+            "transport": {
+              "mode": "auto",
+              "origins": {
+                "https://registry.rifty.dev": {
+                  "protocol": "h2",
+                  "requests": 2
+                }
+              }
+            }
+          }
+        ]
+      }
     },
-    "presetBootToPreviewLiveMs": {
-      "status": "skipped",
-      "note": "--presets none"
-    }
+    "presetBootToPreviewLiveMs": [
+      {
+        "presetId": "project-files",
+        "status": "measured",
+        "count": 5,
+        "samples": [
+          5485,
+          5570,
+          5510,
+          5189,
+          4298
+        ],
+        "median": 5485,
+        "displayMs": 5500,
+        "stages": {
+          "interactiveMs": 3687,
+          "viteReadyMs": 5384
+        }
+      },
+      {
+        "presetId": "typescript-ls",
+        "status": "measured",
+        "count": 5,
+        "samples": [
+          4447,
+          4399,
+          4372,
+          4453,
+          4399
+        ],
+        "median": 4399,
+        "displayMs": 4400,
+        "stages": {
+          "interactiveMs": 2608,
+          "viteReadyMs": 4349
+        }
+      }
+    ]
   }
 }
