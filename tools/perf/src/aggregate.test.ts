@@ -237,8 +237,7 @@ describe('bench aggregate core', () => {
   });
 });
 
-const SHADOW_ASSET_CACHE_REGIME =
-  'fresh-context-empty-store-and-tarball;warm-proxy-origin';
+const SHADOW_ASSET_CACHE_REGIME = 'fresh-context-empty-store-and-tarball;warm-proxy-origin';
 const SHADOW_ASSET_DIGEST = 'a'.repeat(64);
 const SHADOW_ASSET_MEMBER_BYTES = 13_918_738;
 
@@ -362,8 +361,14 @@ describe('schema-v3 shadowAssetColdFillMs', () => {
   });
 
   it.each([
-    ['mixed digest', (runs) => runs.with(4, shadowAssetRun(140, { requiredSetDigest: 'b'.repeat(64) }))],
-    ['mixed storage', (runs) => runs.with(4, shadowAssetRun(140, { storageClass: 'memory-session' }))],
+    [
+      'mixed digest',
+      (runs) => runs.with(4, shadowAssetRun(140, { requiredSetDigest: 'b'.repeat(64) })),
+    ],
+    [
+      'mixed storage',
+      (runs) => runs.with(4, shadowAssetRun(140, { storageClass: 'memory-session' })),
+    ],
     ['wrong cache', (runs) => runs.with(4, shadowAssetRun(140, { fillCache: 'storage' }))],
     ['wrong source', (runs) => runs.with(4, shadowAssetRun(140, { fillTransport: 'eddy' }))],
   ])('refuses %s instead of aggregating heterogeneous evidence', (_name, mutate) => {
@@ -392,10 +397,7 @@ describe('schema-v3 shadowAssetColdFillMs', () => {
         responseBodyBytes: { packumentDecoded: 650, tarball: 5_057_200, total: 5_000_000 },
       }),
     ],
-    [
-      'wrong member size',
-      shadowAssetRun(100, { memberBytes: SHADOW_ASSET_MEMBER_BYTES - 1 }),
-    ],
+    ['wrong member size', shadowAssetRun(100, { memberBytes: SHADOW_ASSET_MEMBER_BYTES - 1 })],
     [
       'unknown protocol on a used origin',
       shadowAssetRun(100, {
@@ -438,9 +440,7 @@ describe('schema-v3 shadowAssetColdFillMs', () => {
 
   it('emits speedupX only for two complete matched measured rows', () => {
     const standardRuns = [500, 510, 520, 530, 540].map((duration) => shadowAssetRun(duration));
-    const eddyRuns = [250, 255, 260, 265, 270].map((duration) =>
-      eddyShadowAssetRun(duration),
-    );
+    const eddyRuns = [250, 255, 260, 265, 270].map((duration) => eddyShadowAssetRun(duration));
     const matched = shadowAssetArtifact(
       measuredShadowAssetRow(standardRuns),
       measuredShadowAssetRow(eddyRuns, {
@@ -458,10 +458,10 @@ describe('schema-v3 shadowAssetColdFillMs', () => {
       total: 5_058_900,
     });
 
-    const incomplete = shadowAssetArtifact(
-      measuredShadowAssetRow(standardRuns),
-      { status: 'unmeasured', note: 'Eddy bundle missed one asset' },
-    ).metrics.shadowAssetColdFillMs;
+    const incomplete = shadowAssetArtifact(measuredShadowAssetRow(standardRuns), {
+      status: 'unmeasured',
+      note: 'Eddy bundle missed one asset',
+    }).metrics.shadowAssetColdFillMs;
     expect(incomplete.speedupX).toBeUndefined();
   });
 

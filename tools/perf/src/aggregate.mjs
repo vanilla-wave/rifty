@@ -9,8 +9,7 @@ export const SCHEMA_VERSION = 3;
 const DEFAULT_STEP_MS = 100;
 const SHADOW_ASSET_RUN_COUNT = 5;
 const SHADOW_ASSET_MEMBER_BYTES = 13_918_738;
-const SHADOW_ASSET_CACHE_REGIME =
-  'fresh-context-empty-store-and-tarball;warm-proxy-origin';
+const SHADOW_ASSET_CACHE_REGIME = 'fresh-context-empty-store-and-tarball;warm-proxy-origin';
 const SHADOW_ASSET_STORAGE_CLASSES = new Set([
   'opfs-persisted',
   'opfs-best-effort',
@@ -87,10 +86,31 @@ function registryOrigin(value) {
   }
 }
 
+function endpointOrigin(value) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+function exactResponseFields(value, expected) {
+  const fields = Object.keys(value).sort();
+  return (
+    fields.length === expected.length && fields.every((field, index) => field === expected[index])
+  );
+}
+
 function normalizedShadowAssetRun(run, index, expectedFillTransport, expectedFillCache) {
   const label = `shadow asset cold run ${index + 1}`;
   if (!plainRecord(run)) return { error: `${label} must be an object` };
-  if (typeof run.durationMs !== 'number' || !Number.isFinite(run.durationMs) || run.durationMs < 0) {
+  if (
+    typeof run.durationMs !== 'number' ||
+    !Number.isFinite(run.durationMs) ||
+    run.durationMs < 0
+  ) {
     return { error: `${label} durationMs must be a non-negative finite number` };
   }
   if (typeof run.requiredSetDigest !== 'string' || run.requiredSetDigest.length === 0) {
@@ -117,21 +137,49 @@ function normalizedShadowAssetRun(run, index, expectedFillTransport, expectedFil
 
   const response = run.responseBodyBytes;
   if (!plainRecord(response)) return { error: `${label} responseBodyBytes must be an object` };
-  for (const field of ['packumentDecoded', 'tarball', 'total']) {
-    if (!nonNegativeSafeInteger(response[field])) {
-      return { error: `${label} responseBodyBytes.${field} must be a non-negative safe integer` };
+  let responseBodyBytes;
+  if (expectedFillTransport === 'standard') {
+    const fields = ['packumentDecoded', 'tarball', 'total'];
+    if (!exactResponseFields(response, fields)) {
+      return {
+        error: `${label} standard responseBodyBytes must contain exactly ${fields.join(', ')}`,
+      };
     }
-  }
-  if (
-    expectedFillTransport === 'standard' &&
-    (response.packumentDecoded === 0 || response.tarball === 0)
-  ) {
-    return { error: `${label} standard packument and tarball response bytes must be positive` };
-  }
-  if (response.total < response.packumentDecoded + response.tarball) {
-    return {
-      error: `${label} responseBodyBytes.total is smaller than packumentDecoded + tarball`,
+    for (const field of fields) {
+      if (!nonNegativeSafeInteger(response[field])) {
+        return { error: `${label} responseBodyBytes.${field} must be a non-negative safe integer` };
+      }
+    }
+    if (response.packumentDecoded === 0 || response.tarball === 0) {
+      return { error: `${label} standard packument and tarball response bytes must be positive` };
+    }
+    if (response.total < response.packumentDecoded + response.tarball) {
+      return {
+        error: `${label} responseBodyBytes.total is smaller than packumentDecoded + tarball`,
+      };
+    }
+    responseBodyBytes = {
+      packumentDecoded: response.packumentDecoded,
+      tarball: response.tarball,
+      total: response.total,
     };
+  } else {
+    const fields = ['bundle', 'total'];
+    if (!exactResponseFields(response, fields)) {
+      return { error: `${label} Eddy responseBodyBytes must contain exactly bundle, total` };
+    }
+    for (const field of fields) {
+      if (!nonNegativeSafeInteger(response[field])) {
+        return { error: `${label} responseBodyBytes.${field} must be a non-negative safe integer` };
+      }
+    }
+    if (response.bundle === 0) {
+      return { error: `${label} Eddy bundle response bytes must be positive` };
+    }
+    if (response.total < response.bundle) {
+      return { error: `${label} responseBodyBytes.total is smaller than bundle` };
+    }
+    responseBodyBytes = { bundle: response.bundle, total: response.total };
   }
 
   const transport = run.transport;
@@ -141,7 +189,8 @@ function normalizedShadowAssetRun(run, index, expectedFillTransport, expectedFil
   const origins = {};
   let usedOrigins = 0;
   for (const [origin, evidence] of Object.entries(transport.origins)) {
-    if (remoteOrigin(origin) === null) return { error: `${label} transport origin is invalid: ${origin}` };
+    if (remoteOrigin(origin) === null)
+      return { error: `${label} transport origin is invalid: ${origin}` };
     if (!plainRecord(evidence) || !nonNegativeSafeInteger(evidence.requests)) {
       return { error: `${label} transport evidence for ${origin} has invalid requests` };
     }
@@ -168,11 +217,7 @@ function normalizedShadowAssetRun(run, index, expectedFillTransport, expectedFil
       fillTransport: run.fillTransport,
       fillCache: run.fillCache,
       memberBytes: run.memberBytes,
-      responseBodyBytes: {
-        packumentDecoded: response.packumentDecoded,
-        tarball: response.tarball,
-        total: response.total,
-      },
+      responseBodyBytes,
       transport: { mode: 'auto', origins },
     },
   };
@@ -192,15 +237,27 @@ function buildShadowAssetColdRow(input, expectedFillTransport, stepMs, label) {
     );
   }
   if (input.cacheRegime !== SHADOW_ASSET_CACHE_REGIME) {
-    return shadowAssetUnmeasured(
-      `${label} cacheRegime must be ${SHADOW_ASSET_CACHE_REGIME}`,
-    );
+    return shadowAssetUnmeasured(`${label} cacheRegime must be ${SHADOW_ASSET_CACHE_REGIME}`);
   }
   const registry = registryOrigin(input.registryUrl);
   if (registry === null) {
     return shadowAssetUnmeasured(`${label} registryUrl must be an absolute http(s) URL`);
   }
-  const expectedFillCache = 'network';
+  const expectedFillCache = expectedFillTransport === 'standard' ? 'network' : 'bundle';
+  let measuredOrigins;
+  if (expectedFillTransport === 'standard') {
+    measuredOrigins = new Set([registry]);
+  } else {
+    const resolver = endpointOrigin(input.resolverUrl);
+    if (resolver === null) {
+      return shadowAssetUnmeasured(`${label} resolverUrl must be an absolute http(s) URL`);
+    }
+    const bundle = input.bundleUrl === undefined ? resolver : endpointOrigin(input.bundleUrl);
+    if (bundle === null) {
+      return shadowAssetUnmeasured(`${label} bundleUrl must be an absolute http(s) URL`);
+    }
+    measuredOrigins = new Set([resolver, bundle]);
+  }
   const runs = [];
   for (const [index, raw] of input.runs.entries()) {
     const normalized = normalizedShadowAssetRun(
@@ -222,9 +279,14 @@ function buildShadowAssetColdRow(input, expectedFillTransport, stepMs, label) {
     if (run.storageClass !== first.storageClass) {
       return shadowAssetUnmeasured(`${label} run ${index + 1} has a mixed storage class`);
     }
-    if ((run.transport.origins[registry]?.requests ?? 0) === 0) {
+    const usedMeasuredOrigin = [...measuredOrigins].some(
+      (origin) => (run.transport.origins[origin]?.requests ?? 0) > 0,
+    );
+    if (!usedMeasuredOrigin) {
       return shadowAssetUnmeasured(
-        `${label} run ${index + 1} has no measured request for registry origin ${registry}`,
+        expectedFillTransport === 'standard'
+          ? `${label} run ${index + 1} has no measured request for registry origin ${registry}`
+          : `${label} run ${index + 1} has no measured request for a configured Eddy origin`,
       );
     }
   }
@@ -278,12 +340,7 @@ function buildShadowAssetColdMetric(input, stepMs) {
   );
   const metric = { standard };
   if (plainRecord(input) && input.eddy !== undefined) {
-    const eddy = buildShadowAssetColdRow(
-      input.eddy,
-      'eddy',
-      stepMs,
-      'shadow asset cold Eddy row',
-    );
+    const eddy = buildShadowAssetColdRow(input.eddy, 'eddy', stepMs, 'shadow asset cold Eddy row');
     metric.eddy = eddy;
     if (matchedShadowAssetColdRows(standard, eddy)) {
       metric.speedupX = Math.round((standard.median / eddy.median) * 100) / 100;
