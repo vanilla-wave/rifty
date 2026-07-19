@@ -13,6 +13,9 @@
 
 ### Fixed
 
+- Runtime-asset lifecycle contracts now use one integrity-checked vendored
+  upstream tarball instead of reconstructing source bytes with environment-dependent
+  `npm pack` output.
 - Privileged Node and dev-server bootstraps now consume entry capability ports
   before importing ordinary VFS guest code; unused and unknown endpoints close
   before handoff instead of remaining recoverable through an ambient global

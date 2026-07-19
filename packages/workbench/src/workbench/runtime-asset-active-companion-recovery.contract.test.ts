@@ -1,8 +1,3 @@
-import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
 import {
   RegistryClient,
   type ShadowAssetPlan,
@@ -21,6 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { publishedEsbuildWasmTarball } from '../test-fixtures/published-esbuild-wasm-tarball.ts';
 import { createOwnerPackageState } from '../workers/owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from '../workers/owner-vfs-authority.ts';
 import {
@@ -84,49 +80,6 @@ const NODE_WORKER_RUNTIME_ENV = Object.freeze({
   RIFTY_NODE_ENTRY_WORKER_URL: 'https://playground.invalid/workers/node.js',
   RIFTY_SQLITE_WASM_URL: 'https://playground.invalid/sqlite.wasm',
 });
-
-const require = createRequire(
-  new URL('../../../../tools/shadow-registry/package.json', import.meta.url),
-);
-const ESBUILD_WASM_PACKAGE_ROOT = dirname(require.resolve('esbuild-wasm/package.json'));
-let publishedEsbuildWasmTarballPromise: Promise<Uint8Array> | undefined;
-
-function runNpmPack(packageRoot: string, destination: string, cache: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'npm',
-      ['pack', packageRoot, '--pack-destination', destination, '--json'],
-      {
-        env: {
-          ...process.env,
-          npm_config_cache: cache,
-          npm_config_update_notifier: 'false',
-        },
-        maxBuffer: 1024 * 1024,
-      },
-      (error) => {
-        if (error) reject(error);
-        else resolve();
-      },
-    );
-  });
-}
-
-function publishedEsbuildWasmTarball(): Promise<Uint8Array> {
-  publishedEsbuildWasmTarballPromise ??= (async () => {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'rifty-active-recovery-esbuild-pack-'));
-    const destination = join(tempRoot, 'pack');
-    const cache = join(tempRoot, 'cache');
-    try {
-      await Promise.all([mkdir(destination), mkdir(cache)]);
-      await runNpmPack(ESBUILD_WASM_PACKAGE_ROOT, destination, cache);
-      return new Uint8Array(await readFile(join(destination, 'esbuild-wasm-0.28.0.tgz')));
-    } finally {
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  })();
-  return publishedEsbuildWasmTarballPromise;
-}
 
 class QuotaOnceStorage implements ShadowAssetStorage {
   readonly storageClass = 'memory-session' as const;

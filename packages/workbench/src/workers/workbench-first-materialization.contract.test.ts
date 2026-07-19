@@ -1,10 +1,5 @@
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { globalProcessManager } from '@riftydev/kernel';
 import {
@@ -34,6 +29,7 @@ import type { InstallFn } from '../glue/npm-shell-command.ts';
 import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { publishedEsbuildWasmTarball } from '../test-fixtures/published-esbuild-wasm-tarball.ts';
 import { projectTerminalStateFromOwner } from '../workbench/internal/playground-terminal-state.ts';
 import { createProjectRuntimeAcquisitionController } from '../workbench/internal/project-runtime-acquisition.ts';
 import { createNodeCliProjectRuntime } from '../workbench/node-project-runtime.ts';
@@ -118,12 +114,6 @@ interface OwnerHarnessOptions {
   readonly runtimeAssetManager?: ShadowAssetManager;
 }
 
-const require = createRequire(
-  new URL('../../../../tools/shadow-registry/package.json', import.meta.url),
-);
-const ESBUILD_WASM_PACKAGE_ROOT = dirname(require.resolve('esbuild-wasm/package.json'));
-let publishedEsbuildWasmTarballPromise: Promise<Uint8Array> | undefined;
-
 function concatBytes(...parts: readonly Uint8Array[]): Uint8Array {
   const result = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
   let offset = 0;
@@ -179,43 +169,6 @@ function fixturePackageTarball(
   }
   archive.push(new Uint8Array(1024));
   return new Uint8Array(gzipSync(concatBytes(...archive)));
-}
-
-function runNpmPack(packageRoot: string, destination: string, cache: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'npm',
-      ['pack', packageRoot, '--pack-destination', destination, '--json'],
-      {
-        env: {
-          ...process.env,
-          npm_config_cache: cache,
-          npm_config_update_notifier: 'false',
-        },
-        maxBuffer: 1024 * 1024,
-      },
-      (error) => {
-        if (error) reject(error);
-        else resolve();
-      },
-    );
-  });
-}
-
-function publishedEsbuildWasmTarball(): Promise<Uint8Array> {
-  publishedEsbuildWasmTarballPromise ??= (async () => {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'rifty-esbuild-wasm-pack-'));
-    const destination = join(tempRoot, 'pack');
-    const cache = join(tempRoot, 'cache');
-    try {
-      await Promise.all([mkdir(destination), mkdir(cache)]);
-      await runNpmPack(ESBUILD_WASM_PACKAGE_ROOT, destination, cache);
-      return new Uint8Array(await readFile(join(destination, 'esbuild-wasm-0.28.0.tgz')));
-    } finally {
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  })();
-  return publishedEsbuildWasmTarballPromise;
 }
 
 const VITE_SEVEN_MANIFEST = Object.freeze({
