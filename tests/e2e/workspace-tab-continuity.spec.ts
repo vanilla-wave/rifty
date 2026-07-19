@@ -168,6 +168,7 @@ test('a fatal admission failure paints the standalone failure notice, never the 
   await expect(fatal).toHaveAttribute('role', 'alert');
   await expect(fatal.getByRole('heading', { name: 'Playground failed to start' })).toBeVisible();
   await expect(fatal).toContainText('Workbench requires Web Locks');
+  await expect(fatal.getByRole('button', { name: 'Retry' })).toBeVisible();
   await expect(fatal.getByRole('button', { name: 'Reload' })).toBeVisible();
   await expect(page.locator('#rf-boot')).toHaveCount(0);
   await expect(page.locator('.rf-app')).toHaveCount(0);

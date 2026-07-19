@@ -9,10 +9,11 @@
   `Saved` bytes reopen in both the explicitly reloaded tab and a later fresh tab.
 - Every fatal page-entry outcome (boot probe, non-contention admission failure,
   terminal persistence, App mount) now replaces the cold-boot skeleton with a
-  standalone failure notice carrying the causes and an explicit Reload —
-  previously a fatal admission failure left the boot spinner up forever with
-  the error only in the console (Chromium acceptance injects an absent
-  Web Locks capability).
+  standalone `boot-failed` notice carrying the causes, a host-owned Retry that
+  re-runs the same entry transaction, and an explicit Reload — previously a
+  fatal admission failure left the boot spinner up forever with the error only
+  in the console (Chromium acceptance injects an absent Web Locks capability;
+  the existing owner-boot Retry e2e keeps passing unchanged).
 
 ### Added (app-local Workbench contract)
 

@@ -3232,6 +3232,27 @@ body.rf-resizing iframe {
   margin: 6px 0 0;
   padding-left: 18px;
 }
+.rf-boot-failure__actions {
+  display: flex;
+  grid-column: 2;
+  gap: 8px;
+  justify-self: start;
+  margin-top: 2px;
+}
+.rf-boot-failure__actions .rf-btn {
+  min-height: 34px;
+  padding-inline: 15px;
+}
+@media (max-width: 560px) {
+  .rf-boot-failure__actions {
+    grid-column: 1;
+    width: 100%;
+  }
+  .rf-boot-failure__actions .rf-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
 
 @media (max-width: 560px) {
   .rf-workspace-occupied {

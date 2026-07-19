@@ -2,17 +2,26 @@ import { renderToString } from 'solid-js/web';
 import { describe, expect, it } from 'vitest';
 import { BootFailure } from './BootFailure.tsx';
 
+const noop = (): void => {};
+
 describe('BootFailure', () => {
-  it('renders a standalone directed alert with the failure cause and reload affordance', () => {
+  it('renders a standalone boot-failed alert with the cause and Retry/Reload affordances', () => {
     const html = renderToString(() =>
-      BootFailure({ error: new Error('Workbench requires Web Locks'), onReload: () => {} }),
+      BootFailure({
+        error: new Error('Workbench requires Web Locks'),
+        onRetry: noop,
+        onReload: noop,
+      }),
     );
 
     expect(html).toContain('data-testid="boot-failure"');
+    expect(html).toContain('data-workbench-health="boot-failed"');
     expect(html).toContain('role="alert"');
     expect(html).toContain('Playground failed to start');
     expect(html).toContain('Workbench requires Web Locks');
-    expect(html).toContain('>Reload<');
+    expect(html).toContain('data-action="retry-workbench"');
+    expect(html).toMatch(/Retry<\/button>/);
+    expect(html).toContain('>Reload</');
   });
 
   it('lists every aggregated cause without collapsing them', () => {
@@ -22,7 +31,8 @@ describe('BootFailure', () => {
           [new Error('mount failed'), new Error('Workbench close failed')],
           'Playground page entry failed and cleanup failed',
         ),
-        onReload: () => {},
+        onRetry: noop,
+        onReload: noop,
       }),
     );
 
@@ -33,7 +43,7 @@ describe('BootFailure', () => {
 
   it('shows a non-Error rejection value instead of hiding it', () => {
     const html = renderToString(() =>
-      BootFailure({ error: 'owner boot refused', onReload: () => {} }),
+      BootFailure({ error: 'owner boot refused', onRetry: noop, onReload: noop }),
     );
 
     expect(html).toContain('owner boot refused');

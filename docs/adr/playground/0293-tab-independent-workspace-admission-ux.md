@@ -70,12 +70,13 @@ a second workspace id/path would likewise fork the already-stable catalog.
 9. **Every fatal page-entry outcome is painted by the same coordinator.** Any
    failure of the entry transaction — boot probe, non-contention admission
    failure, terminal persistence, App mount — replaces the cold-boot skeleton
-   with a standalone failure notice (causes + explicit Reload) after the
-   admitted Workbench, if any, is closed; the original error still propagates.
-   The skeleton is never a terminal state. The COI guard keeps its earlier
-   bespoke banner: it fires before this coordinator exists. ADR-0285's health
-   authority remains the recovery surface once an App exists; before one does,
-   explicit Reload is the only retry (decision 6).
+   with a standalone `boot-failed` notice (causes + host-owned Retry that
+   re-runs the same finite transaction + explicit Reload) after the admitted
+   Workbench, if any, is closed; the original error still propagates. The
+   skeleton is never a terminal state. The COI guard keeps its earlier bespoke
+   banner: it fires before this coordinator exists. ADR-0285's health authority
+   remains the recovery surface once an App exists; decision 6's Reload-only
+   rule governs the contender, not this notice.
 
 This corrects ADR-0263's generic “contention rejects” clause only: origin
 contention now has a stable public error prototype; its one-lock/one-Workbench

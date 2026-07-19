@@ -42,25 +42,48 @@ async function renderApp(): Promise<void> {
   const root = document.getElementById('app');
   if (!root) throw new Error('Missing #app root element');
 
-  await mountPlaygroundPage({
-    bootstrapPlayground,
-    openPlaygroundAppWorkbench,
-    createTerminalPersistence: () => createTerminalPersistence(WORKSPACE),
-    mountOccupied() {
-      root.replaceChildren();
-      render(() => <WorkspaceOccupied onReload={() => globalThis.location.reload()} />, root);
-    },
-    mountApp(props) {
-      // Drop the index.html cold-boot skeleton only after Workbench admission.
-      root.replaceChildren();
-      render(() => <App {...props} />, root);
-    },
-    mountFatal(error) {
-      root.replaceChildren();
-      render(
-        () => <BootFailure error={error} onReload={() => globalThis.location.reload()} />,
-        root,
-      );
-    },
-  });
+  // Retry re-enters the same finite transaction, so each mount disposes the
+  // previous Solid root before painting into the shared #app container.
+  let disposePrevious: (() => void) | null = null;
+  const mount = (paint: () => ReturnType<typeof render>): void => {
+    disposePrevious?.();
+    root.replaceChildren();
+    disposePrevious = paint();
+  };
+
+  const startPageEntry = (): Promise<void> =>
+    mountPlaygroundPage({
+      bootstrapPlayground,
+      openPlaygroundAppWorkbench,
+      createTerminalPersistence: () => createTerminalPersistence(WORKSPACE),
+      mountOccupied() {
+        mount(() =>
+          render(() => <WorkspaceOccupied onReload={() => globalThis.location.reload()} />, root),
+        );
+      },
+      mountApp(props) {
+        // Drop the index.html cold-boot skeleton only after Workbench admission.
+        mount(() => render(() => <App {...props} />, root));
+      },
+      mountFatal(error) {
+        mount(() =>
+          render(
+            () => (
+              <BootFailure
+                error={error}
+                onRetry={() =>
+                  void startPageEntry().catch((retryFailure: unknown) =>
+                    console.error('[playground] page entry retry failed', retryFailure),
+                  )
+                }
+                onReload={() => globalThis.location.reload()}
+              />
+            ),
+            root,
+          ),
+        );
+      },
+    });
+
+  await startPageEntry();
 }
