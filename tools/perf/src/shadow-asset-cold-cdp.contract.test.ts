@@ -75,6 +75,56 @@ function cdpResponse(requestId: string, url: string, overrides: Record<string, u
 }
 
 describe('standard shadow-asset CDP response recorder', () => {
+  it('drains only selected source lifecycles and follows their redirect request id', async () => {
+    const session = new FakeCdpSession();
+    const opaqueCdnTarball = 'https://cdn.example/object/abc123';
+    session.bodies.set('asset', {
+      body: Buffer.from([1, 2, 3]).toString('base64'),
+      base64Encoded: true,
+    });
+    session.bodies.set('unrelated', { body: 'large unrelated package', base64Encoded: false });
+    const recorder = await startCdpResponseRecorder(fakePage(session), {
+      captureUrl: (url: string) => url.includes('esbuild-wasm'),
+    });
+
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'unrelated',
+      request: { url: `${registryUrl}/vite` },
+    });
+    session.emit(
+      'Network.responseReceived',
+      cdpResponse('unrelated', `${registryUrl}/vite`),
+    );
+    session.emit('Network.loadingFinished', { requestId: 'unrelated' });
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'asset',
+      request: { url: tarballUrl },
+    });
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'asset',
+      request: { url: opaqueCdnTarball },
+      redirectResponse: {
+        url: tarballUrl,
+        status: 302,
+        protocol: 'h2',
+        fromDiskCache: false,
+        fromServiceWorker: false,
+      },
+    });
+    session.emit('Network.responseReceived', cdpResponse('asset', opaqueCdnTarball));
+    session.emit('Network.loadingFinished', { requestId: 'asset' });
+
+    const captured = await recorder.stop();
+    expect(captured).toEqual([
+      expect.objectContaining({ url: tarballUrl, status: 302, complete: false }),
+      expect.objectContaining({ url: opaqueCdnTarball, bodyBytes: 3, complete: true }),
+    ]);
+    expect(session.calls).not.toContainEqual({
+      method: 'Network.getResponseBody',
+      params: { requestId: 'unrelated' },
+    });
+  });
+
   it('enables Network and records exact decoded text and binary response-body bytes', async () => {
     const session = new FakeCdpSession();
     const text = '{"name":"esbuild-wasm"}';
