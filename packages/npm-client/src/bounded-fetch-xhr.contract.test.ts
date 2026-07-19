@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as boundedFetch from './bounded-fetch.ts';
 import { EDDY_STORE_DURABLE_HEADER } from './eddy-request.ts';
 import {
   assetFixture,
@@ -34,15 +35,14 @@ type RequestBodyBounded = (
   fetchImpl?: typeof fetch,
 ) => Promise<BoundedBodyResult>;
 
-async function requestBodyBounded(
+function requestBodyBounded(
   request: BoundedBodyRequest,
   bounds: RequestBodyBounds = {},
   fetchImpl?: typeof fetch,
 ): Promise<BoundedBodyResult> {
-  const module = (await import('./bounded-fetch.ts')) as unknown as Record<string, unknown>;
-  const operation = module.requestBodyBounded;
+  const operation = (boundedFetch as unknown as Record<string, unknown>).requestBodyBounded;
   if (typeof operation !== 'function') {
-    throw new TypeError('bounded-fetch requestBodyBounded is not implemented');
+    return Promise.reject(new TypeError('bounded-fetch requestBodyBounded is not implemented'));
   }
   return (operation as RequestBodyBounded)(request, bounds, fetchImpl);
 }
