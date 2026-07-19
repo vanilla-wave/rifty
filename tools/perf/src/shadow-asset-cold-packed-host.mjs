@@ -4,10 +4,27 @@ import { resolve } from 'node:path';
 const READY_PREFIX = 'RIFTY_SHADOW_ASSET_COLD_HOST=';
 const START_TIMEOUT_MS = 600_000;
 const STOP_TIMEOUT_MS = 30_000;
+const KILL_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT = 1024 * 1024;
+const WAIT_TIMEOUT = Symbol('packed cold host wait timeout');
 
-function delay(milliseconds) {
-  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+async function waitWithin(promise, milliseconds) {
+  let timeout;
+  const timed = new Promise((resolveTimeout) => {
+    timeout = setTimeout(() => resolveTimeout(WAIT_TIMEOUT), milliseconds);
+  });
+  try {
+    return await Promise.race([promise, timed]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function positiveTimeout(value, name) {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return value;
 }
 
 function appendBounded(current, chunk) {
@@ -33,17 +50,62 @@ export function hostOriginFromLine(line) {
   return origin.origin;
 }
 
+function exitDescription(result) {
+  return `code ${String(result.code)}, signal ${String(result.signal)}`;
+}
+
+function unexpectedExit(result, output, boundary) {
+  return new Error(
+    `packed cold host ${boundary} (${exitDescription(result)})\n${output}`,
+    result.error === undefined ? undefined : { cause: result.error },
+  );
+}
+
+function signalHostProcess(child, signal) {
+  if (signal !== 'SIGKILL' || process.platform === 'win32' || child.pid === undefined) {
+    return child.kill(signal);
+  }
+  try {
+    process.kill(-child.pid, signal);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
+    throw error;
+  }
+}
+
+function assertExpectedStopExit(result, output, forced) {
+  if (result.error !== undefined) {
+    throw unexpectedExit(result, output, 'failed during stop');
+  }
+  if (result.code === 0 && result.signal === null) return;
+  if (result.code === null && result.signal === 'SIGTERM') return;
+  if (forced && result.code === null && result.signal === 'SIGKILL') return;
+  throw unexpectedExit(result, output, 'exited unexpectedly during stop');
+}
+
 /** Build and hold the controller item's tarball-installed external host. */
-export async function startPackedShadowAssetColdHost({ repoRoot, env }) {
+export async function startPackedShadowAssetColdHost({
+  repoRoot,
+  env,
+  startTimeoutMs = START_TIMEOUT_MS,
+  stopTimeoutMs = STOP_TIMEOUT_MS,
+  killTimeoutMs = KILL_TIMEOUT_MS,
+}) {
+  positiveTimeout(startTimeoutMs, 'startTimeoutMs');
+  positiveTimeout(stopTimeoutMs, 'stopTimeoutMs');
+  positiveTimeout(killTimeoutMs, 'killTimeoutMs');
   const runner = resolve(repoRoot, 'tests/integration/workbench-packed-consumer.mjs');
   const child = spawn(process.execPath, [runner, '--serve-shadow-asset-cold'], {
     cwd: repoRoot,
+    detached: process.platform !== 'win32',
     env: { ...env, CI: '1', COREPACK_ENABLE_NETWORK: '0' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
   let lineBuffer = '';
-  let exited = false;
+  let closed = false;
+  let spawnError;
   let resolveExit;
   const exit = new Promise((resolvePromise) => {
     resolveExit = resolvePromise;
@@ -80,47 +142,77 @@ export async function startPackedShadowAssetColdHost({ repoRoot, env }) {
     process.stderr.write(text);
   });
   child.on('error', (error) => {
-    exited = true;
-    rejectReady(error);
-    resolveExit({ error });
+    spawnError = error;
+    rejectReady(new Error('packed cold host process failed', { cause: error }));
   });
   child.on('close', (code, signal) => {
-    exited = true;
-    rejectReady(
-      new Error(
-        `packed cold host exited before readiness (code ${String(code)}, signal ${String(signal)})\n${output}`,
-      ),
-    );
-    resolveExit({ code, signal });
+    closed = true;
+    const result = { code, signal, error: spawnError };
+    rejectReady(unexpectedExit(result, output, 'exited before readiness'));
+    resolveExit(result);
   });
 
-  const timeout = delay(START_TIMEOUT_MS).then(() => {
-    throw new Error(
-      `packed cold host did not become ready within ${START_TIMEOUT_MS}ms\n${output}`,
-    );
-  });
+  const terminate = async ({ acceptExistingExit }) => {
+    if (closed) {
+      const result = await exit;
+      if (acceptExistingExit) return;
+      throw unexpectedExit(result, output, 'exited outside the stop boundary');
+    }
+
+    const termDelivered = signalHostProcess(child, 'SIGTERM');
+    if (!termDelivered) {
+      const result = await waitWithin(exit, stopTimeoutMs);
+      if (result === WAIT_TIMEOUT) {
+        throw new Error(`packed cold host rejected SIGTERM and did not exit\n${output}`);
+      }
+      if (acceptExistingExit) return;
+      throw unexpectedExit(result, output, 'exited before SIGTERM delivery');
+    }
+
+    const gracefulResult = await waitWithin(exit, stopTimeoutMs);
+    if (gracefulResult !== WAIT_TIMEOUT) {
+      if (!acceptExistingExit) assertExpectedStopExit(gracefulResult, output, false);
+      return;
+    }
+
+    const killDelivered = signalHostProcess(child, 'SIGKILL');
+    const forcedResult = await waitWithin(exit, killTimeoutMs);
+    if (forcedResult === WAIT_TIMEOUT) {
+      const delivery = killDelivered ? 'accepted' : 'rejected';
+      throw new Error(
+        `packed cold host ${delivery} SIGKILL but did not exit within ${killTimeoutMs}ms\n${output}`,
+      );
+    }
+    if (!acceptExistingExit) assertExpectedStopExit(forcedResult, output, killDelivered);
+  };
+
   let origin;
   try {
-    origin = await Promise.race([ready, timeout]);
+    const readyResult = await waitWithin(ready, startTimeoutMs);
+    if (readyResult === WAIT_TIMEOUT) {
+      throw new Error(
+        `packed cold host did not become ready within ${startTimeoutMs}ms\n${output}`,
+      );
+    }
+    origin = readyResult;
   } catch (error) {
-    if (!exited) child.kill('SIGTERM');
-    await Promise.race([exit, delay(STOP_TIMEOUT_MS)]);
-    if (!exited) child.kill('SIGKILL');
+    try {
+      await terminate({ acceptExistingExit: true });
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'packed cold host start failed and teardown did not complete',
+      );
+    }
     throw error;
   }
 
-  let stopped = false;
+  let stopPromise;
   return {
     origin,
-    async stop() {
-      if (stopped) return;
-      stopped = true;
-      if (!exited) child.kill('SIGTERM');
-      await Promise.race([exit, delay(STOP_TIMEOUT_MS)]);
-      if (!exited) {
-        child.kill('SIGKILL');
-        await exit;
-      }
+    stop() {
+      stopPromise ??= terminate({ acceptExistingExit: false });
+      return stopPromise;
     },
   };
 }

@@ -832,6 +832,20 @@ function delay(milliseconds) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
 
+const PROCESS_WAIT_TIMEOUT = Symbol('packed consumer process wait timeout');
+
+async function waitForProcessWithin(promise, milliseconds) {
+  let timeout;
+  const timed = new Promise((resolveTimeout) => {
+    timeout = setTimeout(() => resolveTimeout(PROCESS_WAIT_TIMEOUT), milliseconds);
+  });
+  try {
+    return await Promise.race([promise, timed]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function reserveLoopbackPort() {
   const server = createServer();
   await listen(server);
@@ -858,6 +872,7 @@ function startProcess(command, args, options) {
   });
   let output = '';
   let completed = false;
+  let processError;
   const exit = new Promise((resolveExit) => {
     child.stdout.on('data', (chunk) => {
       output = appendBounded(output, chunk);
@@ -866,24 +881,61 @@ function startProcess(command, args, options) {
       output = appendBounded(output, chunk);
     });
     child.on('error', (error) => {
-      completed = true;
-      resolveExit({ error });
+      processError = error;
     });
     child.on('close', (code, signal) => {
       completed = true;
-      resolveExit({ code, signal });
+      resolveExit({ code, signal, error: processError });
     });
   });
+  const exitFailure = (result, boundary) =>
+    new Error(
+      `${command} ${boundary}: ${JSON.stringify(result)}\n${output}`,
+      result.error === undefined ? undefined : { cause: result.error },
+    );
+  const assertExpectedStop = (result, forced) => {
+    if (result.error !== undefined) throw exitFailure(result, 'failed during stop');
+    if (result.code === 0 && result.signal === null) return;
+    if (result.code === null && result.signal === 'SIGTERM') return;
+    if (forced && result.code === null && result.signal === 'SIGKILL') return;
+    throw exitFailure(result, 'exited unexpectedly during stop');
+  };
+  let stopPromise;
   return {
     output: () => output,
     exit,
     completed: () => completed,
-    async stop() {
-      if (completed) return;
-      child.kill('SIGTERM');
-      await Promise.race([exit, delay(5_000)]);
-      if (!completed) child.kill('SIGKILL');
-      await exit;
+    stop() {
+      stopPromise ??= (async () => {
+        if (completed) {
+          const result = await exit;
+          throw exitFailure(result, 'exited outside the stop boundary');
+        }
+
+        const termDelivered = child.kill('SIGTERM');
+        if (!termDelivered) {
+          const result = await waitForProcessWithin(exit, 5_000);
+          if (result === PROCESS_WAIT_TIMEOUT) {
+            throw exitFailure({ code: null, signal: null }, 'rejected SIGTERM and remained alive');
+          }
+          throw exitFailure(result, 'exited before SIGTERM delivery');
+        }
+
+        const gracefulResult = await waitForProcessWithin(exit, 5_000);
+        if (gracefulResult !== PROCESS_WAIT_TIMEOUT) {
+          assertExpectedStop(gracefulResult, false);
+          return;
+        }
+
+        const killDelivered = child.kill('SIGKILL');
+        const forcedResult = await waitForProcessWithin(exit, 5_000);
+        if (forcedResult === PROCESS_WAIT_TIMEOUT) {
+          const delivery = killDelivered ? 'accepted' : 'rejected';
+          throw exitFailure({ code: null, signal: null }, `${delivery} SIGKILL but remained alive`);
+        }
+        assertExpectedStop(forcedResult, killDelivered);
+      })();
+      return stopPromise;
     },
   };
 }

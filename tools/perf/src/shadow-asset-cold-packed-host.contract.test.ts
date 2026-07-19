@@ -140,45 +140,31 @@ describe('packed shadow-asset cold host readiness', () => {
         lifecycleScenario(
           `
             import { spawn } from 'node:child_process';
-            import { writeFileSync } from 'node:fs';
+            import { existsSync } from 'node:fs';
             import { resolve } from 'node:path';
 
-            const signalPath = resolve(process.cwd(), 'nested-signal');
-            const nested = spawn(
+            const readyPath = resolve(process.cwd(), 'nested-ready');
+            spawn(
               process.execPath,
               [
                 '--input-type=module',
                 '--eval',
                 \`import { writeFileSync } from 'node:fs';
-                 process.once('SIGTERM', () => {
-                   writeFileSync(\${JSON.stringify(signalPath)}, 'SIGTERM');
-                   process.exit(0);
-                 });
-                 console.log('READY');
+                 process.on('SIGTERM', () => {});
+                 writeFileSync(\${JSON.stringify(readyPath)}, 'ready');
                  setInterval(() => {}, 1_000);\`,
               ],
-              { stdio: ['ignore', 'pipe', 'ignore'] },
+              { stdio: 'inherit' },
             );
-            await new Promise((resolveReady, rejectReady) => {
-              nested.stdout.once('data', resolveReady);
-              nested.once('error', rejectReady);
-              nested.once('close', (code, signal) => {
-                rejectReady(new Error(\`nested exited before readiness: \${code}/\${signal}\`));
-              });
-            });
-            writeFileSync(resolve(process.cwd(), 'nested-pid'), String(nested.pid));
+            while (!existsSync(readyPath)) {
+              await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+            }
             process.on('SIGTERM', () => {});
             console.log('RIFTY_SHADOW_ASSET_COLD_HOST={"origin":"http://127.0.0.1:43127"}');
             setInterval(() => {}, 1_000);
           `,
           `
-            const { readFile } = await import('node:fs/promises');
-            const { resolve } = await import('node:path');
             await host.stop();
-            const nestedSignal = await readFile(resolve(repoRoot, 'nested-signal'), 'utf8');
-            if (nestedSignal !== 'SIGTERM') {
-              throw new Error(\`nested process missed group SIGTERM: \${nestedSignal}\`);
-            }
             console.log('SCENARIO_OK');
           `,
           'startTimeoutMs: 1_000, stopTimeoutMs: 50, killTimeoutMs: 1_000,',
