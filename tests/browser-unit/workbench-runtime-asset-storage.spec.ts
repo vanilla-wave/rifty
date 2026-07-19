@@ -8,12 +8,14 @@ import {
   sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from './fixtures.ts';
+import { pinPublicEsbuild0280 } from './pinned-public-esbuild.ts';
 
 test('real Vite 7 runtime assets survive OPFS reopen, clear only while idle, and refill independently of project data', async ({
   page,
 }) => {
   test.setTimeout(300_000);
   await gotoHarness(page);
+  const pinnedEsbuildRequests = await pinPublicEsbuild0280(page);
   const boot = {
     workspaceId: 'browser-unit-runtime-asset-storage',
     template: 'vite' as const,
@@ -33,6 +35,7 @@ test('real Vite 7 runtime assets survive OPFS reopen, clear only while idle, and
   await open();
   const cold = await execLine(page, 'npm install');
   expect(cold.exit, cold.out).toBe(0);
+  expect(pinnedEsbuildRequests).toHaveLength(1);
   const seeded = await inspect();
   expect(seeded.storageClass).toMatch(/^opfs-/u);
   expect(seeded.verifiedObjectCount).toBe(1);
