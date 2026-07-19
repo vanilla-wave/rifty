@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  describeCapturedResponseLedger,
   finalizeStandardAssetSourceResponses,
   startCdpResponseRecorder,
 } from './shadow-asset-cold-cdp.mjs';
@@ -452,6 +453,35 @@ const source = Object.freeze({
 });
 const packumentUrl = `${registryUrl}/${source.name}`;
 const tarballUrl = `${registryUrl}/-/esbuild-wasm-0.28.0.tgz`;
+
+describe('bounded shadow-asset CDP ledger diagnostics', () => {
+  it('exposes bounded lifecycle metadata without response-body contents', () => {
+    const captured = Array.from({ length: 12 }, (_, index) => ({
+      requestId: `request-${index}`,
+      lifecycleId: `target-${index}\u0000request-${index}`,
+      method: index === 0 ? 'POST' : 'GET',
+      url: `${registryUrl}/asset-${index}`,
+      status: index === 0 ? 503 : 200,
+      protocol: 'h2',
+      bodyBytes: index,
+      bodyText: 'SECRET RESPONSE BODY',
+      complete: index !== 0,
+      fromDiskCache: false,
+      fromServiceWorker: false,
+      error: index === 0 ? `body failed ${'x'.repeat(1_000)}` : undefined,
+    }));
+
+    const diagnostic = describeCapturedResponseLedger(captured);
+
+    expect(diagnostic).toContain('captured=12; shown=8');
+    expect(diagnostic).toContain('"method":"POST"');
+    expect(diagnostic).toContain('"complete":false');
+    expect(diagnostic).toContain('body failed');
+    expect(diagnostic).toContain('omitted=4');
+    expect(diagnostic).not.toContain('SECRET RESPONSE BODY');
+    expect(diagnostic.length).toBeLessThanOrEqual(4_096);
+  });
+});
 
 function packumentBody(overrides: Record<string, unknown> = {}) {
   return JSON.stringify({
