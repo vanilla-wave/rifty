@@ -346,6 +346,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       config.slug,
       config.cfg.packageJson,
     ]);
+    // TODO(backlog: perf/redundant-v4-eddy-prefetch) avoid an unused v4 warm-tree fetch.
     const decision = decideInstallPrefetch({
       devFromScratch: config.fromScratch,
       resolverUrl: url,
