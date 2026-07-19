@@ -1,4 +1,5 @@
 import {
+  type ShadowAssetColdCleanupEvidence,
   type ShadowAssetColdMeasurementOptions,
   type ShadowAssetColdPageEvidence,
   closeShadowAssetCold,
@@ -9,7 +10,7 @@ import {
 export interface ShadowAssetColdPagePort {
   prepare(options: ShadowAssetColdMeasurementOptions): Promise<void>;
   measure(): Promise<ShadowAssetColdPageEvidence>;
-  close(): Promise<void>;
+  close(): Promise<ShadowAssetColdCleanupEvidence>;
 }
 
 declare global {

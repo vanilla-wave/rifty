@@ -10,6 +10,7 @@ function errorMessage(error) {
 
 const LEDGER_DIAGNOSTIC_RECORDS = 8;
 const LEDGER_DIAGNOSTIC_MAX_LENGTH = 4_096;
+const TRACKED_REQUEST_POST_DATA_MAX_BYTES = 16 * 1024;
 
 function boundedDiagnosticString(value, maxLength) {
   if (typeof value !== 'string') return undefined;
@@ -40,6 +41,8 @@ function diagnosticRecord(record) {
     status: typeof value.status === 'number' ? value.status : undefined,
     protocol: boundedDiagnosticString(value.protocol, 16),
     bodyBytes: typeof value.bodyBytes === 'number' ? value.bodyBytes : undefined,
+    observedDataBytes:
+      typeof value.observedDataBytes === 'number' ? value.observedDataBytes : undefined,
     complete: value.complete === true,
     fromDiskCache: value.fromDiskCache === true,
     fromServiceWorker: value.fromServiceWorker === true,
@@ -648,18 +651,27 @@ async function cdpNetworkSession(page) {
  */
 export async function startCdpResponseRecorder(page, options = {}) {
   const captureUrl = options.captureUrl ?? (() => true);
+  const captureRequest = options.captureRequest;
   if (typeof captureUrl !== 'function') {
     throw new TypeError('CDP response recorder captureUrl must be a function');
+  }
+  if (captureRequest !== undefined && typeof captureRequest !== 'function') {
+    throw new TypeError('CDP response recorder captureRequest must be a function');
   }
   const session = cdpSessionPort(await cdpNetworkSession(page));
   const captured = [];
   const active = new Map();
   const requestMethods = new Map();
+  const requestPostData = new Map();
+  const requestPostDataFailures = new Map();
+  const requestDecisions = new Map();
   const requestStarts = new Set();
   const requestUrls = new Map();
   const requestServedFromCache = new Set();
   const responseStreams = new Map();
   const tracked = new Set();
+  const unsettledStarted = new Set();
+  const terminalWaiters = new Set();
   const requestMetadata = new WeakSet();
   const responseMetadata = new WeakSet();
   const pending = new Set();
@@ -688,6 +700,50 @@ export async function startCdpResponseRecorder(page, options = {}) {
   const applyRequestCacheSignal = (requestId, record) => {
     if (!requestServedFromCache.delete(requestId)) return;
     record.requestServedFromCache = true;
+  };
+
+  const applyRequestPostData = (requestId, record) => {
+    const postData = requestPostData.get(requestId);
+    if (postData !== undefined) record.postData = postData;
+    const failure = requestPostDataFailures.get(requestId);
+    if (failure !== undefined) appendError(record, failure);
+  };
+
+  const forgetRequest = (requestId) => {
+    requestMethods.delete(requestId);
+    requestPostData.delete(requestId);
+    requestPostDataFailures.delete(requestId);
+    requestStarts.delete(requestId);
+    requestUrls.delete(requestId);
+    requestDecisions.delete(requestId);
+  };
+
+  const notifyTerminal = (requestId) => {
+    if (!unsettledStarted.delete(requestId)) return;
+    if (unsettledStarted.size !== 0) return;
+    for (const resolve of terminalWaiters) resolve();
+    terminalWaiters.clear();
+  };
+
+  const waitForStartedTerminals = async (timeoutMs) => {
+    if (unsettledStarted.size === 0) return true;
+    let timer;
+    let resolveTerminal;
+    const terminal = new Promise((resolve) => {
+      resolveTerminal = resolve;
+      terminalWaiters.add(resolve);
+    });
+    try {
+      return await Promise.race([
+        terminal.then(() => true),
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve(false), timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      terminalWaiters.delete(resolveTerminal);
+    }
   };
 
   const retainPending = (operation) => {
@@ -756,7 +812,15 @@ export async function startCdpResponseRecorder(page, options = {}) {
     const requestUrl = typeof event.request?.url === 'string' ? event.request.url : undefined;
     const redirectUrl =
       typeof event.redirectResponse?.url === 'string' ? event.redirectResponse.url : undefined;
-    if (!track(requestId, requestUrl) && !track(requestId, redirectUrl)) return;
+    const inherited = tracked.has(requestId);
+    const decision =
+      inherited ||
+      (captureRequest === undefined
+        ? typeof requestUrl === 'string' && captureUrl(requestUrl) === true
+        : captureRequest(event.request ?? {}) === true);
+    requestDecisions.set(requestId, decision);
+    if (!decision && !inherited) return;
+    tracked.add(requestId);
     if (event.redirectResponse !== undefined) {
       const redirect = event.redirectResponse;
       const prior = active.get(requestId);
@@ -780,6 +844,7 @@ export async function startCdpResponseRecorder(page, options = {}) {
           requestMethods.get(requestId),
         );
         applyRequestCacheSignal(requestId, record);
+        applyRequestPostData(requestId, record);
         retainIncomplete(
           record,
           'redirect response body is unavailable through an unambiguous CDP lifecycle',
@@ -795,12 +860,26 @@ export async function startCdpResponseRecorder(page, options = {}) {
         ? event.request.method
         : 'unknown';
     requestMethods.set(requestId, requestMethod);
+    const postData = event.request?.postData;
+    if (typeof postData === 'string') {
+      const bytes = new TextEncoder().encode(postData).byteLength;
+      if (bytes <= TRACKED_REQUEST_POST_DATA_MAX_BYTES) requestPostData.set(requestId, postData);
+      else {
+        requestPostDataFailures.set(
+          requestId,
+          `request postData exceeded ${TRACKED_REQUEST_POST_DATA_MAX_BYTES} bytes`,
+        );
+      }
+    }
     requestStarts.add(requestId);
+    if (event.redirectResponse === undefined) unsettledStarted.add(requestId);
     startBodyStream(requestId);
   };
 
   const onResponseReceived = (event) => {
     if (stopping || typeof event?.requestId !== 'string') return;
+    const decision = requestDecisions.get(event.requestId);
+    if (decision === false) return;
     if (!track(event.requestId, event.response?.url)) return;
     const prior = active.get(event.requestId);
     if (prior !== undefined) {
@@ -816,11 +895,13 @@ export async function startCdpResponseRecorder(page, options = {}) {
       requestMethods.get(event.requestId),
     );
     applyRequestCacheSignal(event.requestId, record);
+    applyRequestPostData(event.requestId, record);
     captured.push(record);
     active.set(event.requestId, record);
     responseMetadata.add(record);
     if (requestStarts.has(event.requestId)) {
       requestMetadata.add(record);
+      unsettledStarted.add(event.requestId);
     } else {
       appendError(record, 'response lifecycle began before CDP capture was ready');
     }
@@ -902,7 +983,10 @@ export async function startCdpResponseRecorder(page, options = {}) {
   const onLoadingFinished = (event) => {
     if (stopping || typeof event?.requestId !== 'string') return;
     const requestId = event.requestId;
-    if (!tracked.has(requestId)) return;
+    if (!tracked.has(requestId)) {
+      requestDecisions.delete(requestId);
+      return;
+    }
     let record = active.get(requestId);
     if (record === undefined) {
       record = responseRecord(
@@ -914,18 +998,21 @@ export async function startCdpResponseRecorder(page, options = {}) {
       captured.push(record);
     }
     applyRequestCacheSignal(requestId, record);
+    applyRequestPostData(requestId, record);
     active.delete(requestId);
-    requestMethods.delete(requestId);
-    requestStarts.delete(requestId);
-    requestUrls.delete(requestId);
+    forgetRequest(requestId);
     const operation = collectBody(requestId, record);
     retainPending(operation);
+    notifyTerminal(requestId);
   };
 
   const onLoadingFailed = (event) => {
     if (stopping || typeof event?.requestId !== 'string') return;
     const requestId = event.requestId;
-    if (!tracked.has(requestId)) return;
+    if (!tracked.has(requestId)) {
+      requestDecisions.delete(requestId);
+      return;
+    }
     let record = active.get(requestId);
     if (record === undefined) {
       record = responseRecord(
@@ -937,12 +1024,16 @@ export async function startCdpResponseRecorder(page, options = {}) {
       captured.push(record);
     }
     applyRequestCacheSignal(requestId, record);
+    applyRequestPostData(requestId, record);
+    const stream = responseStreams.get(requestId);
+    if (stream !== undefined && Number.isSafeInteger(stream.dataBytes)) {
+      record.observedDataBytes = stream.dataBytes;
+    }
     active.delete(requestId);
-    requestMethods.delete(requestId);
-    requestStarts.delete(requestId);
-    requestUrls.delete(requestId);
+    forgetRequest(requestId);
     responseStreams.delete(requestId);
     retainIncomplete(record, loadingFailure(event));
+    notifyTerminal(requestId);
   };
 
   const listeners = [
@@ -964,19 +1055,42 @@ export async function startCdpResponseRecorder(page, options = {}) {
   }
 
   return {
-    stop() {
+    stop(stopOptions = {}) {
       if (stopPromise !== undefined) return stopPromise;
+      const settleTimeoutMs = stopOptions.settleTimeoutMs;
+      if (
+        settleTimeoutMs !== undefined &&
+        (!Number.isSafeInteger(settleTimeoutMs) || settleTimeoutMs < 1)
+      ) {
+        throw new TypeError('CDP response recorder settleTimeoutMs must be a positive integer');
+      }
       stopPromise = (async () => {
+        const timedOut =
+          settleTimeoutMs !== undefined && !(await waitForStartedTerminals(settleTimeoutMs));
         stopping = true;
         for (const [event, listener] of listeners) session.off(event, listener);
         while (pending.size > 0) await Promise.all([...pending]);
-        for (const record of active.values()) {
+        for (const requestId of unsettledStarted) {
+          let record = active.get(requestId);
+          if (record === undefined) {
+            record = responseRecord(
+              requestId,
+              { url: requestUrls.get(requestId) },
+              requestId,
+              requestMethods.get(requestId),
+            );
+            applyRequestPostData(requestId, record);
+            captured.push(record);
+          }
           retainIncomplete(
             record,
-            'response lifecycle stopped before Network.loadingFinished/loadingFailed',
+            timedOut
+              ? `response lifecycle did not settle within ${settleTimeoutMs}ms`
+              : 'response lifecycle stopped before Network.loadingFinished/loadingFailed',
           );
         }
         active.clear();
+        unsettledStarted.clear();
         await session.detach();
         return Object.freeze(captured.map((record) => Object.freeze({ ...record })));
       })();

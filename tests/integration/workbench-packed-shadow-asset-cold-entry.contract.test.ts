@@ -59,7 +59,9 @@ describe('packed shadow-asset cold entry contract', () => {
     expect(measure).toContain('openProject(');
     expect(measure).not.toContain('openWorkbench(');
     expect(measure).not.toContain('closeWorkbenchBoundary(');
+    expect(measure).not.toContain('project.close()');
     expect(measure).not.toContain('workbench.close()');
+    expect(close).toContain('project.close()');
     expect(close).toContain('workbench.close()');
     expect(close).toContain('reacquireWorkbenchLock()');
     expect(close).toContain('return Object.freeze(');

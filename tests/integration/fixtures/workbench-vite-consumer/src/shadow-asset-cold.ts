@@ -30,20 +30,25 @@ export interface ShadowAssetColdPageEvidence {
   readonly openResolvedAtMs: number;
   readonly postInspection: RuntimeAssetCacheInspection;
   readonly lockfileText: string;
-  readonly cleanup: Readonly<{
-    readonly projectClosed: boolean;
-    readonly workbenchClosed: boolean;
-    readonly lockReacquired: boolean;
-  }>;
+}
+
+export interface ShadowAssetColdCleanupEvidence {
+  readonly projectClosed: boolean;
+  readonly workbenchClosed: boolean;
+  readonly lockReacquired: boolean;
 }
 
 interface PreparedShadowAssetCold {
+  readonly measurementConsumed: boolean;
   readonly preInspection: RuntimeAssetCacheInspection;
+  readonly project: ProjectSession<unknown> | null;
+  readonly projectClosed: boolean;
   readonly workbench: Workbench;
 }
 
 let activePhase: 'closing' | 'idle' | 'measuring' | 'preparing' = 'idle';
 let prepared: PreparedShadowAssetCold | null = null;
+let closedCleanup: ShadowAssetColdCleanupEvidence | null = null;
 
 function viteFiles(): Readonly<Record<string, string>> {
   return {
@@ -131,7 +136,14 @@ export async function prepareShadowAssetCold(
       storage: { persistence: 'preferred' },
     });
     const preInspection = await workbench.runtimeAssets.inspect();
-    prepared = Object.freeze({ preInspection, workbench });
+    closedCleanup = null;
+    prepared = Object.freeze({
+      measurementConsumed: false,
+      preInspection,
+      project: null,
+      projectClosed: false,
+      workbench,
+    });
   } catch (error) {
     const operationFailure = failure(error);
     if (workbench === null) throw operationFailure;
@@ -147,18 +159,41 @@ export async function prepareShadowAssetCold(
 }
 
 /** Abort a prepared page after recorder/setup failure. Safe after measure cleanup. */
-export async function closeShadowAssetCold(): Promise<void> {
+export async function closeShadowAssetCold(): Promise<ShadowAssetColdCleanupEvidence> {
   if (activePhase !== 'idle') {
     throw new Error(`shadow-asset cold page cannot close while ${activePhase}`);
   }
-  if (prepared === null) return;
+  if (prepared === null) {
+    return (
+      closedCleanup ??
+      Object.freeze({ projectClosed: false, workbenchClosed: false, lockReacquired: false })
+    );
+  }
+  const projectClosed = prepared.projectClosed;
+  const project = prepared.project;
   const workbench = prepared.workbench;
   prepared = null;
   activePhase = 'closing';
   let operationFailure: Error | null = null;
+  let measuredProjectClosed = projectClosed;
+  let workbenchClosed = false;
+  let lockReacquired = false;
   try {
+    if (project !== null && !measuredProjectClosed) {
+      try {
+        await project.close();
+        measuredProjectClosed = true;
+      } catch (error) {
+        operationFailure = appendFailure(
+          operationFailure,
+          error,
+          'shadow-asset cold project cleanup failed',
+        );
+      }
+    }
     try {
       await workbench.close();
+      workbenchClosed = true;
     } catch (error) {
       operationFailure = appendFailure(
         operationFailure,
@@ -167,7 +202,7 @@ export async function closeShadowAssetCold(): Promise<void> {
       );
     }
     try {
-      const lockReacquired = await reacquireWorkbenchLock();
+      lockReacquired = await reacquireWorkbenchLock();
       if (!lockReacquired) {
         operationFailure = appendFailure(
           operationFailure,
@@ -185,16 +220,21 @@ export async function closeShadowAssetCold(): Promise<void> {
   } finally {
     activePhase = 'idle';
   }
+  closedCleanup = Object.freeze({
+    projectClosed: measuredProjectClosed,
+    workbenchClosed,
+    lockReacquired,
+  });
   if (operationFailure !== null) throw operationFailure;
+  return Object.freeze(closedCleanup);
 }
 
-/** Consume one prepared public Workbench; always release project, owner, and lock. */
+/** Measure one prepared Workbench while leaving its network owner alive for CDP terminal proof. */
 export async function measureShadowAssetCold(): Promise<ShadowAssetColdPageEvidence> {
-  if (activePhase !== 'idle' || prepared === null) {
+  if (activePhase !== 'idle' || prepared === null || prepared.measurementConsumed) {
     throw new Error('shadow-asset cold page must be prepared before measurement');
   }
   const state = prepared;
-  prepared = null;
   activePhase = 'measuring';
   const progress: Array<{ readonly atMs: number; readonly progress: RuntimeAssetProgress }> = [];
   let project: ProjectSession<unknown> | null = null;
@@ -202,8 +242,6 @@ export async function measureShadowAssetCold(): Promise<ShadowAssetColdPageEvide
   let lockfileText: string | null = null;
   let openResolvedAtMs: number | null = null;
   let operationFailure: Error | null = null;
-  let projectClosed = false;
-  let cleanup = { workbenchClosed: false, lockReacquired: false };
 
   try {
     project = await state.workbench.openProject(
@@ -226,32 +264,13 @@ export async function measureShadowAssetCold(): Promise<ShadowAssetColdPageEvide
     operationFailure = failure(error);
   }
 
-  if (project !== null) {
-    try {
-      await project.close();
-      projectClosed = true;
-    } catch (error) {
-      operationFailure = appendFailure(
-        operationFailure,
-        error,
-        'shadow-asset cold project cleanup failed',
-      );
-    }
-  }
-  try {
-    const released = await closeWorkbenchBoundary(
-      state.workbench,
-      operationFailure,
-      'shadow-asset cold measurement',
-    );
-    operationFailure = released.failure;
-    cleanup = {
-      workbenchClosed: released.workbenchClosed,
-      lockReacquired: released.lockReacquired,
-    };
-  } finally {
-    activePhase = 'idle';
-  }
+  prepared = Object.freeze({
+    ...state,
+    measurementConsumed: true,
+    project,
+    projectClosed: false,
+  });
+  activePhase = 'idle';
   if (operationFailure !== null) throw operationFailure;
   if (postInspection === null || lockfileText === null || openResolvedAtMs === null) {
     throw new Error('shadow-asset cold operation settled without complete page evidence');
@@ -262,6 +281,5 @@ export async function measureShadowAssetCold(): Promise<ShadowAssetColdPageEvide
     openResolvedAtMs,
     postInspection,
     lockfileText,
-    cleanup: Object.freeze({ projectClosed, ...cleanup }),
   });
 }

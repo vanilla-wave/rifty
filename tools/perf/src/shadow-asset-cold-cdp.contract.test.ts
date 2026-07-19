@@ -529,10 +529,8 @@ describe('standard shadow-asset CDP response recorder', () => {
     session.streams.set('exact', { bufferedData: Buffer.from('bundle').toString('base64') });
     session.streams.set('ordinary', { bufferedData: '' });
     const recorder = await startCdpResponseRecorder(fakePage(session), {
-      awaitTerminalRequest: (request: Record<string, unknown>) =>
-        request.postData === exactPostData,
+      captureRequest: (request: Record<string, unknown>) => request.postData === exactPostData,
       captureUrl: (url: string) => url === 'https://eddy.example/resolve',
-      terminalDrainTimeoutMs: 1_000,
     });
     session.emit('Network.requestWillBeSent', {
       requestId: 'ordinary',
@@ -554,14 +552,11 @@ describe('standard shadow-asset CDP response recorder', () => {
         postData: exactPostData,
       },
     });
-    session.emit(
-      'Network.responseReceived',
-      cdpResponse('exact', 'https://eddy.example/resolve'),
-    );
+    session.emit('Network.responseReceived', cdpResponse('exact', 'https://eddy.example/resolve'));
     await Promise.resolve();
     await Promise.resolve();
 
-    const stopping = recorder.stop();
+    const stopping = recorder.stop({ settleTimeoutMs: 1_000 });
     await Promise.resolve();
     expect(session.calls).not.toContainEqual({ method: 'detach' });
 
@@ -572,9 +567,40 @@ describe('standard shadow-asset CDP response recorder', () => {
     session.emit('Network.loadingFinished', { requestId: 'exact' });
 
     await expect(stopping).resolves.toEqual([
-      expect.objectContaining({ requestId: 'ordinary', complete: false }),
       expect.objectContaining({ requestId: 'exact', complete: true }),
     ]);
+    expect(session.calls.at(-1)).toEqual({ method: 'detach' });
+  });
+
+  it('bounds a selected request that never emits a terminal event and retains it incomplete', async () => {
+    const session = new FakeCdpSession();
+    const recorder = await startCdpResponseRecorder(fakePage(session), {
+      captureRequest: () => true,
+    });
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'never-terminal',
+      request: { url: 'https://eddy.example/resolve', method: 'POST', postData: '{}' },
+    });
+    session.emit(
+      'Network.responseReceived',
+      cdpResponse('never-terminal', 'https://eddy.example/resolve'),
+    );
+
+    await expect(recorder.stop({ settleTimeoutMs: 1 })).resolves.toEqual([
+      expect.objectContaining({
+        requestId: 'never-terminal',
+        complete: false,
+        error: expect.stringMatching(/did not settle within 1ms/),
+      }),
+    ]);
+  });
+
+  it('rejects an invalid settle bound without poisoning a later cleanup stop', async () => {
+    const session = new FakeCdpSession();
+    const recorder = await startCdpResponseRecorder(fakePage(session));
+
+    expect(() => recorder.stop({ settleTimeoutMs: 0 })).toThrow(/positive integer/);
+    await expect(recorder.stop()).resolves.toEqual([]);
     expect(session.calls.at(-1)).toEqual({ method: 'detach' });
   });
 });

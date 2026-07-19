@@ -22,7 +22,8 @@
  *       the headline number with the standard baseline + measured `speedupX`
  *       nested under it (the resolver is baked per dev server, so it takes two).
  *
- * Usage: node tools/perf/bench.mjs [--runs N] [--out path] [--transport auto|h2|h3|matrix]
+ * Usage: node tools/perf/bench.mjs [--runs N] [--out path]
+ *   [--transport auto|h2|h3|matrix] [--shadow-asset-cold off|standard|eddy]
  *   RIFTY_PLAYGROUND_PORT  isolate the dev-server port (default 5390)
  *   VITE_RIFTY_REGISTRY_URL  enables (b), routes install at the live proxy
  *   VITE_RIFTY_RESOLVER_URL  adds the eddy fast-path pass + speedup vs baseline
@@ -37,14 +38,30 @@
  * `auto` (default) records evidence without pinning.
  */
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { buildArtifact, verifyEddyInstallProof, verifyTransportPin } from './src/aggregate.mjs';
+import { withMeasuredBrowser } from './src/browser-lifecycle.mjs';
+import {
+  assertPreservedStandardShadowAssetColdOutput,
+  parseShadowAssetColdOptions,
+  preserveStandardShadowAssetColdInput,
+  shadowAssetColdHostEnv,
+} from './src/shadow-asset-cold-cli.mjs';
+import { startPackedShadowAssetColdHost } from './src/shadow-asset-cold-packed-host.mjs';
+import {
+  runPackedEddyShadowAssetCold,
+  runPackedStandardShadowAssetCold,
+} from './src/shadow-asset-cold-playwright.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../..');
+const SHADOW_ASSET_CATALOG = resolve(
+  REPO_ROOT,
+  'tools/shadow-registry/generated/shadow-asset-catalog.json',
+);
 
 const args = process.argv.slice(2);
 const argVal = (name, def) => {
@@ -73,6 +90,35 @@ if (!['auto', 'h2', 'h3', 'matrix'].includes(TRANSPORT_ARG)) {
   process.exit(2);
 }
 const TRANSPORT_MODES = TRANSPORT_ARG === 'matrix' ? ['auto', 'h2', 'h3'] : [TRANSPORT_ARG];
+let SHADOW_ASSET_COLD;
+try {
+  SHADOW_ASSET_COLD = parseShadowAssetColdOptions({
+    args,
+    env: process.env,
+    runs: RUNS,
+    transport: TRANSPORT_ARG,
+  });
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(2);
+}
+let PRESERVED_SHADOW_ASSET_STANDARD;
+if (SHADOW_ASSET_COLD.mode === 'eddy') {
+  try {
+    const priorArtifact = JSON.parse(readFileSync(OUT, 'utf8'));
+    PRESERVED_SHADOW_ASSET_STANDARD = preserveStandardShadowAssetColdInput(
+      priorArtifact,
+      SHADOW_ASSET_COLD,
+    );
+  } catch (error) {
+    console.error(
+      `cannot start Eddy shadow-asset cold measurement without its exact STD artifact: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    process.exit(2);
+  }
+}
 if (TRANSPORT_MODES.some((mode) => mode !== 'auto') && !REGISTRY_URL) {
   console.error(
     `--transport ${TRANSPORT_ARG} pins the install path's remote origins, but no install pass is configured (set VITE_RIFTY_REGISTRY_URL) — refusing a pin that measures nothing.`,
@@ -141,6 +187,7 @@ const PRESET_STAGE_MARKERS = [['viteReadyMs', /VITE v[\d.]+\s+ready in \d+ ms/]]
 
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const errorMessage = (error) => (error instanceof Error ? error.message : String(error));
 
 /** The page has booted to interactive: SW in control + storage badge painted +
  * a terminal slot present. All reached at boot, before/independent of install. */
@@ -658,20 +705,17 @@ function installMetricFromRow(mode, row) {
 }
 
 async function withBrowserForTransport(mode, fn) {
-  let browser;
-  try {
-    browser = await chromium.launch({
-      headless: true,
-      args: [
-        ...(process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : []),
-        ...transportLaunchArgs(mode),
-      ],
-    });
-    return await fn(browser);
-  } finally {
-    // Bound browser teardown so a wedged Chromium can't hang the process.
-    if (browser) await Promise.race([browser.close().catch(() => {}), sleep(10_000)]);
-  }
+  return withMeasuredBrowser(
+    () =>
+      chromium.launch({
+        headless: true,
+        args: [
+          ...(process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : []),
+          ...transportLaunchArgs(mode),
+        ],
+      }),
+    fn,
+  );
 }
 
 async function runInstallForTransport(browser, mode, measureInstall, measureEddy) {
@@ -700,6 +744,58 @@ async function runInstallForTransport(browser, mode, measureInstall, measureEddy
     row: null,
     installMetric: { status: 'requires proxy' },
   };
+}
+
+async function runShadowAssetColdPhase() {
+  if (SHADOW_ASSET_COLD.mode === 'off') return undefined;
+  let host;
+  let measured;
+  let failure = null;
+  try {
+    host = await startPackedShadowAssetColdHost({
+      repoRoot: REPO_ROOT,
+      env: shadowAssetColdHostEnv(process.env, SHADOW_ASSET_COLD),
+    });
+    const catalog = JSON.parse(readFileSync(SHADOW_ASSET_CATALOG, 'utf8'));
+    measured = await withBrowserForTransport('auto', (browser) => {
+      const shared = {
+        browser,
+        hostOrigin: host.origin,
+        registryUrl: SHADOW_ASSET_COLD.registryUrl,
+        catalog,
+      };
+      return SHADOW_ASSET_COLD.mode === 'eddy'
+        ? runPackedEddyShadowAssetCold({
+            ...shared,
+            resolverUrl: SHADOW_ASSET_COLD.resolverUrl,
+            bundleUrl: SHADOW_ASSET_COLD.bundleUrl,
+          })
+        : runPackedStandardShadowAssetCold(shared);
+    });
+  } catch (error) {
+    failure = error;
+  } finally {
+    if (host !== undefined) {
+      try {
+        await host.stop();
+      } catch (error) {
+        failure =
+          failure === null
+            ? error
+            : new AggregateError([failure, error], 'packed cold host cleanup failed');
+      }
+    }
+  }
+  const row =
+    failure === null
+      ? measured
+      : {
+          status: 'unmeasured',
+          note: errorMessage(failure),
+        };
+  return SHADOW_ASSET_COLD.mode === 'eddy'
+    ? { standard: PRESERVED_SHADOW_ASSET_STANDARD, eddy: row }
+    : { standard: row };
 }
 
 async function main() {
@@ -732,6 +828,7 @@ async function main() {
   if (Object.keys(transportRows).length > 0) installMetric.transportMatrix = transportRows;
 
   const presetBoot = await withBrowserForTransport('auto', runPresetBootPhase);
+  const shadowAssetCold = await runShadowAssetColdPhase();
 
   const artifact = buildArtifact({
     generatedAt: new Date().toISOString(),
@@ -739,7 +836,11 @@ async function main() {
     coldStartSamples: coldSamples,
     install: installMetric,
     presetBoot,
+    shadowAssetCold,
   });
+  if (PRESERVED_SHADOW_ASSET_STANDARD !== undefined) {
+    assertPreservedStandardShadowAssetColdOutput(artifact, PRESERVED_SHADOW_ASSET_STANDARD);
+  }
 
   mkdirSync(dirname(OUT), { recursive: true });
   writeFileSync(OUT, `${JSON.stringify(artifact, null, 2)}\n`);
