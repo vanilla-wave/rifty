@@ -350,6 +350,39 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/workbench:
+    dependencies:
+      '@riftydev/git':
+        specifier: workspace:*
+        version: link:../git
+      '@riftydev/io':
+        specifier: workspace:*
+        version: link:../io
+      '@riftydev/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@riftydev/net':
+        specifier: workspace:*
+        version: link:../net
+      '@riftydev/npm-client':
+        specifier: workspace:*
+        version: link:../npm-client
+      '@riftydev/runtime-js':
+        specifier: workspace:*
+        version: link:../runtime-js
+      '@riftydev/service-worker':
+        specifier: workspace:*
+        version: link:../service-worker
+      '@riftydev/shell':
+        specifier: workspace:*
+        version: link:../shell
+      '@riftydev/ts-language-service':
+        specifier: workspace:*
+        version: link:../ts-language-service
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../vfs
+
   packages/vfs:
     devDependencies:
       typescript:

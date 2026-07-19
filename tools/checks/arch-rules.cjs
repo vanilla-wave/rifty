@@ -14,6 +14,7 @@ const TIERS = [
   ['kernel'],
   ['runtime-js', 'runtime-wasi'],
   ['shell', 'terminal', 'npm-client', 'ts-language-service'],
+  ['workbench'],
   ['playground'],
 ];
 

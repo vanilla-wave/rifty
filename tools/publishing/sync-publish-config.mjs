@@ -145,6 +145,18 @@ const SPEC = {
     sideEffects: ['./dist/sw.js'],
     keywords: ['service-worker', 'preview'],
   },
+  '@riftydev/workbench': {
+    dir: 'packages/workbench',
+    sourceEntry: './src/workbench/public.ts',
+    sideEffects: [
+      './dist/owner-worker.js',
+      './dist/kernel-worker.js',
+      './dist/node-worker.js',
+      './dist/dev-server-worker.js',
+      './dist/typescript-worker.js',
+    ],
+    keywords: ['workbench', 'development-environment', 'browser-runtime'],
+  },
   '@riftydev/shadow-registry': {
     dir: 'tools/shadow-registry',
     sideEffects: false,
@@ -176,6 +188,8 @@ const DESCRIPTIONS = {
     'TypeScript language service over the rifty VFS: LSP-shaped diagnostics, hostable in a kernel worker.',
   '@riftydev/terminal': 'xterm.js terminal wrapper for rifty.',
   '@riftydev/service-worker': 'Service Worker preview/HMR routing bridge for rifty.',
+  '@riftydev/workbench':
+    'Framework-free embeddable development workbench over the rifty browser runtime.',
   '@riftydev/shadow-registry': 'Data tables of in-browser npm package substitutions for rifty.',
 };
 
@@ -220,9 +234,9 @@ function rebuildPkg(orig, name, spec) {
     bugs: { url: `${REPO_URL}/issues` },
     keywords: dedupe([...BASE_KEYWORDS, ...(spec.keywords ?? [])]),
     sideEffects: spec.sideEffects,
-    main: './src/index.ts',
-    module: './src/index.ts',
-    types: './src/index.ts',
+    main: spec.sourceEntry ?? './src/index.ts',
+    module: spec.sourceEntry ?? './src/index.ts',
+    types: spec.sourceEntry ?? './src/index.ts',
     exports: devExports,
     files,
     publishConfig: {
