@@ -17,9 +17,7 @@ class FakeCdpSession {
   >();
   readonly streams = new Map<
     string,
-    | { readonly bufferedData: string }
-    | Error
-    | Array<{ readonly bufferedData: string } | Error>
+    { readonly bufferedData: string } | Error | Array<{ readonly bufferedData: string } | Error>
   >();
   readonly #handlers = new Map<string, Set<CdpHandler>>();
 
@@ -149,6 +147,10 @@ describe('standard shadow-asset CDP response recorder', () => {
     });
 
     const recorder = await startCdpResponseRecorder(fakePage(session));
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'packument',
+      request: { url: packumentUrl, method: 'GET' },
+    });
     session.emit('Network.responseReceived', cdpResponse('packument', packumentUrl));
     session.emit('Network.dataReceived', {
       requestId: 'packument',
@@ -161,6 +163,10 @@ describe('standard shadow-asset CDP response recorder', () => {
       data: Buffer.from(textEnd).toString('base64'),
     });
     session.emit('Network.loadingFinished', { requestId: 'packument' });
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'tarball',
+      request: { url: tarballUrl, method: 'GET' },
+    });
     session.emit('Network.responseReceived', cdpResponse('tarball', tarballUrl));
     session.emit('Network.dataReceived', {
       requestId: 'tarball',
@@ -177,6 +183,7 @@ describe('standard shadow-asset CDP response recorder', () => {
     await expect(recorder.stop()).resolves.toEqual([
       {
         requestId: 'packument',
+        method: 'GET',
         url: packumentUrl,
         status: 200,
         protocol: 'h2',
@@ -188,6 +195,7 @@ describe('standard shadow-asset CDP response recorder', () => {
       },
       {
         requestId: 'tarball',
+        method: 'GET',
         url: tarballUrl,
         status: 200,
         protocol: 'h2',
@@ -211,6 +219,10 @@ describe('standard shadow-asset CDP response recorder', () => {
     session.bodies.set('missing-data', { body: 'hidden fallback', base64Encoded: false });
     const recorder = await startCdpResponseRecorder(fakePage(session));
 
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'missing-data',
+      request: { url: packumentUrl, method: 'GET' },
+    });
     session.emit('Network.responseReceived', cdpResponse('missing-data', packumentUrl));
     await Promise.resolve();
     await Promise.resolve();
@@ -334,6 +346,10 @@ describe('standard shadow-asset CDP response recorder', () => {
         fromServiceWorker: false,
       },
     });
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'retry',
+      request: { url: packumentUrl, method: 'GET' },
+    });
     session.emit(
       'Network.responseReceived',
       cdpResponse('retry', packumentUrl, { status: 503, protocol: 'http/1.1' }),
@@ -348,6 +364,10 @@ describe('standard shadow-asset CDP response recorder', () => {
       errorText: 'net::ERR_CONNECTION_RESET',
       canceled: true,
       blockedReason: 'other',
+    });
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'body-failure',
+      request: { url: tarballUrl, method: 'GET' },
     });
     session.emit('Network.responseReceived', cdpResponse('body-failure', tarballUrl));
     session.emit('Network.loadingFinished', { requestId: 'body-failure' });
@@ -452,6 +472,7 @@ function response(url: string, body: string | Uint8Array, overrides: Record<stri
   return {
     requestId: `request-${Math.random()}`,
     url,
+    method: 'GET',
     status: 200,
     protocol: 'h2',
     bodyBytes: bytes.byteLength,
@@ -478,6 +499,7 @@ describe('standard shadow-asset CDP response finalization', () => {
         {
           source: 'tarball',
           url: tarballUrl,
+          method: 'GET',
           protocol: 'h2',
           bodyBytes: 3,
           complete: true,
@@ -487,6 +509,7 @@ describe('standard shadow-asset CDP response finalization', () => {
         {
           source: 'packument',
           url: packumentUrl,
+          method: 'GET',
           protocol: 'h2',
           bodyBytes: new TextEncoder().encode(body).byteLength,
           complete: true,

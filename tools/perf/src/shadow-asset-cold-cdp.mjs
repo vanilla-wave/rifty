@@ -8,9 +8,11 @@ function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function responseRecord(requestId, response) {
+function responseRecord(requestId, response, lifecycleId = requestId, method = 'unknown') {
   return {
     requestId,
+    ...(lifecycleId !== requestId ? { lifecycleId } : {}),
+    method,
     url: typeof response?.url === 'string' ? response.url : '',
     status: typeof response?.status === 'number' ? response.status : 0,
     protocol:
@@ -21,6 +23,7 @@ function responseRecord(requestId, response) {
     complete: false,
     fromDiskCache: response?.fromDiskCache === true,
     fromServiceWorker: response?.fromServiceWorker === true,
+    ...(response?.fromPrefetchCache === true ? { fromPrefetchCache: true } : {}),
   };
 }
 
@@ -66,6 +69,27 @@ function decodedBody(result) {
   return { bytes, text };
 }
 
+function streamedBody(chunks) {
+  let total = 0;
+  for (const chunk of chunks) {
+    total += chunk.byteLength;
+    if (!Number.isSafeInteger(total)) throw new RangeError('CDP streamed body size is unsafe');
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    // Binary response: exact byte count is the required evidence.
+  }
+  return { bytes, text };
+}
+
 function loadingFailure(event) {
   const parts = [
     `Network.loadingFailed: ${
@@ -99,6 +123,8 @@ function cdpSessionPort(session) {
 const NETWORK_EVENTS = Object.freeze([
   'Network.requestWillBeSent',
   'Network.responseReceived',
+  'Network.requestServedFromCache',
+  'Network.dataReceived',
   'Network.loadingFinished',
   'Network.loadingFailed',
 ]);
@@ -284,7 +310,7 @@ class BrowserTargetNetworkSession {
       this.#throwFailures('CDP target Network enable failed');
       return {};
     }
-    if (method === 'Network.getResponseBody') {
+    if (method === 'Network.getResponseBody' || method === 'Network.streamResourceContent') {
       const route = this.#requestRoutes.get(params?.requestId);
       if (route === undefined) throw new Error('CDP response body request has no target route');
       return route.session.send(method, { requestId: route.requestId });
@@ -573,8 +599,13 @@ export async function startCdpResponseRecorder(page, options = {}) {
   const session = cdpSessionPort(await cdpNetworkSession(page));
   const captured = [];
   const active = new Map();
+  const requestMethods = new Map();
+  const requestStarts = new Set();
   const requestUrls = new Map();
+  const requestServedFromCache = new Set();
+  const responseStreams = new Map();
   const tracked = new Set();
+  const requestMetadata = new WeakSet();
   const responseMetadata = new WeakSet();
   const pending = new Set();
   let stopping = false;
@@ -599,6 +630,71 @@ export async function startCdpResponseRecorder(page, options = {}) {
     return true;
   };
 
+  const applyRequestCacheSignal = (requestId, record) => {
+    if (!requestServedFromCache.delete(requestId)) return;
+    record.requestServedFromCache = true;
+  };
+
+  const retainPending = (operation) => {
+    pending.add(operation);
+    void operation.finally(() => pending.delete(operation));
+  };
+
+  const bodyStream = (requestId) => {
+    let stream = responseStreams.get(requestId);
+    if (stream === undefined) {
+      stream = {
+        buffered: new Uint8Array(),
+        chunks: [],
+        dataBytes: 0,
+        enabled: false,
+        integrityFailure: undefined,
+        setup: undefined,
+        ready: undefined,
+      };
+      responseStreams.set(requestId, stream);
+    }
+    return stream;
+  };
+
+  const attemptBodyStream = (requestId, stream) => {
+    const setup = session
+      .send('Network.streamResourceContent', { requestId })
+      .then((result) => {
+        if (
+          result === null ||
+          typeof result !== 'object' ||
+          typeof result.bufferedData !== 'string'
+        ) {
+          throw new TypeError('CDP returned an invalid Network.streamResourceContent result');
+        }
+        const buffered = strictBase64Bytes(result.bufferedData);
+        if (!stream.enabled) {
+          stream.buffered = buffered;
+          stream.enabled = true;
+        }
+      })
+      .catch(() => {});
+    stream.setup = setup;
+    return setup;
+  };
+
+  const startBodyStream = (requestId) => {
+    const stream = bodyStream(requestId);
+    if (stream.setup !== undefined) return;
+    const retained = attemptBodyStream(requestId, stream);
+    retainPending(retained);
+  };
+
+  const ensureResponseBodyStream = (requestId) => {
+    const stream = bodyStream(requestId);
+    const ready = (stream.setup ?? Promise.resolve()).then(async () => {
+      if (!stream.enabled) await attemptBodyStream(requestId, stream);
+    });
+    stream.ready = ready;
+    retainPending(ready);
+  };
+
   const onRequestWillBeSent = (event) => {
     if (stopping || typeof event?.requestId !== 'string') return;
     const requestId = event.requestId;
@@ -610,6 +706,7 @@ export async function startCdpResponseRecorder(page, options = {}) {
       const redirect = event.redirectResponse;
       const prior = active.get(requestId);
       if (prior !== undefined && prior.url === redirect?.url && prior.status === redirect?.status) {
+        applyRequestCacheSignal(requestId, prior);
         retainIncomplete(
           prior,
           'redirect response body is unavailable through an unambiguous CDP lifecycle',
@@ -621,7 +718,13 @@ export async function startCdpResponseRecorder(page, options = {}) {
             'response lifecycle was replaced before Network.loadingFinished/loadingFailed',
           );
         }
-        const record = responseRecord(publicRequestId(event), redirect);
+        const record = responseRecord(
+          publicRequestId(event),
+          redirect,
+          event.requestId,
+          requestMethods.get(requestId),
+        );
+        applyRequestCacheSignal(requestId, record);
         retainIncomplete(
           record,
           'redirect response body is unavailable through an unambiguous CDP lifecycle',
@@ -629,8 +732,16 @@ export async function startCdpResponseRecorder(page, options = {}) {
         captured.push(record);
       }
       active.delete(requestId);
+      responseStreams.delete(requestId);
     }
     if (requestUrl !== undefined) requestUrls.set(requestId, requestUrl);
+    const requestMethod =
+      typeof event.request?.method === 'string' && event.request.method.length > 0
+        ? event.request.method
+        : 'unknown';
+    requestMethods.set(requestId, requestMethod);
+    requestStarts.add(requestId);
+    startBodyStream(requestId);
   };
 
   const onResponseReceived = (event) => {
@@ -643,22 +754,94 @@ export async function startCdpResponseRecorder(page, options = {}) {
         'response lifecycle was replaced before Network.loadingFinished/loadingFailed',
       );
     }
-    const record = responseRecord(publicRequestId(event), event.response);
+    const record = responseRecord(
+      publicRequestId(event),
+      event.response,
+      event.requestId,
+      requestMethods.get(event.requestId),
+    );
+    applyRequestCacheSignal(event.requestId, record);
     captured.push(record);
     active.set(event.requestId, record);
     responseMetadata.add(record);
+    if (requestStarts.has(event.requestId)) {
+      requestMetadata.add(record);
+    } else {
+      appendError(record, 'response lifecycle began before CDP capture was ready');
+    }
+    // The request event can precede the target agent's request registration.
+    // Retry a rejected early setup here without perturbing an active stream.
+    ensureResponseBodyStream(event.requestId);
+  };
+
+  const onRequestServedFromCache = (event) => {
+    if (stopping || typeof event?.requestId !== 'string' || !tracked.has(event.requestId)) return;
+    const record = active.get(event.requestId);
+    if (record !== undefined) {
+      record.requestServedFromCache = true;
+      return;
+    }
+    requestServedFromCache.add(event.requestId);
+  };
+
+  const onDataReceived = (event) => {
+    if (stopping || typeof event?.requestId !== 'string') return;
+    const stream = responseStreams.get(event.requestId);
+    if (stream === undefined || stream.integrityFailure !== undefined) return;
+    try {
+      if (!Number.isSafeInteger(event.dataLength) || event.dataLength < 0) {
+        throw new TypeError('Network.dataReceived has invalid dataLength');
+      }
+      stream.dataBytes += event.dataLength;
+      if (!Number.isSafeInteger(stream.dataBytes)) {
+        throw new RangeError('Network.dataReceived body size is unsafe');
+      }
+      if (typeof event.data !== 'string') {
+        if (stream.enabled) throw new Error('Network.dataReceived omitted streamed data');
+        return;
+      }
+      const chunk = strictBase64Bytes(event.data);
+      if (chunk.byteLength !== event.dataLength) {
+        throw new Error('Network.dataReceived streamed bytes do not match dataLength');
+      }
+      stream.chunks.push(chunk);
+    } catch (error) {
+      stream.integrityFailure = error;
+    }
+  };
+
+  const applyBody = (record, body) => {
+    record.bodyBytes = body.bytes.byteLength;
+    if (body.text !== undefined) record.bodyText = body.text;
+    if (responseMetadata.has(record)) {
+      if (requestMetadata.has(record)) record.complete = true;
+    } else {
+      appendError(record, 'Network.loadingFinished lacked Network.responseReceived metadata');
+    }
   };
 
   const collectBody = async (requestId, record) => {
+    const stream = responseStreams.get(requestId);
+    responseStreams.delete(requestId);
+    if (stream !== undefined) {
+      await (stream.ready ?? stream.setup);
+      if (stream.enabled) {
+        try {
+          if (stream.integrityFailure !== undefined) throw stream.integrityFailure;
+          const body = streamedBody([stream.buffered, ...stream.chunks]);
+          if (body.bytes.byteLength !== stream.dataBytes) {
+            throw new Error('CDP streamed body bytes do not match Network.dataReceived total');
+          }
+          applyBody(record, body);
+        } catch (error) {
+          retainIncomplete(record, `Network.streamResourceContent failed: ${errorMessage(error)}`);
+        }
+        return;
+      }
+    }
     try {
       const body = decodedBody(await session.send('Network.getResponseBody', { requestId }));
-      record.bodyBytes = body.bytes.byteLength;
-      if (body.text !== undefined) record.bodyText = body.text;
-      if (responseMetadata.has(record)) {
-        record.complete = true;
-      } else {
-        appendError(record, 'Network.loadingFinished lacked Network.responseReceived metadata');
-      }
+      applyBody(record, body);
     } catch (error) {
       retainIncomplete(record, `Network.getResponseBody failed: ${errorMessage(error)}`);
     }
@@ -670,13 +853,21 @@ export async function startCdpResponseRecorder(page, options = {}) {
     if (!tracked.has(requestId)) return;
     let record = active.get(requestId);
     if (record === undefined) {
-      record = responseRecord(publicRequestId(event), { url: requestUrls.get(requestId) });
+      record = responseRecord(
+        publicRequestId(event),
+        { url: requestUrls.get(requestId) },
+        event.requestId,
+        requestMethods.get(requestId),
+      );
       captured.push(record);
     }
+    applyRequestCacheSignal(requestId, record);
     active.delete(requestId);
+    requestMethods.delete(requestId);
+    requestStarts.delete(requestId);
+    requestUrls.delete(requestId);
     const operation = collectBody(requestId, record);
-    pending.add(operation);
-    void operation.finally(() => pending.delete(operation));
+    retainPending(operation);
   };
 
   const onLoadingFailed = (event) => {
@@ -685,16 +876,28 @@ export async function startCdpResponseRecorder(page, options = {}) {
     if (!tracked.has(requestId)) return;
     let record = active.get(requestId);
     if (record === undefined) {
-      record = responseRecord(publicRequestId(event), { url: requestUrls.get(requestId) });
+      record = responseRecord(
+        publicRequestId(event),
+        { url: requestUrls.get(requestId) },
+        event.requestId,
+        requestMethods.get(requestId),
+      );
       captured.push(record);
     }
+    applyRequestCacheSignal(requestId, record);
     active.delete(requestId);
+    requestMethods.delete(requestId);
+    requestStarts.delete(requestId);
+    requestUrls.delete(requestId);
+    responseStreams.delete(requestId);
     retainIncomplete(record, loadingFailure(event));
   };
 
   const listeners = [
     ['Network.requestWillBeSent', onRequestWillBeSent],
     ['Network.responseReceived', onResponseReceived],
+    ['Network.requestServedFromCache', onRequestServedFromCache],
+    ['Network.dataReceived', onDataReceived],
     ['Network.loadingFinished', onLoadingFinished],
     ['Network.loadingFailed', onLoadingFailed],
   ];
@@ -761,6 +964,20 @@ function successfulPackument(record) {
   return record?.status === 200 && record.complete === true;
 }
 
+function successfulTarball(record) {
+  return record?.status >= 200 && record.status < 300 && record.complete === true;
+}
+
+function responseLifecycle(record) {
+  if (typeof record?.lifecycleId === 'string') return record.lifecycleId;
+  return typeof record?.requestId === 'string' ? record.requestId : undefined;
+}
+
+function cacheSignal(record) {
+  if (record?.requestServedFromCache === true) return 'Network.requestServedFromCache';
+  if (record?.fromPrefetchCache === true) return 'response.fromPrefetchCache';
+}
+
 function decodedPackument(record, label) {
   if (typeof record.bodyText !== 'string') {
     return refuse(`${label} successful packument lacks decoded body evidence`);
@@ -819,6 +1036,7 @@ function sourceResponse(record, source) {
   return {
     source,
     url: record.url,
+    method: record.method,
     protocol: record.protocol,
     bodyBytes: record.bodyBytes,
     complete: record.complete,
@@ -860,13 +1078,50 @@ export function finalizeStandardAssetSourceResponses({ registryUrl, source, capt
   const [expectedTarballUrl] = tarballUrls;
   const tarballs = captured.filter((record) => record?.url === expectedTarballUrl);
   if (tarballs.length === 0) return refuse(`${label} has no exact tarball response`);
+  if (!tarballs.some(successfulTarball)) {
+    return refuse(`${label} has no complete successful 2xx exact tarball response`);
+  }
+
+  const sourceByLifecycle = new Map();
+  for (const record of captured) {
+    const sourceKind =
+      record?.url === expectedPackumentUrl
+        ? 'packument'
+        : record?.url === expectedTarballUrl
+          ? 'tarball'
+          : undefined;
+    if (sourceKind === undefined) continue;
+    const lifecycle = responseLifecycle(record);
+    if (lifecycle === undefined) continue;
+    const prior = sourceByLifecycle.get(lifecycle);
+    if (prior !== undefined && prior !== sourceKind) {
+      return refuse(`${label} captured lifecycle crosses packument and tarball sources`);
+    }
+    sourceByLifecycle.set(lifecycle, sourceKind);
+  }
+
+  const sourceResponses = [];
+  for (const record of captured) {
+    const sourceKind =
+      record?.url === expectedPackumentUrl
+        ? 'packument'
+        : record?.url === expectedTarballUrl
+          ? 'tarball'
+          : sourceByLifecycle.get(responseLifecycle(record));
+    if (sourceKind === undefined) {
+      const url =
+        typeof record?.url === 'string' && record.url.length > 0 ? record.url : '<unknown>';
+      return refuse(`${label} has unclassified captured response lifecycle ${url}`);
+    }
+    const signal = cacheSignal(record);
+    if (signal !== undefined) {
+      return refuse(`${label} ${sourceKind} response was served from cache (${signal})`);
+    }
+    sourceResponses.push(sourceResponse(record, sourceKind));
+  }
 
   return {
     ok: true,
-    sourceResponses: captured.flatMap((record) => {
-      if (record?.url === expectedPackumentUrl) return [sourceResponse(record, 'packument')];
-      if (record?.url === expectedTarballUrl) return [sourceResponse(record, 'tarball')];
-      return [];
-    }),
+    sourceResponses,
   };
 }

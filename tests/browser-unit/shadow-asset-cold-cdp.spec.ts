@@ -5,14 +5,11 @@ test('cold response recorder captures a real owner-class Worker fetch', async ({
   await page.goto('/unit-harness.html');
   const assetUrl = new URL(`/unit-harness.html?shadow-asset-cdp=${crypto.randomUUID()}`, page.url())
     .href;
-  const recorder = await startCdpResponseRecorder(page, {
-    captureUrl: (url: string) => url === assetUrl,
-  });
-
-  await page.evaluate(async (url) => {
+  await page.evaluate(async () => {
     const source = `
-      globalThis.onmessage = async () => {
-        const response = await fetch(${JSON.stringify(url)}, { cache: 'no-store' })
+      globalThis.postMessage('ready')
+      globalThis.onmessage = async ({ data: url }) => {
+        const response = await fetch(url, { cache: 'no-store' })
         const bytes = await response.arrayBuffer()
         globalThis.postMessage(bytes.byteLength)
       }
@@ -23,7 +20,20 @@ test('cold response recorder captures a real owner-class Worker fetch', async ({
     await new Promise<void>((resolve, reject) => {
       worker.onmessage = () => resolve();
       worker.onerror = (event) => reject(new Error(event.message));
-      worker.postMessage(undefined);
+    });
+  });
+  const recorder = await startCdpResponseRecorder(page, {
+    captureUrl: (url: string) => url === assetUrl,
+  });
+
+  await page.evaluate(async (url) => {
+    const state = Reflect.get(globalThis, '__riftyShadowAssetCdpWorker') as {
+      readonly worker: Worker;
+    };
+    await new Promise<void>((resolve, reject) => {
+      state.worker.onmessage = () => resolve();
+      state.worker.onerror = (event) => reject(new Error(event.message));
+      state.worker.postMessage(url);
     });
   }, assetUrl);
 
@@ -32,6 +42,7 @@ test('cold response recorder captures a real owner-class Worker fetch', async ({
     expect(captured).toEqual([
       expect.objectContaining({
         url: assetUrl,
+        method: 'GET',
         status: 200,
         bodyBytes: expect.any(Number),
         complete: true,
