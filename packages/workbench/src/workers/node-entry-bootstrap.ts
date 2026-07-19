@@ -103,13 +103,14 @@ if (launch.remoteFs) {
 registerSqliteBuiltin();
 installSqliteWasmSyncProvider(nodeWorkerRuntimeConfig.sqliteWasmUrl);
 
-const vitePreparation = bin
-  ? viteCliPreparationFromArgs({
-      root: proc.cwd(),
-      args: proc.argv.slice(2),
-      executedBinPath: entryPath,
-    })
-  : null;
+const vitePreparation =
+  launch.kind === 'program'
+    ? viteCliPreparationFromArgs({
+        root: proc.cwd(),
+        args: proc.argv.slice(2),
+        executedBinPath: entryPath,
+      })
+    : null;
 if (vitePreparation !== null) {
   await prepareViteCliForNodeEntry(vitePreparation);
 }

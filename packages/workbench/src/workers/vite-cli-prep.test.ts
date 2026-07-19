@@ -152,19 +152,22 @@ describe('viteCliPreparationFromArgs — executed entry authority', () => {
     ).toBeNull();
   });
 
-  it('decodes the exact executed Vite shim', () => {
-    expect(
-      viteCliPreparationFromArgs({
+  it.each([VITE_BIN, '/app/node_modules/vite/bin/vite.js'])(
+    'decodes the exact installed Vite entry %s',
+    (executedBinPath) => {
+      expect(
+        viteCliPreparationFromArgs({
+          root: '/app',
+          args: ['preview'],
+          executedBinPath,
+        }),
+      ).toEqual({
         root: '/app',
-        args: ['preview'],
-        executedBinPath: VITE_BIN,
-      }),
-    ).toEqual({
-      root: '/app',
-      mode: 'preview',
-      executedBinPath: VITE_BIN,
-    });
-  });
+        mode: 'preview',
+        executedBinPath,
+      });
+    },
+  );
 });
 
 describe('prepareViteCliAcquisitionFiles — pre-promotion CLI keepalive patch', () => {
@@ -588,10 +591,10 @@ describe('Vite esbuild runtime startup policy', () => {
     }
   });
 
-  it('loud-fails a forged Vite mode whose executed argv[1] is not a .bin/vite shim', async () => {
+  it('loud-fails a forged Vite mode whose argv[1] is not a canonical installed entry', async () => {
     bootFs();
     await expect(prepareVite('dev', '/app/scripts/vite.js')).rejects.toThrow(
-      'expected an executed .bin/vite',
+      'expected an installed Vite entry',
     );
   });
 });

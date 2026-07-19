@@ -13,6 +13,9 @@
 
 ### Fixed
 
+- Recursive program entries now classify the two canonical installed Vite CLI
+  paths before guest import. An unadmitted Vite 7 child loud-throws
+  `vite.esbuild.shadowAssets` instead of bypassing the non-inherited capability.
 - Vite 7 installs now consume the public `esbuild@0.28.0` synthesized delegate
   and its exact runtime-asset plan; active fixtures no longer depend on the
   retired `@esbuild/wasi-preview1` alias package (ADR-0298).

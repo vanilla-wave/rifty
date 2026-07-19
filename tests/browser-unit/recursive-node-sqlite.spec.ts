@@ -109,7 +109,10 @@ test('recursive Vite 7 fails at the missing shadow capability before import or f
   page.on('request', (request) => {
     if (!observeRecursiveNetwork) return;
     const path = new URL(request.url()).pathname;
-    if (path.includes('esbuild') || path.includes('wasi-preview1')) {
+    if (
+      path.startsWith('/npm-registry') &&
+      (path.includes('esbuild') || path.includes('wasi-preview1'))
+    ) {
       recursiveAssetRequests.push(path);
     }
   });

@@ -19,6 +19,7 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 export type ViteCliMode = 'dev' | 'build' | 'preview' | 'optimize' | 'info';
 const VITE_BIN_SUFFIX = '/.bin/vite';
+const VITE_DIRECT_CLI_SUFFIX = '/vite/bin/vite.js';
 const VITE_CHUNKS_SUFFIX = '/dist/node/chunks';
 
 declare global {
@@ -39,17 +40,23 @@ export interface PlannedViteCliPreparation {
   readonly runtimeDecision: ViteEsbuildRuntimeDecision;
 }
 
+function vitePackageRootFromExecutedEntry(entryPath: string): string | null {
+  const path = normalizePath(entryPath);
+  const nodeModules = path.endsWith(VITE_BIN_SUFFIX)
+    ? path.slice(0, -VITE_BIN_SUFFIX.length)
+    : path.endsWith(VITE_DIRECT_CLI_SUFFIX)
+      ? path.slice(0, -VITE_DIRECT_CLI_SUFFIX.length)
+      : '';
+  return nodeModules.endsWith('/node_modules') ? `${nodeModules}/vite` : null;
+}
+
 /** Derive one complete Vite preparation from the executed entry + real argv. */
 export function viteCliPreparationFromArgs(options: {
   readonly root: string;
   readonly args: readonly string[];
   readonly executedBinPath: string;
 }): ViteCliPreparation | null {
-  const binPath = normalizePath(options.executedBinPath);
-  const nodeModules = binPath.endsWith(VITE_BIN_SUFFIX)
-    ? binPath.slice(0, -VITE_BIN_SUFFIX.length)
-    : '';
-  return !nodeModules.endsWith('/node_modules')
+  return vitePackageRootFromExecutedEntry(options.executedBinPath) === null
     ? null
     : {
         root: options.root,
@@ -137,15 +144,13 @@ function validateRootWatchPatch(vitePackageRoot: string): void {
 
 function vitePackageRoot(root: string, executedBinPath?: string): string {
   if (executedBinPath === undefined) return normalizePath(`${root}/node_modules/vite`);
-  const binPath = normalizePath(executedBinPath);
-  if (!binPath.endsWith(VITE_BIN_SUFFIX)) {
-    throw new Error(`vite CLI preparation expected an executed .bin/vite; got ${executedBinPath}`);
+  const packageRoot = vitePackageRootFromExecutedEntry(executedBinPath);
+  if (packageRoot === null) {
+    throw new Error(
+      `vite CLI preparation expected an installed Vite entry; got ${executedBinPath}`,
+    );
   }
-  const nodeModules = binPath.slice(0, -VITE_BIN_SUFFIX.length);
-  if (!nodeModules.endsWith('/node_modules')) {
-    throw new Error(`vite CLI preparation cannot resolve package from ${executedBinPath}`);
-  }
-  return `${nodeModules}/vite`;
+  return packageRoot;
 }
 
 /** Acquisition-adapter step: patch installed Vite before its stamp promotion. */
