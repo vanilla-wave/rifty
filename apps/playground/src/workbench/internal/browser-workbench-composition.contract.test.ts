@@ -88,4 +88,13 @@ describe('browser Workbench composition closure', () => {
     expect(companionClosure).toContain(companionComposition);
     expect(companionClosure).toContain(companionImplementation);
   });
+
+  it('owns generic Vite definition policy inside the Workbench closure', () => {
+    const workbenchPolicy = fileURLToPath(new URL('./vite-project-policy.ts', import.meta.url));
+    const appPolicy = fileURLToPath(new URL('../../vite-project-policy.ts', import.meta.url));
+    const genericClosure = runtimeStaticClosure(new URL('../public.ts', import.meta.url));
+
+    expect(genericClosure).toContain(workbenchPolicy);
+    expect(genericClosure).not.toContain(appPolicy);
+  });
 });
