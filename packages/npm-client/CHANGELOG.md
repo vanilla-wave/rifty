@@ -14,6 +14,12 @@
   without a package tarball. Exact lockfile markers, replay, placement, Eddy,
   and acquisition provenance distinguish synthesized bytes from ordinary
   same-coordinate packages; user overrides retain the standard verified path.
+  The committed fixed-origin whole-journey proof records 11,003,099
+  response-body bytes before and 5,949,185 after: 5,053,914 bytes removed. The retired
+  alias falls from one 627-byte packument plus one 5,057,200-byte tarball to
+  zero; one 3,913-byte public-esbuild packument replaces it, all other response
+  bodies stay byte-exact, and the runtime-asset source remains one 690-byte
+  packument plus one 3,845,798-byte tarball.
 
 - **Immutable runtime-adapter-bound shadow capability client (ADR-0296).**
   Admitted children can verify builtin adapter bytes without receiving or

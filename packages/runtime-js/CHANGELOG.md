@@ -19,6 +19,9 @@
 
 ### Fixed
 
+- Node process context now recognizes the one runtime-owned `process` across
+  separately bundled Worker entries, preserving child admission without
+  accepting foreign lookalikes.
 - Node-entry v2 now accepts only the exact kernel, node-entry, and SQLite host
   runtime fields. Owner-recursive `execSync` snapshots one validated private
   `remoteFsRoot` for preflight and nested launch, while first-require defaults

@@ -4,6 +4,8 @@
 
 ### Changed (Workbench extraction)
 
+- Vite now prebundles Workbench's public `@riftydev/git` dependency graph, so
+  packed external Workbench startup resolves `isomorphic-git` consistently.
 - Playground no longer imports or depends on the esbuild WASM package for
   Workbench boot; the sealed Workbench capability path owns Vite 7 preparation.
 - Normal Playground and browser-unit boot no longer install a second raw kernel
