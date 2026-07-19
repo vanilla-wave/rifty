@@ -90,7 +90,7 @@ describe('CJS resolver — Node algorithm', () => {
     expect(loader.require('./main.js', '/app/entry.js')).toBe('fp');
   });
 
-  it('throws PACKAGE_PATH_NOT_EXPORTED for missing subpath', () => {
+  it('throws ERR_PACKAGE_PATH_NOT_EXPORTED for missing subpath', () => {
     const loader = setup({
       '/app/main.js': "module.exports = require('lib/nope');",
       '/app/node_modules/lib/package.json': '{"exports": {"./ok": "./ok.js"}}',

@@ -15,9 +15,8 @@ import {
   globalProcessManager,
   isSabIpcSupported,
 } from '@riftydev/kernel';
-import { type FsSync, dirname } from '@riftydev/vfs';
-import { fileURLToPathPosix } from '../internal/posix-file-url.ts';
-import { hasURLScheme } from '../internal/url-scheme.ts';
+import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -27,10 +26,12 @@ import {
 } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
+import { getProcessCwd } from './process.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
   env?: Record<string, string | undefined>;
+  eval?: boolean;
 }
 
 function snapshotWorkerEnvironment(
@@ -42,6 +43,10 @@ function snapshotWorkerEnvironment(
 }
 
 type WorkerScript = string | URL;
+
+type WorkerEntry =
+  | { readonly kind: 'path'; readonly path: string }
+  | { readonly kind: 'data-url'; readonly href: string };
 
 interface WorkerMessageEvent {
   readonly data: unknown;
@@ -75,7 +80,7 @@ export function setSameRealmWorkerModuleImporter(importer: SameRealmWorkerModule
 export class Worker extends EventEmitter {
   static isMainThread = true;
   threadId: number;
-  private readonly script: string;
+  private readonly entry: WorkerEntry;
   private readonly workerData: unknown;
   private readonly env: Record<string, string>;
   private readonly processContext: NodeProcessContextSnapshot | null;
@@ -90,14 +95,17 @@ export class Worker extends EventEmitter {
 
   constructor(script: WorkerScript, opts: WorkerOptions = {}) {
     super();
-    this.threadId = nextThreadId++;
-    this.script = normalizeWorkerScript(script);
-    this.workerData = opts.workerData;
-    this.processContext = snapshotNodeProcessContext();
-    this.env =
+    const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
+    const processContext = snapshotNodeProcessContext();
+    const env =
       opts.env === undefined
-        ? { ...(this.processContext?.env ?? {}) }
+        ? { ...(processContext?.env ?? {}) }
         : snapshotWorkerEnvironment(opts.env);
+    this.threadId = nextThreadId++;
+    this.entry = entry;
+    this.workerData = opts.workerData;
+    this.processContext = processContext;
+    this.env = env;
     // TODO(backlog: runtime-js/worker-threads-prompt-start-atomics-wait):
     // synchronous allocation cannot close prompt-start while entry loading
     // still needs parent-serviced remote FS.
@@ -105,20 +113,32 @@ export class Worker extends EventEmitter {
   }
 
   private start(): void {
+    if (this.entry.kind === 'data-url') {
+      // TODO(backlog: runtime-js/worker-eval-data-url-entry)
+      this.emitWorkerError(
+        new NotImplementedError(
+          'worker_threads.Worker.data-url',
+          'data: URL Worker entries are not implemented',
+        ),
+      );
+      void this.terminate(1);
+      return;
+    }
+    const script = this.entry.path;
     // ADR-0011 phase 2: real Worker realm via kernel.spawnWorker when
     // capability + host wiring permit.
     if (isSabIpcSupported() && getKernelWorkerUrl() !== null && getNodeEntryWorkerUrl() !== null) {
-      this.startViaKernel();
+      this.startViaKernel(script);
       return;
     }
     // ADR-0011 fallback: in-realm polyfill violates worker_threads' separate-
     // event-loop promise, so warn loudly (once per import) but don't throw —
     // conformance + integration paths still rely on same-realm propagation.
     warnSameRealmFallbackOnce();
-    this.startSameRealm();
+    this.startSameRealm(script);
   }
 
-  private startViaKernel(): void {
+  private startViaKernel(script: string): void {
     try {
       const nodeEntryWorkerUrl = getNodeEntryWorkerUrl();
       if (nodeEntryWorkerUrl === null) {
@@ -140,7 +160,7 @@ export class Worker extends EventEmitter {
       }
       const spec: SpawnWorkerSpec = {
         entry,
-        argv: ['rifty', this.script],
+        argv: ['rifty', script],
         env,
         cwd: this.processContext.cwd,
         // serve:true keeps a message-driven Worker alive (Node parity, and the
@@ -177,13 +197,13 @@ export class Worker extends EventEmitter {
     }
   }
 
-  private startSameRealm(): void {
-    void this.startSameRealmAsync();
+  private startSameRealm(script: string): void {
+    void this.startSameRealmAsync(script);
   }
 
-  private async startSameRealmAsync(): Promise<void> {
+  private async startSameRealmAsync(script: string): Promise<void> {
     try {
-      const source = Buffer.from(syncMirror().readFileBytesSync(this.script)).toString();
+      const source = Buffer.from(syncMirror().readFileBytesSync(script)).toString();
       const parentPort = createWorkerPort((msg) => this.emitWorkerMessage(msg));
       const context: WorkerThreadContext = {
         parentPort,
@@ -201,7 +221,7 @@ export class Worker extends EventEmitter {
       this.emit('online');
 
       const previousGlobalOnMessage = readGlobalOnMessage();
-      if (shouldLoadWithModuleLoader(this.script, source)) {
+      if (shouldLoadWithModuleLoader(script, source)) {
         const importer = sameRealmWorkerModuleImporter;
         if (importer === null) {
           throw new NotImplementedError(
@@ -210,13 +230,13 @@ export class Worker extends EventEmitter {
           );
         }
         await withSameRealmWorkerContext(context, () =>
-          importer(syncMirror(), this.script, dirname(this.script)),
+          importer(syncMirror(), script, dirname(script)),
         );
       } else {
         const fn = new Function(
           'parentPort',
           'workerData',
-          `${source}\n//# sourceURL=${this.script}`,
+          `${source}\n//# sourceURL=${script}`,
         ) as (parentPort: unknown, workerData: unknown) => unknown;
         await withSameRealmWorkerContext(context, () =>
           Promise.resolve(fn(parentPort, this.workerData)),
@@ -428,24 +448,54 @@ export function isMarkedAsUncloneable(object: unknown): boolean {
   return isObjectLike(object) && uncloneable.has(object);
 }
 
-function normalizeWorkerScript(script: WorkerScript): string {
-  if (typeof script === 'string') {
-    // Node string scripts are paths only — a file: URL string is a synchronous
-    // ERR_WORKER_PATH (parity url/file-url-consumers); only URL objects decode.
-    // Remaining string-path contract (relative/junk/extension rules):
-    // TODO(backlog: runtime-js/worker-string-file-url-err-worker-path).
-    if (hasURLScheme(script, 'file')) {
+function parseWorkerEntry(
+  script: WorkerScript,
+  cwd: string,
+  evalScript: boolean | undefined,
+): WorkerEntry {
+  if (evalScript) {
+    if (typeof script !== 'string') {
       const error = new TypeError(
-        `The worker script or module filename must be an absolute path or a relative path starting with './' or '../'. Wrap file:// URLs with \`new URL\`. Received "${script}"`,
+        "The property 'options.eval' must be false when 'filename' is not a string. Received true",
       ) as TypeError & { code: string };
-      error.code = 'ERR_WORKER_PATH';
+      error.code = 'ERR_INVALID_ARG_VALUE';
       throw error;
     }
-    return script;
+    // TODO(backlog: runtime-js/worker-eval-data-url-entry)
+    throw new NotImplementedError(
+      'worker_threads.Worker.eval',
+      'eval Worker entries are not implemented',
+    );
   }
-  const raw = script.href;
-  if (raw.startsWith('file://')) return fileURLToPathPosix(raw);
-  return raw;
+  if (typeof script === 'string') {
+    if (!isAbsolute(script) && !/^\.\.?[\\/]/u.test(script)) throwWorkerPathError(script);
+    return {
+      kind: 'path',
+      path: isAbsolute(script) ? normalizePath(script) : joinPath(cwd, script),
+    };
+  }
+  if (!isNodeUrl(script)) {
+    const error = new TypeError(
+      'The "filename" argument must be of type string or an instance of URL',
+    ) as TypeError & { code: string };
+    error.code = 'ERR_INVALID_ARG_TYPE';
+    throw error;
+  }
+  if (script.protocol === 'data:') return { kind: 'data-url', href: script.href };
+  return { kind: 'path', path: fileURLToPathPosix(script) };
+}
+
+function throwWorkerPathError(script: string): never {
+  const wrapHint = script.startsWith('file://')
+    ? ' Wrap file:// URLs with `new URL`.'
+    : script.startsWith('data:text/javascript')
+      ? ' Wrap data: URLs with `new URL`.'
+      : '';
+  const error = new TypeError(
+    `The worker script or module filename must be an absolute path or a relative path starting with './' or '../'.${wrapHint} Received "${script}"`,
+  ) as TypeError & { code: string };
+  error.code = 'ERR_WORKER_PATH';
+  throw error;
 }
 
 function shouldLoadWithModuleLoader(script: string, source: string): boolean {

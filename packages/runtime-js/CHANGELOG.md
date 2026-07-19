@@ -19,28 +19,35 @@
 
 ### Fixed
 
-- **CJS specifiers stay path-only.** `require()`/`require.resolve()` of a
-  URL-like string (`file:`, `FiLe:`, `data:`, any scheme) now falls through to
-  Node's `MODULE_NOT_FOUND` instead of resolving or throwing
-  `UNSUPPORTED_PROTOCOL`; the resolver's URL-scheme dispatch is gated to ESM,
-  where WHATWG case-insensitive semantics apply (parity
-  `modules/require-url-specifier-strings`).
+- **CJS specifiers stay path-only.** `require()`/`require.resolve()` never URL-
+  dispatch a string: URL-looking names use the ordinary alias, `baseUrl`, file,
+  and package pipeline. They can load a matching filename/package; an ordinary
+  miss is `MODULE_NOT_FOUND`, never `UNSUPPORTED_PROTOCOL`. ESM keeps WHATWG
+  case-insensitive URL semantics (parity `modules/require-url-specifier-strings`).
 
-- **Bare walk gains Node's `LOAD_AS_FILE(DIR/X)` step.** A loose
-  `node_modules/<name>(.ext)` file with no package directory now resolves —
-  including a name that only looks like a URL scheme, e.g. `require('file:')` →
-  `node_modules/file:.js` (parity `modules/require-bare-file-package`).
+- **Bare resolution follows Node's ordered candidate pipeline.** Each generated
+  `node_modules` directory applies package `exports`, raw file resolution, then
+  directory resolution. Loose files beat same-name directories, exports targets
+  are exact and terminal, nested `node_modules/node_modules` paths are skipped,
+  trailing directory segments do not extension-load, and `main: "."` falls back
+  to the package index. Blocked exports report `ERR_PACKAGE_PATH_NOT_EXPORTED`
+  (parity `modules/require-bare-file-package`).
 
-- **tsconfig `baseUrl` follows the TypeScript oracle for URL-rooted names.**
-  tsc treats `scheme://` specifiers as rooted, so baseUrl never prepends and the
-  lookup misses; the resolver now matches instead of following tsconfig-paths'
-  blind join. Exact/wildcard `paths` aliases keep matching URL-like bare names
-  (both oracles agree).
+- **tsconfig `baseUrl` follows TypeScript's full path grammar.** One TypeScript-
+  owned predicate now excludes URL roots, drive roots, UNC/backslash roots, and
+  dot-relative names while retaining opaque/single-slash schemes and drive-
+  relative names. A real-TypeScript differential suite covers Classic, Node10,
+  Node16, NodeNext, and Bundler; `paths` aliases remain independent.
 
-- **Worker string scripts reject `file:` URLs like Node.** A string `file:` URL
-  (any ASCII casing) throws synchronous `ERR_WORKER_PATH`; URL objects keep
-  decoding. Remaining string-path contract: backlog
-  `runtime-js/worker-string-file-url-err-worker-path`.
+- **Worker entry validation has one Node-ordered boundary.** String entries must
+  be absolute or start `./`/`../`, relative paths snapshot construction-time cwd,
+  invalid strings throw `ERR_WORKER_PATH`, invalid types throw
+  `ERR_INVALID_ARG_TYPE`, and URL objects outside the supported `file:`/`data:`
+  schemes throw `ERR_INVALID_URL_SCHEME` before a thread id is allocated. File
+  URL objects (including cross-realm/Node URL-shaped values) keep decoding; data
+  URL objects are accepted synchronously then hit the explicit execution gap.
+  `eval: true` is likewise loud, never treated as a path (backlog
+  `runtime-js/worker-eval-data-url-entry`).
 
 - Node-entry program and worker-thread bootstrap metadata can carry one
   validated host-only remote-FS root. Nested `worker_threads` and recursive
