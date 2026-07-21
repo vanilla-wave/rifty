@@ -46,6 +46,8 @@
   trailing directory segments do not extension-load, and `main: "."` falls back
   to the package index. Blocked exports report `ERR_PACKAGE_PATH_NOT_EXPORTED`
   (parity `modules/require-bare-file-package`).
+- Bare file-vs-directory selection uses the captured string suffix primordial;
+  guest mutation of `String.prototype.endsWith` cannot alter resolution.
 
 - **tsconfig `baseUrl` follows TypeScript's full path grammar.** One TypeScript-
   owned predicate now excludes URL roots, drive roots, UNC/backslash roots, and

@@ -606,11 +606,11 @@ function nodeModulesPaths(fromDir: string): readonly string[] {
 
 function hasTrailingDirectorySegment(specifier: string): boolean {
   return (
-    specifier.endsWith('/') ||
+    safeEndsWith(specifier, '/') ||
     specifier === '.' ||
     specifier === '..' ||
-    specifier.endsWith('/.') ||
-    specifier.endsWith('/..')
+    safeEndsWith(specifier, '/.') ||
+    safeEndsWith(specifier, '/..')
   );
 }
 
