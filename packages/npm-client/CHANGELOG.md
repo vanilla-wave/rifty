@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Attested package-tree runtime facts (ADR-0304).** One strict exact-byte
+  projection now returns the shadow plan plus frozen root install-path/version
+  evidence; missing, mismatched, nested-only, or unmapped root identities cannot
+  mint child runtime authority.
+
 - **Builtin Eddy shadow-asset source composition (ADR-0299).** One public
   factory derives the closed builtin source set inside npm-client, owns learned
   pins, batches exact misses, and preserves bounded Eddy -> STD fallback through

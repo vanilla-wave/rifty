@@ -358,7 +358,7 @@ describe('prepareViteCliAcquisitionFiles — real Vite config ownership', () => 
       expect(source).toContain('__riftyViteConfigTempFs.writeFile');
       expect(source).toContain('__riftyViteConfigTempFs.unlink');
       expect(source).toContain('import(pathToFileURL(tempFileName).href)');
-      expect(readPreparedViteConfigSource(fsSync, '/app')?.relativeSourcePath).toBe(
+      expect(readPreparedViteConfigSource(fsSync, '/app', version)?.relativeSourcePath).toBe(
         `node_modules/vite/${relativeChunk}`,
       );
     },

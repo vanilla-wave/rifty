@@ -108,7 +108,7 @@ describe('readPreparedViteConfigSource', () => {
     const { fsSync } = createMemoryFs();
     fsSync.mkdirSync('/app', { recursive: true });
 
-    expect(readPreparedViteConfigSource(fsSync, '/app')).toBeNull();
+    expect(readPreparedViteConfigSource(fsSync, '/app', null)).toBeNull();
   });
 
   it.each(['7.3.6', '8.0.16'] as const)(
@@ -125,8 +125,7 @@ describe('readPreparedViteConfigSource', () => {
         path,
         enc.encode(applyViteConfigTempPatch(upstreamConfigLoader(version), version)),
       );
-
-      const prepared = readPreparedViteConfigSource(fsSync, '/app');
+      const prepared = readPreparedViteConfigSource(fsSync, '/app', version);
       expect(prepared?.relativeSourcePath).toBe(path.slice('/app/'.length));
       expect(dec.decode(prepared?.sourceBytes)).toBe(
         expectedPrepared(upstreamConfigLoader(version)),
@@ -137,6 +136,42 @@ describe('readPreparedViteConfigSource', () => {
       );
     },
   );
+
+  it('ignores prepared Vite bytes absent from the attested installed-tree epoch', () => {
+    const { fsSync } = createMemoryFs();
+    const path = sourcePath('7.3.6');
+    fsSync.mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+    fsSync.writeFileSync(
+      '/app/node_modules/vite/package.json',
+      enc.encode(JSON.stringify({ name: 'vite', version: '7.3.6' })),
+    );
+    fsSync.writeFileSync(
+      path,
+      enc.encode(applyViteConfigTempPatch(upstreamConfigLoader('7.3.6'), '7.3.6')),
+    );
+    expect(readPreparedViteConfigSource(fsSync, '/app', null)).toBeNull();
+  });
+
+  it('loud-rejects physical Vite bytes that disagree with the attested epoch version', () => {
+    const { fsSync } = createMemoryFs();
+    const path = sourcePath('7.3.6');
+    fsSync.mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+    fsSync.writeFileSync(
+      '/app/node_modules/vite/package.json',
+      enc.encode(JSON.stringify({ name: 'vite', version: '7.3.6' })),
+    );
+    fsSync.writeFileSync(
+      path,
+      enc.encode(applyViteConfigTempPatch(upstreamConfigLoader('7.3.6'), '7.3.6')),
+    );
+
+    expect(() => readPreparedViteConfigSource(fsSync, '/app', '8.0.16')).toThrowError(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'playground.vite-config-temp-cache',
+      }),
+    );
+  });
 
   it.each([
     ['unsupported version', '7.3.5', 'config.js', expectedPrepared(upstreamConfigLoader('7.3.6'))],
@@ -150,7 +185,8 @@ describe('readPreparedViteConfigSource', () => {
       enc.encode(JSON.stringify({ name: 'vite', version })),
     );
     fsSync.writeFileSync(`/app/node_modules/vite/dist/node/chunks/${chunk}`, enc.encode(source));
-
-    expect(() => readPreparedViteConfigSource(fsSync, '/app')).toThrow(NotImplementedError);
+    expect(() => readPreparedViteConfigSource(fsSync, '/app', version)).toThrow(
+      NotImplementedError,
+    );
   });
 });

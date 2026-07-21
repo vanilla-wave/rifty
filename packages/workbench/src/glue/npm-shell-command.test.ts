@@ -266,7 +266,7 @@ async function terminalRuntimeAssetHarness(
       const plan = plans[produceIndex] ?? plans.at(-1);
       produceIndex += 1;
       if (plan === undefined) throw new Error('terminal runtime-asset fixture has no plan');
-      return { plan };
+      return { plan, rootPackageVersionsByInstallPath: Object.freeze({}) };
     },
   };
   const adapter: PackageAcquisitionAdapter = {

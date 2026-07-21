@@ -13,6 +13,11 @@
 
 ### Fixed
 
+- Child entry capabilities now bind to immutable package identities captured
+  with the installed-tree epoch. Package-only edits preserve that evidence,
+  tree mutation clears it, and stale prepared Vite files cannot activate the
+  Vite/esbuild adapter for unrelated Node or package-tool children (ADR-0304).
+
 - Exact Vite 7.3.6 and 8.0.16 acquisition transforms now redirect only bundled-config
   temp-file backing to an owner-private lexical capability. Vite retains upstream
   bundle, naming, URL, import, and cleanup order; version, path, or anchor drift

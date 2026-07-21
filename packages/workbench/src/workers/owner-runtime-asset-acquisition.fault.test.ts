@@ -202,6 +202,70 @@ function adapterWith(overrides: Partial<PackageAcquisitionAdapter>): PackageAcqu
   };
 }
 
+async function postTreeFactsFailure(produce: PackageRuntimeAssetPort['produce']): Promise<{
+  readonly assetError: ShadowAssetInstallError;
+  readonly caught: unknown;
+  readonly promotion: ReturnType<typeof vi.fn>;
+  readonly publication: ReturnType<typeof vi.fn>;
+  readonly stamp: Awaited<ReturnType<typeof readInstallStamp>>;
+}> {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir(ROOT, { recursive: true });
+  await vfs.writeFile(`${ROOT}/package.json`, PACKAGE_JSON);
+  const assetPlan = plan();
+  const installed = installResult();
+  const assetError = shadowFailure(installed, assetPlan);
+  const promotion = vi.fn();
+  const publication = vi.fn();
+  const authority = createPackageAcquisitionAuthority({
+    stamps: createInstallStampAuthority({ vfs }),
+    adapter: adapterWith({
+      install: async () => ({
+        status: 'post-tree-failure',
+        treeResult: installed,
+        packageJsonText: PACKAGE_JSON,
+        error: assetError,
+      }),
+    }),
+    runtimeAssets: {
+      installer: {
+        ensure: async () => {
+          throw new Error('invalid facts must not retry readiness');
+        },
+        inspectReceipt: async () => null,
+      },
+      produce,
+    },
+    publishTreeReadiness: publication,
+  });
+  const project: PackageAcquisitionProject = {
+    projectId: 'scratch',
+    root: ROOT,
+    slug: 'scratch',
+    identity: installArtifactIdentity,
+  };
+
+  let caught: unknown;
+  try {
+    await authority.dispatch({
+      type: 'terminal-install',
+      project,
+      argv: [],
+      onPromotion: promotion,
+    });
+  } catch (error) {
+    caught = error;
+  }
+
+  return {
+    assetError,
+    caught,
+    promotion,
+    publication,
+    stamp: await readInstallStamp(vfs, ROOT),
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   resetSyncMirror();
@@ -254,6 +318,18 @@ describe('owner post-tree runtime-asset commit order', () => {
       resolverUrl: () => undefined,
       resolverBundleBaseUrl: () => undefined,
       resolverPin: () => undefined,
+      runtimeAssets: {
+        installer: {
+          ensure: async () => {
+            throw new Error('post-tree failure fixture must not retry readiness');
+          },
+          inspectReceipt: async () => null,
+        },
+        produce: async () => ({
+          plan: assetPlan,
+          rootPackageVersionsByInstallPath: Object.freeze({ 'node_modules/kleur': '4.1.5' }),
+        }),
+      },
     });
 
     await expect(state.activateAndEnsure(config)).resolves.toEqual({
@@ -350,6 +426,38 @@ describe('owner post-tree runtime-asset commit order', () => {
     expect(await readInstallStamp(pair.vfs, ROOT)).toBeNull();
     expect(state.readPackageTreeEpoch(PROJECT).readiness).toEqual({ kind: 'unavailable' });
     expect(consumptionEvidence).not.toHaveBeenCalled();
+  });
+
+  // Fault classes: torn-state + observable-order. Exact installed-tree facts
+  // must be structurally valid before the v4 trust transition can begin.
+  it('does not publish or promote when post-tree facts projection fails', async () => {
+    const projectionError = new Error('root package inventory is inconsistent');
+    const outcome = await postTreeFactsFailure(async () => Promise.reject(projectionError));
+
+    expect.soft(outcome.caught).toBeInstanceOf(AggregateError);
+    expect
+      .soft([...(outcome.caught as AggregateError).errors])
+      .toEqual([outcome.assetError, projectionError]);
+    expect.soft(outcome.promotion).not.toHaveBeenCalled();
+    expect.soft(outcome.publication).not.toHaveBeenCalled();
+    expect.soft(outcome.stamp).toBeNull();
+  });
+
+  it('does not publish or promote when post-tree facts disagree with the failed plan', async () => {
+    const outcome = await postTreeFactsFailure(async () => ({
+      plan: planBuiltinShadowAssets([]),
+      rootPackageVersionsByInstallPath: Object.freeze({}),
+    }));
+
+    expect.soft(outcome.caught).toBeInstanceOf(AggregateError);
+    const errors = [...(outcome.caught as AggregateError).errors];
+    expect.soft(errors[0]).toBe(outcome.assetError);
+    expect
+      .soft(errors[1])
+      .toEqual(new Error('post-tree runtime-asset facts do not match the failed exact plan'));
+    expect.soft(outcome.promotion).not.toHaveBeenCalled();
+    expect.soft(outcome.publication).not.toHaveBeenCalled();
+    expect.soft(outcome.stamp).toBeNull();
   });
 
   // The special post-tree pair is already the complete causal error. A broad
@@ -455,7 +563,7 @@ describe('deferred first materialization runtime readiness', () => {
       },
       produce: async (input) => {
         facts.push(input);
-        return { plan: assetPlan };
+        return { plan: assetPlan, rootPackageVersionsByInstallPath: Object.freeze({}) };
       },
     };
     let physicalInstalls = 0;

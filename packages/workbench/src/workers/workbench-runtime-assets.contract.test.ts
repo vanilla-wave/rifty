@@ -69,15 +69,22 @@ function installResult(
   plan: ShadowAssetPlan = EMPTY_SHADOW_ASSET_PLAN,
   ready: ShadowAssetReadyReceipt | undefined = undefined,
 ): InstallResult {
+  const lockfile =
+    plan.assets.length === 0
+      ? {
+          name: 'app',
+          version: '1.0.0',
+          lockfileVersion: 3 as const,
+          requires: true as const,
+          packages: {
+            '': { version: '1.0.0', dependencies: { vite: '8.0.16' } },
+            'node_modules/vite': { version: '8.0.16', dependencies: {} },
+          },
+        }
+      : (JSON.parse(new TextDecoder().decode(lockfileBytes(plan))) as InstallResult['lockfile']);
   return {
     packages: [],
-    lockfile: {
-      name: 'app',
-      version: '1.0.0',
-      lockfileVersion: 3,
-      requires: true,
-      packages: {},
-    },
+    lockfile,
     conflicts: [],
     provenance: { resolution: 'metadata', packages: [] },
     ...(ready === undefined
@@ -94,7 +101,7 @@ function lockfileBytes(plan: ShadowAssetPlan): Uint8Array {
       lockfileVersion: 3,
       requires: true,
       packages: {
-        '': { version: '1.0.0' },
+        '': { version: '1.0.0', dependencies: { esbuild: '0.28.0' } },
         'node_modules/esbuild': {
           version: '0.28.0',
           dependencies: {},
@@ -146,7 +153,11 @@ describe('Workbench npm runtime-asset production composition', () => {
       expect(port.installer).toBe(harness.manager.installer);
       await expect(
         port.produce({ kind: 'install', project: PROJECT, result: installResult(plan, ready) }),
-      ).resolves.toEqual({ plan, receipt: ready });
+      ).resolves.toEqual({
+        plan,
+        receipt: ready,
+        rootPackageVersionsByInstallPath: { 'node_modules/esbuild': '0.28.0' },
+      });
       expect(harness.acquire).not.toHaveBeenCalled();
     } finally {
       await harness.manager.close();
@@ -165,7 +176,10 @@ describe('Workbench npm runtime-asset production composition', () => {
           project: PROJECT,
           lockfileBytes: lockfileBytes(plan),
         }),
-      ).resolves.toEqual({ plan });
+      ).resolves.toEqual({
+        plan,
+        rootPackageVersionsByInstallPath: { 'node_modules/esbuild': '0.28.0' },
+      });
       expect(harness.acquire).not.toHaveBeenCalled();
     } finally {
       await harness.manager.close();
@@ -178,7 +192,10 @@ describe('Workbench npm runtime-asset production composition', () => {
     try {
       await expect(
         port.produce({ kind: 'install', project: PROJECT, result: installResult() }),
-      ).resolves.toEqual({ plan: EMPTY_SHADOW_ASSET_PLAN });
+      ).resolves.toEqual({
+        plan: EMPTY_SHADOW_ASSET_PLAN,
+        rootPackageVersionsByInstallPath: { 'node_modules/vite': '8.0.16' },
+      });
       expect(harness.acquire).not.toHaveBeenCalled();
     } finally {
       await harness.manager.close();

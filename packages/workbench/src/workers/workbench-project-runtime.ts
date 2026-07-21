@@ -20,7 +20,10 @@ import {
   type NodeWorkerRuntimeEnv,
   readNodeWorkerRuntimeConfig,
 } from './node-worker-runtime-config.ts';
-import type { OwnerChildAdmissionAuthority } from './owner-child-admission.ts';
+import type {
+  OwnerChildAdmissionAuthority,
+  OwnerChildEntryEvidence,
+} from './owner-child-admission.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
@@ -201,8 +204,12 @@ export function createWorkbenchProjectRuntime(
             }
           },
           runtimeReader: options.runtimeAssetReader,
-          entryCapabilities: () => {
-            const prepared = readPreparedViteConfigSource(options.authority, projectRoot);
+          entryCapabilities: (evidence: OwnerChildEntryEvidence) => {
+            const prepared = readPreparedViteConfigSource(
+              options.authority,
+              projectRoot,
+              evidence.rootPackageVersionsByInstallPath['node_modules/vite'] ?? null,
+            );
             return prepared === null
               ? undefined
               : options.viteConfigTempCache.admit(prepared.relativeSourcePath);

@@ -40,6 +40,8 @@ const require = createRequire(
 );
 const ESBUILD_WASM_PATH = require.resolve('esbuild-wasm/esbuild.wasm');
 const PROJECT = Object.freeze({ root: ROOT, slug: 'app' });
+const ROOT_PACKAGE_VERSIONS = Object.freeze({ 'node_modules/vite': '7.3.6' });
+const VITE_8_ROOT_PACKAGE_VERSIONS = Object.freeze({ 'node_modules/vite': '8.0.16' });
 const ACQUISITION_PROJECT: PackageAcquisitionProject = Object.freeze({
   projectId: 'app',
   root: ROOT,
@@ -61,10 +63,12 @@ interface OwnerPackageTreeEpoch {
   readonly project: Readonly<{ root: string; slug: string }>;
   readonly sequence: number;
   readonly readiness: OwnerPackageTreeReadiness;
+  readonly rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
 }
 
 interface OwnerChildAdmissionReservation {
   readonly readiness: Extract<OwnerPackageTreeReadiness, { kind: 'not-required' | 'ready' }>;
+  readonly rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
   commit(): void;
   abortBeforeSpawn(error: unknown): void;
   abortAfterChildSettlement(error: unknown, exited: Promise<unknown>): Promise<void>;
@@ -84,7 +88,12 @@ interface AttestedOwnerPackageState extends OwnerPackageState {
 
 interface RuntimeAssetFactsPort {
   readonly installer: ShadowAssetInstaller;
-  produce(input: unknown): Promise<Readonly<{ plan: ShadowAssetPlan }>>;
+  produce(input: unknown): Promise<
+    Readonly<{
+      plan: ShadowAssetPlan;
+      rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
+    }>
+  >;
 }
 
 type AttestedOwnerPackageStateFactory = (
@@ -109,6 +118,7 @@ interface HarnessOptions {
   readonly assetPlan?: ShadowAssetPlan;
   readonly installer?: ShadowAssetInstaller;
   readonly expectedActivationFailure?: unknown;
+  readonly rootPackageVersionsByInstallPath?: Readonly<Record<string, string>>;
 }
 
 interface Deferred<T> {
@@ -245,7 +255,11 @@ async function harness(ownerEpoch: string, harnessOptions: HarnessOptions = {}):
         },
         inspectReceipt: (requiredSetDigest) => installer.inspectReceipt(requiredSetDigest),
       },
-      produce: async () => ({ plan: assetPlan }),
+      produce: async () => ({
+        plan: assetPlan,
+        rootPackageVersionsByInstallPath:
+          harnessOptions.rootPackageVersionsByInstallPath ?? ROOT_PACKAGE_VERSIONS,
+      }),
     },
   });
   let activationFailed = false;
@@ -423,6 +437,7 @@ describe('owner-private package-tree epoch', () => {
       project: PROJECT,
       sequence: expect.any(Number),
       readiness: { kind: 'ready', plan: h.plan, receipt: h.receipt },
+      rootPackageVersionsByInstallPath: ROOT_PACKAGE_VERSIONS,
     });
     expect(h.ensureCalls).toEqual([h.plan]);
     expect(() => h.state.readPackageTreeEpoch({ root: ROOT, slug: 'other-project' })).toThrow(
@@ -431,6 +446,22 @@ describe('owner-private package-tree epoch', () => {
     expect(() =>
       h.state.readPackageTreeEpoch({ root: '/project-copy', slug: PROJECT.slug }),
     ).toThrow(/project|root|epoch/i);
+  });
+
+  it('retains exact root package evidence for an asset-free Vite 8-style epoch', async () => {
+    const h = await harness('asset-epoch-vite-8-empty', {
+      assetPlan: EMPTY_SHADOW_ASSET_PLAN,
+      rootPackageVersionsByInstallPath: VITE_8_ROOT_PACKAGE_VERSIONS,
+    });
+
+    expect(h.state.readPackageTreeEpoch(PROJECT)).toMatchObject({
+      readiness: { kind: 'not-required' },
+      rootPackageVersionsByInstallPath: VITE_8_ROOT_PACKAGE_VERSIONS,
+    });
+    const reservation = await h.state.reserveChildAdmission(PROJECT);
+    expect(reservation.readiness).toEqual({ kind: 'not-required' });
+    expect(reservation.rootPackageVersionsByInstallPath).toEqual(VITE_8_ROOT_PACKAGE_VERSIONS);
+    reservation.commit();
   });
 
   it.each([
@@ -455,6 +486,7 @@ describe('owner-private package-tree epoch', () => {
     });
 
     expect(h.state.readPackageTreeEpoch(PROJECT)).toEqual(before);
+    expect(before.rootPackageVersionsByInstallPath).toEqual(ROOT_PACKAGE_VERSIONS);
   });
 
   it('crosses the tree barrier before the first destructive ingress write', async () => {
@@ -474,6 +506,7 @@ describe('owner-private package-tree epoch', () => {
     expect(inside).toMatchObject({
       project: PROJECT,
       readiness: { kind: 'unavailable' },
+      rootPackageVersionsByInstallPath: {},
     });
     expect(inside!.sequence).toBeGreaterThan(before.sequence);
     expect(h.state.readPackageTreeEpoch(PROJECT)).toEqual(inside);
@@ -510,6 +543,7 @@ describe('owner-private package-tree epoch', () => {
     const duplicate = h.state.readPackageTreeEpoch(PROJECT);
 
     expect(first.readiness).toEqual({ kind: 'unavailable' });
+    expect(first.rootPackageVersionsByInstallPath).toEqual({});
     expect(first.sequence).toBeGreaterThan(before.sequence);
     expect(duplicate).toEqual(first);
     expect(() => h.state.beginTreeMutation({ root: ROOT, slug: 'wrong' }, token)).toThrow(
@@ -552,6 +586,8 @@ describe('child reservation owns package FIFO settlement', () => {
       plan: h.plan,
       receipt: h.receipt,
     });
+    expect(reservation.rootPackageVersionsByInstallPath).toEqual(ROOT_PACKAGE_VERSIONS);
+    expect(Object.isFrozen(reservation.rootPackageVersionsByInstallPath)).toBe(true);
     let mutationApplied = false;
     const mutation = h.state.mutations.guardedMutation(
       [{ kind: 'rm', path: `${ROOT}/node_modules` }],
@@ -565,6 +601,8 @@ describe('child reservation owns package FIFO settlement', () => {
     reservation.commit();
     await mutation;
     expect(mutationApplied).toBe(true);
+    expect(h.state.readPackageTreeEpoch(PROJECT).rootPackageVersionsByInstallPath).toEqual({});
+    expect(reservation.rootPackageVersionsByInstallPath).toEqual(ROOT_PACKAGE_VERSIONS);
   });
 
   it('keeps quiesce pending until an aborted reservation settles physical exit', async () => {

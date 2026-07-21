@@ -271,6 +271,72 @@ export function shadowAssetPlanFromLockfileFacts(lockfile: Lockfile): ShadowAsse
   return plan;
 }
 
+export interface PackageTreeRuntimeFacts {
+  readonly plan: ShadowAssetPlan;
+  /** Exact root-visible package identities, keyed by project-relative install path. */
+  readonly rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
+}
+
+function brokenRootInventory(
+  detail: string,
+  reason: 'missing-root-entry' | 'root-version-disagreement' | 'unmapped-root-entry',
+): never {
+  throw Object.assign(new Error(`EBROKENLOCK: ${detail}. Delete the lockfile and re-install.`), {
+    code: 'EBROKENLOCK' as const,
+    reason,
+  });
+}
+
+function rootPackageVersionsByInstallPath(lockfile: Lockfile): Readonly<Record<string, string>> {
+  const root = lockfile.packages[''];
+  const rootDependencies = root?.dependencies ?? {};
+  const versions: Record<string, string> = {};
+  for (const name of Object.keys(rootDependencies).sort()) {
+    const installPath = `node_modules/${name}`;
+    const entry = lockfile.packages[installPath];
+    if (entry === undefined) {
+      brokenRootInventory(
+        `root package '${name}' is missing its exact top-level lock entry`,
+        'missing-root-entry',
+      );
+    }
+    if (rootDependencies[name] !== entry.version) {
+      brokenRootInventory(
+        `root package '${name}' version does not match its exact top-level lock entry`,
+        'root-version-disagreement',
+      );
+    }
+    versions[installPath] = entry.version;
+  }
+  for (const installPath of Object.keys(lockfile.packages)) {
+    if (
+      !installPath.startsWith('node_modules/') ||
+      installPath.slice('node_modules/'.length).includes('/node_modules/')
+    ) {
+      continue;
+    }
+    const name = installPath.slice('node_modules/'.length);
+    if (!Object.hasOwn(rootDependencies, name)) {
+      brokenRootInventory(
+        `exact top-level package '${name}' is absent from the root package map`,
+        'unmapped-root-entry',
+      );
+    }
+  }
+  return Object.freeze(versions);
+}
+
+/** Parse-only: caller must already attest these exact bytes to its installed-tree epoch. */
+export function packageTreeRuntimeFactsFromLockfileBytes(
+  bytes: Uint8Array,
+): PackageTreeRuntimeFacts {
+  const lockfile = parseLockfile(bytes);
+  return Object.freeze({
+    plan: shadowAssetPlanFromLockfileFacts(lockfile),
+    rootPackageVersionsByInstallPath: rootPackageVersionsByInstallPath(lockfile),
+  });
+}
+
 /** Concrete npm-client v0 reader; caller must already attest the exact bytes. */
 export function shadowAssetPlanFromLockfileBytes(bytes: Uint8Array): ShadowAssetPlan {
   return shadowAssetPlanFromLockfileFacts(parseLockfile(bytes));

@@ -46,6 +46,7 @@ type RuntimeAssetFactsInput =
 interface RuntimeAssetFacts {
   readonly plan: ShadowAssetPlan;
   readonly receipt?: ShadowAssetReadyReceipt;
+  readonly rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
 }
 
 interface PackageRuntimeAssetPort {
@@ -167,15 +168,20 @@ function adapterWith(
 }
 
 function runtimePort(
-  facts: RuntimeAssetFacts,
+  suppliedFacts: Omit<RuntimeAssetFacts, 'rootPackageVersionsByInstallPath'> &
+    Partial<Pick<RuntimeAssetFacts, 'rootPackageVersionsByInstallPath'>>,
   ensure: (
     plan: ShadowAssetPlan,
     options?: ShadowAssetEnsureOptions,
   ) => ReturnType<ShadowAssetInstaller['ensure']> = async (assetPlan) => {
-    const ready = facts.receipt ?? receipt(assetPlan);
+    const ready = suppliedFacts.receipt ?? receipt(assetPlan);
     return { kind: 'ready', plan: assetPlan, receipt: ready };
   },
 ) {
+  const facts: RuntimeAssetFacts = {
+    rootPackageVersionsByInstallPath: Object.freeze({}),
+    ...suppliedFacts,
+  };
   const inputs: RuntimeAssetFactsInput[] = [];
   const ensureCalls: Array<{
     readonly plan: ShadowAssetPlan;

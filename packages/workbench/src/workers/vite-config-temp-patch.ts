@@ -160,11 +160,22 @@ export function validatePreparedViteConfigSource(fs: ReadFs, vitePackageRoot: st
 export function readPreparedViteConfigSource(
   fs: ReadFs,
   projectRoot: string,
+  attestedVersion: string | null,
 ): PreparedViteConfigSource | null {
   const root = normalizePath(projectRoot);
+  if (attestedVersion === null) return null;
   const packageRoot = joinPath(root, 'node_modules/vite');
-  if (fs.statSyncOrNull(packageRoot) === null) return null;
+  if (fs.statSyncOrNull(packageRoot) === null) {
+    throw viteConfigTempNotImplemented(
+      `active Vite package is missing from the installed tree: ${packageRoot}`,
+    );
+  }
   const located = locateSource(fs, packageRoot);
+  if (located.policy.version !== attestedVersion) {
+    throw viteConfigTempNotImplemented(
+      `installed Vite ${located.policy.version} does not match attested tree version ${attestedVersion}`,
+    );
+  }
   if (!viteConfigTempPatchApplied(located.source, located.policy.version)) {
     throw viteConfigTempNotImplemented(
       `Vite config source was not prepared before promotion: ${located.absoluteSourcePath}`,

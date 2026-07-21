@@ -164,10 +164,13 @@ export interface OwnerPackageTreeEpoch {
   readonly project: OwnerPackageTreeProject;
   readonly sequence: number;
   readonly readiness: OwnerPackageTreeReadiness;
+  /** Exact root-visible package versions captured with this installed-tree epoch. */
+  readonly rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
 }
 
 export interface OwnerChildAdmissionReservation {
   readonly readiness: Extract<OwnerPackageTreeReadiness, { kind: 'not-required' | 'ready' }>;
+  readonly rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
   commit(): void;
   abortBeforeSpawn(error: unknown): void;
   abortAfterChildSettlement(error: unknown, exited: Promise<unknown>): Promise<void>;
@@ -237,6 +240,9 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     left: OwnerPackageTreeProject,
     right: OwnerPackageTreeProject,
   ): boolean => left.root === right.root && left.slug === right.slug;
+  const freezeRootPackageVersions = (
+    versions: Readonly<Record<string, string>>,
+  ): Readonly<Record<string, string>> => Object.freeze({ ...versions });
   const freezeReadiness = (readiness: OwnerPackageTreeReadiness): OwnerPackageTreeReadiness => {
     switch (readiness.kind) {
       case 'unavailable':
@@ -255,6 +261,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   const replacePackageTreeEpoch = (
     project: OwnerPackageTreeProject,
     readiness: OwnerPackageTreeReadiness,
+    rootPackageVersionsByInstallPath: Readonly<Record<string, string>> = Object.freeze({}),
   ): OwnerPackageTreeEpoch => {
     if (
       !Number.isSafeInteger(packageTreeSequence) ||
@@ -266,6 +273,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       project: canonicalTreeProject(project),
       sequence: packageTreeSequence + 1,
       readiness: freezeReadiness(readiness),
+      rootPackageVersionsByInstallPath: freezeRootPackageVersions(rootPackageVersionsByInstallPath),
     });
     packageTreeSequence = next.sequence;
     packageTreeEpoch = next;
@@ -299,6 +307,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   const publishTreeReadiness = (
     project: OwnerPackageTreeProject,
     readiness: PackageTreeRuntimeAssetReadiness,
+    rootPackageVersionsByInstallPath: Readonly<Record<string, string>>,
   ): void => {
     if (
       readiness.kind === 'not-required' &&
@@ -308,7 +317,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       return;
     }
     const epoch = readPackageTreeEpoch(project);
-    replacePackageTreeEpoch(epoch.project, readiness);
+    replacePackageTreeEpoch(epoch.project, readiness, rootPackageVersionsByInstallPath);
   };
   const publishUnavailableProject = (project: OwnerPackageTreeProject): void => {
     replacePackageTreeEpoch(project, { kind: 'unavailable' });
@@ -833,7 +842,11 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     };
     throwIfAdmissionAborted();
     type AttestedReadiness = Extract<OwnerPackageTreeReadiness, { kind: 'not-required' | 'ready' }>;
-    const held = await packages.reserveChildAdmission<AttestedReadiness>(async () => {
+    type AttestedTree = Readonly<{
+      readiness: AttestedReadiness;
+      rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
+    }>;
+    const held = await packages.reserveChildAdmission<AttestedTree>(async () => {
       throwIfAdmissionAborted();
       let epoch: OwnerPackageTreeEpoch;
       try {
@@ -873,17 +886,24 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         ) {
           throw new PackageTreeUnattestedError(project);
         }
-        publishTreeReadiness(project, {
-          kind: 'ready',
-          plan: pendingPlan,
-          receipt: ensured.receipt,
-        });
+        publishTreeReadiness(
+          project,
+          {
+            kind: 'ready',
+            plan: pendingPlan,
+            receipt: ensured.receipt,
+          },
+          epoch.rootPackageVersionsByInstallPath,
+        );
         epoch = readPackageTreeEpoch(project);
       }
       if (epoch.readiness.kind !== 'not-required' && epoch.readiness.kind !== 'ready') {
         throw new PackageTreeUnattestedError(project);
       }
-      return epoch.readiness;
+      return Object.freeze({
+        readiness: epoch.readiness,
+        rootPackageVersionsByInstallPath: epoch.rootPackageVersionsByInstallPath,
+      });
     });
     try {
       throwIfAdmissionAborted();
@@ -892,7 +912,8 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       throw error;
     }
     return Object.freeze({
-      readiness: held.snapshot,
+      readiness: held.snapshot.readiness,
+      rootPackageVersionsByInstallPath: held.snapshot.rootPackageVersionsByInstallPath,
       commit: (): void => held.commit(),
       abortBeforeSpawn: (error: unknown): void => held.abortBeforeSpawn(error),
       abortAfterChildSettlement: (error: unknown, exited: Promise<unknown>): Promise<void> =>

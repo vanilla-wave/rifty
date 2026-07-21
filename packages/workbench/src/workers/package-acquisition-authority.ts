@@ -264,6 +264,8 @@ export type PackageRuntimeAssetFactsInput =
 export interface PackageRuntimeAssetFacts {
   readonly plan: ShadowAssetPlan;
   readonly receipt?: ShadowAssetReadyReceipt;
+  /** Exact root-visible package versions projected from the same attested tree facts. */
+  readonly rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
 }
 
 export type PackageTreeRuntimeAssetReadiness =
@@ -329,6 +331,7 @@ export interface PackageAcquisitionAuthorityOptions {
   readonly publishTreeReadiness?: (
     project: PackageAcquisitionProject,
     readiness: PackageTreeRuntimeAssetReadiness,
+    rootPackageVersionsByInstallPath: Readonly<Record<string, string>>,
   ) => void;
   /** FIFO-head ancestor/descendant claims affected by replacing `<root>/node_modules`. */
   readonly resolveTreeGuards?: (
@@ -958,16 +961,28 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       evidence = input;
     }
     const facts = await runtimeAssets.produce(evidence);
-    const { plan, receipt } = facts;
+    const { plan, receipt, rootPackageVersionsByInstallPath } = facts;
     if (plan.assets.length === 0) {
-      this.#publishTreeReadiness?.(input.project, Object.freeze({ kind: 'not-required' }));
+      this.#publishTreeReadiness?.(
+        input.project,
+        Object.freeze({ kind: 'not-required' }),
+        rootPackageVersionsByInstallPath,
+      );
       return facts;
     }
     if (receipt?.requiredSetDigest === plan.requiredSetDigest) {
-      this.#publishTreeReadiness?.(input.project, Object.freeze({ kind: 'ready', plan, receipt }));
+      this.#publishTreeReadiness?.(
+        input.project,
+        Object.freeze({ kind: 'ready', plan, receipt }),
+        rootPackageVersionsByInstallPath,
+      );
       return facts;
     }
-    this.#publishTreeReadiness?.(input.project, Object.freeze({ kind: 'pending', plan }));
+    this.#publishTreeReadiness?.(
+      input.project,
+      Object.freeze({ kind: 'pending', plan }),
+      rootPackageVersionsByInstallPath,
+    );
 
     let warned = false;
     const onProgress = options?.onProgress;
@@ -1003,8 +1018,9 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     this.#publishTreeReadiness?.(
       input.project,
       Object.freeze({ kind: 'ready', plan, receipt: ensured.receipt }),
+      rootPackageVersionsByInstallPath,
     );
-    return { plan, receipt: ensured.receipt };
+    return { plan, receipt: ensured.receipt, rootPackageVersionsByInstallPath };
   }
 
   async #ensure(
@@ -1333,10 +1349,43 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       );
     }
     if (installed.status === 'not-required') {
-      this.#publishTreeReadiness?.(request.project, Object.freeze({ kind: 'not-required' }));
+      this.#publishTreeReadiness?.(
+        request.project,
+        Object.freeze({ kind: 'not-required' }),
+        Object.freeze({}),
+      );
       return;
     }
     if (installed.status === 'post-tree-failure') {
+      const runtimeAssets = this.#runtimeAssets;
+      if (runtimeAssets === undefined) {
+        throw new AggregateError(
+          [installed.error, new Error('post-tree runtime-asset failure has no facts producer')],
+          'package tree finalized without runtime-asset facts',
+        );
+      }
+      let facts: PackageRuntimeAssetFacts;
+      try {
+        facts = await runtimeAssets.produce({
+          kind: 'install',
+          project: request.project,
+          result: installed.treeResult,
+        });
+      } catch (error) {
+        throw new AggregateError(
+          [installed.error, error],
+          'package tree finalized but runtime-asset facts projection failed',
+        );
+      }
+      if (facts.plan.requiredSetDigest !== installed.error.plan.requiredSetDigest) {
+        throw new AggregateError(
+          [
+            installed.error,
+            new Error('post-tree runtime-asset facts do not match the failed exact plan'),
+          ],
+          'package tree finalized with mismatched runtime-asset facts',
+        );
+      }
       await this.#completePromotion(
         request.project,
         request.type,
@@ -1348,6 +1397,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       this.#publishTreeReadiness?.(
         request.project,
         Object.freeze({ kind: 'pending', plan: installed.error.plan }),
+        facts.rootPackageVersionsByInstallPath,
       );
       throw installed.error;
     }

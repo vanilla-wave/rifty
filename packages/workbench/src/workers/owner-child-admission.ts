@@ -13,7 +13,13 @@ export interface OwnerChildAdmissionAuthority {
   reserve(options?: Readonly<{ signal?: AbortSignal }>): Promise<OwnerChildAdmissionReservation>;
   runtimeReader(plan: ShadowAssetPlan): ShadowAssetRuntimeReader;
   /** Optional owner-private entry capabilities, minted while the package FIFO is held. */
-  entryCapabilities?(): OwnerChildEntryCapabilitySession | undefined;
+  entryCapabilities?(
+    evidence: OwnerChildEntryEvidence,
+  ): OwnerChildEntryCapabilitySession | undefined;
+}
+
+export interface OwnerChildEntryEvidence {
+  readonly rootPackageVersionsByInstallPath: Readonly<Record<string, string>>;
 }
 
 export interface OwnerChildEntryCapabilitySession {
@@ -87,7 +93,11 @@ function prepareSession(
   reservation: OwnerChildAdmissionReservation,
   authority: OwnerChildAdmissionAuthority,
 ): PreparedSession {
-  const entrySession = authority.entryCapabilities?.();
+  const entrySession = authority.entryCapabilities?.(
+    Object.freeze({
+      rootPackageVersionsByInstallPath: reservation.rootPackageVersionsByInstallPath,
+    }),
+  );
   let ports: Record<string, MessagePort>;
   try {
     ports = { ...(entrySession?.capabilityPorts ?? {}) };

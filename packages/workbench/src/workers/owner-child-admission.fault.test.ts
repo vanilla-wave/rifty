@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   type OwnerChildAdmissionAuthority,
   type OwnerChildAdmissionHandle,
+  type OwnerChildEntryEvidence,
   admitOwnerChild,
 } from './owner-child-admission.ts';
 import type { OwnerChildAdmissionReservation } from './owner-package-state.ts';
@@ -181,6 +182,8 @@ function authority(
       events.push('abort-settled');
     },
     ...overrides,
+    rootPackageVersionsByInstallPath:
+      overrides.rootPackageVersionsByInstallPath ?? Object.freeze({}),
   };
   return {
     reserve: async () => {
@@ -199,6 +202,7 @@ describe('owner child admission transaction', () => {
     const child = new FakeChild(events);
     const reservation: OwnerChildAdmissionReservation = {
       readiness: { kind: 'ready', plan: assetPlan, receipt: receipt(assetPlan) },
+      rootPackageVersionsByInstallPath: Object.freeze({ 'node_modules/vite': '7.3.6' }),
       commit: () => events.push('commit'),
       abortBeforeSpawn: (error) => {
         expect(error).toMatchObject({ name: 'AbortError' });
@@ -250,8 +254,10 @@ describe('owner child admission transaction', () => {
   it('commits an attested empty plan without constructing a channel or reader', async () => {
     const events: string[] = [];
     const child = new FakeChild(events);
+    const entryCapabilities = vi.fn((_evidence: OwnerChildEntryEvidence) => undefined);
     const reservation: OwnerChildAdmissionReservation = {
       readiness: { kind: 'not-required' },
+      rootPackageVersionsByInstallPath: Object.freeze({ 'node_modules/vite': '8.0.16' }),
       commit: () => events.push('commit'),
       abortBeforeSpawn: () => events.push('abort-before'),
       abortAfterChildSettlement: async () => {
@@ -265,6 +271,7 @@ describe('owner child admission transaction', () => {
         runtimeReader: () => {
           throw new Error('empty admission must not construct a reader');
         },
+        entryCapabilities,
       },
       spawn: (capabilities) => {
         expect(capabilities).toBeUndefined();
@@ -276,6 +283,13 @@ describe('owner child admission transaction', () => {
         return child;
       },
     });
+    expect(entryCapabilities).toHaveBeenCalledOnce();
+    const evidence = entryCapabilities.mock.calls[0]?.[0];
+    expect(evidence).toEqual({
+      rootPackageVersionsByInstallPath: { 'node_modules/vite': '8.0.16' },
+    });
+    expect(Object.keys(evidence ?? {})).toEqual(['rootPackageVersionsByInstallPath']);
+    expect(Object.isFrozen(evidence)).toBe(true);
     expect(events).toEqual(['spawn', 'observe:exit', 'supervise', 'commit']);
     child.exit();
   });

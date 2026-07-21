@@ -10,6 +10,7 @@ import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
 import {
   EMPTY_SHADOW_ASSET_PLAN,
   type ShadowAssetPlan,
+  packageTreeRuntimeFactsFromLockfileBytes,
   shadowAssetPlanFromLockfileBytes,
 } from './index.ts';
 import { install } from './installer.ts';
@@ -382,12 +383,111 @@ describe('shadow-asset facts from exact stored npm-client lockfile bytes', () =>
         lockfileVersion: 3,
         requires: true,
         packages: {
-          '': { version: '1.0.0', dependencies: { vite: '8.0.16' } },
+          '': {
+            version: '1.0.0',
+            dependencies: { parent: '1.0.0', vite: '8.0.16' },
+          },
           'node_modules/vite': { version: '8.0.16', dependencies: {} },
         },
       }),
     );
 
     expect(shadowAssetPlanFromLockfileBytes(bytes)).toBe(EMPTY_SHADOW_ASSET_PLAN);
+  });
+
+  it('projects only exact root-visible package versions from the same strict parse', () => {
+    const bytes = enc.encode(
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': {
+            version: '1.0.0',
+            dependencies: { parent: '1.0.0', vite: '8.0.16' },
+          },
+          'node_modules/vite': { version: '8.0.16', dependencies: {} },
+          'node_modules/parent': { version: '1.0.0', dependencies: { vite: '7.3.6' } },
+          'node_modules/parent/node_modules/vite': {
+            version: '7.3.6',
+            dependencies: {},
+          },
+        },
+      }),
+    );
+
+    const facts = packageTreeRuntimeFactsFromLockfileBytes(bytes);
+    expect(facts).toEqual({
+      plan: EMPTY_SHADOW_ASSET_PLAN,
+      rootPackageVersionsByInstallPath: {
+        'node_modules/parent': '1.0.0',
+        'node_modules/vite': '8.0.16',
+      },
+    });
+    expect(Object.isFrozen(facts)).toBe(true);
+    expect(Object.isFrozen(facts.rootPackageVersionsByInstallPath)).toBe(true);
+  });
+
+  it('does not promote a nested-only package into root-visible epoch evidence', () => {
+    const bytes = enc.encode(
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': { version: '1.0.0', dependencies: { parent: '1.0.0' } },
+          'node_modules/parent': { version: '1.0.0', dependencies: { vite: '7.3.6' } },
+          'node_modules/parent/node_modules/vite': {
+            version: '7.3.6',
+            dependencies: {},
+          },
+        },
+      }),
+    );
+
+    expect(
+      packageTreeRuntimeFactsFromLockfileBytes(bytes).rootPackageVersionsByInstallPath,
+    ).toEqual({
+      'node_modules/parent': '1.0.0',
+    });
+  });
+
+  it.each([
+    [
+      'missing exact top-level entry',
+      {
+        '': { version: '1.0.0', dependencies: { vite: '8.0.16' } },
+      },
+    ],
+    [
+      'mismatched exact top-level version',
+      {
+        '': { version: '1.0.0', dependencies: { vite: '8.0.15' } },
+        'node_modules/vite': { version: '8.0.16', dependencies: {} },
+      },
+    ],
+    [
+      'unmapped exact top-level entry',
+      {
+        '': { version: '1.0.0', dependencies: {} },
+        'node_modules/vite': { version: '8.0.16', dependencies: {} },
+      },
+    ],
+  ])('loud-rejects %s in installed-tree evidence', (_label, packages) => {
+    const bytes = enc.encode(
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages,
+      }),
+    );
+
+    expect(() => packageTreeRuntimeFactsFromLockfileBytes(bytes)).toThrow(
+      expect.objectContaining({ code: 'EBROKENLOCK' }),
+    );
   });
 });
