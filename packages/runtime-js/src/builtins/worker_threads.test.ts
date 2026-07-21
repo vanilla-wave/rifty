@@ -553,6 +553,45 @@ const onceEvent = <T = unknown>(emitter: EventEmitter, event: string): Promise<T
   new Promise<T>((resolve) => emitter.once(event, (...args: unknown[]) => resolve(args[0] as T)));
 
 describe('worker_threads Node parity (threadId / online / terminate)', () => {
+  it('keeps unsupported eval and data-URL success paths loud', async () => {
+    expect(() => new Worker('parentPort.postMessage("ok")', { eval: true })).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'worker_threads.Worker.eval',
+      }),
+    );
+
+    const worker = new Worker(new URL('data:text/javascript,0'));
+    const error = onceEvent<NotImplementedError>(worker, 'error');
+    const exit = onceEvent<number>(worker, 'exit');
+    expect(await error).toEqual(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'worker_threads.Worker.data-url',
+      }),
+    );
+    expect(await exit).toBe(1);
+  });
+
+  it('keeps the eval filename error ahead of the unsupported eval gap', () => {
+    expect(() => new Worker(new URL('file:///w-eval.js'), { eval: true })).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_VALUE' }),
+    );
+  });
+
+  it('rejects an invalid string entry before allocating a threadId', async () => {
+    _resetThreadIdCounterForTests();
+    expect(() => new Worker('FiLe:///w-invalid.js')).toThrow(
+      expect.objectContaining({ code: 'ERR_WORKER_PATH' }),
+    );
+
+    writeFileSync('/w-after-invalid.js', ';');
+    const worker = new Worker('/w-after-invalid.js');
+    const exited = onceEvent(worker, 'exit');
+    expect(worker.threadId).toBe(1);
+    await exited;
+  });
+
   it('numbers threadId like Node: main thread 0, workers 1, 2, …', async () => {
     // Main-thread view (what `require('node:worker_threads').threadId` returns).
     expect(workerThreadsModule.threadId).toBe(0);

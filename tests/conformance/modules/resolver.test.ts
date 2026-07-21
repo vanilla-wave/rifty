@@ -90,7 +90,7 @@ describe('CJS resolver — Node algorithm', () => {
     expect(loader.require('./main.js', '/app/entry.js')).toBe('fp');
   });
 
-  it('throws PACKAGE_PATH_NOT_EXPORTED for missing subpath', () => {
+  it('throws ERR_PACKAGE_PATH_NOT_EXPORTED for missing subpath', () => {
     const loader = setup({
       '/app/main.js': "module.exports = require('lib/nope');",
       '/app/node_modules/lib/package.json': '{"exports": {"./ok": "./ok.js"}}',
@@ -3260,6 +3260,7 @@ describe('tsconfig path aliases (ADR-0066)', () => {
     specifier: string,
     fromFile: string,
     compilerOptions: ts.CompilerOptions,
+    moduleResolution: ts.ModuleResolutionKind = ts.ModuleResolutionKind.Node10,
   ): string | undefined {
     const fileSet = new Set(Object.keys(files));
     const host: ts.ModuleResolutionHost = {
@@ -3275,9 +3276,41 @@ describe('tsconfig path aliases (ADR-0066)', () => {
     return ts.resolveModuleName(
       specifier,
       fromFile,
-      { ...compilerOptions, moduleResolution: ts.ModuleResolutionKind.Node10 },
+      {
+        ...compilerOptions,
+        module:
+          moduleResolution === ts.ModuleResolutionKind.Node16
+            ? ts.ModuleKind.Node16
+            : moduleResolution === ts.ModuleResolutionKind.NodeNext
+              ? ts.ModuleKind.NodeNext
+              : ts.ModuleKind.ESNext,
+        moduleResolution,
+      },
       host,
     ).resolvedModule?.resolvedFileName;
+  }
+
+  function autoTsconfigResolveId(
+    files: Record<string, string>,
+    specifier: string,
+    fromFile: string,
+  ): string | undefined {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture(files);
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+    try {
+      return loader.resolver.resolve(specifier, { fromFile, esm: false }).id;
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'MODULE_NOT_FOUND'
+      ) {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   it('wildcard alias maps `@/x` onto the absolute target', () => {
@@ -3504,6 +3537,76 @@ describe('tsconfig path aliases (ADR-0066)', () => {
       gold,
     );
   });
+
+  const baseUrlGrammarCases = [
+    { specifier: 'plain', candidate: '/proj/src/plain.ts', resolves: true },
+    { specifier: 'file:/single', candidate: '/proj/src/file:/single.ts', resolves: true },
+    { specifier: 'FiLe:/case', candidate: '/proj/src/FiLe:/case.ts', resolves: true },
+    { specifier: 'file:opaque', candidate: '/proj/src/file:opaque.ts', resolves: true },
+    { specifier: 'data:text', candidate: '/proj/src/data:text.ts', resolves: true },
+    { specifier: 'DaTa:text', candidate: '/proj/src/DaTa:text.ts', resolves: true },
+    { specifier: 'C:relative', candidate: '/proj/src/C:relative.ts', resolves: true },
+    { specifier: 'nested/../plain', candidate: '/proj/src/plain.ts', resolves: true },
+    { specifier: 'file:///rooted', candidate: '/proj/src/file:/rooted.ts', resolves: false },
+    { specifier: 'FiLe:///case', candidate: '/proj/src/FiLe:/case.ts', resolves: false },
+    {
+      specifier: 'data://host/rooted',
+      candidate: '/proj/src/data:/host/rooted.ts',
+      resolves: false,
+    },
+    { specifier: 'DaTa://host/case', candidate: '/proj/src/DaTa:/host/case.ts', resolves: false },
+    {
+      specifier: 'custom://host/rooted',
+      candidate: '/proj/src/custom:/host/rooted.ts',
+      resolves: false,
+    },
+    { specifier: 'C:/drive', candidate: '/proj/src/C:/drive.ts', resolves: false },
+    { specifier: 'C:\\drive', candidate: '/proj/src/C:\\drive.ts', resolves: false },
+    { specifier: 'C:', candidate: '/proj/src/C:.ts', resolves: false },
+    {
+      specifier: '\\\\server\\share\\unc',
+      candidate: '/proj/src/\\\\server\\share\\unc.ts',
+      resolves: false,
+    },
+    { specifier: '\\rooted', candidate: '/proj/src/\\rooted.ts', resolves: false },
+    {
+      specifier: '//server/share/unc',
+      candidate: '/proj/src/server/share/unc.ts',
+      resolves: false,
+    },
+    { specifier: './local', candidate: '/proj/src/local.ts', resolves: false },
+    { specifier: '../parent', candidate: '/proj/src/parent.ts', resolves: false },
+    { specifier: '.\\local', candidate: '/proj/src/.\\local.ts', resolves: false },
+    { specifier: '..\\parent', candidate: '/proj/src/..\\parent.ts', resolves: false },
+  ] as const;
+
+  const moduleResolutionModes = [
+    ts.ModuleResolutionKind.Classic,
+    ts.ModuleResolutionKind.Node10,
+    ts.ModuleResolutionKind.Node16,
+    ts.ModuleResolutionKind.NodeNext,
+    ts.ModuleResolutionKind.Bundler,
+  ] as const;
+
+  it.each(baseUrlGrammarCases)(
+    'matches TypeScript baseUrl path grammar for "$specifier"',
+    ({ specifier, candidate, resolves }) => {
+      const files = {
+        '/proj/tsconfig.json': '{ "compilerOptions": { "baseUrl": "src" } }',
+        [candidate]: 'export const value = 1;',
+      };
+      const expected = resolves ? candidate : undefined;
+
+      for (const moduleResolution of moduleResolutionModes) {
+        expect(
+          tsResolveId(files, specifier, '/proj/app.ts', { baseUrl: '/proj/src' }, moduleResolution),
+          ts.ModuleResolutionKind[moduleResolution],
+        ).toBe(expected);
+      }
+
+      expect(autoTsconfigResolveId(files, specifier, '/proj/app.ts')).toBe(expected);
+    },
+  );
 
   it('falls back to tsconfig baseUrl when paths exist but no pattern matches', () => {
     const vfs = new MemoryFsSync();
