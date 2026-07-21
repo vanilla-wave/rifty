@@ -8,6 +8,25 @@ const reflectApplyPrimordial = Reflect.apply;
 
 type CodedTypeError = TypeError & { code: string };
 
+/** Node's cross-realm-safe URL brand predicate (`internal/url.isURL`). */
+export function isNodeUrl(value: unknown): value is URL {
+  const candidate = value as
+    | {
+        readonly href?: unknown;
+        readonly protocol?: unknown;
+        readonly auth?: unknown;
+        readonly path?: unknown;
+      }
+    | null
+    | undefined;
+  return Boolean(
+    candidate?.href &&
+      candidate.protocol &&
+      candidate.auth === undefined &&
+      candidate.path === undefined,
+  );
+}
+
 function codedTypeError(code: string, message: string): CodedTypeError {
   const error = new TypeError(message) as CodedTypeError;
   error.code = code;

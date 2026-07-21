@@ -17,6 +17,11 @@ export interface TsconfigPathResolution {
   readonly baseUrl?: string;
 }
 
+/** Whether TypeScript prefixes this module name with `baseUrl`. */
+export function shouldPrependTsconfigBaseUrl(specifier: string): boolean {
+  return !ts.isExternalModuleNameRelative(specifier) && !specifier.includes('://');
+}
+
 export function findNearestTsconfig(vfs: FsSync, fromDir: string): string | null {
   let dir = normalizePath(fromDir);
   while (true) {

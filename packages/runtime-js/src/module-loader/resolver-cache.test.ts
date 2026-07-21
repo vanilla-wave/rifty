@@ -11,7 +11,7 @@
  *   FULLY cleared in `loader.invalidate()` (both arms).
  * #15 (Q-2026-06-06-321): resolution memo keyed `esm\0fromDir\0specifier`,
  *   FULLY cleared on ANY invalidate, NEVER caching not-found or the
- *   PACKAGE_PATH_NOT_EXPORTED throw.
+ *   ERR_PACKAGE_PATH_NOT_EXPORTED throw.
  */
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
@@ -222,7 +222,7 @@ describe('resolver resolution cache (#15, Q-2026-06-06-321)', () => {
     expect(fresh.id).toBe('/app/sub/node_modules/dep/index.js');
   });
 
-  it('NEVER caches the PACKAGE_PATH_NOT_EXPORTED throw (re-throws on repeat)', () => {
+  it('NEVER caches the ERR_PACKAGE_PATH_NOT_EXPORTED throw (re-throws on repeat)', () => {
     const fs = new MemoryFsSync();
     fs.loadFixture({
       '/app/node_modules/pkg/package.json': JSON.stringify({
@@ -235,7 +235,7 @@ describe('resolver resolution cache (#15, Q-2026-06-06-321)', () => {
     });
     const loader = createModuleLoader(fs);
 
-    // './secret' is not in the exports map -> PACKAGE_PATH_NOT_EXPORTED, twice
+    // './secret' is not in the exports map -> ERR_PACKAGE_PATH_NOT_EXPORTED, twice
     // (the throw propagates before the memo `set`, so it is structurally
     // un-cacheable — both calls must throw identically).
     expect(() =>

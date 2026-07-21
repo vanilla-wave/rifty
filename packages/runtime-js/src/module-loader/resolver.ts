@@ -1,5 +1,5 @@
 import type { FsSync } from '@riftydev/vfs';
-import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { basename, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { ensureRuntimeJsBuiltinsRegistered, isBuiltinSpecifier } from '../builtins/index.ts';
 import {
   URLConstructor,
@@ -12,6 +12,7 @@ import {
   type TsconfigPathResolution,
   findNearestTsconfig,
   loadTsconfigPathResolution,
+  shouldPrependTsconfigBaseUrl,
 } from './tsconfig-paths.ts';
 
 const utf8 = new TextDecoder('utf-8');
@@ -132,7 +133,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
   const pkgCache: PkgCache = new Map();
   // Resolution memo (perf #15): key `esm\0fromDir\0specifier` -> resolved
   // file-id. NEVER caches not-found (guest writes / npm install create files
-  // without firing invalidate) nor the PACKAGE_PATH_NOT_EXPORTED throw.
+  // without firing invalidate) nor the ERR_PACKAGE_PATH_NOT_EXPORTED throw.
   // Cleared whole on ANY invalidate (input-keyed; cannot prune by resolved id).
   // TODO(backlog: perf/resolver-resolution-cache).
   const resolveCache = new Map<string, string>();
@@ -162,7 +163,9 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
         }
         return { id: `node:${name}`, kind: 'builtin', source: '', packageRoot: null };
       }
-      if (hasURLScheme(specifier, 'data')) {
+      // URL dispatch is ESM-only. CJS sends every string through its ordinary
+      // alias/path/package pipeline; URL-looking names may resolve as filenames.
+      if (opts.esm && hasURLScheme(specifier, 'data')) {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
           specifier,
@@ -170,7 +173,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
           opts.fromFile,
         );
       }
-      if (hasURLScheme(specifier, 'file')) {
+      if (opts.esm && hasURLScheme(specifier, 'file')) {
         const filePath = fileUrlToVfsPath(specifier, opts.fromFile);
         const resolved = resolveAsFileOrDir(vfs, pkgCache, filePath);
         if (resolved === null) {
@@ -205,8 +208,11 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
               : { status: 'no-match' };
           if (aliased.status === 'resolved')
             return readResolved(vfs, pkgCache, aliased.path, opts.esm);
-          if (aliased.status === 'no-match' && tsconfigResolution.baseUrl !== undefined) {
-            // TODO(backlog: runtime-js/tsconfig-baseurl-module-resolution): gate baseUrl bare-specifier fallback by TS moduleResolution parity.
+          if (
+            aliased.status === 'no-match' &&
+            tsconfigResolution.baseUrl !== undefined &&
+            shouldPrependTsconfigBaseUrl(specifier)
+          ) {
             const baseUrlResolved = resolveAsFileOrDir(
               vfs,
               pkgCache,
@@ -223,7 +229,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       // the full node_modules walk; `readResolved` still re-reads source fresh.
       // Only SUCCESSFUL (non-null) resolutions are cached — a miss leaves the
       // memo untouched so a later-created file resolves, and the
-      // PACKAGE_PATH_NOT_EXPORTED throw propagates before any `set` is reached.
+      // ERR_PACKAGE_PATH_NOT_EXPORTED throw propagates before any `set` is reached.
       const resolveKey = `${opts.esm ? 1 : 0}\0${fromDir}\0${specifier}`;
       const cached = resolveCache.get(resolveKey);
       if (cached !== undefined) return readResolved(vfs, pkgCache, cached, opts.esm);
@@ -467,28 +473,34 @@ function resolveAsFileOrDir(
   base: string,
   order?: FileDirResolutionOrder,
 ): string | null {
-  // Node order is LOAD_AS_FILE before LOAD_AS_DIRECTORY: exact file, then
-  // `X` + extension, then `X` as a directory. Stat `base` once (ADR-0083:
-  // non-throwing, null on miss).
   const baseStat = vfs.statSyncOrNull(base);
+  const file = resolveAsFile(vfs, base, baseStat?.isFile === true, order);
+  if (file !== null) return file;
+  if (baseStat?.isDirectory) return resolveAsDirectory(vfs, pkgCache, base, order);
+  return null;
+}
 
-  // (1) Exact file. An explicitly-named declaration file (e.g. exports target
-  // `./foo.d.ts`) is not runnable — skip so the caller falls back to a sibling.
-  if (baseStat?.isFile) return isDeclarationFile(base) ? null : base;
-
-  // (2) `base` + extension, tried BEFORE the directory case (ADR-0053 adds
-  // `.ts`/`.tsx`) — so a `foo.ts` sibling wins over a `foo/` directory. opencode
-  // relies on this: `./migration` resolves the `migration.ts` barrel, not the
-  // sibling `migration/` dir of SQL files (no index). Verified against Node 24.
+function resolveAsFile(
+  vfs: FsSync,
+  base: string,
+  baseIsFile: boolean,
+  order?: FileDirResolutionOrder,
+): string | null {
+  if (baseIsFile) return isDeclarationFile(base) ? null : base;
   for (const ext of order?.extensions ?? DEFAULT_EXTENSIONS) {
     const candidate = `${base}${ext}`;
     if (isDeclarationFile(candidate)) continue;
     if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
   }
+  return null;
+}
 
-  // (3) `base` as a directory (package.json `main`, then `index.*`).
-  if (baseStat?.isDirectory) return resolveAsDirectory(vfs, pkgCache, base, order);
-
+function resolveIndex(vfs: FsSync, dir: string, order?: FileDirResolutionOrder): string | null {
+  for (const idx of order?.indexFiles ?? INDEX_FILES) {
+    const candidate = joinPath(dir, idx);
+    if (isDeclarationFile(candidate)) continue;
+    if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
+  }
   return null;
 }
 
@@ -503,16 +515,15 @@ function resolveAsDirectory(
     const pkg = readPackageJson(vfs, pkgCache, pkgPath);
     const main = pickMainEntry(pkg);
     if (main) {
-      const candidate = resolveAsFileOrDir(vfs, pkgCache, joinPath(dir, main), order);
-      if (candidate) return candidate;
+      const mainBase = joinPath(dir, main);
+      const mainStat = vfs.statSyncOrNull(mainBase);
+      const mainFile = resolveAsFile(vfs, mainBase, mainStat?.isFile === true, order);
+      if (mainFile !== null) return mainFile;
+      const mainIndex = resolveIndex(vfs, mainBase, order);
+      if (mainIndex !== null) return mainIndex;
     }
   }
-  for (const idx of order?.indexFiles ?? INDEX_FILES) {
-    const candidate = joinPath(dir, idx);
-    if (isDeclarationFile(candidate)) continue;
-    if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
-  }
-  return null;
+  return resolveIndex(vfs, dir, order);
 }
 
 function resolveBareSpecifier(
@@ -522,75 +533,95 @@ function resolveBareSpecifier(
   fromDir: string,
   esm: boolean,
 ): string | null {
-  const { name, subpath } = parseBareSpecifier(specifier);
-  let dir = fromDir;
-  while (true) {
-    const candidateDir = joinPath(dir, 'node_modules', name);
-    if (vfs.statSyncOrNull(candidateDir)?.isDirectory) {
-      const file = resolveInsidePackage(vfs, pkgCache, candidateDir, subpath, esm);
-      if (file) return file;
+  const trailingDirectorySegment = hasTrailingDirectorySegment(specifier);
+  for (const nodeModulesDir of nodeModulesPaths(fromDir)) {
+    const exported = resolvePackageExports(vfs, pkgCache, nodeModulesDir, specifier, esm);
+    if (exported !== null) return exported;
+
+    const candidate = joinPath(nodeModulesDir, specifier);
+    const candidateStat = vfs.statSyncOrNull(candidate);
+    if (!trailingDirectorySegment) {
+      const file = resolveAsFile(vfs, candidate, candidateStat?.isFile === true);
+      if (file !== null) return file;
     }
-    if (dir === '/') break;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
+    if (candidateStat?.isDirectory) {
+      const directory = resolveAsDirectory(vfs, pkgCache, candidate);
+      if (directory !== null) return directory;
+    }
   }
   return null;
 }
 
-interface ParsedBareSpecifier {
+function nodeModulesPaths(fromDir: string): readonly string[] {
+  const paths: string[] = [];
+  let dir = normalizePath(fromDir);
+  while (true) {
+    if (basename(dir) !== 'node_modules') paths.push(joinPath(dir, 'node_modules'));
+    if (dir === '/') return paths;
+    const parent = dirname(dir);
+    if (parent === dir) return paths;
+    dir = parent;
+  }
+}
+
+function hasTrailingDirectorySegment(specifier: string): boolean {
+  return (
+    specifier.endsWith('/') ||
+    specifier === '.' ||
+    specifier === '..' ||
+    specifier.endsWith('/.') ||
+    specifier.endsWith('/..')
+  );
+}
+
+interface ParsedPackageRequest {
   readonly name: string;
   readonly subpath: string;
 }
 
-function parseBareSpecifier(specifier: string): ParsedBareSpecifier {
-  if (specifier.startsWith('@')) {
-    const firstSlash = specifier.indexOf('/');
-    if (firstSlash === -1) return { name: specifier, subpath: '.' };
-    const secondSlash = specifier.indexOf('/', firstSlash + 1);
-    if (secondSlash === -1) return { name: specifier, subpath: '.' };
-    return { name: specifier.slice(0, secondSlash), subpath: `.${specifier.slice(secondSlash)}` };
-  }
-  const slash = specifier.indexOf('/');
-  if (slash === -1) return { name: specifier, subpath: '.' };
-  return { name: specifier.slice(0, slash), subpath: `.${specifier.slice(slash)}` };
+const PACKAGE_EXPORTS_PATTERN = /^((?:@[^/\\%]+\/)?[^./\\%][^/\\%]*)(\/.*)?$/;
+
+function parsePackageRequest(specifier: string): ParsedPackageRequest | null {
+  const match = PACKAGE_EXPORTS_PATTERN.exec(specifier);
+  if (match === null) return null;
+  const name = match[1];
+  if (name === undefined) return null;
+  return { name, subpath: `.${match[2] ?? ''}` };
 }
 
-function resolveInsidePackage(
+function resolvePackageExports(
   vfs: FsSync,
   pkgCache: PkgCache,
-  pkgDir: string,
-  subpath: string,
+  nodeModulesDir: string,
+  specifier: string,
   esm: boolean,
 ): string | null {
+  const parsed = parsePackageRequest(specifier);
+  if (parsed === null) return null;
+  const pkgDir = joinPath(nodeModulesDir, parsed.name);
   const pkgJsonPath = joinPath(pkgDir, 'package.json');
-  if (vfs.existsSync(pkgJsonPath)) {
-    const pkg = readPackageJson(vfs, pkgCache, pkgJsonPath);
-    if (pkg.exports !== undefined) {
-      const resolved = resolveExports(pkg.exports, subpath, esm);
-      if (resolved !== null) {
-        return resolveAsFileOrDir(vfs, pkgCache, joinPath(pkgDir, resolved));
-      }
-      throw new ModuleLoadError(
-        'PACKAGE_PATH_NOT_EXPORTED',
-        subpath,
-        `Package subpath '${subpath}' is not defined by 'exports' in ${pkgJsonPath}`,
-      );
-    }
-    if (subpath === '.') {
-      const main = pickMainEntry(pkg);
-      if (main) {
-        const candidate = resolveAsFileOrDir(vfs, pkgCache, joinPath(pkgDir, main));
-        if (candidate) return candidate;
-      }
-    } else {
-      return resolveAsFileOrDir(vfs, pkgCache, joinPath(pkgDir, subpath.slice(2)));
-    }
+  if (vfs.statSyncOrNull(pkgJsonPath)?.isFile !== true) return null;
+  const pkg = readPackageJson(vfs, pkgCache, pkgJsonPath);
+  if (pkg.exports === undefined || pkg.exports === null) return null;
+
+  const target = resolveExports(pkg.exports, parsed.subpath, esm);
+  if (target === null) {
+    throw new ModuleLoadError(
+      'ERR_PACKAGE_PATH_NOT_EXPORTED',
+      parsed.subpath,
+      `Package subpath '${parsed.subpath}' is not defined by 'exports' in ${pkgJsonPath}`,
+    );
   }
-  if (subpath === '.') {
-    return resolveAsDirectory(vfs, pkgCache, pkgDir);
+
+  const targetPath = joinPath(pkgDir, target);
+  if (!isDeclarationFile(targetPath) && vfs.statSyncOrNull(targetPath)?.isFile) {
+    return targetPath;
   }
-  return resolveAsFileOrDir(vfs, pkgCache, joinPath(pkgDir, subpath.slice(2)));
+  throw new ModuleLoadError(
+    'MODULE_NOT_FOUND',
+    specifier,
+    `Cannot find module '${targetPath}' exported by ${pkgJsonPath}`,
+  );
 }
 
 type ExportsField =
@@ -699,7 +730,7 @@ function resolveExports(field: ExportsField, subpath: string, esm: boolean): str
     const wildcard = findWildcard(obj, subpath);
     // `undefined` = no pattern matched; `null` = most-specific pattern is a block
     // (e.g. effect's `"./internal/*": null`) → caller throws
-    // PACKAGE_PATH_NOT_EXPORTED. Only a real target resolves.
+    // ERR_PACKAGE_PATH_NOT_EXPORTED. Only a real target resolves.
     if (wildcard !== null && wildcard !== undefined) {
       return resolveConditionTree(wildcard, esm);
     }
@@ -742,7 +773,7 @@ function resolveConditionTree(node: ExportsField, esm: boolean): string | null {
  * `./*` instead of letting the block deny it.
  *
  * A winning target of `null`/`undefined` is a deliberate BLOCK: return `null`
- * so the caller throws `PACKAGE_PATH_NOT_EXPORTED`, never falling through to a
+ * so the caller throws `ERR_PACKAGE_PATH_NOT_EXPORTED`, never falling through to a
  * less-specific non-null pattern.
  *
  * @returns `undefined` = no pattern matched (vs blocked); substituted target
