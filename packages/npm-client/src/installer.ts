@@ -2,7 +2,7 @@
  * Top-level installer: resolve a name+range, walk transitive deps, fetch
  * tarballs, unpack into the VFS.
  *
- * Placement: surviving direct requests reserve their root-visible identities
+ * Placement (ADR-0303): surviving direct requests reserve their root-visible identities
  * before descendant traversal. Descendants then use first-wins-flat +
  * nest-on-conflict: `node_modules/<name>` when the identity owns that slot,
  * otherwise `<parentInstallPath>/node_modules/<name>`. Conflicts nest instead
@@ -1668,7 +1668,7 @@ function createIncrementalSource(
  * placement, fetch the tarball, record it, recurse into `dependencies` and
  * `optionalDependencies` (registry-source only).
  *
- * Placement rule (M11 + direct-root tier):
+ * Placement rule (ADR-0042 + ADR-0303 direct-root tier):
  *   0. Resolve every required direct request; acquire + materialize optional
  *      direct requests. Surviving direct identities reserve their flat slots.
  *   1. Lockfile source returns a preferred `pin.installPath`; use it when free,

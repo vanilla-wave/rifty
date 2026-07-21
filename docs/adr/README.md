@@ -138,6 +138,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0296 | Bind child shadow-asset clients to immutable runtime adapters |
 | 0298 | Synthesize esbuild delegates with explicit lockfile materialization provenance |
 | 0299 | Expose builtin Eddy shadow asset source composition |
+| 0303 | Direct roots reserve flat slots before transitive placement |
 
 ### playground
 
@@ -302,6 +303,8 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0042 global first-wins-flat clause | 0303 | surviving direct identities reserve root-visible slots before serial descendant first-wins placement |
+| 0175 globally request-ordered placement clause | 0303 | direct reservation precedes descendant DFS; prefetch/network completion remains non-authoritative |
 | 0249 npm-client-specific applied-substitution-record clause | 0249 note 2026-07-18 | record/plan values exclude resolver, lockfile-schema, and redirect-target internals; only installer-side producer/composition changes for a future package manager, with no speculative producer SPI |
 | 0249 alias-retirement-outside-delivery clause | 0249 note 2026-07-17 | measured alias retirement is an epic-closing post-cutover item; runtime-asset contract unchanged |
 | 0249 post-extraction-only delivery-order clause | 0249 note 2026-07-17 | private storage and acquisition land on current app-local owners before their mechanical extraction; runtime/deployment cutover stays post-extraction |

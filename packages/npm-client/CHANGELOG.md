@@ -86,7 +86,7 @@
 
 - Direct requests reserve their root-visible identities before descendant DFS;
   failed optional roots reserve nothing, same identities dedupe, and
-  incompatible direct identities fail before tree mutation.
+  incompatible direct identities fail before tree mutation (ADR-0303).
 
 - Default-browser Eddy full-body requests now use bounded native XHR
   progress/load completion, preserving a positive browser-network terminal;
