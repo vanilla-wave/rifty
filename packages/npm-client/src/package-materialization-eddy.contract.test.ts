@@ -1,6 +1,9 @@
 import * as shadowRegistry from '@riftydev/shadow-registry';
 import { describe, expect, it } from 'vitest';
-import { bundleCompletenessGap } from './installer-lockfile-reader.ts';
+import {
+  bundleCompletenessGap,
+  bundleCompletenessGapForPaths,
+} from './installer-lockfile-reader.ts';
 import type { Lockfile } from './linker.ts';
 
 function recipeSha256(): string {
@@ -112,5 +115,37 @@ describe('Eddy completeness — materialization-aware closure', () => {
         { name: 'esbuild', version: '0.28.0', integrity: 'sha512-public-esbuild' },
       ]),
     ).toBeNull();
+  });
+
+  it('checks an exact alias-target path even when the recorded edge uses its source name', () => {
+    const lockfile: Lockfile = {
+      name: 'root',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { version: '1.0.0', dependencies: { host: '1.0.0' } },
+        'node_modules/host': {
+          version: '1.0.0',
+          resolved: 'fixture://host|1.0.0',
+          integrity: 'sha512-host',
+          dependencies: { source: '1.0.0' },
+        },
+        'node_modules/target': {
+          version: '2.0.0',
+          resolved: 'fixture://target|2.0.0',
+          integrity: 'sha512-target',
+          dependencies: {},
+        },
+      },
+    };
+
+    expect(
+      bundleCompletenessGapForPaths(
+        lockfile,
+        new Set(['node_modules/host', 'node_modules/target']),
+        [{ name: 'host', version: '1.0.0', integrity: 'sha512-host' }],
+      ),
+    ).toBe('bundle omits the tarball for target@2.0.0');
   });
 });

@@ -78,6 +78,16 @@
 
 ### Fixed
 
+- Partial lockfile misses now replay every compatible retained edge and consult
+  public metadata only for the changed frontier. Exact nested-path rebasing,
+  synthetic materialization, monotonic optional/required demand, corrupt-lock
+  loud failures, and Eddy override/companion completeness survive package.json
+  and override mutations (ADR-0023).
+
+- Direct requests reserve their root-visible identities before descendant DFS;
+  failed optional roots reserve nothing, same identities dedupe, and
+  incompatible direct identities fail before tree mutation.
+
 - Default-browser Eddy full-body requests now use bounded native XHR
   progress/load completion, preserving a positive browser-network terminal;
   injected and non-browser transports retain bounded fetch semantics.

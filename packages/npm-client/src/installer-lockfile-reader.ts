@@ -39,11 +39,9 @@ export function pinnedVersionFor(lockfile: Lockfile, name: string): string | und
 }
 
 /**
- * Result of a walk-up lookup: the matched entry plus the lockfile key
- * (install path) it was found under. Caller needs the path because fast-path
- * replay places packages exactly where the lockfile recorded them;
- * re-deriving placement from the walk could diverge if visit-order shifts
- * between installs (e.g. `dependencies` reordered in `package.json`).
+ * Result of a walk-up lookup: the matched entry plus its recorded lockfile key.
+ * Replay prefers that path; a mixed install may relocate it when a surviving
+ * direct root or changed subgraph now owns the old slot.
  */
 export interface PinnedEntryLookup {
   readonly installPath: string;
@@ -171,6 +169,21 @@ export function bundleCompletenessGap(
   request: Record<string, string>,
   tarballs: ReadonlyArray<{ name: string; version: string; integrity: string }>,
 ): string | null {
+  const reachableNames = lockfileSubgraph(lockfile, Object.keys(request));
+  const reachablePaths = new Set(
+    Object.keys(lockfile.packages).filter(
+      (path) => path !== '' && reachableNames.has(lockfilePathBareName(path)),
+    ),
+  );
+  return bundleCompletenessGapForPaths(lockfile, reachablePaths, tarballs);
+}
+
+/** Exact-path variant for callers that already own override/companion traversal. */
+export function bundleCompletenessGapForPaths(
+  lockfile: Lockfile,
+  reachablePaths: ReadonlySet<string>,
+  tarballs: ReadonlyArray<{ name: string; version: string; integrity: string }>,
+): string | null {
   try {
     if (lockfileHasHistoricalShadowSubstitution(lockfile)) {
       return 'bundle lockfile contains a historical package materialization';
@@ -188,11 +201,10 @@ export function bundleCompletenessGap(
   }
   const integrityByNameVersion = new Map<string, string>();
   for (const t of tarballs) integrityByNameVersion.set(`${t.name}@${t.version}`, t.integrity);
-  const reachable = lockfileSubgraph(lockfile, Object.keys(request));
   for (const [path, entry] of Object.entries(lockfile.packages)) {
     if (path === '') continue; // the root project is not a tarball
+    if (!reachablePaths.has(path)) continue;
     const name = lockfilePathBareName(path);
-    if (!reachable.has(name)) continue;
     let materialization: ReturnType<typeof packageMaterializationFromLockfileEntry>;
     try {
       materialization = packageMaterializationFromLockfileEntry(entry);

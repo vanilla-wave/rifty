@@ -1123,12 +1123,9 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
-  it('declines (source standard) when an override divergence would force chooseSource to live-resolve', async () => {
-    // A parent-scoped override forces `chooseSource` to live-resolve regardless
-    // of the lockfile (v3 flat lockfiles lose parent context). The eddy gate
-    // must mirror that condition: writing the bundle lockfile + claiming
-    // source:'eddy' here would be a provenance lie — the install would actually
-    // live-resolve. So eddy must DECLINE; provenance stays honest.
+  it('adopts an Eddy-resolved parent-scoped override with zero client-registry traffic', async () => {
+    // The bundle was resolved with the same parent-scoped policy and pins the
+    // exact target version, so every edge replays without public metadata.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/app', { recursive: true });
     await vfs.writeFile(
@@ -1140,9 +1137,11 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
         overrides: { 'debug>ms': 'ms@2.0.0' },
       }),
     );
-    const { registry } = makeRegistry();
+    const { registry, calls } = makeRegistry();
     const result = await install({ vfs, cwd: '/app', registry, resolverUrl: eddyUrl });
-    expect(result.source).toBe('standard');
+    expect(result.source).toBe('eddy');
+    expect(result.provenance.resolution).toBe('lockfile');
+    expect(calls.packument + calls.tarball).toBe(0);
     // Tree is still correct — the override applied (debug's ms pinned to 2.0.0).
     expect(await vfs.exists('/app/node_modules/debug/package.json')).toBe(true);
     const ms = JSON.parse(await vfs.readFileText('/app/node_modules/ms/package.json')) as {
@@ -1219,6 +1218,90 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
       expect(result.closureHash).toBeUndefined(); // no pin learned for a partial bundle
       // The standard install still produced the full correct tree.
       expect(await vfs.exists('/app/node_modules/ms/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('[fault: provenance-lie] refuses a bundle that omits a parent-scoped override target tarball', async () => {
+    // The lockfile keeps the source edge (`debug -> ms`), while replay applies
+    // the current override and actually reaches `kleur`. A bare-name lockfile
+    // walk sees only `ms`; adoption must use the exact replay paths instead.
+    const built = await resolveBundle(
+      { dependencies: { debug: '^4.4.1', kleur: '4.1.5' } },
+      { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+    );
+    if (built.kind !== 'bundle') throw new Error('setup');
+    const contents = unpackEddyBundle(built.bytes);
+    const lockfile = JSON.parse(contents.lockfileText) as {
+      packages: Record<string, { dependencies?: Record<string, string> }>;
+    };
+    const root = lockfile.packages[''];
+    if (!root) throw new Error('setup: root lockfile entry missing');
+    root.dependencies = { debug: '^4.4.1' };
+    contents.lockfileText = JSON.stringify(lockfile);
+    contents.manifest.asOf.closureHash = await closureHashOf(lockfile as never);
+    contents.manifest.tarballs = contents.manifest.tarballs.filter((t) => t.name !== 'kleur');
+    contents.tarballs = contents.tarballs.filter((t) => t.entry.name !== 'kleur');
+    const partial = packEddyBundle(contents);
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(partial));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/app', { recursive: true });
+      await vfs.writeFile(
+        '/app/package.json',
+        JSON.stringify({
+          name: 'app',
+          version: '1.0.0',
+          dependencies: { debug: '^4.4.1' },
+          overrides: { 'debug>ms': 'kleur@4.1.5' },
+        }),
+      );
+      const { registry } = makeRegistry();
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+
+      expect(result.source).toBe('standard');
+      expect(result.closureHash).toBeUndefined();
+      expect(await vfs.exists('/app/node_modules/kleur/package.json')).toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
+
+  it('[fault: provenance-lie] refuses a bundle that omits an injected internals-shim companion tarball', async () => {
+    // Companion edges are derived from the installed trigger version and are
+    // deliberately absent from npm-compatible lockfile dependency records.
+    const synthetic = makeSyntheticRegistry([
+      { name: 'rollup', version: '4.62.2' },
+      { name: '@rollup/wasm-node', version: '4.62.2' },
+    ]);
+    const built = await resolveBundle(
+      { dependencies: { rollup: '4.62.2' } },
+      { registryBaseUrl: synthetic.baseUrl, fetch: synthetic.fetch },
+    );
+    if (built.kind !== 'bundle') throw new Error(`setup: ${built.feature}`);
+    const contents = unpackEddyBundle(built.bytes);
+    contents.manifest.tarballs = contents.manifest.tarballs.filter(
+      (t) => t.name !== '@rollup/wasm-node',
+    );
+    contents.tarballs = contents.tarballs.filter((t) => t.entry.name !== '@rollup/wasm-node');
+    const partial = packEddyBundle(contents);
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(partial));
+    });
+    try {
+      const vfs = new MemoryVfs();
+      await writePackageJson(vfs, { rollup: '4.62.2' });
+      const registry = new RegistryClient({ baseUrl: synthetic.baseUrl, fetch: synthetic.fetch });
+      const result = await install({ vfs, cwd: '/app', registry, resolverUrl: raw.url });
+
+      expect(result.source).toBe('standard');
+      expect(result.closureHash).toBeUndefined();
+      expect(await vfs.exists('/app/node_modules/@rollup/wasm-node/package.json')).toBe(true);
     } finally {
       await closeServer(raw.server);
     }

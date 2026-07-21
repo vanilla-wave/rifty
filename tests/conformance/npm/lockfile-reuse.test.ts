@@ -124,10 +124,15 @@ describe('install — lockfile reuse (ADR-0023)', () => {
       }),
       'index.js': "module.exports = require('tiny') + 2;",
     });
+    const addedV1 = await makeTarGz({
+      'package.json': JSON.stringify({ name: 'added', version: '1.0.0' }),
+      'index.js': 'module.exports = 3;',
+    });
     tarballs = {
       'tarball:tiny-1.0.0.tgz': tinyV1,
       'tarball:wrapper-2.0.0.tgz': wrapperV2,
       'tarball:wrapper-3.0.0.tgz': wrapperV3,
+      'tarball:added-1.0.0.tgz': addedV1,
     };
     packuments = {
       tiny: {
@@ -154,6 +159,16 @@ describe('install — lockfile reuse (ADR-0023)', () => {
             version: '3.0.0',
             dependencies: { tiny: '^1.0.0' },
             dist: { tarball: 'tarball:wrapper-3.0.0.tgz' },
+          },
+        },
+      },
+      added: {
+        name: 'added',
+        versions: {
+          '1.0.0': {
+            name: 'added',
+            version: '1.0.0',
+            dist: { tarball: 'tarball:added-1.0.0.tgz' },
           },
         },
       },
@@ -197,14 +212,29 @@ describe('install — lockfile reuse (ADR-0023)', () => {
     calls.packument = 0;
     calls.tarball = 0;
 
-    // Bump wrapper to ^3.0.0 — tiny still satisfies its old pin, but the
-    // current implementation triggers a full re-resolve when any top-level
-    // range no longer matches the lockfile (simpler invariant; per-subgraph
-    // partial reuse is a future optimisation). The cache still saves the
-    // tarball roundtrip for tiny@1.0.0.
+    // Bump wrapper to ^3.0.0 — tiny still satisfies its old pin and is replayed
+    // without consulting moving registry metadata.
     await install('root', '0.0.0', { wrapper: '^3.0.0' }, { vfs, cwd: '/app', registry });
-    expect(calls.packument).toBeGreaterThan(0); // wrapper at minimum
+    expect(calls.packument).toBe(1);
     // tiny's tarball is served from cache; wrapper@3.0.0 is a new tarball.
+    expect(calls.tarball).toBe(1);
+  });
+
+  it('adding one direct dependency keeps the existing subgraph locked', async () => {
+    const { fetch, calls } = await makeCountingFetcher(packuments, tarballs);
+    const registry = new RegistryClient({ baseUrl: 'packument:', fetch });
+
+    await install('root', '0.0.0', { wrapper: '^2.0.0' }, { vfs, cwd: '/app', registry });
+    calls.packument = 0;
+    calls.tarball = 0;
+
+    await install(
+      'root',
+      '0.0.0',
+      { wrapper: '^2.0.0', added: '1.0.0' },
+      { vfs, cwd: '/app', registry },
+    );
+    expect(calls.packument).toBe(1);
     expect(calls.tarball).toBe(1);
   });
 
