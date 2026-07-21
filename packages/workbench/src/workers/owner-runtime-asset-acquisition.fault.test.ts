@@ -460,6 +460,56 @@ describe('owner post-tree runtime-asset commit order', () => {
     expect.soft(outcome.stamp).toBeNull();
   });
 
+  it('does not publish or promote a successful install when exact facts projection fails', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir(ROOT, { recursive: true });
+    await vfs.writeFile(`${ROOT}/package.json`, PACKAGE_JSON);
+    const installed = installResult();
+    const projectionError = new Error('successful install root inventory is inconsistent');
+    const promotion = vi.fn();
+    const publication = vi.fn();
+    const authority = createPackageAcquisitionAuthority({
+      stamps: createInstallStampAuthority({ vfs }),
+      adapter: adapterWith({
+        install: async () => {
+          await vfs.mkdir(`${ROOT}/node_modules/kleur`, { recursive: true });
+          await vfs.writeFile(`${ROOT}/package-lock.json`, LOCKFILE);
+          return { result: installed, packageJsonText: PACKAGE_JSON };
+        },
+      }),
+      runtimeAssets: {
+        installer: {
+          ensure: async () => {
+            throw new Error('facts projection failure must precede readiness');
+          },
+          inspectReceipt: async () => null,
+        },
+        produce: async () => Promise.reject(projectionError),
+      },
+      publishTreeReadiness: publication,
+    });
+    const project: PackageAcquisitionProject = {
+      projectId: 'scratch',
+      root: ROOT,
+      slug: 'scratch',
+      identity: installArtifactIdentity,
+    };
+
+    await expect(
+      authority.dispatch({
+        type: 'terminal-install',
+        project,
+        argv: [],
+        onPromotion: promotion,
+      }),
+    ).rejects.toBe(projectionError);
+    await authority.quiesce();
+
+    expect.soft(promotion).not.toHaveBeenCalled();
+    expect.soft(publication).not.toHaveBeenCalled();
+    expect.soft(await readInstallStamp(vfs, ROOT)).toBeNull();
+  });
+
   // The special post-tree pair is already the complete causal error. A broad
   // AggregateError escape would lie for ordinary pre-tree acquisition failures.
   it('preserves the exact post-tree aggregate while still wrapping an ordinary pre-tree aggregate', async () => {

@@ -934,7 +934,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     return provenance;
   }
 
-  async #postTreeRuntimeAssetReadiness(
+  async #projectRuntimeAssetFacts(
     input: PostTreeRuntimeAssetInput,
     options?: ShadowAssetEnsureOptions,
   ): Promise<PackageRuntimeAssetFacts | null> {
@@ -960,7 +960,23 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     } else {
       evidence = input;
     }
-    const facts = await runtimeAssets.produce(evidence);
+    return runtimeAssets.produce(evidence);
+  }
+
+  async #postTreeRuntimeAssetReadiness(
+    input: PostTreeRuntimeAssetInput,
+    options?: ShadowAssetEnsureOptions,
+    projectedFacts?: PackageRuntimeAssetFacts | null,
+  ): Promise<PackageRuntimeAssetFacts | null> {
+    const facts =
+      projectedFacts === undefined
+        ? await this.#projectRuntimeAssetFacts(input, options)
+        : projectedFacts;
+    if (facts === null) return null;
+    const runtimeAssets = this.#runtimeAssets;
+    if (!runtimeAssets) {
+      throw new Error('projected runtime-asset facts have no readiness port');
+    }
     const { plan, receipt, rootPackageVersionsByInstallPath } = facts;
     if (plan.assets.length === 0) {
       this.#publishTreeReadiness?.(
@@ -1402,6 +1418,15 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       throw installed.error;
     }
 
+    const runtimeAssetInput = {
+      kind: 'install' as const,
+      project: request.project,
+      result: installed.result,
+    };
+    const runtimeAssetFacts = await this.#projectRuntimeAssetFacts(
+      runtimeAssetInput,
+      request.runtimeAssets,
+    );
     await this.#completePromotion(
       request.project,
       request.type,
@@ -1411,8 +1436,9 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       onPromotion ?? (request.type === 'terminal-install' ? request.onPromotion : undefined),
     );
     await this.#postTreeRuntimeAssetReadiness(
-      { kind: 'install', project: request.project, result: installed.result },
+      runtimeAssetInput,
       request.runtimeAssets,
+      runtimeAssetFacts,
     );
     return installedProvenance(installed.result);
   }
