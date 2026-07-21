@@ -1,4 +1,3 @@
-import { NotImplementedError } from '@riftydev/io';
 import { builtinShadowAssetCatalog } from '@riftydev/shadow-registry';
 import { describe, expect, it } from 'vitest';
 import {
@@ -48,9 +47,11 @@ describe('builtin shadow-asset planner', () => {
   it('loud-throws an admitted substitution without an exact public-version map', () => {
     expect(() =>
       planBuiltinShadowAssets([applied({ resolvedPublicVersion: '0.29.0' })]),
-    ).toThrowError(NotImplementedError);
-    expect(() => planBuiltinShadowAssets([applied({ resolvedPublicVersion: '0.29.0' })])).toThrow(
-      /shadow-registry\.esbuild@0\.29\.0\.assets/,
+    ).toThrowError(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'shadow-registry.esbuild@0.29.0.assets',
+      }),
     );
   });
 

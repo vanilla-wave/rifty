@@ -355,7 +355,12 @@ describe('shadow asset MessagePort builtin runtime binding', () => {
             resolvedPublicVersion: '1.0.0',
           },
         }),
-      ).toThrow(/runtime adapter binding/i);
+      ).toThrowError(
+        expect.objectContaining({
+          name: 'NotImplementedError',
+          feature: 'shadow-registry.missing.runtime-adapter@1.0.0.assets',
+        }),
+      );
       expect(start).not.toHaveBeenCalled();
     } finally {
       closeChannel(channel);

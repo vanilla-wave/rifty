@@ -20,7 +20,7 @@ from test RESULTS is tracked in `docs/backlog/toolchain-build/compat-matrix-test
 - [esbuild-js-api.md](./esbuild-js-api.md) — exact esbuild 0.28.0 Final+GREEN over guest VFS, with explicit D4 loud gaps (ADR-0226)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [vite-command.md](./vite-command.md) — playground `vite` command through the installed `.bin` CLI (ADR-0174)
-- [honest-shadow-substitutions.md](./honest-shadow-substitutions.md) — exact synthesized delegates and their loud version/protocol/adapter ceilings (ADR-0296/0298)
+- [honest-shadow-substitutions.md](./honest-shadow-substitutions.md) — exact synthesized delegates, runtime assets, and owner-cache ceilings (ADR-0296/0298/0302)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal `node <file>` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (`@riftydev/runtime-wasi`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

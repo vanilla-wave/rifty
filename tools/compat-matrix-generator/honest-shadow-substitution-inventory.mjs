@@ -104,4 +104,59 @@ export const honestShadowSubstitutionGaps = Object.freeze([
       }),
     ]),
   }),
+  Object.freeze({
+    feature: 'Unknown built-in runtime-asset map',
+    gap: 'shadow-registry.<package-or-runtime-adapter>@<version>.assets',
+    notes:
+      'The planner and built-in MessagePort client accept only exact package/version and adapter/version pairs from the generated asset catalog; an unknown map is rejected before a plan or port authority is adopted.',
+    tests: Object.freeze([
+      'packages/npm-client/src/shadow-asset-plan.test.ts',
+      'packages/npm-client/src/shadow-asset-message-port.contract.test.ts',
+    ]),
+    sites: Object.freeze([
+      Object.freeze({
+        source: 'packages/npm-client/src/shadow-asset-plan.ts',
+        needle: 'shadow-registry.${candidate.publicName}@${candidate.resolvedPublicVersion}.assets',
+      }),
+      Object.freeze({
+        source: 'packages/npm-client/src/shadow-asset-message-port.ts',
+        needle: 'shadow-registry.${value.runtimeAdapterId}@${value.resolvedPublicVersion}.assets',
+      }),
+    ]),
+  }),
+  Object.freeze({
+    feature: 'Unsupported or drifted Vite config-loader artifact',
+    gap: 'playground.vite-config-temp-cache',
+    notes:
+      'Only the exact attested Vite 7.3.6 and 8.0.16 loader sources are redirected; an unsupported version, malformed package, invalid UTF-8, or changed source anchor is rejected before promotion.',
+    tests: Object.freeze([
+      'packages/workbench/src/workers/vite-config-temp-patch.test.ts',
+      'packages/workbench/src/workers/vite-cli-prep.test.ts',
+    ]),
+    sites: Object.freeze([
+      Object.freeze({
+        source: 'packages/workbench/src/workers/vite-config-temp-patch-policy.ts',
+        needle: "const FEATURE = 'playground.vite-config-temp-cache'",
+      }),
+      Object.freeze({
+        source: 'packages/workbench/src/workers/vite-config-temp-patch.ts',
+        needle: 'new NotImplementedError(viteConfigTempPatchPolicy.feature, reason)',
+      }),
+    ]),
+  }),
+  Object.freeze({
+    feature: 'Vite config temp-cache generation exceeds 8 MiB',
+    gap: 'playground.vite-config-temp-cache.capacity',
+    notes:
+      'The owner refuses a write that would exceed the bounded per-generation capacity before replacing an existing entry or exposing partial bytes.',
+    tests: Object.freeze([
+      'packages/workbench/src/workers/owner-vite-config-temp-cache.fault.test.ts',
+    ]),
+    sites: Object.freeze([
+      Object.freeze({
+        source: 'packages/workbench/src/workers/owner-vite-config-temp-cache.ts',
+        needle: "'playground.vite-config-temp-cache.capacity'",
+      }),
+    ]),
+  }),
 ]);
