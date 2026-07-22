@@ -40,7 +40,17 @@ A `draft` item needs only `## Context`. See `TEMPLATE.md`.
 Required: `kind: epic` · `status` (`draft|ready|in-progress`) · `title` · `created` · `value` (one-line user outcome).
 Recommended: `user_story`. Optional: `items` (`[<area>/<slug>, …]`) · `tier` (see §Tier).
 
-A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User scenario` (the end-to-end scenario that means done) + an enumerated `## Items`. See `epics/TEMPLATE.md`.
+A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User scenario` (the end-to-end scenario that means done, naming the coarse invariants its closing smoke proves) + an enumerated `## Items` in dependency order — a mechanism shared by ≥2 children is an existing owner, the first item, or an ADR why separate. See `epics/TEMPLATE.md`.
+
+## Budget (epics handed to an autonomous run)
+
+`## Budget` = the run's tripwires, declared at refine; over budget = stop and surface, never silent absorption:
+
+- scope implemented outside `ready` items: 0 (capturing new drafts is fine; building them is not)
+- in-place ready-contract edits alongside source changes: 0 (enforced: `pnpm check:contract-drift`)
+- new coordination mechanisms: 0, or the named substrate item (`fault-classes.md` §Class-kill)
+- review rounds per item: ≤ 2 (§Review convergence)
+- per-item diff estimate (rough band from comparable landed items) — 2× over = anomaly, pause
 
 ## Tier
 
