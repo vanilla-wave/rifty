@@ -32,8 +32,8 @@ export type WorkspaceFileReadReplyFrame =
 
 type WorkspaceFileReadFrame = WorkspaceFileReadRequestFrame | WorkspaceFileReadReplyFrame;
 
-// TODO(backlog: playground/correlated-broadcast-bridge-helper) — same correlated
-// request/reply scaffold as git-owner-port + three older bridges; factor shared.
+// TODO(backlog: playground/page-owner-correlation-substrate) — same correlated
+// request/reply scaffold as git-owner-port + three older bridges; ADR-0305 substrate.
 let counter = 0;
 function nextRequestId(): string {
   return `fr${++counter}-${Math.random().toString(36).slice(2, 8)}`;

@@ -10,7 +10,7 @@ channel. Doesn't: owner-realm authority (→ `../workers`), UI state/rendering
 (→ `../adapters`, `../components`), Workbench public surface + protocol
 (→ `../workbench`), generic Node/platform behavior (→ `packages/*`).
 
-Known debt: sibling request/reply correlation engines await one substrate
-(`backlog: playground/correlated-broadcast-bridge-helper`); minting another
-copy violates the mechanism sweep (`docs/process/fault-classes.md`
+Known debt: sibling request/reply correlation engines await the ADR-0305
+substrate (`backlog: playground/page-owner-correlation-substrate`); minting
+another copy violates the mechanism sweep (`docs/process/fault-classes.md`
 §Class-kill).

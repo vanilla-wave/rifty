@@ -168,6 +168,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0284 | Git status entries preserve per-path classification gaps |
 | 0292 | Workbench authorities replace Solid orchestration core |
 | 0293 | Tab-independent workspace admission UX |
+| 0305 | Page-owner correlation substrate settles mutations on owner terminal or owner death |
+| 0306 | Glue carved along the Workbench extraction seam |
 
 ### toolchain-build
 
