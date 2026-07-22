@@ -53,6 +53,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Backlog capture/contract split + refine altitude + epic tier.** Findings
+  enter through the new `rifty-to-backlog` skill (classify → dedup → gate →
+  mint; the gates from the anti-overengineering set fire at capture, not at
+  refine). `rifty-refine` gains the altitude rule — Acceptance pins
+  observables, never carriers; unresolvable forks settle by throwaway spike;
+  direction forks (point-support vs generic, tier raise) go to their own ADR —
+  retiring the mechanism-prescriptive speculative contract failure mode
+  (rejected first `vite-temp-install-claim-churn` contract). Epics may declare
+  `tier: works|robust|production` (validated by `backlog:check`; items
+  inherit): tier × boundary model = the fault rows in scope, and a finding
+  above the declared tier parks pending a tier-raise ADR instead of minting
+  work. Also repairs a sentence split mid-way by the reachability-gate insert
+  in decision-workflow.
 - **Anti-overengineering process gates.** Four rules aimed at the workbench
   retro findings (five sibling correlation engines, distributed-systems fault
   machinery on in-browser ports, 101-file unowned `glue/`): fault-classes
