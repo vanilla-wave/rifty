@@ -20,7 +20,8 @@ Write the concrete developer scenario first: the **real npm package / Node progr
 Interview the user one scenario-branch at a time (each branch = a case the user hits), resolving dependencies in order. One question at a time, with your recommended answer.
 - **User owns the boundary; you own the mechanism.** Ask ONLY user-observable forks: which real software must work, which cases are in vs out. No user-visible difference between the options (wire-format, broker location, internal dispatch) → not a user question: decide + record yourself (REVERSIBLE → CHANGELOG/backlog; IRREVERSIBLE → ADR BEFORE `ready`), never ask. A question citing no scenario branch is the wrong one.
 - Codebase / ADRs / Node already answer it → explore, don't ask.
-- Infra-touching scope (cache/persistence/network/concurrency) → grill failure branches like scenario branches: what does the user observe when the fast path / store / network breaks mid-operation? Each answer = a `## Fault matrix` row (axes: `docs/process/fault-classes.md`).
+- Infra-touching scope (cache/persistence/network/concurrency) → grill failure branches like scenario branches: what does the user observe when the fast path / store / network breaks mid-operation? Each answer = a `## Fault matrix` row (axes: `docs/process/fault-classes.md`). Cite the boundary's row in §Boundary failure models and strike excluded axes — never refine machinery against a fault the transport cannot physically produce.
+- Own-product surface (no external oracle — Workbench/Playground lifecycle & UX) → apply the reachability gate (`docs/process/decision-workflow.md` §Backlog readiness): `ready` needs a user-action repro path; an unreproduced audit finding stays `draft` with the attempt recorded.
 - Keep going until in / out of scope and every fork are settled — zero open assumptions for the implementer.
 
 ## Shape

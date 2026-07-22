@@ -74,6 +74,7 @@ const TASKS = [
   'check:install-artifact-drift',
   'check:snapshot-artifact-drift',
   'check:source-grep',
+  'check:dir-owner',
   'check:install-stamp-writers',
   'backlog:check',
   'refs:check',
