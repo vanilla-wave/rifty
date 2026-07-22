@@ -64,8 +64,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `tier: works|robust|production` (validated by `backlog:check`; items
   inherit): tier × boundary model = the fault rows in scope, and a finding
   above the declared tier parks pending a tier-raise ADR instead of minting
-  work. Also repairs a sentence split mid-way by the reachability-gate insert
-  in decision-workflow.
+  work. `rifty-review` gains a goal-drift axis: delivered user-visible outcome
+  must equal the originating contract, and a contract-wording edit landing in
+  the same PR as its implementation is treated as the contract-level "never
+  edit a test to make code pass". Also repairs a sentence split mid-way by the
+  reachability-gate insert in decision-workflow.
 - **Anti-overengineering process gates.** Four rules aimed at the workbench
   retro findings (five sibling correlation engines, distributed-systems fault
   machinery on in-browser ports, 101-file unowned `glue/`): fault-classes
