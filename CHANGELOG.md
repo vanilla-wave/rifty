@@ -53,6 +53,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Backlog capture/contract split + refine altitude + epic tier.** Findings
+  enter through the new `rifty-to-backlog` skill (classify → dedup → gate →
+  mint; the gates from the anti-overengineering set fire at capture, not at
+  refine). `rifty-refine` gains the altitude rule — Acceptance pins
+  observables, never carriers; unresolvable forks settle by throwaway spike;
+  direction forks (point-support vs generic, tier raise) go to their own ADR —
+  retiring the mechanism-prescriptive speculative contract failure mode
+  (rejected first `vite-temp-install-claim-churn` contract). Epics may declare
+  `tier: works|robust|production` (validated by `backlog:check`; items
+  inherit): tier × boundary model = the fault rows in scope, and a finding
+  above the declared tier parks pending a tier-raise ADR instead of minting
+  work. `rifty-review` gains a goal-drift axis: delivered user-visible outcome
+  must equal the originating contract, and a contract-wording edit landing in
+  the same PR as its implementation is treated as the contract-level "never
+  edit a test to make code pass" — now also enforced mechanically by `pnpm
+  check:contract-drift` (in-place edit of a ready item / ready|in-progress
+  epic in the same diff as apps/packages/services source = fail; adds and
+  delete-on-done closures stay normal flow). Epic hand-off hardened for
+  autonomous runs: ready epics enumerate Items in dependency order with a
+  substrate-first rule (shared mechanism = existing owner, first item, or
+  ADR-separate), and epics handed to a run declare `## Budget` tripwires
+  (scope outside ready items, contract edits, new mechanisms, review rounds,
+  diff estimate) — over budget stops the run, never absorbs silently; the
+  deferred orchestration/detector/trial half is recorded in
+  `backlog/process-meta/autonomous-epic-runs`. Also repairs a sentence split
+  mid-way by the reachability-gate insert in decision-workflow.
 - **Anti-overengineering process gates.** Four rules aimed at the workbench
   retro findings (five sibling correlation engines, distributed-systems fault
   machinery on in-browser ports, 101-file unowned `glue/`): fault-classes

@@ -24,6 +24,7 @@
     "check:e2e-coverage": "node tools/checks/e2e-coverage.mjs",
     "check:source-grep": "node tools/checks/source-grep-ratchet.mjs",
     "check:dir-owner": "node tools/checks/dir-owner.mjs",
+    "check:contract-drift": "node tools/checks/contract-drift.mjs",
     "check:install-stamp-writers": "node tools/checks/install-stamp-writers.mjs",
     "test": "vitest",
     "test:run": "vitest run",

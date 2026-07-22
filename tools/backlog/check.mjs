@@ -37,6 +37,9 @@ const ITEM_STATUS_SET = new Set(ITEM_STATUSES);
 const EPIC_STATUSES = ['draft', 'ready', 'in-progress'];
 const EPIC_STATUS_SET = new Set(EPIC_STATUSES);
 
+const EPIC_TIERS = ['works', 'robust', 'production'];
+const EPIC_TIER_SET = new Set(EPIC_TIERS);
+
 const ITEM_REQUIRED_KEYS = ['area', 'status', 'title', 'created', 'why'];
 const EPIC_REQUIRED_KEYS = ['kind', 'status', 'title', 'created', 'value'];
 const READY_ITEM_SECTIONS = ['Acceptance', 'Parity cases', 'Out of scope', 'Decisions'];
@@ -156,6 +159,9 @@ for (const { rel, area, fm, text } of itemRecords) {
   if (typeof fm.why === 'string' && /^(?:DELIVERED|DONE|LANDED)\b/i.test(fm.why)) {
     errors.push(`${rel}: completed item must be deleted, not kept active via why: ${fm.why}`);
   }
+  if ('tier' in fm) {
+    errors.push(`${rel}: tier lives on the epic (items inherit it) — remove 'tier'`);
+  }
   if (fm.area != null) {
     if (!KNOWN_AREAS.has(fm.area)) errors.push(`${rel}: unknown area '${fm.area}'`);
     if (fm.area !== area)
@@ -210,6 +216,9 @@ for (const { rel, fm, text } of epicRecords) {
   if (fm.kind !== 'epic') errors.push(`${rel}: epic must set 'kind: epic'`);
   if (fm.status != null && !EPIC_STATUS_SET.has(fm.status)) {
     errors.push(`${rel}: invalid status '${fm.status}' (must be ${EPIC_STATUSES.join('|')})`);
+  }
+  if (fm.tier != null && !EPIC_TIER_SET.has(fm.tier)) {
+    errors.push(`${rel}: invalid tier '${fm.tier}' (must be ${EPIC_TIERS.join('|')})`);
   }
   if (fm.status === 'ready') {
     for (const s of READY_EPIC_SECTIONS) {

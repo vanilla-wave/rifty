@@ -5,7 +5,7 @@ Two kinds of work under `docs/backlog/`:
 - **Items** — one implementable unit per file: `docs/backlog/<area>/<slug>.md`.
 - **Epics** — a user-value umbrella over several items: `docs/backlog/epics/<slug>.md`.
 
-Refine an item or epic to `ready` with the **`rifty-refine`** skill. Closure = **delete on done** (git history is the record); there is no "done" status.
+Capture a finding into a draft with the **`rifty-to-backlog`** skill; refine an item or epic to `ready` with the **`rifty-refine`** skill. Closure = **delete on done** (git history is the record); there is no "done" status.
 
 ## Areas (items)
 
@@ -38,9 +38,29 @@ A `draft` item needs only `## Context`. See `TEMPLATE.md`.
 ## Epic frontmatter
 
 Required: `kind: epic` · `status` (`draft|ready|in-progress`) · `title` · `created` · `value` (one-line user outcome).
-Recommended: `user_story`. Optional: `items` (`[<area>/<slug>, …]`).
+Recommended: `user_story`. Optional: `items` (`[<area>/<slug>, …]`) · `tier` (see §Tier).
 
-A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User scenario` (the end-to-end scenario that means done) + an enumerated `## Items`. See `epics/TEMPLATE.md`.
+A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User scenario` (the end-to-end scenario that means done, naming the coarse invariants its closing smoke proves) + an enumerated `## Items` in dependency order — a mechanism shared by ≥2 children is an existing owner, the first item, or an ADR why separate. See `epics/TEMPLATE.md`.
+
+## Budget (epics handed to an autonomous run)
+
+`## Budget` = the run's tripwires, declared at refine; over budget = stop and surface, never silent absorption:
+
+- scope implemented outside `ready` items: 0 (capturing new drafts is fine; building them is not)
+- in-place ready-contract edits alongside source changes: 0 (enforced: `pnpm check:contract-drift`)
+- new coordination mechanisms: 0, or the named substrate item (`fault-classes.md` §Class-kill)
+- review rounds per item: ≤ 2 (§Review convergence)
+- per-item diff estimate (rough band from comparable landed items) — 2× over = anomaly, pause
+
+## Tier
+
+`tier: works|robust|production` on an epic declares how complete the capability is REQUIRED to be; items inherit it (no per-item tier). Composes with `docs/process/fault-classes.md` §Boundary failure models: tier × boundary = the fault rows in scope. The no-silent-lie bar has no tier — it holds everywhere.
+
+- `works` — happy path honest; any fault on the boundary's real surface may resolve to one loud throw.
+- `robust` — every (real axis × operation) resolves to its honest outcome (fallback / degraded-visibly / loud throw), each row a fault test.
+- `production` — `robust` + crash/reload consistency + e2e fault-injection proof.
+
+No `tier` = undeclared: refine decides per item. Raising a tier is a strategic decision — ADR first, then refine the fault delta (`docs/process/decision-workflow.md` §Backlog readiness); a finding above the declared tier parks at capture.
 
 ## Code markers
 
