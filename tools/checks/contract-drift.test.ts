@@ -3,9 +3,8 @@ import { evaluate, statusOf } from './contract-drift.mjs';
 
 const item = (status: string) => `---\narea: playground\nstatus: ${status}\ntitle: T\n---\n\nbody`;
 
-const read =
-  (base: string | null, head: string | null) => (_path: string, side: 'base' | 'head') =>
-    side === 'base' ? base : head;
+const read = (base: string | null, head: string | null) => (_path: string, side: 'base' | 'head') =>
+  side === 'base' ? base : head;
 
 describe('statusOf', () => {
   it('reads frontmatter status, null without one', () => {
@@ -32,12 +31,12 @@ describe('evaluate', () => {
   it('passes draft edits, docs-only diffs, adds, and deletes', () => {
     expect(evaluate([src, contract], read(item('draft'), item('draft')))).toHaveLength(0);
     expect(evaluate([contract], read(item('ready'), item('ready')))).toHaveLength(0);
-    expect(
-      evaluate([src, { ...contract, status: 'A' }], read(null, item('ready'))),
-    ).toHaveLength(0);
-    expect(
-      evaluate([src, { ...contract, status: 'D' }], read(item('ready'), null)),
-    ).toHaveLength(0);
+    expect(evaluate([src, { ...contract, status: 'A' }], read(null, item('ready')))).toHaveLength(
+      0,
+    );
+    expect(evaluate([src, { ...contract, status: 'D' }], read(item('ready'), null))).toHaveLength(
+      0,
+    );
   });
 
   it('guards in-progress epics, skips README/TEMPLATE', () => {
