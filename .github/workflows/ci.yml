@@ -30,6 +30,7 @@ jobs:
       - run: pnpm check:parity-coverage
       - run: pnpm check:e2e-coverage
       - run: pnpm check:source-grep # blocking: no new source-grep tests in playground unit + browser-unit (allowlist exact-match)
+      - run: pnpm check:dir-owner # blocking: source dir > 30 direct prod modules carries an owner README
       - run: node tools/backlog/check.mjs # blocking: frontmatter + TODO(backlog:) integrity
       - run: node tools/refs/check.mjs # blocking: ADR index + cross-ref integrity
 

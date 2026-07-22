@@ -21,6 +21,20 @@ Apply at any boundary — network, storage/OPFS, cache, worker/process, concurre
 | `frozen-assumption` | unverified external behavior pinned by a self-referential test (conformance snapshot with no oracle) | PR #115: write-stream destroy 'error' sequence born wrong inside a green rifty-vs-rifty conformance test (`29828aff`); `cat -A` goldens froze raw high bytes GNU renders as `M-x`. Kill = parity case / real-tool golden, not a rewritten assert |
 | `lossy-aggregate` | an identity/gate/ratchet compares a lossy projection (flattened map, count, truncated sample) of the real input — distinct inputs collide | PR #113 count-ratchet (same-count swap invisible); ADR-0216 r5: the stamp unmoved-guard compared the flattened dep map — a dependencies↔devDependencies move or `overrides` edit changed the installer request with an identical flat map. Kill = compare the exact input (bytes/text/digest), never its aggregate |
 
+## Boundary failure models
+
+Axes apply per boundary — and a boundary only has the faults its transport can physically produce. The taxonomy was mined at a network boundary (#107); applied verbatim to an in-browser port it invents distributed-systems faults (lost-then-replayed, duplicate delivery) that a live MessagePort cannot exhibit, and refine then demands retention ledgers and replay guards against nothing. Before writing a `## Fault matrix`, cite the boundary row below and strike the axes its model excludes. Model wrong or boundary missing → fix THIS table first (same discipline as a new axis).
+
+| Boundary | While alive | Real fault surface | Physically excluded |
+|---|---|---|---|
+| MessagePort / dedicated Worker (page↔owner, owner↔child) | exactly-once, ordered, no partial loss | slow peer — a local deadline may flip UI state but never proves not-applied; only the peer's terminal or its death settles an admitted mutation · peer death / port close = total inflight loss · respawn epoch: new peer ignorant of old inflight | lost-then-replayed, duplicate delivery, reorder |
+| BroadcastChannel | ordered per sender→receiver pair while both attached | receiver not-yet / no-longer attached silently misses frames; no delivery receipt | duplicate delivery, reorder within a pair |
+| Service worker | none — killable between any two events | inflight fetch/registration lost without notice; handler re-runs from scratch; SW-side route state outlives the page | — (full surface) |
+| Network (registry, CDN, eddy) | none | the full distributed set: loss, duplicate, reorder, replay, stall, partial/corrupt body | — |
+| Storage (OPFS/IndexedDB) | per-op atomicity only where the API grants it | torn multi-step writes, quota/permission mid-op, cross-tab concurrent writers | — |
+
+Striking an axis removes machinery, not rigor: the surviving axes still need fault tests, and the death/epoch rows are usually the hard ones.
+
 ## Honest-outcome contract
 
 Every (axis × operation) resolves to exactly one of: **transparent success via fallback** · **degraded-but-correct, visibly** · **loud throw**. Always forbidden: the silent lie — wrong bytes, false provenance, a hang, trusting torn state.
@@ -32,6 +46,8 @@ A fault test injects one axis at one boundary and asserts the honest outcome. Co
 ## Class-kill
 
 Second instance of an axis at the same boundary = structural fix — one chokepoint API / one validation boundary / a gate — never another point fix. Precedent: `unbounded-read` survived #107 R5→R17 as four sibling point-fix helpers until `drainBodyBounded` consolidated the class. New axis found in review → add its row here first, then fix.
+
+Mechanism sweep (design-time, codebase-wide): review-time class-kill is PR-scoped, so five hand-rolled page↔owner correlation engines reached `main` one honest PR at a time (found only by post-merge audit; `backlog: playground/correlated-broadcast-bridge-helper`). Before minting a coordination mechanism — request/reply correlation (pending map + opId + deadline), per-key serialization FIFO, generation/epoch guard, retention ledger/journal, lock/lease — inventory existing implementations of that class across the repo. Two already exist → implement by consolidating into (or on top of) one owner, or record an ADR why this instance is genuinely separate; "different authorities/result shapes" is an ADR-grade claim, not a default. A third copy without either is a defect.
 
 Design-stop trigger: **more than TWO coordination mechanisms guarding one file/key** (locks, generations, chains, rechecks, proof ladders…) = the invariant has no owner — STOP adding mechanism #3, consolidate into one authority (single serialized writer). Precedent: PR #131 install stamp grew 7 mechanisms across 5 review rounds before the authority was named (ADR-0216 §audit); the trigger would have fired at round 2. A growing fix-surface across review rounds (each round's fixes feed the next round's findings) is the same signal at process level — §Review convergence row "Repeat" owns it.
 

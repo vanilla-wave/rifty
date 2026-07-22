@@ -53,6 +53,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Anti-overengineering process gates.** Four rules aimed at the workbench
+  retro findings (five sibling correlation engines, distributed-systems fault
+  machinery on in-browser ports, 101-file unowned `glue/`): fault-classes
+  §Boundary failure models (refine cites the boundary's physical fault surface,
+  strikes impossible axes), §Class-kill mechanism sweep (design-time,
+  codebase-wide: third copy of a coordination mechanism = defect),
+  decision-workflow workspace-internal shared-primitive tier (shared helper via
+  `/internal` subpath = REVERSIBLE — removes the gradient that made app-local
+  copies free) + own-product reachability gate (`ready` needs a user-action
+  repro path; audit findings without one stay `draft`), and `pnpm
+  check:dir-owner` (source dir > 30 direct prod modules carries an owner
+  README; glue/workers/builtins/commands got theirs).
 - **Bench transport matrix (`pnpm bench --transport matrix`,
   perf/eddy-http3-cold-validation).** The harness PINS Chromium's transport for
   the measured remote origins (h2 = `--disable-quic`; h3 =
