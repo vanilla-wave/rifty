@@ -12,5 +12,6 @@
 
 ### Fixed
 
-- Keep recursive `execSync` entry checks and child launches in the active
-  project's public filesystem namespace without exposing its physical root.
+- Keep recursive `execSync` and `worker_threads` launches in the active
+  project's public filesystem namespace across owner and dev-server realms
+  without exposing its physical root.

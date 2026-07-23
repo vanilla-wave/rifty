@@ -74,11 +74,9 @@ async function bootstrapDevServerChild(): Promise<void> {
   // A node-server child may spawn nested workers whose `fs.*` sync-RPC calls
   // land on THIS realm's dispatcher. The child has no OPFS of its own
   // (single-writer is the owner), so register the fs handlers backed by our own
-  // unrooted relay: the nested bootstrap scopes it exactly once. execSync's
-  // local ENOENT preflight alone receives project-logical paths.
-  installOwnerSyncRuntimeHandlers(getKernelDispatcher(), () => ownerRemoteFs, undefined, {
-    getVfs: () => remoteFs,
-  });
+  // remote view: the child becomes a fs RELAY that forwards a nested worker's
+  // `fs.statOrNull`/reads to the owner store.
+  installOwnerSyncRuntimeHandlers(getKernelDispatcher(), () => remoteFs);
 
   setProcessCwd(c.cfg.root);
 

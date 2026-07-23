@@ -4,6 +4,7 @@ import {
   bootOwner,
   closeOwner,
   execLine,
+  execLineUntil,
   gotoHarness,
   runDefaultProjectOnce,
   writeOwnerFile,
@@ -18,6 +19,30 @@ interface WorkerContextOracle {
   readonly parentAbsent: boolean;
   readonly cwdInherited: boolean;
   readonly data: number;
+}
+
+function nodeServerPlan(
+  starterId: string,
+  port: number,
+  files: Readonly<Record<string, string>>,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    kind: 'node-server',
+    id: 'scratch',
+    starterId,
+    templateId: `browser-unit:${starterId}`,
+    files: Object.freeze({
+      '/package.json': `${JSON.stringify({
+        name: starterId,
+        private: true,
+        type: 'module',
+      })}\n`,
+      ...files,
+    }),
+    firstMaterialization: Object.freeze({ kind: 'install' }),
+    entryPath: '/server.mjs',
+    port,
+  });
 }
 
 function nativeWorkerContextOracle(): Promise<WorkerContextOracle> {
@@ -188,6 +213,85 @@ await worker.terminate();
     expect(result.out).toContain(
       `WORKER_RELAY|env=${oracle.env}|envKeys=${oracle.envKeys.join(',')}|parentAbsent=${oracle.parentAbsent}|cwdInherited=${oracle.cwdInherited}|cwd=/|data=${oracle.data}|file=owner-file|sqlite=worker-sqlite|nested=grandchild-sqlite:grand-exact`,
     );
+  } finally {
+    await closeOwner(page);
+  }
+});
+
+// Fault class: sibling-drift — dev-server children must relay one project namespace
+// for every nested Node mechanism, not only the node-entry bootstrap sibling.
+test('node-server execSync relays the public project root to its nested child', async ({
+  page,
+}) => {
+  const marker = 'DEV_EXEC_RELAY|exec-project-only';
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-dev-server-recursive-exec',
+    plan: nodeServerPlan('bu-dev-server-recursive-exec', 3417, {
+      '/exec-project-only.txt': 'exec-project-only\n',
+      '/nested-exec.mjs': `import { readFileSync } from 'node:fs';
+process.stdout.write(readFileSync('/exec-project-only.txt', 'utf8').trim());
+`,
+      '/server.mjs': `import { execSync } from 'node:child_process';
+import { createServer } from 'node:http';
+
+const nested = execSync('node nested-exec.mjs', { cwd: '/' }).toString();
+createServer((_request, response) => response.end('ok')).listen(3417, () => {
+  console.log('DEV_EXEC_RELAY|' + nested);
+});
+`,
+    }),
+  });
+
+  try {
+    const result = await execLineUntil(page, 'npm run dev', marker);
+    expect(result.out).toContain(marker);
+  } finally {
+    await closeOwner(page);
+  }
+});
+
+// Fault class: sibling-drift — worker_threads shares the same nested dispatcher
+// contract as execSync, so both siblings need observable acceptance proof.
+test('node-server worker_threads relays the public project root to its worker', async ({
+  page,
+}) => {
+  const marker = 'DEV_WORKER_RELAY|worker-project-only';
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-dev-server-worker-thread',
+    plan: nodeServerPlan('bu-dev-server-worker-thread', 3418, {
+      '/worker-project-only.txt': 'worker-project-only\n',
+      '/thread-child.mjs': `import { readFileSync } from 'node:fs';
+import { parentPort } from 'node:worker_threads';
+parentPort.postMessage(readFileSync('/worker-project-only.txt', 'utf8').trim());
+`,
+      '/server.mjs': `import { createServer } from 'node:http';
+import { Worker } from 'node:worker_threads';
+
+const worker = new Worker(new URL('./thread-child.mjs', import.meta.url));
+const nested = await new Promise((resolve, reject) => {
+  let settled = false;
+  worker.once('message', (value) => {
+    settled = true;
+    resolve(value);
+  });
+  worker.once('error', reject);
+  worker.once('exit', (code) => {
+    if (!settled) reject(new Error('worker exited before message: ' + code));
+  });
+});
+await worker.terminate();
+createServer((_request, response) => response.end('ok')).listen(3418, () => {
+  console.log('DEV_WORKER_RELAY|' + nested);
+});
+`,
+    }),
+  });
+
+  try {
+    const result = await execLineUntil(page, 'npm run dev', marker);
+    expect(result.out).toContain(marker);
   } finally {
     await closeOwner(page);
   }
