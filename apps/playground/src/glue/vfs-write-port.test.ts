@@ -54,12 +54,13 @@ describe('serveVfsWrites + sendVfsWrite', () => {
         '/workspace',
       ),
     ).toBe('manifest');
+    // ADR-0307: strictly-inside-tree writes are extraneous.
     expect(
       classifyVfsWriteFramePackageImpact(
         { type: 'write', path: '/workspace/node_modules/pkg/index.js', data: enc.encode('x') },
         '/workspace',
       ),
-    ).toBe('tree');
+    ).toBe('none');
     expect(
       classifyVfsWriteFramePackageImpact(
         {

@@ -6,6 +6,7 @@ import {
   isAbsolute,
   normalizePath,
 } from '@riftydev/vfs';
+import { isInsideInstallTree } from '../glue/install-stamp.ts';
 import {
   type OwnerVfsCommitTerminal,
   handleOwnerVfsCommitCleanup,
@@ -23,6 +24,8 @@ import { VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
 import {
   type PackageMutationExecutor,
   applyPackageAwareHostCommit,
+  hostCommitMutationIntent,
+  vfsMutationIntentPaths,
 } from '../glue/package-mutation-executor.ts';
 import { collectSnapshot } from '../glue/vfs-snapshot-port.ts';
 import { ClosedHandleError } from '../workbench/errors.ts';
@@ -520,13 +523,19 @@ export function createWorkbenchProjectVfs(
       // recovery. No tentative/recovered revision crosses to the page.
       cursor.acknowledge(options.authority.treeRevision);
     } else {
-      if (mutationKind !== null) {
+      if (mutationKind !== null && !extraneousTreeMutation(intents)) {
         await recordAppliedMutation(mutationKind, priorTreeRevision);
       }
       await publishThroughCurrent(true);
     }
     return scoped;
   };
+
+  // ADR-0307: a batch touching only paths strictly inside node_modules is an
+  // extraneous tree write — it never marks Scratch dirty.
+  const extraneousTreeMutation = (intents: readonly VfsMutationIntent[]): boolean =>
+    intents.length > 0 &&
+    intents.every((intent) => vfsMutationIntentPaths(intent).every(isInsideInstallTree));
 
   const recordAppliedMutation = async (
     kind: 'guest' | 'file',
@@ -694,7 +703,9 @@ export function createWorkbenchProjectVfs(
                 projectRoot,
                 candidate,
               );
-              await recordAppliedMutation('file', priorTreeRevision);
+              if (!extraneousTreeMutation([hostCommitMutationIntent(candidate)])) {
+                await recordAppliedMutation('file', priorTreeRevision);
+              }
               return ack;
             },
             () => {

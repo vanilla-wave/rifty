@@ -306,26 +306,42 @@ describe('owner sync runtime package mutation guard', () => {
     expect(owner.readFileBytesSync(`${ROOT}/after.txt`)).toEqual(enc.encode('before'));
   });
 
-  it.each([
-    ['package.json', `${ROOT}/package.json`, '{"name":"changed"}\n'],
-    ['node_modules child', `${ROOT}/node_modules/pkg/index.js`, 'changed'],
-  ])(
-    'fences a real child %s write through package trust transition',
-    async (_label, path, text) => {
-      const { owner, stamps, dispatcher } = await harness();
+  it('fences a real child package.json write through package trust transition', async () => {
+    const { owner, stamps, dispatcher } = await harness();
+    const path = `${ROOT}/package.json`;
+    const text = '{"name":"changed"}\n';
 
-      const reply = await roundTrip(dispatcher, FS_METHODS.writeChunk, {
-        path,
-        b64: base64(text),
-        offset: 0,
-        truncate: true,
-      });
+    const reply = await roundTrip(dispatcher, FS_METHODS.writeChunk, {
+      path,
+      b64: base64(text),
+      offset: 0,
+      truncate: true,
+    });
 
-      expect(reply).toEqual({ ok: true, value: null });
-      expect(dec.decode(owner.readFileBytesSync(path))).toBe(text);
-      await expectUntrusted(stamps);
-    },
-  );
+    expect(reply).toEqual({ ok: true, value: null });
+    expect(dec.decode(owner.readFileBytesSync(path))).toBe(text);
+    await expectUntrusted(stamps);
+  });
+
+  // ADR-0307: a child write inside the tree is extraneous — it applies with no
+  // trust transition, matching real npm/Node.
+  it('applies a child node_modules write without any trust transition', async () => {
+    const { owner, stamps, dispatcher } = await harness();
+    const path = `${ROOT}/node_modules/pkg/index.js`;
+
+    const reply = await roundTrip(dispatcher, FS_METHODS.writeChunk, {
+      path,
+      b64: base64('changed'),
+      offset: 0,
+      truncate: true,
+    });
+
+    expect(reply).toEqual({ ok: true, value: null });
+    expect(dec.decode(owner.readFileBytesSync(path))).toBe('changed');
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+      status: 'trusted',
+    });
+  });
 
   it.each([
     ['rm', FS_METHODS.rm, { path: ROOT, recursive: true, force: false }, false, ROOT],
@@ -398,16 +414,14 @@ describe('owner sync runtime package mutation guard', () => {
     );
   });
 
-  it('returns the exact revoke proof failure and never applies the child write', async () => {
+  it('returns the exact revoke proof failure and never applies the ancestor rm', async () => {
     const { owner, dispatcher, failTransitions } = await harness();
     failTransitions();
-    const path = `${ROOT}/node_modules/pkg/index.js`;
 
-    const reply = await roundTrip(dispatcher, FS_METHODS.writeChunk, {
-      path,
-      b64: base64('must-not-land'),
-      offset: 0,
-      truncate: true,
+    const reply = await roundTrip(dispatcher, FS_METHODS.rm, {
+      path: ROOT,
+      recursive: true,
+      force: false,
     });
 
     expect(reply).toEqual({
@@ -418,6 +432,8 @@ describe('owner sync runtime package mutation guard', () => {
         code: 'INSTALL_STAMP_REVOKE_UNPROVEN',
       },
     });
-    expect(dec.decode(owner.readFileBytesSync(path))).toBe('trusted');
+    expect(dec.decode(owner.readFileBytesSync(`${ROOT}/node_modules/pkg/index.js`))).toBe(
+      'trusted',
+    );
   });
 });

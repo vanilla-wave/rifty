@@ -660,6 +660,34 @@ describe.each(implementations)('install-stamp authority contract — %s', (_name
   });
 });
 
+describe('install-stamp authority lockfile identity (ADR-0307)', () => {
+  it('check misses after guest lockfile drift; extraneous tree bytes stay irrelevant', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir(`${ROOT}/node_modules/vite`, { recursive: true });
+    await vfs.writeFile(`${ROOT}/package.json`, PACKAGE_JSON);
+    await vfs.writeFile(`${ROOT}/package-lock.json`, '{"lockfileVersion":3}\n');
+    const authority = createInstallStampAuthority({ vfs });
+    const claim = await authority.demote({ root: ROOT, slug: 'app' });
+    await authority.promote(
+      { root: ROOT, slug: 'app', packageJsonText: PACKAGE_JSON },
+      { epoch: claim.epoch, packages: 1 },
+    );
+
+    // Extraneous write inside the tree: trust unaffected.
+    await vfs.mkdir(`${ROOT}/node_modules/.vite-temp`, { recursive: true });
+    await vfs.writeFile(`${ROOT}/node_modules/.vite-temp/x.mjs`, 'export default 1');
+    await expect(authority.check({ root: ROOT, slug: 'app' })).resolves.toMatchObject({
+      status: 'trusted',
+    });
+
+    // Lockfile drift: request identity changed — miss at open.
+    await vfs.writeFile(`${ROOT}/package-lock.json`, '{"lockfileVersion":3,"edited":1}\n');
+    await expect(authority.check({ root: ROOT, slug: 'app' })).resolves.toEqual({
+      status: 'absent',
+    });
+  });
+});
+
 describe('install-stamp authority async fencing', () => {
   it('does not let an older failed demote restoration clobber a reentrant newer claim', async () => {
     const inner = new MemoryVfs();

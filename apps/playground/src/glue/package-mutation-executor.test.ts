@@ -52,8 +52,14 @@ const INTENT_CLASSIFIER_CASES: readonly IntentClassifierCase[] = [
           expected: 'manifest',
         },
         {
+          // ADR-0307: extraneous writes inside the tree never invalidate.
           name: `${kind}: node_modules child`,
           intent: { kind, path: `${ROOT}/node_modules/pkg/index.js` },
+          expected: 'none',
+        },
+        {
+          name: `${kind}: the tree itself`,
+          intent: { kind, path: `${ROOT}/node_modules` },
           expected: 'tree',
         },
         { name: `${kind}: guarded ancestor`, intent: { kind, path: ROOT }, expected: 'tree' },
@@ -70,8 +76,13 @@ const INTENT_CLASSIFIER_CASES: readonly IntentClassifierCase[] = [
     expected: 'manifest',
   },
   {
-    name: 'rename: sensitive source tree',
+    name: 'rename: source inside the tree is extraneous (ADR-0307)',
     intent: { kind: 'rename', sourcePath: `${ROOT}/node_modules/pkg`, targetPath: '/archive/pkg' },
+    expected: 'none',
+  },
+  {
+    name: 'rename: source is the tree itself',
+    intent: { kind: 'rename', sourcePath: `${ROOT}/node_modules`, targetPath: '/archive/nm' },
     expected: 'tree',
   },
   {
@@ -89,9 +100,9 @@ const INTENT_CLASSIFIER_CASES: readonly IntentClassifierCase[] = [
     expected: 'manifest',
   },
   {
-    name: 'rename: sensitive target tree',
+    name: 'rename: target inside the tree is extraneous (ADR-0307)',
     intent: { kind: 'rename', sourcePath: '/incoming/pkg', targetPath: `${ROOT}/node_modules/pkg` },
-    expected: 'tree',
+    expected: 'none',
   },
   {
     name: 'rename: sensitive target ancestor',
@@ -133,8 +144,13 @@ const INTENT_CLASSIFIER_CASES: readonly IntentClassifierCase[] = [
     expected: 'manifest',
   },
   {
-    name: 'copy: sensitive target tree',
+    name: 'copy: target inside the tree is extraneous (ADR-0307)',
     intent: { kind: 'copy', sourcePath: '/incoming/pkg', targetPath: `${ROOT}/node_modules/pkg` },
+    expected: 'none',
+  },
+  {
+    name: 'copy: target is the tree itself',
+    intent: { kind: 'copy', sourcePath: '/incoming/nm', targetPath: `${ROOT}/node_modules` },
     expected: 'tree',
   },
   {
@@ -230,8 +246,9 @@ describe('package mutation routing', () => {
     );
 
     expect(dec.decode(owner.readFileBytesSync(path))).toBe('template seed');
-    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toEqual({
-      status: 'absent',
+    // ADR-0307: the in-tree write is extraneous — the seeded claim survives.
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+      status: 'trusted',
     });
   });
 
@@ -259,7 +276,7 @@ describe('package mutation routing', () => {
     ]);
   });
 
-  it('revokes an outer tree while demoting a nested exact manifest', () => {
+  it('demotes a nested exact manifest without touching the outer tree claim (ADR-0307)', () => {
     const nested: PackageAcquisitionProject = {
       ...PROJECT,
       projectId: 'nested',
@@ -272,10 +289,7 @@ describe('package mutation routing', () => {
         [{ kind: 'write', path: `${nested.root}/package.json` }],
         [PROJECT, nested],
       ),
-    ).toEqual([
-      { mode: 'revoke', root: ROOT },
-      { mode: 'demote', project: nested },
-    ]);
+    ).toEqual([{ mode: 'demote', project: nested }]);
   });
 
   it('discovers inactive and nested stamped roots from current on-disk state', async () => {
@@ -322,10 +336,7 @@ describe('package mutation routing', () => {
         [],
         [{ kind: 'write', path: `${nested.root}/package.json` }],
       ),
-    ).toEqual([
-      { mode: 'revoke', root: '/projects/a' },
-      { mode: 'demote', project: nested },
-    ]);
+    ).toEqual([{ mode: 'demote', project: nested }]);
   });
 
   it.each(['write', 'rm', 'replace'] as const)(
@@ -719,9 +730,13 @@ describe('package mutation routing', () => {
     });
   });
 
-  it('revokes the whole claim before a direct node_modules child write', async () => {
+  // ADR-0307 churn scenario: a tool writing into the tree (Vite's
+  // node_modules/.vite-temp config modules) is an extraneous write — trust
+  // survives, matching real npm which never re-validates tree bytes.
+  it('keeps the trusted claim across direct node_modules child writes', async () => {
     const { owner, stamps, mutations } = await harness();
     const path = `${ROOT}/node_modules/pkg/index.js`;
+    const temp = `${ROOT}/node_modules/.vite-temp/vite.config.ts.timestamp-1.mjs`;
 
     await applyPackageAwareHostCommit(owner, mutations, ROOT, {
       kind: 'write',
@@ -730,9 +745,30 @@ describe('package mutation routing', () => {
       expectedVersion: owner.versionOf(path),
       data: enc.encode('changed'),
     });
+    await applyPackageAwareHostCommit(owner, mutations, ROOT, {
+      kind: 'mkdir',
+      operationId: 'vite-temp-mkdir',
+      path: `${ROOT}/node_modules/.vite-temp`,
+      expectedVersion: null,
+    });
+    await applyPackageAwareHostCommit(owner, mutations, ROOT, {
+      kind: 'write',
+      operationId: 'vite-temp-write',
+      path: temp,
+      expectedVersion: null,
+      data: enc.encode('export default {}'),
+    });
+    const tempVersion = owner.versionOf(temp);
+    if (!tempVersion) throw new Error('test setup missing temp version');
+    await applyPackageAwareHostCommit(owner, mutations, ROOT, {
+      kind: 'remove',
+      operationId: 'vite-temp-remove',
+      path: temp,
+      expectedVersion: tempVersion,
+    });
 
     expect(dec.decode(owner.readFileBytesSync(path))).toBe('changed');
-    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.not.toMatchObject({
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
       status: 'trusted',
     });
   });
@@ -753,8 +789,20 @@ describe('package mutation routing', () => {
       classifyHostCommitPackageImpact(
         {
           kind: 'remove',
-          operationId: 'tree',
+          operationId: 'extraneous',
           path: `${ROOT}/node_modules/pkg`,
+          expectedVersion: 'v1',
+          recursive: true,
+        },
+        ROOT,
+      ),
+    ).toBe('none');
+    expect(
+      classifyHostCommitPackageImpact(
+        {
+          kind: 'remove',
+          operationId: 'tree',
+          path: `${ROOT}/node_modules`,
           expectedVersion: 'v1',
           recursive: true,
         },
