@@ -12,7 +12,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import type { SabRing } from './sab-ring.ts';
-import { decodeReply, encodeRequest } from './sync-rpc.ts';
+import { type SyncRpcReply, decodeReply, encodeRequest } from './sync-rpc.ts';
 
 /** Options accepted by {@link SyncRpcClient}. */
 export interface SyncRpcClientOptions {
@@ -35,6 +35,14 @@ export interface SyncRpcClientOptions {
 export class SyncRpcClient {
   private readonly ring: SabRing;
   private readonly defaultTimeoutMs: number | undefined;
+  /**
+   * Forensic trail: the last method sent on this ring and whether its
+   * exchange completed. A wedged ring ("previous reply is unread") is a
+   * SECONDARY symptom — the primal violation is whatever abandoned the
+   * PREVIOUS exchange; without this trail the CI flake was undiagnosable.
+   */
+  private lastMethod: string | null = null;
+  private lastCompleted = false;
 
   constructor(ring: SabRing, opts: SyncRpcClientOptions = {}) {
     if (!isWorkerRealm()) {
@@ -55,11 +63,28 @@ export class SyncRpcClient {
    * format carries no type info, so the caller asserts the shape.
    */
   call<T>(method: string, payload: unknown, timeoutMs?: number): T {
-    const req = encodeRequest({ method, payload });
-    this.ring.writeRequest(req);
-    const effectiveTimeout = timeoutMs ?? this.defaultTimeoutMs;
-    const replyBytes = this.ring.waitReply(effectiveTimeout);
-    const reply = decodeReply(replyBytes);
+    // Trail captured BEFORE this exchange mutates it — the wedge context is
+    // the PREVIOUS call, not the current one.
+    const prevMethod = this.lastMethod;
+    const prevCompleted = this.lastCompleted;
+    let replyBytes: Uint8Array;
+    try {
+      const req = encodeRequest({ method, payload });
+      this.ring.writeRequest(req);
+      this.lastMethod = method;
+      this.lastCompleted = false;
+      const effectiveTimeout = timeoutMs ?? this.defaultTimeoutMs;
+      replyBytes = this.ring.waitReply(effectiveTimeout);
+    } catch (err) {
+      throw withCallContext(err, method, prevMethod, prevCompleted);
+    }
+    this.lastCompleted = true;
+    let reply: SyncRpcReply;
+    try {
+      reply = decodeReply(replyBytes);
+    } catch (err) {
+      throw withCallContext(err, method, prevMethod, prevCompleted);
+    }
     if (reply.ok) {
       return reply.value as T;
     }
@@ -76,6 +101,27 @@ export class SyncRpcClient {
     Object.assign(err, extras);
     throw err;
   }
+}
+
+/**
+ * Augment a ring/decode error with the call it interrupted and the previous
+ * call on this ring (same Error OBJECT — class and `code` survive for
+ * callers that branch on them). The wedge errors are secondary symptoms;
+ * this trail points at the exchange that abandoned the ring.
+ */
+function withCallContext(
+  err: unknown,
+  method: string,
+  prevMethod: string | null,
+  prevCompleted: boolean,
+): unknown {
+  if (!(err instanceof Error)) return err;
+  const prev =
+    prevMethod === null
+      ? ''
+      : ` (previous call on this ring: '${prevMethod}' (${prevCompleted ? 'completed' : 'failed'}))`;
+  err.message = `sync-rpc call '${method}' failed: ${err.message}${prev}`;
+  return err;
 }
 
 /**

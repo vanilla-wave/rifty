@@ -216,3 +216,57 @@ describe('SabRing — protocol violations', () => {
     expect(() => responder.writeReply(new Uint8Array([2]))).toThrow(/previous reply is unread/);
   });
 });
+
+describe('SabRing — violation forensics (CI-flake postmortem needs the header state)', () => {
+  it('writeRequest-over-unread-reply names the full header state', async () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+    caller.writeRequest(new Uint8Array([1]));
+    responder.readRequest();
+    responder.writeReply(new Uint8Array([2, 3]));
+    expect(() => caller.writeRequest(new Uint8Array([4]))).toThrow(
+      /previous reply is unread \(header: version=\d+ req=idle rep=ready reqLen=0 repLen=2\)/,
+    );
+    await caller.waitReplyAsync(100);
+  });
+
+  it('writeRequest-over-unread-request names the full header state', () => {
+    const { ring: caller } = createSabRing({ payloadCapacity: 16 });
+    caller.writeRequest(new Uint8Array([1, 2, 3]));
+    expect(() => caller.writeRequest(new Uint8Array([4]))).toThrow(
+      /previous request is unread \(header: version=\d+ req=ready rep=idle reqLen=3 repLen=0\)/,
+    );
+  });
+
+  it('writeReply-over-unread-reply names the full header state', () => {
+    const { sab } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+    responder.writeReply(new Uint8Array([1]));
+    expect(() => responder.writeReply(new Uint8Array([2]))).toThrow(
+      /previous reply is unread \(header: version=\d+ req=idle rep=ready reqLen=0 repLen=1\)/,
+    );
+  });
+
+  it('corrupt reply length names the full header state', async () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+    caller.writeRequest(new Uint8Array([1]));
+    responder.readRequest();
+    responder.writeReply(new Uint8Array([2]));
+    // Forge an out-of-range REP_LEN after a legitimate reply write.
+    const i32 = new Int32Array(sab);
+    i32[4] = 999; // REP_LEN slot (offset 16 >> 2)
+    await expect(caller.waitReplyAsync(100)).rejects.toThrow(
+      /corrupt reply length 999 \(capacity 16\) \(header: version=\d+/,
+    );
+  });
+
+  it('RingTimeoutError names the header state at expiry', async () => {
+    const { ring } = createSabRing({ payloadCapacity: 16 });
+    ring.writeRequest(new Uint8Array([1]));
+    // No responder: the request is still pending at timeout.
+    await expect(ring.waitReplyAsync(30)).rejects.toThrow(
+      /timed out after 30ms \(header: version=\d+ req=ready rep=idle reqLen=1 repLen=0\)/,
+    );
+  });
+});
