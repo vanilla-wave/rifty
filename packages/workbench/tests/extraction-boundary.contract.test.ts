@@ -1,0 +1,288 @@
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+import { describe, expect, it } from 'vitest';
+import { EXTRACTION_MAP } from './extraction-map.ts';
+
+const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../', import.meta.url)));
+const REPO_ROOT = resolve(PACKAGE_ROOT, '../..');
+const APP_SRC_ROOT = resolve(REPO_ROOT, 'apps/playground/src');
+const PACKAGE_SRC_ROOT = resolve(PACKAGE_ROOT, 'src');
+
+const EXPORTED_SOURCE_ENTRIES = [
+  'src/index.ts',
+  'src/workbench/playground.ts',
+  'src/workers/workbench-owner-bootstrap.ts',
+  'src/workers/kernel-worker-entry.ts',
+  'src/workers/node-entry-bootstrap.ts',
+  'src/workers/dev-server-child-bootstrap.ts',
+  'src/workers/ts-lsp-worker-entry.ts',
+] as const;
+
+const EXPECTED_EXTERNAL_PACKAGES = [
+  '@riftydev/git',
+  '@riftydev/io',
+  '@riftydev/kernel',
+  '@riftydev/net',
+  '@riftydev/npm-client',
+  '@riftydev/runtime-js',
+  '@riftydev/service-worker',
+  '@riftydev/shell',
+  '@riftydev/ts-language-service',
+  '@riftydev/vfs',
+] as const;
+
+interface PackageManifest {
+  readonly exports: Readonly<Record<string, string>>;
+  readonly dependencies: Readonly<Record<string, string>>;
+}
+
+interface ModuleReference {
+  readonly importer: string;
+  readonly specifier: string;
+  readonly isStatic: boolean;
+}
+
+interface ClosureAudit {
+  readonly files: ReadonlySet<string>;
+  readonly externalPackages: ReadonlySet<string>;
+  readonly escapedEdges: readonly string[];
+  readonly unresolvedEdges: readonly string[];
+  readonly allReferences: readonly ModuleReference[];
+  readonly importMetaEnvFiles: readonly string[];
+}
+
+function isProductionSource(path: string): boolean {
+  return (
+    /\.(?:[cm]?[jt]sx?|json)$/u.test(path) &&
+    !/(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$/u.test(path)
+  );
+}
+
+function readManifest(): PackageManifest {
+  return JSON.parse(readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf8')) as PackageManifest;
+}
+
+function packageName(specifier: string): string {
+  if (specifier.startsWith('@')) return specifier.split('/').slice(0, 2).join('/');
+  return specifier.split('/')[0] ?? specifier;
+}
+
+function moduleReferences(path: string, sourceText: string): readonly ModuleReference[] {
+  const source = ts.createSourceFile(path, sourceText, ts.ScriptTarget.Latest, true);
+  const references: ModuleReference[] = [];
+
+  function visit(node: ts.Node): void {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      references.push({ importer: path, specifier: node.moduleSpecifier.text, isStatic: true });
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const argument = node.arguments[0];
+      if (node.arguments.length === 1 && argument !== undefined && ts.isStringLiteral(argument)) {
+        references.push({ importer: path, specifier: argument.text, isStatic: false });
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(source);
+  return references;
+}
+
+function usesImportMetaEnv(path: string, sourceText: string): boolean {
+  const source = ts.createSourceFile(path, sourceText, ts.ScriptTarget.Latest, true);
+  let found = false;
+
+  function isImportMeta(node: ts.Node): boolean {
+    return (
+      ts.isMetaProperty(node) &&
+      node.keywordToken === ts.SyntaxKind.ImportKeyword &&
+      node.name.text === 'meta'
+    );
+  }
+
+  function visit(node: ts.Node): void {
+    if (
+      (ts.isPropertyAccessExpression(node) &&
+        node.name.text === 'env' &&
+        isImportMeta(node.expression)) ||
+      (ts.isElementAccessExpression(node) &&
+        node.argumentExpression !== undefined &&
+        ts.isStringLiteral(node.argumentExpression) &&
+        node.argumentExpression.text === 'env' &&
+        isImportMeta(node.expression))
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(source);
+  return found;
+}
+
+function relativeSource(importer: string, specifier: string): string | null {
+  if (!specifier.startsWith('.')) return null;
+  const base = resolve(dirname(importer), specifier);
+  const candidates = [
+    base,
+    `${base}.ts`,
+    `${base}.tsx`,
+    `${base}.js`,
+    `${base}.mjs`,
+    `${base}.json`,
+    resolve(base, 'index.ts'),
+    resolve(base, 'index.tsx'),
+    resolve(base, 'index.js'),
+  ];
+  return (
+    candidates.find((candidate) => existsSync(candidate) && statSync(candidate).isFile()) ?? base
+  );
+}
+
+function isOutsidePackage(path: string): boolean {
+  const fromPackage = relative(PACKAGE_ROOT, path);
+  return (
+    fromPackage === '..' ||
+    fromPackage.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
+    isAbsolute(fromPackage)
+  );
+}
+
+function sourceClosure(entries: readonly string[]): ClosureAudit {
+  const pending = [...entries];
+  const files = new Set<string>();
+  const externalPackages = new Set<string>();
+  const escapedEdges: string[] = [];
+  const unresolvedEdges: string[] = [];
+  const allReferences: ModuleReference[] = [];
+  const importMetaEnvFiles: string[] = [];
+
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (path === undefined || files.has(path)) continue;
+    files.add(path);
+    const sourceText = readFileSync(path, 'utf8');
+    if (usesImportMetaEnv(path, sourceText)) importMetaEnvFiles.push(relative(PACKAGE_ROOT, path));
+
+    const references = moduleReferences(path, sourceText);
+    allReferences.push(...references);
+    for (const reference of references) {
+      if (!reference.isStatic) continue;
+      const dependency = relativeSource(path, reference.specifier);
+      if (dependency === null) {
+        externalPackages.add(packageName(reference.specifier));
+        continue;
+      }
+      const edge = `${relative(PACKAGE_ROOT, path)} -> ${reference.specifier}`;
+      if (isOutsidePackage(dependency)) {
+        escapedEdges.push(edge);
+      } else if (!existsSync(dependency) || !statSync(dependency).isFile()) {
+        unresolvedEdges.push(edge);
+      } else {
+        pending.push(dependency);
+      }
+    }
+  }
+
+  return {
+    files,
+    externalPackages,
+    escapedEdges: escapedEdges.sort(),
+    unresolvedEdges: unresolvedEdges.sort(),
+    allReferences,
+    importMetaEnvFiles: importMetaEnvFiles.sort(),
+  };
+}
+
+function productionFiles(root: string): readonly string[] {
+  const pending = [root];
+  const files: string[] = [];
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (path === undefined) continue;
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      const child = resolve(path, entry.name);
+      if (entry.isDirectory()) pending.push(child);
+      else if (entry.isFile() && isProductionSource(child)) files.push(child);
+    }
+  }
+  return files.sort();
+}
+
+function resolvedExportEntries(): readonly string[] {
+  return Object.values(readManifest().exports).map((target) => resolve(PACKAGE_ROOT, target));
+}
+
+describe('@riftydev/workbench extraction boundary', () => {
+  it('pins the reviewed 228-file move, including all 112 tests and fixtures', () => {
+    expect(EXTRACTION_MAP).toHaveLength(228);
+    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(228);
+    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(228);
+    expect(
+      EXTRACTION_MAP.filter(([, target]) =>
+        /(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$/u.test(target),
+      ),
+    ).toHaveLength(112);
+
+    expect(
+      EXTRACTION_MAP.filter(([source]) => existsSync(resolve(APP_SRC_ROOT, source))).map(
+        ([source]) => source,
+      ),
+    ).toEqual([]);
+    expect(
+      EXTRACTION_MAP.filter(([, target]) => !existsSync(resolve(PACKAGE_SRC_ROOT, target))).map(
+        ([, target]) => target,
+      ),
+    ).toEqual([]);
+  });
+
+  it('resolves exactly the seven sealed package source entries', () => {
+    const entries = resolvedExportEntries();
+    expect(entries.map((path) => relative(PACKAGE_ROOT, path))).toEqual(EXPORTED_SOURCE_ENTRIES);
+    expect(
+      entries.filter((path) => !existsSync(path)).map((path) => relative(PACKAGE_ROOT, path)),
+    ).toEqual([]);
+    expect(entries.filter(isOutsidePackage)).toEqual([]);
+  });
+
+  it('contains the whole production closure with no unreachable implementation files', () => {
+    const entries = resolvedExportEntries();
+    const closure = sourceClosure(entries);
+    const packageProductionFiles = productionFiles(PACKAGE_SRC_ROOT);
+
+    expect(closure.escapedEdges).toEqual([]);
+    expect(closure.unresolvedEdges).toEqual([]);
+    expect(packageProductionFiles).toHaveLength(137);
+    expect([...closure.files].sort()).toEqual(packageProductionFiles);
+  });
+
+  it('imports only declared lower packages and no App, bundler query, env, Solid, or Monaco code', () => {
+    const closure = sourceClosure(resolvedExportEntries());
+    const references = closure.allReferences;
+
+    expect([...closure.externalPackages].sort()).toEqual(EXPECTED_EXTERNAL_PACKAGES);
+    expect(Object.keys(readManifest().dependencies).sort()).toEqual(EXPECTED_EXTERNAL_PACKAGES);
+    expect(
+      references
+        .filter(
+          ({ specifier }) =>
+            specifier.includes('apps/playground') || specifier.startsWith('@riftydev/playground'),
+        )
+        .map(({ importer, specifier }) => `${relative(PACKAGE_ROOT, importer)} -> ${specifier}`),
+    ).toEqual([]);
+    expect(references.filter(({ specifier }) => specifier.includes('?'))).toEqual([]);
+    expect(closure.importMetaEnvFiles).toEqual([]);
+    expect(
+      references.filter(({ specifier }) => {
+        const dependency = packageName(specifier);
+        return dependency === 'solid-js' || dependency === 'monaco-editor';
+      }),
+    ).toEqual([]);
+  });
+});

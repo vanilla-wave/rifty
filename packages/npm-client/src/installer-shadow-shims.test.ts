@@ -14,12 +14,16 @@ import {
   gzip,
   padToBlock,
 } from './_test-fixtures/tar-builder.ts';
+import { closureHashOf } from './closure-hash.ts';
+import { EDDY_BUNDLE_FORMAT, packEddyBundle } from './eddy-bundle.ts';
 import { install } from './installer.ts';
+import type { Lockfile } from './linker.ts';
 import { resolveOverride } from './overrides.ts';
 import type { Packument, VersionManifest } from './registry.ts';
 import { RegistryClient } from './registry.ts';
 import { matchesRange } from './semver.ts';
 import { applyInternalsShims } from './shadow-shims.ts';
+import { computeIntegrity } from './tarball-cache.ts';
 
 interface FakeRegistryEntry {
   manifest: VersionManifest;
@@ -189,6 +193,239 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
     ).rejects.toMatchObject({
       name: 'NotImplementedError',
       message: expect.stringContaining('shadow-registry.rollup@5.0.0'),
+    });
+  });
+
+  it('keeps a locked unsupported root optional non-fatal with Eddy configured', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const stable = await makeEntry('stable', '1.0.0');
+    const unsupported = await makeEntry(
+      'rollup',
+      '5.0.0',
+      {},
+      { 'dist/native.js': REAL_ROLLUP_NATIVE },
+    );
+    const registry = new FakeRegistry(db(['stable', stable], ['rollup', unsupported]));
+    await install('root', '1.0.0', { stable: '1.0.0' }, { vfs, cwd: '/proj', registry });
+    const lockfile = JSON.parse(await readText(vfs, '/proj/package-lock.json')) as {
+      packages: Record<
+        string,
+        {
+          version: string;
+          dependencies?: Record<string, string>;
+          resolved?: string;
+          integrity?: string;
+        }
+      >;
+    };
+    const root = lockfile.packages[''];
+    if (!root) throw new Error('test setup: root lockfile entry missing');
+    root.dependencies = { ...root.dependencies, rollup: '5.0.0' };
+    lockfile.packages['node_modules/rollup'] = {
+      version: '5.0.0',
+      dependencies: {},
+      resolved: unsupported.manifest.dist.tarball,
+      integrity: await computeIntegrity(unsupported.tarball),
+    };
+    await vfs.writeFile('/proj/package-lock.json', JSON.stringify(lockfile));
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { stable: '1.0.0' },
+        optionalDependencies: { rollup: '5.0.0' },
+      }),
+    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('expected Eddy fallback'));
+
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry,
+      resolverUrl: 'https://eddy.invalid/resolve',
+    });
+
+    expect(result.packages.map(({ name }) => name)).toEqual(['stable']);
+    expect(await vfs.exists('/proj/node_modules/rollup/package.json')).toBe(false);
+    expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+      expect.stringContaining('optional dependency rollup@5.0.0 of root could not be installed'),
+    );
+  });
+
+  it('[fault: provenance-lie] declines an Eddy bundle missing a surviving optional root tarball', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        optionalDependencies: { 'optional-root': '1.0.0' },
+      }),
+    );
+    const optionalRoot = await makeEntry('optional-root', '1.0.0', { rollup: '5.0.0' });
+    const unsupported = await makeEntry(
+      'rollup',
+      '5.0.0',
+      {},
+      { 'dist/native.js': REAL_ROLLUP_NATIVE },
+    );
+    const lockfile: Lockfile = {
+      name: 'root',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { version: '1.0.0', dependencies: { 'optional-root': '1.0.0' } },
+        'node_modules/optional-root': {
+          version: '1.0.0',
+          dependencies: { rollup: '5.0.0' },
+          resolved: optionalRoot.manifest.dist.tarball,
+          integrity: await computeIntegrity(optionalRoot.tarball),
+        },
+        'node_modules/rollup': {
+          version: '5.0.0',
+          dependencies: {},
+          resolved: unsupported.manifest.dist.tarball,
+          integrity: await computeIntegrity(unsupported.tarball),
+        },
+      },
+    };
+    const closureHash = await closureHashOf(lockfile);
+    const bundle = packEddyBundle({
+      manifest: {
+        format: EDDY_BUNDLE_FORMAT,
+        npmClientVersion: '0.1.0-test',
+        asOf: {
+          resolvedAt: '2026-07-19T00:00:00.000Z',
+          registry: 'https://registry.test',
+          closureHash,
+        },
+        tarballs: [],
+      },
+      lockfileText: JSON.stringify(lockfile),
+      tarballs: [],
+    });
+    const registry = new FakeRegistry(db(['optional-root', optionalRoot], ['rollup', unsupported]));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(bundle as unknown as BodyInit));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry,
+      resolverUrl: 'https://eddy.invalid/resolve',
+    });
+
+    expect(result.source ?? 'standard').toBe('standard');
+    expect(result.provenance.eddyFallback?.reason).toBe(
+      'post: bundle omits the tarball for optional-root@1.0.0',
+    );
+    expect(result.provenance.packages).toContainEqual({
+      name: 'optional-root',
+      version: '1.0.0',
+      transport: 'registry',
+    });
+    expect(result.packages.map(({ name }) => name)).toEqual(['optional-root']);
+    expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+      expect.stringContaining(
+        'optional dependency optional-root@1.0.0 of root could not be installed',
+      ),
+    );
+  });
+
+  it('[fault: provenance-lie] does not lose an earlier optional metadata frontier when a later child is unsupported', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        optionalDependencies: { 'optional-root': '1.0.0' },
+        overrides: { 'optional-root>foo': 'bar@2.0.0' },
+      }),
+    );
+    const optionalRoot = await makeEntry('optional-root', '1.0.0', {
+      foo: '1.0.0',
+      rollup: '5.0.0',
+    });
+    const bar = await makeEntry('bar', '2.0.0');
+    const unsupported = await makeEntry(
+      'rollup',
+      '5.0.0',
+      {},
+      { 'dist/native.js': REAL_ROLLUP_NATIVE },
+    );
+    const optionalIntegrity = await computeIntegrity(optionalRoot.tarball);
+    const lockfile: Lockfile = {
+      name: 'root',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { version: '1.0.0', dependencies: { 'optional-root': '1.0.0' } },
+        'node_modules/optional-root': {
+          version: '1.0.0',
+          // Order is the fault: `foo` proves metadata ownership before the
+          // later unsupported child stops the optional traversal.
+          dependencies: { foo: '1.0.0', rollup: '5.0.0' },
+          resolved: optionalRoot.manifest.dist.tarball,
+          integrity: optionalIntegrity,
+        },
+        'node_modules/rollup': {
+          version: '5.0.0',
+          dependencies: {},
+          resolved: unsupported.manifest.dist.tarball,
+          integrity: await computeIntegrity(unsupported.tarball),
+        },
+      },
+    };
+    const tarballEntry = {
+      file: 'tarballs/optional-root-1.0.0.tgz',
+      name: 'optional-root',
+      version: '1.0.0',
+      integrity: optionalIntegrity,
+    };
+    const bundle = packEddyBundle({
+      manifest: {
+        format: EDDY_BUNDLE_FORMAT,
+        npmClientVersion: '0.1.0-test',
+        asOf: {
+          resolvedAt: '2026-07-19T00:00:00.000Z',
+          registry: 'https://registry.test',
+          closureHash: await closureHashOf(lockfile),
+        },
+        tarballs: [tarballEntry],
+      },
+      lockfileText: JSON.stringify(lockfile),
+      tarballs: [{ entry: tarballEntry, bytes: optionalRoot.tarball }],
+    });
+    const registry = new FakeRegistry(
+      db(['optional-root', optionalRoot], ['bar', bar], ['rollup', unsupported]),
+    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(bundle as unknown as BodyInit));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry,
+      resolverUrl: 'https://eddy.invalid/resolve',
+    });
+
+    expect(result.source ?? 'standard').toBe('standard');
+    expect(result.provenance.eddyFallback?.reason).toMatch(
+      /bundle lockfile does not cover the request|override forces a re-resolve/,
+    );
+    expect(result.packages.map(({ name }) => name).sort()).toEqual(['bar', 'optional-root']);
+    expect(result.provenance.packages).toContainEqual({
+      name: 'bar',
+      version: '2.0.0',
+      transport: 'registry',
     });
   });
 

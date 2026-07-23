@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import { MemoryVfs, joinPath } from '@riftydev/vfs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
 import { readExistingLockfile } from './installer-lockfile-reader.ts';
 import { install } from './installer.ts';
@@ -248,7 +248,7 @@ describe('install — lockfile fast path re-applies overrides', () => {
     expect(secondRegistry.calls.tarball).toEqual([]);
   });
 
-  it('falls through to live-resolve for parent-scoped overrides instead of replaying stale child names', async () => {
+  it('replays an unchanged parent-scoped override without consulting metadata', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { child: '1.0.0' })]]));
     db.set('bar', new Map([['1.0.0', await makeEntry('bar', '1.0.0')]]));
@@ -273,7 +273,7 @@ describe('install — lockfile fast path re-applies overrides', () => {
     );
 
     expect(result.packages.map((p) => p.name).sort()).toEqual(['bar', 'parent']);
-    expect(registry.calls.packument).toEqual(['parent', 'bar']);
+    expect(registry.calls).toEqual({ packument: [], tarball: [] });
   });
 
   it('falls through when an override changes the locked range to one the pin no longer satisfies', async () => {
@@ -333,6 +333,577 @@ describe('install — lockfile fast path re-applies overrides', () => {
     );
     expect(registry.calls.packument).toEqual([]);
     expect(registry.calls.tarball).toEqual([]);
+  });
+});
+
+describe('install — partial lockfile reuse', () => {
+  it('retries a failed root optional without re-resolving the retained required graph', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('stable', new Map([['1.0.0', await makeEntry('stable', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { stable: '1.0.0' },
+        optionalDependencies: { missing: '1.0.0' },
+      }),
+    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const seedRegistry = new CountingFakeRegistry(db);
+    await install({ vfs, cwd: '/proj', registry: seedRegistry });
+
+    const replayRegistry = new CountingFakeRegistry(db);
+    const result = await install({ vfs, cwd: '/proj', registry: replayRegistry });
+
+    expect(replayRegistry.calls.packument.length).toBeGreaterThan(0);
+    expect(new Set(replayRegistry.calls.packument)).toEqual(new Set(['missing']));
+    expect(replayRegistry.calls.tarball).toEqual([]);
+    expect(result.provenance.resolution).toBe('metadata');
+    expect(result.packages.map(({ name }) => name)).toEqual(['stable']);
+    expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+      expect.stringContaining('optional dependency missing@1.0.0 of root could not be installed'),
+    );
+    warn.mockRestore();
+  });
+
+  it('preserves compatible flat and nested pins while resolving only a new root', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'flat-parent',
+      new Map([['1.0.0', await makeEntry('flat-parent', '1.0.0', { shared: '2.0.0' })]]),
+    );
+    db.set(
+      'nested-parent',
+      new Map([['1.0.0', await makeEntry('nested-parent', '1.0.0', { shared: '^1.0.0' })]]),
+    );
+    db.set(
+      'shared',
+      new Map([
+        ['1.0.0', await makeEntry('shared', '1.0.0')],
+        ['2.0.0', await makeEntry('shared', '2.0.0')],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const initialRequest = { 'flat-parent': '1.0.0', 'nested-parent': '1.0.0' };
+    const seeded = await install('root', '1.0.0', initialRequest, {
+      vfs,
+      cwd: '/proj',
+      registry: new CountingFakeRegistry(db),
+    });
+    const retainedEntries = Object.fromEntries(
+      [
+        'node_modules/flat-parent',
+        'node_modules/nested-parent',
+        'node_modules/shared',
+        'node_modules/nested-parent/node_modules/shared',
+      ].map((path) => [path, structuredClone(seeded.lockfile.packages[path])]),
+    );
+
+    db.get('shared')?.set('1.1.0', await makeEntry('shared', '1.1.0'));
+    db.set('newcomer', new Map([['1.0.0', await makeEntry('newcomer', '1.0.0')]]));
+    const registry = new CountingFakeRegistry(db);
+    const result = await install(
+      'root',
+      '1.0.0',
+      { ...initialRequest, newcomer: '1.0.0' },
+      { vfs, cwd: '/proj', registry },
+    );
+
+    expect(result.provenance.resolution).toBe('metadata');
+    expect(registry.calls).toEqual({
+      packument: ['newcomer'],
+      tarball: ['fake://newcomer/1.0.0'],
+    });
+    for (const [path, entry] of Object.entries(retainedEntries)) {
+      expect(result.lockfile.packages[path]).toEqual(entry);
+    }
+    expect(
+      result.lockfile.packages['node_modules/nested-parent/node_modules/shared']?.version,
+    ).toBe('1.0.0');
+    expect(result.lockfile.packages['node_modules/newcomer']?.version).toBe('1.0.0');
+  });
+
+  it('keeps request-order placement when a new subgraph conflicts with a retained pin', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'retained-parent',
+      new Map([['1.0.0', await makeEntry('retained-parent', '1.0.0', { shared: '1.0.0' })]]),
+    );
+    db.set('shared', new Map([['1.0.0', await makeEntry('shared', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { 'retained-parent': '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      },
+    );
+
+    db.set(
+      'new-parent',
+      new Map([['1.0.0', await makeEntry('new-parent', '1.0.0', { shared: '2.0.0' })]]),
+    );
+    db.get('shared')?.set('2.0.0', await makeEntry('shared', '2.0.0'));
+    const registry = new CountingFakeRegistry(db);
+    const result = await install(
+      'root',
+      '1.0.0',
+      { 'new-parent': '1.0.0', 'retained-parent': '1.0.0' },
+      { vfs, cwd: '/proj', registry },
+    );
+
+    expect(registry.calls.packument).toEqual(['new-parent', 'shared']);
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('2.0.0');
+    expect(
+      result.lockfile.packages['node_modules/retained-parent/node_modules/shared']?.version,
+    ).toBe('1.0.0');
+  });
+
+  it('lets a new direct root own flat while relocating its retained transitive copy', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]));
+    db.set('shared', new Map([['1.0.0', await makeEntry('shared', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { parent: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      },
+    );
+
+    db.get('shared')?.set('2.0.0', await makeEntry('shared', '2.0.0'));
+    const result = await install(
+      'root',
+      '1.0.0',
+      { shared: '2.0.0', parent: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+    );
+
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('2.0.0');
+    expect(result.lockfile.packages['node_modules/parent/node_modules/shared']?.version).toBe(
+      '1.0.0',
+    );
+    expect(result.lockfile.packages['/node_modules/shared']).toBeUndefined();
+  });
+
+  it('lets a later-requested direct root own flat while relocating its retained transitive copy', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]));
+    db.set('shared', new Map([['1.0.0', await makeEntry('shared', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { parent: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      },
+    );
+
+    db.get('shared')?.set('2.0.0', await makeEntry('shared', '2.0.0'));
+    const result = await install(
+      'root',
+      '1.0.0',
+      { parent: '1.0.0', shared: '2.0.0' },
+      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+    );
+
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('2.0.0');
+    expect(result.lockfile.packages['node_modules/parent/node_modules/shared']?.version).toBe(
+      '1.0.0',
+    );
+    expect(result.lockfile.packages['/node_modules/shared']).toBeUndefined();
+  });
+
+  it('relocates a replayed pin when a changed root subtree claims its old flat path first', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'wrapper',
+      new Map([['1.0.0', await makeEntry('wrapper', '1.0.0', { shared: '1.0.0' })]]),
+    );
+    db.set('shared', new Map([['1.0.0', await makeEntry('shared', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { wrapper: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      },
+    );
+
+    db.get('wrapper')?.set(
+      '2.0.0',
+      await makeEntry('wrapper', '2.0.0', { 'new-parent': '1.0.0', shared: '1.0.0' }),
+    );
+    db.set(
+      'new-parent',
+      new Map([['1.0.0', await makeEntry('new-parent', '1.0.0', { shared: '2.0.0' })]]),
+    );
+    db.get('shared')?.set('2.0.0', await makeEntry('shared', '2.0.0'));
+    const result = await install(
+      'root',
+      '1.0.0',
+      { wrapper: '2.0.0' },
+      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+    );
+
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('2.0.0');
+    expect(result.lockfile.packages['node_modules/wrapper/node_modules/shared']?.version).toBe(
+      '1.0.0',
+    );
+  });
+
+  it('rebases retained descendants under the actual path of a relocated parent', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('blocker', new Map([['1.0.0', await makeEntry('blocker', '1.0.0', { dep: '2.0.0' })]]));
+    db.set('owner', new Map([['1.0.0', await makeEntry('owner', '1.0.0', { pkg: '1.0.0' })]]));
+    db.set('pkg', new Map([['1.0.0', await makeEntry('pkg', '1.0.0', { dep: '1.0.0' })]]));
+    db.set(
+      'dep',
+      new Map([
+        ['1.0.0', await makeEntry('dep', '1.0.0')],
+        ['2.0.0', await makeEntry('dep', '2.0.0')],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { blocker: '1.0.0', owner: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+    );
+
+    db.get('pkg')?.set('2.0.0', await makeEntry('pkg', '2.0.0'));
+    const result = await install(
+      'root',
+      '1.0.0',
+      { pkg: '2.0.0', blocker: '1.0.0', owner: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+    );
+
+    expect(result.lockfile.packages['node_modules/pkg']?.version).toBe('2.0.0');
+    expect(result.lockfile.packages['node_modules/owner/node_modules/pkg']?.version).toBe('1.0.0');
+    expect(
+      result.lockfile.packages['node_modules/owner/node_modules/pkg/node_modules/dep']?.version,
+    ).toBe('1.0.0');
+    expect(result.lockfile.packages['node_modules/pkg/node_modules/dep']).toBeUndefined();
+  });
+
+  it('re-resolves a changed global override without drifting an unrelated retained root', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { foo: '1.0.0' })]]));
+    db.set(
+      'bar',
+      new Map([
+        ['1.0.0', await makeEntry('bar', '1.0.0')],
+        ['2.0.0', await makeEntry('bar', '2.0.0')],
+      ]),
+    );
+    db.set('newcomer', new Map([['1.0.0', await makeEntry('newcomer', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { host: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+        overrides: { foo: 'bar@1.0.0' },
+      },
+    );
+    const before = JSON.parse(await vfs.readFileText(joinPath('/proj', 'package-lock.json'))) as {
+      packages: Record<string, unknown>;
+    };
+    const registry = new CountingFakeRegistry(db);
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { host: '1.0.0', newcomer: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        overrides: { foo: 'bar@2.0.0' },
+      },
+    );
+
+    expect(registry.calls.packument.sort()).toEqual(['bar', 'newcomer']);
+    expect(result.lockfile.packages['node_modules/host']).toEqual(
+      before.packages['node_modules/host'],
+    );
+    expect(result.lockfile.packages['node_modules/bar']?.version).toBe('2.0.0');
+    expect(result.lockfile.packages['node_modules/newcomer']?.version).toBe('1.0.0');
+  });
+
+  it('does not call an override-drifted lock zero-network when deciding whether to use Eddy', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { foo: '1.0.0' })]]));
+    db.set(
+      'bar',
+      new Map([
+        ['1.0.0', await makeEntry('bar', '1.0.0')],
+        ['2.0.0', await makeEntry('bar', '2.0.0')],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { host: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+        overrides: { foo: 'bar@1.0.0' },
+      },
+    );
+    const eddyFetch = vi.fn(async () => {
+      throw new Error('expected Eddy probe failure');
+    });
+    vi.stubGlobal('fetch', eddyFetch);
+    const originalWarn = console.warn;
+    console.warn = () => undefined;
+    try {
+      const registry = new CountingFakeRegistry(db);
+      const result = await install(
+        'root',
+        '1.0.0',
+        { host: '1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry,
+          overrides: { foo: 'bar@2.0.0' },
+          resolverUrl: 'https://eddy.invalid/resolve',
+        },
+      );
+
+      expect(eddyFetch).toHaveBeenCalledTimes(1);
+      expect(result.source).toBe('standard');
+      expect(result.provenance.eddyFallback?.reason).toMatch(/expected Eddy probe failure/);
+      expect(registry.calls.packument).toEqual(['bar']);
+      expect(result.lockfile.packages['node_modules/bar']?.version).toBe('2.0.0');
+    } finally {
+      console.warn = originalWarn;
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    ['alias first', { foo: '1.0.0', bar: '2.0.0' }],
+    ['target first', { bar: '2.0.0', foo: '1.0.0' }],
+  ])(
+    '[fault: lossy-aggregate] rejects incompatible direct effective-name collisions (%s)',
+    async (_label, request) => {
+      const db = new Map<string, Map<string, FakeRegistryEntry>>();
+      db.set(
+        'bar',
+        new Map([
+          ['1.0.0', await makeEntry('bar', '1.0.0')],
+          ['2.0.0', await makeEntry('bar', '2.0.0')],
+        ]),
+      );
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+      const overrides = { foo: 'bar@1.0.0' };
+      await install(
+        'root',
+        '1.0.0',
+        { foo: '1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry: new CountingFakeRegistry(db),
+          overrides,
+        },
+      );
+      const lockPath = joinPath('/proj', 'package-lock.json');
+      const before = await vfs.readFile(lockPath);
+
+      await expect(
+        install('root', '1.0.0', request, {
+          vfs,
+          cwd: '/proj',
+          registry: new CountingFakeRegistry(db),
+          overrides,
+        }),
+      ).rejects.toMatchObject({
+        code: 'EINSTALLPATHCONFLICT',
+        installPath: 'node_modules/bar',
+      });
+      expect(await vfs.readFile(lockPath)).toEqual(before);
+      expect(await vfs.exists('/node_modules/bar')).toBe(false);
+    },
+  );
+
+  it('[fault: corrupt-input] never swallows retained lock corruption through a root optional boundary', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('optional', new Map([['1.0.0', await makeEntry('optional', '1.0.0')]]));
+    db.set('newcomer', new Map([['1.0.0', await makeEntry('newcomer', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const packageJson = (withNewcomer: boolean) =>
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: withNewcomer ? { newcomer: '1.0.0' } : {},
+        optionalDependencies: { optional: '1.0.0' },
+      });
+    await vfs.writeFile('/proj/package.json', packageJson(false));
+    await install({ vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) });
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const lockfile = JSON.parse(await vfs.readFileText(lockPath)) as {
+      packages: Record<string, { integrity?: string }>;
+    };
+    // biome-ignore lint/performance/noDelete: fault injection needs a malformed retained entry
+    delete lockfile.packages['node_modules/optional']?.integrity;
+    await vfs.writeFile(lockPath, JSON.stringify(lockfile));
+    const before = await vfs.readFile(lockPath);
+    await vfs.writeFile('/proj/package.json', packageJson(true));
+
+    await expect(
+      install({
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      }),
+    ).rejects.toMatchObject({ code: 'EBROKENLOCK', reason: 'malformed-entry' });
+    expect(await vfs.readFile(lockPath)).toEqual(before);
+    expect(await vfs.exists('/proj/node_modules/newcomer')).toBe(false);
+  });
+
+  it('keeps a corrupt retained subgraph loud and publishes no partial mutation', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('foo', new Map([['1.0.0', await makeEntry('foo', '1.0.0', { bar: '1.0.0' })]]));
+    db.set('bar', new Map([['1.0.0', await makeEntry('bar', '1.0.0')]]));
+    db.set('newcomer', new Map([['1.0.0', await makeEntry('newcomer', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { foo: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      },
+    );
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const lockfile = JSON.parse(await vfs.readFileText(lockPath)) as {
+      packages: Record<string, { integrity?: string }>;
+    };
+    // biome-ignore lint/performance/noDelete: fault injection needs a malformed retained entry
+    delete lockfile.packages['node_modules/bar']?.integrity;
+    await vfs.writeFile(lockPath, JSON.stringify(lockfile));
+    const corruptBytes = await vfs.readFile(lockPath);
+    const registry = new CountingFakeRegistry(db);
+
+    await expect(
+      install(
+        'root',
+        '1.0.0',
+        { foo: '1.0.0', newcomer: '1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry,
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'EBROKENLOCK', reason: 'malformed-entry' });
+    expect(registry.calls.tarball).toEqual([]);
+    expect(await vfs.readFile(lockPath)).toEqual(corruptBytes);
+    expect(await vfs.exists('/proj/node_modules/newcomer')).toBe(false);
+  });
+
+  it('[fault: torn-state] settles an earlier acquisition before publishing a later retained-lock failure', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('foo', new Map([['1.0.0', await makeEntry('foo', '1.0.0', { broken: '1.0.0' })]]));
+    db.set('broken', new Map([['1.0.0', await makeEntry('broken', '1.0.0')]]));
+    db.set('newcomer', new Map([['1.0.0', await makeEntry('newcomer', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { foo: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+    );
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const lockfile = JSON.parse(await vfs.readFileText(lockPath)) as {
+      packages: Record<string, { integrity?: string }>;
+    };
+    // biome-ignore lint/performance/noDelete: fault injection needs malformed retained data
+    delete lockfile.packages['node_modules/broken']?.integrity;
+    await vfs.writeFile(lockPath, JSON.stringify(lockfile));
+
+    let releaseGate: (() => void) | undefined;
+    let markStarted: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    class GatedRegistry extends CountingFakeRegistry {
+      override async getTarball(tarballUrl: string): Promise<Uint8Array> {
+        if (tarballUrl === 'fake://newcomer/1.0.0') {
+          markStarted?.();
+          await gate;
+        }
+        return await super.getTarball(tarballUrl);
+      }
+    }
+    let outcome: 'pending' | 'resolved' | 'rejected' = 'pending';
+    const observed = install(
+      'root',
+      '1.0.0',
+      { newcomer: '1.0.0', foo: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new GatedRegistry(db) },
+    ).then(
+      () => {
+        outcome = 'resolved';
+        return undefined;
+      },
+      (error: unknown) => {
+        outcome = 'rejected';
+        return error;
+      },
+    );
+
+    await started;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(outcome).toBe('pending');
+    releaseGate?.();
+    await expect(observed).resolves.toMatchObject({
+      code: 'EBROKENLOCK',
+      reason: 'malformed-entry',
+    });
   });
 });
 
