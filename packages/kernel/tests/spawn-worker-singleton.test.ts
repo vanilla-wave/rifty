@@ -11,14 +11,13 @@
  *
  * The stress test spawns 10 mock workers and asserts both invariants.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   type WorkerLike,
   clearKernelDispatcher,
   clearKernelWorkerUrl,
   clearWorkerFactoryForTests,
   getKernelDispatcher,
-  getKernelWorkerUrl,
   setKernelWorkerUrl,
   setWorkerFactoryForTests,
   spawnKernelWorker,
@@ -76,21 +75,5 @@ describe('spawnKernelWorker — singleton SyncRpcDispatcher (ADR-0011 phase 3 fi
     for (const r of results) r.terminate();
     expect(dispatcherBefore.getAttachmentCount()).toBe(0);
     expect(dispatcherBefore.getActiveTimerCount()).toBe(0);
-  });
-
-  /** Fault class: sibling-drift. Dev/prod bundles may instantiate kernel twice in one realm. */
-  it('shares the configured worker URL across duplicate kernel module instances', async () => {
-    const configured = 'https://example.invalid/cross-bundle-kernel-worker.js';
-    setKernelWorkerUrl(configured);
-
-    vi.resetModules();
-    const duplicate = await import('../src/spawn-worker.ts');
-    try {
-      expect(duplicate.getKernelWorkerUrl()).toBe(configured);
-      duplicate.clearKernelWorkerUrl();
-      expect(getKernelWorkerUrl()).toBeNull();
-    } finally {
-      duplicate.clearKernelWorkerUrl();
-    }
   });
 });

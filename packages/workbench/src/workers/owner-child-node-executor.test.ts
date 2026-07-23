@@ -5,6 +5,7 @@ import {
   type NodeChildHandle,
   buildNodeChildSpawnSpec,
   createOwnerChildNodeExecutor,
+  createOwnerExecSyncRunner,
 } from './owner-child-node-executor.ts';
 
 const NODE_WORKER_RUNTIME_ENV = {
@@ -55,6 +56,32 @@ function makeCtx(over: Record<string, unknown> = {}): CommandContext {
     signal: undefined,
     ...over,
   } as unknown as CommandContext;
+}
+
+function fakeRecursiveChild() {
+  const stdout = {
+    onmessage: null as ((event: MessageEvent) => void) | null,
+    start: vi.fn(),
+  };
+  const stderr = {
+    onmessage: null as ((event: MessageEvent) => void) | null,
+    start: vi.fn(),
+  };
+  let exit: ((code: number) => void) | null = null;
+  return {
+    child: {
+      ports: { stdout, stderr },
+      onExit(listener: (code: number) => void) {
+        exit = listener;
+        return () => {
+          if (exit === listener) exit = null;
+        };
+      },
+    },
+    stdout: (data: Uint8Array) => stdout.onmessage?.({ data } as MessageEvent),
+    stderr: (data: Uint8Array) => stderr.onmessage?.({ data } as MessageEvent),
+    exit: (code: number) => exit?.(code),
+  };
 }
 
 describe('owner-child-node-executor', () => {
@@ -136,6 +163,80 @@ describe('owner-child-node-executor', () => {
     expect(JSON.stringify({ argv: spec.argv, cwd: spec.cwd, env: spec.env })).not.toContain(
       REMOTE_FS_ROOT,
     );
+  });
+
+  it('roots an owner execSync child out of band and captures stdout/stderr byte-exact', async () => {
+    const fake = fakeRecursiveChild();
+    const spawn = vi.fn(() => fake.child);
+    const run = createOwnerExecSyncRunner(
+      'URL',
+      NODE_WORKER_RUNTIME_ENV,
+      () => REMOTE_FS_ROOT,
+      spawn,
+    );
+
+    const result = run({
+      entryPath: '/child.mjs',
+      argv: ['rifty', '/child.mjs', '--exact'],
+      env: { USER_VALUE: 'kept' },
+      cwd: '/',
+    });
+    fake.stdout(new Uint8Array([0x00, 0xff]));
+    fake.stdout(new Uint8Array([0x7f]));
+    fake.stderr(new Uint8Array([0x80]));
+    fake.exit(7);
+
+    await expect(result).resolves.toEqual({
+      stdout: new Uint8Array([0x00, 0xff, 0x7f]),
+      stderr: new Uint8Array([0x80]),
+      exitCode: 7,
+    });
+    expect(spawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entry: expect.objectContaining({
+          bootstrap: expect.objectContaining({
+            protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+            payload: expect.objectContaining({
+              hostRuntime: NODE_WORKER_RUNTIME_ENV,
+              launch: {
+                kind: 'program',
+                bin: false,
+                remoteFs: true,
+                remoteFsRoot: REMOTE_FS_ROOT,
+                nodeServe: false,
+              },
+            }),
+          }),
+        }),
+        argv: ['rifty', '/child.mjs', '--exact'],
+        env: { USER_VALUE: 'kept' },
+        cwd: '/',
+      }),
+      expect.objectContaining({ ppid: 1 }),
+    );
+    expect(JSON.stringify(spawn.mock.calls[0]?.[0].env)).not.toContain(REMOTE_FS_ROOT);
+  });
+
+  it('fails before owner execSync spawn when the active project is gone', () => {
+    const spawn = vi.fn();
+    const run = createOwnerExecSyncRunner(
+      'URL',
+      NODE_WORKER_RUNTIME_ENV,
+      () => {
+        throw new Error('Workbench owner execSync requires an active project');
+      },
+      spawn,
+    );
+
+    expect(() =>
+      run({
+        entryPath: '/stale.mjs',
+        argv: ['rifty', '/stale.mjs'],
+        env: {},
+        cwd: '/',
+      }),
+    ).toThrow(/active project/i);
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it('threads the actor-minted preview scope into the node-entry launch', async () => {

@@ -1,11 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
-import {
-  bootOwner,
-  closeOwner,
-  flushOwnerDurable,
-  gotoHarness,
-  writeOwnerFile,
-} from './fixtures.ts';
+import { gotoHarness, sealedWorkbenchFixtureUrl, seedLegacyWorkspace } from './fixtures.ts';
 
 const OUTPUT_MARKER = 'WORKBENCH_COMPANION_KLEUR_OK';
 const ARGUMENT_MARKER = '--from-companion';
@@ -20,54 +14,114 @@ async function seedLegacyCatalog(
     readonly marker: string;
   },
 ): Promise<void> {
-  await bootOwner(page, {
-    workspaceId: input.workspaceId,
-    template: 'hidden-empty',
-    root: '/projects/project-a',
-    slug: 'project-a',
-    starter: 'starter-a',
-    hiddenEmptyBoot: true,
-  });
-  try {
-    await writeOwnerFile(
-      page,
-      '/projects/project-a/package.json',
-      '{"name":"legacy-project-a","private":true,"type":"module"}\n',
-    );
-    await writeOwnerFile(page, '/projects/project-a/legacy-marker.txt', `${input.marker}:a`);
-    await writeOwnerFile(
-      page,
-      '/projects/project-b/package.json',
-      '{"name":"legacy-project-b","private":true,"type":"module"}\n',
-    );
-    await writeOwnerFile(page, '/projects/project-b/legacy-marker.txt', `${input.marker}:b`);
-    await writeOwnerFile(
-      page,
-      '/.rifty-project-index.json',
-      `${JSON.stringify({
-        activeId: 'project-a',
-        scratch: null,
-        projects: [
-          {
-            id: 'project-a',
-            name: `${input.label} A`,
-            starter: 'starter-a',
-            editedAt: '2026-07-01T01:00:00.000Z',
-          },
-          {
-            id: 'project-b',
-            name: `${input.label} B`,
-            starter: 'starter-b',
-            editedAt: '2026-07-02T02:00:00.000Z',
-          },
-        ],
-      })}\n`,
-    );
-    await flushOwnerDurable(page);
-  } finally {
-    await closeOwner(page);
-  }
+  await seedLegacyWorkspace(page, input);
 }
+
+test('editor CAS rejects a stale save and preserves the externally committed bytes', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+
+  const result = await page.evaluate(async (fixtureUrl) => {
+    interface ProjectDocumentSnapshot {
+      readonly bytes: Uint8Array;
+      readonly version: string | null;
+      readonly dirty: boolean;
+    }
+    interface ProjectDocument {
+      snapshot(): ProjectDocumentSnapshot;
+      close(options?: { readonly dirty: 'save' | 'discard' }): Promise<void>;
+    }
+    interface ProjectSession {
+      readonly documents: {
+        open(path: string): Promise<ProjectDocument>;
+      };
+      readonly files: {
+        writeFile(
+          path: string,
+          bytes: Uint8Array,
+          options: { readonly expectedVersion: string | null },
+        ): Promise<{ readonly version: string }>;
+        readFile(path: string): Promise<{ readonly bytes: Uint8Array; readonly version: string }>;
+      };
+    }
+    interface SealedFixture {
+      openSealedWorkbenchFixture(options: {
+        readonly workspaceId: string;
+        readonly hiddenEmptyBoot: true;
+      }): Promise<void>;
+      currentProject(): ProjectSession;
+      closeSealedWorkbenchFixture(): Promise<void>;
+    }
+    interface DocumentWriter {
+      open(path: string): Promise<ProjectDocumentSnapshot>;
+      write(path: string, text: string): Promise<void>;
+    }
+    interface ProjectViewAdapter {
+      createPlaygroundDocumentWriter(documents: {
+        open(path: string): Promise<ProjectDocument>;
+      }): DocumentWriter;
+    }
+
+    const fixture = (await import(/* @vite-ignore */ fixtureUrl)) as SealedFixture;
+    const adapterUrl = '/src/adapters/playground-project-view.ts';
+    const adapter = (await import(/* @vite-ignore */ adapterUrl)) as ProjectViewAdapter;
+    await fixture.openSealedWorkbenchFixture({
+      workspaceId: 'bu-real-editor-cas',
+      hiddenEmptyBoot: true,
+    });
+
+    let openedDocument: ProjectDocument | null = null;
+    try {
+      const project = fixture.currentProject();
+      const writer = adapter.createPlaygroundDocumentWriter({
+        async open(path) {
+          const document = await project.documents.open(path);
+          openedDocument = document;
+          return document;
+        },
+      });
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+      const first = await project.files.writeFile('/cas.txt', encoder.encode('version one\n'), {
+        expectedVersion: null,
+      });
+      const opened = await writer.open('/cas.txt');
+      const external = await project.files.writeFile('/cas.txt', encoder.encode('version two\n'), {
+        expectedVersion: first.version,
+      });
+
+      let conflict: { readonly name: string; readonly message: string } | null = null;
+      try {
+        await writer.write('/cas.txt', 'stale editor bytes\n');
+      } catch (error) {
+        const inspected = error instanceof Error ? error : new Error(String(error));
+        conflict = { name: inspected.name, message: inspected.message };
+      }
+      const preserved = await project.files.readFile('/cas.txt');
+      return {
+        firstVersion: first.version,
+        openedVersion: opened.version,
+        externalVersion: external.version,
+        preservedVersion: preserved.version,
+        preservedText: decoder.decode(preserved.bytes),
+        conflict,
+      };
+    } finally {
+      if (openedDocument !== null) {
+        await openedDocument.close({ dirty: 'discard' });
+      }
+      await fixture.closeSealedWorkbenchFixture();
+    }
+  }, sealedWorkbenchFixtureUrl);
+
+  expect(result.openedVersion).toBe(result.firstVersion);
+  expect(result.externalVersion).not.toBe(result.firstVersion);
+  expect(result.preservedVersion).toBe(result.externalVersion);
+  expect(result.preservedText).toBe('version two\n');
+  expect(result.conflict?.name).toBe('FileConflictError');
+  expect(result.conflict?.message).toContain('/cas.txt');
+});
 
 test('Playground companion installs a Node CLI and keeps its owner live when a write races close', async ({
   page,

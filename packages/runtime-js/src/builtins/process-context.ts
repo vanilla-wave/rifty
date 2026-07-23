@@ -1,4 +1,4 @@
-import { isRuntimeOwnedNodeProcess } from './process-brand.ts';
+import { NodeProcess } from './process.ts';
 
 export interface NodeProcessContextSnapshot {
   readonly cwd: string;
@@ -19,7 +19,7 @@ export function snapshotProcessEnv(
 /** Construction-time snapshot, or null outside a kernel-installed Node realm. */
 export function snapshotNodeProcessContext(): NodeProcessContextSnapshot | null {
   const process = (globalThis as { process?: unknown }).process;
-  if (!isRuntimeOwnedNodeProcess(process)) return null;
+  if (!(process instanceof NodeProcess)) return null;
   return {
     cwd: process.cwd(),
     env: snapshotProcessEnv(process.env),

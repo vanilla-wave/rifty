@@ -1,16 +1,99 @@
 /**
- * Owner-realm `node <file>` child driver (ADR-0155). Foreground run like the bin
- * executor (stream stdout/stderr, Ctrl-C kill→mute, resolve on exit code) PLUS
- * the dev-server child's fork-IPC: a server child posts `rifty:node-listening`
- * which the owner forwards into the preview registry. Spawn injected (real
- * `globalProcessManager.spawnWorker` in prod; fake in unit tests).
+ * Owner-realm Node worker launchers (ADR-0155): foreground `node <file>` streams
+ * terminal I/O and forwards listening IPC; recursive execSync captures exact
+ * stdout/stderr bytes. Physical project roots stay in bootstrap config.
  */
-import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import {
+  type SpawnWorkerIdentity,
+  type SpawnWorkerSpec,
+  globalProcessManager,
+  spawnKernelWorker,
+} from '@riftydev/kernel';
 import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
+import type { InstallRuntimeJsExecSyncOptions } from '@riftydev/runtime-js/ipc/exec-sync-handler';
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { type ForegroundWritable, runForegroundChild } from '../glue/run-foreground-child.ts';
+
+type OwnerExecSyncRunner = NonNullable<InstallRuntimeJsExecSyncOptions['runWorker']>;
+
+interface OwnerExecSyncPort {
+  onmessage: ((event: MessageEvent) => void) | null;
+  start(): void;
+}
+
+interface OwnerExecSyncChild {
+  readonly ports: {
+    readonly stdout: OwnerExecSyncPort;
+    readonly stderr: OwnerExecSyncPort;
+  };
+  onExit(listener: (code: number) => void): () => void;
+}
+
+type OwnerExecSyncSpawn = (
+  spec: SpawnWorkerSpec,
+  identity: SpawnWorkerIdentity,
+) => OwnerExecSyncChild;
+
+function concatChunks(chunks: readonly Uint8Array[]): Uint8Array {
+  const output = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
+
+/** Owner-realm recursive runner; active project root stays out of guest state. */
+export function createOwnerExecSyncRunner(
+  nodeEntryUrl: string,
+  nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
+  getActiveProjectRoot: () => string,
+  spawn: OwnerExecSyncSpawn = spawnKernelWorker,
+): OwnerExecSyncRunner {
+  let nextNestedPid = 0xc0000000;
+  return (spec) => {
+    const remoteFsRoot = getActiveProjectRoot();
+    const child = spawn(
+      {
+        entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
+          kind: 'program',
+          bin: false,
+          remoteFs: true,
+          remoteFsRoot,
+          nodeServe: false,
+        }),
+        argv: spec.argv,
+        env: { ...spec.env },
+        cwd: spec.cwd,
+      },
+      { pid: nextNestedPid++, ppid: 1 },
+    );
+    const stdout: Uint8Array[] = [];
+    const stderr: Uint8Array[] = [];
+    child.ports.stdout.onmessage = (event) => {
+      if (event.data instanceof Uint8Array) stdout.push(event.data);
+    };
+    child.ports.stderr.onmessage = (event) => {
+      if (event.data instanceof Uint8Array) stderr.push(event.data);
+    };
+    child.ports.stdout.start();
+    child.ports.stderr.start();
+    return new Promise((resolve) => {
+      child.onExit((exitCode) => {
+        queueMicrotask(() => {
+          resolve({
+            stdout: concatChunks(stdout),
+            stderr: concatChunks(stderr),
+            exitCode,
+          });
+        });
+      });
+    });
+  };
+}
 
 export function buildNodeChildSpawnSpec(
   entry: string,

@@ -1,46 +1,47 @@
 import { expect, test } from '@playwright/test';
-import {
-  bootOwner,
-  execLine,
-  gotoHarness,
-  readOwnerFile,
-  setDevConfig,
-  writeOwnerFile,
-} from './fixtures.ts';
+import { bootOwner, execLine, gotoHarness, readOwnerFile, writeOwnerFile } from './fixtures.ts';
 
 /**
  * Owner shell command routing, behaviorally against the REAL owner worker
- * (browser-unit lane, ADR-0196) — contracts formerly source-grep-pinned in
- * real-vite-bootstrap.test.ts:
+ * (browser-unit lane, ADR-0196):
  *   1. `npm run <script>` executes the package.json script through the real
  *      shell (runPackageScript → scriptShell.run), streaming its output.
- *   2. `vite` is NOT an owner-registered command — nothing shadows
- *      node_modules/.bin/vite, so with no install it is an honest 127.
- *   3. node-cli templates: the dev-script alias runs the package.json command
- *      wrapped in the `cli: running <name>` / `[cli] completed with exit code N`
- *      lifecycle lines (pty:dev-config switches the active template).
+ *   2. `vite` is NOT an owner-registered command, so with no installed
+ *      node_modules/.bin/vite it is an honest 127.
+ *   3. a declarative node-cli project keeps the package script body on the
+ *      same owner-backed shell path.
  */
 
-test('npm scripts route through the real shell; vite unshadowed; node-cli dev wrapper', async ({
+test('npm scripts route through the real shell; vite stays package-owned; node-cli dev wrapper', async ({
   page,
 }) => {
   await gotoHarness(page);
-  await bootOwner(page, { workspaceId: 'bu-shell-routing', hiddenEmptyBoot: true });
-
-  // No package.json is seeded on a hidden-empty boot — provide the scripts.
-  await writeOwnerFile(
-    page,
-    '/scratch/package.json',
-    `${JSON.stringify(
-      {
-        name: 'bu-shell-routing',
-        version: '0.0.0',
-        scripts: { hello: 'echo from-package-script', dev: 'echo cli-dev-body-ran' },
+  await bootOwner(page, {
+    workspaceId: 'bu-shell-routing',
+    persistence: 'ephemeral',
+    plan: {
+      kind: 'node-cli',
+      id: 'scratch',
+      starterId: 'cli-report',
+      templateId: 'cli-report',
+      files: {
+        '/package.json': `${JSON.stringify(
+          {
+            name: 'bu-shell-routing',
+            version: '0.0.0',
+            private: true,
+            type: 'module',
+            scripts: { hello: 'echo from-package-script', dev: 'echo cli-dev-body-ran' },
+          },
+          null,
+          2,
+        )}\n`,
+        '/src/cli.js': "console.log('cli-project-run')\n",
       },
-      null,
-      2,
-    )}\n`,
-  );
+      firstMaterialization: { kind: 'install' },
+      entryPath: '/src/cli.js',
+    },
+  });
 
   // 1. Plain script → real shell execution of the script body.
   const hello = await execLine(page, 'npm run hello');
@@ -52,15 +53,10 @@ test('npm scripts route through the real shell; vite unshadowed; node-cli dev wr
   expect(vite.exit).toBe(127);
   expect(vite.out).toContain('vite: command not found');
 
-  // 3. node-cli lifecycle: switch the active dev config to the cli-report
-  //    template, then run its dev alias — the wrapper prints the lifecycle
-  //    lines around the REAL script body (from package.json, via the shell).
-  await setDevConfig(page, { templateId: 'cli-report', slug: 'scratch', setup: 'from-scratch' });
+  // 3. The declarative node-cli plan owns the command policy from project open.
   const dev = await execLine(page, 'npm run dev');
   expect(dev.exit).toBe(0);
-  expect(dev.out).toContain('cli: running CLI report');
   expect(dev.out).toContain('cli-dev-body-ran');
-  expect(dev.out).toContain('[cli] completed with exit code 0');
 });
 
 test('terminal npm install keeps an arbitrary nested cwd outside the active preset config', async ({
@@ -78,7 +74,7 @@ test('terminal npm install keeps an arbitrary nested cwd outside the active pres
   expect(cd.exit).toBe(0);
   const installed = await execLine(page, 'npm install');
 
-  expect(installed.exit).toBe(0);
+  expect(installed.exit, installed.out).toBe(0);
   expect(installed.out).not.toContain('package acquisition config missing');
   expect(installed.out).toContain('npm: no dependencies to install');
 });
@@ -88,10 +84,12 @@ test('terminal git preflights every worktree target through the owner namespace 
 }) => {
   await gotoHarness(page);
   await bootOwner(page, { workspaceId: 'bu-git-claim-preflight', hiddenEmptyBoot: true });
+  expect((await execLine(page, 'mkdir repo')).exit).toBe(0);
+  expect((await execLine(page, 'cd repo')).exit).toBe(0);
   expect((await execLine(page, 'git init')).exit).toBe(0);
   await writeOwnerFile(
     page,
-    '/scratch/claim.patch',
+    '/scratch/repo/claim.patch',
     [
       'diff --git a/ordinary.txt b/ordinary.txt',
       'new file mode 100644',
@@ -111,42 +109,41 @@ test('terminal git preflights every worktree target through the owner namespace 
 
   const applied = await execLine(page, 'git apply claim.patch');
 
-  expect(applied.exit).toBe(128);
+  expect(applied.exit, applied.out).toBe(128);
   expect(applied.out).toContain('EPERM');
-  expect((await readOwnerFile(page, '/scratch/ordinary.txt')).ok).toBe(false);
-  expect((await readOwnerFile(page, '/scratch/node_modules/.rifty-install-stamp.json')).ok).toBe(
-    false,
-  );
+  expect((await readOwnerFile(page, '/scratch/repo/ordinary.txt')).ok).toBe(false);
+  expect(
+    (await readOwnerFile(page, '/scratch/repo/node_modules/.rifty-install-stamp.json')).ok,
+  ).toBe(false);
 });
 
-test('instant preset restore gates the run; template node_modules seeds re-asserted post-restore', async ({
+test('instant preset open completes snapshot restore and template seeds before terminal use', async ({
   page,
 }) => {
   await gotoHarness(page);
-  // Fresh owner: this test mutates /scratch node_modules via the instant restore.
-  await bootOwner(page, { workspaceId: 'bu-restore-gate', hiddenEmptyBoot: true });
-
-  // Hold the snapshot response ~600ms (latency shaping only — the REAL bytes
-  // still flow through the REAL restore path). The stamp rework (ADR-0187
-  // Corrected) took the awaited OPFS drains out of the restore, so on a fast
-  // host the whole restore can beat the 250ms slow-progress threshold and the
-  // exec below would no longer provably overlap the in-flight restore.
+  let snapshotResponseCompleted = false;
   await page.route('**/snapshots/typescript-node-modules.json.gz', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 600));
     await route.continue();
+    snapshotResponseCompleted = true;
   });
 
-  // Switch to the instant typescript preset: prepareActiveDevConfigDeps starts
-  // restoring the baked snapshot ASYNCHRONOUSLY (the ack must not wait for it).
-  await setDevConfig(page, { templateId: 'typescript', slug: 'scratch', setup: 'instant' });
+  await bootOwner(page, {
+    workspaceId: 'bu-restore-gate',
+    template: 'typescript',
+    starter: 'typescript',
+    setup: 'instant',
+    persistence: 'ephemeral',
+  });
 
-  // Issued IMMEDIATELY after the config ack, while the multi-MB restore is in
-  // flight: the per-run beforeRun gate must hold the command until deps landed,
-  // streaming the slow-restore progress line into THIS run's output.
+  // The sealed companion publishes the project only after a valid snapshot is
+  // restored and the project tree is ready. No pre-session progress is
+  // relabelled as output from this later terminal command.
+  expect(snapshotResponseCompleted).toBe(true);
   const ls = await execLine(page, 'ls node_modules/typescript');
-  expect(ls.exit).toBe(0);
+  expect(ls.exit, ls.out).toBe(0);
   expect(ls.out).toContain('package.json');
-  expect(ls.out).toContain('restoring project dependencies');
+  expect(ls.out).not.toContain('restoring project dependencies');
 
   // The snapshot replaced node_modules wholesale; template-owned node_modules
   // seed files (the @rifty/example-types .d.ts fixture) must be re-asserted
@@ -160,11 +157,14 @@ test('direct TypeScript Vite boot reasserts a deleted template seed before child
   page,
 }) => {
   await gotoHarness(page);
-  await bootOwner(page, { workspaceId: 'bu-vite-boot-seed', hiddenEmptyBoot: true });
+  await bootOwner(page, {
+    workspaceId: 'bu-vite-boot-seed',
+    template: 'typescript',
+    starter: 'typescript',
+    setup: 'instant',
+    persistence: 'ephemeral',
+  });
 
-  await setDevConfig(page, { templateId: 'typescript', slug: 'scratch', setup: 'instant' });
-  // Cross the real restore gate first; the regression is a later user deletion,
-  // after config preparation already completed.
   expect((await execLine(page, 'ls node_modules/typescript')).exit).toBe(0);
 
   await writeOwnerFile(
@@ -172,7 +172,7 @@ test('direct TypeScript Vite boot reasserts a deleted template seed before child
     '/scratch/.rifty-vite-seed-probe.mjs',
     [
       "import { readFileSync } from 'node:fs';",
-      "const seed = readFileSync('/scratch/node_modules/@rifty/example-types/index.d.ts', 'utf8');",
+      "const seed = readFileSync('/node_modules/@rifty/example-types/index.d.ts', 'utf8');",
       "console.log('seed-visible-before-spawn=' + seed.includes('LibraryShape'));",
       "console.log('vite-argv=' + process.argv.slice(2).join(','));",
       '',
@@ -181,7 +181,7 @@ test('direct TypeScript Vite boot reasserts a deleted template seed before child
   await writeOwnerFile(
     page,
     '/scratch/node_modules/.bin/vite',
-    "#!/usr/bin/env node\nimport('/scratch/.rifty-vite-seed-probe.mjs');\n",
+    "#!/usr/bin/env node\nimport('/.rifty-vite-seed-probe.mjs');\n",
   );
 
   const removed = await execLine(page, 'rm node_modules/@rifty/example-types/index.d.ts');
@@ -190,8 +190,6 @@ test('direct TypeScript Vite boot reasserts a deleted template seed before child
     (await readOwnerFile(page, '/scratch/node_modules/@rifty/example-types/index.d.ts')).ok,
   ).toBe(false);
 
-  // Exact auto-boot line for the TypeScript preset. The finite replacement
-  // keeps the real direct .bin spawn seam while avoiding a long-lived server.
   const boot = await execLine(page, 'vite --port 5174');
   expect(boot.exit, boot.out).toBe(0);
   expect(boot.out).toContain('seed-visible-before-spawn=true');

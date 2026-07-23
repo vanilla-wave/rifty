@@ -34,9 +34,6 @@
   (parity `modules/require-bare-file-package`).
 - Bare file-vs-directory selection uses the captured string suffix primordial;
   guest mutation of `String.prototype.endsWith` cannot alter resolution.
-- Runtime-owned process identity now survives duplicate bundles, so process
-  globals, builtins, context, streams, and `nextTick` faults use the live realm
-  process instead of a bundle-local singleton.
 
 - **tsconfig `baseUrl` follows TypeScript's full path grammar.** One TypeScript-
   owned predicate now excludes URL roots, drive roots, UNC/backslash roots, and

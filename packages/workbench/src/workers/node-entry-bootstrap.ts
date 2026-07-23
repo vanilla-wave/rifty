@@ -90,8 +90,11 @@ if (launch.remoteFs) {
 
   // This realm owns the dispatcher for every kernel Worker it creates. Relay
   // the upstream-authoritative mirror so a nested Worker can load its entry/fs
-  // and recursively exec without forking an empty VFS.
-  installOwnerSyncRuntimeHandlers(getKernelDispatcher(), () => remoteFs);
+  // without double-applying remoteFsRoot. execSync's local ENOENT preflight
+  // receives project-logical paths, so only its resolver uses the scoped mirror.
+  installOwnerSyncRuntimeHandlers(getKernelDispatcher(), () => remoteFs, undefined, {
+    getVfs: () => syncMirror(),
+  });
 }
 
 // Every recursive Node entry gets the same host-provided sqlite engine source.

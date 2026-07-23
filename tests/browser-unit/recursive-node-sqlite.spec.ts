@@ -1,6 +1,13 @@
 import { Worker as NodeWorker } from 'node:worker_threads';
 import { expect, test } from '@playwright/test';
-import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
+import {
+  bootOwner,
+  closeOwner,
+  execLine,
+  gotoHarness,
+  runDefaultProjectOnce,
+  writeOwnerFile,
+} from './fixtures.ts';
 
 const MISSING_RUNTIME_CONFIG_ERROR = 'node-entry worker bootstrap config is not configured';
 const MUST_NOT_LOAD_BOOTSTRAP_PATH = '/__recursive-node-bootstrap-must-not-load__.js';
@@ -62,16 +69,18 @@ process.stdout.write(
       '/scratch/sqlite-parent.mjs',
       `import { execSync } from 'node:child_process';
 const stdout = execSync('node sqlite-child.mjs', {
-  cwd: '/scratch',
+  cwd: '/',
   env: { CONTEXT_SENTINEL: 'exact-child' },
 });
 process.stdout.write(stdout);
 `,
     );
 
+    expect(await runDefaultProjectOnce(page)).toEqual({ code: 0, signal: null });
+
     const result = await execLine(page, 'node sqlite-parent.mjs');
     expect(result.exit, result.out).toBe(0);
-    expect(result.out).toContain('NESTED_SQLITE|sqlite-ready|cwd=/scratch|env=exact-child');
+    expect(result.out).toContain('NESTED_SQLITE|sqlite-ready|cwd=/|env=exact-child');
   } finally {
     await closeOwner(page);
   }
@@ -172,10 +181,12 @@ await worker.terminate();
 `,
     );
 
+    expect(await runDefaultProjectOnce(page)).toEqual({ code: 0, signal: null });
+
     const result = await execLine(page, 'node worker-parent.mjs');
     expect(result.exit, result.out).toBe(0);
     expect(result.out).toContain(
-      `WORKER_RELAY|env=${oracle.env}|envKeys=${oracle.envKeys.join(',')}|parentAbsent=${oracle.parentAbsent}|cwdInherited=${oracle.cwdInherited}|cwd=/scratch|data=${oracle.data}|file=owner-file|sqlite=worker-sqlite|nested=grandchild-sqlite:grand-exact`,
+      `WORKER_RELAY|env=${oracle.env}|envKeys=${oracle.envKeys.join(',')}|parentAbsent=${oracle.parentAbsent}|cwdInherited=${oracle.cwdInherited}|cwd=/|data=${oracle.data}|file=owner-file|sqlite=worker-sqlite|nested=grandchild-sqlite:grand-exact`,
     );
   } finally {
     await closeOwner(page);

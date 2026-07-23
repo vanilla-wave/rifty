@@ -27,6 +27,7 @@ import {
   createProjectMaterializer,
 } from '../workbench/project-materialization.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
+import { createOwnerExecSyncRunner } from './owner-child-node-executor.ts';
 import { resolveOwnerGitCommitIdentity } from './owner-git-commit-identity.ts';
 import { createOwnerPackageState } from './owner-package-state.ts';
 import {
@@ -40,6 +41,7 @@ import {
   createPlaygroundProjectAuthority,
 } from './playground-project-authority.ts';
 import { createOwnerPlaygroundSessionTools } from './playground-session-tools-owner.ts';
+import { ProjectTerminalFsSync } from './project-terminal-namespace.ts';
 import { createWorkbenchOwnerChildVfsMutationGuard } from './workbench-owner-child-vfs.ts';
 import {
   type WorkbenchOwnerProjectRuntime,
@@ -324,6 +326,12 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   let rejectOwnerLifetime = (error: Error): void => {
     throw error;
   };
+  const requireActiveProjectRoot = (): string => {
+    if (activeProjectRoot === null) {
+      throw new Error('Workbench owner execSync requires an active project');
+    }
+    return activeProjectRoot;
+  };
   installOwnerSyncRuntimeHandlers(
     getKernelDispatcher(),
     () => authority,
@@ -333,6 +341,14 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           ? null
           : { root: activeProjectRoot, vfs: activeProjectVfs },
     }),
+    {
+      getVfs: () => new ProjectTerminalFsSync(authority, requireActiveProjectRoot()),
+      runWorker: createOwnerExecSyncRunner(
+        config.deployment.workers.node,
+        nodeWorkerRuntimeEnv,
+        requireActiveProjectRoot,
+      ),
+    },
   );
 
   if (closeAuthority === undefined) {

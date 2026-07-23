@@ -9,3 +9,8 @@
 
 - Preserve main's v3 install stamps and host-supplied esbuild WASM URL through
   the extracted owner and child bootstraps.
+
+### Fixed
+
+- Keep recursive `execSync` entry checks and child launches in the active
+  project's public filesystem namespace without exposing its physical root.

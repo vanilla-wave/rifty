@@ -58,35 +58,7 @@ export interface SpawnWorkerSpec {
   readonly serve?: boolean;
 }
 
-const KERNEL_WORKER_URL_SLOT = Symbol.for('rifty.kernel.worker-url.v1');
-
-/** One host-realm slot survives duplicate dev/prod bundle module instances. */
-function realmKernelWorkerUrl(): string | URL | null {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, KERNEL_WORKER_URL_SLOT);
-  if (descriptor === undefined) return null;
-  if (
-    !('value' in descriptor) ||
-    descriptor.enumerable ||
-    descriptor.writable ||
-    !descriptor.configurable
-  ) {
-    throw new TypeError('kernel worker URL realm slot has an invalid descriptor');
-  }
-  const value = descriptor.value;
-  if (value !== null && typeof value !== 'string' && !(value instanceof URL)) {
-    throw new TypeError('kernel worker URL realm slot has an invalid value');
-  }
-  return value;
-}
-
-function publishRealmKernelWorkerUrl(url: string | URL | null): void {
-  Object.defineProperty(globalThis, KERNEL_WORKER_URL_SLOT, {
-    value: url,
-    enumerable: false,
-    configurable: true,
-    writable: false,
-  });
-}
+let kernelWorkerUrl: string | URL | null = null;
 
 /**
  * Host-side setter: tell the kernel where to find the kernel-worker entry
@@ -95,7 +67,7 @@ function publishRealmKernelWorkerUrl(url: string | URL | null): void {
  * `spawnWorker` picks it up).
  */
 export function setKernelWorkerUrl(url: string | URL): void {
-  publishRealmKernelWorkerUrl(url);
+  kernelWorkerUrl = url;
 }
 
 /**
@@ -105,12 +77,12 @@ export function setKernelWorkerUrl(url: string | URL): void {
  * and the same-realm fallback per ADR-0011.
  */
 export function getKernelWorkerUrl(): string | URL | null {
-  return realmKernelWorkerUrl();
+  return kernelWorkerUrl;
 }
 
 /** Test-only: forget the configured URL. Not exported from the package. */
 export function clearKernelWorkerUrl(): void {
-  publishRealmKernelWorkerUrl(null);
+  kernelWorkerUrl = null;
 }
 
 /** Bundle of identity the worker-spawn flow needs from the manager. */
@@ -163,7 +135,7 @@ export function spawnKernelWorker(
   spec: SpawnWorkerSpec,
   identity: SpawnWorkerIdentity,
 ): SpawnWorkerResult {
-  const url = realmKernelWorkerUrl();
+  const url = kernelWorkerUrl;
   if (url === null) {
     throw new NotImplementedError(
       'kernel.spawnWorker',

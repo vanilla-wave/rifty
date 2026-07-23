@@ -24,7 +24,6 @@ import {
   normalizePath,
 } from '@riftydev/vfs';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
-import { ownerVfsScopeHasFailure } from './owner-vfs-durability.ts';
 
 export interface InstallStamp {
   readonly version: 4;
@@ -204,7 +203,7 @@ export function reportHasFailure(
   predicate: (path: string) => boolean,
 ): boolean {
   return report.anyFailure
-    ? ownerVfsScopeHasFailure(report, predicate)
+    ? report.anyFailure(predicate)
     : report.failures.some((failure) => predicate(failure.path));
 }
 

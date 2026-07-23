@@ -261,7 +261,7 @@ describe('@riftydev/workbench extraction boundary', () => {
 
     expect(closure.escapedEdges).toEqual([]);
     expect(closure.unresolvedEdges).toEqual([]);
-    expect(packageProductionFiles).toHaveLength(132);
+    expect(packageProductionFiles).toHaveLength(131);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

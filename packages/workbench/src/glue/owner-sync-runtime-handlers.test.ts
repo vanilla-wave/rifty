@@ -8,13 +8,14 @@ import {
 } from '@riftydev/kernel';
 import type { VfsMutationGuard, VfsMutationIntent } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { OwnerProjectVfsFrame } from '../workbench/project-vfs-protocol.ts';
 import { createOwnerVfsAuthorityComposition } from '../workers/owner-vfs-authority.ts';
 import {
   type PackageAcquisitionProject,
   createPackageAcquisitionAuthority,
 } from '../workers/package-acquisition-authority.ts';
+import { ProjectTerminalFsSync } from '../workers/project-terminal-namespace.ts';
 import { createWorkbenchOwnerChildVfsMutationGuard } from '../workers/workbench-owner-child-vfs.ts';
 import { createWorkbenchProjectVfs } from '../workers/workbench-project-vfs.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
@@ -435,5 +436,118 @@ describe('owner sync runtime package mutation guard', () => {
     expect(dec.decode(owner.readFileBytesSync(`${ROOT}/node_modules/pkg/index.js`))).toBe(
       'trusted',
     );
+  });
+});
+
+describe('owner sync runtime child relay views', () => {
+  // Fault classes: observable-order × sibling-drift. ENOENT preflight must not
+  // mask recursive spawn; owner and child hops translate the same two views.
+  it('keeps fs handlers unrooted while resolving recursive scripts through the scoped view', async () => {
+    const { fsSync: relay } = createMemoryFs();
+    const projectRoot = '/private/project';
+    relay.mkdirSync(projectRoot, { recursive: true });
+    relay.writeFileSync(`${projectRoot}/child.mjs`, enc.encode(''));
+    const scoped = new ProjectTerminalFsSync(relay, projectRoot);
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    installOwnerSyncRuntimeHandlers(dispatcher, () => relay, undefined, {
+      getVfs: () => scoped,
+    });
+
+    await expect(
+      roundTrip(dispatcher, 'fs.exists', { path: `${projectRoot}/child.mjs` }),
+    ).resolves.toEqual({ ok: true, value: true });
+    await expect(roundTrip(dispatcher, 'fs.exists', { path: '/child.mjs' })).resolves.toEqual({
+      ok: true,
+      value: false,
+    });
+
+    const recursive = await roundTrip(dispatcher, 'execSync', {
+      cmd: 'node child.mjs',
+      opts: { cwd: '/', env: {} },
+    });
+    expect(recursive).toMatchObject({
+      ok: false,
+      error: {
+        message: expect.stringContaining('node-entry worker URL not configured'),
+      },
+    });
+    expect(recursive).not.toMatchObject({
+      error: { message: expect.stringContaining('script not found') },
+    });
+  });
+
+  it('tracks the active project lifecycle and reads or spawns nothing after close', async () => {
+    const { fsSync: authority } = createMemoryFs();
+    const projectA = '/private/project-a';
+    const projectB = '/private/project-b';
+    authority.mkdirSync(projectA, { recursive: true });
+    authority.mkdirSync(projectB, { recursive: true });
+    authority.writeFileSync(`${projectA}/a.mjs`, enc.encode(''));
+    authority.writeFileSync(`${projectB}/b.mjs`, enc.encode(''));
+    let activeProjectRoot: string | null = null;
+    let ownerReads = 0;
+    const runWorker = vi.fn(async () => ({
+      stdout: enc.encode('ran'),
+      stderr: new Uint8Array(),
+      exitCode: 0,
+    }));
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    installOwnerSyncRuntimeHandlers(dispatcher, () => authority, undefined, {
+      getVfs: () => {
+        if (activeProjectRoot === null) {
+          throw new Error('Workbench owner execSync requires an active project');
+        }
+        ownerReads += 1;
+        return new ProjectTerminalFsSync(authority, activeProjectRoot);
+      },
+      runWorker,
+    });
+
+    const preflight = (path: string) =>
+      roundTrip(dispatcher, 'execSync', {
+        cmd: `node ${path}`,
+        opts: { cwd: '/', env: {} },
+      });
+    const expectResolved = async (path: string): Promise<void> => {
+      await expect(preflight(path)).resolves.toMatchObject({ ok: true });
+    };
+    const expectMissing = async (path: string): Promise<void> => {
+      await expect(preflight(path)).resolves.toMatchObject({
+        ok: false,
+        error: { message: expect.stringContaining('script not found') },
+      });
+    };
+
+    const readsBeforeOpen = ownerReads;
+    const spawnsBeforeOpen = runWorker.mock.calls.length;
+    await expect(preflight(`${projectA}/a.mjs`)).resolves.toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining('requires an active project') },
+    });
+    expect(ownerReads).toBe(readsBeforeOpen);
+    expect(runWorker).toHaveBeenCalledTimes(spawnsBeforeOpen);
+
+    activeProjectRoot = projectA;
+    await expectResolved('/a.mjs');
+    expect(runWorker).toHaveBeenLastCalledWith(
+      expect.objectContaining({ entryPath: '/a.mjs', cwd: '/' }),
+    );
+    await expectMissing('/b.mjs');
+    activeProjectRoot = projectB;
+    await expectResolved('/b.mjs');
+    expect(runWorker).toHaveBeenLastCalledWith(
+      expect.objectContaining({ entryPath: '/b.mjs', cwd: '/' }),
+    );
+    await expectMissing('/a.mjs');
+
+    activeProjectRoot = null;
+    const readsAfterClose = ownerReads;
+    const spawnsAfterClose = runWorker.mock.calls.length;
+    await expect(preflight(`${projectB}/b.mjs`)).resolves.toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining('requires an active project') },
+    });
+    expect(ownerReads).toBe(readsAfterClose);
+    expect(runWorker).toHaveBeenCalledTimes(spawnsAfterClose);
   });
 });
