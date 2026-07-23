@@ -1,23 +1,25 @@
 ---
 area: playground
 status: ready
-title: Keep Vite config-loader temp writes outside the attested dependency tree
+title: Install trust survives extraneous node_modules writes (re-scoped oracle)
 created: 2026-07-16
-why: live Vite repeatedly writes node_modules/.vite-temp after npm install, correctly revoking the whole-tree claim, marking a fresh Scratch UNSAVED, and forcing the next project reopen to reacquire an otherwise usable dependency tree
-user_story: As a playground user, I want an untouched Vite project to stay visibly clean and switching back to remain fast and offline-capable, without weakening dependency-tree trust.
-sources: [M11, PR-136-recut, ADR-0261, ADR-0279, Vite-v8.0.16]
-code: [apps/playground/src/glue/package-mutation-executor.ts, apps/playground/src/workers/package-acquisition-authority.ts, apps/playground/src/workers/vite-cli-prep.ts, apps/playground/src/workers/workbench-project-vfs.ts]
+why: live Vite repeatedly writes node_modules/.vite-temp after npm install; today any such write revokes the whole-tree claim, marks a fresh Scratch UNSAVED, and forces the next reopen to reacquire an otherwise usable tree — surveillance real npm does not perform (ADR-0307 probe)
+user_story: As a playground user, I want an untouched Vite project to stay visibly clean and switching back to remain fast and offline-capable, without weakening dependency-tree trust below real npm's bar.
+epic: honest-shadow-substitutions
+sources: [M11, ADR-0261, ADR-0307, Vite-v8.0.16]
+code: [apps/playground/src/glue/install-stamp.ts, apps/playground/src/glue/install-stamp-authority.ts, apps/playground/src/glue/package-mutation-executor.ts]
 ---
 
 ## Context
 
-Vite v8.0.16's bundle config loader creates
-`node_modules/.vite-temp/vite.config.*.timestamp-*.mjs`, imports it, and removes
-it. Classifying those ordinary `node_modules` mutations as dependency-tree
-changes is correct: ADR-0261 permits no path whitelist or trust publication over
-a tree changed after promotion. Today the resulting revoke also marks a fresh
-Scratch dirty; switching A→B→A then safely but unnecessarily reacquires the
-whole dependency tree.
+Re-refined under ADR-0307 (supersedes this item's previous disposable-cache
+contract; that carrier — owner-private cache, admission capability, chunked
+protocol — is dead, not deferred). The oracle: trust is affected only by
+installer-protocol events (demote → mutate → flush → promote) and by
+package.json/lockfile comparison at open; extraneous writes into
+`node_modules` never invalidate — exactly real npm (probe evidence in
+ADR-0307). Vite stays byte-unmodified and writes its temp config modules to
+the real VFS as on Node.
 
 ## User scenario
 
@@ -25,114 +27,85 @@ On a fresh Chromium profile, a user opens the Vite Starter, waits for install
 and LIVE preview, and makes no edit. Scratch remains clean. They switch to a
 second Starter, disable registry/snapshot network, and switch back. The Vite
 project reuses its exact installed dependency tree and reaches LIVE without a
-second acquisition; its JS/TS config behaves exactly as under unmodified Vite
-v8.0.16 on Node v24.16.0.
-
-## Deferred implementation
-
-The first cache redirection patch was rejected after adversarial review: a
-complete fix needs an authenticated, chunked capability shared by every Vite
-entry path in both legacy and Workbench owners, plus differential proof against
-unmodified Vite. Keep this item open; no partial path or synthetic loader closes
-the contract below.
+second acquisition.
 
 ## Acceptance
 
-- The acquisition-time Vite preparation redirects only the installed Vite
-  config loader's generated module backing to a generation-scoped,
-  owner-private disposable cache outside `<projectRoot>/node_modules`. The
-  original bundle/transform/import/remove algorithm still executes.
-- The disposable cache has one owner and one ingress capability. Ordinary page,
-  terminal, runtime-fs, Git, archive, and package writes cannot enter it. Cache
-  writes neither call dependency demote/revoke nor mark Scratch dirty; this is
-  provenance-based, not a path-wide exception for guest mutations.
-- The owner mints an unforgeable per-run admission before child launch. Raw
-  kernel sync calls cannot open, enumerate, or reuse a cache generation; knowing
-  a generation id grants no authority. Config bytes use a bounded chunked
-  protocol below the sync-ring frame limit, with real-dispatcher coverage at the
-  maximum accepted bundled-config size.
-- The prepared artifact remains usable through `vite`, direct
-  `node node_modules/vite/bin/vite.js`, and Vite's programmatic API in both the
-  legacy and Workbench owners. Cache URLs preserve `pathToFileURL` escaping for
-  config names containing `#`, `?`, `%`, spaces, and non-ASCII text.
-- Real Vite v8.0.16 browser proof: initial open reaches LIVE and keeps
-  `scratch.dirty === false`; A→B→A with all acquisition network disabled performs
-  zero install/snapshot/registry work, retains exact added dependencies, and
-  reaches LIVE. Editing any ordinary project file still marks Scratch dirty.
-- A control mutates `node_modules/.vite-temp` and another arbitrary
-  `node_modules` path through normal guest fs. Both still revoke the install
-  claim and mark Scratch dirty; reopen reacquires. Re-promoting after those
-  mutations is forbidden.
-- Differential config-loader tests run the parity cases below against
-  unmodified Vite v8.0.16 on Node v24.16.0 and the prepared browser package.
-  Bundle-anchor drift rejects preparation loudly before claim promotion. A fake
-  config loader, a `.vite-temp` whitelist, or only counting fewer installs
-  cannot close the item.
-
-## Reference contract
-
-- Oracle: unmodified Vite v8.0.16 config loading on Node v24.16.0.
-- Mechanism: Vite's own bundle/transform/import/remove config-loader path; the
-  prepared package redirects only its generated-module storage through an
-  owner-private disposable-cache capability.
+- RED first on current main: the churn scenario (a `vite` run's
+  `node_modules/.vite-temp` write demotes/revokes trust) fails before the fix;
+  the guard is revert-checked (reverting the predicate change makes it fail
+  again).
+- Running installed Vite — config load writes and removes
+  `node_modules/.vite-temp/vite.config.*.mjs` — neither demotes nor revokes
+  the install claim and does not mark Scratch dirty. No cache, no Vite
+  patching, no path whitelist: classification is by writer protocol
+  (installer vs everything else), not by filename.
+- Any non-installer write under `node_modules` (guest fs, terminal, package
+  code at run time, including deleting an installed package directory) leaves
+  trust intact; subsequent `require` of removed bytes fails exactly as on
+  Node, and the next explicit install reconciles.
+- Trust checks at open additionally compare the stored lockfile hash
+  (v4-shaped claim field per ADR-0307); a package.json or lockfile mismatch is
+  a miss that runs real arrival.
+- Unchanged installer protocol: acquisition mutations still demote first and
+  promote only through the full-ledger durability proof; quota/flush failure
+  refuses promotion; nested `cd sub && npm install` still demotes the ancestor
+  claim before mutating under its tree; the reserved claim path
+  (`node_modules/.rifty-install-stamp.json`) keeps ADR-0261 EPERM-class
+  ingress protection.
+- Real-browser proof: fresh Vite open reaches LIVE with `scratch.dirty ===
+  false`; A→B→A with acquisition network disabled performs zero
+  install/snapshot/registry work and reaches LIVE.
+- Delete-on-done when every branch above is proven. The oracle-slice PR owns
+  the churn/trust/lockfile branches; the A→B→A offline browser proof may need
+  its own slice (Playground save/switch re-materializes `node_modules` today —
+  if that empirically blocks UI-level reuse, the branch returns to refine
+  rather than being narrated away).
 
 ## Parity cases
 
-1. Default and explicit `--config` load `vite.config.js`, `.mjs`, `.cjs`, and
-   `.ts` with the same exported config, mode, command, cwd, and root as the
-   oracle under both `type: module` and `type: commonjs` package contexts and
-   through package-bin, direct-Node, and programmatic entry paths.
-2. Config-relative imports and package imports resolve from the original config
-   and project `node_modules`, not from the disposable cache location. Dynamic
-   import and top-level await preserve Vite v8.0.16 behavior.
-3. `vite`, `vite build`, and `vite preview` observe the same config side-effect
-   order and output. A thrown config error names the user's config source and
-   line; the private cache path does not replace it in user-visible diagnostics.
-4. Repeated config evaluation after editing the config never reuses a prior
-   generated module. Two run generations cannot see or delete each other's
-   cache entry.
-5. With no user mutation, the config-loader mkdir/write/import/remove sequence
-   changes neither the trusted install claim nor Scratch dirty state. The same
-   sequence performed through ordinary guest fs revokes trust and dirties
-   Scratch.
+Oracle: real npm 11.x / Node v24.16.0 (ADR-0307 probe protocol).
+
+1. Extraneous file under `node_modules` (`.vite-temp/*.mjs`, stray file inside
+   an installed package) → reopen skips install, mirroring npm's "up to date"
+   with an unchanged manifest/lockfile.
+2. Installed package directory deleted → trust retained; `require` fails with
+   the same error class as Node; next explicit `npm install` restores from the
+   lockfile.
+3. Tampered installed-package bytes → runtime executes them (Node runs what is
+   on disk); no reinstall is triggered by reopen.
+4. `package.json` dependency edit → demote/reinstall path (existing behavior
+   preserved).
+5. Lockfile bytes changed since the claim → miss at open, real arrival runs.
 
 ## Fault matrix
 
-The shared mutable state is the disposable Vite config cache. Its complete
-writer set is the prepared Vite config loader; `OwnerVfsAuthority` owns
-admission, generation identity, cleanup, and exclusion of every ordinary writer.
+Boundary: Storage (OPFS) per `fault-classes.md` §Boundary failure models; the
+predicate change adds no new writer or mechanism. ADR-0261 rows stand; delta
+rows:
 
 | Fault | Required outcome |
 |---|---|
-| `torn-state` × owner/child crash during write/import/remove | Project bytes and install claim stay unchanged; next generation removes only its own stale cache and evaluates config afresh. |
-| `concurrent-same-key` × overlapping/retiring Vite generations | Unique generation keys; old cleanup cannot remove or satisfy the current generation. |
-| `stale-state` × late write after session fence | Reject the retired generation; do not dirty the new project or create a reusable cache entry. |
-| `quota-perm-fail` × cache materialization | Vite command fails finitely with storage provenance; no fallback into `node_modules`, no claim revoke, no false LIVE. |
-| `poisoned-cache` × leftover generated module | Generated modules are never trusted across generations; re-evaluate from the current user config. |
-| `sibling-drift` × dev/build/preview or Vite bundle upgrade | Every bundled config-loader entry uses the one capability; missing/duplicate patch anchors loud-fail before promotion. |
-| `provenance-lie` × ordinary guest write to the old `.vite-temp` path | It remains an ordinary attested-tree mutation: revoke + dirty + reacquire. |
+| `provenance-lie` × extraneous write while pending | Non-installer writes cannot promote or refresh a claim; only the serialized authority mints trust. |
+| `stale-state` × lockfile edited after promotion | At-open hash compare misses; no trusted reuse over a drifted request. |
+| `torn-state` × crash between mutate and promote | Pending claim never satisfies reuse; reopen reinstalls (unchanged ADR-0261 row, re-asserted against the new predicate). |
+| `quota-perm-fail` × flush during promote | No promotion; miss on reopen (unchanged, re-asserted). |
 
 ## Out of scope
 
-- Arbitrary Vite/plugin/user writes anywhere under `node_modules`, including a
-  user-created `node_modules/.vite-temp`, remain dependency mutations. They
-  revoke trust and dirty Scratch; no filename or directory whitelist exists.
-- Caches from Vitest, Jest, ESLint, Rollup plugins, or other tools are not routed
-  through the Vite capability. They retain ordinary mutation behavior until a
-  separately refined owner exists.
-- An installed Vite bundle without the exact single config-loader patch anchor
-  throws `NotImplementedError('playground.vite-config-temp-cache')`, remains
-  compat ❌, and never falls back to a mutable attested tree.
+- Content-hash verification of tree bytes between installs — permanently out,
+  matching Node (ADR-0307); not a deferred feature.
+- Scratch-dirty semantics for ordinary project files outside `node_modules` —
+  unchanged; editing a project file still marks Scratch dirty.
+- The disposable Vite config cache and its capability machinery — dead per
+  ADR-0307, never built on main.
+- Snapshot/archive claim-transfer rules — unchanged ADR-0261 surface.
 
 ## Decisions
 
-- Preserve ADR-0261 whole-tree trust exactly. Do not whitelist `.vite-temp`,
-  classify it as harmless after the fact, hash only part of `node_modules`, or
-  mint a new claim after an uncoordinated mutation.
-- Keep Vite's bundle config loader because its CJS/ESM/TS behavior is the oracle.
-  Runner/native loaders that change supported config semantics are rejected.
-- Prepare the exact installed Vite artifact before claim promotion, following
-  the existing `vite-cli-prep` loud-anchor discipline. Artifact identity covers
-  the prepared bytes.
-- Cache placement/capability is private Playground ownership and reversible:
-  no public API, external dependency, claim schema, or attested set changes.
+- ADR-0307 owns the predicate re-scope and the probe evidence; ADR-0261
+  remains active for everything else.
+- Lockfile hash lands as a v4-shaped claim field in the same slice (schema
+  fork resolved there, no separate migration item; v3 claims miss once).
+- Scratch-dirty declassification for non-installer `node_modules` writes rides
+  the same predicate change (same classification site), not a separate item.

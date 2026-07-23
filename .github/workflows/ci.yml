@@ -34,6 +34,7 @@ jobs:
       - run: pnpm check:source-grep # blocking: no new source-grep tests in playground unit + browser-unit (allowlist exact-match)
       - run: pnpm check:dir-owner # blocking: source dir > 30 direct prod modules carries an owner README
       - run: pnpm check:contract-drift # blocking: no in-place ready-contract edits in the same diff as source changes
+      - run: pnpm check:budget # blocking when the PR declares Budget-Slice: hand-written diff vs the epic's band + mechanism sweep
       - run: node tools/backlog/check.mjs # blocking: frontmatter + TODO(backlog:) integrity
       - run: node tools/refs/check.mjs # blocking: ADR index + cross-ref integrity
 
