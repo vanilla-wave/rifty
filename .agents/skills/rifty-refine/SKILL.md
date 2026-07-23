@@ -1,12 +1,14 @@
 ---
 name: rifty-refine
-description: Refine a backlog epic or item to `ready` — lead with the user scenario, grill scope sharp, so an implementer can't approximate it. Manual invocation only.
+description: Refine a backlog epic or item to `ready` — close its open scope forks; lead with the user scenario, grill scope sharp, so an implementer can't approximate it. NOT for writing out an already-settled contract — missing/unfilled sections alone are plain writing per `docs/backlog/README.md`, not refine. Manual invocation only.
 disable-model-invocation: true
 ---
 
 Refine the given piece of value (epic, item, or raw idea) to `ready`.
 
 Refine is the contract half of the pipeline: audit/review findings arrive as drafts minted by `rifty-to-backlog` (capture — classify, dedup, gates); a finding that skipped capture goes through it first.
+
+**Refine = closing open forks, not document form.** A draft whose scope is already settled — forks resolved in Context/ADRs/code, nothing left to ask or decide — needs no refine: write the contract sections per `docs/backlog/README.md` + `TEMPLATE.md` and flip to `ready`. Missing sections alone are never a reason to propose refine.
 
 **Target = the `draft` doc itself.** A `ready` epic with `draft` children is the designed shape, not a defect — refine the draft child (it leans on the epic's scenario), never re-refine the `ready` epic. The epic is the target only when its own doc is `draft`, or its shape is wrong (overlap, bad split).
 
@@ -35,9 +37,7 @@ Refine closes user-visible forks and direction; it never designs internal carrie
 - Too big for one implementer pass → epic: outcome + end-to-end user scenario as acceptance, split into child items (`epic: <slug>`).
 - Atomic → item.
 
-## `ready` bar — built whole: zero new decisions at refine altitude, zero new in-scope items, ADR already exists
-A contract prescribing carriers with neither spike nor ADR behind them is not ready (process-level `frozen-assumption`).
-Item — five contract sections, shapes + anti-approximation rules all in `docs/backlog/README.md` (`backlog:check` enforces them; read there, don't restate): **`## User scenario`** (the spine from §Lead with — required unless the item has an `epic:` parent, which owns it) · **Acceptance** · **Parity cases** · **Out of scope** · **Decisions**. Every fork is one YOU resolved (mechanism) or an ADR link — never parked for the user.
-Infra-touching item: contract also carries **`## Fault matrix`** — applicable axes from `docs/process/fault-classes.md` × operation → honest outcome (fallback / degraded / loud throw), each row a fault-test target. A single «works or falls back» sentence is not a matrix — enumerate the rows.
-Epic: Outcome + end-to-end User scenario (naming the coarse invariants its closing smoke proves) + Items in dependency order — a mechanism shared by ≥2 children is an existing owner, the first item, or an ADR why separate; handed to an autonomous run → also `## Budget` (`docs/backlog/README.md` §Budget). Each child `ready` or `draft` with a clear path. An epic-child item leans on the epic's User scenario — its contract is Acceptance/Parity/Out-of-scope/Decisions only.
+## `ready` bar — built whole
+Zero new decisions at refine altitude, zero new in-scope items, the ADR (if any) already exists. Every fork is one YOU resolved (mechanism) or an ADR link — never parked for the user. A contract prescribing carriers with neither spike nor ADR behind them is not ready (process-level `frozen-assumption`).
+Section shapes — item contract, `## Fault matrix` rows, epic Outcome/Scenario/Items/`## Budget` — all in `docs/backlog/README.md` + `TEMPLATE.md` (`backlog:check` enforces the core sections; Fault matrix/Budget — review): write to them, never restate or grill about them.
 Flip `draft → ready` only when the bar is met.

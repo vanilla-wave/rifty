@@ -15,7 +15,7 @@ code: []
 
 <Situation. What's missing / wrong / deferred.>
 
-<!-- A `draft` can stop here. To reach `ready`, fill the contract below (use the rifty-refine skill).
+<!-- A `draft` can stop here. To reach `ready`, fill the contract below (open forks → rifty-refine skill; every fork settled → just write it out).
      `ready` ⇒ an implementer builds it whole: zero new decisions, zero new in-scope items, the ADR (if any) already exists. -->
 
 ## User scenario

@@ -33,6 +33,8 @@ A `ready` item MUST carry (enforced by `backlog:check`):
 - `## Out of scope` — the exact inputs/APIs that throw `NotImplementedError` + compat ❌ (named, never "…").
 - `## Decisions` — every fork resolved or ADR-linked; no open "Decide X".
 
+Infra-touching item (cache/persistence/network/concurrency) → also `## Fault matrix`: applicable axes (`docs/process/fault-classes.md`) × operation → honest outcome (fallback / degraded / loud throw), each row a fault-test target. A single «works or falls back» sentence is not a matrix — enumerate the rows. Not machine-checked (`backlog:check` can't judge "touches infra") — review-enforced via the DoD fault-matrix row. Shape: `TEMPLATE.md`.
+
 A `draft` item needs only `## Context`. See `TEMPLATE.md`.
 
 ## Epic frontmatter
