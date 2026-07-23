@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed (Workbench extraction)
+
+- Playground now consumes the sealed `@riftydev/workbench` root, companion, and
+  five worker entries; package-owned implementation and tests moved unchanged.
+- Host-owned esbuild WASM configuration remains explicit for Vite 7, while the
+  gated execSync fixture owns its lower-level worker setup and proves
+  cross-bundle process/Buffer identity.
+
 ### Changed (tab-independent workspace admission, ADR-0293)
 
 - A competing tab now gets a directed occupied-workspace screen instead of an

@@ -38,6 +38,12 @@
 
 ### Fixed
 
+- Partial lockfile misses now replay compatible retained edges and resolve only
+  changed frontiers, including exact nested-path rebasing and optional rollback.
+- Direct dependencies reserve root-visible slots before descendant traversal;
+  failed optional roots reserve nothing and required demand cannot be suppressed
+  by an earlier optional attempt (ADR-0303).
+
 - Package tarball ingress now rejects absolute/parent-traversal members before
   linking and exposes one host batch preflight over every actual package target.
   Rifty uses that preflight to reject reserved install claims before the first

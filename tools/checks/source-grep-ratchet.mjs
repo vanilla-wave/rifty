@@ -22,10 +22,10 @@
  * Known under-approximation is accepted (recorded at refine, epic
  * playground-testable-core); new evasion variants get added here when seen.
  *
- * Scope = the playground test surface: `apps/playground/src` unit tests AND the
- * `tests/browser-unit` lane (`*.spec.ts` — a grep there would bypass the gate
- * otherwise). Other packages' pre-existing greps are inventoried but NOT yet
- * ratcheted — TODO(backlog: toolchain-build/source-grep-ratchet-repo-wide).
+ * Scope = the Playground + extracted Workbench test surfaces and the
+ * `tests/browser-unit` lane (`*.spec.ts` — a grep there would bypass the gate).
+ * Other packages' pre-existing greps are inventoried but NOT yet ratcheted —
+ * TODO(backlog: toolchain-build/source-grep-ratchet-repo-wide).
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -76,27 +76,21 @@ export const ALLOWLIST = [
     why: 'RiftyTerminal is constructed in onMount (client-only, solid server runtime) — ctor-option wiring unobservable in node; values pinned via terminal-appearance module',
   },
   {
-    file: 'apps/playground/src/workers/kernel-worker-entry.test.ts',
+    file: 'packages/workbench/src/workers/kernel-worker-entry.test.ts',
     count: 5,
     digest: 'ceb47c6a61e8',
     why: 'contract = emitted-bundle shape (explicit bindings keep Vite from tree-shaking the setup chunk) — unobservable at node runtime; import executes installWorkerEntry worker wiring',
   },
 
   {
-    file: 'apps/playground/src/workers/real-vite-bootstrap.test.ts',
-    count: 12,
-    digest: '0c9f1de026ac',
-    why: 'worker-only owner entry; residual = zero-vite-name-dispatch pins, prod-bundle registrar pins, ready-vs-bridge ORDER + setProcessCwd (not page-observable); withViteCliArgs/Env moved to vite-cli-prep (behavioral tests there incl. ADR-0161 hmr-off); heirs in tests/browser-unit + e2e',
-  },
-  {
-    file: 'apps/playground/src/workers/bundle-local-buffer.test.ts',
+    file: 'packages/workbench/src/workers/bundle-local-buffer.test.ts',
     count: 5,
     digest: '48a01d0768ed',
     why: 'dual-copy Buffer hazard exists only in PROD ?worker&url bundles (dev/browser-unit share one ESM instance); wiring pins on child bootstraps; behavior covered in tests/e2e-prod',
   },
 ];
 
-export const SCAN_ROOTS = ['apps/playground/src', 'tests/browser-unit'];
+export const SCAN_ROOTS = ['apps/playground/src', 'packages/workbench/src', 'tests/browser-unit'];
 /** Window after a binding's `=` in which the readFileSync target path must
  *  appear — covers the multi-line `fileURLToPath(new URL('…', import.meta.url))`
  *  formatting without swallowing the whole file. */

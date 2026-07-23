@@ -27,6 +27,7 @@ import {
   readNodeEntryBootstrapIfPresent,
   snapshotNodeEntryTerminalBootstrap,
 } from './node-entry-runtime-config.ts';
+import { brandRuntimeOwnedNodeProcess, isRuntimeOwnedNodeProcess } from './process-brand.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
@@ -60,7 +61,7 @@ function drainNextTicks(): void {
       // Surface on the ACTIVE realm process (the one user code attached handlers
       // to): the seeded NodeProcess in a kernel child, else the REPL singleton.
       const active = (globalThis as { process?: unknown }).process;
-      const target = active instanceof NodeProcess ? active : riftyProcess;
+      const target = isRuntimeOwnedNodeProcess(active) ? (active as NodeProcess) : riftyProcess;
       (target as unknown as EventEmitter).emit('uncaughtException', err);
     }
   }
@@ -493,6 +494,7 @@ export class NodeProcess extends EventEmitter {
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    brandRuntimeOwnedNodeProcess(this);
     Object.defineProperty(this, NODE_PROCESS_TERMINAL_BOOTSTRAP, {
       value: (terminal: unknown): void => this.#applyTerminalBootstrap(terminal),
       enumerable: false,
@@ -741,7 +743,7 @@ export function writeProcessStdin(data: string | Uint8Array): void {
  * backlog: runtime-js/worker-entry-process-globals-side-effect).
  */
 export function installProcessGlobals(): void {
-  if ((globalThis as { process?: unknown }).process instanceof NodeProcess) return;
+  if (isRuntimeOwnedNodeProcess((globalThis as { process?: unknown }).process)) return;
   patchPromiseForNextTick();
   (globalThis as unknown as { process: NodeProcess }).process = riftyProcess;
   // `global === globalThis` via the single helper — Node's descriptor

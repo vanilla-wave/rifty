@@ -15,7 +15,13 @@ import {
   shouldPrependTsconfigBaseUrl,
 } from './tsconfig-paths.ts';
 
+const safeReflectApply = Reflect.apply.bind(Reflect);
+const stringEndsWithPrimordial = String.prototype.endsWith;
 const utf8 = new TextDecoder('utf-8');
+
+function safeEndsWith(value: string, suffix: string): boolean {
+  return safeReflectApply(stringEndsWithPrimordial, value, [suffix]) as boolean;
+}
 
 export type ModuleKind = 'cjs' | 'esm' | 'json' | 'builtin' | 'text';
 
@@ -448,7 +454,7 @@ function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | 
     if (
       specifier.length >= prefix.length + suffix.length &&
       specifier.startsWith(prefix) &&
-      specifier.endsWith(suffix)
+      safeEndsWith(specifier, suffix)
     ) {
       const baseLen = prefix.length;
       const trailerLen = suffix.length;
@@ -566,11 +572,11 @@ function nodeModulesPaths(fromDir: string): readonly string[] {
 
 function hasTrailingDirectorySegment(specifier: string): boolean {
   return (
-    specifier.endsWith('/') ||
+    safeEndsWith(specifier, '/') ||
     specifier === '.' ||
     specifier === '..' ||
-    specifier.endsWith('/.') ||
-    specifier.endsWith('/..')
+    safeEndsWith(specifier, '/.') ||
+    safeEndsWith(specifier, '/..')
   );
 }
 
@@ -795,7 +801,7 @@ function findWildcard(
     if (
       subpath.length >= prefix.length + suffix.length &&
       subpath.startsWith(prefix) &&
-      subpath.endsWith(suffix)
+      safeEndsWith(subpath, suffix)
     ) {
       // Specificity: longer base wins, tie → longer trailer.
       if (
@@ -922,15 +928,17 @@ function readResolved(
 }
 
 function detectKind(filePath: string, scopeType: string | undefined): ModuleKind {
-  if (filePath.endsWith('.json')) return 'json';
-  if (TEXT_EXTENSIONS.some((ext) => filePath.endsWith(ext))) return 'text';
-  if (filePath.endsWith('.mjs')) return 'esm';
-  if (filePath.endsWith('.cjs')) return 'cjs';
+  if (safeEndsWith(filePath, '.json')) return 'json';
+  for (let index = 0; index < TEXT_EXTENSIONS.length; index += 1) {
+    if (safeEndsWith(filePath, TEXT_EXTENSIONS[index] as string)) return 'text';
+  }
+  if (safeEndsWith(filePath, '.mjs')) return 'esm';
+  if (safeEndsWith(filePath, '.cjs')) return 'cjs';
   if (
-    filePath.endsWith('.js') ||
-    filePath.endsWith('.ts') ||
-    filePath.endsWith('.tsx') ||
-    filePath.endsWith('.jsx')
+    safeEndsWith(filePath, '.js') ||
+    safeEndsWith(filePath, '.ts') ||
+    safeEndsWith(filePath, '.tsx') ||
+    safeEndsWith(filePath, '.jsx')
   ) {
     // `.ts`/`.tsx`/`.jsx` mirror the `.js` branch (ADR-0053): ESM under a `type:module`
     // scope, else CJS — as a TS-aware Node loader classifies by package scope.

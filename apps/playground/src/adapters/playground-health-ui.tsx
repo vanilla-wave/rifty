@@ -1,10 +1,10 @@
-import { type Accessor, For, Show, createSignal } from 'solid-js';
 import type {
   WorkbenchHealth,
   WorkbenchHealthIssue,
   WorkbenchHealthSnapshot,
   WorkbenchRecoveryScope,
-} from '../workbench/public.ts';
+} from '@riftydev/workbench';
+import { type Accessor, For, Show, createSignal } from 'solid-js';
 
 export type PlaygroundBootLifecycle =
   | { readonly kind: 'opening' }

@@ -47,7 +47,7 @@ async function installWorkbenchHarness(page: Page): Promise<void> {
     });
 
     const [publicEntryModule, hostAssetsModule] = await Promise.all([
-      import(/* @vite-ignore */ '/src/workbench/public.ts'),
+      import(/* @vite-ignore */ '/src/browser-unit/workbench-public-entry.ts'),
       import('/src/browser-unit/workbench-vite-host-assets.ts'),
     ]);
     const publicEntry = publicEntryModule as unknown as {

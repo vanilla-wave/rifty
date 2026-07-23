@@ -13,19 +13,17 @@
  * once the cache is warm. The fast path also handles nested entries — see
  * `createLockfileSource` / `pinnedEntryForParent`.
  *
- * Pipeline (D-F unification): the lockfile fast path and live-resolve share one
- * traversal driver (`walkAndPin`) that pulls each node's pin from a
- * `ResolutionSource`:
+ * Pipeline (D-F unification): lockfile replay and live resolution share one
+ * traversal driver (`walkAndPin`) and compose per edge:
  *
  *   - {@link createLockfileSource} — replays pins from a v3 lockfile entry,
  *     parent-aware walk-up for nested copies.
  *   - {@link createRegistrySource} — packument fetch + `pickBestVersion`,
  *     applies overrides per node.
  *
- * The fast-path/live-path choice is made once pre-flight (see {@link
- * chooseSource}); the walk doesn't care which source it drives. {@link
- * pinToPackage} is the single adapter from a resolved pin + tarball bytes to a
- * `PinnedPackage`.
+ * Covered edges replay exact pins; a missing root/policy frontier resolves from
+ * metadata without discarding compatible retained subgraphs. {@link
+ * pinToPackage} is the shared materialization seam.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -58,15 +56,13 @@ import {
   fetchAndUnpackToCache,
 } from './fetch-and-unpack.ts';
 import {
-  bundleCompletenessGap,
-  lockfileCovers,
-  lockfileSubgraph,
+  bundleCompletenessGapForPaths,
   pinnedEntryForParent,
   readExistingLockfile,
   writeLockfileIfChanged,
 } from './installer-lockfile-reader.ts';
 import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './linker.ts';
-import { type OverrideMap, resolveOverride } from './overrides.ts';
+import type { OverrideMap } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import {
@@ -280,6 +276,7 @@ export interface InstallResult {
  * a `PinnedPackage`.
  */
 interface ResolvedPin {
+  readonly origin: 'lockfile' | 'metadata';
   readonly name: string;
   readonly version: string;
   readonly resolved: string;
@@ -291,10 +288,8 @@ interface ResolvedPin {
    * succeeding optionals were folded into `dependencies` and failures dropped,
    * so there's nothing to re-traverse. */
   readonly optionalDependencies: Record<string, string>;
-  /** Pre-determined install path (lockfile-source only). When set, the walk
-   *  honours it verbatim, so the fast path always reproduces the recorded
-   *  layout regardless of visit order; when undefined, the walk computes
-   *  first-wins-flat + nest-on-conflict placement. */
+  /** Preferred recorded install path (lockfile-source only). The mixed walk
+   *  may relocate it when another identity owns that path. */
   readonly installPath?: string;
 }
 
@@ -308,19 +303,26 @@ interface NormalizedInstallRequest {
 
 interface SourcePlan {
   readonly source: ResolutionSource;
-  readonly resolution: InstallResolution;
+  readonly resolution: () => InstallResolution;
   readonly dependencies: Record<string, string>;
   readonly optionalDependencies: Record<string, string>;
 }
 
+interface LockfilePathTranslation {
+  readonly recordedPrefix: string;
+  readonly actualPrefix: string;
+}
+
 /**
- * `parentName` scopes `parent>child` overrides (registry source);
- * `parentInstallPath` drives the lockfile source's walk-up lookup. Top-level:
- * `parentName` = root name, `parentInstallPath` = `''`.
+ * The actual tree path may differ from the recorded lockfile scope when mixed
+ * replay relocates a retained package under a new conflict.
  */
 interface ResolveContext {
   readonly parentName: string | undefined;
   readonly parentInstallPath: string;
+  readonly parentLockfilePath: string;
+  readonly parentOrigin: 'root' | 'lockfile' | 'metadata';
+  readonly lockfilePathTranslations: readonly LockfilePathTranslation[];
 }
 
 /**
@@ -378,6 +380,12 @@ export async function install(
   const substitutions = createSubstitutionReporter(
     opts.onSubstitution ?? ((line) => console.warn(line)),
   );
+  const directEffectiveNameCollision = hasEffectiveTopLevelNameCollision(
+    dependencies,
+    optionalDependencies,
+    rootName,
+    opts.overrides,
+  );
 
   let existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
 
@@ -397,7 +405,14 @@ export async function install(
   let eddyFallbackCause: Error | undefined;
   if (
     opts.resolverUrl &&
-    !hasLockfileFastPath(existingLockfile, dependencies, optionalDependencies, rootName, opts)
+    !directEffectiveNameCollision &&
+    !existingLockfilePreemptsEddy(
+      existingLockfile,
+      dependencies,
+      optionalDependencies,
+      rootName,
+      opts,
+    )
   ) {
     const staged = await tryEddyFastPath(
       opts,
@@ -422,7 +437,6 @@ export async function install(
     existingLockfile,
     dependencies,
     optionalDependencies,
-    rootName,
     opts,
     substitutions,
   );
@@ -488,7 +502,7 @@ export async function install(
     lockfile,
     conflicts: [],
     provenance: {
-      resolution: plan.resolution,
+      resolution: plan.resolution(),
       packages: provenancePackages,
       ...(eddyFallbackReason === undefined ? {} : { eddyFallback: { reason: eddyFallbackReason } }),
     },
@@ -730,13 +744,8 @@ function assertNoLifecycleScripts(
   }
 }
 
-/**
- * Would {@link chooseSource} take the zero-network lockfile fast path for this
- * request? Used to skip the eddy round-trip when a covering lockfile already
- * exists (eddy is the COLD-install optimizer). Mirrors chooseSource's
- * lockfile-path condition exactly — keep the two in sync.
- */
-function hasLockfileFastPath(
+/** Skip Eddy when the existing lock owns replay or a loud structural failure. */
+function existingLockfilePreemptsEddy(
   existingLockfile: Lockfile | null,
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
@@ -744,12 +753,20 @@ function hasLockfileFastPath(
   opts: InstallOptions,
 ): boolean {
   if (!existingLockfile) return false;
-  const request = {
-    ...applyOverridesToRequest(dependencies, rootName, opts.overrides),
-    ...applyOverridesToRequest(optionalDependencies, rootName, opts.overrides),
-  };
-  const pins = lockfileCovers(existingLockfile, request);
-  return !!pins && subgraphFreeOfOverrideDivergence(existingLockfile, pins, opts.overrides);
+  if (
+    hasEffectiveTopLevelNameCollision(dependencies, optionalDependencies, rootName, opts.overrides)
+  ) {
+    return false;
+  }
+  return (
+    analyzeLockfileRequest(
+      existingLockfile,
+      dependencies,
+      optionalDependencies,
+      rootName,
+      opts.overrides,
+    ).ownership !== 'metadata'
+  );
 }
 
 /**
@@ -799,16 +816,6 @@ async function tryEddyFastPath(
   const body: EddyRequestBody = { dependencies, optionalDependencies };
   if (opts.overrides) body.overrides = opts.overrides;
   const requestKey = canonicalEddyRequestKey(body, opts.prefer ?? 'cached');
-
-  // The EXACT condition `chooseSource` uses for its lockfile fast path
-  // (coverage AND no override divergence) — a bundle passing it GUARANTEES
-  // `chooseSource` fast-paths the eddy lockfile; without the divergence half, a
-  // parent-scoped override would make `chooseSource` silently live-resolve
-  // while we'd already have claimed `source: 'eddy'` (a provenance lie).
-  const effectiveRequest = {
-    ...applyOverridesToRequest(dependencies, rootName, opts.overrides),
-    ...applyOverridesToRequest(optionalDependencies, rootName, opts.overrides),
-  };
 
   // prefer:'online' (the `--prefer-online` analogue) promises a FRESH
   // server-side recompute — a pinned prefetch/GET would serve a cached
@@ -900,7 +907,9 @@ async function tryEddyFastPath(
           : await fetchHeadersBounded(attempt.run, headersStallMs, `eddy ${attempt.label}`);
       const outcome = await consumeEddyResponse(
         response,
-        effectiveRequest,
+        dependencies,
+        optionalDependencies,
+        rootName,
         opts,
         tarballCache,
         attempt.expectedHash,
@@ -956,7 +965,9 @@ async function* bufferedTarEntries(
  */
 async function consumeEddyResponse(
   response: Response,
-  effectiveRequest: Record<string, string>,
+  dependencies: Record<string, string>,
+  optionalDependencies: Record<string, string>,
+  rootName: string,
   opts: InstallOptions,
   tarballCache: TarballCache,
   expectedClosureHash?: string,
@@ -1063,9 +1074,21 @@ async function consumeEddyResponse(
       if (manifest !== null && manifest.asOf.closureHash !== (await closureHashOf(parsed))) {
         return `bundle manifest closure hash ${manifest.asOf.closureHash} does not match its lockfile`;
       }
-      // Coverage gap / override divergence → fallback (no partial install).
-      const pins = lockfileCovers(parsed, effectiveRequest);
-      if (!pins || !subgraphFreeOfOverrideDivergence(parsed, pins, opts.overrides)) {
+      // A v3 lockfile records effective pins, not which parent-scoped policy
+      // selected them. Local replay has the current request context; an
+      // imported bundle cannot prove that provenance, so keep Eddy additive
+      // and fall back to the standard resolver for this policy shape.
+      if (hasParentScopedOverride(opts.overrides)) {
+        return 'bundle lockfile does not cover the request (or an override forces a re-resolve)';
+      }
+      const requestAnalysis = analyzeLockfileRequest(
+        parsed,
+        dependencies,
+        optionalDependencies,
+        rootName,
+        opts.overrides,
+      );
+      if (requestAnalysis.ownership !== 'replay') {
         return 'bundle lockfile does not cover the request (or an override forces a re-resolve)';
       }
       // Completeness (round 6): a covering lockfile whose reachable packages
@@ -1073,7 +1096,11 @@ async function consumeEddyResponse(
       // ORDINARY registry on cache miss while claiming `source: 'eddy'` — a
       // provenance lie (and a learned pin to a partial bundle). Gate at member
       // 2, before any tarball seed or lockfile write.
-      const gap = bundleCompletenessGap(parsed, effectiveRequest, manifest?.tarballs ?? []);
+      const gap = bundleCompletenessGapForPaths(
+        parsed,
+        requestAnalysis.reachablePaths,
+        manifest?.tarballs ?? [],
+      );
       if (gap) return gap;
       lockfile = parsed;
       continue;
@@ -1167,76 +1194,200 @@ function createSubstitutionReporter(sink: (line: string) => void): SubstitutionR
   };
 }
 
-/**
- * Replay-path top-level redirects: the walk only sees post-override names
- * (`applyOverridesToRequest` rewrote the request), so a top-level baked
- * redirect must be reported here, with the version the lockfile pins.
- */
-function reportTopLevelBakedRedirects(
-  request: Record<string, string>,
-  parent: string,
-  overrides: OverrideMap | undefined,
-  topLevelPins: Map<string, string>,
-  reporter: SubstitutionReporter,
-): void {
-  for (const [name, range] of Object.entries(request)) {
-    const { override } = resolveEffectivePackageRequest(name, range, parent, overrides);
-    if (!override || override.source !== 'baked' || override.name === name) continue;
-    const version = topLevelPins.get(override.name);
-    if (version) reporter.redirect(name, range, override.name, version);
-  }
-}
-
-/**
- * Pick the resolution strategy. Lockfile fast path wins iff a valid v3 lockfile
- * exists, covers every top-level request after override application, and no
- * override redirects the locked subgraph to an unpinned name. Else live-resolve.
- */
+/** Pick per-edge lockfile replay or fresh metadata resolution. */
 function chooseSource(
   existingLockfile: Lockfile | null,
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
-  rootName: string,
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
 ): SourcePlan {
-  const effectiveDependencies = applyOverridesToRequest(dependencies, rootName, opts.overrides);
-  const effectiveOptionalDependencies = applyOverridesToRequest(
-    optionalDependencies,
-    rootName,
-    opts.overrides,
-  );
   if (existingLockfile) {
-    // TODO(backlog: npm-client/lockfile-fast-path-failed-optionals) — a root
-    // optional that failed resolution is absent from the lockfile, so including
-    // optionals here defeats the fast path on every subsequent install.
-    const effectiveRequest = { ...effectiveDependencies, ...effectiveOptionalDependencies };
-    const topLevelPins = lockfileCovers(existingLockfile, effectiveRequest);
-    if (
-      topLevelPins &&
-      subgraphFreeOfOverrideDivergence(existingLockfile, topLevelPins, opts.overrides)
-    ) {
-      reportTopLevelBakedRedirects(
-        { ...dependencies, ...optionalDependencies },
-        rootName,
-        opts.overrides,
-        topLevelPins,
-        substitutions,
-      );
-      return {
-        source: createLockfileSource(existingLockfile, opts, substitutions),
-        resolution: 'lockfile',
-        dependencies: effectiveDependencies,
-        optionalDependencies: effectiveOptionalDependencies,
-      };
-    }
+    const incremental = createIncrementalSource(existingLockfile, opts, substitutions);
+    return {
+      source: incremental.source,
+      resolution: incremental.resolution,
+      dependencies,
+      optionalDependencies,
+    };
   }
   return {
     source: createRegistrySource(opts, substitutions),
-    resolution: 'metadata',
+    resolution: () => 'metadata',
     dependencies,
     optionalDependencies,
   };
+}
+
+type LockfileReuseDecision =
+  | { readonly kind: 'reuse' }
+  | {
+      readonly kind: 'miss';
+      readonly reason: 'missing-entry' | 'range-drift';
+      readonly policyFrontier: boolean;
+    };
+
+/** Per-edge ADR-0023 coverage. Strict lockfile decoding errors stay fatal. */
+function lockfileReuseDecision(
+  lockfile: Lockfile,
+  name: string,
+  range: string | null,
+  ctx: ResolveContext,
+  overrides: OverrideMap | undefined,
+): LockfileReuseDecision {
+  const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
+    name,
+    range,
+    ctx.parentName,
+    overrides,
+  );
+  const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+  const policyFrontier = override !== null;
+  if (!hit) return { kind: 'miss', reason: 'missing-entry', policyFrontier };
+  if (
+    (!rangeIsUnconstrained(effectiveRange) && !matchesRange(hit.entry.version, effectiveRange)) ||
+    (override?.range !== null &&
+      override?.range !== undefined &&
+      !matchesRange(hit.entry.version, override.range))
+  ) {
+    return { kind: 'miss', reason: 'range-drift', policyFrontier };
+  }
+  return { kind: 'reuse' };
+}
+
+function registryOwnsIncrementalMiss(
+  decision: Exclude<LockfileReuseDecision, { readonly kind: 'reuse' }>,
+  ctx: ResolveContext,
+): boolean {
+  return ctx.parentOrigin !== 'lockfile' || decision.policyFrontier;
+}
+
+type LockfileRequestOwnership = 'replay' | 'metadata' | 'broken';
+
+function mergeLockfileRequestOwnership(
+  left: LockfileRequestOwnership,
+  right: LockfileRequestOwnership,
+): LockfileRequestOwnership {
+  if (left === 'broken' || right === 'broken') return 'broken';
+  if (left === 'metadata' || right === 'metadata') return 'metadata';
+  return 'replay';
+}
+
+interface LockfileRequestAnalysis {
+  readonly ownership: LockfileRequestOwnership;
+  readonly reachablePaths: ReadonlySet<string>;
+}
+
+/** No-I/O mirror of the mixed resolver, used by the Eddy provenance gates. */
+function analyzeLockfileRequest(
+  lockfile: Lockfile,
+  dependencies: Record<string, string>,
+  optionalDependencies: Record<string, string>,
+  rootName: string,
+  overrides: OverrideMap | undefined,
+): LockfileRequestAnalysis {
+  const reachablePaths = new Set<string>();
+  let ownership: LockfileRequestOwnership = 'replay';
+  const recordOwnership = (next: LockfileRequestOwnership): void => {
+    ownership = mergeLockfileRequestOwnership(ownership, next);
+  };
+
+  const visit = (name: string, range: string | null, ctx: ResolveContext): void => {
+    const decision = lockfileReuseDecision(lockfile, name, range, ctx, overrides);
+    if (decision.kind === 'miss') {
+      recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
+      return;
+    }
+    const { effectiveName } = resolveEffectivePackageRequest(
+      name,
+      range,
+      ctx.parentName,
+      overrides,
+    );
+    const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+    if (!hit || !hit.entry.resolved || !hit.entry.integrity) {
+      recordOwnership('broken');
+      return;
+    }
+    assertShimSupported(effectiveName, hit.entry.version);
+    if (reachablePaths.has(hit.installPath)) return;
+    reachablePaths.add(hit.installPath);
+    const childContext: ResolveContext = {
+      parentName: effectiveName,
+      parentInstallPath: hit.installPath,
+      parentLockfilePath: hit.installPath,
+      parentOrigin: 'lockfile',
+      lockfilePathTranslations: [],
+    };
+    for (const [childName, childRange] of Object.entries(hit.entry.dependencies ?? {})) {
+      visit(childName, childRange, childContext);
+    }
+    for (const [companionName, companionRange] of Object.entries(
+      companionRequestsFor(effectiveName, hit.entry.version),
+    )) {
+      visit(companionName, companionRange, childContext);
+    }
+  };
+
+  const rootContext: ResolveContext = {
+    parentName: rootName,
+    parentInstallPath: '',
+    parentLockfilePath: '',
+    parentOrigin: 'root',
+    lockfilePathTranslations: [],
+  };
+  for (const [name, range] of Object.entries(dependencies)) {
+    visit(name, range, rootContext);
+  }
+  for (const [name, range] of Object.entries(optionalDependencies)) {
+    try {
+      visit(name, range, rootContext);
+    } catch (error) {
+      const code = (error as { code?: unknown })?.code;
+      if (code === 'EBROKENLOCK' || code === 'EINSTALLPATHCONFLICT') {
+        recordOwnership('broken');
+      }
+    }
+  }
+  return { ownership, reachablePaths };
+}
+
+/** Covered edges replay; only uncovered or policy-drifted frontiers use metadata. */
+function createIncrementalSource(
+  lockfile: Lockfile,
+  opts: InstallOptions,
+  substitutions: SubstitutionReporter,
+): Readonly<{ source: ResolutionSource; resolution: () => InstallResolution }> {
+  const locked = createLockfileSource(lockfile, opts, substitutions);
+  const registry = createRegistrySource(opts, substitutions);
+  let metadataUsed = false;
+  const useRegistry = (name: string, range: string | null, ctx: ResolveContext): boolean => {
+    const decision = lockfileReuseDecision(lockfile, name, range, ctx, opts.overrides);
+    return decision.kind === 'miss' && registryOwnsIncrementalMiss(decision, ctx);
+  };
+
+  return {
+    source: {
+      prefetch(name, range, ctx): void {
+        if (!useRegistry(name, range, ctx)) return;
+        metadataUsed = true;
+        registry.prefetch?.(name, range, ctx);
+      },
+      async resolve(name, range, ctx): Promise<ResolvedPin> {
+        if (useRegistry(name, range, ctx)) {
+          metadataUsed = true;
+          return await registry.resolve(name, range, ctx);
+        }
+        return await locked.resolve(name, range, ctx);
+      },
+    },
+    resolution: () => (metadataUsed ? 'metadata' : 'lockfile'),
+  };
+}
+
+/** Exact package identity shared by direct reservation, placement, and fetch dedup. */
+function resolvedPinIdentity(pin: ResolvedPin): string {
+  return `${pin.name}\0${pin.version}\0${pin.resolved}\0${pin.integrity ?? ''}`;
 }
 
 /**
@@ -1244,21 +1395,18 @@ function chooseSource(
  * placement, fetch the tarball, record it, recurse into `dependencies` and
  * `optionalDependencies` (registry-source only).
  *
- * Placement rule (M11):
- *   1. Lockfile source returns a `pin.installPath` — use it verbatim; live
- *      source returns `undefined` and the walk computes placement.
- *   2. Name has no flat slot yet → take `node_modules/<name>`.
- *   3. Flat slot holds the same version → dedupe (no fetch/entry/recursion).
- *   4. Diamond conflict → nest under parent: `<parentInstallPath>/node_modules/<name>`.
+ * Placement rule (M11 + direct-root tier):
+ *   0. Surviving direct identities reserve their root-visible slots.
+ *   1. Reuse a recorded path when free; relocate it on a mixed-source conflict.
+ *   2. Descendants use first-wins-flat + nest-on-conflict.
  *
  * Intentionally simpler than npm v3 hoisting: a conflict always nests under its
  * immediate parent even when a sibling-ancestor has a reusable nested copy.
  * Correct in all cases; costs a few duplicated nested copies (disk, never
  * resolution). Full "hoist as high as possible" is a follow-on.
  *
- * Two paths converge because the lockfile was written by the live path, so
- * replaying its recorded paths reproduces the live layout for the same visit
- * order — and replay matches the lockfile regardless of visit order.
+ * Full replay reproduces recorded paths. Mixed replay preserves free recorded
+ * paths and rebases descendants when a retained parent moves.
  *
  * Keyed by **install path**, not name: post-M11 one name can sit at several
  * paths (one flat + nested copies).
@@ -1271,35 +1419,32 @@ async function walkAndPin(
   fetchCtx: FetchAndUnpackCtx,
   onPackage?: (event: InstallProgressEvent) => void,
 ): Promise<Map<string, PinnedPackage>> {
-  // Determinism-vs-throughput invariant (#24, perf-audit 2026-06-05): the
-  // placement walk (resolve -> choosePlacement -> flatByName claim -> recurse)
-  // stays STRICTLY SERIAL and REQUEST-ORDERED. First-wins-flat is claimed AFTER
-  // `await source.resolve` (version known only post-resolve), so the claim
-  // straddles an await; running placement concurrently would make which version
-  // wins the flat slot depend on resolve-completion order, not request order,
-  // breaking the express-diamond contract (installer.test.ts:225 — ms@2.1.3
-  // flat, ms@2.0.0 nested). Packument prefetch may overlap metadata I/O, but it
-  // never places a package. Tarball fetch is also parallelized (bounded
+  // Direct roots resolve first and surviving identities reserve flat slots
+  // before descendant DFS. Descendant placement stays serial/request-ordered;
+  // packument prefetch and tarball acquisition may overlap without owning paths.
+  // Tarball fetch is parallelized (bounded
   // semaphore): tarball bytes feed extractTarGz/files alone, never the dep walk
   // (pin.dependencies comes from the packument/lockfile, not the tarball), so
   // fetch order cannot perturb layout. Concurrent same-(name,version) fetches
   // dedupe to one network call via `inFlight`. ONE exception to the deferred
-  // fetch: an OPTIONAL-boundary node awaits its own fetch BEFORE recursing (see
-  // the `isOptionalBoundary` site) so a failed optional fetch skips its WHOLE
-  // subtree before it is walked — npm parity, and identical to the old serial
-  // walk.
+  // fetch: an OPTIONAL-boundary node awaits acquisition + materialization
+  // before recursing, so its own failure skips the subtree before it is walked.
   const FETCH_CONCURRENCY = 8; // perf knob only; any value yields the identical tree.
   const sem = new Semaphore(FETCH_CONCURRENCY);
 
-  /** What's installed at `node_modules/<name>` (the hoisted slot). */
-  const flatByName = new Map<string, string /* version */>();
+  /** Identity installed at `node_modules/<name>` (the hoisted slot). */
+  const flatByName = new Map<string, Readonly<{ version: string; identity: string }>>();
   /** Every installed copy, keyed by install path. */
   const pinned = new Map<string, PinnedPackage>();
   /** Install paths already scheduled this walk (synchronous path-level dedup,
    * replaces `pinned.has` since `pinned` is now populated at the await site). */
-  const scheduled = new Set<string>();
-  /** Collapse concurrent same-(name,version) fetches to one network call. */
+  const scheduled = new Map<string, string>();
+  /** Paths reached by at least one non-optional edge; demand only strengthens. */
+  const requiredDemandPaths = new Set<string>();
+  /** Collapse concurrent same-package acquisitions to one network call. */
   const inFlight = new Map<string, Promise<FetchAndUnpackResult>>();
+  /** Optional direct roots materialized before they may reserve a flat slot. */
+  const preparedOptionalPackages = new Map<string, PinnedPackage>();
   /** Deferred fetch tasks; `optional` carries the warn descriptor (or null). */
   const fetchTasks: Array<{
     promise: Promise<FetchAndUnpackResult>;
@@ -1308,28 +1453,59 @@ async function walkAndPin(
     optional: { depName: string; depRange: string; parentName: string } | null;
   }> = [];
 
-  function prefetchPackuments(
-    dependencies: Record<string, string>,
-    parentInstallPath: string,
-    parentName: string,
-  ): void {
+  function prefetchPackuments(dependencies: Record<string, string>, ctx: ResolveContext): void {
     if (!source.prefetch) return;
     for (const [depName, depRange] of Object.entries(dependencies)) {
-      source.prefetch(depName, depRange, { parentName, parentInstallPath });
+      source.prefetch(depName, depRange, ctx);
     }
+  }
+
+  function acquirePin(pin: ResolvedPin): Promise<FetchAndUnpackResult> {
+    const key = resolvedPinIdentity(pin);
+    let pending = inFlight.get(key);
+    if (pending) return pending;
+    pending = sem.run(() =>
+      fetchAndUnpackToCache(
+        {
+          name: pin.name,
+          version: pin.version,
+          resolved: pin.resolved,
+          integrity: pin.integrity,
+        },
+        fetchCtx,
+      ),
+    );
+    if (onPackage) {
+      const hook = onPackage;
+      const { name: pinName, version: pinVersion } = pin;
+      pending = pending.then((result) => {
+        try {
+          hook({ name: pinName, version: pinVersion, cacheHit: result.cacheHit });
+        } catch (err) {
+          console.warn(
+            `install onPackage hook threw for ${pinName}@${pinVersion}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+        return result;
+      });
+    }
+    inFlight.set(key, pending);
+    return pending;
   }
 
   function visit(
     name: string,
     range: string | null,
-    parentInstallPath: string,
-    parentName: string | undefined,
+    ctx: ResolveContext,
     // When set, this node (and its subtree) is reached via an optional dep; a
     // fetch failure warns-and-skips instead of aborting, with this descriptor.
     optional: { depName: string; depRange: string; parentName: string } | null,
+    preparedPin?: ResolvedPin,
   ): Promise<void> {
     return (async () => {
-      const pin = await source.resolve(name, range, { parentName, parentInstallPath });
+      const pin = preparedPin ?? (await source.resolve(name, range, ctx));
       // ADR-0188: a shimmed package outside its shim's proven range must fail
       // loudly BEFORE anything installs — never a stale shim silently applied.
       assertShimSupported(pin.name, pin.version);
@@ -1340,55 +1516,45 @@ async function walkAndPin(
       // visit already won. Captured pre-placement because `choosePlacement`
       // mutates `flatByName` as a side effect.
       const flatSlotFreeBefore = !flatByName.has(pin.name);
-      const installPath = pin.installPath ?? choosePlacement(pin, parentInstallPath, flatByName);
-      // Record the flat slot so a later live-source visit honours first-wins.
-      // Only one source drives a given install today, but the bookkeeping is
-      // cheap and removes a foot-gun in a hypothetical mixed run.
-      if (installPath === `node_modules/${pin.name}` && !flatByName.has(pin.name)) {
-        flatByName.set(pin.name, pin.version);
+      const key = resolvedPinIdentity(pin);
+      let installPath =
+        pin.installPath === undefined
+          ? undefined
+          : translateRecordedInstallPath(pin.installPath, ctx.lockfilePathTranslations);
+      if (installPath === undefined) {
+        installPath = choosePlacement(pin, ctx.parentInstallPath, flatByName);
+      } else {
+        const preferredIdentity = scheduled.get(installPath);
+        const flat =
+          installPath === `node_modules/${pin.name}` ? flatByName.get(pin.name) : undefined;
+        if (
+          (preferredIdentity !== undefined && preferredIdentity !== key) ||
+          (flat !== undefined && flat.identity !== key)
+        ) {
+          installPath = choosePlacement(pin, ctx.parentInstallPath, flatByName);
+        }
       }
-      if (scheduled.has(installPath)) return;
-      scheduled.add(installPath);
+      // Record the flat slot so a later live-source visit honours first-wins.
+      if (installPath === `node_modules/${pin.name}` && !flatByName.has(pin.name)) {
+        flatByName.set(pin.name, { version: pin.version, identity: key });
+      }
+      if (optional === null) requiredDemandPaths.add(installPath);
+      const scheduledIdentity = scheduled.get(installPath);
+      if (scheduledIdentity !== undefined) {
+        if (scheduledIdentity !== key) {
+          throw Object.assign(
+            new Error(
+              `EINSTALLPATHCONFLICT: '${installPath}' was assigned to two different package identities`,
+            ),
+            { code: 'EINSTALLPATHCONFLICT', installPath },
+          );
+        }
+        return;
+      }
+      scheduled.set(installPath, key);
       const claimedFlat = flatSlotFreeBefore && installPath === `node_modules/${pin.name}`;
 
-      // Defer the fetch through the bounded semaphore; dedupe concurrent
-      // same-(name,version) fetches (flat + nested same-version, or two parents
-      // racing the same version) to a single network call.
-      const key = `${pin.name}@${pin.version}`;
-      let p = inFlight.get(key);
-      if (!p) {
-        p = sem.run(() =>
-          fetchAndUnpackToCache(
-            {
-              name: pin.name,
-              version: pin.version,
-              resolved: pin.resolved,
-              integrity: pin.integrity,
-            },
-            fetchCtx,
-          ),
-        );
-        if (onPackage) {
-          // Fire on the dedup'd promise: once per unique (name, version), only
-          // on success (ADR-0134). `inFlight` stores the hooked promise so a
-          // second visitor of the same key never double-fires.
-          const hook = onPackage;
-          const { name: pinName, version: pinVersion } = pin;
-          p = p.then((result) => {
-            try {
-              hook({ name: pinName, version: pinVersion, cacheHit: result.cacheHit });
-            } catch (err) {
-              console.warn(
-                `install onPackage hook threw for ${pinName}@${pinVersion}: ${
-                  err instanceof Error ? err.message : String(err)
-                }`,
-              );
-            }
-            return result;
-          });
-        }
-        inFlight.set(key, p);
-      }
+      const p = acquirePin(pin);
 
       // Optional-subtree skip-on-failure (npm parity, regression fix): when THIS
       // node IS the optional boundary (reached as a direct optional child), its
@@ -1401,13 +1567,19 @@ async function walkAndPin(
       // diverging from real npm. Required deps keep the deferred/concurrent
       // fetch; only the boundary trades concurrency for correctness here.
       const isOptionalBoundary =
-        optional !== null && optional.depName === name && optional.parentName === parentName;
+        optional !== null && optional.depName === name && optional.parentName === ctx.parentName;
       if (isOptionalBoundary) {
         // Awaits here (and pins on success) instead of deferring to `fetchTasks`,
-        // so a rejection skips the subtree before it is walked.
-        let result: FetchAndUnpackResult;
+        // so acquisition and archive parsing both belong to the boundary.
         try {
-          result = await p;
+          const result = await p;
+          if (!pinned.has(installPath)) {
+            const preparedKey = `${key}\0${installPath}`;
+            const pkg =
+              preparedOptionalPackages.get(preparedKey) ??
+              (await pinToPackage(pin, result.bytes, result.integrity, installPath));
+            pinned.set(installPath, pkg);
+          }
         } catch (err) {
           // Roll back the synchronous claims THIS visit made before re-throwing
           // to the parent's optional catch (#24 dedup-gate bug): `scheduled` was
@@ -1417,12 +1589,6 @@ async function walkAndPin(
           scheduled.delete(installPath);
           if (claimedFlat) flatByName.delete(pin.name);
           throw err;
-        }
-        if (!pinned.has(installPath)) {
-          pinned.set(
-            installPath,
-            await pinToPackage(pin, result.bytes, result.integrity, installPath),
-          );
         }
       } else {
         fetchTasks.push({ promise: p, pin, installPath, optional });
@@ -1435,19 +1601,35 @@ async function walkAndPin(
       // failed grandchild is warned-and-skipped while surviving siblings still
       // pin — rifty SALVAGES the optional subtree's survivors rather than doing
       // npm's atomic-rollback. Characterization-pinned; see Q-2026-06-07-324.
-      prefetchPackuments(pin.dependencies, installPath, pin.name);
+      const childContext: ResolveContext = {
+        parentName: pin.name,
+        parentInstallPath: installPath,
+        parentLockfilePath:
+          pin.origin === 'lockfile' ? (pin.installPath ?? installPath) : installPath,
+        parentOrigin: pin.origin,
+        lockfilePathTranslations:
+          pin.origin === 'lockfile' &&
+          pin.installPath !== undefined &&
+          pin.installPath !== installPath
+            ? [
+                ...ctx.lockfilePathTranslations,
+                { recordedPrefix: pin.installPath, actualPrefix: installPath },
+              ]
+            : ctx.lockfilePathTranslations,
+      };
+      prefetchPackuments(pin.dependencies, childContext);
       for (const [depName, depRange] of Object.entries(pin.dependencies)) {
-        await visit(depName, depRange, installPath, pin.name, optional);
+        await visit(depName, depRange, childContext, optional);
       }
       // npm contract: a missing optional dep is non-fatal (typically
       // platform-specific native helpers like fsevents). A resolve-time failure
       // is caught here; a fetch-time failure is attributed at the await site via
       // the `optional` descriptor propagated into the subtree.
-      prefetchPackuments(pin.optionalDependencies, installPath, pin.name);
+      prefetchPackuments(pin.optionalDependencies, childContext);
       for (const [depName, depRange] of Object.entries(pin.optionalDependencies)) {
         const desc = { depName, depRange, parentName: pin.name };
         try {
-          await visit(depName, depRange, installPath, pin.name, desc);
+          await visit(depName, depRange, childContext, desc);
         } catch (err) {
           warnOptional(desc, err);
         }
@@ -1457,49 +1639,117 @@ async function walkAndPin(
       // replay re-derives them from (name, version); a pre-shim lockfile
       // misses the entry and throws EBROKENLOCK (delete + re-install).
       const companions = companionRequestsFor(pin.name, pin.version);
-      prefetchPackuments(companions, installPath, pin.name);
+      prefetchPackuments(companions, childContext);
       for (const [depName, depRange] of Object.entries(companions)) {
-        await visit(depName, depRange, installPath, pin.name, optional);
+        await visit(depName, depRange, childContext, optional);
       }
     })();
   }
 
-  prefetchPackuments(topLevelDependencies, '', rootName);
-  for (const [depName, depRange] of Object.entries(topLevelDependencies)) {
-    await visit(depName, depRange, '', rootName, null);
-  }
-  prefetchPackuments(topLevelOptionalDependencies, '', rootName);
-  for (const [depName, depRange] of Object.entries(topLevelOptionalDependencies)) {
-    const desc = { depName, depRange, parentName: rootName };
-    try {
-      await visit(depName, depRange, '', rootName, desc);
-    } catch (err) {
-      warnOptional(desc, err);
+  let traversalFailure: { readonly error: unknown } | undefined;
+  try {
+    const rootContext: ResolveContext = {
+      parentName: rootName,
+      parentInstallPath: '',
+      parentLockfilePath: '',
+      parentOrigin: 'root',
+      lockfilePathTranslations: [],
+    };
+    prefetchPackuments(topLevelDependencies, rootContext);
+    prefetchPackuments(topLevelOptionalDependencies, rootContext);
+
+    interface PreparedRoot {
+      readonly name: string;
+      readonly range: string;
+      readonly pin: ResolvedPin;
+      readonly optional: { depName: string; depRange: string; parentName: string } | null;
     }
+    const requiredRoots: PreparedRoot[] = [];
+    for (const [name, range] of Object.entries(topLevelDependencies)) {
+      const pin = await source.resolve(name, range, rootContext);
+      assertShimSupported(pin.name, pin.version);
+      requiredRoots.push({ name, range, pin, optional: null });
+    }
+    const optionalRoots: PreparedRoot[] = [];
+    for (const [name, range] of Object.entries(topLevelOptionalDependencies)) {
+      const desc = { depName: name, depRange: range, parentName: rootName };
+      try {
+        const pin = await source.resolve(name, range, rootContext);
+        assertShimSupported(pin.name, pin.version);
+        const result = await acquirePin(pin);
+        const installPath = `node_modules/${pin.name}`;
+        preparedOptionalPackages.set(
+          `${resolvedPinIdentity(pin)}\0${installPath}`,
+          await pinToPackage(pin, result.bytes, result.integrity, installPath),
+        );
+        optionalRoots.push({ name, range, pin, optional: desc });
+      } catch (error) {
+        warnOptional(desc, error);
+      }
+    }
+
+    for (const { pin } of [...requiredRoots, ...optionalRoots]) {
+      const identity = resolvedPinIdentity(pin);
+      const prior = flatByName.get(pin.name);
+      if (prior !== undefined && prior.identity !== identity) {
+        throw Object.assign(
+          new Error(
+            `EINSTALLPATHCONFLICT: direct requests resolve '${pin.name}' to incompatible package identities`,
+          ),
+          { code: 'EINSTALLPATHCONFLICT', installPath: `node_modules/${pin.name}` },
+        );
+      }
+      flatByName.set(pin.name, { version: pin.version, identity });
+    }
+
+    for (const root of requiredRoots) {
+      await visit(root.name, root.range, rootContext, null, root.pin);
+    }
+    for (const root of optionalRoots) {
+      try {
+        await visit(root.name, root.range, rootContext, root.optional, root.pin);
+      } catch (error) {
+        warnOptional(root.optional!, error);
+      }
+    }
+  } catch (error) {
+    traversalFailure = { error };
+  }
+  if (traversalFailure !== undefined) {
+    await Promise.allSettled([...inFlight.values()]);
+    throw traversalFailure.error;
   }
 
   // The ordered walk has assigned every installPath; now await the parallelized
-  // fetches and build `pinned`. A required-dep fetch failure rejects; an
-  // optional-dep fetch failure warns-and-skips (preserving the exact message),
-  // mirroring the old serial loop. Settle all so one optional failure can't
-  // strand siblings already in flight.
+  // fetches and build `pinned`. Settle all before publishing any failure.
   const results = await Promise.allSettled(fetchTasks.map((t) => t.promise));
   for (let i = 0; i < fetchTasks.length; i++) {
     const task = fetchTasks[i];
     const outcome = results[i];
     if (!task || !outcome) continue;
+    const optionalFailure = requiredDemandPaths.has(task.installPath) ? null : task.optional;
     if (outcome.status === 'rejected') {
-      if (task.optional) {
-        warnOptional(task.optional, outcome.reason);
+      if (optionalFailure !== null) {
+        warnOptional(optionalFailure, outcome.reason);
         continue;
       }
       throw outcome.reason;
     }
     if (pinned.has(task.installPath)) continue;
-    pinned.set(
-      task.installPath,
-      await pinToPackage(task.pin, outcome.value.bytes, outcome.value.integrity, task.installPath),
-    );
+    try {
+      pinned.set(
+        task.installPath,
+        await pinToPackage(
+          task.pin,
+          outcome.value.bytes,
+          outcome.value.integrity,
+          task.installPath,
+        ),
+      );
+    } catch (error) {
+      if (optionalFailure === null) throw error;
+      warnOptional(optionalFailure, error);
+    }
   }
   return pinned;
 }
@@ -1509,12 +1759,14 @@ function warnOptional(
   desc: { depName: string; depRange: string; parentName: string },
   err: unknown,
 ): void {
+  const code = (err as { code?: unknown })?.code;
+  if (code === 'EBROKENLOCK' || code === 'EINSTALLPATHCONFLICT') throw err;
   // A platform-native optional sibling (e.g. one of Rolldown's
   // `@rolldown/binding-<platform>` packages) is EXPECTED to be skipped — rifty's
   // JS+WASI runtime can never run a native binary (ADR-0051), and the matching
   // wasm/WASI sibling is the one that installs. Phrase it as an expected skip so a
   // pack of these does not read as a wall of install errors (it is not a failure).
-  if ((err as { code?: unknown })?.code === 'ENATIVEUNSUPPORTED') {
+  if (code === 'ENATIVEUNSUPPORTED') {
     console.warn(
       `npm: skipped optional native dependency ${desc.depName}@${desc.depRange} (expected — rifty runs JS+WASI only, ADR-0051)`,
     );
@@ -1526,21 +1778,42 @@ function warnOptional(
   );
 }
 
-/** Live-source placement: first-wins-flat + nest-on-conflict (`walkAndPin` step 2-4). */
+/** Descendant placement: first-wins-flat + nest-on-conflict. */
 function choosePlacement(
   pin: ResolvedPin,
   parentInstallPath: string,
-  flatByName: Map<string, string>,
+  flatByName: Map<string, Readonly<{ version: string; identity: string }>>,
 ): string {
-  const flatVersion = flatByName.get(pin.name);
-  if (flatVersion === undefined) {
-    flatByName.set(pin.name, pin.version);
+  const identity = resolvedPinIdentity(pin);
+  const flat = flatByName.get(pin.name);
+  if (flat === undefined) {
+    flatByName.set(pin.name, { version: pin.version, identity });
     return `node_modules/${pin.name}`;
   }
-  if (flatVersion === pin.version) {
+  if (flat.identity === identity) {
     return `node_modules/${pin.name}`;
   }
   return `${parentInstallPath}/node_modules/${pin.name}`;
+}
+
+/** Rebase a recorded descendant through the most-specific relocated ancestor. */
+function translateRecordedInstallPath(
+  installPath: string,
+  translations: readonly LockfilePathTranslation[],
+): string {
+  let match: LockfilePathTranslation | undefined;
+  for (const candidate of translations) {
+    if (
+      (installPath === candidate.recordedPrefix ||
+        installPath.startsWith(`${candidate.recordedPrefix}/node_modules/`)) &&
+      (match === undefined || candidate.recordedPrefix.length > match.recordedPrefix.length)
+    ) {
+      match = candidate;
+    }
+  }
+  return match === undefined
+    ? installPath
+    : `${match.actualPrefix}${installPath.slice(match.recordedPrefix.length)}`;
 }
 
 /**
@@ -1572,12 +1845,9 @@ async function pinToPackage(
 }
 
 /**
- * Lockfile-replay source. Walks up the parent's path via `pinnedEntryForParent`
- * and returns the first matching entry. `range` is ignored (the lockfile pins
- * exact versions); `name`/`parentName` are override-resolved first so a redirect
- * target's recorded key is what gets looked up. Returns `installPath = <matched
- * lockfile key>` so the walk reproduces the recorded layout regardless of visit
- * order.
+ * Lockfile-replay source. Walks up the recorded parent scope and validates the
+ * current edge range. The matched key is a preferred path; mixed traversal may
+ * relocate it when another identity now owns that slot.
  *
  * Throws `EBROKENLOCK` on a missing or malformed (no `resolved`/`integrity`)
  * entry: the contract is "lockfile is authoritative or it's an error".
@@ -1596,19 +1866,18 @@ function createLockfileSource(
       // (`esbuild` → `@esbuild/wasi-preview1`), leaving no `node_modules/esbuild`
       // entry, so replaying the SOURCE name verbatim would miss the pin and throw
       // EBROKENLOCK — the exact break eddy's pre-seeded lockfile hit on vite →
-      // esbuild. `subgraphFreeOfOverrideDivergence` cannot pre-empt it: the
-      // source name has no entry, so `lockfileSubgraph` never surfaces it.
-      const { override, effectiveName } = resolveEffectivePackageRequest(
+      // esbuild.
+      const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
         name,
         range,
         ctx.parentName,
         opts.overrides,
       );
-      const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentInstallPath);
+      const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
       if (!hit) {
         throw Object.assign(
           new Error(
-            `EBROKENLOCK: lockfile coverage gap — '${effectiveName}' is reachable from the dep graph but missing from package-lock.json (searched walk-up from parent path '${ctx.parentInstallPath}'). Delete the lockfile and re-install.`,
+            `EBROKENLOCK: lockfile coverage gap — '${effectiveName}' is reachable from the dep graph but missing from package-lock.json (searched walk-up from recorded parent path '${ctx.parentLockfilePath}'). Delete the lockfile and re-install.`,
           ),
           { code: 'EBROKENLOCK', packageName: effectiveName, reason: 'missing-entry' as const },
         );
@@ -1628,13 +1897,23 @@ function createLockfileSource(
           },
         );
       }
+      if (!rangeIsUnconstrained(effectiveRange) && !matchesRange(entry.version, effectiveRange)) {
+        throw Object.assign(
+          new Error(
+            `EBROKENLOCK: '${effectiveName}@${effectiveRange}' resolves to ${entry.version} at '${installPath}', which no longer satisfies the recorded dependency edge. Delete the lockfile and re-install.`,
+          ),
+          {
+            code: 'EBROKENLOCK',
+            packageName: effectiveName,
+            reason: 'dependency-range-drift' as const,
+          },
+        );
+      }
       // Override redirected to a target NAME the lockfile pins, but a moved
       // override RANGE (e.g. the baked table bumps, or a user edits `overrides`)
       // can leave the locked version stale. The live-resolve source would pick a
-      // satisfying version; the fast path must NOT silently reuse a version the
-      // current override no longer admits. `subgraphFreeOfOverrideDivergence`
-      // misses it (the source name has no entry to surface), so refuse here —
-      // loud, per the "lockfile is authoritative or it's an error" contract.
+      // satisfying version; replay must NOT silently reuse a version the
+      // current override no longer admits.
       if (override?.range && !matchesRange(entry.version, override.range)) {
         throw Object.assign(
           new Error(
@@ -1652,6 +1931,7 @@ function createLockfileSource(
         substitutions.redirect(name, range, effectiveName, entry.version);
       }
       return {
+        origin: 'lockfile',
         name: effectiveName,
         version: entry.version,
         resolved: entry.resolved,
@@ -1710,8 +1990,8 @@ function createRegistrySource(
   const PACKUMENT_CONCURRENCY = 8;
   const packumentSem = new Semaphore(PACKUMENT_CONCURRENCY);
   const inFlightPackuments = new Map<string, Promise<Packument>>();
-  // Live-resolve was chosen because coverage failed for some top-level pin, but
-  // the lockfile's other entries can still seed integrity for the rest.
+  // Mixed installs may consult metadata at any uncovered edge; retained entries
+  // can still seed integrity for matching registry pins.
   let existingLockfile: Lockfile | null = null;
   const ensureLockfileLoaded = async (): Promise<Lockfile | null> => {
     if (existingLockfile) return existingLockfile;
@@ -1800,6 +2080,7 @@ function createRegistrySource(
       }
 
       return {
+        origin: 'metadata',
         name: effectiveName,
         version: pick,
         resolved: manifest.dist.tarball,
@@ -1822,63 +2103,22 @@ function rangeIsUnconstrained(range: string | null | undefined): boolean {
   return !range || range === '*' || range === 'latest' || range === '';
 }
 
-/**
- * Apply overrides to the top-level request, yielding effective names → ranges
- * (unmatched names kept verbatim). The fast path queries the lockfile for the
- * names that would actually install — without this, adding `"overrides": {
- * "bcrypt": "bcryptjs" }` after the lockfile was written would silently no-op,
- * since replay would use the original `bcrypt` pin.
- */
-function applyOverridesToRequest(
-  request: Record<string, string>,
-  parent: string,
-  overrides: OverrideMap | undefined,
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [name, range] of Object.entries(request)) {
-    const effective = resolveEffectivePackageRequest(name, range, parent, overrides);
-    if (effective.override) {
-      // null range ("latest") has no lockfile-pinnable range, so reuse the
-      // request's `range`; an operator wanting a specific one writes it into
-      // the override target (`"bcrypt": "bcryptjs@2.x"`).
-      out[effective.effectiveName] = effective.effectiveRange ?? range;
-    } else {
-      out[name] = range;
-    }
-  }
-  return out;
-}
-
-/**
- * Walk the lockfile subgraph reachable from the top-level pins; return `false`
- * (forcing live-resolve) if any locked name would be redirected by an override
- * to a name the lockfile doesn't pin.
- *
- * Uses the global (no-parent) `resolveOverride` for transitive entries because
- * the v3 flat lockfile loses parent context — slightly over-eager (a
- * non-applicable `parent>child` override still triggers fallthrough), but the
- * cost is one extra live-resolve vs. silently ignoring an override.
- */
-function subgraphFreeOfOverrideDivergence(
-  lockfile: Lockfile,
-  topLevelPins: Map<string, string>,
+/** Whether distinct direct requests project onto one effective package name. */
+function hasEffectiveTopLevelNameCollision(
+  dependencies: Record<string, string>,
+  optionalDependencies: Record<string, string>,
+  rootName: string,
   overrides: OverrideMap | undefined,
 ): boolean {
-  if (hasParentScopedOverride(overrides)) return false;
-  const subgraph = lockfileSubgraph(lockfile, [...topLevelPins.keys()]);
-  for (const name of subgraph) {
-    const override = resolveOverride(name, undefined, overrides);
-    if (!override) continue;
-    // Redirect to a different name → the lockfile would need that name pinned.
-    if (override.name !== name) return false;
-    // Same name, narrower range: if the locked version no longer satisfies it,
-    // replay would silently differ from live-resolve.
-    if (override.range) {
-      const entry = lockfile.packages[`node_modules/${name}`];
-      if (!entry || !matchesRange(entry.version, override.range)) return false;
+  const seen = new Set<string>();
+  for (const request of [dependencies, optionalDependencies]) {
+    for (const [name, range] of Object.entries(request)) {
+      const { effectiveName } = resolveEffectivePackageRequest(name, range, rootName, overrides);
+      if (seen.has(effectiveName)) return true;
+      seen.add(effectiveName);
     }
   }
-  return true;
+  return false;
 }
 
 function hasParentScopedOverride(overrides: OverrideMap | undefined): boolean {

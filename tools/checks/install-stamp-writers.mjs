@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const CLAIM_FILE = '.rifty-install-stamp.json';
-const AUTHORITY = 'apps/playground/src/glue/install-stamp-authority.ts';
-const OWNER_AUTHORITY = 'apps/playground/src/workers/owner-vfs-authority.ts';
+const AUTHORITY = 'packages/workbench/src/glue/install-stamp-authority.ts';
+const OWNER_AUTHORITY = 'packages/workbench/src/workers/owner-vfs-authority.ts';
 const OWNER_CLAIM_FLOW_CONTEXTS = new Set([
   '#readInstallStampClaim',
   '#writeInstallStampClaim',
@@ -17,7 +17,7 @@ const OWNER_CLAIM_MUTATION_CONTEXTS = new Set([
   '#writeInstallStampClaim',
   '#removeInstallStampClaim',
 ]);
-const SOURCE_ROOT = 'apps/playground/src';
+const SOURCE_ROOT = 'packages/workbench/src';
 const NO_NAMES = new Set();
 const PACKAGE_TREE_HELPERS = new Set([
   'clearProjectTree',
@@ -28,12 +28,12 @@ const PACKAGE_TREE_HELPERS = new Set([
 ]);
 const PACKAGE_TREE_CONTEXTS = new Map([
   [
-    'apps/playground/src/glue/project-deps.ts',
+    'packages/workbench/src/glue/project-deps.ts',
     new Set(['clearProjectTree', 'prepareProjectInstallTree', 'prepareEnsure', 'restoreSnapshot']),
   ],
-  ['apps/playground/src/glue/workspace-archive.ts', new Set(['applyWorkspaceArchive'])],
+  ['packages/workbench/src/glue/workspace-archive.ts', new Set(['applyWorkspaceArchive'])],
   [
-    'apps/playground/src/workers/owner-package-state.ts',
+    'packages/workbench/src/workers/owner-package-state.ts',
     new Set([
       'prepareEnsure',
       'planSnapshotRestore',

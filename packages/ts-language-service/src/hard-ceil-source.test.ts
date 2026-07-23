@@ -6,7 +6,10 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
 const service = readFileSync(here('./service.ts'), 'utf8');
 const protocol = readFileSync(here('./worker/protocol.ts'), 'utf8');
 const endpoint = readFileSync(here('./worker/service-endpoint.ts'), 'utf8');
-const client = readFileSync(here('../../../apps/playground/src/glue/ts-ls-client.ts'), 'utf8');
+const client = readFileSync(
+  here('../../workbench/src/workbench/internal/typescript-relay-client.ts'),
+  'utf8',
+);
 const publicIndex = readFileSync(here('./index.ts'), 'utf8');
 const compat = readFileSync(here('../../../docs/public/compat/ts-language-service.md'), 'utf8');
 

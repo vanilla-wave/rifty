@@ -1,15 +1,21 @@
+import { WorkbenchOriginOccupiedError } from '@riftydev/workbench';
+import devServerWorkerUrl from '@riftydev/workbench/dev-server-worker?worker&url';
+import kernelWorkerUrl from '@riftydev/workbench/kernel-worker?worker&url';
+import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
+import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
+import {
+  type OpenPlaygroundWorkbench,
+  openPlaygroundWorkbench,
+} from '@riftydev/workbench/playground';
+import type {
+  PlaygroundWorkbench,
+  PlaygroundWorkbenchOptions,
+} from '@riftydev/workbench/playground';
+import typescriptWorkerUrl from '@riftydev/workbench/typescript-worker?worker&url';
 import esbuildWasmUrl from 'esbuild-wasm/esbuild.wasm?url';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import { getRegistryProxyPrefix } from '../glue/registry-fetch.ts';
+import { getRegistryProxyPrefix } from '../glue/registry-config.ts';
 import { getEddyBundleBaseUrl, getResolverUrl } from '../glue/resolver-config.ts';
-import type { PlaygroundWorkbench, PlaygroundWorkbenchOptions } from '../workbench/playground.ts';
-import { type OpenPlaygroundWorkbench, openPlaygroundWorkbench } from '../workbench/playground.ts';
-import { WorkbenchOriginOccupiedError } from '../workbench/public.ts';
-import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&url';
-import kernelWorkerUrl from '../workers/kernel-worker-entry.ts?worker&url';
-import nodeWorkerUrl from '../workers/node-entry-bootstrap.ts?worker&url';
-import typescriptWorkerUrl from '../workers/ts-lsp-worker-entry.ts?worker&url';
-import ownerWorkerUrl from '../workers/workbench-owner-bootstrap.ts?worker&url';
 
 function presetPins(value: unknown): Readonly<Record<string, string>> | undefined {
   if (value === undefined || value === '') return undefined;

@@ -23,13 +23,13 @@ import {
   readLearnedPin,
   revalidateLearnedPin,
   writeLearnedPin,
-} from '../../apps/playground/src/glue/eddy-learned-pins.ts';
-import { installArtifactIdentity } from '../../apps/playground/src/glue/install-artifact-identity.ts';
+} from '../../packages/workbench/src/glue/eddy-learned-pins.ts';
+import { installArtifactIdentity } from '../../packages/workbench/src/glue/install-artifact-identity.ts';
 import {
   createNpmPackageAcquisitionAuthority,
   createNpmShellCommand,
-} from '../../apps/playground/src/glue/npm-shell-command.ts';
-import { PackageAcquisitionError } from '../../apps/playground/src/workers/package-acquisition-authority.ts';
+} from '../../packages/workbench/src/glue/npm-shell-command.ts';
+import { PackageAcquisitionError } from '../../packages/workbench/src/workers/package-acquisition-authority.ts';
 import { type EddyServer, createEddyServer, resolveBundle } from '../../services/eddy/src/index.ts';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
 

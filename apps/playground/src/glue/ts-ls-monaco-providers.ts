@@ -7,7 +7,7 @@
  * These RETIRE Monaco's built-in TS approximation (the isolated lib.d.ts-only
  * `ts.worker` that can't see the owner VFS / tsconfig / node_modules — the "stub
  * that lies" ADR-0166 rejects). Every query goes through the real
- * page↔owner↔LS relay {@link TsLanguageServiceClient}, so hover types, go-to-def
+ * companion semantic interface, so hover types, go-to-def
  * targets, completion candidates, references, rename edits, and signature help
  * reflect the REAL project + dependencies.
  *
@@ -56,13 +56,13 @@ import {
   type SymbolKind as LspSymbolKind,
   type TypeScriptFormatCodeSettings as LspTypeScriptFormatCodeSettings,
 } from '@riftydev/ts-language-service/lsp-types';
+import type { PlaygroundTypeScript } from '@riftydev/workbench/playground';
 import * as monaco from 'monaco-editor';
 import { lspToMonacoRange, monacoToLspPosition, monacoToLspRange } from './lsp-position.ts';
-import type { TsLanguageServiceClient } from './ts-ls-client.ts';
 
 /** Semantic query surface consumed by Monaco; transport/lifecycle stay outside this seam. */
 export type TsLanguageServiceProviderClient = Pick<
-  TsLanguageServiceClient,
+  PlaygroundTypeScript,
   | 'getCodeFixes'
   | 'getCombinedCodeFix'
   | 'getCompletionDetails'

@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { renderToString } from 'solid-js/web';
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
-import { PreviewPanel, reconcileSelectedPort } from './PreviewPanel.tsx';
+import { PreviewPanel, type PreviewPanelEntry, reconcileSelectedPort } from './PreviewPanel.tsx';
 
 // Read ONLY for the two residual client-only pins below (keyed remount +
 // no-location.reload) — everything else is behavioral or tsc-gated.
@@ -12,24 +11,20 @@ const panelSource = readFileSync(
   'utf8',
 );
 
-const TWO_PORTS: PreviewPortEntry[] = [
+const TWO_PORTS: PreviewPanelEntry[] = [
   {
     port: 5174,
     url: '/preview/5174/',
     label: 'npm run dev',
-    source: 'dev-server',
-    sid: 'dev-server',
   },
-  { port: 3000, url: '/preview/3000/', label: 'node :3000', source: 'node', sid: 's1' },
+  { port: 3000, url: '/preview/3000/', label: 'node :3000' },
 ];
-const WITH_PROD_PREVIEW: PreviewPortEntry[] = [
+const WITH_PROD_PREVIEW: PreviewPanelEntry[] = [
   ...TWO_PORTS,
   {
     port: 4173,
     url: '/preview/4173/',
     label: 'vite preview',
-    source: 'preview',
-    sid: 'preview',
   },
 ];
 

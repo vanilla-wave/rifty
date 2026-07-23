@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **Kernel worker URL configuration now survives duplicate bundles.**
+  `setKernelWorkerUrl()` publishes one host-realm slot, so a Workbench bundle
+  and a direct kernel import cannot split into configured/unconfigured copies.
 - **Failed Worker init no longer leaks its half-built process.** If the
   bootstrap `postMessage` throws synchronously (for example, an uncloneable
   entry payload), spawn now detaches its SAB ring, terminates the Worker, and

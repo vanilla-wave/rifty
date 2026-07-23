@@ -56,6 +56,7 @@ interface ClosureAudit {
 function isProductionSource(path: string): boolean {
   return (
     /\.(?:[cm]?[jt]sx?|json)$/u.test(path) &&
+    !/[\\/]test-fixtures[\\/]/u.test(path) &&
     !/(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$/u.test(path)
   );
 }
@@ -220,15 +221,17 @@ function resolvedExportEntries(): readonly string[] {
 }
 
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the reviewed 228-file move, including all 112 tests and fixtures', () => {
+  it('pins the reviewed 228-file move, including all 110 tests and three fixtures', () => {
     expect(EXTRACTION_MAP).toHaveLength(228);
     expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(228);
     expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(228);
     expect(
       EXTRACTION_MAP.filter(([, target]) =>
-        /(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$/u.test(target),
+        /(?:[\\/]test-fixtures[\\/]|(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$)/u.test(
+          target,
+        ),
       ),
-    ).toHaveLength(112);
+    ).toHaveLength(113);
 
     expect(
       EXTRACTION_MAP.filter(([source]) => existsSync(resolve(APP_SRC_ROOT, source))).map(
@@ -258,7 +261,7 @@ describe('@riftydev/workbench extraction boundary', () => {
 
     expect(closure.escapedEdges).toEqual([]);
     expect(closure.unresolvedEdges).toEqual([]);
-    expect(packageProductionFiles).toHaveLength(137);
+    expect(packageProductionFiles).toHaveLength(132);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

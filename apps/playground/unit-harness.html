@@ -8,17 +8,13 @@
     <!--
       Thin browser-unit harness (spike: browser-unit test lane).
       Deliberately does NOT import main.tsx / App.tsx — no Solid render, no #app
-      mount, no xterm/monaco. It wires ONLY the two worker-URL seams main.tsx
-      wires the atomic node-worker runtime config, so specs can
-      dynamically import worker-side playground modules (e.g. startWorkspaceOwner)
-      and boot REAL workers under the dev server's COI headers.
+      mount, no xterm/monaco, and no duplicate Node runtime owner. Public
+      Workbench fixtures receive deployment assets at open; lower-level e2e
+      fixtures install their own explicit runtime under the dev server's COI
+      headers.
     -->
     <main id="browser-unit-harness" data-status="wiring">rifty browser-unit harness</main>
     <script type="module">
-      import { installPlaygroundNodeWorkerRuntime } from '/src/glue/playground-node-worker-runtime.ts';
-
-      installPlaygroundNodeWorkerRuntime();
-
       const el = document.getElementById('browser-unit-harness');
       el.dataset.coi = String(globalThis.crossOriginIsolated === true);
       el.dataset.status = 'ready';

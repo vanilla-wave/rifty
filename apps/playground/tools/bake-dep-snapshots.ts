@@ -16,8 +16,11 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { createMemoryFs } from '@riftydev/vfs/internal';
-import { buildDepSnapshot, serializeDepSnapshot } from '../src/glue/dep-snapshot.ts';
-import { readEffectiveDeps } from '../src/glue/install-stamp.ts';
+import {
+  buildDepSnapshot,
+  serializeDepSnapshot,
+} from '../../../packages/workbench/src/glue/dep-snapshot.ts';
+import { readEffectiveDeps } from '../../../packages/workbench/src/glue/install-stamp.ts';
 import { buildProjectPackageJson } from '../src/templates/project-spec.ts';
 import { allProjectSpecs } from '../src/templates/registry.ts';
 import { assertRollupWasmNodeLockstep } from '../src/templates/rollup-lockstep.ts';

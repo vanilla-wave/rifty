@@ -73,6 +73,7 @@ const TASKS = [
   'check:esbuild-runtime-drift',
   'check:install-artifact-drift',
   'check:snapshot-artifact-drift',
+  'check:publish-config-drift',
   'check:source-grep',
   'check:dir-owner',
   'check:contract-drift',

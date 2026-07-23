@@ -191,7 +191,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           );
         });
 
-      const companionEntryUrl = '/src/workbench/playground.ts';
+      const companionEntryUrl = '/src/browser-unit/workbench-playground-entry.ts';
       const [companionModule, hostAssetsModule] = await Promise.all([
         import(/* @vite-ignore */ companionEntryUrl),
         import('/src/browser-unit/workbench-vite-host-assets.ts'),
@@ -549,7 +549,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
       );
 
     const [companionModule, hostAssetsModule] = await Promise.all([
-      import(/* @vite-ignore */ '/src/workbench/playground.ts'),
+      import(/* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'),
       import('/src/browser-unit/workbench-vite-host-assets.ts'),
     ]);
     const companionEntry = companionModule as unknown as CompanionEntry;
@@ -939,7 +939,7 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
         );
       });
 
-    const companionEntryUrl = '/src/workbench/playground.ts';
+    const companionEntryUrl = '/src/browser-unit/workbench-playground-entry.ts';
     const mapperUrl = '/src/adapters/playground-project-plan.ts';
     const [companionModule, mapperModule, presetsModule, starterModule, hostAssetsModule] =
       await Promise.all([
@@ -1270,7 +1270,9 @@ test('selected historical workspace migrates through one physical Workbench owne
     let workbench: PlaygroundWorkbench | null = null;
     let session: ProjectSession | null = null;
     try {
-      const companionModule = await import(/* @vite-ignore */ '/src/workbench/playground.ts');
+      const companionModule = await import(
+        /* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'
+      );
       const companionEntry = companionModule as unknown as CompanionEntry;
       workbench = await withTimeout(
         companionEntry.openPlaygroundWorkbench({
@@ -1476,7 +1478,7 @@ test('forSession TypeScript uses the real owner service and returns only project
 
     const [companionModule, mapperModule, presetsModule, starterModule, hostAssetsModule] =
       await Promise.all([
-        import(/* @vite-ignore */ '/src/workbench/playground.ts'),
+        import(/* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'),
         import(/* @vite-ignore */ '/src/adapters/playground-project-plan.ts'),
         import('/src/presets.ts'),
         import('/src/glue/starter.ts'),

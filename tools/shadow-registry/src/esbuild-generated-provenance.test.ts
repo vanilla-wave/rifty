@@ -7,7 +7,7 @@ const MANIFEST_PATH = fileURLToPath(
   new URL('../generated/esbuild-runtime-manifest.json', import.meta.url),
 );
 const OUTPUT_PATH = fileURLToPath(
-  new URL('../../../apps/playground/src/workers/generated/esbuild-runtime.js', import.meta.url),
+  new URL('../../../packages/workbench/src/workers/generated/esbuild-runtime.js', import.meta.url),
 );
 
 const policy = readJson(fileURLToPath(new URL('../esbuild-runtime-policy.json', import.meta.url)));
@@ -31,7 +31,7 @@ const EXPECTED_METADATA = {
     sha256: '41abefec8704d24e069532fb38a418905d16f8fee4da88e54ecd65adc71f5507',
   },
   output: {
-    path: 'apps/playground/src/workers/generated/esbuild-runtime.js',
+    path: 'packages/workbench/src/workers/generated/esbuild-runtime.js',
     format: 'esm',
   },
 } as const;

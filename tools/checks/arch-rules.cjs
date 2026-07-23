@@ -13,6 +13,7 @@ const TIERS = [
   ['kernel'],
   ['runtime-js', 'runtime-wasi'],
   ['shell', 'terminal', 'npm-client', 'ts-language-service'],
+  ['workbench'],
   ['playground'],
 ];
 
@@ -96,8 +97,7 @@ const dependencyPolicyRules = [
   {
     name: 'playground-app-uses-sealed-workbench-entrypoints',
     severity: 'error',
-    comment:
-      'ADR-0282: App production modules survive extraction by importing Workbench only through public.ts/playground.ts',
+    comment: 'ADR-0282: do not resurrect app-local Workbench implementation imports',
     from: {
       path: '(?:^|/)playground/src/',
       pathNot: '(?:^|/)playground/src/(?:workbench|workers)/',
@@ -105,6 +105,23 @@ const dependencyPolicyRules = [
     to: {
       path: '(?:^|/)playground/src/workbench/',
       pathNot: '(?:^|/)playground/src/workbench/(?:public|playground)\\.ts$',
+    },
+  },
+  {
+    name: 'workbench-package-uses-sealed-entrypoints',
+    severity: 'error',
+    comment:
+      'ADR-0282: foreign production modules reach Workbench only through its seven package entrypoints',
+    from: {
+      // Repo build tools own baked/generated artifact checks and may consume
+      // the package-private serializers they prove. They are not shipped
+      // production modules and cannot create an embedder import path.
+      pathNot: ['(?:^|/)workbench/src/', '(?:^|/)tools/'],
+    },
+    to: {
+      path: '(?:^|/)workbench/src/',
+      pathNot:
+        '(?:^|/)workbench/src/(?:index|workbench/playground|workers/(?:workbench-owner-bootstrap|kernel-worker-entry|node-entry-bootstrap|dev-server-child-bootstrap|ts-lsp-worker-entry))\\.ts$',
     },
   },
   {
