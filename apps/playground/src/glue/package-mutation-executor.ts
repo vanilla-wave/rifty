@@ -159,7 +159,11 @@ export function packageMutationImpactForPath(path: string, root: string): Packag
   const packageJson = normalizePath(`${root}/package.json`);
   const nodeModules = normalizePath(`${root}/node_modules`);
   if (normalized === packageJson) return 'manifest';
-  if (containsPath(nodeModules, normalized)) return 'tree';
+  if (normalized === nodeModules) return 'tree';
+  // ADR-0307: a write STRICTLY INSIDE the tree is extraneous — real npm never
+  // invalidates on it (the reserved claim path is EPERM-guarded at ingress,
+  // not here). Destroying/moving the tree itself or an ancestor stays 'tree'.
+  if (containsPath(nodeModules, normalized)) return 'none';
   if (containsPath(normalized, packageJson) || containsPath(normalized, nodeModules)) return 'tree';
   return 'none';
 }

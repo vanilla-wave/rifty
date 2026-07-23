@@ -1487,7 +1487,7 @@ describe('Workbench companion first materialization Contract+RED', () => {
     ).toBe(true);
   });
 
-  it('reinstalls A from its current extended manifest after a direct tree mutation revokes it, then A→B→A', async () => {
+  it('reopens A on its exact tree after .vite-temp churn — extraneous writes never revoke (ADR-0307), then A→B→A', async () => {
     const id = 'vite-reopen-current-manifest';
     const templateId = 'vite-reopen-current-manifest-v1';
     const fixture = serializedSnapshotFixture(viteDefinition({ kind: 'install' }, id), templateId);
@@ -1568,22 +1568,6 @@ describe('Workbench companion first materialization Contract+RED', () => {
     await h.open(definitionB);
     const installsBeforeReopen = h.timeline.installs.length;
     const reopened = await h.open(definitionA);
-    if (!isDeferredInstallPlan(reopened.acquisition)) {
-      await h.close();
-      expect(reopened.acquisition).toEqual({
-        kind: 'install',
-        snapshotFailures: [{ snapshotId: descriptor.snapshotId, reason: 'package-json-mismatch' }],
-      });
-      return;
-    }
-
-    const session = await h.session(definitionA, reopened);
-    const run = session.run();
-    const child = await waitForChild(h, 0);
-    child.finish('vite: reopened current manifest output\n');
-    await run.exited;
-    await run.close();
-    await session.close();
     await h.close();
 
     expect.soft(first.acquisition).toMatchObject({
@@ -1594,13 +1578,15 @@ describe('Workbench companion first materialization Contract+RED', () => {
       kind: 'ready',
       provenance: { outcome: 'existing' },
     });
-    expect.soft(fetchSnapshot).toHaveBeenCalledTimes(2);
-    expect.soft(installsBeforeReopen).toBe(1);
-    expect.soft(reopened.acquisition).toEqual({
-      kind: 'install',
-      snapshotFailures: [{ snapshotId: descriptor.snapshotId, reason: 'package-json-mismatch' }],
+    // ADR-0307: the .vite-temp churn is an extraneous tree write — reopening A
+    // reuses its exact installed tree with no snapshot refetch and no install.
+    expect.soft(reopened.acquisition).toMatchObject({
+      kind: 'ready',
+      provenance: { outcome: 'existing' },
     });
-    expect.soft(h.timeline.installs).toHaveLength(installsBeforeReopen + 1);
+    expect.soft(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect.soft(installsBeforeReopen).toBe(1);
+    expect.soft(h.timeline.installs).toHaveLength(installsBeforeReopen);
     expect.soft(dependencyMap(installerManifests.at(-1) ?? '{}')).toMatchObject({
       vite: '8.0.16',
       cowsay: '1.6.0',

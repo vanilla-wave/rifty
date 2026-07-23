@@ -14,9 +14,12 @@ import {
   installStampPath,
   installTreeDir,
   isStampedTreeDamage,
+  lockfileMatchesStamp,
+  lockfilePath,
   parseInstallStamp,
   readInstallStamp,
   reportHasFailure,
+  sha256Hex,
   stampTrusted,
 } from './install-stamp.ts';
 
@@ -337,13 +340,40 @@ function pendingStamp(identity: InstallStampIdentity, epoch: string, packages = 
   return stamp;
 }
 
-function trustedStamp(identity: InstallStampIdentity, packages: number): InstallStamp {
+function trustedStamp(
+  identity: InstallStampIdentity,
+  packages: number,
+  lockfileSha256?: string,
+): InstallStamp {
   const stamp = createInstallStamp(identity.root, identity.packageJsonText, {
     slug: identity.slug,
     packages,
+    ...(lockfileSha256 === undefined ? {} : { lockfileSha256 }),
   });
   if (!stamp) throw new Error('install stamp identity is not valid package.json');
   return stamp;
+}
+
+async function readLockfileBytesIo(io: StampIo, root: string): Promise<Uint8Array | null> {
+  const path = lockfilePath(root);
+  try {
+    if (io.fsSync) return readLockfileBytesSync(io.fsSync, root);
+    return (await io.vfs.exists(path)) ? await io.vfs.readFile(path) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readLockfileBytesSync(
+  fsSync: Pick<InstallStampAuthoritySyncFs, 'existsSync' | 'readFileBytesSync'>,
+  root: string,
+): Uint8Array | null {
+  const path = lockfilePath(root);
+  try {
+    return fsSync.existsSync(path) ? fsSync.readFileBytesSync(path) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function classifyCheck(
@@ -371,11 +401,13 @@ async function classifyCheck(
     const current = currentText === null ? null : effectiveDepsFromPackageJsonText(currentText);
     expectedCovered = expected !== null && current !== null && depsInclude(current, expected);
   }
+  const lockfileOk = lockfileMatchesStamp(stamp, await readLockfileBytesIo(io, input.root));
   const matches =
     (input.slug === undefined || input.slug === stamp.slug) &&
     treeExists &&
     currentText !== null &&
     stamp.packageJsonText === currentText &&
+    lockfileOk &&
     expectedCovered;
   return {
     result: matches ? { status: 'trusted', stamp } : { status: 'absent' },
@@ -413,6 +445,7 @@ function classifyCheckSync(
     fsSync.existsSync(installTreeDir(input.root)) &&
     currentText !== null &&
     stamp.packageJsonText === currentText &&
+    lockfileMatchesStamp(stamp, readLockfileBytesSync(fsSync, input.root)) &&
     expectedCovered;
   return {
     result: matches ? { status: 'trusted', stamp } : { status: 'absent' },
@@ -727,7 +760,15 @@ export function createInstallStampAuthority(options: {
       if (!isCurrentPendingClaim(state, pending, epoch)) {
         return { kind: 'claim-replaced' as const };
       }
-      const stamp = trustedStamp(identity, packages);
+      const lockfileBytes = await readLockfileBytesIo(io, identity.root);
+      if (state.epoch !== epoch || state.slug !== identity.slug) {
+        return { kind: 'stale' as const };
+      }
+      const stamp = trustedStamp(
+        identity,
+        packages,
+        lockfileBytes === null ? undefined : sha256Hex(lockfileBytes),
+      );
       try {
         await writeRawStamp(io, identity.root, stamp, false);
       } catch (error) {

@@ -171,7 +171,7 @@ describe('package acquisition invalid physical claim acceptance', () => {
       } else {
         expect(owner.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(true);
         await expect(readInstallStamp(pair.vfs, ROOT)).resolves.toMatchObject({
-          version: 3,
+          version: 4,
           root: ROOT,
           slug: PROJECT.slug,
           installArtifactIdentity,

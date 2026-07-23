@@ -1231,7 +1231,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const stamp = JSON.parse(
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { version: number; deps: Record<string, string>; packages: number };
-    expect(stamp.version).toBe(3);
+    expect(stamp.version).toBe(4);
     expect(stamp.deps).toEqual({ lodash: '^4.17.0' });
     expect(stamp.packages).toBe(2);
   });

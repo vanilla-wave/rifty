@@ -227,7 +227,7 @@ it('preserves a trusted user-extended tree when the first dev config replaces hi
   ).resolves.toMatchObject({ status: 'trusted' });
 });
 
-it('reasserts template node_modules inside the package authority without preserving stale trust', async () => {
+it('reasserts template node_modules inside the package authority; extraneous seed churn keeps trust (ADR-0307)', async () => {
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
     ownerEpoch: 'owner-package-template-seed-test',
@@ -292,8 +292,10 @@ it('reasserts template node_modules inside the package authority without preserv
   authority.rmSync(seedPath, { force: true });
   await state.reassertTemplateNodeModules(ownerConfig);
   expect(authority.existsSync(seedPath)).toBe(true);
-  await expect(stamps.check({ root: ROOT, slug: ownerConfig.slug })).resolves.toEqual({
-    status: 'absent',
+  // ADR-0307: deleting and re-seeding a file INSIDE the tree is extraneous
+  // churn — the claim survives, exactly as real npm tolerates tree writes.
+  await expect(stamps.check({ root: ROOT, slug: ownerConfig.slug })).resolves.toMatchObject({
+    status: 'trusted',
   });
 });
 

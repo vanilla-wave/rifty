@@ -73,7 +73,7 @@ describe('install stamp (ADR-0135)', () => {
     const stamp = await readInstallStamp(vfs, ROOT);
 
     expect(stamp).toEqual({
-      version: 3,
+      version: 4,
       root: ROOT,
       slug: 'real-vite',
       packageJsonText: JSON.stringify({
@@ -152,6 +152,105 @@ describe('install stamp (ADR-0135)', () => {
     expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
   });
 
+  it('treats a v3 claim as a miss (v4 schema, ADR-0307)', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await seedTrustedStamp(vfs, 14, 'real-vite');
+    const text = await vfs.readFileText(installStampPath(ROOT));
+    await vfs.writeFile(installStampPath(ROOT), text.replace('"version": 4', '"version": 3'));
+
+    await expect(readInstallStamp(vfs, ROOT)).resolves.toBeNull();
+    await expect(installStampSatisfied(vfs, ROOT, 'real-vite')).resolves.toBeNull();
+  });
+
+  // ADR-0307: request identity at open = package.json text + lockfile hash.
+  it('records the lockfile hash at promotion and misses on lockfile drift', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await vfs.writeFile(`${ROOT}/package-lock.json`, '{"lockfileVersion":3}\n');
+    await seedTrustedStamp(vfs, 14, 'real-vite');
+
+    const stamp = await readInstallStamp(vfs, ROOT);
+    expect(stamp?.lockfileSha256).toMatch(/^[0-9a-f]{64}$/);
+    await expect(installStampSatisfied(vfs, ROOT, 'real-vite')).resolves.toMatchObject({
+      slug: 'real-vite',
+    });
+
+    await vfs.writeFile(`${ROOT}/package-lock.json`, '{"lockfileVersion":3,"edited":true}\n');
+    await expect(installStampSatisfied(vfs, ROOT, 'real-vite')).resolves.toBeNull();
+
+    await vfs.rm(`${ROOT}/package-lock.json`);
+    await expect(installStampSatisfied(vfs, ROOT, 'real-vite')).resolves.toBeNull();
+  });
+
+  it('misses when a lockfile appears after a lockfile-free promotion', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await seedTrustedStamp(vfs, 14, 'real-vite');
+
+    expect((await readInstallStamp(vfs, ROOT))?.lockfileSha256).toBeUndefined();
+    await expect(installStampSatisfied(vfs, ROOT, 'real-vite')).resolves.toMatchObject({
+      slug: 'real-vite',
+    });
+
+    await vfs.writeFile(`${ROOT}/package-lock.json`, '{"lockfileVersion":3}\n');
+    await expect(installStampSatisfied(vfs, ROOT, 'real-vite')).resolves.toBeNull();
+  });
+
+  it('sha256Hex matches the fixed vector and crypto.subtle on random bytes', async () => {
+    const { sha256Hex } = await import('./install-stamp.ts');
+    expect(sha256Hex('abc')).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    );
+    expect(sha256Hex(new Uint8Array(0))).toBe(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
+    const bytes = new Uint8Array(257).map((_, i) => (i * 31) % 256);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const expected = Array.from(new Uint8Array(digest), (b) =>
+      b.toString(16).padStart(2, '0'),
+    ).join('');
+    expect(sha256Hex(bytes)).toBe(expected);
+  });
+
+  it('sync twin applies the same lockfile hash compare as the async predicate', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    const lockText = '{"lockfileVersion":3}\n';
+    await vfs.writeFile(`${ROOT}/package-lock.json`, lockText);
+    await seedTrustedStamp(vfs, 14, 'real-vite');
+    const packageJsonText = await vfs.readFileText(`${ROOT}/package.json`);
+    const stampText = await vfs.readFileText(installStampPath(ROOT));
+    const enc = new TextEncoder();
+    const files = new Map<string, string>([
+      [`${ROOT}/package.json`, packageJsonText],
+      [installStampPath(ROOT), stampText],
+      [`${ROOT}/node_modules`, ''],
+      [`${ROOT}/package-lock.json`, lockText],
+    ]);
+    const fs: InstallStampSyncFs = {
+      existsSync: (path) => files.has(path),
+      readFileBytesSync: (path) => {
+        const text = files.get(path);
+        if (text === undefined) throw new Error(`ENOENT: ${path}`);
+        return enc.encode(text);
+      },
+    };
+
+    expect(
+      installStampSatisfiedForPackageJsonSync(fs, ROOT, 'real-vite', packageJsonText),
+    ).toMatchObject({ slug: 'real-vite' });
+
+    files.delete(`${ROOT}/package-lock.json`);
+    expect(
+      installStampSatisfiedForPackageJsonSync(fs, ROOT, 'real-vite', packageJsonText),
+    ).toBeNull();
+  });
+
   it('reads pending stamps but never satisfies reuse from them', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
@@ -159,7 +258,7 @@ describe('install stamp (ADR-0135)', () => {
     await seedPendingStamp(vfs, 14, 'real-vite');
 
     expect(await readInstallStamp(vfs, ROOT)).toEqual({
-      version: 3,
+      version: 4,
       root: ROOT,
       slug: 'real-vite',
       packageJsonText: JSON.stringify({ name: 'app', dependencies: { vite: '^5.4.0' } }),
@@ -311,7 +410,7 @@ describe('install stamp (ADR-0135)', () => {
     ).toBeNull();
 
     const forged = {
-      version: 3,
+      version: 4,
       root: ROOT,
       slug: 'real-vite',
       packageJsonText,
@@ -357,7 +456,7 @@ describe('install stamp (ADR-0135)', () => {
     expect(createInstallStamp(ROOT, text, { slug: 'real-vite', packages: 14 })).toBeNull();
 
     const forged = {
-      version: 3,
+      version: 4,
       root: ROOT,
       slug: 'real-vite',
       packageJsonText: text,

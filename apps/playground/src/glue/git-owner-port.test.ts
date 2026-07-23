@@ -66,7 +66,7 @@ describe('git owner RPC bridge', () => {
         op: 'restore',
         pathspecs: ['node_modules/pkg/index.js'],
       }),
-    ).toBe('tree');
+    ).toBe('none');
     expect(classifyGitOwnerPackageImpact({ id: 'ancestor', op: 'restore', pathspecs: ['.'] })).toBe(
       'tree',
     );

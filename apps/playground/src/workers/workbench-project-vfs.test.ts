@@ -216,6 +216,47 @@ describe('Workbench project VFS owner adapter', () => {
     expect(recordMutation).toHaveBeenCalledTimes(2);
   });
 
+  // ADR-0307: writes strictly inside node_modules are extraneous — they must
+  // not reach recordMutation (no Scratch dirty), while publication still runs.
+  it('does not record extraneous node_modules writes as dirtying mutations', async () => {
+    const events: string[] = [];
+    const recordMutation = vi.fn(async (kind: string, treeRevision: number) => {
+      events.push(`dirty:${kind}:${String(treeRevision)}`);
+    });
+    const h = harness(undefined, (frame) => events.push(`emit:${frame.type}`), recordMutation);
+    const dir = `${ROOT}/node_modules/.vite-temp`;
+    const temp = `${dir}/vite.config.ts.timestamp-1.mjs`;
+    h.vfs.publishSnapshot();
+    events.splice(0);
+
+    await h.vfs.mutationGuard(
+      [
+        { kind: 'mkdir', path: dir },
+        { kind: 'write', path: temp },
+      ],
+      () => {
+        h.authority.mkdirSync(dir, { recursive: true });
+        h.authority.writeFileSync(temp, encoder.encode('export default {}'));
+      },
+    );
+    expect(events).toEqual(['emit:workbench:project-vfs-state']);
+
+    events.splice(0);
+    await h.vfs.handleFrame({
+      type: 'rifty:owner-vfs-commit',
+      request: writeRequest('extraneous-host-write', temp, h.authority.versionOf(temp)),
+    });
+    expect(events).toEqual(['emit:workbench:project-vfs-state', 'emit:rifty:owner-vfs-commit-ack']);
+    expect(recordMutation).not.toHaveBeenCalled();
+
+    events.splice(0);
+    const src = `${ROOT}/src/main.ts`;
+    await h.vfs.mutationGuard([{ kind: 'write', path: src }], () => {
+      h.authority.writeFileSync(src, encoder.encode('guest'));
+    });
+    expect(recordMutation).toHaveBeenCalledTimes(1);
+  });
+
   it('publishes only the active source tree and serves each read from one atomic snapshot', () => {
     const h = harness();
 
