@@ -885,9 +885,10 @@ export function startBrowserWorkspaceOwner(
         subscribe: transport.previews.subscribeRouted,
         requestSnapshot: transport.previews.requestSnapshot,
         // The registry admits only already-mounted, SW-control-proven routes.
-        // Readiness therefore observes that authority and adds only HTTP proof.
+        // Readiness observes that authority, adds only HTTP proof, then composes
+        // the same route-operation barrier on run retirement.
         mountRoute: () => () => {},
-        proveServiceWorkerControl: async () => {},
+        proveServiceWorkerControl: () => transport.previews.settleRoutes(),
         probe: async (url, signal) => {
           const response = await dependencies.fetch(url, {
             cache: 'no-store',

@@ -27,6 +27,8 @@ export interface BrowserPlaygroundPreviewAuthority {
   readonly registry: BrowserPlaygroundPreviewRegistry;
   subscribeRouted(listener: (snapshot: readonly PreviewAdvertisement[]) => void): () => void;
   requestSnapshot(): void;
+  /** Wait until every raw snapshot admitted before this call has completed its route proof. */
+  settleRoutes(): Promise<void>;
   recover(): Promise<void>;
   close(): Promise<void>;
 }
@@ -422,6 +424,28 @@ export function createBrowserPlaygroundPreviewAuthority(
     requestSnapshot() {
       assertLive();
       dependencies.requestSnapshot();
+    },
+    async settleRoutes() {
+      for (;;) {
+        if (failure !== null) throw failure;
+        if (state === 'closed') return;
+        if (state === 'closing') {
+          const closing = closePromise;
+          if (closing === null) {
+            await operationTail;
+            continue;
+          }
+          await closing;
+          return;
+        }
+        if (state !== 'live') throw new ClosedHandleError('Playground preview registry');
+        const pending = operationTail;
+        await pending;
+        if (pending !== operationTail || state !== 'live') continue;
+        if (failure !== null) throw failure;
+        if (degradation !== null) throw degradation;
+        return;
+      }
     },
     recover() {
       if (failure !== null) return Promise.reject(failure);

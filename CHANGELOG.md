@@ -19,7 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (ubuntu-latest already ships chromium's shared libs via Chrome): its apt tail
   is bimodal — 11s p50 / 440s max across 12 parallel shards — and with a
   sharded matrix the max IS the wall-clock; a lib dropped by a future image
-  update fails the browser launch loudly.
+  update fails the browser launch loudly. Packed Workbench acceptance runs once
+  on light shard 1 instead of once per shard.
 
 ### Added
 

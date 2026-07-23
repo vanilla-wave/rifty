@@ -140,6 +140,9 @@ jobs:
       # light parallelism for speed needs the owner to survive concurrent boots.
       # (Sharding above sidesteps this: shards parallelize across machines, each
       # machine still boots one stack at a time.)
+      - name: Packed Workbench consumer
+        if: matrix.lane == 'light' && matrix.shard == 1
+        run: pnpm test:packed-consumer
       - run: pnpm test:e2e:${{ matrix.lane }} ${{ matrix.lane == 'light' && '--workers=1' || '' }} ${{ matrix.shardTotal && format('--shard={0}/{1}', matrix.shard, matrix.shardTotal) || '' }}
       - name: Landing browser regression
         if: matrix.lane == 'prod'

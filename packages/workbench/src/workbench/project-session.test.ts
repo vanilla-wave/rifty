@@ -200,6 +200,7 @@ function createHarness() {
   let runtimeCloseCalls = 0;
   let runtimeCloseError: Error | null = null;
   let ownerCloseCalls = 0;
+  let ownerCloseError: Error | null = null;
   const ownerCloseOrder: {
     readonly terminalCalls: readonly string[];
     readonly runtimeCalls: number;
@@ -237,6 +238,7 @@ function createHarness() {
         terminalCalls: [...port.closeCalls],
         runtimeCalls: runtimeCloseCalls,
       });
+      if (ownerCloseError) throw ownerCloseError;
     },
   });
 
@@ -251,6 +253,9 @@ function createHarness() {
     ownerCloseOrder,
     failRuntimeClose(error: Error) {
       runtimeCloseError = error;
+    },
+    failOwnerClose(error: Error) {
+      ownerCloseError = error;
     },
     setReadVersionedFile: contentFixture.setReadVersionedFile,
   };
@@ -639,5 +644,36 @@ describe('ProjectSession lifecycle contract', () => {
     expect(h.runtimeCloseCalls()).toBe(1);
 
     await expect(sibling.write('closed')).rejects.toBeInstanceOf(ClosedHandleError);
+  });
+
+  it('deduplicates a shared causal close failure only by reference identity', async () => {
+    const h = createHarness();
+    const authorityFailure = new AggregateError(
+      [new Error('route teardown failed')],
+      'preview authority close failed',
+    );
+    const readinessFailure = new AggregateError(
+      [authorityFailure],
+      'preview readiness close failed',
+    );
+    h.failRuntimeClose(readinessFailure);
+    h.failOwnerClose(authorityFailure);
+
+    const failure = await h.session.close().catch((error: unknown) => error);
+
+    expect(failure).toBe(authorityFailure);
+  });
+
+  it('keeps equal-looking independent close failures distinct', async () => {
+    const h = createHarness();
+    const runtimeFailure = new Error('same close failure');
+    const ownerFailure = new Error('same close failure');
+    h.failRuntimeClose(runtimeFailure);
+    h.failOwnerClose(ownerFailure);
+
+    const failure = await h.session.close().catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([runtimeFailure, ownerFailure]);
   });
 });

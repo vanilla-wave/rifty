@@ -44,6 +44,19 @@ interface ProjectSessionCloseInternals {
 
 const closeInternals = new WeakMap<object, ProjectSessionCloseInternals>();
 
+function deduplicateCausalCloseErrors(errors: readonly Error[]): readonly Error[] {
+  const unique = errors.filter((error, index) => errors.indexOf(error) === index);
+  const reported = new Set(unique);
+  return unique.filter((error) => {
+    if (!(error instanceof AggregateError)) return true;
+    const causes = error.errors as readonly unknown[];
+    return (
+      causes.length === 0 ||
+      causes.some((cause) => !(cause instanceof Error) || cause === error || !reported.has(cause))
+    );
+  });
+}
+
 /** Package-private lifecycle hook; clean preflight always runs before these drains. */
 export function registerProjectSessionBeforeClose(
   session: ProjectSession<unknown>,
@@ -228,16 +241,20 @@ export function createProjectSession<TReady>(_options: {
             result.status === 'rejected' ? [errorFrom(result.reason)] : [],
           ),
         );
+        const reportedErrors = deduplicateCausalCloseErrors(errors);
         activeRun = null;
         runClaimed = false;
         closed = true;
-        if (errors.length === 1) {
-          closeOutcome.reject(errors[0] as Error);
+        if (reportedErrors.length === 1) {
+          closeOutcome.reject(reportedErrors[0] as Error);
           return;
         }
-        if (errors.length > 1) {
+        if (reportedErrors.length > 1) {
           closeOutcome.reject(
-            new AggregateError(errors, errors.map((error) => error.message).join('; ')),
+            new AggregateError(
+              reportedErrors,
+              reportedErrors.map((error) => error.message).join('; '),
+            ),
           );
           return;
         }

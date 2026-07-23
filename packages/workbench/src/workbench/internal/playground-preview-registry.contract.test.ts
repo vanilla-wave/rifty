@@ -402,6 +402,43 @@ describe('browser Playground preview registry contract', () => {
     expect(mount.events).not.toContain('public:4100');
   });
 
+  it('settles only after an admitted route withdrawal completes its control proof', async () => {
+    const h = harness({ deferredProof: true });
+    h.publishRaw(Object.freeze([entry(4100)]));
+    await vi.waitFor(() => expect(h.proofs).toHaveLength(1));
+    h.proofs[0]?.resolve();
+    await vi.waitFor(() => expect(h.authority.registry.snapshot()).toHaveLength(1));
+
+    h.publishRaw(Object.freeze([]));
+    await vi.waitFor(() => {
+      expect(h.events).toContain('unmount:4100:scope-4100');
+      expect(h.proofs).toHaveLength(2);
+    });
+    let settled = false;
+    const settling = h.authority.settleRoutes().finally(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+    h.proofs[1]?.resolve();
+    await expect(settling).resolves.toBeUndefined();
+    expect(h.authority.registry.snapshot()).toEqual([]);
+  });
+
+  it('reports route degradation through the settle barrier', async () => {
+    const routeFailure = new Error('control proof failed');
+    const h = harness({ deferredProof: true });
+    h.publishRaw(Object.freeze([entry(4100)]));
+    await vi.waitFor(() => expect(h.proofs).toHaveLength(1));
+
+    const settling = h.authority.settleRoutes();
+    h.proofs[0]?.reject(routeFailure);
+
+    await expect(settling).rejects.toBe(routeFailure);
+    expect(h.degraded).toEqual([routeFailure]);
+  });
+
   it('close publishes no live entry, releases all routes, fences control, and is idempotent', async () => {
     const h = harness();
     const snapshots: number[][] = [];

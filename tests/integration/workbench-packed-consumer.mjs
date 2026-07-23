@@ -21,6 +21,7 @@ import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 import ts from 'typescript';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
+import { installedPackagePackCommand } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -331,14 +332,8 @@ async function packInstalledPackages(packages, tarballRoot, npmCacheRoot) {
   const tarballs = new Map();
   for (const [name, packageEntry] of packages) {
     const before = new Set(await readdir(tarballRoot));
-    await run(
-      'npm',
-      ['pack', '--ignore-scripts', '--pack-destination', tarballRoot, packageEntry.dir],
-      {
-        timeoutMs: 120_000,
-        env: { npm_config_cache: npmCacheRoot, npm_config_offline: 'true' },
-      },
-    );
+    const packCommand = installedPackagePackCommand(packageEntry.dir, tarballRoot, npmCacheRoot);
+    await run(packCommand.command, packCommand.args, packCommand.options);
     const created = (await readdir(tarballRoot)).filter(
       (entry) => entry.endsWith('.tgz') && !before.has(entry),
     );
