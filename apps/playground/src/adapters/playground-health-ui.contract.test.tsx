@@ -1,11 +1,11 @@
-import { createRoot } from 'solid-js';
-import { renderToString } from 'solid-js/web';
-import { describe, expect, it, vi } from 'vitest';
 import type {
   WorkbenchHealth,
   WorkbenchHealthSnapshot,
   WorkbenchRecoveryScope,
-} from '../workbench/public.ts';
+} from '@riftydev/workbench';
+import { createRoot } from 'solid-js';
+import { renderToString } from 'solid-js/web';
+import { describe, expect, it, vi } from 'vitest';
 import { PlaygroundHealthBanner, createPlaygroundHealthUi } from './playground-health-ui.tsx';
 
 const HEALTHY: WorkbenchHealthSnapshot = Object.freeze({ disposition: 'healthy', issues: [] });

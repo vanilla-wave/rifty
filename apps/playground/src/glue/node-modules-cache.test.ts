@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { NodeModulesCache } from './node-modules-cache.ts';
-import type { NodeModulesBridge, NodeModulesDirEntry } from './node-modules-port.ts';
+import type { NodeModulesBridge, NodeModulesDirEntry } from './node-modules-model.ts';
 
 const ENTRIES: readonly NodeModulesDirEntry[] = [
   { name: 'dist', kind: 'dir', size: 0 },

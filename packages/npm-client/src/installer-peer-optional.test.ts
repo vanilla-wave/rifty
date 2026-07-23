@@ -185,4 +185,40 @@ describe('install — optionalDependencies', () => {
     expect(msg).toContain('optional');
     expect(msg).toContain('opt-missing');
   });
+
+  it('warns and skips when a required child of an optional subtree has an invalid archive', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'pkg',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry('pkg', '1.0.0', {
+            optionalDependencies: { opt: '1.0.0' },
+          }),
+        ],
+      ]),
+    );
+    db.set(
+      'opt',
+      new Map([['1.0.0', await makeEntry('opt', '1.0.0', { dependencies: { broken: '1.0.0' } })]]),
+    );
+    const broken = await makeEntry('broken', '1.0.0');
+    broken.tarball = new Uint8Array([1, 2, 3]);
+    db.set('broken', new Map([['1.0.0', broken]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { pkg: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new FakeRegistry(db) },
+    );
+
+    expect(result.packages.map((pkg) => pkg.name).sort()).toEqual(['opt', 'pkg']);
+    expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+      expect.stringContaining('optional dependency opt@1.0.0 of pkg could not be installed'),
+    );
+  });
 });

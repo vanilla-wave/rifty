@@ -26,6 +26,7 @@
     "@riftydev/terminal": "workspace:*",
     "@riftydev/ts-language-service": "workspace:*",
     "@riftydev/vfs": "workspace:*",
+    "@riftydev/workbench": "workspace:*",
     "@xterm/xterm": "^5.5.0",
     "esbuild-wasm": "0.28.0",
     "monaco-editor": "^0.52.0",

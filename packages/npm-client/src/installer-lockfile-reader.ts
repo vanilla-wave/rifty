@@ -166,13 +166,27 @@ export function bundleCompletenessGap(
   request: Record<string, string>,
   tarballs: ReadonlyArray<{ name: string; version: string; integrity: string }>,
 ): string | null {
+  const reachableNames = lockfileSubgraph(lockfile, Object.keys(request));
+  const reachablePaths = new Set(
+    Object.keys(lockfile.packages).filter(
+      (path) => path !== '' && reachableNames.has(lockfilePathBareName(path)),
+    ),
+  );
+  return bundleCompletenessGapForPaths(lockfile, reachablePaths, tarballs);
+}
+
+/** Exact-path variant for callers that already own override/companion traversal. */
+export function bundleCompletenessGapForPaths(
+  lockfile: Lockfile,
+  reachablePaths: ReadonlySet<string>,
+  tarballs: ReadonlyArray<{ name: string; version: string; integrity: string }>,
+): string | null {
   const integrityByNameVersion = new Map<string, string>();
   for (const t of tarballs) integrityByNameVersion.set(`${t.name}@${t.version}`, t.integrity);
-  const reachable = lockfileSubgraph(lockfile, Object.keys(request));
   for (const [path, entry] of Object.entries(lockfile.packages)) {
     if (path === '') continue; // the root project is not a tarball
+    if (!reachablePaths.has(path)) continue;
     const name = lockfilePathBareName(path);
-    if (!reachable.has(name)) continue;
     if (!entry.version || !entry.resolved || !entry.integrity) {
       return `bundle lockfile entry ${path} lacks replay fields (resolved/integrity)`;
     }

@@ -8,7 +8,7 @@
 import { registerServiceWorker } from '@riftydev/service-worker';
 import { detectVfsBackend } from '@riftydev/vfs';
 import { type PreconnectDocument, injectPreconnects } from './glue/preconnect.ts';
-import { getRegistryProxyPrefix } from './glue/registry-fetch.ts';
+import { getRegistryProxyPrefix } from './glue/registry-config.ts';
 import { getEddyBundleBaseUrl, getResolverUrl } from './glue/resolver-config.ts';
 import { type StoragePersistenceStatus, probeStoragePersistence } from './glue/storage-status.ts';
 

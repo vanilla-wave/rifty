@@ -86,6 +86,9 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
+      '@riftydev/workbench':
+        specifier: workspace:*
+        version: link:../../packages/workbench
       '@xterm/xterm':
         specifier: ^5.5.0
         version: 5.5.0
@@ -358,6 +361,39 @@ importers:
       vitest:
         specifier: '*'
         version: 2.1.9(@types/node@22.19.19)
+
+  packages/workbench:
+    dependencies:
+      '@riftydev/git':
+        specifier: workspace:*
+        version: link:../git
+      '@riftydev/io':
+        specifier: workspace:*
+        version: link:../io
+      '@riftydev/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@riftydev/net':
+        specifier: workspace:*
+        version: link:../net
+      '@riftydev/npm-client':
+        specifier: workspace:*
+        version: link:../npm-client
+      '@riftydev/runtime-js':
+        specifier: workspace:*
+        version: link:../runtime-js
+      '@riftydev/service-worker':
+        specifier: workspace:*
+        version: link:../service-worker
+      '@riftydev/shell':
+        specifier: workspace:*
+        version: link:../shell
+      '@riftydev/ts-language-service':
+        specifier: workspace:*
+        version: link:../ts-language-service
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../vfs
 
   services/eddy:
     devDependencies:

@@ -113,6 +113,10 @@
         "types": "./dist/builtins/node-entry-url.d.ts",
         "import": "./dist/builtins/node-entry-url.js"
       },
+      "./builtins/process-identity": {
+        "types": "./dist/builtins/process-identity.d.ts",
+        "import": "./dist/builtins/process-identity.js"
+      },
       "./builtins/os": {
         "types": "./dist/builtins/os.d.ts",
         "import": "./dist/builtins/os.js"

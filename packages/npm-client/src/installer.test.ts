@@ -127,6 +127,70 @@ describe('install — package ingress preflight (ADR-0261)', () => {
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 
+  it.each(['root', 'transitive', 'subtree-child'] as const)(
+    'keeps structural tar-path corruption loud across a %s optional boundary',
+    async (boundary) => {
+      const db = new Map<string, Map<string, FakeRegistryEntry>>();
+      db.set(
+        'evil',
+        new Map([
+          [
+            '1.0.0',
+            await makeEntry('evil', '1.0.0', {}, {}, { '../.rifty-install-stamp.json': 'forged' }),
+          ],
+        ]),
+      );
+      if (boundary !== 'root') {
+        const optionalName = boundary === 'transitive' ? 'evil' : 'optional-parent';
+        db.set(
+          'parent',
+          new Map([
+            [
+              '1.0.0',
+              await makeEntry(
+                'parent',
+                '1.0.0',
+                {},
+                { optionalDependencies: { [optionalName]: '1.0.0' } },
+              ),
+            ],
+          ]),
+        );
+        if (boundary === 'subtree-child') {
+          db.set(
+            'optional-parent',
+            new Map([['1.0.0', await makeEntry('optional-parent', '1.0.0', { evil: '1.0.0' })]]),
+          );
+        }
+      }
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+      if (boundary === 'root') {
+        await vfs.writeFile(
+          '/proj/package.json',
+          JSON.stringify({
+            name: 'root',
+            version: '1.0.0',
+            optionalDependencies: { evil: '1.0.0' },
+          }),
+        );
+      }
+
+      const installing =
+        boundary === 'root'
+          ? install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) })
+          : install(
+              'root',
+              '1.0.0',
+              { parent: '1.0.0' },
+              { vfs, cwd: '/proj', registry: new FakeRegistry(db) },
+            );
+
+      await expect(installing).rejects.toMatchObject({ code: 'EINVALIDPACKAGETAR' });
+      expect(await vfs.exists('/proj/node_modules')).toBe(false);
+    },
+  );
+
   it('preflights every actual target through the host policy before the first link write', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set(
@@ -596,12 +660,10 @@ describe('install — package.json defaults', () => {
     ]);
   });
 
-  it('throws EBROKENLOCK on replay when an override redirect no longer satisfies the locked version', async () => {
-    // The lockfile fast path replays the override TARGET name, but a stale
-    // target version must not be reused silently: if the override range moved
-    // (foo → bar@1.0.0 becomes foo → bar@2.0.0) while the lockfile still pins
-    // bar@1.0.0, the source name has no entry so `subgraphFreeOfOverrideDivergence`
-    // can't catch it — the replay itself must refuse, loudly, not install stale.
+  it('re-resolves an override redirect that no longer admits the locked target version', async () => {
+    // An override range is current package policy. If foo → bar@1.0.0 becomes
+    // foo → bar@2.0.0, ADR-0023 treats that edge as a metadata frontier rather
+    // than replaying the stale target or requiring lockfile deletion.
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { foo: '1.0.0' })]]));
     db.set(
@@ -627,17 +689,14 @@ describe('install — package.json defaults', () => {
     const first = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
     expect(first.lockfile.packages['node_modules/bar']?.version).toBe('1.0.0');
 
-    // Second install: the override now wants bar@2.0.0, but the lockfile still
-    // pins bar@1.0.0. The fast-path replay must throw EBROKENLOCK, not silently
-    // reuse 1.0.0.
+    // Second install: only the changed override edge re-resolves.
     await vfs.writeFile('/proj/package.json', pkg('bar@2.0.0'));
-    let caught: unknown;
-    try {
-      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
-    } catch (err) {
-      caught = err;
-    }
-    expect((caught as { code?: string })?.code).toBe('EBROKENLOCK');
+    const second = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    expect(second.lockfile.packages['node_modules/bar']?.version).toBe('2.0.0');
+    expect(second.packages.map((p) => `${p.name}@${p.version}`).sort()).toEqual([
+      'bar@2.0.0',
+      'host@1.0.0',
+    ]);
   });
 
   it('throws a deliberate error for malformed root package.json shapes', async () => {
@@ -840,8 +899,169 @@ describe('install — nested install for conflicting transitive versions (M11)',
   // install died. The live express experiment on 2026-05-27 hit exactly this
   // shape on `ms: 2.1.3 vs 2.0.0` and pinned M11 nested install as a
   // prerequisite for M9 closure. The contract below documents the M11
-  // semantics: first-seen wins flat; subsequent conflicting versions get
-  // placed under the requesting parent's `node_modules/`.
+  // semantics: direct requests reserve flat identities first; among descendant
+  // requests, first-seen wins and later conflicts nest under their parent.
+  it.each([
+    ['parent first', { parent: '1.0.0', shared: '2.0.0' }],
+    ['direct dependency first', { shared: '2.0.0', parent: '1.0.0' }],
+  ])(
+    '[fault: observable-order] reserves the root-visible slot for a direct dependency (%s)',
+    async (_label, request) => {
+      const db = new Map<string, Map<string, FakeRegistryEntry>>();
+      db.set(
+        'parent',
+        new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]),
+      );
+      db.set(
+        'shared',
+        new Map([
+          ['1.0.0', await makeEntry('shared', '1.0.0')],
+          ['2.0.0', await makeEntry('shared', '2.0.0')],
+        ]),
+      );
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+
+      const result = await install('root', '1.0.0', request, {
+        vfs,
+        cwd: '/proj',
+        registry: new FakeRegistry(db),
+      });
+
+      expect(result.lockfile.packages['node_modules/shared']?.version).toBe('2.0.0');
+      expect(result.lockfile.packages['node_modules/parent/node_modules/shared']?.version).toBe(
+        '1.0.0',
+      );
+      expect(result.lockfile.packages['/node_modules/shared']).toBeUndefined();
+    },
+  );
+
+  it('dedupes a direct root and an earlier transitive request for the same identity', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]));
+    db.set('shared', new Map([['1.0.0', await makeEntry('shared', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { parent: '1.0.0', shared: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new FakeRegistry(db) },
+    );
+
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('1.0.0');
+    expect(result.lockfile.packages['node_modules/parent/node_modules/shared']).toBeUndefined();
+    expect(result.packages.filter((pkg) => pkg.name === 'shared')).toHaveLength(1);
+  });
+
+  it('does not reserve a root slot for an optional direct dependency whose acquisition fails', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]));
+    db.set(
+      'shared',
+      new Map([
+        ['1.0.0', await makeEntry('shared', '1.0.0')],
+        ['2.0.0', await makeEntry('shared', '2.0.0')],
+      ]),
+    );
+    class FailingOptionalRegistry extends FakeRegistry {
+      override async getTarball(tarballUrl: string): Promise<Uint8Array> {
+        if (tarballUrl === 'fake://shared/2.0.0') {
+          throw new Error('optional shared@2 acquisition failed');
+        }
+        return await super.getTarball(tarballUrl);
+      }
+    }
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { parent: '1.0.0' },
+        optionalDependencies: { shared: '2.0.0' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FailingOptionalRegistry(db) });
+
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('1.0.0');
+    expect(result.lockfile.packages['node_modules/parent/node_modules/shared']).toBeUndefined();
+  });
+
+  it('[fault: torn-state] does not reserve a root slot for an optional direct dependency whose archive is invalid', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]));
+    const invalidOptional = await makeEntry('shared', '2.0.0');
+    invalidOptional.tarball = new Uint8Array([1, 2, 3]);
+    db.set(
+      'shared',
+      new Map([
+        ['1.0.0', await makeEntry('shared', '1.0.0')],
+        ['2.0.0', invalidOptional],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { parent: '1.0.0' },
+        optionalDependencies: { shared: '2.0.0' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('1.0.0');
+    expect(result.lockfile.packages['node_modules/parent/node_modules/shared']).toBeUndefined();
+  });
+
+  it('[fault: torn-state] does not let a failed optional materialization suppress a later required visit', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'optional-parent',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'optional-parent',
+            '1.0.0',
+            {},
+            { optionalDependencies: { shared: '1.0.0' } },
+          ),
+        ],
+      ]),
+    );
+    db.set(
+      'required-parent',
+      new Map([['1.0.0', await makeEntry('required-parent', '1.0.0', { shared: '1.0.0' })]]),
+    );
+    const invalidShared = await makeEntry('shared', '1.0.0');
+    invalidShared.tarball = new Uint8Array([1, 2, 3]);
+    db.set('shared', new Map([['1.0.0', invalidShared]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(
+        install(
+          'root',
+          '1.0.0',
+          { 'optional-parent': '1.0.0', 'required-parent': '1.0.0' },
+          { vfs, cwd: '/proj', registry: new FakeRegistry(db) },
+        ),
+      ).rejects.toThrow();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('nests the second version under the requesting parent (simple diamond)', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('a', new Map([['1.0.0', await makeEntry('a', '1.0.0', { c: '1.0.0' })]]));

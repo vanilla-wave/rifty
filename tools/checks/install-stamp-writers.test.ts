@@ -1,10 +1,14 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   findInstallStampWriterViolations,
   isProductionTypeScript,
+  scanInstallStampWriters,
 } from './install-stamp-writers.mjs';
 
-const FILE = 'apps/playground/src/glue/example.ts';
+const FILE = 'packages/workbench/src/glue/example.ts';
 
 function operations(source: string): string[] {
   return findInstallStampWriterViolations(source, FILE).map((violation) => violation.operation);
@@ -72,7 +76,7 @@ describe('install-stamp one-writer gate', () => {
   });
 
   it('allows package-tree primitives only inside acquisition adapter callbacks', () => {
-    const bootstrap = 'apps/playground/src/workers/owner-package-state.ts';
+    const bootstrap = 'packages/workbench/src/workers/owner-package-state.ts';
     expect(
       findInstallStampWriterViolations(
         `
@@ -122,16 +126,44 @@ describe('install-stamp one-writer gate', () => {
     expect(
       findInstallStampWriterViolations(
         'vfs.writeFile(installStampPath(root), bytes)',
-        'apps/playground/src/glue/install-stamp-authority.ts',
+        'packages/workbench/src/glue/install-stamp-authority.ts',
       ),
     ).toEqual([]);
-    expect(isProductionTypeScript('apps/playground/src/a.test.ts')).toBe(false);
-    expect(isProductionTypeScript('apps/playground/src/a.spec.tsx')).toBe(false);
+    expect(isProductionTypeScript('packages/workbench/src/a.test.ts')).toBe(false);
+    expect(isProductionTypeScript('packages/workbench/src/a.spec.tsx')).toBe(false);
     expect(isProductionTypeScript(FILE)).toBe(true);
   });
 
+  it('scans production Playground writers while excluding Playground tests', () => {
+    const root = mkdtempSync(join(tmpdir(), 'install-stamp-writers-'));
+    try {
+      mkdirSync(join(root, 'packages/workbench/src'), { recursive: true });
+      mkdirSync(join(root, 'apps/playground/src'), { recursive: true });
+      writeFileSync(join(root, 'packages/workbench/src/safe.ts'), 'export const safe = true;');
+      writeFileSync(
+        join(root, 'apps/playground/src/claim-writer.ts'),
+        'vfs.writeFile(installStampPath(root), bytes);',
+      );
+      writeFileSync(
+        join(root, 'apps/playground/src/claim-writer.test.ts'),
+        'vfs.writeFile(installStampPath(root), bytes);',
+      );
+
+      expect(
+        scanInstallStampWriters(root).map(({ file, operation }) => ({ file, operation })),
+      ).toEqual([
+        {
+          file: 'apps/playground/src/claim-writer.ts',
+          operation: 'writeFile',
+        },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('allows only the Owner construction-local claim capability, not ordinary writes', () => {
-    const owner = 'apps/playground/src/workers/owner-vfs-authority.ts';
+    const owner = 'packages/workbench/src/workers/owner-vfs-authority.ts';
     expect(
       findInstallStampWriterViolations(
         `

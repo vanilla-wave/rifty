@@ -1,8 +1,10 @@
 /**
  * Real Vite smoke — standalone (run via `tsx`), NOT a vitest test.
  *
- * Mirrors `apps/playground/src/workers/real-vite-bootstrap.ts` install steps
- * in-process: install real vite@8 from the live registry (the installer applies
+ * Mirrors the package acquisition and Vite preparation now split between
+ * `packages/workbench/src/workers/owner-package-state.ts` and
+ * `packages/workbench/src/workers/vite-cli-prep.ts`: install real vite@8
+ * from the live registry (the installer applies
  * the shadow-registry internals shims itself, ADR-0188), then (only in a
  * SAB/kernel-backed Worker realm) build the loader, `import('vite')`,
  * `createServer`, `listen`, and `transformRequest`.

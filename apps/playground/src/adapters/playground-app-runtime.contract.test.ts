@@ -1,10 +1,3 @@
-import { describe, expect, it, vi } from 'vitest';
-import type {
-  PlaygroundCatalogSnapshot,
-  PlaygroundProjectPlan,
-  PlaygroundSessionToolsView,
-  PlaygroundWorkbench,
-} from '../workbench/playground.ts';
 import {
   DirtyProjectDocumentError,
   type ProjectDefinition,
@@ -13,7 +6,14 @@ import {
   type ProjectTerminalSnapshot,
   type WorkbenchHealth,
   type WorkbenchHealthSnapshot,
-} from '../workbench/public.ts';
+} from '@riftydev/workbench';
+import type {
+  PlaygroundCatalogSnapshot,
+  PlaygroundProjectPlan,
+  PlaygroundSessionToolsView,
+  PlaygroundWorkbench,
+} from '@riftydev/workbench/playground';
+import { describe, expect, it, vi } from 'vitest';
 import { createPlaygroundAppRuntime } from './playground-app-runtime.ts';
 
 const EMPTY_CATALOG: PlaygroundCatalogSnapshot = Object.freeze({

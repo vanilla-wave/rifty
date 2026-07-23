@@ -130,6 +130,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0201 | Bounded-fetch chokepoint: no-progress stall bounds on all npm-client fetches |
 | 0258 | Structured install acquisition provenance |
 | 0283 | Canonical package manifest serialization |
+| 0303 | Direct roots reserve flat slots before transitive placement |
 | 0308 | Package-generic builtin shadow-substitution registry with optional runtime binding |
 | 0309 | One package-tree authority for install-tree lifecycle |
 | 0310 | Sass ships as a synthesized sass-embedded facade over the exact pure-JS sass twin |
@@ -296,6 +297,8 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0042 global first-wins-flat clause | 0303 | surviving direct identities reserve root-visible slots before serial descendant first-wins placement |
+| 0175 globally request-ordered placement clause | 0303 | direct reservation precedes descendant DFS; prefetch/network completion remains non-authoritative |
 | 0263 generic origin-contention rejection clause | 0293 / note 2026-07-18 | callback-null origin contention has public `WorkbenchOriginOccupiedError`; same-page/capability/request/init failures remain fatal |
 | 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |

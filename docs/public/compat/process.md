@@ -28,10 +28,10 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 The playground terminal runs an arbitrary entry as a supervised child of the workspace owner
 (the `.bin`/`runNodeEntry` seam, ADR-0137 — NOT the template dev-server). Server-vs-script is
 decided by what the program DOES (it called `listen()`), not a flag — Node-faithful. Backing tests:
-`tests/e2e/node-command.spec.ts`, `apps/playground/src/workers/node-program-lifecycle.test.ts`,
-`apps/playground/src/workers/owner-child-node-executor.test.ts`,
-`apps/playground/src/workers/workbench-project-runtime.test.ts`,
-`apps/playground/src/workers/preview-registry.test.ts`, and
+`tests/e2e/node-command.spec.ts`, `packages/workbench/src/workers/node-program-lifecycle.test.ts`,
+`packages/workbench/src/workers/owner-child-node-executor.test.ts`,
+`packages/workbench/src/workers/workbench-project-runtime.test.ts`,
+`packages/workbench/src/workers/preview-registry.test.ts`, and
 `tests/browser-unit/owner-node-stdio-control.spec.ts`. Run-to-completion loader parity (shebang,
 relative `import`/`require`, exit codes) reuses the existing node-entry/resolver conformance
 (`packages/runtime-js/src/builtins/node-entry.test.ts`, `tests/conformance/modules/resolver.test.ts`,

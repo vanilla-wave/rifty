@@ -427,6 +427,25 @@ describe('install — optional-dep fetch failure stays non-fatal under concurren
     ).rejects.toThrow('simulated fetch failure for req@1.0.0');
   });
 
+  it('[fault: concurrent-same-key] promotes a deferred optional-descendant fetch when a later required path dedupes', async () => {
+    // a -> opt (optional) -> shared (required within that optional subtree)
+    // schedules shared first with optional failure semantics. b -> shared is
+    // globally required and must strengthen the already-scheduled demand.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('a', new Map([['1.0.0', await makeEntry('a', '1.0.0', {}, { opt: '1.0.0' })]]));
+    db.set('opt', new Map([['1.0.0', await makeEntry('opt', '1.0.0', { shared: '1.0.0' })]]));
+    db.set('b', new Map([['1.0.0', await makeEntry('b', '1.0.0', { shared: '1.0.0' })]]));
+    db.set('shared', new Map([['1.0.0', await makeEntry('shared', '1.0.0')]]));
+    const registry = new CountingDelayedRegistry(db);
+    registry.rejectKeys.add('shared@1.0.0');
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    await expect(
+      install('root', '1.0.0', { a: '1.0.0', b: '1.0.0' }, { vfs, cwd: '/proj', registry }),
+    ).rejects.toThrow('simulated fetch failure for shared@1.0.0');
+  });
+
   it('a failed OPTIONAL-boundary fetch does not poison a later REQUIRED visit of the same name (#24 dedup-gate bug)', async () => {
     // BLOCKER #24: `scheduled` is set synchronously BEFORE the optional-boundary
     // fetch, and was NEVER cleaned when that fetch rejected (the catch only

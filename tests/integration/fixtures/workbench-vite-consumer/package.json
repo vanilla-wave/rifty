@@ -1,0 +1,22 @@
+{
+  "name": "rifty-workbench-vite-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@riftydev/service-worker": "0.1.0",
+    "@riftydev/workbench": "0.1.0",
+    "esbuild-wasm": "0.28.0",
+    "sql.js": "1.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vite": "5.4.21"
+  }
+}

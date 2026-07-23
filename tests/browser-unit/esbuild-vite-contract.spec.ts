@@ -91,6 +91,7 @@ interface ContractPaths {
 }
 
 const VITE_BIN = '/scratch/node_modules/.bin/vite';
+const PUBLIC_VITE_BIN = '/node_modules/.bin/vite';
 const expectedContract = JSON.parse(
   readFileSync(
     fileURLToPath(
@@ -118,8 +119,8 @@ const shadowRequire = createRequire(
 );
 const hostEsbuild = shadowRequire('esbuild') as HostEsbuild;
 
-function pathsFor(token: string): ContractPaths {
-  const dir = `/scratch/.rifty-esbuild-contract-${token}`;
+function pathsFor(token: string, fixtureRoot: '/scratch' | ''): ContractPaths {
+  const dir = `${fixtureRoot}/.rifty-esbuild-contract-${token}`;
   return {
     dir,
     devRunner: `${dir}/dev-full.cjs`,
@@ -343,25 +344,26 @@ async function runContractHarness(page: Page): Promise<{
   readonly info: InfoEnvelope;
 }> {
   const token = randomUUID();
-  const paths = pathsFor(token);
+  const fixturePaths = pathsFor(token, '/scratch');
+  const paths = pathsFor(token, '');
   const bundle = await bundleProbe();
   const original = await readOwnerFile(page, VITE_BIN);
   expect(original.ok, original.error).toBe(true);
 
-  await writeOwnerFile(page, paths.devRunner, devRunner(bundle, token, paths));
+  await writeOwnerFile(page, fixturePaths.devRunner, devRunner(bundle, token, paths));
   await writeOwnerFile(
     page,
-    paths.buildRunner,
+    fixturePaths.buildRunner,
     moduleRunner(bundle, token, 'build', `${paths.dir}/build-workspace`, paths.buildResult),
   );
   await writeOwnerFile(
     page,
-    paths.previewRunner,
+    fixturePaths.previewRunner,
     moduleRunner(bundle, token, 'preview', `${paths.dir}/preview-workspace`, paths.previewResult),
   );
   await writeOwnerFile(
     page,
-    paths.optimizeRunner,
+    fixturePaths.optimizeRunner,
     moduleRunner(
       bundle,
       token,
@@ -370,7 +372,7 @@ async function runContractHarness(page: Page): Promise<{
       paths.optimizeResult,
     ),
   );
-  await writeOwnerFile(page, paths.infoRunner, infoRunner(token, paths));
+  await writeOwnerFile(page, fixturePaths.infoRunner, infoRunner(token, paths));
 
   let dev: Awaited<ReturnType<typeof execLine>>;
   let build: Awaited<ReturnType<typeof execLine>>;
@@ -392,11 +394,11 @@ async function runContractHarness(page: Page): Promise<{
     await writeOwnerFile(page, VITE_BIN, original.text);
   }
 
-  const devFile = await readOwnerFile(page, paths.devResult);
-  const buildFile = await readOwnerFile(page, paths.buildResult);
-  const previewFile = await readOwnerFile(page, paths.previewResult);
-  const optimizeFile = await readOwnerFile(page, paths.optimizeResult);
-  const infoFile = await readOwnerFile(page, paths.infoResult);
+  const devFile = await readOwnerFile(page, fixturePaths.devResult);
+  const buildFile = await readOwnerFile(page, fixturePaths.buildResult);
+  const previewFile = await readOwnerFile(page, fixturePaths.previewResult);
+  const optimizeFile = await readOwnerFile(page, fixturePaths.optimizeResult);
+  const infoFile = await readOwnerFile(page, fixturePaths.infoResult);
   const restored = await readOwnerFile(page, VITE_BIN);
   const cleanup = await execLine(page, `rm -rf ${paths.dir}`);
 
@@ -541,7 +543,7 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
   try {
     const which = await execLine(page, 'which vite');
     expect(which).toMatchObject({ exit: 0 });
-    expect(which.out).toContain(VITE_BIN);
+    expect(which.out).toContain(PUBLIC_VITE_BIN);
     const version = await execLine(page, 'vite --version');
     expect(version).toMatchObject({ exit: 0 });
     expect(version.out).toContain('vite/7.3.6');

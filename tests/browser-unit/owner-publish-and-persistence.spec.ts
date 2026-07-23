@@ -4,163 +4,92 @@ import {
   closeOwner,
   flushOwnerDurable,
   gotoHarness,
-  ownerLogs,
   readOwnerFile,
+  removeOwnerPath,
+  sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from './fixtures.ts';
 
-/**
- * Owner publish + persistence contracts against the REAL owner worker
- * (browser-unit lane, ADR-0196) — formerly source-grep-pinned:
- *   1. Every owner mutation refresh hook pushes a FRESH file snapshot: a
- *      vfs-write is followed by an unsolicited `snapshot` frame containing the
- *      new path (onVfsWrite → publishOwnerState → publishVfsSnapshot).
- *   2. The BroadcastChannel vfs-write bridge (serveVfsWrites) applies frames
- *      without the kernel-IPC ack path.
- *   3. The owner wires the OPFS backend (initBackend) and its tree survives an
- *      owner respawn of the same workspace.
- */
-
-test('vfs-write pushes a fresh snapshot; BroadcastChannel write bridge applies frames', async ({
-  page,
-}) => {
+test('public file mutation acknowledges bytes and publishes a fresh snapshot', async ({ page }) => {
   await gotoHarness(page);
-  await bootOwner(page, { workspaceId: 'bu-publish', hiddenEmptyBoot: true });
-
-  const result = await page.evaluate(async () => {
-    const w = window as unknown as {
-      __buOwner: {
-        snapshotPort: string | number;
-        writeFrameAcked(frame: { type: 'write'; path: string; data: Uint8Array }): Promise<void>;
-        readFileBytes(path: string): Promise<Uint8Array>;
-      };
-    };
-    const handle = w.__buOwner;
-    const snapshotPort = handle.snapshotPort;
-    const [snapshotPortModule, vfsWritePort] = await Promise.all([
-      import('/src/glue/vfs-snapshot-port.ts'),
-      import('/src/glue/vfs-write-port.ts'),
-    ]);
-
-    // 1. Subscribe (passively — no snapshot-req), then mutate: the owner must
-    //    PUSH a fresh snapshot frame carrying the new file.
-    const pushed = new Promise<string[] | null>((resolve) => {
-      const timer = setTimeout(() => {
-        tear();
-        resolve(null);
-      }, 15_000);
-      const tear = snapshotPortModule.subscribeVfsSnapshot(
-        snapshotPort,
-        (frame: { entries: readonly { path: string }[] }) => {
-          const paths = frame.entries.map((e) => e.path);
-          if (paths.includes('/scratch/push-probe.txt')) {
-            clearTimeout(timer);
-            tear();
-            resolve(paths);
-          }
-        },
-      );
-    });
-    await handle.writeFrameAcked({
-      type: 'write',
-      path: '/scratch/push-probe.txt',
-      data: new TextEncoder().encode('push-probe'),
-    });
-    const pushedPaths = await pushed;
-
-    // 2. BroadcastChannel write bridge (no ack, no kernel IPC): the frame must
-    //    land in the owner tree, observable through readFileBytes.
-    const bcContent = `bc-bridge-write ${Date.now().toString(36)}`;
-    vfsWritePort.sendVfsWrite(snapshotPort, {
-      type: 'write',
-      path: '/scratch/bc-bridge.txt',
-      data: new TextEncoder().encode(bcContent),
-    });
-    let bcReadBack: string | null = null;
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline) {
-      try {
-        bcReadBack = new TextDecoder().decode(await handle.readFileBytes('/scratch/bc-bridge.txt'));
-        break;
-      } catch {
-        await new Promise((r) => setTimeout(r, 100));
-      }
-    }
-    return { pushedPaths, bcReadBack, bcContent };
+  await bootOwner(page, {
+    workspaceId: 'bu-publish',
+    template: 'hidden-empty',
+    persistence: 'ephemeral',
   });
 
-  expect(result.pushedPaths).not.toBeNull();
-  expect(result.pushedPaths).toContain('/scratch/push-probe.txt');
-  expect(result.bcReadBack).toBe(result.bcContent);
+  const result = await page.evaluate(async (fixtureUrl) => {
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    const project = fixture.currentProject();
+    const observed: string[][] = [];
+    const unsubscribe = project.files.subscribe(
+      (snapshot: { readonly entries: readonly { readonly path: string }[] }) => {
+        observed.push(snapshot.entries.map((entry) => entry.path));
+      },
+    );
+    try {
+      await fixture.writeProjectText('/scratch/push-probe.txt', 'push-probe');
+      const read = await project.files.readFile('/push-probe.txt');
+      return {
+        observed,
+        readBack: new TextDecoder().decode(read.bytes),
+      };
+    } finally {
+      unsubscribe();
+    }
+  }, sealedWorkbenchFixtureUrl);
+
+  expect(result.observed.some((paths) => paths.includes('/push-probe.txt'))).toBe(true);
+  expect(result.readBack).toBe('push-probe');
 });
 
-test('hidden-empty owner stays hidden; OPFS tree survives an owner respawn', async ({ page }) => {
+test('required OPFS project survives a sealed Workbench reopen', async ({ page }) => {
   await gotoHarness(page);
-  await bootOwner(page, { workspaceId: 'bu-persist', hiddenEmptyBoot: true });
+  const boot = {
+    workspaceId: 'bu-persist',
+    template: 'hidden-empty' as const,
+    persistence: 'required' as const,
+  };
+  await bootOwner(page, boot);
 
-  // Hidden first-run boot: NO welcome README / starter seed (the launcher owns
-  // the first pick) — the read must fail with a real owner error, not content.
   const readme = await readOwnerFile(page, '/scratch/README.md');
   expect(readme.ok).toBe(false);
-
-  // OPFS backend wired before serving (initBackend) — owner log is the seam.
-  expect(await ownerLogs(page)).toContain('VFS backend: opfs');
+  expect(
+    await page.evaluate(async (fixtureUrl) => {
+      const fixture = await import(/* @vite-ignore */ fixtureUrl);
+      return fixture.currentWorkbench().snapshot().storage;
+    }, sealedWorkbenchFixtureUrl),
+  ).toEqual({ policy: 'required', backend: 'opfs', durability: 'durable' });
 
   const marker = `persist-probe ${Date.now().toString(36)}`;
   await writeOwnerFile(page, '/scratch/persist-probe.txt', marker);
-  // Durability barrier (ADR-0187): the write ack only proves the in-memory
-  // mirror; flushDurable drains the OPFS write-through and rejects on persist
-  // failures — the respawn below reads from disk, deterministically.
   await flushOwnerDurable(page);
   await closeOwner(page);
 
-  // Same workspace id → same OPFS scope: a respawned owner must see the file.
-  await bootOwner(page, { workspaceId: 'bu-persist', hiddenEmptyBoot: true });
+  await bootOwner(page, boot);
   const readBack = await readOwnerFile(page, '/scratch/persist-probe.txt');
-  expect(readBack.ok).toBe(true);
-  expect(readBack.text).toBe(marker);
+  expect(readBack).toEqual({ ok: true, text: marker, error: '' });
 });
 
-test('durable Vite config claim preserves user deletion across owner respawn', async ({ page }) => {
+test('durable project seeding preserves a user-deleted Vite config across reopen', async ({
+  page,
+}) => {
   await gotoHarness(page);
   const boot = {
     workspaceId: 'bu-vite-config-claim',
     template: 'vite' as const,
     starter: 'real-vite',
     setup: 'from-scratch' as const,
-    hiddenEmptyBoot: false,
+    persistence: 'required' as const,
   };
   await bootOwner(page, boot);
 
-  const claimPath = '/scratch/.rifty/vite-config.seeded';
   const configPath = '/scratch/vite.config.js';
   expect((await readOwnerFile(page, configPath)).ok).toBe(true);
-  const firstClaim = await readOwnerFile(page, claimPath);
-  expect(firstClaim.ok).toBe(true);
-  expect(JSON.parse(firstClaim.text)).toMatchObject({
-    schema: 1,
-    starter: 'real-vite',
-    file: 'vite.config.js',
-  });
-
-  await page.evaluate(async (path) => {
-    const w = window as unknown as {
-      __buOwner?: {
-        writeFrameAcked(frame: {
-          type: 'rm';
-          path: string;
-          recursive: boolean;
-          force: boolean;
-        }): Promise<void>;
-      };
-    };
-    if (!w.__buOwner) throw new Error('config deletion: no owner booted on this page');
-    await w.__buOwner.writeFrameAcked({ type: 'rm', path, recursive: false, force: false });
-  }, configPath);
+  await removeOwnerPath(page, configPath);
   await flushOwnerDurable(page);
   await closeOwner(page);
 
   await bootOwner(page, boot);
   expect((await readOwnerFile(page, configPath)).ok).toBe(false);
-  expect((await readOwnerFile(page, claimPath)).text).toBe(firstClaim.text);
 });

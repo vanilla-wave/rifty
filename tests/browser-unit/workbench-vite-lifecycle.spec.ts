@@ -401,7 +401,7 @@ if (import.meta.hot) import.meta.hot.accept();
       };
     };
 
-    const publicEntryUrl: string = '/src/workbench/public.ts';
+    const publicEntryUrl: string = '/src/browser-unit/workbench-public-entry.ts';
     const [publicEntryModule, hostAssetsModule] = await Promise.all([
       import(/* @vite-ignore */ publicEntryUrl),
       import('/src/browser-unit/workbench-vite-host-assets.ts'),

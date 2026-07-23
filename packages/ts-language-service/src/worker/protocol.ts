@@ -2,7 +2,7 @@
  * Worker protocol for the TS language service (ADR-0166). A
  * discriminated-union request/response frame set carried over the kernel
  * fork-IPC channel (page ⇄ serve-worker), modelled on
- * `apps/playground/src/glue/pty-protocol.ts`. Pure types/constants — NO side
+ * `packages/workbench/src/glue/pty-protocol.ts`. Pure types/constants — NO side
  * effects, NO worker globals (this module is import-safe for types alone).
  *
  * Every request carries a correlation `id`; the matching response echoes it.

@@ -94,7 +94,7 @@ interface GeneratedEsbuildRuntimeModule {
 
 async function startGeneratedRuntime(fs: FsSync, cwd: string): Promise<EsbuildContractApi> {
   const generatedUrl = new URL(
-    '../../../apps/playground/src/workers/generated/esbuild-runtime.js',
+    '../../../packages/workbench/src/workers/generated/esbuild-runtime.js',
     import.meta.url,
   ).href;
   const generated = (await import(generatedUrl)) as unknown as GeneratedEsbuildRuntimeModule;
