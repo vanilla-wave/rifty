@@ -288,6 +288,34 @@ describe('SyncRpc error shape — path/errno/syscall fields (child CLI reads own
   });
 });
 
+describe('SyncRpc decode forensics — a garbage frame must say WHAT it saw (CI-flake postmortem)', () => {
+  it('decodeReply on an EMPTY frame names the zero length, not "discriminator 0x-1"', () => {
+    // A zero-length reply is the double-consume signature (a second consumer
+    // reads the slot after REP_LEN was already cleared) — name it as such.
+    expect(() => decodeReply(new Uint8Array(0))).toThrow(
+      /decodeReply: empty reply frame \(0 bytes\) — reply slot already consumed \(concurrent consumer\?\)/,
+    );
+  });
+
+  it('decodeReply on an unknown discriminator names the byte and the frame length', () => {
+    expect(() => decodeReply(Uint8Array.from([0x7f, 1, 2]))).toThrow(
+      /decodeReply: unknown frame discriminator 0x7f \(frame 3 bytes\)/,
+    );
+  });
+
+  it('decodeRequest on an EMPTY frame names the zero length', () => {
+    expect(() => decodeRequest(new Uint8Array(0))).toThrow(
+      /decodeRequest: empty request frame \(0 bytes\) — request slot already consumed \(concurrent consumer\?\)/,
+    );
+  });
+
+  it('decodeRequest on an unknown discriminator names the byte and the frame length', () => {
+    expect(() => decodeRequest(Uint8Array.from([0x42, 9]))).toThrow(
+      /decodeRequest: expected JSON frame, got discriminator 0x42 \(frame 2 bytes\)/,
+    );
+  });
+});
+
 /** Local helper: encode a JSON request frame the way the client does. */
 function encodeReqJson(method: string): Uint8Array {
   const body = new TextEncoder().encode(JSON.stringify({ method, payload: null }));

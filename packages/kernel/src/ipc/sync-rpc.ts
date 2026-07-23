@@ -135,6 +135,14 @@ export function encodeRequest(req: SyncRpcRequest): Uint8Array {
  * on the version guard first.)
  */
 export function decodeReply(bytes: Uint8Array): SyncRpcReply {
+  if (bytes.byteLength === 0) {
+    // The double-consume signature: a second consumer read the reply slot
+    // after REP_LEN was already cleared. Name it — the old "discriminator
+    // 0x-1" message hid this exact CI flake for weeks.
+    throw new TypeError(
+      'decodeReply: empty reply frame (0 bytes) — reply slot already consumed (concurrent consumer?)',
+    );
+  }
   const kind = bytes[0];
   const body = bytes.subarray(1);
   if (kind === FRAME_BINARY) {
@@ -143,7 +151,9 @@ export function decodeReply(bytes: Uint8Array): SyncRpcReply {
     return { ok: true, value: body.slice() };
   }
   if (kind !== FRAME_JSON) {
-    throw new TypeError(`decodeReply: unknown frame discriminator 0x${(kind ?? -1).toString(16)}`);
+    throw new TypeError(
+      `decodeReply: unknown frame discriminator 0x${(kind ?? -1).toString(16)} (frame ${bytes.byteLength} bytes)`,
+    );
   }
   const text = decodeUtf8FromMaybeShared(body);
   const parsed = JSON.parse(text) as unknown;
@@ -158,10 +168,15 @@ export function decodeReply(bytes: Uint8Array): SyncRpcReply {
  * bytes the client wrote into the SAB request slot. Requests are JSON-only.
  */
 export function decodeRequest(bytes: Uint8Array): SyncRpcRequest {
+  if (bytes.byteLength === 0) {
+    throw new TypeError(
+      'decodeRequest: empty request frame (0 bytes) — request slot already consumed (concurrent consumer?)',
+    );
+  }
   const kind = bytes[0];
   if (kind !== FRAME_JSON) {
     throw new TypeError(
-      `decodeRequest: expected JSON frame, got discriminator 0x${(kind ?? -1).toString(16)}`,
+      `decodeRequest: expected JSON frame, got discriminator 0x${(kind ?? -1).toString(16)} (frame ${bytes.byteLength} bytes)`,
     );
   }
   const text = decodeUtf8FromMaybeShared(bytes.subarray(1));

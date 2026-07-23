@@ -4,6 +4,17 @@
 
 ### Fixed
 
+- **SyncRpc protocol violations are forensic and loud, never silent.** Two CI
+  flake signatures (`SabRing: cannot writeRequest while a previous reply is
+  unread`, `decodeReply: unknown frame discriminator 0x-1`) carried zero
+  context. Now: every SabRing guard/corrupt/timeout throw appends the atomic
+  header snapshot (`version/req/rep/reqLen/repLen`); an empty reply/request
+  frame is named as the double-consume signature instead of `0x-1`;
+  `SyncRpcClient.call` errors name the failing method and the previous call on
+  the ring; the dispatcher's undeliverable-reply drop (both writers) logs a
+  `console.error` naming the method instead of a silent `catch {}`. No wire or
+  behavior change — messages and one log line only.
+
 - **Failed Worker init no longer leaks its half-built process.** If the
   bootstrap `postMessage` throws synchronously (for example, an uncloneable
   entry payload), spawn now detaches its SAB ring, terminates the Worker, and
