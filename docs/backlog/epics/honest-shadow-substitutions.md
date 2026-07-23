@@ -55,7 +55,8 @@ Contract+RED → Final+GREEN):
 
 1. `playground/vite-temp-install-claim-churn` — **oracle-slice**: stamp trust
    predicate re-scoped per ADR-0307; earliest user payoff (running `vite` no
-   longer demotes install trust). Ready; closes delete-on-done with its PR.
+   longer demotes install trust). Ready; closes delete-on-done when its
+   acceptance branches are fully proven.
 2. `playground/workbench-package-extraction` — **workbench-extraction**:
    mechanical subtraction from the #160 quarry (renames, sealed entrypoints,
    installer per-edge replay + direct-slot reservation); hard cut line, nothing

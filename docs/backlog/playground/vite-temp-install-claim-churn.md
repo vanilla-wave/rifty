@@ -56,7 +56,11 @@ second acquisition.
 - Real-browser proof: fresh Vite open reaches LIVE with `scratch.dirty ===
   false`; A→B→A with acquisition network disabled performs zero
   install/snapshot/registry work and reaches LIVE.
-- Delete-on-done: this item closes with the oracle-slice PR.
+- Delete-on-done when every branch above is proven. The oracle-slice PR owns
+  the churn/trust/lockfile branches; the A→B→A offline browser proof may need
+  its own slice (Playground save/switch re-materializes `node_modules` today —
+  if that empirically blocks UI-level reuse, the branch returns to refine
+  rather than being narrated away).
 
 ## Parity cases
 
