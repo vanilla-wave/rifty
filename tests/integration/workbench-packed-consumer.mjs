@@ -21,7 +21,7 @@ import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 import ts from 'typescript';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
-import { installedPackagePackCommand } from './workbench-packed-consumer-package-manager.mjs';
+import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -330,10 +330,23 @@ async function packPackages(packages, tarballRoot) {
 
 async function packInstalledPackages(packages, tarballRoot, npmCacheRoot) {
   const tarballs = new Map();
+  const stagingRoot = resolve(
+    dirname(tarballRoot),
+    `${basename(tarballRoot)}-installed-package-staging`,
+  );
+  await mkdir(stagingRoot, { recursive: true });
+  let packageIndex = 0;
   for (const [name, packageEntry] of packages) {
     const before = new Set(await readdir(tarballRoot));
-    const packCommand = installedPackagePackCommand(packageEntry.dir, tarballRoot, npmCacheRoot);
-    await run(packCommand.command, packCommand.args, packCommand.options);
+    const packPlan = installedPackagePackPlan(
+      packageEntry.dir,
+      resolve(stagingRoot, String(packageIndex)),
+      tarballRoot,
+      npmCacheRoot,
+    );
+    packageIndex += 1;
+    await cp(packPlan.copy.source, packPlan.copy.destination, packPlan.copy.options);
+    await run(packPlan.command.command, packPlan.command.args, packPlan.command.options);
     const created = (await readdir(tarballRoot)).filter(
       (entry) => entry.endsWith('.tgz') && !before.has(entry),
     );

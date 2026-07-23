@@ -4,7 +4,7 @@ import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
 import { hostBuiltinAliases } from './fixtures/workbench-vite-consumer/host-builtins';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
-import { installedPackagePackCommand } from './workbench-packed-consumer-package-manager.mjs';
+import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
 
 const integrationRoot = dirname(fileURLToPath(import.meta.url));
@@ -137,16 +137,28 @@ describe('packed Workbench first-party package contract', () => {
 });
 
 describe('packed Workbench host package-manager contract', () => {
-  it('packs from the installed package cwd instead of resolving its pnpm-linked path', () => {
-    expect(installedPackagePackCommand('/installed/package', '/tarballs', '/npm-cache')).toEqual({
-      command: 'npm',
-      args: ['pack', '--ignore-scripts', '--pack-destination', '/tarballs'],
-      options: {
-        cwd: '/installed/package',
-        timeoutMs: 120_000,
-        env: {
-          npm_config_cache: '/npm-cache',
-          npm_config_offline: 'true',
+  it('materializes installed packages outside the pnpm store before npm pack', () => {
+    expect(
+      installedPackagePackPlan('/installed/package', '/staging/package', '/tarballs', '/npm-cache'),
+    ).toEqual({
+      copy: {
+        source: '/installed/package',
+        destination: '/staging/package',
+        options: {
+          recursive: true,
+          dereference: true,
+        },
+      },
+      command: {
+        command: 'npm',
+        args: ['pack', '--loglevel=verbose', '--ignore-scripts', '--pack-destination', '/tarballs'],
+        options: {
+          cwd: '/staging/package',
+          timeoutMs: 120_000,
+          env: {
+            npm_config_cache: '/npm-cache',
+            npm_config_offline: 'true',
+          },
         },
       },
     });
