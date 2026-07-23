@@ -24,10 +24,8 @@ PR #167 moved/deleted every prior `code:` anchor. Verified live mechanism sweep:
 
 Classify: design debt, not a confirmed behavior bug. These engines are related,
 not behaviorally identical: mutation admission, stream progress, retained
-terminals, and teardown outcomes differ. Request/reply correlation is a named
-coordination mechanism, so `fault-classes.md` §Class-kill requires consolidation
-under one owner or an ADR for genuinely separate instances; another point helper
-is not an acceptable ninth copy.
+terminals, and teardown outcomes differ. `fault-classes.md` §Class-kill requires
+consolidation under one owner or an ADR for genuinely separate instances.
 
 Boundary gate: dedicated Worker/MessagePort paths cannot duplicate, reorder, or
 lose-then-replay frames while alive; BroadcastChannel may miss an unattached
@@ -42,8 +40,6 @@ open/PTY/session tools/TS, preview dispatch, and `spawnRuntime`.
   reject/resolve on certified teardown. Keep protocol-specific admission and
   streaming outside it.
 - Choose one layer-correct package-internal owner with a shared consumer suite.
-  If net/runtime/workbench need separate owners, record the boundary reason in
-  an ADR before migration.
 - Migrate behind existing wire shapes and differential lifecycle tests.
 
 ## Out of scope

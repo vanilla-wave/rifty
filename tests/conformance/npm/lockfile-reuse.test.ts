@@ -6,6 +6,11 @@
  * (everything served from the lockfile via the tarball cache).
  * One-package range bump: only that package re-resolves.
  */
+import { spawn } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   type Fetcher,
   type Packument,
@@ -15,6 +20,7 @@ import {
 } from '@riftydev/npm-client';
 import { MemoryVfs } from '@riftydev/vfs';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { makeLocalFetcher } from '../../integration/fixtures/local-registry.ts';
 
 function concat(parts: Uint8Array[]): Uint8Array {
   let total = 0;
@@ -95,6 +101,79 @@ async function makeCountingFetcher(
     return new Response('', { status: 404 });
   };
   return { fetch, calls };
+}
+
+type DriftLock = {
+  packages: Record<string, { version?: string; dependencies?: Record<string, string> }>;
+};
+
+function runNpm(cwd: string, args: string[], registry: string) {
+  return new Promise<{ code: number; output: string }>((resolve, reject) => {
+    const child = spawn('npm', args, {
+      cwd,
+      env: {
+        ...process.env,
+        npm_config_cache: join(cwd, '.npm-cache'),
+        npm_config_registry: registry,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 10_000,
+    });
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      output += String(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code: code ?? -1, output }));
+  });
+}
+
+async function startFixtureRegistry() {
+  const fixtureFetch = makeLocalFetcher().fetch;
+  let origin = '';
+  const server = createServer((request, response) => {
+    void (async () => {
+      const path = decodeURIComponent(new URL(request.url ?? '/', 'http://fixture').pathname);
+      const served = await fixtureFetch(
+        path.startsWith('/tarball:') ? path.slice(1) : `packument:${path}`,
+      );
+      response.statusCode = served.status;
+      if (!served.ok) return response.end();
+      if (path.startsWith('/tarball:'))
+        return response.end(Buffer.from(await served.arrayBuffer()));
+      const packument = (await served.json()) as Packument;
+      for (const manifest of Object.values(packument.versions)) {
+        manifest.dist.tarball = `${origin}/${manifest.dist.tarball}`;
+      }
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify(packument));
+    })().catch((error: unknown) => {
+      response.statusCode = 500;
+      response.end(String(error));
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('fixture registry has no TCP port');
+  origin = `http://127.0.0.1:${address.port}`;
+  return { origin, server };
+}
+
+function driftSummary(lock: DriftLock, treeVersion: string) {
+  return {
+    edge: lock.packages['node_modules/diamond-conflict-parent']?.dependencies?.ms,
+    pin: lock.packages['node_modules/ms']?.version,
+    tree: treeVersion,
+  };
 }
 
 describe('install — lockfile reuse (ADR-0023)', () => {
@@ -269,4 +348,56 @@ describe('install — lockfile reuse (ADR-0023)', () => {
     await install('root', '0.0.0', { tiny: '^1.0.0' }, { vfs, cwd: '/app', registry: registry2 });
     expect(calls2.tarball).toBe(1);
   });
+});
+
+describe('install — transitive lockfile range drift parity', () => {
+  it('[fault: frozen-assumption] matches npm install repair while npm ci rejects', async () => {
+    const { origin, server } = await startFixtureRegistry();
+    const workspace = mkdtempSync(join(tmpdir(), 'rifty-range-drift-'));
+    const request = { 'diamond-conflict-parent': '1.0.0' };
+    const rootPackage = JSON.stringify({
+      name: 'range-drift-probe',
+      version: '1.0.0',
+      private: true,
+      dependencies: request,
+    });
+    try {
+      writeFileSync(join(workspace, 'package.json'), rootPackage);
+      const flags = ['--ignore-scripts', '--no-audit', '--no-fund'];
+      expect((await runNpm(workspace, ['install', ...flags], origin)).code).toBe(0);
+      const lockPath = join(workspace, 'package-lock.json');
+      const drifted = JSON.parse(readFileSync(lockPath, 'utf8')) as DriftLock;
+      const parent = drifted.packages['node_modules/diamond-conflict-parent'];
+      if (!parent?.dependencies) throw new Error('npm seed lock missing parent edge');
+      parent.dependencies.ms = '2.1.3';
+      const driftText = JSON.stringify(drifted);
+      writeFileSync(lockPath, driftText);
+      const ci = await runNpm(workspace, ['ci', '--dry-run', ...flags], origin);
+      expect(ci.code).not.toBe(0);
+      expect(ci.output).toMatch(/ms@2\.0\.0 does not satisfy ms@2\.1\.3/);
+      expect(readFileSync(lockPath, 'utf8')).toBe(driftText);
+      expect((await runNpm(workspace, ['install', ...flags], origin)).code).toBe(0);
+      const nodeLock = JSON.parse(readFileSync(lockPath, 'utf8')) as DriftLock;
+      const nodeTree = JSON.parse(
+        readFileSync(join(workspace, 'node_modules/ms/package.json'), 'utf8'),
+      ) as { version: string };
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/app', { recursive: true });
+      await vfs.writeFile('/app/package-lock.json', driftText);
+      const rifty = await install('range-drift-probe', '1.0.0', request, {
+        vfs,
+        cwd: '/app',
+        registry: new RegistryClient({ baseUrl: origin }),
+      });
+      const riftyTree = JSON.parse(await vfs.readFileText('/app/node_modules/ms/package.json')) as {
+        version: string;
+      };
+      expect(driftSummary(rifty.lockfile, riftyTree.version)).toEqual(
+        driftSummary(nodeLock, nodeTree.version),
+      );
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

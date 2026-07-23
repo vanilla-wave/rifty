@@ -47,8 +47,6 @@ PR #167 review capture deduplicated into this item:
   creates one stamp/package authority, then injects that package authority into
   restore (`:491-500`) and terminal npm (`:624-628`), so the split is not
   reachable from today's production user path.
-  Keep the attempted repro recorded; Contract+RED must remove the fallbacks or
-  prove one canonical injected identity rather than point-keying both.
 - **Worker VFS mechanism cascade.**
   `packages/workbench/src/glue/owner-vfs-client.ts:148-245` owns commit replay
   every 250 ms plus receipt/cleanup retry maps; `:345-377` completes the
@@ -64,11 +62,8 @@ PR #167 review capture deduplicated into this item:
   `packages/workbench/src/glue/install-stamp.ts:83-163` copied the one-shot
   browser-safe implementation from
   `tools/shadow-registry/src/esbuild-contract-probe.ts:407-488`;
-  `packages/runtime-js/src/builtins/crypto.ts:590+`
-  is a third, streaming guest-crypto implementation, while the other repo hash
-  helpers are async WebCrypto or Node-only. The sync stamp compare is
-  user-reachable on reopen. Consolidate the identical one-shot copies behind a
+  the sync stamp compare is user-reachable on reopen. Consolidate both behind a
   layer-correct package-internal primitive + shared fixed-vector suite, or
-  record why separate implementations are intentional; do not land copy four.
+  record why separate implementations are intentional; do not add another copy.
 
 Refine before pickup (`rifty-refine`).

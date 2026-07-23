@@ -31,17 +31,11 @@ PR #167 review matched this draft; no sibling item minted:
   `packages/workbench/src/workbench/project-files.ts:15` hard-code `.vite` into
   generic project-tree exclusion policy. Repro: put user-owned
   `.vite/notes.txt` in a non-Vite project and open its Workbench file snapshot;
-  the directory is omitted. Move consumer exclusions to an explicit integration
-  policy; generic project files must not infer them from one tool.
+  the directory is omitted.
 - `packages/workbench/src/glue/project-deps.ts:149-420` prefixes every reuse,
   snapshot, and stamp-promotion diagnostic with `[real-vite/worker]`. Repro:
   restore/install dependencies for a non-Vite Workbench project and observe
-  Vite provenance in its log. The package-tree owner needs a tool-neutral
-  component identity; concrete Vite integration may add its own presentation.
-
-Both are product-reachable own-surface defects; neither introduces a new
-coordination mechanism or fault-boundary claim. Keep this epic `draft` until
-refinement cuts semantic-owner children.
+  Vite provenance in its log.
 
 ## Draft gates
 
