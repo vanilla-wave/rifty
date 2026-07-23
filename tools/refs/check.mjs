@@ -36,6 +36,24 @@ const RETIRED = new Set(['0008', '0022', '0024', '0033', '0063', '0064', '0081']
 // old provisional labels without becoming dangling references.
 const DRAFTS = new Set(['0056', '0057', '0058', '0059', '0060', '0061', '0062']);
 
+// Quarry ADR numbers: decided on the unmerged #160 branch
+// (codex/implement-honest-shadow-substitutions, kept as a quarry) and never on
+// main. Successor ADRs 0307-0310 cite them by number when recording their
+// disposition. 0303 leaves this set when the extraction slice lands its file.
+const QUARRY = new Set([
+  '0249',
+  '0295',
+  '0296',
+  '0297',
+  '0298',
+  '0299',
+  '0300',
+  '0301',
+  '0302',
+  '0303',
+  '0304',
+]);
+
 // Moved doc trees: a `docs/<old>/x` ref resolves if `docs/<new>/x` exists.
 // Mirror docs/adr/README.md "Historical references".
 const REDIRECTS = [
@@ -206,7 +224,8 @@ function adrRefResolves(num) {
     removedNums.has(num) ||
     RESERVED.has(num) ||
     DRAFTS.has(num) ||
-    RETIRED.has(num)
+    RETIRED.has(num) ||
+    QUARRY.has(num)
   );
 }
 

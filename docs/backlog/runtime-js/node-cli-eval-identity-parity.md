@@ -6,7 +6,7 @@ created: 2026-07-15
 why: The terminal implements eval by running a transient `.cjs`, changing observable argv and module identity from Node 24.
 user_story: As a CLI author probing its invocation context under `node -e` or `node -p`, I want the same argv and module identity as Node 24, but today legacy rifty exposes a temporary entry file and Workbench rejects the command.
 sources: [M11, Node-v24.16.0-probe, ADR-0155, ADR-0157]
-code: [apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/workers/workbench-project-runtime.ts, apps/playground/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/cjs.ts]
+code: [packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/cjs.ts]
 ---
 
 ## Context

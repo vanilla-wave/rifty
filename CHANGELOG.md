@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Shadow-series decision set (replaces PR #160; branch kept as quarry).**
+  ADR-0307 re-scopes the install-trust oracle to an install-protocol commit +
+  at-open package.json/lockfile compare — extraneous `node_modules` writes
+  never invalidate (probe vs real npm 11.17.0/Node v24.16.0 recorded in the
+  ADR; probe PASSED, so the quarry's Vite temp-cache cluster and conditional
+  slice are dead). ADR-0308 fixes the package-generic builtin
+  shadow-substitution registry with optional runtime binding; ADR-0309 one
+  package-tree authority; ADR-0310 Sass Pattern-1 synthesized facade over the
+  exact pure-JS `sass@1.100.0` twin (differential spike evidence in the ADR).
+  Epic `honest-shadow-substitutions` re-refined on fresh main
+  (`tier: production`, §Budget slice bands); `check:budget` enforces
+  hand-written diff bands (>1× warn, >2× fail) and the
+  new-coordination-mechanisms sweep for PRs declaring `Budget-Slice:`;
+  `refs:check` learns quarry ADR numbers 0249/0295–0304.
+  `esbuild-substitution-strategy-reconciliation` folded into the
+  `esbuild-vite-cutover` slice.
+
 ### Fixed
 
 - **`check:arch` now sees type-only boundary violations without inventing

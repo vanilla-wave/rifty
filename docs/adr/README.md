@@ -130,6 +130,9 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0201 | Bounded-fetch chokepoint: no-progress stall bounds on all npm-client fetches |
 | 0258 | Structured install acquisition provenance |
 | 0283 | Canonical package manifest serialization |
+| 0308 | Package-generic builtin shadow-substitution registry with optional runtime binding |
+| 0309 | One package-tree authority for install-tree lifecycle |
+| 0310 | Sass ships as a synthesized sass-embedded facade over the exact pure-JS sass twin |
 
 ### playground
 
@@ -168,6 +171,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0284 | Git status entries preserve per-path classification gaps |
 | 0292 | Workbench authorities replace Solid orchestration core |
 | 0293 | Tab-independent workspace admission UX |
+| 0307 | Install trust is an install-protocol commit, not tree surveillance |
 
 ### toolchain-build
 

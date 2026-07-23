@@ -6,7 +6,7 @@ created: 2026-06-28
 why: Installed Vite loads preview config normally, but the browser bridge changes the observable origin/Host shape; `preview.cors` and `preview.allowedHosts` lack direct-Node differential proof.
 user_story: As a developer using `vite preview` in rifty, I want preview HTTP headers and CORS behavior to match real Vite where observable, or to see a loud tracked ceiling instead of a silent sandbox-only divergence.
 sources: [ADR-0173, ADR-0174]
-code: [apps/playground/src/workers/vite-cli-prep.ts, tests/e2e/vite7-build-preview.spec.ts]
+code: [packages/workbench/src/workers/vite-cli-prep.ts, tests/e2e/vite7-build-preview.spec.ts]
 ---
 
 ## Context
