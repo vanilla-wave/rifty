@@ -113,10 +113,13 @@ const dependencyPolicyRules = [
     comment:
       'ADR-0282: foreign production modules reach Workbench only through its seven package entrypoints',
     from: {
-      // Repo build tools own baked/generated artifact checks and may consume
-      // the package-private serializers they prove. They are not shipped
-      // production modules and cannot create an embedder import path.
-      pathNot: ['(?:^|/)workbench/src/', '(?:^|/)tools/'],
+      // These artifact owners prove package-private recipes; no other foreign
+      // module may deep-import Workbench.
+      pathNot: [
+        '(?:^|/)workbench/src/',
+        '(?:^|/)apps/playground/tools/bake-dep-snapshots\\.ts$',
+        '(?:^|/)tools/shadow-registry/tools/(?:check-dep-snapshot-artifacts|generate-install-artifact-identity)\\.ts$',
+      ],
     },
     to: {
       path: '(?:^|/)workbench/src/',

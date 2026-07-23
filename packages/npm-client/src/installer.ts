@@ -1255,11 +1255,14 @@ function lockfileReuseDecision(
   return { kind: 'reuse' };
 }
 
+/** ADR-0023/npm install: repair range drift; ordinary retained-parent absence stays loud. */
 function registryOwnsIncrementalMiss(
   decision: Exclude<LockfileReuseDecision, { readonly kind: 'reuse' }>,
   ctx: ResolveContext,
 ): boolean {
-  return ctx.parentOrigin !== 'lockfile' || decision.policyFrontier;
+  return (
+    decision.reason === 'range-drift' || ctx.parentOrigin !== 'lockfile' || decision.policyFrontier
+  );
 }
 
 type LockfileRequestOwnership = 'replay' | 'metadata' | 'broken';
@@ -1869,7 +1872,7 @@ function createLockfileSource(
       // entry, so replaying the SOURCE name verbatim would miss the pin and throw
       // EBROKENLOCK — the exact break eddy's pre-seeded lockfile hit on vite →
       // esbuild.
-      const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
+      const { override, effectiveName } = resolveEffectivePackageRequest(
         name,
         range,
         ctx.parentName,
@@ -1896,18 +1899,6 @@ function createLockfileSource(
             code: 'EBROKENLOCK',
             packageName: effectiveName,
             reason: 'malformed-entry' as const,
-          },
-        );
-      }
-      if (!rangeIsUnconstrained(effectiveRange) && !matchesRange(entry.version, effectiveRange)) {
-        throw Object.assign(
-          new Error(
-            `EBROKENLOCK: '${effectiveName}@${effectiveRange}' resolves to ${entry.version} at '${installPath}', which no longer satisfies the recorded dependency edge. Delete the lockfile and re-install.`,
-          ),
-          {
-            code: 'EBROKENLOCK',
-            packageName: effectiveName,
-            reason: 'dependency-range-drift' as const,
           },
         );
       }

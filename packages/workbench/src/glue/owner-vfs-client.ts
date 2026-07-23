@@ -145,6 +145,7 @@ export function createOwnerVfsClient(options: OwnerVfsClientOptions): OwnerVfsCl
   const generateBarrierId = options.generateBarrierId ?? defaultBarrierId;
   const reportProtocolError = options.reportProtocolError ?? (() => {});
 
+  // TODO(backlog: npm-client/package-tree-authority) Collapse the replay/receipt cascade.
   const commits = new Map<string, PendingCommit>();
   const receipts = new Map<string, PendingTerminalDelivery>();
   const cleanups = new Map<string, PendingTerminalDelivery>();

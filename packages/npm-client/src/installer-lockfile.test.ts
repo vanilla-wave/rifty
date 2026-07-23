@@ -337,6 +337,67 @@ describe('install — lockfile fast path re-applies overrides', () => {
 });
 
 describe('install — partial lockfile reuse', () => {
+  it('[fault: frozen-assumption] re-resolves only a transitive range-drifted lock entry', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { child: '^1.0.0' })]]));
+    db.set(
+      'child',
+      new Map([
+        ['1.0.0', await makeEntry('child', '1.0.0')],
+        ['2.0.0', await makeEntry('child', '2.0.0')],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { parent: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+    );
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const lockfile = JSON.parse(await vfs.readFileText(lockPath)) as {
+      packages: Record<string, { dependencies?: Record<string, string>; version?: string }>;
+    };
+    const lockedParent = lockfile.packages['node_modules/parent'];
+    if (!lockedParent?.dependencies) throw new Error('seed lockfile missing parent dependencies');
+    lockedParent.dependencies.child = '^2.0.0';
+    await vfs.writeFile(lockPath, JSON.stringify(lockfile));
+    const eddyFetch = vi.fn(async () => {
+      throw new Error('expected Eddy probe failure');
+    });
+    vi.stubGlobal('fetch', eddyFetch);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const registry = new CountingFakeRegistry(db);
+      const result = await install(
+        'root',
+        '1.0.0',
+        { parent: '1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry,
+          resolverUrl: 'https://eddy.invalid/resolve',
+        },
+      );
+
+      expect(eddyFetch).toHaveBeenCalledTimes(1);
+      expect(result.source).toBe('standard');
+      expect(result.provenance.eddyFallback?.reason).toMatch(/expected Eddy probe failure/);
+      expect(result.provenance.resolution).toBe('metadata');
+      expect(registry.calls).toEqual({
+        packument: ['child'],
+        tarball: ['fake://child/2.0.0'],
+      });
+      expect(result.lockfile.packages['node_modules/parent']?.version).toBe('1.0.0');
+      expect(result.lockfile.packages['node_modules/child']?.version).toBe('2.0.0');
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('retries a failed root optional without re-resolving the retained required graph', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('stable', new Map([['1.0.0', await makeEntry('stable', '1.0.0')]]));

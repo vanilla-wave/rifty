@@ -17,7 +17,7 @@ const OWNER_CLAIM_MUTATION_CONTEXTS = new Set([
   '#writeInstallStampClaim',
   '#removeInstallStampClaim',
 ]);
-const SOURCE_ROOT = 'packages/workbench/src';
+const SOURCE_ROOTS = ['apps/playground/src', 'packages/workbench/src'];
 const NO_NAMES = new Set();
 const PACKAGE_TREE_HELPERS = new Set([
   'clearProjectTree',
@@ -486,7 +486,7 @@ function sourceFiles(root) {
       else if (isProductionTypeScript(relative(root, path))) files.push(path);
     }
   };
-  walk(resolve(root, SOURCE_ROOT));
+  for (const sourceRoot of SOURCE_ROOTS) walk(resolve(root, sourceRoot));
   return files;
 }
 

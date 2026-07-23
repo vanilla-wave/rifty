@@ -156,13 +156,27 @@ describe('check:arch layer boundaries', () => {
     expect(ruleNames([root])).not.toContain('workbench-package-uses-sealed-entrypoints');
   });
 
-  it('allows repo build tools to prove package-owned Workbench artifacts', () => {
+  it('allows the artifact owners that prove package-owned Workbench recipes', () => {
     const root = fixture({
-      'playground/tools/check-artifact.ts':
-        "import '../../workbench/src/glue/private-serializer';\nexport const check = 1;\n",
-      'workbench/src/glue/private-serializer.ts': 'export const serialize = 1;\n',
+      'apps/playground/tools/bake-dep-snapshots.ts':
+        "import '../../../packages/workbench/src/glue/private-serializer';\nexport const bake = 1;\n",
+      'tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts':
+        "import '../../../packages/workbench/src/glue/private-serializer';\nexport const check = 1;\n",
+      'tools/shadow-registry/tools/generate-install-artifact-identity.ts':
+        "import '../../../packages/workbench/src/workers/private-policy';\nexport const generate = 1;\n",
+      'packages/workbench/src/glue/private-serializer.ts': 'export const serialize = 1;\n',
+      'packages/workbench/src/workers/private-policy.ts': 'export const policy = 1;\n',
     });
     expect(ruleNames([root])).not.toContain('workbench-package-uses-sealed-entrypoints');
+  });
+
+  it('flags Workbench implementation imports from unrelated repo tools', () => {
+    const root = fixture({
+      'tools/unrelated.ts':
+        "import '../packages/workbench/src/glue/private-serializer';\nexport const unrelated = 1;\n",
+      'packages/workbench/src/glue/private-serializer.ts': 'export const serialize = 1;\n',
+    });
+    expect(ruleNames([root])).toContain('workbench-package-uses-sealed-entrypoints');
   });
 
   it('flags an eager monaco-editor import outside the lazy editor stack', () => {

@@ -197,6 +197,7 @@ const DEFAULT_PROJECT_NAME = 'rifty-project';
 const DEFAULT_PROJECT_VERSION = '0.0.0';
 
 function stampAuthorityFor(deps: NpmShellCommandDeps): InstallStampAuthority {
+  // TODO(backlog: npm-client/package-tree-authority) Remove this bare-composition fallback.
   return (
     deps.installStampAuthority ?? installStampAuthorityFor(deps.vfs as object, { vfs: deps.vfs })
   );

@@ -80,6 +80,7 @@ export function lockfileMatchesStamp(
   return sha256Hex(currentBytes) === stamp.lockfileSha256;
 }
 
+// TODO(backlog: npm-client/package-tree-authority) Consolidate the one-shot SHA core.
 // FIPS 180-4 SHA-256; same implementation as the tool-local
 // esbuild-contract-probe copy (browser-safe, no node:crypto). Fixed-vector
 // guarded in install-stamp.test.ts against `crypto.subtle`.

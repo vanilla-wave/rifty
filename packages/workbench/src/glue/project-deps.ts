@@ -107,6 +107,7 @@ export interface EnsureProjectDepsOptions {
 
 function stampAuthorityFor(opts: EnsureProjectDepsOptions): InstallStampAuthority {
   if (opts.installStampAuthority) return opts.installStampAuthority;
+  // TODO(backlog: npm-client/package-tree-authority) Remove this bare-composition fallback.
   return installStampAuthorityFor(opts.fsSync as object, {
     vfs: opts.vfs,
     fsSync: opts.fsSync,

@@ -40,6 +40,8 @@
 
 - Partial lockfile misses now replay compatible retained edges and resolve only
   changed frontiers, including exact nested-path rebasing and optional rollback.
+- Transitive lockfile range drift now follows `npm install`: only the drifted
+  frontier re-resolves instead of applying `npm ci`-style strict rejection.
 - Direct dependencies reserve root-visible slots before descendant traversal;
   failed optional roots reserve nothing and required demand cannot be suppressed
   by an earlier optional attempt (ADR-0303).
