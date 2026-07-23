@@ -127,6 +127,70 @@ describe('install — package ingress preflight (ADR-0261)', () => {
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
 
+  it.each(['root', 'transitive', 'subtree-child'] as const)(
+    'keeps structural tar-path corruption loud across a %s optional boundary',
+    async (boundary) => {
+      const db = new Map<string, Map<string, FakeRegistryEntry>>();
+      db.set(
+        'evil',
+        new Map([
+          [
+            '1.0.0',
+            await makeEntry('evil', '1.0.0', {}, {}, { '../.rifty-install-stamp.json': 'forged' }),
+          ],
+        ]),
+      );
+      if (boundary !== 'root') {
+        const optionalName = boundary === 'transitive' ? 'evil' : 'optional-parent';
+        db.set(
+          'parent',
+          new Map([
+            [
+              '1.0.0',
+              await makeEntry(
+                'parent',
+                '1.0.0',
+                {},
+                { optionalDependencies: { [optionalName]: '1.0.0' } },
+              ),
+            ],
+          ]),
+        );
+        if (boundary === 'subtree-child') {
+          db.set(
+            'optional-parent',
+            new Map([['1.0.0', await makeEntry('optional-parent', '1.0.0', { evil: '1.0.0' })]]),
+          );
+        }
+      }
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+      if (boundary === 'root') {
+        await vfs.writeFile(
+          '/proj/package.json',
+          JSON.stringify({
+            name: 'root',
+            version: '1.0.0',
+            optionalDependencies: { evil: '1.0.0' },
+          }),
+        );
+      }
+
+      const installing =
+        boundary === 'root'
+          ? install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) })
+          : install(
+              'root',
+              '1.0.0',
+              { parent: '1.0.0' },
+              { vfs, cwd: '/proj', registry: new FakeRegistry(db) },
+            );
+
+      await expect(installing).rejects.toMatchObject({ code: 'EINVALIDPACKAGETAR' });
+      expect(await vfs.exists('/proj/node_modules')).toBe(false);
+    },
+  );
+
   it('preflights every actual target through the host policy before the first link write', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set(

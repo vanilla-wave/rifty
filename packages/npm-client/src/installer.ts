@@ -1760,7 +1760,9 @@ function warnOptional(
   err: unknown,
 ): void {
   const code = (err as { code?: unknown })?.code;
-  if (code === 'EBROKENLOCK' || code === 'EINSTALLPATHCONFLICT') throw err;
+  if (code === 'EBROKENLOCK' || code === 'EINSTALLPATHCONFLICT' || code === 'EINVALIDPACKAGETAR') {
+    throw err;
+  }
   // A platform-native optional sibling (e.g. one of Rolldown's
   // `@rolldown/binding-<platform>` packages) is EXPECTED to be skipped — rifty's
   // JS+WASI runtime can never run a native binary (ADR-0051), and the matching

@@ -43,6 +43,9 @@
 - Direct dependencies reserve root-visible slots before descendant traversal;
   failed optional roots reserve nothing and required demand cannot be suppressed
   by an earlier optional attempt (ADR-0303).
+- Structural lock, placement, and tar-path corruption remains loud across root
+  and transitive optional boundaries; only ordinary optional acquisition and
+  archive failures warn-and-skip.
 
 - Package tarball ingress now rejects absolute/parent-traversal members before
   linking and exposes one host batch preflight over every actual package target.
