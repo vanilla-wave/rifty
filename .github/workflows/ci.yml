@@ -110,8 +110,12 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       # Cache the browser binary keyed by the resolved Playwright version so a
       # version bump (lockfile) busts it but day-to-day runs skip the uncached,
-      # CDN-variable download. The apt system deps (`install-deps`) live outside
-      # ~/.cache/ms-playwright, so they run on every hit too.
+      # CDN-variable download. On a cache hit NO apt runs at all: ubuntu-latest
+      # ships Chrome, so chromium's shared libs are already on the image. The
+      # old unconditional `install-deps` had a bimodal apt-mirror tail (11s p50,
+      # 440s max across 12 parallel shards, run 30023071566) that dominated the
+      # sharded wall-clock. If an image update ever drops a lib, the browser
+      # launch fails loudly → restore an install-deps step.
       - id: pw-version
         run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
       - id: pw-cache
@@ -121,8 +125,6 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
-      - if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
       # One lane per matrix job. heavy = serialized TS-LS/fullstack specs
       # (--workers=1); light = the rest; prod = prod-artifact smoke (builds the
       # app + `pnpm preview` with Netlify COI headers, asserts the owner boots —
@@ -208,10 +210,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      # No install-deps on cache hit — see the e2e job's pw-cache comment.
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
-      - if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
       # Serial by config (workers:1) — concurrent owner boots starve the owner
       # worker on shared runners (same reason chromium-light is serialized).
       - run: pnpm test:browser-unit

@@ -15,7 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   untouched and serial groups travel whole into a single shard. heavy → 2
   shards; `unit-and-conformance` runs `test:run`/`test:parity` as parallel
   matrix jobs. Baseline: 4 PR runs 2026-07-22/23, light lane 19.5–24.5m ≥ 4×
-  every other job.
+  every other job. Also drops `playwright install-deps` on browser-cache hit
+  (ubuntu-latest already ships chromium's shared libs via Chrome): its apt tail
+  is bimodal — 11s p50 / 440s max across 12 parallel shards — and with a
+  sharded matrix the max IS the wall-clock; a lib dropped by a future image
+  update fails the browser launch loudly.
 
 ### Added
 
