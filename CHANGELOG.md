@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **PR CI wall-clock ~24m → ~5m: e2e lanes sharded, unit split.** The light
+  lane (23.4m serialized: 107 tests × ~13s, `--workers=1` for owner cold-boot
+  starvation) now runs as 8 `--shard=i/8` matrix jobs — each shard its own
+  runner, still workers=1, so the one-cold-boot-per-machine invariant is
+  untouched and serial groups travel whole into a single shard. heavy → 2
+  shards; `unit-and-conformance` runs `test:run`/`test:parity` as parallel
+  matrix jobs. Baseline: 4 PR runs 2026-07-22/23, light lane 19.5–24.5m ≥ 4×
+  every other job. Also drops `playwright install-deps` on browser-cache hit
+  (ubuntu-latest already ships chromium's shared libs via Chrome): its apt tail
+  is bimodal — 11s p50 / 440s max across 12 parallel shards — and with a
+  sharded matrix the max IS the wall-clock; a lib dropped by a future image
+  update fails the browser launch loudly.
+
 ### Added
 
 - **Shadow-series decision set (replaces PR #160; branch kept as quarry).**
