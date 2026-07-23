@@ -1,3 +1,4 @@
+import type { SpawnWorkerSpec } from '@riftydev/kernel';
 import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { CommandContext } from '@riftydev/shell';
 import { describe, expect, it, vi } from 'vitest';
@@ -167,7 +168,7 @@ describe('owner-child-node-executor', () => {
 
   it('roots an owner execSync child out of band and captures stdout/stderr byte-exact', async () => {
     const fake = fakeRecursiveChild();
-    const spawn = vi.fn(() => fake.child);
+    const spawn = vi.fn((_spec: SpawnWorkerSpec) => fake.child);
     const run = createOwnerExecSyncRunner(
       'URL',
       NODE_WORKER_RUNTIME_ENV,
