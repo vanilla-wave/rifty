@@ -41,6 +41,7 @@ export interface FetchAndUnpackResult {
 export interface FetchAndUnpackCtx {
   readonly cache: TarballCache;
   readonly getTarball: (url: string) => Promise<Uint8Array>;
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -54,6 +55,11 @@ export async function fetchAndUnpackToCache(
   spec: FetchSpec,
   ctx: FetchAndUnpackCtx,
 ): Promise<FetchAndUnpackResult> {
+  if (ctx.signal?.aborted) {
+    throw ctx.signal.reason instanceof Error
+      ? ctx.signal.reason
+      : new Error('npm tarball acquisition aborted');
+  }
   if (spec.integrity) {
     const cached = await ctx.cache.get(spec.name, spec.version, spec.integrity);
     if (cached) {
@@ -62,6 +68,11 @@ export async function fetchAndUnpackToCache(
   }
 
   const bytes = await ctx.getTarball(spec.resolved);
+  if (ctx.signal?.aborted) {
+    throw ctx.signal.reason instanceof Error
+      ? ctx.signal.reason
+      : new Error('npm tarball acquisition aborted');
+  }
   // Match the algorithm declared by `spec.integrity` so the comparison is
   // apples-to-apples; default sha512 (what modern npm packuments produce)
   // when no expected integrity is supplied.

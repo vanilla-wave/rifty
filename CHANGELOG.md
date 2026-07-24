@@ -331,6 +331,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **ADR-0311 decides removal of the public host-supplied esbuild WASM URL.**
   The builtin registry recipe owns acquisition and attestation; hosts continue
   resolving Worker, service-worker, and unrelated WASM deployment assets.
+- **ADR-0316 retires the ADR-0047 vendored esbuild WASI carrier.** The exact
+  preview1 package remains private conformance proof for `runWasi`; product
+  esbuild now has one registry-attested `esbuild-wasm@0.28.0` authority, and
+  the checked-in blob, fetch script, bindings, transform export, and preview1
+  alias/overlay are removed.
 - **ADR-0049 — WASI `cwd` option + `AT_FDCWD`/directory-open semantics (promotes Q-2026-05-27-003).** Running esbuild through `runWasi` forced the preopen/cwd API: `WasiOptions.cwd?: string` (Option A), `AT_FDCWD` resolution, directory-open in `path_open`, `fd_readdir` → `E_NOTDIR` on a file fd, and a wired stdin reader. Public-API change in `@riftydev/runtime-wasi`.
 
 ### Added

@@ -320,7 +320,6 @@ export function startBrowserWorkspaceOwner(
     protocolFailure = errorFrom(failure);
     readyState.reject(protocolFailure);
     rejectPending(protocolFailure);
-    activeProject?.disconnect(protocolFailure);
     if (!exited) worker.kill('SIGTERM');
   };
 
@@ -575,7 +574,6 @@ export function startBrowserWorkspaceOwner(
       }),
       wasm: Object.freeze({
         sqlite: input.deployment.wasm.sqlite,
-        esbuild: input.deployment.wasm.esbuild,
       }),
       previewProbeTimeoutMs: input.deployment.previewProbeTimeoutMs,
     }),
@@ -900,10 +898,16 @@ export function startBrowserWorkspaceOwner(
 
     const closeOwner = async (): Promise<void> => {
       const failures: Error[] = [];
+      let ownerCloseFailed = false;
       try {
         await requestCloseProject(transport.token);
       } catch (error) {
+        ownerCloseFailed = true;
         failures.push(errorFrom(error));
+      }
+      if (ownerCloseFailed) {
+        if (!exited) worker.kill('SIGTERM');
+        await ownerClosed.catch(() => {});
       }
       try {
         await transport.previews.close();

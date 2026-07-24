@@ -16,14 +16,14 @@ import { type SourceMapRegistry, withStackRemapping } from './source-maps.ts';
 /**
  * Per-file source transform for `.ts`/`.tsx`/`.jsx` modules, run BEFORE the AST
  * ESM rewriter ({@link transformEsm}) parses them. The loader carries no
- * esbuild/runtime-wasi edge — the caller injects a closure (typically wrapping
- * `transformWithEsbuild`), the same DI seam the WASI esbuild binding uses for
- * `runWasi` (ADR-0047/0049). Request shape is a load-bearing contract (ADR-0052 D1).
+ * transform-provider edge — the caller injects a real implementation. Product
+ * esbuild uses registry admission; Node parity injects exact host esbuild
+ * (ADR-0052/0316). Request shape is the load-bearing contract.
  *
  * @param req.source    raw module source from the VFS
  * @param req.id        absolute resolved file path
  * @param req.loader    esbuild loader, from file extension only
- * @param req.workspace esbuild guest cwd/preopen for the strip
+ * @param req.workspace provider workspace root for the transform
  * @returns stripped/lowered JS that {@link transformEsm} parses
  */
 export type TransformSourceHook = (req: {
@@ -55,7 +55,7 @@ export interface EsmLoaderDeps {
    */
   loadAsyncResolved(resolved: ResolvedModule): Promise<Record<string, unknown>>;
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
-  /** esbuild guest cwd/preopen threaded through to {@link TransformSourceHook}. */
+  /** Caller-defined transform root threaded through to {@link TransformSourceHook}. */
   readonly workspace: string;
   /** Internal transform sourcemap registry, keyed by resolved id. */
   readonly sourceMaps?: SourceMapRegistry;

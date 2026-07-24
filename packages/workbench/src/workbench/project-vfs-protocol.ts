@@ -1,20 +1,12 @@
 import type {
-  OwnerVfsCommitCleanedMessage,
-  OwnerVfsCommitCleanupMessage,
   OwnerVfsCommitIpcMessage,
-  OwnerVfsCommitReceivedMessage,
-  OwnerVfsCommitReleasedMessage,
   OwnerVfsCommitTerminal,
   OwnerVfsDurabilityAckMessage,
   OwnerVfsDurabilityIpcMessage,
   OwnerVfsErrorFrame,
 } from '../glue/owner-vfs-ipc.ts';
 import {
-  isOwnerVfsCommitCleanedMessage,
-  isOwnerVfsCommitCleanupMessage,
   isOwnerVfsCommitIpcMessage,
-  isOwnerVfsCommitReceivedMessage,
-  isOwnerVfsCommitReleasedMessage,
   isOwnerVfsDurabilityAckMessage,
   isOwnerVfsDurabilityIpcMessage,
   validateOwnerVfsCommitTerminal,
@@ -124,8 +116,6 @@ export type ProjectVfsReadDirectoryResult =
 
 export type PageProjectVfsFrame =
   | OwnerVfsCommitIpcMessage
-  | OwnerVfsCommitReceivedMessage
-  | OwnerVfsCommitCleanupMessage
   | OwnerVfsDurabilityIpcMessage
   | ProjectVfsSnapshotRequest
   | ProjectVfsReadFileRequest
@@ -133,8 +123,6 @@ export type PageProjectVfsFrame =
 
 export type OwnerProjectVfsFrame =
   | OwnerVfsCommitTerminal
-  | OwnerVfsCommitReleasedMessage
-  | OwnerVfsCommitCleanedMessage
   | OwnerVfsDurabilityAckMessage
   | ProjectVfsSnapshotMessage
   | ProjectVfsStateMessage
@@ -149,16 +137,6 @@ export function inspectPageProjectVfsFrame(value: unknown): PageProjectVfsFrame 
     case 'rifty:owner-vfs-commit':
       inspectCommitRequestFrame(frame);
       if (!isOwnerVfsCommitIpcMessage(frame)) throw invalid('page project VFS commit');
-      return frame;
-    case 'rifty:owner-vfs-commit-received':
-      exact(frame, ['type', 'terminal'], 'page project VFS commit receipt');
-      inspectCommitTerminal(frame.terminal);
-      if (!isOwnerVfsCommitReceivedMessage(frame)) throw invalid('page project VFS commit receipt');
-      return frame;
-    case 'rifty:owner-vfs-commit-cleanup':
-      exact(frame, ['type', 'terminal'], 'page project VFS commit cleanup');
-      inspectCommitTerminal(frame.terminal);
-      if (!isOwnerVfsCommitCleanupMessage(frame)) throw invalid('page project VFS commit cleanup');
       return frame;
     case 'rifty:owner-vfs-durability':
       exact(
@@ -194,20 +172,6 @@ export function inspectOwnerProjectVfsFrame(value: unknown): OwnerProjectVfsFram
   switch (frame.type) {
     case 'rifty:owner-vfs-commit-ack':
       return inspectCommitTerminal(frame);
-    case 'rifty:owner-vfs-commit-released':
-      exact(frame, ['type', 'terminal'], 'owner project VFS commit release');
-      inspectCommitTerminal(frame.terminal);
-      if (!isOwnerVfsCommitReleasedMessage(frame)) {
-        throw invalid('owner project VFS commit release');
-      }
-      return frame;
-    case 'rifty:owner-vfs-commit-cleaned':
-      exact(frame, ['type', 'terminal'], 'owner project VFS commit cleaned');
-      inspectCommitTerminal(frame.terminal);
-      if (!isOwnerVfsCommitCleanedMessage(frame)) {
-        throw invalid('owner project VFS commit cleaned');
-      }
-      return frame;
     case 'rifty:owner-vfs-durability-ack':
       inspectDurabilityAck(frame);
       if (!isOwnerVfsDurabilityAckMessage(frame)) {

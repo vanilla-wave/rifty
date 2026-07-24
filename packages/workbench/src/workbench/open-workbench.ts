@@ -45,7 +45,6 @@ export interface WorkbenchOptions {
     };
     readonly wasm: {
       readonly sqlite: string;
-      readonly esbuild: string;
     };
     readonly previewProbeTimeoutMs?: number;
   };
@@ -797,7 +796,6 @@ function validateWorkbenchOptions(
         }),
         wasm: Object.freeze({
           sqlite: wasmAssetUrl(wasm.sqlite, 'deployment.wasm.sqlite', urlContext),
-          esbuild: wasmAssetUrl(wasm.esbuild, 'deployment.wasm.esbuild', urlContext),
         }),
         previewProbeTimeoutMs,
       }),

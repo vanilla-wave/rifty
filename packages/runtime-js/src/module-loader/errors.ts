@@ -30,7 +30,8 @@ export class ModuleLoadError extends Error {
     requireStack?: readonly string[],
   ) {
     super(message);
-    this.name = 'ModuleLoadError';
+    this.name =
+      code === 'MODULE_NOT_FOUND' && requireStack !== undefined ? 'Error' : 'ModuleLoadError';
     this.code = code;
     this.specifier = specifier;
     if (importer !== undefined) this.importer = importer;

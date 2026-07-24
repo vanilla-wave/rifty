@@ -21,10 +21,10 @@ export interface ModuleLoaderOptions {
   /** Working directory used when the caller passes a relative `entry` to `import`/`require`. */
   readonly cwd?: string;
   /**
-   * esbuild guest cwd/preopen, `workspace` of every {@link TransformSourceHook}
-   * call. Defaults to {@link ModuleLoaderOptions.cwd} (or the internal entry stub).
-   * A single root suffices: a type-strip transform doesn't resolve relative
-   * imports through esbuild — rifty's resolver does (ADR-0052 D5).
+   * Caller-defined transform root, passed as `workspace` to every
+   * {@link TransformSourceHook} call. Defaults to {@link ModuleLoaderOptions.cwd}
+   * (or the internal entry stub). A single root suffices: per-file transforms
+   * do not resolve imports — rifty's resolver does (ADR-0052 D5).
    */
   readonly workspace?: string;
   /**
@@ -133,7 +133,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   // exists per id until coherent invalidation.
   const cjsImportJobs = new Map<string, CjsImportJob>();
 
-  // Strip cache: WASI esbuild is a full process spawn per module, so re-stripping
+  // Strip cache: real transform providers can be expensive, so re-stripping
   // byte-identical `.ts` across repeated loads is wasted work. Keep the cache
   // under the absolute id but validate against the current source text so an
   // in-place edit at the same path cannot serve a stale transform.

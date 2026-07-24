@@ -41,12 +41,12 @@ import { syncMirror } from '@riftydev/vfs';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { installNodeEntryRemoteFs } from './node-entry-remote-fs.ts';
+import { prepareNodeEntryRuntime } from './node-entry-runtime-preparation.ts';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import {
   installNodeWorkerRuntimeConfig,
   readNodeWorkerRuntimeConfig,
 } from './node-worker-runtime-config.ts';
-import { prepareViteCli, viteCliPreparationFromArgs } from './vite-cli-prep.ts';
 import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
@@ -103,17 +103,13 @@ if (launch.remoteFs) {
 registerSqliteBuiltin();
 installSqliteWasmSyncProvider(nodeWorkerRuntimeConfig.sqliteWasmUrl);
 
-const vitePreparation = bin
-  ? viteCliPreparationFromArgs({
-      root: proc.cwd(),
-      args: proc.argv.slice(2),
-      executedBinPath: entryPath,
-      esbuildWasmUrl: nodeWorkerRuntimeConfig.esbuildWasmUrl,
-    })
-  : null;
-if (vitePreparation !== null) {
-  await prepareViteCli(vitePreparation);
-}
+await prepareNodeEntryRuntime({
+  bin,
+  root: proc.cwd(),
+  args: proc.argv.slice(2),
+  entryPath,
+  fs: syncMirror(),
+});
 
 // `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net

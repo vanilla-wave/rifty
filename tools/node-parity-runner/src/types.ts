@@ -45,9 +45,7 @@ export interface ParityCase {
    *   This is the ONLY way to exercise rifty's `node:http` *server* surface
    *   head-to-head against Node — the default modes never register `node:http`
    *   (it lives in `@riftydev/net`, which the runner does not import by default).
-   *   The runner is a `tools/` harness already permitted to import higher
-   *   layers (precedent: the WASI cases reach into `@riftydev/runtime-wasi` +
-   *   `@riftydev/shadow-registry`).
+   *   The runner is a `tools/` harness permitted to import higher layers.
    * - `'ts-esm'` — TypeScript-on-import ESM mode. Both `code` and any `.ts`
    *   `setup.files` are written verbatim and the entry is `main.ts`. The Node
    *   side runs `main.ts` through a FULL TS transform (the vendored `tsx`), NOT
@@ -56,11 +54,9 @@ export interface ParityCase {
    *   lowers it — strip-only would throw `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on
    *   those (ADR-0132).
    *   The rifty side builds `createModuleLoader(vfs, { cwd, workspace,
-   *   transformSource })` where `transformSource` runs the REAL esbuild WASI
-   *   binary (`transformWithEsbuild` over `runWasi`, ADR-0052/0049) to strip
-   *   types / lower JSX before the AST ESM rewrite — the same edge the headless
-   *   opencode harness will use. Like `'http'`, this is a `tools/`-harness-only
-   *   reach into `@riftydev/runtime-wasi` + `@riftydev/shadow-registry`.
+   *   transformSource })`; the Node-only harness injects workspace esbuild to
+   *   strip types / lower JSX before the AST ESM rewrite. Product esbuild
+   *   activation is proved separately through the browser registry adapter.
    * - `'sqlite'` — opt-in `node:sqlite` registration mode (ADR-0065). Like
    *   `'http'` for `@riftydev/net`'s `node:http`, the rifty side imports
    *   `@riftydev/net/sqlite/register-builtins` so `require('node:sqlite')` resolves

@@ -125,7 +125,7 @@ const INSTALL_TIMEOUT = 180_000;
 
 // Instant presets for the pick→preview-live metric (`--presets none` skips the
 // phase — recorded in the artifact, never silent). typescript-ls exercises the
-// esbuild-WASI transform path; project-files is the plain-JS floor.
+// TypeScript-tooling path; project-files is the plain-JS floor.
 const PRESETS_ARG = argVal('--presets', 'project-files,typescript-ls');
 const PRESET_IDS = PRESETS_ARG === 'none' ? [] : PRESETS_ARG.split(',').filter(Boolean);
 const PRESET_BOOT_TIMEOUT = 120_000;

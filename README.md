@@ -72,7 +72,7 @@ The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@ri
 
 3. **A service worker** for preview/HMR routing — build from `@riftydev/service-worker/sw`, register via `registerServiceWorker(url)`. No prebuilt `sw.js`; it must be bundled (the playground does this in `apps/playground/build/sw-plugin.ts`).
 
-4. **Same-origin WASM assets** when used: `node:sqlite` needs `sql.js/dist/sql-wasm.wasm` reachable (inject a `locateFile` via `initSqliteEngine({ locateFile })`, awaited once before any `DatabaseSync`); the real-tooling WASI path needs its `esbuild.wasm`.
+4. **Same-origin WASM assets** when used: `node:sqlite` needs `sql.js/dist/sql-wasm.wasm` reachable (inject a `locateFile` via `initSqliteEngine({ locateFile })`, awaited once before any `DatabaseSync`). Registry-backed esbuild owns and attests its own runtime asset.
 
 Given those, the umbrella's **`createSandbox()`** does the boot wiring (capability probe → COI guard → VFS backend with memory fallback → service-worker registration → runtime worker) and hands you a live `RuntimeController`:
 

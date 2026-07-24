@@ -33,8 +33,15 @@ export interface SetDevServerOpts {
 export interface PreviewRegistry {
   setDevServer(port: number, previewScope: string | undefined, opts: SetDevServerOpts): void;
   clearDevServer(): void;
-  setPreview(port: number, previewScope: string | undefined, origin: PreviewProducerOrigin): void;
-  clearPreview(): void;
+  /** Replace one launch's production-preview ports; newest live launch owns the slot. */
+  setPreview(
+    ownerSid: string,
+    ports: readonly number[],
+    previewScope: string | undefined,
+    origin: PreviewProducerOrigin,
+  ): void;
+  /** Revoke only the named launch; a late exit cannot clear its successor. */
+  clearPreview(ownerSid: string): void;
   addNode(sid: string, ports: number[], previewScope: string | undefined, opts: AddNodeOpts): void;
   removeBySid(sid: string): void;
   /** Controller boot began — derived status reads 'starting' until a port lands. */
@@ -84,7 +91,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   // primary port (most-senior server keeps the pill): dev server keeps its slot;
   // production preview follows; node/bin entries append.
   let dev: TrackedEntry | null = null;
-  let preview: TrackedEntry | null = null;
+  const preview = new Map<string, TrackedEntry[]>();
   const node = new Map<string, TrackedEntry[]>();
   let starting: { readonly sid?: string } | null = null;
   let lastDev: DerivedDev = { status: 'stopped' };
@@ -98,11 +105,8 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   const snapshot = (): TrackedEntry[] => {
     const seen = new Set<number>();
     const out: TrackedEntry[] = [];
-    for (const tracked of [
-      ...(dev ? [dev] : []),
-      ...(preview ? [preview] : []),
-      ...[...node.values()].flat(),
-    ]) {
+    const activePreview = [...preview.values()].at(-1) ?? [];
+    for (const tracked of [...(dev ? [dev] : []), ...activePreview, ...[...node.values()].flat()]) {
       if (seen.has(tracked.entry.port)) continue;
       seen.add(tracked.entry.port);
       out.push(tracked);
@@ -183,25 +187,31 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       dev = null;
       emit();
     },
-    setPreview(port, previewScope, origin) {
+    setPreview(ownerSid, ports, previewScope, origin) {
       if (closed) return;
-      preview = {
-        entry: {
-          port,
-          url: `/preview/${port}/`,
-          label: 'vite preview',
-          source: 'preview',
-          sid: PREVIEW_SID,
-          ...previewIdentity(origin),
-          ...(previewScope === undefined ? {} : { previewScope }),
-        },
-      };
+      if (ports.length === 0) {
+        if (preview.delete(ownerSid)) emit();
+        return;
+      }
+      preview.set(
+        ownerSid,
+        ports.map((port) => ({
+          entry: {
+            port,
+            url: `/preview/${port}/`,
+            label: 'vite preview',
+            source: 'preview' as const,
+            sid: PREVIEW_SID,
+            ...previewIdentity(origin),
+            ...(previewScope === undefined ? {} : { previewScope }),
+          },
+        })),
+      );
       emit();
     },
-    clearPreview() {
+    clearPreview(ownerSid) {
       if (closed) return;
-      preview = null;
-      emit();
+      if (preview.delete(ownerSid)) emit();
     },
     addNode(sid, ports, previewScope, opts) {
       if (closed) return;
@@ -273,7 +283,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       if (closed) return;
       closed = true;
       dev = null;
-      preview = null;
+      preview.clear();
       node.clear();
       starting = null;
       lastDev = { status: 'stopped' };

@@ -51,8 +51,9 @@ export function __clearWasiWorkerUrlForTests(): void {
 export interface WasiProcessOpts {
   /**
    * WASM module source. `BufferSource` is wrapped in a Blob URL so the
-   * spawned Worker can fetch it; `URL` / `string` is forwarded verbatim
-   * (what M8 toolchains use to point at a vendored `esbuild.wasm` asset URL).
+   * spawned Worker can fetch it; a caller-owned `URL` / `string` source is
+   * forwarded verbatim. Product esbuild has a separate registry-owned runtime
+   * and does not use this guest-source seam (ADR-0316).
    */
   readonly wasm: BufferSource | URL | string;
   /** Arguments after the implicit `argv[0]` ('wasi-guest'). */

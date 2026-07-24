@@ -63,7 +63,7 @@
     "gate-one-shot-build-write"
   ],
   "patchDescriptions": {
-    "inline-worker-startup": "private worker:false Go/WASM startup in the Vite Worker",
+    "inline-worker-startup": "private worker:false Go/WASM startup in the admitted Node-entry Worker",
     "node-callback-fs": "Node-callback filesystem over guest FsSync; protocol fds preserved",
     "channel-has-fs": "upstream channel runs with hasFS:true",
     "runtime-default-wd": "defaultWD is the guest cwd",
@@ -80,12 +80,17 @@
     {
       "surface": "Generated upstream-derived runtime",
       "status": "implemented",
-      "notes": "Exact esbuild-wasm 0.28.0 client runs over guest VFS in the Vite Worker and publishes one exact CJS outer before the first import."
+      "notes": "Exact esbuild-wasm 0.28.0 client runs over guest VFS in each admitted Node-entry Worker and publishes one exact CJS outer before the first import; direct Node and Vite consume the same adapter."
     },
     {
       "surface": "Install request for esbuild@0.28.0",
       "status": "implemented",
-      "notes": "Exact 0.28.0 admission is enforced across fresh/replay and direct/transitive requests; incompatible baked requests loud-fail, while an explicit user override to the exact WASI target remains supported without false shadow provenance."
+      "notes": "Exact 0.28.0 admission is enforced across fresh/replay and direct/transitive requests; the builtin recipe materializes the exact synthetic delegate and plans the attested esbuild-wasm asset without a package alias."
+    },
+    {
+      "surface": "Direct CommonJS and ESM loading",
+      "status": "implemented",
+      "notes": "A normal project with only esbuild@0.28.0 installed can require('esbuild') or import('esbuild') without Vite; both orders expose the same CJS outer and browser-differential transform output."
     },
     {
       "surface": "transform",
@@ -101,6 +106,12 @@
       "surface": "context",
       "status": "partial",
       "notes": "Exact upstream context supports Vite scan/rebuild/dispose; watch and serve remain explicit D4 loud gaps."
+    }
+  ],
+  "unsupportedSurfaces": [
+    {
+      "surface": "esbuild CLI/bin",
+      "notes": "The synthetic bin throws NotImplementedError('esbuild.cli'); it never reports command-not-found or runs an approximate CLI."
     }
   ],
   "gaps": [
@@ -171,11 +182,15 @@
     "tools/shadow-registry/src/esbuild-contract.test.ts",
     "tools/shadow-registry/src/esbuild-generated-provenance.test.ts",
     "packages/npm-client/src/installer-shadow-shims.test.ts",
+    "packages/npm-client/src/internal/shadow/manager.contract.test.ts",
     "packages/workbench/src/workers/vite-cli-prep.test.ts",
+    "packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts",
+    "packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts",
     "tests/browser-unit/esbuild-vite-contract.spec.ts"
   ],
   "limitations": [
-    "Only exact esbuild 0.28.0 with exact Vite 7.3.6 is in this contract; other esbuild versions and Vite 8/Rolldown are outside it.",
+    "Only exact esbuild 0.28.0 and its exact Vite 7.3.6 integration are in this contract; other esbuild versions stay loud gaps, while Vite 8/Rolldown has an observable empty esbuild plan.",
+    "The esbuild CLI is not implemented and throws NotImplementedError('esbuild.cli').",
     "Every D4 gap must preserve upstream validation and error priority before NotImplementedError; a current early, absent, or silent gate is recorded as partial, never supported."
   ]
 }

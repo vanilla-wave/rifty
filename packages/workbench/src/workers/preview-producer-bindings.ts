@@ -9,7 +9,7 @@ import {
   type PreviewProducerOrigin,
   type PreviewRegistry,
 } from './preview-registry.ts';
-import { binNameOf } from './vite-cli-prep.ts';
+import { binNameOf, viteCliMode } from './vite-cli-prep.ts';
 
 export type ActivePtyAdmission = (ptySid: string) => OwnerPtyRunAdmission | null;
 export type PreviewOriginCapture = () => PreviewProducerOrigin;
@@ -55,6 +55,7 @@ interface InstalledBinLaunch {
   readonly origin: PreviewProducerOrigin;
   readonly cwd: string;
   readonly labelBase: string;
+  readonly source: 'node' | 'preview';
   readonly previewScope?: string;
 }
 
@@ -74,6 +75,10 @@ export function createInstalledBinPreviewHooks(options: {
         origin,
         cwd: ctx.cwd,
         labelBase: binNameOf(req.shimPath),
+        source:
+          binNameOf(req.shimPath) === 'vite' && viteCliMode(req.args) === 'preview'
+            ? 'preview'
+            : 'node',
         ...(req.previewScope ? { previewScope: req.previewScope } : {}),
       });
     },
@@ -81,22 +86,23 @@ export function createInstalledBinPreviewHooks(options: {
       if (!isNodeChildMessage(message)) return;
       const launch = launches.get(req);
       if (launch === undefined) return;
-      options.previews.addNode(
-        launch.sid,
-        message.ports,
-        message.previewScope ?? launch.previewScope,
-        {
-          origin: launch.origin,
-          cwd: launch.cwd,
-          labelBase: launch.labelBase,
-        },
-      );
+      const previewScope = message.previewScope ?? launch.previewScope;
+      if (launch.source === 'preview') {
+        options.previews.setPreview(launch.sid, message.ports, previewScope, launch.origin);
+        return;
+      }
+      options.previews.addNode(launch.sid, message.ports, previewScope, {
+        origin: launch.origin,
+        cwd: launch.cwd,
+        labelBase: launch.labelBase,
+      });
     },
     onExit(req) {
       const launch = launches.get(req);
       if (launch === undefined) return;
       launches.delete(req);
-      options.previews.removeBySid(launch.sid);
+      if (launch.source === 'preview') options.previews.clearPreview(launch.sid);
+      else options.previews.removeBySid(launch.sid);
     },
   };
 }

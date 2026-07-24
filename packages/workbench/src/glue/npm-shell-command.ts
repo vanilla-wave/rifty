@@ -23,11 +23,10 @@
  * drain the stamp is SKIPPED and the terminal warns loudly: the install
  * works this session, the next boot re-installs instead of trusting a torn
  * tree (npm parity stays honest — a reload cannot silently lose the install).
- * The sequence runs in BACKGROUND (backlog install-stamp-background-flush):
- * install exit does not await it — real `npm install` exit does not fsync
- * node_modules either, so the durability tier (a browser-only concept) must
- * not tax the prompt. A later install claims the FIFO immediately; its newer
- * epoch fences any parked promoter from attesting the replacement tree.
+ * The durability sequence stays background to the terminal result: real
+ * `npm install` exit does not fsync node_modules. The package authority keeps
+ * the affected-root admission until promotion/readiness settles, so another
+ * overlapping mutation or child cannot observe the pending tree.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -42,6 +41,10 @@ import {
   install as realInstall,
 } from '@riftydev/npm-client';
 import {
+  type ShadowAssetPlan,
+  planAppliedShadowSubstitutions,
+} from '@riftydev/npm-client/internal';
+import {
   type CommandContext,
   type ShellCommand,
   type ShellCommandResult,
@@ -51,16 +54,12 @@ import { type PersistFailureReport, type Vfs, normalizePath } from '@riftydev/vf
 import {
   type PackageAcquisitionAuthority,
   PackageAcquisitionError,
-  type PackageInstallAdapterResult,
   type PackageInstallExecution,
-  createPackageAcquisitionAuthority,
 } from '../workers/package-acquisition-authority.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import {
-  type InstallStampAuthority,
   InstallStampAuthorityError,
   type InstallStampPromotionResult,
-  installStampAuthorityFor,
 } from './install-stamp-authority.ts';
 import { isStampedTreeDamage } from './install-stamp.ts';
 
@@ -93,7 +92,7 @@ export interface NpmShellCommandDeps {
    *  tree outside the FIFO could raze it under ANOTHER terminal's in-flight
    *  exclusive install. `fullInstall` = bare `npm install` (no specs);
    *  `sessionInstallActivity` = THIS realm already ran an install on this
-   *  tree (its background durability may still be in flight — a PENDING
+   *  tree (its owner-held background durability may still be in flight — a PENDING
    *  stamp seen now is ours, not a foreign/torn leftover). */
   readonly prepareInstall?: (
     ctx: CommandContext,
@@ -105,13 +104,16 @@ export interface NpmShellCommandDeps {
       readonly priorSlug?: string;
     },
   ) => Promise<void>;
+  /** Prune a prior tree for an exact empty manifest, inside the acquisition FIFO.
+   * The real installer then materializes the canonical empty lock/tree shape. */
+  readonly prepareEmptyInstall?: (ctx: CommandContext) => Promise<void>;
   /** Executes an `npm run <script>` command in the host shell/session. */
   readonly runScript?: (
     name: string,
     command: string,
     ctx: CommandContext,
   ) => Promise<ShellCommandResult>;
-  /** Drains the VFS write-through — in BACKGROUND, after the command returned
+  /** Drains the VFS write-through during authority-owned background settlement
    *  (npm parity: real `npm install` exit does not fsync node_modules; a
    *  reload before the drain settles only costs a re-install, never a torn
    *  stamped tree). Returns the drain's persist-failure report (ADR-0187
@@ -119,12 +121,8 @@ export interface NpmShellCommandDeps {
    *  OPFS failed to hold); `undefined` means "no durability tier" (memory
    *  backend) and reads as clean. */
   readonly flush?: () => Promise<PersistFailureReport | undefined>;
-  /** Shared owner-realm stamp authority. Composition injects the same instance
-   *  used by boot acquisition; unit harnesses fall back to one per Vfs. */
-  readonly installStampAuthority?: InstallStampAuthority;
-  /** Single owner-realm package mutation authority. Production injects one
-   * instance shared with boot restore; focused harnesses get a local owner. */
-  readonly packageAcquisitionAuthority?: PackageAcquisitionAuthority;
+  /** Single owner-realm package mutation authority shared with boot/restore. */
+  readonly packageAcquisitionAuthority: PackageAcquisitionAuthority;
   /** Root-aware project slug the install stamp is keyed on so the
    *  next boot's `installStampSatisfied(slug)` REUSES this tree instead of
    *  re-running its dependency arrival (which replaces node_modules, dropping the
@@ -175,6 +173,8 @@ export interface NpmShellCommandDeps {
   };
 }
 
+type NpmInstallOperationDeps = Omit<NpmShellCommandDeps, 'packageAcquisitionAuthority'>;
+
 /** One learned-pin lookup: `stale` = past the fresh TTL but inside the hard
  *  stale bound (see `eddy-learned-pins.ts`); structural on purpose — the seam
  *  stays stubbable without importing the pin store. */
@@ -196,20 +196,17 @@ interface ProjectPackageJson {
 const DEFAULT_PROJECT_NAME = 'rifty-project';
 const DEFAULT_PROJECT_VERSION = '0.0.0';
 
-function stampAuthorityFor(deps: NpmShellCommandDeps): InstallStampAuthority {
-  // TODO(backlog: npm-client/package-tree-authority) Remove this bare-composition fallback.
-  return (
-    deps.installStampAuthority ?? installStampAuthorityFor(deps.vfs as object, { vfs: deps.vfs })
-  );
-}
-
 function npmPrefixInvocation(
   args: readonly string[],
   context: CommandContext,
-): { readonly args: readonly string[]; readonly context: CommandContext } | null {
+): {
+  readonly args: readonly string[];
+  readonly context: CommandContext;
+  readonly explicitPrefix: boolean;
+} | null {
   const first = args[0];
   if (first !== '--prefix' && !first?.startsWith('--prefix=')) {
-    return { args, context };
+    return { args, context, explicitPrefix: false };
   }
   const inline = first.startsWith('--prefix=');
   const prefix = inline ? first.slice('--prefix='.length) : args[1];
@@ -221,7 +218,77 @@ function npmPrefixInvocation(
   return {
     args: args.slice(inline ? 1 : 2),
     context: { ...context, cwd },
+    explicitPrefix: true,
   };
+}
+
+async function nearestNpmPrefix(vfs: Vfs, cwd: string): Promise<string> {
+  const original = normalizePath(cwd);
+  let nearest: string | null = null;
+  let candidate = original;
+  for (;;) {
+    const base = candidate === '/' ? '' : candidate;
+    const hasPackageJson = await npmPrefixMarker(vfs, `${base}/package.json`, 'file');
+    if (hasPackageJson) await rejectNpmWorkspacesAt(vfs, candidate);
+    if (
+      nearest === null &&
+      (hasPackageJson || (await npmPrefixMarker(vfs, `${base}/node_modules`, 'directory')))
+    ) {
+      nearest = candidate;
+    }
+    if (candidate === '/') return nearest ?? original;
+    const separator = candidate.lastIndexOf('/');
+    candidate = separator <= 0 ? '/' : candidate.slice(0, separator);
+  }
+}
+
+async function rejectNpmWorkspacesAt(vfs: Vfs, root: string): Promise<void> {
+  const base = root === '/' ? '' : root;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await vfs.readFileText(`${base}/package.json`)) as unknown;
+  } catch {
+    // npm ignores an unreadable/non-normalizable package.json during prefix discovery.
+    return;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+  const workspaces = (parsed as Record<string, unknown>).workspaces;
+  if (!workspaces) return;
+
+  assertNpmWorkspaceDeclaration(workspaces);
+  throw new NotImplementedError(
+    'npm.workspaces',
+    'workspace-aware manifest, lockfile, and lifecycle routing is not implemented',
+  );
+}
+
+function assertNpmWorkspaceDeclaration(workspaces: unknown): void {
+  const declaration =
+    workspaces !== null &&
+    typeof workspaces === 'object' &&
+    !Array.isArray(workspaces) &&
+    Array.isArray((workspaces as Record<string, unknown>).packages)
+      ? (workspaces as { readonly packages: readonly unknown[] }).packages
+      : workspaces;
+  if (!Array.isArray(declaration) || declaration.some((pattern) => typeof pattern !== 'string')) {
+    throw Object.assign(new TypeError('EWORKSPACESCONFIG: workspaces config expects an Array'), {
+      code: 'EWORKSPACESCONFIG' as const,
+    });
+  }
+}
+
+async function npmPrefixMarker(
+  vfs: Vfs,
+  path: string,
+  kind: 'file' | 'directory',
+): Promise<boolean> {
+  try {
+    const stat = await vfs.stat(path);
+    return kind === 'file' ? stat.isFile : stat.isDirectory;
+  } catch {
+    // npm 11.17 treats every marker stat failure as a miss and keeps walking.
+    return false;
+  }
 }
 
 /**
@@ -230,12 +297,16 @@ function npmPrefixInvocation(
  * it with a plain `Shell` instance.
  */
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
-  const packages = deps.packageAcquisitionAuthority ?? createNpmPackageAcquisitionAuthority(deps);
+  const packages = deps.packageAcquisitionAuthority;
   return async (rawArgs, rawContext) => {
     const invocation = npmPrefixInvocation(rawArgs, rawContext);
     if (invocation === null) return 1;
     const { args } = invocation;
-    const ctx = deps.mapInvocationContext?.(invocation.context) ?? invocation.context;
+    const mapped = deps.mapInvocationContext?.(invocation.context) ?? invocation.context;
+    if (invocation.explicitPrefix) await rejectNpmWorkspacesAt(deps.vfs, mapped.cwd);
+    const ctx = invocation.explicitPrefix
+      ? mapped
+      : { ...mapped, cwd: await nearestNpmPrefix(deps.vfs, mapped.cwd) };
     const sub = args[0];
     // Bare `npm` and the help flags print the command list (one per line), but
     // keep npm's observable usage-exit contract: these forms return 1.
@@ -555,43 +626,6 @@ export function parseNpmInstallRequest(specs: readonly string[]): ParsedNpmInsta
   };
 }
 
-/** One adapter around the real npm mutation operation. Production normally
- * supplies a broader shared authority; this is the focused-shell composition. */
-export function createNpmPackageAcquisitionAuthority(
-  deps: NpmShellCommandDeps,
-): PackageAcquisitionAuthority {
-  return createPackageAcquisitionAuthority({
-    stamps: stampAuthorityFor(deps),
-    ...(deps.flush ? { stampTransition: { flush: deps.flush } } : {}),
-    adapter: {
-      planSnapshotRestore: async () => {
-        throw new NotImplementedError('package-acquisition.snapshot-restore');
-      },
-      install: async (request, execution) => {
-        const parsed = parseNpmInstallRequest(
-          request.type === 'terminal-install' ? request.argv : [],
-        );
-        if (parsed.status === 'rejected') throw new Error(parsed.message.trimEnd());
-        const sink = { write: (_chunk: string | Uint8Array): void => {} };
-        const context: CommandContext =
-          request.type === 'terminal-install'
-            ? (request.context ??
-              (() => {
-                throw new Error('terminal package acquisition requires its shell context');
-              })())
-            : { cwd: request.project.root, env: {}, stdout: sink, stderr: sink };
-        return executeNpmInstallOperation(parsed.request, context, deps, execution);
-      },
-      reset: async () => {
-        throw new NotImplementedError('package-acquisition.reset');
-      },
-      switchProject: async () => {
-        throw new NotImplementedError('package-acquisition.project-switch');
-      },
-    },
-  });
-}
-
 async function runInstall(
   specs: string[],
   ctx: CommandContext,
@@ -645,9 +679,19 @@ async function runInstall(
 export async function executeNpmInstallOperation(
   request: ParsedNpmInstallRequest,
   ctx: CommandContext,
-  deps: NpmShellCommandDeps,
+  deps: NpmInstallOperationDeps,
   execution: PackageInstallExecution,
-): Promise<PackageInstallAdapterResult> {
+): Promise<
+  | {
+      readonly status: 'noop';
+      readonly packageJsonText: string | null;
+      readonly shadowPlan: ShadowAssetPlan;
+    }
+  | {
+      readonly result: InstallResult;
+      readonly packageJsonText: string | null;
+    }
+> {
   const { target, prefer, packageSpecs: pkgSpecs } = request;
   if (ctx.signal?.aborted) throw ctx.signal.reason;
 
@@ -671,6 +715,9 @@ export async function executeNpmInstallOperation(
   }
 
   const pkg = await readPackageJson(deps.vfs, ctx.cwd);
+  const packageJsonPath = `${ctx.cwd}/package.json`;
+  const hadPackageJson = await deps.vfs.exists(packageJsonPath);
+  const previousPackageJson = hadPackageJson ? await deps.vfs.readFile(packageJsonPath) : null;
   const dependencies = { ...pkg.dependencies };
   const devDependencies = { ...pkg.devDependencies };
   const targetMap = target === 'devDependencies' ? devDependencies : dependencies;
@@ -690,16 +737,18 @@ export async function executeNpmInstallOperation(
     Object.keys(pkg.optionalDependencies).length === 0 &&
     !hasRootLifecycleScript(pkg.scripts);
   if (nothingToInstall) {
-    // A demote above may have left a PENDING marker on an empty-deps stamped
-    // tree — untrusted is the honest resting state (the next boot re-runs
-    // arrival); real npm no-ops here too.
-    ctx.stdout.write('npm: no dependencies to install\n');
-    return { status: 'noop' };
+    const packageJsonText = hadPackageJson ? await deps.vfs.readFileText(packageJsonPath) : null;
+    if (packageJsonText === null) {
+      ctx.stdout.write('npm: no dependencies to install\n');
+      return {
+        status: 'noop',
+        packageJsonText,
+        shadowPlan: planAppliedShadowSubstitutions([]),
+      };
+    }
+    await deps.prepareEmptyInstall?.(ctx);
   }
 
-  const packageJsonPath = `${ctx.cwd}/package.json`;
-  const hadPackageJson = await deps.vfs.exists(packageJsonPath);
-  const previousPackageJson = hadPackageJson ? await deps.vfs.readFile(packageJsonPath) : null;
   if (pkgSpecs.length > 0) {
     // Emit a dep map only when it has entries OR was already present (no spurious `{}`).
     const nextRaw: Record<string, unknown> = { ...pkg.raw };
@@ -770,6 +819,7 @@ export async function executeNpmInstallOperation(
       vfs: deps.vfs,
       cwd: ctx.cwd,
       registry: deps.registry,
+      ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
       ...(deps.assertPortablePaths ? { assertPortablePaths: deps.assertPortablePaths } : {}),
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
       ...(prefer ? { prefer } : {}),

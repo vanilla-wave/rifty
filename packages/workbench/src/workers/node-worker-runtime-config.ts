@@ -5,7 +5,6 @@ export interface NodeWorkerRuntimeConfig {
   readonly kernelWorkerUrl: string;
   readonly nodeEntryWorkerUrl: string;
   readonly sqliteWasmUrl: string;
-  readonly esbuildWasmUrl: string;
 }
 
 function objectRecord(value: unknown, owner: string): Record<string, unknown> {
@@ -42,16 +41,11 @@ export function snapshotNodeWorkerRuntimeConfig(
   owner: string,
 ): NodeWorkerRuntimeConfig {
   const record = objectRecord(value, owner);
-  exactFields(
-    record,
-    ['kernelWorkerUrl', 'nodeEntryWorkerUrl', 'sqliteWasmUrl', 'esbuildWasmUrl'],
-    owner,
-  );
+  exactFields(record, ['kernelWorkerUrl', 'nodeEntryWorkerUrl', 'sqliteWasmUrl'], owner);
   return Object.freeze({
     kernelWorkerUrl: nonEmptyString(record.kernelWorkerUrl, `${owner}.kernelWorkerUrl`),
     nodeEntryWorkerUrl: nonEmptyString(record.nodeEntryWorkerUrl, `${owner}.nodeEntryWorkerUrl`),
     sqliteWasmUrl: nonEmptyString(record.sqliteWasmUrl, `${owner}.sqliteWasmUrl`),
-    esbuildWasmUrl: nonEmptyString(record.esbuildWasmUrl, `${owner}.esbuildWasmUrl`),
   });
 }
 
@@ -76,7 +70,6 @@ export function buildNodeWorkerRuntimeEnv(
     RIFTY_KERNEL_WORKER_URL: snapshot.kernelWorkerUrl,
     RIFTY_NODE_ENTRY_WORKER_URL: snapshot.nodeEntryWorkerUrl,
     RIFTY_SQLITE_WASM_URL: snapshot.sqliteWasmUrl,
-    RIFTY_ESBUILD_WASM_URL: snapshot.esbuildWasmUrl,
   };
   readNodeWorkerRuntimeConfig(env, 'node-worker-runtime-config');
   return Object.freeze(env);
@@ -91,7 +84,6 @@ export function readNodeWorkerRuntimeConfig(
     kernelWorkerUrl: required(env, 'RIFTY_KERNEL_WORKER_URL', owner),
     nodeEntryWorkerUrl: required(env, 'RIFTY_NODE_ENTRY_WORKER_URL', owner),
     sqliteWasmUrl: required(env, 'RIFTY_SQLITE_WASM_URL', owner),
-    esbuildWasmUrl: required(env, 'RIFTY_ESBUILD_WASM_URL', owner),
   };
 }
 

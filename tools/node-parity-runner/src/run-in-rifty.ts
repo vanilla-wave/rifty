@@ -24,6 +24,7 @@ import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
 import { asyncVfs, syncMirror } from '@riftydev/vfs';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
+import { transform as transformWithHostEsbuild } from 'esbuild';
 import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
 // vm-engine relative source imports (same `tools/`-harness precedent as
 // `formatArgs` below): `setVmEngineOverride` lets the runner reset the engine
@@ -38,18 +39,6 @@ import {
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
-// The runner is a `tools/` harness, so reaching into `@riftydev/runtime-wasi` and
-// the shadow-registry esbuild binding is layer-legal (same precedent as the
-// `kind: 'http'` mode importing `@riftydev/net`). We pull `runWasi` from the
-// runtime-wasi index and `transformWithEsbuild` from the binding *source*
-// (the package index does not re-export the binding). Relative source paths
-// mirror the existing `formatArgs` import above and avoid adding workspace
-// dependencies the runner does not otherwise need.
-import { runWasi } from '../../../packages/runtime-wasi/src/index.ts';
-import {
-  loadVendoredEsbuildWasm,
-  transformWithEsbuild,
-} from '../../shadow-registry/src/esbuild-binding.ts';
 import { type ParityCase, caseCwd } from './types.ts';
 
 /**
@@ -963,28 +952,15 @@ async function installExecSyncMode(): Promise<() => void> {
 }
 
 /**
- * Build the `transformSource` hook for `kind: 'ts-esm'` — the SAME edge the
- * headless opencode harness uses (ADR-0052). It strips types / lowers JSX with
- * the REAL vendored esbuild WASI binary via the injected `runWasi`, selecting
- * the loader purely by extension (`.ts` → `ts`, `.tsx` → `tsx`, `.jsx` → `jsx`)
- * and passing `jsx:'automatic'` for the JSX loaders (matching the design's
- * caller-chosen default; `.ts` needs no jsx flag). The wasm is read once per
- * run; esbuild's stdin transform mounts `workspace` as its sole preopen, so
- * that directory must exist in the global sync mirror (ensured in `runInRifty`).
+ * Build the `transformSource` hook for `kind: 'ts-esm'`. The loader is the
+ * parity target; the Node-only harness injects workspace esbuild as its real
+ * transform boundary. Product runtime activation is proved separately through
+ * the registry-owned browser adapter.
  */
 function buildTsTransform(): TransformSourceHook {
-  // `readFileSync` returns `Uint8Array<ArrayBufferLike>`; copy once into a
-  // plain-`ArrayBuffer`-backed view so it satisfies `BufferSource` (the binding
-  // never sees a `SharedArrayBuffer`). The copy is paid once per run, outside
-  // the returned closure.
-  const raw = loadVendoredEsbuildWasm();
-  const wasm = new Uint8Array(raw.byteLength);
-  wasm.set(raw);
-  return ({ source, loader, workspace }) =>
-    transformWithEsbuild(runWasi, wasm, {
-      source,
+  return ({ source, loader }) =>
+    transformWithHostEsbuild(source, {
       loader,
-      workspace,
       format: 'esm',
       sourcemap: 'inline',
       supported: { decorators: false },
@@ -1037,17 +1013,6 @@ export async function runInRiftyInCurrentRealm(
       fsFiles[`/${rel}`] = content;
     }
   }
-  // The esbuild WASI transform (ts-esm) mounts the loader `workspace` (= /work)
-  // as its sole preopen and resolves it against the GLOBAL sync mirror (the
-  // WASI path syscalls read `syncMirror()`, not the loader's own vfs). Mount
-  // the /work tree into the mirror too so that preopen directory exists; esbuild
-  // only reads the source over stdin, but its Go runtime canonicalises the cwd
-  // preopen at startup (ADR-0049), so /work must be a real directory there.
-  if (testCase.kind === 'ts-esm') {
-    for (const [path, content] of Object.entries(files)) {
-      fsFiles[path] = content;
-    }
-  }
   const fsMirror = new MemoryFsSync();
   fsMirror.loadFixture(fsFiles);
   // Materialize the case cwd: the Node runner mkdirs `<workDir>/<cwd>` before
@@ -1078,9 +1043,8 @@ export async function runInRiftyInCurrentRealm(
     setProcessCwd(cwd);
     refreshRuntimeJsProcessBuiltin();
 
-    // `ts-esm` threads the real esbuild type-strip hook (ADR-0052) so `.ts`
-    // resolves and its types are stripped before the AST ESM rewrite, with the
-    // esbuild guest cwd/preopen pinned to the loader's `/work` workspace.
+    // `ts-esm` threads a real esbuild type-strip hook (ADR-0052) so `.ts`
+    // resolves and its types are stripped before the AST ESM rewrite.
     const loader =
       testCase.kind === 'ts-esm'
         ? createModuleLoader(vfs, {

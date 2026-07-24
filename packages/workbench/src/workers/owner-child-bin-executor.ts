@@ -10,16 +10,24 @@
  * invariant). Stream/kill/exit reuse `glue/bin-executor.ts`'s createBinExecutor.
  */
 
-import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import {
+  type KernelEntryCapabilityPorts,
+  type SpawnWorkerSpec,
+  globalProcessManager,
+} from '@riftydev/kernel';
 import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { BinExecutor } from '@riftydev/shell';
-import {
-  type BinExecutorDeps,
-  type BinSpawnRequest,
-  type BinWorkerHandle,
-  createBinExecutor,
-} from '../glue/bin-executor.ts';
+import type { BinExecutorDeps, BinSpawnRequest, BinWorkerHandle } from '../glue/bin-executor.ts';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
+import { runForegroundChild } from '../glue/run-foreground-child.ts';
+import {
+  type ReserveOwnerChildAdmission,
+  abortOwnerChildAdmissionAfterSpawn,
+  abortOwnerChildAdmissionBeforeSpawn,
+  attachOwnerChildCapabilities,
+  commitOwnerChildAdmission,
+  observeOwnerChildExit,
+} from './owner-child-admission.ts';
 import { prepareViteBinSpawnRequest } from './vite-cli-prep.ts';
 
 /** Pure: build the spawn spec for a resolved bin request (unit-tested). */
@@ -27,17 +35,20 @@ export function buildChildSpawnSpec(
   req: BinSpawnRequest,
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
+  capabilityPorts?: KernelEntryCapabilityPorts,
 ): SpawnWorkerSpec {
+  const entry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
+    kind: 'program',
+    bin: true,
+    remoteFs: true,
+    ...(req.remoteFsRoot === undefined ? {} : { remoteFsRoot: req.remoteFsRoot }),
+    nodeServe: true,
+    ...(req.previewScope === undefined ? {} : { previewScope: req.previewScope }),
+    terminal: childTerminalBootstrap(req),
+  });
   return {
-    entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
-      kind: 'program',
-      bin: true,
-      remoteFs: true,
-      ...(req.remoteFsRoot === undefined ? {} : { remoteFsRoot: req.remoteFsRoot }),
-      nodeServe: true,
-      ...(req.previewScope === undefined ? {} : { previewScope: req.previewScope }),
-      terminal: childTerminalBootstrap(req),
-    }),
+    entry:
+      capabilityPorts === undefined ? entry : attachOwnerChildCapabilities(entry, capabilityPorts),
     argv: ['rifty', req.shimPath, ...req.args],
     env: { ...req.env },
     cwd: req.cwd,
@@ -60,26 +71,63 @@ export function prepareOwnerChildBinSpawnRequest(
 export function createOwnerChildBinExecutor(
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
+  reserveAdmission: ReserveOwnerChildAdmission,
   hooks: Pick<BinExecutorDeps, 'onStart' | 'onSpawn' | 'onMessage' | 'onExit'> = {},
   enrichRequest?: OwnerChildBinRequestEnricher,
 ): BinExecutor {
-  return createBinExecutor({
-    prepareRequest: (request) => prepareOwnerChildBinSpawnRequest(request, enrichRequest),
-    ...hooks,
-    spawn: (req): BinWorkerHandle => {
-      const handle = globalProcessManager.spawnWorker(
+  return async (binPath, args, ctx) => {
+    const req = prepareOwnerChildBinSpawnRequest(
+      {
+        shimPath: binPath,
+        args,
+        env: ctx.env,
+        cwd: ctx.cwd,
+        isTTY: ctx.isTTY === true,
+        cols: ctx.cols,
+        rows: ctx.rows,
+      },
+      enrichRequest,
+    );
+    const reservation = await reserveAdmission(req.shimPath);
+    let handle: BinWorkerHandle;
+    try {
+      hooks.onStart?.(req, ctx);
+      const spawned = globalProcessManager.spawnWorker(
         req.shimPath,
-        buildChildSpawnSpec(req, nodeEntryUrl, nodeWorkerRuntimeEnv),
+        buildChildSpawnSpec(
+          req,
+          nodeEntryUrl,
+          nodeWorkerRuntimeEnv,
+          reservation.snapshot.capabilityPorts,
+        ),
         1,
       );
-      if (handle.kind !== 'worker') {
-        throw new Error(`owner-child-bin-executor: expected worker handle, got ${handle.kind}`);
+      if (spawned.kind !== 'worker') {
+        throw new Error(`owner-child-bin-executor: expected worker handle, got ${spawned.kind}`);
       }
-      // After the kind guard, TS narrows to WorkerProcessHandle, which structurally
-      // satisfies BinWorkerHandle: stdout()/stderr() return Readable (has on('data',...));
-      // on(event,listener) returns `this` (assignable to `unknown`); kill() returns
-      // boolean (assignable to `unknown`). No cast needed.
-      return handle;
-    },
-  });
+      handle = spawned;
+    } catch (error) {
+      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      throw error;
+    }
+    const physicalExit = observeOwnerChildExit(handle);
+    let running: ReturnType<typeof runForegroundChild>;
+    try {
+      hooks.onSpawn?.(req, handle, ctx);
+      running = runForegroundChild(handle, ctx, {
+        onMessage: hooks.onMessage ? (message) => hooks.onMessage?.(req, message, ctx) : undefined,
+        onExit: hooks.onExit ? () => hooks.onExit?.(req, ctx) : undefined,
+      });
+      commitOwnerChildAdmission(reservation, physicalExit);
+    } catch (error) {
+      try {
+        handle.kill('SIGTERM');
+      } catch {
+        // Exact physical exit observation below remains authoritative.
+      }
+      await abortOwnerChildAdmissionAfterSpawn(reservation, error, physicalExit);
+      throw error;
+    }
+    return running;
+  };
 }

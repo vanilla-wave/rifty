@@ -24,6 +24,7 @@
       ".arch-fixtures/**",
       ".claude/**",
       "packages/workbench/src/workers/generated/**",
+      "tools/shadow-registry/generated/**",
       "packages/ts-language-service/vendor/**"
     ]
   },

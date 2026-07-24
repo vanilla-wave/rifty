@@ -32,7 +32,7 @@ export interface WorkbenchOwnerBootConfig {
       readonly devServer: string;
       readonly typescript?: string;
     };
-    readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+    readonly wasm: { readonly sqlite: string };
     readonly previewProbeTimeoutMs: number;
   };
   readonly packageAcquisition: {
@@ -213,7 +213,7 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     'owner boot workers',
   );
   const wasm = record(deployment.wasm, 'owner boot wasm');
-  exact(wasm, ['sqlite', 'esbuild'], 'owner boot wasm');
+  exact(wasm, ['sqlite'], 'owner boot wasm');
   const previewProbeTimeoutMs = positiveFinite(
     deployment.previewProbeTimeoutMs,
     'owner boot preview proof timeout',
@@ -257,7 +257,6 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     }),
     wasm: Object.freeze({
       sqlite: nonEmptyString(wasm.sqlite, 'owner boot sqlite wasm'),
-      esbuild: nonEmptyString(wasm.esbuild, 'owner boot esbuild wasm'),
     }),
     previewProbeTimeoutMs,
   });

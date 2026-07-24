@@ -31,6 +31,8 @@ export interface StreamTarEntriesBounds {
   stallTimeoutMs?: number;
   /** Total received-byte cap; exceeding it throws. */
   maxBytes?: number;
+  /** Caller-owned lifecycle cancellation. */
+  signal?: AbortSignal;
 }
 
 export async function* streamTarEntries(
@@ -39,6 +41,7 @@ export async function* streamTarEntries(
 ): AsyncGenerator<{ name: string; data: Uint8Array }, void, undefined> {
   const stallMs = bounds.stallTimeoutMs ?? DEFAULT_FETCH_STALL_MS;
   const maxBytes = bounds.maxBytes ?? DEFAULT_FETCH_MAX_BYTES;
+  const signal = bounds.signal;
   const reader = stream.getReader();
   // Unconsumed chunks in arrival order; `available` = total buffered bytes.
   const pending: Uint8Array[] = [];
@@ -48,11 +51,24 @@ export async function* streamTarEntries(
 
   async function ensure(n: number): Promise<boolean> {
     while (available < n && !sourceDone) {
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : new Error('eddy bundle: aborted');
+      }
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
       const read = reader.read();
       // A raced-out read settles later (the finally-block cancel resolves it);
       // never let a late rejection surface as unhandled.
       read.catch(() => {});
+      const abortWait = signal
+        ? new Promise<never>((_, reject) => {
+            onAbort = () =>
+              reject(
+                signal.reason instanceof Error ? signal.reason : new Error('eddy bundle: aborted'),
+              );
+            signal.addEventListener('abort', onAbort, { once: true });
+          })
+        : undefined;
       const r = await Promise.race([
         read,
         new Promise<never>((_, reject) => {
@@ -61,7 +77,11 @@ export async function* streamTarEntries(
             stallMs,
           );
         }),
-      ]).finally(() => clearTimeout(timer));
+        ...(abortWait ? [abortWait] : []),
+      ]).finally(() => {
+        clearTimeout(timer);
+        if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+      });
       if (r.done) sourceDone = true;
       else if (r.value.length > 0) {
         received += r.value.length;

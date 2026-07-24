@@ -10,6 +10,7 @@
   "dependencies": {
     "@riftydev/net": "workspace:*",
     "@riftydev/runtime-js": "workspace:*",
-    "@riftydev/vfs": "workspace:*"
+    "@riftydev/vfs": "workspace:*",
+    "esbuild": "0.28.0"
   }
 }

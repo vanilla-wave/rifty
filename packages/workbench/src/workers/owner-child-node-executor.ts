@@ -4,6 +4,7 @@
  * stdout/stderr bytes. Physical project roots stay in bootstrap config.
  */
 import {
+  type KernelEntryCapabilityPorts,
   type SpawnWorkerIdentity,
   type SpawnWorkerSpec,
   globalProcessManager,
@@ -15,6 +16,15 @@ import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import { type ForegroundWritable, runForegroundChild } from '../glue/run-foreground-child.ts';
+import { toOwnerProjectPath } from '../workbench/project-file-boundary.ts';
+import {
+  type ReserveOwnerChildAdmission,
+  abortOwnerChildAdmissionAfterSpawn,
+  abortOwnerChildAdmissionBeforeSpawn,
+  attachOwnerChildCapabilities,
+  commitOwnerChildAdmission,
+  observeOwnerChildExit,
+} from './owner-child-admission.ts';
 
 type OwnerExecSyncRunner = NonNullable<InstallRuntimeJsExecSyncOptions['runWorker']>;
 
@@ -29,6 +39,8 @@ interface OwnerExecSyncChild {
     readonly stderr: OwnerExecSyncPort;
   };
   onExit(listener: (code: number) => void): () => void;
+  /** Synchronous kernel teardown; returning certifies the worker is physically gone. */
+  terminate(): void;
 }
 
 type OwnerExecSyncSpawn = (
@@ -51,52 +63,99 @@ export function createOwnerExecSyncRunner(
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
   getActiveProjectRoot: () => string,
+  reserveAdmission: ReserveOwnerChildAdmission,
   spawn: OwnerExecSyncSpawn = spawnKernelWorker,
 ): OwnerExecSyncRunner {
   let nextNestedPid = 0xc0000000;
-  return (spec) => {
+  return async (spec) => {
     const remoteFsRoot = getActiveProjectRoot();
-    const child = spawn(
-      {
-        entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
-          kind: 'program',
-          bin: false,
-          remoteFs: true,
-          remoteFsRoot,
-          nodeServe: false,
-        }),
-        argv: spec.argv,
-        env: { ...spec.env },
-        cwd: spec.cwd,
-      },
-      { pid: nextNestedPid++, ppid: 1 },
-    );
+    const reservation = await reserveAdmission(toOwnerProjectPath(remoteFsRoot, spec.entryPath));
+    let child: OwnerExecSyncChild;
+    try {
+      child = spawn(
+        {
+          entry: attachOwnerChildCapabilities(
+            buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
+              kind: 'program',
+              bin: false,
+              remoteFs: true,
+              remoteFsRoot,
+              nodeServe: false,
+            }),
+            reservation.snapshot.capabilityPorts,
+          ),
+          argv: spec.argv,
+          env: { ...spec.env },
+          cwd: spec.cwd,
+        },
+        { pid: nextNestedPid++, ppid: 1 },
+      );
+    } catch (error) {
+      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      throw error;
+    }
+    let resolvePhysicalExit = (): void => {};
+    const physicalExit = new Promise<void>((resolve) => {
+      resolvePhysicalExit = resolve;
+    });
+    let exitCode = 0;
+    let resolveResult!: (value: {
+      readonly stdout: Uint8Array;
+      readonly stderr: Uint8Array;
+      readonly exitCode: number;
+    }) => void;
     const stdout: Uint8Array[] = [];
     const stderr: Uint8Array[] = [];
-    child.ports.stdout.onmessage = (event) => {
-      if (event.data instanceof Uint8Array) stdout.push(event.data);
-    };
-    child.ports.stderr.onmessage = (event) => {
-      if (event.data instanceof Uint8Array) stderr.push(event.data);
-    };
-    child.ports.stdout.start();
-    child.ports.stderr.start();
-    return new Promise((resolve) => {
-      child.onExit((exitCode) => {
-        queueMicrotask(() => {
-          resolve({
-            stdout: concatChunks(stdout),
-            stderr: concatChunks(stderr),
-            exitCode,
-          });
+    const result = new Promise<{
+      readonly stdout: Uint8Array;
+      readonly stderr: Uint8Array;
+      readonly exitCode: number;
+    }>((resolve) => {
+      resolveResult = resolve;
+    });
+    child.onExit((code) => {
+      exitCode = code;
+      resolvePhysicalExit();
+      queueMicrotask(() => {
+        resolveResult({
+          stdout: concatChunks(stdout),
+          stderr: concatChunks(stderr),
+          exitCode,
         });
       });
     });
+    try {
+      child.ports.stdout.onmessage = (event) => {
+        if (event.data instanceof Uint8Array) stdout.push(event.data);
+      };
+      child.ports.stderr.onmessage = (event) => {
+        if (event.data instanceof Uint8Array) stderr.push(event.data);
+      };
+      child.ports.stdout.start();
+      child.ports.stderr.start();
+      commitOwnerChildAdmission(reservation, physicalExit);
+    } catch (error) {
+      let failure = error;
+      let termination: Promise<unknown>;
+      try {
+        child.terminate();
+        termination = Promise.resolve();
+      } catch (terminationError) {
+        termination = physicalExit;
+        failure = new AggregateError(
+          [error, terminationError],
+          'execSync child setup and termination failed',
+        );
+      }
+      await abortOwnerChildAdmissionAfterSpawn(reservation, failure, termination);
+      throw failure;
+    }
+    return result;
   };
 }
 
 export function buildNodeChildSpawnSpec(
-  entry: string,
+  programEntry: string,
   args: readonly string[],
   env: Record<string, string>,
   cwd: string,
@@ -107,18 +166,23 @@ export function buildNodeChildSpawnSpec(
   rows = 24,
   previewScope?: string,
   remoteFsRoot?: string,
+  capabilityPorts?: KernelEntryCapabilityPorts,
 ): SpawnWorkerSpec {
+  const workerEntry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
+    kind: 'program',
+    bin: false,
+    remoteFs: true,
+    ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+    nodeServe: true,
+    ...(previewScope === undefined ? {} : { previewScope }),
+    terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
+  });
   return {
-    entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
-      kind: 'program',
-      bin: false,
-      remoteFs: true,
-      ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
-      nodeServe: true,
-      ...(previewScope === undefined ? {} : { previewScope }),
-      terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
-    }),
-    argv: ['rifty', entry, ...args],
+    entry:
+      capabilityPorts === undefined
+        ? workerEntry
+        : attachOwnerChildCapabilities(workerEntry, capabilityPorts),
+    argv: ['rifty', programEntry, ...args],
     // serve:true → kernel keeps it alive; the entry-scoped bootstrap owns the
     // run-vs-serve decision (ADR-0155) without changing observable guest env.
     env: { ...env },
@@ -162,6 +226,7 @@ export type OwnerNodeExecutor = (
 export function createOwnerChildNodeExecutor(
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
+  reserveAdmission: ReserveOwnerChildAdmission,
   spawn: (spec: SpawnWorkerSpec) => NodeChildHandle = (spec) => {
     const h = globalProcessManager.spawnWorker('node', spec, 1);
     if (h.kind !== 'worker')
@@ -178,29 +243,51 @@ export function createOwnerChildNodeExecutor(
   // failure) surfaces as a rejected promise, not a sync throw. The spawn + the
   // shared driver's listener registration run before the first suspension.
   return async (entry, args, ctx, hooks) => {
-    const handle = spawn(
-      buildNodeChildSpawnSpec(
-        entry,
-        args,
-        ctx.env,
-        ctx.cwd,
-        nodeEntryUrl,
-        nodeWorkerRuntimeEnv,
-        ctx.isTTY === true,
-        ctx.cols ?? 80,
-        ctx.rows ?? 24,
-        hooks.previewScope,
-        hooks.remoteFsRoot,
-      ),
-    );
+    const reservation = await reserveAdmission(entry);
+    let handle: NodeChildHandle;
+    try {
+      handle = spawn(
+        buildNodeChildSpawnSpec(
+          entry,
+          args,
+          ctx.env,
+          ctx.cwd,
+          nodeEntryUrl,
+          nodeWorkerRuntimeEnv,
+          ctx.isTTY === true,
+          ctx.cols ?? 80,
+          ctx.rows ?? 24,
+          hooks.previewScope,
+          hooks.remoteFsRoot,
+          reservation.snapshot.capabilityPorts,
+        ),
+      );
+    } catch (error) {
+      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      throw error;
+    }
+    const physicalExit = observeOwnerChildExit(handle);
     // Shared foreground driver (stream/abort/exit). A server child posts
     // `rifty:node-listening` → register a preview slot; the slot is removed on
     // exit. (run-foreground-child owns the exit-before-pre-abort ordering.)
-    return runForegroundChild(handle, ctx, {
-      onMessage: (m) => {
-        if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports, m.previewScope);
-      },
-      onExit: () => hooks.onExit(hooks.sid),
-    });
+    let running: Promise<ProcessExit>;
+    try {
+      running = runForegroundChild(handle, ctx, {
+        onMessage: (m) => {
+          if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports, m.previewScope);
+        },
+        onExit: () => hooks.onExit(hooks.sid),
+      });
+      commitOwnerChildAdmission(reservation, physicalExit);
+    } catch (error) {
+      try {
+        handle.kill('SIGTERM');
+      } catch {
+        // Exact physical exit observation below remains authoritative.
+      }
+      await abortOwnerChildAdmissionAfterSpawn(reservation, error, physicalExit);
+      throw error;
+    }
+    return running;
   };
 }

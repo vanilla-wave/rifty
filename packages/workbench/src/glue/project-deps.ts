@@ -24,7 +24,6 @@
  * never bricks the boot. Extracted from the worker bootstrap so the priority
  * logic is unit-testable outside a worker realm.
  */
-import { NotImplementedError } from '@riftydev/io';
 import type { InstallResult } from '@riftydev/npm-client';
 import {
   type PersistFailureReport,
@@ -35,22 +34,12 @@ import {
   normalizePath,
 } from '@riftydev/vfs';
 import {
-  type AcquisitionObservation,
   type PackageAcquisitionAuthority,
   PackageAcquisitionError,
-  createPackageAcquisitionAuthority,
 } from '../workers/package-acquisition-authority.ts';
-import {
-  type DepSnapshotV2,
-  prepareDepSnapshotRestore,
-  fetchDepSnapshot as realFetchDepSnapshot,
-} from './dep-snapshot.ts';
+import { type DepSnapshotV2, fetchDepSnapshot as realFetchDepSnapshot } from './dep-snapshot.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
-import {
-  type InstallStampAuthority,
-  type InstallStampPromotionResult,
-  installStampAuthorityFor,
-} from './install-stamp-authority.ts';
+import type { InstallStampPromotionResult } from './install-stamp-authority.ts';
 import { isStampedTreeDamage, readPackageJsonText } from './install-stamp.ts';
 import { isSegmentContained } from './project-seed-paths.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
@@ -96,22 +85,10 @@ export interface EnsureProjectDepsOptions {
    * Optional: absent on the memory backend and in restore-only harnesses.
    */
   readonly flush?: () => Promise<PersistFailureReport | undefined>;
-  /** Shared owner-realm authority. Tests may omit it; the paired fsSync owns a
-   *  cached authority so concurrent arrivals still share one epoch/queue. */
-  readonly installStampAuthority?: InstallStampAuthority;
   /** One owner-realm FIFO shared with terminal npm. */
-  readonly packageAcquisitionAuthority?: PackageAcquisitionAuthority;
+  readonly packageAcquisitionAuthority: PackageAcquisitionAuthority;
   /** Clear foreign dependency-owned files after durable demotion. */
   readonly replaceTreeOnMiss?: boolean;
-}
-
-function stampAuthorityFor(opts: EnsureProjectDepsOptions): InstallStampAuthority {
-  if (opts.installStampAuthority) return opts.installStampAuthority;
-  // TODO(backlog: npm-client/package-tree-authority) Remove this bare-composition fallback.
-  return installStampAuthorityFor(opts.fsSync as object, {
-    vfs: opts.vfs,
-    fsSync: opts.fsSync,
-  });
 }
 
 export async function ensureProjectDependencies(
@@ -119,8 +96,7 @@ export async function ensureProjectDependencies(
 ): Promise<EnsureProjectDepsResult> {
   const packageJsonText =
     opts.packageJsonText ?? (await readPackageJsonText(opts.vfs, opts.root)) ?? '';
-  const authority =
-    opts.packageAcquisitionAuthority ?? createProjectPackageAcquisitionAuthority(opts);
+  const authority = opts.packageAcquisitionAuthority;
   try {
     const provenance = await authority.dispatch({
       type: 'ensure',
@@ -264,85 +240,12 @@ async function resolveProjectSnapshot(opts: EnsureProjectDepsOptions) {
   };
 }
 
-function createProjectPackageAcquisitionAuthority(
-  opts: EnsureProjectDepsOptions,
-): PackageAcquisitionAuthority {
-  return createPackageAcquisitionAuthority({
-    stamps: stampAuthorityFor(opts),
-    ...(opts.flush ? { stampTransition: { flush: opts.flush } } : {}),
-    observe: (event) => reportAcquisitionObservation(opts, event),
-    adapter: {
-      prepareEnsure: async (command, execution) => {
-        if (!command.replaceTreeOnMiss) return;
-        if (execution.phase === 'snapshot-rejected') {
-          clearProjectTree(opts.fsSync, command.project.root);
-          opts.fsSync.writeFileSync(
-            joinPath(command.project.root, 'package.json'),
-            new TextEncoder().encode(command.packageJsonText),
-          );
-          return;
-        }
-        prepareProjectInstallTree(opts.fsSync, command.project.root, {
-          packageJsonText: command.packageJsonText,
-          currentSlug: command.project.slug,
-          ...(execution.claim.priorSlug ? { priorSlug: execution.claim.priorSlug } : {}),
-          priorTrustedTree: false,
-        });
-      },
-      planSnapshotRestore: async ({ project, snapshot }) => {
-        try {
-          const payload = snapshot.payload as DepSnapshotV2;
-          const prepared = prepareDepSnapshotRestore(opts.fsSync, project.root, payload);
-          return {
-            status: 'ready',
-            packages: payload.packages,
-            apply: async () => prepared.apply(),
-          };
-        } catch (error) {
-          return {
-            status: 'rejected',
-            reason: `snapshot-restore-plan-failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          };
-        }
-      },
-      install: async (request) => {
-        if (request.type !== 'ensure' || !opts.install) {
-          throw new NotImplementedError('package-acquisition.project-install');
-        }
-        const result = await opts.install();
-        return {
-          result,
-          packageJsonText: await readPackageJsonText(opts.vfs, request.project.root),
-        };
-      },
-      reset: async () => {
-        throw new NotImplementedError('package-acquisition.reset');
-      },
-      switchProject: async () => {
-        throw new NotImplementedError('package-acquisition.project-switch');
-      },
-    },
-  });
-}
-
-function reportAcquisitionObservation(
-  opts: EnsureProjectDepsOptions,
-  event: AcquisitionObservation,
-): void {
-  if (event.type !== 'snapshot-rejected') return;
-  reportSnapshotFailure(opts, event.snapshotId, event.reason);
-}
-
 function reportSnapshotFailures(
   opts: EnsureProjectDepsOptions,
   failures: readonly { readonly snapshotId: string; readonly reason: string }[],
 ): void {
   if (failures.length === 0) return;
-  // Local authority observations already emitted these. An injected production
-  // authority may use a different observer, so keep restore-only failure loud.
-  if (!opts.packageAcquisitionAuthority) return;
+  // The lifetime authority may use a different observer; keep restore-only failure loud here.
   for (const failure of failures) reportSnapshotFailure(opts, failure.snapshotId, failure.reason);
 }
 
