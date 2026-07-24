@@ -4,6 +4,10 @@
 
 ### Changed (Workbench extraction)
 
+- Exact Vite 8.0.16 now runs real Rolldown-WASI production build and preview
+  through the installed CLI; browser acceptance executes the hashed bundle in
+  the routed preview iframe while proving the esbuild plan stays empty
+  (ADR-0317). HMR remains disabled.
 - Playground now consumes the sealed `@riftydev/workbench` root, companion, and
   five worker entries; package-owned implementation and tests moved unchanged.
 - Playground no longer imports or supplies a host esbuild WASM URL. Exact

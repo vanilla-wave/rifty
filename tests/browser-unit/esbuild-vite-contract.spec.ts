@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { type Page, expect, test } from '@playwright/test';
+import { DEFAULT_VITE8_CONFIG_JS } from '../../apps/playground/src/vite-project-policy.ts';
 import {
   ESBUILD_CONTRACT_ROW_IDS,
   ESBUILD_GUEST_POLICY_EXPECTATIONS,
@@ -783,6 +784,7 @@ interface ViteServerRender {
   readonly status: number;
   readonly body: string;
   readonly source: string;
+  readonly renderedText?: string;
 }
 
 async function runViteServerRenders(
@@ -868,6 +870,34 @@ async function runViteServerRenders(
 
       const previewResponse = await fetch(new URL(preview.url, location.href));
       const previewBody = await previewResponse.text();
+      const previewFrame = document.createElement('iframe');
+      previewFrame.src = new URL(preview.url, location.href).href;
+      const previewLoaded = new Promise<void>((resolve, reject) => {
+        previewFrame.addEventListener('load', () => resolve(), { once: true });
+        previewFrame.addEventListener(
+          'error',
+          () => reject(new Error(`Vite preview iframe failed to load ${previewFrame.src}`)),
+          { once: true },
+        );
+      });
+      document.body.appendChild(previewFrame);
+      let frameTimer: ReturnType<typeof setTimeout> | null = null;
+      let renderedText = '';
+      try {
+        await Promise.race([
+          previewLoaded,
+          new Promise<never>((_resolve, reject) => {
+            frameTimer = setTimeout(
+              () => reject(new Error(`Vite preview iframe timed out at ${previewFrame.src}`)),
+              30_000,
+            );
+          }),
+        ]);
+        renderedText = previewFrame.contentDocument?.querySelector('#app')?.textContent ?? '';
+      } finally {
+        if (frameTimer !== null) clearTimeout(frameTimer);
+        previewFrame.remove();
+      }
       const previewStopped = await previewRun.stop();
       const previewClosed = await previewRun.close();
       previewRun = null;
@@ -889,6 +919,7 @@ async function runViteServerRenders(
           status: previewResponse.status,
           body: previewBody,
           source: preview.source,
+          renderedText,
         },
       };
     } finally {
@@ -1259,7 +1290,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
   }
 });
 
-test('Vite 8.0.16 cold install has no esbuild fetch or runtime activation', async ({
+test('Vite 8.0.16 build/preview stay green with no esbuild fetch or activation', async ({
   context,
   page,
 }) => {
@@ -1278,6 +1309,7 @@ test('Vite 8.0.16 cold install has no esbuild fetch or runtime activation', asyn
       files: {
         '/index.html': '<div id="app"></div><script type="module" src="/src/main.js"></script>',
         '/src/main.js': "document.getElementById('app').textContent = 'vite8';\n",
+        '/vite.config.js': DEFAULT_VITE8_CONFIG_JS,
       },
       viteVersion: '8.0.16',
       firstMaterialization: { kind: 'install' },
@@ -1298,6 +1330,13 @@ test('Vite 8.0.16 cold install has no esbuild fetch or runtime activation', asyn
     const distIndex = await readOwnerFile(page, '/scratch/dist/index.html');
     expect(distIndex.ok, distIndex.error).toBe(true);
     expect(distIndex.text).toContain('<div id="app"></div>');
+    expect(distIndex.text).not.toContain('/src/main.js');
+    const distJsName = /src=["'][^"']*\/assets\/([^"']+\.js)["']/.exec(distIndex.text)?.[1];
+    expect(distJsName, distIndex.text).toBeDefined();
+    if (!distJsName) throw new Error('Vite 8 build emitted no hashed JavaScript asset');
+    const distJs = await readOwnerFile(page, `/scratch/dist/assets/${distJsName}`);
+    expect(distJs.ok, distJs.error).toBe(true);
+    expect(await executeBuiltBrowserModule(page, distJs.text)).toBe('vite8');
 
     const servers = await runViteServerRenders(page);
     expect(servers.dev.out).toContain('Local');
@@ -1307,7 +1346,9 @@ test('Vite 8.0.16 cold install has no esbuild fetch or runtime activation', asyn
     expect(servers.preview.out).toContain('Local');
     expect(servers.preview.status).toBe(200);
     expect(servers.preview.body).toContain('<div id="app"></div>');
+    expect(servers.preview.body).toContain(`/assets/${distJsName}`);
     expect(servers.preview.source).toBe('preview');
+    expect(servers.preview.renderedText).toBe('vite8');
 
     const original = await readOwnerFile(page, VITE_BIN);
     expect(original.ok, original.error).toBe(true);

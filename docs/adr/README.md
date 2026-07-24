@@ -176,6 +176,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0292 | Workbench authorities replace Solid orchestration core |
 | 0293 | Tab-independent workspace admission UX |
 | 0307 | Install trust is an install-protocol commit, not tree surveillance |
+| 0317 | Vite 8 build and preview through installed CLI |
 
 ### toolchain-build
 
@@ -328,6 +329,7 @@ superseded.
 | 0135 baked snapshot contains preview1 carrier | 0316 / note 2026-07-24 | snapshots use registry-owned substitutions; setup semantics stand |
 | 0172 Playground vendored-WASI consumer consequence | 0316 / note 2026-07-24 | public side-effect-free runner remains; product esbuild no longer consumes it |
 | 0173 vendored-WASI build preparation clauses | 0316 / note 2026-07-24 | registry esbuild-wasm owns product builds; installed Vite ownership stands |
+| 0173 D5 Vite 8 build/preview loud-reject clause | 0317 / note 2026-07-25 | exact Vite 8.0.16 builds and previews through the installed CLI; Vite 7 remains default and Vite 8 HMR stays off |
 | 0188 esbuild alias placement / preview1 redirect clauses | 0316 / note 2026-07-24 | synthetic registry recipe replaces only esbuild; rollup/lightningcss and generic installer/provenance rules stand |
 | 0193 Playground esbuild bridge consumer premise | 0316 / note 2026-07-24 | public precompiled-Module and cross-realm behavior remain without a product esbuild consumer |
 | 0226 D6 vendored WASI CLI remains | 0316 / note 2026-07-24 | exact preview1 package is an explicit guest; registry esbuild-wasm is the sole product runtime |

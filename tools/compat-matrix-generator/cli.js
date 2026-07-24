@@ -162,7 +162,7 @@ const viteCommandMatrix = {
   file: 'vite-command.md',
   title: 'Compatibility matrix — installed Vite command',
   intro:
-    'Public claim surface for Vite 7 through the installed `node_modules/.bin/vite` CLI, plus Vite 8 esbuild non-activation (ADR-0174/0226/0243/0308).',
+    'Public claim surface for Vite 7 and exact Vite 8.0.16 through the installed `node_modules/.bin/vite` CLI (ADR-0174/0226/0243/0308/0317).',
   rows: [
     [
       'Installed `.bin/vite` dispatch',
@@ -200,6 +200,11 @@ const viteCommandMatrix = {
       'Chromium runs exact Vite 7.3.6 over owner VFS; a real CJS dependency prebundle and source map are written and consumed.',
     ],
     [
+      'Vite 8.0.16 build and preview',
+      '✅',
+      'Chromium runs the installed CLI, executes a real hashed Rolldown bundle, and renders it through the routed production preview iframe. HMR remains disabled.',
+    ],
+    [
       'Vite 8.0.16 esbuild isolation',
       '✅',
       'A cold Chromium install has no esbuild package/asset request, no installed esbuild delegate, and no published esbuild runtime before the Vite 8 entry; Rolldown owns its path.',
@@ -222,7 +227,8 @@ const viteCommandMatrix = {
     '`tests/e2e/generic-dev-server-lifecycle.spec.ts`',
   ],
   limitations: [
-    'Exact esbuild-backed claim is Vite 7.3.6 with esbuild 0.28.0; Vite 8 uses Rolldown, has an empty esbuild plan, and keeps HMR disabled in visible template config.',
+    'Exact esbuild-backed claim is Vite 7.3.6 with esbuild 0.28.0; exact Vite 8.0.16 dev/build/preview uses Rolldown with an empty esbuild plan and keeps HMR disabled in visible template config.',
+    'Vite 8 `vite optimize`, other Vite 8 versions, and broader config/plugin parity are not claimed by the Vite 8 build/preview smoke.',
     'Preview traffic traverses the same-origin Service Worker/owner bridge, so `preview.cors` and `preview.allowedHosts` need direct-Node differential proof.',
     'Fallback-port publication when the requested Vite port is busy still needs browser proof; no hidden `strictPort` force exists.',
   ],
