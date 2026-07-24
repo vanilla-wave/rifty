@@ -136,6 +136,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0308 | Package-generic builtin shadow-substitution registry with optional runtime binding |
 | 0309 | One package-tree authority for install-tree lifecycle |
 | 0310 | Sass ships as a synthesized sass-embedded facade over the exact pure-JS sass twin |
+| 0314 | Cancellable package acquisition |
 
 ### playground
 
@@ -193,6 +194,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0226 | Upstream-derived Vite esbuild runtime over guest VFS |
 | 0242 | Generated esbuild diagnostic provenance and target errno normalization |
 | 0255 | Disposable worker realm for seeded-process parity cases |
+| 0312 | Keep synchronous SHA-256 implementations layer-local |
 
 ### protocol
 
