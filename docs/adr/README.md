@@ -28,6 +28,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
 | 0045 | Worker-process IPC — fork-mode `send` / `'message'` / `disconnect` over a parent↔child MessagePort |
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
+| 0313 | One-shot opaque Worker entry capability ports |
 
 ### runtime-js
 
