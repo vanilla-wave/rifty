@@ -45,6 +45,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Snapshot drift checks now compare canonical decompressed bytes, so valid gzip
+  output from different Node/zlib platforms does not fail CI.
+
 - **`check:arch` now sees type-only boundary violations without inventing
   runtime cycles.** The checker runs an emitted-runtime graph for exact cycle
   detection and a type-inclusive graph for layer, internal, and sealed-entry
