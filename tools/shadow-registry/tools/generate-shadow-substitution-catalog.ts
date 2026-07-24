@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { canonicalShadowJson } from '../src/internal/canonical.ts';
 import { builtinShadowCatalogSource } from '../src/internal/catalog-source.ts';
 
@@ -28,5 +28,3 @@ async function main(): Promise<void> {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
-
-export const shadowSubstitutionCatalogPath = fileURLToPath(output);
