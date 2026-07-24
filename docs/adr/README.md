@@ -137,6 +137,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0309 | One package-tree authority for install-tree lifecycle |
 | 0310 | Sass ships as a synthesized sass-embedded facade over the exact pure-JS sass twin |
 | 0314 | Cancellable package acquisition |
+| 0318 | Retain verified shadow assets for manager lifetime |
 
 ### playground
 

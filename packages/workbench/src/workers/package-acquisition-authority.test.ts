@@ -11,7 +11,12 @@ import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
-import { clearProjectTree } from '../glue/project-deps.ts';
+import { type NpmShellCommandDeps, createNpmShellCommand } from '../glue/npm-shell-command.ts';
+import {
+  type EnsureProjectDepsOptions,
+  clearProjectTree,
+  ensureProjectDependencies,
+} from '../glue/project-deps.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import {
   type EnsurePackagesCommand,
@@ -189,7 +194,21 @@ function snapshotOnly(command: Omit<EnsurePackagesCommand, 'type'>): EnsurePacka
   } as EnsurePackagesCommand;
 }
 
+function assertSingleAuthorityInjection(
+  npmDeps: Omit<NpmShellCommandDeps, 'packageAcquisitionAuthority'>,
+  projectDeps: Omit<EnsureProjectDepsOptions, 'packageAcquisitionAuthority'>,
+): void {
+  // @ts-expect-error Terminal npm composition must inject the owner authority.
+  createNpmShellCommand(npmDeps);
+  // @ts-expect-error Project dependency composition must inject the same owner authority.
+  void ensureProjectDependencies(projectDeps);
+}
+
 describe('package-acquisition authority', () => {
+  it('keeps both former package entry points dependent on owner injection', () => {
+    expect(assertSingleAuthorityInjection).toBeTypeOf('function');
+  });
+
   it('opens a real Owner tree-replacement window after demotion before snapshot restore', async () => {
     const pair = createMemoryFs();
     pair.fsSync.mkdirSync(`${ROOT}/node_modules/old`, { recursive: true });
