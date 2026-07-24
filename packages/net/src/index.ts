@@ -28,6 +28,7 @@ export {
   onRegistryChange,
 } from './registry.ts';
 export type { PortHandler } from './registry.ts';
+export type { AddressInfo } from './server-address.ts';
 export {
   WebSocket,
   WebSocketServer,

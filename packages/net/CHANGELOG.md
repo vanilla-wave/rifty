@@ -65,6 +65,11 @@
 
 ### Fixed
 
+- **`http.Server.address()` and `net.Server.address()` return complete
+  `AddressInfo`.** Bound servers expose the effective virtual
+  `{ address: '127.0.0.1', family: 'IPv4', port }`, restoring Vite 7/8 URL
+  printing for explicit hosts (ADR-0315).
+
 - **HTTP body Readables declare their push-fed `_read` owner.** The new loud
   base Readable hook no longer mistakes fetch-driven request/response bodies for
   an unimplemented pull source.

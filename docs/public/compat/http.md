@@ -17,6 +17,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `server.close()` | ✅ | Unregisters port and callback fires |
 | `listen` on a bound port | ✅ | Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`. Catches an intra-realm double-listen (ADR-0157) AND a cross-realm one (ADR-0186): a bind-claim broadcast over the per-port BroadcastChannel refuses a port a sibling Worker realm already owns |
 | `listen(0)` / `listen({ port: 0 })` ephemeral | ✅ | Allocates a free virtual port from the realm registry; `address().port` reflects it until `close()`; distinct per concurrent server (parity-pinned) |
+| `http.Server.address()` / `net.Server.address()` | ⚠️ | Full `{ address, family, port }` while bound and `null` before/pending/after; exact Node v24 parity for explicit `127.0.0.1`. The host-agnostic virtual registry reports its effective `127.0.0.1` / `IPv4` endpoint when another host was requested (ADR-0315) |
 | Missing port dispatch | ✅ | Returns 502 through registry dispatch |
 | `http.get` loopback | ✅ | Client request to own registered port |
 | Cross-realm `http.request` loopback | ✅ | A loopback request to a port owned by ANOTHER Worker realm reaches it via the preview broker — an `accept` ownership probe over the per-port BroadcastChannel separates a live owner from no-listener; streamed replies (SSE/NDJSON) stay live chunk-by-chunk; no owner → Node `ECONNREFUSED`; the same-realm registry is consulted first (ADR-0180) |
@@ -45,6 +46,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tools/node-parity-runner/cases/http2/surface.case.ts`
 - `packages/net/src/http/client.test.ts`
 - `packages/net/src/http/cross-realm-request.test.ts`
+- `packages/net/src/server-address.test.ts`
 - `packages/service-worker/src/body-transport.test.ts`
 - `packages/net/src/cross-realm/preview-port.test.ts`
 - `packages/net/src/cross-realm/cross-realm-loopback.test.ts`

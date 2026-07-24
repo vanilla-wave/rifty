@@ -92,6 +92,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0181 | Client node:https request and get over browser fetch |
 | 0186 | Cross-realm EADDRINUSE via per-port bind-claim broadcast |
 | 0189 | Preview loopback WebSocket bridge |
+| 0315 | Report the effective virtual server address |
 
 ### service-worker
 
