@@ -471,6 +471,11 @@ const matrices = [
         '✅',
         'Allocates a free virtual port from the realm registry; `address().port` reflects it until `close()`; distinct per concurrent server (parity-pinned)',
       ],
+      [
+        '`http.Server.address()` / `net.Server.address()`',
+        '⚠️',
+        'Full `{ address, family, port }` while bound and `null` before/pending/after; exact Node v24 parity for explicit `127.0.0.1`. The host-agnostic virtual registry reports its effective `127.0.0.1` / `IPv4` endpoint when another host was requested (ADR-0315)',
+      ],
       ['Missing port dispatch', '✅', 'Returns 502 through registry dispatch'],
       ['`http.get` loopback', '✅', 'Client request to own registered port'],
       [
@@ -538,6 +543,7 @@ const matrices = [
       '`tools/node-parity-runner/cases/http2/surface.case.ts`',
       '`packages/net/src/http/client.test.ts`',
       '`packages/net/src/http/cross-realm-request.test.ts`',
+      '`packages/net/src/server-address.test.ts`',
       '`packages/service-worker/src/body-transport.test.ts`',
       '`packages/net/src/cross-realm/preview-port.test.ts`',
       '`packages/net/src/cross-realm/cross-realm-loopback.test.ts`',
