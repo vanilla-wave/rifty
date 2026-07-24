@@ -390,6 +390,11 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           const inspected = error instanceof Error ? error : new Error(String(error));
           throw new Error(`post-race file read rejected: ${inspected.name}: ${inspected.message}`);
         });
+        const reopenedCloseRace = await withTimeout(
+          session.files.readFile('/close-race.txt'),
+          'post-race admitted write verification',
+          30_000,
+        );
         await withTimeout(session.close(), 'post-race Scratch close', 60_000);
         session = null;
         await withTimeout(workbench.close(), 'Playground Workbench close', 60_000);
@@ -404,6 +409,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           installedVersion,
           output: chunks.map(({ chunk }) => chunk).join(''),
           reopenedManifestText: new TextDecoder().decode(reopenedManifest.bytes),
+          reopenedCloseRaceText: new TextDecoder().decode(reopenedCloseRace.bytes),
         };
       } finally {
         detach?.();
@@ -425,12 +431,15 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
   expect(result.exit).toEqual({ code: 0, signal: null });
   expect(result.closeExit).toEqual({ code: 0, signal: null });
   expect(result.concurrentWrite).toMatchObject({
-    status: 'rejected',
-    name: 'ProjectFileOperationError',
-    message: expect.stringContaining('writeFile /close-race.txt failed'),
+    status: 'fulfilled',
+    value: {
+      path: '/close-race.txt',
+      version: expect.any(String),
+    },
   });
   expect(result.installedVersion).toBe('4.1.5');
   expect(result.reopenedManifestText).toContain('"name":"companion-kleur"');
+  expect(result.reopenedCloseRaceText).toBe('write admitted before session close\n');
 
   const installCommand = result.output.indexOf('$ npm install');
   const install = result.output.indexOf('npm: installing all from package.json');
@@ -1140,7 +1149,10 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
   expect(result.viteManifest).toEqual({ name: 'vite', version: expect.stringMatching(/^7\./u) });
   expect(result.closeExit).toEqual({ code: null, signal: 'SIGTERM' });
   expect(result.output).not.toContain('npm: installing');
-  expect(registryRequests).toEqual([]);
+  expect(registryRequests.map((url) => new URL(url).pathname)).toEqual([
+    '/npm-registry/esbuild-wasm',
+    '/npm-registry/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz',
+  ]);
   expect(snapshotRequests).toHaveLength(1);
 });
 
