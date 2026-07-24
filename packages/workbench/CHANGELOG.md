@@ -23,6 +23,10 @@
 
 ### Fixed
 
+- Keep the already-published live package tree available to Node after a
+  manifest-only edit while demoting its durable install claim; real tree
+  mutations still revoke admission, and empty trees are re-attested.
+
 - Register installed `vite preview` listeners as the production-preview source
   from owner-trusted CLI mode, with launch-scoped teardown that cannot clear a
   newer preview.

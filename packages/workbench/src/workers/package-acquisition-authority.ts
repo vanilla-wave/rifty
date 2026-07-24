@@ -91,6 +91,8 @@ export interface PackageJsonEditCommand {
   readonly preflight?: () => Promise<boolean>;
   /** Runs only after durable demotion, inside the owner acquisition FIFO. */
   readonly mutate: () => Promise<void>;
+  /** Samples exact post-mutation bytes for a strict empty-tree publication. */
+  readonly readCurrentPackageJsonText?: () => string | null;
 }
 
 export interface ResetPackagesCommand {
@@ -149,6 +151,8 @@ export interface GuardedPackageMutationCommand {
   readonly resolveTransitions: () => readonly PackageMutationTransition[];
   /** Runs only after every distinct transition is durably established. */
   readonly mutate: () => Promise<void>;
+  /** Samples exact post-mutation manifest bytes by canonical project root. */
+  readonly readCurrentPackageJsonText?: (root: string) => string | null;
 }
 
 export type PackageAcquisitionCommand =
@@ -371,6 +375,8 @@ type PublishedPackageTree =
       packageJsonText: string;
       plan: ShadowAssetPlan;
       ready: ShadowAssetReadySet | null;
+      /** A manifest-only edit preserves the live tree, not its durable install claim. */
+      proof: 'claim' | 'owner-runtime';
     }>
   | Readonly<{
       kind: 'empty';
@@ -528,6 +534,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         packageJsonText,
         plan,
         ready,
+        proof: 'claim',
       }),
     );
   }
@@ -551,7 +558,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     );
   }
 
-  async #assertPublishedPackageTreeTrusted(
+  async #assertPackageTreeAdmission(
     canonicalRoot: string,
     published: PublishedPackageTree,
   ): Promise<void> {
@@ -567,6 +574,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       this.#packageTrees.delete(canonicalRoot);
       throw new Error(`package tree readiness is not trusted for ${canonicalRoot}`);
     }
+    if (published.proof === 'owner-runtime') return;
 
     const trusted = await this.#stamps.check({
       root: canonicalRoot,
@@ -815,7 +823,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       throw new Error(`package tree readiness is not published for ${lookupPath}`);
     }
     for (const [canonicalRoot, published] of ancestry) {
-      await this.#assertPublishedPackageTreeTrusted(canonicalRoot, published);
+      await this.#assertPackageTreeAdmission(canonicalRoot, published);
     }
     const [canonicalRoot, published] = nearest;
     const composed = await this.#composePackageTreeAncestry(ancestry);
@@ -865,9 +873,13 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         if (command.preflight && !(await command.preflight())) return;
         const project = resolveScheduledProject(command);
         this.#rememberProject(project);
-        this.#invalidatePackageTrees(project.root);
-        await this.#stamps.demote(project, this.#stampTransition);
-        await command.mutate();
+        await this.#runGuardedMutation(
+          [{ mode: 'demote', project }],
+          command.mutate,
+          command.readCurrentPackageJsonText === undefined
+            ? undefined
+            : () => command.readCurrentPackageJsonText?.() ?? null,
+        );
         return;
       }
       case 'reset': {
@@ -888,8 +900,11 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       }
       case 'guarded-mutation':
         if (command.preflight && !(await command.preflight())) return;
-        await this.#applyMutationTransitions(command.resolveTransitions());
-        await command.mutate();
+        await this.#runGuardedMutation(
+          command.resolveTransitions(),
+          command.mutate,
+          command.readCurrentPackageJsonText,
+        );
         return;
       case 'project-switch':
         if (command.from) this.#rememberProject(command.from);
@@ -1007,6 +1022,38 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         await this.#stamps.revoke({ root: transition.root }, this.#stampTransition);
       } else {
         await this.#stamps.demote(transition.project, this.#stampTransition);
+      }
+    }
+  }
+
+  async #runGuardedMutation(
+    transitions: readonly PackageMutationTransition[],
+    mutate: () => Promise<void>,
+    readCurrentPackageJsonText?: (root: string) => string | null,
+  ): Promise<void> {
+    const retained = new Map<string, PublishedPackageTree>();
+    for (const transition of transitions) {
+      if (transition.mode !== 'demote') continue;
+      const root = normalizeSchedulingRoot(transition.project.root);
+      const published = this.#packageTrees.get(root);
+      if (published !== undefined) retained.set(root, published);
+    }
+
+    await this.#applyMutationTransitions(transitions);
+    await mutate();
+
+    for (const transition of transitions) {
+      if (transition.mode !== 'demote') continue;
+      const root = normalizeSchedulingRoot(transition.project.root);
+      const published = retained.get(root);
+      if (published?.kind === 'installed') {
+        this.#packageTrees.set(root, Object.freeze({ ...published, proof: 'owner-runtime' }));
+        continue;
+      }
+      const packageJsonText =
+        published?.kind === 'empty' ? readCurrentPackageJsonText?.(root) : undefined;
+      if (packageJsonText !== undefined && packageJsonText !== null) {
+        await this.#publishEmptyPackageTree(transition.project, packageJsonText);
       }
     }
   }

@@ -145,6 +145,71 @@ it('rejects deferred empty-tree admission after exact package.json bytes drift',
   );
 });
 
+it('re-publishes an exact empty tree after a coordinated package.json edit', async () => {
+  const { authority, state } = await packageMutationHarness(
+    'owner-package-empty-manifest-edit-test',
+  );
+  const editedPackageJson = `${JSON.stringify({
+    name: 'app',
+    private: true,
+    type: 'module',
+    scripts: { dev: 'node server.mjs' },
+  })}\n`;
+
+  await state.mutations.guardedMutation(
+    [{ kind: 'write', path: `${ROOT}/package.json` }],
+    async () => {
+      authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(editedPackageJson));
+    },
+  );
+
+  const reservation = await state.reserveChildAdmission(`${ROOT}/server.mjs`);
+  expect(reservation.snapshot).toMatchObject({
+    root: ROOT,
+    ready: null,
+    capabilityPorts: {},
+  });
+  reservation.commit();
+});
+
+it('retains the installed tree for runtime after a coordinated package.json edit', async () => {
+  const { authority, shell, state } = await packageMutationHarness(
+    'owner-package-installed-manifest-edit-test',
+  );
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+  const editedPackageJson = `${JSON.stringify({
+    name: 'app',
+    private: true,
+    type: 'module',
+    scripts: { dev: 'node server.mjs' },
+  })}\n`;
+
+  await state.mutations.guardedMutation(
+    [{ kind: 'write', path: `${ROOT}/package.json` }],
+    async () => {
+      authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(editedPackageJson));
+    },
+  );
+
+  const reservation = await state.reserveChildAdmission(`${ROOT}/server.mjs`);
+  expect(reservation.snapshot).toMatchObject({
+    root: ROOT,
+    ready: null,
+    capabilityPorts: {},
+  });
+  reservation.commit();
+
+  await state.mutations.guardedMutation(
+    [{ kind: 'rm', path: `${ROOT}/node_modules` }],
+    async () => {
+      authority.rmSync(`${ROOT}/node_modules`, { recursive: true });
+    },
+  );
+  await expect(state.reserveChildAdmission(`${ROOT}/server.mjs`)).rejects.toThrow(
+    /readiness is not published/,
+  );
+});
+
 it('does not fall through a known nested root after production empty proof fails', async () => {
   const { authority, shell, state } = await packageMutationHarness(
     'owner-package-known-nested-gap-test',
