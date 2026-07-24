@@ -13,6 +13,10 @@ Date: 2026-06
 > superseded. Installed `.bin/vite` owns build/preview/config/args; exact browser
 > runtime preparation happens before the CLI. The old helpers are deleted.
 
+> Correction 2026-07-24 (ADR-0316): build runtime preparation uses the
+> registry-owned `esbuild-wasm` substitution. The vendored WASI binding, fetch,
+> and browser asset clauses are retired; real build/preview ownership stands.
+
 ## Context
 
 The playground goal is real Node programs in Chromium, not a Vite-like stub.

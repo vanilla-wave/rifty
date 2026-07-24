@@ -9,6 +9,11 @@ Supersedes: ADR-0224
 > plans to internal Vite/Node runtimes and exposes lifetime-scoped Playground
 > tools without exposing the owner, protocols, or a generic extension system.
 
+> Correction 2026-07-24 (ADR-0311): the host still resolves Worker, service
+> worker, and unrelated WASM URLs, but public `deployment.wasm.esbuild` is
+> removed. ADR-0308's registry recipe now owns those exact runtime bytes; the
+> sealed companion and all other deployment rules stand.
+
 ## Context
 
 The embeddable-dev-loop needs the Playground's real boot, package acquisition,

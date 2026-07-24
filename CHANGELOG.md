@@ -323,9 +323,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documented
 
-- **ADR-0047 — revert to esbuild (`@esbuild/wasi-preview1`) as the M8/M10 WASI forcing consumer; supersedes ADR-0044 D1/D2.** ADR-0044's two premises were verified false at vendoring time: swc has NO WASI build (its published wasm is wasm-bindgen, not WASIp1), and esbuild DOES — `@esbuild/wasi-preview1@0.28.0` imports only `wasi_snapshot_preview1` (zero deps, ~20 MB), a different package from the gojs `esbuild-wasm` ADR-0044's audit inspected. ADR-0044 D3 (Go/gojs bridge deferred) stays valid and is now moot for esbuild. Q-2026-05-27-003's forcing consumer reverts to esbuild and the question is resolved (promoted to ADR-0049). PROJECT_PLAN.md, TASKS.md, OPEN_QUESTIONS.md, and `docs/compat/wasi.md` reverted to esbuild with cross-refs.
+- **ADR-0316 decides retirement of the ADR-0047 vendored esbuild WASI carrier.** The exact
+  preview1 package remains an explicit conformance/showcase guest with pinned
+  provenance; product esbuild has one registry-attested
+  `esbuild-wasm@0.28.0` authority. The cutover must remove the checked-in blob,
+  fetch script, bindings, transform export, and preview1 alias/overlay.
+- **ADR-0311 decides removal of the public host-supplied esbuild WASM URL.**
+  The builtin registry recipe owns acquisition and attestation; hosts continue
+  resolving Worker, service-worker, and unrelated WASM deployment assets.
 - **ADR-0049 — WASI `cwd` option + `AT_FDCWD`/directory-open semantics (promotes Q-2026-05-27-003).** Running esbuild through `runWasi` forced the preopen/cwd API: `WasiOptions.cwd?: string` (Option A), `AT_FDCWD` resolution, directory-open in `path_open`, `fd_readdir` → `E_NOTDIR` on a file fd, and a wired stdin reader. Public-API change in `@riftydev/runtime-wasi`.
-- **ADR-0044 — esbuild ships gojs; substitute swc for M8/M10; defer Go-runtime bridge.** Planning correction: all published `esbuild-wasm` builds (0.21.5 / 0.25.0 / 0.28.0) import Go's `js/wasm` (`gojs`) ABI, not `wasi_snapshot_preview1`, so `@riftydev/runtime-wasi` cannot host them. swc takes esbuild's place as the M8 vendoring target and the M10 Vite shadow-binding target. Q-2026-05-27-003 (preopens/cwd API) keeps its A/B/C options but its forcing consumer is now swc; status stays Active. PROJECT_PLAN.md, TASKS.md, and OPEN_QUESTIONS.md updated; the Go-runtime bridge work is parked in TASKS.md Follow-ups. _(D1/D2 reversed by ADR-0047; D3/D4 stand.)_
 
 ### Added
 
