@@ -5,7 +5,7 @@ title: Honest shadow substitutions at scale — builtin package-generic registry
 created: 2026-07-23
 value: Real projects that depend on native-backed packages (esbuild directly or through Vite, sass-embedded) install and run faithfully in the browser through one builtin, parity-proven substitution registry
 user_story: As a browser-IDE user, I want npm install of a project using esbuild or sass-embedded to just work — direct require, through Vite, offline on reopen — but today each native binding stops the project or costs a re-acquisition
-items: [playground/vite-temp-install-claim-churn, playground/workbench-package-extraction, npm-client/shadow-registry-core, npm-client/package-tree-authority, playground/esbuild-vite-cutover, npm-client/sass-embedded-substitution, playground/shadow-series-measured-cleanup]
+items: [playground/vite-temp-install-claim-churn, playground/workbench-package-extraction, npm-client/sass-embedded-substitution, playground/shadow-series-measured-cleanup]
 tier: production
 sources: [ADR-0307, ADR-0308, ADR-0309, ADR-0310, PR-160]
 ---
@@ -61,16 +61,6 @@ Contract+RED → Final+GREEN):
    mechanical subtraction from the #160 quarry (renames, sealed entrypoints,
    installer per-edge replay + direct-slot reservation); hard cut line, nothing
    touching trust/epoch/shadow. May proceed in parallel with the decision PR.
-3. `npm-client/shadow-registry-core` — **registry-core**: recipe schema with
-   optional runtime binding, strict ingress codec, manager/store/ready-only
-   port, frozen manager↔authority boundary contract.
-4. `npm-client/package-tree-authority` — **package-tree-authority**: one owner
-   per ADR-0309 (FIFO + commit protocol, no tree-epoch surveillance) behind the
-   frozen boundary; reliability deletion/collapse pass rides here.
-5. `playground/esbuild-vite-cutover` — **esbuild-vite-cutover**: real adapter
-   dispatch, direct esbuild proof, Vite concrete edge, host-asset and alias
-   retirement; absorbs `npm-client/esbuild-substitution-strategy-reconciliation`
-   (the three overlapping esbuild paths collapse here).
 6. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
    generic-file no-change gate. Required for epic closure, not optional.
@@ -103,9 +93,6 @@ budget = stop and surface:
 |---|---|
 | oracle-slice | 300–1000 |
 | workbench-extraction | 2000–4000 |
-| registry-core | 2000–4000 |
-| package-tree-authority | 2000–4000 |
-| esbuild-vite-cutover | 2000–4000 |
 | sass-scale-proof | 1000–3000 |
 | measured-cleanup | 1000–3000 |
 

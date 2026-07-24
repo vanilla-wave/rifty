@@ -1,22 +1,27 @@
 #!/usr/bin/env node
 /**
  * Budget tripwire (docs/backlog/README.md §Budget). An epic's `## Budget`
- * declares named slices with hand-written diff bands; a source PR names its
- * slice (`Budget-Slice: <epic-slug>/<slice>` in the PR body, or
- * RIFTY_BUDGET_SLICE locally); this check counts hand-written insertions
- * (numstat with rename detection, minus the epic's declared generated globs)
- * against the band: > band warns, > 2× band fails (stop-and-recut). If the
- * budget pins `new coordination mechanisms: 0`, ADDED source files matching
- * mechanism-class markers (fault-classes.md §Class-kill) fail unless the
- * budget names a substrate item. No declared slice = nothing to enforce
- * (review's Budget axis owns undeclared epic work).
+ * declares named slices with hand-written diff bands; a source PR names one
+ * slice (`Budget-Slice`) or an explicitly requester-approved same-epic group
+ * (`Budget-Slices` + `Budget-Reason`; task-scoped RIFTY_* equivalents locally).
+ * Slice contracts are read at pickup (the diff base), so delete-on-done closure
+ * in HEAD cannot erase validation authority. This check counts hand-written
+ * insertions (numstat with rename detection, minus declared generated globs)
+ * against the original band or their sum: > band warns, > 2× band fails
+ * (stop-and-recut). If the budget pins `new coordination mechanisms: 0`, ADDED
+ * production source files carrying mechanism-class identifiers
+ * (fault-classes.md §Class-kill) fail unless the budget names a substrate item.
+ * No declared slice = nothing to enforce (review's Budget axis owns undeclared
+ * epic work).
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import * as ts from 'typescript';
 
 const SOURCE_RE = /^(?:apps|packages|services)\/.+\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
 const MECHANISM_RE = /\b(epoch|generation|fifo|ledger|lease|seenRequest\w*|opId)\b/i;
+const TEST_SOURCE_RE = /(?:^|\/)(?:__tests__|tests?|fixtures)(?:\/|$)|\.(?:test|spec)\.[^.]+$/u;
 
 /** `a/{b => c}/d` and `a => b` numstat paths resolve to the new path. */
 export function newPath(path) {
@@ -89,33 +94,112 @@ export function evaluateMass(numstat, band, generated) {
 }
 
 /**
- * @param {{path:string, content:string}[]} addedFiles  ADDED source files
- * @returns {string[]} mechanism-marker hits `path (marker)`
+ * @param {{path:string, content:string}[]} addedFiles  ADDED production source files
+ * @returns {string[]} mechanism-identifier hits `path (marker)`
  */
 export function scanMechanisms(addedFiles) {
   const hits = [];
   for (const file of addedFiles) {
-    if (!SOURCE_RE.test(file.path)) continue;
-    const m = MECHANISM_RE.exec(file.content ?? '');
-    if (m) hits.push(`${file.path} (${m[1]})`);
+    if (!SOURCE_RE.test(file.path) || TEST_SOURCE_RE.test(file.path)) continue;
+    const source = ts.createSourceFile(
+      file.path,
+      file.content ?? '',
+      ts.ScriptTarget.Latest,
+      false,
+      file.path.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    );
+    let marker = null;
+    const visit = (node) => {
+      if (marker !== null) return;
+      if (ts.isIdentifier(node)) marker = MECHANISM_RE.exec(node.text)?.[1] ?? null;
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    if (marker !== null) hits.push(`${file.path} (${marker})`);
   }
   return hits;
 }
 
-/** `Budget-Slice: <epic>/<slice>` from env or the GitHub event PR body. */
-export function declaredSlice(env, readEvent) {
-  if (env.RIFTY_BUDGET_SLICE) return env.RIFTY_BUDGET_SLICE.trim();
-  if (env.GITHUB_EVENT_PATH) {
-    try {
-      const event = JSON.parse(readEvent(env.GITHUB_EVENT_PATH));
-      const body = event?.pull_request?.body ?? '';
-      const m = /^Budget-Slice:\s*([\w./-]+)\s*$/m.exec(body);
-      if (m) return m[1];
-    } catch {
-      /* no event or malformed — fall through to undeclared */
+/** Sum existing slice bands for one explicitly combined implementation run. */
+export function combinedBand(slices, selected) {
+  return selected.reduce(
+    (total, name) => {
+      const band = slices.get(name);
+      if (!band) throw new Error(`unknown Budget slice "${name}"`);
+      return { lo: total.lo + band.lo, hi: total.hi + band.hi };
+    },
+    { lo: 0, hi: 0 },
+  );
+}
+
+function sliceItemEntries(epicText) {
+  return [...epicText.matchAll(/^\d+\.\s+`([^`]+)`\s+—\s+\*\*([^*]+)\*\*/gmu)].map((match) => ({
+    item: match[1],
+    slice: match[2],
+  }));
+}
+
+/** Every selected Budget row must map once to a ready item at pickup. */
+export function validateSelectedSliceItems(epicText, selected, read) {
+  const entries = sliceItemEntries(epicText);
+  const violations = [];
+  for (const slice of selected) {
+    const matches = entries.filter((entry) => entry.slice === slice);
+    if (matches.length !== 1) {
+      violations.push(
+        matches.length === 0
+          ? `Budget slice "${slice}" has no Items mapping`
+          : `Budget slice "${slice}" has ${matches.length} Items mappings`,
+      );
+      continue;
+    }
+    const path = `docs/backlog/${matches[0].item}.md`;
+    const text = read(path);
+    if (text === null) {
+      violations.push(`${path} does not exist`);
+    } else if (!/^---[\s\S]*?^status:\s*ready\s*$/mu.test(text)) {
+      violations.push(`${path} is not ready`);
     }
   }
-  return null;
+  return violations;
+}
+
+function parseList(value) {
+  return value
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/** Full single/combined Budget declaration from env or GitHub PR body. */
+export function declaredRun(env, readEvent) {
+  if (env.RIFTY_BUDGET_SLICES || env.RIFTY_BUDGET_SLICE) {
+    return {
+      slices: parseList(env.RIFTY_BUDGET_SLICES ?? env.RIFTY_BUDGET_SLICE),
+      reason: env.RIFTY_BUDGET_REASON?.trim() || null,
+    };
+  }
+  if (!env.GITHUB_EVENT_PATH) return null;
+  try {
+    const event = JSON.parse(readEvent(env.GITHUB_EVENT_PATH));
+    const body = event?.pull_request?.body ?? '';
+    const multiple = /^Budget-Slices:\s*(.+)\s*$/mu.exec(body)?.[1];
+    const single = /^Budget-Slice:\s*([\w./-]+)\s*$/mu.exec(body)?.[1];
+    const slices = multiple ? parseList(multiple) : single ? [single] : [];
+    if (slices.length === 0) return null;
+    return {
+      slices,
+      reason: /^Budget-Reason:\s*(.+)\s*$/mu.exec(body)?.[1]?.trim() || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Backward-compatible single-slice view. */
+export function declaredSlice(env, readEvent) {
+  const run = declaredRun(env, readEvent);
+  return run?.slices.length === 1 ? run.slices[0] : null;
 }
 
 function git(...args) {
@@ -123,35 +207,72 @@ function git(...args) {
 }
 
 function main() {
-  const declaration = declaredSlice(process.env, (p) => readFileSync(p, 'utf8'));
+  const declaration = declaredRun(process.env, (p) => readFileSync(p, 'utf8'));
   if (!declaration) {
     console.log('budget: OK — no Budget-Slice declared');
     return;
   }
-  const m = /^([\w-]+)\/(.+)$/.exec(declaration);
-  if (!m) {
-    console.error(`budget: ✗ malformed declaration "${declaration}" (want <epic-slug>/<slice>)`);
+  if (declaration.slices.length === 0) {
+    console.error('budget: ✗ empty Budget-Slices declaration');
     process.exit(1);
   }
-  const [, epicSlug, slice] = m;
-  let epicText;
-  try {
-    epicText = readFileSync(`docs/backlog/epics/${epicSlug}.md`, 'utf8');
-  } catch {
-    console.error(`budget: ✗ declared epic docs/backlog/epics/${epicSlug}.md not found`);
+  if (new Set(declaration.slices).size !== declaration.slices.length) {
+    console.error('budget: ✗ Budget-Slices contains a duplicate declaration');
     process.exit(1);
   }
-  const budget = parseBudget(epicText);
-  if (!budget || !budget.slices.has(slice)) {
-    console.error(`budget: ✗ epic ${epicSlug} declares no Budget slice "${slice}"`);
+  if (declaration.slices.length > 1 && declaration.reason === null) {
+    console.error('budget: ✗ combined slices require a non-empty Budget-Reason');
     process.exit(1);
   }
+  const parsed = declaration.slices.map((value) => {
+    const match = /^([\w-]+)\/(.+)$/.exec(value);
+    if (!match) {
+      console.error(`budget: ✗ malformed declaration "${value}" (want <epic-slug>/<slice>)`);
+      process.exit(1);
+    }
+    return { epic: match[1], slice: match[2] };
+  });
+  const epicSlug = parsed[0].epic;
+  if (parsed.some(({ epic }) => epic !== epicSlug)) {
+    console.error('budget: ✗ one combined run cannot span multiple epics');
+    process.exit(1);
+  }
+  const selected = parsed.map(({ slice }) => slice);
   let base;
   try {
     base = git('merge-base', 'origin/main', 'HEAD').trim();
   } catch {
     console.log('budget: SKIPPED — no origin/main merge-base (shallow clone?)');
     return;
+  }
+  const readAtPickup = (path) => {
+    try {
+      return git('show', `${base}:${path}`);
+    } catch {
+      return null;
+    }
+  };
+  const epicPath = `docs/backlog/epics/${epicSlug}.md`;
+  const epicText = readAtPickup(epicPath);
+  if (epicText === null) {
+    console.error(
+      `budget: ✗ declared epic ${epicPath} did not exist at pickup ${base.slice(0, 12)}`,
+    );
+    process.exit(1);
+  }
+  const budget = parseBudget(epicText);
+  const unknown = selected.find((slice) => !budget?.slices.has(slice));
+  if (!budget || unknown) {
+    console.error(`budget: ✗ epic ${epicSlug} declares no Budget slice "${unknown}"`);
+    process.exit(1);
+  }
+  const itemViolations = validateSelectedSliceItems(epicText, selected, readAtPickup);
+  if (itemViolations.length > 0) {
+    console.error(
+      `budget: ${itemViolations.length} invalid selected item(s) at pickup ${base.slice(0, 12)}:`,
+    );
+    for (const violation of itemViolations) console.error(`  ✗ ${violation}`);
+    process.exit(1);
   }
   const numstat = git('diff', '-M', '--numstat', base)
     .trim()
@@ -161,11 +282,11 @@ function main() {
       const [added, , ...rest] = line.split('\t');
       return { added: added === '-' ? null : Number(added), path: newPath(rest.join('\t')) };
     });
-  const mass = evaluateMass(numstat, budget.slices.get(slice), budget.generated);
+  const mass = evaluateMass(numstat, combinedBand(budget.slices, selected), budget.generated);
   const failures = [];
   if (mass.level === 'fail') failures.push(mass.message);
   else if (mass.level === 'warn') console.warn(`budget: ⚠ ${mass.message}`);
-  if (budget.mechanismsZero && !budget.substrate) {
+  if (budget.mechanismsZero) {
     const addedPaths = git('diff', '--name-status', base)
       .trim()
       .split('\n')
@@ -180,18 +301,18 @@ function main() {
         }
       }),
     );
-    if (hits.length > 0) {
+    if (hits.length > 0 && !budget.substrate) {
       failures.push(
-        `new coordination mechanisms: 0 declared, but added source files carry mechanism-class markers (fault-classes.md §Class-kill): ${hits.join(', ')} — consolidate into an existing owner or name the substrate item in the epic Budget`,
+        `new coordination mechanisms: 0 declared, but added production source files carry mechanism-class identifiers (fault-classes.md §Class-kill): ${hits.join(', ')} — consolidate into an existing owner or name the substrate item in the epic Budget`,
       );
     }
   }
   if (failures.length > 0) {
-    console.error(`budget: ${failures.length} violation(s) for ${declaration}:`);
+    console.error(`budget: ${failures.length} violation(s) for ${declaration.slices.join(', ')}:`);
     for (const f of failures) console.error(`  ✗ ${f}`);
     process.exit(1);
   }
-  console.log(`budget: OK (${declaration}: ${mass.message})`);
+  console.log(`budget: OK (${declaration.slices.join(', ')}: ${mass.message})`);
 }
 
 if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -52,6 +52,20 @@ A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User
 - review rounds per item: ≤ 2 (§Review convergence)
 - per-item diff estimate (rough band from comparable landed items) — 2× over = anomaly, pause
 
+Default declaration is one `Budget-Slice: <epic>/<slice>` per PR. A requester
+may explicitly require several ready slices from the SAME epic in one PR:
+declare comma-separated `Budget-Slices` and a non-empty `Budget-Reason`. Every
+selected Budget row must map exactly once to an existing `ready` item at pickup
+(the `origin/main` merge-base); closure still deletes the item in HEAD. The
+check reads mapping and band from that immutable pickup commit, then sums the
+original bands; it does not widen them.
+
+Deleting an epic child permits only the corresponding mechanical bookkeeping
+subtraction in that same epic: its `items:` token, complete `## Items` entry,
+and Budget row, plus that closed key alone in a dependent item's `blocked_by:`.
+`check:contract-drift` compares those exact subtractions; any wording, status,
+acceptance, addition, or unrelated ready-contract edit still fails.
+
 ## Tier
 
 `tier: works|robust|production` on an epic declares how complete the capability is REQUIRED to be; items inherit it (no per-item tier). Composes with `docs/process/fault-classes.md` §Boundary failure models: tier × boundary = the fault rows in scope. The no-silent-lie bar has no tier — it holds everywhere.
