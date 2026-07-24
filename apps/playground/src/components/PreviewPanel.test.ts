@@ -19,14 +19,12 @@ const TWO_PORTS: PreviewPanelEntry[] = [
   },
   { port: 3000, url: '/preview/3000/', label: 'node :3000' },
 ];
-const WITH_PROD_PREVIEW: PreviewPanelEntry[] = [
-  ...TWO_PORTS,
-  {
-    port: 4173,
-    url: '/preview/4173/',
-    label: 'vite preview',
-  },
-];
+const PROD_PREVIEW: PreviewPanelEntry = {
+  port: 4173,
+  url: '/preview/4173/',
+  label: 'vite preview',
+};
+const WITH_PROD_PREVIEW: PreviewPanelEntry[] = [...TWO_PORTS, PROD_PREVIEW];
 
 describe('PreviewPanel refresh contract', () => {
   it('does not accept a parent snapshot refresh key', () => {
@@ -117,7 +115,7 @@ describe('PreviewPanel port switcher (ADR-0155)', () => {
   });
 });
 
-describe('reconcileSelectedPort (auto-select newly appended)', () => {
+describe('reconcileSelectedPort (auto-select newly published)', () => {
   const known = (ports: readonly number[]): ReadonlySet<number> => new Set(ports);
 
   it('keeps the current selection when it is still live and nothing new appeared', () => {
@@ -130,6 +128,12 @@ describe('reconcileSelectedPort (auto-select newly appended)', () => {
     expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 5174, known([5174, 3000]))).toBe(4173);
     // …and a freshly started node/bin server auto-selects the same way.
     expect(reconcileSelectedPort(TWO_PORTS, 5174, known([5174]))).toBe(3000);
+  });
+
+  it('selects a newly inserted server regardless of registry source ordering', () => {
+    const sourceOrdered = [PROD_PREVIEW, TWO_PORTS[0]!];
+
+    expect(reconcileSelectedPort(sourceOrdered, 5174, known([5174]))).toBe(4173);
   });
 
   it('does not re-snap to an already-known last entry', () => {

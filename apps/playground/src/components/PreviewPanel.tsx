@@ -51,7 +51,7 @@ type Phase = 'starting' | 'live' | 'error' | 'unreachable';
 
 // Which port the switcher should show given the live set + current selection
 // (ADR-0155). Empty set → keep current until the registry publishes. A port
-// NEWLY appended since the previous reconcile auto-selects (the user just
+// NEWLY published since the previous reconcile auto-selects (the user just
 // started that server — `vite preview`, webpack, a node server alike; replaces
 // the old `source === 'preview'` special case, backlog:
 // playground/generic-dev-server-lifecycle). Else current-if-live, else last.
@@ -62,7 +62,10 @@ export function reconcileSelectedPort(
 ): number {
   const last = entries.at(-1);
   if (!last) return current;
-  if (knownPorts && !knownPorts.has(last.port)) return last.port;
+  const latestNew = knownPorts
+    ? entries.findLast((entry) => !knownPorts.has(entry.port))
+    : undefined;
+  if (latestNew) return latestNew.port;
   if (entries.some((e) => e.port === current)) return current;
   return last.port;
 }
@@ -88,7 +91,7 @@ export function PreviewPanel(props: {
   const previewUrl = (): string | undefined => selectedEntry()?.url;
   const frameKey = createMemo(() => ({ epoch: frameEpoch() }));
 
-  // Keep the selected port valid against the live set: a NEWLY appended server
+  // Keep the selected port valid against the live set: a NEWLY published server
   // auto-selects, a removed selection falls back to the last entry. The warm-up
   // effect + iframe stay keyed off `port()`, so the switch flows through
   // unchanged. `knownPorts` = the set seen by the previous reconcile.

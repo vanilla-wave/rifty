@@ -61,6 +61,9 @@
 
 ### Fixed (finite Node Workbench review)
 
+- Auto-select a newly published preview even when registry source ordering
+  inserts it before an already-running server.
+
 - Persistence health now reports only owner-completed flush failures; transport
   rejection and observation timeout keep their exact provenance instead of
   masquerading as storage loss.
