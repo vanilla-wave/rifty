@@ -22,8 +22,9 @@
 - Shadow CAS readiness now distinguishes persisted OPFS, best-effort OPFS, and
   memory sessions, durability-flushes mirror writes, reads back through the
   actual persisted VFS, and refuses receipts/pointers after quota, torn-write,
-  lifecycle-abort, or port-death faults. Port reads revalidate authoritative
-  CAS bytes and loud-reject a backing-store removal without reacquisition.
+  lifecycle-abort, or port-death faults. Each CAS object is SHA-verified once
+  when loaded, then port reads copy the retained verified bytes without another
+  storage read or hash; a cold reopen still validates persisted bytes.
 
 - `serializePackageJson()` provides one canonical byte spelling for finite
   plain-data manifests shared by host plans, Workbench definitions, and snapshot

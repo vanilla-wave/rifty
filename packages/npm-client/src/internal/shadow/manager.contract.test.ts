@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { canonicalShadowJson } from '@riftydev/shadow-registry/internal';
+import { canonicalShadowJson, shadowSha256 } from '@riftydev/shadow-registry/internal';
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -305,18 +305,13 @@ describe('shadow asset manager contract', () => {
     expect(observedAbort).toBe(true);
   });
 
-  it('rejects a read when the backing store is cleared mid-read without reacquisition', async () => {
+  it('serves retained verified bytes without rereading or reacquiring the backing object', async () => {
     const base = createMemoryShadowAssetStorage();
-    const readEntered = deferred<void>();
-    const releaseRead = deferred<void>();
-    let stallObjectRead = false;
+    let objectReads = 0;
     const storage: ShadowAssetStorage = {
       storageClass: base.storageClass,
       async read(entry) {
-        if (stallObjectRead && entry.kind === 'object') {
-          readEntered.resolve();
-          await releaseRead.promise;
-        }
+        if (entry.kind === 'object') objectReads += 1;
         return await base.read(entry);
       },
       write: (entry, bytes) => base.write(entry, bytes),
@@ -334,37 +329,21 @@ describe('shadow asset manager contract', () => {
       },
     });
     const ready = await manager.ensure(plan);
+    const readsAfterEnsure = objectReads;
+    await base.remove({ kind: 'object', sha256: plan.assets[0]!.memberSha256 });
+    await base.remove({ kind: 'receipt', sha256: ready.receipt.receiptSha256 });
+    await base.remove({ kind: 'ready', requiredSetDigest: plan.requiredSetDigest });
+
     const channel = new MessageChannel();
     const server = manager.serve(ready, channel.port1);
     const client = createShadowAssetPortClient(channel.port2, { deadlineMs: 1_000 });
     await client.ready;
-    stallObjectRead = true;
-    const read = client.read(plan.assets[0]!.id);
-    const boundary = await Promise.race([
-      readEntered.promise.then(() => 'store-read' as const),
-      read.then(
-        () => 'completed-from-cache' as const,
-        () => 'rejected-before-store' as const,
-      ),
-    ]);
-    if (boundary !== 'store-read') {
-      client.dispose();
-      server.dispose();
-      await manager.close();
-      expect(boundary).toBe('store-read');
-      return;
-    }
 
-    await base.remove({ kind: 'object', sha256: plan.assets[0]!.memberSha256 });
-    await base.remove({ kind: 'receipt', sha256: ready.receipt.receiptSha256 });
-    await base.remove({ kind: 'ready', requiredSetDigest: plan.requiredSetDigest });
-    releaseRead.resolve();
-
-    await expect(read).rejects.toMatchObject({
-      code: 'ESHADOWASSETPORT',
-      message: expect.stringContaining('asset store cleared during read'),
-      retryable: true,
-    });
+    const first = await client.read(plan.assets[0]!.id);
+    const second = await client.read(plan.assets[0]!.id);
+    expect(shadowSha256(first)).toBe(plan.assets[0]!.memberSha256);
+    expect(shadowSha256(second)).toBe(plan.assets[0]!.memberSha256);
+    expect(objectReads).toBe(readsAfterEnsure);
     expect(acquisitions).toBe(1);
     client.dispose();
     server.dispose();

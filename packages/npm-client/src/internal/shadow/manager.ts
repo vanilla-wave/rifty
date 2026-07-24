@@ -311,6 +311,7 @@ export function createOriginExclusiveShadowAssetManager(
 ): OriginExclusiveShadowAssetManager {
   const storage = options.storage;
   const source = options.source;
+  const verified = new Map<string, Uint8Array>();
   const readyOwned = new WeakMap<object, AbortSignal>();
   const active = new Set<Promise<unknown>>();
   let state: 'open' | 'closed' = 'open';
@@ -346,6 +347,8 @@ export function createOriginExclusiveShadowAssetManager(
     asset: Readonly<ShadowRuntimeAsset>,
     lifecycle: AbortSignal,
   ): Promise<Uint8Array | null> => {
+    const retained = verified.get(asset.memberSha256);
+    if (retained) return retained.slice();
     const bytes = await readStorage({ kind: 'object', sha256: asset.memberSha256 }, 'ready');
     if (lifecycle.aborted) {
       throw new ShadowAssetError('ready', 'shadow asset manager closed during read');
@@ -356,6 +359,7 @@ export function createOriginExclusiveShadowAssetManager(
       shadowSha256(bytes) !== asset.memberSha256
     )
       return null;
+    verified.set(asset.memberSha256, bytes.slice());
     return bytes.slice();
   };
   const readReady = async (
@@ -424,6 +428,7 @@ export function createOriginExclusiveShadowAssetManager(
       ) {
         throw new ShadowAssetError('persist', `asset ${asset.id} read-back mismatch`);
       }
+      verified.set(asset.memberSha256, readBack.slice());
     }
     const payload = receiptPayload(plan, storage.storageClass);
     const receiptBytes = encoder.encode(canonicalShadowJson(payload));
@@ -499,6 +504,7 @@ export function createOriginExclusiveShadowAssetManager(
           new ShadowAssetError('close', 'shadow asset acquisition cancelled by close'),
         );
         await Promise.allSettled([...active]);
+        verified.clear();
         await storage.close();
       });
       return closePromise;
