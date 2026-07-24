@@ -1,5 +1,6 @@
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
+import sha256FixedVectors from '../../../../tools/shadow-registry/src/internal/sha256-fixed-vectors.json';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import {
@@ -202,12 +203,14 @@ describe('install stamp (ADR-0135)', () => {
 
   it('sha256Hex matches the fixed vector and crypto.subtle on random bytes', async () => {
     const { sha256Hex } = await import('./install-stamp.ts');
-    expect(sha256Hex('abc')).toBe(
-      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
-    );
-    expect(sha256Hex(new Uint8Array(0))).toBe(
-      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    );
+    for (const vector of sha256FixedVectors) {
+      expect(
+        sha256Hex(
+          Uint8Array.from(vector.hex.match(/../g) ?? [], (byte) => Number.parseInt(byte, 16)),
+        ),
+        vector.name,
+      ).toBe(vector.sha256);
+    }
     const bytes = new Uint8Array(257).map((_, i) => (i * 31) % 256);
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     const expected = Array.from(new Uint8Array(digest), (b) =>
@@ -309,7 +312,7 @@ describe('install stamp (ADR-0135)', () => {
       JSON.stringify({
         name: 'app',
         dependencies: { vite: '^5.4.0' },
-        overrides: { esbuild: '@esbuild/wasi-preview1@0.28.0' },
+        overrides: { picocolors: '1.1.1' },
       }),
       JSON.stringify({ name: 'app', devDependencies: { vite: '^5.4.0' } }),
       '{ "name": "app", "dependencies": { "vite": "^5.4.0" } }',

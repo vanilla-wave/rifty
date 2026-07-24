@@ -29,9 +29,10 @@ import type { ParityCase } from '../../src/types.ts';
  *     opencode uses `satisfies` widely (e.g. `core/src/process.ts`,
  *     `core/src/git.ts`, several migrations).
  *
- * On the rifty side this runs through `createModuleLoader` with the REAL vendored
- * esbuild WASI transform hook (`buildTsTransform` in `run-in-rifty.ts`) — the
- * same edge the headless opencode harness uses. Both sides print `43`
+ * On the rifty side this runs through `createModuleLoader` with exact workspace
+ * esbuild injected by the Node-only parity harness (`buildTsTransform` in
+ * `run-in-rifty.ts`). Product activation is proved separately in Chromium.
+ * Both sides print `43`
  * (base.n=40 + box.n=2 + Priority.High=1) only if every construct erased/lowered
  * correctly AND `b.ts` fully evaluated before `a.ts` read its bindings.
  *

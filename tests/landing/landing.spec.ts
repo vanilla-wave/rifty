@@ -333,6 +333,26 @@ test('defers the below-fold architecture explorer until it approaches the viewpo
     .toBe(true);
 });
 
+test('renders raw WASI separately from the npm esbuild CLI gap', async ({ page }) => {
+  await page.goto('/#arch');
+  await expect(page.getByRole('button', { name: '01 Schema', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Raw WASI', exact: true }).click();
+  const visibleBoard = page.locator('.exp-board:visible');
+  await expect(visibleBoard.locator('[data-ed-file]')).toHaveText('run-wasi.js');
+  await expect(visibleBoard.locator('[data-ed-code]')).toContainText('createWasiProcess');
+  await expect(visibleBoard.locator('[data-ed-code]')).not.toContainText('esbuild');
+  await expect(visibleBoard.locator('[data-pv-body]')).toContainText('raw WASI guest · exit 0');
+
+  const esbuild = visibleBoard.locator('[data-node="esbuild"]');
+  await expect(esbuild).toHaveAttribute('aria-label', 'esbuild JS API');
+  await esbuild.click();
+  const inspector = visibleBoard.locator('.exp-inspector');
+  await expect(inspector.locator('.exp-ins-role')).toHaveText(
+    "npm esbuild@0.28.0 transform APIs use the registry-attested esbuild-wasm adapter. The esbuild CLI/bin throws NotImplementedError('esbuild.cli').",
+  );
+});
+
 test('keeps secondary explorer labels at WCAG AA text contrast', async ({ page }) => {
   await page.goto('/#arch');
   await expect(page.getByRole('button', { name: '01 Schema', exact: true })).toBeVisible();

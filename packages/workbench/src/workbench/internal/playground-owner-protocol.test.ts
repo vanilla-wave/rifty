@@ -40,7 +40,7 @@ describe('Playground owner protocol', () => {
       config: {
         deployment: {
           workers: { kernel: '/kernel.js', node: '/node.js', devServer: '/dev-server.js' },
-          wasm: { sqlite: '/sqlite.wasm', esbuild: '/esbuild.wasm' },
+          wasm: { sqlite: '/sqlite.wasm' },
           previewProbeTimeoutMs: 1_000,
         },
         packageAcquisition: { registryUrl: '/registry' },

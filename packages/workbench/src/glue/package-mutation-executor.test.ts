@@ -687,7 +687,7 @@ describe('package mutation routing', () => {
     expect(owner.existsSync(installStampPath(target))).toBe(false);
   });
 
-  it('replays an already-applied package commit without demoting a newly trusted tree', async () => {
+  it('rejects an already-applied stale package commit before demoting a newly trusted tree', async () => {
     const { owner, stamps, mutations } = await harness();
     const request = {
       kind: 'write' as const,
@@ -696,16 +696,16 @@ describe('package mutation routing', () => {
       expectedVersion: owner.versionOf(`${ROOT}/package.json`),
       data: enc.encode(PACKAGE_JSON),
     };
-    const first = await applyPackageAwareHostCommit(owner, mutations, ROOT, request);
+    await applyPackageAwareHostCommit(owner, mutations, ROOT, request);
     const claim = await stamps.demote(PROJECT);
     await stamps.promote(
       { ...PROJECT, packageJsonText: PACKAGE_JSON },
       { epoch: claim.epoch, packages: 1 },
     );
 
-    const replay = await applyPackageAwareHostCommit(owner, mutations, ROOT, request);
-
-    expect(replay).toBe(first);
+    await expect(
+      applyPackageAwareHostCommit(owner, mutations, ROOT, request),
+    ).rejects.toBeInstanceOf(VfsVersionConflictError);
     await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
       status: 'trusted',
     });

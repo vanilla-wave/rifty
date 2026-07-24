@@ -37,7 +37,7 @@ const input: WorkbenchOwnerStartInput = Object.freeze({
       node: '/workers/node.js',
       devServer: '/workers/dev-server.js',
     }),
-    wasm: Object.freeze({ sqlite: '/wasm/sqlite.wasm', esbuild: '/wasm/esbuild.wasm' }),
+    wasm: Object.freeze({ sqlite: '/wasm/sqlite.wasm' }),
     previewProbeTimeoutMs: 1_000,
   }),
   packageAcquisition: Object.freeze({ registryUrl: '/npm-registry' }),
@@ -63,6 +63,10 @@ class FakeOwnerWorker extends EventEmitter {
   killedWith: string | null = null;
   receive: ((message: PageToPhysicalOwnerMessage) => void) | null = null;
 
+  constructor(private readonly exitOnKill = true) {
+    super();
+  }
+
   send(message: unknown): boolean {
     const inspected = message as PageToPhysicalOwnerMessage;
     this.sent.push(inspected);
@@ -80,7 +84,7 @@ class FakeOwnerWorker extends EventEmitter {
 
   kill(signal = 'SIGTERM'): boolean {
     this.killedWith = signal;
-    this.emit('exit', null, signal);
+    if (this.exitOnKill) this.emit('exit', null, signal);
     return true;
   }
 }
@@ -1080,11 +1084,6 @@ describe('browser Workbench owner transport', () => {
     worker.emit('message', {
       type: 'workbench:project-vfs',
       projectToken: 'owner-token-a',
-      frame: { type: 'rifty:owner-vfs-commit-released', terminal },
-    });
-    worker.emit('message', {
-      type: 'workbench:project-vfs',
-      projectToken: 'owner-token-a',
       frame: {
         type: 'workbench:project-vfs-state',
         fromTreeRevision: 1,
@@ -1169,7 +1168,7 @@ describe('browser Workbench owner transport', () => {
   });
 
   it('routes impossible VFS commit correlation to fatal invariant health', async () => {
-    const worker = new FakeOwnerWorker();
+    const worker = new FakeOwnerWorker(false);
     const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
     void raw.closed.catch(() => {});
     const health = vi.fn();
@@ -1207,6 +1206,18 @@ describe('browser Workbench owner transport', () => {
       expectedVersion,
     });
     void writing.catch(() => {});
+    const lostWrite = project.files.writeFile('/src/lost.ts', encoder.encode('lost'), {
+      expectedVersion: null,
+    });
+    let lostSettled = false;
+    void lostWrite.then(
+      () => {
+        lostSettled = true;
+      },
+      () => {
+        lostSettled = true;
+      },
+    );
     const commit = sentOf(worker, 'workbench:project-vfs').find(
       (message) => message.frame.type === 'rifty:owner-vfs-commit',
     );
@@ -1222,7 +1233,7 @@ describe('browser Workbench owner transport', () => {
           operationId: commit.frame.request.operationId,
           ownerEpoch: 'foreign-owner',
           treeRevision: 2,
-          versions: [],
+          versions: [{ path: `${root}/src/main.ts`, version: 'file-v2' }],
         },
       },
     });
@@ -1232,6 +1243,11 @@ describe('browser Workbench owner transport', () => {
       summary: 'Workbench protocol invariant failed',
     });
     expect(worker.killedWith).toBe('SIGTERM');
+    await settleMicrotasks();
+    expect(lostSettled).toBe(false);
+    worker.emit('exit', null, 'SIGTERM');
+    await expect(lostWrite).rejects.toBeInstanceOf(ProjectFileOperationError);
+    await expect(raw.closed).rejects.toThrow('foreign-owner');
   });
 
   it('keeps the project token and real files usable after dirty close preflight rejects', async () => {

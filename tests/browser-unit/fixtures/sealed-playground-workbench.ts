@@ -33,7 +33,7 @@ interface HostAssets {
     readonly devServer: string;
     readonly typescript: string;
   };
-  readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+  readonly wasm: { readonly sqlite: string };
 }
 
 interface ActiveFixture {

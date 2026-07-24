@@ -13,8 +13,9 @@
  * — the playground wires the same primitives into a real iframe + editor.
  */
 
+import { transform as transformWithHostEsbuild } from 'esbuild';
 import { afterEach, describe, expect, it } from 'vitest';
-import { startDevServer } from '../../examples/vite-like-dev/src/index.ts';
+import { type TransformModule, startDevServer } from '../../examples/vite-like-dev/src/index.ts';
 import { dispatchToPort } from '../../packages/net/src/registry.ts';
 import { WebSocket } from '../../packages/net/src/ws.ts';
 import {
@@ -27,6 +28,15 @@ afterEach(() => {
 });
 
 const enc = new TextEncoder();
+const hostTransformModule: TransformModule = async ({ source, loader }) =>
+  (
+    await transformWithHostEsbuild(source, {
+      loader,
+      format: 'esm',
+      jsx: loader === 'tsx' || loader === 'jsx' ? 'automatic' : undefined,
+      supported: { decorators: false },
+    })
+  ).code;
 
 function writeFile(path: string, text: string): void {
   const fs = syncMirror();
@@ -79,13 +89,18 @@ describe('examples/vite-like-dev', () => {
     }
   });
 
-  it('transforms TypeScript modules through the default esbuild WASI pipeline', async () => {
+  it('transforms TypeScript modules through an explicit executable boundary', async () => {
     writeFile('/workspace/index.html', '<!doctype html><body></body>');
     writeFile(
       '/workspace/src/main.ts',
       'const n: number = 2 satisfies number;\nexport const v = n;\n',
     );
-    const server = await startDevServer({ root: '/workspace', port: 3013, watchInterval: 5 });
+    const server = await startDevServer({
+      root: '/workspace',
+      port: 3013,
+      watchInterval: 5,
+      transformModule: hostTransformModule,
+    });
     try {
       const resp = await dispatchToPort(3013, new Request('http://x/src/main.ts'));
       expect(resp.status).toBe(200);
@@ -93,6 +108,19 @@ describe('examples/vite-like-dev', () => {
       expect(body).toContain('const n = 2;');
       expect(body).not.toContain(': number');
       expect(body).not.toContain('satisfies');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('fails loudly when a TypeScript request has no transform capability', async () => {
+    writeFile('/workspace/index.html', '<!doctype html><body></body>');
+    writeFile('/workspace/src/main.ts', 'export const value: number = 42;\n');
+    const server = await startDevServer({ root: '/workspace', port: 3019, watchInterval: 5 });
+    try {
+      const response = await dispatchText(3019, '/src/main.ts');
+      expect(response.status).toBe(500);
+      expect(response.body).toContain('Not implemented: vite-like-dev.transformModule');
     } finally {
       await server.close();
     }
@@ -123,7 +151,12 @@ describe('examples/vite-like-dev', () => {
       "import { value } from './dep';\nexport const v = value;\n",
     );
     writeFile('/workspace/src/dep.ts', 'export const value: number = 42;\n');
-    const server = await startDevServer({ root: '/workspace', port: 3015, watchInterval: 5 });
+    const server = await startDevServer({
+      root: '/workspace',
+      port: 3015,
+      watchInterval: 5,
+      transformModule: hostTransformModule,
+    });
     try {
       const r = await dispatchText(3015, '/src/main.ts');
       expect(r.status).toBe(200);
@@ -144,7 +177,12 @@ describe('examples/vite-like-dev', () => {
       "import { value } from './dep?raw#named';\nexport const v = value;\n",
     );
     writeFile('/workspace/src/dep.ts', 'export const value: number = 42;\n');
-    const server = await startDevServer({ root: '/workspace', port: 3016, watchInterval: 5 });
+    const server = await startDevServer({
+      root: '/workspace',
+      port: 3016,
+      watchInterval: 5,
+      transformModule: hostTransformModule,
+    });
     try {
       const r = await dispatchText(3016, '/src/main.ts');
       expect(r.status).toBe(200);
@@ -166,7 +204,12 @@ describe('examples/vite-like-dev', () => {
     );
     writeFile('/workspace/src/aliases/value.ts', 'export const aliasValue: number = 40;\n');
     writeFile('/workspace/src/base.ts', 'export const baseValue: number = 2;\n');
-    const server = await startDevServer({ root: '/workspace', port: 3017, watchInterval: 5 });
+    const server = await startDevServer({
+      root: '/workspace',
+      port: 3017,
+      watchInterval: 5,
+      transformModule: hostTransformModule,
+    });
     try {
       const r = await dispatchText(3017, '/src/main.ts');
       expect(r.status).toBe(200);

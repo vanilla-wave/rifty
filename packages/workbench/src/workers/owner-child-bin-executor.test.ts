@@ -1,3 +1,4 @@
+import { SHADOW_ASSET_PORT_CAPABILITY } from '@riftydev/npm-client/internal';
 import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { describe, expect, it } from 'vitest';
 import type { BinSpawnRequest } from '../glue/bin-executor.ts';
@@ -10,7 +11,6 @@ const NODE_WORKER_RUNTIME_ENV = {
   RIFTY_KERNEL_WORKER_URL: 'blob:kernel-url',
   RIFTY_NODE_ENTRY_WORKER_URL: 'blob:node-entry-url',
   RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
-  RIFTY_ESBUILD_WASM_URL: 'blob:esbuild-wasm',
 };
 const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 
@@ -85,6 +85,27 @@ describe('buildChildSpawnSpec', () => {
     expect(JSON.stringify({ argv: spec.argv, cwd: spec.cwd, env: spec.env })).not.toContain(
       REMOTE_FS_ROOT,
     );
+  });
+
+  it('attaches admitted capabilities to the URL entry before spawn', () => {
+    const capability = new MessageChannel();
+    const req: BinSpawnRequest = {
+      shimPath: '/node_modules/.bin/vite',
+      args: ['build'],
+      env: {},
+      cwd: '/',
+      isTTY: false,
+    };
+
+    const spec = buildChildSpawnSpec(req, 'blob:node-entry-url', NODE_WORKER_RUNTIME_ENV, {
+      [SHADOW_ASSET_PORT_CAPABILITY]: capability.port2,
+    });
+
+    expect(spec.entry.kind).toBe('url');
+    if (spec.entry.kind !== 'url') throw new Error('expected URL worker entry');
+    expect(spec.entry.capabilityPorts?.[SHADOW_ASSET_PORT_CAPABILITY]).toBe(capability.port2);
+    capability.port1.close();
+    capability.port2.close();
   });
 });
 

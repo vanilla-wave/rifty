@@ -6,7 +6,7 @@ import type { ParityCase } from '../../src/types.ts';
  * of any opencode VFS contents (ADR-0052, EXECUTION-LOG P0 closer).
  *
  * A two-file `.ts` graph proves three things at once, head-to-head against
- * Node-with-a-stripper (Node v24 strip-types vs the rifty esbuild WASI hook):
+ * Node-with-a-stripper (tsx vs the rifty loader with injected exact esbuild):
  *
  * 1. **Type-only erasure.** `b.ts` exports an `interface Box` and `a.ts` imports
  *    it as `type Box` and annotates a local with it. Both must vanish entirely
@@ -23,9 +23,10 @@ import type { ParityCase } from '../../src/types.ts';
  *    `43` if `b.ts` fully evaluated before `a.ts` read its bindings, matching
  *    Node's import-graph ordering.
  *
- * On the rifty side this runs through `createModuleLoader` with the REAL
- * vendored esbuild WASI transform hook (`buildTsTransform` in `run-in-rifty.ts`,
- * the same edge the headless opencode harness uses). If F02-T1 (`.ts`/`.tsx`
+ * On the rifty side this runs through `createModuleLoader` with exact workspace
+ * esbuild injected by the Node-only parity harness (`buildTsTransform` in
+ * `run-in-rifty.ts`). Product activation is proved separately in Chromium. If
+ * F02-T1 (`.ts`/`.tsx`
  * resolvable+ESM) or F02-T3 (the pre-acorn strip step) regressed, rifty would
  * either `MODULE_NOT_FOUND` on `./a.ts`/`./b.ts` (no `.ts` extension) or
  * `SYNTAX_ERROR` on the `interface`/`enum` (no strip) — Node prints `43` and the

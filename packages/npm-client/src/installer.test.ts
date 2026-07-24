@@ -91,6 +91,123 @@ async function makePackageTarballWithFiles(
   return await gzip(concat(...chunks, TAR_TRAILER));
 }
 
+describe('install — lifecycle cancellation (ADR-0314)', () => {
+  it('aborts a hung standard registry request with the caller reason before tree writes', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    let markFetchStarted!: () => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    const observedRequest: { signal?: AbortSignal } = {};
+    const registry = new RegistryClient({
+      baseUrl: '/registry',
+      maxRetries: 0,
+      fetch: async (_url, init) => {
+        if (init?.signal instanceof AbortSignal) observedRequest.signal = init.signal;
+        markFetchStarted();
+        return await new Promise<Response>(() => {});
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error('project closed during npm install');
+    const installing = install(
+      'root',
+      '1.0.0',
+      { kleur: '4.1.5' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        signal: controller.signal,
+      },
+    );
+
+    await fetchStarted;
+    controller.abort(reason);
+
+    await expect(installing).rejects.toBe(reason);
+    expect(observedRequest.signal?.aborted).toBe(true);
+    expect(await vfs.exists('/proj/node_modules')).toBe(false);
+    expect(await vfs.exists('/proj/package-lock.json')).toBe(false);
+  });
+
+  it('does not turn an Eddy abort into a standard-registry fallback', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const registry = new FakeRegistry(new Map());
+    const packument = vi.spyOn(registry, 'getPackument');
+    let markFetchStarted!: () => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    vi.stubGlobal('fetch', async () => {
+      markFetchStarted();
+      return await new Promise<Response>(() => {});
+    });
+    const controller = new AbortController();
+    const reason = new Error('project closed during Eddy acquisition');
+    try {
+      const installing = install(
+        'root',
+        '1.0.0',
+        { kleur: '4.1.5' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry,
+          resolverUrl: 'https://resolver.test/bundle',
+          signal: controller.signal,
+        },
+      );
+      await fetchStarted;
+      controller.abort(reason);
+
+      await expect(installing).rejects.toBe(reason);
+      expect(packument).not.toHaveBeenCalled();
+      expect(await vfs.exists('/proj/node_modules')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('aborts a stalled Eddy prefetch wait without trying another Eddy or registry request', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const registry = new FakeRegistry(new Map());
+    const packument = vi.spyOn(registry, 'getPackument');
+    const resolverPrefetch = {
+      take: () => new Promise<Response>(() => {}),
+    };
+    const fetch = vi.fn(async () => new Response('', { status: 500 }));
+    vi.stubGlobal('fetch', fetch);
+    const controller = new AbortController();
+    const reason = new Error('project closed during Eddy prefetch');
+    try {
+      const installing = install(
+        'root',
+        '1.0.0',
+        { kleur: '4.1.5' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry,
+          resolverUrl: 'https://resolver.test/bundle',
+          resolverPrefetch,
+          signal: controller.signal,
+        },
+      );
+      controller.abort(reason);
+
+      await expect(installing).rejects.toBe(reason);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(packument).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('install — package ingress preflight (ADR-0261)', () => {
   it('rejects a tar entry that escapes its package before linking any bytes', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
@@ -569,24 +686,7 @@ describe('install — package.json defaults', () => {
     expect(await vfs.exists('/proj/node_modules/with-prepare/package.json')).toBe(true);
   });
 
-  it('uses the baked esbuild override before the registry lifecycle gate when the request admits 0.28.0', async () => {
-    const db = new Map<string, Map<string, FakeRegistryEntry>>();
-    db.set(
-      'esbuild',
-      new Map([
-        [
-          '0.28.0',
-          await makeEntry('esbuild', '0.28.0', {}, { scripts: { postinstall: 'node install.js' } }),
-        ],
-      ]),
-    );
-    db.set(
-      '@esbuild/wasi-preview1',
-      new Map([
-        ['0.28.0', await makeEntry('@esbuild/wasi-preview1', '0.28.0', {}, { cpu: ['wasm'] })],
-      ]),
-    );
-
+  it('materializes synthetic esbuild before registry lifecycle handling', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     await vfs.writeFile(
@@ -598,46 +698,23 @@ describe('install — package.json defaults', () => {
       }),
     );
 
-    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(new Map()) });
 
-    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual([
-      '@esbuild/wasi-preview1@0.28.0',
-    ]);
-    expect(await vfs.exists('/proj/node_modules/@esbuild/wasi-preview1/package.json')).toBe(true);
-    // ADR-0188: the installer now materializes the `esbuild` import name from
-    // the shadow-registry alias shim (was a playground boot-overlay concern).
+    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual(['esbuild@0.28.0']);
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
     expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.cjs')).toContain(
       '__rifty?.esbuild',
     );
+    expect(result.lockfile.packages['node_modules/esbuild']).toMatchObject({
+      version: '0.28.0',
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+    });
+    expect(result.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
   });
 
-  it('replays a transitive baked-override dep on the fast path without EBROKENLOCK', async () => {
-    // Regression (eddy fast-install, ADR-0182): a shadow-override target
-    // (esbuild → @esbuild/wasi-preview1) is stored in the lockfile under the
-    // TARGET key; the override SOURCE name (`esbuild`, here a transitive dep of
-    // `host`) has no entry of its own. `lockfileSubgraph` drops `esbuild` (no
-    // entry), so `subgraphFreeOfOverrideDivergence` never sees its redirect and
-    // the lockfile fast path is taken — the replay source must ALSO apply the
-    // override, else it looks up bare `esbuild`, misses, and throws
-    // EBROKENLOCK. Exactly the break the live eddy bundle hit on vite → esbuild.
+  it('replays a transitive synthetic esbuild recipe on the lockfile fast path', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { esbuild: '^0.28.0' })]]));
-    db.set(
-      'esbuild',
-      new Map([
-        [
-          '0.28.0',
-          await makeEntry('esbuild', '0.28.0', {}, { scripts: { postinstall: 'node install.js' } }),
-        ],
-      ]),
-    );
-    db.set(
-      '@esbuild/wasi-preview1',
-      new Map([
-        ['0.28.0', await makeEntry('@esbuild/wasi-preview1', '0.28.0', {}, { cpu: ['wasm'] })],
-      ]),
-    );
 
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
@@ -646,18 +723,18 @@ describe('install — package.json defaults', () => {
       JSON.stringify({ name: 'app', version: '1.0.0', dependencies: { host: '1.0.0' } }),
     );
 
-    // First install: live-resolve redirects esbuild → the pinned
-    // @esbuild/wasi-preview1 and writes the lockfile (no node_modules/esbuild).
     const first = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
-    expect(first.lockfile.packages['node_modules/@esbuild/wasi-preview1']?.version).toBe('0.28.0');
-    expect(first.lockfile.packages['node_modules/esbuild']).toBeUndefined();
+    expect(first.lockfile.packages['node_modules/esbuild']).toMatchObject({
+      version: '0.28.0',
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+    });
 
-    // Second install: the lockfile fast path replays. Must NOT throw EBROKENLOCK.
     const second = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
     expect(second.packages.map((p) => `${p.name}@${p.version}`).sort()).toEqual([
-      '@esbuild/wasi-preview1@0.28.0',
+      'esbuild@0.28.0',
       'host@1.0.0',
     ]);
+    expect(second.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
   });
 
   it('re-resolves an override redirect that no longer admits the locked target version', async () => {

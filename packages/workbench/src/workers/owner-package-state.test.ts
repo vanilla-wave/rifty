@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { createNoShadowInstallResultFixture } from './install-result.test-fixture.ts';
 import {
   type FirstMaterializationOwnerPackageConfig,
   type OwnerPackageConfig,
@@ -30,8 +31,8 @@ const config: OwnerPackageConfig['cfg'] = {
   seedFiles: {},
 };
 
-function installResult(): InstallResult {
-  return {
+async function installResult(): Promise<InstallResult> {
+  const result: InstallResult = {
     packages: [{ name: 'user-pkg', version: '1.0.0', dependencies: {}, files: {} }],
     lockfile: {
       name: 'app',
@@ -46,6 +47,7 @@ function installResult(): InstallResult {
       packages: [{ name: 'user-pkg', version: '1.0.0', transport: 'registry' }],
     },
   };
+  return await createNoShadowInstallResultFixture(result);
 }
 
 afterEach(resetSyncMirror);
@@ -88,7 +90,7 @@ async function packageMutationHarness(ownerEpoch: string) {
       );
       await opts.vfs.writeFile(
         `${opts.cwd}/package-lock.json`,
-        `${JSON.stringify({ installInvocation })}\n`,
+        `${JSON.stringify({ lockfileVersion: 3, packages: {}, installInvocation })}\n`,
       );
       return installResult();
     },
@@ -107,8 +109,82 @@ async function packageMutationHarness(ownerEpoch: string) {
     state.createNpmCommand(async () => 0, { recordMutation }),
   );
 
-  return { recordMutation, shell };
+  return { authority, recordMutation, shell, state };
 }
+
+it('admits a deferred first-materialization child only while its package tree stays empty', async () => {
+  const { authority, state } = await packageMutationHarness(
+    'owner-package-empty-tree-admission-test',
+  );
+
+  const reservation = await state.reserveChildAdmission(`${ROOT}/src/missing.cjs`);
+  expect(reservation.snapshot).toMatchObject({
+    root: ROOT,
+    ready: null,
+    capabilityPorts: {},
+  });
+  reservation.commit();
+
+  authority.mkdirSync(`${ROOT}/node_modules/partial`, { recursive: true });
+  await expect(state.reserveChildAdmission(`${ROOT}/src/missing.cjs`)).rejects.toThrow(
+    /readiness is not trusted/,
+  );
+});
+
+it('rejects deferred empty-tree admission after exact package.json bytes drift', async () => {
+  const { authority, state } = await packageMutationHarness(
+    'owner-package-empty-manifest-drift-test',
+  );
+  authority.writeFileSync(
+    `${ROOT}/package.json`,
+    new TextEncoder().encode(`${BASE_PACKAGE_JSON.trimEnd()} `),
+  );
+
+  await expect(state.reserveChildAdmission(`${ROOT}/src/missing.cjs`)).rejects.toThrow(
+    /readiness is not trusted/,
+  );
+});
+
+it('does not fall through a known nested root after production empty proof fails', async () => {
+  const { authority, shell, state } = await packageMutationHarness(
+    'owner-package-known-nested-gap-test',
+  );
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+  const nestedRoot = `${ROOT}/packages/nested`;
+  const nestedPackageJson = '{"name":"nested","private":true}\n';
+  authority.mkdirSync(`${nestedRoot}/node_modules/partial`, { recursive: true });
+  authority.writeFileSync(
+    `${nestedRoot}/package.json`,
+    new TextEncoder().encode(nestedPackageJson),
+  );
+  const nestedConfig: FirstMaterializationOwnerPackageConfig = {
+    cfg: {
+      ...config,
+      root: nestedRoot,
+      entryPath: `${nestedRoot}/src/main.ts`,
+      packageName: 'nested',
+      installDeps: {},
+      packageJson: nestedPackageJson,
+    },
+    templateId: 'nested-empty',
+    slug: 'nested-empty',
+    fromScratch: true,
+    firstMaterialization: { kind: 'install' },
+  };
+  await expect(state.activateAndEnsure(nestedConfig)).resolves.toEqual({
+    kind: 'install',
+    snapshotFailures: [],
+  });
+
+  const unknownSubdirectory = await state.reserveChildAdmission(
+    `${ROOT}/packages/unknown/src/main.ts`,
+  );
+  expect(unknownSubdirectory.snapshot.root).toBe(ROOT);
+  unknownSubdirectory.commit();
+  await expect(state.reserveChildAdmission(`${nestedRoot}/src/main.ts`)).rejects.toThrow(
+    `package tree readiness is not published for ${nestedRoot}`,
+  );
+});
 
 it('classifies first dependency arrival separately from user package manifest/lock edits', async () => {
   const { recordMutation, shell } = await packageMutationHarness(
@@ -312,6 +388,10 @@ it('uses exact session project identity while a full install enters during promo
   const promotionGate = new Promise<void>((resolve) => {
     releasePromotion = resolve;
   });
+  let markPromotionStarted!: () => void;
+  const promotionStarted = new Promise<void>((resolve) => {
+    markPromotionStarted = resolve;
+  });
   let calls = 0;
   let secondSawInstalledTree = false;
   let secondSawExactManifest = false;
@@ -323,7 +403,10 @@ it('uses exact session project identity while a full install enters during promo
     vfs: new SyncMirrorVfs(),
     fsSync: authority,
     installStampClaims,
-    flush: () => promotionGate.then(() => ({ failures: [], total: 0 })),
+    flush: () => {
+      markPromotionStarted();
+      return promotionGate.then(() => ({ failures: [], total: 0 }));
+    },
     nodeWorkerRuntimeEnv: {},
     log: () => {},
     registry: new RegistryClient({
@@ -350,7 +433,10 @@ it('uses exact session project identity while a full install enters during promo
         `${ROOT}/node_modules/user-pkg/keep.js`,
         new TextEncoder().encode('installed'),
       );
-      await opts.vfs.writeFile(`${ROOT}/package-lock.json`, '{}\n');
+      await opts.vfs.writeFile(
+        `${ROOT}/package-lock.json`,
+        '{"lockfileVersion":3,"packages":{}}\n',
+      );
       return installResult();
     },
     resolverUrl: () => undefined,
@@ -363,8 +449,14 @@ it('uses exact session project identity while a full install enters during promo
     state.createNpmCommand(async () => 0),
   );
 
-  expect((await shell.run('npm install user-pkg@1.0.0')).exitCode).toBe(0);
-  expect((await shell.run('npm install')).exitCode).toBe(0);
+  const firstInstall = shell.run('npm install user-pkg@1.0.0');
+  await promotionStarted;
+  const secondInstall = shell.run('npm install');
+  await Promise.resolve();
+  expect(calls).toBe(1);
+  releasePromotion();
+  expect((await firstInstall).exitCode).toBe(0);
+  expect((await secondInstall).exitCode).toBe(0);
 
   expect(calls).toBe(2);
   expect(secondSawInstalledTree).toBe(true);
@@ -391,8 +483,6 @@ it('uses exact session project identity while a full install enters during promo
   expect(calls).toBe(3);
   expect(switchedInstallSawPriorTree).toBe(false);
   expect(switchedInstallSawPriorManifest).toBe(false);
-  releasePromotion();
-  await new Promise((resolve) => setTimeout(resolve, 0));
 });
 
 it('activates and ensures independent real project configs without an initial placeholder', async () => {
@@ -451,7 +541,10 @@ it('activates and ensures independent real project configs without an initial pl
         `${opts.cwd}/node_modules/vite/package.json`,
         new TextEncoder().encode('{}\n'),
       );
-      await opts.vfs.writeFile(`${opts.cwd}/package-lock.json`, '{}\n');
+      await opts.vfs.writeFile(
+        `${opts.cwd}/package-lock.json`,
+        '{"lockfileVersion":3,"packages":{}}\n',
+      );
       return installResult();
     },
     resolverUrl: () => undefined,
@@ -547,7 +640,10 @@ it('fault: binds back-to-back activation manifests to their FIFO registration sl
         `${opts.cwd}/node_modules/vite/package.json`,
         new TextEncoder().encode('{}\n'),
       );
-      await opts.vfs.writeFile(`${opts.cwd}/package-lock.json`, '{}\n');
+      await opts.vfs.writeFile(
+        `${opts.cwd}/package-lock.json`,
+        '{"lockfileVersion":3,"packages":{}}\n',
+      );
       return installResult();
     },
     resolverUrl: () => undefined,

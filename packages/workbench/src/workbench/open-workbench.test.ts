@@ -42,7 +42,7 @@ function validOptions(): WorkbenchOptions {
         devServer: '/assets/dev-server.js',
       },
       serviceWorker: { url: '/service-worker.js', scope: '/' },
-      wasm: { sqlite: '/assets/sqlite.wasm', esbuild: '/assets/esbuild.wasm' },
+      wasm: { sqlite: '/assets/sqlite.wasm' },
       previewProbeTimeoutMs: 50,
     },
     packageAcquisition: {
@@ -361,12 +361,6 @@ const invalidConfigurationCases: readonly {
     expectedPath: /deployment\.wasm\.sqlite/,
   },
   {
-    label: 'esbuild WASM URL',
-    path: ['deployment', 'wasm', 'esbuild'],
-    value: '',
-    expectedPath: /deployment\.wasm\.esbuild/,
-  },
-  {
     label: 'zero preview timeout',
     path: ['deployment', 'previewProbeTimeoutMs'],
     value: 0,
@@ -418,7 +412,6 @@ const malformedUrlCases = [
   ['deployment.serviceWorker.url', ['deployment', 'serviceWorker', 'url']],
   ['deployment.serviceWorker.scope', ['deployment', 'serviceWorker', 'scope']],
   ['deployment.wasm.sqlite', ['deployment', 'wasm', 'sqlite']],
-  ['deployment.wasm.esbuild', ['deployment', 'wasm', 'esbuild']],
   ['packageAcquisition.registryUrl', ['packageAcquisition', 'registryUrl']],
   ['packageAcquisition.eddy.resolverUrl', ['packageAcquisition', 'eddy', 'resolverUrl']],
   ['packageAcquisition.eddy.bundleBaseUrl', ['packageAcquisition', 'eddy', 'bundleBaseUrl']],
@@ -505,18 +498,6 @@ const invalidDestinationCases: readonly {
     options: () =>
       withOption(['deployment', 'wasm', 'sqlite'], 'blob:https://other.invalid/sqlite-wasm'),
     expectedPath: /deployment\.wasm\.sqlite/,
-  },
-  {
-    label: 'credentialed esbuild WASM URL',
-    options: () =>
-      withOption(['deployment', 'wasm', 'esbuild'], 'https://user:secret@host/esbuild.wasm'),
-    expectedPath: /deployment\.wasm\.esbuild/,
-  },
-  {
-    label: 'non-trustworthy HTTP esbuild WASM asset',
-    options: () =>
-      withOption(['deployment', 'wasm', 'esbuild'], 'http://assets.invalid/esbuild.wasm'),
-    expectedPath: /deployment\.wasm\.esbuild/,
   },
   {
     label: 'data registry base',
@@ -672,7 +653,7 @@ describe('openWorkbench configuration and host admission', () => {
           devServer: './dev-server.js',
         },
         serviceWorker: { url: './service-worker.js', scope: '/app/' },
-        wasm: { sqlite: './sqlite.wasm', esbuild: './esbuild.wasm' },
+        wasm: { sqlite: './sqlite.wasm' },
       },
       packageAcquisition: {
         registryUrl: './npm-registry',
@@ -700,7 +681,6 @@ describe('openWorkbench configuration and host admission', () => {
             },
             wasm: {
               sqlite: 'https://workbench.invalid/config/sqlite.wasm',
-              esbuild: 'https://workbench.invalid/config/esbuild.wasm',
             },
           }),
           packageAcquisition: {
@@ -718,7 +698,7 @@ describe('openWorkbench configuration and host admission', () => {
     }
   });
 
-  it('keeps same-origin blob Workers and blob/data WASM assets valid', async () => {
+  it('keeps same-origin blob Workers and blob WASM assets valid', async () => {
     const h = harness();
     const options = validOptions();
     const workbench = await h.open({
@@ -731,7 +711,6 @@ describe('openWorkbench configuration and host admission', () => {
         },
         wasm: {
           sqlite: 'blob:https://workbench.invalid/sqlite-wasm',
-          esbuild: 'data:application/wasm;base64,AGFzbQEAAAA=',
         },
       },
     });

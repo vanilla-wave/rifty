@@ -9,7 +9,11 @@ import {
   restoreDepSnapshot,
   serializeDepSnapshot,
 } from './dep-snapshot.ts';
-import { ensureProjectDependencies } from './project-deps.ts';
+import {
+  type TestEnsureProjectDepsOptions,
+  createTestProjectPackageAcquisitionAuthority,
+} from './project-deps.test-fixture.ts';
+import { ensureProjectDependencies as ensureProjectDependenciesWithAuthority } from './project-deps.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -19,6 +23,20 @@ const PACKAGE_JSON_TEXT = JSON.stringify({
   name: 'app',
   dependencies: { vite: '^5.4.0' },
 });
+const PACKAGE_LOCK_TEXT = '{"lockfileVersion":3,"packages":{}}';
+
+function ensureProjectDependencies(opts: TestEnsureProjectDepsOptions) {
+  const {
+    installStampAuthority: _installStampAuthority,
+    packageAcquisitionAuthority,
+    ...base
+  } = opts;
+  return ensureProjectDependenciesWithAuthority({
+    ...base,
+    packageAcquisitionAuthority:
+      packageAcquisitionAuthority ?? createTestProjectPackageAcquisitionAuthority(opts),
+  });
+}
 
 function installResult(count: number): InstallResult {
   const packages = Array.from({ length: count }, (_, index) => ({
@@ -53,7 +71,7 @@ function write(fs: MemoryFsSync, path: string, bytes: Uint8Array): void {
 function bakedFs(): MemoryFsSync {
   const fs = new MemoryFsSync();
   write(fs, `${ROOT}/package.json`, enc.encode(PACKAGE_JSON_TEXT));
-  write(fs, `${ROOT}/package-lock.json`, enc.encode('{"lockfileVersion":3}'));
+  write(fs, `${ROOT}/package-lock.json`, enc.encode(PACKAGE_LOCK_TEXT));
   write(fs, `${ROOT}/node_modules/vite/package.json`, enc.encode('{"name":"vite"}'));
   write(fs, `${ROOT}/node_modules/vite/bin/vite.js`, enc.encode('#!/usr/bin/env node'));
   // nested copy (nest-on-conflict layout) must survive the round-trip
@@ -93,7 +111,7 @@ describe('dep snapshot (ADR-0135)', () => {
       0, 255, 128, 7,
     ]);
     expect(dec.decode(target.readFileBytesSync(`${ROOT}/package-lock.json`))).toBe(
-      '{"lockfileVersion":3}',
+      PACKAGE_LOCK_TEXT,
     );
     // install-time shim files restored verbatim (ADR-0188)
     expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/rollup/dist/native.js`))).toBe(
@@ -219,7 +237,7 @@ describe('dep snapshot (ADR-0135)', () => {
     ).toBe('{"name":"vite"}');
     expect(target.existsSync(`${projectRoot}/node_modules/a/node_modules/ms/index.js`)).toBe(true);
     expect(dec.decode(target.readFileBytesSync(`${projectRoot}/package-lock.json`))).toBe(
-      '{"lockfileVersion":3}',
+      PACKAGE_LOCK_TEXT,
     );
     // and NOT leaked at the bake root
     expect(target.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(false);
@@ -323,7 +341,7 @@ describe('dep snapshot (ADR-0135)', () => {
         JSON.stringify({
           name: 'app',
           dependencies: { vite: '^5.4.0' },
-          overrides: { esbuild: '@esbuild/wasi-preview1@0.28.0' },
+          overrides: { picocolors: '1.1.1' },
         }),
       ),
     );

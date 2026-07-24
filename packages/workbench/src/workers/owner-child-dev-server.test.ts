@@ -1,12 +1,13 @@
 import { EventEmitter } from 'node:events';
 import type { TerminalResizeSource, TerminalSize } from '@riftydev/shell';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
+import type { ReserveOwnerChildAdmission } from './owner-child-admission.ts';
 import {
   type DevServerChildHandle,
   type DevServerChildSpawnParams,
   buildDevServerChildSpawnSpec,
-  createOwnerChildDevServer,
+  createOwnerChildDevServer as createOwnerChildDevServerWithAdmission,
 } from './owner-child-dev-server.ts';
 
 const nodeServerConfig: NodeServerPackageConfig = {
@@ -35,8 +36,37 @@ const NODE_WORKER_RUNTIME_ENV = {
   kernelWorkerUrl: 'blob:kernel-url',
   nodeEntryWorkerUrl: 'blob:node-entry-url',
   sqliteWasmUrl: 'blob:sqlite-wasm',
-  esbuildWasmUrl: 'blob:esbuild-wasm',
 };
+
+const reserveEmptyAdmission: ReserveOwnerChildAdmission = async () =>
+  Object.freeze({
+    snapshot: Object.freeze({
+      capabilityPorts: Object.freeze({}),
+      dispose() {},
+    }),
+    commit() {},
+    abortBeforeSpawn() {},
+    async abortAfterChildSettlement(_error: unknown, exited: Promise<unknown>) {
+      await exited;
+    },
+  });
+
+function createOwnerChildDevServer(
+  devServerWorkerUrl: string,
+  runtime: typeof NODE_WORKER_RUNTIME_ENV,
+  spawn: NonNullable<Parameters<typeof createOwnerChildDevServerWithAdmission>[3]>,
+) {
+  return createOwnerChildDevServerWithAdmission(
+    devServerWorkerUrl,
+    runtime,
+    reserveEmptyAdmission,
+    spawn,
+  );
+}
+
+async function waitForChildAdmission(): Promise<void> {
+  await Promise.resolve();
+}
 
 describe('buildDevServerChildSpawnSpec', () => {
   it('builds a serve:true remote-fs dev-server child spawn spec', () => {
@@ -55,7 +85,6 @@ describe('buildDevServerChildSpawnSpec', () => {
             kernelWorkerUrl: 'blob:kernel-url',
             nodeEntryWorkerUrl: 'blob:node-entry-url',
             sqliteWasmUrl: 'blob:sqlite-wasm',
-            esbuildWasmUrl: 'blob:esbuild-wasm',
           },
           cfg: nodeServerConfig,
           terminal: {
@@ -88,7 +117,6 @@ describe('buildDevServerChildSpawnSpec', () => {
     expect(spec.env.RIFTY_KERNEL_WORKER_URL).toBeUndefined();
     expect(spec.env.RIFTY_NODE_ENTRY_WORKER_URL).toBeUndefined();
     expect(spec.env.RIFTY_SQLITE_WASM_URL).toBeUndefined();
-    expect(spec.env.RIFTY_ESBUILD_WASM_URL).toBeUndefined();
   });
 
   it('keeps guest cwd and argv public while carrying the private remote root out-of-band', () => {
@@ -148,6 +176,7 @@ describe('buildDevServerChildSpawnSpec', () => {
         },
       },
     });
+    expect(Object.hasOwn(spec.entry, 'capabilityPorts')).toBe(false);
   });
 
   it('forces the WASI path for napi-rs bindings — never native', () => {
@@ -158,6 +187,22 @@ describe('buildDevServerChildSpawnSpec', () => {
       NODE_WORKER_RUNTIME_ENV,
     );
     expect(spec.env.NAPI_RS_FORCE_WASI).toBe('1');
+  });
+
+  it('attaches admitted capabilities to the URL entry before spawn', () => {
+    const capability = new MessageChannel();
+    const spec = buildDevServerChildSpawnSpec(
+      params,
+      'blob:dev-server-url',
+      NODE_WORKER_RUNTIME_ENV,
+      { 'test.shadow-assets/v1': capability.port2 },
+    );
+
+    expect(spec.entry.kind).toBe('url');
+    if (spec.entry.kind !== 'url') throw new Error('expected URL worker entry');
+    expect(spec.entry.capabilityPorts?.['test.shadow-assets/v1']).toBe(capability.port2);
+    capability.port1.close();
+    capability.port2.close();
   });
 });
 
@@ -231,6 +276,38 @@ class MutableTerminalResizeSource implements TerminalResizeSource {
 }
 
 describe('createOwnerChildDevServer', () => {
+  it('reserves the concrete nested entry before spawning a node server', async () => {
+    const fake = new FakeHandle();
+    const reserve = vi.fn<ReserveOwnerChildAdmission>(reserveEmptyAdmission);
+    const driver = createOwnerChildDevServerWithAdmission(
+      'blob:dev-url',
+      NODE_WORKER_RUNTIME_ENV,
+      reserve,
+      () => fake,
+    );
+    const nestedParams: DevServerChildSpawnParams = {
+      ...params,
+      cfg: {
+        ...nodeServerConfig,
+        root: '/',
+        entryPath: '/packages/nested/server.mjs',
+      },
+      remoteFsRoot: '/.rifty/workbench/v1/projects/project-a/tree',
+    };
+    const boot = driver.boot({
+      signal: new AbortController().signal,
+      log: () => {},
+      params: nestedParams,
+      onSnapshotDirty: () => {},
+    });
+    await waitForChildAdmission();
+
+    expect(reserve).toHaveBeenCalledWith('/packages/nested/server.mjs');
+    fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
+    const handle = await boot;
+    await handle.stop();
+  });
+
   it('forwards one TTY context from spawn through live resize and unsubscribes on stop', async () => {
     const fake = new FakeHandle();
     const terminal = new MutableTerminalResizeSource(100, 30);
@@ -253,6 +330,7 @@ describe('createOwnerChildDevServer', () => {
       } as DevServerChildSpawnParams,
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
 
     expect(capturedEnv).toEqual({
       USER_VALUE: 'kept',
@@ -306,6 +384,7 @@ describe('createOwnerChildDevServer', () => {
       params: { ...params, isTTY: true, terminal: firstTerminal } as DevServerChildSpawnParams,
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
     expect(firstTerminal.listenerCount()).toBe(1);
     first.emitExit(1);
     await expect(firstBoot).rejects.toThrow(/exited before listening/i);
@@ -324,6 +403,7 @@ describe('createOwnerChildDevServer', () => {
       params: { ...params, isTTY: true, terminal: secondTerminal } as DevServerChildSpawnParams,
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
     second.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
     const secondHandle = await secondBoot;
     const { failure } = secondHandle;
@@ -355,6 +435,7 @@ describe('createOwnerChildDevServer', () => {
         params: { ...params, isTTY: true, terminal },
         onSnapshotDirty: () => {},
       });
+      await waitForChildAdmission();
       fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
       const handle = await boot;
       const { failure } = handle;
@@ -382,6 +463,7 @@ describe('createOwnerChildDevServer', () => {
       params,
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
     fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
     const handle = await boot;
     const { failure } = handle;
@@ -413,6 +495,7 @@ describe('createOwnerChildDevServer', () => {
       params: { ...params, isTTY: true, terminal: firstTerminal },
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
     expect(first.resizes).toEqual([{ cols: 92, rows: 30 }]);
     expect(firstTerminal.listenerCount()).toBe(1);
 
@@ -440,6 +523,7 @@ describe('createOwnerChildDevServer', () => {
       params: { ...params, isTTY: true, terminal: secondTerminal },
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
     expect(second.resizes).toEqual([]);
     expect(secondTerminal.listenerCount()).toBe(0);
     expect(second.killed).toBe('SIGTERM');
@@ -460,6 +544,7 @@ describe('createOwnerChildDevServer', () => {
       params,
       onSnapshotDirty: () => snapshots.push(1),
     });
+    await waitForChildAdmission();
     fake.emitStdout('installing…\n');
     fake.emitMessage({ type: 'rifty:dev-snapshot' });
     fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
@@ -485,6 +570,7 @@ describe('createOwnerChildDevServer', () => {
       onSnapshotDirty: () => {},
       onPortsChanged: (ports) => changes.push(ports),
     });
+    await waitForChildAdmission();
     // Pre-ready: boot resolution owns the first port — port frames are ignored.
     fake.emitMessage({ type: 'rifty:dev-ports', ports: [5174] });
     fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
@@ -517,6 +603,7 @@ describe('createOwnerChildDevServer', () => {
       onSnapshotDirty: () => {},
       flush,
     });
+    await waitForChildAdmission();
     let settled = false;
     void bootPromise.then(() => {
       settled = true;
@@ -543,6 +630,7 @@ describe('createOwnerChildDevServer', () => {
       onSnapshotDirty: () => {},
       // no flush
     });
+    await waitForChildAdmission();
     fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
     const handle = await bootPromise;
     expect(handle.port).toBe(5174);
@@ -558,6 +646,7 @@ describe('createOwnerChildDevServer', () => {
       params: { ...params, isTTY: true, terminal },
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
     expect(terminal.listenerCount()).toBe(1);
     fake.emitMessage({ type: 'rifty:dev-error', message: 'install failed' });
     await expect(p).rejects.toThrow('install failed');
@@ -576,6 +665,7 @@ describe('createOwnerChildDevServer', () => {
       params,
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
     fake.emitExit(1);
     await expect(p).rejects.toMatchObject({
       message: expect.stringMatching(/exited before listening/),
@@ -593,6 +683,7 @@ describe('createOwnerChildDevServer', () => {
       params,
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
 
     try {
       abort.abort();
@@ -619,6 +710,7 @@ describe('createOwnerChildDevServer', () => {
       params,
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
 
     try {
       expect(fake.killed).toBe('SIGTERM');
@@ -646,6 +738,7 @@ describe('createOwnerChildDevServer', () => {
       params,
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
 
     fake.emitExit(code, signal);
 
@@ -664,6 +757,7 @@ describe('createOwnerChildDevServer', () => {
       params,
       onSnapshotDirty: () => {},
     });
+    await waitForChildAdmission();
     fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
     const handle = await bootPromise;
     fake.emitExit(1); // child crashes AFTER ready

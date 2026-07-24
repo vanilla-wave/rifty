@@ -1,5 +1,10 @@
 import { globalProcessManager } from '@riftydev/kernel';
-import { RegistryClient } from '@riftydev/npm-client';
+import {
+  type InstallOptions,
+  type InstallResult,
+  RegistryClient,
+  install as installPackages,
+} from '@riftydev/npm-client';
 import {
   NODE_ENTRY_BOOTSTRAP_PROTOCOL,
   type NodeEntryBootstrapPayload,
@@ -7,11 +12,14 @@ import {
 import type { VfsMutationGuard } from '@riftydev/vfs';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { InstallFn } from '../glue/npm-shell-command.ts';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { createNoShadowInstallResultFixture } from './install-result.test-fixture.ts';
 import {
   type OwnerPackageConfig,
   type OwnerPackageMutationKind,
+  type OwnerPackageState,
   createOwnerPackageState,
 } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
@@ -27,13 +35,11 @@ const NODE_WORKER_RUNTIME_ENV = Object.freeze({
   RIFTY_KERNEL_WORKER_URL: 'https://example.test/kernel.js',
   RIFTY_NODE_ENTRY_WORKER_URL: NODE_ENTRY_WORKER_URL,
   RIFTY_SQLITE_WASM_URL: 'https://example.test/sqlite.wasm',
-  RIFTY_ESBUILD_WASM_URL: 'https://example.test/esbuild.wasm',
 });
 const NODE_WORKER_RUNTIME_CONFIG = Object.freeze({
   kernelWorkerUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_KERNEL_WORKER_URL,
   nodeEntryWorkerUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_NODE_ENTRY_WORKER_URL,
   sqliteWasmUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_SQLITE_WASM_URL,
-  esbuildWasmUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_ESBUILD_WASM_URL,
 });
 const PACKAGE_JSON = `${JSON.stringify({
   name: 'workbench-project-a',
@@ -105,6 +111,66 @@ const nodeCliPackageConfig: OwnerPackageConfig = {
   fromScratch: true,
 };
 
+function preparedTreeInstall(config: OwnerPackageConfig): InstallFn {
+  return async (
+    arg1: string | InstallOptions,
+    _rootVersion?: string,
+    dependenciesOrOpts?: Record<string, string> | InstallOptions,
+    explicitOpts?: InstallOptions,
+  ): Promise<InstallResult> => {
+    const options: InstallOptions | undefined =
+      typeof arg1 === 'object'
+        ? arg1
+        : (explicitOpts ??
+          (dependenciesOrOpts !== undefined &&
+          'vfs' in dependenciesOrOpts &&
+          typeof dependenciesOrOpts.vfs !== 'string'
+            ? (dependenciesOrOpts as InstallOptions)
+            : undefined));
+    if (options === undefined) throw new Error('test install options missing');
+
+    await options.vfs.mkdir(`${options.cwd}/node_modules`, { recursive: true });
+    if (config.cfg.runtime === 'vite') {
+      await options.vfs.mkdir(`${options.cwd}/node_modules/.bin`, { recursive: true });
+      await options.vfs.writeFile(`${options.cwd}/node_modules/.bin/vite`, '#!/usr/bin/env node\n');
+    }
+    const viteVersion = config.cfg.installDeps.vite;
+    const lockfilePackages: InstallResult['lockfile']['packages'] =
+      viteVersion === undefined
+        ? {}
+        : {
+            'node_modules/vite': { version: viteVersion },
+          };
+    const lockfile = {
+      name: config.cfg.packageName,
+      version: config.cfg.packageVersion,
+      lockfileVersion: 3 as const,
+      requires: true as const,
+      packages: lockfilePackages,
+    };
+    await options.vfs.writeFile(
+      `${options.cwd}/package-lock.json`,
+      `${JSON.stringify(lockfile)}\n`,
+    );
+    const result: InstallResult = {
+      packages:
+        viteVersion === undefined
+          ? []
+          : [{ name: 'vite', version: viteVersion, dependencies: {}, files: {} }],
+      lockfile,
+      conflicts: [],
+      provenance: {
+        resolution: 'metadata',
+        packages:
+          viteVersion === undefined
+            ? []
+            : [{ name: 'vite', version: viteVersion, transport: 'registry' }],
+      },
+    };
+    return await createNoShadowInstallResultFixture(result);
+  };
+}
+
 interface BoundaryWorker {
   readonly handle: ReturnType<typeof globalProcessManager.spawnWorker>;
   readonly command: () => Parameters<typeof globalProcessManager.spawnWorker>[0] | null;
@@ -165,6 +231,7 @@ function boundaryWorker(): BoundaryWorker {
       return writer;
     },
   };
+  const control = new MessageChannel();
   const rawHandle = {
     kind: 'worker' as const,
     pid: 101,
@@ -173,7 +240,7 @@ function boundaryWorker(): BoundaryWorker {
     cwd: ROOT,
     exitCode: null,
     signalCode: null,
-    ports: {},
+    ports: { ipc: control.port1 },
     stdout: () => ({ on: () => undefined }),
     stderr: () => ({ on: () => undefined }),
     stdin: () => writer,
@@ -187,6 +254,8 @@ function boundaryWorker(): BoundaryWorker {
     resize: () => true,
     kill(signal = 'SIGTERM') {
       killedWith = signal;
+      control.port1.close();
+      control.port2.close();
       return true;
     },
     disconnect: () => undefined,
@@ -207,16 +276,27 @@ function boundaryWorker(): BoundaryWorker {
       for (const listener of listeners.get('message') ?? []) listener(message);
     },
     emitExit(code, signal = null) {
+      control.port1.close();
+      control.port2.close();
       for (const listener of listeners.get('exit') ?? []) listener(code, signal);
     },
   };
 }
 
-function harness(
+async function harness(
   onSend?: (frame: OwnerToPageFrame, runtime: () => WorkbenchProjectRuntime) => void,
   activePackageConfig: OwnerPackageConfig = packageConfig,
   publicationBarrier: () => Promise<void> = async () => {},
   recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>,
+  reservationEvidence?: {
+    readonly events: string[];
+    readonly paths?: string[];
+    ready?: unknown;
+  },
+  packageAcquisition?: {
+    readonly registry?: RegistryClient;
+    readonly install?: InstallFn;
+  },
 ) {
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
@@ -250,14 +330,44 @@ function harness(
     flush: () => authority.flush(),
     nodeWorkerRuntimeEnv,
     log: () => {},
-    registry: new RegistryClient({
-      baseUrl: 'https://example.test/registry',
-      fetch: async () => new Response('', { status: 599 }),
-    }),
+    registry:
+      packageAcquisition?.registry ??
+      new RegistryClient({
+        baseUrl: 'https://example.test/registry',
+        fetch: async () => new Response('', { status: 599 }),
+      }),
+    install: packageAcquisition?.install ?? preparedTreeInstall(activePackageConfig),
     resolverUrl: () => undefined,
     resolverBundleBaseUrl: () => undefined,
     resolverPin: () => undefined,
   });
+  await packageState.activateAndEnsure(activePackageConfig);
+  const runtimePackageState: OwnerPackageState =
+    reservationEvidence === undefined
+      ? packageState
+      : {
+          ...packageState,
+          reserveChildAdmission: async (root) => {
+            reservationEvidence.paths?.push(root);
+            const reservation = await packageState.reserveChildAdmission(root);
+            reservationEvidence.ready = reservation.snapshot.ready;
+            const snapshot = reservation.snapshot;
+            return Object.freeze({
+              ...reservation,
+              snapshot: Object.freeze({
+                ...snapshot,
+                dispose() {
+                  reservationEvidence.events.push('dispose');
+                  snapshot.dispose();
+                },
+              }),
+              commit() {
+                reservationEvidence.events.push('commit');
+                reservation.commit();
+              },
+            });
+          },
+        };
   const frames: OwnerToPageFrame[] = [];
   const runtimeRef: { current?: WorkbenchProjectRuntime } = {};
   const mutationGuard: VfsMutationGuard = (intents, apply) =>
@@ -272,7 +382,7 @@ function harness(
     projectRoot: ROOT,
     packageConfig: activePackageConfig,
     authority,
-    packageState,
+    packageState: runtimePackageState,
     nodeEntryWorkerUrl: NODE_ENTRY_WORKER_URL,
     devServerWorkerUrl: DEV_SERVER_WORKER_URL,
     nodeWorkerRuntimeEnv,
@@ -290,7 +400,7 @@ function harness(
   };
   const runtime = createWorkbenchProjectRuntime(runtimeOptions);
   runtimeRef.current = runtime;
-  return { authority, frames, packageState, runtime };
+  return { authority, frames, packageState: runtimePackageState, runtime };
 }
 
 afterEach(() => {
@@ -301,7 +411,7 @@ afterEach(() => {
 describe('Workbench finite Node owner lifecycle Contract+RED', () => {
   it('runs node-server npm dev in its dedicated entry-scoped child with PTY provenance', async () => {
     const worker = boundaryWorker();
-    const h = harness(undefined, nodeServerPackageConfig);
+    const h = await harness(undefined, nodeServerPackageConfig);
     h.runtime.handlePtyFrame({
       type: 'pty:open',
       sid: 'terminal-node-server',
@@ -432,7 +542,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
 
   it('runs node-cli through a supervised node child with exact empty argv and physical exit', async () => {
     const worker = boundaryWorker();
-    const h = harness(undefined, nodeCliPackageConfig);
+    const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({
       type: 'pty:open',
       sid: 'terminal-node-cli',
@@ -510,7 +620,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
       throw new Error('unexpected Node eval child spawn');
     });
-    const h = harness(undefined, nodeCliPackageConfig);
+    const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval' });
 
     await h.runtime.handlePtyFrame({
@@ -545,7 +655,18 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
 describe('Workbench project runtime', () => {
   it('uses project-rooted Shells and actor-minted preview provenance despite forged guest env', async () => {
     const worker = boundaryWorker();
-    const h = harness();
+    const reservationEvidence: {
+      events: string[];
+      paths: string[];
+      ready?: unknown;
+    } = { events: [], paths: [] };
+    const h = await harness(
+      undefined,
+      packageConfig,
+      async () => {},
+      undefined,
+      reservationEvidence,
+    );
     h.runtime.handlePtyFrame({
       type: 'pty:open',
       sid: 'terminal-a',
@@ -611,6 +732,10 @@ describe('Workbench project runtime', () => {
     if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
       throw new Error('expected node-entry URL bootstrap');
     }
+    expect(reservationEvidence.ready).toBeNull();
+    expect(reservationEvidence.paths).toEqual([`${ROOT}/node_modules/.bin/vite`]);
+    expect(Object.hasOwn(entry, 'capabilityPorts')).toBe(false);
+    expect(reservationEvidence.events).toEqual(['commit']);
     const payload = entry.bootstrap.payload as NodeEntryBootstrapPayload;
     if (payload.launch.kind !== 'program') throw new Error('expected program launch');
     expect(payload.launch.previewScope).not.toBe('scope-forged');
@@ -657,13 +782,15 @@ describe('Workbench project runtime', () => {
       error: 'ClosedHandleError: pty server is closing',
     });
     await expect(settledOr(closing, 'pending')).resolves.toBe('pending');
+    expect(reservationEvidence.events).toEqual(['commit']);
     worker.emitExit(null, 'SIGTERM');
     await expect(closing).resolves.toBeUndefined();
     await running;
+    expect(reservationEvidence.events).toEqual(['commit', 'dispose']);
   });
 
   it('exposes one project-rooted terminal namespace without leaking the owner root', async () => {
-    const h = harness();
+    const h = await harness();
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-namespace' });
 
     await h.runtime.handlePtyFrame({
@@ -699,7 +826,7 @@ describe('Workbench project runtime', () => {
   });
 
   it('runs npm lifecycle bodies through a nested real Shell rooted in the project', async () => {
-    const h = harness();
+    const h = await harness();
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-npm' });
 
     await h.runtime.handlePtyFrame({
@@ -732,11 +859,78 @@ describe('Workbench project runtime', () => {
     await h.runtime.close();
   });
 
+  it('selects a nested node_modules npm prefix through the production PTY owner composition', async () => {
+    const installCwds: string[] = [];
+    const baseInstall = preparedTreeInstall(nodeCliPackageConfig);
+    const install: InstallFn = async (arg1, rootVersion, dependenciesOrOpts, explicitOpts) => {
+      const options: InstallOptions | undefined =
+        typeof arg1 === 'object'
+          ? arg1
+          : (explicitOpts ??
+            (dependenciesOrOpts !== undefined &&
+            'vfs' in dependenciesOrOpts &&
+            typeof dependenciesOrOpts.vfs !== 'string'
+              ? (dependenciesOrOpts as InstallOptions)
+              : undefined));
+      if (options === undefined) throw new Error('test install options missing');
+      installCwds.push(options.cwd);
+      const packageJson = JSON.parse(
+        await options.vfs.readFileText(`${options.cwd}/package.json`),
+      ) as {
+        readonly dependencies?: Readonly<Record<string, string>>;
+      };
+      if (packageJson.dependencies?.['user-pkg'] === '1.0.0') {
+        await options.vfs.mkdir(`${options.cwd}/node_modules/user-pkg`, { recursive: true });
+        await options.vfs.writeFile(
+          `${options.cwd}/node_modules/user-pkg/package.json`,
+          '{"name":"user-pkg","version":"1.0.0"}\n',
+        );
+      }
+      return await baseInstall(arg1, rootVersion, dependenciesOrOpts, explicitOpts);
+    };
+    const h = await harness(undefined, nodeCliPackageConfig, async () => {}, undefined, undefined, {
+      install,
+    });
+    const nestedRoot = `${ROOT}/sub`;
+    h.authority.mkdirSync(`${nestedRoot}/deep`, { recursive: true });
+    h.authority.mkdirSync(`${nestedRoot}/node_modules`, { recursive: false });
+    const outerPackageJson = h.authority.readFileBytesSync(`${ROOT}/package.json`);
+    installCwds.length = 0;
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-npm-prefix' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-npm-prefix',
+      rid: 'run-npm-prefix',
+      line: 'cd sub/deep && npm install user-pkg@1.0.0',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    expect(installCwds).toEqual([nestedRoot]);
+    expect(h.authority.readFileBytesSync(`${ROOT}/package.json`)).toEqual(outerPackageJson);
+    expect(
+      JSON.parse(
+        new TextDecoder().decode(h.authority.readFileBytesSync(`${nestedRoot}/package.json`)),
+      ),
+    ).toMatchObject({
+      name: 'rifty-project',
+      dependencies: { 'user-pkg': '1.0.0' },
+    });
+    expect(h.authority.existsSync(`${nestedRoot}/node_modules/user-pkg/package.json`)).toBe(true);
+    expect(h.authority.existsSync(`${ROOT}/node_modules/user-pkg/package.json`)).toBe(false);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-npm-prefix', code: 0 }),
+    );
+    await h.runtime.close();
+  });
+
   it('binds terminal npm commands to owner package-mutation reflection', async () => {
     const recordMutation = vi.fn(
       async (_kind: OwnerPackageMutationKind, _treeRevision: number) => {},
     );
-    const h = harness(undefined, packageConfig, async () => {}, recordMutation);
+    const h = await harness(undefined, packageConfig, async () => {}, recordMutation);
     const createNpmCommand = vi.spyOn(h.packageState, 'createNpmCommand');
 
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-npm-mutations' });
@@ -749,7 +943,9 @@ describe('Workbench project runtime', () => {
   });
 
   it('routes Shell writes through the package guard and reserved-path policy', async () => {
-    const h = harness();
+    const h = await harness();
+    const stampPath = `${ROOT}/node_modules/.rifty-install-stamp.json`;
+    const trustedStamp = h.authority.readFileBytesSync(stampPath);
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-write' });
 
     await h.runtime.handlePtyFrame({
@@ -773,14 +969,14 @@ describe('Workbench project runtime', () => {
     expect(h.frames).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', rid: 'run-write', code: 1 }),
     );
-    expect(h.authority.existsSync(`${ROOT}/node_modules/.rifty-install-stamp.json`)).toBe(false);
+    expect(h.authority.readFileBytesSync(stampPath)).toEqual(trustedStamp);
     expect(h.authority.existsSync(`${ROOT}/should-not-exist.txt`)).toBe(false);
     await h.runtime.close();
   });
 
   it('publishes a real Shell rename before its matching PTY exit', async () => {
     const timeline: string[] = [];
-    const h = harness(
+    const h = await harness(
       (frame) => {
         if (frame.type === 'pty:exit' && frame.rid === 'run-mv') timeline.push('exit');
       },
@@ -815,7 +1011,7 @@ describe('Workbench project runtime', () => {
     const entered = deferred<void>();
     const release = deferred<void>();
     const timeline: string[] = [];
-    const h = harness(
+    const h = await harness(
       (frame) => {
         if (frame.type === 'pty:exit' && frame.rid === 'run-echo') timeline.push('exit');
       },
@@ -858,7 +1054,7 @@ describe('Workbench project runtime', () => {
   });
 
   it('rejects legacy project reconfiguration instead of acknowledging a fake switch', async () => {
-    const h = harness();
+    const h = await harness();
 
     await h.runtime.handlePtyFrame({
       type: 'pty:dev-config',
@@ -877,7 +1073,7 @@ describe('Workbench project runtime', () => {
   });
 
   it('fails close loudly when the final owner durability barrier is unclean', async () => {
-    const h = harness();
+    const h = await harness();
     h.authority.flush = async () => ({
       failures: [{ path: `${ROOT}/package.json`, op: 'write', message: 'quota exceeded' }],
       total: 1,
@@ -893,7 +1089,7 @@ describe('Workbench project runtime', () => {
   });
 
   it('waits for package mutations admitted before close to quiesce', async () => {
-    const h = harness();
+    const h = await harness();
     const entered = deferred<void>();
     const release = deferred<void>();
     const mutation = h.packageState.mutations.guardedMutation(
@@ -913,9 +1109,51 @@ describe('Workbench project runtime', () => {
     await expect(closing).resolves.toBeUndefined();
   });
 
+  it('project close aborts an npm install stalled at the real RegistryClient boundary', async () => {
+    const registryStarted = deferred<void>();
+    const observed: { signal?: AbortSignal } = {};
+    const registry = new RegistryClient({
+      baseUrl: 'https://registry.test',
+      maxRetries: 0,
+      stallTimeoutMs: 60_000,
+      fetch: async (_url, init) => {
+        if (init?.signal instanceof AbortSignal) observed.signal = init.signal;
+        registryStarted.resolve(undefined);
+        return await new Promise<Response>(() => {});
+      },
+    });
+    const realObjectInstall: InstallFn = async (options) => {
+      if (typeof options === 'string') throw new Error('expected object-form install');
+      return await installPackages(options);
+    };
+    const h = await harness(undefined, nodeCliPackageConfig, async () => {}, undefined, undefined, {
+      registry,
+      install: realObjectInstall,
+    });
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-stalled-npm' });
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-stalled-npm',
+        rid: 'run-stalled-npm',
+        line: 'npm install kleur@4.1.5',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    await registryStarted.promise;
+
+    const closing = h.runtime.close();
+
+    await expect(settledOr(closing, 'pending')).resolves.toBeUndefined();
+    await expect(running).resolves.toBeUndefined();
+    expect(observed.signal?.aborted).toBe(true);
+  });
+
   it('shares one close promise with a re-entrant definitive-preview callback', async () => {
     let reentrant: Promise<void> | undefined;
-    const h = harness((frame, runtime) => {
+    const h = await harness((frame, runtime) => {
       if (frame.type === 'pty:preview' && frame.ports.length === 0 && reentrant === undefined) {
         reentrant = runtime().close();
       }
@@ -927,8 +1165,8 @@ describe('Workbench project runtime', () => {
     await expect(closing).resolves.toBeUndefined();
   });
 
-  it('rejects a package config whose root is not the owner-born project root', () => {
-    const h = harness();
+  it('rejects a package config whose root is not the owner-born project root', async () => {
+    const h = await harness();
 
     expect(() =>
       createWorkbenchProjectRuntime({

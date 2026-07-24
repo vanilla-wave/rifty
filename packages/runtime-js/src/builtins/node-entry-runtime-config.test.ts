@@ -68,7 +68,7 @@ describe('node-entry host bootstrap config', () => {
     expect(
       buildNodeEntryWorkerEntry(
         'https://host.test/node.js',
-        { RIFTY_ESBUILD_WASM_URL: 'https://host.test/esbuild.wasm' },
+        { RIFTY_TEST_VALUE: 'host-snapshot' },
         { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
       ),
     ).toMatchObject({
@@ -77,7 +77,7 @@ describe('node-entry host bootstrap config', () => {
       bootstrap: {
         protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
         payload: {
-          hostRuntime: { RIFTY_ESBUILD_WASM_URL: 'https://host.test/esbuild.wasm' },
+          hostRuntime: { RIFTY_TEST_VALUE: 'host-snapshot' },
           launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
         },
       },

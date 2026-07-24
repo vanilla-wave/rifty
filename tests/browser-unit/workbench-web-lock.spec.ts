@@ -34,7 +34,7 @@ async function installWorkbenchHarness(page: Page): Promise<void> {
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     }
 
     const NativeWorker = globalThis.Worker;

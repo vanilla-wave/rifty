@@ -1,3 +1,4 @@
+import { publishRuntimeEsbuild, readRuntimeEsbuild } from '@riftydev/runtime-js';
 import {
   type MemoryFsSync,
   createMemoryFs,
@@ -24,14 +25,12 @@ const CLI_PATH = '/app/node_modules/vite/dist/node/cli.js';
 const CONFIG_PATH = '/app/node_modules/vite/dist/node/chunks/config.js';
 const VITE_PACKAGE_JSON = '/app/node_modules/vite/package.json';
 const VITE_BIN = '/app/node_modules/.bin/vite';
-const ESBUILD_WASM_URL = 'blob:test-esbuild-wasm';
 
 function prepareVite(mode: 'dev' | 'build' | 'preview' | 'optimize' | 'info', bin = VITE_BIN) {
   return prepareViteCli({
     root: '/app',
     mode,
     executedBinPath: bin,
-    esbuildWasmUrl: ESBUILD_WASM_URL,
   });
 }
 /** Mirrors the CAC runMatchedCommand call shape of real vite dist/node/cli.js —
@@ -144,7 +143,6 @@ describe('viteCliPreparationFromArgs — executed entry authority', () => {
         root: '/app',
         args: [],
         executedBinPath: '/app/node_modules/@rolldown/binding-wasm32-wasi/wasi-worker.mjs',
-        esbuildWasmUrl: ESBUILD_WASM_URL,
       }),
     ).toBeNull();
   });
@@ -155,13 +153,11 @@ describe('viteCliPreparationFromArgs — executed entry authority', () => {
         root: '/app',
         args: ['preview'],
         executedBinPath: VITE_BIN,
-        esbuildWasmUrl: ESBUILD_WASM_URL,
       }),
     ).toEqual({
       root: '/app',
       mode: 'preview',
       executedBinPath: VITE_BIN,
-      esbuildWasmUrl: ESBUILD_WASM_URL,
     });
   });
 });
@@ -499,6 +495,30 @@ describe('Vite esbuild runtime startup policy', () => {
     expect(readText(fsSync, hoistedCli)).toContain('__riftyTrackCliPromise');
   });
 
+  it('Vite 7 consumes the already-dispatched exact outer without a host asset fetch', async () => {
+    bootFs({
+      [CLI_PATH]: CAC_CALL_SITE,
+      [VITE_PACKAGE_JSON]: manifest('7.3.6'),
+    });
+    await prepareViteCliAcquisitionFiles('/app');
+    const outer = Object.freeze({ version: '0.28.0' });
+    publishRuntimeEsbuild(outer);
+    const savedFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = () => {
+      fetchCalls += 1;
+      return Promise.reject(new Error('Vite must consume the registry-dispatched runtime'));
+    };
+    try {
+      await prepareVite('build');
+      expect(fetchCalls).toBe(0);
+      expect(readRuntimeEsbuild()).toBe(outer);
+    } finally {
+      globalThis.fetch = savedFetch;
+      clearEsbuildRuntimeSlot();
+    }
+  });
+
   it('skips Vite 8 Rolldown without fetching, compiling, starting, or publishing', async () => {
     const fsSync = bootFs({
       [CLI_PATH]: CAC_CALL_SITE,
@@ -574,8 +594,8 @@ describe('Vite esbuild runtime startup policy', () => {
 // Keep this fault last: ADR-0226 gives a failed startup no retry lifecycle;
 // the real child Worker terminates, while this unit realm stays alive.
 // Browser contract proves dev/build/preview/optimize routing; this faults their shared branch.
-describe('prepareViteCli — mode-independent esbuild startup fault (ADR-0226)', () => {
-  it('startup failure rejects the child and leaves the typed runtime slot absent', async () => {
+describe('prepareViteCli — mode-independent esbuild admission fault (ADR-0308)', () => {
+  it('missing generic dispatch rejects before Vite import and never fetches a host asset', async () => {
     bootFs({
       [CLI_PATH]: CAC_CALL_SITE,
       [VITE_PACKAGE_JSON]: JSON.stringify({ name: 'vite', version: '7.3.6' }),
@@ -584,21 +604,17 @@ describe('prepareViteCli — mode-independent esbuild startup fault (ADR-0226)',
     let fetchCalls = 0;
     globalThis.fetch = () => {
       fetchCalls += 1;
-      return Promise.reject(new Error('contract injected esbuild startup failure'));
+      return Promise.reject(new Error('host asset fetch is forbidden'));
     };
     clearEsbuildRuntimeSlot();
 
     try {
       await prepareViteCliAcquisitionFiles('/app');
-      await expect(prepareVite('build')).rejects.toThrow(
-        'contract injected esbuild startup failure',
-      );
-      expect(fetchCalls).toBe(1);
+      await expect(prepareVite('build')).rejects.toThrow('vite.esbuild.shadowAssets');
+      expect(fetchCalls).toBe(0);
       expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
-      await expect(prepareVite('build')).rejects.toThrow(
-        'contract injected esbuild startup failure',
-      );
-      expect(fetchCalls).toBe(1);
+      await expect(prepareVite('build')).rejects.toThrow('vite.esbuild.shadowAssets');
+      expect(fetchCalls).toBe(0);
     } finally {
       globalThis.fetch = savedFetch;
       clearEsbuildRuntimeSlot();

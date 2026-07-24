@@ -6,7 +6,7 @@ const PKG = JSON.stringify({
   name: 'app',
   dependencies: { vite: '^7.0.0' },
   devDependencies: { typescript: '^5.5.0' },
-  overrides: { esbuild: 'npm:@riftydev/shadow-esbuild@0.21.5' },
+  overrides: { picocolors: '1.1.1' },
 });
 
 function fetchSpy() {

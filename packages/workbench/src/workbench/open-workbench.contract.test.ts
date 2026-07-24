@@ -85,7 +85,7 @@ function validOptions(): WorkbenchOptions {
         devServer: '/assets/dev-server.js',
       },
       serviceWorker: { url: '/service-worker.js', scope: '/' },
-      wasm: { sqlite: '/assets/sqlite.wasm', esbuild: '/assets/esbuild.wasm' },
+      wasm: { sqlite: '/assets/sqlite.wasm' },
       previewProbeTimeoutMs: 50,
     },
     packageAcquisition: {
@@ -110,7 +110,7 @@ function optionsWithDefaults(): WorkbenchOptions {
         devServer: '/assets/dev-server.js',
       },
       serviceWorker: { url: '/service-worker.js', scope: '/' },
-      wasm: { sqlite: '/assets/sqlite.wasm', esbuild: '/assets/esbuild.wasm' },
+      wasm: { sqlite: '/assets/sqlite.wasm' },
     },
     packageAcquisition: {
       registryUrl: '/npm-registry',
@@ -529,7 +529,6 @@ describe('openWorkbench normalized composition', () => {
         },
         wasm: {
           sqlite: 'https://workbench.invalid/assets/sqlite.wasm',
-          esbuild: 'https://workbench.invalid/assets/esbuild.wasm',
         },
         previewProbeTimeoutMs: 3_000,
       },

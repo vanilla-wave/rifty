@@ -25,9 +25,10 @@ import {
   writeLearnedPin,
 } from '../../packages/workbench/src/glue/eddy-learned-pins.ts';
 import { installArtifactIdentity } from '../../packages/workbench/src/glue/install-artifact-identity.ts';
+import { createTestNpmPackageAcquisitionAuthority } from '../../packages/workbench/src/glue/npm-shell-command.test-fixture.ts';
 import {
-  createNpmPackageAcquisitionAuthority,
-  createNpmShellCommand,
+  type NpmShellCommandDeps,
+  createNpmShellCommand as createProductionNpmShellCommand,
 } from '../../packages/workbench/src/glue/npm-shell-command.ts';
 import { PackageAcquisitionError } from '../../packages/workbench/src/workers/package-acquisition-authority.ts';
 import { type EddyServer, createEddyServer, resolveBundle } from '../../services/eddy/src/index.ts';
@@ -59,6 +60,15 @@ async function runShell(shell: Shell, line: string): Promise<{ exitCode: number;
     },
   });
   return { exitCode: r.exitCode, out: chunks.join('') };
+}
+
+function createIntegrationNpmShellCommand(
+  deps: Omit<NpmShellCommandDeps, 'packageAcquisitionAuthority'>,
+) {
+  return createProductionNpmShellCommand({
+    ...deps,
+    packageAcquisitionAuthority: createTestNpmPackageAcquisitionAuthority(deps),
+  });
 }
 
 /** The fixture registry is deterministic, so a local resolve computes the same
@@ -114,7 +124,7 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
         }),
         resolverUrl: 'https://eddy.invalid/resolve',
       };
-      const authority = createNpmPackageAcquisitionAuthority(deps);
+      const authority = createTestNpmPackageAcquisitionAuthority(deps);
       const sink = { write: () => {} };
       const context: CommandContext = { cwd: '/proj', env: {}, stdout: sink, stderr: sink };
       let caught: unknown;
@@ -177,7 +187,7 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
       },
     });
     let coveringLockSeen = false;
-    const authority = createNpmPackageAcquisitionAuthority({
+    const authority = createTestNpmPackageAcquisitionAuthority({
       vfs,
       registry: offlineRegistry,
       prepareInstall: async (_context, info) => {
@@ -263,7 +273,7 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
-      createNpmShellCommand({
+      createIntegrationNpmShellCommand({
         vfs,
         registry: makeRegistry(),
         resolverUrl: eddyUrl,
@@ -330,7 +340,7 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     const shell1 = new Shell({ cwd: '/proj' });
     shell1.registerCommand(
       'npm',
-      createNpmShellCommand({
+      createIntegrationNpmShellCommand({
         vfs: vfs1,
         registry: makeRegistry(),
         resolverUrl: eddyUrl,
@@ -350,7 +360,7 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     const shell2 = new Shell({ cwd: '/proj' });
     shell2.registerCommand(
       'npm',
-      createNpmShellCommand({
+      createIntegrationNpmShellCommand({
         vfs: vfs2,
         registry: makeRegistry(),
         resolverUrl: eddyUrl,
@@ -389,7 +399,12 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
       const shell = new Shell({ cwd: '/proj' });
       shell.registerCommand(
         'npm',
-        createNpmShellCommand({ vfs, registry: makeRegistry(), resolverUrl: eddyUrl, learnedPins }),
+        createIntegrationNpmShellCommand({
+          vfs,
+          registry: makeRegistry(),
+          resolverUrl: eddyUrl,
+          learnedPins,
+        }),
       );
       return shell;
     };
@@ -475,7 +490,7 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
       const shell = new Shell({ cwd: '/proj' });
       shell.registerCommand(
         'npm',
-        createNpmShellCommand({
+        createIntegrationNpmShellCommand({
           vfs,
           registry: makeRegistry(),
           resolverUrl: eddyUrl,
@@ -509,7 +524,7 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
-      createNpmShellCommand({
+      createIntegrationNpmShellCommand({
         vfs,
         registry: makeRegistry(),
         learnedPins: {

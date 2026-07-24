@@ -219,6 +219,34 @@ describe('RegistryClient — transient-failure retry (429/5xx/network)', () => {
     expect(count()).toBe(2);
   });
 
+  it('aborts during retry backoff with the caller reason and starts no sibling attempt', async () => {
+    let fetchCalls = 0;
+    let markSleepStarted!: () => void;
+    const sleepStarted = new Promise<void>((resolve) => {
+      markSleepStarted = resolve;
+    });
+    const client = new RegistryClient({
+      baseUrl: 'https://r',
+      fetch: async () => {
+        fetchCalls += 1;
+        return new Response('', { status: 503 });
+      },
+      sleep: async () => {
+        markSleepStarted();
+        return await new Promise<void>(() => {});
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error('project closed during registry retry');
+    const request = client.getPackument('x', { signal: controller.signal });
+
+    await sleepStarted;
+    controller.abort(reason);
+
+    await expect(request).rejects.toBe(reason);
+    expect(fetchCalls).toBe(1);
+  });
+
   it('rethrows a persistent network error after exhausting retries', async () => {
     const { fetch } = makeFetch(['throw']);
     const client = new RegistryClient({

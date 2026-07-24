@@ -1,9 +1,10 @@
 import type { PersistFailureReport } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
+import * as ownerStorageModule from './workbench-owner-storage.ts';
 import {
   type WorkbenchOwnerStorageInstallers,
-  installWorkbenchOwnerStorage,
+  installWorkbenchOwnerStorageAuthority,
 } from './workbench-owner-storage.ts';
 
 function installers(): WorkbenchOwnerStorageInstallers {
@@ -18,12 +19,18 @@ function installers(): WorkbenchOwnerStorageInstallers {
 }
 
 describe('Workbench owner storage runtime', () => {
+  it('keeps the clone-safe snapshot behind the owner storage authority', () => {
+    expect(ownerStorageModule).not.toHaveProperty('installWorkbenchOwnerStorage');
+  });
+
   it('ephemeral intentionally installs memory and never opens OPFS', async () => {
     const h = installers();
 
-    await expect(
-      installWorkbenchOwnerStorage('ephemeral', { installers: h, proofTimeoutMs: 50 }),
-    ).resolves.toEqual({
+    const { snapshot } = await installWorkbenchOwnerStorageAuthority('ephemeral', {
+      installers: h,
+      proofTimeoutMs: 50,
+    });
+    expect(snapshot).toEqual({
       policy: 'ephemeral',
       backend: 'memory',
       durability: 'ephemeral',
@@ -37,13 +44,12 @@ describe('Workbench owner storage runtime', () => {
     const opened = await h.openOpfs();
     h.openOpfs = vi.fn(async () => opened);
 
-    await expect(
-      installWorkbenchOwnerStorage('required', {
-        installers: h,
-        proofTimeoutMs: 50,
-        createProofId: () => 'proof-1',
-      }),
-    ).resolves.toEqual({ policy: 'required', backend: 'opfs', durability: 'durable' });
+    const { snapshot } = await installWorkbenchOwnerStorageAuthority('required', {
+      installers: h,
+      proofTimeoutMs: 50,
+      createProofId: () => 'proof-1',
+    });
+    expect(snapshot).toEqual({ policy: 'required', backend: 'opfs', durability: 'durable' });
 
     expect(await opened.vfs.exists('/.rifty/workbench/v1/storage-proof/proof-1')).toBe(false);
     expect(h.openMemory).not.toHaveBeenCalled();
@@ -58,7 +64,7 @@ describe('Workbench owner storage runtime', () => {
     }));
 
     await expect(
-      installWorkbenchOwnerStorage('required', {
+      installWorkbenchOwnerStorageAuthority('required', {
         installers: h,
         proofTimeoutMs: 50,
         createProofId: () => 'proof-2',
@@ -75,7 +81,7 @@ describe('Workbench owner storage runtime', () => {
       vfs: { ...opened.vfs, readFile: () => new Promise<Uint8Array>(() => {}) },
     }));
 
-    const snapshot = await installWorkbenchOwnerStorage('preferred', {
+    const { snapshot } = await installWorkbenchOwnerStorageAuthority('preferred', {
       installers: h,
       proofTimeoutMs: 5,
       createProofId: () => 'proof-3',

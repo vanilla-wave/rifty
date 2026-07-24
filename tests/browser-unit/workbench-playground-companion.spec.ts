@@ -205,7 +205,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
               readonly typescript: string;
             };
             readonly serviceWorker: { readonly url: string; readonly scope: string };
-            readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+            readonly wasm: { readonly sqlite: string };
             readonly previewProbeTimeoutMs: number;
           };
           readonly packageAcquisition: { readonly registryUrl: string };
@@ -220,7 +220,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           readonly devServer: string;
           readonly typescript: string;
         };
-        readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+        readonly wasm: { readonly sqlite: string };
       };
 
       const withTimeout = <T>(
@@ -529,7 +529,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -544,7 +544,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const PRIMARY_PORT = 43_170;
@@ -957,7 +957,7 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -972,7 +972,7 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
@@ -1222,7 +1222,7 @@ test('selected historical workspace migrates through one physical Workbench owne
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -1237,7 +1237,7 @@ test('selected historical workspace migrates through one physical Workbench owne
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
@@ -1493,7 +1493,7 @@ test('forSession TypeScript uses the real owner service and returns only project
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -1509,7 +1509,7 @@ test('forSession TypeScript uses the real owner service and returns only project
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>

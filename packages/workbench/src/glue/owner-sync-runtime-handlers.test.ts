@@ -6,6 +6,7 @@ import {
   decodeReply,
   encodeRequest,
 } from '@riftydev/kernel';
+import { planAppliedShadowSubstitutions } from '@riftydev/npm-client/internal';
 import type { VfsMutationGuard, VfsMutationIntent } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
@@ -180,7 +181,11 @@ async function harness(
       install: async () => {
         installStarted();
         if (options.parkInstall) await installGate;
-        return { status: 'noop' };
+        return {
+          status: 'noop',
+          packageJsonText: null,
+          shadowPlan: planAppliedShadowSubstitutions([]),
+        };
       },
       reset: async () => {},
       switchProject: async () => {},

@@ -93,23 +93,120 @@ function commitFrame(sent: readonly PageProjectVfsFrame[]) {
 }
 
 describe('ProjectContentTransport', () => {
-  // Fault class: unbounded-read. Initial state and finite file reads share the
-  // project content correlation deadline and fence the transport on timeout.
-  it('loudly bounds a missing initial snapshot and a hung atomic read', async () => {
+  // MessagePort slow-peer row: elapsed local time cannot prove the live owner
+  // failed. The original request stays singular and its exact late snapshot wins.
+  it('keeps a slow live initial snapshot pending without replay until its exact reply', async () => {
     vi.useFakeTimers();
     try {
-      const unopened = harness();
-      void unopened.transport.ready.catch(() => {});
-      await vi.advanceTimersByTimeAsync(1_000);
-      await expect(unopened.transport.ready).rejects.toThrow(/initial snapshot.*timed out/i);
+      const h = harness();
+      let settled = false;
+      void h.transport.ready.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
 
-      const opened = harness();
-      opened.acceptSnapshot();
-      const content = await opened.transport.ready;
-      const reading = content.files.readFile('/src/main.ts');
-      void reading.catch(() => {});
-      await vi.advanceTimersByTimeAsync(1_000);
-      await expect(reading).rejects.toBeInstanceOf(ProjectFileOperationError);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(settled).toBe(false);
+      expect(h.sent).toEqual([{ type: 'workbench:project-vfs-snapshot-request' }]);
+
+      h.acceptSnapshot();
+      await expect(h.transport.ready).resolves.toBeDefined();
+      expect(h.protocolErrors).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // File and directory reads are sibling correlation tiers. Neither gains a
+  // replay/cancel twin merely because the live owner is slow.
+  it('keeps slow live atomic reads pending without replay until exact late replies', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness();
+      h.acceptSnapshot();
+      const content = await h.transport.ready;
+      const readingFile = content.files.readFile('/src/main.ts');
+      const readingDirectory = content.files.readdir('/src');
+      let fileSettled = false;
+      let directorySettled = false;
+      void readingFile.then(
+        () => {
+          fileSettled = true;
+        },
+        () => {
+          fileSettled = true;
+        },
+      );
+      void readingDirectory.then(
+        () => {
+          directorySettled = true;
+        },
+        () => {
+          directorySettled = true;
+        },
+      );
+      expect(h.sent.slice(-2)).toEqual([
+        {
+          type: 'workbench:project-vfs-read-file',
+          requestId: 'transport-1',
+          path: `${ROOT}/src/main.ts`,
+        },
+        {
+          type: 'workbench:project-vfs-read-directory',
+          requestId: 'transport-2',
+          path: `${ROOT}/src`,
+        },
+      ]);
+      const admittedFrames = h.sent.length;
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect({ fileSettled, directorySettled }).toEqual({
+        fileSettled: false,
+        directorySettled: false,
+      });
+      expect(h.sent).toHaveLength(admittedFrames);
+
+      h.transport.accept({
+        type: 'workbench:project-vfs-read-directory-result',
+        requestId: 'transport-2',
+        ok: true,
+        ownerEpoch: OWNER,
+        treeRevision: 1,
+        entries: [
+          {
+            path: `${ROOT}/src/main.ts`,
+            kind: 'file',
+            size: 7,
+            version: 'file-v1',
+          },
+        ],
+      });
+      h.transport.accept({
+        type: 'workbench:project-vfs-read-file-result',
+        requestId: 'transport-1',
+        ok: true,
+        ownerEpoch: OWNER,
+        treeRevision: 1,
+        entry: {
+          path: `${ROOT}/src/main.ts`,
+          kind: 'file',
+          size: 4,
+          content: encoder.encode('late'),
+          version: 'file-v1',
+        },
+      });
+      await expect(readingFile).resolves.toMatchObject({
+        path: '/src/main.ts',
+        bytes: encoder.encode('late'),
+      });
+      await expect(readingDirectory).resolves.toMatchObject([
+        { path: '/src/main.ts', kind: 'file', size: 7 },
+      ]);
+      expect(h.protocolErrors).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
@@ -223,11 +320,6 @@ describe('ProjectContentTransport', () => {
       ack,
     } as const;
     h.transport.accept(terminal);
-    expect(h.sent.at(-1)).toEqual({
-      type: 'rifty:owner-vfs-commit-received',
-      terminal,
-    });
-    h.transport.accept({ type: 'rifty:owner-vfs-commit-released', terminal });
     h.acceptState(snapshot(2, 'next'));
     await Promise.resolve();
     expect(h.sent.at(-1)).toEqual({
@@ -288,7 +380,6 @@ describe('ProjectContentTransport', () => {
       },
     } as const;
     h.transport.accept(terminal);
-    h.transport.accept({ type: 'rifty:owner-vfs-commit-released', terminal });
     h.acceptState(snapshot(2, 'next'));
     await Promise.resolve();
     expect(closed).toBe(false);
@@ -322,10 +413,12 @@ describe('ProjectContentTransport', () => {
     const h = harness();
     h.acceptSnapshot();
     const content = await h.transport.ready;
-    const reading = content.files.readFile('/src/main.ts');
+    const readingFile = content.files.readFile('/src/main.ts');
+    const readingDirectory = content.files.readdir('/src');
     h.setAlive(false);
     h.transport.disconnect();
-    await expect(reading).rejects.toBeInstanceOf(ProjectFileOperationError);
+    await expect(readingFile).rejects.toBeInstanceOf(ProjectFileOperationError);
+    await expect(readingDirectory).rejects.toBeInstanceOf(ProjectFileOperationError);
     expect(content.files.snapshot().entries).toEqual([]);
     await expect(content.files.mkdir('/later', { expectedVersion: null })).rejects.toBeInstanceOf(
       ProjectFileOperationError,

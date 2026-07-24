@@ -1,4 +1,5 @@
 import type { InstallResult } from '@riftydev/npm-client';
+import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
@@ -23,6 +24,14 @@ const PROJECT: PackageAcquisitionProject = {
   slug: 'app',
   identity: installArtifactIdentity,
 };
+const EMPTY_SHADOW_PLAN = planShadowSubstitutionsFromLockfile({
+  lockfileVersion: 3,
+  packages: {},
+});
+
+function packageInstall(result: InstallResult, packageJsonText: string | null) {
+  return { result, shadowPlan: EMPTY_SHADOW_PLAN, packageJsonText };
+}
 
 async function vfsHarness(): Promise<MemoryVfs> {
   const vfs = new MemoryVfs();
@@ -66,6 +75,7 @@ function result(): InstallResult {
 
 function adapterWith(overrides: Partial<PackageAcquisitionAdapter>): PackageAcquisitionAdapter {
   return {
+    readTrustedPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
     planSnapshotRestore: async () => ({ status: 'rejected', reason: 'unavailable' }),
     install: async () => {
       throw new Error('unexpected install');
@@ -93,7 +103,7 @@ describe('package-acquisition authority faults', () => {
       adapter: adapterWith({
         install: async () => {
           installCalls += 1;
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          return packageInstall(result(), PACKAGE_JSON);
         },
       }),
     });
@@ -141,7 +151,7 @@ describe('package-acquisition authority faults', () => {
       adapter: adapterWith({
         install: async () => {
           installCalls += 1;
-          return { result: result(), packageJsonText: '{"name":"nested"}\n' };
+          return packageInstall(result(), '{"name":"nested"}\n');
         },
       }),
     });
@@ -222,20 +232,30 @@ describe('package-acquisition authority faults', () => {
     await expect(vfs.exists('/projects/mutated')).resolves.toBe(false);
   });
 
-  it('keeps successful install provenance prompt-fast when background promotion is refused', async () => {
+  it('returns terminal provenance after linking but holds same-root work and readiness until promotion settles', async () => {
     const vfs = await vfsHarness();
     const stamps = createInstallStampAuthority({ vfs });
     let releaseFlush!: () => void;
     const flushGate = new Promise<void>((resolve) => {
       releaseFlush = resolve;
     });
+    let markPromotionStarted!: () => void;
+    const promotionStarted = new Promise<void>((resolve) => {
+      markPromotionStarted = resolve;
+    });
+    let flushCalls = 0;
+    let installCalls = 0;
     const observations: AcquisitionObservation[] = [];
     const authority = createPackageAcquisitionAuthority({
       stamps,
       observe: (event) => observations.push(event),
       stampTransition: {
         flush: async () => {
-          await flushGate;
+          flushCalls += 1;
+          if (flushCalls === 1) {
+            markPromotionStarted();
+            await flushGate;
+          }
           return {
             failures: [
               {
@@ -250,8 +270,9 @@ describe('package-acquisition authority faults', () => {
       },
       adapter: adapterWith({
         install: async () => {
+          installCalls += 1;
           await seedTree(vfs);
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          return packageInstall(result(), PACKAGE_JSON);
         },
       }),
     });
@@ -265,12 +286,48 @@ describe('package-acquisition authority faults', () => {
       install,
       new Promise<'timed-out'>((resolve) => setTimeout(() => resolve('timed-out'), 20)),
     ]);
-    expect(promptOutcome).toMatchObject({
+    expect(promptOutcome).toMatchObject({ outcome: 'installed' });
+    await promotionStarted;
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+      status: 'pending',
+    });
+
+    let secondSettled = false;
+    const second = authority
+      .dispatch({
+        type: 'terminal-install',
+        project: PROJECT,
+        argv: ['vite'],
+      })
+      .then((value) => {
+        secondSettled = true;
+        return value;
+      });
+    let childSettled = false;
+    const child = authority.reserveChildAdmission(ROOT).then(
+      (reservation) => {
+        childSettled = true;
+        reservation.commit();
+      },
+      (error: unknown) => {
+        childSettled = true;
+        throw error;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(secondSettled).toBe(false);
+    expect(childSettled).toBe(false);
+    expect(installCalls).toBe(1);
+
+    releaseFlush();
+    await expect(install).resolves.toMatchObject({
       outcome: 'installed',
       packages: [{ name: 'vite', version: '5.4.21', transport: 'registry' }],
     });
-    releaseFlush();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect(second).resolves.toMatchObject({ outcome: 'installed' });
+    await expect(child).rejects.toThrow(/readiness is not published/);
+    await authority.quiesce();
+    expect(installCalls).toBe(2);
     await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.not.toMatchObject({
       status: 'trusted',
     });
@@ -308,12 +365,16 @@ describe('package-acquisition authority faults', () => {
     expect(resetCalls).toBe(0);
   });
 
-  it('runs reset mutation inside the FIFO and fences an older background promoter', async () => {
+  it('fault: a mutation admitted during readiness cannot be overwritten by stale publication', async () => {
     const vfs = await vfsHarness();
     const stamps = createInstallStampAuthority({ vfs });
     let releasePromotion!: () => void;
     const promotionGate = new Promise<void>((resolve) => {
       releasePromotion = resolve;
+    });
+    let markPromotionStarted!: () => void;
+    const promotionStarted = new Promise<void>((resolve) => {
+      markPromotionStarted = resolve;
     });
     let flushCalls = 0;
     const authority = createPackageAcquisitionAuthority({
@@ -321,25 +382,35 @@ describe('package-acquisition authority faults', () => {
       stampTransition: {
         flush: async () => {
           flushCalls += 1;
-          if (flushCalls === 1) await promotionGate;
+          if (flushCalls === 1) {
+            markPromotionStarted();
+            await promotionGate;
+          }
           return { failures: [], total: 0 };
         },
       },
       adapter: adapterWith({
         install: async () => {
           await seedTree(vfs);
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          return packageInstall(result(), PACKAGE_JSON);
         },
       }),
     });
 
-    await authority.dispatch({ type: 'terminal-install', project: PROJECT, argv: ['vite'] });
+    const install = authority.dispatch({
+      type: 'terminal-install',
+      project: PROJECT,
+      argv: ['vite'],
+    });
+    await promotionStarted;
+    let resetMutated = false;
     const reset = authority.dispatch({
       type: 'reset',
       target: { root: PROJECT.root },
       prepare: async () => ({
         status: 'ready' as const,
         mutate: async () => {
+          resetMutated = true;
           await vfs.rm(ROOT, { recursive: true, force: true });
           await vfs.mkdir(ROOT, { recursive: true });
           await vfs.writeFile(`${ROOT}/package.json`, PACKAGE_JSON);
@@ -347,7 +418,10 @@ describe('package-acquisition authority faults', () => {
         },
       }),
     });
+    await Promise.resolve();
+    expect(resetMutated).toBe(false);
     releasePromotion();
+    await install;
     await reset;
 
     await expect(vfs.readFileText(`${ROOT}/reset-marker`)).resolves.toBe('reset');
@@ -433,7 +507,14 @@ describe('package-acquisition authority faults', () => {
   });
 
   it.each([
-    ['terminal noop', async () => ({ status: 'noop' as const })],
+    [
+      'terminal noop',
+      async () => ({
+        status: 'noop' as const,
+        packageJsonText: PACKAGE_JSON,
+        shadowPlan: EMPTY_SHADOW_PLAN,
+      }),
+    ],
     [
       'installer failure',
       async () => {
@@ -524,11 +605,16 @@ describe('package-acquisition authority faults', () => {
         adapter: adapterWith({
           planSnapshotRestore: async () => {
             restoreCalls += 1;
-            return { status: 'ready', packages: 1, apply: async () => {} };
+            return {
+              status: 'ready',
+              packages: 1,
+              shadowPlan: EMPTY_SHADOW_PLAN,
+              apply: async () => {},
+            };
           },
           install: async () => {
             await seedTree(vfs);
-            return { result: result(), packageJsonText: PACKAGE_JSON };
+            return packageInstall(result(), PACKAGE_JSON);
           },
         }),
       });
@@ -568,6 +654,7 @@ describe('package-acquisition authority faults', () => {
         planSnapshotRestore: async () => ({
           status: 'ready',
           packages: 1,
+          shadowPlan: EMPTY_SHADOW_PLAN,
           apply: async () => {
             await vfs.mkdir(`${ROOT}/node_modules`, { recursive: true });
             await vfs.writeFile(partial, 'partial');
@@ -577,7 +664,7 @@ describe('package-acquisition authority faults', () => {
         install: async () => {
           partialSeenByInstall = await vfs.exists(partial);
           await seedTree(vfs);
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          return packageInstall(result(), PACKAGE_JSON);
         },
       }),
     });
@@ -612,6 +699,7 @@ describe('package-acquisition authority faults', () => {
         planSnapshotRestore: async () => ({
           status: 'ready',
           packages: 1,
+          shadowPlan: EMPTY_SHADOW_PLAN,
           apply: async () => {
             await vfs.mkdir(`${ROOT}/node_modules`, { recursive: true });
             await vfs.writeFile(partial, 'partial');
@@ -620,7 +708,7 @@ describe('package-acquisition authority faults', () => {
         }),
         install: async () => {
           installCalls += 1;
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          return packageInstall(result(), PACKAGE_JSON);
         },
       }),
     });
@@ -662,7 +750,7 @@ describe('package-acquisition authority faults', () => {
         install: async () => {
           calls.push('install');
           await seedTree(vfs);
-          return { result: result(), packageJsonText: PACKAGE_JSON };
+          return packageInstall(result(), PACKAGE_JSON);
         },
       }),
     });
