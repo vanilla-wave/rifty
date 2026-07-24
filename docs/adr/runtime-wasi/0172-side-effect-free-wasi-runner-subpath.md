@@ -5,6 +5,11 @@ Date: 2026-06-24
 
 > TL;DR: publish `@riftydev/runtime-wasi/wasi` as the side-effect-free same-realm runner entry; keep `./worker-entry` for kernel-spawned WASI workers
 
+> Correction 2026-07-24 (ADR-0316): the public side-effect-free runner remains,
+> but Playground/product esbuild no longer consumes it through a vendored
+> binding. Exact preview1 esbuild now exercises it only as an explicit
+> package-sourced guest.
+
 ## Context
 
 `@riftydev/runtime-wasi` already exposes two different surfaces:

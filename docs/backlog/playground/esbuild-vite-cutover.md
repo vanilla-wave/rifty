@@ -6,7 +6,7 @@ created: 2026-07-23
 why: direct guest require('esbuild')/import('esbuild') must run the proven transform surface without Vite, and Vite must consume the same adapter through its concrete integration edge; the three overlapping legacy esbuild paths (full-package alias override, file-overlay shim, vendored wasm) collapse into the one registry path
 epic: honest-shadow-substitutions
 blocked_by: [npm-client/package-tree-authority]
-sources: [ADR-0308, ADR-0300-quarry, docs/adr/npm-client/0051-native-dependency-install-policy.md]
+sources: [ADR-0308, ADR-0316, ADR-0300-quarry, docs/adr/npm-client/0051-native-dependency-install-policy.md]
 ---
 
 ## Context
@@ -108,6 +108,8 @@ Tier `production`:
 
 - ADR-0308 owns dispatch-by-adapterId, the no-consumer-branches rule, and the
   quarry disposition (0296/0298 not adopted, 0300 confirmed).
+- ADR-0316 owns retirement of the vendored preview1 carrier and preserves the
+  exact package only as a separately proven, explicit WASI guest.
 - ADR-0307 owns why no temp-cache/tree machinery participates here.
 - ADR-0051 owns the native-dependency install policy the alias retirement
   finishes honoring.

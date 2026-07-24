@@ -10,6 +10,12 @@ Date: 2026-05
 - **A-026 (2026-05-26) — Vite in Worker:** confirmed **M11**. Vite moves from the playground main-thread realm (ADR-0025 Option A) to a kernel-spawned Worker once the `@riftydev/net` cross-realm bridge is ready. Local migration: replace `realVite.ts` with a worker-spawning adapter + registry bridge.
 - **A-026 (2026-05-27) — landed:** ADR-0043 ratified the migration. `apps/playground/src/glue/realVite.ts` spawns a kernel Worker (`apps/playground/src/workers/real-vite-bootstrap.ts`); cross-realm bridge ships as `@riftydev/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview` (over `BroadcastChannel`, like the HMR bridge); HMR bridge moves into the worker realm. **ADR-0025 superseded for the Real Vite path**; main-thread Dev Mode stays as non-isolated fallback. A-023 is the next consumer of the bridge primitive.
 
+> Correction 2026-07-24 (ADR-0316): A-008 and the M11 follow-up no longer
+> prescribe a checked-in WASI esbuild carrier. Registry-acquired
+> `esbuild-wasm` is the sole product runtime; exact preview1 proof is
+> package-sourced and explicit. The SAB, Worker-process, stdio, and generic
+> WASI decisions stand.
+
 > TL;DR: Each Node process is its own kernel-spawned Worker realm; sync IPC (`execSync`) rides a `SharedArrayBuffer` ring framed by `Atomics.wait`/`notify`
 
 ## Context

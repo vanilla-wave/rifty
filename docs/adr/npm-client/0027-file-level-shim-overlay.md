@@ -11,6 +11,11 @@ Date: 2026-05
 > registry in `@riftydev/shadow-registry`. The per-file-overlay-post-`install()`
 > model stands; only the "ad-hoc overlay list until 3 sites" clause is superseded.
 
+> Correction 2026-07-24 (ADR-0316): esbuild no longer uses this per-file
+> overlay. Its catalog-owned synthetic package consumes admitted registry
+> `esbuild-wasm` bytes; the typed install-time overlay model remains for Rollup
+> and LightningCSS.
+
 ## Context
 
 ADR 0006 (D-005, "shadow registry") covers **full-package** swaps via `BUILT_IN_OVERRIDES` (e.g. `bcrypt → bcryptjs`). M10 Real-Vite needs finer granularity: install the real package (`esbuild`, `rollup`), then overwrite specific files inside it (`esbuild/lib/main.js`, `rollup/dist/native.js`) with browser-safe replacements while keeping the package's `package.json`, `exports` map, types, and peers intact. The provisional implementation (`esbuild-shim.ts`, `realVite.ts` calling `overlayShims()`) writes shims into the VFS after the npm-client linker finishes; this ADR ratifies it and sets the promotion threshold.

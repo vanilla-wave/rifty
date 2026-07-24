@@ -5,6 +5,10 @@ Date: 2026-07
 
 > TL;DR: derive one runtime from esbuild-wasm 0.28.0's exact browser CJS client; change only its environment and named capability gates, then publish its exact outer object. No API facade.
 
+> Correction 2026-07-24 (ADR-0316): D6's “vendored WASI CLI remains” clause is
+> superseded. The exact preview1 package is an explicit test/showcase guest;
+> registry-attested esbuild-wasm is the sole product runtime. D1–D5 stand.
+
 ## Context
 
 The current shim runs real WASI `transform`, one single-module `build({write:false})`, and an empty context. Vite config graphs and dependency optimization loud-throw.

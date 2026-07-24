@@ -24,6 +24,10 @@ Date: 2026-06
 > moved to owner-seed. `RIFTY_RFV_SETUP` no longer drives a dev-line install. The
 > slug-stamp + baked-snapshot machinery (points 4-7) stands.
 
+> **Correction 2026-07-24 (ADR-0316).** Baked snapshots are regenerated from
+> registry-owned substitutions and contain no `@esbuild/wasi-preview1` alias or
+> vendored carrier. Snapshot fidelity and setup-kind semantics stand.
+
 ## Context
 
 All presets booted identically: terminal runs `vite`/`npm run dev`, the worker silently installs deps inside its bootstrap. Wanted: (a) "ready" sandboxes with the fastest possible start; (b) "honest" sandboxes where the terminal really runs `npm install` and shows what it installs, then starts. Naming: "live" collides with `tag.tone: 'live'` (= dev server running), so **instant / from-scratch**.

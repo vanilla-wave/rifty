@@ -5,6 +5,11 @@ Date: 2026-05
 
 > TL;DR: 11 `@riftydev/*` packages publish via `tsup` (ESM + `.d.ts`); in-repo `exports`→`./src/*.ts` for dev, `publishConfig`→`./dist/*` for the tarball
 
+> Correction 2026-07-24 (ADR-0316): `@riftydev/shadow-registry` retires both
+> `./esbuild-binding` and the published `./esbuild-transform` subpath with the
+> checked-in WASM carrier. The pure `./internal` catalog replaces that transform
+> surface for trusted first-party consumers; the dual-export decision stands.
+
 ## Context
 
 The 10 `packages/*` libraries (+ `tools/shadow-registry`, a runtime dep of `@riftydev/npm-client`) are all `"private": true`, `"version": "0.0.0"`, with `main`/`module`/`types`/`exports` pointing at **raw TypeScript source** (`./src/index.ts`, `.ts`-extensioned imports). This makes the dev loop fast (Vite/Vitest transpile workspace `.ts` on the fly, HMR, no build step) but the packages **unpublishable/unconsumable**: `npm install @riftydev/x` would ship `.ts` files with `.ts` specifiers that Node/bundler resolution rejects.
