@@ -63,6 +63,8 @@ export async function buildInstallArtifactRecipe() {
     },
     viteCliActionPatch: viteCliActionPatchPolicy,
     viteRootWatchPatch: viteRootWatchPatchPolicy,
+    // TODO(backlog: npm-client/install-artifact-identity-doc-coupling): whole-file hash
+    // couples doc-only policy edits to stamp invalidation + snapshot rebakes.
     esbuildRuntimePolicy: await readJson(policyUrl),
     esbuildRuntimeOutput: await readRuntimeOutputIdentity(),
   };

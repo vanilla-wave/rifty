@@ -8,6 +8,10 @@
   runtime CAS now has an explicit two-request esbuild-wasm acquisition contract
   and loud `ESHADOWASSET/acquire` offline failure; warm CAS and Vite 8 are
   registry-free (ADR-0320).
+- Baked dependency snapshots re-baked against the live registry absorbed
+  `postcss` 8.5.22 → 8.5.23 (vite's floating `^8.5.6` range) in all three
+  presets; pinning bake inputs is
+  TODO(backlog: playground/baked-snapshot-regeneration).
 
 - Exact Vite 8.0.16 now runs real Rolldown-WASI production build and preview
   through the installed CLI; browser acceptance executes the hashed bundle in
