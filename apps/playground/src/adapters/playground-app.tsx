@@ -5,6 +5,15 @@ import {
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
+import type { ProjectTerminalSnapshot } from '@riftydev/workbench';
+import type {
+  PlaygroundCatalogSnapshot,
+  PlaygroundPreview,
+  PlaygroundProjectPlan,
+  PlaygroundScmSnapshot,
+  PlaygroundScmSupportedChange,
+  PlaygroundWorkbench,
+} from '@riftydev/workbench/playground';
 import type * as monaco from 'monaco-editor';
 import { Show, createEffect, createMemo, createSignal, lazy, onCleanup, onMount } from 'solid-js';
 import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from '../boot.ts';
@@ -53,25 +62,16 @@ import { starterById } from '../glue/starter.ts';
 import { pathFromTerminalFileLink } from '../glue/terminal-links.ts';
 import type { TerminalPersistence } from '../glue/terminal-persistence.ts';
 import { createTsDiagnosticsSync } from '../glue/ts-diagnostics-sync.ts';
-import { lspToMonacoMarkers } from '../glue/ts-ls-client.ts';
 import {
   clearTsLsInitDiagnostics,
   shouldPublishTsLsInitDiagnostic,
   upsertTsLsInitDiagnostic,
 } from '../glue/ts-ls-init-diagnostic.ts';
+import { lspToMonacoMarkers } from '../glue/ts-ls-monaco-markers.ts';
 import type { TsLanguageServiceProvidersHandle } from '../glue/ts-ls-monaco-providers.ts';
 import { createEditorOpQueue } from '../orchestration/editor-op-queue.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset } from '../presets.ts';
 import { resolveProjectSpec } from '../templates/registry.ts';
-import type {
-  PlaygroundCatalogSnapshot,
-  PlaygroundPreview,
-  PlaygroundProjectPlan,
-  PlaygroundScmSnapshot,
-  PlaygroundScmSupportedChange,
-  PlaygroundWorkbench,
-} from '../workbench/playground.ts';
-import type { ProjectTerminalSnapshot } from '../workbench/public.ts';
 import {
   type PlaygroundAppProjectContext,
   type PlaygroundAppRuntime,
@@ -99,9 +99,9 @@ import {
 } from './playground-sidebar-recovery.tsx';
 import { selectPlaygroundSidebarView } from './playground-sidebar-view.ts';
 import { type PlaygroundTerminalUi, createPlaygroundTerminalUi } from './playground-terminal-ui.ts';
+import type { TerminalSessionSnapshot } from './playground-terminal-ui.ts';
 import { createPlaygroundStoreToastDismissal } from './playground-toast-policy.ts';
 import type { PlaygroundTsDevHooksHandle } from './playground-ts-dev-hooks.ts';
-import type { TerminalSessionSnapshot } from './terminal-manager.ts';
 import { useLayout } from './useLayout.ts';
 import { useMode } from './useMode.ts';
 

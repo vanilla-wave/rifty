@@ -365,7 +365,7 @@
     }
   ],
   "output": {
-    "path": "apps/playground/src/workers/generated/esbuild-runtime.js",
+    "path": "packages/workbench/src/workers/generated/esbuild-runtime.js",
     "format": "esm",
     "bytes": 135144,
     "sha256": "7acc5cd6f0e111810d3505c0959ec2fb5767f25af8dd2c5919a5b36d4f4da553"

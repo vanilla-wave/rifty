@@ -1,92 +1,67 @@
 import { expect, test } from '@playwright/test';
+import { gotoHarness, sealedWorkbenchFixtureUrl } from './fixtures.ts';
 
-/**
- * Owner→page bridge contracts, behaviorally, against the REAL owner worker
- * (browser-unit lane, ADR-0196) — the tier the worker-file source-greps lacked:
- *   1. vfs-write ack round-trip: writeFrameAcked persists into the OWNER tree
- *      (readFileBytes returns the bytes back).
- *   2. vfs-write ack error contract: a failing frame rejects with the owner's
- *      REAL error name/message (never a silent ok).
- *   3. pty:preview republish handshake: a subscribe + request always yields a
- *      frame (never a missed one-shot push).
- */
+test('sealed Workbench exposes owner-backed file ACK/error and initial preview state', async ({
+  page,
+}) => {
+  await gotoHarness(page);
 
-test.describe('workspace-owner bridges (real worker, no App)', () => {
-  test('vfs-write ack + readFileBytes round-trip, error contract, preview handshake', async ({
-    page,
-  }) => {
-    await page.goto('/unit-harness.html');
-    await page.waitForSelector('#browser-unit-harness[data-status="ready"]');
-
-    const result = await page.evaluate(async () => {
-      const [realVite, hiddenEmpty] = await Promise.all([
-        import('/src/glue/realVite.ts'),
-        import('/src/templates/hidden-empty.ts'),
-      ]);
-      const logs: string[] = [];
-      const handle = realVite.startWorkspaceOwner({
+  const result = await page.evaluate(async (fixtureUrl) => {
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    let opened = false;
+    try {
+      await fixture.openSealedWorkbenchFixture({
         workspaceId: 'browser-unit-bridges',
-        root: '/scratch',
-        template: hiddenEmpty.HIDDEN_EMPTY_TEMPLATE,
-        slug: 'scratch',
-        setup: 'instant',
-        hiddenEmptyBoot: true,
-        onLog: (line: string) => logs.push(line),
+        template: 'hidden-empty',
+        persistence: 'ephemeral',
       });
-      const timeout = new Promise<never>((_, reject) => {
-        setTimeout(
-          () => reject(new Error(`owner ready timed out; logs:\n${logs.slice(-40).join('')}`)),
-          60_000,
-        );
-      });
-      await Promise.race([handle.ready, timeout]);
-
-      // 1. write → acked → read back through the owner byte reader.
+      opened = true;
+      const project = fixture.currentProject();
       const content = `bridge-roundtrip ${'x'.repeat(64)}`;
-      await handle.writeFrameAcked({
-        type: 'write',
-        path: '/scratch/bridge-roundtrip.txt',
-        data: new TextEncoder().encode(content),
-      });
-      const bytes = await handle.readFileBytes('/scratch/bridge-roundtrip.txt');
-      const readBack = new TextDecoder().decode(bytes);
+      const created = await project.files.writeFile(
+        '/bridge-roundtrip.txt',
+        new TextEncoder().encode(content),
+        { expectedVersion: null },
+      );
+      const read = await project.files.readFile('/bridge-roundtrip.txt');
 
-      // 2. a failing frame surfaces the owner's REAL error (ack ok:false path).
       let ackError: { name: string; message: string } | null = null;
       try {
-        await handle.writeFrameAcked({
-          type: 'rename',
-          from: '/scratch/definitely-missing-source.txt',
-          to: '/scratch/whatever.txt',
-        });
-      } catch (err) {
+        await project.files.writeFile(
+          '/bridge-roundtrip.txt',
+          new TextEncoder().encode('must conflict'),
+          { expectedVersion: null },
+        );
+      } catch (error) {
         ackError =
-          err instanceof Error
-            ? { name: err.name, message: err.message }
-            : { name: 'unknown', message: String(err) };
+          error instanceof Error
+            ? { name: error.name, message: error.message }
+            : { name: 'unknown', message: String(error) };
       }
 
-      // 3. preview republish handshake: subscribe + request ⇒ a frame arrives
-      //    even when the set is empty (missed-before-listener discipline).
-      const previewFrame = await new Promise<{ ports: unknown[] } | null>((resolve) => {
-        const timer = setTimeout(() => resolve(null), 10_000);
-        const unsub = handle.onPreview((frame: { ports: unknown[] }) => {
-          clearTimeout(timer);
-          unsub();
-          resolve(frame);
-        });
-        handle.requestPreview();
+      const previews = fixture.currentSessionTools().previews;
+      let initialPreviewState: readonly unknown[] | null = null;
+      const unsubscribe = previews.subscribe((snapshot: readonly unknown[]) => {
+        initialPreviewState = snapshot;
       });
+      unsubscribe();
 
-      handle.close();
-      return { readBack, ackError, previewFrame, content };
-    });
+      return {
+        content,
+        readBack: new TextDecoder().decode(read.bytes),
+        createdPath: created.path,
+        ackError,
+        initialPreviewState,
+      };
+    } finally {
+      if (opened) await fixture.closeSealedWorkbenchFixture();
+    }
+  }, sealedWorkbenchFixtureUrl);
 
-    expect(result.readBack).toBe(result.content);
-    expect(result.ackError).not.toBeNull();
-    expect(result.ackError?.message).toBeTruthy();
-    expect(result.ackError?.message).toContain('definitely-missing-source');
-    expect(result.previewFrame).not.toBeNull();
-    expect(Array.isArray(result.previewFrame?.ports)).toBe(true);
-  });
+  expect(result.readBack).toBe(result.content);
+  expect(result.createdPath).toBe('/bridge-roundtrip.txt');
+  expect(result.ackError).not.toBeNull();
+  expect(result.ackError?.name).toBe('FileConflictError');
+  expect(result.ackError?.message).toContain('/bridge-roundtrip.txt');
+  expect(result.initialPreviewState).toEqual([]);
 });

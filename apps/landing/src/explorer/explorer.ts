@@ -98,7 +98,7 @@ const SCN_CHIPS: { id: ScnState; label: string }[] = [
   { id: 'npm', label: 'npm install' },
   { id: 'express', label: 'Express + preview' },
   { id: 'vite', label: 'Vite HMR' },
-  { id: 'wasi', label: 'WASI esbuild' },
+  { id: 'wasi', label: 'Raw WASI' },
   { id: 'sync', label: 'Sync fs (SAB)' },
 ];
 

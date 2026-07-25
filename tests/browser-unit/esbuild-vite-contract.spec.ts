@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { type Page, expect, test } from '@playwright/test';
+import { DEFAULT_VITE8_CONFIG_JS } from '../../apps/playground/src/vite-project-policy.ts';
 import {
   ESBUILD_CONTRACT_ROW_IDS,
   ESBUILD_GUEST_POLICY_EXPECTATIONS,
@@ -16,13 +17,22 @@ import {
   bootOwner,
   closeOwner,
   execLine,
+  execLineUntil,
   gotoHarness,
   readOwnerFile,
+  sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from './fixtures.ts';
 
 interface HostEsbuild {
   readonly version: string;
+  transform(
+    input: string,
+    options: Record<string, unknown>,
+  ): Promise<{
+    readonly code: string;
+    readonly map: string;
+  }>;
   build(options: Record<string, unknown>): Promise<{
     readonly outputFiles?: readonly { readonly text: string }[];
   }>;
@@ -76,6 +86,33 @@ interface InfoEnvelope {
   };
 }
 
+interface DirectEnvelope {
+  readonly version: string;
+  readonly namespaceVersion: string;
+  readonly defaultSame: boolean;
+  readonly moduleExportsSame: boolean;
+  readonly runtimeSame: boolean;
+  readonly namespaceKeys: readonly string[];
+  readonly namespaceRelations: Readonly<Record<string, boolean>>;
+  readonly code: string;
+  readonly map: string;
+  readonly transformError: TransformErrorEvidence;
+}
+
+interface TransformErrorEvidence {
+  readonly name: string;
+  readonly message: string;
+  readonly errors: readonly unknown[];
+  readonly warnings: readonly unknown[];
+}
+
+interface ModuleNotFoundEvidence {
+  readonly name: string;
+  readonly code: string;
+  readonly message: string;
+  readonly requireStack: readonly string[];
+}
+
 interface ContractPaths {
   readonly dir: string;
   readonly devRunner: string;
@@ -91,6 +128,19 @@ interface ContractPaths {
 }
 
 const VITE_BIN = '/scratch/node_modules/.bin/vite';
+const PUBLIC_VITE_BIN = '/node_modules/.bin/vite';
+const DIRECT_SOURCE = 'export const answer: number = 42;\n';
+const DIRECT_TRANSFORM_OPTIONS = Object.freeze({
+  loader: 'ts',
+  format: 'esm',
+  sourcemap: 'external',
+  sourcefile: 'direct.ts',
+});
+const DIRECT_ERROR_SOURCE = 'export const broken: = 1;\n';
+const DIRECT_ERROR_OPTIONS = Object.freeze({
+  loader: 'ts',
+  sourcefile: 'direct-error.ts',
+});
 const expectedContract = JSON.parse(
   readFileSync(
     fileURLToPath(
@@ -118,8 +168,8 @@ const shadowRequire = createRequire(
 );
 const hostEsbuild = shadowRequire('esbuild') as HostEsbuild;
 
-function pathsFor(token: string): ContractPaths {
-  const dir = `/scratch/.rifty-esbuild-contract-${token}`;
+function pathsFor(token: string, fixtureRoot: '/scratch' | ''): ContractPaths {
+  const dir = `${fixtureRoot}/.rifty-esbuild-contract-${token}`;
   return {
     dir,
     devRunner: `${dir}/dev-full.cjs`,
@@ -323,6 +373,209 @@ globalThis.process.stdout.write(${JSON.stringify(completion)});
 `;
 }
 
+function directCjsRunner(resultPath: string): string {
+  return `const fs = require('node:fs');
+const cjs = require('esbuild');
+module.exports.__promise = (async () => {
+  const esm = await import('esbuild');
+  const transformed = await cjs.transform(
+    ${JSON.stringify(DIRECT_SOURCE)},
+    ${JSON.stringify(DIRECT_TRANSFORM_OPTIONS)},
+  );
+  let transformError;
+  try {
+    await cjs.transform(
+      ${JSON.stringify(DIRECT_ERROR_SOURCE)},
+      ${JSON.stringify(DIRECT_ERROR_OPTIONS)},
+    );
+  } catch (error) {
+    transformError = {
+      name: error.name,
+      message: error.message,
+      errors: error.errors,
+      warnings: error.warnings,
+    };
+  }
+  const namespaceKeys = Object.keys(esm).sort();
+  const namespaceRelations = Object.fromEntries(
+    namespaceKeys
+      .filter((key) => key !== 'default' && key !== 'module.exports')
+      .map((key) => [key, esm[key] === cjs[key]]),
+  );
+  fs.writeFileSync(
+    ${JSON.stringify(resultPath)},
+    JSON.stringify({
+      version: cjs.version,
+      namespaceVersion: esm.version,
+      defaultSame: esm.default === cjs,
+      moduleExportsSame: esm['module.exports'] === cjs,
+      runtimeSame: globalThis.__rifty?.esbuild === cjs,
+      namespaceKeys,
+      namespaceRelations,
+      code: transformed.code,
+      map: transformed.map,
+      transformError,
+    }),
+  );
+})();
+`;
+}
+
+function directEsmRunner(resultPath: string): string {
+  return `import { createRequire } from 'node:module';
+import * as fs from 'node:fs';
+import * as esm from 'esbuild';
+const require = createRequire(import.meta.url);
+const cjs = require('esbuild');
+const transformed = await esm.transform(
+  ${JSON.stringify(DIRECT_SOURCE)},
+  ${JSON.stringify(DIRECT_TRANSFORM_OPTIONS)},
+);
+let transformError;
+try {
+  await esm.transform(
+    ${JSON.stringify(DIRECT_ERROR_SOURCE)},
+    ${JSON.stringify(DIRECT_ERROR_OPTIONS)},
+  );
+} catch (error) {
+  transformError = {
+    name: error.name,
+    message: error.message,
+    errors: error.errors,
+    warnings: error.warnings,
+  };
+}
+const namespaceKeys = Object.keys(esm).sort();
+const namespaceRelations = Object.fromEntries(
+  namespaceKeys
+    .filter((key) => key !== 'default' && key !== 'module.exports')
+    .map((key) => [key, esm[key] === cjs[key]]),
+);
+fs.writeFileSync(
+  ${JSON.stringify(resultPath)},
+  JSON.stringify({
+    version: cjs.version,
+    namespaceVersion: esm.version,
+    defaultSame: esm.default === cjs,
+    moduleExportsSame: esm['module.exports'] === cjs,
+    runtimeSame: globalThis.__rifty?.esbuild === cjs,
+    namespaceKeys,
+    namespaceRelations,
+    code: transformed.code,
+    map: transformed.map,
+    transformError,
+  }),
+);
+`;
+}
+
+function missingEsbuildRunner(resultPath: string): string {
+  return `const fs = require('node:fs');
+let evidence;
+try {
+  require('esbuild');
+  evidence = { loaded: true };
+} catch (error) {
+  evidence = {
+    name: error.name,
+    code: error.code,
+    message: error.message,
+    requireStack: error.requireStack,
+  };
+}
+fs.writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify(evidence));
+`;
+}
+
+function nativeMissingEsbuildEvidence(): ModuleNotFoundEvidence {
+  const missingRequire = createRequire('file:///missing.cjs');
+  try {
+    missingRequire.resolve('esbuild', { paths: [] });
+  } catch (error) {
+    const record = error as ModuleNotFoundEvidence;
+    return {
+      name: record.name,
+      code: record.code,
+      message: record.message,
+      requireStack: record.requireStack,
+    };
+  }
+  throw new Error('native missing-module oracle unexpectedly resolved esbuild from /missing.cjs');
+}
+
+function transformErrorEvidence(error: unknown): TransformErrorEvidence {
+  const record = error as {
+    readonly name?: unknown;
+    readonly message?: unknown;
+    readonly errors?: unknown;
+    readonly warnings?: unknown;
+  };
+  return JSON.parse(
+    JSON.stringify({
+      name: record.name,
+      message: record.message,
+      errors: record.errors,
+      warnings: record.warnings,
+    }),
+  ) as TransformErrorEvidence;
+}
+
+async function hostTransformErrorEvidence(): Promise<TransformErrorEvidence> {
+  try {
+    await hostEsbuild.transform(DIRECT_ERROR_SOURCE, DIRECT_ERROR_OPTIONS);
+  } catch (error) {
+    return transformErrorEvidence(error);
+  }
+  throw new Error('native esbuild accepted the direct transform error fixture');
+}
+
+function namespaceRelations(
+  namespace: Readonly<Record<string, unknown>>,
+  cjs: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, boolean>> {
+  return Object.fromEntries(
+    Object.keys(namespace)
+      .sort()
+      .filter((key) => key !== 'default' && key !== 'module.exports')
+      .map((key) => [key, namespace[key] === cjs[key]]),
+  );
+}
+
+function decodedRequestUrl(url: string): string {
+  try {
+    return decodeURIComponent(url);
+  } catch {
+    return url;
+  }
+}
+
+function aliasRequests(urls: readonly string[]): readonly string[] {
+  return urls.filter((url) => decodedRequestUrl(url).includes('@esbuild/wasi-preview1'));
+}
+
+function registryPackageRequests(urls: readonly string[], packageName: string): readonly string[] {
+  return urls.filter((url) => {
+    try {
+      return (
+        new URL(url).pathname.includes('/npm-registry') &&
+        decodedRequestUrl(url).includes(packageName)
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
+function hostEsbuildWasmRequests(urls: readonly string[]): readonly string[] {
+  return urls.filter((url) => {
+    try {
+      return new URL(url).pathname.endsWith('/esbuild.wasm');
+    } catch {
+      return false;
+    }
+  });
+}
+
 function launcher(target: string): string {
   return `#!/usr/bin/env node\nimport(${JSON.stringify(target)});\n`;
 }
@@ -343,25 +596,26 @@ async function runContractHarness(page: Page): Promise<{
   readonly info: InfoEnvelope;
 }> {
   const token = randomUUID();
-  const paths = pathsFor(token);
+  const fixturePaths = pathsFor(token, '/scratch');
+  const paths = pathsFor(token, '');
   const bundle = await bundleProbe();
   const original = await readOwnerFile(page, VITE_BIN);
   expect(original.ok, original.error).toBe(true);
 
-  await writeOwnerFile(page, paths.devRunner, devRunner(bundle, token, paths));
+  await writeOwnerFile(page, fixturePaths.devRunner, devRunner(bundle, token, paths));
   await writeOwnerFile(
     page,
-    paths.buildRunner,
+    fixturePaths.buildRunner,
     moduleRunner(bundle, token, 'build', `${paths.dir}/build-workspace`, paths.buildResult),
   );
   await writeOwnerFile(
     page,
-    paths.previewRunner,
+    fixturePaths.previewRunner,
     moduleRunner(bundle, token, 'preview', `${paths.dir}/preview-workspace`, paths.previewResult),
   );
   await writeOwnerFile(
     page,
-    paths.optimizeRunner,
+    fixturePaths.optimizeRunner,
     moduleRunner(
       bundle,
       token,
@@ -370,7 +624,7 @@ async function runContractHarness(page: Page): Promise<{
       paths.optimizeResult,
     ),
   );
-  await writeOwnerFile(page, paths.infoRunner, infoRunner(token, paths));
+  await writeOwnerFile(page, fixturePaths.infoRunner, infoRunner(token, paths));
 
   let dev: Awaited<ReturnType<typeof execLine>>;
   let build: Awaited<ReturnType<typeof execLine>>;
@@ -392,11 +646,11 @@ async function runContractHarness(page: Page): Promise<{
     await writeOwnerFile(page, VITE_BIN, original.text);
   }
 
-  const devFile = await readOwnerFile(page, paths.devResult);
-  const buildFile = await readOwnerFile(page, paths.buildResult);
-  const previewFile = await readOwnerFile(page, paths.previewResult);
-  const optimizeFile = await readOwnerFile(page, paths.optimizeResult);
-  const infoFile = await readOwnerFile(page, paths.infoResult);
+  const devFile = await readOwnerFile(page, fixturePaths.devResult);
+  const buildFile = await readOwnerFile(page, fixturePaths.buildResult);
+  const previewFile = await readOwnerFile(page, fixturePaths.previewResult);
+  const optimizeFile = await readOwnerFile(page, fixturePaths.optimizeResult);
+  const infoFile = await readOwnerFile(page, fixturePaths.infoResult);
   const restored = await readOwnerFile(page, VITE_BIN);
   const cleanup = await execLine(page, `rm -rf ${paths.dir}`);
 
@@ -525,23 +779,187 @@ async function executeBuiltBrowserModule(page: Page, source: string): Promise<st
   }, source);
 }
 
+interface ViteServerRender {
+  readonly out: string;
+  readonly status: number;
+  readonly body: string;
+  readonly source: string;
+  readonly renderedText?: string;
+}
+
+async function runViteServerRenders(
+  page: Page,
+): Promise<{ readonly dev: ViteServerRender; readonly preview: ViteServerRender }> {
+  return page.evaluate(async (fixtureUrl) => {
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    const project = fixture.currentProject();
+    let devRun: ReturnType<typeof project.run> | null = null;
+    let previewRun: ReturnType<ReturnType<typeof project.run>['terminal']['run']> | null = null;
+    let detach: (() => void) | null = null;
+    try {
+      devRun = project.run();
+      let devOut = '';
+      detach = devRun.terminal.attach((chunk: string) => {
+        devOut += chunk;
+      });
+      const devHandle = await devRun.ready;
+      const devPreview = fixture
+        .currentSessionTools()
+        .previews.snapshot()
+        .find((entry: { readonly port: number }) => entry.port === devHandle.port);
+      if (devPreview === undefined) {
+        throw new Error(`Vite dev ${devHandle.port} is absent from the routed registry`);
+      }
+      const devResponse = await fetch(new URL(devHandle.url, location.href));
+      const devBody = await devResponse.text();
+      const devStopped = await devRun.stop();
+      const devClosed = await devRun.close();
+      const terminal = devRun.terminal;
+      devRun = null;
+      detach();
+      detach = null;
+      if (devStopped.code !== devClosed.code || devStopped.signal !== devClosed.signal) {
+        throw new Error('Vite dev stop/close changed its exit outcome');
+      }
+
+      let previewOut = '';
+      let resolveMarker!: () => void;
+      const markerSeen = new Promise<void>((resolve) => {
+        resolveMarker = resolve;
+      });
+      detach = terminal.attach((chunk: string) => {
+        previewOut += chunk;
+        if (previewOut.includes('Local')) resolveMarker();
+      });
+      previewRun = terminal.run('vite preview --host 127.0.0.1 --port 4174');
+      let markerTimer: ReturnType<typeof setTimeout> | null = null;
+      try {
+        await Promise.race([
+          markerSeen,
+          previewRun.exited.then((exit: unknown) => {
+            throw new Error(
+              `Vite preview exited before "Local": ${JSON.stringify(exit)}\n${previewOut}`,
+            );
+          }),
+          new Promise<never>((_resolve, reject) => {
+            markerTimer = setTimeout(
+              () => reject(new Error(`Vite preview did not print "Local"\n${previewOut}`)),
+              30_000,
+            );
+          }),
+        ]);
+      } finally {
+        if (markerTimer !== null) clearTimeout(markerTimer);
+      }
+
+      const previews = fixture.currentSessionTools().previews;
+      const deadline = Date.now() + 30_000;
+      let preview:
+        | { readonly port: number; readonly url: string; readonly source: string }
+        | undefined;
+      while (preview === undefined) {
+        preview = previews
+          .snapshot()
+          .find((entry: { readonly port: number }) => entry.port === 4174);
+        if (preview !== undefined) break;
+        if (Date.now() >= deadline) {
+          throw new Error(`Vite preview 4174 did not reach the routed registry\n${previewOut}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+
+      const previewResponse = await fetch(new URL(preview.url, location.href));
+      const previewBody = await previewResponse.text();
+      const previewFrame = document.createElement('iframe');
+      previewFrame.src = new URL(preview.url, location.href).href;
+      const previewLoaded = new Promise<void>((resolve, reject) => {
+        previewFrame.addEventListener('load', () => resolve(), { once: true });
+        previewFrame.addEventListener(
+          'error',
+          () => reject(new Error(`Vite preview iframe failed to load ${previewFrame.src}`)),
+          { once: true },
+        );
+      });
+      document.body.appendChild(previewFrame);
+      let frameTimer: ReturnType<typeof setTimeout> | null = null;
+      let renderedText = '';
+      try {
+        await Promise.race([
+          previewLoaded,
+          new Promise<never>((_resolve, reject) => {
+            frameTimer = setTimeout(
+              () => reject(new Error(`Vite preview iframe timed out at ${previewFrame.src}`)),
+              30_000,
+            );
+          }),
+        ]);
+        renderedText = previewFrame.contentDocument?.querySelector('#app')?.textContent ?? '';
+      } finally {
+        if (frameTimer !== null) clearTimeout(frameTimer);
+        previewFrame.remove();
+      }
+      const previewStopped = await previewRun.stop();
+      const previewClosed = await previewRun.close();
+      previewRun = null;
+      if (
+        previewStopped.code !== previewClosed.code ||
+        previewStopped.signal !== previewClosed.signal
+      ) {
+        throw new Error('Vite preview stop/close changed its exit outcome');
+      }
+      return {
+        dev: {
+          out: devOut,
+          status: devResponse.status,
+          body: devBody,
+          source: devPreview.source,
+        },
+        preview: {
+          out: previewOut,
+          status: previewResponse.status,
+          body: previewBody,
+          source: preview.source,
+          renderedText,
+        },
+      };
+    } finally {
+      detach?.();
+      if (previewRun !== null) {
+        await previewRun.stop().catch(() => {});
+        await previewRun.close().catch(() => {});
+      }
+      if (devRun !== null) {
+        await devRun.stop().catch(() => {});
+        await devRun.close().catch(() => {});
+      }
+    }
+  }, sealedWorkbenchFixtureUrl);
+}
+
 test('Vite 7 config graph and dependency optimizer use real esbuild over owner VFS', async ({
+  context,
   page,
 }) => {
   test.setTimeout(240_000);
+  const requests: string[] = [];
+  context.on('request', (request) => requests.push(request.url()));
   await gotoHarness(page);
-  await bootOwner(page, {
+  const bootOptions = {
     workspaceId: 'bu-esbuild-vite-contract',
-    template: 'vite',
-    setup: 'instant',
+    template: 'vite' as const,
+    setup: 'instant' as const,
     starter: 'real-vite',
     hiddenEmptyBoot: false,
-  });
+    persistence: 'preferred' as const,
+  };
+  let ownerOpen = false;
+  await bootOwner(page, bootOptions);
+  ownerOpen = true;
 
   try {
     const which = await execLine(page, 'which vite');
     expect(which).toMatchObject({ exit: 0 });
-    expect(which.out).toContain(VITE_BIN);
+    expect(which.out).toContain(PUBLIC_VITE_BIN);
     const version = await execLine(page, 'vite --version');
     expect(version).toMatchObject({ exit: 0 });
     expect(version.out).toContain('vite/7.3.6');
@@ -677,6 +1095,303 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
       executedDist: 'config-helper-marker:dep-marker',
       distExecutionError: '',
     });
+    expect(aliasRequests(requests), 'retired @esbuild/wasi-preview1 alias request').toEqual([]);
+    expect(hostEsbuildWasmRequests(requests), 'retired host esbuild.wasm asset request').toEqual(
+      [],
+    );
+    expect(
+      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
+      'Vite 7 must acquire the registry recipe asset, not host bytes',
+    ).toBe(true);
+
+    await closeOwner(page);
+    ownerOpen = false;
+    const blockedRegistryRequests: string[] = [];
+    await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
+      blockedRegistryRequests.push(route.request().url());
+      await route.abort();
+    });
+    await bootOwner(page, bootOptions);
+    ownerOpen = true;
+    const offlineBuild = await execLine(page, 'vite build');
+    expect(offlineBuild.exit, offlineBuild.out).toBe(0);
+    const offlineDev = await execLineUntil(page, 'vite --host 127.0.0.1 --port 5174', 'Local');
+    expect(offlineDev.out).toContain('Local');
+    expect(
+      blockedRegistryRequests,
+      'cold-filled Vite tree and registry asset must reopen without acquisition',
+    ).toEqual([]);
+  } finally {
+    if (ownerOpen) await closeOwner(page);
+  }
+});
+
+test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite', async ({
+  context,
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const requests: string[] = [];
+  context.on('request', (request) => requests.push(request.url()));
+  await gotoHarness(page);
+  const cjsResultPath = '/direct-cjs-result.json';
+  const esmResultPath = '/direct-esm-result.json';
+  const bootOptions = {
+    workspaceId: 'bu-esbuild-direct-contract',
+    persistence: 'preferred' as const,
+    plan: {
+      kind: 'node-cli' as const,
+      id: 'scratch',
+      starterId: 'direct-esbuild',
+      templateId: 'browser-unit:direct-esbuild',
+      files: {
+        '/package.json': '{"name":"direct-esbuild","private":true,"type":"module"}\n',
+        '/direct.cjs': directCjsRunner(cjsResultPath),
+        '/direct.mjs': directEsmRunner(esmResultPath),
+      },
+      dependencies: { esbuild: '0.28.0' },
+      firstMaterialization: { kind: 'install' },
+      entryPath: '/direct.mjs',
+    },
+  };
+  let ownerOpen = false;
+  await bootOwner(page, bootOptions);
+  ownerOpen = true;
+
+  try {
+    const install = await execLine(page, 'npm install');
+    const vite = await execLine(page, 'which vite');
+    const config = await readOwnerFile(page, '/scratch/vite.config.js');
+    const cjsRun = await execLine(page, 'node direct.cjs');
+    const esmRun = await execLine(page, 'node direct.mjs');
+    const cli = await execLine(page, 'esbuild --version');
+    const cjsFile = await readOwnerFile(page, `/scratch${cjsResultPath}`);
+    const esmFile = await readOwnerFile(page, `/scratch${esmResultPath}`);
+    const native = await hostEsbuild.transform(DIRECT_SOURCE, DIRECT_TRANSFORM_OPTIONS);
+    const nativeNamespace = (await import(
+      pathToFileURL(shadowRequire.resolve('esbuild')).href
+    )) as Readonly<Record<string, unknown>>;
+    const nativeCjs = hostEsbuild as unknown as Readonly<Record<string, unknown>>;
+
+    expect(install.exit, install.out).toBe(0);
+    expect(vite.exit, vite.out).toBe(1);
+    expect(config.ok).toBe(false);
+    expect(cjsRun.exit, cjsRun.out).toBe(0);
+    expect(esmRun.exit, esmRun.out).toBe(0);
+    expect(cli.exit, cli.out).toBe(1);
+    expect(cli.out).toContain('esbuild.cli');
+
+    const expected: DirectEnvelope = {
+      version: '0.28.0',
+      namespaceVersion: '0.28.0',
+      defaultSame: true,
+      moduleExportsSame: true,
+      runtimeSame: true,
+      namespaceKeys: Object.keys(nativeNamespace).sort(),
+      namespaceRelations: namespaceRelations(nativeNamespace, nativeCjs),
+      code: native.code,
+      map: native.map,
+      transformError: await hostTransformErrorEvidence(),
+    };
+    expect(parseResult<DirectEnvelope>(cjsFile, 'direct CJS')).toEqual(expected);
+    expect(parseResult<DirectEnvelope>(esmFile, 'direct ESM')).toEqual(expected);
+    expect(aliasRequests(requests), 'retired @esbuild/wasi-preview1 alias request').toEqual([]);
+    expect(hostEsbuildWasmRequests(requests), 'retired host esbuild.wasm asset request').toEqual(
+      [],
+    );
+    expect(
+      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
+      'direct esbuild must acquire the registry recipe asset',
+    ).toBe(true);
+
+    await closeOwner(page);
+    ownerOpen = false;
+    const blockedRegistryRequests: string[] = [];
+    await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
+      blockedRegistryRequests.push(route.request().url());
+      await route.abort();
+    });
+    await bootOwner(page, bootOptions);
+    ownerOpen = true;
+    const offlineCjs = await execLine(page, 'node direct.cjs');
+    const offlineEsm = await execLine(page, 'node direct.mjs');
+    expect(offlineCjs.exit, offlineCjs.out).toBe(0);
+    expect(offlineEsm.exit, offlineEsm.out).toBe(0);
+    expect(blockedRegistryRequests, 'verified asset/tree must reopen without acquisition').toEqual(
+      [],
+    );
+  } finally {
+    if (ownerOpen) await closeOwner(page);
+  }
+});
+
+test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves the tree unchanged', async ({
+  context,
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const requests: string[] = [];
+  context.on('request', (request) => requests.push(request.url()));
+  await gotoHarness(page);
+  const resultPath = '/missing-esbuild-result.json';
+  await bootOwner(page, {
+    workspaceId: 'bu-esbuild-missing-and-unsupported',
+    persistence: 'ephemeral',
+    plan: {
+      kind: 'node-cli',
+      id: 'scratch',
+      starterId: 'missing-esbuild',
+      templateId: 'browser-unit:missing-esbuild',
+      files: {
+        '/package.json': '{"name":"missing-esbuild","private":true,"type":"commonjs"}\n',
+        '/missing.cjs': missingEsbuildRunner(resultPath),
+      },
+      firstMaterialization: { kind: 'install' },
+      entryPath: '/missing.cjs',
+    },
+  });
+
+  try {
+    const firstMissing = await execLine(page, 'node missing.cjs');
+    const firstEvidence = await readOwnerFile(page, `/scratch${resultPath}`);
+    const packageJsonBefore = await readOwnerFile(page, '/scratch/package.json');
+    const lockfileBefore = await readOwnerFile(page, '/scratch/package-lock.json');
+    const modulesBefore = await execLine(page, 'ls node_modules');
+
+    expect(firstMissing.exit, firstMissing.out).toBe(0);
+    expect(parseResult<ModuleNotFoundEvidence>(firstEvidence, 'missing esbuild')).toEqual(
+      nativeMissingEsbuildEvidence(),
+    );
+
+    const unsupported = await execLine(page, 'npm install esbuild@^0.27');
+    const packageJsonAfter = await readOwnerFile(page, '/scratch/package.json');
+    const lockfileAfter = await readOwnerFile(page, '/scratch/package-lock.json');
+    const modulesAfter = await execLine(page, 'ls node_modules');
+    const installed = await readOwnerFile(page, '/scratch/node_modules/esbuild/package.json');
+    const secondMissing = await execLine(page, 'node missing.cjs');
+    const secondEvidence = await readOwnerFile(page, `/scratch${resultPath}`);
+
+    expect(unsupported.exit, unsupported.out).toBe(1);
+    expect(unsupported.out).toContain('shadow-registry.esbuild@');
+    expect(packageJsonAfter).toEqual(packageJsonBefore);
+    expect(lockfileAfter).toEqual(lockfileBefore);
+    expect(modulesAfter).toEqual(modulesBefore);
+    expect(installed.ok).toBe(false);
+    expect(secondMissing.exit, secondMissing.out).toBe(0);
+    expect(
+      parseResult<ModuleNotFoundEvidence>(secondEvidence, 'missing after rejected install'),
+    ).toEqual(nativeMissingEsbuildEvidence());
+    expect(
+      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
+      'unsupported recipe must not acquire runtime assets',
+    ).toBe(false);
+  } finally {
+    await closeOwner(page);
+  }
+});
+
+test('Vite 8.0.16 build/preview stay green with no esbuild fetch or activation', async ({
+  context,
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const requests: string[] = [];
+  context.on('request', (request) => requests.push(request.url()));
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-vite8-empty-esbuild-plan',
+    persistence: 'ephemeral',
+    plan: {
+      kind: 'vite',
+      id: 'scratch',
+      starterId: 'vite8-empty-esbuild-plan',
+      templateId: 'browser-unit:vite8-empty-esbuild-plan',
+      files: {
+        '/index.html': '<div id="app"></div><script type="module" src="/src/main.js"></script>',
+        '/src/main.js': "document.getElementById('app').textContent = 'vite8';\n",
+        '/vite.config.js': DEFAULT_VITE8_CONFIG_JS,
+      },
+      viteVersion: '8.0.16',
+      firstMaterialization: { kind: 'install' },
+      port: 5174,
+    },
+  });
+
+  try {
+    const install = await execLine(page, 'npm install');
+    expect(install.exit, install.out).toBe(0);
+
+    const version = await execLine(page, 'vite --version');
+    expect(version.exit, version.out).toBe(0);
+    expect(version.out).toContain('vite/8.0.16');
+
+    const build = await execLine(page, 'vite build');
+    expect(build.exit, build.out).toBe(0);
+    const distIndex = await readOwnerFile(page, '/scratch/dist/index.html');
+    expect(distIndex.ok, distIndex.error).toBe(true);
+    expect(distIndex.text).toContain('<div id="app"></div>');
+    expect(distIndex.text).not.toContain('/src/main.js');
+    const distJsName = /src=["'][^"']*\/assets\/([^"']+\.js)["']/.exec(distIndex.text)?.[1];
+    expect(distJsName, distIndex.text).toBeDefined();
+    if (!distJsName) throw new Error('Vite 8 build emitted no hashed JavaScript asset');
+    const distJs = await readOwnerFile(page, `/scratch/dist/assets/${distJsName}`);
+    expect(distJs.ok, distJs.error).toBe(true);
+    expect(await executeBuiltBrowserModule(page, distJs.text)).toBe('vite8');
+
+    const servers = await runViteServerRenders(page);
+    expect(servers.dev.out).toContain('Local');
+    expect(servers.dev.status).toBe(200);
+    expect(servers.dev.body).toContain('<div id="app"></div>');
+    expect(servers.dev.source).toBe('node');
+    expect(servers.preview.out).toContain('Local');
+    expect(servers.preview.status).toBe(200);
+    expect(servers.preview.body).toContain('<div id="app"></div>');
+    expect(servers.preview.body).toContain(`/assets/${distJsName}`);
+    expect(servers.preview.source).toBe('preview');
+    expect(servers.preview.renderedText).toBe('vite8');
+
+    const original = await readOwnerFile(page, VITE_BIN);
+    expect(original.ok, original.error).toBe(true);
+    await writeOwnerFile(
+      page,
+      '/scratch/.vite8-no-esbuild.cjs',
+      `const fs = require('node:fs');
+const runtime = globalThis.__rifty;
+fs.writeFileSync('/vite8-no-esbuild.json', JSON.stringify({
+  runtimePresent: runtime !== undefined && Reflect.has(runtime, 'esbuild'),
+  legacyBridgePresent: Reflect.has(globalThis, '__riftyEsbuildTransform'),
+}));
+globalThis.process.stdout.write('RIFTY_VITE8_NO_ESBUILD\\n');
+`,
+    );
+    try {
+      await writeOwnerFile(page, VITE_BIN, launcher('/.vite8-no-esbuild.cjs'));
+      const probe = await execLine(page, 'vite build');
+      expect(probe.exit, probe.out).toBe(0);
+      expect(probe.out).toContain('RIFTY_VITE8_NO_ESBUILD');
+    } finally {
+      await writeOwnerFile(page, VITE_BIN, original.text);
+    }
+
+    const probeFile = await readOwnerFile(page, '/scratch/vite8-no-esbuild.json');
+    expect(
+      parseResult<{ runtimePresent: boolean; legacyBridgePresent: boolean }>(
+        probeFile,
+        'Vite 8 empty adapter plan',
+      ),
+    ).toEqual({
+      runtimePresent: false,
+      legacyBridgePresent: false,
+    });
+    expect((await readOwnerFile(page, '/scratch/node_modules/esbuild/package.json')).ok).toBe(
+      false,
+    );
+    expect(
+      registryPackageRequests(requests, 'esbuild'),
+      'Vite 8 cold install must not fetch any esbuild package or asset',
+    ).toEqual([]);
+    expect(aliasRequests(requests)).toEqual([]);
+    expect(hostEsbuildWasmRequests(requests)).toEqual([]);
   } finally {
     await closeOwner(page);
   }

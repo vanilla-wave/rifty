@@ -14,7 +14,7 @@
 //
 // Why all libs, not just the configured target: a project may `lib`-target any
 // of es5..esnext/dom/webworker — for fidelity we vendor the whole set (large is
-// fine; fetched once over HTTP, like the wasm artifacts — ADR-0047 precedent).
+// fine; fetched once and pinned to the workspace compiler — ADR-0166/0177).
 //
 // Zero non-builtin deps; `createRequire` to resolve the installed compiler dir.
 

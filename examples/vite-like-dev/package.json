@@ -9,10 +9,9 @@
   "exports": { ".": "./src/index.ts" },
   "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
   "dependencies": {
+    "@riftydev/io": "workspace:*",
     "@riftydev/net": "workspace:*",
     "@riftydev/runtime-js": "workspace:*",
-    "@riftydev/runtime-wasi": "workspace:*",
-    "@riftydev/shadow-registry": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "acorn": "^8.14.0"
   }

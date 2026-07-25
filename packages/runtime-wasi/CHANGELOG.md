@@ -18,11 +18,19 @@
   `node:wasi.WASI` wrapper; this package's `Wasi` class remains the low-level
   runner used by `runWasi`.
 
+### Changed
+
+- **ADR-0316 retires the bundled esbuild preview1 carrier.** Product/Workbench
+  esbuild now uses only the registry-owned `esbuild-wasm@0.28.0` adapter.
+  `@esbuild/wasi-preview1@0.28.0` remains an exact package-sourced conformance
+  guest (and future explicit showcase input), never an implicit product
+  transform provider.
+
 ### Fixed
 
-- **PR #76 review gap recorded explicitly.** Added a backlog contract and
-  `TODO(backlog:)` seam for the playground dev esbuild bridge to preserve
-  successful transform warnings instead of throwing on non-empty stderr.
+- **ADR-0316 closes PR #76's obsolete transform-warning seam.** The retired
+  product preview1 bridge no longer has a stderr-warning path for runtime-wasi
+  to own; exact preview1 execution remains covered as an explicit guest.
 
 - **Vite 8 browser boot — two WASI faithfulness fixes.** (a) `worker-entry`'s
   top-level guest-run is gated on the kernel having published a *wasi-guest* spec
@@ -56,8 +64,9 @@
 
 - **ADR-0172 — side-effect-free `./wasi` subpath.** `@riftydev/runtime-wasi/wasi`
   exposes `Wasi` / `WasiExit` / `runWasi` without evaluating the kernel
-  `worker-entry` auto-run module, so browser Worker hosts can run vendored WASI
-  tools directly.
+  `worker-entry` auto-run module, so browser Worker hosts can run explicitly
+  supplied WASI guests directly. Product esbuild does not use this subpath
+  (ADR-0316).
 
 - **M11 fd-based fs slice** — implemented local preview1
   `fd_pread`, `fd_pwrite`, and `fd_filestat_set_size` over `FileDescriptor.data`.
@@ -71,8 +80,9 @@
   `E_BADF`.
 
 - **ADR-0049 — WASI working-directory + directory-open semantics (promotes
-  Q-2026-05-27-003).** Forced by running the real esbuild WASI binary
-  (`@esbuild/wasi-preview1`, restored by ADR-0047) through `runWasi`:
+  Q-2026-05-27-003).** Originally forced by running exact
+  `@esbuild/wasi-preview1` through `runWasi`; ADR-0316 now retains that package
+  only as an explicit conformance/showcase guest:
   - `WasiOptions.cwd?: string` (Option A) — names the preopen that serves as
     the relative-path resolution default; it is hoisted to fd 3. Omitting it
     keeps the insertion-order default (backward-compatible). `WasiCtx.cwdFd`
@@ -85,12 +95,18 @@
   - `fd_readdir` returns `E_NOTDIR` (not `E_BADF`) on a valid non-directory fd
     so Go/WASIp1 guests treat it as "file" rather than a hard error.
   - `fd_read` on fd 0 is wired to `WasiOptions.stdin` (was always EOF) — the
-    surface esbuild's `transform` (Vite's TS/JSX path) reads from. Residual
-    buffering for chunked delivery; `null` is EOF.
+    surface the exact preview1 CLI exercises in conformance. Product/Vite
+    esbuild does not use this runner (ADR-0316). Residual buffering for chunked
+    delivery; `null` is EOF.
 
 ### Changed
 
-- **ADR-0041 — `fd_readdir` now writes a real `d_type`.** Each preview1 dirent emits `FILETYPE_REGULAR_FILE` / `FILETYPE_DIRECTORY` based on the `VfsDirent` shape from `FsSync.readdirSync`; guests like esbuild no longer need to re-stat every entry to distinguish files from subdirs. Closes the "fill `d_type`" follow-up (`docs/follow-ups-2026-05-27.md` item #10).
+- **ADR-0041 — `fd_readdir` now writes a real `d_type`.** Each preview1 dirent
+  emits `FILETYPE_REGULAR_FILE` / `FILETYPE_DIRECTORY` based on the `VfsDirent`
+  shape from `FsSync.readdirSync`; explicit guests such as package-sourced
+  preview1 esbuild no longer need to re-stat every entry to distinguish files
+  from subdirs. Closes the "fill `d_type`" follow-up
+  (`docs/follow-ups-2026-05-27.md` item #10).
 
 
 - **ADR-0039 — worker-entry reads `KernelProcessSpec`, not `globalThis.process`.**

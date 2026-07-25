@@ -16,11 +16,14 @@
  *      attached to one URL entry. The worker bootstrap publishes it before
  *      the pre-entry hook; higher runtimes select their own protocol and
  *      decode the opaque payload.
+ *   4. {@link KernelEntryCapabilityPorts} — entry-scoped opaque endpoints
+ *      (ADR-0313).
+ *      The kernel transfers and publishes them but never interprets protocols.
  *
  * Values live on `globalThis` under string keys (cross-bundle sharing — no
- * module identity to rely on across the Worker boundary). The `publish*` /
- * `read*` helpers are the only sanctioned API; reaching into `globalThis[...]`
- * directly is untyped and leaks `any`.
+ * module identity to rely on across the Worker boundary). The helpers below
+ * are the only sanctioned interface; reaching into `globalThis[...]` directly
+ * is untyped and leaks `any`.
  */
 
 /** Type of the in-Worker sync call shim. Narrow so callers stay `any`-free. */
@@ -79,19 +82,25 @@ export interface KernelEntryBootstrapEnvelope {
   readonly payload: unknown;
 }
 
-/**
- * Internal hook keys. Exported only so conformance tests can assert the
- * publish path; production code goes through {@link publishKernelSyncApi} /
- * {@link readKernelSyncApi} etc.
- */
+/** Opaque named MessagePort capabilities attached to one URL worker entry. */
+export type KernelEntryCapabilityPorts = Readonly<Record<string, MessagePort>>;
+
+/** Existing hook keys exported for cross-package compatibility/tests. */
 export const KERNEL_SYNC_CALL_KEY = '__riftyKernelSyncCall' as const;
 export const KERNEL_PROCESS_SPEC_KEY = '__riftyProcessSpec__' as const;
 export const KERNEL_ENTRY_BOOTSTRAP_KEY = '__riftyKernelEntryBootstrap__' as const;
+/** Private one-shot publication; higher runtimes receive only the consume operation. */
+const KERNEL_ENTRY_CAPABILITY_PORTS_KEY = '__riftyKernelEntryCapabilityPorts__' as const;
+
+const EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS = Object.freeze(
+  Object.create(null) as Record<string, MessagePort>,
+) as KernelEntryCapabilityPorts;
 
 interface GlobalWithKernelHooks {
   [KERNEL_SYNC_CALL_KEY]?: KernelSyncCall;
   [KERNEL_PROCESS_SPEC_KEY]?: KernelProcessSpec;
   [KERNEL_ENTRY_BOOTSTRAP_KEY]?: KernelEntryBootstrapEnvelope | null;
+  [KERNEL_ENTRY_CAPABILITY_PORTS_KEY]?: KernelEntryCapabilityPorts;
 }
 
 function asGlobal(): GlobalWithKernelHooks {
@@ -172,4 +181,106 @@ export function publishKernelEntryBootstrap(bootstrap: KernelEntryBootstrapEnvel
 /** Read this entry's bootstrap envelope; `null` when absent or unpublished. */
 export function readKernelEntryBootstrap(): KernelEntryBootstrapEnvelope | null {
   return asGlobal()[KERNEL_ENTRY_BOOTSTRAP_KEY] ?? null;
+}
+
+function capabilityKeyLabel(key: PropertyKey | '<root>'): string {
+  if (key === '<root>') return key;
+  if (typeof key === 'symbol') return String(key);
+  if (typeof key === 'number') return String(key);
+  return key.length === 0 ? "''" : `'${key}'`;
+}
+
+function capabilityTypeError(key: PropertyKey | '<root>', detail: string): TypeError {
+  return new TypeError(
+    `WorkerEntryDescriptor.capabilityPorts ${capabilityKeyLabel(key)} ${detail}`,
+  );
+}
+
+/**
+ * Validate without invoking accessors and detach from later caller mutation.
+ * A null-prototype snapshot also prevents protocol names from reaching object
+ * prototype behavior at the cross-realm seam.
+ */
+export function snapshotKernelEntryCapabilityPorts(value: unknown): KernelEntryCapabilityPorts {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw capabilityTypeError('<root>', 'must be a plain or null-prototype record');
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw capabilityTypeError('<root>', 'must be a plain or null-prototype record');
+  }
+
+  const snapshot = Object.create(null) as Record<string, MessagePort>;
+  const seen = new Set<MessagePort>();
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) {
+      throw capabilityTypeError(key, 'changed during validation');
+    }
+    if (!('value' in descriptor)) {
+      throw capabilityTypeError(key, 'must be a data property; accessors are forbidden');
+    }
+    if (typeof key === 'symbol') {
+      if (descriptor.enumerable) {
+        throw capabilityTypeError(key, 'must not be an enumerable symbol');
+      }
+      continue;
+    }
+    if (!descriptor.enumerable) continue;
+    if (key.length === 0) {
+      throw capabilityTypeError(key, 'must be a non-empty exact string');
+    }
+    const port = descriptor.value;
+    if (typeof MessagePort === 'undefined' || !(port instanceof MessagePort)) {
+      throw capabilityTypeError(key, 'must be a MessagePort');
+    }
+    if (seen.has(port)) {
+      throw capabilityTypeError(key, 'duplicates a MessagePort already used by another name');
+    }
+    seen.add(port);
+    snapshot[key] = port;
+  }
+  return Object.freeze(snapshot);
+}
+
+/**
+ * Publish one entry's capabilities. Canonical absence is no own global
+ * property, so stale ports cannot survive an entry without capabilities.
+ */
+export function publishKernelEntryCapabilityPorts(
+  ports: KernelEntryCapabilityPorts | null | undefined,
+): void {
+  const snapshot =
+    ports === null || ports === undefined
+      ? EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS
+      : snapshotKernelEntryCapabilityPorts(ports);
+  if (Object.keys(snapshot).length === 0) {
+    if (!Reflect.deleteProperty(globalThis, KERNEL_ENTRY_CAPABILITY_PORTS_KEY)) {
+      throw new TypeError('kernel entry capability publication could not be cleared');
+    }
+    return;
+  }
+  Object.defineProperty(globalThis, KERNEL_ENTRY_CAPABILITY_PORTS_KEY, {
+    value: snapshot,
+    writable: false,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
+/**
+ * Atomically adopt the entry capabilities and erase ambient publication before
+ * less-privileged guest modules import.
+ */
+export function consumeKernelEntryCapabilityPorts(): KernelEntryCapabilityPorts {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, KERNEL_ENTRY_CAPABILITY_PORTS_KEY);
+  if (descriptor === undefined) return EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS;
+  if (!('value' in descriptor)) {
+    throw new TypeError('kernel entry capability publication must be a data property');
+  }
+  const snapshot = snapshotKernelEntryCapabilityPorts(descriptor.value);
+  if (!Reflect.deleteProperty(globalThis, KERNEL_ENTRY_CAPABILITY_PORTS_KEY)) {
+    throw new TypeError('kernel entry capability publication could not be consumed');
+  }
+  return Object.keys(snapshot).length === 0 ? EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS : snapshot;
 }

@@ -73,13 +73,13 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'runtime-wasi',
     realm: 'worker',
     compat: 'ok',
-    role: 'WASI preview1 runner. Runs .wasm guests against the shared VFS; kernel ProcessHandle.',
+    role: 'WASI preview1 runner for raw .wasm guests. runWasi stays in-realm; createWasiProcess uses a Worker and the shared VFS.',
   },
   esbuild: {
-    label: 'esbuild.wasm',
+    label: 'esbuild JS API',
     realm: 'worker',
-    compat: 'ok',
-    role: 'Vendored 19 MB Go-compiled WASI binary — the real WASI-forcing consumer.',
+    compat: 'warn',
+    role: "npm esbuild@0.28.0 transform APIs use the registry-attested esbuild-wasm adapter. The esbuild CLI/bin throws NotImplementedError('esbuild.cli').",
   },
   vite: {
     label: 'vite dev server',
@@ -250,7 +250,7 @@ export const EDGES: EdgeDef[] = [
   { from: 'runtimejs', to: 'sab', kind: 'ipc' },
   { from: 'runtimewasi', to: 'kernel', kind: 'import' },
   { from: 'runtimewasi', to: 'vfs', kind: 'data' },
-  { from: 'esbuild', to: 'runtimewasi', kind: 'ipc' },
+  { from: 'esbuild', to: 'runtimejs', kind: 'import' },
   { from: 'vite', to: 'esbuild', kind: 'control' },
   { from: 'vite', to: 'net', kind: 'data' },
   { from: 'kernel', to: 'sab', kind: 'data' },
@@ -326,7 +326,10 @@ export const SCN: Record<ScenarioId, Scenario> = {
     steps: [
       { node: 'playground', t: 'Edit src/main.js in Monaco and save' },
       { node: 'vite', t: 'The real Vite 7 worker re-transforms the changed module' },
-      { node: 'esbuild', t: 'esbuild.wasm bundles it; Vite computes the module-graph delta' },
+      {
+        node: 'esbuild',
+        t: 'Vite 7 uses the registry-attested esbuild JS adapter; there is no host WASM URL',
+      },
       { node: 'net', t: 'HMR payload rides RFC6455 frames over the BroadcastChannel WS bridge' },
       {
         node: 'preview',
@@ -335,17 +338,22 @@ export const SCN: Record<ScenarioId, Scenario> = {
     ],
   },
   wasi: {
-    label: 'Run esbuild.wasm (WASI)',
-    cmd: 'esbuild entry.ts --bundle',
+    label: 'Run a raw WASI guest',
+    cmd: 'createWasiProcess({ wasm })',
     steps: [
       {
-        node: 'shell',
-        t: 'A build invokes esbuild — shadow-registry already redirected it to WASI',
+        node: 'runtimewasi',
+        t: 'createWasiProcess receives raw wasi_snapshot_preview1 module bytes',
       },
-      { node: 'runtimewasi', t: 'createWasiProcess spawns a WASI worker (a kernel ProcessHandle)' },
-      { node: 'esbuild', t: 'esbuild.wasm runs syscall-faithfully against the WASI shim' },
+      {
+        node: 'kernel',
+        t: 'The kernel spawns its WASI Worker process and returns a ProcessHandle',
+      },
       { node: 'sab', t: 'Synchronous fd reads ride the SAB ring — Atomics.wait on the worker' },
-      { node: 'vfs', t: 'Syscalls write through to the same VFS your JS code sees → exit 0' },
+      {
+        node: 'vfs',
+        t: 'The raw guest syscalls use the same VFS as JS and terminate with an honest exit code',
+      },
     ],
   },
   sync: {

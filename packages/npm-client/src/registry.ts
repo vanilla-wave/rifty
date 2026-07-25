@@ -112,6 +112,37 @@ export interface RegistryClientOptions {
   stallTimeoutMs?: number;
 }
 
+export interface RegistryRequestOptions {
+  readonly signal?: AbortSignal;
+  readonly maxBytes?: number;
+}
+
+function registryAbort(signal: AbortSignal, label: string): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error(`${label}: aborted`);
+}
+
+async function waitWithSignal(
+  operation: Promise<void>,
+  signal: AbortSignal | undefined,
+  label: string,
+): Promise<void> {
+  if (!signal) return await operation;
+  if (signal.aborted) throw registryAbort(signal, label);
+  operation.catch(() => {}); // abort can win while an injected sleep settles later
+  let onAbort: (() => void) | undefined;
+  try {
+    await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(registryAbort(signal, label));
+        signal.addEventListener('abort', onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  }
+}
+
 /** Backoff for retry `attempt` (0-based): honor `Retry-After`, else exponential. */
 function retryDelayMs(attempt: number, response: Response | undefined): number {
   const retryAfter = response?.headers.get('retry-after');
@@ -155,21 +186,26 @@ export class RegistryClient {
   private async fetchBytesWithRetry(
     url: string,
     label: string,
+    options: RegistryRequestOptions = {},
   ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; response: Response }> {
     let lastNetworkError: unknown;
     for (let attempt = 0; ; attempt += 1) {
       let response: Response | undefined;
       let bytes: Uint8Array | undefined;
       try {
+        if (options.signal?.aborted) throw registryAbort(options.signal, label);
         response = await fetchHeadersBounded(
           (signal) => this.fetch(url, { signal }),
           this.stallTimeoutMs,
           label,
+          options.signal,
         );
         if (response.ok) {
           bytes = await drainBodyBounded(response, {
             stallTimeoutMs: this.stallTimeoutMs,
+            maxBytes: options.maxBytes,
             label,
+            signal: options.signal,
           });
         } else {
           // Never-consumed body (callers read only the status) — cancelled
@@ -178,6 +214,7 @@ export class RegistryClient {
         }
         lastNetworkError = undefined;
       } catch (err) {
+        if (options.signal?.aborted) throw registryAbort(options.signal, label);
         response = undefined;
         lastNetworkError = err;
       }
@@ -190,19 +227,28 @@ export class RegistryClient {
         if (response !== undefined) return { ok: false, response };
         throw lastNetworkError;
       }
-      await this.sleep(retryDelayMs(attempt, response));
+      await waitWithSignal(this.sleep(retryDelayMs(attempt, response)), options.signal, label);
     }
   }
 
-  async getPackument(name: string): Promise<Packument> {
+  async getPackument(
+    name: string,
+    options: Omit<RegistryRequestOptions, 'maxBytes'> = {},
+  ): Promise<Packument> {
     const url = `${this.baseUrl}/${encodeURIComponent(name).replace('%40', '@')}`;
-    const result = await this.fetchBytesWithRetry(url, `packument ${url}`);
+    const result = await this.fetchBytesWithRetry(url, `packument ${url}`, options);
     if (!result.ok) throw new Error(`Failed to fetch packument ${name}: ${result.response.status}`);
     return JSON.parse(packumentDecoder.decode(result.bytes)) as Packument;
   }
 
-  async getTarball(tarballUrl: string): Promise<Uint8Array> {
-    const result = await this.fetchBytesWithRetry(tarballUrl, `tarball ${tarballUrl}`);
+  async getTarball(tarballUrl: string, options: RegistryRequestOptions = {}): Promise<Uint8Array> {
+    if (
+      options.maxBytes !== undefined &&
+      (!Number.isSafeInteger(options.maxBytes) || options.maxBytes <= 0)
+    ) {
+      throw new TypeError('registry tarball maxBytes must be a positive safe integer');
+    }
+    const result = await this.fetchBytesWithRetry(tarballUrl, `tarball ${tarballUrl}`, options);
     if (!result.ok) throw new Error(`Failed to fetch tarball: ${result.response.status}`);
     return result.bytes;
   }

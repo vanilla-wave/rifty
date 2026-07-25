@@ -1,7 +1,7 @@
+import type { PlaygroundWorkbench } from '@riftydev/workbench/playground';
 import { describe, expect, it, vi } from 'vitest';
 import type { BootResult } from '../boot.ts';
 import type { TerminalPersistence } from '../glue/terminal-persistence.ts';
-import type { PlaygroundWorkbench } from '../workbench/playground.ts';
 import { mountPlaygroundPage } from './playground-page-entry.ts';
 
 const BOOT: BootResult = Object.freeze({

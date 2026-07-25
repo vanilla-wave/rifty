@@ -1,4 +1,4 @@
-import type { PlaygroundWorkbench } from '../workbench/playground.ts';
+import type { PlaygroundWorkbench } from '@riftydev/workbench/playground';
 import { rethrowAfterCleanup } from './cleanup-after-failure.ts';
 import type { PlaygroundAppRuntime } from './playground-app-runtime.ts';
 

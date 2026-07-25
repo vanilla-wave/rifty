@@ -75,8 +75,10 @@ export interface SabRingHeader {
 /** Thrown by {@link SabRing.waitReply} when the timeout elapses. */
 export class RingTimeoutError extends Error {
   readonly code = 'ERINGTIMEOUT' as const;
-  constructor(timeoutMs: number) {
-    super(`SAB ring waitReply timed out after ${timeoutMs}ms`);
+  constructor(timeoutMs: number, headerState?: string) {
+    super(
+      `SAB ring waitReply timed out after ${timeoutMs}ms${headerState === undefined ? '' : ` (${headerState})`}`,
+    );
     this.name = 'RingTimeoutError';
   }
 }
@@ -175,6 +177,23 @@ export class SabRing {
     };
   }
 
+  /**
+   * Forensic snapshot of the atomic header — every protocol-violation throw
+   * carries it. Two CI flake signatures ("cannot writeRequest while a previous
+   * reply is unread", an empty reply frame) surfaced with no state at all,
+   * making the primal violation undiagnosable; the snapshot names it.
+   */
+  private headerState(): string {
+    const state = (v: number): string =>
+      v === STATE_IDLE ? 'idle' : v === STATE_READY ? 'ready' : String(v);
+    const version = Atomics.load(this.i32, VERSION_INDEX);
+    const req = Atomics.load(this.i32, REQ_STATE_INDEX);
+    const rep = Atomics.load(this.i32, REP_STATE_INDEX);
+    const reqLen = Atomics.load(this.i32, REQ_LEN_INDEX);
+    const repLen = Atomics.load(this.i32, REP_LEN_INDEX);
+    return `header: version=${version} req=${state(req)} rep=${state(rep)} reqLen=${reqLen} repLen=${repLen}`;
+  }
+
   /** Attaches a {@link SabRing} to an existing {@link SharedArrayBuffer}.
    * Both peers must agree on `payloadCapacity`. `expectedVersion`
    * (ADR-0032) defaults to {@link SYNC_RPC_PROTOCOL_VERSION}. */
@@ -202,10 +221,14 @@ export class SabRing {
       throw new RingPayloadTooLargeError(payload.byteLength, this.payloadCapacity);
     }
     if (Atomics.load(this.i32, REP_STATE_INDEX) !== STATE_IDLE) {
-      throw new Error('SabRing: cannot writeRequest while a previous reply is unread');
+      throw new Error(
+        `SabRing: cannot writeRequest while a previous reply is unread (${this.headerState()})`,
+      );
     }
     if (Atomics.load(this.i32, REQ_STATE_INDEX) !== STATE_IDLE) {
-      throw new Error('SabRing: cannot writeRequest while a previous request is unread');
+      throw new Error(
+        `SabRing: cannot writeRequest while a previous request is unread (${this.headerState()})`,
+      );
     }
     this.bytes.set(payload, this.reqPayloadOffset);
     Atomics.store(this.i32, REQ_LEN_INDEX, payload.byteLength);
@@ -221,7 +244,7 @@ export class SabRing {
   waitReply(timeoutMs?: number): Uint8Array {
     const timeout = timeoutMs ?? Number.POSITIVE_INFINITY;
     const result = Atomics.wait(this.i32, REP_STATE_INDEX, STATE_IDLE, timeout);
-    if (result === 'timed-out') throw new RingTimeoutError(timeout);
+    if (result === 'timed-out') throw new RingTimeoutError(timeout, this.headerState());
     return this.consumeReply();
   }
 
@@ -231,7 +254,7 @@ export class SabRing {
     const timeout = timeoutMs ?? Number.POSITIVE_INFINITY;
     const pending = atomicsWaitAsync(this.i32, REP_STATE_INDEX, STATE_IDLE, timeout);
     const result = pending.async ? await pending.value : pending.value;
-    if (result === 'timed-out') throw new RingTimeoutError(timeout);
+    if (result === 'timed-out') throw new RingTimeoutError(timeout, this.headerState());
     return this.consumeReply();
   }
 
@@ -246,6 +269,8 @@ export class SabRing {
   }
 
   private consumeReply(): Uint8Array {
+    // Pre-clear snapshot — the forensic state a corrupt-length throw reports.
+    const stateBefore = this.headerState();
     // Snapshot VERSION first, then clear state; the throw must not wedge the ring (ADR-0032).
     const version = Atomics.load(this.i32, VERSION_INDEX);
     const len = Atomics.load(this.i32, REP_LEN_INDEX);
@@ -255,7 +280,9 @@ export class SabRing {
       throw new SyncRpcProtocolMismatchError(this.expectedVersion, version);
     }
     if (len < 0 || len > this.payloadCapacity) {
-      throw new Error(`SabRing: corrupt reply length ${len} (capacity ${this.payloadCapacity})`);
+      throw new Error(
+        `SabRing: corrupt reply length ${len} (capacity ${this.payloadCapacity}) (${stateBefore})`,
+      );
     }
     // ADR-0084 #18: zero-copy live VIEW into the reply slot — no copy-out. State
     // is already flipped to IDLE above, so the consumer MUST decode synchronously
@@ -271,6 +298,8 @@ export class SabRing {
    * {@link writeReplyWithVersion} echoing the caller's version (ADR-0032). */
   readRequest(): Uint8Array | null {
     if (Atomics.load(this.i32, REQ_STATE_INDEX) !== STATE_READY) return null;
+    // Pre-clear snapshot — the forensic state a corrupt-length throw reports.
+    const stateBefore = this.headerState();
     // Snapshot VERSION first, then clear state; the throw must not wedge the ring (ADR-0032).
     const version = Atomics.load(this.i32, VERSION_INDEX);
     const len = Atomics.load(this.i32, REQ_LEN_INDEX);
@@ -280,7 +309,9 @@ export class SabRing {
       throw new SyncRpcProtocolMismatchError(this.expectedVersion, version);
     }
     if (len < 0 || len > this.payloadCapacity) {
-      throw new Error(`SabRing: corrupt request length ${len} (capacity ${this.payloadCapacity})`);
+      throw new Error(
+        `SabRing: corrupt request length ${len} (capacity ${this.payloadCapacity}) (${stateBefore})`,
+      );
     }
     // ADR-0084 #18: zero-copy live VIEW into the request slot (decode now).
     return this.bytes.subarray(this.reqPayloadOffset, this.reqPayloadOffset + len);
@@ -300,7 +331,9 @@ export class SabRing {
       throw new RingPayloadTooLargeError(payload.byteLength, this.payloadCapacity);
     }
     if (Atomics.load(this.i32, REP_STATE_INDEX) !== STATE_IDLE) {
-      throw new Error('SabRing: cannot writeReply while a previous reply is unread');
+      throw new Error(
+        `SabRing: cannot writeReply while a previous reply is unread (${this.headerState()})`,
+      );
     }
     this.bytes.set(payload, this.repPayloadOffset);
     Atomics.store(this.i32, REP_LEN_INDEX, payload.byteLength);

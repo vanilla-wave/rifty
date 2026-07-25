@@ -104,7 +104,11 @@ describe('listen() cross-realm EADDRINUSE (ADR-0186)', () => {
     });
     await new Promise<void>((resolve) => s.listen({ port }, () => resolve()));
     expect(errored).toBeNull();
-    expect(s.address()).toEqual({ port });
+    expect(s.address()).toEqual({
+      address: '127.0.0.1',
+      family: 'IPv4',
+      port,
+    });
     s.close();
   });
 });

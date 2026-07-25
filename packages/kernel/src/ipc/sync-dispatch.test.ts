@@ -194,3 +194,23 @@ describe('SyncRpcDispatcher — busy-poll fallback when waitAsync is absent (ADR
     }
   });
 });
+
+describe('SyncRpcDispatcher — a dropped reply is LOUD, never silent', () => {
+  it('when even the error reply cannot land, console.error names the method + ring state', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    dispatcher.register('echo', (p) => p);
+    const { sab, ring } = createSabRing({ payloadCapacity: 256 });
+    const caller = SabRing.attach(sab, 256);
+    caller.writeRequest(encodeRequest({ method: 'echo', payload: 1 }));
+    // Forge a protocol violation: occupy the reply slot so BOTH the value reply
+    // and the fallback error reply fail their "previous reply unread" guard.
+    ring.writeReply(new Uint8Array([9]));
+    dispatcher.pumpOnce(ring);
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    const line = String(errSpy.mock.calls[0]?.[0]);
+    expect(line).toMatch(/SyncRpcDispatcher: reply for 'echo' DROPPED/);
+    expect(line).toMatch(/previous reply is unread/);
+    dispatcher.detachAll();
+  });
+});

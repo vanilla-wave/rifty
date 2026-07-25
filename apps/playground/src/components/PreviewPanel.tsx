@@ -42,6 +42,7 @@ export interface PreviewPanelEntry {
   readonly port: number;
   readonly url: string;
   readonly label: string;
+  readonly source: 'dev-server' | 'preview' | 'node';
 }
 
 // `unreachable` = the route never answered ok (dev server down); `error` = the
@@ -50,19 +51,27 @@ export interface PreviewPanelEntry {
 type Phase = 'starting' | 'live' | 'error' | 'unreachable';
 
 // Which port the switcher should show given the live set + current selection
-// (ADR-0155). Empty set → keep current until the registry publishes. A port
-// NEWLY appended since the previous reconcile auto-selects (the user just
-// started that server — `vite preview`, webpack, a node server alike; replaces
-// the old `source === 'preview'` special case, backlog:
-// playground/generic-dev-server-lifecycle). Else current-if-live, else last.
+// (ADR-0155/0173). Empty set → keep current until the registry publishes. A
+// hand-picked selection (user clicked the switcher) is never displaced while
+// its port stays live. Else a port NEWLY published since the previous reconcile
+// auto-selects regardless of registry position or source — the registry orders
+// [dev-server, preview, node], so `npm run dev` inserts FIRST while a node
+// server is live and must still win (several new at once → last new in registry
+// order; backlog: playground/generic-dev-server-lifecycle). Else current-if-live,
+// then fallback last.
 export function reconcileSelectedPort(
   entries: readonly PreviewPanelEntry[],
   current: number,
   knownPorts?: ReadonlySet<number>,
+  manualPort?: number | null,
 ): number {
   const last = entries.at(-1);
   if (!last) return current;
-  if (knownPorts && !knownPorts.has(last.port)) return last.port;
+  if (manualPort != null && entries.some((e) => e.port === manualPort)) return manualPort;
+  const latestNew = knownPorts
+    ? entries.findLast((entry) => !knownPorts.has(entry.port))
+    : undefined;
+  if (latestNew) return latestNew.port;
   if (entries.some((e) => e.port === current)) return current;
   return last.port;
 }
@@ -88,14 +97,17 @@ export function PreviewPanel(props: {
   const previewUrl = (): string | undefined => selectedEntry()?.url;
   const frameKey = createMemo(() => ({ epoch: frameEpoch() }));
 
-  // Keep the selected port valid against the live set: a NEWLY appended server
-  // auto-selects, a removed selection falls back to the last entry. The warm-up
-  // effect + iframe stay keyed off `port()`, so the switch flows through
-  // unchanged. `knownPorts` = the set seen by the previous reconcile.
+  // Keep the selected port valid against the live set. Any newly published
+  // server auto-selects; a hand-picked switcher choice survives until its port
+  // leaves the live set (then normal rules resume). A removed selection falls
+  // back to the last entry. `knownPorts` is the set seen by the previous
+  // reconcile. `initialPort` is a default, never a manual pick.
   let knownPorts: ReadonlySet<number> = new Set<number>();
+  let manualPort: number | null = null;
   createEffect(() => {
     const live = entries();
-    const next = reconcileSelectedPort(live, port(), knownPorts);
+    if (manualPort !== null && !live.some((e) => e.port === manualPort)) manualPort = null;
+    const next = reconcileSelectedPort(live, port(), knownPorts, manualPort);
     knownPorts = new Set(live.map((e) => e.port));
     if (next !== port()) setPort(next);
   });
@@ -219,7 +231,11 @@ export function PreviewPanel(props: {
                 class="rf-preview__switcher"
                 aria-label="Preview server"
                 value={selectedEntry()?.port ?? port()}
-                onChange={(e) => setPort(Number(e.currentTarget.value))}
+                onChange={(e) => {
+                  const chosen = Number(e.currentTarget.value);
+                  manualPort = chosen; // user-picked: new servers may not displace it
+                  setPort(chosen);
+                }}
               >
                 <For each={entries()}>
                   {(e) => <option value={e.port}>{`${e.label} (:${e.port})`}</option>}

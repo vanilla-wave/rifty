@@ -31,6 +31,14 @@ const readyEpicAfterX = readyEpic.replace(
   'items: [playground/y]',
 );
 
+const closedChild = `---
+area: playground
+status: ready
+title: X
+epic: e
+---
+`;
+
 describe('statusOf', () => {
   it('reads frontmatter status, null without one', () => {
     expect(statusOf(item('ready'))).toBe('ready');
@@ -44,9 +52,9 @@ describe('evaluate', () => {
   const contract = { status: 'M', path: 'docs/backlog/playground/x.md' };
 
   it('flags an in-place ready-contract edit alongside source changes', () => {
-    const v = evaluate([src, contract], read(item('ready'), item('ready')));
-    expect(v).toHaveLength(1);
-    expect(v[0]).toContain('docs/backlog/playground/x.md');
+    const violations = evaluate([src, contract], read(item('ready'), item('ready')));
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain('docs/backlog/playground/x.md');
   });
 
   it('flags a ready→draft demotion alongside source changes', () => {
@@ -64,49 +72,97 @@ describe('evaluate', () => {
     );
   });
 
-  it('guards in-progress epics, skips README/TEMPLATE', () => {
+  it('guards in-progress epics and skips README/TEMPLATE', () => {
     const epic = { status: 'M', path: 'docs/backlog/epics/e.md' };
     expect(evaluate([src, epic], read(item('in-progress'), item('in-progress')))).toHaveLength(1);
     const readme = { status: 'M', path: 'docs/backlog/README.md' };
     expect(evaluate([src, readme], read(item('ready'), item('ready')))).toHaveLength(0);
   });
 
-  it('rejects an implementation diff that edits its own process referee', () => {
-    const src = { status: 'M', path: 'packages/vfs/src/index.ts' };
+  it('rejects a process referee changed anywhere in the implementation PR', () => {
     for (const path of [
       'tools/checks/budget.mjs',
       'tools/checks/run-pickup.mjs',
       '.agents/skills/rifty-review-loop/review-schema.json',
     ]) {
       const referee = { status: 'M', path };
-      expect(evaluate([src, referee], read(null, null))[0]).toContain('own process referee');
+      expect(evaluate([src], read(null, null), [src, referee])[0]).toContain('own process referee');
       expect(evaluate([referee], read(null, null))).toEqual([]);
     }
   });
 
-  it('allows only exact bookkeeping subtraction for a deleted ready child', () => {
-    const src = { status: 'M', path: 'packages/vfs/src/index.ts' };
+  it('allows only exact frontmatter subtraction for a deleted ready child', () => {
     const deleted = { status: 'D', path: 'docs/backlog/playground/x.md' };
     const epicEntry = { status: 'M', path: 'docs/backlog/epics/e.md' };
-    const child = `---
+    const byPath =
+      (baseEpic: string, headEpic: string, child = closedChild) =>
+      (path: string, side: 'base' | 'head'): string | null => {
+        if (path === deleted.path) return side === 'base' ? child : null;
+        if (path === epicEntry.path) return side === 'base' ? baseEpic : headEpic;
+        return null;
+      };
+
+    expect(evaluate([src, deleted, epicEntry], byPath(readyEpic, readyEpicAfterX))).toEqual([]);
+    const activeBase = readyEpic.replace('status: ready', 'status: in-progress');
+    const activeHead = readyEpicAfterX.replace('status: ready', 'status: in-progress');
+    expect(evaluate([src, deleted, epicEntry], byPath(activeBase, activeHead))).toEqual([]);
+
+    expect(
+      evaluate(
+        [src, deleted, epicEntry],
+        byPath(readyEpic, readyEpicAfterX.replace('keep me.', 'rewritten.')),
+      ),
+    ).toHaveLength(1);
+    expect(
+      evaluate(
+        [src, deleted, epicEntry],
+        byPath(
+          readyEpic,
+          readyEpicAfterX.replace('items: [playground/y]', 'items: [playground/y, playground/z]'),
+        ),
+      ),
+    ).toHaveLength(1);
+    expect(
+      evaluate(
+        [src, deleted, epicEntry],
+        byPath(readyEpic, readyEpicAfterX, closedChild.replace('status: ready', 'status: draft')),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('allows only deleted ready keys to leave a dependent blocked_by list', () => {
+    const deleted = { status: 'D', path: 'docs/backlog/playground/x.md' };
+    const dependent = { status: 'M', path: 'docs/backlog/playground/y.md' };
+    const baseDependent = `---
 area: playground
 status: ready
-title: X
+title: Y
 epic: e
+blocked_by: [playground/x, playground/z]
 ---
-`;
-    const byPath = (path: string, side: 'base' | 'head'): string | null => {
-      if (path === deleted.path) return side === 'base' ? child : null;
-      if (path === epicEntry.path) return side === 'base' ? readyEpic : readyEpicAfterX;
-      return null;
-    };
 
-    expect(evaluate([src, deleted, epicEntry], byPath)).toEqual([]);
+body
+`;
+    const headDependent = baseDependent.replace(
+      'blocked_by: [playground/x, playground/z]',
+      'blocked_by: [playground/z]',
+    );
+    const byPath =
+      (head: string) =>
+      (path: string, side: 'base' | 'head'): string | null => {
+        if (path === deleted.path) return side === 'base' ? closedChild : null;
+        if (path === dependent.path) return side === 'base' ? baseDependent : head;
+        return null;
+      };
+
+    expect(evaluate([src, deleted, dependent], byPath(headDependent))).toEqual([]);
     expect(
-      evaluate([src, deleted, epicEntry], (path, side) =>
-        path === epicEntry.path && side === 'head'
-          ? readyEpicAfterX.replace('keep me.', 'rewritten.')
-          : byPath(path, side),
+      evaluate([src, deleted, dependent], byPath(headDependent.replace('body', 'rewritten body'))),
+    ).toHaveLength(1);
+    expect(
+      evaluate(
+        [src, deleted, dependent],
+        byPath(headDependent.replace('blocked_by: [playground/z]\n', '')),
       ),
     ).toHaveLength(1);
   });

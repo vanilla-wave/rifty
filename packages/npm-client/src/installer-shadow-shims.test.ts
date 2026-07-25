@@ -14,12 +14,17 @@ import {
   gzip,
   padToBlock,
 } from './_test-fixtures/tar-builder.ts';
+import { closureHashOf } from './closure-hash.ts';
+import { EDDY_BUNDLE_FORMAT, packEddyBundle } from './eddy-bundle.ts';
 import { install } from './installer.ts';
+import { shadowAssetPlanForInstallResult } from './internal/shadow/index.ts';
+import type { Lockfile } from './linker.ts';
 import { resolveOverride } from './overrides.ts';
 import type { Packument, VersionManifest } from './registry.ts';
 import { RegistryClient } from './registry.ts';
 import { matchesRange } from './semver.ts';
 import { applyInternalsShims } from './shadow-shims.ts';
+import { computeIntegrity } from './tarball-cache.ts';
 
 interface FakeRegistryEntry {
   manifest: VersionManifest;
@@ -192,6 +197,239 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
     });
   });
 
+  it('keeps a locked unsupported root optional non-fatal with Eddy configured', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const stable = await makeEntry('stable', '1.0.0');
+    const unsupported = await makeEntry(
+      'rollup',
+      '5.0.0',
+      {},
+      { 'dist/native.js': REAL_ROLLUP_NATIVE },
+    );
+    const registry = new FakeRegistry(db(['stable', stable], ['rollup', unsupported]));
+    await install('root', '1.0.0', { stable: '1.0.0' }, { vfs, cwd: '/proj', registry });
+    const lockfile = JSON.parse(await readText(vfs, '/proj/package-lock.json')) as {
+      packages: Record<
+        string,
+        {
+          version: string;
+          dependencies?: Record<string, string>;
+          resolved?: string;
+          integrity?: string;
+        }
+      >;
+    };
+    const root = lockfile.packages[''];
+    if (!root) throw new Error('test setup: root lockfile entry missing');
+    root.dependencies = { ...root.dependencies, rollup: '5.0.0' };
+    lockfile.packages['node_modules/rollup'] = {
+      version: '5.0.0',
+      dependencies: {},
+      resolved: unsupported.manifest.dist.tarball,
+      integrity: await computeIntegrity(unsupported.tarball),
+    };
+    await vfs.writeFile('/proj/package-lock.json', JSON.stringify(lockfile));
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { stable: '1.0.0' },
+        optionalDependencies: { rollup: '5.0.0' },
+      }),
+    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('expected Eddy fallback'));
+
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry,
+      resolverUrl: 'https://eddy.invalid/resolve',
+    });
+
+    expect(result.packages.map(({ name }) => name)).toEqual(['stable']);
+    expect(await vfs.exists('/proj/node_modules/rollup/package.json')).toBe(false);
+    expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+      expect.stringContaining('optional dependency rollup@5.0.0 of root could not be installed'),
+    );
+  });
+
+  it('[fault: provenance-lie] declines an Eddy bundle missing a surviving optional root tarball', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        optionalDependencies: { 'optional-root': '1.0.0' },
+      }),
+    );
+    const optionalRoot = await makeEntry('optional-root', '1.0.0', { rollup: '5.0.0' });
+    const unsupported = await makeEntry(
+      'rollup',
+      '5.0.0',
+      {},
+      { 'dist/native.js': REAL_ROLLUP_NATIVE },
+    );
+    const lockfile: Lockfile = {
+      name: 'root',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { version: '1.0.0', dependencies: { 'optional-root': '1.0.0' } },
+        'node_modules/optional-root': {
+          version: '1.0.0',
+          dependencies: { rollup: '5.0.0' },
+          resolved: optionalRoot.manifest.dist.tarball,
+          integrity: await computeIntegrity(optionalRoot.tarball),
+        },
+        'node_modules/rollup': {
+          version: '5.0.0',
+          dependencies: {},
+          resolved: unsupported.manifest.dist.tarball,
+          integrity: await computeIntegrity(unsupported.tarball),
+        },
+      },
+    };
+    const closureHash = await closureHashOf(lockfile);
+    const bundle = packEddyBundle({
+      manifest: {
+        format: EDDY_BUNDLE_FORMAT,
+        npmClientVersion: '0.1.0-test',
+        asOf: {
+          resolvedAt: '2026-07-19T00:00:00.000Z',
+          registry: 'https://registry.test',
+          closureHash,
+        },
+        tarballs: [],
+      },
+      lockfileText: JSON.stringify(lockfile),
+      tarballs: [],
+    });
+    const registry = new FakeRegistry(db(['optional-root', optionalRoot], ['rollup', unsupported]));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(bundle as unknown as BodyInit));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry,
+      resolverUrl: 'https://eddy.invalid/resolve',
+    });
+
+    expect(result.source ?? 'standard').toBe('standard');
+    expect(result.provenance.eddyFallback?.reason).toBe(
+      'post: bundle omits the tarball for optional-root@1.0.0',
+    );
+    expect(result.provenance.packages).toContainEqual({
+      name: 'optional-root',
+      version: '1.0.0',
+      transport: 'registry',
+    });
+    expect(result.packages.map(({ name }) => name)).toEqual(['optional-root']);
+    expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+      expect.stringContaining(
+        'optional dependency optional-root@1.0.0 of root could not be installed',
+      ),
+    );
+  });
+
+  it('[fault: provenance-lie] does not lose an earlier optional metadata frontier when a later child is unsupported', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        optionalDependencies: { 'optional-root': '1.0.0' },
+        overrides: { 'optional-root>foo': 'bar@2.0.0' },
+      }),
+    );
+    const optionalRoot = await makeEntry('optional-root', '1.0.0', {
+      foo: '1.0.0',
+      rollup: '5.0.0',
+    });
+    const bar = await makeEntry('bar', '2.0.0');
+    const unsupported = await makeEntry(
+      'rollup',
+      '5.0.0',
+      {},
+      { 'dist/native.js': REAL_ROLLUP_NATIVE },
+    );
+    const optionalIntegrity = await computeIntegrity(optionalRoot.tarball);
+    const lockfile: Lockfile = {
+      name: 'root',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { version: '1.0.0', dependencies: { 'optional-root': '1.0.0' } },
+        'node_modules/optional-root': {
+          version: '1.0.0',
+          // Order is the fault: `foo` proves metadata ownership before the
+          // later unsupported child stops the optional traversal.
+          dependencies: { foo: '1.0.0', rollup: '5.0.0' },
+          resolved: optionalRoot.manifest.dist.tarball,
+          integrity: optionalIntegrity,
+        },
+        'node_modules/rollup': {
+          version: '5.0.0',
+          dependencies: {},
+          resolved: unsupported.manifest.dist.tarball,
+          integrity: await computeIntegrity(unsupported.tarball),
+        },
+      },
+    };
+    const tarballEntry = {
+      file: 'tarballs/optional-root-1.0.0.tgz',
+      name: 'optional-root',
+      version: '1.0.0',
+      integrity: optionalIntegrity,
+    };
+    const bundle = packEddyBundle({
+      manifest: {
+        format: EDDY_BUNDLE_FORMAT,
+        npmClientVersion: '0.1.0-test',
+        asOf: {
+          resolvedAt: '2026-07-19T00:00:00.000Z',
+          registry: 'https://registry.test',
+          closureHash: await closureHashOf(lockfile),
+        },
+        tarballs: [tarballEntry],
+      },
+      lockfileText: JSON.stringify(lockfile),
+      tarballs: [{ entry: tarballEntry, bytes: optionalRoot.tarball }],
+    });
+    const registry = new FakeRegistry(
+      db(['optional-root', optionalRoot], ['bar', bar], ['rollup', unsupported]),
+    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(bundle as unknown as BodyInit));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry,
+      resolverUrl: 'https://eddy.invalid/resolve',
+    });
+
+    expect(result.source ?? 'standard').toBe('standard');
+    expect(result.provenance.eddyFallback?.reason).toMatch(
+      /bundle lockfile does not cover the request|override forces a re-resolve/,
+    );
+    expect(result.packages.map(({ name }) => name).sort()).toEqual(['bar', 'optional-root']);
+    expect(result.provenance.packages).toContainEqual({
+      name: 'bar',
+      version: '2.0.0',
+      transport: 'registry',
+    });
+  });
+
   it('loud EBROKENLOCK when a pre-shim lockfile lacks the companion entry (replay)', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
@@ -232,20 +470,19 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
   });
 });
 
-describe('install-time shadow shims — alias packages + substitution lines', () => {
+describe('shadow substitutions — synthetic recipes + retained legacy redirects', () => {
   async function esbuildDb() {
     return db(
-      ['@esbuild/wasi-preview1', await makeEntry('@esbuild/wasi-preview1', '0.28.0')],
+      ['user-esbuild-target', await makeEntry('user-esbuild-target', '0.28.0')],
       ['viteish', await makeEntry('viteish', '1.0.0', { esbuild: '^0.28.0' })],
       ['viteish-old', await makeEntry('viteish-old', '1.0.0', { esbuild: '0.21.5' })],
     );
   }
 
-  const REDIRECT_LINE =
-    'npm: esbuild@^0.28.0 → @esbuild/wasi-preview1@0.28.0 (substituted from shadow registry, ADR-0051)';
-  const PATCH_LINE = 'npm: esbuild@0.28.0 internals patched from shadow registry';
+  const MATERIALIZE_LINE =
+    'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v1)';
 
-  it('materializes the esbuild alias package next to the redirect target (fresh + replay, byte-identical)', async () => {
+  it('materializes synthetic esbuild on fresh + replay, byte-identical', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -265,8 +502,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
     expect(aliasMain).toContain('__rifty?.esbuild');
     expect(await readText(vfs, '/proj/node_modules/esbuild/package.json')).toContain('"esbuild"');
-    expect(fresh).toContain(REDIRECT_LINE);
-    expect(fresh).toContain(PATCH_LINE);
+    expect(fresh).toContain(MATERIALIZE_LINE);
 
     // Replay (lockfile fast path): same lines, byte-identical shim files.
     const replay: string[] = [];
@@ -281,12 +517,11 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => replay.push(line),
       },
     );
-    expect(replay).toContain(REDIRECT_LINE);
-    expect(replay).toContain(PATCH_LINE);
+    expect(replay).toContain(MATERIALIZE_LINE);
     expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasMain);
   });
 
-  it('prints the redirect + patch lines for a TRANSITIVE baked override on fresh AND replay', async () => {
+  it('materializes a transitive synthetic recipe on fresh AND replay', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -302,8 +537,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => fresh.push(line),
       },
     );
-    expect(fresh).toContain(REDIRECT_LINE);
-    expect(fresh).toContain(PATCH_LINE);
+    expect(fresh).toContain(MATERIALIZE_LINE);
     expect(await vfs.exists('/proj/node_modules/esbuild/lib/main.cjs')).toBe(true);
 
     const replay: string[] = [];
@@ -318,8 +552,74 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => replay.push(line),
       },
     );
-    expect(replay).toContain(REDIRECT_LINE);
-    expect(replay).toContain(PATCH_LINE);
+    expect(replay).toContain(MATERIALIZE_LINE);
+  });
+
+  it('attests and replays the registry-backed lightningcss recipe', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const recipeId = 'rifty.shadow-substitution.lightningcss.v1';
+    const materializeLine = `npm: lightningcss@^1.32.0 materialized from shadow registry (${recipeId})`;
+    const registry = new FakeRegistry(
+      db([
+        'lightningcss-wasm',
+        await makeEntry(
+          'lightningcss-wasm',
+          '1.32.0',
+          {},
+          {
+            'index.js': 'module.exports = { transform() {} };',
+          },
+        ),
+      ]),
+    );
+
+    const freshTrace: string[] = [];
+    const first = await install(
+      'root',
+      '1.0.0',
+      { lightningcss: '^1.32.0' },
+      { vfs, cwd: '/proj', registry, onSubstitution: (line) => freshTrace.push(line) },
+    );
+    expect(first.lockfile.packages['node_modules/lightningcss']).toMatchObject({
+      version: '1.32.0',
+      riftyShadowRecipe: recipeId,
+    });
+    expect(first.lockfile.packages['node_modules/lightningcss-wasm']).toMatchObject({
+      version: '1.32.0',
+    });
+    expect(
+      first.lockfile.rifty?.shadowSubstitutions.applied.map(
+        (substitution) => substitution.substitutionId,
+      ),
+    ).toEqual([recipeId]);
+    expect(freshTrace).toContain(materializeLine);
+    expect(freshTrace.filter((line) => line.includes('internals patched'))).toEqual([]);
+    expect(await readText(vfs, '/proj/node_modules/lightningcss/index.mjs')).toContain(
+      "from 'lightningcss-wasm'",
+    );
+    expect(shadowAssetPlanForInstallResult(first)).toMatchObject({
+      assets: [],
+      bindings: [],
+      substitutions: [{ substitutionId: recipeId }],
+    });
+
+    const packument = vi.spyOn(registry, 'getPackument');
+    const replayTrace: string[] = [];
+    const replay = await install(
+      'root',
+      '1.0.0',
+      { lightningcss: '^1.32.0' },
+      { vfs, cwd: '/proj', registry, onSubstitution: (line) => replayTrace.push(line) },
+    );
+    expect(packument).not.toHaveBeenCalled();
+    expect(replayTrace).toEqual(freshTrace);
+    expect(replay.lockfile.rifty?.shadowSubstitutions).toEqual(
+      first.lockfile.rifty?.shadowSubstitutions,
+    );
+    expect(await readText(vfs, '/proj/node_modules/lightningcss/index.cjs')).toContain(
+      "require('lightningcss-wasm')",
+    );
   });
 
   const UNSUPPORTED_REQUEST = '0.21.5';
@@ -328,7 +628,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     feature: `shadow-registry.esbuild@${UNSUPPORTED_REQUEST}`,
   };
 
-  it('refuses a direct baked substitution when the fresh request excludes exact esbuild 0.28.0', async () => {
+  it('refuses a direct synthetic substitution when the request excludes exact esbuild 0.28.0', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const lines: string[] = [];
@@ -350,7 +650,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
   });
 
-  it('refuses a direct baked substitution on replay when the new request excludes exact esbuild 0.28.0', async () => {
+  it('refuses a direct synthetic substitution on replay when the request excludes exact esbuild 0.28.0', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -372,7 +672,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasBefore);
   });
 
-  it('refuses a transitive baked substitution when the fresh request excludes exact esbuild 0.28.0', async () => {
+  it('refuses a transitive synthetic substitution outside its exact recipe', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const lines: string[] = [];
@@ -394,7 +694,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
   });
 
-  it('refuses a transitive baked substitution from an old lockfile whose request excludes exact esbuild 0.28.0', async () => {
+  it('refuses transitive replay when the recorded request drifts outside the recipe', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -424,11 +724,11 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasBefore);
   });
 
-  it('allows an explicit user target at 0.28.0 to replace an otherwise-incompatible source request on fresh and replay', async () => {
+  it('lets an explicit user target bypass built-in synthetic policy without shadow attribution', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
-    const overrides = { esbuild: '@esbuild/wasi-preview1@0.28.0' };
+    const overrides = { esbuild: 'user-esbuild-target@0.28.0' };
     const fresh: string[] = [];
 
     await install(
@@ -443,8 +743,7 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => fresh.push(line),
       },
     );
-    expect(fresh.filter((line) => line.includes('substituted from shadow registry'))).toEqual([]);
-    expect(fresh).toContain(PATCH_LINE);
+    expect(fresh).toEqual([]);
 
     const replay: string[] = [];
     await install(
@@ -459,9 +758,8 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
         onSubstitution: (line) => replay.push(line),
       },
     );
-    expect(replay.filter((line) => line.includes('substituted from shadow registry'))).toEqual([]);
-    expect(replay).toContain(PATCH_LINE);
-    expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
+    expect(replay).toEqual([]);
+    expect(await vfs.exists('/proj/node_modules/user-esbuild-target/package.json')).toBe(true);
   });
 
   it('prints a redirect line for a plain baked redirect without an internals shim (bcrypt)', async () => {
@@ -512,32 +810,30 @@ describe('install-time shadow shims — alias packages + substitution lines', ()
     const registry = new FakeRegistry(await esbuildDb());
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await install('root', '1.0.0', { esbuild: '^0.28.0' }, { vfs, cwd: '/proj', registry });
-    expect(warn.mock.calls.map((c) => String(c[0]))).toContain(REDIRECT_LINE);
+    expect(warn.mock.calls.map((c) => String(c[0]))).toContain(MATERIALIZE_LINE);
   });
 
-  it('keeps an explicit user target at 0.29.0 loud because it is outside the alias shim range', async () => {
+  it('does not attribute an explicit user target outside the builtin recipe', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(
-      db(['@esbuild/wasi-preview1', await makeEntry('@esbuild/wasi-preview1', '0.29.0')]),
+      db(['user-esbuild-target', await makeEntry('user-esbuild-target', '0.29.0')]),
     );
-    await expect(
-      install(
-        'root',
-        '1.0.0',
-        { esbuild: '*' },
-        {
-          vfs,
-          cwd: '/proj',
-          registry,
-          overrides: { esbuild: '@esbuild/wasi-preview1@0.29.0' },
-        },
-      ),
-    ).rejects.toMatchObject({
-      name: 'NotImplementedError',
-      feature: 'shadow-registry.esbuild@0.29.0',
-      message: expect.stringContaining('shadow-registry.esbuild@0.29.0'),
-    });
+    const lines: string[] = [];
+    await install(
+      'root',
+      '1.0.0',
+      { esbuild: '*' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        overrides: { esbuild: 'user-esbuild-target@0.29.0' },
+        onSubstitution: (line) => lines.push(line),
+      },
+    );
+    expect(lines).toEqual([]);
+    expect(await vfs.exists('/proj/node_modules/user-esbuild-target/package.json')).toBe(true);
   });
 });
 

@@ -30,6 +30,7 @@ import {
   registerPort,
   unregisterPort,
 } from '../registry.ts';
+import { type AddressInfo, createVirtualAddressInfo } from '../server-address.ts';
 import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
 import type { WsMessage } from '../ws/in-process.ts';
 import { METHODS, maxHeaderSize } from './methods.ts';
@@ -76,7 +77,7 @@ function assertSupportedServerOptions(options: ServerOptions | undefined): void 
 }
 
 export class HttpServer extends EventEmitter {
-  private port: number | null = null;
+  private boundAddress: AddressInfo | null = null;
   private pendingPort: number | null = null;
   private readonly handler: RequestListener;
   private readonly upgradeChannels: BroadcastChannel[] = [];
@@ -127,7 +128,7 @@ export class HttpServer extends EventEmitter {
     // `listen(0)` / `listen({ port: 0 })` allocates a virtual ephemeral port from
     // the realm registry (no OS socket), exposed via `address().port` until close.
     const register = (port: number): void => {
-      this.port = port;
+      this.boundAddress = createVirtualAddressInfo(port);
       registerPort(port, (request) => {
         if (isWebSocketUpgradeRequest(request)) {
           return new Response('WebSocket upgrade requires the rifty WebSocket bridge transport', {
@@ -171,15 +172,15 @@ export class HttpServer extends EventEmitter {
     return this;
   }
 
-  address(): { port: number } | null {
-    return this.port === null ? null : { port: this.port };
+  address(): AddressInfo | null {
+    return this.boundAddress === null ? null : { ...this.boundAddress };
   }
 
   close(cb?: () => void): this {
-    if (this.port !== null) {
-      releasePort(this.port); // stop answering cross-realm claims (ADR-0186 D4)
-      unregisterPort(this.port);
-      this.port = null;
+    if (this.boundAddress !== null) {
+      releasePort(this.boundAddress.port); // stop answering cross-realm claims (ADR-0186 D4)
+      unregisterPort(this.boundAddress.port);
+      this.boundAddress = null;
     }
     this.pendingPort = null;
     for (const socket of this.upgradeSockets.values()) socket.destroy();
@@ -206,7 +207,7 @@ export class HttpServer extends EventEmitter {
   private onWebSocketBridgeMessage = (event: MessageEvent): void => {
     const frame = event.data as WebSocketBridgeFrame;
     const channel = this.upgradeChannels.find((candidate) => candidate === event.currentTarget);
-    if (!channel || this.port === null) return;
+    if (!channel || this.boundAddress === null) return;
     if (frame.type === 'open') {
       this.acceptUpgradeOpenFrame(channel, frame);
       return;
@@ -223,7 +224,7 @@ export class HttpServer extends EventEmitter {
   };
 
   private acceptUpgradeOpenFrame(channel: BroadcastChannel, frame: WebSocketBridgeFrame): void {
-    if (this.port === null) return;
+    if (this.boundAddress === null) return;
     if (this.listenerCount('upgrade') === 0) return;
     if (frame.url === undefined) return;
     let url: URL;

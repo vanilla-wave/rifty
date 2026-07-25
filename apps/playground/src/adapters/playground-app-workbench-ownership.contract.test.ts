@@ -1,5 +1,5 @@
+import type { PlaygroundWorkbench } from '@riftydev/workbench/playground';
 import { describe, expect, it, vi } from 'vitest';
-import type { PlaygroundWorkbench } from '../workbench/playground.ts';
 import type { PlaygroundAppRuntime } from './playground-app-runtime.ts';
 import { createPlaygroundAppWorkbenchOwnership } from './playground-app-workbench-ownership.ts';
 

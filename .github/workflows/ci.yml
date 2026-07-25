@@ -31,7 +31,13 @@ jobs:
       - run: pnpm check:arch # layer direction + cycles + foreign-internal + solid (D-002)
       - run: pnpm check:parity-coverage
       - run: pnpm check:e2e-coverage
+      - run: pnpm check:shadow-catalog-drift
+      - run: pnpm check:install-artifact-drift
+      - run: pnpm check:snapshot-artifact-drift
+      - run: pnpm check:sync-sha256-cores
       - run: pnpm check:source-grep # blocking: no new source-grep tests in playground unit + browser-unit (allowlist exact-match)
+      - run: pnpm check:runtime-adapter-boundary # ADR-0308: generic admission/launch never branches on esbuild/Vite
+      - run: pnpm check:esbuild-legacy-retirement # cutover: vendored ADR-0047 path cannot return
       - run: pnpm check:dir-owner # blocking: source dir > 30 direct prod modules carries an owner README
       - run: pnpm check:contract-drift # blocking: no in-place ready-contract edits in the same diff as source changes
       - run: pnpm check:goal-contract # blocking: exact-SHA autonomous goal cannot narrow or close with linked residuals
@@ -41,6 +47,12 @@ jobs:
 
   unit-and-conformance:
     runs-on: ubuntu-latest
+    # run + parity as parallel matrix jobs: wall-clock = max(suite), not sum
+    # (test:run ~3m dominates; parity ~1m rides a second runner).
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [run, parity]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
@@ -56,8 +68,7 @@ jobs:
         # chromium (with apt deps) via the explicit step below. Mirrors netlify.toml.
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - run: pnpm test:run
-      - run: pnpm test:parity
+      - run: pnpm test:${{ matrix.suite }}
 
   e2e-chromium:
     runs-on: ubuntu-latest
@@ -66,10 +77,29 @@ jobs:
     # the sum. Separate runners also remove heavy<->light contention entirely
     # (the reason the old global workers=1 / same-job lane-split existed), so each
     # lane gets a dedicated machine.
+    #
+    # heavy/light are additionally SHARDED (`--shard=i/N`): each shard is its own
+    # runner, still --workers=1 inside, so the proven one-cold-boot-per-machine
+    # invariant is untouched — sharding only splits the serialized queue across
+    # machines. Serial groups (ts-LS, project-management) travel whole into one
+    # shard; the rest is already declared parallel-safe by fullyParallel.
+    # Baseline that sized N: light 23.4m serial (107 tests, ~13s/test, no
+    # dominating spec) → 8 shards ≈ 3m tests + ~1.5m setup; heavy 4.3m → 2.
     strategy:
       fail-fast: false
       matrix:
-        lane: [heavy, light, prod]
+        include:
+          - { lane: heavy, shard: 1, shardTotal: 2 }
+          - { lane: heavy, shard: 2, shardTotal: 2 }
+          - { lane: light, shard: 1, shardTotal: 8 }
+          - { lane: light, shard: 2, shardTotal: 8 }
+          - { lane: light, shard: 3, shardTotal: 8 }
+          - { lane: light, shard: 4, shardTotal: 8 }
+          - { lane: light, shard: 5, shardTotal: 8 }
+          - { lane: light, shard: 6, shardTotal: 8 }
+          - { lane: light, shard: 7, shardTotal: 8 }
+          - { lane: light, shard: 8, shardTotal: 8 }
+          - { lane: prod }
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
@@ -87,8 +117,12 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       # Cache the browser binary keyed by the resolved Playwright version so a
       # version bump (lockfile) busts it but day-to-day runs skip the uncached,
-      # CDN-variable download. The apt system deps (`install-deps`) live outside
-      # ~/.cache/ms-playwright, so they run on every hit too.
+      # CDN-variable download. On a cache hit NO apt runs at all: ubuntu-latest
+      # ships Chrome, so chromium's shared libs are already on the image. The
+      # old unconditional `install-deps` had a bimodal apt-mirror tail (11s p50,
+      # 440s max across 12 parallel shards, run 30023071566) that dominated the
+      # sharded wall-clock. If an image update ever drops a lib, the browser
+      # launch fails loudly → restore an install-deps step.
       - id: pw-version
         run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
       - id: pw-cache
@@ -98,8 +132,6 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
-      - if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
       # One lane per matrix job. heavy = serialized TS-LS/fullstack specs
       # (--workers=1); light = the rest; prod = prod-artifact smoke (builds the
       # app + `pnpm preview` with Netlify COI headers, asserts the owner boots —
@@ -113,7 +145,12 @@ jobs:
       # → all pass; the heavy lane already proves single-boot-at-a-time is reliable.
       # Local runs keep parallel (beefy machines don't oversubscribe). Re-enabling
       # light parallelism for speed needs the owner to survive concurrent boots.
-      - run: pnpm test:e2e:${{ matrix.lane }} ${{ matrix.lane == 'light' && '--workers=1' || '' }}
+      # (Sharding above sidesteps this: shards parallelize across machines, each
+      # machine still boots one stack at a time.)
+      - name: Packed Workbench consumer
+        if: matrix.lane == 'light' && matrix.shard == 1
+        run: pnpm test:packed-consumer
+      - run: pnpm test:e2e:${{ matrix.lane }} ${{ matrix.lane == 'light' && '--workers=1' || '' }} ${{ matrix.shardTotal && format('--shard={0}/{1}', matrix.shard, matrix.shardTotal) || '' }}
       - name: Landing browser regression
         if: matrix.lane == 'prod'
         run: pnpm test:landing
@@ -158,7 +195,7 @@ jobs:
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.lane }}
+          name: playwright-report-${{ matrix.lane }}${{ matrix.shardTotal && format('-{0}', matrix.shard) || '' }}
           path: playwright-report
 
   browser-unit-chromium:
@@ -183,10 +220,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      # No install-deps on cache hit — see the e2e job's pw-cache comment.
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
-      - if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
       # Serial by config (workers:1) — concurrent owner boots starve the owner
       # worker on shared runners (same reason chromium-light is serialized).
       - run: pnpm test:browser-unit

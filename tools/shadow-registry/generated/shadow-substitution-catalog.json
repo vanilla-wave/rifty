@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "id": "rifty.shadow-substitutions.builtin.v1",
+  "recipes": [
+    {
+      "schema": 1,
+      "id": "rifty.shadow-substitution.esbuild.v1",
+      "trigger": {
+        "name": "esbuild",
+        "version": "0.28.0"
+      },
+      "acquisition": {
+        "kind": "synthetic"
+      },
+      "materialization": {
+        "name": "esbuild",
+        "version": "0.28.0",
+        "files": [
+          {
+            "path": "bin/esbuild",
+            "content": "#!/usr/bin/env node\nclass NotImplementedError extends Error {\n  constructor(feature) {\n    super(`Not implemented: ${feature}`);\n    this.name = 'NotImplementedError';\n    this.feature = feature;\n  }\n}\nthrow new NotImplementedError('esbuild.cli');\n",
+            "sha256": "d1e76833fddb0febf70bfaf8d6942286382fbb549b0722e49de997fdaa773f47",
+            "bytes": 248
+          },
+          {
+            "path": "lib/main.cjs",
+            "content": "const esbuild = globalThis.__rifty?.esbuild;\nif (esbuild == null) {\n  throw new Error('rifty invariant: esbuild runtime slot is not initialized');\n}\nmodule.exports = esbuild;\n",
+            "sha256": "961d1a20258b40af980ed63ece45a0f3a2ca7e0df375cb5bfa3a99cde0386cb4",
+            "bytes": 175
+          },
+          {
+            "path": "package.json",
+            "content": "{\n  \"name\": \"esbuild\",\n  \"version\": \"0.28.0\",\n  \"main\": \"./lib/main.cjs\",\n  \"module\": \"./lib/main.cjs\",\n  \"type\": \"commonjs\",\n  \"bin\": {\n    \"esbuild\": \"./bin/esbuild\"\n  },\n  \"exports\": {\n    \".\": {\n      \"import\": \"./lib/main.cjs\",\n      \"require\": \"./lib/main.cjs\",\n      \"default\": \"./lib/main.cjs\"\n    }\n  }\n}",
+            "sha256": "6ea61c374d8c8681e86b0e950c4c87dea840996284709d35af7e799169e064ab",
+            "bytes": 313
+          }
+        ]
+      },
+      "binding": {
+        "adapterId": "rifty.runtime-adapter.esbuild.v1",
+        "assets": [
+          "esbuild-wasm@0.28.0/package/esbuild.wasm"
+        ]
+      },
+      "digest": "0cf34400121b3ddd82ed19aa2b30c2ecd6e3e7a8c573aeba64155652f78167e6"
+    },
+    {
+      "schema": 1,
+      "id": "rifty.shadow-substitution.lightningcss.v1",
+      "trigger": {
+        "name": "lightningcss",
+        "version": "1.32.0"
+      },
+      "acquisition": {
+        "kind": "registry",
+        "name": "lightningcss-wasm",
+        "version": "1.32.0"
+      },
+      "materialization": {
+        "name": "lightningcss",
+        "version": "1.32.0",
+        "files": [
+          {
+            "path": "index.cjs",
+            "content": "module.exports = require('lightningcss-wasm');\n",
+            "sha256": "e862f01641a1b33713b5c205474ffb23379b4e66affdf08680fe4c00faf56e20",
+            "bytes": 47
+          },
+          {
+            "path": "index.mjs",
+            "content": "export {\n  Features,\n  browserslistToTargets,\n  bundle,\n  bundleAsync,\n  composeVisitors,\n  transform,\n  transformStyleAttribute,\n} from 'lightningcss-wasm';\n\nimport * as lightningcss from 'lightningcss-wasm';\nexport default lightningcss;\n",
+            "sha256": "1be16085d6c090f58b459e45b2531616bff8836c3f3d95e363fc36c7ebfdb9cd",
+            "bytes": 239
+          },
+          {
+            "path": "package.json",
+            "content": "{\n  \"name\": \"lightningcss\",\n  \"version\": \"1.32.0\",\n  \"main\": \"./index.cjs\",\n  \"module\": \"./index.mjs\",\n  \"type\": \"module\",\n  \"exports\": {\n    \".\": {\n      \"import\": \"./index.mjs\",\n      \"require\": \"./index.cjs\",\n      \"default\": \"./index.mjs\"\n    }\n  }\n}",
+            "sha256": "3ebddaa8830dd3bd37e01a4c798f73d5a493abb737fc24909e906b62fd8acfe1",
+            "bytes": 254
+          }
+        ]
+      },
+      "digest": "0dd089ff66e159b0b53cfd90857ac02ea1d4f32dc97b483d9ed300f0dabe2d4e"
+    }
+  ],
+  "assets": [
+    {
+      "id": "esbuild-wasm@0.28.0/package/esbuild.wasm",
+      "source": {
+        "name": "esbuild-wasm",
+        "version": "0.28.0",
+        "integrity": "sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg=="
+      },
+      "member": "package/esbuild.wasm",
+      "memberSha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b",
+      "memberSize": 13918738,
+      "maxTarballBytes": 3845798,
+      "maxUnpackedBytes": 14483968
+    }
+  ],
+  "digest": "0eb5dc4c53231efcbfca5c5b6aca6bc203f3013d5168b6e190a9bcf0152993ac"
+}

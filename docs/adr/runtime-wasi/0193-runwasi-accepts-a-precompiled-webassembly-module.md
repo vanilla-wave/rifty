@@ -5,6 +5,11 @@ Date: 2026-07
 
 > TL;DR: widen public `runWasi(wasm)` from `BufferSource` to `BufferSource | WebAssembly.Module` so callers can compile once and re-run; detect the form by the `WebAssembly.instantiate` RESULT shape, never by realm-local `instanceof` on the input.
 
+> Correction 2026-07-24 (ADR-0316): the Playground vendored-esbuild bridge is
+> retired, so no product esbuild path consumes this API. The public
+> precompiled-Module input, fresh-instance semantics, and cross-realm rationale
+> remain unchanged.
+
 ## Context
 
 The playground's esbuild transform bridge calls `runWasi` per transform. Compiling

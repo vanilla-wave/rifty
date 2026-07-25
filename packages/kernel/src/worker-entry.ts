@@ -39,9 +39,11 @@ import { SyncRpcClient } from './ipc/sync-client.ts';
 import {
   KERNEL_SYNC_CALL_KEY,
   type KernelEntryBootstrapEnvelope,
+  type KernelEntryCapabilityPorts,
   type KernelProcessSpec,
   type KernelSyncCall,
   publishKernelEntryBootstrap,
+  publishKernelEntryCapabilityPorts,
   publishKernelProcessSpec,
   publishKernelSyncApi,
 } from './shared-globals.ts';
@@ -77,6 +79,8 @@ export type WorkerEntryDescriptor =
       readonly url: string;
       /** Entry-scoped higher-runtime metadata; kernel transports it opaquely. */
       readonly bootstrap?: KernelEntryBootstrapEnvelope;
+      /** Entry-scoped protocol-opaque endpoints (ADR-0313); URL entries only. */
+      readonly capabilityPorts?: KernelEntryCapabilityPorts;
     };
 
 /**
@@ -281,6 +285,17 @@ function closePorts(ports: WorkerStdioPorts): void {
   }
 }
 
+function closeCapabilityPorts(entry: WorkerEntryDescriptor): void {
+  if (entry.kind !== 'url' || entry.capabilityPorts === undefined) return;
+  for (const port of Object.values(entry.capabilityPorts)) {
+    try {
+      port.close();
+    } catch {
+      /* transferred/already-closed endpoint */
+    }
+  }
+}
+
 /** Outcome of running a worker entry: did it throw, and the resolved exit code. */
 export interface WorkerEntryOutcome {
   readonly threw: boolean;
@@ -302,6 +317,10 @@ export interface EntryLifecycleDeps {
   writeStderr(bytes: Uint8Array): void;
 }
 
+interface InternalEntryLifecycleDeps extends EntryLifecycleDeps {
+  readonly prepareEntry?: (spec: WorkerSpawnSpec) => void;
+}
+
 /**
  * Run the pre-entry hook + entry, drain a run-to-completion child's event loop,
  * and compute the exit outcome — the realm-independent core of the bootstrap.
@@ -314,17 +333,21 @@ export interface EntryLifecycleDeps {
  *    stderr (no silent stub), EXCEPT a `RIFTY_PROCESS_EXIT` shape, which carries
  *    its own `process.exit(N)` code with no stderr write.
  */
-export async function runEntryLifecycle(
+async function runEntryLifecycleInternal(
   spec: WorkerSpawnSpec,
-  deps: EntryLifecycleDeps,
+  deps: InternalEntryLifecycleDeps,
 ): Promise<WorkerEntryOutcome> {
   let code = 0;
   let threw = false;
   try {
+    deps.prepareEntry?.(spec);
     // One publication boundary for every entry lifecycle. URL entries expose
     // their opaque higher-runtime envelope; URL-without-envelope and source
     // entries publish null so stale host/test state cannot cross entries.
     publishKernelEntryBootstrap(spec.entry.kind === 'url' ? (spec.entry.bootstrap ?? null) : null);
+    publishKernelEntryCapabilityPorts(
+      spec.entry.kind === 'url' ? spec.entry.capabilityPorts : undefined,
+    );
     if (deps.preEntryHook !== null) deps.preEntryHook(spec);
     await deps.runEntry(spec.entry);
     if (spec.serve !== true && deps.drainHook !== null) {
@@ -345,6 +368,13 @@ export async function runEntryLifecycle(
     }
   }
   return { threw, code };
+}
+
+export function runEntryLifecycle(
+  spec: WorkerSpawnSpec,
+  deps: EntryLifecycleDeps,
+): Promise<WorkerEntryOutcome> {
+  return runEntryLifecycleInternal(spec, deps);
 }
 
 /**
@@ -368,9 +398,20 @@ export function finalizeWorkerEntry(
 ): void {
   if (spec.serve === true && !outcome.threw) return;
   const exitMessage: WorkerExitMessage = { type: 'exit', code: outcome.code };
-  target.postMessage(exitMessage);
+  let firstError: unknown;
+  try {
+    target.postMessage(exitMessage);
+  } catch (error) {
+    firstError = error;
+  }
   closePorts(spec.stdio);
-  target.close();
+  closeCapabilityPorts(spec.entry);
+  try {
+    target.close();
+  } catch (error) {
+    firstError ??= error;
+  }
+  if (firstError !== undefined) throw firstError;
 }
 
 /**
@@ -394,23 +435,20 @@ export function installWorkerEntry(
     target.removeEventListener('message', onMessage as unknown as EventListener);
 
     const spec = msg.spec;
-    // ADR-0084 #19: attach with the parent-chosen capacity so both peers
-    // compute identical offsets. Absent (legacy specs) → default.
-    const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
-    // Expose the sync-call shim so runtime-js can route `execSync`,
-    // `readFileSync`, etc. through the parent dispatcher without each builtin
-    // re-implementing the SAB ring framing.
-    publishSyncCallShim(ring);
-    // ADR-0039: typed process spec only, no Node-shape shim. The pre-entry hook
-    // reads it to install whatever process surface its runtime needs.
-    publishProcessSpec(spec);
-
     // Run pre-entry hook + entry, drain a run-to-completion child's loop, and
     // compute the outcome — the realm-independent core (unit-tested via
     // runEntryLifecycle). ADR-0152: serve workers are kept
     // alive by their ports (never drained here); a drain rejection (recorded
     // unhandledrejection / cap timeout) becomes stderr + exit 1 (no silent stub).
-    const outcome = await runEntryLifecycle(spec, {
+    const outcome = await runEntryLifecycleInternal(spec, {
+      prepareEntry: (workerSpec) => {
+        const ring = SabRing.attach(
+          workerSpec.syncRing,
+          workerSpec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY,
+        );
+        publishSyncCallShim(ring);
+        publishProcessSpec(workerSpec);
+      },
       preEntryHook,
       drainHook,
       runEntry,

@@ -1,6 +1,6 @@
+import { WorkbenchOriginOccupiedError } from '@riftydev/workbench';
+import type { OpenPlaygroundWorkbench, PlaygroundWorkbench } from '@riftydev/workbench/playground';
 import { expect, it, vi } from 'vitest';
-import type { OpenPlaygroundWorkbench, PlaygroundWorkbench } from '../workbench/playground.ts';
-import { WorkbenchOriginOccupiedError } from '../workbench/public.ts';
 import {
   createOpenPlaygroundAppWorkbench,
   playgroundWorkbenchOptions,
@@ -17,6 +17,7 @@ it('supplies every companion worker asset at the host boundary', () => {
     'typescript',
   ]);
   expect(options.deployment.workers.typescript).toMatch(/ts-lsp-worker-entry/);
+  expect(Object.keys(options.deployment.wasm)).toEqual(['sqlite']);
 });
 
 it('returns the opened Workbench without hiding its identity', async () => {

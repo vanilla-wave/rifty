@@ -1,11 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
-import {
-  bootOwner,
-  closeOwner,
-  flushOwnerDurable,
-  gotoHarness,
-  writeOwnerFile,
-} from './fixtures.ts';
+import { gotoHarness, sealedWorkbenchFixtureUrl, seedLegacyWorkspace } from './fixtures.ts';
 
 const OUTPUT_MARKER = 'WORKBENCH_COMPANION_KLEUR_OK';
 const ARGUMENT_MARKER = '--from-companion';
@@ -20,54 +14,114 @@ async function seedLegacyCatalog(
     readonly marker: string;
   },
 ): Promise<void> {
-  await bootOwner(page, {
-    workspaceId: input.workspaceId,
-    template: 'hidden-empty',
-    root: '/projects/project-a',
-    slug: 'project-a',
-    starter: 'starter-a',
-    hiddenEmptyBoot: true,
-  });
-  try {
-    await writeOwnerFile(
-      page,
-      '/projects/project-a/package.json',
-      '{"name":"legacy-project-a","private":true,"type":"module"}\n',
-    );
-    await writeOwnerFile(page, '/projects/project-a/legacy-marker.txt', `${input.marker}:a`);
-    await writeOwnerFile(
-      page,
-      '/projects/project-b/package.json',
-      '{"name":"legacy-project-b","private":true,"type":"module"}\n',
-    );
-    await writeOwnerFile(page, '/projects/project-b/legacy-marker.txt', `${input.marker}:b`);
-    await writeOwnerFile(
-      page,
-      '/.rifty-project-index.json',
-      `${JSON.stringify({
-        activeId: 'project-a',
-        scratch: null,
-        projects: [
-          {
-            id: 'project-a',
-            name: `${input.label} A`,
-            starter: 'starter-a',
-            editedAt: '2026-07-01T01:00:00.000Z',
-          },
-          {
-            id: 'project-b',
-            name: `${input.label} B`,
-            starter: 'starter-b',
-            editedAt: '2026-07-02T02:00:00.000Z',
-          },
-        ],
-      })}\n`,
-    );
-    await flushOwnerDurable(page);
-  } finally {
-    await closeOwner(page);
-  }
+  await seedLegacyWorkspace(page, input);
 }
+
+test('editor CAS rejects a stale save and preserves the externally committed bytes', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+
+  const result = await page.evaluate(async (fixtureUrl) => {
+    interface ProjectDocumentSnapshot {
+      readonly bytes: Uint8Array;
+      readonly version: string | null;
+      readonly dirty: boolean;
+    }
+    interface ProjectDocument {
+      snapshot(): ProjectDocumentSnapshot;
+      close(options?: { readonly dirty: 'save' | 'discard' }): Promise<void>;
+    }
+    interface ProjectSession {
+      readonly documents: {
+        open(path: string): Promise<ProjectDocument>;
+      };
+      readonly files: {
+        writeFile(
+          path: string,
+          bytes: Uint8Array,
+          options: { readonly expectedVersion: string | null },
+        ): Promise<{ readonly version: string }>;
+        readFile(path: string): Promise<{ readonly bytes: Uint8Array; readonly version: string }>;
+      };
+    }
+    interface SealedFixture {
+      openSealedWorkbenchFixture(options: {
+        readonly workspaceId: string;
+        readonly hiddenEmptyBoot: true;
+      }): Promise<void>;
+      currentProject(): ProjectSession;
+      closeSealedWorkbenchFixture(): Promise<void>;
+    }
+    interface DocumentWriter {
+      open(path: string): Promise<ProjectDocumentSnapshot>;
+      write(path: string, text: string): Promise<void>;
+    }
+    interface ProjectViewAdapter {
+      createPlaygroundDocumentWriter(documents: {
+        open(path: string): Promise<ProjectDocument>;
+      }): DocumentWriter;
+    }
+
+    const fixture = (await import(/* @vite-ignore */ fixtureUrl)) as SealedFixture;
+    const adapterUrl = '/src/adapters/playground-project-view.ts';
+    const adapter = (await import(/* @vite-ignore */ adapterUrl)) as ProjectViewAdapter;
+    await fixture.openSealedWorkbenchFixture({
+      workspaceId: 'bu-real-editor-cas',
+      hiddenEmptyBoot: true,
+    });
+
+    let openedDocument: ProjectDocument | null = null;
+    try {
+      const project = fixture.currentProject();
+      const writer = adapter.createPlaygroundDocumentWriter({
+        async open(path) {
+          const document = await project.documents.open(path);
+          openedDocument = document;
+          return document;
+        },
+      });
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+      const first = await project.files.writeFile('/cas.txt', encoder.encode('version one\n'), {
+        expectedVersion: null,
+      });
+      const opened = await writer.open('/cas.txt');
+      const external = await project.files.writeFile('/cas.txt', encoder.encode('version two\n'), {
+        expectedVersion: first.version,
+      });
+
+      let conflict: { readonly name: string; readonly message: string } | null = null;
+      try {
+        await writer.write('/cas.txt', 'stale editor bytes\n');
+      } catch (error) {
+        const inspected = error instanceof Error ? error : new Error(String(error));
+        conflict = { name: inspected.name, message: inspected.message };
+      }
+      const preserved = await project.files.readFile('/cas.txt');
+      return {
+        firstVersion: first.version,
+        openedVersion: opened.version,
+        externalVersion: external.version,
+        preservedVersion: preserved.version,
+        preservedText: decoder.decode(preserved.bytes),
+        conflict,
+      };
+    } finally {
+      if (openedDocument !== null) {
+        await openedDocument.close({ dirty: 'discard' });
+      }
+      await fixture.closeSealedWorkbenchFixture();
+    }
+  }, sealedWorkbenchFixtureUrl);
+
+  expect(result.openedVersion).toBe(result.firstVersion);
+  expect(result.externalVersion).not.toBe(result.firstVersion);
+  expect(result.preservedVersion).toBe(result.externalVersion);
+  expect(result.preservedText).toBe('version two\n');
+  expect(result.conflict?.name).toBe('FileConflictError');
+  expect(result.conflict?.message).toContain('/cas.txt');
+});
 
 test('Playground companion installs a Node CLI and keeps its owner live when a write races close', async ({
   page,
@@ -151,7 +205,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
               readonly typescript: string;
             };
             readonly serviceWorker: { readonly url: string; readonly scope: string };
-            readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+            readonly wasm: { readonly sqlite: string };
             readonly previewProbeTimeoutMs: number;
           };
           readonly packageAcquisition: { readonly registryUrl: string };
@@ -166,7 +220,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           readonly devServer: string;
           readonly typescript: string;
         };
-        readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+        readonly wasm: { readonly sqlite: string };
       };
 
       const withTimeout = <T>(
@@ -191,7 +245,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           );
         });
 
-      const companionEntryUrl = '/src/workbench/playground.ts';
+      const companionEntryUrl = '/src/browser-unit/workbench-playground-entry.ts';
       const [companionModule, hostAssetsModule] = await Promise.all([
         import(/* @vite-ignore */ companionEntryUrl),
         import('/src/browser-unit/workbench-vite-host-assets.ts'),
@@ -336,6 +390,11 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           const inspected = error instanceof Error ? error : new Error(String(error));
           throw new Error(`post-race file read rejected: ${inspected.name}: ${inspected.message}`);
         });
+        const reopenedCloseRace = await withTimeout(
+          session.files.readFile('/close-race.txt'),
+          'post-race admitted write verification',
+          30_000,
+        );
         await withTimeout(session.close(), 'post-race Scratch close', 60_000);
         session = null;
         await withTimeout(workbench.close(), 'Playground Workbench close', 60_000);
@@ -350,6 +409,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           installedVersion,
           output: chunks.map(({ chunk }) => chunk).join(''),
           reopenedManifestText: new TextDecoder().decode(reopenedManifest.bytes),
+          reopenedCloseRaceText: new TextDecoder().decode(reopenedCloseRace.bytes),
         };
       } finally {
         detach?.();
@@ -371,12 +431,15 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
   expect(result.exit).toEqual({ code: 0, signal: null });
   expect(result.closeExit).toEqual({ code: 0, signal: null });
   expect(result.concurrentWrite).toMatchObject({
-    status: 'rejected',
-    name: 'ProjectFileOperationError',
-    message: expect.stringContaining('writeFile /close-race.txt failed'),
+    status: 'fulfilled',
+    value: {
+      path: '/close-race.txt',
+      version: expect.any(String),
+    },
   });
   expect(result.installedVersion).toBe('4.1.5');
   expect(result.reopenedManifestText).toContain('"name":"companion-kleur"');
+  expect(result.reopenedCloseRaceText).toBe('write admitted before session close\n');
 
   const installCommand = result.output.indexOf('$ npm install');
   const install = result.output.indexOf('npm: installing all from package.json');
@@ -475,7 +538,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -490,7 +553,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const PRIMARY_PORT = 43_170;
@@ -549,7 +612,7 @@ test('terminal snapshots and the semantic preview registry round-trip through ex
       );
 
     const [companionModule, hostAssetsModule] = await Promise.all([
-      import(/* @vite-ignore */ '/src/workbench/playground.ts'),
+      import(/* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'),
       import('/src/browser-unit/workbench-vite-host-assets.ts'),
     ]);
     const companionEntry = companionModule as unknown as CompanionEntry;
@@ -903,7 +966,7 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -918,7 +981,7 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
@@ -939,7 +1002,7 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
         );
       });
 
-    const companionEntryUrl = '/src/workbench/playground.ts';
+    const companionEntryUrl = '/src/browser-unit/workbench-playground-entry.ts';
     const mapperUrl = '/src/adapters/playground-project-plan.ts';
     const [companionModule, mapperModule, presetsModule, starterModule, hostAssetsModule] =
       await Promise.all([
@@ -1086,7 +1149,10 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
   expect(result.viteManifest).toEqual({ name: 'vite', version: expect.stringMatching(/^7\./u) });
   expect(result.closeExit).toEqual({ code: null, signal: 'SIGTERM' });
   expect(result.output).not.toContain('npm: installing');
-  expect(registryRequests).toEqual([]);
+  expect(registryRequests.map((url) => new URL(url).pathname)).toEqual([
+    '/npm-registry/esbuild-wasm',
+    '/npm-registry/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz',
+  ]);
   expect(snapshotRequests).toHaveLength(1);
 });
 
@@ -1168,7 +1234,7 @@ test('selected historical workspace migrates through one physical Workbench owne
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -1183,7 +1249,7 @@ test('selected historical workspace migrates through one physical Workbench owne
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
@@ -1270,7 +1336,9 @@ test('selected historical workspace migrates through one physical Workbench owne
     let workbench: PlaygroundWorkbench | null = null;
     let session: ProjectSession | null = null;
     try {
-      const companionModule = await import(/* @vite-ignore */ '/src/workbench/playground.ts');
+      const companionModule = await import(
+        /* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'
+      );
       const companionEntry = companionModule as unknown as CompanionEntry;
       workbench = await withTimeout(
         companionEntry.openPlaygroundWorkbench({
@@ -1437,7 +1505,7 @@ test('forSession TypeScript uses the real owner service and returns only project
             readonly typescript: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -1453,7 +1521,7 @@ test('forSession TypeScript uses the real owner service and returns only project
         readonly devServer: string;
         readonly typescript: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
@@ -1476,7 +1544,7 @@ test('forSession TypeScript uses the real owner service and returns only project
 
     const [companionModule, mapperModule, presetsModule, starterModule, hostAssetsModule] =
       await Promise.all([
-        import(/* @vite-ignore */ '/src/workbench/playground.ts'),
+        import(/* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'),
         import(/* @vite-ignore */ '/src/adapters/playground-project-plan.ts'),
         import('/src/presets.ts'),
         import('/src/glue/starter.ts'),

@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "before": {
+    "schema": 1,
+    "revision": "263c00b3c328ba7c7a77a023ba3486decc37a382",
+    "scenario": {
+      "id": "cold-vite-7.3.6-install-build",
+      "persistence": "ephemeral",
+      "commands": ["npm install", "vite build"],
+      "instrumentation": "BrowserContext.response"
+    },
+    "environment": {
+      "browserName": "chromium",
+      "browserVersion": "148.0.7778.96",
+      "nodeVersion": "v24.16.0",
+      "platform": "darwin",
+      "architecture": "arm64"
+    },
+    "responses": [
+      {
+        "kind": "host-wasm",
+        "path": "/node_modules/esbuild-wasm/esbuild.wasm",
+        "status": 200,
+        "contentType": "application/wasm",
+        "bodyBytes": 13918738,
+        "bodySha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b"
+      },
+      {
+        "kind": "host-wasm",
+        "path": "/node_modules/esbuild-wasm/esbuild.wasm",
+        "status": 200,
+        "contentType": "text/javascript",
+        "bodyBytes": 814,
+        "bodySha256": "f4e1621ca1ef6b640a128334e4d1b944888a66065cf2e05f8c863a3eb7ff8114"
+      },
+      {
+        "kind": "registry",
+        "path": "/npm-registry/@esbuild/wasi-preview1",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 45963,
+        "bodySha256": "e4b0e315a1daa3ff2b04eebad4d1183cbe44b12ff5f2fdee7a8544cd2dd4dae5"
+      },
+      {
+        "kind": "registry",
+        "path": "/npm-registry/@esbuild/wasi-preview1/-/wasi-preview1-0.28.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 5057213,
+        "bodySha256": "a9cf7a452b0bfe92d4270dce55af26858d3f6398f176fd2a2e37c5fe856a696c"
+      }
+    ],
+    "totalBodyBytes": 19022728
+  },
+  "after": {
+    "schema": 1,
+    "revision": "f03ce1da01ee4aed4f76c39117710c2370eb8080",
+    "scenario": {
+      "id": "cold-vite-7.3.6-install-build",
+      "persistence": "ephemeral",
+      "commands": ["npm install", "vite build"],
+      "instrumentation": "BrowserContext.response"
+    },
+    "environment": {
+      "browserName": "chromium",
+      "browserVersion": "148.0.7778.96",
+      "nodeVersion": "v24.16.0",
+      "platform": "darwin",
+      "architecture": "arm64"
+    },
+    "responses": [
+      {
+        "kind": "registry",
+        "path": "/npm-registry/esbuild-wasm",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 1042853,
+        "bodySha256": "fb9cc23e75b8bff93f1b352fb7bb1f496456a336879212bdb410d65b8b06ab4e"
+      },
+      {
+        "kind": "registry",
+        "path": "/npm-registry/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 3845798,
+        "bodySha256": "83b1d57542ab703328aef03a6d69b769afb58026eec43e8af4e127a40ad530cc"
+      }
+    ],
+    "totalBodyBytes": 4888651
+  },
+  "delta": {
+    "beforeBodyBytes": 19022728,
+    "afterBodyBytes": 4888651,
+    "netRemovedBodyBytes": 14134077
+  }
+}

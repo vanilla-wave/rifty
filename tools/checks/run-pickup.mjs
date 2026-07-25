@@ -6,6 +6,8 @@ export const PRODUCTION_SOURCE_RE = /^(?:apps|packages|services)\/.+\.(?:ts|tsx|
  * precede it in one PR; implementation cannot rewrite their authority later.
  */
 export function pickupCommit(base, git) {
+  const prPaths = git('diff', '--name-only', base, 'HEAD').trim().split('\n').filter(Boolean);
+  if (!prPaths.some((path) => PRODUCTION_SOURCE_RE.test(path))) return base;
   const commits = git('rev-list', '--first-parent', '--reverse', `${base}..HEAD`)
     .trim()
     .split('\n')

@@ -23,8 +23,8 @@ const REFEREE_RE =
 
 /** Frontmatter `status:` value, or null. */
 export function statusOf(text) {
-  const m = /^---[\s\S]*?^status:\s*(\S+)\s*$/m.exec(text ?? '');
-  return m ? m[1] : null;
+  const match = /^---[\s\S]*?^status:\s*(\S+)\s*$/m.exec(text ?? '');
+  return match ? match[1] : null;
 }
 
 function frontmatterValue(text, key) {
@@ -72,12 +72,13 @@ export function closeItemDependencies(itemText, deletedItems) {
 }
 
 /**
- * @param {{status:string,path:string}[]} entries  git name-status rows
+ * @param {{status:string,path:string}[]} entries  post-pickup git name-status rows
  * @param {(path:string, side:'base'|'head') => string|null} read
+ * @param {{status:string,path:string}[]} refereeEntries  full-PR rows
  * @returns {string[]} violations (empty = pass)
  */
 export function evaluate(entries, read, refereeEntries = entries) {
-  if (!entries.some((e) => SOURCE_RE.test(e.path))) return [];
+  if (!entries.some((entry) => SOURCE_RE.test(entry.path))) return [];
   const refereeChanges = refereeEntries.filter((entry) => REFEREE_RE.test(entry.path));
   if (refereeChanges.length > 0) {
     return refereeChanges.map(
@@ -101,13 +102,15 @@ export function evaluate(entries, read, refereeEntries = entries) {
     closedByEpic.set(epic, children);
   }
   const violations = [];
-  for (const e of entries) {
-    if (e.status !== 'M' || !CONTRACT_RE.test(e.path) || SKIP_RE.test(e.path)) continue;
-    const oldStatus = statusOf(read(e.path, 'base'));
-    const newStatus = statusOf(read(e.path, 'head'));
-    const oldText = read(e.path, 'base');
-    const newText = read(e.path, 'head');
-    const epic = EPIC_PATH_RE.exec(e.path)?.[1];
+  for (const entry of entries) {
+    if (entry.status !== 'M' || !CONTRACT_RE.test(entry.path) || SKIP_RE.test(entry.path)) {
+      continue;
+    }
+    const oldText = read(entry.path, 'base');
+    const newText = read(entry.path, 'head');
+    const oldStatus = statusOf(oldText);
+    const newStatus = statusOf(newText);
+    const epic = EPIC_PATH_RE.exec(entry.path)?.[1];
     if (epic && GUARDED.has(oldStatus) && newStatus === oldStatus) {
       const closed = closeEpicItems(oldText, closedByEpic.get(epic) ?? []);
       if (closed !== null && closed === newText) continue;
@@ -118,7 +121,7 @@ export function evaluate(entries, read, refereeEntries = entries) {
     }
     if (GUARDED.has(oldStatus) || GUARDED.has(newStatus)) {
       violations.push(
-        `${e.path}: ready contract edited in-place (${oldStatus} → ${newStatus}) beside source — split the contract change; an implementer cannot rewrite the goal (goal-drift)`,
+        `${entry.path}: ready contract edited in-place (${oldStatus} → ${newStatus}) beside source — split the contract change; an implementer cannot rewrite the goal (goal-drift)`,
       );
     }
   }
@@ -159,7 +162,7 @@ function main() {
   const violations = evaluate(entries, read, fullEntries);
   if (violations.length > 0) {
     console.error(`contract-drift: ${violations.length} violation(s) vs ${pickup.slice(0, 12)}:`);
-    for (const v of violations) console.error(`  ✗ ${v}`);
+    for (const violation of violations) console.error(`  ✗ ${violation}`);
     process.exit(1);
   }
   console.log(

@@ -5,6 +5,10 @@ Date: 2026-05-30
 
 > TL;DR: optional async `transformSource` hook (+`workspace`) on `ModuleLoaderOptions`, DI-injected (zero new import edges), runs before acorn on `.ts`/`.tsx`/`.jsx` ESM ids
 
+> Correction 2026-07-24 (ADR-0316): the public hook remains provider-neutral,
+> but the vendored WASI provider is retired. Node parity injects exact host
+> esbuild; product proof uses the registry-owned browser adapter.
+
 ## Context
 
 opencode (the M12 facade target) is a `.ts` graph. ADR-0053 made `.ts`/`.tsx`

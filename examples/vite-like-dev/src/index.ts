@@ -19,6 +19,7 @@
  *   - HMR client injected into the served HTML
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import { WebSocketServer, createHttpServer } from '@riftydev/net';
 import { type FSWatcher, watch } from '@riftydev/runtime-js/builtins/fs-watch';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
@@ -66,8 +67,8 @@ export interface DevServerOptions {
    */
   hmr?: HmrTransport;
   /**
-   * Transform TS/TSX/JSX modules before serving. Defaults to the real vendored
-   * esbuild WASI binding; tests may inject the same shape to pin arguments.
+   * Transform TS/TSX/JSX modules before serving. Required when such a module is
+   * requested; embedders own the executable transform capability.
    */
   transformModule?: TransformModule;
 }
@@ -135,30 +136,6 @@ function moduleLoaderForPath(path: string): TransformLoader | null {
   if (path.endsWith('.jsx')) return 'jsx';
   if (path.endsWith('.js') || path.endsWith('.mjs')) return 'js';
   return null;
-}
-
-let cachedEsbuildWasm: Uint8Array<ArrayBuffer> | null = null;
-
-async function defaultTransformModule(request: TransformRequest): Promise<string> {
-  const [{ runWasi }, { loadVendoredEsbuildWasm, transformWithEsbuild }] = await Promise.all([
-    import('@riftydev/runtime-wasi'),
-    import('@riftydev/shadow-registry/esbuild-binding'),
-  ]);
-  if (cachedEsbuildWasm === null) {
-    const raw = loadVendoredEsbuildWasm();
-    const wasmBuffer = new ArrayBuffer(raw.byteLength);
-    cachedEsbuildWasm = new Uint8Array(wasmBuffer);
-    cachedEsbuildWasm.set(raw);
-  }
-  const result = await transformWithEsbuild(runWasi, cachedEsbuildWasm, {
-    source: request.source,
-    loader: request.loader,
-    workspace: request.root,
-    format: 'esm',
-    jsx: request.loader === 'tsx' || request.loader === 'jsx' ? 'automatic' : undefined,
-    supported: { decorators: false },
-  });
-  return result.code;
 }
 
 interface BaseNode {
@@ -311,7 +288,7 @@ export async function startDevServer(opts: DevServerOptions): Promise<DevServer>
   const root = normalizePath(opts.root);
   const interval = opts.watchInterval ?? 100;
   const decoder = new TextDecoder();
-  const transformModule = opts.transformModule ?? defaultTransformModule;
+  const transformModule = opts.transformModule;
 
   const wss = new WebSocketServer({ port: opts.port, path: HMR_PATH });
 
@@ -370,10 +347,16 @@ export async function startDevServer(opts: DevServerOptions): Promise<DevServer>
       }
       try {
         const source = decoder.decode(bytes);
-        const transformed =
-          loader === 'js'
-            ? source
-            : await transformModule({ path: filePath, root, source, loader });
+        let transformed: string;
+        if (loader === 'js') {
+          transformed = source;
+        } else {
+          const executeTransform = transformModule;
+          if (executeTransform === undefined) {
+            throw new NotImplementedError('vite-like-dev.transformModule');
+          }
+          transformed = await executeTransform({ path: filePath, root, source, loader });
+        }
         res.writeHead(200, { 'content-type': ctype(pathname) });
         res.end(rewriteBareSpecifiers(transformed, filePath, root));
       } catch (error) {

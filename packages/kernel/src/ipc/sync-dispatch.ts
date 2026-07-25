@@ -299,7 +299,7 @@ export class SyncRpcDispatcher {
     try {
       req = decodeRequest(bytes);
     } catch (err) {
-      this.writeError(ring, err);
+      this.writeError(ring, err, '<decodeRequest>');
       return;
     }
     const handler = this.handlers.get(req.method);
@@ -309,6 +309,7 @@ export class SyncRpcDispatcher {
         Object.assign(new Error(`SyncRpcDispatcher: no handler for '${req.method}'`), {
           code: 'ERPCNOHANDLER',
         }),
+        req.method,
       );
       return;
     }
@@ -316,20 +317,20 @@ export class SyncRpcDispatcher {
     try {
       result = handler(req.payload);
     } catch (err) {
-      this.writeError(ring, err);
+      this.writeError(ring, err, req.method);
       return;
     }
     if (isThenable(result)) {
       result.then(
-        (value) => this.writeValue(ring, value),
-        (err: unknown) => this.writeError(ring, err),
+        (value) => this.writeValue(ring, value, req.method),
+        (err: unknown) => this.writeError(ring, err, req.method),
       );
       return;
     }
-    this.writeValue(ring, result);
+    this.writeValue(ring, result, req.method);
   }
 
-  private writeValue(ring: SabRing, value: unknown): void {
+  private writeValue(ring: SabRing, value: unknown, method: string): void {
     try {
       // ADR-0084 #23: a Uint8Array value (execSync stdout) rides a binary
       // frame — byte-exact, no JSON/TextDecoder round-trip. Everything else
@@ -345,18 +346,24 @@ export class SyncRpcDispatcher {
       // writeReply rejects when a previous reply is unread or the payload
       // exceeds capacity — both programmer errors here; surface as an error
       // reply that fits, since the happy-path reply already failed to land.
-      this.writeError(ring, err);
+      this.writeError(ring, err, method);
     }
   }
 
-  private writeError(ring: SabRing, err: unknown): void {
+  private writeError(ring: SabRing, err: unknown, method: string): void {
     const reply: SyncRpcReply = { ok: false, error: errorToShape(err) };
     try {
       ring.writeReply(encodeReply(reply));
-    } catch {
-      // If even the error reply can't be written (e.g. ring already has a
-      // pending reply), drop it — the caller times out on `waitReply` and
-      // surfaces a `RingTimeoutError`.
+    } catch (dropErr) {
+      // Even the error reply can't land (e.g. the reply slot is already
+      // occupied — a ring protocol violation). The caller will block/time out
+      // on `waitReply`; a silent drop here erased the ONLY evidence of the
+      // primal violation in the CI wedge flakes, so name it loudly. Not a
+      // throw: this runs from a timer/microtask in the responder realm and
+      // must not kill the realm serving every other ring.
+      console.error(
+        `SyncRpcDispatcher: reply for '${method}' DROPPED — ${String(dropErr)} (handler outcome: ${String(err)})`,
+      );
     } finally {
       this.inFlight.delete(ring);
       this.rearm(ring);
@@ -369,8 +376,11 @@ export class SyncRpcDispatcher {
     const reply: SyncRpcReply = { ok: false, error: errorToShape(err) };
     try {
       ring.writeReplyWithVersion(encodeReply(reply), callerVersion);
-    } catch {
-      /* see writeError */
+    } catch (dropErr) {
+      // Sibling of writeError's drop path — same loud-not-silent contract.
+      console.error(
+        `SyncRpcDispatcher: versioned error reply DROPPED — ${String(dropErr)} (original: ${String(err)})`,
+      );
     } finally {
       this.inFlight.delete(ring);
       this.rearm(ring);

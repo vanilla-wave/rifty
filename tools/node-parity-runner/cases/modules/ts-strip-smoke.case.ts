@@ -3,13 +3,12 @@ import type { ParityCase } from '../../src/types.ts';
 /**
  * Smoke for the `ts-esm` kind: a single-file TypeScript module whose type
  * annotation must be stripped before execution. Node v24 strips types
- * natively when the entry is `main.ts`; the rifty side runs the SAME source
- * through `createModuleLoader` with the real esbuild WASI transform hook
- * (injected by `run-in-rifty.ts`). Both must print `42`.
+ * through full-transform `tsx`; the rifty side runs the SAME source through
+ * `createModuleLoader` with exact workspace esbuild injected by the Node-only
+ * harness. Both must print `42`.
  *
  * This is the harness prerequisite for the gold cross-file graph case: it
- * proves the runner threads the real esbuild type-strip end-to-end on both
- * sides (Node strip-types vs rifty esbuild-on-import).
+ * proves the runner threads real esbuild lowering through the loader.
  */
 const c: ParityCase = {
   kind: 'ts-esm',

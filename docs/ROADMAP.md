@@ -51,7 +51,7 @@ open:
 ## M8 — WASI Runner
 
 **PARTIAL.**
-`@riftydev/runtime-wasi` preview1 syscalls + preopens over the shared mirror; `@esbuild/wasi-preview1` runs end-to-end. ADR-0038, ADR-0047, ADR-0049.
+`@riftydev/runtime-wasi` preview1 syscalls + preopens over the shared mirror; exact package-sourced `@esbuild/wasi-preview1` runs end-to-end in conformance. ADR-0038, ADR-0049, ADR-0316.
 open:
 - `docs/backlog/runtime-wasi/wasi-vfs-unification-doc-test` — single-source-of-truth VFS↔WASI doc/test.
 - `docs/backlog/runtime-wasi/unimplemented-syscalls-nosys` — `poll_oneoff` + remaining ENOSYS syscalls.
@@ -68,7 +68,7 @@ open:
 ## M10 — Real Tooling
 
 **PARTIAL.**
-Mini Vite-equivalent dev server (fs.watch, in-process WebSocket/HMR, shell, SW preview bridge); real `vite@5.4` runs in-process; esbuild.wasm TS/JSX transform; Vite-in-Worker; cross-realm HMR bridge; preview iframe root-relative routing. ADR-0043, ADR-0047, ADR-0049, ADR-0050, ADR-0073, ADR-0075, ADR-0076, ADR-0077, ADR-0078, ADR-0079, ADR-0080, ADR-0097.
+Mini Vite-equivalent dev server (fs.watch, in-process WebSocket/HMR, shell, SW preview bridge); real Vite runs in-process; registry-attested esbuild-wasm transforms TS/JSX; Vite-in-Worker; cross-realm HMR bridge; preview iframe root-relative routing. ADR-0043, ADR-0049, ADR-0050, ADR-0073, ADR-0075, ADR-0076, ADR-0077, ADR-0078, ADR-0079, ADR-0080, ADR-0097, ADR-0226, ADR-0316.
 open:
 - `docs/backlog/playground/real-vite-browser-e2e` — full worker+HMR+iframe+SW-routing flow in a cross-origin-isolated browser via a default/CI verification lane.
 

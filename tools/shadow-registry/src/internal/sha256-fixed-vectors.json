@@ -1,0 +1,22 @@
+[
+  {
+    "name": "empty",
+    "hex": "",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "abc",
+    "hex": "616263",
+    "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  },
+  {
+    "name": "multiblock-bytes",
+    "hex": "0724415e7b98b5d2ef0c294663809dbad7f4112e4b6885a2bfdcf91633506d8aa7c4e1fe1b3855728facc9e603203d5a7794b1ceeb0825425f7c99b6d3f00d2a4764819ebbd8f5122f4c6986a3c0ddfa1734516e8ba8c5e2ff1c39567390adcae704213e5b7895b2cfec092643607d9ab7d4f10e2b4865829fbcd9f613304d6a87a4",
+    "sha256": "dec9b3fd32aaa217a620abc4b2a0407cd6d46394ebe1c41a74971a7b8c37c1b7"
+  },
+  {
+    "name": "non-ascii",
+    "hex": "d09fd180d0b8d0b2d0b5d1822c20f09f8c8a",
+    "sha256": "9df2fca906235c2393b7fb323455e7850018a0f6e120b9e7ace2a9ed0fe2f2fb"
+  }
+]
