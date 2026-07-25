@@ -14,6 +14,7 @@ import {
   padToBlock,
 } from '../../_test-fixtures/tar-builder.ts';
 import {
+  type InstallOptions,
   type ShadowInstallAuthority,
   install,
   installWithShadowAuthority,
@@ -118,6 +119,7 @@ const CONTRACT_OPTIONAL_DEPENDENCIES = {
 };
 const CONTRACT_PEER_DEPENDENCIES = { [CONTRACT_PEER]: '^1.0.0' };
 const CONTRACT_BIN = { contract: 'bin/contract.js' };
+const CONTRACT_MATERIALIZATION_PATHS = ['bin/contract.js', 'index.js', 'package.json'] as const;
 
 function freezeFixture<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -303,6 +305,9 @@ async function installContract(
   vfs: MemoryVfs,
   registry: ContractRegistry,
   dependencies: Readonly<Record<string, string>>,
+  transport: Partial<
+    Pick<InstallOptions, 'resolverUrl' | 'resolverClosureHash' | 'resolverBundleBaseUrl'>
+  > = {},
 ) {
   return await installWithShadowAuthority(
     {
@@ -314,10 +319,44 @@ async function installContract(
         cwd: '/project',
         registry,
         onSubstitution: () => {},
+        ...transport,
       },
     },
     contractAuthority(),
   );
+}
+
+async function snapshotContractMaterialization(
+  vfs: MemoryVfs,
+  root: string,
+): Promise<ReadonlyMap<string, Uint8Array>> {
+  return new Map(
+    await Promise.all(
+      CONTRACT_MATERIALIZATION_PATHS.map(
+        async (path) => [path, await vfs.readFile(`${root}/${path}`)] as const,
+      ),
+    ),
+  );
+}
+
+async function damageContractMaterialization(vfs: MemoryVfs, root: string): Promise<void> {
+  const [corrupt, ...missing] = CONTRACT_MATERIALIZATION_PATHS;
+  await vfs.writeFile(`${root}/${corrupt}`, 'corrupt');
+  for (const path of missing) await vfs.rm(`${root}/${path}`);
+}
+
+async function expectContractMaterialization(
+  vfs: MemoryVfs,
+  root: string,
+  expected: ReadonlyMap<string, Uint8Array>,
+): Promise<void> {
+  for (const path of CONTRACT_MATERIALIZATION_PATHS) {
+    const restored = await vfs.readFile(`${root}/${path}`);
+    const before = expected.get(path);
+    if (!before) throw new Error(`missing contract materialization snapshot ${path}`);
+    expect(restored, path).toEqual(before);
+    expect(shadowSha256(restored), path).toBe(shadowSha256(before));
+  }
 }
 
 async function freshLockfile(
@@ -382,6 +421,44 @@ describe('shadow substitution installer boundary', () => {
     },
   );
 
+  it('[fault: observable-order] exact-only rejects before Eddy pinned GET or POST', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const resolverFetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new Error('Eddy must not start before exact admission'));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const registry = await contractRegistry();
+    const mkdir = vi.spyOn(vfs, 'mkdir');
+    const writeFile = vi.spyOn(vfs, 'writeFile');
+    const rm = vi.spyOn(vfs, 'rm');
+
+    await expect(
+      installContract(
+        vfs,
+        registry,
+        { [CONTRACT_TRIGGER]: '^1.100.0' },
+        {
+          resolverUrl: 'https://eddy.test/resolve',
+          resolverClosureHash: '0'.repeat(64),
+          resolverBundleBaseUrl: 'https://eddy-cdn.test',
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'contract-package.version',
+    });
+
+    expect(resolverFetch).not.toHaveBeenCalled();
+    expect(registry.packumentReads).toEqual([]);
+    expect(registry.tarballReads).toEqual([]);
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(rm).not.toHaveBeenCalled();
+    await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
+    await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+  });
+
   it('[fault: observable-order] exact-only replay rejects drift without reads or mutation', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const vfs = new MemoryVfs();
@@ -393,16 +470,29 @@ describe('shadow substitution installer boundary', () => {
     const launcherBefore = await vfs.readFile('/project/node_modules/.bin/contract');
 
     registry.resetReads();
+    const resolverFetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new Error('Eddy must not start during exact replay rejection'));
     const mkdir = vi.spyOn(vfs, 'mkdir');
     const writeFile = vi.spyOn(vfs, 'writeFile');
     const rm = vi.spyOn(vfs, 'rm');
     await expect(
-      installContract(vfs, registry, { [CONTRACT_TRIGGER]: '^1.100.0' }),
+      installContract(
+        vfs,
+        registry,
+        { [CONTRACT_TRIGGER]: '^1.100.0' },
+        {
+          resolverUrl: 'https://eddy.test/resolve',
+          resolverClosureHash: '0'.repeat(64),
+          resolverBundleBaseUrl: 'https://eddy-cdn.test',
+        },
+      ),
     ).rejects.toMatchObject({
       name: 'NotImplementedError',
       feature: 'contract-package.version',
     });
 
+    expect(resolverFetch).not.toHaveBeenCalled();
     expect(registry.packumentReads).toEqual([]);
     expect(registry.tarballReads).toEqual([]);
     expect(mkdir).not.toHaveBeenCalled();
@@ -552,6 +642,68 @@ describe('shadow substitution installer boundary', () => {
     expect(replay.lockfile.packages[nestedSource]).not.toHaveProperty('bin');
     expect(await vfs.readFileText(launcherPath)).toBe(launcher);
     expect(writeFile.mock.calls.filter(([path]) => path === launcherPath)).toHaveLength(1);
+  });
+
+  it('[fault: poisoned-cache/provenance-lie] regenerates destroyed root registry materialization', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const registry = await contractRegistry();
+    const writeFile = vi.spyOn(vfs, 'writeFile');
+    await installContract(vfs, registry, { [CONTRACT_TRIGGER]: CONTRACT_VERSION });
+
+    const materializationRoot = '/project/node_modules/contract-package';
+    const materializationBefore = await snapshotContractMaterialization(vfs, materializationRoot);
+    const launcherPath = '/project/node_modules/.bin/contract';
+    const lockBefore = await vfs.readFile('/project/package-lock.json');
+    await damageContractMaterialization(vfs, materializationRoot);
+    await vfs.rm(launcherPath);
+    registry.resetReads();
+    writeFile.mockClear();
+
+    await installContract(vfs, registry, { [CONTRACT_TRIGGER]: CONTRACT_VERSION });
+
+    expect(registry.packumentReads).toEqual([]);
+    expect(registry.tarballReads).toEqual([]);
+    await expectContractMaterialization(vfs, materializationRoot, materializationBefore);
+    expect(await vfs.readFileText(launcherPath)).toBe(
+      "#!/usr/bin/env node\nimport('../contract-package/bin/contract.js');\n",
+    );
+    expect(writeFile.mock.calls.filter(([path]) => path === launcherPath)).toHaveLength(1);
+    expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+  });
+
+  it('[fault: poisoned-cache/provenance-lie] regenerates destroyed nested registry materialization', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const registry = await contractRegistry();
+    const writeFile = vi.spyOn(vfs, 'writeFile');
+    const dependencies = {
+      [CONTRACT_SOURCE]: '1.99.0',
+      'contract-host': '1.0.0',
+    };
+    await installContract(vfs, registry, dependencies);
+
+    const materializationRoot = '/project/node_modules/contract-host/node_modules/contract-package';
+    const materializationBefore = await snapshotContractMaterialization(vfs, materializationRoot);
+    const launcherPath = '/project/node_modules/contract-host/node_modules/.bin/contract';
+    const lockBefore = await vfs.readFile('/project/package-lock.json');
+    await damageContractMaterialization(vfs, materializationRoot);
+    await vfs.rm(launcherPath);
+    registry.resetReads();
+    writeFile.mockClear();
+
+    await installContract(vfs, registry, dependencies);
+
+    expect(registry.packumentReads).toEqual([]);
+    expect(registry.tarballReads).toEqual([]);
+    await expectContractMaterialization(vfs, materializationRoot, materializationBefore);
+    expect(await vfs.readFileText(launcherPath)).toBe(
+      "#!/usr/bin/env node\nimport('../contract-package/bin/contract.js');\n",
+    );
+    expect(writeFile.mock.calls.filter(([path]) => path === launcherPath)).toHaveLength(1);
+    expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
   });
 
   it('materializes and lockfile-replays esbuild without registry acquisition', async () => {
