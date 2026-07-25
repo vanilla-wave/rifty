@@ -1,37 +1,43 @@
 ---
 area: runtime-js
 status: draft
-title: Wire remote-FS into the generic worker-backed child_process.spawn so a node child sees the parent/owner filesystem
+title: Owner-backed remote FS for generic Worker Node children
 created: 2026-06-17
-why: the generic worker path (spawnViaWorker → former spawnWorkerChild) never set RIFTY_REMOTE_FS, so a spawned worker read its OWN empty mirror instead of the parent/owner store — a Node-parity break (a node child must see the parent fs). Reachable only from a realm that serves nothing to the child (owner/page); the supervised-child realm keeps the same-realm fallback. Closed as a LOUD throw (review #1, ADR-0150) — this item is the proper fix that re-enables the worker path
-user_story: As a dev whose program does child_process.spawn('node', ['child.js']) / fork() from a realm with the kernel + node-entry worker URLs, I want the worker child to read the same filesystem as its parent (the owner store over fs.* sync-RPC), not throw NotImplementedError
-sources: [ADR-0150, ADR-0011, ADR-0137]
-code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/ipc/sync-rpc-fs.ts, apps/playground/src/workers/node-entry-bootstrap.ts, apps/playground/src/workers/owner-child-bin-executor.ts]
+why: generic `spawn('node', …)` and `fork()` still loud-throw when a real Worker route exists because the child has no proven route to the parent-owned VFS
+epic: real-node-server-dev-loop
+sources: [ADR-0011, ADR-0137, ADR-0150, ADR-0267]
+code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/ipc/sync-rpc-fs.ts, apps/playground/src/workers/node-entry-bootstrap.ts, apps/playground/src/workers/node-entry-remote-fs.ts, apps/playground/src/workers/workbench-project-runtime.ts]
 ---
 
 ## Context
 
-Re-derived at HEAD (review #1). The generic worker route in `spawn()` now THROWS
-`NotImplementedError('child_process.spawn[worker]')` instead of silently spawning an
-empty-mirror child. The `.bin` path already works because `owner-child-bin-executor.ts`
-sets `RIFTY_REMOTE_FS=1`, so the child's `node-entry-bootstrap` installs the owner store as
-its global sync mirror. The generic path has no equivalent wiring.
+Current `child_process.spawn` throws
+`NotImplementedError('child_process.spawn[worker]')` when SAB and node-entry
+Worker URLs are available. The former generic route could only give the new
+realm a private empty mirror; that would silently violate Node's shared
+filesystem namespace.
 
-The subtlety that makes this non-trivial: setting `RIFTY_REMOTE_FS=1` only works if the
-SPAWNING realm SERVES the child's `fs.*` calls. Only the owner registers `fs.*` handlers
-(ADR-0150); the page does not. So this needs either (a) the spawner to route the child's
-`fs.*` through the owner's fs-server, or (b) a per-realm "do I serve fs.*?" capability the
-generic path can check before opting the child into remote-FS vs. throwing.
+ADR-0267 replaced guest-env launch controls with a versioned entry bootstrap,
+fresh launch metadata, and exact guest `process.env`. Current Playground
+entries also carry a typed remote-FS root into `node-entry-remote-fs`; the old
+PR #129 guest-env/private-mirror mechanism is therefore invalid. This item owns
+only recursive Worker launch and VFS provenance: the child resolves the same
+owner-backed namespace, forwards recursive descendants through the current
+relay, never
+opens a second OPFS owner, and fails before PID/Worker allocation when a complete
+route cannot be proven. Public cwd/env/stdio/IPC/process-table and terminal
+settlement belong to `runtime-js/worker-child-process-contract`.
 
-## Options or Next
+Real-Worker browser proof also owns the former residual conformance scope:
+parent writes followed by child sync reads, chunk boundaries, short/no-progress
+reads, concurrent size changes, error metadata, and readdir/stat shapes. The
+Workbench content snapshot plane remains a separate document transport and is
+never a child-process filesystem fallback.
 
-- Owner realm: set `RIFTY_REMOTE_FS=1` in the generic spawn spec (the owner already serves
-  `fs.*`) — the worker child reads the owner store, Node-parity restored.
-- Page realm (does not serve `fs.*`): keep the loud throw, or proxy `fs.*` to the owner.
-- Likely needs a small ADR (changes generic-spawn FS semantics + the realm capability check)
-  and re-introduces a worker-spawn module (the deleted `child_process-worker.ts`).
+`kernel/process-equals-web-worker` separately owns retirement of the non-Worker
+fallback; this item proves and enables the real Worker route without changing
+that fallback policy.
 
-## Reversibility
-
-IRREVERSIBLE-ish — re-introduces worker-spawn + changes generic-spawn FS semantics → own ADR
-when built. Recorded here until then.
+The transport/bootstrap change is public and cross-package; a fresh ADR
+composing ADR-0267 is required before this item can become `ready`. If
+refinement finds a real contradiction, it must use the superseding-ADR process.
