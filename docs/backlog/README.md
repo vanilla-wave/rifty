@@ -29,7 +29,9 @@ A draft needs `## Context`. A ready item needs:
 - `## Acceptance`: testable done-definition that rejects approximations;
 - `## Parity cases`: enumerated oracle behaviors and RED targets;
 - `## Out of scope`: named loud throws + compat ❌;
-- `## Decisions`: every fork resolved or ADR-linked.
+- `## Decisions`: every fork resolved or ADR-linked;
+- agent-compiled flip: a `ready-verdict:` line from the fresh-context judge
+  (`decision-workflow.md` §Backlog readiness).
 
 External-oracle work adds `## Reference contract` with pinned version/mechanism;
 semantic copies require an ADR + differential suite.
@@ -38,9 +40,10 @@ Infra work also needs `## Fault matrix`: each reachable axis × operation →
 fallback, visible degradation, or loud throw; each row is a fault-test target.
 Use `docs/process/fault-classes.md`. Template: `TEMPLATE.md`.
 
-A ready/in-progress epic needs `## Outcome`, end-to-end `## User scenario`, and
-`## Items`. Known children seed order; reverse links (`epic: <slug>`) are the
-live residual set. Map a Budget slice once:
+A ready/in-progress epic needs `## Outcome`, end-to-end `## User scenario`,
+numbered checkable `## Invariants` (observable statements the closing smoke
+proves; legacy epics add them at next refine), and `## Items`. Known children
+seed order; reverse links (`epic: <slug>`) are the live residual set. Map a Budget slice once:
 
 ```md
 - `area/item` — **slice-name** — dependency/result
@@ -64,7 +67,8 @@ Budget-Slice: <epic>/<slice>
 ```
 
 The marker is write-once and inherited from merge-base. It freezes `value`,
-`tier`, Outcome, and User scenario; only the user may change them. Title and
+`tier`, Outcome, User scenario, and `## Invariants`; only the user may change
+them. Title and
 `user_story` are indexes; children, order, mechanisms, slices, and append-only
 Budget are live run state.
 

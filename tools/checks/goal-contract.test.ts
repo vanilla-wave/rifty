@@ -94,8 +94,21 @@ describe('goalContract / evaluateGoal', () => {
       tier: 'robust',
       outcome: 'The package installs and runs through one honest path.',
       userScenario: 'Open the project, install, run, reload offline.',
+      invariants: null,
     });
     expect(evaluateGoal(baseline, current, [])).toEqual([]);
+  });
+
+  it('freezes Invariants when the baseline declares them; legacy baselines may gain them', () => {
+    const withInvariants = (inv: string) =>
+      epic().replace('## Items', `## Invariants\n\n- I1. ${inv}\n\n## Items`);
+    expect(
+      evaluateGoal(withInvariants('Install survives reload.'), withInvariants('Install works.'), [])[0],
+    ).toContain('Invariants');
+    expect(
+      evaluateGoal(withInvariants('Install survives reload.'), withInvariants('Install survives reload.'), []),
+    ).toEqual([]);
+    expect(evaluateGoal(epic(), withInvariants('Install survives reload.'), [])).toEqual([]);
   });
 
   it.each([

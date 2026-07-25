@@ -25,7 +25,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - Comments/ADRs/docs: extremely concise, sacrifice grammar, cut anything restating code.
 
 ## Data sources
-- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding → `rifty-to-backlog`; settled draft → compile normally; unresolved observable fork → manual `rifty-refine`; ready → implement normally. Never implement a draft. Planned/process work never invokes `rifty-fix`.
+- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding → `rifty-to-backlog`; settled draft → compile + fresh-context judge verdict (`ready-verdict:`, never self-certified — `decision-workflow.md` §Backlog readiness); unresolved observable fork → manual `rifty-refine`; ready → implement normally. Never implement a draft. Planned/process work never invokes `rifty-fix`.
 - `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/decision-workflow.md` — read at any fork
 - `docs/process/fault-classes.md` — fault taxonomy + review convergence
@@ -42,7 +42,8 @@ Full checklist + subagent budget: `docs/process/decision-workflow.md`. Core:
 
 ## Autonomous goals
 
-Explicit whole-ready-epic hand-off → `rifty-goal-run`; data contract:
+Explicit whole-ready-epic hand-off or a `Goal-Baseline` task/PR → run loop in
+`docs/process/decision-workflow.md` §Autonomous goals; data contract:
 `docs/backlog/README.md` §Autonomous goal. The user owns the frozen observable
 goal; the agent owns just-in-time units/mechanisms. Required discoveries stay
 reverse-linked. Budget/review trips re-cut the unit; slice done ≠ goal done.

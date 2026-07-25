@@ -10,7 +10,7 @@ Report these axes once, in order:
 
 1. **Completeness** — every unit clause covered; no required deferral.
 2. **Mission and architecture** — fits rifty's mission and boundaries.
-3. **Goal drift** — delivery matches exact `Goal-Baseline`, else ready contract.
+3. **Goal drift** — delivery matches exact `Goal-Baseline`, else ready contract; a `draft→ready` flip in the diff carries its `ready-verdict:` line.
 4. **Approach cost** — identify removable machinery: contract deliverable without it → blocker, first instance included; pure code shrinkage → residual note, never a checkpoint condition. Apply §Class-kill.
 5. **Budget** — one declared slice; inspect modified files, not only advisory scans.
 6. **Bugs** — no correctness defect.

@@ -32,7 +32,17 @@ Shape and validation: `docs/backlog/README.md`. Never implement a draft.
 1. Exhaust code, ADR, real-Node, and disposable-spike evidence.
 2. Resolve internal forks yourself. A missing section is not a reason to invoke a skill.
 3. Remaining user-observable fork → leave draft and request manual `rifty-refine`.
-4. Otherwise compile the contract, set `ready`, run `pnpm backlog:check`, continue.
+4. Otherwise compile the contract and get a fresh-context judge verdict: a subagent
+   receives the item path + repo access only — no framing, no «I think it's settled»
+   (frame-then-validate voids the check). It independently re-checks stale/overlap,
+   evidence behind every Parity/Fault row (model memory is not evidence), boundary
+   rows, and the mechanism inventory; the verdict lands in the item as
+   `ready-verdict: <date> — <what settled each section>`. Clean → set `ready`, run
+   `pnpm backlog:check`, continue; any open fork → step 3. No «settled with caveats».
+5. An unsettled fork discovered in an already-`ready` item (mid-build or review) →
+   demote to `draft` in a separate PR with the fork recorded, then resume from
+   step 1; never absorb it silently. (An active goal epic itself cannot be
+   demoted — `check:goal-contract`.)
 
 ### Refine altitude
 
@@ -50,7 +60,29 @@ Raising tier requires an ADR.
 
 ## Autonomous goals
 
-Marker, Budget, residual, and closure rules live in `docs/backlog/README.md`
-§Autonomous goal; execution lives in `rifty-goal-run`. At a fork, the only extra
-decision rule is: the user owns frozen observable fields; re-cut live
+Data contract (marker, Budget, residuals, closure): `docs/backlog/README.md`
+§Autonomous goal. Own the frozen outcome, not a prewritten plan. At a fork, the
+only extra rule: the user owns frozen observable fields; re-cut live
 items/order/mechanisms, never the goal or its required reverse-linked work.
+
+Run loop — starts only on an explicit whole-ready-epic hand-off or a task/PR
+carrying `Goal-Baseline`; never for ordinary items, single fixes, or
+process/docs/skill work:
+
+1. Bootstrap or inherit the write-once marker; declare the matching
+   `Goal-Baseline` and one `Budget-Slice`.
+2. Pick one dependency-ready residual; compile a settled draft per §Backlog
+   readiness above; surface only a remaining observable fork for manual
+   `rifty-refine`.
+3. Run Contract+RED, then implement the ready unit. Planned work and expected
+   RED never invoke `rifty-fix`.
+4. Classify discoveries against the frozen goal/tier/Fidelity: required →
+   reverse-linked goal residual; outside → `rifty-to-backlog`.
+5. Budget trip or Final+GREEN unit residual → re-cut the unit/mechanism; never
+   narrow the goal, detach required work, auto-fix, or start review three.
+6. Unit clean with goal residuals → close only that unit and continue.
+7. Close the goal only when no reverse-linked children remain, review returns
+   `goal_complete: true` with empty residuals, and end-to-end proof of the
+   baseline `## Invariants` + DoD are green on one SHA; then delete the epic.
+
+Show any conflict with the baseline against its exact clause.

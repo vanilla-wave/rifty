@@ -17,6 +17,12 @@ tier: <works|robust|production — required for an autonomous goal>
 
 <Concrete end-to-end steps whose success closes the epic.>
 
+## Invariants
+
+<!-- Frozen with the marker. Numbered observable statements the closing smoke proves. -->
+
+- I1. <user-observable statement>
+
 ## Items
 
 <!-- Historical slice/role ledger; child `epic:` links are the live residual set. -->

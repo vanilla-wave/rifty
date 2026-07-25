@@ -8,7 +8,7 @@ ordinary contract compilation.
 
 ## Preconditions
 
-- Target one `draft` document, not its ready parent.
+- Target one `draft` document, not its ready parent. A `ready` item with a live fork is demoted first (`decision-workflow.md` §Backlog readiness).
 - Exhaust code, ADR, real-Node, and disposable-spike evidence first.
 - Require one concrete unresolved user-observable scenario branch. Otherwise ask nothing and stop.
 
@@ -19,5 +19,6 @@ ordinary contract compilation.
 3. Do not ask what code/ADR/Node already answers. Apply reachability and refine-altitude rules from `docs/process/decision-workflow.md` §Backlog readiness.
 4. For infra, ask only physically reachable fault branches within the epic tier; use `docs/process/fault-classes.md` and `docs/backlog/README.md` §Tier.
 5. Treat any active-baseline change as user-owned; never soften it through ADR, backlog, Out of scope, or rewritten acceptance.
+6. For an epic, land the outcome as numbered `## Invariants` — checkable observable statements the closing smoke proves; frozen with the marker.
 
 Done when every observable fork and its evidence are recorded in the draft. The ordinary workflow owns document shape, `draft → ready`, and `pnpm backlog:check`.

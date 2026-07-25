@@ -1,6 +1,6 @@
 ---
 name: rifty-review-loop
-description: Run one rifty Contract+RED or Final+GREEN checkpoint. Invoke only on an explicit checkpoint request or when rifty-goal-run reaches one; not as a repair loop or ordinary planned step.
+description: Run one rifty Contract+RED or Final+GREEN checkpoint. Invoke only on an explicit checkpoint request or when an autonomous goal run reaches one; not as a repair loop or ordinary planned step.
 ---
 
 # rifty-review-loop

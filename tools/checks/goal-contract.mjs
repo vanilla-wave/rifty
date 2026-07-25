@@ -2,7 +2,8 @@
 /**
  * Run-goal tripwire. `Goal-Baseline: <epic>@<exact SHA>` freezes the epic's
  * observable promise across every implementation slice. Item order and run
- * bookkeeping stay mutable; value, tier, Outcome, and User scenario do not.
+ * bookkeeping stay mutable; value, tier, Outcome, User scenario do not —
+ * nor Invariants once the baseline declares them (legacy epics may gain them).
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -63,6 +64,7 @@ export function goalContract(text) {
     tier: frontmatterValue(text, 'tier'),
     outcome: section(text, 'Outcome'),
     userScenario: section(text, 'User scenario'),
+    invariants: section(text, 'Invariants'),
   };
 }
 
@@ -122,7 +124,9 @@ export function evaluateGoal(baselineText, currentText, linkedItems) {
     ['tier', 'tier'],
     ['outcome', 'Outcome'],
     ['userScenario', 'User scenario'],
+    ['invariants', 'Invariants'],
   ]) {
+    if (key === 'invariants' && baseline.invariants === null) continue;
     if (baseline[key] !== current?.[key]) violations.push(`frozen ${label} changed from baseline`);
   }
   return violations;
