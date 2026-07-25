@@ -5,7 +5,6 @@ title: Honest shadow substitutions at scale — builtin package-generic registry
 created: 2026-07-23
 value: Real projects that depend on native-backed packages (esbuild directly or through Vite, sass-embedded) install and run faithfully in the browser through one builtin, parity-proven substitution registry
 user_story: As a browser-IDE user, I want npm install of a project using esbuild or sass-embedded to just work — direct require, through Vite, offline on reopen — but today each native binding stops the project or costs a re-acquisition
-items: [playground/vite-temp-install-claim-churn, playground/workbench-package-extraction, npm-client/sass-embedded-substitution, playground/shadow-series-measured-cleanup]
 tier: production
 sources: [ADR-0307, ADR-0308, ADR-0309, ADR-0310, PR-160]
 ---
@@ -77,17 +76,15 @@ withdrawn until a second Pattern-2 package lands
 
 ## Budget
 
-Tripwires for the autonomous run (`docs/backlog/README.md` §Budget); over
-budget = stop and surface:
+Run tripwires (`docs/backlog/README.md` §Budget):
 
 - scope implemented outside `ready` items: 0
 - in-place ready-contract edits alongside source changes: 0
   (`pnpm check:contract-drift`)
 - new coordination mechanisms: 0
-- review rounds per slice: ≤ 2 (Contract+RED, then Final+GREEN)
+- review checkpoints per slice: exactly 2
 - generated globs: `docs/public/compat/**`, `**/generated/**`, `pnpm-lock.yaml`
-- slices (hand-written insertions vs merge-base, `pnpm check:budget`;
-  declare `Budget-Slice: honest-shadow-substitutions/<slice>` in the PR body):
+- slices:
 
 | slice | band |
 |---|---|
@@ -95,6 +92,3 @@ budget = stop and surface:
 | workbench-extraction | 2000–4000 |
 | sass-scale-proof | 1000–3000 |
 | measured-cleanup | 1000–3000 |
-
-Bands are estimates from comparable landed slices; 2× a band means stop and
-re-cut, never silent absorption.

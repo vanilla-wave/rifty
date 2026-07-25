@@ -5,7 +5,6 @@ title: Fault-honest OPFS persistence — reload never trusts torn state, durabil
 created: 2026-07-05
 value: After any mid-write failure or worst-moment reload (quota, crash, wedged handle), the project a developer reopens is provably honest — the operation fully took effect or cleanly didn't; durability checks answer within a bound instead of parking forever.
 user_story: As a developer, I want to close or reload the tab at ANY moment — mid `npm install`, mid `git commit`, mid editor save — and reopen to a correct project, but today the git ref path has no torn-write tests, a wedged OPFS op parks every durability gate forever, and no e2e ever kills the page at the worst moment.
-items: [vfs/iso-git-ref-torn-write-rows, vfs/persist-ledger-fault-rows-completion, playground/reload-crash-consistency-fault-e2e]
 ---
 
 ## Outcome

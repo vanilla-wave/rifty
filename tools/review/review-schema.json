@@ -1,0 +1,81 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "overall_verdict": { "type": "string", "enum": ["pass", "concern", "blocker"] },
+    "merge_call": { "type": "string", "description": "One-line merge recommendation." },
+    "checkpoint": { "type": "string", "enum": ["Contract+RED", "Final+GREEN"] },
+    "unit_goal_source": {
+      "type": "string",
+      "description": "Exact ready contract/path and baseline used for the current unit."
+    },
+    "unit_residuals": {
+      "type": "array",
+      "description": "Current PR/slice contract clauses not covered at this checkpoint. Any entry blocks the slice.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "clause": { "type": "string" },
+          "location": { "type": "string" },
+          "summary": { "type": "string" }
+        },
+        "required": ["clause", "location", "summary"]
+      }
+    },
+    "goal_residuals": {
+      "type": "array",
+      "description": "Frozen run-goal clauses still open after this honest slice. They require continuation but do not block this slice.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "clause": { "type": "string" },
+          "location": { "type": "string" },
+          "summary": { "type": "string" }
+        },
+        "required": ["clause", "location", "summary"]
+      }
+    },
+    "goal_complete": {
+      "type": "boolean",
+      "description": "True only when goal_residuals is empty and end-to-end goal acceptance is proven."
+    },
+    "axes": {
+      "type": "array",
+      "description": "One entry per rifty-review rubric axis, in rubric order.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "axis": { "type": "string", "description": "Rubric axis name." },
+          "verdict": { "type": "string", "enum": ["pass", "concern", "blocker"] },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "severity": { "type": "string", "enum": ["blocker", "concern", "nit"] },
+                "location": { "type": "string", "description": "file:line, cited from the diff." },
+                "summary": { "type": "string", "description": "Concise defect statement." }
+              },
+              "required": ["severity", "location", "summary"]
+            }
+          }
+        },
+        "required": ["axis", "verdict", "findings"]
+      }
+    }
+  },
+  "required": [
+    "overall_verdict",
+    "merge_call",
+    "checkpoint",
+    "unit_goal_source",
+    "unit_residuals",
+    "goal_residuals",
+    "goal_complete",
+    "axes"
+  ]
+}

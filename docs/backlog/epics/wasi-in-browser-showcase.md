@@ -5,7 +5,6 @@ title: WASI-in-browser — show the one uncontested capability
 created: 2026-06-28
 value: A developer sees, clicks, and runs rifty's one uncontested capability — a real compiled WASI guest sharing files with node:fs in a browser tab — and trusts it because every claim is auditable.
 user_story: As a tool/WASM builder evaluating rifty, I want to click a preset and watch a file written by node:fs get read+rewritten by a real esbuild.wasm WASI guest, and run the same thing from my terminal in 30s, but today there is no WASI preset, no standalone WASI example, and no blog to host the article.
-items: [playground/wasi-preset, runtime-wasi/standalone-wasi-example, distribution/landing-blog-surface]
 sources: [ADR-0316]
 ---
 

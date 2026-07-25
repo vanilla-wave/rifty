@@ -5,7 +5,6 @@ title: Honest compatibility in the IDE
 created: 2026-07-09
 value: A developer can see what rifty knows, what it observed, and what remains unknown for the project in front of them, with every compatibility claim linked to evidence.
 user_story: As a developer trying a real Node project, I want known browser ceilings, rifty gaps, package incompatibilities, and observed divergences explained in the IDE, but today truth is split between external Markdown, stderr, and a runtime event path the playground does not receive.
-items: [toolchain-build/machine-readable-compat-claim-catalog, playground/notimplemented-stub-telemetry, playground/compatibility-event-bridge, playground/project-compatibility-preflight, playground/compatibility-inspector]
 ---
 
 ## Outcome

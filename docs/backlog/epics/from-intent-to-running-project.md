@@ -5,7 +5,6 @@ title: From intent to a running Node project
 created: 2026-07-09
 value: A first-time user chooses an outcome or opens their own project and reaches a truthful install/run result without first learning rifty's internal preset taxonomy.
 user_story: As a developer evaluating rifty, I want to run Express, a Node CLI, WASI, or my own project from the first screen, but today I must infer the right path from eleven equally weighted technical starters.
-items: [playground/outcome-oriented-launcher, playground/project-ingress-transaction, playground/open-local-project, playground/open-git-project, playground/imported-project-run-plan]
 ---
 
 ## Outcome

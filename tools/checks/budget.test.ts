@@ -1,18 +1,20 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
-  combinedBand,
-  declaredRun,
+  declaredBudgetSelection,
   declaredSlice,
+  declaredSlices,
   evaluateMass,
   globToRegExp,
   newPath,
   parseBudget,
   scanMechanisms,
+  validateBudgetAuthority,
+  validateRunDeclarations,
   validateSelectedSliceItems,
 } from './budget.mjs';
 
@@ -37,12 +39,12 @@ status: ready
 
 describe('parseBudget', () => {
   it('reads slices with en-dash and hyphen bands, globs, mechanisms pin', () => {
-    const b = parseBudget(epic);
-    expect(b?.slices.get('oracle-slice')).toEqual({ lo: 300, hi: 1000 });
-    expect(b?.slices.get('registry-core')).toEqual({ lo: 2000, hi: 4000 });
-    expect(b?.generated).toHaveLength(2);
-    expect(b?.mechanismsZero).toBe(true);
-    expect(b?.substrate).toBeNull();
+    const budget = parseBudget(epic);
+    expect(budget?.slices.get('oracle-slice')).toEqual({ lo: 300, hi: 1000 });
+    expect(budget?.slices.get('registry-core')).toEqual({ lo: 2000, hi: 4000 });
+    expect(budget?.generated).toHaveLength(2);
+    expect(budget?.mechanismsZero).toBe(true);
+    expect(budget?.substrate).toBeNull();
   });
 
   it('reads a substrate escape and returns null without a Budget section', () => {
@@ -52,6 +54,61 @@ describe('parseBudget', () => {
     );
     expect(parseBudget(withSubstrate)?.substrate).toBe('npm-client/shadow-registry-core');
     expect(parseBudget('## Items\n')).toBeNull();
+  });
+});
+
+describe('validateBudgetAuthority', () => {
+  const addRow = (text: string, row: string) =>
+    text.replace('| registry-core | 2000-4000 |', `| registry-core | 2000-4000 |\n${row}`);
+
+  it('accepts an identical existing slice and one selected JIT row/item', () => {
+    expect(validateBudgetAuthority(epic, epic, 'oracle-slice')).toEqual([]);
+    const pickup = addRow(epic, '| jit | 10–20 |').replace(
+      '## Items',
+      '## Items\n\n- `playground/jit` — **jit**: ready.',
+    );
+    expect(validateBudgetAuthority(epic, pickup, 'jit')).toEqual([]);
+  });
+
+  it.each([
+    ['rewritten row', epic.replace('300–1000', '300–2000')],
+    ['deleted row', epic.replace('| oracle-slice | 300–1000 |\n', '')],
+    [
+      'reordered rows',
+      epic.replace(
+        '| oracle-slice | 300–1000 |\n| registry-core | 2000-4000 |',
+        '| registry-core | 2000-4000 |\n| oracle-slice | 300–1000 |',
+      ),
+    ],
+    ['rewritten tripwire', epic.replace('mechanisms: 0', 'mechanisms: 1')],
+    ['rewritten glob', epic.replace('docs/public/compat/**', 'docs/public/**')],
+  ])('rejects %s', (_case, pickup) => {
+    expect(validateBudgetAuthority(epic, pickup, 'oracle-slice')).toEqual([
+      'pickup rewrites merge-base Budget content or existing rows',
+    ]);
+  });
+
+  it('rejects extra, wrong, and duplicate rows', () => {
+    const extra = addRow(epic, '| jit | 10–20 |\n| extra | 1–2 |');
+    expect(validateBudgetAuthority(epic, extra, 'jit')).toEqual(
+      expect.arrayContaining([
+        'pickup adds 2 Budget rows; want at most one',
+        'pickup adds Budget row "extra" instead of selected slice "jit"',
+      ]),
+    );
+
+    const wrong = addRow(epic, '| other | 10–20 |');
+    expect(validateBudgetAuthority(epic, wrong, 'jit')).toEqual([
+      'pickup adds Budget row "other" instead of selected slice "jit"',
+    ]);
+
+    const duplicate = addRow(epic, '| jit | 10–20 |\n| jit | 10–20 |');
+    expect(validateBudgetAuthority(epic, duplicate, 'jit')).toEqual(
+      expect.arrayContaining([
+        'pickup duplicates Budget row "jit"',
+        'pickup adds 2 Budget rows; want at most one',
+      ]),
+    );
   });
 });
 
@@ -65,9 +122,9 @@ describe('newPath / globToRegExp', () => {
   });
 
   it('matches ** across segments and * within one', () => {
-    const re = globToRegExp('packages/*/src/generated/**');
-    expect(re.test('packages/npm-client/src/generated/deep/file.ts')).toBe(true);
-    expect(re.test('packages/a/b/src/generated/file.ts')).toBe(false);
+    const regexp = globToRegExp('packages/*/src/generated/**');
+    expect(regexp.test('packages/npm-client/src/generated/deep/file.ts')).toBe(true);
+    expect(regexp.test('packages/a/b/src/generated/file.ts')).toBe(false);
   });
 });
 
@@ -75,8 +132,8 @@ describe('evaluateMass', () => {
   const band = { lo: 300, hi: 1000 };
   const generated = [globToRegExp('docs/public/compat/**')];
 
-  it('ok within band; generated and binary rows excluded', () => {
-    const r = evaluateMass(
+  it('is ok within band; generated and binary rows excluded', () => {
+    const result = evaluateMass(
       [
         { added: 900, path: 'packages/x/src/a.ts' },
         { added: 5000, path: 'docs/public/compat/esbuild.md' },
@@ -85,17 +142,17 @@ describe('evaluateMass', () => {
       band,
       generated,
     );
-    expect(r).toMatchObject({ insertions: 900, level: 'ok' });
+    expect(result).toMatchObject({ insertions: 900, level: 'ok' });
   });
 
-  it('warns over band, fails over 2× band', () => {
+  it('warns over band and fails at 2× band', () => {
     expect(evaluateMass([{ added: 1500, path: 'a.ts' }], band, []).level).toBe('warn');
-    expect(evaluateMass([{ added: 2001, path: 'a.ts' }], band, []).level).toBe('fail');
+    expect(evaluateMass([{ added: 2000, path: 'a.ts' }], band, []).level).toBe('fail');
   });
 });
 
 describe('scanMechanisms', () => {
-  it('flags identifiers only in added production source', () => {
+  it('finds identifiers only in added production source', () => {
     const hits = scanMechanisms([
       { path: 'packages/x/src/fifo-owner.ts', content: 'const epoch = 1;' },
       { path: 'docs/adr/npm-client/0309-x.md', content: 'epoch epoch epoch' },
@@ -109,115 +166,151 @@ describe('scanMechanisms', () => {
   });
 });
 
-describe('declaredSlice', () => {
-  it('prefers env, falls back to PR body, null when absent', () => {
+describe('Budget declaration routing', () => {
+  it('prefers env, falls back to every PR-body declaration', () => {
     expect(declaredSlice({ RIFTY_BUDGET_SLICE: ' e/s ' }, () => '')).toBe('e/s');
-    const event = JSON.stringify({
-      pull_request: { body: 'Some PR.\nBudget-Slice: honest-shadow-substitutions/oracle-slice\n' },
-    });
-    expect(declaredSlice({ GITHUB_EVENT_PATH: '/tmp/ev.json' }, () => event)).toBe(
-      'honest-shadow-substitutions/oracle-slice',
-    );
-    expect(declaredSlice({}, () => '')).toBeNull();
-    expect(declaredSlice({ GITHUB_EVENT_PATH: '/x' }, () => 'not json')).toBeNull();
-  });
-});
-
-describe('combined requester-approved run', () => {
-  const selected = [
-    'honest-shadow-substitutions/registry-core',
-    'honest-shadow-substitutions/package-tree-authority',
-    'honest-shadow-substitutions/esbuild-vite-cutover',
-  ];
-
-  it('reads multiple slices and reason from the PR body', () => {
     const event = JSON.stringify({
       pull_request: {
         body: [
-          `Budget-Slices: ${selected.join(', ')}`,
-          'Budget-Reason: requester required every PR #170 slice in one implementation PR',
+          'Budget-Slice: honest-shadow-substitutions/registry-core',
+          'Budget-Slice: honest-shadow-substitutions/package-tree-authority',
         ].join('\n'),
       },
     });
-    expect(declaredRun({ GITHUB_EVENT_PATH: '/tmp/event.json' }, () => event)).toEqual({
-      slices: selected,
-      reason: 'requester required every PR #170 slice in one implementation PR',
+    expect(declaredSlices({ GITHUB_EVENT_PATH: '/tmp/ev.json' }, () => event)).toEqual([
+      'honest-shadow-substitutions/registry-core',
+      'honest-shadow-substitutions/package-tree-authority',
+    ]);
+    expect(declaredSlice({ GITHUB_EVENT_PATH: '/tmp/ev.json' }, () => event)).toBeNull();
+    expect(declaredSlice({}, () => '')).toBeNull();
+    expect(declaredSlice({ GITHUB_EVENT_PATH: '/x' }, () => 'not json')).toBeNull();
+  });
+
+  it('recognises legacy plural forms so they fail closed', () => {
+    const event = JSON.stringify({
+      pull_request: {
+        body: ['Budget-Slices: goal/a, goal/b', 'Budget-Reason: old grouped-run exception'].join(
+          '\n',
+        ),
+      },
+    });
+    expect(declaredBudgetSelection({ GITHUB_EVENT_PATH: '/tmp/ev.json' }, () => event)).toEqual({
+      slices: ['goal/a', 'goal/b'],
+      plural: true,
+    });
+    expect(declaredBudgetSelection({ RIFTY_BUDGET_SLICES: 'goal/a' }, () => '')).toEqual({
+      slices: ['goal/a'],
+      plural: true,
+    });
+    expect(validateRunDeclarations(['goal/a'], [], true).error).toContain('unsupported');
+  });
+});
+
+describe('validateSelectedSliceItems', () => {
+  const ready = (linkedEpic: string) => `---
+area: playground
+status: ready
+title: Work
+epic: ${linkedEpic}
+---
+`;
+  const epicText = `${epic}
+1. \`playground/a\` — **oracle-slice**: numbered.
+- \`playground/b\` — **registry-core**: bullet.
+`;
+  const read = (path: string): string | null => {
+    if (path === 'docs/backlog/playground/a.md') return ready('goal');
+    if (path === 'docs/backlog/playground/b.md') return ready('other');
+    return null;
+  };
+
+  it('accepts numbered or bullet mapping to one ready reverse-linked item', () => {
+    expect(validateSelectedSliceItems(epicText, ['oracle-slice'], 'goal', read)).toEqual([]);
+    expect(validateSelectedSliceItems(epicText, ['registry-core'], 'goal', read)[0]).toContain(
+      'not reverse-linked',
+    );
+  });
+
+  it('rejects missing and duplicate mappings', () => {
+    expect(validateSelectedSliceItems(epicText, ['missing'], 'goal', read)[0]).toContain(
+      'no Items mapping',
+    );
+    const duplicate = `${epicText}- \`playground/c\` — **oracle-slice**: duplicate.\n`;
+    expect(validateSelectedSliceItems(duplicate, ['oracle-slice'], 'goal', read)[0]).toContain(
+      '2 Items mappings',
+    );
+  });
+});
+
+describe('validateRunDeclarations', () => {
+  const goalSha = '0123456789abcdef0123456789abcdef01234567';
+
+  it('allows normal non-goal PRs and requires paired single declarations', () => {
+    expect(validateRunDeclarations([], [])).toEqual({ mode: 'normal' });
+    expect(validateRunDeclarations(['honest-shadow-substitutions/oracle-slice'], [])).toMatchObject(
+      { error: expect.stringContaining('Goal-Baseline') },
+    );
+    expect(validateRunDeclarations([], [`honest-shadow-substitutions@${goalSha}`])).toMatchObject({
+      error: expect.stringContaining('Budget-Slice'),
+    });
+    expect(
+      validateRunDeclarations(
+        ['honest-shadow-substitutions/a', 'honest-shadow-substitutions/b'],
+        [`honest-shadow-substitutions@${goalSha}`],
+      ),
+    ).toMatchObject({ error: expect.stringContaining('exactly one') });
+  });
+
+  it('requires the slice and goal to name the same epic', () => {
+    expect(
+      validateRunDeclarations(['other/oracle-slice'], [`honest-shadow-substitutions@${goalSha}`]),
+    ).toMatchObject({ error: expect.stringContaining('does not match') });
+    expect(
+      validateRunDeclarations(
+        ['honest-shadow-substitutions/oracle-slice'],
+        [`honest-shadow-substitutions@${goalSha}`],
+      ),
+    ).toMatchObject({
+      mode: 'goal',
+      epicSlug: 'honest-shadow-substitutions',
+      slice: 'oracle-slice',
     });
   });
 
-  it('sums original slice bands instead of inventing a wider contract', () => {
-    expect(
-      combinedBand(
-        new Map([
-          ['registry-core', { lo: 2000, hi: 4000 }],
-          ['package-tree-authority', { lo: 2000, hi: 4000 }],
-          ['esbuild-vite-cutover', { lo: 2000, hi: 4000 }],
-        ]),
-        ['registry-core', 'package-tree-authority', 'esbuild-vite-cutover'],
-      ),
-    ).toEqual({ lo: 6000, hi: 12000 });
-  });
-
-  it('requires every selected slice to map exactly once to a ready item', () => {
-    const epicText = `${epic}
-1. \`npm-client/shadow-registry-core\` — **registry-core**: core.
-2. \`npm-client/shadow-registry-core-copy\` — **registry-core**: duplicate.
-3. \`playground/oracle\` — **oracle-slice**: oracle.
-4. \`playground/missing\` — **missing-slice**: missing.
-`;
-    const read = (path: string): string | null =>
-      path === 'docs/backlog/playground/oracle.md' ? '---\nstatus: draft\n---\n' : null;
-    expect(validateSelectedSliceItems(epicText, ['registry-core', 'oracle-slice'], read)).toEqual([
-      'Budget slice "registry-core" has 2 Items mappings',
-      'docs/backlog/playground/oracle.md is not ready',
-    ]);
-    expect(validateSelectedSliceItems(epicText, ['unmapped'], read)).toEqual([
-      'Budget slice "unmapped" has no Items mapping',
-    ]);
-    expect(validateSelectedSliceItems(epicText, ['missing-slice'], read)).toEqual([
-      'docs/backlog/playground/missing.md does not exist',
-    ]);
-  });
-
-  it('validates all selected contracts at pickup after delete-on-done closure in HEAD', () => {
+  it('takes JIT row and ready-item authority before source and retains it after closure', () => {
     const root = mkdtempSync(join(tmpdir(), 'rifty-budget-pickup-'));
     try {
       mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
-      mkdirSync(join(root, 'docs/backlog/npm-client'), { recursive: true });
       mkdirSync(join(root, 'docs/backlog/playground'), { recursive: true });
       mkdirSync(join(root, 'packages/x/src'), { recursive: true });
-      writeFileSync(
-        join(root, 'docs/backlog/epics/honest-shadow-substitutions.md'),
-        `${epic.replace(
-          '| registry-core | 2000-4000 |\n',
-          [
-            '| registry-core | 2000-4000 |',
-            '| package-tree-authority | 2000-4000 |',
-            '| esbuild-vite-cutover | 2000-4000 |',
-            '',
-          ].join('\n'),
-        )}
-1. \`npm-client/shadow-registry-core\` — **registry-core**: core.
-2. \`npm-client/package-tree-authority\` — **package-tree-authority**: owner.
-3. \`playground/esbuild-vite-cutover\` — **esbuild-vite-cutover**: cutover.
-`,
-      );
-      for (const item of [
-        'npm-client/shadow-registry-core',
-        'npm-client/package-tree-authority',
-        'playground/esbuild-vite-cutover',
-      ]) {
-        writeFileSync(
-          join(root, `docs/backlog/${item}.md`),
-          `---
-area: ${item.split('/')[0]}
+      const epicPath = join(root, 'docs/backlog/epics/goal.md');
+      const initialEpic = `---
+kind: epic
 status: ready
-title: X
-epic: honest-shadow-substitutions
+title: Goal
+created: 2026-07-25
+value: Goal
 ---
-`,
-        );
-      }
+
+## Outcome
+
+Goal.
+
+## User scenario
+
+Run it.
+
+## Items
+
+Known work.
+
+## Budget
+
+| slice | band |
+|---|---|
+| seed | 1–10 |
+`;
+      writeFileSync(epicPath, initialEpic);
       execFileSync('git', ['init', '-b', 'main'], { cwd: root });
       execFileSync('git', ['add', '.'], { cwd: root });
       execFileSync(
@@ -225,24 +318,57 @@ epic: honest-shadow-substitutions
         ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'base'],
         { cwd: root },
       );
-      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: root });
+      const baseline = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: root,
+        encoding: 'utf8',
+      }).trim();
+      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', baseline], { cwd: root });
 
-      for (const item of [
-        'npm-client/shadow-registry-core',
-        'npm-client/package-tree-authority',
-        'playground/esbuild-vite-cutover',
-      ]) {
-        rmSync(join(root, `docs/backlog/${item}.md`));
-      }
-      const epicPath = join(root, 'docs/backlog/epics/honest-shadow-substitutions.md');
-      const closedEpic = readFileSync(epicPath, 'utf8')
-        .replace(/^\| (?:registry-core|package-tree-authority|esbuild-vite-cutover) \|.*\n/gmu, '')
-        .replace(
-          /^\d+\. `(?:npm-client\/shadow-registry-core|npm-client\/package-tree-authority|playground\/esbuild-vite-cutover)`.*\n/gmu,
-          '',
-        );
-      writeFileSync(epicPath, closedEpic);
+      const itemPath = join(root, 'docs/backlog/playground/jit.md');
+      writeFileSync(
+        itemPath,
+        `---
+area: playground
+status: ready
+title: JIT
+created: 2026-07-25
+why: Required by goal
+epic: goal
+---
+`,
+      );
+      writeFileSync(
+        epicPath,
+        initialEpic
+          .replace('Known work.', '- `playground/jit` — **jit**: just-in-time unit.')
+          .replace('| seed | 1–10 |', '| seed | 1–10 |\n| jit | 1–10 |'),
+      );
+      execFileSync('git', ['add', '.'], { cwd: root });
+      execFileSync(
+        'git',
+        [
+          '-c',
+          'user.name=Rifty',
+          '-c',
+          'user.email=rifty@example.test',
+          'commit',
+          '-m',
+          'contract red',
+        ],
+        { cwd: root },
+      );
       writeFileSync(join(root, 'packages/x/src/a.ts'), 'export const shipped = true;\n');
+      execFileSync('git', ['add', '.'], { cwd: root });
+      execFileSync(
+        'git',
+        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'source'],
+        { cwd: root },
+      );
+      rmSync(itemPath);
+      writeFileSync(
+        epicPath,
+        initialEpic.replace('Known work.', '- `playground/jit` — **jit**: historical unit.'),
+      );
 
       const script = fileURLToPath(new URL('./budget.mjs', import.meta.url));
       const output = execFileSync(process.execPath, [script], {
@@ -250,12 +376,12 @@ epic: honest-shadow-substitutions
         encoding: 'utf8',
         env: {
           ...process.env,
-          RIFTY_BUDGET_SLICES: selected.join(','),
-          RIFTY_BUDGET_REASON: 'one requested implementation PR',
+          RIFTY_GOAL_BASELINE: `goal@${baseline}`,
+          RIFTY_BUDGET_SLICE: 'goal/jit',
         },
       });
       expect(output).toContain('budget: OK');
-      expect(output).toContain('within band 6000–12000');
+      expect(output).toContain('goal/jit');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

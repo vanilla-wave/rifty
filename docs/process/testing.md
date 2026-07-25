@@ -11,9 +11,11 @@ Same code in real Node and rifty, diff stdout. External reference — agent can'
 - Parity — vs real Node API (parity-runner + Vitest)
 - Conformance — documented Node semantics out of parity reach (event-loop order, async timers, errors)
 - Integration — real npm tarballs, tiers `tier-0-utility`…`tier-4-tooling`; each green package pinned by regression test
-- Fault — inject one fault axis at a boundary (network/storage/cache/concurrency) → assert the honest outcome (fallback / degraded / loud throw, never a silent lie); axes + contract: `docs/process/fault-classes.md`
+- Fault — inject one fault axis at a boundary (network/storage/cache/concurrency) → assert the honest outcome; axes + outcome contract: `docs/process/fault-classes.md`
 - E2E — playground via Playwright (chromium default)
 - Smoke — basic post-build scenarios
 - Compat matrix — auto-generated, `docs/public/compat/`
 
-Anti-pattern (ratcheted): source-grep tests (`expect(source).toContain`) — `pnpm check:source-grep` refuses new ones across the playground test surface (`apps/playground/src` unit tests + `tests/browser-unit` specs); residual pins live in the ALLOWLIST (`tools/checks/source-grep-ratchet.mjs`), each with an enforced why-behavioral-is-impossible. Pre-existing greps in other packages: backlog `toolchain-build/source-grep-ratchet-repo-wide`.
+Source-grep tests (`expect(source).toContain`) are forbidden. `pnpm
+check:source-grep` guards the playground surface; allowlisted exceptions require
+why behavioral proof is impossible.

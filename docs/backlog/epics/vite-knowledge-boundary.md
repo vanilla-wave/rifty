@@ -5,7 +5,6 @@ title: Keep Vite knowledge out of generic platform contracts
 created: 2026-07-18
 value: Vite projects work through faithful Node, filesystem, process, and storage behavior without turning Vite into a Rifty platform concept.
 user_story: As a developer running Vite or another ordinary npm tool, I want fixes to improve the real platform behavior the tool exercises, but today a Vite workaround can change generic runtime, Workbench, install, or persistence contracts.
-items: []
 sources: [ADR-0263, ADR-0278, PR-167-review]
 ---
 

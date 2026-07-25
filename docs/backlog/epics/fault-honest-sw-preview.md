@@ -5,7 +5,6 @@ title: Fault-honest SW preview — dispatch settles on every terminal event, a h
 created: 2026-07-05
 value: The preview either serves or says why — no dev-server/routing failure mode (dead worker, closed socket, misconfig) can park an iframe, an HMR socket, or a loopback http.request forever.
 user_story: As a developer, I want the preview to fail loudly with a diagnosable error when routing breaks, but today a host-check rejection reproducibly parks the iframe forever (untraced) and the bridge's termination semantics (worker death, teardown mid-request, WS upgrade) have no fault rows.
-items: [service-worker/preview-blocked-host-hang, service-worker/preview-dispatch-termination-chokepoint, net/preview-ws-bridge-termination]
 ---
 
 ## Outcome
@@ -18,7 +17,7 @@ A developer opens a vite preset, runs the real `npm run dev`, preview goes LIVE.
 
 ## Items
 
-- `service-worker/preview-blocked-host-hang` (ready) — entry point: diagnose (per `rifty-fix`) + fix the lost vite 403; unblocks preset-deglue's allowedHosts retirement.
+- `service-worker/preview-blocked-host-hang` (ready) — planned Contract+RED diagnosis + repair of the lost Vite 403; unblocks preset-deglue's allowedHosts retirement.
 - `service-worker/preview-dispatch-termination-chokepoint` (ready, blocked_by the diagnosis) — settle on every terminal event; ONE chokepoint, parity-first synthesized page only when no response exists; covers loopback http.request.
 - `net/preview-ws-bridge-termination` (ready) — WS/HMR sockets error/close under faults, vite's own reconnect UX works.
 
