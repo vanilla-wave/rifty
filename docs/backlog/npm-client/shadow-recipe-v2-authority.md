@@ -75,6 +75,7 @@ this prerequisite lands it without shipping the Sass recipe.
 | observable-order | unsupported admission rejects before registry/VFS work; dependency drift rejects before tarball work | synthetic policy and registry counters |
 | poisoned-cache / provenance-lie | matching v2 lock replays byte-identically with zero reads; v1 or drifted evidence loud-fails | installer replay contracts |
 | torn-state | abort during reachable registry alias writes stops later writes and the success claim, publishes no lock, and retry reconciles exact bytes; shared-bin cancellation remains inherited | installer materialization fault plus linker fault suite |
+| quota-perm-fail | quota/permission rejection during alias or bin writes publishes no success report or lock; retry reconciles exact bytes | root/nested registry alias and shared-bin write faults |
 | sibling-drift | esbuild and LightningCSS share the same policy/linker path | both recipe contract suites plus source boundary gate |
 
 ## Out of scope
