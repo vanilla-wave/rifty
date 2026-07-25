@@ -4,6 +4,14 @@
 
 ### Changed
 
+- Install-artifact identity now hashes only behavior-bearing policy fields
+  (`schema`/`api`/`version`/`consumer`/`source`/`wasm`/`patches`); compat prose
+  edits no longer invalidate deployed stamps or force snapshot rebakes. One-time
+  identity flip; the accompanying rebake changed no package bytes or versions.
+- Cold offline promise reworded to the page-observable failure
+  (`ShadowAssetError: failed to acquire …`); `ESHADOWASSET`/`acquire` fields
+  stay unit-pinned below the owner boundary.
+
 - Builtin substitutions now come from one generated, strict-decoded catalog
   with canonical catalog/recipe/file identities. Esbuild is an exact synthetic
   recipe with a runtime-asset binding; the retained lightningcss public tables

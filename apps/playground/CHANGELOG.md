@@ -12,6 +12,9 @@
   `postcss` 8.5.22 → 8.5.23 (vite's floating `^8.5.6` range) in all three
   presets; pinning bake inputs is
   TODO(backlog: playground/baked-snapshot-regeneration).
+- A second rebake re-embedded the narrowed install-artifact identity (doc-only
+  policy edits no longer flip it); zero package or byte changes beyond the
+  identity field.
 
 - Exact Vite 8.0.16 now runs real Rolldown-WASI production build and preview
   through the installed CLI; browser acceptance executes the hashed bundle in
