@@ -104,6 +104,24 @@ describe('goalContract / evaluateGoal', () => {
     expect(evaluateGoal(baseline, current, [])).toEqual([]);
   });
 
+  it('freezes every line of observable goal sections', () => {
+    const baseline = epic({
+      outcome: 'First outcome.\nSecond outcome.',
+      scenario: 'First action.\nSecond action.',
+      invariants: 'First invariant.\n- I2. Second invariant.',
+    });
+    const current = baseline
+      .replace('Second outcome.', 'Narrowed outcome.')
+      .replace('Second action.', 'Narrowed action.')
+      .replace('Second invariant.', 'Narrowed invariant.');
+
+    expect(evaluateGoal(baseline, current, [])).toEqual([
+      'frozen Outcome changed from baseline',
+      'frozen User scenario changed from baseline',
+      'frozen Invariants changed from baseline',
+    ]);
+  });
+
   it('rejects a baseline lacking Invariants', () => {
     const stripped = epic().replace(/## Invariants[\s\S]*?## Items/, '## Items');
     expect(evaluateGoal(stripped, epic(), [])[0]).toContain('Invariants');

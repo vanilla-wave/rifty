@@ -1,6 +1,6 @@
 ---
 name: rifty-refine
-description: Interview the user to close unresolved observable scope forks in one existing draft rifty item or epic after evidence and internal decisions are exhausted.
+description: Interview the user to close unresolved observable scope forks in one draft rifty item or epic — or in a raw idea, which is captured to a draft first — after evidence and internal decisions are exhausted.
 ---
 
 Refine owns only the interview. New finding → `rifty-to-backlog`; settled draft →
@@ -9,6 +9,7 @@ ordinary contract compilation.
 ## Preconditions
 
 - Target one `draft` document, not its ready parent. A `ready` item with a live fork is demoted first (`decision-workflow.md` §Backlog readiness).
+- Raw idea with no doc yet → capture it first (`rifty-to-backlog`: classify → dedup → gate → mint draft), then interview that draft — one invocation covers both.
 - Exhaust code, ADR, real-Node, and disposable-spike evidence first.
 - Require one concrete unresolved user-observable scenario branch. Otherwise ask nothing and stop.
 

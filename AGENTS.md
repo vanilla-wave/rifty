@@ -19,6 +19,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - Import boundaries enforced by `pnpm check:arch` (rules `tools/checks/arch-rules.cjs`): layer top-down (vfs/io/net → kernel → runtime-* → shell/terminal/npm-client → playground), no reverse imports, no cycles, no foreign `src/internal/*`, solid-js only in playground (D-002).
 - Source dir > 30 direct prod files carries an owner `README.md` (what belongs / what doesn't) — `pnpm check:dir-owner`. A dir no rule can describe is not a layer: split it.
 - New coordination mechanism (correlation, per-key FIFO, epoch guard, ledger, lock) → mechanism sweep first: `docs/process/fault-classes.md` §Class-kill.
+- **Simplicity.** The smallest honest mechanism that meets the contract. No speculative generality: a mechanism/layer/knob/abstraction the contract is deliverable without doesn't ship (review blocks it — `rifty-review` axis 4). Simplicity never trades against Fidelity: cut machinery, not behavior; gaps stay loud throws.
 - Public API only via `src/index.ts`.
 - No `any`; `@ts-ignore` only with why-comment + tracking issue.
 - No hardcoded external URLs — env-config (D-004).
@@ -49,6 +50,7 @@ Explicit whole-ready-epic hand-off or a `Goal-Baseline` task/PR → run loop:
 ## DoD (per PR)
 - [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked; report slice/goal status separately
 - [ ] implementation aligned with project goal
+- [ ] no machinery the contract is deliverable without (§Simplicity)
 - [ ] `pnpm pr:check` pass
 - [ ] touches cache/persistence/network/concurrency → `## Fault matrix` rows covered by fault tests
 - [ ] shipped capability carries observable acceptance proof (e2e/parity) in the same PR — source greps, fakes, and opt-in lanes do not close acceptance
