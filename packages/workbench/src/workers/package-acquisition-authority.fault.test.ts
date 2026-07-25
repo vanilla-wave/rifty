@@ -1,5 +1,6 @@
 import type { InstallResult } from '@riftydev/npm-client';
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
+import type { CommandContext } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
@@ -87,6 +88,83 @@ function adapterWith(overrides: Partial<PackageAcquisitionAdapter>): PackageAcqu
 }
 
 describe('package-acquisition authority faults', () => {
+  it('aborts a queued terminal waiter before the FIFO head releases', async () => {
+    const vfs = await vfsHarness();
+    const stamps = createInstallStampAuthority({ vfs });
+    await trustTree(vfs, stamps);
+    let enterHead!: () => void;
+    const headEntered = new Promise<void>((resolve) => {
+      enterHead = resolve;
+    });
+    let unblockHead!: () => void;
+    const headGate = new Promise<void>((resolve) => {
+      unblockHead = resolve;
+    });
+    let installCalls = 0;
+    const authority = createPackageAcquisitionAuthority({
+      stamps,
+      adapter: adapterWith({
+        install: async () => {
+          installCalls += 1;
+          return packageInstall(result(), PACKAGE_JSON);
+        },
+      }),
+    });
+    const head = authority.dispatch({
+      type: 'guarded-mutation',
+      resolveTransitions: () => [],
+      mutate: async () => {
+        enterHead();
+        await headGate;
+      },
+    });
+    await headEntered;
+
+    const controller = new AbortController();
+    const sink = { write: (_chunk: string | Uint8Array): void => {} };
+    const context: CommandContext = {
+      cwd: ROOT,
+      env: {},
+      stdout: sink,
+      stderr: sink,
+      signal: controller.signal,
+    };
+    const queued = authority.dispatch({
+      type: 'terminal-install',
+      project: PROJECT,
+      argv: [],
+      context,
+    });
+    const settlement = queued.then(
+      () => ({ status: 'resolved' as const }),
+      (reason: unknown) => ({ status: 'rejected' as const, reason }),
+    );
+    const closeReason = new Error('PTY closed while npm waited for package FIFO');
+    controller.abort(closeReason);
+    let quiesced = false;
+    const quiescence = authority.quiesce().then(() => {
+      quiesced = true;
+    });
+
+    const beforeHeadRelease = await Promise.race([
+      settlement,
+      new Promise<{ readonly status: 'pending' }>((resolve) =>
+        setTimeout(() => resolve({ status: 'pending' }), 20),
+      ),
+    ]);
+    expect(quiesced).toBe(false);
+    unblockHead();
+    await head;
+    await quiescence;
+    await settlement;
+
+    expect(beforeHeadRelease).toEqual({ status: 'rejected', reason: closeReason });
+    expect(installCalls).toBe(0);
+    await expect(stamps.check({ root: ROOT, slug: PROJECT.slug })).resolves.toMatchObject({
+      status: 'trusted',
+    });
+  });
+
   it('forwards durability proof to demote before an existing tree can be mutated', async () => {
     const vfs = await vfsHarness();
     const stamps = createInstallStampAuthority({ vfs });

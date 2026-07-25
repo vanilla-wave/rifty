@@ -23,6 +23,10 @@
 
 ### Fixed
 
+- Abort a terminal install waiter immediately when its lifecycle closes behind
+  the package FIFO head, while retaining its cancelled admission until that
+  FIFO position so quiescence and stamp ownership stay exact.
+
 - Preserve the exact owner outcome of file mutations admitted before project
   close; close drains those commits while fencing future and unhanded work
   (ADR-0319).

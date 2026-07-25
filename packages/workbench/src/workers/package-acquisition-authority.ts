@@ -346,6 +346,8 @@ interface CommandQueueEntry {
   readonly command: PackageAcquisitionCommand;
   readonly resolve: (value: PackageAcquisitionResult) => void;
   readonly reject: (reason: unknown) => void;
+  state: 'queued' | 'active' | 'cancelled';
+  queuedAbortCleanup: (() => void) | null;
 }
 
 interface ChildAdmissionQueueEntry {
@@ -667,13 +669,27 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   dispatch(command: PackageAcquisitionCommand): Promise<unknown> {
     const admission = ++this.#lastAdmission;
     const pending = new Promise<PackageAcquisitionResult>((resolve, reject) => {
-      this.#queue.push({
+      const entry: CommandQueueEntry = {
         kind: 'command',
         admission,
         command,
         resolve,
         reject,
-      });
+        state: 'queued',
+        queuedAbortCleanup: null,
+      };
+      this.#queue.push(entry);
+      if (command.type === 'terminal-install' && command.context?.signal) {
+        const signal = command.context.signal;
+        const abortQueuedWaiter = (): void => {
+          if (entry.state !== 'queued') return;
+          entry.state = 'cancelled';
+          entry.reject(signal.reason);
+        };
+        signal.addEventListener('abort', abortQueuedWaiter, { once: true });
+        entry.queuedAbortCleanup = () => signal.removeEventListener('abort', abortQueuedWaiter);
+        if (signal.aborted) abortQueuedWaiter();
+      }
     });
     this.#startDrain();
     return pending;
@@ -694,7 +710,12 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           if (entry.kind === 'child-admission') {
             await this.#runChildAdmission(entry);
           } else {
-            await this.#runCommand(entry);
+            entry.queuedAbortCleanup?.();
+            entry.queuedAbortCleanup = null;
+            if (entry.state !== 'cancelled') {
+              entry.state = 'active';
+              await this.#runCommand(entry);
+            }
           }
         } finally {
           this.#completeAdmission(entry.admission);

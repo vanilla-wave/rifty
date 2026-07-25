@@ -1109,6 +1109,52 @@ describe('Workbench project runtime', () => {
     await expect(closing).resolves.toBeUndefined();
   });
 
+  it('project close aborts an npm waiter queued behind the package FIFO head', async () => {
+    const install = vi.fn(preparedTreeInstall(nodeCliPackageConfig));
+    const h = await harness(undefined, nodeCliPackageConfig, async () => {}, undefined, undefined, {
+      install,
+    });
+    install.mockClear();
+    const stampPath = `${ROOT}/node_modules/.rifty-install-stamp.json`;
+    const trustedStamp = h.authority.readFileBytesSync(stampPath);
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const head = h.packageState.mutations.guardedMutation(
+      [{ kind: 'write', path: `${ROOT}/pending.txt` }],
+      async () => {
+        entered.resolve(undefined);
+        await release.promise;
+        h.authority.writeFileSync(`${ROOT}/pending.txt`, new Uint8Array());
+      },
+    );
+    await entered.promise;
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-queued-npm' });
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-queued-npm',
+        rid: 'run-queued-npm',
+        line: 'npm install kleur@4.1.5',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+
+    const closing = h.runtime.close();
+
+    await expect(settledOr(running, 'pending')).resolves.toBeUndefined();
+    await expect(settledOr(closing, 'pending')).resolves.toBe('pending');
+    expect(install).not.toHaveBeenCalled();
+    expect(h.authority.readFileBytesSync(stampPath)).toEqual(trustedStamp);
+
+    release.resolve(undefined);
+    await head;
+    await expect(closing).resolves.toBeUndefined();
+    expect(install).not.toHaveBeenCalled();
+    expect(h.authority.readFileBytesSync(stampPath)).toEqual(trustedStamp);
+  });
+
   it('project close aborts an npm install stalled at the real RegistryClient boundary', async () => {
     const registryStarted = deferred<void>();
     const observed: { signal?: AbortSignal } = {};
