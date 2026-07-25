@@ -4,6 +4,11 @@
 
 ### Changed (Workbench extraction)
 
+- Instant Vite 7 restores still skip `npm install`, but an empty verified
+  runtime CAS now has an explicit two-request esbuild-wasm acquisition contract
+  and loud `ESHADOWASSET/acquire` offline failure; warm CAS and Vite 8 are
+  registry-free (ADR-0320).
+
 - Exact Vite 8.0.16 now runs real Rolldown-WASI production build and preview
   through the installed CLI; browser acceptance executes the hashed bundle in
   the routed preview iframe while proving the esbuild plan stays empty

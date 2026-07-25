@@ -23,6 +23,10 @@
 
 ### Fixed
 
+- Preserve the exact owner outcome of file mutations admitted before project
+  close; close drains those commits while fencing future and unhanded work
+  (ADR-0319).
+
 - Extend the generic runtime-adapter boundary to every owner admission/asset/
   controller module and move the concrete Vite runtime decision behind its
   named integration edge.

@@ -15,7 +15,8 @@
   acquires each npm member once and mints a strict one-shot ready/read port for
   admitted child entries. The exact `esbuild@0.28.0` recipe now
   synthetic-materializes its CJS/ESM delegate and loud CLI bin without the
-  retired `@esbuild/wasi-preview1` alias.
+  retired `@esbuild/wasi-preview1` alias. Its ready/read/cancel correlation
+  engine remains package-local under the recorded layer constraint (ADR-0321).
 - Shadow recipe provenance now round-trips through lockfile markers plus a
   canonical applied trace. Synthetic replay performs zero registry reads;
   registry-backed install-only recipes retain exact acquisition provenance.

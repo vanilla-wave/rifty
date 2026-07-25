@@ -138,6 +138,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0310 | Sass ships as a synthesized sass-embedded facade over the exact pure-JS sass twin |
 | 0314 | Cancellable package acquisition |
 | 0318 | Retain verified shadow assets for manager lifetime |
+| 0321 | Keep shadow asset port correlation package local |
 
 ### playground
 
@@ -178,6 +179,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0293 | Tab-independent workspace admission UX |
 | 0307 | Install trust is an install-protocol commit, not tree surveillance |
 | 0317 | Vite 8 build and preview through installed CLI |
+| 0320 | Define instant restore runtime asset availability |
 
 ### toolchain-build
 
@@ -269,6 +271,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0280 | Project-rooted terminal execution namespace |
 | 0282 | Extraction-safe Playground host and session seams |
 | 0311 | Registry-owned esbuild runtime removes the host asset URL |
+| 0319 | Preserve admitted mutations across project close |
 
 ## Superseded (removed)
 
@@ -328,6 +331,7 @@ superseded.
 | 0053 vendored-WASI transform provider premise | 0316 / note 2026-07-24 | resolver behavior stands; no provider is prescribed |
 | 0070 shadow-registry esbuild-binding / published esbuild-transform exports | 0316 / note 2026-07-24 | both carrier subpaths removed; pure internal catalog replaces the transform surface |
 | 0135 baked snapshot contains preview1 carrier | 0316 / note 2026-07-24 | snapshots use registry-owned substitutions; setup semantics stand |
+| 0135 instant zero-network clause | 0320 | instant skips npm install; an empty verified Vite 7 runtime CAS performs the exact esbuild-wasm acquisition or fails loudly offline |
 | 0172 Playground vendored-WASI consumer consequence | 0316 / note 2026-07-24 | public side-effect-free runner remains; product esbuild no longer consumes it |
 | 0173 vendored-WASI build preparation clauses | 0316 / note 2026-07-24 | registry esbuild-wasm owns product builds; installed Vite ownership stands |
 | 0173 D5 Vite 8 build/preview loud-reject clause | 0317 / note 2026-07-25 | exact Vite 8.0.16 builds and previews through the installed CLI; Vite 7 remains default and Vite 8 HMR stays off |
