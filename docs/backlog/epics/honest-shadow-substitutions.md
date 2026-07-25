@@ -61,6 +61,9 @@ Contract+RED → Final+GREEN):
    mechanical subtraction from the #160 quarry (renames, sealed entrypoints,
    installer per-edge replay + direct-slot reservation); hard cut line, nothing
    touching trust/epoch/shadow. May proceed in parallel with the decision PR.
+5. `runtime-js/process-versions-node-honesty` —
+   **process-release-identity**: expose Node's API-family discriminator without
+   lying about the rifty/wasm host; prerequisite discovered by the Sass RED.
 6. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
    generic-file no-change gate. Required for epic closure, not optional.
@@ -91,5 +94,6 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 |---|---|
 | oracle-slice | 300–1000 |
 | workbench-extraction | 2000–4000 |
+| process-release-identity | 100–500 |
 | sass-scale-proof | 1000–3000 |
 | measured-cleanup | 1000–3000 |
