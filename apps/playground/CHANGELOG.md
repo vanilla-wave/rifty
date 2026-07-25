@@ -65,8 +65,8 @@
 
 ### Fixed (finite Node Workbench review)
 
-- Auto-select a newly published preview even when registry source ordering
-  inserts it before an already-running server.
+- Auto-select a newly appended server or inserted production preview without
+  letting an inserted dev server steal a still-live Node selection.
 
 - Persistence health now reports only owner-completed flush failures; transport
   rejection and observation timeout keep their exact provenance instead of

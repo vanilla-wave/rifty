@@ -42,6 +42,7 @@ export interface PreviewPanelEntry {
   readonly port: number;
   readonly url: string;
   readonly label: string;
+  readonly source: 'dev-server' | 'preview' | 'node';
 }
 
 // `unreachable` = the route never answered ok (dev server down); `error` = the
@@ -50,11 +51,10 @@ export interface PreviewPanelEntry {
 type Phase = 'starting' | 'live' | 'error' | 'unreachable';
 
 // Which port the switcher should show given the live set + current selection
-// (ADR-0155). Empty set → keep current until the registry publishes. A port
-// NEWLY published since the previous reconcile auto-selects (the user just
-// started that server — `vite preview`, webpack, a node server alike; replaces
-// the old `source === 'preview'` special case, backlog:
-// playground/generic-dev-server-lifecycle). Else current-if-live, else last.
+// (ADR-0155/0173). Empty set → keep current until the registry publishes. A
+// newly appended server auto-selects; production preview also auto-selects when
+// source ordering inserts it before an existing server. Other inserted servers
+// cannot displace a live selection. Else current-if-live, then fallback last.
 export function reconcileSelectedPort(
   entries: readonly PreviewPanelEntry[],
   current: number,
@@ -62,10 +62,11 @@ export function reconcileSelectedPort(
 ): number {
   const last = entries.at(-1);
   if (!last) return current;
-  const latestNew = knownPorts
-    ? entries.findLast((entry) => !knownPorts.has(entry.port))
+  if (knownPorts && !knownPorts.has(last.port)) return last.port;
+  const newProductionPreview = knownPorts
+    ? entries.findLast((entry) => entry.source === 'preview' && !knownPorts.has(entry.port))
     : undefined;
-  if (latestNew) return latestNew.port;
+  if (newProductionPreview) return newProductionPreview.port;
   if (entries.some((e) => e.port === current)) return current;
   return last.port;
 }
@@ -91,10 +92,10 @@ export function PreviewPanel(props: {
   const previewUrl = (): string | undefined => selectedEntry()?.url;
   const frameKey = createMemo(() => ({ epoch: frameEpoch() }));
 
-  // Keep the selected port valid against the live set: a NEWLY published server
-  // auto-selects, a removed selection falls back to the last entry. The warm-up
-  // effect + iframe stay keyed off `port()`, so the switch flows through
-  // unchanged. `knownPorts` = the set seen by the previous reconcile.
+  // Keep the selected port valid against the live set. A newly appended server
+  // or inserted production preview auto-selects; other insertions preserve a
+  // live choice. A removed selection falls back to the last entry. `knownPorts`
+  // is the set seen by the previous reconcile.
   let knownPorts: ReadonlySet<number> = new Set<number>();
   createEffect(() => {
     const live = entries();

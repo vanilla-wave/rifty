@@ -16,13 +16,15 @@ const TWO_PORTS: PreviewPanelEntry[] = [
     port: 5174,
     url: '/preview/5174/',
     label: 'npm run dev',
+    source: 'dev-server',
   },
-  { port: 3000, url: '/preview/3000/', label: 'node :3000' },
+  { port: 3000, url: '/preview/3000/', label: 'node :3000', source: 'node' },
 ];
 const PROD_PREVIEW: PreviewPanelEntry = {
   port: 4173,
   url: '/preview/4173/',
   label: 'vite preview',
+  source: 'preview',
 };
 const WITH_PROD_PREVIEW: PreviewPanelEntry[] = [...TWO_PORTS, PROD_PREVIEW];
 
@@ -130,10 +132,14 @@ describe('reconcileSelectedPort (auto-select newly published)', () => {
     expect(reconcileSelectedPort(TWO_PORTS, 5174, known([5174]))).toBe(3000);
   });
 
-  it('selects a newly inserted server regardless of registry source ordering', () => {
+  it('selects a newly inserted production preview despite registry source ordering', () => {
     const sourceOrdered = [PROD_PREVIEW, TWO_PORTS[0]!];
 
     expect(reconcileSelectedPort(sourceOrdered, 5174, known([5174]))).toBe(4173);
+  });
+
+  it('keeps a live node selection when a dev server is newly inserted before it', () => {
+    expect(reconcileSelectedPort(TWO_PORTS, 3000, known([3000]))).toBe(3000);
   });
 
   it('does not re-snap to an already-known last entry', () => {
