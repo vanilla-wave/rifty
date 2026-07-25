@@ -6,11 +6,11 @@ disable-model-invocation: true
 
 Refine the given piece of value (epic, item, or raw idea) to `ready`.
 
-Refine is the contract half of the pipeline: audit/review findings arrive as drafts minted by `rifty-to-backlog` (capture — classify, dedup, gates); a finding that skipped capture goes through it first.
+Refine is the fork-closing half of the pipeline (user-tier): findings enter via `rifty-to-backlog` (capture); fork-free items reach `ready` there through the judge — what lands HERE is drafts with open forks. A finding that skipped capture goes through it first. Canon of both paths: `docs/process/decision-workflow.md` §Backlog readiness.
 
-**Refine = closing open forks, not document form.** A draft whose scope is already settled — forks resolved in Context/ADRs/code, nothing left to ask or decide — needs no refine: write the contract sections per `docs/backlog/README.md` + `TEMPLATE.md` and flip to `ready`. Missing sections alone are never a reason to propose refine.
+**Refine = closing open forks, not document form.** A draft whose scope is already settled — forks closed by ADRs, recorded decisions, or verified evidence (a de-facto choice buried in code is a frozen assumption, not a settled fork) — needs no refine: write the contract per `docs/backlog/README.md` + `TEMPLATE.md` and flip through the judge verdict (§Backlog readiness). Missing sections alone are never a reason to propose refine.
 
-**Target = the `draft` doc itself.** A `ready` epic with `draft` children is the designed shape, not a defect — refine the draft child (it leans on the epic's scenario), never re-refine the `ready` epic. The epic is the target only when its own doc is `draft`, or its shape is wrong (overlap, bad split).
+**Target = the `draft` doc itself.** A `ready` epic with `draft` children is the designed shape, not a defect — refine the draft child (it leans on the epic's scenario), never re-refine the `ready` epic. The epic is the target only when its own doc is `draft`, or its shape is wrong (overlap, bad split). A `ready` item with a discovered unsettled fork → demote to `draft` first (separate PR, fork recorded — §Backlog readiness), then refine.
 
 ## Lead with the user scenario
 Write the concrete developer scenario first: the **real npm package / Node program** the user runs, the exact call, what they observe — re-derived from the user's POV, not inherited from the item's (often mechanism-first) framing. Can't name real software it unblocks? Not user value — off-mission or `process-meta` test/tooling debt: say so and stop. The scenario is the spine: every question sharpens one branch of it.
@@ -34,10 +34,10 @@ Refine closes user-visible forks and direction; it never designs internal carrie
 - Keep going until in / out of scope and every fork are settled — zero open assumptions for the implementer.
 
 ## Shape
-- Too big for one implementer pass → epic: outcome + end-to-end user scenario as acceptance, split into child items (`epic: <slug>`).
+- Too big for one implementer pass → epic: frozen envelope (Outcome + end-to-end User scenario + numbered checkable `## Invariants` + tier/Out-of-scope/Budget) + `## Items` as a LIVING plan the run may re-cut — pre-decide order only where it is user-value-bearing (`docs/backlog/README.md` §Epic). Grill the invariants like scenario branches: each = a pass/fail observable the closing smoke proves.
 - Atomic → item.
 
 ## `ready` bar — built whole
 Zero new decisions at refine altitude, zero new in-scope items, the ADR (if any) already exists. Every fork is one YOU resolved (mechanism) or an ADR link — never parked for the user. A contract prescribing carriers with neither spike nor ADR behind them is not ready (process-level `frozen-assumption`).
-Section shapes — item contract, `## Fault matrix` rows, epic Outcome/Scenario/Items/`## Budget` — all in `docs/backlog/README.md` + `TEMPLATE.md` (`backlog:check` enforces the core sections; Fault matrix/Budget — review): write to them, never restate or grill about them.
+Section shapes — item contract, `## Fault matrix` rows, epic envelope (Outcome/Scenario/`## Invariants`/Budget) + living Items — all in `docs/backlog/README.md` + `TEMPLATE.md` (`backlog:check` enforces the core sections; the rest — review): write to them, never restate or grill about them.
 Flip `draft → ready` only when the bar is met.

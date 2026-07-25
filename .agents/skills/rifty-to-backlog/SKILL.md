@@ -3,7 +3,7 @@ name: rifty-to-backlog
 description: Capture a finding or idea into docs/backlog as a correctly classified draft. Use BEFORE creating or editing any backlog item — when an audit/review/post-merge finding needs recording, when work surfaces a gap worth deferring, or when the user asks to file something to the backlog.
 ---
 
-Capture = classify → dedup → gate → mint. Cheap and mechanical — no grilling. Contract sections are form (`docs/backlog/README.md` + `TEMPLATE.md`): a finding that already settles every fork is written out to `ready` at mint (§4); any open fork → `rifty-refine` on the minted draft. The anti-pattern this skill exists to stop: an audit finding minted straight to an item with a `user_story` reverse-engineered afterward.
+Capture = classify → dedup → gate → mint. Cheap and mechanical — no grilling. Default mint = `draft`; mint to `ready` only through the judge (§4) — never self-certified. Any open fork → `rifty-refine` (user-tier) on the minted draft. The anti-pattern this skill exists to stop: an item whose `user_story` or contract evidence is reverse-engineered afterward.
 
 ## 1. Classify
 capability / test / tooling / design debt — backlog. Doc-drift or a pure record — not backlog: fix the doc. Can't name what breaks for a user or the project → it's a note, not an item; stop here.
@@ -20,4 +20,4 @@ Sweep `docs/backlog/` (titles, `code:` paths, epic `items:`) for the same defect
 ## 4. Mint
 `docs/backlog/<area>/<slug>.md`, frontmatter per `docs/backlog/README.md`, status `draft`, `## Context` = observed evidence (what, where, how found). `user_story` only from a real user path — omit it rather than invent one. Code-anchored → `// TODO(backlog: <area>/<slug>)` at the site. Done when `pnpm backlog:check` passes.
 
-Every fork already settled — evidence/ADR in hand, real (not reverse-engineered) user scenario, nothing left to ask or decide → fill the contract sections per `TEMPLATE.md` and mint `ready` directly; writing out a settled contract is not refine. One open fork → stay `draft`.
+Mint to `ready` (now or at later write-out): fill the contract per `TEMPLATE.md`, then spawn a fresh-context judge subagent — hand it ONLY the item path + repo access, no framing, no «I think it's settled» (frame-then-validate voids the check). The judge independently walks the checklist in `docs/process/decision-workflow.md` §Backlog readiness (stale/overlap, evidence behind EVERY Parity/Fault row — model memory is not evidence, boundary row for fault claims, mechanism sweep, epic invariant named, scenario traced to an observed path, estimate band for mid-run mints) and its verdict lands in the item as a `ready-verdict:` line. Judge finds any open fork → user-tier `rifty-refine`; no «settled with caveats». One open fork you already see → stay `draft`, skip the judge.

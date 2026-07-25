@@ -21,7 +21,7 @@ Capture a finding into a draft with the **`rifty-to-backlog`** skill; refine an 
 
 Required: `area` (= parent folder, a known area) · `status` (`draft|ready`) · `title` · `created` (`YYYY-MM-DD`) · `why`.
 Recommended: `user_story` (line right after `why`) — `As <persona>, I want <X>, but today <blocker>`.
-Optional: `epic` (parent epic slug) · `blocked_by` (`[<area>/<slug>, …]`) · `sources` · `code`. Arrays as `[a, b]`.
+Optional: `epic` (parent epic slug) · `blocked_by` (`[<area>/<slug>, …]`) · `sources` · `code` · `invariants` (`[I1, …]` — epic child: parent-epic invariants this item serves; required for items minted mid-run). Arrays as `[a, b]`.
 
 ## `ready` = a contract an implementer can't close with an approximation
 
@@ -42,7 +42,9 @@ A `draft` item needs only `## Context`. See `TEMPLATE.md`.
 Required: `kind: epic` · `status` (`draft|ready|in-progress`) · `title` · `created` · `value` (one-line user outcome).
 Recommended: `user_story`. Optional: `items` (`[<area>/<slug>, …]`) · `tier` (see §Tier).
 
-A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User scenario` (the end-to-end scenario that means done, naming the coarse invariants its closing smoke proves) + an enumerated `## Items` in dependency order — a mechanism shared by ≥2 children is an existing owner, the first item, or an ADR why separate. See `epics/TEMPLATE.md`.
+A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User scenario` (the end-to-end scenario that means done) + `## Invariants` (numbered, checkable statements of observable behavior, in text — the closing smoke proves them; review-enforced, pre-existing ready epics predate it) + `## Items`. See `epics/TEMPLATE.md`.
+
+**Frozen envelope vs living plan.** Outcome, User scenario, Invariants, `tier`, Out of scope, `## Budget` = the envelope: immutable for the whole run — any edit is a user-tier re-refine event named in the PR; a silent diff is a review blocker. `## Items` = the current best plan, not contract: the agent may mint/merge/re-cut items mid-run via capture + judge. Every epic child names the invariant(s) it serves (`invariants:` frontmatter); an item no invariant explains is outside the epic — park it. A mechanism shared by ≥2 children is an existing owner, the first item, or an ADR why separate — checked at item mint. A serial dependency that is itself part of the user value (A must ship before B) is recorded in the envelope, not the plan.
 
 ## Budget (epics handed to an autonomous run)
 
@@ -52,7 +54,7 @@ A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User
 - in-place ready-contract edits alongside source changes: 0 (enforced: `pnpm check:contract-drift`)
 - new coordination mechanisms: 0, or the named substrate item (`fault-classes.md` §Class-kill)
 - review rounds per item: ≤ 2 (§Review convergence)
-- per-item diff estimate (rough band from comparable landed items) — 2× over = anomaly, pause
+- per-item diff estimate (rough band from comparable landed items; mid-run mints get their band at mint) — 2× over = anomaly, pause
 
 ## Tier
 
