@@ -47,7 +47,7 @@ describe('builtin shadow substitution catalog contract', () => {
     const esbuildPackage = JSON.parse(
       esbuild?.materialization.files.find((file) => file.path === 'package.json')?.content ?? '{}',
     ) as { bin?: Record<string, string> };
-    expect(esbuildPackage.bin).toEqual({ esbuild: './bin/esbuild' });
+    expect(esbuildPackage.bin).toEqual({ esbuild: 'bin/esbuild' });
     expect(
       esbuild?.materialization.files.find((file) => file.path === 'bin/esbuild')?.content,
     ).toContain("new NotImplementedError('esbuild.cli')");
@@ -60,6 +60,30 @@ describe('builtin shadow substitution catalog contract', () => {
     expect(structuredClone(builtinShadowSubstitutionCatalog)).toEqual(
       builtinShadowSubstitutionCatalog,
     );
+  });
+
+  it('accepts scoped package names in every registry dependency projection map', () => {
+    for (const field of [
+      'dependencies',
+      'optionalDependencies',
+      'omittedOptionalDependencies',
+      'peerDependencies',
+    ] as const) {
+      const catalog = structuredClone(builtinShadowSubstitutionCatalog);
+      const recipe = catalog.recipes.find((candidate) => candidate.trigger.name === 'lightningcss');
+      if (!recipe || recipe.acquisition.kind !== 'registry') {
+        throw new Error('test fixture lacks registry recipe');
+      }
+      Reflect.set(recipe.acquisition.dependencyProjection[field], '@scope/package', '1.0.0');
+      const { digest: _recipeDigest, ...recipePayload } = recipe;
+      Reflect.set(recipe, 'digest', shadowDigest(recipePayload));
+      const { digest: _catalogDigest, ...catalogPayload } = catalog;
+      Reflect.set(catalog, 'digest', shadowDigest(catalogPayload));
+
+      expect(() => decodeBuiltinShadowSubstitutionCatalog(catalog), field).toThrow(
+        /not the admitted builtin catalog identity/i,
+      );
+    }
   });
 
   it('rejects forged identity and duplicate materialization members at ingress', () => {
@@ -87,6 +111,174 @@ describe('builtin shadow substitution catalog contract', () => {
       ],
     };
     expect(() => decodeBuiltinShadowSubstitutionCatalog(forged)).toThrow(/duplicate.*file/i);
+  });
+
+  it.each([
+    [
+      'catalog v1 schema',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged, 'schema', 1);
+        return forged;
+      },
+      /schema.*unsupported/i,
+    ],
+    [
+      'recipe v1 schema',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged.recipes[0]!, 'schema', 1);
+        return forged;
+      },
+      /schema.*unsupported/i,
+    ],
+    [
+      'sparse catalog recipes',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged, 'recipes', new Array<unknown>(1));
+        return forged;
+      },
+      /dense/i,
+    ],
+    [
+      'unknown nested admission field',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged.recipes[0]!.admission, 'unexpected', true);
+        return forged;
+      },
+      /extra or missing fields/i,
+    ],
+    [
+      'missing dependency projection field',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        const recipe = forged.recipes.find(
+          (candidate) => candidate.trigger.name === 'lightningcss',
+        );
+        if (!recipe || recipe.acquisition.kind !== 'registry') {
+          throw new Error('test fixture lacks registry recipe');
+        }
+        Reflect.deleteProperty(
+          recipe.acquisition.dependencyProjection,
+          'omittedOptionalDependencies',
+        );
+        return forged;
+      },
+      /extra or missing fields/i,
+    ],
+    [
+      'extra dependency projection field',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        const recipe = forged.recipes.find(
+          (candidate) => candidate.trigger.name === 'lightningcss',
+        );
+        if (!recipe || recipe.acquisition.kind !== 'registry') {
+          throw new Error('test fixture lacks registry recipe');
+        }
+        Reflect.set(recipe.acquisition.dependencyProjection, 'unexpected', {});
+        return forged;
+      },
+      /extra or missing fields/i,
+    ],
+    [
+      'missing nested admission field',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.deleteProperty(forged.recipes[0]!.admission, 'unsupportedFeature');
+        return forged;
+      },
+      /extra or missing fields/i,
+    ],
+    [
+      'invalid trigger package name',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged.recipes[0]!.trigger, 'name', 'bad package');
+        return forged;
+      },
+      /invalid string/i,
+    ],
+    [
+      'invalid registry dependency package name',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        const recipe = forged.recipes.find(
+          (candidate) => candidate.trigger.name === 'lightningcss',
+        );
+        if (!recipe || recipe.acquisition.kind !== 'registry') {
+          throw new Error('test fixture lacks registry recipe');
+        }
+        Reflect.set(recipe.acquisition.dependencyProjection.dependencies, '@scope', '1.0.0');
+        return forged;
+      },
+      /invalid string/i,
+    ],
+    [
+      'invalid bin command',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged.recipes[0]!.materialization.bin, 'bad/command', 'bin/esbuild');
+        return forged;
+      },
+      /invalid command/i,
+    ],
+    [
+      'escaping bin target',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged.recipes[0]!.materialization.bin, 'esbuild', '../escape');
+        return forged;
+      },
+      /normalized relative path/i,
+    ],
+    [
+      'missing bin target',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged.recipes[0]!.materialization.bin, 'esbuild', 'bin/missing');
+        return forged;
+      },
+      /target.*missing/i,
+    ],
+    [
+      'package manifest bin disagreement',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged.recipes[0]!.materialization.bin, 'esbuild', 'lib/main.cjs');
+        return forged;
+      },
+      /disagrees.*bin/i,
+    ],
+    [
+      'overlapping dependency projection',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        const recipe = forged.recipes.find(
+          (candidate) => candidate.trigger.name === 'lightningcss',
+        );
+        if (!recipe || recipe.acquisition.kind !== 'registry') {
+          throw new Error('test fixture lacks registry recipe');
+        }
+        Reflect.set(recipe.acquisition.dependencyProjection.dependencies, 'collision', '1.0.0');
+        Reflect.set(recipe.acquisition.dependencyProjection.peerDependencies, 'collision', '1.0.0');
+        return forged;
+      },
+      /overlaps/i,
+    ],
+    [
+      'forged recipe behavior digest',
+      () => {
+        const forged = structuredClone(builtinShadowSubstitutionCatalog);
+        Reflect.set(forged.recipes[0]!.admission, 'unsupportedFeature', 'forged.feature');
+        return forged;
+      },
+      /recipe digest mismatch/i,
+    ],
+  ] as const)('rejects recipe-v2 %s', (_name, value, expected) => {
+    expect(() => decodeBuiltinShadowSubstitutionCatalog(value())).toThrow(expected);
   });
 
   it('rejects getters, non-normal paths, invalid SRI, and recomputed foreign builtin ids', () => {
