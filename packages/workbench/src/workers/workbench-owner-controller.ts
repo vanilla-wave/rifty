@@ -8,6 +8,7 @@ import {
   type PlaygroundOwnerToPageMessage,
   inspectPageToPlaygroundOwnerMessage,
   isPageToPlaygroundOwnerMessage,
+  playgroundProjectRuntimeDecision,
 } from '../workbench/internal/playground-owner-protocol.ts';
 import {
   type CapturedPlaygroundUrlContext,
@@ -38,7 +39,6 @@ import type {
   PlaygroundProjectAuthority,
   PlaygroundProjectMutationKind,
 } from './playground-project-authority.ts';
-import { playgroundRuntimeDecision } from './playground-runtime-decision.ts';
 
 type ProjectPtyInput = Extract<
   PageToWorkbenchOwnerMessage,
@@ -443,7 +443,7 @@ export function createWorkbenchOwnerController(
           projectToken: token,
           projectRoot,
           acquisition,
-          runtime: playgroundRuntimeDecision(definition),
+          runtime: playgroundProjectRuntimeDecision(definition),
           initialScmSnapshot: runtime.playgroundTools.initialScmSnapshot,
           ...(initialTerminalState === undefined ? {} : { initialTerminalState }),
         });

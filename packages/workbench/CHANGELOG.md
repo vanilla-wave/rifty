@@ -32,8 +32,8 @@
   (ADR-0319).
 
 - Extend the generic runtime-adapter boundary to every owner admission/asset/
-  controller module and move the concrete Vite runtime decision behind its
-  named integration edge.
+  controller module and move the concrete runtime projection into its existing
+  owner-protocol seam.
 
 - Keep the already-published live package tree available to Node after a
   manifest-only edit while demoting its durable install claim; real tree
