@@ -17,6 +17,10 @@
 
 ### Changed
 
+- Removed dead zero-caller surface: `installStampAuthorityFor` + its
+  `ownerAuthorities` registry and the two unused owner-VFS terminal equality
+  helpers; module-surface tests pin their absence.
+
 - Remove the public host-supplied esbuild WASM deployment URL. Worker and
   sqlite deployment assets remain host-resolved; esbuild is now registry-owned
   with no host fallback (ADR-0311).

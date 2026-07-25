@@ -21,7 +21,8 @@ import * as ts from 'typescript';
 
 const SOURCE_RE = /^(?:apps|packages|services)\/.+\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
 const MECHANISM_RE = /\b(epoch|generation|fifo|ledger|lease|seenRequest\w*|opId)\b/i;
-const TEST_SOURCE_RE = /(?:^|\/)(?:__tests__|tests?|fixtures)(?:\/|$)|\.(?:test|spec)\.[^.]+$/u;
+const TEST_SOURCE_RE =
+  /(?:^|\/)(?:__tests__|tests?|fixtures)(?:\/|$)|\.(?:test|spec|test-fixture|contract-fixtures)\.[^.]+$/u;
 
 /** `a/{b => c}/d` and `a => b` numstat paths resolve to the new path. */
 export function newPath(path) {

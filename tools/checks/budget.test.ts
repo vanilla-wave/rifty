@@ -100,6 +100,8 @@ describe('scanMechanisms', () => {
       { path: 'packages/x/src/fifo-owner.ts', content: 'const epoch = 1;' },
       { path: 'docs/adr/npm-client/0309-x.md', content: 'epoch epoch epoch' },
       { path: 'packages/x/src/owner.test.ts', content: 'const generation = 1;' },
+      { path: 'packages/x/src/owner.test-fixture.ts', content: 'const epoch = 1;' },
+      { path: 'packages/x/src/owner.contract-fixtures.ts', content: 'const opId = 1;' },
       { path: 'packages/x/src/comment.ts', content: '/** Existing FIFO owner. */\nexport {};' },
       { path: 'packages/x/src/clean.ts', content: 'export const a = 1;' },
     ]);

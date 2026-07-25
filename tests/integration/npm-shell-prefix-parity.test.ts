@@ -192,7 +192,11 @@ describe('npm shell prefix parity', () => {
     }
   });
 
-  it('documents the rifty-only claim delta for an install root nested under node_modules', async () => {
+  // Claim transitions below run with INJECTED resolveTreeGuards mirroring the production
+  // demote-ancestors/revoke-descendants policy; guard DISCOVERY itself is pinned in
+  // package-mutation-executor.test.ts ('discoverPackageAcquisitionGuardTransitions' cases),
+  // not composed through this differential.
+  it('matches the native npm install-root delta and documents injected claim transitions for a root nested under node_modules', async () => {
     const nativeRoot = mkdtempSync(join(tmpdir(), 'rifty-npm-nested-root-'));
     const nativeDependency = mkdtempSync(join(tmpdir(), 'rifty-npm-nested-dependency-'));
     const nativeNested = join(nativeRoot, 'node_modules/tool/project');
