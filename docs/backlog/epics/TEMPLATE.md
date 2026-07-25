@@ -19,8 +19,10 @@ tier: <works|robust|production — required for an autonomous goal>
 
 ## Invariants
 
-<!-- Frozen with the marker. Numbered observable statements the closing smoke proves.
-     Authored only at user-tier refine; the run proves them, never writes or edits them. -->
+<!-- Frozen with the marker (shape: README §Shape). Authored with the user — refine
+     interview or direct sign-off; the run proves them, never writes or edits them.
+     Each must be false on main before the run: a trivially-true invariant closes
+     the goal on an empty proof. -->
 
 - I1. <user-observable statement>
 

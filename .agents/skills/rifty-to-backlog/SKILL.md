@@ -32,6 +32,6 @@ Create `docs/backlog/<area>/<slug>.md` from `docs/backlog/README.md`: `draft`,
 observed `## Context`, honest sources, optional real-path `user_story`, and a code
 marker when anchored. Done when `pnpm backlog:check` passes.
 
-After capture, ordinary workflow compiles settled drafts through the fresh-context
-judge verdict (`decision-workflow.md` §Backlog readiness); only an unresolved
-observable fork goes to manual `rifty-refine`.
+After capture: `decision-workflow.md` §Backlog readiness owns draft→ready
+(judge verdict; an unresolved observable fork = request manual `rifty-refine`,
+don't self-run the interview).

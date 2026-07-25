@@ -5,13 +5,13 @@ description: Repair an unexpected, observed rifty runtime/package/toolchain corr
 
 # rifty-fix
 
-Apply the description's scope gate first. A task stays planned even when its title says “fix”.
+Apply the description's scope gate first. A task stays planned even when its title says “fix”; a defect already owned by a backlog item follows that contract's workflow, not this loop.
 
 ## Steps
 
-1. **Root cause.** Reproduce. Trace the bad value to where it is born; instrument each boundary when the path spans layers.
-2. **Class.** In `docs/process/fault-classes.md`, name the axis and boundary; add a missing model first. Strike physically excluded faults — only on the boundary where step 1 traced the birth (a friendlier row = boundary-shopping), after the full sweep, each strike listed in the PR with its row; surviving axes keep fault tests. Sweep the pattern repo-wide and enumerate sibling operations. A second reachable instance requires §Class-kill; a third coordination mechanism on the same state requires one authority.
+1. **Root cause.** Reproduce. Cannot reproduce → record the attempt, capture (or keep the draft), stop — no speculative fix. Trace the bad value to where it is born; instrument each boundary when the path spans layers.
+2. **Class.** In `docs/process/fault-classes.md`, name the axis and boundary; add a missing model first. Strike physically excluded faults — only on the boundary where step 1 traced the birth (a friendlier row = boundary-shopping), after the full sweep, each strike listed in the PR with its row and the step-1 trace evidence; surviving axes keep fault tests. Sweep the pattern repo-wide and enumerate sibling operations. A second reachable instance → §Class-kill.
 3. **RED.** Add a failing parity/regression/fault test before code. Assert the honest outcome. A conflicting old test means the contract changed; do not quietly retarget it.
 4. **Fix once.** Change the root owner; for a class, apply §Class-kill. Avoid wrappers and drive-by work.
 5. **Prove.** RED→GREEN, then revert-check each new guard. Run touched gates and verify the committed tree.
-6. **Close honestly.** If the class exceeds the unit, re-cut. Keep active-goal work reverse-linked; otherwise capture it. Backlog never makes a partial repair complete.
+6. **Close honestly.** If the class exceeds the unit, re-cut — the chokepoint/authority stays in the current unit; backlog takes only extra call-sites beyond it. Keep active-goal work reverse-linked; otherwise capture it. Backlog never makes a partial repair complete.

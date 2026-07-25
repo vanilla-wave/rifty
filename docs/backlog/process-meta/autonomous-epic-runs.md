@@ -15,3 +15,8 @@ Remaining: run one mid-size epic and compare escaped horizontal defects with the
 workbench baseline. Promote only honest detectors: scope-to-unit mapping, full
 mechanism inventory, review-count tracking, and explicit run membership if
 concurrent source PRs require it. Until then, review owns them.
+
+Exploit-hardening detectors (2026-07-25 six-agent audit): posted verdict
+artifacts + SHA-lineage review counter (kills retry-until-green via slice
+rename); reviewed-SHA == merge-head binding; falsified-on-main proof per epic
+invariant (kills trivially-true `## Invariants`).

@@ -11,13 +11,14 @@ Report these axes once, in order:
 1. **Completeness** — every unit clause covered; no required deferral.
 2. **Mission and architecture** — fits rifty's mission and boundaries.
 3. **Goal drift** — delivery matches exact `Goal-Baseline`, else ready contract; a `draft→ready` flip in the diff carries its `ready-verdict:` line.
-4. **Approach cost** — identify removable machinery: contract deliverable without it → blocker, first instance included; pure code shrinkage → residual note, never a checkpoint condition. Apply §Class-kill.
+4. **Approach cost** — identify removable machinery: contract deliverable without it → blocker, first instance included; pure code shrinkage → goal residual (in a run) or capture, never a checkpoint condition. Apply §Class-kill.
 5. **Budget** — one declared slice; inspect modified files, not only advisory scans.
 6. **Bugs** — no correctness defect.
 7. **Regressions** — existing behavior holds.
 8. **Ecosystem UX** — observable behavior matches real Node software.
 
-Contract+RED checks oracle/RED coverage; Final+GREEN checks delivery. Correctness
+Contract+RED checks oracle/RED coverage and ALWAYS precedes implementation — a PR
+that skipped it cannot jump to Final+GREEN; Final+GREEN checks delivery. Correctness
 blockers name class, RED, and sibling sweep; other blockers cite their rule.
 
 Open with verdict + merge call. Return `checkpoint`, exact `unit_goal_source`,
@@ -43,4 +44,5 @@ node tools/review/blockers.mjs "$RUN/verdict.json"
 
 Exit 0 → unit passes (`goal_complete:false` = continue the goal); exit 1 →
 redesign/re-cut, no auto-fix, never a third review; exit 2 → retry once, then
-stop. Do not edit or push.
+stop. The verdict binds to the reviewed SHA — new commits invalidate it; merge
+requires PR head == reviewed SHA. Do not edit or push.

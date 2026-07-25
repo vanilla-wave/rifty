@@ -24,6 +24,7 @@ const epic = ({
   tier = 'robust',
   outcome = 'The package installs and runs through one honest path.',
   scenario = 'Open the project, install, run, reload offline.',
+  invariants = 'Install survives an offline reload.',
 } = {}) => `---
 kind: epic
 status: ready
@@ -41,6 +42,10 @@ ${outcome}
 ## User scenario
 
 ${scenario}
+
+## Invariants
+
+- I1. ${invariants}
 
 ## Items
 
@@ -94,21 +99,14 @@ describe('goalContract / evaluateGoal', () => {
       tier: 'robust',
       outcome: 'The package installs and runs through one honest path.',
       userScenario: 'Open the project, install, run, reload offline.',
-      invariants: null,
+      invariants: '- I1. Install survives an offline reload.',
     });
     expect(evaluateGoal(baseline, current, [])).toEqual([]);
   });
 
-  it('freezes Invariants when the baseline declares them; legacy baselines may gain them', () => {
-    const withInvariants = (inv: string) =>
-      epic().replace('## Items', `## Invariants\n\n- I1. ${inv}\n\n## Items`);
-    expect(
-      evaluateGoal(withInvariants('Install survives reload.'), withInvariants('Install works.'), [])[0],
-    ).toContain('Invariants');
-    expect(
-      evaluateGoal(withInvariants('Install survives reload.'), withInvariants('Install survives reload.'), []),
-    ).toEqual([]);
-    expect(evaluateGoal(epic(), withInvariants('Install survives reload.'), [])).toEqual([]);
+  it('rejects a baseline lacking Invariants', () => {
+    const stripped = epic().replace(/## Invariants[\s\S]*?## Items/, '## Items');
+    expect(evaluateGoal(stripped, epic(), [])[0]).toContain('Invariants');
   });
 
   it.each([
@@ -116,6 +114,7 @@ describe('goalContract / evaluateGoal', () => {
     ['tier', epic({ tier: 'works' })],
     ['Outcome', epic({ outcome: 'Only installation works.' })],
     ['User scenario', epic({ scenario: 'Open the project once.' })],
+    ['Invariants', epic({ invariants: 'Install works once.' })],
   ])('blocks drift in frozen %s', (field, current) => {
     expect(evaluateGoal(epic(), current, [])[0]).toContain(field);
   });

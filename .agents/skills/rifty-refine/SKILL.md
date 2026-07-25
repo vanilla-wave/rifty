@@ -19,6 +19,6 @@ ordinary contract compilation.
 3. Do not ask what code/ADR/Node already answers. Apply reachability and refine-altitude rules from `docs/process/decision-workflow.md` §Backlog readiness.
 4. For infra, ask only physically reachable fault branches within the epic tier; use `docs/process/fault-classes.md` and `docs/backlog/README.md` §Tier.
 5. Treat any active-baseline change as user-owned; never soften it through ADR, backlog, Out of scope, or rewritten acceptance.
-6. For an epic, land the outcome as numbered `## Invariants` — checkable observable statements the closing smoke proves; frozen with the marker.
+6. For an epic, land the outcome as numbered `## Invariants` (shape: `docs/backlog/README.md` §Shape) — each false on main before the run.
 
 Done when every observable fork and its evidence are recorded in the draft. The ordinary workflow owns document shape, `draft → ready`, and `pnpm backlog:check`.

@@ -47,4 +47,7 @@ code: []
 
 ## Decisions
 
+<!-- On a draft→ready flip the first line is the judge's verdict, copied verbatim:
+     ready-verdict: <date> — <what settled each section>   (decision-workflow §Backlog readiness) -->
+
 <Every fork resolved, or linked to its ADR. No open "Decide X".>

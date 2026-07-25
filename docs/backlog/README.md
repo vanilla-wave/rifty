@@ -30,7 +30,7 @@ A draft needs `## Context`. A ready item needs:
 - `## Parity cases`: enumerated oracle behaviors and RED targets;
 - `## Out of scope`: named loud throws + compat ❌;
 - `## Decisions`: every fork resolved or ADR-linked;
-- agent-compiled flip: a `ready-verdict:` line from the fresh-context judge
+- any `draft→ready` flip: a `ready-verdict:` line from the fresh-context judge
   (`decision-workflow.md` §Backlog readiness).
 
 External-oracle work adds `## Reference contract` with pinned version/mechanism;
@@ -54,7 +54,8 @@ item, or an ADR explaining separation. Template: `epics/TEMPLATE.md`.
 
 ## Autonomous goal
 
-Only an explicit whole-ready-epic hand-off starts a run.
+Only an explicit whole-ready-epic hand-off or a task/PR carrying `Goal-Baseline`
+starts a run.
 
 1. Land the ready epic.
 2. In a later commit, add only
@@ -73,7 +74,8 @@ them. Title and
 Budget are live run state.
 
 Required discoveries stay reverse-linked; only outside-goal work enters normal
-backlog. A clean slice may merge while goal residuals remain. Close the goal
+backlog. A required discovery may mint a `draft` child (`epic:` link) at any
+time; its readiness, Items mapping, and Budget row wait for a pre-pickup window. A clean slice may merge while goal residuals remain. Close the goal
 only with no linked children, empty unit/goal residuals, end-to-end baseline
 proof, fresh `goal_complete: true`, and DoD green on one SHA; then delete it.
 
@@ -85,7 +87,8 @@ Each autonomous source PR selects one epic `## Budget` row. Tripwires:
 - ready-contract edits beside source: `0`;
 - new coordination mechanisms: `0`, unless the named substrate item owns one;
 - review checkpoints per slice: exactly `2`;
-- hand-written insertion band: above high warns; at `2×` high re-cut.
+- hand-written insertion band = inserted lines in the slice source PR (tests/
+  generated globs excluded — `check:budget`): above high warns; at `2×` high re-cut.
 
 Pickup is the parent of the first production-source commit. Before pickup,
 Contract+RED may append one ready JIT child, its Items mapping, and its Budget

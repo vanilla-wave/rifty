@@ -2,8 +2,8 @@
 /**
  * Run-goal tripwire. `Goal-Baseline: <epic>@<exact SHA>` freezes the epic's
  * observable promise across every implementation slice. Item order and run
- * bookkeeping stay mutable; value, tier, Outcome, User scenario do not —
- * nor Invariants once the baseline declares them (legacy epics may gain them).
+ * bookkeeping stay mutable; value, tier, Outcome, User scenario, Invariants
+ * do not.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -103,9 +103,10 @@ export function evaluateGoal(baselineText, currentText, linkedItems) {
     baseline.value === null ||
     baseline.tier === null ||
     baseline.outcome === null ||
-    baseline.userScenario === null
+    baseline.userScenario === null ||
+    baseline.invariants === null
   ) {
-    violations.push('goal baseline lacks value, tier, Outcome, or User scenario');
+    violations.push('goal baseline lacks value, tier, Outcome, User scenario, or Invariants');
     return violations;
   }
   if (currentText === null) {
@@ -126,7 +127,6 @@ export function evaluateGoal(baselineText, currentText, linkedItems) {
     ['userScenario', 'User scenario'],
     ['invariants', 'Invariants'],
   ]) {
-    if (key === 'invariants' && baseline.invariants === null) continue;
     if (baseline[key] !== current?.[key]) violations.push(`frozen ${label} changed from baseline`);
   }
   return violations;
@@ -204,7 +204,8 @@ export function evaluateMarkerHistory(path, states, hasNonContractChanges, decla
       baseline.value === null ||
       baseline.tier === null ||
       baseline.outcome === null ||
-      baseline.userScenario === null
+      baseline.userScenario === null ||
+      baseline.invariants === null
     ) {
       violations.push(`${path}: goal_baseline parent lacks the complete observable contract`);
     }

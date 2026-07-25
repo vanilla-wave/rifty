@@ -13,7 +13,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - **No "implement later" / silent backlog.** Every gap is explicit (NotImplementedError, backlog item, compat ❌) — never hidden behind a passing path.
 - **No mocking what we build.** Real Memory VFS, real Workers/SW, real npm tarballs, real parity vs Node. Mock only unavoidable external boundaries (network egress, clock, absent browser APIs); never the unit under test or a sibling rifty package. Hard to instantiate = API smell — fix it.
 - **Parity = gold standard.** Never assume Node/Anthropic/StackBlitz behavior — verify via parity-runner. Found gap/bug → failing parity (or regression) test first, then fix; no fix merges without it; never edit a test to make code pass.
-- **Review convergence.** Parity/stateful changes get two checkpoints: Contract+RED, then Final+GREEN. Each correctness blocker gets a fault class, RED test, and sibling sweep in the PR. A repeated class or review-born state owner stops point fixes: redesign or split. Protocol: `docs/process/fault-classes.md` §Review convergence.
+- **Review convergence.** Parity/stateful changes pass two checkpoints (Contract+RED → Final+GREEN); protocol + blocker requirements: `docs/process/fault-classes.md` §Review convergence.
 
 ## Architecture — hard rules
 - Import boundaries enforced by `pnpm check:arch` (rules `tools/checks/arch-rules.cjs`): layer top-down (vfs/io/net → kernel → runtime-* → shell/terminal/npm-client → playground), no reverse imports, no cycles, no foreign `src/internal/*`, solid-js only in playground (D-002).
@@ -25,7 +25,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - Comments/ADRs/docs: extremely concise, sacrifice grammar, cut anything restating code.
 
 ## Data sources
-- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding → `rifty-to-backlog`; settled draft → compile + fresh-context judge verdict (`ready-verdict:`, never self-certified — `decision-workflow.md` §Backlog readiness); unresolved observable fork → manual `rifty-refine`; ready → implement normally. Never implement a draft. Planned/process work never invokes `rifty-fix`.
+- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding/idea → `rifty-to-backlog`; settled draft → compile + judge verdict (`decision-workflow.md` §Backlog readiness); unresolved observable fork → request manual `rifty-refine`; unsettled fork inside a `ready` item → demote first (same §); ready → implement normally; PR review → `rifty-review`. Never implement a draft. Planned/process work never invokes `rifty-fix`.
 - `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/decision-workflow.md` — read at any fork
 - `docs/process/fault-classes.md` — fault taxonomy + review convergence
@@ -42,11 +42,9 @@ Full checklist + subagent budget: `docs/process/decision-workflow.md`. Core:
 
 ## Autonomous goals
 
-Explicit whole-ready-epic hand-off or a `Goal-Baseline` task/PR → run loop in
+Explicit whole-ready-epic hand-off or a `Goal-Baseline` task/PR → run loop:
 `docs/process/decision-workflow.md` §Autonomous goals; data contract:
-`docs/backlog/README.md` §Autonomous goal. The user owns the frozen observable
-goal; the agent owns just-in-time units/mechanisms. Required discoveries stay
-reverse-linked. Budget/review trips re-cut the unit; slice done ≠ goal done.
+`docs/backlog/README.md` §Autonomous goal.
 
 ## DoD (per PR)
 - [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked; report slice/goal status separately
