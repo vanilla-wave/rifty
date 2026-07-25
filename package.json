@@ -32,6 +32,7 @@
     "check:esbuild-legacy-retirement": "node tools/checks/esbuild-legacy-retirement.mjs",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:docs-contract": "vitest run apps/playground/src/App.test.ts packages/service-worker/tests/preview-routing-docs.test.ts packages/ts-language-service/src/hard-ceil-source.test.ts tools/checks/esbuild-compat-matrix.test.ts tests/integration/landing-static.test.ts tests/integration/prod-npm-registry-proxy.test.ts",
     "test:parity": "tsx tools/node-parity-runner/src/cli.ts",
     "test:conformance": "vitest run --project conformance",
     "test:integration": "vitest run --project integration",
