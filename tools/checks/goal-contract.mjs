@@ -50,7 +50,7 @@ function frontmatterValues(text, key) {
 function section(text, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return (
-    new RegExp(`^##\\s+${escaped}\\s*$\\r?\\n([\\s\\S]*?)(?=^##\\s+|\\s*$)`, 'mu')
+    new RegExp(`^##\\s+${escaped}\\s*$\\r?\\n([\\s\\S]*?)(?=^##\\s+|$(?![\\s\\S]))`, 'mu')
       .exec(text ?? '')?.[1]
       ?.trim() ?? null
   );

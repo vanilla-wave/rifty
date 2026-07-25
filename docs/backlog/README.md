@@ -105,9 +105,10 @@ from the band.
 | `check:goal-contract` | bootstrap/marker history, frozen fields, linked-child deletion |
 | `check:budget` | paired declaration, append-only Budget, pickup row/item, band |
 | `check:contract-drift` | post-pickup ready contracts and process referees |
-| Final review | run membership, semantic scope/residuals, review count, full mechanism sweep, acceptance |
+| Final review | routing/run membership, checkpoint order/count, semantic scope/residuals, full mechanism sweep, acceptance |
 
-`pr:check`/CI run the machine gates.
+Machine gates prove only the listed local facts; review owns contextual
+classification. `pr:check`/CI run the machine gates.
 
 ## Tier
 

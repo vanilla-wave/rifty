@@ -228,6 +228,9 @@ for (const { rel, fm, text } of epicRecords) {
       errors.push(`${rel}: goal_baseline must be one exact 40-hex commit`);
     }
     if (fm.tier == null) errors.push(`${rel}: autonomous goal_baseline requires tier`);
+    if (!hasSection(text, 'Invariants')) {
+      errors.push(`${rel}: autonomous goal_baseline requires '## Invariants'`);
+    }
     if (!hasSection(text, 'Budget')) {
       errors.push(`${rel}: autonomous goal_baseline requires '## Budget'`);
     }
