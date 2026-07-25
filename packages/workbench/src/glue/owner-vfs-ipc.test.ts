@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import * as ownerVfsIpcModule from './owner-vfs-ipc.ts';
 import {
   type OwnerVfsCommitAckMessage,
   decodeOwnerVfsError,
@@ -23,6 +24,11 @@ import {
 const encoder = new TextEncoder();
 
 describe('owner VFS IPC', () => {
+  it('does not expose unused parallel terminal equality authorities', () => {
+    expect(ownerVfsIpcModule).not.toHaveProperty('equalOwnerVfsCommitTerminals');
+    expect(ownerVfsIpcModule).not.toHaveProperty('equalOwnerVfsAppliedCommitTerminals');
+  });
+
   it.each([
     {
       type: 'rifty:owner-vfs-commit',

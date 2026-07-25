@@ -107,27 +107,6 @@ export type InstallStampAuthoritySyncFs = Pick<
   'existsSync' | 'readFileBytesSync' | 'writeFileSync' | 'mkdirSync' | 'rmSync'
 >;
 
-const ownerAuthorities = new WeakMap<object, InstallStampAuthority>();
-
-/** One authority instance per concrete owner/store when composition does not
- * inject it explicitly (unit harnesses). Production should pass the shared
- * owner instance across acquisition and terminal installs. */
-export function installStampAuthorityFor(
-  owner: object,
-  options: {
-    readonly vfs: Vfs;
-    readonly fsSync?: InstallStampAuthoritySyncFs;
-    readonly claimIo?: InstallStampClaimIo;
-  },
-): InstallStampAuthority {
-  let authority = ownerAuthorities.get(owner);
-  if (!authority) {
-    authority = createInstallStampAuthority(options);
-    ownerAuthorities.set(owner, authority);
-  }
-  return authority;
-}
-
 export class InstallStampAuthorityError extends Error {
   readonly code:
     | 'INSTALL_STAMP_DEMOTE_UNPROVEN'

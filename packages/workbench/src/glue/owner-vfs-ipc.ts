@@ -11,7 +11,6 @@ import {
   VfsCommitProtocolError,
   VfsPersistenceFailureError,
   VfsVersionConflictError,
-  equalHostCommitAcks,
 } from './owner-vfs-protocol.ts';
 
 export interface OwnerVfsCommitIpcMessage {
@@ -288,74 +287,6 @@ export function isOwnerVfsAppliedCommitTerminal(
   return (
     terminal.kind === 'valid' && (terminal.message.ok || terminal.message.applied !== undefined)
   );
-}
-
-function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.byteLength !== right.byteLength) return false;
-  return left.every((byte, index) => right[index] === byte);
-}
-
-function equalSnapshotEntries(
-  left: OwnerVfsSnapshotEntry | null,
-  right: OwnerVfsSnapshotEntry | null,
-): boolean {
-  if (left === null || right === null) return left === right;
-  if (
-    left.path !== right.path ||
-    left.kind !== right.kind ||
-    left.size !== right.size ||
-    left.version !== right.version
-  ) {
-    return false;
-  }
-  return left.kind === 'dir' || (right.kind === 'file' && equalBytes(left.content, right.content));
-}
-
-function equalOwnerVfsErrorFrames(left: OwnerVfsErrorFrame, right: OwnerVfsErrorFrame): boolean {
-  if (left.kind !== right.kind || left.name !== right.name || left.message !== right.message) {
-    return false;
-  }
-  if (left.kind === 'error' || right.kind === 'error') return left.kind === right.kind;
-  if (left.kind === 'operation-id-reuse' || right.kind === 'operation-id-reuse') {
-    return (
-      left.kind === 'operation-id-reuse' &&
-      right.kind === 'operation-id-reuse' &&
-      left.operationId === right.operationId
-    );
-  }
-  if (left.kind === 'persistence-failure' || right.kind === 'persistence-failure') {
-    return left.kind === 'persistence-failure' && right.kind === 'persistence-failure';
-  }
-  return (
-    left.path === right.path &&
-    left.expectedVersion === right.expectedVersion &&
-    left.actualVersion === right.actualVersion &&
-    left.ownerEpoch === right.ownerEpoch &&
-    left.treeRevision === right.treeRevision &&
-    equalSnapshotEntries(left.actualEntry, right.actualEntry)
-  );
-}
-
-export function equalOwnerVfsAppliedCommitTerminals(
-  left: OwnerVfsAppliedCommitTerminal,
-  right: OwnerVfsAppliedCommitTerminal,
-): boolean {
-  return equalOwnerVfsCommitTerminals(left, right);
-}
-
-export function equalOwnerVfsCommitTerminals(
-  left: OwnerVfsCommitTerminal,
-  right: OwnerVfsCommitTerminal,
-): boolean {
-  if (left.operationId !== right.operationId || left.ok !== right.ok) return false;
-  if (left.ok || right.ok) {
-    return left.ok && right.ok && equalHostCommitAcks(left.ack, right.ack);
-  }
-  if (!equalOwnerVfsErrorFrames(left.error, right.error)) return false;
-  if (left.applied === undefined || right.applied === undefined) {
-    return left.applied === undefined && right.applied === undefined;
-  }
-  return equalHostCommitAcks(left.applied, right.applied);
 }
 
 export function isOwnerVfsDurabilityIpcMessage(
