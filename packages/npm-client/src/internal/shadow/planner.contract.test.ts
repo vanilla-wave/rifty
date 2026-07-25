@@ -41,6 +41,7 @@ describe('shadow substitution planner contract', () => {
         '': { version: '1.0.0' },
         'node_modules/esbuild': {
           version: '0.28.0',
+          bin: { esbuild: 'bin/esbuild' },
           resolved: `rifty:shadow-substitution/${applied.substitutionId}@${applied.recipeDigest}`,
           riftyShadowRecipe: applied.substitutionId,
         },
@@ -72,6 +73,7 @@ describe('shadow substitution planner contract', () => {
         '': { version: '1.0.0' },
         'node_modules/esbuild': {
           version: '0.27.0',
+          bin: { esbuild: 'bin/esbuild' },
           resolved: `rifty:shadow-substitution/${applied.substitutionId}@${applied.recipeDigest}`,
           riftyShadowRecipe: applied.substitutionId,
         },
@@ -220,11 +222,13 @@ describe('shadow substitution planner contract', () => {
       packages: {
         'node_modules/esbuild': {
           version: '0.28.0',
+          bin: { esbuild: 'bin/esbuild' },
           resolved: `rifty:shadow-substitution/${root.substitutionId}@${root.recipeDigest}`,
           riftyShadowRecipe: root.substitutionId,
         },
         'node_modules/parent/node_modules/esbuild': {
           version: '0.28.0',
+          bin: { esbuild: 'bin/esbuild' },
           resolved: `rifty:shadow-substitution/${nested.substitutionId}@${nested.recipeDigest}`,
           riftyShadowRecipe: nested.substitutionId,
         },

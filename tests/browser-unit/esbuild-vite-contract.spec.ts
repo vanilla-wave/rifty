@@ -1160,6 +1160,7 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
 
   try {
     const install = await execLine(page, 'npm install');
+    const lockfile = await readOwnerFile(page, '/scratch/package-lock.json');
     const vite = await execLine(page, 'which vite');
     const config = await readOwnerFile(page, '/scratch/vite.config.js');
     const cjsRun = await execLine(page, 'node direct.cjs');
@@ -1174,6 +1175,32 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
     const nativeCjs = hostEsbuild as unknown as Readonly<Record<string, unknown>>;
 
     expect(install.exit, install.out).toBe(0);
+    expect(lockfile.ok, lockfile.error).toBe(true);
+    const lock = JSON.parse(lockfile.text) as {
+      readonly packages?: Readonly<
+        Record<
+          string,
+          {
+            readonly version?: string;
+            readonly bin?: Readonly<Record<string, string>>;
+            readonly riftyShadowRecipe?: string;
+          }
+        >
+      >;
+      readonly rifty?: {
+        readonly shadowSubstitutions?: {
+          readonly protocol?: string;
+        };
+      };
+    };
+    expect(lock.packages?.['node_modules/esbuild']).toMatchObject({
+      version: '0.28.0',
+      bin: { esbuild: 'bin/esbuild' },
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+    });
+    expect(lock.rifty?.shadowSubstitutions?.protocol).toBe(
+      'rifty.shadow-substitutions/v2',
+    );
     expect(vite.exit, vite.out).toBe(1);
     expect(config.ok).toBe(false);
     expect(cjsRun.exit, cjsRun.out).toBe(0);

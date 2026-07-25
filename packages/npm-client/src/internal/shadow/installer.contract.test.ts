@@ -35,10 +35,20 @@ class RejectingRegistry extends RegistryClient {
 
 class LightningRegistry extends RegistryClient {
   readonly #tarball: Uint8Array;
+  readonly #fields: Readonly<
+    Pick<VersionManifest, 'dependencies' | 'optionalDependencies' | 'peerDependencies'>
+  >;
+  tarballReads = 0;
 
-  constructor(tarball: Uint8Array) {
+  constructor(
+    tarball: Uint8Array,
+    fields: Readonly<
+      Pick<VersionManifest, 'dependencies' | 'optionalDependencies' | 'peerDependencies'>
+    >,
+  ) {
     super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
     this.#tarball = tarball;
+    this.#fields = fields;
   }
 
   override async getPackument(name: string): Promise<Packument> {
@@ -46,6 +56,7 @@ class LightningRegistry extends RegistryClient {
     const manifest: VersionManifest = {
       name,
       version: '1.32.0',
+      ...this.#fields,
       dist: { tarball: 'https://registry.test/lightningcss-wasm-1.32.0.tgz' },
     };
     return {
@@ -56,6 +67,7 @@ class LightningRegistry extends RegistryClient {
   }
 
   override async getTarball(url: string): Promise<Uint8Array> {
+    this.tarballReads += 1;
     if (url !== 'https://registry.test/lightningcss-wasm-1.32.0.tgz') {
       throw new Error(`unexpected registry tarball ${url}`);
     }
@@ -63,7 +75,11 @@ class LightningRegistry extends RegistryClient {
   }
 }
 
-async function lightningRegistry(): Promise<LightningRegistry> {
+async function lightningRegistry(
+  fields: Readonly<
+    Pick<VersionManifest, 'dependencies' | 'optionalDependencies' | 'peerDependencies'>
+  > = {},
+): Promise<LightningRegistry> {
   const packageJson = new TextEncoder().encode(
     JSON.stringify({ name: 'lightningcss-wasm', version: '1.32.0' }),
   );
@@ -75,6 +91,7 @@ async function lightningRegistry(): Promise<LightningRegistry> {
         TAR_TRAILER,
       ),
     ),
+    fields,
   );
 }
 
@@ -127,7 +144,7 @@ describe('shadow substitution installer boundary', () => {
     expect(firstRegistry.reads).toBe(0);
     expect(first.lockfile.packages['node_modules/esbuild']).toMatchObject({
       version: '0.28.0',
-      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
     });
     expect(first.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
     expect(plan.bindings).toEqual([
@@ -150,6 +167,16 @@ describe('shadow substitution installer boundary', () => {
     expect(await vfs.readFile('/project/node_modules/esbuild/bin/esbuild')).toEqual(firstBin);
     expect(await vfs.readFile('/project/node_modules/esbuild/package.json')).toEqual(firstPackage);
     expect(shadowAssetPlanForInstallResult(replay)).toEqual(plan);
+  });
+
+  it('rejects registry dependency drift before tarball acquisition', async () => {
+    const registry = await lightningRegistry({ dependencies: { unexpected: '1.0.0' } });
+
+    await expect(freshLockfile({ lightningcss: '1.32.0' }, registry)).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'lightningcss.acquisitionDependencies',
+    });
+    expect(registry.tarballReads).toBe(0);
   });
 });
 
@@ -191,7 +218,7 @@ describe('shadow substitution lockfile provenance', () => {
     [
       'missing rifty scheme',
       (entry: LockfileEntry) => {
-        entry.resolved = 'shadow-substitution/rifty.shadow-substitution.esbuild.v1';
+        entry.resolved = 'shadow-substitution/rifty.shadow-substitution.esbuild.v2';
       },
     ],
     [
@@ -209,7 +236,7 @@ describe('shadow substitution lockfile provenance', () => {
     [
       'wrong recipe digest',
       (entry: LockfileEntry) => {
-        entry.resolved = `rifty:shadow-substitution/rifty.shadow-substitution.esbuild.v1@${'0'.repeat(64)}`;
+        entry.resolved = `rifty:shadow-substitution/rifty.shadow-substitution.esbuild.v2@${'0'.repeat(64)}`;
       },
     ],
     [
@@ -223,6 +250,40 @@ describe('shadow substitution lockfile provenance', () => {
     const entry = lockfile.packages['node_modules/esbuild'];
     if (!entry) throw new Error('fresh synthetic lockfile entry missing');
     tamper(entry);
+
+    expectShadowTraceDrift(lockfile);
+  });
+
+  it.each([
+    [
+      'missing materialized bin',
+      (entry: LockfileEntry) => {
+        // biome-ignore lint/performance/noDelete: corruption fixture removes recipe-owned data.
+        delete entry.bin;
+      },
+    ],
+    [
+      'changed materialized bin',
+      (entry: LockfileEntry) => {
+        entry.bin = { esbuild: 'lib/main.cjs' };
+      },
+    ],
+  ] as const)('rejects synthetic %s', (_label, tamper) => {
+    const lockfile = structuredClone(synthetic);
+    const entry = lockfile.packages['node_modules/esbuild'];
+    if (!entry) throw new Error('fresh synthetic lockfile entry missing');
+    tamper(entry);
+
+    expectShadowTraceDrift(lockfile);
+  });
+
+  it('rejects a v1 shadow trace instead of reinterpreting it as v2', () => {
+    const lockfile = structuredClone(synthetic);
+    Reflect.set(
+      lockfile.rifty?.shadowSubstitutions ?? {},
+      'protocol',
+      'rifty.shadow-substitutions/v1',
+    );
 
     expectShadowTraceDrift(lockfile);
   });
@@ -259,6 +320,28 @@ describe('shadow substitution lockfile provenance', () => {
   ] as const)('rejects registry acquisition provenance drift: %s', (_label, tamper) => {
     const lockfile = structuredClone(registry);
     tamper(lockfile);
+
+    expectShadowTraceDrift(lockfile);
+  });
+
+  it.each([
+    [
+      'source bin',
+      (entry: LockfileEntry) => {
+        entry.bin = { leaked: 'bin/leaked' };
+      },
+    ],
+    [
+      'dependency projection',
+      (entry: LockfileEntry) => {
+        entry.dependencies = { unexpected: '1.0.0' };
+      },
+    ],
+  ] as const)('rejects registry acquisition %s drift', (_label, tamper) => {
+    const lockfile = structuredClone(registry);
+    const acquisition = lockfile.packages['node_modules/lightningcss-wasm'];
+    if (!acquisition) throw new Error('fresh registry acquisition entry missing');
+    tamper(acquisition);
 
     expectShadowTraceDrift(lockfile);
   });
