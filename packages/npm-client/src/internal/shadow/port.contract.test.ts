@@ -100,6 +100,58 @@ describe('ready-only shadow asset port', () => {
     server.dispose();
   });
 
+  it('rejects a duplicate active correlation and still settles the first read', async () => {
+    const admitted = planAppliedShadowSubstitutions([
+      attestBuiltinShadowSubstitution({
+        trigger: { name: 'esbuild', requestedRange: '0.28.0', version: '0.28.0' },
+        installPath: 'node_modules/esbuild',
+        acquisition: { kind: 'synthetic' },
+      }),
+    ]);
+    const channel = new MessageChannel();
+    let releaseRead!: (bytes: Uint8Array) => void;
+    const gate = new Promise<Uint8Array>((resolve) => {
+      releaseRead = resolve;
+    });
+    const server = serveTrustedReadyShadowAssets(channel.port1, {
+      plan: admitted,
+      read: () => gate,
+    });
+    const buffered: Record<string, unknown>[] = [];
+    const waiters: ((frame: Record<string, unknown>) => void)[] = [];
+    channel.port2.addEventListener('message', (event: MessageEvent<unknown>) => {
+      const frame = event.data as Record<string, unknown>;
+      const waiter = waiters.shift();
+      if (waiter) waiter(frame);
+      else buffered.push(frame);
+    });
+    channel.port2.start();
+    const nextFrame = () =>
+      new Promise<Record<string, unknown>>((resolve) => {
+        const frame = buffered.shift();
+        if (frame) resolve(frame);
+        else waiters.push(resolve);
+      });
+    await expect(nextFrame()).resolves.toMatchObject({ type: 'ready' });
+
+    const assetId = admitted.assets[0]!.id;
+    channel.port2.postMessage({ type: 'read', id: 7, assetId });
+    channel.port2.postMessage({ type: 'read', id: 7, assetId });
+    await expect(nextFrame()).resolves.toMatchObject({
+      type: 'error',
+      id: 7,
+      retryable: false,
+      message: expect.stringMatching(/duplicate active correlation 7/),
+    });
+
+    releaseRead(new Uint8Array([9, 8, 7]));
+    const settled = await nextFrame();
+    expect(settled).toMatchObject({ type: 'result', id: 7 });
+    expect(settled.bytes).toEqual(new Uint8Array([9, 8, 7]));
+    server.dispose();
+    channel.port2.close();
+  });
+
   it('rejects an accessor frame without invoking its discriminator getter', () => {
     const plan = planAppliedShadowSubstitutions([]);
     const channel = new MessageChannel();

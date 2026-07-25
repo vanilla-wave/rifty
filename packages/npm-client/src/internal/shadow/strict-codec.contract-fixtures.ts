@@ -7,6 +7,8 @@ import {
 export interface ShadowPlanCodecCase {
   readonly name: string;
   readonly value: () => unknown;
+  /** Exact decode failure pinned at the unwrapped planner boundary. */
+  readonly expected: RegExp;
 }
 
 function freezeDeep<T>(value: T): T {
@@ -38,6 +40,7 @@ function frozen(value: unknown): unknown {
 export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   {
     name: 'forged catalog id',
+    expected: /applied shadow substitution catalog identity drifted/,
     value: () => {
       const plan = validShadowPlan();
       const applied = plan.substitutions[0]!;
@@ -49,6 +52,7 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'forged catalog digest',
+    expected: /applied shadow substitution catalog identity drifted/,
     value: () => {
       const plan = validShadowPlan();
       const applied = plan.substitutions[0]!;
@@ -60,6 +64,7 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'forged substitution id',
+    expected: /Not implemented: shadow-registry\.substitutionRecipe\.forged-substitution/,
     value: () => {
       const plan = validShadowPlan();
       return frozen({
@@ -70,6 +75,7 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'forged recipe digest',
+    expected: /applied shadow substitution recipe digest drifted/,
     value: () => {
       const plan = validShadowPlan();
       return frozen({
@@ -80,10 +86,12 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'forged required-set digest',
+    expected: /shadow asset plan is non-canonical or tampered/,
     value: () => frozen({ ...validShadowPlan(), requiredSetDigest: '0'.repeat(64) }),
   },
   {
     name: 'forged asset id',
+    expected: /shadow asset plan is non-canonical or tampered/,
     value: () => {
       const plan = validShadowPlan();
       return frozen({
@@ -94,6 +102,7 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'forged adapter id',
+    expected: /applied shadow substitution is non-canonical or tampered/,
     value: () => {
       const plan = validShadowPlan();
       const applied = plan.substitutions[0]!;
@@ -109,10 +118,12 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'absent builtin substitution',
+    expected: /shadow asset plan is non-canonical or tampered/,
     value: () => frozen({ ...validShadowPlan(), substitutions: [] }),
   },
   {
     name: 'tampered materialized byte count',
+    expected: /applied shadow substitution is non-canonical or tampered/,
     value: () => {
       const plan = validShadowPlan();
       const applied = plan.substitutions[0]!;
@@ -136,6 +147,7 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'tampered asset member size',
+    expected: /shadow asset plan is non-canonical or tampered/,
     value: () => {
       const plan = validShadowPlan();
       const asset = plan.assets[0]!;
@@ -144,6 +156,7 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'tampered asset member digest',
+    expected: /shadow asset plan is non-canonical or tampered/,
     value: () => {
       const plan = validShadowPlan();
       return frozen({
@@ -154,6 +167,7 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'noncanonical substitution ordering',
+    expected: /shadow asset plan is non-canonical or tampered/,
     value: () => {
       const plan = planAppliedShadowSubstitutions([
         substitution(),
@@ -164,6 +178,7 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'duplicate asset member',
+    expected: /shadow asset plan is non-canonical or tampered/,
     value: () => {
       const plan = validShadowPlan();
       return frozen({ ...plan, assets: [...plan.assets, structuredClone(plan.assets[0]!)] });
@@ -171,6 +186,7 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
   },
   {
     name: 'duplicate materialized file member',
+    expected: /applied shadow substitution is non-canonical or tampered/,
     value: () => {
       const plan = validShadowPlan();
       const applied = plan.substitutions[0]!;

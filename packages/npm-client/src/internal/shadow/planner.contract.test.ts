@@ -11,9 +11,12 @@ import {
 import { strictShadowPlanCodecCases } from './strict-codec.contract-fixtures.ts';
 
 describe('shadow substitution planner contract', () => {
-  it.each(strictShadowPlanCodecCases)('strict-decodes $name at planner ingress', ({ value }) => {
-    expect(() => decodeShadowAssetPlan(value())).toThrow();
-  });
+  it.each(strictShadowPlanCodecCases)(
+    'strict-decodes $name at planner ingress',
+    ({ value, expected }) => {
+      expect(() => decodeShadowAssetPlan(value())).toThrow(expected);
+    },
+  );
 
   it('replays exact synthetic esbuild identity and binding', () => {
     const applied = attestBuiltinShadowSubstitution({

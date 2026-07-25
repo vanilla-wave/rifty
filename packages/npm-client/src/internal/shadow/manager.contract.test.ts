@@ -77,9 +77,13 @@ describe('shadow asset manager contract', () => {
         },
       });
 
-      await expect(
-        Promise.resolve().then(() => manager.ensure(value() as ShadowAssetPlan)),
-      ).rejects.toBeInstanceOf(ShadowAssetError);
+      const failure = Promise.resolve().then(() => manager.ensure(value() as ShadowAssetPlan));
+      await expect(failure).rejects.toBeInstanceOf(ShadowAssetError);
+      await expect(failure).rejects.toMatchObject({
+        code: 'ESHADOWASSET',
+        phase: 'ready',
+        message: expect.stringContaining('shadow asset plan rejected at manager ingress'),
+      });
     },
   );
 
