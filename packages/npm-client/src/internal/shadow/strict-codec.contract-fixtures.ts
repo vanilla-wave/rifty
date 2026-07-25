@@ -48,6 +48,17 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
     },
   },
   {
+    name: 'forged catalog digest',
+    value: () => {
+      const plan = validShadowPlan();
+      const applied = plan.substitutions[0]!;
+      return frozen({
+        ...plan,
+        substitutions: [{ ...applied, catalog: { ...applied.catalog, digest: '0'.repeat(64) } }],
+      });
+    },
+  },
+  {
     name: 'forged substitution id',
     value: () => {
       const plan = validShadowPlan();
@@ -78,6 +89,21 @@ export const strictShadowPlanCodecCases: readonly ShadowPlanCodecCase[] = [
       return frozen({
         ...plan,
         assets: [{ ...plan.assets[0]!, id: 'forged-asset' }],
+      });
+    },
+  },
+  {
+    name: 'forged adapter id',
+    value: () => {
+      const plan = validShadowPlan();
+      const applied = plan.substitutions[0]!;
+      const binding = applied.binding!;
+      return frozen({
+        ...plan,
+        substitutions: [
+          { ...applied, binding: { ...binding, adapterId: 'rifty.runtime-adapter.absent.v1' } },
+        ],
+        bindings: [{ ...plan.bindings[0]!, adapterId: 'rifty.runtime-adapter.absent.v1' }],
       });
     },
   },
