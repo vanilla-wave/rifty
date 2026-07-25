@@ -55,6 +55,7 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
   it('exposes all Node identity fields', () => {
     const proc = installNodeProcessShim(spec());
     expect(proc.version).toBe('v24.0.0');
+    expect(proc.versions.rifty).toBe('0.0.0');
     expect(proc.platform).toBe('rifty');
     expect(proc.arch).toBe('wasm');
     expect(proc.argv0).toBe('rifty');
@@ -68,7 +69,9 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     refreshRuntimeJsProcessBuiltin();
 
     const release = (proc as typeof proc & { release: { name: string } }).release;
-    expect(loadBuiltin('node:process')).toBe(proc);
+    const processModule = loadBuiltin('node:process');
+    expect(processModule).toBe(proc);
+    expect(processModule?.versions).toMatchObject({ node: '24.0.0', rifty: '0.0.0' });
     expect(release).toEqual({ name: 'node' });
     expect(Object.getOwnPropertyDescriptor(proc, 'release')).toEqual({
       value: release,

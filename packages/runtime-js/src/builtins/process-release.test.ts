@@ -1,7 +1,7 @@
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { describe, expect, it } from 'vitest';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
-import { NodeProcess } from './process.ts';
+import { NodeProcess, riftyProcess } from './process.ts';
 
 interface ProcessRelease {
   name: string;
@@ -63,13 +63,17 @@ describe('process.release Node compatibility identity (ADR-0322)', () => {
     expectReleaseShape(new NodeProcess(spec()));
   });
 
-  it('keeps release mutation isolated per process', () => {
-    const first = new NodeProcess();
-    const second = new NodeProcess();
-    const firstRelease = releaseOf(first);
+  it('keeps release mutation isolated across no-spec, spec, and singleton processes', () => {
+    const noSpec = new NodeProcess();
+    const firstSpec = new NodeProcess(spec());
+    const secondSpec = new NodeProcess(spec());
+    const firstRelease = releaseOf(firstSpec);
+    const siblings = [releaseOf(noSpec), releaseOf(secondSpec), releaseOf(riftyProcess)];
+
+    expect(new Set([firstRelease, ...siblings]).size).toBe(4);
 
     expect(() => {
-      (first as NodeProcess & { release: ProcessRelease }).release = { name: 'other' };
+      (firstSpec as NodeProcess & { release: ProcessRelease }).release = { name: 'other' };
     }).toThrow(TypeError);
     expect(() => {
       firstRelease.name = 'other';
@@ -78,7 +82,14 @@ describe('process.release Node compatibility identity (ADR-0322)', () => {
     firstRelease.extra = 'local';
 
     expect(firstRelease).toEqual({ extra: 'local' });
-    expect(releaseOf(second)).toEqual({ name: 'node' });
+    for (const sibling of siblings) expect(sibling).toEqual({ name: 'node' });
+  });
+
+  it('retains rifty host identity beside the Node compatibility axis', () => {
+    expect(NODE_PROCESS_IDENTITY.versions.rifty).toBe('0.0.0');
+    expect(new NodeProcess().versions.rifty).toBe('0.0.0');
+    expect(new NodeProcess(spec()).versions.rifty).toBe('0.0.0');
+    expect(riftyProcess.versions.rifty).toBe('0.0.0');
   });
 
   it('publishes the frozen release seed without sharing a live object', () => {
