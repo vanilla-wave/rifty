@@ -27,7 +27,15 @@ export function identityForRecipe(recipe: unknown): string {
  * `tests`/`limitations`) must NOT flip the install identity — a doc edit once
  * invalidated every deployed stamp and forced a 27 MB snapshot rebake.
  */
-const IDENTITY_POLICY_FIELDS = ['schema', 'api', 'version', 'consumer', 'source', 'wasm', 'patches'] as const;
+const IDENTITY_POLICY_FIELDS = [
+  'schema',
+  'api',
+  'version',
+  'consumer',
+  'source',
+  'wasm',
+  'patches',
+] as const;
 
 export function identityPolicyProjection(policy: unknown): Record<string, unknown> {
   if (policy === null || typeof policy !== 'object' || Array.isArray(policy)) {
