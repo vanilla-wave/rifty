@@ -27,6 +27,7 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
+import { bakedOverrides } from '@riftydev/shadow-registry';
 import {
   type BuiltinShadowSubstitutionRecipe,
   builtinShadowSubstitutionCatalog,
@@ -69,6 +70,7 @@ import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install
 import {
   type AppliedShadowSubstitution,
   type ShadowAssetPlan,
+  type ShadowSubstitutionCatalog,
   attestBuiltinShadowSubstitution,
   materializeRegistryShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
@@ -80,7 +82,7 @@ import {
   buildInstallLockfile,
   linkInstallTree,
 } from './linker.ts';
-import type { OverrideMap } from './overrides.ts';
+import { type OverrideMap, type ResolvedOverrideTarget, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import {
@@ -202,6 +204,26 @@ export interface InstallOptions {
    */
   resolverStallTimeoutMs?: number;
 }
+
+/** Package-private policy injection; intentionally absent from `src/index.ts`. */
+export interface ShadowInstallAuthority {
+  readonly catalog: ShadowSubstitutionCatalog;
+  readonly builtinOverrides: Readonly<Record<string, string>>;
+}
+
+/** Normalized package-private request for shadow-policy contract suites. */
+export interface ShadowInstallRequest {
+  readonly rootName: string;
+  readonly rootVersion: string;
+  readonly dependencies: Record<string, string>;
+  readonly optionalDependencies?: Record<string, string>;
+  readonly opts: InstallOptions;
+}
+
+const BUILTIN_SHADOW_INSTALL_AUTHORITY: ShadowInstallAuthority = Object.freeze({
+  catalog: builtinShadowSubstitutionCatalog,
+  builtinOverrides: Object.freeze({ ...bakedOverrides }),
+});
 
 function abortReason(signal: AbortSignal, label: string): Error {
   return signal.reason instanceof Error ? signal.reason : new Error(`${label}: aborted`);
@@ -430,6 +452,34 @@ export async function install(
     dependenciesOrOpts,
     maybeOpts,
   );
+  return await installNormalized(request, BUILTIN_SHADOW_INSTALL_AUTHORITY);
+}
+
+/** Package-private contract seam; production callers use {@link install}. */
+export async function installWithShadowAuthority(
+  request: ShadowInstallRequest,
+  authority: ShadowInstallAuthority,
+): Promise<InstallResult> {
+  const dependencies = { ...request.dependencies };
+  const optionalDependencies = { ...(request.optionalDependencies ?? {}) };
+  assertRegistryDependencySpecs(dependencies, optionalDependencies);
+  assertRegistryOverrideTargets(request.opts.overrides);
+  return await installNormalized(
+    {
+      rootName: request.rootName,
+      rootVersion: request.rootVersion,
+      dependencies,
+      optionalDependencies,
+      opts: request.opts,
+    },
+    authority,
+  );
+}
+
+async function installNormalized(
+  request: NormalizedInstallRequest,
+  authority: ShadowInstallAuthority,
+): Promise<InstallResult> {
   const {
     rootName,
     rootVersion: normalizedRootVersion,
@@ -453,13 +503,14 @@ export async function install(
     optionalDependencies,
     rootName,
     opts.overrides,
+    authority,
   );
 
   let existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
   // Decode once at lockfile ingress; frozen owner-internal consumers receive
   // this plan rather than reparsing the same clone at every dependency edge.
   let existingShadowPlan = existingLockfile
-    ? planShadowSubstitutionsFromLockfile(existingLockfile)
+    ? planShadowSubstitutionsFromLockfile(existingLockfile, authority.catalog)
     : null;
 
   // ADR-0182 opt-in fast path: when a resolver is configured AND no covering
@@ -486,6 +537,7 @@ export async function install(
       optionalDependencies,
       rootName,
       opts,
+      authority,
     )
   ) {
     const staged = await tryEddyFastPath(
@@ -494,6 +546,7 @@ export async function install(
       dependencies,
       optionalDependencies,
       tarballCache,
+      authority,
     );
     if (staged.kind === 'adopted') {
       source = 'eddy';
@@ -515,6 +568,7 @@ export async function install(
     optionalDependencies,
     opts,
     substitutions,
+    authority,
   );
 
   const cacheHits = new Map<string, boolean>();
@@ -526,6 +580,7 @@ export async function install(
       plan.optionalDependencies,
       rootName,
       fetchCtx,
+      authority,
       (event) => {
         cacheHits.set(`${event.name}@${event.version}`, event.cacheHit);
         opts.onPackage?.(event);
@@ -579,13 +634,20 @@ export async function install(
       const substitution = pinnedShadowSubstitutions.get(pkg);
       return substitution ? [substitution] : [];
     }),
+    authority.catalog,
   );
   warnUnsatisfiedPeers(packages);
   opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, packages));
   throwIfAborted(opts.signal);
   await linkInstallTree(opts.vfs, opts.cwd, packages, () => throwIfAborted(opts.signal));
   throwIfAborted(opts.signal);
-  await materializeRegistryShadowSubstitutions(opts.vfs, opts.cwd, shadowPlan, substitutions.line);
+  await materializeRegistryShadowSubstitutions(
+    opts.vfs,
+    opts.cwd,
+    shadowPlan,
+    substitutions.line,
+    authority.catalog,
+  );
   throwIfAborted(opts.signal);
   // ADR-0188: install-time internals shims into the actual installed dirs —
   // AFTER link so tarball bytes never clobber a shim. Both paths (+ eddy).
@@ -857,11 +919,18 @@ function existingLockfilePreemptsEddy(
   optionalDependencies: Record<string, string>,
   rootName: string,
   opts: InstallOptions,
+  authority: ShadowInstallAuthority,
 ): boolean {
   if (!existingLockfile) return false;
   if (!shadowPlan) throw new TypeError('decoded lockfile shadow plan is missing');
   if (
-    hasEffectiveTopLevelNameCollision(dependencies, optionalDependencies, rootName, opts.overrides)
+    hasEffectiveTopLevelNameCollision(
+      dependencies,
+      optionalDependencies,
+      rootName,
+      opts.overrides,
+      authority,
+    )
   ) {
     return false;
   }
@@ -873,6 +942,7 @@ function existingLockfilePreemptsEddy(
       optionalDependencies,
       rootName,
       opts.overrides,
+      authority,
     ).ownership !== 'metadata'
   );
 }
@@ -903,6 +973,7 @@ async function tryEddyFastPath(
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   tarballCache: TarballCache,
+  authority: ShadowInstallAuthority,
 ): Promise<
   | {
       kind: 'adopted';
@@ -1026,6 +1097,7 @@ async function tryEddyFastPath(
         rootName,
         opts,
         tarballCache,
+        authority,
         attempt.expectedHash,
       );
       if (typeof outcome !== 'string') {
@@ -1086,6 +1158,7 @@ async function consumeEddyResponse(
   rootName: string,
   opts: InstallOptions,
   tarballCache: TarballCache,
+  authority: ShadowInstallAuthority,
   expectedClosureHash?: string,
 ): Promise<
   | {
@@ -1209,11 +1282,12 @@ async function consumeEddyResponse(
       }
       const requestAnalysis = analyzeLockfileRequest(
         parsed,
-        planShadowSubstitutionsFromLockfile(parsed),
+        planShadowSubstitutionsFromLockfile(parsed, authority.catalog),
         dependencies,
         optionalDependencies,
         rootName,
         opts.overrides,
+        authority,
       );
       if (requestAnalysis.ownership !== 'replay') {
         return 'bundle lockfile does not cover the request (or an override forces a re-resolve)';
@@ -1323,15 +1397,40 @@ function createSubstitutionReporter(sink: (line: string) => void): SubstitutionR
   };
 }
 
+function resolveEffectivePackageRequestWithAuthority(
+  name: string,
+  range: string | null,
+  parent: string | undefined,
+  userOverrides: OverrideMap | undefined,
+  authority: ShadowInstallAuthority,
+): ReturnType<typeof resolveEffectivePackageRequest> {
+  if (authority === BUILTIN_SHADOW_INSTALL_AUTHORITY) {
+    return resolveEffectivePackageRequest(name, range, parent, userOverrides);
+  }
+  const override = resolveOverride(name, parent, userOverrides, authority.builtinOverrides);
+  return {
+    override,
+    effectiveName: override?.name ?? name,
+    effectiveRange: override?.range ?? range,
+  };
+}
+
 function syntheticRecipeForRequest(
   name: string,
   range: string | null,
   parent: string | undefined,
   overrides: OverrideMap | undefined,
+  authority: ShadowInstallAuthority,
 ): BuiltinShadowSubstitutionRecipe | null {
-  const { override } = resolveEffectivePackageRequest(name, range, parent, overrides);
+  const { override } = resolveEffectivePackageRequestWithAuthority(
+    name,
+    range,
+    parent,
+    overrides,
+    authority,
+  );
   if (override !== null) return null;
-  const candidates = builtinShadowSubstitutionCatalog.recipes.filter(
+  const candidates = authority.catalog.recipes.filter(
     (recipe) => recipe.acquisition.kind === 'synthetic' && recipe.trigger.name === name,
   );
   if (candidates.length === 0) return null;
@@ -1346,13 +1445,14 @@ function syntheticRecipeForRequest(
 function registryRecipeForResolution(
   requestedName: string,
   requestedRange: string | null,
-  override: ReturnType<typeof resolveEffectivePackageRequest>['override'],
+  override: ResolvedOverrideTarget | null,
   effectiveName: string,
   version: string,
+  authority: ShadowInstallAuthority,
 ): BuiltinShadowSubstitutionRecipe | null {
   if (override?.source !== 'baked') return null;
   return (
-    builtinShadowSubstitutionCatalog.recipes.find(
+    authority.catalog.recipes.find(
       (recipe) =>
         recipe.acquisition.kind === 'registry' &&
         recipe.trigger.name === requestedName &&
@@ -1427,6 +1527,7 @@ function chooseSource(
   optionalDependencies: Record<string, string>,
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
+  authority: ShadowInstallAuthority,
 ): SourcePlan {
   if (existingLockfile) {
     if (!existingShadowPlan) throw new TypeError('decoded lockfile shadow plan is missing');
@@ -1435,6 +1536,7 @@ function chooseSource(
       existingShadowPlan,
       opts,
       substitutions,
+      authority,
     );
     return {
       source: incremental.source,
@@ -1444,7 +1546,7 @@ function chooseSource(
     };
   }
   return {
-    source: createRegistrySource(opts, substitutions),
+    source: createRegistrySource(opts, substitutions, authority),
     resolution: () => 'metadata',
     dependencies,
     optionalDependencies,
@@ -1493,13 +1595,15 @@ function lockfileReuseDecision(
   range: string | null,
   ctx: ResolveContext,
   overrides: OverrideMap | undefined,
+  authority: ShadowInstallAuthority,
 ): LockfileReuseDecision {
-  const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides);
-  const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
+  const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides, authority);
+  const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequestWithAuthority(
     name,
     range,
     ctx.parentName,
     overrides,
+    authority,
   );
   const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
   const policyFrontier = override !== null || synthetic !== null;
@@ -1514,7 +1618,7 @@ function lockfileReuseDecision(
   }
   const recipe =
     synthetic ??
-    registryRecipeForResolution(name, range, override, effectiveName, hit.entry.version);
+    registryRecipeForResolution(name, range, override, effectiveName, hit.entry.version, authority);
   const materializationInstallPath = recipe
     ? shadowMaterializationInstallPath(hit.installPath, effectiveName, recipe.materialization.name)
     : undefined;
@@ -1562,6 +1666,7 @@ function analyzeLockfileRequest(
   optionalDependencies: Record<string, string>,
   rootName: string,
   overrides: OverrideMap | undefined,
+  authority: ShadowInstallAuthority,
 ): LockfileRequestAnalysis {
   const reachablePaths = new Set<string>();
   let ownership: LockfileRequestOwnership = 'replay';
@@ -1570,17 +1675,26 @@ function analyzeLockfileRequest(
   };
 
   const visit = (name: string, range: string | null, ctx: ResolveContext): void => {
-    const decision = lockfileReuseDecision(lockfile, shadowPlan, name, range, ctx, overrides);
+    const decision = lockfileReuseDecision(
+      lockfile,
+      shadowPlan,
+      name,
+      range,
+      ctx,
+      overrides,
+      authority,
+    );
     if (decision.kind === 'miss') {
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
     }
-    const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides);
-    const { effectiveName } = resolveEffectivePackageRequest(
+    const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides, authority);
+    const { effectiveName } = resolveEffectivePackageRequestWithAuthority(
       name,
       range,
       ctx.parentName,
       overrides,
+      authority,
     );
     const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
     if (!hit || (!synthetic && (!hit.entry.resolved || !hit.entry.integrity))) {
@@ -1636,12 +1750,21 @@ function createIncrementalSource(
   shadowPlan: ShadowAssetPlan,
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
+  authority: ShadowInstallAuthority,
 ): Readonly<{ source: ResolutionSource; resolution: () => InstallResolution }> {
-  const locked = createLockfileSource(lockfile, shadowPlan, opts, substitutions);
-  const registry = createRegistrySource(opts, substitutions);
+  const locked = createLockfileSource(lockfile, shadowPlan, opts, substitutions, authority);
+  const registry = createRegistrySource(opts, substitutions, authority);
   let metadataUsed = false;
   const useRegistry = (name: string, range: string | null, ctx: ResolveContext): boolean => {
-    const decision = lockfileReuseDecision(lockfile, shadowPlan, name, range, ctx, opts.overrides);
+    const decision = lockfileReuseDecision(
+      lockfile,
+      shadowPlan,
+      name,
+      range,
+      ctx,
+      opts.overrides,
+      authority,
+    );
     return decision.kind === 'miss' && registryOwnsIncrementalMiss(decision, ctx);
   };
 
@@ -1700,6 +1823,7 @@ async function walkAndPin(
   topLevelOptionalDependencies: Record<string, string>,
   rootName: string,
   fetchCtx: FetchAndUnpackCtx,
+  authority: ShadowInstallAuthority,
   onPackage?: (event: InstallProgressEvent) => void,
 ): Promise<Map<string, PinnedPackage>> {
   // Direct roots resolve first and surviving identities reserve flat slots
@@ -1870,7 +1994,7 @@ async function walkAndPin(
             const preparedKey = `${key}\0${installPath}`;
             const pkg =
               preparedOptionalPackages.get(preparedKey) ??
-              (await pinToPackage(pin, result, installPath));
+              (await pinToPackage(pin, result, installPath, authority));
             pinned.set(installPath, pkg);
           }
         } catch (err) {
@@ -1975,7 +2099,7 @@ async function walkAndPin(
         const installPath = `node_modules/${pin.name}`;
         preparedOptionalPackages.set(
           `${resolvedPinIdentity(pin)}\0${installPath}`,
-          await pinToPackage(pin, result, installPath),
+          await pinToPackage(pin, result, installPath, authority),
         );
         optionalRoots.push({ name, range, pin, optional: desc });
       } catch (error) {
@@ -2034,7 +2158,10 @@ async function walkAndPin(
     }
     if (pinned.has(task.installPath)) continue;
     try {
-      pinned.set(task.installPath, await pinToPackage(task.pin, outcome.value, task.installPath));
+      pinned.set(
+        task.installPath,
+        await pinToPackage(task.pin, outcome.value, task.installPath, authority),
+      );
     } catch (error) {
       throwIfAborted(fetchCtx.signal);
       if (optionalFailure === null) throw error;
@@ -2117,6 +2244,7 @@ async function pinToPackage(
   pin: ResolvedPin,
   acquisition: PinAcquisitionResult,
   installPath: string,
+  authority: ShadowInstallAuthority,
 ): Promise<PinnedPackage> {
   const files =
     acquisition.kind === 'synthetic'
@@ -2146,23 +2274,26 @@ async function pinToPackage(
       pin.name,
       pin.shadow.recipe.materialization.name,
     );
-    const fact = attestBuiltinShadowSubstitution({
-      trigger: pin.shadow.trigger,
-      installPath: materializationInstallPath,
-      acquisition:
-        pin.shadow.acquisition.kind === 'synthetic'
-          ? { kind: 'synthetic' }
-          : {
-              kind: 'registry',
-              name: pin.shadow.acquisition.name,
-              version: pin.shadow.acquisition.version,
-              resolved: pin.shadow.acquisition.resolved,
-              integrity:
-                acquisition.kind === 'tarball'
-                  ? acquisition.result.integrity
-                  : pin.shadow.acquisition.integrity!,
-            },
-    });
+    const fact = attestBuiltinShadowSubstitution(
+      {
+        trigger: pin.shadow.trigger,
+        installPath: materializationInstallPath,
+        acquisition:
+          pin.shadow.acquisition.kind === 'synthetic'
+            ? { kind: 'synthetic' }
+            : {
+                kind: 'registry',
+                name: pin.shadow.acquisition.name,
+                version: pin.shadow.acquisition.version,
+                resolved: pin.shadow.acquisition.resolved,
+                integrity:
+                  acquisition.kind === 'tarball'
+                    ? acquisition.result.integrity
+                    : pin.shadow.acquisition.integrity!,
+              },
+      },
+      authority.catalog,
+    );
     pinnedShadowSubstitutions.set(pkg, fact);
   }
   return pkg;
@@ -2194,18 +2325,26 @@ function createLockfileSource(
   shadowPlan: ShadowAssetPlan,
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
+  authority: ShadowInstallAuthority,
 ): ResolutionSource {
   return {
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides);
-      // Apply the same retained redirect/user override as live resolution
-      // before lookup. Synthetic catalog recipes keep their source identity
-      // and are validated separately against the lockfile recipe trace.
-      const { override, effectiveName } = resolveEffectivePackageRequest(
+      const synthetic = syntheticRecipeForRequest(
         name,
         range,
         ctx.parentName,
         opts.overrides,
+        authority,
+      );
+      // Apply the same retained redirect/user override as live resolution
+      // before lookup. Synthetic catalog recipes keep their source identity
+      // and are validated separately against the lockfile recipe trace.
+      const { override, effectiveName } = resolveEffectivePackageRequestWithAuthority(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        authority,
       );
       const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
       if (!hit) {
@@ -2254,7 +2393,7 @@ function createLockfileSource(
       }
       const shadowRecipe =
         synthetic ??
-        registryRecipeForResolution(name, range, override, effectiveName, entry.version);
+        registryRecipeForResolution(name, range, override, effectiveName, entry.version, authority);
       const shadowFact = shadowRecipe
         ? replayedShadowFact(
             shadowPlan,
@@ -2361,6 +2500,7 @@ function assertNativeSupported(name: string, version: string, manifest: VersionM
 function createRegistrySource(
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
+  authority: ShadowInstallAuthority,
 ): ResolutionSource {
   const packumentCache = opts.packumentCache ?? new Map<string, Packument>();
   const PACKUMENT_CONCURRENCY = 8;
@@ -2400,18 +2540,27 @@ function createRegistrySource(
 
   return {
     prefetch(name, range, ctx): void {
-      if (syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides)) return;
-      const { effectiveName } = resolveEffectivePackageRequest(
+      if (syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides, authority)) {
+        return;
+      }
+      const { effectiveName } = resolveEffectivePackageRequestWithAuthority(
         name,
         range,
         ctx.parentName,
         opts.overrides,
+        authority,
       );
       void loadPackument(effectiveName);
     },
 
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+      const synthetic = syntheticRecipeForRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        authority,
+      );
       if (synthetic) {
         const manifest = syntheticManifest(synthetic);
         substitutions.line(
@@ -2437,12 +2586,14 @@ function createRegistrySource(
           },
         };
       }
-      const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
-        name,
-        range,
-        ctx.parentName,
-        opts.overrides,
-      );
+      const { override, effectiveName, effectiveRange } =
+        resolveEffectivePackageRequestWithAuthority(
+          name,
+          range,
+          ctx.parentName,
+          opts.overrides,
+          authority,
+        );
 
       const packument = await loadPackument(effectiveName);
       const versions = Object.keys(packument.versions);
@@ -2485,7 +2636,14 @@ function createRegistrySource(
         }
       }
 
-      const shadowRecipe = registryRecipeForResolution(name, range, override, effectiveName, pick);
+      const shadowRecipe = registryRecipeForResolution(
+        name,
+        range,
+        override,
+        effectiveName,
+        pick,
+        authority,
+      );
       return {
         origin: 'metadata',
         name: effectiveName,
@@ -2535,11 +2693,18 @@ function hasEffectiveTopLevelNameCollision(
   optionalDependencies: Record<string, string>,
   rootName: string,
   overrides: OverrideMap | undefined,
+  authority: ShadowInstallAuthority,
 ): boolean {
   const seen = new Set<string>();
   for (const request of [dependencies, optionalDependencies]) {
     for (const [name, range] of Object.entries(request)) {
-      const { effectiveName } = resolveEffectivePackageRequest(name, range, rootName, overrides);
+      const { effectiveName } = resolveEffectivePackageRequestWithAuthority(
+        name,
+        range,
+        rootName,
+        overrides,
+        authority,
+      );
       if (seen.has(effectiveName)) return true;
       seen.add(effectiveName);
     }

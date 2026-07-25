@@ -480,7 +480,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
   }
 
   const MATERIALIZE_LINE =
-    'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v1)';
+    'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)';
 
   it('materializes synthetic esbuild on fresh + replay, byte-identical', async () => {
     const vfs = new MemoryVfs();
@@ -500,11 +500,15 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     );
 
     const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
+    const launcher = await readText(vfs, '/proj/node_modules/.bin/esbuild');
     expect(aliasMain).toContain('__rifty?.esbuild');
     expect(await readText(vfs, '/proj/node_modules/esbuild/package.json')).toContain('"esbuild"');
+    expect(launcher).toBe("#!/usr/bin/env node\nimport('../esbuild/bin/esbuild');\n");
     expect(fresh).toContain(MATERIALIZE_LINE);
 
     // Replay (lockfile fast path): same lines, byte-identical shim files.
+    await vfs.rm('/proj/node_modules/.bin/esbuild');
+    const packument = vi.spyOn(registry, 'getPackument');
     const replay: string[] = [];
     await install(
       'root',
@@ -517,8 +521,10 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
         onSubstitution: (line) => replay.push(line),
       },
     );
+    expect(packument).not.toHaveBeenCalled();
     expect(replay).toContain(MATERIALIZE_LINE);
     expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasMain);
+    expect(await readText(vfs, '/proj/node_modules/.bin/esbuild')).toBe(launcher);
   });
 
   it('materializes a transitive synthetic recipe on fresh AND replay', async () => {
@@ -558,7 +564,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
   it('attests and replays the registry-backed lightningcss recipe', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const recipeId = 'rifty.shadow-substitution.lightningcss.v1';
+    const recipeId = 'rifty.shadow-substitution.lightningcss.v2';
     const materializeLine = `npm: lightningcss@^1.32.0 materialized from shadow registry (${recipeId})`;
     const registry = new FakeRegistry(
       db([
@@ -625,7 +631,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
   const UNSUPPORTED_REQUEST = '0.21.5';
   const unsupportedRequestError = {
     name: 'NotImplementedError',
-    feature: `shadow-registry.esbuild@${UNSUPPORTED_REQUEST}`,
+    feature: 'esbuild.version',
   };
 
   it('refuses a direct synthetic substitution when the request excludes exact esbuild 0.28.0', async () => {
