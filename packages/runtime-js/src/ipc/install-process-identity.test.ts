@@ -11,7 +11,7 @@ import {
   ensureRuntimeJsBuiltinsRegistered,
   refreshRuntimeJsProcessBuiltin,
 } from '../builtins/index.ts';
-import { NodeProcess } from '../builtins/process.ts';
+import { riftyProcess } from '../builtins/process.ts';
 import { createModuleLoader } from '../module-loader/loader.ts';
 import { installNodeProcessShim } from './install-process.ts';
 
@@ -94,14 +94,13 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     [
       'no-spec',
       () => {
-        const proc = new NodeProcess();
         Object.defineProperty(globalThis, 'process', {
-          value: proc,
+          value: riftyProcess,
           writable: true,
           configurable: true,
           enumerable: false,
         });
-        return proc;
+        return riftyProcess;
       },
     ],
     ['kernel-spec', () => installNodeProcessShim(spec())],
