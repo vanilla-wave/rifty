@@ -14,6 +14,8 @@ import { RegistryClient } from '@riftydev/npm-client';
 import { Shell } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
+import { installArtifactIdentity } from '../../packages/workbench/src/glue/install-artifact-identity.ts';
+import { createInstallStampAuthority } from '../../packages/workbench/src/glue/install-stamp-authority.ts';
 import { createTestNpmPackageAcquisitionAuthority } from '../../packages/workbench/src/glue/npm-shell-command.test-fixture.ts';
 import { createNpmShellCommand } from '../../packages/workbench/src/glue/npm-shell-command.ts';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
@@ -184,6 +186,145 @@ describe('npm shell prefix parity', () => {
       });
       await expect(vfs.exists(`${root}/node_modules/kleur/package.json`)).resolves.toBe(false);
       await expect(vfs.exists(`${member}/node_modules/kleur/package.json`)).resolves.toBe(true);
+    } finally {
+      rmSync(nativeRoot, { recursive: true, force: true });
+      rmSync(nativeDependency, { recursive: true, force: true });
+    }
+  });
+
+  it('documents the rifty-only claim delta for an install root nested under node_modules', async () => {
+    const nativeRoot = mkdtempSync(join(tmpdir(), 'rifty-npm-nested-root-'));
+    const nativeDependency = mkdtempSync(join(tmpdir(), 'rifty-npm-nested-dependency-'));
+    const nativeNested = join(nativeRoot, 'node_modules/tool/project');
+    const outerPackageJson = '{"name":"outer","private":true}\n';
+    const nestedPackageJson = '{"name":"nested","private":true}\n';
+    const sentinel = 'outer-tree-byte\n';
+    try {
+      mkdirSync(nativeNested, { recursive: true });
+      writeFileSync(join(nativeRoot, 'package.json'), outerPackageJson);
+      writeFileSync(join(nativeRoot, 'node_modules/outer-owned.txt'), sentinel);
+      writeFileSync(join(nativeNested, 'package.json'), nestedPackageJson);
+      writeFileSync(
+        join(nativeDependency, 'package.json'),
+        '{"name":"user-pkg","version":"1.0.0"}\n',
+      );
+
+      execFileSync(
+        'npm',
+        ['install', nativeDependency, '--ignore-scripts', '--no-audit', '--no-fund'],
+        {
+          cwd: nativeNested,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+
+      const nativeDelta = {
+        outerManifestPreserved:
+          readFileSync(join(nativeRoot, 'package.json'), 'utf8') === outerPackageJson,
+        outerSentinelPreserved:
+          readFileSync(join(nativeRoot, 'node_modules/outer-owned.txt'), 'utf8') === sentinel,
+        outerLockCreated: existsSync(join(nativeRoot, 'package-lock.json')),
+        outerDependencyPlaced: existsSync(join(nativeRoot, 'node_modules/user-pkg')),
+        nestedDependencyPlaced: existsSync(
+          join(nativeNested, 'node_modules/user-pkg/package.json'),
+        ),
+      };
+
+      const vfs = new MemoryVfs();
+      const root = '/workspace';
+      const nested = `${root}/node_modules/tool/project`;
+      await vfs.mkdir(nested, { recursive: true });
+      await vfs.writeFile(`${root}/package.json`, outerPackageJson);
+      await vfs.writeFile(`${root}/node_modules/outer-owned.txt`, sentinel);
+      await vfs.writeFile(`${nested}/package.json`, nestedPackageJson);
+      const stamps = createInstallStampAuthority({ vfs });
+      const outerProject = {
+        projectId: 'outer',
+        root,
+        slug: 'outer',
+        identity: installArtifactIdentity,
+      };
+      const outerClaim = await stamps.demote(outerProject);
+      await stamps.promote(
+        { ...outerProject, packageJsonText: outerPackageJson },
+        { epoch: outerClaim.epoch, packages: 0 },
+      );
+      await expect(stamps.check({ root, slug: outerProject.slug })).resolves.toMatchObject({
+        status: 'trusted',
+      });
+
+      const local = makeLocalFetcher();
+      let outerStatusAtRegistry: string | undefined;
+      const registry = new RegistryClient({
+        baseUrl: LOCAL_REGISTRY_BASE_URL,
+        fetch: async (url) => {
+          outerStatusAtRegistry ??= (await stamps.check({ root, slug: outerProject.slug })).status;
+          return local.fetch(url);
+        },
+      });
+      const deps = { vfs, registry };
+      const packages = createTestNpmPackageAcquisitionAuthority(deps, {
+        stamps,
+        resolveTreeGuards: (installRoot) => {
+          if (installRoot === nested) {
+            return [{ mode: 'demote', project: outerProject }];
+          }
+          if (installRoot === root) {
+            return [{ mode: 'revoke', root: nested }];
+          }
+          return [];
+        },
+      });
+      const npm = createNpmShellCommand({
+        ...deps,
+        packageAcquisitionAuthority: packages,
+        projectSlug: (installRoot) => (installRoot === root ? outerProject.slug : installRoot),
+      });
+      const shell = new Shell({ cwd: nested });
+      shell.registerCommand('npm', npm);
+
+      const result = await shell.run('npm install kleur@4.1.5', { onChunk: () => {} });
+      await packages.quiesce();
+
+      expect(result.exitCode).toBe(0);
+      expect(outerStatusAtRegistry).toBe('pending');
+      const riftyDelta = {
+        outerManifestPreserved:
+          (await vfs.readFileText(`${root}/package.json`)) === outerPackageJson,
+        outerSentinelPreserved:
+          (await vfs.readFileText(`${root}/node_modules/outer-owned.txt`)) === sentinel,
+        outerLockCreated: await vfs.exists(`${root}/package-lock.json`),
+        outerDependencyPlaced: await vfs.exists(`${root}/node_modules/kleur`),
+        nestedDependencyPlaced: await vfs.exists(`${nested}/node_modules/kleur/package.json`),
+      };
+      // Native uses a local package to keep the oracle offline; Rifty uses the vendored registry.
+      // Package identity/transport differ, but the observable install-root delta must not.
+      expect(riftyDelta).toEqual(nativeDelta);
+      await expect(stamps.check({ root, slug: outerProject.slug })).resolves.toMatchObject({
+        status: 'pending',
+      });
+      await expect(stamps.check({ root: nested, slug: nested })).resolves.toMatchObject({
+        status: 'trusted',
+      });
+
+      const outerShell = new Shell({ cwd: root });
+      outerShell.registerCommand('npm', npm);
+      const outerResult = await outerShell.run('npm install kleur@4.1.5', { onChunk: () => {} });
+      await packages.quiesce();
+
+      expect(outerResult.exitCode).toBe(0);
+      await expect(stamps.check({ root, slug: outerProject.slug })).resolves.toMatchObject({
+        status: 'trusted',
+      });
+      await expect(stamps.check({ root: nested, slug: nested })).resolves.toMatchObject({
+        status: 'absent',
+      });
+      expect(JSON.parse(await vfs.readFileText(`${root}/package.json`))).toMatchObject({
+        name: 'outer',
+        dependencies: { kleur: '4.1.5' },
+      });
+      await expect(vfs.exists(`${root}/node_modules/kleur/package.json`)).resolves.toBe(true);
     } finally {
       rmSync(nativeRoot, { recursive: true, force: true });
       rmSync(nativeDependency, { recursive: true, force: true });
