@@ -6,7 +6,6 @@ import {
 import {
   type PageToPlaygroundOwnerMessage,
   type PlaygroundOwnerToPageMessage,
-  type PlaygroundProjectRuntimeDecision,
   inspectPageToPlaygroundOwnerMessage,
   isPageToPlaygroundOwnerMessage,
 } from '../workbench/internal/playground-owner-protocol.ts';
@@ -39,6 +38,7 @@ import type {
   PlaygroundProjectAuthority,
   PlaygroundProjectMutationKind,
 } from './playground-project-authority.ts';
+import { playgroundRuntimeDecision } from './playground-runtime-decision.ts';
 
 type ProjectPtyInput = Extract<
   PageToWorkbenchOwnerMessage,
@@ -365,18 +365,6 @@ export function createWorkbenchOwnerController(
     }
   };
 
-  const runtimeDecision = (
-    definition: ReturnType<typeof inspectPlaygroundProjectDefinition>,
-  ): PlaygroundProjectRuntimeDecision => {
-    if (definition.kind === 'vite') {
-      if (definition.port === undefined) {
-        throw new TypeError('Playground Vite definition is missing its owner port');
-      }
-      return Object.freeze({ kind: 'vite', port: definition.port });
-    }
-    return Object.freeze({ kind: definition.kind });
-  };
-
   const performPlaygroundOpen = async (message: PlaygroundOpenMessage): Promise<void> => {
     let opened: Awaited<ReturnType<PlaygroundProjectAuthority['openProject']>> | null = null;
     try {
@@ -455,7 +443,7 @@ export function createWorkbenchOwnerController(
           projectToken: token,
           projectRoot,
           acquisition,
-          runtime: runtimeDecision(definition),
+          runtime: playgroundRuntimeDecision(definition),
           initialScmSnapshot: runtime.playgroundTools.initialScmSnapshot,
           ...(initialTerminalState === undefined ? {} : { initialTerminalState }),
         });
