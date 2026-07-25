@@ -41,6 +41,7 @@ import {
   createProjectTerminal,
 } from '../workbench/project-terminal.ts';
 import { createViteProjectRuntime } from '../workbench/vite-project-runtime.ts';
+import { createNoShadowInstallResultFixture } from './install-result.test-fixture.ts';
 import { type OwnerPackageState, createOwnerPackageState } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import type { AcquisitionProvenance, SnapshotFailure } from './package-acquisition-authority.ts';
@@ -58,7 +59,6 @@ const NODE_WORKER_RUNTIME_ENV = Object.freeze({
   RIFTY_KERNEL_WORKER_URL: 'https://playground.test/workers/kernel.js',
   RIFTY_NODE_ENTRY_WORKER_URL: NODE_ENTRY_WORKER_URL,
   RIFTY_SQLITE_WASM_URL: 'https://playground.test/sqlite.wasm',
-  RIFTY_ESBUILD_WASM_URL: 'https://playground.test/esbuild.wasm',
 });
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -97,8 +97,8 @@ interface OwnerHarnessOptions {
   readonly beforeInstallReturn?: (options: InstallOptions) => Promise<void>;
 }
 
-function installResult(name: string, version: string): InstallResult {
-  return {
+async function installResult(name: string, version: string): Promise<InstallResult> {
+  const result: InstallResult = {
     packages: [{ name, version, dependencies: {}, files: {} }],
     lockfile: {
       name: 'app',
@@ -113,6 +113,7 @@ function installResult(name: string, version: string): InstallResult {
       packages: [{ name, version, transport: 'registry' }],
     },
   };
+  return await createNoShadowInstallResultFixture(result);
 }
 
 function realInstallBoundary(
@@ -146,7 +147,7 @@ function realInstallBoundary(
       options.onPackage?.({ name, version, cacheHit: false });
       await beforeReturn?.(options);
       timeline.events.push(`install:end:${options.cwd}`);
-      return installResult(name, version);
+      return await installResult(name, version);
     } finally {
       timeline.activeInstalls -= 1;
     }
@@ -168,6 +169,7 @@ function withPlaygroundMetadata<TReady>(
 function viteDefinition(
   firstMaterialization: FirstMaterialization,
   id = 'vite-project',
+  packageJson?: string,
 ): PlaygroundDefinition {
   return withPlaygroundMetadata(
     inspectProjectDefinition(
@@ -176,6 +178,7 @@ function viteDefinition(
         files: {
           '/index.html': '<main id="app"></main>',
           '/src/main.ts': "console.log('vite output')\n",
+          ...(packageJson === undefined ? {} : { '/package.json': packageJson }),
         },
         viteVersion: '8.0.16',
       }),
@@ -741,6 +744,47 @@ const SNAPSHOT_FALLBACK_CASES: readonly SnapshotFallbackCase[] = [
     },
   },
   {
+    name: 'snapshot restore plan rejects a forged shadow trace before claim or tree mutation',
+    slug: 'forged-shadow-trace',
+    prepare: (definition) => {
+      const snapshot = bakedSnapshot(definition, 'vite-deps-current');
+      const fixture = snapshotFixtureFromValue({
+        ...snapshot,
+        lockfile: `${JSON.stringify({
+          lockfileVersion: 3,
+          packages: {
+            'node_modules/esbuild': {
+              version: '0.25.0',
+              riftyShadowRecipe: 'forged-recipe',
+            },
+          },
+        })}\n`,
+      });
+      let harness: OwnerHarness | undefined;
+      let beforePlan: ReturnType<OwnerHarness['authority']['snapshot']> | undefined;
+      return {
+        snapshotId: fixture.snapshotId,
+        templateId: 'vite-deps-current',
+        expectedReason:
+          'snapshot-restore-plan-failed: Not implemented: npm-client.lockfile.shadowSubstitutionTrace',
+        beforeOpen: (owner) => {
+          harness = owner;
+        },
+        fetch: () => {
+          if (harness === undefined) throw new Error('forged shadow trace harness is missing');
+          beforePlan = harness.authority.snapshot();
+          return gzipResponse(fixture.bytes);
+        },
+        assertBoundary: () => {
+          if (harness === undefined || beforePlan === undefined) {
+            throw new Error('forged shadow trace pre-plan snapshot is missing');
+          }
+          expect(harness.authority.snapshot()).toEqual(beforePlan);
+        },
+      };
+    },
+  },
+  {
     name: 'snapshot restore apply failure records its exact reason',
     slug: 'restore-apply-failure',
     prepare: (definition) => {
@@ -807,6 +851,8 @@ interface ChildInput extends EventEmitter {
 
 class ChildWorker extends EventEmitter {
   readonly kind = 'worker' as const;
+  readonly #control = new MessageChannel();
+  readonly ports = { ipc: this.#control.port1 };
   readonly stdoutOutput = new EventEmitter();
   readonly stderrOutput = new EventEmitter();
   readonly input = new EventEmitter() as ChildInput;
@@ -859,6 +905,8 @@ class ChildWorker extends EventEmitter {
   finish(output: string, exit: ProcessExit = { code: 0, signal: null }): void {
     this.stdoutOutput.emit('data', encoder.encode(output));
     this.emit('exit', exit.code, exit.signal);
+    this.#control.port1.close();
+    this.#control.port2.close();
   }
 }
 
@@ -1291,7 +1339,7 @@ describe('Workbench companion first materialization Contract+RED', () => {
     );
   });
 
-  it('queues terminal install behind an active snapshot prepare, then reuses the restored claim', async () => {
+  it('queues an explicit terminal install behind snapshot prepare, then reconciles the restored tree', async () => {
     const fixture = serializedSnapshotFixture(
       viteDefinition({ kind: 'install' }),
       'vite-fifo-snapshot-v1',
@@ -1360,8 +1408,8 @@ describe('Workbench companion first materialization Contract+RED', () => {
     expect.soft(installsBeforeRelease).toBe(0);
     expect.soft(childrenBeforeRelease).toBe(0);
     expect.soft(fetchSnapshot).toHaveBeenCalledTimes(1);
-    expect.soft(h.timeline.installs).toEqual([]);
-    expect.soft(h.timeline.maxActiveInstalls).toBe(0);
+    expect.soft(h.timeline.installs).toHaveLength(1);
+    expect.soft(h.timeline.maxActiveInstalls).toBe(1);
     expect.soft(prepared.acquisition).toMatchObject({
       kind: 'ready',
       provenance: {
@@ -1487,16 +1535,20 @@ describe('Workbench companion first materialization Contract+RED', () => {
     ).toBe(true);
   });
 
-  it('reopens A on its exact tree after .vite-temp churn — extraneous writes never revoke (ADR-0307), then A→B→A', async () => {
+  it('pins extraneous .vite-temp writes across install → npm run → install, then A→B→A', async () => {
     const id = 'vite-reopen-current-manifest';
     const templateId = 'vite-reopen-current-manifest-v1';
-    const fixture = serializedSnapshotFixture(viteDefinition({ kind: 'install' }, id), templateId);
+    const packageJson = '{"name":"vite-run-contract","scripts":{"dev":"vite"}}\n';
+    const fixture = serializedSnapshotFixture(
+      viteDefinition({ kind: 'install' }, id, packageJson),
+      templateId,
+    );
     const descriptor = {
       snapshotId: fixture.snapshotId,
       assetUrl: 'https://playground.test/snapshots/vite-reopen-current-manifest.json.gz',
       templateId,
     } as const;
-    const definitionA = viteDefinition({ kind: 'snapshot', snapshot: descriptor }, id);
+    const definitionA = viteDefinition({ kind: 'snapshot', snapshot: descriptor }, id, packageJson);
     const definitionB = viteDefinition({ kind: 'install' }, 'vite-reopen-switch-away');
     const installerManifests: string[] = [];
     const fetchSnapshot = vi.fn(async () => new Response(gzipSnapshot(fixture.bytes, 6)));
@@ -1526,15 +1578,44 @@ describe('Workbench companion first materialization Contract+RED', () => {
     const first = await h.open(definitionA);
     await h.packageState.quiesce();
     const sink = { write: (_chunk: string | Uint8Array): void => {} };
-    const npm = h.packageState.createNpmCommand(async () => 1);
-    await expect(
-      npm(['install', 'cowsay@1.6.0'], {
-        cwd: first.projectRoot,
-        env: {},
-        stdout: sink,
-        stderr: sink,
-      }),
-    ).resolves.toBe(0);
+    const viteTempDir = `${first.projectRoot}/node_modules/.vite-temp`;
+    const timestampModule = `${viteTempDir}/vite.config.js.timestamp-1752700000000-a1b2c3d4.mjs`;
+    const runMarker = `${viteTempDir}/run-cache.json`;
+    let runs = 0;
+    const npm = h.packageState.createNpmCommand(async (name) => {
+      expect(name).toBe('dev');
+      runs += 1;
+      await h.packageState.mutations.guardedMutation(
+        [{ kind: 'mkdir', path: viteTempDir }],
+        async () => {
+          h.authority.mkdirSync(viteTempDir, { recursive: true });
+        },
+      );
+      await h.packageState.mutations.guardedMutation(
+        [
+          { kind: 'write', path: timestampModule },
+          { kind: 'write', path: runMarker },
+        ],
+        async () => {
+          h.authority.writeFileSync(timestampModule, encoder.encode('export default {}\n'));
+          h.authority.writeFileSync(runMarker, encoder.encode('{"run":1}\n'));
+        },
+      );
+      await h.packageState.mutations.guardedMutation(
+        [{ kind: 'rm', path: timestampModule }],
+        async () => {
+          h.authority.rmSync(timestampModule, { force: true });
+        },
+      );
+      return 0;
+    });
+    const context: CommandContext = {
+      cwd: first.projectRoot,
+      env: {},
+      stdout: sink,
+      stderr: sink,
+    };
+    await expect(npm(['install', 'cowsay@1.6.0'], context)).resolves.toBe(0);
     await h.packageState.quiesce();
     const warmBeforeMutation = await h.open(definitionA);
 
@@ -1543,27 +1624,12 @@ describe('Workbench companion first materialization Contract+RED', () => {
     expect.soft(h.authority.existsSync(markerPath)).toBe(true);
     expect.soft(h.authority.existsSync(cowsayBinPath)).toBe(true);
 
-    const viteTempDir = `${first.projectRoot}/node_modules/.vite-temp`;
-    const timestampModule = `${viteTempDir}/vite.config.js.timestamp-1752700000000-a1b2c3d4.mjs`;
-    await h.packageState.mutations.guardedMutation(
-      [{ kind: 'mkdir', path: viteTempDir }],
-      async () => {
-        h.authority.mkdirSync(viteTempDir, { recursive: true });
-      },
-    );
-    await h.packageState.mutations.guardedMutation(
-      [{ kind: 'write', path: timestampModule }],
-      async () => {
-        h.authority.writeFileSync(timestampModule, encoder.encode('export default {}\n'));
-      },
-    );
-    await h.packageState.mutations.guardedMutation(
-      [{ kind: 'rm', path: timestampModule }],
-      async () => {
-        h.authority.rmSync(timestampModule, { force: true });
-      },
-    );
+    await expect(npm(['run', 'dev'], context)).resolves.toBe(0);
     await h.packageState.quiesce();
+    const warmAfterRun = await h.open(definitionA);
+    await expect(npm(['install'], context)).resolves.toBe(0);
+    await h.packageState.quiesce();
+    const warmAfterSecondInstall = await h.open(definitionA);
 
     await h.open(definitionB);
     const installsBeforeReopen = h.timeline.installs.length;
@@ -1578,6 +1644,14 @@ describe('Workbench companion first materialization Contract+RED', () => {
       kind: 'ready',
       provenance: { outcome: 'existing' },
     });
+    expect.soft(warmAfterRun.acquisition).toMatchObject({
+      kind: 'ready',
+      provenance: { outcome: 'existing' },
+    });
+    expect.soft(warmAfterSecondInstall.acquisition).toMatchObject({
+      kind: 'ready',
+      provenance: { outcome: 'existing' },
+    });
     // ADR-0307: the .vite-temp churn is an extraneous tree write — reopening A
     // reuses its exact installed tree with no snapshot refetch and no install.
     expect.soft(reopened.acquisition).toMatchObject({
@@ -1585,19 +1659,21 @@ describe('Workbench companion first materialization Contract+RED', () => {
       provenance: { outcome: 'existing' },
     });
     expect.soft(fetchSnapshot).toHaveBeenCalledTimes(1);
-    expect.soft(installsBeforeReopen).toBe(1);
+    expect.soft(runs).toBe(1);
+    expect.soft(installsBeforeReopen).toBe(2);
     expect.soft(h.timeline.installs).toHaveLength(installsBeforeReopen);
     expect.soft(dependencyMap(installerManifests.at(-1) ?? '{}')).toMatchObject({
       vite: '8.0.16',
       cowsay: '1.6.0',
     });
+    expect.soft(decoder.decode(h.authority.readFileBytesSync(runMarker))).toBe('{"run":1}\n');
     expect.soft(h.authority.existsSync(markerPath)).toBe(true);
     expect.soft(h.authority.existsSync(cowsayBinPath)).toBe(true);
   });
 
   // One Workbench owns one active ProjectSession/VFS cursor. Exercise duplicate
   // consumers at the reachable sibling npm ingress, through the same package FIFO.
-  it('serializes two consumers of one deferred install into one install and one exact warm reuse', async () => {
+  it('serializes two explicit consumers of one deferred install without a stamp-only skip', async () => {
     const releaseInstall = deferred();
     let gateInstall = false;
     let timeline: Timeline | null = null;
@@ -1656,11 +1732,11 @@ describe('Workbench companion first materialization Contract+RED', () => {
     expect.soft(installsBeforeRelease).toBe(1);
     expect.soft(activeBeforeRelease).toBe(1);
     expect.soft(fetchSnapshot).not.toHaveBeenCalled();
-    expect.soft(h.timeline.installs).toHaveLength(1);
+    expect.soft(h.timeline.installs).toHaveLength(2);
     expect.soft(h.timeline.maxActiveInstalls).toBe(1);
     expect
       .soft(h.timeline.events.filter((event) => event.includes('$ npm install')))
-      .toHaveLength(1);
+      .toHaveLength(2);
     expect.soft(warm.acquisition).toMatchObject({
       kind: 'ready',
       provenance: { outcome: 'existing', packages: 1 },

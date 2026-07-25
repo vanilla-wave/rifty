@@ -12,17 +12,17 @@ import { installStampPath, installTreeDir, isInstallStampPath } from '../glue/in
 import {
   type OwnerVfsCommitTerminal,
   encodeOwnerVfsError,
-  equalOwnerVfsCommitTerminals,
+  validateHostCommitAckForRequest,
 } from '../glue/owner-vfs-ipc.ts';
 import {
   type HostCommitAck,
   type HostCommitRequest,
-  OperationIdReuseError,
   type OwnerEpoch,
   type OwnerVfsSnapshot,
   type OwnerVfsSnapshotEntry,
   type PathVersion,
   type TreeRevision,
+  VfsCommitAppliedError,
   VfsCommitProtocolError,
   VfsVersionConflictError,
   equalHostCommitAcks,
@@ -38,13 +38,6 @@ import {
 interface TrackedEntry {
   readonly kind: 'file' | 'dir';
   readonly version: PathVersion;
-}
-
-interface HostCommitRecord {
-  readonly request: HostCommitRequest;
-  ack: HostCommitAck | null;
-  outcome: Promise<OwnerVfsCommitTerminal> | null;
-  terminal: OwnerVfsCommitTerminal | null;
 }
 
 interface CopyPlanEntry {
@@ -69,19 +62,18 @@ export interface OwnerVfsAuthority extends FsSync {
   readonly treeRevision: TreeRevision;
   versionOf(path: string): PathVersion | null;
   snapshot(): OwnerVfsSnapshot;
-  /** Validate idempotency + CAS without mutating. A replay returns its prior ack. */
-  validateHostCommit(request: HostCommitRequest): HostCommitAck | null;
+  /** Validate request identity + CAS without mutating. */
+  validateHostCommit(request: HostCommitRequest): void;
   applyHostCommit(request: HostCommitRequest): HostCommitAck;
-  /** One exact request admission owns apply, publication, and the retained terminal. */
+  /** One exact request admission owns apply, publication, and its terminal. */
   admitHostCommit(
     request: HostCommitRequest,
-    apply: (request: HostCommitRequest) => HostCommitAck | Promise<HostCommitAck>,
+    execute: (
+      request: HostCommitRequest,
+      apply: (request: HostCommitRequest) => HostCommitAck,
+    ) => HostCommitAck | Promise<HostCommitAck>,
     publishSnapshot: () => void,
   ): Promise<OwnerVfsCommitTerminal>;
-  retainHostCommitTerminal(terminal: OwnerVfsCommitTerminal): void;
-  retainedHostCommitTerminal(operationId: string): OwnerVfsCommitTerminal | null;
-  /** Exact release confirmation ends replay ownership; missing is idempotent. */
-  cleanupHostCommitTerminal(terminal: OwnerVfsCommitTerminal): void;
   /** Preflight actual absolute ingress targets before any batch mutation. */
   assertPortablePaths(paths: readonly string[]): void;
   flush(): Promise<PersistFailureReport | undefined>;
@@ -120,7 +112,7 @@ function createOwnerEpoch(): OwnerEpoch {
   throw new Error('owner VFS authority requires cryptographic randomness for its epoch');
 }
 
-function cloneRequest(request: HostCommitRequest): HostCommitRequest {
+function cloneHostCommitRequest(request: HostCommitRequest): HostCommitRequest {
   return request.kind === 'write' ? { ...request, data: request.data.slice() } : { ...request };
 }
 
@@ -156,7 +148,6 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
   readonly #fs: FsSync;
   readonly #initialRoots: readonly string[];
   readonly #entries = new Map<string, TrackedEntry>();
-  readonly #hostCommits = new Map<string, HostCommitRecord>();
   readonly #appliedJournal: OwnerVfsAppliedJournal;
   #treeRevision: TreeRevision = 0;
   #versionSequence = 0n;
@@ -351,15 +342,8 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     if (reserved) throw this.#reservedClaimError(reserved);
   }
 
-  validateHostCommit(request: HostCommitRequest): HostCommitAck | null {
+  validateHostCommit(request: HostCommitRequest): void {
     if (request.operationId.length === 0) throw new Error('VFS operation id must be non-empty');
-    const prior = this.#hostCommits.get(request.operationId);
-    if (prior) {
-      if (!equalHostCommitRequests(prior.request, request)) {
-        throw new OperationIdReuseError(request.operationId);
-      }
-      if (prior.ack) return prior.ack;
-    }
 
     switch (request.kind) {
       case 'write':
@@ -379,12 +363,10 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
         break;
       }
     }
-    return null;
   }
 
   applyHostCommit(request: HostCommitRequest): HostCommitAck {
-    const replay = this.validateHostCommit(request);
-    if (replay) return replay;
+    this.validateHostCommit(request);
 
     let versions: readonly { readonly path: string; readonly version: PathVersion | null }[];
     switch (request.kind) {
@@ -421,129 +403,88 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
       }
     }
 
-    const ack: HostCommitAck = Object.freeze({
+    return Object.freeze({
       operationId: request.operationId,
       ownerEpoch: this.ownerEpoch,
       treeRevision: this.#treeRevision,
       versions: Object.freeze(versions.map((item) => Object.freeze({ ...item }))),
     });
-    const prior = this.#hostCommits.get(request.operationId);
-    if (prior) prior.ack = ack;
-    else {
-      this.#hostCommits.set(request.operationId, {
-        request: cloneRequest(request),
-        ack,
-        outcome: null,
-        terminal: null,
-      });
-    }
-    return ack;
   }
 
   admitHostCommit(
     request: HostCommitRequest,
-    apply: (request: HostCommitRequest) => HostCommitAck | Promise<HostCommitAck>,
+    execute: (
+      request: HostCommitRequest,
+      apply: (request: HostCommitRequest) => HostCommitAck,
+    ) => HostCommitAck | Promise<HostCommitAck>,
     publishSnapshot: () => void,
   ): Promise<OwnerVfsCommitTerminal> {
-    const prior = this.#hostCommits.get(request.operationId);
-    if (prior) {
-      if (!equalHostCommitRequests(prior.request, request)) {
-        return Promise.resolve({
-          type: 'rifty:owner-vfs-commit-ack',
-          operationId: request.operationId,
-          ok: false,
-          error: encodeOwnerVfsError(new OperationIdReuseError(request.operationId)),
-        });
-      }
-      if (prior.outcome) return prior.outcome;
-    }
-
-    const record: HostCommitRecord = prior ?? {
-      request: cloneRequest(request),
-      ack: null,
-      outcome: null,
-      terminal: null,
-    };
-    if (!prior) this.#hostCommits.set(request.operationId, record);
-
-    let resolveOutcome: (terminal: OwnerVfsCommitTerminal) => void = () => {};
-    const outcome = new Promise<OwnerVfsCommitTerminal>((resolve) => {
-      resolveOutcome = resolve;
-    });
-    record.outcome = outcome;
-    const finish = (terminal: OwnerVfsCommitTerminal): void => {
-      if (record.terminal) return;
-      record.terminal = terminal;
-      resolveOutcome(terminal);
-    };
-    const fail = (cause: unknown, applied: HostCommitAck | null = record.ack): void => {
-      finish({
+    const admittedRequest = cloneHostCommitRequest(request);
+    const executionRequest = cloneHostCommitRequest(admittedRequest);
+    const fail = (cause: unknown, applied?: HostCommitAck): OwnerVfsCommitTerminal => {
+      const errorCause =
+        cause instanceof VfsCommitAppliedError && cause.cause !== undefined ? cause.cause : cause;
+      return {
         type: 'rifty:owner-vfs-commit-ack',
-        operationId: request.operationId,
+        operationId: admittedRequest.operationId,
         ok: false,
-        error: encodeOwnerVfsError(cause),
+        error: encodeOwnerVfsError(errorCause),
         ...(applied ? { applied } : {}),
-      });
+      };
     };
-    const succeed = (ack: HostCommitAck): void => {
-      if (record.ack === null || !equalHostCommitAcks(record.ack, ack)) {
-        fail(
-          new VfsCommitProtocolError(
-            `VFS commit ${request.operationId} executor returned divergent ACK evidence`,
-          ),
-          record.ack,
-        );
-        return;
+    return (async () => {
+      let applied: HostCommitAck | null = null;
+      const apply = (candidate: HostCommitRequest): HostCommitAck => {
+        if (!equalHostCommitRequests(candidate, admittedRequest)) {
+          throw new VfsCommitProtocolError(
+            `VFS commit ${admittedRequest.operationId} executor applied a divergent request`,
+          );
+        }
+        if (applied !== null) {
+          throw new VfsCommitProtocolError(
+            `VFS commit ${admittedRequest.operationId} executor applied more than once`,
+          );
+        }
+        applied = this.applyHostCommit(admittedRequest);
+        return applied;
+      };
+      let ack: HostCommitAck;
+      try {
+        ack = await execute(executionRequest, apply);
+      } catch (cause) {
+        if (applied !== null) return fail(cause, applied);
+        if (cause instanceof VfsCommitAppliedError) {
+          const correlation = validateHostCommitAckForRequest(
+            cause.applied,
+            admittedRequest,
+            this.ownerEpoch,
+          );
+          return correlation === null ? fail(cause, cause.applied) : fail(correlation);
+        }
+        return fail(cause);
       }
+      if (applied === null || !equalHostCommitAcks(applied, ack)) {
+        return fail(
+          new VfsCommitProtocolError(
+            `VFS commit ${admittedRequest.operationId} executor returned divergent ACK evidence`,
+          ),
+          applied ?? undefined,
+        );
+      }
+      const correlation = validateHostCommitAckForRequest(ack, admittedRequest, this.ownerEpoch);
+      if (correlation !== null) return fail(correlation);
       try {
         publishSnapshot();
       } catch (cause) {
-        fail(cause, ack);
-        return;
+        return fail(cause, ack);
       }
-      finish({
+      return {
         type: 'rifty:owner-vfs-commit-ack',
-        operationId: request.operationId,
+        operationId: admittedRequest.operationId,
         ok: true,
         ack,
-      });
-    };
-
-    let applied: HostCommitAck | Promise<HostCommitAck>;
-    try {
-      applied = apply(record.request);
-    } catch (cause) {
-      fail(cause);
-      return outcome;
-    }
-    void Promise.resolve(applied).then(succeed, fail);
-    return outcome;
-  }
-
-  retainHostCommitTerminal(terminal: OwnerVfsCommitTerminal): void {
-    const prior = this.#hostCommits.get(terminal.operationId);
-    if (!prior) throw new OperationIdReuseError(terminal.operationId);
-    const ack = terminal.ok ? terminal.ack : terminal.applied;
-    if (ack && (prior.ack === null || !equalHostCommitAcks(prior.ack, ack))) {
-      throw new OperationIdReuseError(terminal.operationId);
-    }
-    if (prior.terminal && !equalOwnerVfsCommitTerminals(prior.terminal, terminal)) {
-      throw new OperationIdReuseError(terminal.operationId);
-    }
-    prior.terminal = terminal;
-  }
-
-  retainedHostCommitTerminal(operationId: string): OwnerVfsCommitTerminal | null {
-    return this.#hostCommits.get(operationId)?.terminal ?? null;
-  }
-
-  cleanupHostCommitTerminal(terminal: OwnerVfsCommitTerminal): void {
-    const prior = this.#hostCommits.get(terminal.operationId);
-    if (!prior) return;
-    if (prior.terminal === null || !equalOwnerVfsCommitTerminals(prior.terminal, terminal)) {
-      throw new OperationIdReuseError(terminal.operationId);
-    }
-    this.#hostCommits.delete(terminal.operationId);
+      };
+    })();
   }
 
   #reservedClaimError(path: string): VfsError {

@@ -16,17 +16,17 @@ const TWO_PORTS: PreviewPanelEntry[] = [
     port: 5174,
     url: '/preview/5174/',
     label: 'npm run dev',
+    source: 'dev-server',
   },
-  { port: 3000, url: '/preview/3000/', label: 'node :3000' },
+  { port: 3000, url: '/preview/3000/', label: 'node :3000', source: 'node' },
 ];
-const WITH_PROD_PREVIEW: PreviewPanelEntry[] = [
-  ...TWO_PORTS,
-  {
-    port: 4173,
-    url: '/preview/4173/',
-    label: 'vite preview',
-  },
-];
+const PROD_PREVIEW: PreviewPanelEntry = {
+  port: 4173,
+  url: '/preview/4173/',
+  label: 'vite preview',
+  source: 'preview',
+};
+const WITH_PROD_PREVIEW: PreviewPanelEntry[] = [...TWO_PORTS, PROD_PREVIEW];
 
 describe('PreviewPanel refresh contract', () => {
   it('does not accept a parent snapshot refresh key', () => {
@@ -117,7 +117,7 @@ describe('PreviewPanel port switcher (ADR-0155)', () => {
   });
 });
 
-describe('reconcileSelectedPort (auto-select newly appended)', () => {
+describe('reconcileSelectedPort (auto-select newly published)', () => {
   const known = (ports: readonly number[]): ReadonlySet<number> => new Set(ports);
 
   it('keeps the current selection when it is still live and nothing new appeared', () => {
@@ -132,6 +132,35 @@ describe('reconcileSelectedPort (auto-select newly appended)', () => {
     expect(reconcileSelectedPort(TWO_PORTS, 5174, known([5174]))).toBe(3000);
   });
 
+  it('selects a newly inserted production preview despite registry source ordering', () => {
+    const sourceOrdered = [PROD_PREVIEW, TWO_PORTS[0]!];
+
+    expect(reconcileSelectedPort(sourceOrdered, 5174, known([5174]))).toBe(4173);
+  });
+
+  it('switches to a dev server newly inserted BEFORE the live node selection', () => {
+    // Registry order is [dev-server, preview, node]: `npm run dev` while a node
+    // server is selected inserts :5174 FIRST — first appearance still wins.
+    expect(reconcileSelectedPort(TWO_PORTS, 3000, known([3000]))).toBe(5174);
+  });
+
+  it('prefers the LAST new entry in registry order when several appear at once', () => {
+    expect(reconcileSelectedPort(TWO_PORTS, 3000, known([]))).toBe(3000);
+    expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 5174, known([5174]))).toBe(4173);
+  });
+
+  it('never displaces a hand-picked selection while its port stays live', () => {
+    // node :3000 picked in the switcher; dev :5174 newly inserted before it.
+    expect(reconcileSelectedPort(TWO_PORTS, 3000, known([3000]), 3000)).toBe(3000);
+    // …even when several new servers appear at once.
+    expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 3000, known([3000]), 3000)).toBe(3000);
+  });
+
+  it('resumes normal rules when the hand-picked port left the live set', () => {
+    // manual :9999 vanished → the newly published entry wins again.
+    expect(reconcileSelectedPort(TWO_PORTS, 9999, known([9999, 5174]), 9999)).toBe(3000);
+  });
+
   it('does not re-snap to an already-known last entry', () => {
     expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 5174, known([5174, 3000, 4173]))).toBe(5174);
   });
@@ -143,5 +172,6 @@ describe('reconcileSelectedPort (auto-select newly appended)', () => {
 
   it('leaves the current selection untouched when the set is empty', () => {
     expect(reconcileSelectedPort([], 8080, known([]))).toBe(8080);
+    expect(reconcileSelectedPort([], 8080, known([]), 8080)).toBe(8080);
   });
 });

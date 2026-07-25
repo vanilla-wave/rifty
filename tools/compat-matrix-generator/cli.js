@@ -98,6 +98,16 @@ function buildEsbuildMatrix(policyValue) {
       ];
     },
   );
+  const unsupportedSurfaces = policyArray(policy.unsupportedSurfaces, 'unsupportedSurfaces').map(
+    (value, index) => {
+      const entry = policyRecord(value, `unsupportedSurfaces[${index}]`);
+      return [
+        policyString(entry.surface, `unsupportedSurfaces[${index}].surface`),
+        '❌',
+        policyString(entry.notes, `unsupportedSurfaces[${index}].notes`),
+      ];
+    },
+  );
 
   const gaps = policyArray(policy.gaps, 'gaps').map((value, index) => {
     const entry = policyRecord(value, `gaps[${index}]`);
@@ -123,8 +133,8 @@ function buildEsbuildMatrix(policyValue) {
     file: 'esbuild-js-api.md',
     title: 'Compatibility matrix — esbuild JavaScript API',
     intro:
-      `Current claim for the Vite-facing esbuild API. Policy is exact \`${sourcePackage}@${version}\` ` +
-      `for \`${consumerPackage}@${consumerVersion}\`; ${finalGreen ? 'Final+GREEN is browser-proven.' : 'Contract+RED is merged, Final+GREEN is not.'}`,
+      `Current claim for direct guest CJS/ESM and the Vite-facing esbuild API. Policy is exact \`${sourcePackage}@${version}\` ` +
+      `with \`${consumerPackage}@${consumerVersion}\` as an integration consumer; ${finalGreen ? 'Final+GREEN is browser-proven.' : 'Contract+RED is merged, Final+GREEN is not.'}`,
     rows: [
       [
         'Exact source and WASM provenance',
@@ -133,9 +143,10 @@ function buildEsbuildMatrix(policyValue) {
       ],
       ['Ordered generated patch plan', finalGreen ? '✅' : '⚠️', patchPlan],
       ...currentSurfaces,
+      ...unsupportedSurfaces,
       ...gaps.map((gap) => [
         `D4 gap: \`${gap.surface}\``,
-        '⚠️',
+        '❌',
         `Required outcome: ${gap.required} ${gap.current}`,
       ]),
     ],
@@ -151,7 +162,7 @@ const viteCommandMatrix = {
   file: 'vite-command.md',
   title: 'Compatibility matrix — installed Vite command',
   intro:
-    'Public claim surface for Vite 7 through the installed `node_modules/.bin/vite` CLI (ADR-0174/0226/0243).',
+    'Public claim surface for Vite 7 and exact Vite 8.0.16 through the installed `node_modules/.bin/vite` CLI (ADR-0174/0226/0243/0308/0317).',
   rows: [
     [
       'Installed `.bin/vite` dispatch',
@@ -189,6 +200,16 @@ const viteCommandMatrix = {
       'Chromium runs exact Vite 7.3.6 over owner VFS; a real CJS dependency prebundle and source map are written and consumed.',
     ],
     [
+      'Vite 8.0.16 build and preview',
+      '✅',
+      'Chromium runs the installed CLI, executes a real hashed Rolldown bundle, and renders it through the routed production preview iframe. HMR remains disabled.',
+    ],
+    [
+      'Vite 8.0.16 esbuild isolation',
+      '✅',
+      'A cold Chromium install has no esbuild package/asset request, no installed esbuild delegate, and no published esbuild runtime before the Vite 8 entry; Rolldown owns its path.',
+    ],
+    [
       'Server-capable non-Vite `.bin` commands',
       '✅',
       'The same generic child/port/preview lifecycle is browser-proven with a non-Vite server.',
@@ -206,7 +227,8 @@ const viteCommandMatrix = {
     '`tests/e2e/generic-dev-server-lifecycle.spec.ts`',
   ],
   limitations: [
-    'Exact esbuild-backed claim is Vite 7.3.6 with esbuild 0.28.0; Vite 8 uses Rolldown and keeps HMR disabled in visible template config.',
+    'Exact esbuild-backed claim is Vite 7.3.6 with esbuild 0.28.0; exact Vite 8.0.16 dev/build/preview uses Rolldown with an empty esbuild plan and keeps HMR disabled in visible template config.',
+    'Vite 8 `vite optimize`, other Vite 8 versions, and broader config/plugin parity are not claimed by the Vite 8 build/preview smoke.',
     'Preview traffic traverses the same-origin Service Worker/owner bridge, so `preview.cors` and `preview.allowedHosts` need direct-Node differential proof.',
     'Fallback-port publication when the requested Vite port is busy still needs browser proof; no hidden `strictPort` force exists.',
   ],
@@ -1116,7 +1138,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0159)
 - [ts-language-service.md](./ts-language-service.md) — in-browser \`ts.LanguageService\` over the VFS (\`@riftydev/ts-language-service\`, ADR-0166)
 - [package-tooling.md](./package-tooling.md) — real package CLIs in the browser shell (Prettier, ESLint, typed \`typescript-eslint\`)
-- [esbuild-js-api.md](./esbuild-js-api.md) — exact esbuild 0.28.0 Final+GREEN over guest VFS, with explicit D4 loud gaps (ADR-0226)
+- [esbuild-js-api.md](./esbuild-js-api.md) — direct CJS/ESM and Vite 7 share exact registry-owned esbuild 0.28.0 over guest VFS; CLI and D4 gaps stay loud (ADR-0226/0308/0311)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [vite-command.md](./vite-command.md) — playground \`vite\` command through the installed \`.bin\` CLI (ADR-0174)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)

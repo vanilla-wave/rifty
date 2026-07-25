@@ -20,7 +20,7 @@ function assertPreviewOriginContract(reg: PreviewRegistry): void {
   // @ts-expect-error Dev-server registration must name its producer origin.
   reg.setDevServer(5173, 'scope-dev', {});
   // @ts-expect-error Production-preview registration must name its producer origin.
-  reg.setPreview(4173, 'scope-preview');
+  reg.setPreview('preview-owner', [4173], 'scope-preview');
   // @ts-expect-error A missing origin cannot silently become an uncorrelated source.
   reg.addNode('node-child', [3000], 'scope-node', {});
   // @ts-expect-error Starting state must retain the producer origin before a port exists.
@@ -97,8 +97,8 @@ describe('preview-registry', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
     reg.setDevServer(5174, 'scope-dev', { origin: HOST_PREVIEW_ORIGIN });
-    reg.setPreview(4173, 'scope-preview-1', HOST_PREVIEW_ORIGIN);
-    reg.setPreview(4174, 'scope-preview-2', HOST_PREVIEW_ORIGIN);
+    reg.setPreview('preview-1', [4173], 'scope-preview-1', HOST_PREVIEW_ORIGIN);
+    reg.setPreview('preview-2', [4174], 'scope-preview-2', HOST_PREVIEW_ORIGIN);
     expect(previewFrames(sent).at(-1)!.ports).toEqual([
       {
         port: 5174,
@@ -117,7 +117,13 @@ describe('preview-registry', () => {
         previewScope: 'scope-preview-2',
       },
     ]);
-    reg.clearPreview();
+    reg.clearPreview('preview-1');
+    expect(
+      previewFrames(sent)
+        .at(-1)!
+        .ports.map((p) => p.source),
+    ).toEqual(['dev-server', 'preview']);
+    reg.clearPreview('preview-2');
     expect(
       previewFrames(sent)
         .at(-1)!
@@ -178,7 +184,12 @@ describe('preview-registry', () => {
     const reg = createPreviewRegistry({ send });
 
     reg.setDevServer(5174, 'scope-dev', { origin: ptyOrigin('terminal-dev', 'run-dev') });
-    reg.setPreview(4173, 'scope-preview', ptyOrigin('terminal-preview', 'run-preview'));
+    reg.setPreview(
+      'preview-owner',
+      [4173],
+      'scope-preview',
+      ptyOrigin('terminal-preview', 'run-preview'),
+    );
     reg.addNode('node-child-1', [3000], 'scope-node', {
       origin: ptyOrigin('terminal-node', 'run-node'),
     });
@@ -366,7 +377,7 @@ describe('preview-registry teardown', () => {
     const reg = createPreviewRegistry({ send });
     const origin = ptyOrigin('term-1', 'run-1');
     reg.setDevServer(5174, 'scope-dev', { origin });
-    reg.setPreview(4173, 'scope-preview', origin);
+    reg.setPreview('preview-owner', [4173], 'scope-preview', origin);
     reg.addNode('node-1', [3000], 'scope-node', { origin });
     reg.devStarting(origin);
     sent.length = 0;
@@ -379,8 +390,8 @@ describe('preview-registry teardown', () => {
 
     reg.setDevServer(5175, 'scope-late-dev', { origin });
     reg.clearDevServer();
-    reg.setPreview(4174, 'scope-late-preview', origin);
-    reg.clearPreview();
+    reg.setPreview('preview-late', [4174], 'scope-late-preview', origin);
+    reg.clearPreview('preview-late');
     reg.addNode('node-late', [4000], 'scope-late-node', { origin });
     reg.removeBySid('node-late');
     reg.devStarting(origin);

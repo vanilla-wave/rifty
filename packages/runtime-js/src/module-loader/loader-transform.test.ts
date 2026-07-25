@@ -134,7 +134,7 @@ describe('createModuleLoader transform cache (feature 02 T5, Q-2026-05-30-202)',
 
     // Drop ONLY the registry record (not the transform cache) so executeEsm is
     // forced to run again while the transform cache stays warm. With the T5
-    // cache this is a hit -> the WASI strip is NOT re-spawned (count stays 1).
+    // cache this is a hit -> the injected transform is NOT re-run (count stays 1).
     // Without a transform cache the hook re-fires here -> count 2 (RED leg).
     loader.registry.invalidate('/work/main.ts');
     const again = await loader.loadById('/work/main.ts', true);
@@ -220,8 +220,8 @@ describe('require() of a .ts module (CJS-scope honesty, feature 02 T4)', () => {
 
     const loader = createModuleLoader(vfs, { cwd: '/work' });
 
-    // The strip hook is async (esbuild via runWasi) and require() cannot await
-    // it (ADR-0052 D1 alt-C), so a `.ts` reached via require() must throw a
+    // The caller-injected strip hook is async and require() cannot await it
+    // (ADR-0052 D1 alt-C), so a `.ts` reached via require() must throw a
     // directed, honest error — not an opaque acorn/new-Function SyntaxError.
     expect(() => loader.require('./legacy.ts', '/work/e.js')).toThrow(NotImplementedError);
     expect(() => loader.require('./legacy.ts', '/work/e.js')).toThrow(/require\(\) of .*\.ts/);

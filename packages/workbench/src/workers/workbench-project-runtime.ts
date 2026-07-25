@@ -163,10 +163,13 @@ export function createWorkbenchProjectRuntime(
   let binSequence = 0;
   let nodeSequence = 0;
   let closePromise: Promise<void> | undefined;
+  const reserveChildAdmission = (path: string) =>
+    options.packageState.reserveChildAdmission(namespace.toOwnerPath(path));
 
   const ownerNodeExecutor = createOwnerChildNodeExecutor(
     options.nodeEntryWorkerUrl,
     options.nodeWorkerRuntimeEnv,
+    reserveChildAdmission,
   );
   const devServer =
     options.packageConfig.cfg.runtime === 'node-server'
@@ -176,6 +179,7 @@ export function createWorkbenchProjectRuntime(
           const child = createOwnerChildDevServer(
             options.devServerWorkerUrl,
             readNodeWorkerRuntimeConfig(options.nodeWorkerRuntimeEnv, 'workbench-project-runtime'),
+            reserveChildAdmission,
           );
           return createDevServerController({
             lifecycle: previews,
@@ -217,6 +221,7 @@ export function createWorkbenchProjectRuntime(
     const childBinExecutor = createOwnerChildBinExecutor(
       options.nodeEntryWorkerUrl,
       options.nodeWorkerRuntimeEnv,
+      reserveChildAdmission,
       createInstalledBinPreviewHooks({
         captureOrigin,
         allocateSid: () => `workbench-bin-${++binSequence}`,

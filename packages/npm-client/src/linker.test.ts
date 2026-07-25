@@ -1,8 +1,16 @@
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
-import { type ResolvedPackage, link } from './linker.ts';
+import { type ResolvedPackage, link, linkInstallTree } from './linker.ts';
 
 const enc = new TextEncoder();
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
 
 function pkg(
   name: string,
@@ -78,6 +86,72 @@ describe('linker — dir dedup + parallel writes (#7, perf-audit 2026-06-05)', (
     expect(await vfs.readFileText('/proj/node_modules/m/lib/sub/b.js')).toBe('BBB');
     expect(await vfs.readFileText('/proj/node_modules/m/bin/run')).toBe('RUN');
   });
+
+  it('[fault: observable-order] settles every sibling write before surfacing the first error', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const secondStarted = deferred<void>();
+    const releaseSecond = deferred<void>();
+    const firstFailure = new Error('first write failed');
+    const writeFile = vfs.writeFile.bind(vfs);
+    vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+      if (path.endsWith('/a.js')) throw firstFailure;
+      if (path.endsWith('/b.js')) {
+        secondStarted.resolve();
+        await releaseSecond.promise;
+      }
+      await writeFile(path, data);
+    });
+
+    let settled = false;
+    const linking = link(vfs, '/proj', [
+      pkg('writes', { 'a.js': 'A', 'b.js': 'B' }, 'node_modules/writes'),
+    ]).finally(() => {
+      settled = true;
+    });
+    void linking.catch(() => {});
+    await secondStarted.promise;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+
+    releaseSecond.resolve();
+    await expect(linking).rejects.toBe(firstFailure);
+    expect(await vfs.readFileText('/proj/node_modules/writes/b.js')).toBe('B');
+  });
+
+  it('[fault: torn-state] gives an observed abort priority after sibling writes settle', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const secondStarted = deferred<void>();
+    const releaseSecond = deferred<void>();
+    const writeFailure = new Error('write failed during cancellation');
+    const writeFile = vfs.writeFile.bind(vfs);
+    vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+      if (path.endsWith('/a.js')) throw writeFailure;
+      if (path.endsWith('/b.js')) {
+        secondStarted.resolve();
+        await releaseSecond.promise;
+      }
+      await writeFile(path, data);
+    });
+    const controller = new AbortController();
+    const abortReason = new Error('cancel link');
+    const checkpoint = (): void => {
+      if (controller.signal.aborted) throw controller.signal.reason;
+    };
+
+    const linking = linkInstallTree(
+      vfs,
+      '/proj',
+      [pkg('writes', { 'a.js': 'A', 'b.js': 'B' }, 'node_modules/writes')],
+      checkpoint,
+    );
+    await secondStarted.promise;
+    controller.abort(abortReason);
+    releaseSecond.resolve();
+
+    await expect(linking).rejects.toBe(abortReason);
+  });
 });
 
 describe('linker — node_modules/.bin launcher shims', () => {
@@ -139,5 +213,47 @@ describe('linker — node_modules/.bin launcher shims', () => {
         pkg('liar', { 'package.json': '{"name":"liar"}' }, 'node_modules/liar', 'bin/ghost.js'),
       ]),
     ).rejects.toThrow(/ghost\.js/);
+  });
+
+  it('[fault: torn-state] does not write a bin shim after cancellation during target read', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const readStarted = deferred<void>();
+    const releaseRead = deferred<void>();
+    const readFile = vfs.readFile.bind(vfs);
+    vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+      if (path.endsWith('/bin/cli.js')) {
+        readStarted.resolve();
+        await releaseRead.promise;
+      }
+      return readFile(path);
+    });
+    const controller = new AbortController();
+    const abortReason = new Error('cancel bin link');
+    const linking = linkInstallTree(
+      vfs,
+      '/proj',
+      [
+        pkg(
+          'cli',
+          {
+            'package.json': '{"name":"cli"}',
+            'bin/cli.js': '#!/usr/bin/env node\n',
+          },
+          'node_modules/cli',
+          'bin/cli.js',
+        ),
+      ],
+      () => {
+        if (controller.signal.aborted) throw controller.signal.reason;
+      },
+    );
+
+    await readStarted.promise;
+    controller.abort(abortReason);
+    releaseRead.resolve();
+
+    await expect(linking).rejects.toBe(abortReason);
+    await expect(vfs.exists('/proj/node_modules/.bin/cli')).resolves.toBe(false);
   });
 });

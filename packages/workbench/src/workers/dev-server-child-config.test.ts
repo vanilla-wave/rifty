@@ -28,7 +28,6 @@ const NODE_WORKER_RUNTIME: NodeWorkerRuntimeConfig = {
   kernelWorkerUrl: 'https://consumer.test/kernel.js',
   nodeEntryWorkerUrl: 'https://consumer.test/node.js',
   sqliteWasmUrl: 'https://consumer.test/sqlite.wasm',
-  esbuildWasmUrl: 'https://consumer.test/esbuild.wasm',
 };
 
 const TERMINAL = {

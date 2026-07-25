@@ -26,7 +26,6 @@ export interface ViteCliPreparation {
   readonly root: string;
   readonly mode: ViteCliMode;
   readonly executedBinPath: string;
-  readonly esbuildWasmUrl: string;
 }
 
 /** Derive one complete Vite preparation from the executed entry + real argv. */
@@ -34,7 +33,6 @@ export function viteCliPreparationFromArgs(options: {
   readonly root: string;
   readonly args: readonly string[];
   readonly executedBinPath: string;
-  readonly esbuildWasmUrl: string;
 }): ViteCliPreparation | null {
   const binPath = normalizePath(options.executedBinPath);
   const nodeModules = binPath.endsWith(VITE_BIN_SUFFIX)
@@ -46,7 +44,6 @@ export function viteCliPreparationFromArgs(options: {
         root: options.root,
         mode: viteCliMode(options.args),
         executedBinPath: options.executedBinPath,
-        esbuildWasmUrl: options.esbuildWasmUrl,
       };
 }
 
@@ -158,9 +155,7 @@ export async function prepareViteCli(options: ViteCliPreparation): Promise<void>
   const fs = syncMirror();
   await prepareViteEsbuildRuntime({
     fs,
-    cwd: options.root,
     packageRoot,
-    esbuildWasmUrl: options.esbuildWasmUrl,
   });
 }
 

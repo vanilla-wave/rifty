@@ -9,7 +9,6 @@ import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/inte
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installStampPath } from '../glue/install-stamp.ts';
 import {
-  OperationIdReuseError,
   type OwnerVfsSnapshot,
   type OwnerVfsSnapshotEntry,
   VfsVersionConflictError,
@@ -424,7 +423,7 @@ describe.each(backends)('%s owner VFS revision authority', (_name, makeFs) => {
     expect(ack.versions[1]?.version).toBe(version(authority, '/target.txt'));
   });
 
-  it('ACKs an identical operation idempotently and rejects divergent id reuse loudly', () => {
+  it('retains no operation replay ledger and rejects every late duplicate by CAS', () => {
     const authority = make();
     const request = {
       kind: 'write' as const,
@@ -433,15 +432,16 @@ describe.each(backends)('%s owner VFS revision authority', (_name, makeFs) => {
       data: encoder.encode('one'),
       expectedVersion: null,
     };
-    const first = authority.applyHostCommit(request);
+    authority.applyHostCommit(request);
     const revision = authority.treeRevision;
 
-    const replay = authority.applyHostCommit({ ...request, data: request.data.slice() });
-    expect(replay).toEqual(first);
+    expect(() => authority.applyHostCommit({ ...request, data: request.data.slice() })).toThrow(
+      VfsVersionConflictError,
+    );
     expect(authority.treeRevision).toBe(revision);
 
     expect(() => authority.applyHostCommit({ ...request, data: encoder.encode('two') })).toThrow(
-      OperationIdReuseError,
+      VfsVersionConflictError,
     );
     expect(authority.treeRevision).toBe(revision);
     expect(authority.readFileBytesSync('/value.txt')).toEqual(encoder.encode('one'));
@@ -543,7 +543,7 @@ describe('owner VFS applied mutation journal', () => {
     }
   });
 
-  it('records exact post-apply rename/remove facts and no additional fact for no-op or replay', () => {
+  it('records exact post-apply rename/remove facts and no additional fact for no-op or stale duplicate', () => {
     const fs = new MemoryFsSync();
     fs.mkdirSync('/source', { recursive: false });
     fs.writeFileSync('/source/nested.txt', encoder.encode('moved'));
@@ -596,7 +596,7 @@ describe('owner VFS applied mutation journal', () => {
         expectedSourceVersion: replayVersion,
         expectedTargetVersion: null,
       };
-      const first = authority.applyHostCommit(request);
+      authority.applyHostCommit(request);
       expect(cursor.peek()).toEqual([
         {
           ownerEpoch: 'applied-owner',
@@ -612,7 +612,7 @@ describe('owner VFS applied mutation journal', () => {
       ]);
       cursor.acknowledge(3);
 
-      expect(authority.applyHostCommit(request)).toEqual(first);
+      expect(() => authority.applyHostCommit(request)).toThrow(VfsVersionConflictError);
       expect(authority.treeRevision).toBe(3);
       expect(cursor.peek()).toEqual([]);
     } finally {

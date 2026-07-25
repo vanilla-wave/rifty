@@ -472,7 +472,7 @@ export function isProductionTypeScript(filePath) {
   const file = normalized(filePath);
   return (
     /\.[cm]?[jt]sx?$/.test(file) &&
-    !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file) &&
+    !/\.(?:test|spec)(?:-fixture)?\.[cm]?[jt]sx?$/.test(file) &&
     !file.endsWith(AUTHORITY)
   );
 }

@@ -71,6 +71,7 @@ const TASKS = [
   // running it inside the gate only mutates the tree when there IS drift.
   'check:compat-drift',
   'check:esbuild-runtime-drift',
+  'check:shadow-catalog-drift',
   'check:install-artifact-drift',
   'check:snapshot-artifact-drift',
   'check:publish-config-drift',
@@ -79,6 +80,9 @@ const TASKS = [
   'check:contract-drift',
   'check:budget',
   'check:install-stamp-writers',
+  'check:runtime-adapter-boundary',
+  'check:esbuild-legacy-retirement',
+  'check:sync-sha256-cores',
   'backlog:check',
   'refs:check',
   'test:run',

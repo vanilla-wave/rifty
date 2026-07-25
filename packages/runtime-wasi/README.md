@@ -1,6 +1,11 @@
 # @riftydev/runtime-wasi
 
-WASI preview1 shim. Lets us run WASI binaries (esbuild.wasm, swc.wasm, sqlite, hello.wasm) inside the runtime.
+WASI preview1 shim. Runs preview1 guests such as exact package-sourced
+`@esbuild/wasi-preview1`, sqlite, and hello-world modules.
+
+Product esbuild uses the registry-owned `esbuild-wasm` adapter (ADR-0316);
+preview1 esbuild is an isolated real-tool conformance guest, not a bundled
+asset or Workbench binding.
 
 ## Surface
 

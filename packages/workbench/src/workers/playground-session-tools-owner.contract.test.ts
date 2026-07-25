@@ -11,7 +11,7 @@ import type {
   PlaygroundSessionToolResult,
 } from '../workbench/internal/playground-session-tools-transport.ts';
 import type { OwnerProjectVfsFrame } from '../workbench/project-vfs-protocol.ts';
-import { createOwnerPackageState } from './owner-package-state.ts';
+import { type OwnerPackageConfig, createOwnerPackageState } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import { createOwnerPlaygroundSessionTools } from './playground-session-tools-owner.ts';
 import { DurableOwnerFs } from './test-fixtures/durable-owner-fs.ts';
@@ -24,6 +24,21 @@ const ARCHIVE_TRANSACTION_PHASE = `${ARCHIVE_TRANSACTION_ROOT}/phase`;
 const SOURCE = `${PROJECT_ROOT}/src/main.ts`;
 const STAGED_DELETE = `${PROJECT_ROOT}/staged-delete.txt`;
 const PACKAGE_JSON = '{"name":"project-a","version":"1.0.0"}\n';
+const PACKAGE_CONFIG: OwnerPackageConfig = Object.freeze({
+  cfg: Object.freeze({
+    runtime: 'node-cli',
+    root: PROJECT_ROOT,
+    entryPath: SOURCE,
+    packageName: 'project-a',
+    packageVersion: '1.0.0',
+    installDeps: Object.freeze({}),
+    packageJson: PACKAGE_JSON,
+    seedFiles: Object.freeze({}),
+  }),
+  templateId: 'playground-session-tools-owner-contract',
+  slug: 'project-a',
+  fromScratch: true,
+});
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 const COMMIT_IDENTITY: GitIdentity = Object.freeze({
@@ -51,6 +66,30 @@ function archive(files: Readonly<Record<string, string>>): string {
       encoding: 'base64',
       content: btoa(String.fromCharCode(...encoder.encode(content))),
     })),
+  });
+}
+
+function createActivePackageState(
+  owner: ReturnType<typeof createOwnerVfsAuthorityComposition>,
+  vfs: SyncMirrorVfs,
+): ReturnType<typeof createOwnerPackageState> {
+  return createOwnerPackageState({
+    // Session tools are composed only after production materialization has
+    // activated the project. Keep every fixture on that same package authority.
+    initial: PACKAGE_CONFIG,
+    vfs,
+    fsSync: owner.authority,
+    installStampClaims: owner.installStampClaims,
+    flush: () => owner.authority.flush(),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry: new RegistryClient({
+      baseUrl: 'https://registry.invalid/',
+      fetch: async () => new Response('', { status: 599 }),
+    }),
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
   });
 }
 
@@ -91,21 +130,7 @@ describe('owner-resident Playground session tools', () => {
     write(owner.authority, ARCHIVE_TRANSACTION_PHASE, 'promoting\n');
     await owner.authority.flush();
 
-    const packages = createOwnerPackageState({
-      vfs,
-      fsSync: owner.authority,
-      installStampClaims: owner.installStampClaims,
-      flush: () => owner.authority.flush(),
-      nodeWorkerRuntimeEnv: {},
-      log: () => {},
-      registry: new RegistryClient({
-        baseUrl: 'https://registry.invalid/',
-        fetch: async () => new Response('', { status: 599 }),
-      }),
-      resolverUrl: () => undefined,
-      resolverBundleBaseUrl: () => undefined,
-      resolverPin: () => undefined,
-    });
+    const packages = createActivePackageState(owner, vfs);
     const vfsFailures: Error[] = [];
     const projectVfs = createWorkbenchProjectVfs({
       projectRoot: PROJECT_ROOT,
@@ -183,21 +208,7 @@ describe('owner-resident Playground session tools', () => {
       },
     });
 
-    const packages = createOwnerPackageState({
-      vfs,
-      fsSync: owner.authority,
-      installStampClaims: owner.installStampClaims,
-      flush: () => owner.authority.flush(),
-      nodeWorkerRuntimeEnv: {},
-      log: () => {},
-      registry: new RegistryClient({
-        baseUrl: 'https://registry.invalid/',
-        fetch: async () => new Response('', { status: 599 }),
-      }),
-      resolverUrl: () => undefined,
-      resolverBundleBaseUrl: () => undefined,
-      resolverPin: () => undefined,
-    });
+    const packages = createActivePackageState(owner, vfs);
     const vfsFrames: OwnerProjectVfsFrame[] = [];
     const vfsFailures: Error[] = [];
     const projectVfs = createWorkbenchProjectVfs({
@@ -784,21 +795,7 @@ describe('owner-resident Playground session tools', () => {
       committer: COMMIT_IDENTITY,
     });
 
-    const packages = createOwnerPackageState({
-      vfs,
-      fsSync: owner.authority,
-      installStampClaims: owner.installStampClaims,
-      flush: () => owner.authority.flush(),
-      nodeWorkerRuntimeEnv: {},
-      log: () => {},
-      registry: new RegistryClient({
-        baseUrl: 'https://registry.invalid/',
-        fetch: async () => new Response('', { status: 599 }),
-      }),
-      resolverUrl: () => undefined,
-      resolverBundleBaseUrl: () => undefined,
-      resolverPin: () => undefined,
-    });
+    const packages = createActivePackageState(owner, vfs);
     const vfsFailures: Error[] = [];
     const projectVfs = createWorkbenchProjectVfs({
       projectRoot: PROJECT_ROOT,
@@ -925,21 +922,7 @@ describe('owner-resident Playground session tools', () => {
     });
     await owner.authority.flush();
 
-    const packages = createOwnerPackageState({
-      vfs,
-      fsSync: owner.authority,
-      installStampClaims: owner.installStampClaims,
-      flush: () => owner.authority.flush(),
-      nodeWorkerRuntimeEnv: {},
-      log: () => {},
-      registry: new RegistryClient({
-        baseUrl: 'https://registry.invalid/',
-        fetch: async () => new Response('', { status: 599 }),
-      }),
-      resolverUrl: () => undefined,
-      resolverBundleBaseUrl: () => undefined,
-      resolverPin: () => undefined,
-    });
+    const packages = createActivePackageState(owner, vfs);
     const timeline: string[] = [];
     const vfsFrames: OwnerProjectVfsFrame[] = [];
     const fatalFailures: Error[] = [];

@@ -32,7 +32,6 @@ const BOOT_CONFIG = Object.freeze({
     }),
     wasm: Object.freeze({
       sqlite: 'https://workbench.invalid/sqlite.wasm',
-      esbuild: 'https://workbench.invalid/esbuild.wasm',
     }),
     previewProbeTimeoutMs: 3_000,
   }),
@@ -552,16 +551,6 @@ describe('Workbench owner protocol', () => {
           expectedTargetVersion: 'target-v1',
         },
       },
-      { type: 'rifty:owner-vfs-commit-received', terminal },
-      { type: 'rifty:owner-vfs-commit-received', terminal: nack },
-      { type: 'rifty:owner-vfs-commit-received', terminal: appliedNack },
-      { type: 'rifty:owner-vfs-commit-received', terminal: conflictNack },
-      { type: 'rifty:owner-vfs-commit-received', terminal: reuseNack },
-      { type: 'rifty:owner-vfs-commit-cleanup', terminal },
-      { type: 'rifty:owner-vfs-commit-cleanup', terminal: nack },
-      { type: 'rifty:owner-vfs-commit-cleanup', terminal: appliedNack },
-      { type: 'rifty:owner-vfs-commit-cleanup', terminal: conflictNack },
-      { type: 'rifty:owner-vfs-commit-cleanup', terminal: reuseNack },
       {
         type: 'rifty:owner-vfs-durability',
         barrierId: 'barrier-1',
@@ -586,12 +575,6 @@ describe('Workbench owner protocol', () => {
       appliedNack,
       conflictNack,
       reuseNack,
-      { type: 'rifty:owner-vfs-commit-released', terminal },
-      { type: 'rifty:owner-vfs-commit-released', terminal: nack },
-      { type: 'rifty:owner-vfs-commit-released', terminal: appliedNack },
-      { type: 'rifty:owner-vfs-commit-cleaned', terminal },
-      { type: 'rifty:owner-vfs-commit-cleaned', terminal: nack },
-      { type: 'rifty:owner-vfs-commit-cleaned', terminal: appliedNack },
       {
         type: 'rifty:owner-vfs-durability-ack',
         barrierId: 'barrier-1',
@@ -698,28 +681,6 @@ describe('Workbench owner protocol', () => {
           projectToken: TOKEN,
           frame: { ...frame, request: { ...frame.request, extra: true } },
         }),
-      ).toThrow(TypeError);
-    }
-
-    const nestedPageExtras = [
-      {
-        type: 'rifty:owner-vfs-commit-received',
-        terminal: { ...terminal, ack: { ...terminal.ack, extra: true } },
-      },
-      {
-        type: 'rifty:owner-vfs-commit-cleanup',
-        terminal: {
-          ...terminal,
-          ack: {
-            ...terminal.ack,
-            versions: [{ ...terminal.ack.versions[0], extra: true }],
-          },
-        },
-      },
-    ] as const;
-    for (const frame of nestedPageExtras) {
-      expect(() =>
-        pageMessage({ type: 'workbench:project-vfs', projectToken: TOKEN, frame }),
       ).toThrow(TypeError);
     }
 

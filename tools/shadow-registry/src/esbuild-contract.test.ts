@@ -20,7 +20,7 @@ import {
 } from './esbuild-contract-probe.ts';
 import fixture from './fixtures/esbuild-0.28.0-contract.json';
 import policyFixture from './fixtures/esbuild-0.28.0-guest-policy-prerequisites.json';
-import { internalsShims } from './index.ts';
+import { builtinShadowSubstitutionCatalog } from './internal/index.ts';
 
 const expected = fixture as unknown as EsbuildContractTranscript;
 const expectedPolicy = policyFixture as unknown as EsbuildGuestPolicyTranscript;
@@ -34,18 +34,20 @@ interface NegativeTextPluginBuild {
   ): void;
 }
 
-async function loadCurrentShimPackage(
+async function loadCurrentSyntheticPackage(
   runtime: EsbuildContractApi,
 ): Promise<EsbuildContractModules> {
-  const shim = internalsShims['@esbuild/wasi-preview1'];
-  if (!shim) throw new Error('esbuild contract: current shim package is missing');
-  const container = mkdtempSync(join(tmpdir(), '.rifty-esbuild-overlay-contract-'));
+  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+    (candidate) => candidate.id === 'rifty.shadow-substitution.esbuild.v1',
+  );
+  if (!recipe) throw new Error('esbuild contract: synthetic recipe is missing');
+  const container = mkdtempSync(join(tmpdir(), '.rifty-esbuild-synthetic-contract-'));
   try {
     const packageRoot = `${container}/node_modules/esbuild`;
-    for (const [path, contents] of Object.entries(shim.files)) {
-      const target = `${packageRoot}/${path}`;
+    for (const file of recipe.materialization.files) {
+      const target = `${packageRoot}/${file.path}`;
       mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, contents);
+      writeFileSync(target, file.content);
     }
     const cjsConsumer = `${container}/contract-consumer.cjs`;
     const esmConsumer = `${container}/contract-consumer.mjs`;
@@ -119,7 +121,7 @@ describe('current guest esbuild vs native 0.28.0 Vite contract', () => {
     try {
       const { fs, workspace } = createMemoryContractWorkspace();
       runtime = await startGeneratedRuntime(fs, workspace.cwd);
-      const modules = await loadCurrentShimPackage(runtime);
+      const modules = await loadCurrentSyntheticPackage(runtime);
       actual = await probeEsbuildContract(modules, workspace);
       actualPolicy = await probeEsbuildGuestPolicy(modules, workspace);
     } finally {

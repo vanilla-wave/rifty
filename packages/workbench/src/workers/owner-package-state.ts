@@ -1,5 +1,14 @@
 import { NotImplementedError } from '@riftydev/io';
+import type { KernelEntryCapabilityPorts } from '@riftydev/kernel';
 import type { RegistryClient } from '@riftydev/npm-client';
+import {
+  type PackageTreeShadowAssetBoundary,
+  SHADOW_ASSET_PORT_CAPABILITY,
+  type ShadowAssetPortServer,
+  type ShadowAssetReadySet,
+  planShadowSubstitutionsFromLockfile,
+  shadowAssetPlanForInstallResult,
+} from '@riftydev/npm-client/internal';
 import type { CommandContext, ShellCommand, ShellCommandResult } from '@riftydev/shell';
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import { normalizePath } from '@riftydev/vfs';
@@ -49,6 +58,7 @@ import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
   type AcquisitionProvenance,
   type PackageAcquisitionProject,
+  type PackageFifoReservation,
   createPackageAcquisitionAuthority,
 } from './package-acquisition-authority.ts';
 import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
@@ -85,6 +95,8 @@ export interface OwnerPackageStateOptions {
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   readonly log: (line: string) => void;
   readonly registry: RegistryClient;
+  /** Origin-exclusive ready-asset manager, constructed under the Workbench Web Lock. */
+  readonly shadowAssets?: PackageTreeShadowAssetBoundary;
   /** Test seam at the external registry/install boundary. */
   readonly install?: InstallFn;
   readonly resolverUrl: () => string | undefined;
@@ -101,6 +113,8 @@ export interface OwnerPackageState {
   activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
   /** Settle package commands and durability work admitted before this call. */
   quiesce(): Promise<void>;
+  /** Freeze the exact installed-tree shadow facts across synchronous child spawn. */
+  reserveChildAdmission(root: string): Promise<OwnerChildPackageReservation>;
   /** Registers the terminal-facing config and starts its optional prefetch. */
   configure(config: OwnerPackageConfig): void;
   /** Restore an instant config without ever turning boot into an implicit install. */
@@ -115,6 +129,16 @@ export interface OwnerPackageState {
     options?: OwnerNpmCommandOptions,
   ): ShellCommand;
 }
+
+export interface OwnerChildPackageAdmission {
+  readonly root: string;
+  readonly ready: ShadowAssetReadySet | null;
+  readonly capabilityPorts: KernelEntryCapabilityPorts;
+  /** Release the ready-port server after confirmed physical child settlement. */
+  dispose(): void;
+}
+
+export type OwnerChildPackageReservation = PackageFifoReservation<OwnerChildPackageAdmission>;
 
 function configKey(root: string, slug: string): string {
   return `${normalizePath(root)}\0${slug}`;
@@ -153,6 +177,25 @@ function optionalFile(authority: OwnerVfsAuthority, path: string): Uint8Array | 
 function equalOptionalBytes(left: Uint8Array | null, right: Uint8Array | null): boolean {
   if (left === null || right === null) return left === right;
   return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
+}
+
+function packageLockValue(authority: OwnerVfsAuthority, root: string): unknown {
+  const path = normalizePath(`${root}/package-lock.json`);
+  const bytes = optionalFile(authority, path);
+  if (bytes === null) {
+    return Object.freeze({ lockfileVersion: 3, packages: Object.freeze({}) });
+  }
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new Error(`package lock is not UTF-8 at ${path}`, { cause: error });
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new Error(`package lock is not valid JSON at ${path}`, { cause: error });
+  }
 }
 
 export function createOwnerPackageState(options: OwnerPackageStateOptions): OwnerPackageState {
@@ -237,7 +280,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         : undefined;
   };
 
-  const baseNpmDeps: NpmShellCommandDeps = {
+  const baseNpmDeps: Omit<NpmShellCommandDeps, 'packageAcquisitionAuthority'> = {
     vfs: options.vfs,
     registry,
     ...(options.install ? { install: options.install } : {}),
@@ -271,6 +314,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
 
   const packages = createPackageAcquisitionAuthority({
     stamps,
+    ...(options.shadowAssets === undefined ? {} : { shadowAssets: options.shadowAssets }),
     stampTransition: { flush: options.flush },
     resolveTreeGuards: (root, knownProjects) =>
       discoverPackageAcquisitionGuardTransitions(options.fsSync, knownProjects, root),
@@ -281,15 +325,17 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         );
       }
     },
-    captureDeferredTerminalReuse: () => {
-      if (activeProject === null) return false;
-      const key = configKey(activeProject.root, activeProject.slug);
-      const phase = firstMaterializationPhases.get(key);
-      if (phase === 'preparing' || phase === 'consuming') return true;
-      if (phase === 'deferred') firstMaterializationPhases.set(key, 'consuming');
-      return false;
-    },
     adapter: {
+      readTrustedPackageLock: async (project) => packageLockValue(options.fsSync, project.root),
+      attestEmptyPackageTree: async ({ project, packageJsonText }) => {
+        const root = normalizePath(project.root);
+        return (
+          equalOptionalBytes(
+            optionalFile(options.fsSync, `${root}/package.json`),
+            enc.encode(packageJsonText),
+          ) && !options.fsSync.existsSync(`${root}/node_modules`)
+        );
+      },
       prepareEnsure: async (command, execution) => {
         if (!command.replaceTreeOnMiss) return;
         if (execution.phase === 'snapshot-rejected') {
@@ -313,9 +359,14 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         try {
           const prepared = prepareDepSnapshotRestore(options.fsSync, project.root, payload);
           const config = configFor(project);
+          const lockfile =
+            payload.lockfile.length === 0
+              ? { lockfileVersion: 3, packages: {} }
+              : (JSON.parse(payload.lockfile) as unknown);
           return {
             status: 'ready',
             packages: payload.packages,
+            shadowPlan: planShadowSubstitutionsFromLockfile(lockfile),
             apply: async () => {
               prepared.apply();
               seedTemplateNodeModulesFiles(
@@ -341,9 +392,14 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         );
         if (parsed.status === 'rejected') throw new Error(parsed.message.trimEnd());
         const config = configs.get(configKey(request.project.root, request.project.slug));
+        const operationBase: NpmShellCommandDeps = {
+          ...baseNpmDeps,
+          prepareEmptyInstall: async (ctx) => clearProjectTree(options.fsSync, ctx.cwd),
+          packageAcquisitionAuthority: packages,
+        };
         const operationDeps: NpmShellCommandDeps = config
           ? {
-              ...baseNpmDeps,
+              ...operationBase,
               prepareInstall: async (ctx, info) => {
                 if (!config.fromScratch || !info.fullInstall) return;
                 if (normalizePath(ctx.cwd) !== normalizePath(request.project.root)) return;
@@ -364,7 +420,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                   ? installPrefetch
                   : undefined,
             }
-          : baseNpmDeps;
+          : operationBase;
         const sink = {
           write: (chunk: string | Uint8Array): void => options.log(decodeChunk(chunk)),
         };
@@ -405,7 +461,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             operationDeps,
             execution,
           );
-          if (installed.status !== 'noop') {
+          if (!('status' in installed) || installed.packageJsonText !== null) {
             await finalizePackageInstallFiles({
               root: request.project.root,
               ...(config
@@ -423,7 +479,11 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           if (firstMaterializationKey !== null) {
             firstMaterializationPhases.delete(firstMaterializationKey);
           }
-          return installed;
+          if ('status' in installed) return installed;
+          return {
+            ...installed,
+            shadowPlan: shadowAssetPlanForInstallResult(installed.result),
+          };
         } catch (error) {
           if (firstMaterializationKey !== null) {
             firstMaterializationPhases.set(firstMaterializationKey, 'deferred');
@@ -448,6 +508,51 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       },
     },
   });
+
+  const reserveChildAdmission = async (root: string): Promise<OwnerChildPackageReservation> => {
+    const canonicalRoot = normalizePath(root);
+    const reservation = await packages.reserveChildAdmission(canonicalRoot);
+    const admitted = reservation.snapshot;
+    if (admitted.ready === null) {
+      const snapshot: OwnerChildPackageAdmission = Object.freeze({
+        root: admitted.root,
+        ready: null,
+        capabilityPorts: Object.freeze({}),
+        dispose: () => {},
+      });
+      return Object.freeze({ ...reservation, snapshot });
+    }
+    const boundary = options.shadowAssets;
+    if (boundary === undefined) {
+      reservation.abortBeforeSpawn(new NotImplementedError('npm-client.packageTree.shadowAssets'));
+      throw new NotImplementedError('npm-client.packageTree.shadowAssets');
+    }
+    const channel = new MessageChannel();
+    let server: ShadowAssetPortServer;
+    try {
+      server = boundary.serve(admitted.ready, channel.port1);
+    } catch (error) {
+      channel.port1.close();
+      channel.port2.close();
+      reservation.abortBeforeSpawn(error);
+      throw error;
+    }
+    let disposed = false;
+    const snapshot: OwnerChildPackageAdmission = Object.freeze({
+      root: admitted.root,
+      ready: admitted.ready,
+      capabilityPorts: Object.freeze({
+        [SHADOW_ASSET_PORT_CAPABILITY]: channel.port2,
+      }),
+      dispose() {
+        if (disposed) return;
+        disposed = true;
+        server.dispose();
+        channel.port2.close();
+      },
+    });
+    return Object.freeze({ ...reservation, snapshot });
+  };
 
   const mutations = createPackageMutationExecutor({
     packages,
@@ -486,6 +591,17 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     primePrefetch(config);
   };
 
+  const registerActivation = (
+    config: OwnerPackageConfig,
+  ): { readonly manifestChanged: boolean } => {
+    const previous = configs.get(configKey(config.cfg.root, config.slug));
+    configure(config);
+    return {
+      manifestChanged:
+        previous !== undefined && previous.cfg.packageJson !== config.cfg.packageJson,
+    };
+  };
+
   const restore = async (config: OwnerPackageConfig): Promise<void> => {
     if (!config.cfg.bakedNodeModulesUrl) return;
     const result = await ensureProjectDependencies({
@@ -519,7 +635,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     if (!hasFirstMaterialization(config)) {
       return packages.dispatch({
         type: 'activate-and-ensure',
-        register: () => configure(config),
+        register: () => registerActivation(config),
         from: () => activeProject,
         to: packageProject(config),
         packageJsonText: config.cfg.packageJson,
@@ -532,7 +648,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     firstMaterializationPhases.set(key, 'preparing');
     const prepared = packages.dispatch({
       type: 'prepare-first-materialization',
-      register: () => configure(config),
+      register: () => registerActivation(config),
       from: () => activeProject,
       to: packageProject(config),
       packageJsonText: config.cfg.packageJson,
@@ -617,6 +733,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     mutations,
     activateAndEnsure,
     quiesce: () => packages.quiesce(),
+    reserveChildAdmission,
     configure,
     restore,
     transition,

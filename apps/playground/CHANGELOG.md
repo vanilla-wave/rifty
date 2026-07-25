@@ -2,13 +2,38 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Preview switcher now auto-selects every server on its FIRST appearance
+  regardless of registry position/source (registry orders [dev-server,
+  preview, node], so `npm run dev` inserting before a live node server no
+  longer failed to switch); a hand-picked switcher choice is never displaced
+  while its port stays live (ADR-0155/0173). Component-effect proof lives in
+  `tests/browser-unit/preview-panel-selection.spec.ts`.
+
 ### Changed (Workbench extraction)
 
+- Instant Vite 7 restores still skip `npm install`, but an empty verified
+  runtime CAS now has an explicit two-request esbuild-wasm acquisition contract
+  and loud `ESHADOWASSET/acquire` offline failure; warm CAS and Vite 8 are
+  registry-free (ADR-0320).
+- Baked dependency snapshots re-baked against the live registry absorbed
+  `postcss` 8.5.22 → 8.5.23 (vite's floating `^8.5.6` range) in all three
+  presets; pinning bake inputs is
+  TODO(backlog: playground/baked-snapshot-regeneration).
+- A second rebake re-embedded the narrowed install-artifact identity (doc-only
+  policy edits no longer flip it); zero package or byte changes beyond the
+  identity field.
+
+- Exact Vite 8.0.16 now runs real Rolldown-WASI production build and preview
+  through the installed CLI; browser acceptance executes the hashed bundle in
+  the routed preview iframe while proving the esbuild plan stays empty
+  (ADR-0317). HMR remains disabled.
 - Playground now consumes the sealed `@riftydev/workbench` root, companion, and
   five worker entries; package-owned implementation and tests moved unchanged.
-- Host-owned esbuild WASM configuration remains explicit for Vite 7, while the
-  gated execSync fixture owns its lower-level worker setup and proves
-  cross-bundle process/Buffer identity.
+- Playground no longer imports or supplies a host esbuild WASM URL. Exact
+  esbuild runtime bytes come from the admitted builtin registry recipe for
+  direct Node and Vite 7; Vite 8 performs no esbuild fetch (ADR-0311).
 
 ### Changed (tab-independent workspace admission, ADR-0293)
 
@@ -60,6 +85,9 @@
   CLI package config carries no invented preview port.
 
 ### Fixed (finite Node Workbench review)
+
+- Auto-select a newly appended server or inserted production preview without
+  letting an inserted dev server steal a still-live Node selection.
 
 - Persistence health now reports only owner-completed flush failures; transport
   rejection and observation timeout keep their exact provenance instead of
@@ -281,9 +309,9 @@
 - Installed Vite 7 CLI commands publish the upstream-derived esbuild CJS outer
   before execution; Vite 8/Rolldown skips it. The retired WASI transform global
   and wrapper are removed.
-- One bounded static-asset reader owns esbuild WASM and dependency snapshots:
-  header/body no-progress and byte overflow fail finitely; esbuild publishes no
-  slot, while a broken snapshot falls back to normal install.
+- Registry admission owns exact esbuild runtime acquisition and publishes its
+  one-shot capability. The bounded host static-asset reader now owns only
+  dependency snapshots; a broken snapshot still falls back to normal install.
 - Browser-unit runs force a cold host optimizer; Worker/child-only `sql.js` and
   `typescript` prebundle before tests, preventing optimizer full reloads from
   dropping owner state or hiding fresh-CI failures behind a warm local cache.
@@ -1097,11 +1125,6 @@
   event wake the warm-up probe/commit checks immediately (poll intervals remain
   as fallback; commit is now checked before the first sleep). Logic extracted to
   `preview-warmup.ts` with deterministic unit tests.
-- esbuild WASI transform bridge compiles `esbuild.wasm` once per realm and
-  reuses the `WebAssembly.Module` across transforms. Measured (V8, single TS
-  transform): ~38-99 ms/call from bytes → ~7-10 ms/call from the shared Module;
-  compounds across TS/JSX module graphs and HMR re-transforms (a small preset's
-  boot has too few transforms for the win to clear session noise).
 - Byte-honest SCM diff blob selection moved out of `App` into a tested
   `scm-diff-plan` module (`scm-diff-plan.test.ts`) so the blob-vs-blob choice for
   every status code is covered behaviorally, not by source-text guards.
@@ -1366,9 +1389,9 @@
   TS-LSP child bootstrap now keeps the package endpoint in the production bundle,
   and provider calls wait for project init/replay before asking for diagnostics
   or definitions.
-- **Vite 7 production builds accept esbuild supported flags.** The build bridge
-  now forwards Vite's `supported.dynamic-import` option to the real esbuild-WASI
-  transform instead of loud-rejecting the build.
+- **Vite 7 production builds accept esbuild supported flags.** The admitted
+  upstream esbuild adapter forwards Vite's `supported.dynamic-import` option
+  instead of loud-rejecting the build.
 - **Honest `vite` command dispatch (ADR-0174).** `vite` is no longer an
   owner-registered curated command: shell resolution reaches
   `node_modules/.bin/vite`, so the installed Vite CLI owns flags, help/version,
@@ -1429,9 +1452,10 @@
 
 ### Documented
 
-- **PR #76 review gaps recorded explicitly.** Added backlog contracts for the
-  playground dev-server synthetic watcher branch and the dev esbuild warning
-  path, with `TODO(backlog:)` seams in the worker code.
+- **PR #76's synthetic-watcher gap remains explicit.** Added its backlog
+  contract and `TODO(backlog:)` seam in the worker code. ADR-0316 retires the
+  former preview1-transform warning path together with the product bridge, so
+  no esbuild warning seam remains for Playground to own.
 
 ### Changed
 
@@ -1588,16 +1612,6 @@
   constant via `createTerminalPersistence(WORKSPACE)`, unchanged by ADR-0165).
 
 ### Fixed
-
-- **TypeScript starter Vite transforms now use real esbuild WASI output.** The
-  playground's `esbuild` overlay used to return pass-through code plus `map: ''`;
-  Vite's `.ts` transform then crashed on `JSON.parse(result.map)` before the
-  `typescript-ls` starter could render. The dev-server child now installs a
-  real `@esbuild/wasi-preview1` transform bridge (via `@riftydev/runtime-wasi`)
-  before importing Vite, and normalizes the inline CLI sourcemap into Vite's JS
-  API `{ code, map }` shape. Unsupported transform options now loud-throw
-  `NotImplementedError('esbuild.transform.<option>')` instead of being silently
-  ignored.
 
 - **TS Monaco workspace edits are now atomic at the editor boundary.** Rename,
   code-action, and completion workspace edits first resolve every target Monaco

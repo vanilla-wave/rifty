@@ -11,6 +11,7 @@ import {
   type SupervisedDevServerHandle,
   createDevServerController,
 } from './dev-server-controller.ts';
+import type { ReserveOwnerChildAdmission } from './owner-child-admission.ts';
 import { type NodeChildHandle, createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
 import {
   createInstalledBinPreviewHooks,
@@ -22,6 +23,19 @@ import { HOST_PREVIEW_ORIGIN, createPreviewRegistry } from './preview-registry.t
 import { createPtyServer } from './pty-server.ts';
 
 const FORGED_PTY_SESSION_ENV = 'RIFTY_INTERNAL_PTY_SID';
+
+const reserveEmptyAdmission: ReserveOwnerChildAdmission = async () =>
+  Object.freeze({
+    snapshot: Object.freeze({
+      capabilityPorts: Object.freeze({}),
+      dispose() {},
+    }),
+    commit() {},
+    abortBeforeSpawn() {},
+    async abortAfterChildSettlement(_error: unknown, exited: Promise<unknown>) {
+      await exited;
+    },
+  });
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -142,8 +156,10 @@ function controllableBinSpawn() {
 function controllableNodeSpawn() {
   let onMessage: (message: unknown) => void = () => {};
   let onExit: (code?: unknown, signal?: unknown) => void = () => {};
+  const control = new MessageChannel();
   const handle = {
     kind: 'worker',
+    ports: { ipc: control.port1 },
     stdout: () => ({ on: () => {} }),
     stderr: () => ({ on: () => {} }),
     stdin: () => {
@@ -160,7 +176,11 @@ function controllableNodeSpawn() {
   return {
     spawn: vi.fn(() => handle),
     emitMessage: (message: unknown) => onMessage(message),
-    emitExit: (code: number | null, signal: string | null = null) => onExit(code, signal),
+    emitExit: (code: number | null, signal: string | null = null) => {
+      onExit(code, signal);
+      control.port1.close();
+      control.port2.close();
+    },
   };
 }
 
@@ -410,6 +430,58 @@ describe('owner preview producer admission capture', () => {
     await second.release();
   });
 
+  it('classifies vite preview from trusted launch args and fences a superseded late exit', () => {
+    const preview = previewHarness();
+    let binRunSeq = 0;
+    const hooks = createInstalledBinPreviewHooks({
+      captureOrigin: createPreviewOriginCapture(vi.fn()),
+      allocateSid: () => `bin-${++binRunSeq}`,
+      previews: preview.previews,
+    });
+    const ctx = producerContext();
+    const request = (args: readonly string[]): BinSpawnRequest => ({
+      shimPath: '/workspace/node_modules/.bin/vite',
+      args,
+      env: {},
+      cwd: ctx.cwd,
+      isTTY: false,
+    });
+    const first = request(['--config', 'vite.custom.ts', 'preview']);
+    const second = request(['preview', '--host', '127.0.0.1']);
+
+    hooks.onStart?.(first, ctx);
+    hooks.onMessage?.(
+      first,
+      { type: 'rifty:node-listening', ports: [4173], previewScope: 'scope-first' },
+      ctx,
+    );
+    expect(preview.latest().ports).toEqual([
+      expect.objectContaining({
+        port: 4173,
+        source: 'preview',
+        previewScope: 'scope-first',
+      }),
+    ]);
+
+    hooks.onStart?.(second, ctx);
+    hooks.onMessage?.(
+      second,
+      { type: 'rifty:node-listening', ports: [4174], previewScope: 'scope-second' },
+      ctx,
+    );
+    hooks.onExit?.(first, ctx);
+    expect(preview.latest().ports).toEqual([
+      expect.objectContaining({
+        port: 4174,
+        source: 'preview',
+        previewScope: 'scope-second',
+      }),
+    ]);
+
+    hooks.onExit?.(second, ctx);
+    expect(preview.latest().ports).toEqual([]);
+  });
+
   it('keeps a node-child late listening message on launch run A after B admission', async () => {
     const actor = actorHarness();
     const first = actor.start('run-a', 0);
@@ -418,6 +490,7 @@ describe('owner preview producer admission capture', () => {
     const executor = createOwnerChildNodeExecutor(
       'node-entry',
       { RIFTY_KERNEL_WORKER_URL: 'kernel-entry' },
+      reserveEmptyAdmission,
       child.spawn,
     );
     const ctx = producerContext();
@@ -433,6 +506,7 @@ describe('owner preview producer admission capture', () => {
       previewScope: 'scope-node-a',
     });
     const running = executor('/workspace/server.js', [], ctx, hooks);
+    await vi.waitFor(() => expect(child.spawn).toHaveBeenCalledOnce());
 
     const second = await replaceActorRun(actor, first);
     child.emitMessage({ type: 'rifty:node-listening', ports: [3000] });

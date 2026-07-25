@@ -19,6 +19,16 @@
 
 ### Fixed
 
+- **TS transform provenance matches ADR-0316.** `transformSource` remains a
+  provider-neutral async injection seam: Node parity supplies exact host
+  `esbuild@0.28.0`, while Workbench product esbuild is proved separately through
+  the registry-owned browser adapter. runtime-js does not invoke a bundled
+  preview1 guest or own product esbuild bytes.
+
+- Caught CJS `MODULE_NOT_FOUND` errors now expose Node's `Error` name while
+  retaining `code`, message, and `requireStack`; internal directed loader errors
+  keep the `ModuleLoadError` name.
+
 - **CJS specifiers stay path-only.** `require()`/`require.resolve()` never URL-
   dispatch a string: URL-looking names use the ordinary alias, `baseUrl`, file,
   and package pipeline. They can load a matching filename/package; an ordinary
@@ -424,7 +434,7 @@
   relative `./dep.js` resolution.
 
 - **TS transform and ESM AST caches validate source freshness.** A changed `.ts`
-  file at the same module id now re-runs both the esbuild strip hook and the AST
+  file at the same module id now re-runs both the injected transform hook and the AST
   ESM transform even if a caller only invalidated the executed module record.
   This closes the stale-transform/stale-AST cache backlog items without dropping
   the fast path for byte-identical reloads.
@@ -1553,11 +1563,12 @@
   (`{ source, id, loader: 'ts'|'tsx'|'jsx', workspace } => Promise<string>`,
   the load-bearing contract) invoked for every `.ts`/`.tsx`/`.jsx` module on the
   ESM execute path BEFORE the AST rewriter parses it; `workspace` (defaults to
-  `cwd`) is the esbuild guest cwd/preopen threaded into each call. The loader
-  gains zero new package import edges — the caller injects the closure (the same
-  DI seam the WASI esbuild binding uses for `runWasi`). When no hook is
-  configured the source passes through unchanged (no behaviour change for
-  plain-JS loaders). Unit: `loader-transform.test.ts`.
+  `cwd`) is the caller-defined transform root threaded into each call. The
+  loader gains zero new package import edges — the caller injects the closure.
+  Node parity now supplies exact host `esbuild@0.28.0`; product esbuild uses the
+  separate registry-owned browser adapter (ADR-0316). When no hook is configured
+  the source passes through unchanged (no behaviour change for plain-JS
+  loaders). Unit: `loader-transform.test.ts`.
 
 - **`.ts`/`.tsx`/`.jsx` reached with no `transformSource` now throws a directed
   error on the ESM execute path (ADR-0052, feature-02 T3).** `executeEsm`
@@ -1575,16 +1586,16 @@
   dying with an opaque `SyntaxError: Unexpected token`. It now throws
   `NotImplementedError('module-loader.ts-via-require')` BEFORE touching the
   registry (so repeated `require()` calls throw idempotently rather than the
-  second returning a stale loading record): the esbuild type-strip is async and
-  a synchronous `require()` cannot await it, so `.ts` is only loadable as ESM via
-  `import()` under a `type:module` scope. JSON and plain-JS CJS are unchanged.
-  Registered in `docs/compat/modules.md` as not-supported. Unit:
+  second returning a stale loading record): the public source-transform hook is
+  async and a synchronous `require()` cannot await it, so `.ts` is only loadable
+  as ESM via `import()` under a `type:module` scope. JSON and plain-JS CJS are
+  unchanged. Registered in `docs/compat/modules.md` as not-supported. Unit:
   `loader-transform.test.ts`.
 
 - **`createModuleLoader` now caches stripped TS output per resolved id, dropped
   on `invalidate(id)` (Q-2026-05-30-202, feature-02 T5).** A loader-internal
-  `Map<id,string>` wraps the injected `transformSource` so the WASI esbuild
-  strip runs at most once per `.ts`/`.tsx`/`.jsx` id across the import graph and
+  `Map<id,string>` wraps the injected `transformSource` so the source transform
+  runs at most once per `.ts`/`.tsx`/`.jsx` id across the import graph and
   across repeated loads within one loader instance. The cache is populated
   lazily on first hook call, read before re-invoking it, and kept coherent with
   the executed-module cache: `invalidate(id)` drops that id's stripped output,
@@ -1596,16 +1607,17 @@
 - **GOLD multi-file `.ts` parity case closes P0 (ADR-0052, feature-02 T7).** A
   cross-file `.ts` graph (`b.ts` exports a type-only `interface`, an `enum`, and
   a type-annotated `const`; `a.ts` imports the erased type + the value and prints
-  `base + box.n + Color.G` → `43`) runs through the rifty loader's real esbuild
-  WASI `transformSource` hook and is diffed against Node — proving type-stripping,
-  `enum` lowering, and cross-file ESM load order match a full-TS-transform Node
-  reference at the unit-of-language level, independent of opencode VFS contents.
+  `base + box.n + Color.G` → `43`) runs through the rifty loader with exact host
+  `esbuild@0.28.0` injected as `transformSource` and is diffed against Node —
+  proving type-stripping, `enum` lowering, and cross-file ESM load order match a
+  full-TS-transform Node reference at the unit-of-language level, independent of
+  opencode VFS contents.
   This is the P0 acceptance signal ADR-0052 requires.
   `tools/node-parity-runner/cases/modules/ts-graph-cross-file.case.ts`. The
   `ts-esm` parity Node reference is the vendored `tsx` (a FULL TS transform),
   not Node strip-only `--experimental-strip-types` (which throws
-  `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on `enum`) — matching rifty's esbuild full
-  transform (TODO(ADR): Q-2026-05-31-201).
+  `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on `enum`) — matching the injected host
+  esbuild full transform (TODO(ADR): Q-2026-05-31-201).
 
 - **`.ts`/`.tsx` are first-class resolvable + ESM module extensions (ADR-0053).**
   The resolver now adds `.ts`,`.tsx` to `DEFAULT_EXTENSIONS`/`INDEX_FILES` —

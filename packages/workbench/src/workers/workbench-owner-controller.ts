@@ -6,9 +6,9 @@ import {
 import {
   type PageToPlaygroundOwnerMessage,
   type PlaygroundOwnerToPageMessage,
-  type PlaygroundProjectRuntimeDecision,
   inspectPageToPlaygroundOwnerMessage,
   isPageToPlaygroundOwnerMessage,
+  playgroundProjectRuntimeDecision,
 } from '../workbench/internal/playground-owner-protocol.ts';
 import {
   type CapturedPlaygroundUrlContext,
@@ -365,18 +365,6 @@ export function createWorkbenchOwnerController(
     }
   };
 
-  const runtimeDecision = (
-    definition: ReturnType<typeof inspectPlaygroundProjectDefinition>,
-  ): PlaygroundProjectRuntimeDecision => {
-    if (definition.kind === 'vite') {
-      if (definition.port === undefined) {
-        throw new TypeError('Playground Vite definition is missing its owner port');
-      }
-      return Object.freeze({ kind: 'vite', port: definition.port });
-    }
-    return Object.freeze({ kind: definition.kind });
-  };
-
   const performPlaygroundOpen = async (message: PlaygroundOpenMessage): Promise<void> => {
     let opened: Awaited<ReturnType<PlaygroundProjectAuthority['openProject']>> | null = null;
     try {
@@ -455,7 +443,7 @@ export function createWorkbenchOwnerController(
           projectToken: token,
           projectRoot,
           acquisition,
-          runtime: runtimeDecision(definition),
+          runtime: playgroundProjectRuntimeDecision(definition),
           initialScmSnapshot: runtime.playgroundTools.initialScmSnapshot,
           ...(initialTerminalState === undefined ? {} : { initialTerminalState }),
         });
@@ -697,9 +685,7 @@ export function createWorkbenchOwnerController(
       !fencedProject.acceptingInput &&
       fencedProject.token === message.projectToken
     ) {
-      return isProjectDrainMessage(message)
-        ? performProjectInput(message, fencedProject)
-        : Promise.resolve();
+      return Promise.resolve();
     }
     if (shutdownRequested) {
       if (isProjectInputMessage(message) && isExpectedPostFenceToken(message.projectToken)) {
@@ -759,15 +745,6 @@ function isProjectInputMessage(
     message.type === 'workbench:project-pty' ||
     message.type === 'workbench:project-preview' ||
     message.type === 'workbench:project-vfs'
-  );
-}
-
-/** Completion legs for work admitted before the lifecycle fence; never new work. */
-function isProjectDrainMessage(message: ProjectInputMessage): boolean {
-  if (message.type !== 'workbench:project-vfs') return false;
-  return (
-    message.frame.type === 'rifty:owner-vfs-commit-received' ||
-    message.frame.type === 'rifty:owner-vfs-commit-cleanup'
   );
 }
 

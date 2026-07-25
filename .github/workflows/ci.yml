@@ -31,7 +31,13 @@ jobs:
       - run: pnpm check:arch # layer direction + cycles + foreign-internal + solid (D-002)
       - run: pnpm check:parity-coverage
       - run: pnpm check:e2e-coverage
+      - run: pnpm check:shadow-catalog-drift
+      - run: pnpm check:install-artifact-drift
+      - run: pnpm check:snapshot-artifact-drift
+      - run: pnpm check:sync-sha256-cores
       - run: pnpm check:source-grep # blocking: no new source-grep tests in playground unit + browser-unit (allowlist exact-match)
+      - run: pnpm check:runtime-adapter-boundary # ADR-0308: generic admission/launch never branches on esbuild/Vite
+      - run: pnpm check:esbuild-legacy-retirement # cutover: vendored ADR-0047 path cannot return
       - run: pnpm check:dir-owner # blocking: source dir > 30 direct prod modules carries an owner README
       - run: pnpm check:contract-drift # blocking: no in-place ready-contract edits in the same diff as source changes
       - run: pnpm check:budget # blocking when the PR declares Budget-Slice: hand-written diff vs the epic's band + mechanism sweep

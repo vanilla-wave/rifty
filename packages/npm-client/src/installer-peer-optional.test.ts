@@ -186,6 +186,70 @@ describe('install — optionalDependencies', () => {
     expect(msg).toContain('opt-missing');
   });
 
+  it('does not classify caller cancellation as an optional-dependency skip', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        optionalDependencies: { opt: '1.0.0' },
+      })}\n`,
+    );
+    let markTarballStarted!: () => void;
+    const tarballStarted = new Promise<void>((resolve) => {
+      markTarballStarted = resolve;
+    });
+    const registry = new RegistryClient({
+      baseUrl: 'https://registry.test',
+      maxRetries: 0,
+      fetch: async (url, init) => {
+        if (String(url).endsWith('/opt')) {
+          return new Response(
+            JSON.stringify({
+              name: 'opt',
+              'dist-tags': { latest: '1.0.0' },
+              versions: {
+                '1.0.0': {
+                  name: 'opt',
+                  version: '1.0.0',
+                  dependencies: {},
+                  dist: { tarball: 'https://registry.test/opt/-/opt-1.0.0.tgz' },
+                },
+              },
+            }),
+          );
+        }
+        markTarballStarted();
+        return await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+            once: true,
+          });
+        });
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error('project closed during optional dependency');
+    const installing = install({
+      vfs,
+      cwd: '/proj',
+      registry,
+      signal: controller.signal,
+      tarballCache: {
+        get: async () => null,
+        put: async () => '',
+      },
+    });
+
+    await tarballStarted;
+    controller.abort(reason);
+
+    await expect(installing).rejects.toBe(reason);
+    expect(warn).not.toHaveBeenCalled();
+    expect(await vfs.exists('/proj/package-lock.json')).toBe(false);
+  });
+
   it('warns and skips when a required child of an optional subtree has an invalid archive', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set(

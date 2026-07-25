@@ -7,7 +7,8 @@ fresh Chromium process.
 
 The journey opens real Vite 7.3.6 from a loopback registry, proves preview and
 native HMR, and executes `node:sqlite`. The host supplies the actual
-`sql.js` and `esbuild-wasm` package assets.
+`sql.js` package asset; esbuild runtime bytes come only from the admitted
+shadow-registry capability.
 
 TypeScript still checks the consumer sources and all imported public shapes.
 `skipLibCheck` isolates a documented pre-existing `@riftydev/io` declaration

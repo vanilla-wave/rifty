@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { gunzipSync } from 'node:zlib';
 
 interface SnapshotFile {
   readonly path: string;
@@ -185,9 +185,9 @@ export function assertSnapshotArtifactCurrent(expectation: SnapshotArtifactExpec
     }
   }
 
-  const canonical = gzipSync(Buffer.from(expectation.canonicalize(snapshot)), { level: 9 });
-  if (!Buffer.from(expectation.bytes).equals(canonical)) {
-    stale(expectation.label, 'snapshot gzip bytes are not canonical');
+  const canonical = Buffer.from(expectation.canonicalize(snapshot));
+  if (!serialized.equals(canonical)) {
+    stale(expectation.label, 'serialized snapshot bytes are not canonical');
   }
   const snapshotId = `sha256:${createHash('sha256').update(serialized).digest('hex')}`;
   if (snapshotId !== expectation.snapshotId) {

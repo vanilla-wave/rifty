@@ -62,6 +62,12 @@ export interface PackageMutationExecutorOptions {
 export function createPackageMutationExecutor(
   options: PackageMutationExecutorOptions,
 ): PackageMutationExecutor {
+  const readPackageJsonText = (root: string): string | null => {
+    const path = normalizePath(`${root}/package.json`);
+    return options.fs.statSyncOrNull(path)?.isFile === true
+      ? new TextDecoder().decode(options.fs.readFileBytesSync(path))
+      : null;
+  };
   const transitions = (intents: readonly VfsMutationIntent[]): PackageMutationTransition[] => {
     assertPortableVfsMutationIntents(options.assertPortablePaths, intents);
     return discoverPackageMutationTransitions(
@@ -108,6 +114,7 @@ export function createPackageMutationExecutor(
             resolveTransitions: () =>
               transitions(typeof intents === 'function' ? intents() : intents),
             mutate: async () => settle(await mutate()),
+            readCurrentPackageJsonText: readPackageJsonText,
           }),
         'guarded package mutation did not settle',
       ),
@@ -138,6 +145,7 @@ export function createPackageMutationExecutor(
             },
             ...(check ? { preflight: () => preflight(check, settle) } : {}),
             mutate: async () => settle(await mutate()),
+            readCurrentPackageJsonText: () => readPackageJsonText(target.root),
           }),
         `package.json edit did not run for ${target.root}`,
       ),
@@ -456,22 +464,20 @@ export function hostCommitTouchesPath(request: HostCommitRequest, path: string):
 }
 
 export interface PackageAwareHostCommitAuthority {
-  validateHostCommit(request: HostCommitRequest): HostCommitAck | null;
+  validateHostCommit(request: HostCommitRequest): void;
   applyHostCommit(request: HostCommitRequest): HostCommitAck;
 }
 
-/** Synchronous preflight preserves exact CAS/idempotency errors before stamp transition. */
+/** Synchronous preflight preserves exact CAS errors before stamp transition. */
 export async function applyPackageAwareHostCommit(
   owner: PackageAwareHostCommitAuthority,
   mutations: PackageMutationExecutor,
   _root: string,
   request: HostCommitRequest,
 ): Promise<HostCommitAck> {
-  const replay = owner.validateHostCommit(request);
-  if (replay) return replay;
+  owner.validateHostCommit(request);
   const preflight: PackageEditPreflight<HostCommitAck> = async () => {
-    const repeated = owner.validateHostCommit(request);
-    if (repeated) return { status: 'noop', value: repeated };
+    owner.validateHostCommit(request);
     return { status: 'ready' };
   };
   return mutations.guardedMutation(

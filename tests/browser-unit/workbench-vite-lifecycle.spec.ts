@@ -206,7 +206,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
             readonly devServer: string;
           };
           readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+          readonly wasm: { readonly sqlite: string };
           readonly previewProbeTimeoutMs: number;
         };
         readonly packageAcquisition: { readonly registryUrl: string };
@@ -227,7 +227,7 @@ test('public Workbench keeps one ephemeral owner across exact Vite A to B to A l
         readonly node: string;
         readonly devServer: string;
       };
-      readonly wasm: { readonly sqlite: string; readonly esbuild: string };
+      readonly wasm: { readonly sqlite: string };
     };
     type LifecycleProbe = {
       __recordWorkbenchLifecycle(event: string): Promise<void>;

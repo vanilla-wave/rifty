@@ -5,6 +5,7 @@ import {
   inspectPlaygroundOwnerToPageMessage,
   isPageToPlaygroundOwnerMessage,
   isPlaygroundOwnerToPageMessage,
+  playgroundProjectRuntimeDecision,
 } from './playground-owner-protocol.ts';
 import {
   definePlaygroundProject,
@@ -34,13 +35,29 @@ function wire() {
 }
 
 describe('Playground owner protocol', () => {
+  it('projects concrete runtime identity beside its clone-safe protocol shape', () => {
+    expect(playgroundProjectRuntimeDecision({ kind: 'vite', port: 5174 })).toEqual({
+      kind: 'vite',
+      port: 5174,
+    });
+    expect(playgroundProjectRuntimeDecision({ kind: 'node-server' })).toEqual({
+      kind: 'node-server',
+    });
+    expect(playgroundProjectRuntimeDecision({ kind: 'node-cli' })).toEqual({
+      kind: 'node-cli',
+    });
+    expect(() => playgroundProjectRuntimeDecision({ kind: 'vite' })).toThrow(
+      /missing its owner port/,
+    );
+  });
+
   it('admits the captured URL context only as an exact optional owner boot extension', () => {
     const initialized = inspectPageToWorkbenchOwnerMessage({
       type: 'workbench:initialize',
       config: {
         deployment: {
           workers: { kernel: '/kernel.js', node: '/node.js', devServer: '/dev-server.js' },
-          wasm: { sqlite: '/sqlite.wasm', esbuild: '/esbuild.wasm' },
+          wasm: { sqlite: '/sqlite.wasm' },
           previewProbeTimeoutMs: 1_000,
         },
         packageAcquisition: { registryUrl: '/registry' },

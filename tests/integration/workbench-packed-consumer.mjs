@@ -31,6 +31,10 @@ const viteSnapshot = resolve(
   repoRoot,
   'apps/playground/public/snapshots/vite-node-modules.json.gz',
 );
+const esbuildWasmManifest = resolve(
+  repoRoot,
+  'tools/shadow-registry/node_modules/esbuild-wasm/package.json',
+);
 const keepTemp = process.argv.includes('--keep');
 const unknownArguments = process.argv.slice(2).filter((argument) => argument !== '--keep');
 if (unknownArguments.length > 0) {
@@ -453,6 +457,16 @@ function tarballIntegrity(bytes) {
 
 async function browserRegistryPackages(options) {
   const snapshotPackages = await materializeSnapshotPackages(options.packageRoot);
+  const assetManifest = await readJson(esbuildWasmManifest);
+  if (assetManifest.name !== 'esbuild-wasm' || assetManifest.version !== '0.28.0') {
+    throw new Error(
+      `Packed consumer registry asset drifted: ${String(assetManifest.name)}@${String(assetManifest.version)}`,
+    );
+  }
+  snapshotPackages.set('esbuild-wasm', {
+    dir: dirname(esbuildWasmManifest),
+    manifest: assetManifest,
+  });
   const tarballs = await packInstalledPackages(
     [...snapshotPackages.entries()],
     options.tarballRoot,
@@ -1031,10 +1045,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     if (!acceptance.sqliteProof.includes('packed-sqlite-42')) {
       throw new Error(`Packed Workbench sqlite proof was lost: ${acceptance.sqliteProof}`);
     }
-    const hostWasmUrls = [
-      assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'sql.js'),
-      assertHostAsset(acceptance.hostWasm.esbuild, previewOrigin, 'esbuild-wasm'),
-    ];
+    const hostWasmUrls = [assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'sql.js')];
     if (new URL(acceptance.typescriptWorkerUrl, previewOrigin).origin !== previewOrigin) {
       throw new Error('Packed Workbench TypeScript worker did not resolve from the packed host');
     }
@@ -1042,6 +1053,18 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       if (!observedUrls.includes(assetUrl)) {
         throw new Error(`Packed Workbench did not fetch host WASM asset ${assetUrl}`);
       }
+    }
+    const retiredHostEsbuildRequests = observedUrls.filter((url) => {
+      try {
+        return new URL(url).pathname.endsWith('/esbuild.wasm');
+      } catch {
+        return false;
+      }
+    });
+    if (retiredHostEsbuildRequests.length > 0) {
+      throw new Error(
+        `Packed Workbench fetched retired host esbuild assets:\n${retiredHostEsbuildRequests.join('\n')}`,
+      );
     }
 
     const previewFrame = page.frameLocator('#preview');
@@ -1109,7 +1132,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         `Packed Workbench Chromium attempted external URLs:\n${blockedUrls.join('\n')}`,
       );
     }
-    for (const name of ['vite', '@esbuild/wasi-preview1']) {
+    for (const name of ['vite', 'esbuild-wasm']) {
       for (const kind of ['packument', 'tarball']) {
         if (
           !registry.responses.some(
@@ -1119,6 +1142,9 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
           throw new Error(`Packed Workbench missed real ${name} ${kind} response`);
         }
       }
+    }
+    if (registry.responses.some((response) => response.packageName === '@esbuild/wasi-preview1')) {
+      throw new Error('Packed Workbench requested the retired @esbuild/wasi-preview1 alias');
     }
     await context.close();
     console.log('Packed Workbench Chromium passed: Vite 7.3.6 preview + native HMR + sqlite');

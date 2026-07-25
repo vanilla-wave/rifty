@@ -25,6 +25,7 @@ import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 import { readDevServerChildConfig } from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
+import { prepareNodeEntryRuntime } from './node-entry-runtime-preparation.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { ProjectTerminalFsSync } from './project-terminal-namespace.ts';
 import {
@@ -71,6 +72,13 @@ async function bootstrapDevServerChild(): Promise<void> {
       ? ownerRemoteFs
       : new ProjectTerminalFsSync(ownerRemoteFs, c.remoteFsRoot);
   setSyncMirror(remoteFs);
+  await prepareNodeEntryRuntime({
+    bin: false,
+    root: c.cfg.root,
+    args: [],
+    entryPath: c.cfg.entryPath,
+    fs: remoteFs,
+  });
   // A node-server child may spawn nested workers whose `fs.*` sync-RPC calls
   // land on THIS realm's dispatcher. The child has no OPFS of its own
   // (single-writer is the owner), so register the fs handlers backed by our own

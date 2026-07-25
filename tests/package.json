@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@esbuild/wasi-preview1": "0.28.0",
     "@riftydev/net": "workspace:*",
     "@riftydev/npm-client": "workspace:*",
     "@riftydev/runtime-js": "workspace:*",

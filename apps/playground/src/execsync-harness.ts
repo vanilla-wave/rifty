@@ -145,7 +145,6 @@ export async function runExecSyncHarness(options: ExecSyncHarnessOptions = {}): 
       RIFTY_KERNEL_WORKER_URL: deployment.workers.kernel,
       RIFTY_NODE_ENTRY_WORKER_URL: deployment.workers.node,
       RIFTY_SQLITE_WASM_URL: deployment.wasm.sqlite,
-      RIFTY_ESBUILD_WASM_URL: deployment.wasm.esbuild,
     });
     setKernelWorkerUrl(hostRuntime.RIFTY_KERNEL_WORKER_URL);
     configureNodeEntryWorker(hostRuntime.RIFTY_NODE_ENTRY_WORKER_URL, hostRuntime);

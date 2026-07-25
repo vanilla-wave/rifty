@@ -96,7 +96,7 @@ export interface VfsCommitCoordinator {
     operation: HostCommitOperation,
     observation?: VfsCommitObservation,
   ): Promise<VfsCommitReceipt>;
-  /** Rejects all pending and future commits. Idempotent. */
+  /** Idempotent. Rejects future and unhanded commits; handed-off commits keep their owner outcome. */
   close(error?: Error): void;
 }
 

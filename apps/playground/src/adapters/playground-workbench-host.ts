@@ -12,7 +12,6 @@ import type {
   PlaygroundWorkbenchOptions,
 } from '@riftydev/workbench/playground';
 import typescriptWorkerUrl from '@riftydev/workbench/typescript-worker?worker&url';
-import esbuildWasmUrl from 'esbuild-wasm/esbuild.wasm?url';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { getRegistryProxyPrefix } from '../glue/registry-config.ts';
 import { getEddyBundleBaseUrl, getResolverUrl } from '../glue/resolver-config.ts';
@@ -56,7 +55,7 @@ export function playgroundWorkbenchOptions(): PlaygroundWorkbenchOptions {
         typescript: typescriptWorkerUrl,
       }),
       serviceWorker: Object.freeze({ url: '/sw.js', scope: '/' }),
-      wasm: Object.freeze({ sqlite: sqlWasmUrl, esbuild: esbuildWasmUrl }),
+      wasm: Object.freeze({ sqlite: sqlWasmUrl }),
       previewProbeTimeoutMs: 30_000,
     }),
     packageAcquisition: Object.freeze({

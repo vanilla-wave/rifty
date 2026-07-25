@@ -5,8 +5,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
 import { type ForegroundChildHandle, runForegroundChild } from '../glue/run-foreground-child.ts';
+import type { ReserveOwnerChildAdmission } from './owner-child-admission.ts';
 import { type DevServerChildHandle, createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createPtyServer } from './pty-server.ts';
+
+const reserveEmptyAdmission: ReserveOwnerChildAdmission = async () =>
+  Object.freeze({
+    snapshot: Object.freeze({
+      capabilityPorts: Object.freeze({}),
+      dispose() {},
+    }),
+    commit() {},
+    abortBeforeSpawn() {},
+    async abortAfterChildSettlement(_error: unknown, exited: Promise<unknown>) {
+      await exited;
+    },
+  });
 
 function harness() {
   const out: OwnerToPageFrame[] = [];
@@ -30,6 +44,8 @@ const settledOr = <T>(promise: Promise<T>, pending: T): Promise<T> =>
 
 class ResizeRejectingDevChild extends EventEmitter implements DevServerChildHandle {
   readonly kind = 'worker';
+  readonly #control = new MessageChannel();
+  readonly ports = { ipc: this.#control.port1 };
   rejectResize = false;
   readonly #stdout = new EventEmitter();
   readonly #stderr = new EventEmitter();
@@ -50,6 +66,8 @@ class ResizeRejectingDevChild extends EventEmitter implements DevServerChildHand
   kill(): boolean {
     if (this.#exited) return false;
     this.#exited = true;
+    this.#control.port1.close();
+    this.#control.port2.close();
     queueMicrotask(() => this.emit('exit', null, 'SIGTERM'));
     return true;
   }
@@ -658,8 +676,8 @@ describe('pty-server', () => {
         kernelWorkerUrl: 'blob:kernel-worker',
         nodeEntryWorkerUrl: 'blob:node-worker',
         sqliteWasmUrl: 'blob:sqlite-wasm',
-        esbuildWasmUrl: 'blob:esbuild-wasm',
       },
+      reserveEmptyAdmission,
       () => {
         spawned.resolve();
         return child;

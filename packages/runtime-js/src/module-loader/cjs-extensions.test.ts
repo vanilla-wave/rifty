@@ -244,7 +244,7 @@ describe('CJS extension hooks', () => {
         keys: ['.js', '.json', '.node'],
         nativeType: 'function',
       },
-      missing: { name: 'ModuleLoadError', code: 'MODULE_NOT_FOUND' },
+      missing: { name: 'Error', code: 'MODULE_NOT_FOUND' },
       failure: {
         name: 'NotImplementedError',
         feature: 'module-loader.native-addon',

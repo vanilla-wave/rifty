@@ -6,7 +6,6 @@ import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
 import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
 import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
 import typescriptWorkerUrl from '@riftydev/workbench/typescript-worker?worker&url';
-import esbuildWasmUrl from 'esbuild-wasm/esbuild.wasm?url';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 export interface PackedWorkbenchAcceptance {
@@ -16,7 +15,6 @@ export interface PackedWorkbenchAcceptance {
   readonly typescriptWorkerUrl: string;
   readonly hostWasm: {
     readonly sqlite: string;
-    readonly esbuild: string;
   };
   writeMessage(message: string): Promise<void>;
   close(): Promise<void>;
@@ -72,7 +70,7 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
         devServer: devServerWorkerUrl,
       },
       serviceWorker: { url: serviceWorkerUrl, scope: '/' },
-      wasm: { sqlite: sqlWasmUrl, esbuild: esbuildWasmUrl },
+      wasm: { sqlite: sqlWasmUrl },
       previewProbeTimeoutMs: 30_000,
     },
     packageAcquisition: {
@@ -145,7 +143,7 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     sqliteProof: sqliteOutput,
     companionLoaded: typeof openPlaygroundWorkbench === 'function',
     typescriptWorkerUrl,
-    hostWasm: Object.freeze({ sqlite: sqlWasmUrl, esbuild: esbuildWasmUrl }),
+    hostWasm: Object.freeze({ sqlite: sqlWasmUrl }),
     async writeMessage(message: string): Promise<void> {
       const current = await project.files.readFile('/src/message.ts');
       await project.files.writeFile(

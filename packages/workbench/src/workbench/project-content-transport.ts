@@ -62,7 +62,6 @@ interface PendingFileRead {
   readonly ownerEpoch: OwnerEpoch;
   resolve(value: ProjectDocumentReadEntry): void;
   reject(error: Error): void;
-  timer: ReturnType<typeof setTimeout> | null;
 }
 
 interface PendingDirectoryRead {
@@ -71,7 +70,6 @@ interface PendingDirectoryRead {
   readonly ownerEpoch: OwnerEpoch;
   resolve(value: AtomicDirectoryRead): void;
   reject(error: Error): void;
-  timer: ReturnType<typeof setTimeout> | null;
 }
 
 type PendingRead = PendingFileRead | PendingDirectoryRead;
@@ -149,17 +147,11 @@ function documentMutation(
 
 /**
  * Session-local Project VFS composition. Owner identity, request correlation,
- * mirror reflection, commit replay, and durability stay behind one transport.
+ * mirror reflection, one-shot commit admission, and durability stay behind one transport.
  */
 export function createProjectContentTransport(
   options: ProjectContentTransportOptions,
 ): ProjectContentTransport {
-  const timers: OwnerVfsClientTimers =
-    options.timers ??
-    Object.freeze({
-      setTimeout: (callback: () => void, delayMs: number) => setTimeout(callback, delayMs),
-      clearTimeout: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
-    });
   const mirror = new SnapshotFs(options.projectRoot);
   const reads = new Map<string, PendingRead>();
   const pendingCommits = new Set<Promise<unknown>>();
@@ -175,7 +167,6 @@ export function createProjectContentTransport(
   let resolveReady: (content: ProjectContentController) => void = () => {};
   let rejectReady: (error: Error) => void = () => {};
   let readySettled = false;
-  let readyTimer: ReturnType<typeof setTimeout> | null = null;
   const ready = new Promise<ProjectContentController>((resolve, reject) => {
     resolveReady = resolve;
     rejectReady = reject;
@@ -260,14 +251,6 @@ export function createProjectContentTransport(
       throw new Error('Project VFS generated a duplicate or empty read request id');
     }
     reads.set(requestId, pending);
-    pending.timer = timers.setTimeout(() => {
-      if (reads.get(requestId) !== pending) return;
-      disconnect(
-        new Error(
-          `Project VFS ${pending.kind === 'file' ? 'read-file' : 'read-directory'} timed out after ${String(options.commitTimeoutMs)}ms (${requestId})`,
-        ),
-      );
-    }, options.commitTimeoutMs);
     return requestId;
   };
 
@@ -275,8 +258,6 @@ export function createProjectContentTransport(
     const pending = reads.get(requestId);
     if (pending === undefined) return undefined;
     reads.delete(requestId);
-    if (pending.timer !== null) timers.clearTimeout(pending.timer);
-    pending.timer = null;
     return pending;
   };
 
@@ -294,7 +275,6 @@ export function createProjectContentTransport(
         ownerEpoch: boundOwner,
         resolve,
         reject,
-        timer: null,
       };
       let requestId: string | null = null;
       try {
@@ -324,7 +304,6 @@ export function createProjectContentTransport(
         ownerEpoch: boundOwner,
         resolve,
         reject,
-        timer: null,
       };
       let requestId: string | null = null;
       try {
@@ -437,8 +416,6 @@ export function createProjectContentTransport(
       },
     });
     readySettled = true;
-    if (readyTimer !== null) timers.clearTimeout(readyTimer);
-    readyTimer = null;
     resolveReady(content);
   };
 
@@ -534,16 +511,12 @@ export function createProjectContentTransport(
   const disconnect = (error: Error = new ClosedHandleError('Project content transport')): void => {
     if (closedError !== null) return;
     closedError = error;
-    if (readyTimer !== null) timers.clearTimeout(readyTimer);
-    readyTimer = null;
     if (!readySettled) {
       readySettled = true;
       rejectReady(error);
     }
     for (const [requestId, pending] of reads) {
       reads.delete(requestId);
-      if (pending.timer !== null) timers.clearTimeout(pending.timer);
-      pending.timer = null;
       pending.reject(error);
     }
     content?.invalidateAll('reset');
@@ -557,13 +530,6 @@ export function createProjectContentTransport(
   };
 
   const transport = Object.freeze({ ready, accept, disconnect });
-  readyTimer = timers.setTimeout(() => {
-    disconnect(
-      new Error(
-        `Project VFS initial snapshot timed out after ${String(options.commitTimeoutMs)}ms`,
-      ),
-    );
-  }, options.commitTimeoutMs);
   try {
     if (!options.send({ type: 'workbench:project-vfs-snapshot-request' })) {
       disconnect(new Error('Project VFS snapshot request send failed'));

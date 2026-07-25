@@ -59,24 +59,78 @@ test('npm scripts route through the real shell; vite stays package-owned; node-c
   expect(dev.out).toContain('cli-dev-body-ran');
 });
 
-test('terminal npm install keeps an arbitrary nested cwd outside the active preset config', async ({
-  page,
-}) => {
+test('terminal nested npm install gives child exact package-tree ancestry', async ({ page }) => {
+  test.setTimeout(240_000);
   await gotoHarness(page);
   await bootOwner(page, { workspaceId: 'bu-nested-npm', hiddenEmptyBoot: true });
   await writeOwnerFile(
     page,
-    '/scratch/nested/package.json',
-    `${JSON.stringify({ name: 'nested', version: '0.0.0', private: true }, null, 2)}\n`,
+    '/scratch/sub/package.json',
+    `${JSON.stringify(
+      {
+        name: 'sub',
+        version: '0.0.0',
+        private: true,
+        dependencies: { esbuild: '0.28.0' },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeOwnerFile(
+    page,
+    '/scratch/root-resolution.cjs',
+    [
+      'try {',
+      "  console.log('ROOT_ESBUILD_RESOLUTION:' + require.resolve('esbuild'));",
+      '} catch (error) {',
+      "  console.log('ROOT_ESBUILD_RESOLUTION:' + error.code);",
+      '}',
+      '',
+    ].join('\n'),
+  );
+  await writeOwnerFile(
+    page,
+    '/scratch/sub/deep/sub-transform.cjs',
+    [
+      "const esbuildPath = require.resolve('esbuild');",
+      "const esbuild = require('esbuild');",
+      'module.exports.__promise = esbuild',
+      "  .transform('export const answer: number = 42;\\n', { loader: 'ts', format: 'esm' })",
+      '  .then((result) => {',
+      "    console.log('SUB_ESBUILD_RESOLUTION:' + esbuildPath);",
+      "    console.log('SUB_ESBUILD_TRANSFORM:' + JSON.stringify({",
+      '      version: esbuild.version,',
+      '      code: result.code,',
+      '    }));',
+      '  });',
+      '',
+    ].join('\n'),
   );
 
-  const cd = await execLine(page, 'cd nested');
-  expect(cd.exit).toBe(0);
-  const installed = await execLine(page, 'npm install');
+  const installed = await execLine(page, 'cd sub && npm install');
 
   expect(installed.exit, installed.out).toBe(0);
   expect(installed.out).not.toContain('package acquisition config missing');
-  expect(installed.out).toContain('npm: no dependencies to install');
+  expect(installed.out).toContain('esbuild@0.28.0');
+  expect((await readOwnerFile(page, '/scratch/sub/node_modules/esbuild/lib/main.cjs')).ok).toBe(
+    true,
+  );
+  expect((await readOwnerFile(page, '/scratch/node_modules/esbuild/package.json')).ok).toBe(false);
+
+  const fromRoot = await execLine(page, 'cd / && node root-resolution.cjs');
+  expect(fromRoot.exit, fromRoot.out).toBe(0);
+  expect(fromRoot.out).toContain('ROOT_ESBUILD_RESOLUTION:MODULE_NOT_FOUND');
+  expect(fromRoot.out).not.toContain('/sub/node_modules/esbuild/');
+
+  const fromSubdirectory = await execLine(page, 'cd sub/deep && node sub-transform.cjs');
+  expect(fromSubdirectory.exit, fromSubdirectory.out).toBe(0);
+  expect(fromSubdirectory.out).toContain(
+    'SUB_ESBUILD_RESOLUTION:/sub/node_modules/esbuild/lib/main.cjs',
+  );
+  expect(fromSubdirectory.out).toContain(
+    'SUB_ESBUILD_TRANSFORM:{"version":"0.28.0","code":"const answer = 42;\\nexport {\\n  answer\\n};\\n"}',
+  );
 });
 
 test('terminal git preflights every worktree target through the owner namespace authority', async ({

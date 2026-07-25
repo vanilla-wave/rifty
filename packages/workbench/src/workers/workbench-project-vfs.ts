@@ -8,19 +8,17 @@ import {
 } from '@riftydev/vfs';
 import { isInsideInstallTree } from '../glue/install-stamp.ts';
 import {
-  type OwnerVfsCommitTerminal,
-  handleOwnerVfsCommitCleanup,
-  handleOwnerVfsCommitReceipt,
   handleOwnerVfsCommitRequest,
   handleOwnerVfsDurabilityRequest,
 } from '../glue/owner-vfs-ipc.ts';
 import type {
+  HostCommitAck,
   HostCommitRequest,
   OwnerVfsDurabilityReceipt,
   OwnerVfsSnapshot,
   OwnerVfsSnapshotEntry,
 } from '../glue/owner-vfs-protocol.ts';
-import { VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
+import { VfsCommitAppliedError, VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
 import {
   type PackageMutationExecutor,
   applyPackageAwareHostCommit,
@@ -140,19 +138,6 @@ function assertProjectPath(projectRoot: string, path: string, allowRoot: boolean
 
 function commitPaths(request: HostCommitRequest): readonly string[] {
   return request.kind === 'rename' ? [request.sourcePath, request.targetPath] : [request.path];
-}
-
-function terminalPaths(terminal: OwnerVfsCommitTerminal): readonly string[] {
-  const paths: string[] = [];
-  const applied = terminal.ok ? terminal.ack : terminal.applied;
-  if (applied !== undefined) {
-    for (const version of applied.versions) paths.push(version.path);
-  }
-  if (!terminal.ok && terminal.error.kind === 'version-conflict') {
-    paths.push(terminal.error.path);
-    if (terminal.error.actualEntry !== null) paths.push(terminal.error.actualEntry.path);
-  }
-  return paths;
 }
 
 function readError(error: unknown): { readonly name: string; readonly message: string } {
@@ -695,18 +680,29 @@ export function createWorkbenchProjectVfs(
         admit: (request) =>
           options.authority.admitHostCommit(
             request,
-            async (candidate) => {
+            async (candidate, apply) => {
               const priorTreeRevision = options.authority.treeRevision;
-              const ack = await applyPackageAwareHostCommit(
-                options.authority,
-                activePackageMutations,
-                projectRoot,
-                candidate,
-              );
-              if (!extraneousTreeMutation([hostCommitMutationIntent(candidate)])) {
-                await recordAppliedMutation('file', priorTreeRevision);
+              let applied: HostCommitAck | null = null;
+              try {
+                applied = await applyPackageAwareHostCommit(
+                  {
+                    validateHostCommit: (request) => options.authority.validateHostCommit(request),
+                    applyHostCommit: apply,
+                  },
+                  activePackageMutations,
+                  projectRoot,
+                  candidate,
+                );
+                if (!extraneousTreeMutation([hostCommitMutationIntent(candidate)])) {
+                  await recordAppliedMutation('file', priorTreeRevision);
+                }
+                return applied;
+              } catch (error) {
+                if (applied !== null) {
+                  throw new VfsCommitAppliedError(applied, errorFrom(error));
+                }
+                throw error;
               }
-              return ack;
             },
             () => {
               try {
@@ -744,10 +740,6 @@ export function createWorkbenchProjectVfs(
       completed.reject(errorFrom(error));
     }
     return task;
-  };
-
-  const assertTerminalPaths = (terminal: OwnerVfsCommitTerminal): void => {
-    for (const path of terminalPaths(terminal)) assertProjectPath(projectRoot, path, false);
   };
 
   const readFile = (
@@ -811,22 +803,6 @@ export function createWorkbenchProjectVfs(
             assertProjectPath(projectRoot, path, false);
           }
           return handleCommit(frame);
-        case 'rifty:owner-vfs-commit-received':
-          assertTerminalPaths(frame.terminal);
-          handleOwnerVfsCommitReceipt({
-            message: frame,
-            retained: (operationId) => options.authority.retainedHostCommitTerminal(operationId),
-            send: options.emit,
-          });
-          return;
-        case 'rifty:owner-vfs-commit-cleanup':
-          assertTerminalPaths(frame.terminal);
-          handleOwnerVfsCommitCleanup({
-            message: frame,
-            cleanup: (terminal) => options.authority.cleanupHostCommitTerminal(terminal),
-            send: options.emit,
-          });
-          return;
         case 'rifty:owner-vfs-durability':
           return track(
             handleOwnerVfsDurabilityRequest({

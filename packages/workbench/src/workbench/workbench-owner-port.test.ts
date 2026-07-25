@@ -40,7 +40,6 @@ function ownerInput(
       }),
       wasm: Object.freeze({
         sqlite: 'https://workbench.invalid/sqlite.wasm',
-        esbuild: 'https://workbench.invalid/esbuild.wasm',
       }),
       previewProbeTimeoutMs: 3_000,
     }),

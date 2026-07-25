@@ -130,6 +130,7 @@ describe('install-stamp one-writer gate', () => {
       ),
     ).toEqual([]);
     expect(isProductionTypeScript('packages/workbench/src/a.test.ts')).toBe(false);
+    expect(isProductionTypeScript('packages/workbench/src/a.test-fixture.ts')).toBe(false);
     expect(isProductionTypeScript('packages/workbench/src/a.spec.tsx')).toBe(false);
     expect(isProductionTypeScript(FILE)).toBe(true);
   });

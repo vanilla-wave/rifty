@@ -41,14 +41,15 @@ const SURF: Record<ScenarioId, Surface> = {
       '<div style="font-size:9.5px; color:#15803d; margin-top:3px;">● HMR applied · state kept</div>',
   },
   wasi: {
-    file: 'build.sh',
+    file: 'run-wasi.js',
     code:
-      '<span style="color:var(--syn-com)">$</span> esbuild entry.ts \\\n' +
-      '  --bundle --outfile=out.js\n' +
-      '<span style="color:#8FD98F">✓</span> built 41ms <span style="color:var(--syn-com)">(WASI)</span>',
+      '<span style="color:var(--syn-kw)">import</span> { <span style="color:var(--syn-fn)">createWasiProcess</span> } \n' +
+      '  <span style="color:var(--syn-kw)">from</span> <span style="color:var(--syn-str)">\'@riftydev/runtime-wasi\'</span>\n' +
+      '<span style="color:var(--syn-kw)">const</span> guest = <span style="color:var(--syn-fn)">createWasiProcess</span>({ wasm })\n' +
+      'guest.<span style="color:var(--syn-fn)">on</span>(<span style="color:var(--syn-str)">\'exit\'</span>, console.log)',
     pv:
-      '<div style="font-weight:700; font-size:13px;">out.js · 18 kb</div>' +
-      '<div style="font-size:9.5px; color:#4b5563; margin-top:3px;">esbuild.wasm bundled in-tab</div>',
+      '<div style="font-weight:700; font-size:13px;">raw WASI guest · exit 0</div>' +
+      '<div style="font-size:9.5px; color:#4b5563; margin-top:3px;">wasi_snapshot_preview1 · Worker</div>',
   },
   boot: {
     file: 'sandbox.js',

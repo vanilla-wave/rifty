@@ -11,6 +11,7 @@ import {
   type OwnerVfsAuthority,
   createOwnerVfsAuthorityComposition,
 } from '../workers/owner-vfs-authority.ts';
+import * as installStampAuthorityModule from './install-stamp-authority.ts';
 import {
   type InstallStampAuthority,
   type InstallStampClaimIo,
@@ -26,6 +27,12 @@ const PACKAGE_JSON = `${JSON.stringify({
   dependencies: { vite: '^5.4.0' },
   overrides: { vite: '5.4.21' },
 })}\n`;
+
+describe('install-stamp authority module surface', () => {
+  it('does not expose a second owner-to-authority registry', () => {
+    expect(installStampAuthorityModule).not.toHaveProperty('installStampAuthorityFor');
+  });
+});
 
 interface AuthorityHarness {
   readonly vfs: MemoryVfs | SyncMirrorVfs;

@@ -27,6 +27,10 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
+import {
+  type BuiltinShadowSubstitutionRecipe,
+  builtinShadowSubstitutionCatalog,
+} from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 import { discardBody, fetchHeadersBounded } from './bounded-fetch.ts';
 import { closureHashOf } from './closure-hash.ts';
@@ -61,7 +65,21 @@ import {
   readExistingLockfile,
   writeLockfileIfChanged,
 } from './installer-lockfile-reader.ts';
-import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './linker.ts';
+import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
+import {
+  type AppliedShadowSubstitution,
+  type ShadowAssetPlan,
+  attestBuiltinShadowSubstitution,
+  materializeRegistryShadowSubstitutions,
+  planShadowSubstitutionsFromLockfile,
+  planTrustedAppliedShadowSubstitutions,
+} from './internal/shadow/planner.ts';
+import {
+  type Lockfile,
+  type ResolvedPackage,
+  buildInstallLockfile,
+  linkInstallTree,
+} from './linker.ts';
 import type { OverrideMap } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
@@ -94,6 +112,8 @@ export interface InstallOptions {
   vfs: Vfs;
   cwd: string;
   registry: RegistryClient;
+  /** Caller-owned lifecycle cancellation, forwarded through every network wait. */
+  signal?: AbortSignal;
   overrides?: OverrideMap;
   /** Cache of already-loaded packuments (lets multiple installs share). */
   packumentCache?: PackumentCacheLike;
@@ -140,12 +160,11 @@ export interface InstallOptions {
   prefer?: 'cached' | 'online';
   /**
    * Substitution-provenance sink (ADR-0188). One complete line per
-   * shadow-registry substitution — baked redirects (`npm: esbuild@^0.28.0 →
-   * @esbuild/wasi-preview1@0.28.0 (substituted from shadow registry, ADR-0051)`)
-   * and internals-shim applications (`npm: rollup@4.62.2 internals patched
-   * from shadow registry`) — on fresh install AND lockfile replay. User
-   * `overrides` do not report (the user authored those). Default:
-   * `console.warn` — a substitution is never silent.
+   * shadow-registry substitution — catalog materializations (`npm:
+   * esbuild@^0.28.0 materialized from shadow registry (...)`), retained baked
+   * redirects, and internals-shim applications — on fresh install AND
+   * lockfile replay. User `overrides` do not report (the user authored those).
+   * Default: `console.warn` — a substitution is never silent.
    */
   onSubstitution?: (line: string) => void;
   /**
@@ -184,6 +203,36 @@ export interface InstallOptions {
   resolverStallTimeoutMs?: number;
 }
 
+function abortReason(signal: AbortSignal, label: string): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error(`${label}: aborted`);
+}
+
+function throwIfAborted(signal: AbortSignal | undefined, label = 'npm install'): void {
+  if (signal?.aborted) throw abortReason(signal, label);
+}
+
+async function awaitWithSignal<T>(
+  operation: Promise<T>,
+  signal: AbortSignal | undefined,
+  label: string,
+): Promise<T> {
+  if (!signal) return await operation;
+  throwIfAborted(signal, label);
+  operation.catch(() => {}); // abort can win while the independently owned prefetch settles later
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(abortReason(signal, label));
+        signal.addEventListener('abort', onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  }
+}
+
 /** Payload for {@link InstallOptions.onPackage}. */
 export interface InstallProgressEvent {
   readonly name: string;
@@ -196,7 +245,7 @@ export interface InstallProgressEvent {
 }
 
 export type InstallResolution = 'lockfile' | 'metadata';
-export type PackageTransport = 'cache' | 'eddy' | 'registry';
+export type PackageTransport = 'cache' | 'eddy' | 'registry' | 'shadow-registry';
 
 export interface InstallPackageProvenance {
   readonly name: string;
@@ -225,6 +274,8 @@ type PinnedPackage = ResolvedPackage & {
   peerDependencies?: Record<string, string>;
   installPath: string;
 };
+
+const pinnedShadowSubstitutions = new WeakMap<PinnedPackage, AppliedShadowSubstitution>();
 
 export interface InstallResult {
   packages: ResolvedPackage[];
@@ -291,6 +342,20 @@ interface ResolvedPin {
   /** Preferred recorded install path (lockfile-source only). The mixed walk
    *  may relocate it when another identity owns that path. */
   readonly installPath?: string;
+  readonly shadow?: Readonly<{
+    recipe: BuiltinShadowSubstitutionRecipe;
+    trigger: Readonly<{ name: string; requestedRange: string | null; version: string }>;
+    acquisition:
+      | Readonly<{ kind: 'synthetic' }>
+      | Readonly<{
+          kind: 'registry';
+          name: string;
+          version: string;
+          resolved: string;
+          integrity?: string;
+        }>;
+    materializationInstallPath?: string;
+  }>;
 }
 
 interface NormalizedInstallRequest {
@@ -372,10 +437,13 @@ export async function install(
     optionalDependencies,
     opts,
   } = request;
+  throwIfAborted(opts.signal);
   const tarballCache: TarballCache = opts.tarballCache ?? new VfsTarballCache(opts.vfs);
   const fetchCtx: FetchAndUnpackCtx = {
     cache: tarballCache,
-    getTarball: (url) => opts.registry.getTarball(url),
+    getTarball: (url) =>
+      opts.registry.getTarball(url, opts.signal === undefined ? {} : { signal: opts.signal }),
+    ...(opts.signal === undefined ? {} : { signal: opts.signal }),
   };
   const substitutions = createSubstitutionReporter(
     opts.onSubstitution ?? ((line) => console.warn(line)),
@@ -388,6 +456,11 @@ export async function install(
   );
 
   let existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
+  // Decode once at lockfile ingress; frozen owner-internal consumers receive
+  // this plan rather than reparsing the same clone at every dependency edge.
+  let existingShadowPlan = existingLockfile
+    ? planShadowSubstitutionsFromLockfile(existingLockfile)
+    : null;
 
   // ADR-0182 opt-in fast path: when a resolver is configured AND no covering
   // lockfile already gives the zero-network fast path, fetch + verify eddy's
@@ -408,6 +481,7 @@ export async function install(
     !directEffectiveNameCollision &&
     !existingLockfilePreemptsEddy(
       existingLockfile,
+      existingShadowPlan,
       dependencies,
       optionalDependencies,
       rootName,
@@ -427,6 +501,7 @@ export async function install(
       eddyResolvedAt = staged.resolvedAt;
       eddyResolvedVia = staged.resolvedVia;
       existingLockfile = staged.lockfile;
+      existingShadowPlan = staged.shadowPlan;
     } else {
       eddyFallbackReason = staged.reason;
       eddyFallbackCause = staged.cause;
@@ -435,6 +510,7 @@ export async function install(
 
   const plan = chooseSource(
     existingLockfile,
+    existingShadowPlan,
     dependencies,
     optionalDependencies,
     opts,
@@ -456,6 +532,7 @@ export async function install(
       },
     );
   } catch (error) {
+    throwIfAborted(opts.signal);
     if (eddyFallbackReason !== undefined) {
       const registryError = error instanceof Error ? error : new Error(String(error));
       throw new AggregateError(
@@ -468,6 +545,7 @@ export async function install(
     }
     throw error;
   }
+  throwIfAborted(opts.signal);
   const packages = [...resolved.values()];
   const provenancePackages: InstallPackageProvenance[] = [];
   const seenProvenance = new Set<string>();
@@ -475,29 +553,54 @@ export async function install(
     const key = `${pkg.name}@${pkg.version}`;
     if (seenProvenance.has(key)) continue;
     seenProvenance.add(key);
+    const shadow = pinnedShadowSubstitutions.get(pkg);
     const cacheHit = cacheHits.get(key);
-    if (cacheHit === undefined) {
+    if (cacheHit === undefined && shadow?.acquisition.kind !== 'synthetic') {
       throw new Error(`install provenance missing fetch result for ${key}`);
     }
     provenancePackages.push({
       name: pkg.name,
       version: pkg.version,
-      transport: cacheHit ? (source === 'eddy' ? 'eddy' : 'cache') : 'registry',
+      transport:
+        shadow?.acquisition.kind === 'synthetic'
+          ? 'shadow-registry'
+          : cacheHit
+            ? source === 'eddy'
+              ? 'eddy'
+              : 'cache'
+            : 'registry',
     });
   }
 
   // Runs on both paths (D-F): lockfile entries carry `peerDependencies`, so
   // warn output is identical whichever path the install took.
+  const shadowPlan = planTrustedAppliedShadowSubstitutions(
+    packages.flatMap((pkg) => {
+      const substitution = pinnedShadowSubstitutions.get(pkg);
+      return substitution ? [substitution] : [];
+    }),
+  );
   warnUnsatisfiedPeers(packages);
   opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, packages));
-  await link(opts.vfs, opts.cwd, packages);
+  throwIfAborted(opts.signal);
+  await linkInstallTree(opts.vfs, opts.cwd, packages, () => throwIfAborted(opts.signal));
+  throwIfAborted(opts.signal);
+  await materializeRegistryShadowSubstitutions(opts.vfs, opts.cwd, shadowPlan, substitutions.line);
+  throwIfAborted(opts.signal);
   // ADR-0188: install-time internals shims into the actual installed dirs —
   // AFTER link so tarball bytes never clobber a shim. Both paths (+ eddy).
-  await applyInternalsShims(opts.vfs, opts.cwd, packages, substitutions.line);
-  const lockfile = buildLockfile(rootName, normalizedRootVersion, packages);
+  await applyInternalsShims(
+    opts.vfs,
+    opts.cwd,
+    packages.filter((pkg) => !pinnedShadowSubstitutions.has(pkg)),
+    substitutions.line,
+  );
+  throwIfAborted(opts.signal);
+  const lockfile = buildInstallLockfile(rootName, normalizedRootVersion, packages, shadowPlan);
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
-  return {
+  throwIfAborted(opts.signal);
+  const result: InstallResult = {
     packages,
     lockfile,
     conflicts: [],
@@ -511,6 +614,8 @@ export async function install(
     ...(eddyResolvedAt === undefined ? {} : { resolvedAt: eddyResolvedAt }),
     ...(eddyResolvedVia === undefined ? {} : { resolvedVia: eddyResolvedVia }),
   };
+  recordShadowAssetPlanForInstallResult(result, shadowPlan);
+  return result;
 }
 
 /** Compute and contain the complete tarball target set before link mutates. */
@@ -747,12 +852,14 @@ function assertNoLifecycleScripts(
 /** Skip Eddy when the existing lock owns replay or a loud structural failure. */
 function existingLockfilePreemptsEddy(
   existingLockfile: Lockfile | null,
+  shadowPlan: ShadowAssetPlan | null,
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   rootName: string,
   opts: InstallOptions,
 ): boolean {
   if (!existingLockfile) return false;
+  if (!shadowPlan) throw new TypeError('decoded lockfile shadow plan is missing');
   if (
     hasEffectiveTopLevelNameCollision(dependencies, optionalDependencies, rootName, opts.overrides)
   ) {
@@ -761,6 +868,7 @@ function existingLockfilePreemptsEddy(
   return (
     analyzeLockfileRequest(
       existingLockfile,
+      shadowPlan,
       dependencies,
       optionalDependencies,
       rootName,
@@ -802,6 +910,7 @@ async function tryEddyFastPath(
       resolvedAt?: string;
       resolvedVia: 'get' | 'post';
       lockfile: Lockfile;
+      shadowPlan: ShadowAssetPlan;
     }
   | {
       kind: 'declined';
@@ -903,8 +1012,13 @@ async function tryEddyFastPath(
       // abandon a slow-but-progressing download and duplicate the request.
       const response =
         attempt.kind === 'prefetch'
-          ? await attempt.response
-          : await fetchHeadersBounded(attempt.run, headersStallMs, `eddy ${attempt.label}`);
+          ? await awaitWithSignal(attempt.response, opts.signal, 'eddy prefetch')
+          : await fetchHeadersBounded(
+              attempt.run,
+              headersStallMs,
+              `eddy ${attempt.label}`,
+              opts.signal,
+            );
       const outcome = await consumeEddyResponse(
         response,
         dependencies,
@@ -921,12 +1035,14 @@ async function tryEddyFastPath(
           ...(outcome.resolvedAt === undefined ? {} : { resolvedAt: outcome.resolvedAt }),
           resolvedVia: attempt.via,
           lockfile: outcome.lockfile,
+          shadowPlan: outcome.shadowPlan,
         };
       }
       const cause = new Error(`${attempt.label}: ${outcome}`);
       reasons.push(cause.message);
       causes.push(cause);
     } catch (err) {
+      if (opts.signal?.aborted) throw abortReason(opts.signal, 'npm install');
       const cause = err instanceof Error ? err : new Error(String(err));
       reasons.push(`${attempt.label}: ${cause.message}`);
       causes.push(cause);
@@ -972,7 +1088,14 @@ async function consumeEddyResponse(
   tarballCache: TarballCache,
   expectedClosureHash?: string,
 ): Promise<
-  { adopted: true; closureHash?: string; resolvedAt?: string; lockfile: Lockfile } | string
+  | {
+      adopted: true;
+      closureHash?: string;
+      resolvedAt?: string;
+      lockfile: Lockfile;
+      shadowPlan: ShadowAssetPlan;
+    }
+  | string
 > {
   // A JSON body is a typed decline (server.ts sends them as 422 + JSON), so
   // parse it BEFORE the status gate — otherwise `!response.ok` swallows the
@@ -986,14 +1109,16 @@ async function consumeEddyResponse(
     // through the same no-progress/byte bound, then parse.
     let declineText: string;
     try {
-      const bytes = await drainBodyBounded(
-        response,
-        opts.resolverStallTimeoutMs === undefined
-          ? { label: 'eddy decline body' }
-          : { stallTimeoutMs: opts.resolverStallTimeoutMs, label: 'eddy decline body' },
-      );
+      const bytes = await drainBodyBounded(response, {
+        label: 'eddy decline body',
+        ...(opts.resolverStallTimeoutMs === undefined
+          ? {}
+          : { stallTimeoutMs: opts.resolverStallTimeoutMs }),
+        ...(opts.signal === undefined ? {} : { signal: opts.signal }),
+      });
       declineText = eddyDecoder.decode(bytes);
     } catch {
+      if (opts.signal?.aborted) throw abortReason(opts.signal, 'npm install');
       return 'resolver decline body stalled or exceeded its byte cap';
     }
     let decline: { feature?: string; error?: string } | null;
@@ -1016,16 +1141,17 @@ async function consumeEddyResponse(
   // drain — an unbounded read here parked `npm install` forever on a resolver
   // that sent a covering manifest+lockfile then hung mid-tarball.
   const entries = response.body
-    ? streamTarEntries(
-        response.body,
-        opts.resolverStallTimeoutMs === undefined
+    ? streamTarEntries(response.body, {
+        ...(opts.resolverStallTimeoutMs === undefined
           ? {}
-          : { stallTimeoutMs: opts.resolverStallTimeoutMs },
-      )
+          : { stallTimeoutMs: opts.resolverStallTimeoutMs }),
+        ...(opts.signal === undefined ? {} : { signal: opts.signal }),
+      })
     : bufferedTarEntries(new Uint8Array(await response.arrayBuffer()));
 
   let manifest: EddyBundleManifestV1 | null = null;
   let lockfile: Lockfile | null = null;
+  let shadowPlan: ShadowAssetPlan | null = null;
   const byFile = new Map<string, EddyBundleTarballEntry>();
   const seededFiles = new Set<string>();
   const seededTarballs: EddyBundleTarballEntry[] = [];
@@ -1083,6 +1209,7 @@ async function consumeEddyResponse(
       }
       const requestAnalysis = analyzeLockfileRequest(
         parsed,
+        planShadowSubstitutionsFromLockfile(parsed),
         dependencies,
         optionalDependencies,
         rootName,
@@ -1103,6 +1230,7 @@ async function consumeEddyResponse(
       );
       if (gap) return gap;
       lockfile = parsed;
+      shadowPlan = requestAnalysis.shadowPlan;
       continue;
     }
     const t = byFile.get(entry.name);
@@ -1116,7 +1244,7 @@ async function consumeEddyResponse(
     seededFiles.add(entry.name);
     seededTarballs.push(t);
   }
-  if (manifest === null || lockfile === null) {
+  if (manifest === null || lockfile === null || shadowPlan === null) {
     return 'malformed EddyBundleV1 bundle: missing manifest or lockfile';
   }
   if (seededFiles.size !== byFile.size) {
@@ -1149,6 +1277,7 @@ async function consumeEddyResponse(
     ...(closureHash === undefined ? {} : { closureHash }),
     ...(resolvedAt === undefined ? {} : { resolvedAt }),
     lockfile,
+    shadowPlan,
   };
 }
 
@@ -1194,16 +1323,119 @@ function createSubstitutionReporter(sink: (line: string) => void): SubstitutionR
   };
 }
 
+function syntheticRecipeForRequest(
+  name: string,
+  range: string | null,
+  parent: string | undefined,
+  overrides: OverrideMap | undefined,
+): BuiltinShadowSubstitutionRecipe | null {
+  const { override } = resolveEffectivePackageRequest(name, range, parent, overrides);
+  if (override !== null) return null;
+  const candidates = builtinShadowSubstitutionCatalog.recipes.filter(
+    (recipe) => recipe.acquisition.kind === 'synthetic' && recipe.trigger.name === name,
+  );
+  if (candidates.length === 0) return null;
+  const match = candidates.find((recipe) => matchesRange(recipe.trigger.version, range));
+  if (match) return match;
+  throw new NotImplementedError(
+    `shadow-registry.${name}@${range ?? '*'}`,
+    'no built-in synthetic recipe admits the requested version range',
+  );
+}
+
+function registryRecipeForResolution(
+  requestedName: string,
+  requestedRange: string | null,
+  override: ReturnType<typeof resolveEffectivePackageRequest>['override'],
+  effectiveName: string,
+  version: string,
+): BuiltinShadowSubstitutionRecipe | null {
+  if (override?.source !== 'baked') return null;
+  return (
+    builtinShadowSubstitutionCatalog.recipes.find(
+      (recipe) =>
+        recipe.acquisition.kind === 'registry' &&
+        recipe.trigger.name === requestedName &&
+        matchesRange(recipe.trigger.version, requestedRange) &&
+        recipe.acquisition.name === effectiveName &&
+        recipe.acquisition.version === version,
+    ) ?? null
+  );
+}
+
+function syntheticResolvedIdentity(recipe: BuiltinShadowSubstitutionRecipe): string {
+  return `rifty:shadow-substitution/${recipe.id}@${recipe.digest}`;
+}
+
+function syntheticManifest(recipe: BuiltinShadowSubstitutionRecipe): Readonly<{
+  dependencies: Record<string, string>;
+  optionalDependencies: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  bin?: string | Record<string, string>;
+}> {
+  const file = recipe.materialization.files.find((candidate) => candidate.path === 'package.json');
+  if (!file) throw new TypeError(`synthetic recipe ${recipe.id} has no package.json`);
+  const value = JSON.parse(file.content) as unknown;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`synthetic recipe ${recipe.id} package.json is not an object`);
+  }
+  const manifest = value as Record<string, unknown>;
+  if (
+    manifest.name !== recipe.materialization.name ||
+    manifest.version !== recipe.materialization.version
+  ) {
+    throw new TypeError(`synthetic recipe ${recipe.id} package identity drifted`);
+  }
+  const record = (field: string): Record<string, string> => {
+    const candidate = manifest[field];
+    if (candidate === undefined) return {};
+    if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      throw new TypeError(`synthetic recipe ${recipe.id} ${field} is invalid`);
+    }
+    const output: Record<string, string> = {};
+    for (const [key, entry] of Object.entries(candidate as Record<string, unknown>)) {
+      if (typeof entry !== 'string') {
+        throw new TypeError(`synthetic recipe ${recipe.id} ${field}.${key} is invalid`);
+      }
+      output[key] = entry;
+    }
+    return output;
+  };
+  const binValue = manifest.bin;
+  let bin: string | Record<string, string> | undefined;
+  if (typeof binValue === 'string') bin = binValue;
+  else if (binValue !== undefined) {
+    if (binValue === null || typeof binValue !== 'object' || Array.isArray(binValue)) {
+      throw new TypeError(`synthetic recipe ${recipe.id} bin is invalid`);
+    }
+    bin = record('bin');
+  }
+  const peerDependencies = record('peerDependencies');
+  return {
+    dependencies: record('dependencies'),
+    optionalDependencies: record('optionalDependencies'),
+    ...(Object.keys(peerDependencies).length === 0 ? {} : { peerDependencies }),
+    ...(bin === undefined ? {} : { bin }),
+  };
+}
+
 /** Pick per-edge lockfile replay or fresh metadata resolution. */
 function chooseSource(
   existingLockfile: Lockfile | null,
+  existingShadowPlan: ShadowAssetPlan | null,
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
 ): SourcePlan {
   if (existingLockfile) {
-    const incremental = createIncrementalSource(existingLockfile, opts, substitutions);
+    if (!existingShadowPlan) throw new TypeError('decoded lockfile shadow plan is missing');
+    const incremental = createIncrementalSource(
+      existingLockfile,
+      existingShadowPlan,
+      opts,
+      substitutions,
+    );
     return {
       source: incremental.source,
       resolution: incremental.resolution,
@@ -1227,14 +1459,42 @@ type LockfileReuseDecision =
       readonly policyFrontier: boolean;
     };
 
+function replayedShadowFact(
+  plan: ShadowAssetPlan,
+  recipe: BuiltinShadowSubstitutionRecipe,
+  entry: Lockfile['packages'][string],
+  materializationInstallPath: string,
+): AppliedShadowSubstitution | undefined {
+  return plan.substitutions.find((fact) => {
+    if (
+      fact.substitutionId !== recipe.id ||
+      fact.materialization.installPath !== materializationInstallPath
+    ) {
+      return false;
+    }
+    if (recipe.acquisition.kind === 'synthetic') {
+      return fact.acquisition.kind === 'synthetic';
+    }
+    return (
+      fact.acquisition.kind === 'registry' &&
+      fact.acquisition.name === recipe.acquisition.name &&
+      fact.acquisition.version === entry.version &&
+      fact.acquisition.resolved === entry.resolved &&
+      fact.acquisition.integrity === entry.integrity
+    );
+  });
+}
+
 /** Per-edge ADR-0023 coverage. Strict lockfile decoding errors stay fatal. */
 function lockfileReuseDecision(
   lockfile: Lockfile,
+  shadowPlan: ShadowAssetPlan,
   name: string,
   range: string | null,
   ctx: ResolveContext,
   overrides: OverrideMap | undefined,
 ): LockfileReuseDecision {
+  const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides);
   const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
     name,
     range,
@@ -1242,7 +1502,7 @@ function lockfileReuseDecision(
     overrides,
   );
   const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
-  const policyFrontier = override !== null;
+  const policyFrontier = override !== null || synthetic !== null;
   if (!hit) return { kind: 'miss', reason: 'missing-entry', policyFrontier };
   if (
     (!rangeIsUnconstrained(effectiveRange) && !matchesRange(hit.entry.version, effectiveRange)) ||
@@ -1251,6 +1511,18 @@ function lockfileReuseDecision(
       !matchesRange(hit.entry.version, override.range))
   ) {
     return { kind: 'miss', reason: 'range-drift', policyFrontier };
+  }
+  const recipe =
+    synthetic ??
+    registryRecipeForResolution(name, range, override, effectiveName, hit.entry.version);
+  const materializationInstallPath = recipe
+    ? shadowMaterializationInstallPath(hit.installPath, effectiveName, recipe.materialization.name)
+    : undefined;
+  if (
+    recipe &&
+    replayedShadowFact(shadowPlan, recipe, hit.entry, materializationInstallPath!) === undefined
+  ) {
+    return { kind: 'miss', reason: 'missing-entry', policyFrontier: true };
   }
   return { kind: 'reuse' };
 }
@@ -1279,11 +1551,13 @@ function mergeLockfileRequestOwnership(
 interface LockfileRequestAnalysis {
   readonly ownership: LockfileRequestOwnership;
   readonly reachablePaths: ReadonlySet<string>;
+  readonly shadowPlan: ShadowAssetPlan;
 }
 
 /** No-I/O mirror of the mixed resolver, used by the Eddy provenance gates. */
 function analyzeLockfileRequest(
   lockfile: Lockfile,
+  shadowPlan: ShadowAssetPlan,
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   rootName: string,
@@ -1296,11 +1570,12 @@ function analyzeLockfileRequest(
   };
 
   const visit = (name: string, range: string | null, ctx: ResolveContext): void => {
-    const decision = lockfileReuseDecision(lockfile, name, range, ctx, overrides);
+    const decision = lockfileReuseDecision(lockfile, shadowPlan, name, range, ctx, overrides);
     if (decision.kind === 'miss') {
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
     }
+    const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides);
     const { effectiveName } = resolveEffectivePackageRequest(
       name,
       range,
@@ -1308,7 +1583,7 @@ function analyzeLockfileRequest(
       overrides,
     );
     const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
-    if (!hit || !hit.entry.resolved || !hit.entry.integrity) {
+    if (!hit || (!synthetic && (!hit.entry.resolved || !hit.entry.integrity))) {
       recordOwnership('broken');
       return;
     }
@@ -1352,20 +1627,21 @@ function analyzeLockfileRequest(
       }
     }
   }
-  return { ownership, reachablePaths };
+  return { ownership, reachablePaths, shadowPlan };
 }
 
 /** Covered edges replay; only uncovered or policy-drifted frontiers use metadata. */
 function createIncrementalSource(
   lockfile: Lockfile,
+  shadowPlan: ShadowAssetPlan,
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
 ): Readonly<{ source: ResolutionSource; resolution: () => InstallResolution }> {
-  const locked = createLockfileSource(lockfile, opts, substitutions);
+  const locked = createLockfileSource(lockfile, shadowPlan, opts, substitutions);
   const registry = createRegistrySource(opts, substitutions);
   let metadataUsed = false;
   const useRegistry = (name: string, range: string | null, ctx: ResolveContext): boolean => {
-    const decision = lockfileReuseDecision(lockfile, name, range, ctx, opts.overrides);
+    const decision = lockfileReuseDecision(lockfile, shadowPlan, name, range, ctx, opts.overrides);
     return decision.kind === 'miss' && registryOwnsIncrementalMiss(decision, ctx);
   };
 
@@ -1392,6 +1668,10 @@ function createIncrementalSource(
 function resolvedPinIdentity(pin: ResolvedPin): string {
   return `${pin.name}\0${pin.version}\0${pin.resolved}\0${pin.integrity ?? ''}`;
 }
+
+type PinAcquisitionResult =
+  | Readonly<{ kind: 'synthetic' }>
+  | Readonly<{ kind: 'tarball'; result: FetchAndUnpackResult }>;
 
 /**
  * Single traversal driver: for each node, ask `source` for its pin, decide
@@ -1445,12 +1725,12 @@ async function walkAndPin(
   /** Paths reached by at least one non-optional edge; demand only strengthens. */
   const requiredDemandPaths = new Set<string>();
   /** Collapse concurrent same-package acquisitions to one network call. */
-  const inFlight = new Map<string, Promise<FetchAndUnpackResult>>();
+  const inFlight = new Map<string, Promise<PinAcquisitionResult>>();
   /** Optional direct roots materialized before they may reserve a flat slot. */
   const preparedOptionalPackages = new Map<string, PinnedPackage>();
   /** Deferred fetch tasks; `optional` carries the warn descriptor (or null). */
   const fetchTasks: Array<{
-    promise: Promise<FetchAndUnpackResult>;
+    promise: Promise<PinAcquisitionResult>;
     pin: ResolvedPin;
     installPath: string;
     optional: { depName: string; depRange: string; parentName: string } | null;
@@ -1463,27 +1743,37 @@ async function walkAndPin(
     }
   }
 
-  function acquirePin(pin: ResolvedPin): Promise<FetchAndUnpackResult> {
+  function acquirePin(pin: ResolvedPin): Promise<PinAcquisitionResult> {
     const key = resolvedPinIdentity(pin);
     let pending = inFlight.get(key);
     if (pending) return pending;
-    pending = sem.run(() =>
-      fetchAndUnpackToCache(
-        {
-          name: pin.name,
-          version: pin.version,
-          resolved: pin.resolved,
-          integrity: pin.integrity,
-        },
-        fetchCtx,
-      ),
-    );
-    if (onPackage) {
+    if (pin.shadow?.acquisition.kind === 'synthetic') {
+      pending = Promise.resolve({ kind: 'synthetic' });
+    } else {
+      pending = sem.run(async () => ({
+        kind: 'tarball' as const,
+        result: await fetchAndUnpackToCache(
+          {
+            name: pin.name,
+            version: pin.version,
+            resolved: pin.resolved,
+            integrity: pin.integrity,
+          },
+          fetchCtx,
+        ),
+      }));
+    }
+    if (onPackage && pin.shadow?.acquisition.kind !== 'synthetic') {
       const hook = onPackage;
       const { name: pinName, version: pinVersion } = pin;
-      pending = pending.then((result) => {
+      pending = pending.then((acquisition) => {
+        if (acquisition.kind !== 'tarball') return acquisition;
         try {
-          hook({ name: pinName, version: pinVersion, cacheHit: result.cacheHit });
+          hook({
+            name: pinName,
+            version: pinVersion,
+            cacheHit: acquisition.result.cacheHit,
+          });
         } catch (err) {
           console.warn(
             `install onPackage hook threw for ${pinName}@${pinVersion}: ${
@@ -1491,7 +1781,7 @@ async function walkAndPin(
             }`,
           );
         }
-        return result;
+        return acquisition;
       });
     }
     inFlight.set(key, pending);
@@ -1580,10 +1870,11 @@ async function walkAndPin(
             const preparedKey = `${key}\0${installPath}`;
             const pkg =
               preparedOptionalPackages.get(preparedKey) ??
-              (await pinToPackage(pin, result.bytes, result.integrity, installPath));
+              (await pinToPackage(pin, result, installPath));
             pinned.set(installPath, pkg);
           }
         } catch (err) {
+          throwIfAborted(fetchCtx.signal);
           // Roll back the synchronous claims THIS visit made before re-throwing
           // to the parent's optional catch (#24 dedup-gate bug): `scheduled` was
           // added pre-fetch, so without this a later REQUIRED visit of the SAME
@@ -1634,6 +1925,7 @@ async function walkAndPin(
         try {
           await visit(depName, depRange, childContext, desc);
         } catch (err) {
+          throwIfAborted(fetchCtx.signal);
           warnOptional(desc, err);
         }
       }
@@ -1683,10 +1975,11 @@ async function walkAndPin(
         const installPath = `node_modules/${pin.name}`;
         preparedOptionalPackages.set(
           `${resolvedPinIdentity(pin)}\0${installPath}`,
-          await pinToPackage(pin, result.bytes, result.integrity, installPath),
+          await pinToPackage(pin, result, installPath),
         );
         optionalRoots.push({ name, range, pin, optional: desc });
       } catch (error) {
+        throwIfAborted(fetchCtx.signal);
         warnOptional(desc, error);
       }
     }
@@ -1732,6 +2025,7 @@ async function walkAndPin(
     if (!task || !outcome) continue;
     const optionalFailure = requiredDemandPaths.has(task.installPath) ? null : task.optional;
     if (outcome.status === 'rejected') {
+      throwIfAborted(fetchCtx.signal);
       if (optionalFailure !== null) {
         warnOptional(optionalFailure, outcome.reason);
         continue;
@@ -1740,16 +2034,9 @@ async function walkAndPin(
     }
     if (pinned.has(task.installPath)) continue;
     try {
-      pinned.set(
-        task.installPath,
-        await pinToPackage(
-          task.pin,
-          outcome.value.bytes,
-          outcome.value.integrity,
-          task.installPath,
-        ),
-      );
+      pinned.set(task.installPath, await pinToPackage(task.pin, outcome.value, task.installPath));
     } catch (error) {
+      throwIfAborted(fetchCtx.signal);
       if (optionalFailure === null) throw error;
       warnOptional(optionalFailure, error);
     }
@@ -1828,11 +2115,18 @@ function translateRecordedInstallPath(
  */
 async function pinToPackage(
   pin: ResolvedPin,
-  bytes: Uint8Array,
-  integrity: string,
+  acquisition: PinAcquisitionResult,
   installPath: string,
 ): Promise<PinnedPackage> {
-  const files = await extractTarGz(bytes);
+  const files =
+    acquisition.kind === 'synthetic'
+      ? Object.fromEntries(
+          pin.shadow!.recipe.materialization.files.map((file) => [
+            file.path,
+            new TextEncoder().encode(file.content),
+          ]),
+        )
+      : await extractTarGz(acquisition.result.bytes);
   const pkg: PinnedPackage = {
     name: pin.name,
     version: pin.version,
@@ -1840,13 +2134,50 @@ async function pinToPackage(
     dependencies: pin.dependencies,
     bin: pin.bin,
     resolved: pin.resolved,
-    integrity,
     installPath,
+    ...(acquisition.kind === 'tarball' ? { integrity: acquisition.result.integrity } : {}),
   };
   if (pin.peerDependencies && Object.keys(pin.peerDependencies).length > 0) {
     pkg.peerDependencies = pin.peerDependencies;
   }
+  if (pin.shadow) {
+    const materializationInstallPath = shadowMaterializationInstallPath(
+      installPath,
+      pin.name,
+      pin.shadow.recipe.materialization.name,
+    );
+    const fact = attestBuiltinShadowSubstitution({
+      trigger: pin.shadow.trigger,
+      installPath: materializationInstallPath,
+      acquisition:
+        pin.shadow.acquisition.kind === 'synthetic'
+          ? { kind: 'synthetic' }
+          : {
+              kind: 'registry',
+              name: pin.shadow.acquisition.name,
+              version: pin.shadow.acquisition.version,
+              resolved: pin.shadow.acquisition.resolved,
+              integrity:
+                acquisition.kind === 'tarball'
+                  ? acquisition.result.integrity
+                  : pin.shadow.acquisition.integrity!,
+            },
+    });
+    pinnedShadowSubstitutions.set(pkg, fact);
+  }
   return pkg;
+}
+
+function shadowMaterializationInstallPath(
+  installPath: string,
+  acquiredName: string,
+  materializedName: string,
+): string {
+  const suffix = `node_modules/${acquiredName}`;
+  if (!installPath.endsWith(suffix)) {
+    throw new TypeError(`shadow acquisition has invalid install path ${installPath}`);
+  }
+  return `${installPath.slice(0, installPath.length - acquiredName.length)}${materializedName}`;
 }
 
 /**
@@ -1860,18 +2191,16 @@ async function pinToPackage(
  */
 function createLockfileSource(
   lockfile: Lockfile,
+  shadowPlan: ShadowAssetPlan,
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
 ): ResolutionSource {
   return {
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      // Apply the same shadow/user override the live-resolve source does
-      // (`createRegistrySource`, ADR-0015 baked table + user `overrides`) BEFORE
-      // the lockfile lookup. The writer stores a redirect under its TARGET key
-      // (`esbuild` → `@esbuild/wasi-preview1`), leaving no `node_modules/esbuild`
-      // entry, so replaying the SOURCE name verbatim would miss the pin and throw
-      // EBROKENLOCK — the exact break eddy's pre-seeded lockfile hit on vite →
-      // esbuild.
+      const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+      // Apply the same retained redirect/user override as live resolution
+      // before lookup. Synthetic catalog recipes keep their source identity
+      // and are validated separately against the lockfile recipe trace.
       const { override, effectiveName } = resolveEffectivePackageRequest(
         name,
         range,
@@ -1888,7 +2217,7 @@ function createLockfileSource(
         );
       }
       const { entry, installPath } = hit;
-      if (!entry.resolved || !entry.integrity) {
+      if (!entry.resolved || (!synthetic && !entry.integrity)) {
         throw Object.assign(
           new Error(
             `EBROKENLOCK: lockfile entry for '${effectiveName}' at '${installPath}' is malformed (missing ${
@@ -1923,11 +2252,43 @@ function createLockfileSource(
       if (override && override.source === 'baked' && override.name !== name) {
         substitutions.redirect(name, range, effectiveName, entry.version);
       }
+      const shadowRecipe =
+        synthetic ??
+        registryRecipeForResolution(name, range, override, effectiveName, entry.version);
+      const shadowFact = shadowRecipe
+        ? replayedShadowFact(
+            shadowPlan,
+            shadowRecipe,
+            entry,
+            shadowMaterializationInstallPath(
+              installPath,
+              effectiveName,
+              shadowRecipe.materialization.name,
+            ),
+          )
+        : undefined;
+      if (shadowRecipe && !shadowFact) {
+        throw Object.assign(
+          new Error(
+            `EBROKENLOCK: shadow substitution ${shadowRecipe.id} is missing its replay trace`,
+          ),
+          {
+            code: 'EBROKENLOCK',
+            packageName: effectiveName,
+            reason: 'shadow-trace-drift' as const,
+          },
+        );
+      }
+      if (synthetic) {
+        substitutions.line(
+          `npm: ${name}@${range ?? '*'} materialized from shadow registry (${synthetic.id})`,
+        );
+      }
       return {
         origin: 'lockfile',
         name: effectiveName,
         version: entry.version,
-        resolved: entry.resolved,
+        resolved: entry.resolved ?? syntheticResolvedIdentity(synthetic!),
         integrity: entry.integrity,
         dependencies: entry.dependencies ?? {},
         bin: entry.bin,
@@ -1935,6 +2296,28 @@ function createLockfileSource(
         // Optionals already filtered at lockfile-write time.
         optionalDependencies: {},
         installPath,
+        ...(shadowRecipe
+          ? {
+              shadow: {
+                recipe: shadowRecipe,
+                trigger: {
+                  name,
+                  requestedRange: range,
+                  version: shadowRecipe.trigger.version,
+                },
+                acquisition:
+                  shadowRecipe.acquisition.kind === 'synthetic'
+                    ? ({ kind: 'synthetic' } as const)
+                    : ({
+                        kind: 'registry',
+                        name: effectiveName,
+                        version: entry.version,
+                        resolved: entry.resolved!,
+                        integrity: entry.integrity,
+                      } as const),
+              },
+            }
+          : {}),
       };
     },
   };
@@ -1999,7 +2382,10 @@ function createRegistrySource(
     if (!pending) {
       pending = packumentSem
         .run(async () => {
-          const packument = await opts.registry.getPackument(name);
+          const packument = await opts.registry.getPackument(
+            name,
+            opts.signal === undefined ? {} : { signal: opts.signal },
+          );
           packumentCache.set(name, packument);
           return packument;
         })
@@ -2014,6 +2400,7 @@ function createRegistrySource(
 
   return {
     prefetch(name, range, ctx): void {
+      if (syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides)) return;
       const { effectiveName } = resolveEffectivePackageRequest(
         name,
         range,
@@ -2024,6 +2411,32 @@ function createRegistrySource(
     },
 
     async resolve(name, range, ctx): Promise<ResolvedPin> {
+      const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+      if (synthetic) {
+        const manifest = syntheticManifest(synthetic);
+        substitutions.line(
+          `npm: ${name}@${range ?? '*'} materialized from shadow registry (${synthetic.id})`,
+        );
+        return {
+          origin: 'metadata',
+          name: synthetic.materialization.name,
+          version: synthetic.materialization.version,
+          resolved: syntheticResolvedIdentity(synthetic),
+          dependencies: manifest.dependencies,
+          bin: manifest.bin,
+          peerDependencies: manifest.peerDependencies,
+          optionalDependencies: manifest.optionalDependencies,
+          shadow: {
+            recipe: synthetic,
+            trigger: {
+              name,
+              requestedRange: range,
+              version: synthetic.trigger.version,
+            },
+            acquisition: { kind: 'synthetic' },
+          },
+        };
+      }
       const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
         name,
         range,
@@ -2072,6 +2485,7 @@ function createRegistrySource(
         }
       }
 
+      const shadowRecipe = registryRecipeForResolution(name, range, override, effectiveName, pick);
       return {
         origin: 'metadata',
         name: effectiveName,
@@ -2082,6 +2496,25 @@ function createRegistrySource(
         bin: manifest.bin,
         peerDependencies: manifest.peerDependencies,
         optionalDependencies: manifest.optionalDependencies ?? {},
+        ...(shadowRecipe
+          ? {
+              shadow: {
+                recipe: shadowRecipe,
+                trigger: {
+                  name,
+                  requestedRange: range,
+                  version: shadowRecipe.trigger.version,
+                },
+                acquisition: {
+                  kind: 'registry' as const,
+                  name: effectiveName,
+                  version: pick,
+                  resolved: manifest.dist.tarball,
+                  integrity: expectedIntegrity,
+                },
+              },
+            }
+          : {}),
       };
     },
   };

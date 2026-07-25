@@ -223,8 +223,10 @@ describe.each(STRUCTURAL_CASES)('owner-applied $name ordering', (scenario) => {
     await handleHostCommit(h, request);
 
     const treeRevision = beforeRevision + 1;
-    const terminal = h.authority.retainedHostCommitTerminal(request.operationId);
-    if (terminal === null) throw new Error('host commit terminal was not retained');
+    const terminal = h.emitted.at(-1);
+    if (terminal?.type !== 'rifty:owner-vfs-commit-ack') {
+      throw new Error('host commit terminal was not emitted');
+    }
     expect.soft(h.authority.treeRevision).toBe(treeRevision);
     expect.soft(terminal).toMatchObject({
       type: 'rifty:owner-vfs-commit-ack',
@@ -256,13 +258,6 @@ describe.each(STRUCTURAL_CASES)('owner-applied $name ordering', (scenario) => {
       closed: false,
     });
 
-    h.timeline.length = 0;
-    const replayBefore = h.emitted.length;
-    await handleHostCommit(h, request);
-
-    expect.soft(h.authority.treeRevision).toBe(treeRevision);
-    expect.soft(h.emitted.slice(replayBefore)).toEqual([terminal]);
-    expect.soft(h.timeline).toEqual([{ kind: 'owner', type: 'rifty:owner-vfs-commit-ack' }]);
     observed.unsubscribe();
   });
 });
@@ -285,8 +280,10 @@ describe('owner-applied no-op ordering', () => {
 
     await handleHostCommit(h, request);
 
-    const terminal = h.authority.retainedHostCommitTerminal(request.operationId);
-    if (terminal === null) throw new Error('no-op terminal was not retained');
+    const terminal = h.emitted.at(-1);
+    if (terminal?.type !== 'rifty:owner-vfs-commit-ack') {
+      throw new Error('no-op terminal was not emitted');
+    }
     expect.soft(h.authority.treeRevision).toBe(treeRevision);
     expect.soft(h.emitted.slice(emittedBefore)).toEqual([
       {
@@ -310,14 +307,6 @@ describe('owner-applied no-op ordering', () => {
       .soft(observed.content.files.snapshot().entries.map((entry) => entry.path))
       .toEqual(['/src', '/src/main.ts']);
 
-    h.timeline.length = 0;
-    const replayBefore = h.emitted.length;
-    await handleHostCommit(h, request);
-
-    expect.soft(h.authority.treeRevision).toBe(treeRevision);
-    expect.soft(h.emitted.slice(replayBefore)).toEqual([terminal]);
-    expect.soft(h.timeline).toEqual([{ kind: 'owner', type: 'rifty:owner-vfs-commit-ack' }]);
-    expect.soft(observed.document.snapshot().staleReason).toBeNull();
     observed.unsubscribe();
   });
 });

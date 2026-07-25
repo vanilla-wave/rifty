@@ -69,7 +69,7 @@ function createHarness(writeFile: (path: string, data: Uint8Array) => Promise<vo
           admit: (candidate) =>
             authority.admitHostCommit(
               candidate,
-              (owned) => authority.applyHostCommit(owned),
+              (owned, apply) => apply(owned),
               () => mirror.update(collectSnapshot(authority, '/')),
             ),
           send: (message) => {

@@ -12,6 +12,7 @@ import {
 import { inspectPlaygroundCatalogSnapshot } from './playground-project-catalog.ts';
 import {
   type CapturedPlaygroundUrlContext,
+  type InspectedPlaygroundProjectDefinition,
   type PlaygroundProjectDefinitionWire,
   playgroundProjectDefinitionWire,
   recreatePlaygroundProjectDefinition,
@@ -67,6 +68,19 @@ export type PlaygroundProjectRuntimeDecision =
   | { readonly kind: 'vite'; readonly port: number }
   | { readonly kind: 'node-server' }
   | { readonly kind: 'node-cli' };
+
+/** Concrete runtime projection owned beside its clone-safe protocol shape. */
+export function playgroundProjectRuntimeDecision(
+  definition: Pick<InspectedPlaygroundProjectDefinition, 'kind' | 'port'>,
+): PlaygroundProjectRuntimeDecision {
+  if (definition.kind === 'vite') {
+    if (definition.port === undefined) {
+      throw new TypeError('Playground Vite definition is missing its owner port');
+    }
+    return Object.freeze({ kind: 'vite', port: definition.port });
+  }
+  return Object.freeze({ kind: definition.kind });
+}
 
 export type PlaygroundOwnerToPageMessage =
   | { readonly type: 'workbench:playground-ready'; readonly catalog: PlaygroundCatalogSnapshot }

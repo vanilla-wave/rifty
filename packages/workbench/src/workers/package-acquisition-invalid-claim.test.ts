@@ -1,4 +1,5 @@
 import type { InstallResult } from '@riftydev/npm-client';
+import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
@@ -24,6 +25,10 @@ const PROJECT: PackageAcquisitionProject = {
   slug: 'app',
   identity: installArtifactIdentity,
 };
+const EMPTY_SHADOW_PLAN = planShadowSubstitutionsFromLockfile({
+  lockfileVersion: 3,
+  packages: {},
+});
 
 const INSTALL_RESULT: InstallResult = {
   packages: [{ name: 'vite', version: '5.4.21', dependencies: {}, files: {} }],
@@ -119,11 +124,16 @@ describe('package acquisition invalid physical claim acceptance', () => {
           planSnapshotRestore: async () => ({
             status: 'ready',
             packages: 1,
+            shadowPlan: EMPTY_SHADOW_PLAN,
             apply: async () => installTree(),
           }),
           install: async () => {
             installTree();
-            return { result: INSTALL_RESULT, packageJsonText: PACKAGE_JSON };
+            return {
+              result: INSTALL_RESULT,
+              shadowPlan: EMPTY_SHADOW_PLAN,
+              packageJsonText: PACKAGE_JSON,
+            };
           },
           reset: async () => {
             mutations.push(operation);

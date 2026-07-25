@@ -2,8 +2,8 @@
  * Baked dependency snapshot (ADR-0135): a template's fully installed
  * node_modules tree + lockfile, serialized at bake time (`pnpm snapshots:bake`)
  * and shipped as a same-origin gzipped JSON asset. The worker bootstrap
- * restores it on a stampless boot instead of running `install()`, so the
- * first-ever open of an instant preset is truly instant.
+ * restores it on a stampless boot instead of running `install()`; runtime
+ * assets follow the separate verified-store contract (ADR-0320).
  *
  * Snapshot v2 carries the exact package.json text and install-artifact identity
  * that produced the tree. Restore compares both byte-for-byte (ADR-0261).

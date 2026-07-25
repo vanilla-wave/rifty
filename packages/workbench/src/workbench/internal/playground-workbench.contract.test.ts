@@ -176,7 +176,7 @@ function options(): WorkbenchOptions {
         devServer: '/dev-server.js',
       },
       serviceWorker: { url: '/service-worker.js', scope: '/' },
-      wasm: { sqlite: '/sqlite.wasm', esbuild: '/esbuild.wasm' },
+      wasm: { sqlite: '/sqlite.wasm' },
     },
     packageAcquisition: { registryUrl: '/npm-registry' },
     storage: { persistence: 'ephemeral' },

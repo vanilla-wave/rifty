@@ -66,7 +66,6 @@ export interface WorkbenchOwnerStartInput {
     };
     readonly wasm: {
       readonly sqlite: string;
-      readonly esbuild: string;
     };
     readonly previewProbeTimeoutMs: number;
   };

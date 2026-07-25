@@ -181,6 +181,31 @@ describe('streamTarEntries — incremental EddyBundleV1 outer-tar reader', () =>
     expect(cancelled).toBe(true); // the dead stream was released, not leaked
   });
 
+  it('caller abort interrupts a stalled bundle read and cancels the source', async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error('project closed during Eddy body read');
+    const consume = async () => {
+      for await (const _ of streamTarEntries(stream, {
+        signal: controller.signal,
+        stallTimeoutMs: 60_000,
+      })) {
+        // drain
+      }
+    };
+    const consuming = consume();
+
+    controller.abort(reason);
+
+    await expect(consuming).rejects.toBe(reason);
+    expect(cancelled).toBe(true);
+  });
+
   it('an OVER-CAP body throws (a forged giant tar header must not buffer unbounded)', async () => {
     // A header claiming a ~8GB member would make `ensure(padded)` buffer the
     // whole body; the byte cap has to cut it off.

@@ -15,6 +15,16 @@ interface OpfsInstallation {
   readonly fsSync: FsSync & { flush(): Promise<PersistFailureReport> };
 }
 
+export interface WorkbenchOwnerStorageAuthority {
+  /** Clone-safe owner truth used by page/worker protocol messages. */
+  readonly snapshot: OwnerStorageSnapshot;
+  /** Present only while the selected backend is the proven OPFS installation. */
+  readonly opfs?: Readonly<{
+    persistedVfs: Vfs;
+    flush(): Promise<PersistFailureReport>;
+  }>;
+}
+
 export interface WorkbenchOwnerStorageInstallers {
   openMemory(): void | Promise<void>;
   openOpfs(): Promise<OpfsInstallation>;
@@ -131,20 +141,37 @@ async function proveOpfs(
   if (cleanupFailure !== undefined) throw cleanupFailure;
 }
 
-/** Installs exactly one owner-realm backend and returns its owner-born truth. */
-export function installWorkbenchOwnerStorage(
+/** Installs one backend and retains the private persisted OPFS read-back surface. */
+export async function installWorkbenchOwnerStorageAuthority(
   policy: OwnerStoragePersistence,
   options: WorkbenchOwnerStorageOptions = {},
-): Promise<OwnerStorageSnapshot> {
+): Promise<WorkbenchOwnerStorageAuthority> {
   const timeoutMs = options.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return Promise.reject(new RangeError('Workbench OPFS proof timeout must be positive'));
+    throw new RangeError('Workbench OPFS proof timeout must be positive');
   }
   const installers = options.installers ?? defaultInstallers();
   const createProofId = options.createProofId ?? defaultProofId;
-  return selectOwnerStorage(policy, {
+  let openedOpfs: OpfsInstallation | undefined;
+  const snapshot = await selectOwnerStorage(policy, {
     openMemory: () => installers.openMemory(),
-    openOpfs: () => installers.openOpfs(),
+    openOpfs: async () => {
+      const installation = await installers.openOpfs();
+      openedOpfs = installation;
+      return installation;
+    },
     proveOpfs: (installation) => proveOpfs(installation, createProofId(), timeoutMs),
+  });
+  if (snapshot.backend !== 'opfs') return Object.freeze({ snapshot });
+  if (openedOpfs === undefined) {
+    throw new Error('Workbench OPFS selection lost its private installation handle');
+  }
+  const installation = openedOpfs;
+  return Object.freeze({
+    snapshot,
+    opfs: Object.freeze({
+      persistedVfs: installation.vfs,
+      flush: () => installation.fsSync.flush(),
+    }),
   });
 }

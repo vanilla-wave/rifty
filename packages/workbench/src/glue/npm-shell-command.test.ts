@@ -26,6 +26,7 @@ import {
   canonicalEddyRequestKey,
   eddyRequestFromPackageJson,
 } from '@riftydev/npm-client';
+import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
 import { type CommandContext, type ProcessExit, Shell } from '@riftydev/shell';
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
@@ -33,12 +34,31 @@ import { createPackageAcquisitionAuthority } from '../workers/package-acquisitio
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import { createInstallStamp } from './install-stamp.ts';
+import { createTestNpmPackageAcquisitionAuthority } from './npm-shell-command.test-fixture.ts';
 import {
   type InstallFn,
-  createNpmPackageAcquisitionAuthority,
-  createNpmShellCommand,
+  type NpmShellCommandDeps,
+  createNpmShellCommand as createNpmShellCommandWithAuthority,
   formatInstallDuration,
 } from './npm-shell-command.ts';
+
+const EMPTY_SHADOW_PLAN = planShadowSubstitutionsFromLockfile({
+  lockfileVersion: 3,
+  packages: {},
+});
+
+type TestNpmShellCommandDeps = Omit<NpmShellCommandDeps, 'packageAcquisitionAuthority'> & {
+  readonly packageAcquisitionAuthority?: NpmShellCommandDeps['packageAcquisitionAuthority'];
+};
+
+function createNpmShellCommand(deps: TestNpmShellCommandDeps) {
+  const { packageAcquisitionAuthority, ...base } = deps;
+  return createNpmShellCommandWithAuthority({
+    ...base,
+    packageAcquisitionAuthority:
+      packageAcquisitionAuthority ?? createTestNpmPackageAcquisitionAuthority(base),
+  });
+}
 
 /**
  * Build a successful install stub that records the call and returns the
@@ -131,6 +151,246 @@ async function runShell(shell: Shell, line: string): Promise<{ exitCode: number;
 }
 
 describe('npm-shell-command — happy path', () => {
+  it('forwards terminal lifecycle cancellation into the active npm-client install', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile('/proj/package.json', '{"name":"app","dependencies":{"kleur":"4.1.5"}}\n');
+    let markInstallStarted!: () => void;
+    const installStarted = new Promise<void>((resolve) => {
+      markInstallStarted = resolve;
+    });
+    let seenSignal: AbortSignal | undefined;
+    const install: InstallFn = async (arg1) => {
+      if (typeof arg1 !== 'object') throw new Error('expected options install');
+      seenSignal = arg1.signal;
+      markInstallStarted();
+      return await new Promise<InstallResult>((_resolve, reject) => {
+        arg1.signal?.addEventListener('abort', () => reject(arg1.signal?.reason), {
+          once: true,
+        });
+      });
+    };
+    const command = createNpmShellCommand({ vfs, registry: fakeRegistry, install });
+    const controller = new AbortController();
+    const output: string[] = [];
+    const running = command(['install'], {
+      cwd: '/proj',
+      env: {},
+      signal: controller.signal,
+      stdout: { write: (chunk) => output.push(String(chunk)) },
+      stderr: { write: (chunk) => output.push(String(chunk)) },
+    });
+    await installStarted;
+    const reason = new Error('project closed');
+    controller.abort(reason);
+
+    await expect(running).resolves.toBe(1);
+    expect(seenSignal).toBe(controller.signal);
+    expect(output.join('')).toContain('project closed');
+  });
+
+  it('walks from a nested cwd to the nearest package.json install root', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/src/nested', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'root', dependencies: { kleur: '4.1.5' } })}\n`,
+    );
+    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const shell = new Shell({ cwd: '/proj/src/nested' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, 'npm install');
+
+    expect(result.exitCode).toBe(0);
+    expect(calls).toEqual([{ root: 'root', deps: { kleur: '4.1.5' }, cwd: '/proj' }]);
+  });
+
+  it('keeps a nested cwd that owns package.json as its exact install root', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/packages/app/src', { recursive: true });
+    await vfs.mkdir('/proj/node_modules');
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'outer', dependencies: { outer: '1.0.0' } })}\n`,
+    );
+    await vfs.writeFile(
+      '/proj/packages/app/package.json',
+      `${JSON.stringify({ name: 'app', dependencies: { kleur: '4.1.5' } })}\n`,
+    );
+    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const shell = new Shell({ cwd: '/proj/packages/app' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, 'npm install');
+
+    expect(result.exitCode).toBe(0);
+    expect(calls).toEqual([{ root: 'app', deps: { kleur: '4.1.5' }, cwd: '/proj/packages/app' }]);
+  });
+
+  it('ignores wrong-kind prefix markers and keeps walking to a valid ancestor', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/near/src', { recursive: true });
+    await vfs.mkdir('/proj/near/package.json');
+    await vfs.writeFile('/proj/near/node_modules', 'not a directory');
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'root', dependencies: { kleur: '4.1.5' } })}\n`,
+    );
+    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const shell = new Shell({ cwd: '/proj/near/src' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, 'npm install');
+
+    expect(result.exitCode).toBe(0);
+    expect(calls).toEqual([{ root: 'root', deps: { kleur: '4.1.5' }, cwd: '/proj' }]);
+  });
+
+  it('treats marker stat failures as misses while walking like npm 11.17', async () => {
+    class MarkerStatFailureVfs extends MemoryVfs {
+      override async stat(path: string) {
+        if (path.startsWith('/proj/near/')) throw new Error('marker stat denied');
+        return super.stat(path);
+      }
+    }
+    const vfs = new MarkerStatFailureVfs();
+    await vfs.mkdir('/proj/near/src', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({ name: 'root', dependencies: { kleur: '4.1.5' } })}\n`,
+    );
+    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const shell = new Shell({ cwd: '/proj/near/src' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, 'npm install');
+
+    expect(result.exitCode).toBe(0);
+    expect(calls).toEqual([{ root: 'root', deps: { kleur: '4.1.5' }, cwd: '/proj' }]);
+  });
+
+  it.each([
+    ['literal array', ['./packages/app/']],
+    ['literal object packages', { packages: ['/packages/app'] }],
+    ['empty array', []],
+    ['wildcard', ['packages/*']],
+    ['brace', { packages: ['packages/{app,other}'] }],
+    ['extglob', ['packages/@(app|other)']],
+    ['negation', ['packages/app', '!packages/other']],
+  ])('rejects ancestor npm workspaces (%s) before install mutation', async (_form, workspaces) => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/packages/app/src', { recursive: true });
+    const rootPackageJson = `${JSON.stringify({ name: 'root', workspaces })}\n`;
+    const memberPackageJson = '{"name":"app"}\n';
+    await vfs.writeFile('/proj/package.json', rootPackageJson);
+    await vfs.writeFile('/proj/packages/app/package.json', memberPackageJson);
+    const { install, calls } = makeStubInstall(() => emptyResult());
+    const shell = new Shell({ cwd: '/proj/packages/app/src' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, 'npm install kleur@4.1.5');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.rec.stderr.join('')).toContain('Not implemented: npm.workspaces');
+    expect(calls).toEqual([]);
+    expect(await vfs.readFileText('/proj/package.json')).toBe(rootPackageJson);
+    expect(await vfs.readFileText('/proj/packages/app/package.json')).toBe(memberPackageJson);
+  });
+
+  it.each([
+    ['discovered', '/proj/src', 'npm install kleur@4.1.5'],
+    ['explicit --prefix', '/outside', 'npm --prefix /proj install kleur@4.1.5'],
+  ])('rejects npm workspaces at the %s package root', async (_form, cwd, line) => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/src', { recursive: true });
+    await vfs.mkdir('/outside');
+    const packageJson = '{"name":"root","workspaces":[]}\n';
+    await vfs.writeFile('/proj/package.json', packageJson);
+    const { install, calls } = makeStubInstall(() => emptyResult());
+    const shell = new Shell({ cwd });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, line);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.rec.stderr.join('')).toContain('Not implemented: npm.workspaces');
+    expect(calls).toEqual([]);
+    expect(await vfs.readFileText('/proj/package.json')).toBe(packageJson);
+  });
+
+  it('rejects ancestor npm workspaces before a package lifecycle script runs', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/packages/app/src', { recursive: true });
+    await vfs.writeFile('/proj/package.json', '{"name":"root","workspaces":["packages/app"]}\n');
+    await vfs.writeFile(
+      '/proj/packages/app/package.json',
+      '{"name":"app","scripts":{"dev":"node src/dev.mjs"}}\n',
+    );
+    const runScript = vi.fn(async () => 0);
+    const shell = new Shell({ cwd: '/proj/packages/app/src' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, runScript }));
+
+    const result = await runShell(shell, 'npm run dev');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.rec.stderr.join('')).toContain('Not implemented: npm.workspaces');
+    expect(runScript).not.toHaveBeenCalled();
+  });
+
+  it('rejects ancestor npm workspaces above a node_modules-only nearest prefix', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/packages/app/src', { recursive: true });
+    await vfs.mkdir('/proj/packages/app/node_modules');
+    await vfs.writeFile('/proj/package.json', '{"name":"root","workspaces":["packages/app"]}\n');
+    const { install, calls } = makeStubInstall(() => emptyResult());
+    const shell = new Shell({ cwd: '/proj/packages/app/src' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, 'npm install kleur@4.1.5');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.rec.stderr.join('')).toContain('Not implemented: npm.workspaces');
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ['object packages', { packages: 'packages/app' }],
+    ['string', 'packages/app'],
+    ['non-string array entry', ['packages/app', 7]],
+  ])('rejects malformed npm workspaces (%s) with EWORKSPACESCONFIG', async (_form, workspaces) => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/packages/app/src', { recursive: true });
+    await vfs.writeFile('/proj/package.json', `${JSON.stringify({ name: 'root', workspaces })}\n`);
+    await vfs.writeFile('/proj/packages/app/package.json', '{"name":"app"}\n');
+    const { install, calls } = makeStubInstall(() => emptyResult());
+    const shell = new Shell({ cwd: '/proj/packages/app/src' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, 'npm install');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.rec.stderr.join('')).toContain(
+      'EWORKSPACESCONFIG: workspaces config expects an Array',
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it('uses an orphan cwd exactly when no ancestor package.json exists', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/orphan/nested', { recursive: true });
+    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const shell = new Shell({ cwd: '/orphan/nested' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const result = await runShell(shell, 'npm install kleur@4.1.5');
+
+    expect(result.exitCode).toBe(0);
+    expect(calls).toEqual([
+      { root: 'rifty-project', deps: { kleur: '4.1.5' }, cwd: '/orphan/nested' },
+    ]);
+  });
+
   it('runs scripts at an explicit relative --prefix without changing shell cwd', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/src', { recursive: true });
@@ -736,6 +996,60 @@ describe('npm-shell-command — happy path', () => {
     expect(rec.stdout.join('')).toContain('no dependencies');
   });
 
+  it('runs an empty manifest through the installer and publishes its canonical empty lock/tree', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules/stale', { recursive: true });
+    await vfs.writeFile('/proj/package.json', '{"name":"demo","private":true}\n');
+    await vfs.writeFile('/proj/node_modules/stale/package.json', '{"name":"stale"}\n');
+    await vfs.writeFile(
+      '/proj/package-lock.json',
+      '{"lockfileVersion":3,"packages":{"node_modules/stale":{"version":"1.0.0"}}}\n',
+    );
+    const lockfile = {
+      name: 'demo',
+      version: '0.0.0',
+      lockfileVersion: 3 as const,
+      requires: true as const,
+      packages: { '': { version: '0.0.0', dependencies: {} } },
+    };
+    let installCalls = 0;
+    const install: InstallFn = async (arg1) => {
+      if (typeof arg1 !== 'object') throw new Error('expected options install');
+      installCalls += 1;
+      await arg1.vfs.mkdir(`${arg1.cwd}/node_modules`, { recursive: true });
+      await arg1.vfs.writeFile(`${arg1.cwd}/package-lock.json`, `${JSON.stringify(lockfile)}\n`);
+      return {
+        packages: [],
+        lockfile,
+        conflicts: [],
+        provenance: { resolution: 'metadata', packages: [] },
+      };
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        prepareEmptyInstall: async () => {
+          await vfs.rm('/proj/node_modules', { recursive: true, force: true });
+          await vfs.rm('/proj/package-lock.json', { force: true });
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(0);
+    expect(installCalls).toBe(1);
+    expect(await vfs.exists('/proj/node_modules/stale')).toBe(false);
+    expect(
+      Object.keys(JSON.parse(await vfs.readFileText('/proj/package-lock.json')).packages),
+    ).toEqual(['']);
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(true);
+  });
+
   it('keeps root lifecycle ceilings on bare npm install even when no deps exist', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
@@ -911,6 +1225,21 @@ describe('npm-shell-command — argv', () => {
     const { exitCode, rec } = await runShell(shell, 'npm install --frozen-lockfile lodash');
     expect(exitCode).toBe(1);
     expect(rec.stderr.join('')).toContain("flag '--frozen-lockfile' not supported");
+    expect(calls).toEqual([]);
+  });
+
+  it('keeps --workspaces=false loud until npm workspace flags are supported', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile('/proj/package.json', '{"name":"root"}\n');
+    const { install, calls } = makeStubInstall(() => emptyResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const { exitCode, rec } = await runShell(shell, 'npm install --workspaces=false');
+
+    expect(exitCode).toBe(1);
+    expect(rec.stderr.join('')).toContain("flag '--workspaces=false' not supported");
     expect(calls).toEqual([]);
   });
 
@@ -1580,7 +1909,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
   });
 });
 
-describe('npm-shell-command — background durability (install exit stops awaiting the drain)', () => {
+describe('npm-shell-command — background durability with authority-held FIFO', () => {
   function twoPackageResult(): InstallResult {
     return {
       packages: [
@@ -1618,7 +1947,21 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     return stamp.durability === undefined ? stamp : null;
   }
 
-  it('resolves the install (and starts a &&-chained command) WITHOUT awaiting the durability sequence; the stamp still lands only after the clean drain', async () => {
+  async function expectPending(promise: Promise<unknown>): Promise<void> {
+    let settled = false;
+    void promise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+  }
+
+  it('returns the install and its && continuation before the clean drain publishes trust', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const { install } = makeStubInstall(() => twoPackageResult());
@@ -1642,23 +1985,19 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       }),
     );
 
-    // Resolves while the FIRST drain is still pending — re-awaiting the
-    // sequence in the foreground deadlocks this call (the gate opens only
-    // after runShell returns), so this line IS the timing assertion.
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0 && echo NEXT');
-
+    const running = runShell(shell, 'npm install lodash@^4.17.0 && echo NEXT');
+    await vi.waitFor(() => expect(flushCalls).toBe(1));
+    const { exitCode, rec } = await running;
     expect(exitCode).toBe(0);
     expect(rec.stdout.join('')).toContain('npm: installed 2 package(s)');
-    expect(rec.stdout.join('')).toContain('NEXT'); // the chained command ran
-    expect(flushCalls).toBe(1); // tree drain issued in background…
-    expect(await trustedStamp(vfs)).toBeNull(); // …and the TRUSTED stamp is GATED on it
+    expect(rec.stdout.join('')).toContain('NEXT');
+    expect(await trustedStamp(vfs)).toBeNull();
+
     releaseFlush();
-    await vi.waitFor(async () => {
-      expect(await trustedStamp(vfs)).not.toBeNull(); // order preserved: drain → gate → stamp
-    });
+    await vi.waitFor(async () => expect(await trustedStamp(vfs)).not.toBeNull());
   });
 
-  it('a DIRTY background drain still warns loudly + skips the stamp — after the prompt returned, never blocking it', async () => {
+  it('returns before a DIRTY drain warns loudly and skips trust', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const { install } = makeStubInstall(() => twoPackageResult());
@@ -1666,6 +2005,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
     });
+    let flushStarted = false;
     const shell = new Shell({ cwd: '/proj' });
     const rec: Recorded = { stdout: [], stderr: [] };
     shell.registerCommand(
@@ -1675,6 +2015,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
         registry: fakeRegistry,
         install,
         flush: async () => {
+          flushStarted = true;
           await flushGate;
           return {
             failures: [
@@ -1690,23 +2031,22 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       }),
     );
 
-    const r = await shell.run('npm install lodash@^4.17.0', {
+    const running = shell.run('npm install lodash@^4.17.0', {
       onChunk: (chunk, stream) => {
         rec[stream].push(chunk);
       },
     });
-
+    await vi.waitFor(() => expect(flushStarted).toBe(true));
+    const r = await running;
     expect(r.exitCode).toBe(0);
-    expect(rec.stderr.join('')).toBe(''); // nothing failed YET — exit did not wait for the verdict
+    expect(rec.stderr.join('')).toBe('');
     releaseFlush();
-    await vi.waitFor(() => {
-      expect(rec.stderr.join('')).toContain('NOT durable'); // honesty stays loud, just async
-    });
+    await vi.waitFor(() => expect(rec.stderr.join('')).toContain('NOT durable'));
     expect(rec.stderr.join('')).toContain('137 file(s) failed to persist');
-    expect(await trustedStamp(vfs)).toBeNull(); // never a trusted stamp over a dirty drain
+    expect(await trustedStamp(vfs)).toBeNull();
   });
 
-  it('a drain that never completes (tab/worker killed) leaves NO stamp — self-heal: the next boot re-installs', async () => {
+  it('a drain that never completes leaves the root internally reserved without blocking the prompt', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const { install } = makeStubInstall(() => twoPackageResult());
@@ -1721,19 +2061,13 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
-
-    expect(exitCode).toBe(0); // install exit never hinged on the drain
-    await new Promise((r) => setTimeout(r, 20));
-    // Never a TRUSTED stamp for an unproven tree — the next boot re-installs.
+    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    await vi.waitFor(async () => expect(await vfs.exists(STAMP)).toBe(true));
+    await expect(running).resolves.toMatchObject({ exitCode: 0 });
     expect(await trustedStamp(vfs)).toBeNull();
   });
 
-  it('a NEWER install cancels the in-flight sequence\u2019s trusted stamp \u2014 stamp #1 can never attest install #2\u2019s tree', async () => {
-    // Generation guard (review round 1): install #2 does NOT wait on install
-    // #1\u2019s wedged drain (an await-chain would park every later install behind
-    // a dead durability layer); instead #1\u2019s sequence loses the right to
-    // write a trusted stamp the moment #2 claims the tree.
+  it('serializes a newer install behind the older install\u2019s durability and promotion', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     let releaseFlush!: () => void;
@@ -1741,7 +2075,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       releaseFlush = r;
     });
     let flushCalls = 0;
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install, calls } = makeStubInstall(() => twoPackageResult());
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
@@ -1757,62 +2091,58 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       }),
     );
 
-    const first = await runShell(shell, 'npm install lodash@^4.17.0');
-    expect(first.exitCode).toBe(0); // resolved with its sequence still in flight
+    const first = runShell(shell, 'npm install lodash@^4.17.0');
+    await vi.waitFor(() => expect(flushCalls).toBe(1));
+    const second = runShell(shell, 'npm install ms@^2.1.3');
+    await expect(first).resolves.toMatchObject({ exitCode: 0 });
+    await expectPending(second);
+    expect(calls).toHaveLength(1);
 
-    // Install #2 proceeds immediately (never parked behind #1's drain) and
-    // its own sequence stamps the tree.
-    const second = await runShell(shell, 'npm install ms@^2.1.3');
-    expect(second.exitCode).toBe(0);
+    releaseFlush();
+    await expect(second).resolves.toMatchObject({ exitCode: 0 });
+    expect(calls).toHaveLength(2);
     await vi.waitFor(async () => {
       expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
     });
-
-    // Now #1's drain finally settles — its sequence must NOT overwrite the
-    // newer stamp with the stale lodash-only attestation.
-    releaseFlush();
-    await new Promise((r) => setTimeout(r, 20));
-    expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
   });
 
-  it('the epoch authority is per TREE, not per command instance \u2014 another terminal’s install fences it too', async () => {
+  it('one injected owner authority serializes the same tree across terminal command instances', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     let releaseFlush!: () => void;
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
     });
-    let hangNext = true;
-    const makeDeps = () => ({
+    let flushCalls = 0;
+    const { install, calls } = makeStubInstall(() => twoPackageResult());
+    const deps = {
       vfs,
       registry: fakeRegistry,
-      install: makeStubInstall(() => twoPackageResult()).install,
+      install,
       flush: async () => {
-        const hang = hangNext;
-        hangNext = false;
-        if (hang) await flushGate; // only terminal A's tree drain hangs
+        flushCalls += 1;
+        if (flushCalls === 1) await flushGate;
         return { failures: [], total: 0 };
       },
-    });
+    };
+    const packageAcquisitionAuthority = createTestNpmPackageAcquisitionAuthority(deps);
     const shellA = new Shell({ cwd: '/proj' });
-    shellA.registerCommand('npm', createNpmShellCommand(makeDeps()));
+    shellA.registerCommand('npm', createNpmShellCommand({ ...deps, packageAcquisitionAuthority }));
     const shellB = new Shell({ cwd: '/proj' });
-    shellB.registerCommand('npm', createNpmShellCommand(makeDeps()));
+    shellB.registerCommand('npm', createNpmShellCommand({ ...deps, packageAcquisitionAuthority }));
 
-    const a = await runShell(shellA, 'npm install lodash@^4.17.0');
-    expect(a.exitCode).toBe(0); // A's sequence still in flight
-
-    const b = await runShell(shellB, 'npm install ms@^2.1.3');
-    expect(b.exitCode).toBe(0);
+    const a = runShell(shellA, 'npm install lodash@^4.17.0');
+    await vi.waitFor(() => expect(flushCalls).toBe(1));
+    const b = runShell(shellB, 'npm install ms@^2.1.3');
+    await expect(a).resolves.toMatchObject({ exitCode: 0 });
+    await expectPending(b);
+    expect(calls).toHaveLength(1);
+    releaseFlush();
+    await expect(b).resolves.toMatchObject({ exitCode: 0 });
+    expect(calls).toHaveLength(2);
     await vi.waitFor(async () => {
       expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
     });
-
-    releaseFlush();
-    await new Promise((r) => setTimeout(r, 20));
-    // A's late sequence (a DIFFERENT command instance) still must not clobber
-    // B's stamp — the VFS-shared authority owns one current epoch per tree root.
-    expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
   });
 
   it('an in-flight install removes the previous trusted claim before touching the tree', async () => {
@@ -1851,7 +2181,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     expect(stampExistsDuringInstall).toBe(false);
   });
 
-  it('a package.json edit during the DRAIN skips the trusted stamp loudly — never a stamp for deps the tree may not hold', async () => {
+  it('a package.json edit during the authority-held drain skips the trusted stamp loudly', async () => {
     // Round 1 wrote the INSTALL-TIME snapshot here; round 4 showed the
     // snapshot cannot be PROVEN to be what the installer read (the installer
     // re-reads package.json after the eddy pin window), so the honest
@@ -1864,6 +2194,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
     });
+    let flushStarted = false;
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
@@ -1872,31 +2203,30 @@ describe('npm-shell-command — background durability (install exit stops awaiti
         registry: fakeRegistry,
         install,
         flush: async () => {
+          flushStarted = true;
           await flushGate;
           return { failures: [], total: 0 };
         },
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
-    expect(exitCode).toBe(0);
+    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    await vi.waitFor(() => expect(flushStarted).toBe(true));
+    const { exitCode, rec } = await running;
 
-    // Edit package.json while the drain is still in flight.
     await vfs.writeFile(
       '/proj/package.json',
       `${JSON.stringify({ name: 'demo', dependencies: { lodash: '^4.17.0', evil: '9.9.9' } }, null, 2)}\n`,
     );
     releaseFlush();
-
-    await vi.waitFor(() => {
-      expect(rec.stderr.join('')).toContain('package.json changed during the install');
-    });
-    // Fresh tree (no prior stamp to demote): the honest state after the skip
-    // is NO stamp at all — untrusted either way, the next boot re-installs.
+    expect(exitCode).toBe(0);
+    await vi.waitFor(() =>
+      expect(rec.stderr.join('')).toContain('package.json changed during the install'),
+    );
     expect(await trustedStamp(vfs)).toBeNull();
   });
 
-  it('the background stamp carries the INSTALL-TIME project slug — a preset switch during the drain cannot re-key it', async () => {
+  it('the promoted stamp carries the install-time slug when selection changes during the background drain', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const { install } = makeStubInstall(() => twoPackageResult());
@@ -1904,6 +2234,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
     });
+    let flushStarted = false;
     let slug = 'preset-a';
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
@@ -1914,26 +2245,28 @@ describe('npm-shell-command — background durability (install exit stops awaiti
         install,
         projectSlug: () => slug,
         flush: async () => {
+          flushStarted = true;
           await flushGate;
           return { failures: [], total: 0 };
         },
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
-    expect(exitCode).toBe(0);
-
-    slug = 'preset-b'; // the active preset changes during the drain window
+    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    await vi.waitFor(() => expect(flushStarted).toBe(true));
+    await expect(running).resolves.toMatchObject({ exitCode: 0 });
+    slug = 'preset-b';
     releaseFlush();
-
+    let stamp!: { durability?: string; slug: string };
     await vi.waitFor(async () => {
-      const stamp = JSON.parse(await vfs.readFileText(STAMP)) as {
+      stamp = JSON.parse(await vfs.readFileText(STAMP)) as {
         durability?: string;
         slug: string;
       };
       expect(stamp.durability).toBeUndefined();
-      expect(stamp.slug).toBe('preset-a'); // the slug the install actually ran under
     });
+    expect(stamp.durability).toBeUndefined();
+    expect(stamp.slug).toBe('preset-a');
   });
 
   it('a preset switch DURING installFn cannot re-key the stamp either — the slug is sampled at mutation START', async () => {
@@ -2001,7 +2334,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     expect(await trustedStamp(vfs)).toBeNull(); // never a stamp for { …, evil } OR the stale snapshot
   });
 
-  it('a SECTION move in package.json (same flat dep map) during the drain also skips the stamp — the unmoved-guard is byte-exact, not a lossy aggregate', async () => {
+  it('a section move during the authority-held drain still fails the byte-exact manifest guard', async () => {
     // Review round 5: the guard compared the flattened dependencies ∪
     // devDependencies ∪ optionalDependencies map — moving a dep between
     // sections (or editing `overrides`) changes the real installer request
@@ -2014,6 +2347,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
     });
+    let flushStarted = false;
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
@@ -2022,14 +2356,16 @@ describe('npm-shell-command — background durability (install exit stops awaiti
         registry: fakeRegistry,
         install,
         flush: async () => {
+          flushStarted = true;
           await flushGate;
           return { failures: [], total: 0 };
         },
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
-    expect(exitCode).toBe(0);
+    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    await vi.waitFor(() => expect(flushStarted).toBe(true));
+    const { exitCode, rec } = await running;
 
     // Same flat map — lodash just moves to devDependencies.
     await vfs.writeFile(
@@ -2046,17 +2382,14 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       )}\n`,
     );
     releaseFlush();
-
-    await vi.waitFor(() => {
-      expect(rec.stderr.join('')).toContain('package.json changed during the install');
-    });
+    expect(exitCode).toBe(0);
+    await vi.waitFor(() =>
+      expect(rec.stderr.join('')).toContain('package.json changed during the install'),
+    );
     expect(await trustedStamp(vfs)).toBeNull();
   });
 
-  it('a tree DELETED during the drain window is never re-stamped — `npm install && rm -rf node_modules` must not resurrect trust', async () => {
-    // Review round 2 regression: pre-background, the stamp landed before the
-    // prompt, so a chained deletion removed it WITH the tree; the deferred
-    // writer must not recreate a trusted stamp inside an empty tree.
+  it('a tree deleted during the authority-held drain is never resurrected by promotion', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const { install } = makeStubInstall(() => twoPackageResult());
@@ -2064,6 +2397,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
     });
+    let flushStarted = false;
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
@@ -2072,28 +2406,23 @@ describe('npm-shell-command — background durability (install exit stops awaiti
         registry: fakeRegistry,
         install,
         flush: async () => {
+          flushStarted = true;
           await flushGate;
           return { failures: [], total: 0 };
         },
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
-    expect(exitCode).toBe(0);
-
-    await vfs.rm('/proj/node_modules', { recursive: true, force: true }); // the chained rm -rf
+    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    await vi.waitFor(() => expect(flushStarted).toBe(true));
+    await expect(running).resolves.toMatchObject({ exitCode: 0 });
+    await vfs.rm('/proj/node_modules', { recursive: true, force: true });
     releaseFlush();
-    await new Promise((r) => setTimeout(r, 20));
-
-    expect(await vfs.exists(STAMP)).toBe(false); // no stamp resurrected into an empty tree
-    expect(await vfs.exists('/proj/node_modules')).toBe(false); // …and no phantom dir either
+    expect(await vfs.exists(STAMP)).toBe(false);
+    expect(await vfs.exists('/proj/node_modules')).toBe(false);
   });
 
-  it('an OLDER epoch never overwrites a NEWER install’s PENDING stamp — the epoch is re-checked AT the write slot', async () => {
-    // Review round 3: the fence check, the vanish check, and the stamp
-    // write were separated by awaits; install #2's pending demote could land
-    // in that window and be overwritten by #1's stale TRUSTED stamp — a reload
-    // during #2 (same dep set) would then trust a half-replaced tree.
+  it('holds the root through the final manifest probe so no newer epoch can enter its write slot', async () => {
     const inner = new MemoryVfs();
     await inner.mkdir('/proj/node_modules', { recursive: true });
     let sequenceParked!: () => void;
@@ -2122,14 +2451,9 @@ describe('npm-shell-command — background durability (install exit stops awaiti
         return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
       },
     }) as unknown as Vfs;
-    let releaseSecondInstall!: () => void;
-    const secondInstallGate = new Promise<void>((r) => {
-      releaseSecondInstall = r;
-    });
     let installCalls = 0;
     const install: InstallFn = async () => {
       installCalls += 1;
-      if (installCalls === 2) await secondInstallGate; // #2 parked mid-tree-write
       return twoPackageResult();
     };
     const shell = new Shell({ cwd: '/proj' });
@@ -2146,26 +2470,17 @@ describe('npm-shell-command — background durability (install exit stops awaiti
       }),
     );
 
-    const first = await runShell(shell, 'npm install lodash@^4.17.0');
-    expect(first.exitCode).toBe(0);
-    await parked; // #1 was admitted, then parked in its pre-write tree probe
-
-    // Install #2, SAME dep set (the dangerous case: deps match, so a stale
-    // trusted stamp would satisfy the next boot over #2's half-written tree).
+    const firstRun = runShell(shell, 'npm install lodash@^4.17.0');
+    await parked;
     const secondRun = runShell(shell, 'npm install lodash@^4.17.0');
-    await vi.waitFor(async () => {
-      expect(await trustedStamp(inner)).toBeNull();
-    });
-
-    // #1's parked sequence resumes — it must SKIP, never publish trust over
-    // #2's pending/absent mutation window.
-    releaseSequence();
-    await new Promise((r) => setTimeout(r, 20));
+    await expect(firstRun).resolves.toMatchObject({ exitCode: 0 });
+    await expectPending(secondRun);
+    expect(installCalls).toBe(1);
     expect(await trustedStamp(inner)).toBeNull();
 
-    releaseSecondInstall();
-    const second = await secondRun;
-    expect(second.exitCode).toBe(0);
+    releaseSequence();
+    await expect(secondRun).resolves.toMatchObject({ exitCode: 0 });
+    expect(installCalls).toBe(2);
     await vi.waitFor(async () => {
       expect((await trustedStamp(inner))?.deps).toEqual({ lodash: '^4.17.0' });
     });
@@ -2547,7 +2862,7 @@ describe('npm-shell-command — background durability (install exit stops awaiti
         return twoPackageResult();
       },
     };
-    const packageAcquisitionAuthority = createNpmPackageAcquisitionAuthority(deps);
+    const packageAcquisitionAuthority = createTestNpmPackageAcquisitionAuthority(deps);
     const shellA = new Shell({ cwd: '/proj' });
     shellA.registerCommand('npm', createNpmShellCommand({ ...deps, packageAcquisitionAuthority }));
     const shellB = new Shell({ cwd: '/proj' });
@@ -2621,6 +2936,7 @@ describe('npm-shell-command — cwd package identity', () => {
           await vfs.writeFile(`${root}/node_modules/${request.project.slug}/package.json`, '{}\n');
           return {
             result: singletonResult(request.project.slug, '1.0.0'),
+            shadowPlan: EMPTY_SHADOW_PLAN,
             packageJsonText,
           };
         },
@@ -2660,6 +2976,7 @@ describe('npm-shell-command — cwd package identity', () => {
     await expect(head).resolves.toMatchObject({ outcome: 'installed' });
     await expect(projectSwitch).resolves.toBeUndefined();
     await expect(queuedInstall).resolves.toBe(0);
+    await packages.quiesce();
 
     expect(installedSlugs).toEqual([projectA.slug, projectB.slug]);
     expect(installedConfigs).toEqual([packageJsonA, packageJsonB]);
@@ -2702,7 +3019,11 @@ describe('npm-shell-command — cwd package identity', () => {
           installedProject = request.project;
           await vfs.mkdir(`${nestedRoot}/node_modules/vite`, { recursive: true });
           await vfs.writeFile(`${nestedRoot}/node_modules/vite/package.json`, '{}\n');
-          return { result: emptyResult(), packageJsonText: nestedPackageJson };
+          return {
+            result: emptyResult(),
+            shadowPlan: EMPTY_SHADOW_PLAN,
+            packageJsonText: nestedPackageJson,
+          };
         },
         reset: async () => {},
         switchProject: async () => {},
@@ -2720,6 +3041,7 @@ describe('npm-shell-command — cwd package identity', () => {
     );
 
     const { exitCode } = await runShell(shell, 'npm install');
+    await packages.quiesce();
 
     expect(exitCode).toBe(0);
     expect(installedProject).toMatchObject({ root: nestedRoot, slug: `root:${nestedRoot}` });

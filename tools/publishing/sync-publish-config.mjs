@@ -109,6 +109,7 @@ const SPEC = {
   '@riftydev/npm-client': {
     dir: 'packages/npm-client',
     sideEffects: false,
+    addExports: { './internal': './src/internal/index.ts' },
     keywords: ['npm', 'semver', 'install'],
   },
   '@riftydev/shell': { dir: 'packages/shell', sideEffects: false, keywords: ['shell', 'bash'] },
@@ -165,9 +166,7 @@ const SPEC = {
   '@riftydev/shadow-registry': {
     dir: 'tools/shadow-registry',
     sideEffects: false,
-    // ./esbuild-binding uses node:fs + a vendored ~20MB WASM (playground/build
-    // tooling only); keep it for the workspace, never ship it to npm.
-    dropExports: ['./esbuild-binding'],
+    addExports: { './internal': './src/internal/index.ts' },
     keywords: ['npm-overrides'],
   },
 };

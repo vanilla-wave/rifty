@@ -17,6 +17,11 @@ Date: 2026-06
 > registry-owned `esbuild-wasm` substitution. The vendored WASI binding, fetch,
 > and browser asset clauses are retired; real build/preview ownership stands.
 
+> Correction 2026-07-25 (ADR-0317): decision 5's Vite 8 loud rejection is
+> retired. Exact Vite 8.0.16 now builds and previews through the installed CLI
+> with a real Rolldown bundle and an empty esbuild plan. Vite 7 remains the
+> default; Vite 8 HMR and unproven surfaces remain out of scope.
+
 ## Context
 
 The playground goal is real Node programs in Chromium, not a Vite-like stub.

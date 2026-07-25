@@ -326,7 +326,7 @@ describe('Workbench project VFS owner adapter', () => {
     });
   });
 
-  it('runs commit, snapshot, terminal retention, cleanup, and durability through existing authorities', async () => {
+  it('runs one commit terminal and durability through existing authorities', async () => {
     const h = harness();
     const path = `${ROOT}/src/main.ts`;
     const expectedVersion = h.authority.versionOf(path);
@@ -363,20 +363,6 @@ describe('Workbench project VFS owner adapter', () => {
         versions: [{ path, version: h.authority.versionOf(path) }],
       },
     });
-    expect(h.authority.retainedHostCommitTerminal('write-1')).toEqual(terminal);
-
-    h.vfs.handleFrame({ type: 'rifty:owner-vfs-commit-received', terminal });
-    expect(h.emitted.at(-1)).toEqual({
-      type: 'rifty:owner-vfs-commit-released',
-      terminal,
-    });
-    h.vfs.handleFrame({ type: 'rifty:owner-vfs-commit-cleanup', terminal });
-    expect(h.emitted.at(-1)).toEqual({
-      type: 'rifty:owner-vfs-commit-cleaned',
-      terminal,
-    });
-    expect(h.authority.retainedHostCommitTerminal('write-1')).toBeNull();
-
     const flush = vi.spyOn(h.authority, 'flush');
     await h.vfs.handleFrame({
       type: 'rifty:owner-vfs-durability',
@@ -700,7 +686,6 @@ describe('Workbench project VFS owner adapter', () => {
         type: 'workbench:project-vfs-fatal',
         error: { name: 'Error', message: failure.message },
       });
-      expect(h.authority.retainedHostCommitTerminal(`failed-${name}`)).toEqual(h.emitted[1]);
       await expect(ownerLifetime).rejects.toBe(failure);
       expect(() => h.vfs.handleFrame({ type: 'workbench:project-vfs-snapshot-request' })).toThrow(
         ClosedHandleError,
