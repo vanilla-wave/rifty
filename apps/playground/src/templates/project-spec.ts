@@ -73,8 +73,8 @@ interface ProjectSpecBase {
   /**
    * Same-origin URL of the baked node_modules snapshot (ADR-0135), produced by
    * `pnpm snapshots:bake`. When set and no install stamp matches, the worker
-   * restores this tree instead of running `install()` — the first-ever boot of
-   * an instant preset is truly instant. Absent → install as usual.
+   * restores this tree instead of running `install()`. Runtime-asset
+   * availability is separate (ADR-0320). Absent → install as usual.
    */
   readonly bakedNodeModulesUrl?: string;
   /** SHA-256 of the exact uncompressed serialized v2 snapshot bytes. */
