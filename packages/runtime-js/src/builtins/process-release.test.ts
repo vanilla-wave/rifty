@@ -73,7 +73,7 @@ describe('process.release Node compatibility identity (ADR-0322)', () => {
     expect(new Set([firstRelease, ...siblings]).size).toBe(4);
 
     expect(() => {
-      (firstSpec as NodeProcess & { release: ProcessRelease }).release = { name: 'other' };
+      (firstSpec as unknown as { release: ProcessRelease }).release = { name: 'other' };
     }).toThrow(TypeError);
     expect(() => {
       firstRelease.name = 'other';

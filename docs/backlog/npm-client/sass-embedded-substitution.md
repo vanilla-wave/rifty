@@ -5,7 +5,6 @@ title: sass-embedded@1.100.0 via synthesized facade — second substitution, sea
 created: 2026-07-23
 why: real Vite SCSS projects pin sass-embedded, whose dart platform binary cannot run in the browser; ADR-0310's spike proved the exact pure-JS sass twin matches every surface Vite and direct consumers touch, so Sass ships as the registry's second substitution and proves the seam is package-generic
 epic: honest-shadow-substitutions
-blocked_by: [runtime-js/process-versions-node-honesty]
 sources: [ADR-0308, ADR-0310]
 ---
 

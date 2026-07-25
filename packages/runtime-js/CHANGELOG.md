@@ -4,6 +4,9 @@
 
 ### Added
 
+- Node 24-compatible `process.release`: every singleton and spawned process owns
+  a fresh descriptor-correct `{ name: 'node' }` object, while `platform`,
+  `arch`, and `versions.rifty` retain honest rifty host identity (ADR-0322).
 - Owner `fs.*` sync-RPC handlers now publish every write, mkdir, remove,
   metadata update, rename, and copy through the optional shared VFS mutation
   guard; async guards defer the reply while unguarded calls stay synchronous
