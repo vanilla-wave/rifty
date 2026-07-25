@@ -3,8 +3,13 @@
  * cowsay → yargs reads `process.versions.electron` → TypeError if versions=undefined.
  * (ADR-0150: supervised child worker running a foreground CLI)
  */
+import { loadBuiltin } from '@riftydev/io';
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
+import {
+  ensureRuntimeJsBuiltinsRegistered,
+  refreshRuntimeJsProcessBuiltin,
+} from '../builtins/index.ts';
 import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
@@ -35,6 +40,7 @@ afterEach(() => {
     writable: true,
     configurable: true,
   });
+  refreshRuntimeJsProcessBuiltin();
 });
 
 describe('installNodeProcessShim identity fields (ADR-0150: supervised child worker)', () => {
@@ -54,5 +60,27 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     expect(proc.argv0).toBe('rifty');
     expect(proc.execPath).toBe('/usr/local/bin/rifty');
     expect(proc.title).toBe('rifty');
+  });
+
+  it('exposes the descriptor-correct process.release on the live node:process module', () => {
+    const proc = installNodeProcessShim(spec());
+    ensureRuntimeJsBuiltinsRegistered();
+    refreshRuntimeJsProcessBuiltin();
+
+    const release = (proc as typeof proc & { release: { name: string } }).release;
+    expect(loadBuiltin('node:process')).toBe(proc);
+    expect(release).toEqual({ name: 'node' });
+    expect(Object.getOwnPropertyDescriptor(proc, 'release')).toEqual({
+      value: release,
+      writable: false,
+      enumerable: true,
+      configurable: true,
+    });
+    expect(Object.getOwnPropertyDescriptor(release, 'name')).toEqual({
+      value: 'node',
+      writable: false,
+      enumerable: true,
+      configurable: true,
+    });
   });
 });
