@@ -31,4 +31,4 @@ Absorbs `npm-client/esbuild-substitution-strategy-reconciliation` (folded
 surface this cutover deletes; its "measure whether dropping the override
 breaks real-Vite e2e" step is subsumed by this slice's matched browser proof.
 
-Refine before pickup (`rifty-refine`).
+No user-observable fork remains; ordinary compilation owns pickup.

@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # check:contract-drift needs the origin/main merge-base
+          fetch-depth: 0 # contract/goal/budget gates need full baseline history
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
       - uses: actions/setup-node@v4
         with:
@@ -34,7 +34,8 @@ jobs:
       - run: pnpm check:source-grep # blocking: no new source-grep tests in playground unit + browser-unit (allowlist exact-match)
       - run: pnpm check:dir-owner # blocking: source dir > 30 direct prod modules carries an owner README
       - run: pnpm check:contract-drift # blocking: no in-place ready-contract edits in the same diff as source changes
-      - run: pnpm check:budget # blocking when the PR declares Budget-Slice: hand-written diff vs the epic's band + mechanism sweep
+      - run: pnpm check:goal-contract # blocking: exact-SHA autonomous goal cannot narrow or close with linked residuals
+      - run: pnpm check:budget # blocking: paired one-slice goal tripwire; pickup diff mass, mechanism scan advisory
       - run: node tools/backlog/check.mjs # blocking: frontmatter + TODO(backlog:) integrity
       - run: node tools/refs/check.mjs # blocking: ADR index + cross-ref integrity
 

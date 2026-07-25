@@ -1,11 +1,18 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   declaredSlice,
+  declaredSlices,
   evaluateMass,
   globToRegExp,
   newPath,
   parseBudget,
   scanMechanisms,
+  validateRunDeclarations,
 } from './budget.mjs';
 
 const epic = `---
@@ -80,9 +87,9 @@ describe('evaluateMass', () => {
     expect(r).toMatchObject({ insertions: 900, level: 'ok' });
   });
 
-  it('warns over band, fails over 2× band', () => {
+  it('warns over band, fails at 2× band', () => {
     expect(evaluateMass([{ added: 1500, path: 'a.ts' }], band, []).level).toBe('warn');
-    expect(evaluateMass([{ added: 2001, path: 'a.ts' }], band, []).level).toBe('fail');
+    expect(evaluateMass([{ added: 2000, path: 'a.ts' }], band, []).level).toBe('fail');
   });
 });
 
@@ -108,5 +115,168 @@ describe('declaredSlice', () => {
     );
     expect(declaredSlice({}, () => '')).toBeNull();
     expect(declaredSlice({ GITHUB_EVENT_PATH: '/x' }, () => 'not json')).toBeNull();
+  });
+
+  it('keeps all body declarations visible so combined slices fail closed', () => {
+    const event = JSON.stringify({
+      pull_request: {
+        body: [
+          'Budget-Slice: honest-shadow-substitutions/registry-core',
+          'Budget-Slice: honest-shadow-substitutions/package-tree-authority',
+        ].join('\n'),
+      },
+    });
+    expect(declaredSlices({ GITHUB_EVENT_PATH: '/tmp/ev.json' }, () => event)).toEqual([
+      'honest-shadow-substitutions/registry-core',
+      'honest-shadow-substitutions/package-tree-authority',
+    ]);
+    expect(declaredSlice({ GITHUB_EVENT_PATH: '/tmp/ev.json' }, () => event)).toBeNull();
+  });
+});
+
+describe('validateRunDeclarations', () => {
+  const goalSha = '0123456789abcdef0123456789abcdef01234567';
+
+  it('allows normal non-goal PRs and requires paired single declarations', () => {
+    expect(validateRunDeclarations([], [])).toEqual({ mode: 'normal' });
+    expect(validateRunDeclarations(['honest-shadow-substitutions/oracle-slice'], [])).toMatchObject(
+      { error: expect.stringContaining('Goal-Baseline') },
+    );
+    expect(validateRunDeclarations([], [`honest-shadow-substitutions@${goalSha}`])).toMatchObject({
+      error: expect.stringContaining('Budget-Slice'),
+    });
+  });
+
+  it('requires the slice and goal to name the same epic', () => {
+    expect(
+      validateRunDeclarations(['other/oracle-slice'], [`honest-shadow-substitutions@${goalSha}`]),
+    ).toMatchObject({ error: expect.stringContaining('does not match') });
+    expect(
+      validateRunDeclarations(
+        ['honest-shadow-substitutions/oracle-slice'],
+        [`honest-shadow-substitutions@${goalSha}`],
+      ),
+    ).toMatchObject({
+      mode: 'goal',
+      epicSlug: 'honest-shadow-substitutions',
+      slice: 'oracle-slice',
+    });
+  });
+
+  it('takes JIT Budget authority before the first source commit', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rifty-budget-pickup-'));
+    try {
+      mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
+      mkdirSync(join(root, 'packages/x/src'), { recursive: true });
+      const epicPath = join(root, 'docs/backlog/epics/goal.md');
+      writeFileSync(
+        epicPath,
+        `---
+kind: epic
+status: ready
+title: Goal
+created: 2026-07-25
+value: Goal
+---
+
+## Outcome
+
+Goal.
+
+## User scenario
+
+Run it.
+
+## Items
+
+Known work.
+
+## Budget
+
+| slice | band |
+|---|---|
+| seed | 1–10 |
+`,
+      );
+      execFileSync('git', ['init', '-b', 'main'], { cwd: root });
+      execFileSync('git', ['add', '.'], { cwd: root });
+      execFileSync(
+        'git',
+        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'base'],
+        { cwd: root },
+      );
+      const baseline = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: root,
+        encoding: 'utf8',
+      }).trim();
+      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', baseline], { cwd: root });
+
+      writeFileSync(
+        epicPath,
+        `---
+kind: epic
+status: ready
+title: Goal
+created: 2026-07-25
+value: Goal
+---
+
+## Outcome
+
+Goal.
+
+## User scenario
+
+Run it.
+
+## Items
+
+Known work.
+
+## Budget
+
+| slice | band |
+|---|---|
+| seed | 1–10 |
+| jit | 1–10 |
+`,
+      );
+      execFileSync('git', ['add', '.'], { cwd: root });
+      execFileSync(
+        'git',
+        [
+          '-c',
+          'user.name=Rifty',
+          '-c',
+          'user.email=rifty@example.test',
+          'commit',
+          '-m',
+          'contract red',
+        ],
+        { cwd: root },
+      );
+      writeFileSync(join(root, 'packages/x/src/a.ts'), 'export const shipped = true;\n');
+      execFileSync('git', ['add', '.'], { cwd: root });
+      execFileSync(
+        'git',
+        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'source'],
+        { cwd: root },
+      );
+
+      const script = fileURLToPath(new URL('./budget.mjs', import.meta.url));
+      const output = execFileSync(process.execPath, [script], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          RIFTY_GOAL_BASELINE: `goal@${baseline}`,
+          RIFTY_BUDGET_SLICE: 'goal/jit',
+        },
+      });
+      expect(output).toContain('budget: OK');
+      expect(output).toContain('goal/jit');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -32,4 +32,4 @@ them unreachable; keep every real-boundary check (network SRI/caps, strict
 codecs, OPFS receipt chain + read-back SHA of actual stored bytes, port-client
 deadline + downward cancel, origin-wide Web Lock, FIFO reservation).
 
-Refine before pickup (`rifty-refine`).
+This is an internal carrier decision: evidence/ADR owns it, not a user interview.

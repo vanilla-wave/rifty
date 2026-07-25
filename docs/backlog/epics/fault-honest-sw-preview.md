@@ -18,7 +18,7 @@ A developer opens a vite preset, runs the real `npm run dev`, preview goes LIVE.
 
 ## Items
 
-- `service-worker/preview-blocked-host-hang` (ready) — entry point: diagnose (per `rifty-fix`) + fix the lost vite 403; unblocks preset-deglue's allowedHosts retirement.
+- `service-worker/preview-blocked-host-hang` (ready) — planned Contract+RED diagnosis + repair of the lost Vite 403; unblocks preset-deglue's allowedHosts retirement.
 - `service-worker/preview-dispatch-termination-chokepoint` (ready, blocked_by the diagnosis) — settle on every terminal event; ONE chokepoint, parity-first synthesized page only when no response exists; covers loopback http.request.
 - `net/preview-ws-bridge-termination` (ready) — WS/HMR sockets error/close under faults, vite's own reconnect UX works.
 

@@ -1,6 +1,6 @@
 # Fault classes — one taxonomy for infra honesty
 
-One vocabulary across the pipeline: refine (`## Fault matrix` in items) → implementation (fault tests) → review (every correctness blocker classified) → fixing (`rifty-fix` skill). Mined from PR #107: 19 review rounds, ~50 findings — almost every round after R5 found a new INSTANCE of an axis already seen, hence §Class-kill.
+One vocabulary across the behavioral-correctness pipeline: contract (`## Fault matrix`) → implementation (fault tests) → review → unplanned defect repair (`rifty-fix`). Goal/budget/process blockers cite their violated contract/rule; never invent a fault class for them.
 
 ## Axes
 
@@ -58,15 +58,16 @@ Applies to parity work and changes touching cache, persistence, network, or conc
 | Gate | Required evidence |
 |---|---|
 | Contract | Pinned oracle; acceptance/parity cases; observable identity, lifecycle, error order; loud gaps |
-| Review | Each correctness blocker: fault class + RED test + sibling sweep in the PR |
+| Review | Each behavioral correctness blocker: fault class + RED test + sibling sweep; goal/process blockers: violated clause/rule |
 | Repeat | Same class at one boundary, or a review change adding a state owner → redesign/split |
 | External API | Proxy/wrapper semantic copy requires an ADR + differential suite |
 | Testing | Same scenario runs against reference and rifty; a fake cannot close acceptance |
 | CI | Required finite checks pass on one committed SHA |
-| Closure | Observable acceptance proof; never source grep, warning, or opt-in lane |
+| Unit closure | Current contract proof + empty unit residuals |
+| Goal closure | No linked children + empty goal residuals + end-to-end baseline proof; never source grep, warning, backlog record, or one green slice |
 
 1. Before implementation, freeze the oracle, acceptance/parity cases, and loud gaps.
 2. Record class, RED test, and sibling sweep directly in the PR; no separate ledger file.
-3. A repeated class or review-born state owner stops point fixes: redesign or split.
+3. A repeated class or review-born state owner stops point fixes: redesign/re-cut the unit; active goal remains open.
 4. Use two review checkpoints only: Contract+RED, then Final+GREEN.
-5. Final requires full checks on one SHA and zero blockers; outcome is merge or redesign, never another point-fix round.
+5. Final requires full checks on one SHA and zero unit blockers; outcome is slice merge or redesign, never another point-fix round. Goal residuals require continuation after an honest slice.

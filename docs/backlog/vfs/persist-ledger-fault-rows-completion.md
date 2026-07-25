@@ -11,7 +11,10 @@ code: [packages/vfs/src/opfs-sync.ts, packages/npm-client/src/tarball-cache.ts, 
 
 ## Context
 
-Test-completion item: each row pins EXISTING expected behavior (a failing row = a real bug → `rifty-fix`, failing test first is already in hand). Rows chosen at the fault-honesty refine from the #107 retro + explorer sweep; expected-green is NOT assumed — that's what the pins are for.
+Test-completion item: each row pins EXISTING expected behavior. A failing row stays
+inside this planned contract's normal RED→implementation lane; it does not
+trigger `rifty-fix`. Rows came from the #107 retro + explorer sweep;
+expected-green is NOT assumed — that's what the pins are for.
 
 ## Acceptance
 

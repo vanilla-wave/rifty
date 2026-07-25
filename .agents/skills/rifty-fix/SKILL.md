@@ -1,11 +1,15 @@
 ---
 name: rifty-fix
-description: Use when fixing any bug, review finding, failing test, flake, or regression in rifty — before writing the fix. Especially when the fix looks like a three-line patch, the reviewer already suggested a fix inline, review is on round 2+, or a previous fix didn't stick.
+description: Repair an unplanned, observed correctness failure in rifty runtime/package/toolchain behavior via root cause → class → RED → fix → proof. Invoke for a current regression, flake, unexpectedly failing previously-green behavioral test, or a concrete product-code review defect the user asks to repair. Never invoke while following an existing plan or ready contract (including a planned bug-fix item), for expected RED, features/refactors, or process/docs/skill/review-policy work.
 ---
 
 # rifty-fix
 
 Root cause → class → RED test → fix → prove. A point fix that leaves the class alive guarantees the next review round: in PR #107 one axis (`unbounded-read`) survived R5→R17 as four sibling point-fix helpers before a chokepoint killed it.
+
+## Scope gate
+
+Use only for a specific, unexpected, already-observed executable failure. “Continue/follow/finish the plan”, a ready item, an expected TDD or Contract+RED failure, planned feature/refactor work, process/docs/skills, and a Final+GREEN redesign stop are excluded even when their prose contains “fix”. If excluded, stop applying this skill and resume the owning workflow.
 
 **Iron law: no code before (1) root cause, (2) class sweep, (3) failing test.** A reviewer-suggested fix gets the same treatment — the reviewer names an instance and guesses a mechanism; you own both. (#107 ledger case: suggested "clear on rm" = clears on in-memory rm; correct = clear on PERSISTED rm, else the ledger lies.)
 
@@ -16,7 +20,7 @@ Root cause → class → RED test → fix → prove. A point fix that leaves the
 3. **RED first.** Failing parity/regression/fault test before the fix. Fault findings assert the honest outcome (fallback / degraded / loud throw — never a silent lie). Never edit a test to make code pass; an existing test contradicting the fix = the CONTRACT changed — renegotiate it explicitly in the PR, don't re-aim the assert quietly.
 4. **Fix once.** One change, no drive-by refactors. Prefer melting twin helpers into the chokepoint over adding another wrapper.
 5. **Prove.** RED→GREEN. Revert-check EVERY new guard: revert the fix, the test must fail (false guards are the norm — one rifty feature shipped ~8 of them; beware caches masking the revert). Fast gate on touched code. Verify the COMMITTED tree, not the worktree (a batched `git add` drops files silently).
-6. **Bounded pragmatism — loudly.** Structural kill genuinely too big now → bound-fix every instance the sweep found NOW with the existing mechanism, file the backlog item for the kill, and say so in the PR. Silent partial fix = defect; recorded partial fix = process.
+6. **No false closure.** Structural kill exceeds the current unit → stop/re-cut. In an active goal, keep it reverse-linked as a blocking residual; outside a goal, capture it but do not claim the defect/class fixed. A backlog record never converts a partial fix into completion.
 
 ## Escalation
 
@@ -27,6 +31,7 @@ Root cause → class → RED test → fix → prove. A point fix that leaves the
 
 | Thought | Reality |
 |---|---|
+| "the plan says fix, so use rifty-fix" | Planned work stays in its contract/run workflow; this skill is for an unexpected observed failure. |
 | «фикс на три строчки, как предложил ревьюер» | An instance + a guess. Root cause + class are still yours. |
 | "that's a different bug" | Same axis at the same boundary = same class. Sweep first. |
 | "while we're here, guard the duplicate/replay/reorder case too" | Boundary can't physically produce it → dead code + a guard whose RED test needs a mock of our own transport. Cite the boundary row; strike it. |

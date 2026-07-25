@@ -1,12 +1,14 @@
 ---
 name: rifty-to-backlog
-description: Capture a finding or idea into docs/backlog as a correctly classified draft. Use BEFORE creating or editing any backlog item — when an audit/review/post-merge finding needs recording, when work surfaces a gap worth deferring, or when the user asks to file something to the backlog.
+description: "Capture a newly surfaced rifty finding or idea into docs/backlog: classify, deduplicate, gate, then mint a draft or update the matching item's evidence. Use for first-time audit/review/post-merge intake, a new discovery that must be recorded, or an explicit request to file it. Never invoke for ordinary edits to an existing contract, compiling a settled draft to ready, or implementing planned work."
 ---
 
-Capture = classify → dedup → gate → mint. Cheap and mechanical — no grilling. Contract sections are form (`docs/backlog/README.md` + `TEMPLATE.md`): a finding that already settles every fork is written out to `ready` at mint (§4); any open fork → `rifty-refine` on the minted draft. The anti-pattern this skill exists to stop: an audit finding minted straight to an item with a `user_story` reverse-engineered afterward.
+Capture = classify → dedup → gate → mint `draft`. Cheap and mechanical — no grilling and no contract compilation. The anti-pattern this skill exists to stop: an audit finding minted straight to an item with a `user_story` reverse-engineered afterward.
 
 ## 1. Classify
 capability / test / tooling / design debt — backlog. Doc-drift or a pure record — not backlog: fix the doc. Can't name what breaks for a user or the project → it's a note, not an item; stop here.
+
+Active `Goal-Baseline`: first classify against frozen Outcome/User scenario/tier/Fidelity. Required by it → reverse-link `epic: <slug>`; this remains a goal-blocking residual. Truly outside it → ordinary backlog. Never detach required quality to make the goal look complete.
 
 ## 2. Dedup
 Sweep `docs/backlog/` (titles, `code:` paths, epic `items:`) for the same defect, mechanism, or boundary. Hit → update THAT item's Context/sources, do not mint a sibling. Done when the sweep is recorded: matched item updated, or no-match stated in the new item's `sources:`.
@@ -20,4 +22,4 @@ Sweep `docs/backlog/` (titles, `code:` paths, epic `items:`) for the same defect
 ## 4. Mint
 `docs/backlog/<area>/<slug>.md`, frontmatter per `docs/backlog/README.md`, status `draft`, `## Context` = observed evidence (what, where, how found). `user_story` only from a real user path — omit it rather than invent one. Code-anchored → `// TODO(backlog: <area>/<slug>)` at the site. Done when `pnpm backlog:check` passes.
 
-Every fork already settled — evidence/ADR in hand, real (not reverse-engineered) user scenario, nothing left to ask or decide → fill the contract sections per `TEMPLATE.md` and mint `ready` directly; writing out a settled contract is not refine. One open fork → stay `draft`.
+After capture: unresolved user-observable fork after evidence exhaustion → manual `rifty-refine`; none → ordinary workflow compiles the contract and promotes it. Internal forks are agent-owned, never interview questions.

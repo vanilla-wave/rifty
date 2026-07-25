@@ -20,6 +20,6 @@ marks for deletion left behind; per-root-export disposition (delete /
 freezes the manager↔package-tree-authority boundary as a named interface with
 a contract test the authority slice must keep green unedited.
 
-Refine before pickup (`rifty-refine`): enumerate acceptance/parity from the
-quarry's proven store contract, fault rows for tier `production` ×
+Before pickup, ordinary compilation derives acceptance/parity from the quarry's
+proven store contract and fault rows from tier `production` ×
 Storage/MessagePort models (no replay/duplicate faults on live ports).

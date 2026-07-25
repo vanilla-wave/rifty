@@ -220,9 +220,15 @@ for (const { rel, fm, text } of epicRecords) {
   if (fm.tier != null && !EPIC_TIER_SET.has(fm.tier)) {
     errors.push(`${rel}: invalid tier '${fm.tier}' (must be ${EPIC_TIERS.join('|')})`);
   }
-  if (fm.status === 'ready') {
+  if (fm.goal_baseline != null) {
+    if (!/^[0-9a-f]{40}$/u.test(fm.goal_baseline)) {
+      errors.push(`${rel}: goal_baseline must be one exact 40-hex commit`);
+    }
+    if (fm.tier == null) errors.push(`${rel}: autonomous goal_baseline requires tier`);
+  }
+  if (fm.status === 'ready' || fm.status === 'in-progress') {
     for (const s of READY_EPIC_SECTIONS) {
-      if (!hasSection(text, s)) errors.push(`${rel}: ready epic missing '## ${s}' section`);
+      if (!hasSection(text, s)) errors.push(`${rel}: ${fm.status} epic missing '## ${s}' section`);
     }
   }
   if (Array.isArray(fm.items)) {

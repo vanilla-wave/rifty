@@ -6,6 +6,8 @@ created: <YYYY-MM-DD>
 value: <one line — the user outcome this epic delivers>
 user_story: As <persona>, I want <end-to-end outcome>, but today <blocker>
 items: []
+tier: <works|robust|production — required for an autonomous goal>
+# goal_baseline: <ready-epic SHA; add alone, land before any source PR>
 ---
 
 ## Outcome
@@ -18,4 +20,17 @@ items: []
 
 ## Items
 
-<Each child item (`<area>/<slug>`) and its role in the outcome.>
+<Known child residuals (`<area>/<slug>`) and dependency order. Seed, not exhaustive plan; reverse-linked children are authoritative.>
+
+## Budget
+
+<!-- Required before autonomous pickup. Add one just-in-time slice before its Contract+RED; never weaken existing rows/tripwires. -->
+
+- scope implemented outside `ready` items: 0
+- in-place ready-contract edits alongside source changes: 0
+- new coordination mechanisms: 0
+- review rounds per slice: ≤ 2
+
+| slice | band |
+|---|---|
+| <slice> | <lo>–<hi> |

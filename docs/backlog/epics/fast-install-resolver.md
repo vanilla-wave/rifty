@@ -23,7 +23,7 @@ model; do not quote it as the browser launch number. The remaining epic gap is
 the transport-qualified validation: the committed artifact does not yet carry
 the full h2/h3 matrix evidence required to close `perf/eddy-http3-cold-validation`.
 
-## User Scenario
+## User scenario
 
 A developer opens a from-scratch preset or writes a package.json, runs
 `npm install` with fast mode enabled via `resolverUrl`, and gets a materially

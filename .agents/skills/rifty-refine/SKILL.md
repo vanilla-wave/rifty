@@ -1,33 +1,32 @@
 ---
 name: rifty-refine
-description: Refine a backlog epic or item to `ready` — close its open scope forks; lead with the user scenario, grill scope sharp, so an implementer can't approximate it. NOT for writing out an already-settled contract — missing/unfilled sections alone are plain writing per `docs/backlog/README.md`, not refine. Manual invocation only.
-disable-model-invocation: true
+description: Manually close unresolved user-observable scope forks in one existing draft rifty backlog item or epic after code/ADR/Node evidence is exhausted. Not for intake, internal mechanism decisions, filling contract sections, or promoting a settled draft to ready.
 ---
 
-Refine the given piece of value (epic, item, or raw idea) to `ready`.
+Close the remaining user-observable forks in the given existing `draft`.
 
-Refine is the contract half of the pipeline: audit/review findings arrive as drafts minted by `rifty-to-backlog` (capture — classify, dedup, gates); a finding that skipped capture goes through it first.
+New/raw finding → `rifty-to-backlog` first. Refine owns the interview only; ordinary workflow owns evidence-backed internal decisions and contract compilation.
 
-**Refine = closing open forks, not document form.** A draft whose scope is already settled — forks resolved in Context/ADRs/code, nothing left to ask or decide — needs no refine: write the contract sections per `docs/backlog/README.md` + `TEMPLATE.md` and flip to `ready`. Missing sections alone are never a reason to propose refine.
+**Precondition.** Code, ADRs, real Node, and any throwaway spike have been exhausted; at least one concrete user-observable scenario branch remains genuinely open. Otherwise stop applying this skill: ask nothing and return the draft to ordinary contract compilation.
 
 **Target = the `draft` doc itself.** A `ready` epic with `draft` children is the designed shape, not a defect — refine the draft child (it leans on the epic's scenario), never re-refine the `ready` epic. The epic is the target only when its own doc is `draft`, or its shape is wrong (overlap, bad split).
 
 ## Lead with the user scenario
 Write the concrete developer scenario first: the **real npm package / Node program** the user runs, the exact call, what they observe — re-derived from the user's POV, not inherited from the item's (often mechanism-first) framing. Can't name real software it unblocks? Not user value — off-mission or `process-meta` test/tooling debt: say so and stop. The scenario is the spine: every question sharpens one branch of it.
 
-## Analyze deeply — never skip to drafting
+## Analyze deeply — never skip to asking
 - Read the real code, ADRs, compat matrix for the area(s); verify against actual Node — never assume.
 - Already built (stale-check) → say so, close it, don't refine.
 - Overlaps a sibling item/epic → merge or carve a clean boundary.
 
 ## Grill until the scope is sharp
 Interview the user one scenario-branch at a time (each branch = a case the user hits), resolving dependencies in order. One question at a time, with your recommended answer.
-- **User owns the boundary; you own the mechanism.** Ask ONLY user-observable forks: which real software must work, which cases are in vs out. No user-visible difference between the options (wire-format, broker location, internal dispatch) → not a user question: decide + record yourself (REVERSIBLE → CHANGELOG/backlog; IRREVERSIBLE → ADR BEFORE `ready`), never ask. A question citing no scenario branch is the wrong one.
+- **User owns the observable boundary; the agent owns the mechanism.** Ask ONLY which real software/case is in or out. No user-visible difference (wire format, broker location, dispatch) → stop the interview branch; ordinary workflow decides + records it. A question citing no scenario branch is invalid.
 - Codebase / ADRs / Node already answer it → explore, don't ask.
 - Infra-touching scope (cache/persistence/network/concurrency) → grill failure branches like scenario branches: what does the user observe when the fast path / store / network breaks mid-operation? Each answer = a `## Fault matrix` row (axes: `docs/process/fault-classes.md`). Cite the boundary's row in §Boundary failure models and strike excluded axes — never refine machinery against a fault the transport cannot physically produce.
 - Own-product surface (no external oracle — Workbench/Playground lifecycle & UX) → apply the reachability gate (`docs/process/decision-workflow.md` §Backlog readiness): `ready` needs a user-action repro path; an unreproduced audit finding stays `draft` with the attempt recorded.
 - Owning epic declares `tier:` → grill fault branches only to that tier (tier × boundary model = the rows in scope; `docs/backlog/README.md` §Tier). A branch demanding more parks pending a tier-raise ADR — it is not a scenario branch.
-- Direction fork (point-support for one tool vs an honest generic mechanism, a tier raise) → its own strategic ADR; the item cites it, never buries it in `## Decisions`.
+- A fork that would change an active `Goal-Baseline` is user-owned and cannot be softened via ADR, backlog, or Out of scope.
 
 ## Altitude — observables, not carriers
 Refine closes user-visible forks and direction; it never designs internal carriers (cache placement, wire framing, admission tokens, storage layout). A carrier enters the contract only as a constraint ("must not …") or as a spike-verified fact. Fork unresolvable from code + ADR + real-Node reading → throwaway spike: evidence into the contract, code discarded — a kept spike becomes the frame it was meant to validate. Full rule + precedent: `docs/process/decision-workflow.md` §Refine altitude.
@@ -37,7 +36,6 @@ Refine closes user-visible forks and direction; it never designs internal carrie
 - Too big for one implementer pass → epic: outcome + end-to-end user scenario as acceptance, split into child items (`epic: <slug>`).
 - Atomic → item.
 
-## `ready` bar — built whole
-Zero new decisions at refine altitude, zero new in-scope items, the ADR (if any) already exists. Every fork is one YOU resolved (mechanism) or an ADR link — never parked for the user. A contract prescribing carriers with neither spike nor ADR behind them is not ready (process-level `frozen-assumption`).
-Section shapes — item contract, `## Fault matrix` rows, epic Outcome/Scenario/Items/`## Budget` — all in `docs/backlog/README.md` + `TEMPLATE.md` (`backlog:check` enforces the core sections; Fault matrix/Budget — review): write to them, never restate or grill about them.
-Flip `draft → ready` only when the bar is met.
+## Done
+
+Every user-observable fork is answered and the answers/evidence are recorded in the draft. Leave document form and `draft → ready` to the ordinary compiler (`docs/backlog/README.md` + template + `pnpm backlog:check`). Do not duplicate that phase inside this skill.

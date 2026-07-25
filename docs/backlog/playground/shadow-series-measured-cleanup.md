@@ -25,4 +25,4 @@ gate:
 - remaining follow-ups resolved through reachability and tier gates; no source
   work hidden in new drafts.
 
-Refine before pickup (`rifty-refine`).
+No user-observable fork remains; ordinary compilation owns pickup.

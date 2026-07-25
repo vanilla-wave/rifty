@@ -5,7 +5,7 @@ Two kinds of work under `docs/backlog/`:
 - **Items** — one implementable unit per file: `docs/backlog/<area>/<slug>.md`.
 - **Epics** — a user-value umbrella over several items: `docs/backlog/epics/<slug>.md`.
 
-Capture a finding into a draft with the **`rifty-to-backlog`** skill; refine an item or epic to `ready` with the **`rifty-refine`** skill. Closure = **delete on done** (git history is the record); there is no "done" status.
+New finding → **`rifty-to-backlog`** draft. Planned draft → exhaust evidence/internal decisions; fork-free = ordinary contract compilation, unresolved user-observable fork = manual **`rifty-refine`**. Planned ready item → normal implementation. Closure = **delete on done**; no "done" status.
 
 ## Areas (items)
 
@@ -40,19 +40,46 @@ A `draft` item needs only `## Context`. See `TEMPLATE.md`.
 ## Epic frontmatter
 
 Required: `kind: epic` · `status` (`draft|ready|in-progress`) · `title` · `created` · `value` (one-line user outcome).
-Recommended: `user_story`. Optional: `items` (`[<area>/<slug>, …]`) · `tier` (see §Tier).
+Recommended: `user_story`. Optional: `items` (`[<area>/<slug>, …]`) · `tier` (see §Tier) · `goal_baseline` (exact SHA, required while an autonomous run is active).
 
-A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User scenario` (the end-to-end scenario that means done, naming the coarse invariants its closing smoke proves) + an enumerated `## Items` in dependency order — a mechanism shared by ≥2 children is an existing owner, the first item, or an ADR why separate. See `epics/TEMPLATE.md`.
+A `ready` epic MUST carry `## Outcome` + end-to-end `## User scenario` + known `## Items`. Known children seed dependency order; reverse-linked items (`epic: <slug>`) are the authoritative live residual set and may be added just-in-time. No exhaustive upfront feature plan. A mechanism shared by ≥2 known children is an existing owner, the first unit, or an ADR why separate.
+
+## Frozen autonomous goal
+
+Establish and land the run before source work: commit the ready epic, then add
+`goal_baseline: <that exact SHA>` in a marker-only commit. The marker is
+write-once; the bootstrap PR may change only `docs/backlog/*.md`. Each later
+source PR must repeat the marker already present at its merge-base:
+
+```
+Goal-Baseline: <epic-slug>@<40-hex-commit>
+Budget-Slice: <epic-slug>/<slice>
+```
+
+Exactly one declaration of each, same epic. `check:goal-contract` requires the
+PR SHA to match the merge-base marker and checks its whole first-parent history,
+even without a declaration, so another PR cannot ratchet or pre-edit it.
+Frozen: `value`, `tier`, Outcome, User scenario; title/user_story are indexes,
+items/order/Budget are run state. Only the user can amend observable goal.
+Required discoveries reverse-link and prevent completion; outside-goal work
+uses normal capture.
 
 ## Budget (epics handed to an autonomous run)
 
-`## Budget` = the run's tripwires, declared at refine; over budget = stop and surface, never silent absorption:
+`## Budget` = slice tripwires, declared before its Contract+RED. Existing tripwires/bands cannot be weakened; new just-in-time slice may be appended before pickup. Over budget = re-cut current unit, never narrow goal or defer a required clause:
 
 - scope implemented outside `ready` items: 0 (capturing new drafts is fine; building them is not)
 - in-place ready-contract edits alongside source changes: 0 (enforced: `pnpm check:contract-drift`)
 - new coordination mechanisms: 0, or the named substrate item (`fault-classes.md` §Class-kill)
 - review rounds per item: ≤ 2 (§Review convergence)
-- per-item diff estimate (rough band from comparable landed items) — 2× over = anomaly, pause
+- per-item diff estimate (rough band from comparable landed items) — at 2× = stop/re-cut
+
+`check:budget` and `check:contract-drift` share pickup = parent of first source
+commit. A preceding Contract+RED commit may add a JIT unit/Budget row; later
+implementation cannot rewrite it. Closure removes only exact frontmatter
+`items:` / `blocked_by:` keys; Items prose and Budget rows remain historical
+authority. Multiple slices fail. Mechanism grep is advisory; Final review owns
+the full modified-file sweep.
 
 ## Tier
 
@@ -77,7 +104,8 @@ Every marker must resolve to an existing item.
 `pnpm backlog:check` runs `tools/backlog/check.mjs`:
 
 - validates item/epic frontmatter (required keys, status enum, area = folder = known)
-- `ready` items/epics carry their contract sections
+- `ready` items and `ready|in-progress` epics carry their contract sections
+- `goal_baseline` is exact 40-hex and carries a declared tier
 - `epic:` / `blocked_by:` / epic `items:` links resolve to existing items/epics
 - resolves every code marker to an existing item
 - prints counts per area × status

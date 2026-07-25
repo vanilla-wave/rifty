@@ -76,6 +76,7 @@ const TASKS = [
   'check:source-grep',
   'check:dir-owner',
   'check:contract-drift',
+  'check:goal-contract',
   'check:budget',
   'check:install-stamp-writers',
   'backlog:check',
