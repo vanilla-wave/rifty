@@ -68,8 +68,12 @@ one parameterized probe script):
 
 ## Consequences
 
-- (+) Sass proves the registry/materialization seam with an install-only
-  substitution; the Sass slice's generic-file no-change gate is meaningful.
+- Correction 2026-07-25 (ADR-0323): the no-generic-file-change seam premise
+  was false. Sass exposed missing generic admission, acquisition-projection,
+  and bin authorities; recipe v2 adds those once without Sass recognition.
+- (+) Sass proves recipe v2 with an install-only substitution; after the v2
+  authority lands, future recipes remain data/capsule additions unless they
+  expose another genuinely missing field.
 - (+) ~10 MB platform binary never fetched; cold-install delta (bytes + wall
   time for the twin) is measured and committed as matched evidence in the Sass
   slice's Budget.

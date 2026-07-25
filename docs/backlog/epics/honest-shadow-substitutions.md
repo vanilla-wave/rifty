@@ -64,10 +64,14 @@ Contract+RED → Final+GREEN):
 5. `runtime-js/process-versions-node-honesty` —
    **process-release-identity**: expose Node's API-family discriminator without
    lying about the rifty/wasm host; prerequisite discovered by the Sass RED.
-6. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
+6. `npm-client/shadow-recipe-v2-authority` —
+   **recipe-v2-authority**: generic admission, exact acquisition projection,
+   materialization-owned bins, and strict replay authority discovered by the
+   Sass contract; required before the package-specific seam proof.
+7. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
    generic-file no-change gate. Required for epic closure, not optional.
-7. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
+8. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption
    narrowing, owner READMEs, dead code imported by extraction).
 
@@ -95,5 +99,6 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | oracle-slice | 300–1000 |
 | workbench-extraction | 2000–4000 |
 | process-release-identity | 100–500 |
+| recipe-v2-authority | 700–1700 |
 | sass-scale-proof | 1000–3000 |
 | measured-cleanup | 1000–3000 |
