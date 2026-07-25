@@ -500,15 +500,20 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     );
 
     const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
+    const aliasBin = await vfs.readFile('/proj/node_modules/esbuild/bin/esbuild');
+    const aliasPackage = await vfs.readFile('/proj/node_modules/esbuild/package.json');
     const launcher = await readText(vfs, '/proj/node_modules/.bin/esbuild');
     expect(aliasMain).toContain('__rifty?.esbuild');
     expect(await readText(vfs, '/proj/node_modules/esbuild/package.json')).toContain('"esbuild"');
     expect(launcher).toBe("#!/usr/bin/env node\nimport('../esbuild/bin/esbuild');\n");
-    expect(fresh).toContain(MATERIALIZE_LINE);
 
     // Replay (lockfile fast path): same lines, byte-identical shim files.
+    await vfs.writeFile('/proj/node_modules/esbuild/lib/main.cjs', 'corrupt');
+    await vfs.rm('/proj/node_modules/esbuild/bin/esbuild');
+    await vfs.rm('/proj/node_modules/esbuild/package.json');
     await vfs.rm('/proj/node_modules/.bin/esbuild');
     const packument = vi.spyOn(registry, 'getPackument');
+    const tarball = vi.spyOn(registry, 'getTarball');
     const replay: string[] = [];
     await install(
       'root',
@@ -522,8 +527,12 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
       },
     );
     expect(packument).not.toHaveBeenCalled();
+    expect(tarball).not.toHaveBeenCalled();
+    expect(fresh).toContain(MATERIALIZE_LINE);
     expect(replay).toContain(MATERIALIZE_LINE);
     expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasMain);
+    expect(await vfs.readFile('/proj/node_modules/esbuild/bin/esbuild')).toEqual(aliasBin);
+    expect(await vfs.readFile('/proj/node_modules/esbuild/package.json')).toEqual(aliasPackage);
     expect(await readText(vfs, '/proj/node_modules/.bin/esbuild')).toBe(launcher);
   });
 
