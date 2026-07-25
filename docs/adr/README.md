@@ -67,6 +67,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0270 | worker_threads.Worker parent events are EventEmitter-only |
 | 0272 | Late typed process terminal bootstrap |
 | 0294 | Node-compatible require.extensions suffix dispatch |
+| 0322 | Split process identity into Node compatibility and rifty host axes |
 
 ### runtime-wasi
 
