@@ -39,7 +39,8 @@ Shape and validation: `docs/backlog/README.md`. Never implement a draft.
    stale/overlap, evidence behind every Parity/Fault row (model memory is not
    evidence; spike evidence counts only as a reproducible artifact — command +
    output + version, else the row is unverified), boundary rows, and the mechanism
-   inventory. Its verdict text is copied VERBATIM as the first line of the doc's
+   inventory — including machinery the Acceptance is deliverable without
+   (prescribed carrier with no spike/ADR = frozen assumption, not ready). Its verdict text is copied VERBATIM as the first line of the doc's
    `## Decisions`: `ready-verdict: <date> — <what settled each section>`. Clean →
    set `ready`, run `pnpm backlog:check`, continue; open fork → step 3;
    missing/unverifiable evidence → step 1. No «settled with caveats».
