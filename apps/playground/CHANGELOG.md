@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Preview switcher now auto-selects every server on its FIRST appearance
+  regardless of registry position/source (registry orders [dev-server,
+  preview, node], so `npm run dev` inserting before a live node server no
+  longer failed to switch); a hand-picked switcher choice is never displaced
+  while its port stays live (ADR-0155/0173). Component-effect proof lives in
+  `tests/browser-unit/preview-panel-selection.spec.ts`.
+
 ### Changed (Workbench extraction)
 
 - Instant Vite 7 restores still skip `npm install`, but an empty verified

@@ -138,8 +138,27 @@ describe('reconcileSelectedPort (auto-select newly published)', () => {
     expect(reconcileSelectedPort(sourceOrdered, 5174, known([5174]))).toBe(4173);
   });
 
-  it('keeps a live node selection when a dev server is newly inserted before it', () => {
-    expect(reconcileSelectedPort(TWO_PORTS, 3000, known([3000]))).toBe(3000);
+  it('switches to a dev server newly inserted BEFORE the live node selection', () => {
+    // Registry order is [dev-server, preview, node]: `npm run dev` while a node
+    // server is selected inserts :5174 FIRST — first appearance still wins.
+    expect(reconcileSelectedPort(TWO_PORTS, 3000, known([3000]))).toBe(5174);
+  });
+
+  it('prefers the LAST new entry in registry order when several appear at once', () => {
+    expect(reconcileSelectedPort(TWO_PORTS, 3000, known([]))).toBe(3000);
+    expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 5174, known([5174]))).toBe(4173);
+  });
+
+  it('never displaces a hand-picked selection while its port stays live', () => {
+    // node :3000 picked in the switcher; dev :5174 newly inserted before it.
+    expect(reconcileSelectedPort(TWO_PORTS, 3000, known([3000]), 3000)).toBe(3000);
+    // …even when several new servers appear at once.
+    expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 3000, known([3000]), 3000)).toBe(3000);
+  });
+
+  it('resumes normal rules when the hand-picked port left the live set', () => {
+    // manual :9999 vanished → the newly published entry wins again.
+    expect(reconcileSelectedPort(TWO_PORTS, 9999, known([9999, 5174]), 9999)).toBe(3000);
   });
 
   it('does not re-snap to an already-known last entry', () => {
@@ -153,5 +172,6 @@ describe('reconcileSelectedPort (auto-select newly published)', () => {
 
   it('leaves the current selection untouched when the set is empty', () => {
     expect(reconcileSelectedPort([], 8080, known([]))).toBe(8080);
+    expect(reconcileSelectedPort([], 8080, known([]), 8080)).toBe(8080);
   });
 });
