@@ -134,12 +134,12 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0258 | Structured install acquisition provenance |
 | 0283 | Canonical package manifest serialization |
 | 0303 | Direct roots reserve flat slots before transitive placement |
-| 0308 | Package-generic builtin shadow-substitution registry with optional runtime binding |
 | 0309 | One package-tree authority for install-tree lifecycle |
 | 0310 | Sass ships as a synthesized sass-embedded facade over the exact pure-JS sass twin |
 | 0314 | Cancellable package acquisition |
 | 0318 | Retain verified shadow assets for manager lifetime |
 | 0321 | Keep shadow asset port correlation package local |
+| 0323 | Shadow recipe v2 owns exact admission acquisition and user-visible bins |
 
 ### playground
 
@@ -301,6 +301,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0179 | 0284 | git-facade ownership retained; scalar result replaced by ordered rows plus explicit path gaps |
 | 0197 | 0292 | Solid testability motive retained; Workbench companion now owns lifecycle and semantic test seams |
 | 0269 | 0294 | shared table and `_compile` retained; `.js`-only dispatch replaced by Node suffix selection |
+| 0308 | 0323 | generic registry retained; recipe v2 adds admission, exact dependency projection, and materialization-owned bins |
 
 ## Corrections (active)
 
@@ -367,6 +368,7 @@ superseded.
 | 0194 §8 learned-pin 30-min hard-TTL clause | 0261 | freshness is SWR: fresh <1800s, stale from 1800s to <24h, dropped at 24h |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |
 | 0188 bridge-backed dual esbuild entries | 0226 / note 2026-07-13 | one install-time CJS overlay reads the exact Worker-owned runtime slot; other 0188 installer/shim/provenance clauses stand |
+| 0310 no-generic-file-change Sass seam | 0323 / note 2026-07-25 | recipe v2 adds the missing generic admission, dependency-projection, and bin authorities once |
 | 0237 non-undefined runtime signal clause | 0239 / note 2026-07-12 | falsy signal is absent; invalid signal errors preserve Node acquisition order; valid supported signal stays a pre-lock loud gap |
 | 0075 permanent program tab / program-model guard | 0075 note 2026-06-29 | initial tabs are preset/project-owned ordinary file tabs (`openFiles`), path-keyed by absolute VFS path; no `PROGRAM_TAB_ID`/program model; same-path opens reuse one model |
 | 0076 Program-tab safety paragraph | 0076 note 2026-06-29 | real-vite entry/source files use the ordinary path-keyed editor write path; no special program tab; writes still reach owner/worker, so no silent copy |
