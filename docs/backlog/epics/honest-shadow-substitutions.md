@@ -6,6 +6,7 @@ created: 2026-07-23
 value: Real projects that depend on native-backed packages (esbuild directly or through Vite, sass-embedded) install and run faithfully in the browser through one builtin, parity-proven substitution registry
 user_story: As a browser-IDE user, I want npm install of a project using esbuild or sass-embedded to just work — direct require, through Vite, offline on reopen — but today each native binding stops the project or costs a re-acquisition
 tier: production
+goal_baseline: 8dfd943ff3c347d4c24273b3bcb93df7ee732bb5
 sources: [ADR-0307, ADR-0308, ADR-0309, ADR-0310, PR-160]
 ---
 
