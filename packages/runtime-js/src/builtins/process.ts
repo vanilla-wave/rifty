@@ -444,6 +444,19 @@ export function coerceExitCode(v: unknown): number {
   );
 }
 
+type NodeProcessRelease = typeof NODE_PROCESS_IDENTITY.release;
+
+function createNodeProcessRelease(): NodeProcessRelease {
+  const release = { ...NODE_PROCESS_IDENTITY.release };
+  Object.defineProperty(release, 'name', {
+    value: NODE_PROCESS_IDENTITY.release.name,
+    writable: false,
+    enumerable: true,
+    configurable: true,
+  });
+  return release;
+}
+
 /**
  * The unified Node `process`. `instanceof EventEmitter` holds so user code doing
  * `process instanceof require('events')` keeps working.
@@ -457,6 +470,7 @@ export class NodeProcess extends EventEmitter {
   readonly platform = NODE_PROCESS_IDENTITY.platform;
   readonly arch = NODE_PROCESS_IDENTITY.arch;
   readonly version = NODE_PROCESS_IDENTITY.version;
+  declare readonly release: NodeProcessRelease;
   // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
   // without throwing and doesn't leak across processes (ADR-0150: each
   // foreground CLI in its own supervised child worker). `Record` (not the narrow
@@ -493,6 +507,12 @@ export class NodeProcess extends EventEmitter {
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    Object.defineProperty(this, 'release', {
+      value: createNodeProcessRelease(),
+      writable: false,
+      enumerable: true,
+      configurable: true,
+    });
     Object.defineProperty(this, NODE_PROCESS_TERMINAL_BOOTSTRAP, {
       value: (terminal: unknown): void => this.#applyTerminalBootstrap(terminal),
       enumerable: false,

@@ -1,8 +1,24 @@
-# Compatibility matrix — Process lifecycle & event loop
+# Compatibility matrix — Process identity, lifecycle & event loop
 
 Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet). Update by hand after
 touching the child-realm drain / keepalive code. Covers how a rifty child process exits — the
 event-loop drain model (ADR-0152) and its one deliberate, loud divergence from Node.
+
+## Process identity (ADR-0322)
+
+Node API compatibility and host provenance are separate axes. Backing tests:
+`packages/runtime-js/src/builtins/process-release.test.ts`,
+`packages/runtime-js/src/ipc/install-process-identity.test.ts`, and parity
+`tools/node-parity-runner/cases/process/release-identity.case.ts`.
+
+| Feature | Status | Notes |
+|---|---|---|
+| Node API family selectors | ✅ | `version === 'v24.0.0'`, `versions.node === '24.0.0'`, and `release.name === 'node'` |
+| Live process aliases | ✅ | In a seeded Node realm, `globalThis.process`, `require('process')`, and `require('node:process')` expose one live process and `release` object |
+| Custom-build `process.release` shape | ✅ | Fresh ordinary extensible object per process; exact Node 24 descriptors; official `sourceUrl`, `headersUrl`, `libUrl`, and `lts` fields stay absent rather than claiming false provenance |
+| Host identity | ⚠️ | Deliberate non-Node values remain `platform === 'rifty'`, `arch === 'wasm'`, and `versions.rifty === '0.0.0'`; this does not claim a native Node/V8 host |
+
+## Process lifecycle
 
 A run-to-completion child (`serve` absent/false) exits when its event loop DRAINS (no live refed
 handle), like real Node — not at top-level resolve. A long-lived server uses `serve:true` and is
