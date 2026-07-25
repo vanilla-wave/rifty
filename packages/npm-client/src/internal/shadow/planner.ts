@@ -10,6 +10,8 @@ import {
 } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath } from '@riftydev/vfs';
 
+export type ShadowSubstitutionCatalog = typeof builtinShadowSubstitutionCatalog;
+
 export interface AppliedShadowSubstitution {
   readonly catalog: Readonly<{ id: string; digest: string }>;
   readonly substitutionId: string;
@@ -120,8 +122,12 @@ function freezeDeep<T>(value: T): T {
   return value;
 }
 
-function recipeForTrigger(name: string, version: string): BuiltinShadowSubstitutionRecipe {
-  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+function recipeForTrigger(
+  catalog: ShadowSubstitutionCatalog,
+  name: string,
+  version: string,
+): BuiltinShadowSubstitutionRecipe {
+  const recipe = catalog.recipes.find(
     (candidate) => candidate.trigger.name === name && candidate.trigger.version === version,
   );
   if (!recipe) throw new NotImplementedError(`shadow-registry.${name}@${version}`);
@@ -181,6 +187,7 @@ function acquisitionFact(
 
 export function attestBuiltinShadowSubstitution(
   inputValue: AttestBuiltinShadowSubstitutionInput,
+  catalog: ShadowSubstitutionCatalog = builtinShadowSubstitutionCatalog,
 ): AppliedShadowSubstitution {
   const input = exact(inputValue, ['acquisition', 'installPath', 'trigger'], 'shadow attestation');
   const trigger = exact(input.trigger, ['name', 'requestedRange', 'version'], 'shadow trigger');
@@ -193,11 +200,11 @@ export function attestBuiltinShadowSubstitution(
   ) {
     throw new TypeError('shadow requestedRange must be a non-empty string or null');
   }
-  const recipe = recipeForTrigger(name, version);
+  const recipe = recipeForTrigger(catalog, name, version);
   const fact: AppliedShadowSubstitution = {
     catalog: {
-      id: builtinShadowSubstitutionCatalog.id,
-      digest: builtinShadowSubstitutionCatalog.digest,
+      id: catalog.id,
+      digest: catalog.digest,
     },
     substitutionId: recipe.id,
     recipeDigest: recipe.digest,
@@ -211,7 +218,10 @@ export function attestBuiltinShadowSubstitution(
   return freezeDeep(fact);
 }
 
-function decodeApplied(value: unknown): AppliedShadowSubstitution {
+function decodeApplied(
+  value: unknown,
+  catalogAuthority: ShadowSubstitutionCatalog,
+): AppliedShadowSubstitution {
   const raw =
     value !== null && typeof value === 'object' && Object.hasOwn(value, 'binding')
       ? exact(
@@ -240,16 +250,11 @@ function decodeApplied(value: unknown): AppliedShadowSubstitution {
           'applied shadow substitution',
         );
   const catalog = exact(raw.catalog, ['digest', 'id'], 'applied catalog identity');
-  if (
-    catalog.id !== builtinShadowSubstitutionCatalog.id ||
-    catalog.digest !== builtinShadowSubstitutionCatalog.digest
-  ) {
+  if (catalog.id !== catalogAuthority.id || catalog.digest !== catalogAuthority.digest) {
     throw new TypeError('applied shadow substitution catalog identity drifted');
   }
   const substitutionId = text(raw.substitutionId, 'substitutionId');
-  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-    (candidate) => candidate.id === substitutionId,
-  );
+  const recipe = catalogAuthority.recipes.find((candidate) => candidate.id === substitutionId);
   if (!recipe)
     throw new NotImplementedError(`shadow-registry.substitutionRecipe.${substitutionId}`);
   if (raw.recipeDigest !== recipe.digest)
@@ -296,15 +301,18 @@ function decodeApplied(value: unknown): AppliedShadowSubstitution {
     };
   }
   const installPath = text(materialization.installPath, 'applied installPath');
-  const decoded = attestBuiltinShadowSubstitution({
-    trigger: {
-      name: text(trigger.name, 'applied trigger name'),
-      requestedRange,
-      version: text(trigger.version, 'applied trigger version'),
+  const decoded = attestBuiltinShadowSubstitution(
+    {
+      trigger: {
+        name: text(trigger.name, 'applied trigger name'),
+        requestedRange,
+        version: text(trigger.version, 'applied trigger version'),
+      },
+      installPath,
+      acquisition,
     },
-    installPath,
-    acquisition,
-  });
+    catalogAuthority,
+  );
   const supplied = {
     catalog: {
       id: text(catalog.id, 'applied catalog id'),
@@ -331,10 +339,11 @@ function decodeApplied(value: unknown): AppliedShadowSubstitution {
   return decoded;
 }
 
-function finishPlan(substitutions: readonly AppliedShadowSubstitution[]): ShadowAssetPlan {
-  const assetsById = new Map(
-    builtinShadowSubstitutionCatalog.assets.map((asset) => [asset.id, asset]),
-  );
+function finishPlan(
+  substitutions: readonly AppliedShadowSubstitution[],
+  catalog: ShadowSubstitutionCatalog,
+): ShadowAssetPlan {
+  const assetsById = new Map(catalog.assets.map((asset) => [asset.id, asset]));
   const required = new Map<string, ShadowRuntimeAsset>();
   const bindings = new Map<string, { adapterId: string; assets: readonly string[] }>();
   for (const substitution of substitutions) {
@@ -373,6 +382,7 @@ function finishPlan(substitutions: readonly AppliedShadowSubstitution[]): Shadow
 
 function planDecodedShadowSubstitutions(
   values: readonly AppliedShadowSubstitution[],
+  catalog: ShadowSubstitutionCatalog,
 ): ShadowAssetPlan {
   const decoded = [...values];
   decoded.sort((left, right) =>
@@ -384,28 +394,36 @@ function planDecodedShadowSubstitutions(
     if (seen.has(key)) throw new TypeError(`duplicate shadow materialization ${key}`);
     seen.add(key);
   }
-  return finishPlan(decoded);
+  return finishPlan(decoded, catalog);
 }
 
 export function planAppliedShadowSubstitutions(
   values: readonly AppliedShadowSubstitution[],
+  catalog: ShadowSubstitutionCatalog = builtinShadowSubstitutionCatalog,
 ): ShadowAssetPlan {
   return planDecodedShadowSubstitutions(
-    decodeDenseDataArray(values, 'applied shadow substitutions').map(decodeApplied),
+    decodeDenseDataArray(values, 'applied shadow substitutions').map((value) =>
+      decodeApplied(value, catalog),
+    ),
+    catalog,
   );
 }
 
 /** Package-private core for facts already returned by this module's attester. */
 export function planTrustedAppliedShadowSubstitutions(
   values: readonly AppliedShadowSubstitution[],
+  catalog: ShadowSubstitutionCatalog = builtinShadowSubstitutionCatalog,
 ): ShadowAssetPlan {
   if (!Array.isArray(values) || values.some((value) => !Object.isFrozen(value))) {
     throw new TypeError('trusted shadow substitutions invariant failed');
   }
-  return planDecodedShadowSubstitutions(values);
+  return planDecodedShadowSubstitutions(values, catalog);
 }
 
-export function decodeShadowAssetPlan(value: unknown): ShadowAssetPlan {
+export function decodeShadowAssetPlan(
+  value: unknown,
+  catalog: ShadowSubstitutionCatalog = builtinShadowSubstitutionCatalog,
+): ShadowAssetPlan {
   const raw = exact(
     value,
     ['assets', 'bindings', 'requiredSetDigest', 'substitutions'],
@@ -414,7 +432,7 @@ export function decodeShadowAssetPlan(value: unknown): ShadowAssetPlan {
   const suppliedSubstitutions = decodeDenseDataArray(
     raw.substitutions,
     'shadow plan substitutions',
-  ).map(decodeApplied);
+  ).map((entry) => decodeApplied(entry, catalog));
   const suppliedAssets = decodeDenseDataArray(raw.assets, 'shadow plan assets').map(
     (value, index) => {
       const asset = exact(
@@ -467,7 +485,7 @@ export function decodeShadowAssetPlan(value: unknown): ShadowAssetPlan {
   );
   const requiredSetDigest = text(raw.requiredSetDigest, 'shadow plan requiredSetDigest');
   if (!SHA.test(requiredSetDigest)) throw new TypeError('shadow plan requiredSetDigest is invalid');
-  const plan = planTrustedAppliedShadowSubstitutions(suppliedSubstitutions);
+  const plan = planTrustedAppliedShadowSubstitutions(suppliedSubstitutions, catalog);
   const supplied = {
     requiredSetDigest,
     substitutions: suppliedSubstitutions,
@@ -590,7 +608,10 @@ function validateLockfileEntryProvenance(
   }
 }
 
-export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowAssetPlan {
+export function planShadowSubstitutionsFromLockfile(
+  value: unknown,
+  catalog: ShadowSubstitutionCatalog = builtinShadowSubstitutionCatalog,
+): ShadowAssetPlan {
   const lockfile = plain(value, 'lockfile');
   if (lockfile.lockfileVersion !== 3)
     throw new TypeError('shadow substitution replay requires lockfile v3');
@@ -606,7 +627,7 @@ export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowAsset
         throw new NotImplementedError('npm-client.lockfile.shadowSubstitutionTrace');
       }
     }
-    return planAppliedShadowSubstitutions([]);
+    return planAppliedShadowSubstitutions([], catalog);
   }
   try {
     const metadata = exact(rifty, ['shadowSubstitutions'], 'lockfile rifty metadata');
@@ -620,8 +641,8 @@ export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowAsset
     const suppliedApplied = decodeDenseDataArray(
       trace.applied,
       'shadow lockfile trace applied',
-    ).map(decodeApplied);
-    const plan = planTrustedAppliedShadowSubstitutions(suppliedApplied);
+    ).map((entry) => decodeApplied(entry, catalog));
+    const plan = planTrustedAppliedShadowSubstitutions(suppliedApplied, catalog);
     for (const substitution of plan.substitutions) {
       validateLockfileEntryProvenance(packages, substitution);
     }
@@ -667,13 +688,14 @@ export async function materializeRegistryShadowSubstitutions(
   root: string,
   plan: ShadowAssetPlan,
   report: (line: string) => void,
+  catalog: ShadowSubstitutionCatalog = builtinShadowSubstitutionCatalog,
 ): Promise<void> {
   if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
     throw new TypeError('trusted shadow plan invariant failed');
   }
   for (const substitution of plan.substitutions) {
     if (substitution.acquisition.kind !== 'registry') continue;
-    const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+    const recipe = catalog.recipes.find(
       (candidate) => candidate.id === substitution.substitutionId,
     );
     if (!recipe)

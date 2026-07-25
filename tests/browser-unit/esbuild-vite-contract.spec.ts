@@ -588,6 +588,35 @@ function parseResult<T>(
   return JSON.parse(result.text) as T;
 }
 
+async function expectEsbuildV2Lock(page: Page): Promise<void> {
+  const lock = parseResult<{
+    readonly packages?: Readonly<
+      Record<
+        string,
+        {
+          readonly version?: string;
+          readonly bin?: Readonly<Record<string, string>>;
+          readonly riftyShadowRecipe?: string;
+        }
+      >
+    >;
+    readonly rifty?: {
+      readonly shadowSubstitutions?: {
+        readonly protocol?: string;
+      };
+    };
+  }>(await readOwnerFile(page, '/scratch/package-lock.json'), 'esbuild v2 lock');
+
+  expect(lock.packages?.['node_modules/esbuild']).toMatchObject({
+    version: '0.28.0',
+    bin: { esbuild: 'bin/esbuild' },
+    riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+  });
+  expect(lock.rifty?.shadowSubstitutions?.protocol).toBe(
+    'rifty.shadow-substitutions/v2',
+  );
+}
+
 async function runContractHarness(page: Page): Promise<{
   readonly dev: FullEnvelope;
   readonly build: ModuleEnvelope;
@@ -963,6 +992,7 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
     const version = await execLine(page, 'vite --version');
     expect(version).toMatchObject({ exit: 0 });
     expect(version.out).toContain('vite/7.3.6');
+    await expectEsbuildV2Lock(page);
 
     const contract = await runContractHarness(page);
     expect(
@@ -1174,6 +1204,7 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
     const nativeCjs = hostEsbuild as unknown as Readonly<Record<string, unknown>>;
 
     expect(install.exit, install.out).toBe(0);
+    await expectEsbuildV2Lock(page);
     expect(vite.exit, vite.out).toBe(1);
     expect(config.ok).toBe(false);
     expect(cjsRun.exit, cjsRun.out).toBe(0);
