@@ -19,7 +19,8 @@ tier: <works|robust|production — required for an autonomous goal>
 
 ## Invariants
 
-<!-- Frozen with the marker. Numbered observable statements the closing smoke proves. -->
+<!-- Frozen with the marker. Numbered observable statements the closing smoke proves.
+     Authored only at user-tier refine; the run proves them, never writes or edits them. -->
 
 - I1. <user-observable statement>
 

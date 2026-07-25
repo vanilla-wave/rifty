@@ -5,7 +5,7 @@ title: Bounded autonomous epic runs — orchestration, tripwire automation, esca
 created: 2026-07-22
 why: PR-176 adds frozen goal, residual accounting, one-slice budgets, and a bounded coordinator; the remaining work is adoption measurement and honest scope/mechanism detectors, not completion semantics
 sources: [workbench-retro-2026-07, PR-161, PR-162, PR-176]
-code: [.agents/skills/rifty-review-loop, tools/checks/goal-contract.mjs]
+code: [tools/review/blockers.mjs, tools/checks/goal-contract.mjs]
 ---
 
 ## Context

@@ -77,7 +77,7 @@ describe('evaluate', () => {
     for (const path of [
       'tools/checks/budget.mjs',
       'tools/checks/run-pickup.mjs',
-      '.agents/skills/rifty-review-loop/review-schema.json',
+      'tools/review/review-schema.json',
     ]) {
       const referee = { status: 'M', path };
       expect(evaluate([src], read(null, null), [src, referee])[0]).toContain('own process referee');

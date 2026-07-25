@@ -15,7 +15,7 @@ const GUARDED = new Set(['ready', 'in-progress']);
 const ITEM_PATH_RE = /^docs\/backlog\/(?!epics\/)(.+)\.md$/;
 const EPIC_PATH_RE = /^docs\/backlog\/epics\/[^/]+\.md$/;
 const REFEREE_RE =
-  /^(?:tools\/checks\/(?:(?:budget|contract-drift|goal-contract|run-pickup)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|\.agents\/skills\/rifty-review-loop\/(?:review-schema\.json|scripts\/blockers\.mjs))$/;
+  /^(?:tools\/checks\/(?:(?:budget|contract-drift|goal-contract|run-pickup)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|tools\/review\/(?:review-schema\.json|blockers\.mjs))$/;
 
 /** Frontmatter `status:` value, or null. */
 export function statusOf(text) {

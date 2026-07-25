@@ -24,3 +24,23 @@ Open with verdict + merge call. Return `checkpoint`, exact `unit_goal_source`,
 ordered axes, `unit_residuals` (slice blockers), `goal_residuals` (continuation),
 and `goal_complete` only after end-to-end proof with both residual sets empty.
 Cite `file:line`.
+
+## Checkpoint run (Contract+RED / Final+GREEN)
+
+One fresh isolated reviewer per named checkpoint — raw evidence only, never the
+implementer's diagnosis. Setup: resolve the PR branch + raw body (`gh pr view
+<arg> --json body,headRefName,baseRefName`), `BASE=origin/<baseRefName>`, refuse
+a dirty tree, name `CHECKPOINT` (ambiguity stops). Final+GREEN first runs
+`pnpm pr:check` on the committed SHA.
+
+```sh
+RUN=$(mktemp -d -t rifty-review.XXXX)
+codex exec -C "$(git rev-parse --show-toplevel)" -s read-only -c approval_policy="never" \
+  --skip-git-repo-check --output-schema tools/review/review-schema.json -o "$RUN/verdict.json" \
+  "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, exact Goal-Baseline when declared, current-unit contract, and every changed file. Do not modify files. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations."
+node tools/review/blockers.mjs "$RUN/verdict.json"
+```
+
+Exit 0 → unit passes (`goal_complete:false` = continue the goal); exit 1 →
+redesign/re-cut, no auto-fix, never a third review; exit 2 → retry once, then
+stop. Do not edit or push.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   REQUIRED_AXES,
   evaluateVerdict,
-} from '../../.agents/skills/rifty-review-loop/scripts/blockers.mjs';
+} from '../review/blockers.mjs';
 
 const verdict = (overrides: Record<string, unknown> = {}) => ({
   overall_verdict: 'pass',
