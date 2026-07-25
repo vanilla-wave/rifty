@@ -5,7 +5,6 @@ title: Adaptive playground workbench
 created: 2026-07-09
 value: On a small laptop or wide desktop, the user can always reach Files/Git, Editor, Preview, and Terminal without a primary surface collapsing to unusable dimensions.
 user_story: As a developer using rifty at 800, 1024, or desktop width, I want to focus and switch the surface needed for my task, but today fixed pane defaults squeeze the editor at 1024 and the narrow breakpoint hides Files/Git with no visible restore control.
-items: [playground/responsive-workbench-geometry, playground/workbench-focus-modes-and-sidebar-drawer]
 ---
 
 ## Outcome

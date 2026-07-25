@@ -1,113 +1,118 @@
 # Backlog
 
-Two kinds of work under `docs/backlog/`:
+- Item: one implementable unit at `docs/backlog/<area>/<slug>.md`.
+- Epic: user outcome spanning items at `docs/backlog/epics/<slug>.md`.
 
-- **Items** — one implementable unit per file: `docs/backlog/<area>/<slug>.md`.
-- **Epics** — a user-value umbrella over several items: `docs/backlog/epics/<slug>.md`.
+Routing: `AGENTS.md` + `docs/process/decision-workflow.md`. Delete completed
+work; there is no done status.
 
-New finding → **`rifty-to-backlog`** draft. Planned draft → exhaust evidence/internal decisions; fork-free = ordinary contract compilation, unresolved user-observable fork = manual **`rifty-refine`**. Planned ready item → normal implementation. Closure = **delete on done**; no "done" status.
+## Shape
 
-## Areas (items)
+Areas: `vfs`, `kernel`, `runtime-js`, `runtime-wasi`, `net`, `service-worker`,
+`npm-client`, `shell`, `playground`, `toolchain-build`, `protocol`,
+`process-meta`, `perf`, `terminal`, `distribution`.
 
-`vfs`, `kernel`, `runtime-js`, `runtime-wasi`, `net`, `service-worker`, `npm-client`, `shell`, `playground`, `toolchain-build`, `protocol`, `process-meta`, `perf`, `terminal`, `distribution`.
+| | Item | Epic |
+|---|---|---|
+| Status | `draft\|ready` | `draft\|ready\|in-progress` |
+| Required | `area`, `status`, `title`, `created`, `why` | `kind: epic`, `status`, `title`, `created`, `value` |
+| Optional | `user_story`, `epic`, `blocked_by`, `sources`, `code` | `user_story`, `tier`, `goal_baseline` |
 
-## Statuses
+`area` equals the parent folder. Dates use `YYYY-MM-DD`; arrays use `[a, b]`.
+Place `user_story` after `why`/`value`: `As <persona>, I want <action>, but today
+<blocker>`.
 
-- Items: `draft` (rough, not pickup-ready) · `ready` (a tight contract — see below).
-- Epics: `draft` · `ready` · `in-progress`.
-- Dropped: `active`/`parked`/`blocked` collapsed into draft/ready. A real dependency goes in `blocked_by:` (a field, not a status).
+A draft needs `## Context`. A ready item needs:
 
-## Item frontmatter
+- `## User scenario` unless its epic supplies it: real package/program, exact
+  call, observed result;
+- `## Acceptance`: testable done-definition that rejects approximations;
+- `## Parity cases`: enumerated oracle behaviors and RED targets;
+- `## Out of scope`: named loud throws + compat ❌;
+- `## Decisions`: every fork resolved or ADR-linked.
 
-Required: `area` (= parent folder, a known area) · `status` (`draft|ready`) · `title` · `created` (`YYYY-MM-DD`) · `why`.
-Recommended: `user_story` (line right after `why`) — `As <persona>, I want <X>, but today <blocker>`.
-Optional: `epic` (parent epic slug) · `blocked_by` (`[<area>/<slug>, …]`) · `sources` · `code`. Arrays as `[a, b]`.
+External-oracle work adds `## Reference contract` with pinned version/mechanism;
+semantic copies require an ADR + differential suite.
 
-## `ready` = a contract an implementer can't close with an approximation
+Infra work also needs `## Fault matrix`: each reachable axis × operation →
+fallback, visible degradation, or loud throw; each row is a fault-test target.
+Use `docs/process/fault-classes.md`. Template: `TEMPLATE.md`.
 
-A `ready` item MUST carry (enforced by `backlog:check`):
+A ready/in-progress epic needs `## Outcome`, end-to-end `## User scenario`, and
+`## Items`. Known children seed order; reverse links (`epic: <slug>`) are the
+live residual set. Map a Budget slice once:
 
-- `## User scenario` — **required only when the item has no `epic:`** (an epic child inherits the scenario from its epic — don't duplicate). The epic-grade concrete scenario: the real npm package / Node program the user runs, the exact call, what they observe; mission-anchored (can't name real software it unblocks → not user value).
-- `## Acceptance` — concrete, testable done-definition; an approximation fails it.
-- `## Parity cases` — the exact Node behaviors to pin, each a failing-test-first target (enumerated, never "plus parity cases").
-- `## Out of scope` — the exact inputs/APIs that throw `NotImplementedError` + compat ❌ (named, never "…").
-- `## Decisions` — every fork resolved or ADR-linked; no open "Decide X".
-
-Infra-touching item (cache/persistence/network/concurrency) → also `## Fault matrix`: applicable axes (`docs/process/fault-classes.md`) × operation → honest outcome (fallback / degraded / loud throw), each row a fault-test target. A single «works or falls back» sentence is not a matrix — enumerate the rows. Not machine-checked (`backlog:check` can't judge "touches infra") — review-enforced via the DoD fault-matrix row. Shape: `TEMPLATE.md`.
-
-A `draft` item needs only `## Context`. See `TEMPLATE.md`.
-
-## Epic frontmatter
-
-Required: `kind: epic` · `status` (`draft|ready|in-progress`) · `title` · `created` · `value` (one-line user outcome).
-Recommended: `user_story`. Optional: `items` (`[<area>/<slug>, …]`) · `tier` (see §Tier) · `goal_baseline` (exact SHA, required while an autonomous run is active).
-
-A `ready` epic MUST carry `## Outcome` + end-to-end `## User scenario` + known `## Items`. Known children seed dependency order; reverse-linked items (`epic: <slug>`) are the authoritative live residual set and may be added just-in-time. No exhaustive upfront feature plan. A mechanism shared by ≥2 known children is an existing owner, the first unit, or an ADR why separate.
-
-## Frozen autonomous goal
-
-Establish and land the run before source work: commit the ready epic, then add
-`goal_baseline: <that exact SHA>` in a marker-only commit. The marker is
-write-once; the bootstrap PR may change only `docs/backlog/*.md`. Each later
-source PR must repeat the marker already present at its merge-base:
-
-```
-Goal-Baseline: <epic-slug>@<40-hex-commit>
-Budget-Slice: <epic-slug>/<slice>
+```md
+- `area/item` — **slice-name** — dependency/result
 ```
 
-Exactly one declaration of each, same epic. `check:goal-contract` requires the
-PR SHA to match the merge-base marker and checks its whole first-parent history,
-even without a declaration, so another PR cannot ratchet or pre-edit it.
-Frozen: `value`, `tier`, Outcome, User scenario; title/user_story are indexes,
-items/order/Budget are run state. Only the user can amend observable goal.
-Required discoveries reverse-link and prevent completion; outside-goal work
-uses normal capture.
+A mechanism shared by two children needs an existing owner, a first substrate
+item, or an ADR explaining separation. Template: `epics/TEMPLATE.md`.
 
-## Budget (epics handed to an autonomous run)
+## Autonomous goal
 
-`## Budget` = slice tripwires, declared before its Contract+RED. Existing tripwires/bands cannot be weakened; new just-in-time slice may be appended before pickup. Over budget = re-cut current unit, never narrow goal or defer a required clause:
+Only an explicit whole-ready-epic hand-off starts a run.
 
-- scope implemented outside `ready` items: 0 (capturing new drafts is fine; building them is not)
-- in-place ready-contract edits alongside source changes: 0 (enforced: `pnpm check:contract-drift`)
-- new coordination mechanisms: 0, or the named substrate item (`fault-classes.md` §Class-kill)
-- review rounds per item: ≤ 2 (§Review convergence)
-- per-item diff estimate (rough band from comparable landed items) — at 2× = stop/re-cut
+1. Land the ready epic.
+2. In a later commit, add only
+   `goal_baseline: <parent ready-epic SHA>`.
+3. Every source PR repeats exactly one same-epic pair:
 
-`check:budget` and `check:contract-drift` share pickup = parent of first source
-commit. A preceding Contract+RED commit may add a JIT unit/Budget row; later
-implementation cannot rewrite it. Closure removes only exact frontmatter
-`items:` / `blocked_by:` keys; Items prose and Budget rows remain historical
-authority. Multiple slices fail. Mechanism grep is advisory; Final review owns
-the full modified-file sweep.
+```text
+Goal-Baseline: <epic>@<40-hex-commit>
+Budget-Slice: <epic>/<slice>
+```
+
+The marker is write-once and inherited from merge-base. It freezes `value`,
+`tier`, Outcome, and User scenario; only the user may change them. Title and
+`user_story` are indexes; children, order, mechanisms, slices, and append-only
+Budget are live run state.
+
+Required discoveries stay reverse-linked; only outside-goal work enters normal
+backlog. A clean slice may merge while goal residuals remain. Close the goal
+only with no linked children, empty unit/goal residuals, end-to-end baseline
+proof, fresh `goal_complete: true`, and DoD green on one SHA; then delete it.
+
+## Budget
+
+Each autonomous source PR selects one epic `## Budget` row. Tripwires:
+
+- scope implemented outside ready items: `0`;
+- ready-contract edits beside source: `0`;
+- new coordination mechanisms: `0`, unless the named substrate item owns one;
+- review checkpoints per slice: exactly `2`;
+- hand-written insertion band: above high warns; at `2×` high re-cut.
+
+Pickup is the parent of the first production-source commit. Before pickup,
+Contract+RED may append one ready JIT child, its Items mapping, and its Budget
+row; existing rows/tripwires cannot weaken. After pickup, closure may only
+subtract exact `blocked_by:` dependencies from ready items; Items prose and
+Budget stay as authority. Optional `generated globs` exclude generated files
+from the band.
+
+## Gates
+
+| Owner | Enforces |
+|---|---|
+| `backlog:check` | schema, ready sections, links, markers |
+| `check:goal-contract` | bootstrap/marker history, frozen fields, linked-child deletion |
+| `check:budget` | paired declaration, append-only Budget, pickup row/item, band |
+| `check:contract-drift` | post-pickup ready contracts and process referees |
+| Final review | run membership, semantic scope/residuals, review count, full mechanism sweep, acceptance |
+
+`pr:check`/CI run the machine gates.
 
 ## Tier
 
-`tier: works|robust|production` on an epic declares how complete the capability is REQUIRED to be; items inherit it (no per-item tier). Composes with `docs/process/fault-classes.md` §Boundary failure models: tier × boundary = the fault rows in scope. The no-silent-lie bar has no tier — it holds everywhere.
+The epic tier bounds required fault behavior; items inherit it:
 
-- `works` — happy path honest; any fault on the boundary's real surface may resolve to one loud throw.
-- `robust` — every (real axis × operation) resolves to its honest outcome (fallback / degraded-visibly / loud throw), each row a fault test.
-- `production` — `robust` + crash/reload consistency + e2e fault-injection proof.
+- `works`: honest happy path; reachable faults may loud-throw;
+- `robust`: every reachable axis × operation has an honest outcome + fault test;
+- `production`: robust + crash/reload consistency + e2e fault proof.
 
-No `tier` = undeclared: refine decides per item. Raising a tier is a strategic decision — ADR first, then refine the fault delta (`docs/process/decision-workflow.md` §Backlog readiness); a finding above the declared tier parks at capture.
+No silent lie is allowed at any tier. No tier means undecided and cannot start an
+autonomous run. Raising tier requires an ADR; above-tier findings remain draft.
 
 ## Code markers
 
-```
-// TODO(backlog: <area>/<slug>)
-```
-
-Every marker must resolve to an existing item.
-
-## Validation
-
-`pnpm backlog:check` runs `tools/backlog/check.mjs`:
-
-- validates item/epic frontmatter (required keys, status enum, area = folder = known)
-- `ready` items and `ready|in-progress` epics carry their contract sections
-- `goal_baseline` is exact 40-hex and carries a declared tier
-- `epic:` / `blocked_by:` / epic `items:` links resolve to existing items/epics
-- resolves every code marker to an existing item
-- prints counts per area × status
-
-Fails CI on any violation.
+`// TODO(backlog: <area>/<slug>)` must resolve to an existing item.

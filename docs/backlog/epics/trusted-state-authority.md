@@ -5,7 +5,6 @@ title: Trusted-state authority — one owner for every trust claim over storage
 created: 2026-07-11
 value: Any "this multi-file state is complete/valid" claim (install stamp today; caches, git index, multi-tab tomorrow) is owned by ONE serialized, durable-proving authority — reload/crash/concurrent writers can never make the platform silently trust torn state, and building the NEXT trust claim costs a primitive call, not five review rounds.
 user_story: As a developer, I want to reload, switch projects, or run installs from two terminals at any worst moment and always reopen a provably honest project, but today that guarantee is held by ~7 hand-rolled coordination mechanisms scattered over 3 modules — each new writer or storage plane interleaving is a fresh trust bug found only by review (42 findings across 5 rounds on PR #131).
-items: [vfs/trusted-state-primitive]
 ---
 
 ## Outcome

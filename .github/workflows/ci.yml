@@ -42,8 +42,8 @@ jobs:
       - run: pnpm check:contract-drift # blocking: no in-place ready-contract edits in the same diff as source changes
       - run: pnpm check:goal-contract # blocking: exact-SHA autonomous goal cannot narrow or close with linked residuals
       - run: pnpm check:budget # blocking: paired one-slice goal tripwire; pickup diff mass, mechanism scan advisory
-      - run: node tools/backlog/check.mjs # blocking: frontmatter + TODO(backlog:) integrity
-      - run: node tools/refs/check.mjs # blocking: ADR index + cross-ref integrity
+      - run: pnpm backlog:check # blocking: frontmatter + TODO(backlog:) integrity
+      - run: pnpm refs:check # blocking: ADR index + cross-ref integrity
 
   unit-and-conformance:
     runs-on: ubuntu-latest

@@ -13,6 +13,7 @@ import {
   newPath,
   parseBudget,
   scanMechanisms,
+  validateBudgetAuthority,
   validateRunDeclarations,
   validateSelectedSliceItems,
 } from './budget.mjs';
@@ -53,6 +54,61 @@ describe('parseBudget', () => {
     );
     expect(parseBudget(withSubstrate)?.substrate).toBe('npm-client/shadow-registry-core');
     expect(parseBudget('## Items\n')).toBeNull();
+  });
+});
+
+describe('validateBudgetAuthority', () => {
+  const addRow = (text: string, row: string) =>
+    text.replace('| registry-core | 2000-4000 |', `| registry-core | 2000-4000 |\n${row}`);
+
+  it('accepts an identical existing slice and one selected JIT row/item', () => {
+    expect(validateBudgetAuthority(epic, epic, 'oracle-slice')).toEqual([]);
+    const pickup = addRow(epic, '| jit | 10–20 |').replace(
+      '## Items',
+      '## Items\n\n- `playground/jit` — **jit**: ready.',
+    );
+    expect(validateBudgetAuthority(epic, pickup, 'jit')).toEqual([]);
+  });
+
+  it.each([
+    ['rewritten row', epic.replace('300–1000', '300–2000')],
+    ['deleted row', epic.replace('| oracle-slice | 300–1000 |\n', '')],
+    [
+      'reordered rows',
+      epic.replace(
+        '| oracle-slice | 300–1000 |\n| registry-core | 2000-4000 |',
+        '| registry-core | 2000-4000 |\n| oracle-slice | 300–1000 |',
+      ),
+    ],
+    ['rewritten tripwire', epic.replace('mechanisms: 0', 'mechanisms: 1')],
+    ['rewritten glob', epic.replace('docs/public/compat/**', 'docs/public/**')],
+  ])('rejects %s', (_case, pickup) => {
+    expect(validateBudgetAuthority(epic, pickup, 'oracle-slice')).toEqual([
+      'pickup rewrites merge-base Budget content or existing rows',
+    ]);
+  });
+
+  it('rejects extra, wrong, and duplicate rows', () => {
+    const extra = addRow(epic, '| jit | 10–20 |\n| extra | 1–2 |');
+    expect(validateBudgetAuthority(epic, extra, 'jit')).toEqual(
+      expect.arrayContaining([
+        'pickup adds 2 Budget rows; want at most one',
+        'pickup adds Budget row "extra" instead of selected slice "jit"',
+      ]),
+    );
+
+    const wrong = addRow(epic, '| other | 10–20 |');
+    expect(validateBudgetAuthority(epic, wrong, 'jit')).toEqual([
+      'pickup adds Budget row "other" instead of selected slice "jit"',
+    ]);
+
+    const duplicate = addRow(epic, '| jit | 10–20 |\n| jit | 10–20 |');
+    expect(validateBudgetAuthority(epic, duplicate, 'jit')).toEqual(
+      expect.arrayContaining([
+        'pickup duplicates Budget row "jit"',
+        'pickup adds 2 Budget rows; want at most one',
+      ]),
+    );
   });
 });
 
@@ -234,7 +290,6 @@ status: ready
 title: Goal
 created: 2026-07-25
 value: Goal
-items: []
 ---
 
 ## Outcome
@@ -285,7 +340,6 @@ epic: goal
       writeFileSync(
         epicPath,
         initialEpic
-          .replace('items: []', 'items: [playground/jit]')
           .replace('Known work.', '- `playground/jit` — **jit**: just-in-time unit.')
           .replace('| seed | 1–10 |', '| seed | 1–10 |\n| jit | 1–10 |'),
       );

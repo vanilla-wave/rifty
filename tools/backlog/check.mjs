@@ -2,7 +2,7 @@
 // Backlog linter (no deps). Run as: node tools/backlog/check.mjs (from repo root).
 // - validates frontmatter of items docs/backlog/<area>/<slug>.md + epics docs/backlog/epics/<slug>.md
 // - `ready` items/epics must carry their contract sections
-// - epic / blocked_by / epic items links must resolve
+// - epic / blocked_by links must resolve
 // - resolves every code marker (see docs/backlog/README.md) to an existing item
 // - prints per-area×status counts; exits 1 on any violation
 
@@ -220,21 +220,21 @@ for (const { rel, fm, text } of epicRecords) {
   if (fm.tier != null && !EPIC_TIER_SET.has(fm.tier)) {
     errors.push(`${rel}: invalid tier '${fm.tier}' (must be ${EPIC_TIERS.join('|')})`);
   }
+  if ('items' in fm) {
+    errors.push(`${rel}: frontmatter items duplicates ## Items and child epic: links`);
+  }
   if (fm.goal_baseline != null) {
     if (!/^[0-9a-f]{40}$/u.test(fm.goal_baseline)) {
       errors.push(`${rel}: goal_baseline must be one exact 40-hex commit`);
     }
     if (fm.tier == null) errors.push(`${rel}: autonomous goal_baseline requires tier`);
+    if (!hasSection(text, 'Budget')) {
+      errors.push(`${rel}: autonomous goal_baseline requires '## Budget'`);
+    }
   }
   if (fm.status === 'ready' || fm.status === 'in-progress') {
     for (const s of READY_EPIC_SECTIONS) {
       if (!hasSection(text, s)) errors.push(`${rel}: ${fm.status} epic missing '## ${s}' section`);
-    }
-  }
-  if (Array.isArray(fm.items)) {
-    for (const it of fm.items) {
-      if (it && !itemKeys.has(it))
-        errors.push(`${rel}: items '${it}' — no item docs/backlog/${it}.md`);
     }
   }
   epicCounts[EPIC_STATUS_SET.has(fm?.status) ? fm.status : 'invalid'] += 1;

@@ -5,7 +5,6 @@ title: Open/auditable launch — the discovery event
 created: 2026-06-28
 value: A first-time visitor discovers rifty as the open, MIT, self-hostable WebContainers alternative running real Express + npm install in a browser tab — and converts instead of bouncing.
 user_story: As a developer who has never heard of rifty, I want a launch link that lands me zero-click on a real npm-install→preview moment and a README that shows it's open/MIT and how it differs from WebContainers, but today there is no demo deep-link, no measured number to quote, and the README opens "pet project".
-items: [playground/launch-deeplink-real-npm, distribution/readme-open-auditable-rewrite, distribution/publish-git-and-ts-language-service]
 ---
 
 ## Outcome

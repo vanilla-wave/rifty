@@ -1,25 +1,36 @@
 ---
 name: rifty-to-backlog
-description: "Capture a newly surfaced rifty finding or idea into docs/backlog: classify, deduplicate, gate, then mint a draft or update the matching item's evidence. Use for first-time audit/review/post-merge intake, a new discovery that must be recorded, or an explicit request to file it. Never invoke for ordinary edits to an existing contract, compiling a settled draft to ready, or implementing planned work."
+description: Capture a new rifty finding or idea as a deduplicated, gated backlog draft. Invoke for first-time audit/review/post-merge intake or explicit filing; excludes existing-contract edits, refinement, and planned work.
 ---
 
-Capture = classify → dedup → gate → mint `draft`. Cheap and mechanical — no grilling and no contract compilation. The anti-pattern this skill exists to stop: an audit finding minted straight to an item with a `user_story` reverse-engineered afterward.
+Capture = classify → dedup → gate → `draft`. No interview or contract compilation.
 
 ## 1. Classify
-capability / test / tooling / design debt — backlog. Doc-drift or a pure record — not backlog: fix the doc. Can't name what breaks for a user or the project → it's a note, not an item; stop here.
 
-Active `Goal-Baseline`: first classify against frozen Outcome/User scenario/tier/Fidelity. Required by it → reverse-link `epic: <slug>`; this remains a goal-blocking residual. Truly outside it → ordinary backlog. Never detach required quality to make the goal look complete.
+Capability/test/tooling/design debt → backlog. Doc drift → fix the doc. No user
+or project impact → stop. Under `Goal-Baseline`, required work reverse-links to
+the epic; only outside-goal work enters ordinary backlog.
 
 ## 2. Dedup
-Sweep `docs/backlog/` (titles, `code:` paths, epic `items:`) for the same defect, mechanism, or boundary. Hit → update THAT item's Context/sources, do not mint a sibling. Done when the sweep is recorded: matched item updated, or no-match stated in the new item's `sources:`.
 
-## 3. Gate (in order; first failure decides the shape)
-- **Boundary** — a fault claim cites its row in `docs/process/fault-classes.md` §Boundary failure models. Physically excluded axis → the finding is void, do not mint (model wrong → fix that table first).
-- **Reachability** (own-product surfaces) — no user-action repro path → mint draft with the attempted repro recorded; it cannot reach `ready` until one exists (`decision-workflow.md` §Backlog readiness).
-- **Tier** — owning epic declares `tier:` and the finding demands more → park: draft naming the missing tier-raise ADR as its blocker, no ordinary refinement path (`docs/backlog/README.md` §Tier).
-- **Mechanism** — finding proposes a coordination mechanism → run the sweep (`fault-classes.md` §Class-kill) and record the inventory in the draft.
+Search titles, `code:`, `## Items`, and child `epic:` links for the same
+defect/mechanism/boundary. Update a match; otherwise record the no-match source.
+
+## 3. Gate
+
+Use `docs/process/fault-classes.md` §§Boundary failure models/Class-kill and
+`docs/backlog/README.md` §Tier. Apply in order:
+
+1. Boundary model excludes the fault → void it; fix a wrong/missing model first.
+2. Own-product finding lacks a user-action path → keep the attempted repro in draft.
+3. Finding exceeds epic tier → block on a tier-raise ADR.
+4. Proposed coordination mechanism → record the §Class-kill inventory.
 
 ## 4. Mint
-`docs/backlog/<area>/<slug>.md`, frontmatter per `docs/backlog/README.md`, status `draft`, `## Context` = observed evidence (what, where, how found). `user_story` only from a real user path — omit it rather than invent one. Code-anchored → `// TODO(backlog: <area>/<slug>)` at the site. Done when `pnpm backlog:check` passes.
 
-After capture: unresolved user-observable fork after evidence exhaustion → manual `rifty-refine`; none → ordinary workflow compiles the contract and promotes it. Internal forks are agent-owned, never interview questions.
+Create `docs/backlog/<area>/<slug>.md` from `docs/backlog/README.md`: `draft`,
+observed `## Context`, honest sources, optional real-path `user_story`, and a code
+marker when anchored. Done when `pnpm backlog:check` passes.
+
+After capture, ordinary workflow compiles settled drafts; only an unresolved
+observable fork goes to manual `rifty-refine`.

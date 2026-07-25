@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
- * pr:check — runs the full per-PR gate (CI mirror, incl. e2e) in parallel.
- * Each task is an independent `pnpm <script>`; output is buffered per task and
- * a pass/fail summary is printed at the end. Exit ≠ 0 if any task fails.
+ * Local static/build/unit/parity PR gate. Browser lanes run separately.
+ * Tasks run in parallel; any failure fails the gate.
  */
 import { spawn } from 'node:child_process';
 import { availableParallelism } from 'node:os';
@@ -52,7 +51,7 @@ export async function runChecks(tasks, { jobs = availableParallelism(), onResult
   return { results, ok: results.every((r) => r.code === 0) };
 }
 
-// Per-PR gate — mirrors ci.yml lint+unit jobs. Playwright lanes are NOT here:
+// Playwright lanes are not here:
 // they spin up browser workers + a vite dev server and, run alongside these,
 // starve the timing-sensitive parity/stream checks. Run them separately:
 // `pnpm test:e2e` and `pnpm test:browser-unit` (CI keeps its own e2e-chromium
@@ -65,10 +64,7 @@ const TASKS = [
   'check:arch',
   'check:parity-coverage',
   'check:e2e-coverage',
-  // Generated compat matrices must match their generator inventory — a
-  // hand-edited docs/public/compat file silently reverts on the next
-  // `compat:generate` (PR #115 finding #1). Regeneration is idempotent, so
-  // running it inside the gate only mutates the tree when there IS drift.
+  // Generated artifacts must match their inventories.
   'check:compat-drift',
   'check:esbuild-runtime-drift',
   'check:shadow-catalog-drift',

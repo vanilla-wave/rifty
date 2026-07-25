@@ -5,7 +5,6 @@ title: Eddy — opt-in fast npm install (production auto 1.88x measured)
 created: 2026-06-28
 value: A developer running a cold `npm install` on a real project in a browser tab gets it meaningfully faster — the same real Node dependency tree, just resolved + bundled by an open, self-hostable server instead of a serial metadata waterfall.
 user_story: As a developer or SDK embedder, I want cold no-lockfile installs to skip the latency-bound packument and tarball waterfalls without changing dependency fidelity; production `auto` is measured at 1.88x, while the h2/h3 transport matrix remains the final headline-validation gap.
-items: [perf/eddy-http3-cold-validation, distribution/eddy-package-and-deploy]
 ---
 
 ## Outcome

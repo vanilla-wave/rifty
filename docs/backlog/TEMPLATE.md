@@ -15,23 +15,19 @@ code: []
 
 <Situation. What's missing / wrong / deferred.>
 
-<!-- A `draft` can stop here. To reach `ready`: exhaust evidence/internal forks; unresolved observable fork → manual rifty-refine; otherwise ordinary workflow writes this contract.
-     `ready` ⇒ an implementer builds it whole: zero new decisions, zero new in-scope items, the ADR (if any) already exists. -->
+<!-- A draft stops here. Ready rules: README + decision-workflow §Backlog readiness. -->
 
 ## User scenario
 
-<!-- Required ONLY when this item has no `epic:` (an epic child inherits the scenario from its epic — delete this section then).
-     Epic-grade + concrete: the real npm package / Node program the user runs, the exact call, what they observe.
-     Mission-anchored — can't name the real software it unblocks? Not user value (off-mission or process-meta debt). -->
+<!-- Required without `epic:`; otherwise delete. Real software, exact call, result. -->
 
 ## Acceptance
 
-<Concrete, testable done-definition + proof command/test path. An approximation must fail it; source grep, fake, or opt-in lane cannot close it.>
+<Testable done-definition + proof path. An approximation must fail.>
 
 ## Reference contract
 
-<!-- Required when matching an external/reference implementation; delete otherwise.
-     Pin oracle + version. Name the upstream mechanism reused. Proxy/wrapper semantic copies require an ADR + differential suite. -->
+<!-- Keep only for an external oracle; rules: README. -->
 
 - Oracle: <implementation + exact version>
 - Mechanism: <upstream mechanism reused>
@@ -42,13 +38,8 @@ code: []
 
 ## Fault matrix
 
-<!-- Required when the item touches cache/persistence/network/concurrency; delete otherwise.
-     One row per applicable axis (docs/process/fault-classes.md) × operation → honest outcome
-     (fallback / degraded-but-correct / loud throw). Each row = a fault-test target.
-     If the item introduces/touches SHARED MUTABLE STATE (a file, a key, a claim): enumerate
-     ALL its writers and name the SINGLE owner serializing them — rows per known writer-pair
-     are not enough (PR #131: the writer-set invariant was never contracted; 5 review rounds
-     found the interleavings one by one). -->
+<!-- Keep for infra. Reachable axis × operation → honest outcome + fault target.
+     Shared mutable state names every writer and one serializing owner. -->
 
 ## Out of scope
 

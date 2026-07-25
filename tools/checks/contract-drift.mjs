@@ -1,12 +1,8 @@
 #!/usr/bin/env node
 /**
- * Contract-drift tripwire (goal-drift axis; decision-workflow §Backlog
- * readiness). An implementation diff that ALSO rewords a ready contract is the
- * contract-level "never edit a test to make code pass". Adding a contract and
- * delete-on-done are normal. Contract+RED commits before pickup establish JIT
- * authority; after pickup, guarded contracts permit only exact frontmatter /
- * dependency subtraction for deleted ready children. Referee semantics always
- * land in process-only PRs.
+ * Contract-authority tripwire. Contract+RED commits before pickup establish JIT
+ * authority. Implementation cannot rewrite it; closure may only subtract exact
+ * dependencies for deleted ready children. Process referees land separately.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -17,7 +13,7 @@ const CONTRACT_RE = /^docs\/backlog\/.+\.md$/;
 const SKIP_RE = /\/(?:README|TEMPLATE)\.md$/;
 const GUARDED = new Set(['ready', 'in-progress']);
 const ITEM_PATH_RE = /^docs\/backlog\/(?!epics\/)(.+)\.md$/;
-const EPIC_PATH_RE = /^docs\/backlog\/epics\/([^/]+)\.md$/;
+const EPIC_PATH_RE = /^docs\/backlog\/epics\/[^/]+\.md$/;
 const REFEREE_RE =
   /^(?:tools\/checks\/(?:(?:budget|contract-drift|goal-contract|run-pickup)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|\.agents\/skills\/rifty-review-loop\/(?:review-schema\.json|scripts\/blockers\.mjs))$/;
 
@@ -25,34 +21,6 @@ const REFEREE_RE =
 export function statusOf(text) {
   const match = /^---[\s\S]*?^status:\s*(\S+)\s*$/m.exec(text ?? '');
   return match ? match[1] : null;
-}
-
-function frontmatterValue(text, key) {
-  const frontmatter = /^---\r?\n([\s\S]*?)^---\s*$/m.exec(text ?? '')?.[1];
-  if (!frontmatter) return null;
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^${escaped}:\\s*([^\\r\\n]+?)\\s*$`, 'm').exec(frontmatter)?.[1] ?? null;
-}
-
-/** The one permitted epic edit: remove exact closed keys from frontmatter. */
-export function closeEpicItems(epicText, deletedItems) {
-  if (deletedItems.length === 0 || new Set(deletedItems).size !== deletedItems.length) return null;
-  const deleted = new Set(deletedItems);
-  const itemLine = /^items:\s*\[([^\]]*)\]\s*$/m.exec(epicText);
-  if (!itemLine) return null;
-  const frontmatterItems = itemLine[1]
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-  if (
-    deletedItems.some(
-      (item) => frontmatterItems.filter((candidate) => candidate === item).length !== 1,
-    )
-  ) {
-    return null;
-  }
-  const remainingItems = frontmatterItems.filter((item) => !deleted.has(item));
-  return epicText.replace(itemLine[0], `items: [${remainingItems.join(', ')}]`);
 }
 
 /** Remove only deleted ready-item keys from a dependent's blocked_by list. */
@@ -86,7 +54,6 @@ export function evaluate(entries, read, refereeEntries = entries) {
         `${entry.path}: implementation diff edits its own process referee — land gate semantics separately`,
     );
   }
-  const closedByEpic = new Map();
   const closedItems = [];
   for (const entry of entries) {
     if (entry.status !== 'D') continue;
@@ -95,11 +62,6 @@ export function evaluate(entries, read, refereeEntries = entries) {
     const baseItem = read(entry.path, 'base');
     if (statusOf(baseItem) !== 'ready') continue;
     closedItems.push(item);
-    const epic = frontmatterValue(baseItem, 'epic');
-    if (!epic) continue;
-    const children = closedByEpic.get(epic) ?? [];
-    children.push(item);
-    closedByEpic.set(epic, children);
   }
   const violations = [];
   for (const entry of entries) {
@@ -110,18 +72,14 @@ export function evaluate(entries, read, refereeEntries = entries) {
     const newText = read(entry.path, 'head');
     const oldStatus = statusOf(oldText);
     const newStatus = statusOf(newText);
-    const epic = EPIC_PATH_RE.exec(entry.path)?.[1];
-    if (epic && GUARDED.has(oldStatus) && newStatus === oldStatus) {
-      const closed = closeEpicItems(oldText, closedByEpic.get(epic) ?? []);
-      if (closed !== null && closed === newText) continue;
-    }
+    const epic = EPIC_PATH_RE.test(entry.path);
     if (!epic && oldStatus === 'ready' && newStatus === 'ready') {
       const closed = closeItemDependencies(oldText, closedItems);
       if (closed !== null && closed === newText) continue;
     }
     if (GUARDED.has(oldStatus) || GUARDED.has(newStatus)) {
       violations.push(
-        `${entry.path}: ready contract edited in-place (${oldStatus} → ${newStatus}) beside source — split the contract change; an implementer cannot rewrite the goal (goal-drift)`,
+        `${entry.path}: ready contract edited in-place (${oldStatus} → ${newStatus}) beside source — split the contract-authority change`,
       );
     }
   }

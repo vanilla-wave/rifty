@@ -10,14 +10,8 @@ code: [.agents/skills/rifty-goal-run, .agents/skills/rifty-review-loop, tools/ch
 
 ## Context
 
-Run semantics now live in `rifty-goal-run` + goal/budget/contract checks:
-
-- exact-SHA observable goal + persistent epic marker; live reverse-linked residuals; JIT units;
-- one slice/PR, Budget authority at pickup, exact closure bookkeeping;
-- fresh Contract+RED / Final+GREEN with unit vs goal residuals;
-- planned work cannot route into `rifty-fix`; budget/review re-cut cannot narrow goal.
-
-Remaining: run the next mid-size epic through it and count escaped horizontal
-defects against the workbench baseline. Promote only honest detectors:
-scope-to-unit mapping, full modified-file mechanism inventory, review-round
-counter. Until then those stay explicit review axes; no fake CI precision.
+PR #176 owns run semantics in `rifty-goal-run` plus goal/budget/contract checks.
+Remaining: run one mid-size epic and compare escaped horizontal defects with the
+workbench baseline. Promote only honest detectors: scope-to-unit mapping, full
+mechanism inventory, review-count tracking, and explicit run membership if
+concurrent source PRs require it. Until then, review owns them.

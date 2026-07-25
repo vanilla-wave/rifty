@@ -24,7 +24,6 @@ const epic = ({
   tier = 'robust',
   outcome = 'The package installs and runs through one honest path.',
   scenario = 'Open the project, install, run, reload offline.',
-  items = 'items: [playground/a]',
 } = {}) => `---
 kind: epic
 status: ready
@@ -32,7 +31,6 @@ title: Goal
 created: 2026-07-25
 value: ${value}
 user_story: As a developer, I want the package to run.
-${items}
 tier: ${tier}
 ---
 
@@ -81,11 +79,14 @@ describe('declaredGoals / parseGoalBaseline', () => {
 });
 
 describe('goalContract / evaluateGoal', () => {
-  it('freezes only observable goal fields, not status, items, order, or Budget', () => {
+  it('freezes only observable goal fields, not status, Items, or Budget', () => {
     const baseline = epic();
-    const current = epic({ items: 'items: [playground/b, playground/a]' })
+    const current = epic()
       .replace('status: ready', 'status: in-progress')
-      .replace('1. `playground/a` — first mechanism.', '1. `playground/b` — new mechanism.')
+      .replace(
+        '1. `playground/a` — first mechanism.',
+        '1. `playground/b` — new mechanism.\n2. `playground/a` — reordered.',
+      )
       .replace('Mutable run bookkeeping.', 'Re-cut run bookkeeping.');
 
     expect(goalContract(baseline)).toEqual({

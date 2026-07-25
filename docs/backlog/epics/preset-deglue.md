@@ -5,7 +5,6 @@ title: Preset de-glue — equivalent libs work like preset libs
 created: 2026-07-02
 value: A developer who swaps a preset library for an equivalent (vite → webpack-dev-server, express → fastify, esbuild → swc) keeps a working sandbox — LIVE/preview/HMR/install ride generic platform mechanisms, and every substitution or remaining gap is loud.
 user_story: As a developer forking a preset, I want to replace its libraries with equivalents and keep the sandbox working, but today the dev-server lifecycle is keyed to the literal `vite` bin name, three packages are patched only at vite-preset boot, readiness is faked via `[vite]` stdout markers, and shadow-registry substitutions happen silently.
-items: [net/preview-websocket-bridge, playground/vite-strictport-fallback-proof]
 ---
 
 ## Outcome

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closeEpicItems, closeItemDependencies, evaluate, statusOf } from './contract-drift.mjs';
+import { closeItemDependencies, evaluate, statusOf } from './contract-drift.mjs';
 
 const item = (status: string) => `---\narea: playground\nstatus: ${status}\ntitle: T\n---\n\nbody`;
 
@@ -10,7 +10,6 @@ const readyEpic = `---
 kind: epic
 status: ready
 title: E
-items: [playground/x, playground/y]
 ---
 
 ## Items
@@ -25,11 +24,6 @@ items: [playground/x, playground/y]
 | x-slice | 10–20 |
 | y-slice | 20–30 |
 `;
-
-const readyEpicAfterX = readyEpic.replace(
-  'items: [playground/x, playground/y]',
-  'items: [playground/y]',
-);
 
 const closedChild = `---
 area: playground
@@ -91,42 +85,20 @@ describe('evaluate', () => {
     }
   });
 
-  it('allows only exact frontmatter subtraction for a deleted ready child', () => {
+  it('closes a child without rewriting the historical epic ledger', () => {
     const deleted = { status: 'D', path: 'docs/backlog/playground/x.md' };
     const epicEntry = { status: 'M', path: 'docs/backlog/epics/e.md' };
     const byPath =
-      (baseEpic: string, headEpic: string, child = closedChild) =>
+      (headEpic: string) =>
       (path: string, side: 'base' | 'head'): string | null => {
-        if (path === deleted.path) return side === 'base' ? child : null;
-        if (path === epicEntry.path) return side === 'base' ? baseEpic : headEpic;
+        if (path === deleted.path) return side === 'base' ? closedChild : null;
+        if (path === epicEntry.path) return side === 'base' ? readyEpic : headEpic;
         return null;
       };
 
-    expect(evaluate([src, deleted, epicEntry], byPath(readyEpic, readyEpicAfterX))).toEqual([]);
-    const activeBase = readyEpic.replace('status: ready', 'status: in-progress');
-    const activeHead = readyEpicAfterX.replace('status: ready', 'status: in-progress');
-    expect(evaluate([src, deleted, epicEntry], byPath(activeBase, activeHead))).toEqual([]);
-
+    expect(evaluate([src, deleted], byPath(readyEpic))).toEqual([]);
     expect(
-      evaluate(
-        [src, deleted, epicEntry],
-        byPath(readyEpic, readyEpicAfterX.replace('keep me.', 'rewritten.')),
-      ),
-    ).toHaveLength(1);
-    expect(
-      evaluate(
-        [src, deleted, epicEntry],
-        byPath(
-          readyEpic,
-          readyEpicAfterX.replace('items: [playground/y]', 'items: [playground/y, playground/z]'),
-        ),
-      ),
-    ).toHaveLength(1);
-    expect(
-      evaluate(
-        [src, deleted, epicEntry],
-        byPath(readyEpic, readyEpicAfterX, closedChild.replace('status: ready', 'status: draft')),
-      ),
+      evaluate([src, deleted, epicEntry], byPath(readyEpic.replace('keep me.', 'rewritten.'))),
     ).toHaveLength(1);
   });
 
@@ -169,23 +141,6 @@ body
 });
 
 describe('closure bookkeeping transforms', () => {
-  it('subtracts only the exact frontmatter child key', () => {
-    expect(closeEpicItems(readyEpic, ['playground/x'])).toBe(readyEpicAfterX);
-    expect(closeEpicItems(readyEpic, ['playground/missing'])).toBeNull();
-  });
-
-  it('preserves bullet-form Items, multiline prose, and historical Budget rows', () => {
-    const withFinal = readyEpic.replace(
-      '2. `playground/y` — **y-slice**: keep me.',
-      '- `playground/y` — delete me.\n  Continuation owned by y.\n\nRun-level prose.',
-    );
-    const expected = withFinal.replace(
-      'items: [playground/x, playground/y]',
-      'items: [playground/x]',
-    );
-    expect(closeEpicItems(withFinal, ['playground/y'])).toBe(expected);
-  });
-
   it('subtracts only closed keys from blocked_by', () => {
     const dependent = `---
 area: playground

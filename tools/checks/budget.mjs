@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 /**
  * Budget tripwire (docs/backlog/README.md §Budget). An autonomous source PR
- * names exactly one same-epic Goal-Baseline + Budget-Slice. Authority is read
- * at pickup (parent of first source commit), so Contract+RED may add a JIT
- * ready item/row while later closure cannot erase or widen it. Hand-written
- * insertions: > band warns, >= 2× fails. AST mechanism detection is advisory;
- * review owns the full modified-file sweep.
+ * names one Goal-Baseline + Budget-Slice. Merge-base Budget is immutable;
+ * Contract+RED may append the selected JIT row before pickup. Hand-written
+ * insertions: > band warns, >= 2× fails. Mechanism detection is advisory.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -17,6 +15,9 @@ import { PRODUCTION_SOURCE_RE as SOURCE_RE, pickupCommit } from './run-pickup.mj
 const MECHANISM_RE = /\b(epoch|generation|fifo|ledger|lease|seenRequest\w*|opId)\b/i;
 const TEST_SOURCE_RE =
   /(?:^|\/)(?:__tests__|tests?|fixtures)(?:\/|$)|\.(?:test|spec|test-fixture|contract-fixtures)\.[^.]+$/u;
+const BUDGET_SECTION_RE = /^## Budget[ \t]*(?:\r?\n|$)[\s\S]*?(?=^##[ \t]+|$(?![\s\S]))/mu;
+const BUDGET_ROW_RE =
+  /^\|\s*`?([\w./-]+)`?\s*\|\s*(\d[\d_]*)\s*[–-]\s*(\d[\d_]*)\s*\|[^\r\n]*(?:\r?\n)?$/u;
 
 /** `a/{b => c}/d` and `a => b` numstat paths resolve to the new path. */
 export function newPath(path) {
@@ -37,22 +38,36 @@ export function globToRegExp(glob) {
   return new RegExp(`^${escaped}$`);
 }
 
+function budgetSection(epicText) {
+  return BUDGET_SECTION_RE.exec(epicText ?? '')?.[0] ?? null;
+}
+
+function budgetLines(section) {
+  return section?.match(/[^\r\n]*(?:\r\n|\n|$)/gu)?.filter(Boolean) ?? [];
+}
+
+function budgetRow(line) {
+  const match = BUDGET_ROW_RE.exec(line);
+  if (!match) return null;
+  return { slice: match[1], lo: match[2], hi: match[3] };
+}
+
 /**
  * Parse an epic's `## Budget` section.
  * @returns {{slices: Map<string, {lo:number, hi:number}>, generated: RegExp[],
  *   mechanismsZero: boolean, substrate: string|null} | null}
  */
 export function parseBudget(epicText) {
-  const section = /^## Budget\s*$([\s\S]*?)(?=^## |\n*$(?![\s\S]))/m.exec(epicText ?? '');
-  if (!section) return null;
-  const body = section[1];
+  const section = budgetSection(epicText);
+  if (section === null) return null;
+  const body = section.replace(/^## Budget[ \t]*(?:\r?\n|$)/u, '');
   const slices = new Map();
-  for (const row of body.matchAll(
-    /^\|\s*`?([\w./-]+)`?\s*\|\s*(\d[\d_]*)\s*[–-]\s*(\d[\d_]*)\s*\|/gm,
-  )) {
-    const [lo, hi] = [row[2], row[3]].map((value) => Number(value.replace(/_/g, '')));
-    if (row[1] !== 'slice' && Number.isFinite(lo) && Number.isFinite(hi)) {
-      slices.set(row[1], { lo, hi });
+  for (const line of budgetLines(body)) {
+    const row = budgetRow(line);
+    if (row === null) continue;
+    const [lo, hi] = [row.lo, row.hi].map((value) => Number(value.replace(/_/g, '')));
+    if (row.slice !== 'slice' && Number.isFinite(lo) && Number.isFinite(hi)) {
+      slices.set(row.slice, { lo, hi });
     }
   }
   const generated = [...body.matchAll(/^-\s*generated globs:\s*(.+)$/gim)].flatMap((match) =>
@@ -63,6 +78,55 @@ export function parseBudget(epicText) {
     ? (/substrate:\s*`?([\w./-]+)`?/.exec(mechanisms[1])?.[1] ?? null)
     : null;
   return { slices, generated, mechanismsZero: Boolean(mechanisms), substrate };
+}
+
+/**
+ * Freeze merge-base Budget bytes; Contract+RED may add only its selected row.
+ * @returns {string[]} violations (empty = valid evolution)
+ */
+export function validateBudgetAuthority(baseEpicText, pickupEpicText, selectedSlice) {
+  const base = budgetSection(baseEpicText);
+  const pickup = budgetSection(pickupEpicText);
+  if (base === null) return ['merge-base epic has no ## Budget authority'];
+  if (pickup === null) return ['pickup epic removed ## Budget authority'];
+
+  const baseRows = budgetLines(base).map(budgetRow).filter(Boolean);
+  const pickupRows = budgetLines(pickup).map(budgetRow).filter(Boolean);
+  const baseSlices = new Set(baseRows.map((row) => row.slice));
+  const newRows = pickupRows.filter((row) => !baseSlices.has(row.slice));
+  const violations = [];
+
+  for (const [side, rows] of [
+    ['merge-base', baseRows],
+    ['pickup', pickupRows],
+  ]) {
+    const seen = new Set();
+    for (const row of rows) {
+      if (seen.has(row.slice)) violations.push(`${side} duplicates Budget row "${row.slice}"`);
+      seen.add(row.slice);
+    }
+  }
+  if (newRows.length > 1) {
+    violations.push(`pickup adds ${newRows.length} Budget rows; want at most one`);
+  }
+  for (const row of newRows) {
+    if (row.slice !== selectedSlice) {
+      violations.push(
+        `pickup adds Budget row "${row.slice}" instead of selected slice "${selectedSlice}"`,
+      );
+    }
+  }
+
+  const fixedPickup = budgetLines(pickup)
+    .filter((line) => {
+      const row = budgetRow(line);
+      return row === null || baseSlices.has(row.slice);
+    })
+    .join('');
+  if (fixedPickup !== base) {
+    violations.push('pickup rewrites merge-base Budget content or existing rows');
+  }
+  return violations;
 }
 
 /**
@@ -267,6 +331,20 @@ function main() {
   const epicText = readAtPickup(epicPath);
   if (epicText === null) {
     console.error(`budget: ✗ declared epic ${epicPath} not found at pickup ${pickup.slice(0, 12)}`);
+    process.exit(1);
+  }
+  let baseEpicText = null;
+  try {
+    baseEpicText = git('show', `${mergeBase}:${epicPath}`);
+  } catch {
+    /* reported by the authority validator */
+  }
+  const authorityViolations = validateBudgetAuthority(baseEpicText, epicText, slice);
+  if (authorityViolations.length > 0) {
+    console.error(
+      `budget: ${authorityViolations.length} authority violation(s) from merge-base to pickup:`,
+    );
+    for (const violation of authorityViolations) console.error(`  ✗ ${violation}`);
     process.exit(1);
   }
   const budget = parseBudget(epicText);

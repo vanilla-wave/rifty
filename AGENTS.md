@@ -25,8 +25,8 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - Comments/ADRs/docs: extremely concise, sacrifice grammar, cut anything restating code.
 
 ## Data sources
-- `docs/backlog/` — open/provisional work: items (`docs/backlog/<area>/<slug>.md`) + epics (`docs/backlog/epics/`, a user-value umbrella over items). Status `draft|ready` (epics also `in-progress`); closure = delete-on-done (no "done" status). `ready` = a contract an implementer can't close with an approximation. **Routing:** new finding → `rifty-to-backlog`; planned ready item → normal implementation; planned draft → exhaust evidence + agent-owned internal decisions, then fork-free = compile per README/TEMPLATE and continue, unresolved user-observable fork = manual `rifty-refine`. Never implement a draft. Process/docs/skills and “continue the plan” stay normal work; never invoke `rifty-fix` for them.
-- `docs/adr/` — decisions + strategic choices (D-001..D-006: V8 engine, WASI-separate, Workers-as-processes, SW-networking, OPFS/VFS); index + D→ADR map: `docs/adr/README.md`
+- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding → `rifty-to-backlog`; settled draft → compile normally; unresolved observable fork → manual `rifty-refine`; ready → implement normally. Never implement a draft. Planned/process work never invokes `rifty-fix`.
+- `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/decision-workflow.md` — read at any fork
 - `docs/process/fault-classes.md` — fault taxonomy + review convergence
 - `docs/process/testing.md` — test pyramid + why parity
@@ -39,22 +39,19 @@ Full checklist + subagent budget: `docs/process/decision-workflow.md`. Core:
 - IRREVERSIBLE (public API / new dep / contradicts ADR / genuine design choice) → `pnpm adr:new <area> "Title"`.
 - Overturn recorded decision → decision subagent → superseding ADR. Active ADRs immutable; superseded = removed + pointer in `docs/adr/README.md`.
 - Confirm-first only: outward/destructive beyond repo (publish, spend, shared-remote push, delete user data).
-- Active `Goal-Baseline` observable fields are user-owned: no autonomous narrowing via ADR, backlog, Out of scope, or rewritten acceptance. Mechanism/order remain agent-owned.
 
-## Autonomous goal run
-- Whole ready-epic hand-off → `rifty-goal-run`. Establish and land two contract-only commits before source: ready epic baseline, then marker-only `goal_baseline: <that SHA>`. Marker is write-once. Every source PR inherits/repeats exactly that `Goal-Baseline` + one same-epic `Budget-Slice`; multiple slices/PR forbidden.
-- Frozen goal = epic `value`, `tier`, `## Outcome`, `## User scenario` + Fidelity/DoD — not a detailed plan. Items/order/mechanisms evolve just-in-time.
-- Reverse-linked children (`epic:`) are the residual ledger. Required discovery stays linked and blocks goal completion; only truly outside-goal work enters ordinary backlog.
-- Budget/review trip → re-cut current unit and continue the goal; never defer a required clause. Slice merge-ready ≠ goal done.
-- Goal done only with no linked children, end-to-end baseline proof, fresh review `goal_complete: true` with empty unit/goal residuals, full DoD green on one SHA; then delete epic.
+## Autonomous goals
+
+Explicit whole-ready-epic hand-off → `rifty-goal-run`; data contract:
+`docs/backlog/README.md` §Autonomous goal. The user owns the frozen observable
+goal; the agent owns just-in-time units/mechanisms. Required discoveries stay
+reverse-linked. Budget/review trips re-cut the unit; slice done ≠ goal done.
 
 ## DoD (per PR)
-- [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked and block goal completion
-- [ ] implementation alligned with project goal
+- [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked; report slice/goal status separately
+- [ ] implementation aligned with project goal
 - [ ] `pnpm pr:check` pass
 - [ ] touches cache/persistence/network/concurrency → `## Fault matrix` rows covered by fault tests
-- [ ] review convergence gates satisfied: Contract+RED; Final+GREEN with 0 blockers; required finite checks green on one SHA
-- [ ] autonomous run: `check:goal-contract` green; current slice and whole-goal completion reported separately
 - [ ] shipped capability carries observable acceptance proof (e2e/parity) in the same PR — source greps, fakes, and opt-in lanes do not close acceptance
 - [ ] `CHANGELOG.md` in affected packages
 - [ ] ADR for IRREVERSIBLE / backlog for provisional
