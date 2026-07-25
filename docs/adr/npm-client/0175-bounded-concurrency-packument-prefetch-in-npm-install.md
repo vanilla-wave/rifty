@@ -6,6 +6,10 @@ Date: 2026-06
 > TL;DR: live npm install may prefetch registry packuments with bounded
 > concurrency, but package placement remains strictly serial and request-ordered.
 
+> Correction (2026-07-21, ADR-0303): surviving direct identities reserve flat
+> slots before the serial descendant DFS. Request order governs descendants;
+> prefetch and network completion still have no placement authority.
+
 ## Context
 
 - Cold live installs were measured as a metadata waterfall: dozens of distinct

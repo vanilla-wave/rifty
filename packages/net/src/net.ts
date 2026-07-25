@@ -23,6 +23,7 @@ import {
   registerPort,
   unregisterPort,
 } from './registry.ts';
+import { type AddressInfo, createVirtualAddressInfo } from './server-address.ts';
 
 // Shared one-shot codecs (default config, non-fatal). One-shot utf8
 // encode/decode is stateless, so a module singleton is byte-identical and
@@ -122,7 +123,7 @@ export interface NetListenOptions {
 }
 
 export class Server extends EventEmitter {
-  private listenedPort: number | null = null;
+  private boundAddress: AddressInfo | null = null;
   private pendingPort: number | null = null;
   private readonly connectionHandler?: (socket: HttpFramedSocket) => void;
 
@@ -155,7 +156,7 @@ export class Server extends EventEmitter {
     // `listen(0)` / `listen({ port: 0 })` allocates a virtual ephemeral port from
     // the realm registry, exposed via `address().port` until close (no OS socket).
     const register = (resolvedPort: number): void => {
-      this.listenedPort = resolvedPort;
+      this.boundAddress = createVirtualAddressInfo(resolvedPort);
       registerPort(resolvedPort, async (request) => {
         const socket = new HttpFramedSocket();
         this.emit('connection', socket);
@@ -227,15 +228,15 @@ export class Server extends EventEmitter {
     return this;
   }
 
-  address(): { port: number } | null {
-    return this.listenedPort === null ? null : { port: this.listenedPort };
+  address(): AddressInfo | null {
+    return this.boundAddress === null ? null : { ...this.boundAddress };
   }
 
   close(cb?: () => void): this {
-    if (this.listenedPort !== null) {
-      releasePort(this.listenedPort); // stop answering cross-realm claims (ADR-0186 D4)
-      unregisterPort(this.listenedPort);
-      this.listenedPort = null;
+    if (this.boundAddress !== null) {
+      releasePort(this.boundAddress.port); // stop answering cross-realm claims (ADR-0186 D4)
+      unregisterPort(this.boundAddress.port);
+      this.boundAddress = null;
     }
     this.pendingPort = null;
     queueMicrotask(() => {

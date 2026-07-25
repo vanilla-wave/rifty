@@ -5,7 +5,7 @@ title: Keep Vite knowledge out of generic platform contracts
 created: 2026-07-18
 value: Vite projects work through faithful Node, filesystem, process, and storage behavior without turning Vite into a Rifty platform concept.
 user_story: As a developer running Vite or another ordinary npm tool, I want fixes to improve the real platform behavior the tool exercises, but today a Vite workaround can change generic runtime, Workbench, install, or persistence contracts.
-items: []
+sources: [ADR-0263, ADR-0278, PR-167-review]
 ---
 
 ## Outcome
@@ -21,6 +21,20 @@ A user opens a Vite project and runs `npm install && npm run dev`; the installed
 ## Items
 
 Not split yet. Refinement starts with an inventory of package-specific production dependencies, then cuts children by the real semantic owner that can remove each leak.
+
+## Captured inventory
+
+PR #167 review matched this draft; no sibling item minted:
+
+- `packages/workbench/src/glue/vfs-snapshot-port.ts:27` and
+  `packages/workbench/src/workbench/project-files.ts:15` hard-code `.vite` into
+  generic project-tree exclusion policy. Repro: put user-owned
+  `.vite/notes.txt` in a non-Vite project and open its Workbench file snapshot;
+  the directory is omitted.
+- `packages/workbench/src/glue/project-deps.ts:149-420` prefixes every reuse,
+  snapshot, and stamp-promotion diagnostic with `[real-vite/worker]`. Repro:
+  restore/install dependencies for a non-Vite Workbench project and observe
+  Vite provenance in its log.
 
 ## Draft gates
 

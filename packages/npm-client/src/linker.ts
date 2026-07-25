@@ -9,6 +9,11 @@
  */
 
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
+import {
+  type ShadowAssetPlan,
+  type ShadowSubstitutionLockfileTrace,
+  createShadowSubstitutionLockfileTrace,
+} from './internal/shadow/planner.ts';
 
 export interface ResolvedPackage {
   name: string;
@@ -32,9 +37,39 @@ export async function link(
   root: string,
   packages: readonly ResolvedPackage[],
 ): Promise<void> {
+  await linkTree(vfs, root, packages, () => {});
+}
+
+/**
+ * Installer-owned cancellable entry. Kept off `src/index.ts`: cancellation
+ * enters the public package through `InstallOptions.signal` (ADR-0314).
+ */
+export async function linkInstallTree(
+  vfs: Vfs,
+  root: string,
+  packages: readonly ResolvedPackage[],
+  checkpoint: () => void,
+): Promise<void> {
+  try {
+    await linkTree(vfs, root, packages, checkpoint);
+  } catch (error) {
+    checkpoint();
+    throw error;
+  }
+}
+
+async function linkTree(
+  vfs: Vfs,
+  root: string,
+  packages: readonly ResolvedPackage[],
+  checkpoint: () => void,
+): Promise<void> {
+  checkpoint();
   const nodeModules = joinPath(root, 'node_modules');
   await vfs.mkdir(nodeModules, { recursive: true });
+  checkpoint();
   for (const pkg of packages) {
+    checkpoint();
     const relPath = pkg.installPath ?? `node_modules/${pkg.name}`;
     const target = joinPath(root, relPath);
     const entries = Object.entries(pkg.files);
@@ -42,7 +77,7 @@ export async function link(
     // per-file mkdir -> O(K) distinct mkdirs), then fan out the writes. Pre-create
     // ALL distinct dirs FIRST (serial) so no parallel write races a missing dir;
     // the writes are an independent write-only fan-out into already-created dirs,
-    // so Promise.all is order-independent and the final FS state is identical.
+    // so the settled write batch is order-independent and final state is identical.
     const dirs = new Set<string>([target]);
     const writes: Array<[string, Uint8Array]> = [];
     for (const [entryPath, data] of entries) {
@@ -52,9 +87,23 @@ export async function link(
     }
     for (const dir of dirs) {
       await vfs.mkdir(dir, { recursive: true });
+      checkpoint();
     }
-    await Promise.all(writes.map(([fullPath, data]) => vfs.writeFile(fullPath, data)));
-    await linkBins(vfs, root, target, pkg);
+    const failures: unknown[] = [];
+    await Promise.allSettled(
+      writes.map(async ([fullPath, data]) => {
+        try {
+          await vfs.writeFile(fullPath, data);
+        } catch (error) {
+          if (failures.length === 0) failures.push(error);
+          throw error;
+        }
+      }),
+    );
+    checkpoint();
+    if (failures.length > 0) throw failures[0];
+    await linkBins(vfs, root, target, pkg, checkpoint);
+    checkpoint();
   }
 }
 
@@ -65,6 +114,7 @@ async function linkBins(
   root: string,
   packageRoot: string,
   pkg: ResolvedPackage,
+  checkpoint: () => void,
 ): Promise<void> {
   const installPath = pkg.installPath ?? `node_modules/${pkg.name}`;
   const bins = normalizeBin(pkg.name, pkg.bin);
@@ -73,17 +123,21 @@ async function linkBins(
 
   const binDir = joinPath(root, packageNodeModulesDir(installPath, pkg.name), '.bin');
   await vfs.mkdir(binDir, { recursive: true });
+  checkpoint();
   for (const [command, target] of entries) {
+    checkpoint();
     const relTarget = normalizeBinTarget(target);
     // Existence check: a manifest pointing at a file the tarball lacks fails
     // loudly here rather than at first exec.
     await vfs.readFile(joinPath(packageRoot, relTarget));
+    checkpoint();
     // Launcher shim, NOT a byte copy (ADR-0050: no symlinks). A copy breaks the
     // moment the bin does a relative require/import (vite's bin/vite.js loads
     // '../dist/...'): relative resolution must happen at the REAL file's path.
     // Dynamic import() loads both CJS and ESM targets.
     const shim = `#!/usr/bin/env node\nimport('../${pkg.name}/${relTarget}');\n`;
     await vfs.writeFile(joinPath(binDir, command), shimEncoder.encode(shim));
+    checkpoint();
   }
 }
 
@@ -127,6 +181,9 @@ export interface Lockfile {
   lockfileVersion: 3;
   requires: true;
   packages: Record<string, LockfileEntry>;
+  readonly rifty?: Readonly<{
+    shadowSubstitutions: ShadowSubstitutionLockfileTrace;
+  }>;
 }
 
 export interface LockfileEntry {
@@ -142,6 +199,8 @@ export interface LockfileEntry {
    * tooling (readers ignore unknown fields).
    */
   peerDependencies?: Record<string, string>;
+  /** Exact built-in recipe attested by `lockfile.rifty.shadowSubstitutions`. */
+  riftyShadowRecipe?: string;
 }
 
 /**
@@ -194,4 +253,35 @@ export function buildLockfile(
     lf.packages[key] = entry;
   }
   return lf;
+}
+
+/** Installer-only writer: root trace and per-entry markers form one replay fact. */
+export function buildInstallLockfile(
+  rootName: string,
+  rootVersion: string,
+  packages: Parameters<typeof buildLockfile>[2],
+  planValue: ShadowAssetPlan,
+): Lockfile {
+  const plan = planValue;
+  if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
+    throw new TypeError('trusted installer shadow plan invariant failed');
+  }
+  const lockfile = buildLockfile(rootName, rootVersion, packages);
+  if (plan.substitutions.length === 0) return lockfile;
+  for (const substitution of plan.substitutions) {
+    let entry = lockfile.packages[substitution.materialization.installPath];
+    if (!entry) {
+      entry = { version: substitution.materialization.version };
+      lockfile.packages[substitution.materialization.installPath] = entry;
+    } else if (entry.version !== substitution.materialization.version) {
+      throw new TypeError(`shadow substitution ${substitution.substitutionId} entry drifted`);
+    }
+    entry.riftyShadowRecipe = substitution.substitutionId;
+  }
+  return {
+    ...lockfile,
+    rifty: {
+      shadowSubstitutions: createShadowSubstitutionLockfileTrace(plan),
+    },
+  };
 }

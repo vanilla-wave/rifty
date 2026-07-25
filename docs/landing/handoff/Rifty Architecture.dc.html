@@ -53,7 +53,7 @@
       <button data-scn="npm" onClick="{{ h.scn_npm }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>npm install</button>
       <button data-scn="express" onClick="{{ h.scn_express }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>Express + preview</button>
       <button data-scn="vite" onClick="{{ h.scn_vite }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>Vite HMR</button>
-      <button data-scn="wasi" onClick="{{ h.scn_wasi }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>WASI esbuild</button>
+      <button data-scn="wasi" onClick="{{ h.scn_wasi }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>WASI guest</button>
       <button data-scn="sync" onClick="{{ h.scn_sync }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>Sync fs (SAB)</button>
     </div>
     <div style="display:flex; align-items:center; gap:14px; padding:13px 16px;">
@@ -138,7 +138,7 @@ class Component extends DCLogic {
     npm:         { label: 'npm-client',    realm: 'page',   compat: 'ok',   role: 'In-browser npm: semver resolve, registry fetch, gunzip + tar, SHA verify, link.' },
     runtimejs:   { label: 'runtime-js',    realm: 'worker', compat: 'ok',   role: 'Node-compatible JS runtime — CJS/ESM loader + ~50 node: builtins, driven in a Worker.' },
     runtimewasi: { label: 'runtime-wasi',  realm: 'worker', compat: 'ok',   role: 'WASI preview1 runner. Runs .wasm guests against the shared VFS; kernel ProcessHandle.' },
-    esbuild:     { label: 'esbuild.wasm',  realm: 'worker', compat: 'ok',   role: 'Vendored 19 MB Go-compiled WASI binary — the real WASI-forcing consumer.' },
+    esbuild:     { label: 'esbuild-wasm adapter', realm: 'worker', compat: 'ok', role: 'Registry-attested esbuild-wasm@0.28.0 adapter — the sole product esbuild runtime; not a WASI guest.' },
     vite:        { label: 'vite dev server', realm: 'worker', compat: 'ok', role: 'The unmodified vite@5.4 in a Worker. Real module graph + native HMR payloads.' },
     kernel:      { label: 'kernel',        realm: 'page',   compat: 'ok',   role: 'Process / scheduling / IPC core. Worker-as-process over SAB + Atomics. Node-API-agnostic.' },
     sab:         { label: 'SAB ring + Atomics', realm: 'worker', compat: 'ok', role: 'SharedArrayBuffer ring + Atomics.wait/notify — the synchronous cross-thread substrate.' },
@@ -191,7 +191,7 @@ class Component extends DCLogic {
     { from: 'runtimejs',   to: 'sab',         kind: 'ipc' },
     { from: 'runtimewasi', to: 'kernel',      kind: 'import' },
     { from: 'runtimewasi', to: 'vfs',         kind: 'data' },
-    { from: 'esbuild',     to: 'runtimewasi', kind: 'ipc' },
+    { from: 'esbuild',     to: 'vfs',         kind: 'data' },
     { from: 'vite',        to: 'esbuild',     kind: 'control' },
     { from: 'vite',        to: 'net',         kind: 'data' },
     { from: 'kernel',      to: 'sab',         kind: 'data' },
@@ -227,14 +227,13 @@ class Component extends DCLogic {
     vite: { label: 'Vite dev server + HMR', cmd: 'vite  (then edit src/main.js)', steps: [
       { node: 'playground', t: 'Edit src/main.js in Monaco and save' },
       { node: 'vite',      t: 'The real vite@5.4 worker re-transforms the changed module' },
-      { node: 'esbuild',   t: 'esbuild.wasm bundles it; Vite computes the module-graph delta' },
+      { node: 'esbuild',   t: 'The registry-admitted esbuild-wasm adapter transforms it; Vite computes the module-graph delta' },
       { node: 'net',       t: 'HMR payload rides RFC6455 frames over the BroadcastChannel WS bridge' },
       { node: 'preview',   t: '@vite/client applies the update — the module hot-swaps, state survives' },
     ] },
-    wasi: { label: 'Run esbuild.wasm (WASI)', cmd: 'esbuild entry.ts --bundle', steps: [
-      { node: 'shell',     t: 'A build invokes esbuild — shadow-registry already redirected it to WASI' },
-      { node: 'runtimewasi', t: 'createWasiProcess spawns a WASI worker (a kernel ProcessHandle)' },
-      { node: 'esbuild',   t: 'esbuild.wasm runs syscall-faithfully against the WASI shim' },
+    wasi: { label: 'Run an explicit WASI guest', cmd: 'createWasiProcess({ wasm })', steps: [
+      { node: 'runtimewasi', t: 'The caller supplies guest bytes or its own URL to createWasiProcess' },
+      { node: 'kernel',     t: 'The kernel spawns a WASI worker and returns a ProcessHandle' },
       { node: 'sab',       t: 'Synchronous fd reads ride the SAB ring — Atomics.wait on the worker' },
       { node: 'vfs',       t: 'Syscalls write through to the same VFS your JS code sees → exit 0' },
     ] },
@@ -894,9 +893,9 @@ class Component extends DCLogic {
       pv: '<div style="font-weight:700; font-size:14px;">Counter: 3</div><div style="font-size:9.5px; color:#16a34a; margin-top:3px;">● HMR applied · state kept</div>',
     },
     wasi: {
-      file: 'build.sh',
-      code: '<span style="color:rgba(255,255,255,0.4)">$</span> esbuild entry.ts \\\n  --bundle --outfile=out.js\n<span style="color:#8FD98F">✓</span> built 41ms <span style="color:rgba(255,255,255,0.4)">(WASI)</span>',
-      pv: '<div style="font-weight:700; font-size:13px;">out.js · 18 kb</div><div style="font-size:9.5px; color:#6b7280; margin-top:3px;">esbuild.wasm bundled in-tab</div>',
+      file: 'guest.js',
+      code: '<span style="color:#C79BF0">const</span> proc = <span style="color:#7CC5F5">createWasiProcess</span>({\n  wasm,\n  preopens: { <span style="color:#9DD98F">\'/work\'</span>: <span style="color:#9DD98F">\'/work\'</span> }\n})',
+      pv: '<div style="font-weight:700; font-size:13px;">raw WASI guest · exit 0</div><div style="font-size:9.5px; color:#6b7280; margin-top:3px;">shared VFS · explicit input</div>',
     },
     boot: {
       file: 'sandbox.js',

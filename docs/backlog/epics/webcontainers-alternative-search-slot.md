@@ -5,7 +5,6 @@ title: Own the open-WebContainers-alternative search slot
 created: 2026-06-28
 value: A developer searching for an open/self-hostable WebContainers alternative finds rifty first, on a comparison where every rifty claim links to a tested status.
 user_story: As a developer at the moment of license-wall intent searching "open source webcontainers alternative", I want one rigorous, verifiable comparison that proves rifty is the MIT/self-hostable/$0 option, but today no such page exists, rifty is on no alternatives list, and apps/landing is a single static page.
-items: [toolchain-build/compat-matrix-test-result-sink, distribution/landing-compare-page]
 ---
 
 ## Outcome

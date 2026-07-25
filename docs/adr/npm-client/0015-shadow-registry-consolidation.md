@@ -5,6 +5,12 @@ Date: 2026-05
 
 > TL;DR: All shim/override sources consolidate under `tools/shadow-registry/` (`bakedOverrides`/`esbuildShimFiles`/`rollupShimFiles`); `overrides.ts` + adapters become one-line re-exports
 
+> Correction 2026-07-24 (ADR-0316): the shadow registry remains the central
+> substitution owner, but the preview1 redirect and `esbuildShimFiles` carrier
+> are removed. A catalog-owned synthetic `esbuild` recipe backed by admitted
+> registry `esbuild-wasm` bytes replaces those esbuild-specific clauses;
+> remaining substitution sources still follow this ADR.
+
 ## Context
 
 ADR 0006 (D-005) committed to a layered shadow-registry rooted under `tools/shadow-registry/packages/*`, but that directory never existed. Sources were scattered: `BUILT_IN_OVERRIDES` in `packages/npm-client/src/overrides.ts`; `esbuild`/`rollup-native` shims in `apps/playground/src/adapters/`. M9 marks the registry DONE, but only symbolically — it has no central home. REVIEW_ACTIONS A-007 flags the gap.

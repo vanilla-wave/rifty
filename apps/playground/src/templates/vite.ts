@@ -30,8 +30,7 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   id: 'vite',
   displayName: 'Vite dev server',
   runtime: 'vite',
-  // Default = Vite 7 (Rollup/esbuild). Vite 8's Rolldown WASI build is
-  // upstream-blocked, so it lives in the opt-in `vite8` preset.
+  // Default = Vite 7 (Rollup/esbuild); Vite 8 + Rolldown stays opt-in.
   // @rollup/wasm-node is NOT pinned here: the installer injects it as rollup's
   // same-version shadow-shim companion (ADR-0188) — a hand pin could drift.
   install: { vite: '^7.0.0' },

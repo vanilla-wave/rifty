@@ -4,6 +4,29 @@
 
 ### Added
 
+- **Cancellable package acquisition (ADR-0314).** `InstallOptions.signal` plus
+  direct `RegistryRequestOptions.signal` propagate through registry, Eddy,
+  retry, and streamed-body waits; abort keeps its causal reason and cannot
+  degrade into fallback or optional-dependency skip. Registry packument and
+  tarball methods accept the new optional request-options argument.
+
+- **Builtin shadow-substitution runtime assets (ADR-0308).** Exact applied
+  recipe facts produce a canonical asset plan; a digest-verified manager
+  acquires each npm member once and mints a strict one-shot ready/read port for
+  admitted child entries. The exact `esbuild@0.28.0` recipe now
+  synthetic-materializes its CJS/ESM delegate and loud CLI bin without the
+  retired `@esbuild/wasi-preview1` alias. Its ready/read/cancel correlation
+  engine remains package-local under the recorded layer constraint (ADR-0321).
+- Shadow recipe provenance now round-trips through lockfile markers plus a
+  canonical applied trace. Synthetic replay performs zero registry reads;
+  registry-backed install-only recipes retain exact acquisition provenance.
+- Shadow CAS readiness now distinguishes persisted OPFS, best-effort OPFS, and
+  memory sessions, durability-flushes mirror writes, reads back through the
+  actual persisted VFS, and refuses receipts/pointers after quota, torn-write,
+  lifecycle-abort, or port-death faults. Each CAS object is SHA-verified once
+  when loaded, then port reads copy the retained verified bytes without another
+  storage read or hash; a cold reopen still validates persisted bytes.
+
 - `serializePackageJson()` provides one canonical byte spelling for finite
   plain-data manifests shared by host plans, Workbench definitions, and snapshot
   tooling; lossy object shapes, accessors, cycles, and unsupported JSON leaves
@@ -38,15 +61,41 @@
 
 ### Fixed
 
+- Strict-decode the complete shadow-plan mutation matrix at planner, manager,
+  port-server, and port-client ingress; manager/port failures now retain their
+  typed boundary errors instead of leaking raw decoder exceptions.
+
+- Concurrent shadow-manager close callers join the same terminal
+  storage-close outcome.
+- Install cancellation now checkpoints the package linker between settled
+  mutation steps, waits for every write in the active batch, and stops before a
+  post-abort bin shim write. An abort leaves the claim untrusted and returns its
+  causal reason; the next explicit install repairs the partial tree from the
+  existing lockfile/cache, matching npm's idempotent repair.
+
+- Shadow-plan object ingresses reject hidden extra or required fields instead
+  of accepting data that a structured clone or canonical digest would omit.
+
+- Partial lockfile misses now replay compatible retained edges and resolve only
+  changed frontiers, including exact nested-path rebasing and optional rollback.
+- Transitive lockfile range drift now follows `npm install`: only the drifted
+  frontier re-resolves instead of applying `npm ci`-style strict rejection.
+- Direct dependencies reserve root-visible slots before descendant traversal;
+  failed optional roots reserve nothing and required demand cannot be suppressed
+  by an earlier optional attempt (ADR-0303).
+- Structural lock, placement, and tar-path corruption remains loud across root
+  and transitive optional boundaries; only ordinary optional acquisition and
+  archive failures warn-and-skip.
+
 - Package tarball ingress now rejects absolute/parent-traversal members before
   linking and exposes one host batch preflight over every actual package target.
   Rifty uses that preflight to reject reserved install claims before the first
   `node_modules` write (ADR-0261), for registry and Eddy/cache replay alike.
 
-- Baked alias substitution now checks the caller's package range at one shared
-  fresh/replay resolution boundary. An esbuild request that excludes the exact
-  shadow API version fails before network, lockfile lookup, provenance, or writes;
-  an explicit user override continues to own its replacement range.
+- Builtin shadow substitution now checks the caller's package range at one
+  shared fresh/replay resolution boundary. An esbuild request that excludes the
+  exact recipe version fails before network, lockfile lookup, provenance, or
+  writes; an explicit user override continues to own its replacement range.
 
 - **Standard-path registry fetches are stall-bounded.** `RegistryClient`
   packument/tarball fetches now bound BOTH phases (headers + body) through the
@@ -125,15 +174,15 @@
   applies `@riftydev/shadow-registry` `internalsShims` after linking, into each pinned copy's
   actual install path (nested/hoisted-aware): rollup's `dist/native.js` → real
   `@rollup/wasm-node` parser (companion-injected into the dep walk at EXACTLY rollup's version;
-  replay re-derives it — no lockfile format change), plus the `esbuild`/`lightningcss` alias
-  packages materialized next to their baked-override targets. Installed trigger version outside
+  replay re-derives it — no lockfile format change), plus the `lightningcss` alias package
+  materialized next to its baked-override target. Installed trigger version outside
   the shim's proven range → `NotImplementedError('shadow-registry.<pkg>@<version>')`; a replayed
   companion at a drifted version → `EBROKENLOCK`. Every baked substitution prints via the new
   `InstallOptions.onSubstitution` sink (default `console.warn`), on fresh install AND lockfile
-  replay: `npm: esbuild@<range> → @esbuild/wasi-preview1@<v> (substituted from shadow registry,
-  ADR-0051)` and `npm: rollup@<v> internals patched from shadow registry`. User `overrides` do
-  not print (`resolveOverride` now returns `source: 'user' | 'baked'`). Tests in
-  `installer-shadow-shims.test.ts`.
+  replay. Esbuild's synthetic recipe reports its own materialization provenance;
+  `npm: rollup@<v> internals patched from shadow registry` remains the shim shape.
+  User `overrides` do not print (`resolveOverride` returns `source: 'user' | 'baked'`).
+  Tests live in `installer-shadow-shims.test.ts`.
 ### Added (eddy v1.2, ADR-0194)
 
 - **`InstallResult.closureHash`.** Set iff `source === 'eddy'` — the adopted bundle's
@@ -262,7 +311,7 @@
 - **Lockfile fast-path replays shadow/user overrides (eddy on override packages).** The
   lockfile-replay source (`createLockfileSource`) now applies `resolveOverride` before the
   entry lookup, matching the live-resolve source. A redirect target is stored under its own
-  key (`esbuild` → `@esbuild/wasi-preview1`, ADR-0015 baked table), leaving no
+  key (`bcrypt` → `bcryptjs`, ADR-0015 baked table), leaving no
   `node_modules/<source>` entry; `lockfileSubgraph` therefore never surfaces the source name
   so `subgraphFreeOfOverrideDivergence` cannot pre-empt it, and the replay used to look up the
   bare source name, miss, and throw `EBROKENLOCK`. This broke eddy's pre-seeded lockfile for
@@ -392,10 +441,11 @@
   stopped before the dev server could start. Registry packages still hard-fail
   on `preinstall`, `install`, and `postinstall`; root package lifecycle handling
   is unchanged. Guard: `src/installer.test.ts`.
-- **Baked esbuild substitution runs before lifecycle gating.** The installer now
-  exercises the shadow-registry `esbuild` redirect before it can fail on the
-  real package's native-binary `postinstall`, covering the Vite install path
-  used by the Netlify playground smoke. Guard: `src/installer.test.ts`.
+- **Builtin esbuild substitution runs before lifecycle gating.** The installer
+  applies the exact synthetic recipe without acquiring the native package, so
+  its binary `postinstall` never enters the admitted tree. This covers the Vite
+  install path used by the Netlify playground smoke. Guard:
+  `src/installer.test.ts`.
 - **Semver prerelease-exclusion (node-semver rule).** A version carrying a
   prerelease tag now only satisfies a range when some comparator in the matching
   branch shares its exact `[major,minor,patch]` AND carries a prerelease.

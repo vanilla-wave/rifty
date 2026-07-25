@@ -6,7 +6,7 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    'esbuild-transform': 'src/esbuild-transform.ts',
+    internal: 'src/internal/index.ts',
   },
   format: ['esm'],
   dts: true,

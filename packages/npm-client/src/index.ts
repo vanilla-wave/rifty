@@ -4,6 +4,7 @@ export {
   getRegistryBaseUrl,
   type Packument,
   type RegistryClientOptions,
+  type RegistryRequestOptions,
   type VersionManifest,
   type Fetcher,
 } from './registry.ts';

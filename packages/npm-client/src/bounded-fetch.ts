@@ -25,6 +25,12 @@ export interface BodyBounds {
   /** Error-message prefix naming the stalled operation (phase + URL) — a
    * bound breach must say WHAT stalled. */
   label?: string;
+  /** Caller-owned lifecycle cancellation, composed with the local stall owner. */
+  signal?: AbortSignal;
+}
+
+function aborted(signal: AbortSignal, label: string): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error(`${label}: aborted`);
 }
 
 /**
@@ -48,9 +54,25 @@ export async function fetchHeadersBounded(
   run: (signal: AbortSignal) => Promise<Response>,
   stallMs: number,
   label: string,
+  externalSignal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let rejectExternal: ((error: Error) => void) | undefined;
+  const externalAbort = externalSignal
+    ? new Promise<never>((_, reject) => {
+        rejectExternal = reject;
+      })
+    : undefined;
+  const onAbort = () => {
+    controller.abort(externalSignal?.reason);
+    if (externalSignal) rejectExternal?.(aborted(externalSignal, label));
+  };
+  if (externalSignal?.aborted) {
+    controller.abort(externalSignal.reason);
+    throw aborted(externalSignal, label);
+  }
+  externalSignal?.addEventListener('abort', onAbort, { once: true });
   const attempt = run(controller.signal);
   attempt.catch(() => {}); // a raced-out attempt settles later (abort) — never unhandled
   try {
@@ -62,9 +84,11 @@ export async function fetchHeadersBounded(
           reject(new Error(`${label}: no response headers for ${stallMs}ms`));
         }, stallMs);
       }),
+      ...(externalAbort ? [externalAbort] : []),
     ]);
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', onAbort);
   }
 }
 
@@ -83,6 +107,8 @@ export async function drainBodyBounded(
   const stallMs = bounds.stallTimeoutMs ?? DEFAULT_FETCH_STALL_MS;
   const maxBytes = bounds.maxBytes ?? DEFAULT_FETCH_MAX_BYTES;
   const label = bounds.label ?? 'fetch';
+  const signal = bounds.signal;
+  if (signal?.aborted) throw aborted(signal, label);
   const body = response.body;
   if (!body) return new Uint8Array(await response.arrayBuffer());
   const reader = body.getReader();
@@ -91,10 +117,17 @@ export async function drainBodyBounded(
   try {
     for (;;) {
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
       const read = reader.read();
       // A raced-out read settles later (cancel() resolves it {done:true});
       // never let a late rejection surface as unhandled.
       read.catch(() => {});
+      const abortWait = signal
+        ? new Promise<never>((_, reject) => {
+            onAbort = () => reject(aborted(signal, label));
+            signal.addEventListener('abort', onAbort, { once: true });
+          })
+        : undefined;
       const next = await Promise.race([
         read,
         new Promise<never>((_, reject) => {
@@ -103,7 +136,11 @@ export async function drainBodyBounded(
             stallMs,
           );
         }),
-      ]).finally(() => clearTimeout(timer));
+        ...(abortWait ? [abortWait] : []),
+      ]).finally(() => {
+        clearTimeout(timer);
+        if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+      });
       if (next.done) break;
       total += next.value.length;
       if (total > maxBytes) {

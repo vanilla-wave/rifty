@@ -8,6 +8,7 @@ const c: ParityCase = {
     files: {
       'node_modules/file:.js': 'module.exports = "pkg-file";\n',
       'node_modules/somepkg.js': 'module.exports = "loose-file";\n',
+      'node_modules/primordial-file.js': 'module.exports = "primordial-file";\n',
       'node_modules/coexist.js': 'module.exports = "loose-unscoped";\n',
       'node_modules/coexist/package.json': '{"main":"index.js"}',
       'node_modules/coexist/index.js': 'module.exports = "directory-unscoped";\n',
@@ -55,6 +56,15 @@ const c: ParityCase = {
     cap('file-colon', () => require('file:'));
     cap('somepkg', () => require('somepkg'));
     cap('somepkg-resolve', () => tail(require.resolve('somepkg')));
+    cap('poisoned-endswith', () => {
+      const saved = String.prototype.endsWith;
+      try {
+        String.prototype.endsWith = () => true;
+        return require('primordial-file');
+      } finally {
+        String.prototype.endsWith = saved;
+      }
+    });
     cap('coexist', () => require('coexist'));
     cap('coexist-resolve', () => tail(require.resolve('coexist')));
     cap('scoped', () => require('@scope/coexist'));
@@ -78,7 +88,7 @@ const c: ParityCase = {
     console.log(JSON.stringify(out));
   `,
   expected:
-    '{"file-colon":"pkg-file","somepkg":"loose-file","somepkg-resolve":"somepkg.js","coexist":"loose-unscoped","coexist-resolve":"coexist.js","scoped":"loose-scoped","scoped-resolve":"@scope/coexist.js","exports-precedence":"exports","exports-blocked":"ERR_PACKAGE_PATH_NOT_EXPORTED","exports-missing":"MODULE_NOT_FOUND","exports-exact":"MODULE_NOT_FOUND","near":"near-loose","skip-nested-node-modules":"MODULE_NOT_FOUND","trailing-slash":"MODULE_NOT_FOUND","trailing-dot":"MODULE_NOT_FOUND","main-dot":"main-dot-index","dot-resolve":"secret/index.js","dot-identity":[true,1,1],"missing":"MODULE_NOT_FOUND"}\n',
+    '{"file-colon":"pkg-file","somepkg":"loose-file","somepkg-resolve":"somepkg.js","poisoned-endswith":"primordial-file","coexist":"loose-unscoped","coexist-resolve":"coexist.js","scoped":"loose-scoped","scoped-resolve":"@scope/coexist.js","exports-precedence":"exports","exports-blocked":"ERR_PACKAGE_PATH_NOT_EXPORTED","exports-missing":"MODULE_NOT_FOUND","exports-exact":"MODULE_NOT_FOUND","near":"near-loose","skip-nested-node-modules":"MODULE_NOT_FOUND","trailing-slash":"MODULE_NOT_FOUND","trailing-dot":"MODULE_NOT_FOUND","main-dot":"main-dot-index","dot-resolve":"secret/index.js","dot-identity":[true,1,1],"missing":"MODULE_NOT_FOUND"}\n',
 };
 
 export default c;

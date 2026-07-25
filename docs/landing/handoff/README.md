@@ -1,7 +1,7 @@
 # Handoff: rifty — Landing Page + Interactive Architecture Explorer
 
 ## Overview
-A single marketing/landing page for **rifty** — a browser-based, Node-compatible runtime and WASI runner ("Node, npm, and a dev server inside a browser tab"). The page sells the project and, in its middle section, embeds a **fully interactive architecture explorer**: a draggable/zoomable node graph of the runtime's modules that can animate how a request flows through the system for six real scenarios (boot, `npm install`, an Express server + preview, Vite HMR, a WASI build, and a synchronous fs call).
+A single marketing/landing page for **rifty** — a browser-based, Node-compatible runtime and WASI runner ("Node, npm, and a dev server inside a browser tab"). The page sells the project and, in its middle section, embeds a **fully interactive architecture explorer**: a draggable/zoomable node graph of the runtime's modules that can animate how a request flows through the system for six real scenarios (boot, `npm install`, an Express server + preview, Vite HMR, an explicit WASI guest, and a synchronous fs call).
 
 The primary deliverable is **`Rifty.dc.html`** (landing + embedded explorer). The explorer is also available standalone as **`Rifty Architecture.dc.html`**.
 
@@ -65,7 +65,7 @@ A floating pill, `bottom: 18px`, horizontally centered, `z-index: 120`.
 
 ### 4. "How it actually works" (`section#arch`) — the interactive explorer
 - `max-width:1200px`, padding `64px 32px 24px`.
-- Header: mono `02` + label `HOW IT ACTUALLY WORKS`. Intro paragraph (17px, `rgba(255,255,255,0.6)`, `max-width:640px`): "An interactive map of the runtime. Pick a scenario — npm install, an Express server, Vite HMR, a WASI build — and watch the request flow across the real package graph. Drag nodes, switch to the realm view, or inspect any module."
+- Header: mono `02` + label `HOW IT ACTUALLY WORKS`. Intro paragraph (17px, `rgba(255,255,255,0.6)`, `max-width:640px`): "An interactive map of the runtime. Pick a scenario — npm install, an Express server, Vite HMR, an explicit WASI guest — and watch the request flow across the real package graph. Drag nodes, switch to the realm view, or inspect any module."
 - Then the **embedded architecture explorer** (full spec in its own section below).
 
 ### 5. Quick start (`section#start`)
@@ -93,7 +93,7 @@ A self-contained widget. Standalone file: `Rifty Architecture.dc.html`. When emb
 ### Layout (top → bottom)
 1. **Inline view switcher** (embedded mode only): label `view` + three pill buttons — **01 Schema**, **02 Realms**, **03 Hybrid**. Active pill: bg `var(--ac)`, text `var(--ac-ink)`, 600. Inactive: transparent, `rgba(255,255,255,0.62)`, 1px border `rgba(255,255,255,0.12)`.
 2. **Scenario player bar** — a `#1A1D24` card, 1px border, `border-radius:12px`, `overflow:hidden`:
-   - **Row A** (`padding:13px 16px`, bottom hairline): label `scenario`, then a **Whole schema** chip (grid icon — this is the default / "exit scenario" state), a 1px divider, then six scenario chips: **Boot**, **npm install**, **Express + preview**, **Vite HMR**, **WASI esbuild**, **Sync fs (SAB)**. Each chip: 1px border, `border-radius:7px`, padding `7px 13px`, 12.5px/500. Real-scenario chips carry a 6px leading status dot. Active chip: bg `rgb(from var(--ac) r g b /0.16)`, border `var(--ac)`, text `#fff`; its dot is `var(--ac)` and **pulses while the scenario is playing**.
+   - **Row A** (`padding:13px 16px`, bottom hairline): label `scenario`, then a **Whole schema** chip (grid icon — this is the default / "exit scenario" state), a 1px divider, then six scenario chips: **Boot**, **npm install**, **Express + preview**, **Vite HMR**, **WASI guest**, **Sync fs (SAB)**. Each chip: 1px border, `border-radius:7px`, padding `7px 13px`, 12.5px/500. Real-scenario chips carry a 6px leading status dot. Active chip: bg `rgb(from var(--ac) r g b /0.16)`, border `var(--ac)`, text `#fff`; its dot is `var(--ac)` and **pulses while the scenario is playing**.
    - **Row B** (`padding:13px 16px`): a title (`data-scn-title`, 13px/600 `#fff`) + a step counter (`N / M`, mono 11px, `var(--ac)`, hidden in Whole-schema mode) + a caption line (`data-step-caption`, 13px `rgba(255,255,255,0.6)`). **There are no prev/next/replay buttons** — interaction is chip-driven (see Interactions).
    - **Progress bar**: a 3px track (`rgba(255,255,255,0.06)`) with an inner fill in `var(--ac)`, width = `(step+1)/total`, `transition: width 0.25s linear`. Empty in Whole-schema mode.
 3. **Legend row** (12px): **type** icons (UI surface, package · API, dev tool, runtime engine, kernel core, fs / net I/O, bridge · external), **realm** color squares (page/worker/service worker/iframe/external), **edge** styles (import = plain line, data = arrow, control = dashed `5 4` arrow, ipc = dashed `4 4` accent arrow). On the right: hint text "drag nodes · drag canvas to pan · scroll to zoom" + **−/+** zoom buttons and a **Reset** button (each 30px, `#1A1D24`, 1px border, `border-radius:7px`).
@@ -111,7 +111,7 @@ A self-contained widget. Standalone file: `Rifty Architecture.dc.html`. When emb
 | npm | npm-client | page | dev tool |
 | runtimejs | runtime-js | worker | runtime engine |
 | runtimewasi | runtime-wasi | worker | runtime engine |
-| esbuild | esbuild.wasm | worker | runtime engine |
+| esbuild | esbuild-wasm adapter | worker | runtime engine |
 | vite | vite dev server | worker | runtime engine |
 | kernel | kernel | page | kernel core |
 | sab | SAB ring + Atomics | worker | kernel core |
@@ -143,7 +143,7 @@ Each scenario = an ordered list of **steps**; each step = `{ node, t }` where `t
 - **npm install** — `npm install express` — terminal → npm → registry → npm → vfs
 - **Express + preview** — `node server.js` — runtimejs → net → preview → sw → httpserver → preview
 - **Vite HMR** — `vite` (edit `src/main.js`) — playground → vite → esbuild → net → preview
-- **WASI esbuild** — `esbuild entry.ts --bundle` — shell → runtimewasi → esbuild → sab → vfs
+- **WASI guest** — `createWasiProcess({ wasm })` — runtimewasi → kernel → sab → vfs
 - **Sync fs (SAB)** — `fs.readFileSync("/app.js")` — runtimejs → sab → kernel → vfs → runtimejs
 
 (Exact captions per step are in the prototype under `SCN = {`. Port them verbatim.)

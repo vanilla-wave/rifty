@@ -28,6 +28,7 @@ drift is closed; range-resolution cadence and Git storage remain open here.
 ## Options or Next
 
 - Range-resolution drift (same ranges, newer published versions) — decide whether periodic re-bakes are wanted at all; the lockfile inside the snapshot keeps installs deterministic either way.
+  Happened 2026-07-25 (PR #175): an identity-refresh rebake silently absorbed `postcss` 8.5.22 → 8.5.23 via vite's floating `^8.5.6` in all three presets; declared post-hoc in the playground CHANGELOG. Bake resolves against live npmjs (`bake-dep-snapshots.ts:38`) — pin bake inputs to the committed lockfile to kill the class.
 - Git size: Git LFS, or move the asset out of the repo (deploy-time bake) if re-bakes become frequent.
 
 ## Reversibility

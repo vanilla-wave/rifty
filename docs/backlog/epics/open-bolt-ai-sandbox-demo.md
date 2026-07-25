@@ -5,7 +5,6 @@ title: Open bolt.diy that actually runs — AI-sandbox reference
 created: 2026-06-28
 value: An OSS AI-tool builder runs LLM-generated Node code that npm-installs and previews entirely in the user's own browser tab — open, self-hostable, the API key never leaving the page.
 user_story: As an OSS AI-coding-tool builder refusing a closed/metered WebContainers dependency, I want a working open reference where an LLM writes a Node/Express app that npm-installs and previews in my own tab with my key in-memory only, but today rifty ships no such demo and the eval-booted-server→preview path is not public.
-items: [distribution/ai-sandbox-reference-demo]
 ---
 
 ## Outcome

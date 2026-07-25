@@ -13,7 +13,6 @@ Candidate mechanics (pick at refine):
 
 - implementer entry points (skills / agent preamble) refuse a `status: draft` target — cheapest, catches the front door;
 - `pr:check` cross-ref: a PR that claims delivery of an item (branch↔item or PR-body marker convention — to design) requires that item `ready`;
-- same gate family: a `draft→ready` flip in the diff requires a recorded judge verdict (`ready-verdict:` line — decision-workflow §Backlog readiness, PR #176);
 - NOT a gate on epics having draft children — that's the designed shape (decision-workflow); the violation is implementing a draft child, not having one.
 
 Must not block legit exploratory spikes (not deliveries).

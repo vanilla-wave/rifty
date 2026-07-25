@@ -5,7 +5,6 @@ title: Actionable IDE diagnostics
 created: 2026-07-09
 value: Install, runtime, compatibility, TypeScript, and preview failures remain visible until resolved and lead the user to the exact run, file, or recovery action.
 user_story: As a developer whose project did not run, I want one retained explanation with source and recovery actions, but today TS owns Problems while other failures disappear into a toast, terminal scrollback, or browser console.
-items: [playground/diagnostics-hub, playground/structured-execution-diagnostics, playground/compatibility-diagnostics-adapter, playground/preview-diagnostics-adapter]
 ---
 
 ## Outcome

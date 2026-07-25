@@ -1,21 +1,26 @@
 ---
 name: rifty-review
-description: Review a pull request for the rifty project — implementation completeness, fit with project goal and architecture, and bugs. Manual invocation only.
-disable-model-invocation: true
+description: Manually perform one read-only rifty PR review against its frozen contract and goal.
 ---
 
-Review the PR.
-Especially interested in:
-- Completeness of the implementation and absence of deferred/unresolved tasks
-- Conformance to the project goal and architecture
-- Goal drift — the PR ends promising what it started promising. Four probes: (1) delivered user-visible outcome ≡ the originating contract (item Acceptance / User scenario, epic Outcome, Contract+RED framing) — silent narrowing or a weaker delivered behavior is a blocker, not a nit; (2) diff every backlog/epic/ADR doc the PR touches vs base — a contract-wording edit (Acceptance, User scenario, Out-of-scope, epic Outcome/value, softened title/why) landing in the same PR as its implementation is the contract-level "never edit a test to make code pass". A genuine mid-PR contract change is legitimate only as an explicit recorded decision (re-refine or superseding ADR, named in the PR description), never a renarration to fit the code; (3) epic envelope immutability — any diff to the owning epic's frozen envelope (Outcome / User scenario / `## Invariants` / tier / Out of scope / Budget) without a named user-tier re-refine event is a blocker; (4) `status: ready` appearing in the diff (flip or direct mint) without a recorded judge verdict (`ready-verdict:` line — `decision-workflow.md` §Backlog readiness) is a blocker
-- Approach earns its cost — even an on-goal capability is wrong if its implementation is disproportionate or net-negative for user or project; flag and reconsider, don't force it. Opposite probe: name what the diff could deliver the same contract without — with no loss to goal, project evolvability, or user experience. The probe itself defines severity: X is machinery (mechanism, layer, guard, engine, config knob) and the contract is deliverable without it → blocker, first instance included — no «§Class-kill starts at the 2nd» defense, no «it's a layer, not a mechanism» defense; X is pure code shrinkage (fold a helper, dedup lines, naming) → concern + backlog item, never a new review round or merge condition
-- Budget — when the owning epic declares `## Budget`, count the run against it (scope outside ready items, contract edits, new mechanisms, review rounds, diff mass vs estimate); over budget is a finding, never silently absorbed
-- Absence of bugs
-- No regressions to existing functionality
-- Feature's user experience matches the real ecosystem
+Review raw contract, baseline, PR body, diff, and tests. Apply
+`docs/process/fault-classes.md` §Review convergence.
 
-Apply `docs/process/fault-classes.md` §Review convergence. Contract+RED checks the pinned oracle, complete contract, and executable RED proof. Final+GREEN checks the implementation against that frozen contract. Every correctness blocker names its fault class, missing RED proof, and unswept sibling surface. A Final+GREEN blocker means redesign/split, never another point-fix round.
+Report these axes once, in order:
 
-## Report
-Open with an overall verdict + merge call. Then one section per axis above (in order), each with its own verdict (pass / concern / blocker) — never folded into a flat severity-ranked list, never downgraded to a nit. Cite file:line.
+1. **Completeness** — every unit clause covered; no required deferral.
+2. **Mission and architecture** — fits rifty's mission and boundaries.
+3. **Goal drift** — delivery matches exact `Goal-Baseline`, else ready contract.
+4. **Approach cost** — identify removable machinery: contract deliverable without it → blocker, first instance included; pure code shrinkage → residual note, never a checkpoint condition. Apply §Class-kill.
+5. **Budget** — one declared slice; inspect modified files, not only advisory scans.
+6. **Bugs** — no correctness defect.
+7. **Regressions** — existing behavior holds.
+8. **Ecosystem UX** — observable behavior matches real Node software.
+
+Contract+RED checks oracle/RED coverage; Final+GREEN checks delivery. Correctness
+blockers name class, RED, and sibling sweep; other blockers cite their rule.
+
+Open with verdict + merge call. Return `checkpoint`, exact `unit_goal_source`,
+ordered axes, `unit_residuals` (slice blockers), `goal_residuals` (continuation),
+and `goal_complete` only after end-to-end proof with both residual sets empty.
+Cite `file:line`.

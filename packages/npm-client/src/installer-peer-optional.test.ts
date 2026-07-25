@@ -185,4 +185,104 @@ describe('install — optionalDependencies', () => {
     expect(msg).toContain('optional');
     expect(msg).toContain('opt-missing');
   });
+
+  it('does not classify caller cancellation as an optional-dependency skip', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        optionalDependencies: { opt: '1.0.0' },
+      })}\n`,
+    );
+    let markTarballStarted!: () => void;
+    const tarballStarted = new Promise<void>((resolve) => {
+      markTarballStarted = resolve;
+    });
+    const registry = new RegistryClient({
+      baseUrl: 'https://registry.test',
+      maxRetries: 0,
+      fetch: async (url, init) => {
+        if (String(url).endsWith('/opt')) {
+          return new Response(
+            JSON.stringify({
+              name: 'opt',
+              'dist-tags': { latest: '1.0.0' },
+              versions: {
+                '1.0.0': {
+                  name: 'opt',
+                  version: '1.0.0',
+                  dependencies: {},
+                  dist: { tarball: 'https://registry.test/opt/-/opt-1.0.0.tgz' },
+                },
+              },
+            }),
+          );
+        }
+        markTarballStarted();
+        return await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+            once: true,
+          });
+        });
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error('project closed during optional dependency');
+    const installing = install({
+      vfs,
+      cwd: '/proj',
+      registry,
+      signal: controller.signal,
+      tarballCache: {
+        get: async () => null,
+        put: async () => '',
+      },
+    });
+
+    await tarballStarted;
+    controller.abort(reason);
+
+    await expect(installing).rejects.toBe(reason);
+    expect(warn).not.toHaveBeenCalled();
+    expect(await vfs.exists('/proj/package-lock.json')).toBe(false);
+  });
+
+  it('warns and skips when a required child of an optional subtree has an invalid archive', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'pkg',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry('pkg', '1.0.0', {
+            optionalDependencies: { opt: '1.0.0' },
+          }),
+        ],
+      ]),
+    );
+    db.set(
+      'opt',
+      new Map([['1.0.0', await makeEntry('opt', '1.0.0', { dependencies: { broken: '1.0.0' } })]]),
+    );
+    const broken = await makeEntry('broken', '1.0.0');
+    broken.tarball = new Uint8Array([1, 2, 3]);
+    db.set('broken', new Map([['1.0.0', broken]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { pkg: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new FakeRegistry(db) },
+    );
+
+    expect(result.packages.map((pkg) => pkg.name).sort()).toEqual(['opt', 'pkg']);
+    expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+      expect.stringContaining('optional dependency opt@1.0.0 of pkg could not be installed'),
+    );
+  });
 });

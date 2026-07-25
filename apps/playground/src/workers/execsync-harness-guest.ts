@@ -24,6 +24,7 @@
  *      dispatcher hangs → the page times out. Only the real SAB + v2-frame path
  *      yields `fffe00`.
  *   3. `LOADER=<text>` — recursive node-entry loader + owner FS round-trip.
+ *   4. `BUFFER=<text>` — recursive node-entry bundle/global Buffer identity.
  * Fault mode catches the same real call and emits `CONFIG_ERROR=<message>`.
  *
  * The child scripts are seeded into the PAGE realm's sync mirror by the page
@@ -66,7 +67,11 @@ function fail(reason: string): never {
 // worker has it null, so the page forwards the real kernel-worker URL via env
 // and the guest re-publishes it here. The URL value is used ONLY for the gate:
 // the recursive child is spawned by the PAGE realm's dispatcher, never here.
-const kernelWorkerUrl = globalThis.process.env.RIFTY_EXECSYNC_KERNEL_WORKER_URL;
+// Indirection is load-bearing in a production `?worker&url` bundle: Vite folds
+// direct `process.env.*` reads to build-time values, but this is kernel-owned
+// per-spawn runtime state.
+const kernelProcess = Reflect.get(globalThis, 'process') as typeof globalThis.process;
+const kernelWorkerUrl = kernelProcess.env.RIFTY_EXECSYNC_KERNEL_WORKER_URL;
 if (!kernelWorkerUrl) {
   fail('missing RIFTY_EXECSYNC_KERNEL_WORKER_URL env');
 }
@@ -78,7 +83,7 @@ if (!isSabIpcSupported()) {
   fail('isSabIpcSupported() is false in the guest realm (no SAB / COI?)');
 }
 
-const fault = globalThis.process.env.RIFTY_EXECSYNC_FAULT;
+const fault = kernelProcess.env.RIFTY_EXECSYNC_FAULT;
 if (fault === 'missing-node-entry-runtime-config') {
   let observedError = '';
   try {
@@ -112,6 +117,11 @@ if (fault === 'missing-node-entry-runtime-config') {
   //    could not resolve the import, and read an empty mirror — this is the gap.
   const built = execSync('node /scripts/build.js');
   emit(`LOADER=${new TextDecoder().decode(built)}`);
+
+  // 4. The recursive production node-entry chunk realigns globalThis.Buffer to
+  // the exact Buffer class exposed by its own `node:buffer` loader.
+  const buffer = execSync('node /scripts/buffer-identity.mjs');
+  emit(`BUFFER=${new TextDecoder().decode(buffer)}`);
 }
 
 emit('DONE');

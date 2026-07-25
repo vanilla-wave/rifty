@@ -1,7 +1,7 @@
 import bakedSnapshotIdentities from '../generated/baked-snapshot-identities.json';
 /**
- * Vite 8 opt-in template. Dev is proven; build/preview remain outside compat
- * while Rolldown's WASI pthread path is upstream-blocked.
+ * Vite 8 opt-in template. Dev/build/preview are proven; HMR stays disabled
+ * until its socket path has separate parity evidence (ADR-0161/0317).
  */
 import {
   DEFAULT_VITE8_CONFIG_JS,

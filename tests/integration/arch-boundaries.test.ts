@@ -108,17 +108,18 @@ describe('check:arch layer boundaries', () => {
   it('flags App extraction-boundary imports of Workbench implementation modules', () => {
     const root = fixture({
       'playground/src/adapters/host.ts':
-        "import '../workbench/internal/owner';\nexport const host = 1;\n",
+        "import '../../../workbench/src/workbench/internal/owner';\nexport const host = 1;\n",
       'playground/src/templates/project-spec.ts':
-        "import '../workbench/project-definition';\nexport const spec = 1;\n",
-      'playground/src/workbench/internal/owner.ts': 'export const owner = 1;\n',
-      'playground/src/workbench/project-definition.ts': 'export const definition = 1;\n',
+        "import '../../../workbench/src/workbench/project-definition';\nexport const spec = 1;\n",
+      'playground/src/browser-unit/legacy-public.ts':
+        "import '../../../workbench/src/workbench/public';\nexport const legacy = 1;\n",
+      'workbench/src/workbench/internal/owner.ts': 'export const owner = 1;\n',
+      'workbench/src/workbench/project-definition.ts': 'export const definition = 1;\n',
+      'workbench/src/workbench/public.ts': 'export const legacyPublic = 1;\n',
     });
     expect(
-      ruleNames([root]).filter(
-        (name) => name === 'playground-app-uses-sealed-workbench-entrypoints',
-      ),
-    ).toHaveLength(2);
+      ruleNames([root]).filter((name) => name === 'workbench-package-uses-sealed-entrypoints'),
+    ).toHaveLength(3);
   });
 
   it('flags type-only App imports of Workbench implementation modules', () => {
@@ -147,11 +148,35 @@ describe('check:arch layer boundaries', () => {
   it('allows App extraction-boundary imports through sealed Workbench entrypoints', () => {
     const root = fixture({
       'playground/src/adapters/host.ts':
-        "import '../workbench/public';\nimport '../workbench/playground';\nexport const host = 1;\n",
-      'playground/src/workbench/public.ts': 'export const publicApi = 1;\n',
-      'playground/src/workbench/playground.ts': 'export const companion = 1;\n',
+        "import '../../../workbench/src/index';\nimport '../../../workbench/src/workbench/playground';\nimport '../../../workbench/src/workers/workbench-owner-bootstrap';\nexport const host = 1;\n",
+      'workbench/src/index.ts': 'export const publicApi = 1;\n',
+      'workbench/src/workbench/playground.ts': 'export const companion = 1;\n',
+      'workbench/src/workers/workbench-owner-bootstrap.ts': 'export const owner = 1;\n',
     });
-    expect(ruleNames([root])).not.toContain('playground-app-uses-sealed-workbench-entrypoints');
+    expect(ruleNames([root])).not.toContain('workbench-package-uses-sealed-entrypoints');
+  });
+
+  it('allows the artifact owners that prove package-owned Workbench recipes', () => {
+    const root = fixture({
+      'apps/playground/tools/bake-dep-snapshots.ts':
+        "import '../../../packages/workbench/src/glue/private-serializer';\nexport const bake = 1;\n",
+      'tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts':
+        "import '../../../packages/workbench/src/glue/private-serializer';\nexport const check = 1;\n",
+      'tools/shadow-registry/tools/generate-install-artifact-identity.ts':
+        "import '../../../packages/workbench/src/workers/private-policy';\nexport const generate = 1;\n",
+      'packages/workbench/src/glue/private-serializer.ts': 'export const serialize = 1;\n',
+      'packages/workbench/src/workers/private-policy.ts': 'export const policy = 1;\n',
+    });
+    expect(ruleNames([root])).not.toContain('workbench-package-uses-sealed-entrypoints');
+  });
+
+  it('flags Workbench implementation imports from unrelated repo tools', () => {
+    const root = fixture({
+      'tools/unrelated.ts':
+        "import '../packages/workbench/src/glue/private-serializer';\nexport const unrelated = 1;\n",
+      'packages/workbench/src/glue/private-serializer.ts': 'export const serialize = 1;\n',
+    });
+    expect(ruleNames([root])).toContain('workbench-package-uses-sealed-entrypoints');
   });
 
   it('flags an eager monaco-editor import outside the lazy editor stack', () => {

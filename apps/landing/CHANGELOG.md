@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Explorer now separates the raw WASI runner from npm esbuild: the proven
+  esbuild JS adapter stays visible while its CLI/bin is an explicit loud gap.
 - SEO/share hardening: compact title + description, WebSite JSON-LD, robots/sitemap, complete
   Open Graph/Twitter card with a branded 1200×630 PNG, Apple touch icon, and an indexable static
   shell that remains useful when client JS fails. Manual Netlify PR aliases now emit

@@ -1,3 +1,4 @@
+import type { PlaygroundProjectPlan } from '@riftydev/workbench/playground';
 import { describe, expect, it } from 'vitest';
 import { type Starter, seedFilesForStarter, starterFromPreset } from '../glue/starter.ts';
 import type { PresetSetup } from '../presets.ts';
@@ -5,7 +6,6 @@ import { PRESETS } from '../presets.ts';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 import { projectScripts, terminalDevLine } from '../templates/project-spec.ts';
 import { allProjectSpecs, resolveProjectSpec } from '../templates/registry.ts';
-import type { PlaygroundProjectPlan } from '../workbench/playground.ts';
 import { toPlaygroundProjectPlan } from './playground-project-plan.ts';
 
 const SENTINEL_ROOT = '/__playground_plan_contract__';

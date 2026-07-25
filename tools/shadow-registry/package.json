@@ -21,8 +21,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./esbuild-binding": "./src/esbuild-binding.ts",
-    "./esbuild-transform": "./src/esbuild-transform.ts"
+    "./internal": "./src/internal/index.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -35,15 +34,17 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       },
-      "./esbuild-transform": {
-        "types": "./dist/esbuild-transform.d.ts",
-        "import": "./dist/esbuild-transform.js"
+      "./internal": {
+        "types": "./dist/internal.d.ts",
+        "import": "./dist/internal.js"
       }
     }
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsup"
+    "build": "tsup",
+    "catalog:generate": "tsx tools/generate-shadow-substitution-catalog.ts --write",
+    "catalog:check": "tsx tools/generate-shadow-substitution-catalog.ts --check"
   },
   "devDependencies": {
     "@riftydev/vfs": "workspace:*",

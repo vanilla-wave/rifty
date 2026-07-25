@@ -145,7 +145,11 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
   it('address() reflects the numeric port from the options form after listening', async () => {
     const s = createServer();
     await new Promise<void>((resolve) => s.listen({ port: 4099 }, () => resolve()));
-    expect(s.address()).toEqual({ port: 4099 });
+    expect(s.address()).toEqual({
+      address: '127.0.0.1',
+      family: 'IPv4',
+      port: 4099,
+    });
     s.close();
   });
 

@@ -28,6 +28,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
 | 0045 | Worker-process IPC — fork-mode `send` / `'message'` / `disconnect` over a parent↔child MessagePort |
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
+| 0313 | One-shot opaque Worker entry capability ports |
 
 ### runtime-js
 
@@ -72,10 +73,10 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | # | Title |
 |---|---|
 | 0038 | WasiProcessHandle — kernel adapter for WASI guests |
-| 0047 | Revert to esbuild (`@esbuild/wasi-preview1`) as the M8/M10 WASI forcing consumer |
 | 0049 | WASI `cwd` option + `AT_FDCWD` and directory-open semantics |
 | 0172 | Side-effect-free WASI runner subpath |
 | 0193 | runWasi accepts a precompiled WebAssembly.Module |
+| 0316 | Retire the vendored esbuild WASI consumer after registry cutover |
 
 ### net
 
@@ -92,6 +93,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0181 | Client node:https request and get over browser fetch |
 | 0186 | Cross-realm EADDRINUSE via per-port bind-claim broadcast |
 | 0189 | Preview loopback WebSocket bridge |
+| 0315 | Report the effective virtual server address |
 
 ### service-worker
 
@@ -130,9 +132,13 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0201 | Bounded-fetch chokepoint: no-progress stall bounds on all npm-client fetches |
 | 0258 | Structured install acquisition provenance |
 | 0283 | Canonical package manifest serialization |
+| 0303 | Direct roots reserve flat slots before transitive placement |
 | 0308 | Package-generic builtin shadow-substitution registry with optional runtime binding |
 | 0309 | One package-tree authority for install-tree lifecycle |
 | 0310 | Sass ships as a synthesized sass-embedded facade over the exact pure-JS sass twin |
+| 0314 | Cancellable package acquisition |
+| 0318 | Retain verified shadow assets for manager lifetime |
+| 0321 | Keep shadow asset port correlation package local |
 
 ### playground
 
@@ -172,6 +178,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0292 | Workbench authorities replace Solid orchestration core |
 | 0293 | Tab-independent workspace admission UX |
 | 0307 | Install trust is an install-protocol commit, not tree surveillance |
+| 0317 | Vite 8 build and preview through installed CLI |
+| 0320 | Define instant restore runtime asset availability |
 
 ### toolchain-build
 
@@ -190,6 +198,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0226 | Upstream-derived Vite esbuild runtime over guest VFS |
 | 0242 | Generated esbuild diagnostic provenance and target errno normalization |
 | 0255 | Disposable worker realm for seeded-process parity cases |
+| 0312 | Keep synchronous SHA-256 implementations layer-local |
 
 ### protocol
 
@@ -261,6 +270,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0279 | Compact staged Playground catalog transactions |
 | 0280 | Project-rooted terminal execution namespace |
 | 0282 | Extraction-safe Playground host and session seams |
+| 0311 | Registry-owned esbuild runtime removes the host asset URL |
+| 0319 | Preserve admitted mutations across project close |
 
 ## Superseded (removed)
 
@@ -272,7 +283,8 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
 | 0028 | 0133 | prod npm-registry proxy; deploy/routing/env contract reshaped, context grafted |
 | 0133 | 0163 | prod npm-registry proxy moved from Netlify Function to Yandex Cloud streaming Compute proxy; context grafted |
-| 0044 | 0047 | esbuild WASI |
+| 0044 | 0316 | swc/WASIp1 discovery retained; product carrier retired |
+| 0047 | 0316 | real WASIp1 proof becomes package-sourced; vendored M8/M10 carrier removed |
 | 0046 | 0125 | owner-binding seam; microtask invariant dropped, context grafted |
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
@@ -296,6 +308,8 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0042 global first-wins-flat clause | 0303 | surviving direct identities reserve root-visible slots before serial descendant first-wins placement |
+| 0175 globally request-ordered placement clause | 0303 | direct reservation precedes descendant DFS; prefetch/network completion remains non-authoritative |
 | 0263 generic origin-contention rejection clause | 0293 / note 2026-07-18 | callback-null origin contention has public `WorkbenchOriginOccupiedError`; same-page/capability/request/init failures remain fatal |
 | 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
@@ -305,11 +319,26 @@ superseded.
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |
+| 0015 preview1 redirect / `esbuildShimFiles` consolidation clauses | 0316 / note 2026-07-24 | registry remains the substitution owner; catalog-owned esbuild-wasm recipe replaces the legacy esbuild carriers |
 | 0027 third-shim promotion trigger | 0156 | Vite browser shims now use the typed `browserShimFileSets` registry |
+| 0027 esbuild per-file overlay clauses | 0316 / note 2026-07-24 | synthetic esbuild package replaces only esbuild; typed overlays remain for Rollup and LightningCSS |
 | 0036 `synthesizePreviewUrl(path)` host clause | 0189 / note 2026-07-04 | SW preview HTTP routing now synthesizes `localhost[:port]`; `PREVIEW_LOCAL_HOST=preview.local` remains for explicit legacy HMR bridge paths |
 | 0040 synthetic host bump-trigger clause | 0189 / note 2026-07-04 | `SW_ROUTING_VERSION` pins `synthesizePreviewUrl` Host synthesis, not the legacy `PREVIEW_LOCAL_HOST` literal alone |
+| 0011 A-008 / M11 checked-in WASI esbuild carrier | 0316 / note 2026-07-24 | registry esbuild-wasm is the sole product runtime; preview1 is an explicit package-sourced guest |
 | 0051 accepted WebAssembly CPU targets | 0156 | `wasm32` is admitted alongside `wasm`; native platform packages remain unsupported |
-| 0047 gojs-moot / JS-build-through-WASI clauses | 0226 | WASI remains the CLI forcing consumer; Vite JS API derives the exact upstream browser CJS client with a guest-VFS environment |
+| 0051 esbuild post-install overlay premise | 0316 / note 2026-07-24 | registry substitution replaces the retired preview1 overlay; native policy stands |
+| 0052 vendored-WASI transform provider premise | 0316 / note 2026-07-24 | public hook stays provider-neutral; Node parity injects host esbuild and product proof uses registry admission |
+| 0053 vendored-WASI transform provider premise | 0316 / note 2026-07-24 | resolver behavior stands; no provider is prescribed |
+| 0070 shadow-registry esbuild-binding / published esbuild-transform exports | 0316 / note 2026-07-24 | both carrier subpaths removed; pure internal catalog replaces the transform surface |
+| 0135 baked snapshot contains preview1 carrier | 0316 / note 2026-07-24 | snapshots use registry-owned substitutions; setup semantics stand |
+| 0135 instant zero-network clause | 0320 | instant skips npm install; an empty verified Vite 7 runtime CAS performs the exact esbuild-wasm acquisition or fails loudly offline |
+| 0172 Playground vendored-WASI consumer consequence | 0316 / note 2026-07-24 | public side-effect-free runner remains; product esbuild no longer consumes it |
+| 0173 vendored-WASI build preparation clauses | 0316 / note 2026-07-24 | registry esbuild-wasm owns product builds; installed Vite ownership stands |
+| 0173 D5 Vite 8 build/preview loud-reject clause | 0317 / note 2026-07-25 | exact Vite 8.0.16 builds and previews through the installed CLI; Vite 7 remains default and Vite 8 HMR stays off |
+| 0188 esbuild alias placement / preview1 redirect clauses | 0316 / note 2026-07-24 | synthetic registry recipe replaces only esbuild; rollup/lightningcss and generic installer/provenance rules stand |
+| 0193 Playground esbuild bridge consumer premise | 0316 / note 2026-07-24 | public precompiled-Module and cross-realm behavior remain without a product esbuild consumer |
+| 0226 D6 vendored WASI CLI remains | 0316 / note 2026-07-24 | exact preview1 package is an explicit guest; registry esbuild-wasm is the sole product runtime |
+| 0263 host-resolved esbuild WASM deployment field | 0311 / note 2026-07-24 | registry recipe owns esbuild runtime bytes; other host-resolved deployment assets stand |
 | 0078 Vite runtime/config fields and direct `createServer` clauses | 0174 / note 2026-07-13 | Vite specs retain install/seed/UI data; installed `.bin/vite` owns execution |
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |

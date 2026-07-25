@@ -77,6 +77,15 @@ describe('snapshot artifact drift check', () => {
     expect(() => assertSnapshotArtifactCurrent(expectation())).not.toThrow();
   });
 
+  it('accepts canonical serialized bytes compressed by another valid gzip encoder setting', () => {
+    const input = {
+      ...expectation(),
+      bytes: gzipSync(Buffer.from(serialize(snapshot())), { level: 1 }),
+    };
+
+    expect(() => assertSnapshotArtifactCurrent(input)).not.toThrow();
+  });
+
   it('rejects a stale install artifact identity without relabeling it', () => {
     const value = { ...snapshot(), installArtifactIdentity: `sha256:${'b'.repeat(64)}` };
     expect(() => assertSnapshotArtifactCurrent(expectation(value))).toThrow(
@@ -107,13 +116,13 @@ describe('snapshot artifact drift check', () => {
     expect(() => assertSnapshotArtifactCurrent(input)).toThrow(/version 1.*pnpm snapshots:bake/);
   });
 
-  it('rejects semantically equal but noncanonical archive bytes', () => {
+  it('rejects semantically equal but noncanonical serialized bytes', () => {
     const input = {
       ...expectation(),
       bytes: gzipSync(Buffer.from(`${serialize(snapshot())}\n`), { level: 9 }),
     };
     expect(() => assertSnapshotArtifactCurrent(input)).toThrow(
-      /gzip bytes are not canonical.*pnpm snapshots:bake/,
+      /serialized snapshot bytes are not canonical.*pnpm snapshots:bake/,
     );
   });
 

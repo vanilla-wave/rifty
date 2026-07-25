@@ -412,7 +412,7 @@ const VITE8_PRESET: Preset = {
   mode: 'real-vite',
   setup: 'instant',
   templateId: 'vite8',
-  blurb: 'Experimental Vite 8 + Rolldown WASI dev server. build/preview upstream-blocked.',
+  blurb: 'Vite 8 + Rolldown WASI dev server, production build, and preview.',
   glyph: { text: 'V8', color: '#E8D44D' },
   tag: { text: 'instant', tone: 'live' },
   openFiles: ['src/main.js'],

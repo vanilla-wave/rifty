@@ -5,7 +5,6 @@ title: Cold npm install fast enough to not bounce
 created: 2026-06-28
 value: A first-time visitor running `npm install` on a real project (no lockfile, cold cache) in a browser tab sees it finish fast enough to stay, not bounce.
 user_story: As a developer trying a real project in rifty for the first time, I want a cold `npm install` to finish quickly, but today it is dominated by a serial full-packument metadata waterfall and I wait too long.
-items: [npm-client/abbreviated-packuments, perf/cold-install-metadata-reprofile, npm-client/persisted-packument-store]
 ---
 
 ## Outcome

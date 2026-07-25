@@ -1,11 +1,9 @@
 /**
  * Shadow-registry — consolidated data tables for in-browser substitutions.
  *
- * Per ADR 0015, all shim/override *data* lives in this package. Consumer-side
- * adapter code stays in `@riftydev/npm-client` (`src/overrides.ts` for package
- * redirects, `src/shadow-shims.ts` for install-time internals shims, ADR-0188).
- *
- * Two tables are exposed:
+ * The generated `/internal` catalog owns typed substitution recipes. These
+ * public legacy tables remain for already-shipped redirects and internals
+ * shims; shared entries derive from the catalog so their bytes cannot drift.
  *
  *   - `bakedOverrides` — full-package substitutions consumed by the npm
  *     installer's override hook (D-005).
@@ -21,6 +19,8 @@
  * the two packages (npm-client depends on this one for the data table). The
  * structural compatibility is asserted in npm-client's tests.
  */
+import { builtinShadowSubstitutionCatalog } from './internal/codec.ts';
+
 export interface OverrideMap {
   /** Map from package name (or `parent>child`) to replacement target. */
   [key: string]: string;
@@ -34,88 +34,20 @@ export interface OverrideMap {
  * Add an entry here when a popular npm package ships native bindings that
  * cannot load in a browser realm AND a drop-in pure-JS alternative exists.
  */
+const lightningcssRecipe = builtinShadowSubstitutionCatalog.recipes.find(
+  (recipe) => recipe.id === 'rifty.shadow-substitution.lightningcss.v1',
+);
+if (!lightningcssRecipe || lightningcssRecipe.acquisition.kind !== 'registry') {
+  throw new Error('shadow-registry builtin lightningcss recipe is missing');
+}
+
 export const bakedOverrides: OverrideMap = {
   // bcrypt's native bindings don't load in the browser; bcryptjs is a drop-in.
   bcrypt: 'bcryptjs',
-  // Real esbuild's registry package runs a native-binary postinstall. The
-  // installer materializes the `esbuild` import name from the shim below.
-  esbuild: '@esbuild/wasi-preview1@0.28.0',
   // Vite 8 imports lightningcss lazily. The native package loads `.node`
   // bindings; lightningcss-wasm ships the same NAPI surface backed by WASM.
-  lightningcss: 'lightningcss-wasm@1.32.0',
+  lightningcss: `${lightningcssRecipe.acquisition.name}@${lightningcssRecipe.acquisition.version}`,
 };
-
-// MUST equal the bakedOverrides trigger pin: the alias package.json + the
-// shim's `version` export claim this — a drifted static value would lie to
-// version-sniffing consumers. The exact-pin `range` below enforces the couple
-// (a bumped override outside it loud-throws at install until this moves too).
-const SHIM_ESBUILD_VERSION = '0.28.0';
-
-// One CJS overlay publishes the upstream-derived runtime object unchanged.
-// Every package condition shares this file, preserving import/require identity.
-const SHIM_ESBUILD_CJS = `const esbuild = globalThis.__rifty?.esbuild;
-if (esbuild == null) {
-  throw new Error('rifty invariant: esbuild runtime slot is not initialized');
-}
-module.exports = esbuild;
-`;
-
-const SHIM_ESBUILD_PACKAGE_JSON = JSON.stringify(
-  {
-    name: 'esbuild',
-    version: SHIM_ESBUILD_VERSION,
-    main: './lib/main.cjs',
-    module: './lib/main.cjs',
-    type: 'commonjs',
-    exports: {
-      '.': {
-        import: './lib/main.cjs',
-        require: './lib/main.cjs',
-        default: './lib/main.cjs',
-      },
-    },
-  },
-  null,
-  2,
-);
-
-const SHIM_LIGHTNINGCSS_VERSION = '1.32.0';
-
-const SHIM_LIGHTNINGCSS_PACKAGE_JSON = JSON.stringify(
-  {
-    name: 'lightningcss',
-    version: SHIM_LIGHTNINGCSS_VERSION,
-    main: './index.cjs',
-    module: './index.mjs',
-    type: 'module',
-    exports: {
-      '.': {
-        import: './index.mjs',
-        require: './index.cjs',
-        default: './index.mjs',
-      },
-    },
-  },
-  null,
-  2,
-);
-
-const SHIM_LIGHTNINGCSS_ESM = `export {
-  Features,
-  browserslistToTargets,
-  bundle,
-  bundleAsync,
-  composeVisitors,
-  transform,
-  transformStyleAttribute,
-} from 'lightningcss-wasm';
-
-import * as lightningcss from 'lightningcss-wasm';
-export default lightningcss;
-`;
-
-const SHIM_LIGHTNINGCSS_CJS = `module.exports = require('lightningcss-wasm');
-`;
 
 // ONE mode-independent rollup native entry (ADR-0188): always the real WASM
 // parser. `@rollup/wasm-node` is guaranteed resolvable by the `companions`
@@ -171,27 +103,13 @@ export const internalsShims: Record<string, InternalsShim> = {
     companions: ['@rollup/wasm-node'],
     files: { 'dist/native.js': ROLLUP_NATIVE_SHIM },
   },
-  // Materialize the `esbuild` import name over the realm's exact runtime API.
-  // EXACT-pin range: the alias files statically claim SHIM_ESBUILD_VERSION —
-  // any trigger version drift must loud-throw, not ship a lying package.json.
-  '@esbuild/wasi-preview1': {
-    range: '0.28.0',
-    into: 'esbuild',
-    apiVersion: SHIM_ESBUILD_VERSION,
-    files: {
-      'package.json': SHIM_ESBUILD_PACKAGE_JSON,
-      'lib/main.cjs': SHIM_ESBUILD_CJS,
-    },
-  },
   // Same for `lightningcss` → lightningcss-wasm (pure re-export delegates).
   'lightningcss-wasm': {
     range: '^1.32.0',
     into: 'lightningcss',
-    apiVersion: SHIM_LIGHTNINGCSS_VERSION,
-    files: {
-      'package.json': SHIM_LIGHTNINGCSS_PACKAGE_JSON,
-      'index.mjs': SHIM_LIGHTNINGCSS_ESM,
-      'index.cjs': SHIM_LIGHTNINGCSS_CJS,
-    },
+    apiVersion: lightningcssRecipe.materialization.version,
+    files: Object.fromEntries(
+      lightningcssRecipe.materialization.files.map((file) => [file.path, file.content]),
+    ),
   },
 };

@@ -20,6 +20,9 @@ importers:
       dependency-cruiser:
         specifier: ^17.4.3
         version: 17.4.3
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
       tsup:
         specifier: ^8.3.5
         version: 8.5.1(postcss@8.5.15)(tsx@4.22.3)(typescript@5.9.3)
@@ -71,9 +74,6 @@ importers:
       '@riftydev/service-worker':
         specifier: workspace:*
         version: link:../../packages/service-worker
-      '@riftydev/shadow-registry':
-        specifier: workspace:*
-        version: link:../../tools/shadow-registry
       '@riftydev/shell':
         specifier: workspace:*
         version: link:../../packages/shell
@@ -86,12 +86,12 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
+      '@riftydev/workbench':
+        specifier: workspace:*
+        version: link:../../packages/workbench
       '@xterm/xterm':
         specifier: ^5.5.0
         version: 5.5.0
-      esbuild-wasm:
-        specifier: 0.28.0
-        version: 0.28.0
       monaco-editor:
         specifier: ^0.52.0
         version: 0.52.2
@@ -130,18 +130,15 @@ importers:
 
   examples/vite-like-dev:
     dependencies:
+      '@riftydev/io':
+        specifier: workspace:*
+        version: link:../../packages/io
       '@riftydev/net':
         specifier: workspace:*
         version: link:../../packages/net
       '@riftydev/runtime-js':
         specifier: workspace:*
         version: link:../../packages/runtime-js
-      '@riftydev/runtime-wasi':
-        specifier: workspace:*
-        version: link:../../packages/runtime-wasi
-      '@riftydev/shadow-registry':
-        specifier: workspace:*
-        version: link:../../tools/shadow-registry
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
@@ -359,6 +356,39 @@ importers:
         specifier: '*'
         version: 2.1.9(@types/node@22.19.19)
 
+  packages/workbench:
+    dependencies:
+      '@riftydev/git':
+        specifier: workspace:*
+        version: link:../git
+      '@riftydev/io':
+        specifier: workspace:*
+        version: link:../io
+      '@riftydev/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@riftydev/net':
+        specifier: workspace:*
+        version: link:../net
+      '@riftydev/npm-client':
+        specifier: workspace:*
+        version: link:../npm-client
+      '@riftydev/runtime-js':
+        specifier: workspace:*
+        version: link:../runtime-js
+      '@riftydev/service-worker':
+        specifier: workspace:*
+        version: link:../service-worker
+      '@riftydev/shell':
+        specifier: workspace:*
+        version: link:../shell
+      '@riftydev/ts-language-service':
+        specifier: workspace:*
+        version: link:../ts-language-service
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../vfs
+
   services/eddy:
     devDependencies:
       '@riftydev/npm-client':
@@ -376,6 +406,9 @@ importers:
 
   tests:
     dependencies:
+      '@esbuild/wasi-preview1':
+        specifier: 0.28.0
+        version: 0.28.0
       '@riftydev/net':
         specifier: workspace:*
         version: link:../packages/net
@@ -411,6 +444,9 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
 
   tools/shadow-registry:
     devDependencies:
@@ -959,6 +995,9 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [sunos]
+
+  '@esbuild/wasi-preview1@0.28.0':
+    resolution: {integrity: sha512-6Mm1hljxx5NJgqnZupvOLfGGKW+9icZUottY+D1a7+QmddYogj84mAFfgZiobQG4qMbW9tIQubV0lL9XGFKLiw==}
 
   '@esbuild/win32-arm64@0.21.5':
     resolution: {integrity: sha512-Z0gOTd75VvXqyq7nsl93zwahcTROgqvuAcYDUr+vOv8uHhNSKROyU961kgtCD1e95IqPKSQKH7tBTslnS3tA8A==}
@@ -2486,6 +2525,8 @@ snapshots:
 
   '@esbuild/sunos-x64@0.28.0':
     optional: true
+
+  '@esbuild/wasi-preview1@0.28.0': {}
 
   '@esbuild/win32-arm64@0.21.5':
     optional: true

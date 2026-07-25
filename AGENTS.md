@@ -25,8 +25,8 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - Comments/ADRs/docs: extremely concise, sacrifice grammar, cut anything restating code.
 
 ## Data sources
-- `docs/backlog/` — open/provisional work: items (`docs/backlog/<area>/<slug>.md`) + epics (`docs/backlog/epics/`, a user-value umbrella over items). Status `draft|ready` (epics also `in-progress`); closure = delete-on-done (no "done" status). `ready` = a contract an implementer can't close with an approximation (Acceptance / Parity cases / Out-of-scope loud-throw / Decisions). **Findings enter via the `rifty-to-backlog` skill (capture); never hand a `draft` to an implementer — two paths to `ready`: open forks → the `rifty-refine` skill (user-tier); fork-free → write the contract + fresh-context judge verdict, never self-certified. Epic envelope (Outcome/Scenario/Invariants/tier/Out-of-scope/Budget) is frozen for the run; `## Items` is a living plan.** Canon: `docs/process/decision-workflow.md` §Backlog readiness.
-- `docs/adr/` — decisions + strategic choices (D-001..D-006: V8 engine, WASI-separate, Workers-as-processes, SW-networking, OPFS/VFS); index + D→ADR map: `docs/adr/README.md`
+- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding → `rifty-to-backlog`; settled draft → compile normally; unresolved observable fork → manual `rifty-refine`; ready → implement normally. Never implement a draft. Planned/process work never invokes `rifty-fix`.
+- `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/decision-workflow.md` — read at any fork
 - `docs/process/fault-classes.md` — fault taxonomy + review convergence
 - `docs/process/testing.md` — test pyramid + why parity
@@ -40,12 +40,18 @@ Full checklist + subagent budget: `docs/process/decision-workflow.md`. Core:
 - Overturn recorded decision → decision subagent → superseding ADR. Active ADRs immutable; superseded = removed + pointer in `docs/adr/README.md`.
 - Confirm-first only: outward/destructive beyond repo (publish, spend, shared-remote push, delete user data).
 
+## Autonomous goals
+
+Explicit whole-ready-epic hand-off → `rifty-goal-run`; data contract:
+`docs/backlog/README.md` §Autonomous goal. The user owns the frozen observable
+goal; the agent owns just-in-time units/mechanisms. Required discoveries stay
+reverse-linked. Budget/review trips re-cut the unit; slice done ≠ goal done.
+
 ## DoD (per PR)
-- [ ] no new deferred decisions or tech debt
-- [ ] implementation alligned with project goal
+- [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked; report slice/goal status separately
+- [ ] implementation aligned with project goal
 - [ ] `pnpm pr:check` pass
 - [ ] touches cache/persistence/network/concurrency → `## Fault matrix` rows covered by fault tests
-- [ ] review convergence gates satisfied: Contract+RED; Final+GREEN with 0 blockers; required finite checks green on one SHA
 - [ ] shipped capability carries observable acceptance proof (e2e/parity) in the same PR — source greps, fakes, and opt-in lanes do not close acceptance
 - [ ] `CHANGELOG.md` in affected packages
 - [ ] ADR for IRREVERSIBLE / backlog for provisional

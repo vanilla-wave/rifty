@@ -6,6 +6,11 @@
  * (everything served from the lockfile via the tarball cache).
  * One-package range bump: only that package re-resolves.
  */
+import { spawn } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   type Fetcher,
   type Packument,
@@ -15,6 +20,7 @@ import {
 } from '@riftydev/npm-client';
 import { MemoryVfs } from '@riftydev/vfs';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { makeLocalFetcher } from '../../integration/fixtures/local-registry.ts';
 
 function concat(parts: Uint8Array[]): Uint8Array {
   let total = 0;
@@ -97,6 +103,223 @@ async function makeCountingFetcher(
   return { fetch, calls };
 }
 
+type DriftLock = {
+  packages: Record<string, { version?: string; dependencies?: Record<string, string> }>;
+};
+
+type InstalledPackageIdentity = Readonly<{
+  name: string;
+  version: string;
+}>;
+
+type InstalledTreeSummary = Readonly<Record<string, InstalledPackageIdentity>>;
+
+function runNpm(cwd: string, args: string[], registry: string) {
+  return new Promise<{ code: number; output: string }>((resolve, reject) => {
+    const child = spawn('npm', args, {
+      cwd,
+      env: {
+        ...process.env,
+        npm_config_cache: join(cwd, '.npm-cache'),
+        npm_config_registry: registry,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 10_000,
+    });
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      output += String(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code: code ?? -1, output }));
+  });
+}
+
+function readNativeInstalledTree(
+  cwd: string,
+  packageJsonPaths: readonly string[],
+): InstalledTreeSummary {
+  const summary: Record<string, InstalledPackageIdentity> = {};
+  for (const relativePath of packageJsonPaths) {
+    const path = join(cwd, relativePath);
+    if (!existsSync(path)) continue;
+    let manifest: { name?: unknown; version?: unknown };
+    try {
+      manifest = JSON.parse(readFileSync(path, 'utf8')) as {
+        name?: unknown;
+        version?: unknown;
+      };
+    } catch {
+      // The interruption probe intentionally races npm's real file writes.
+      // An existing-but-not-yet-complete package.json is itself observable
+      // proof that the package-tree mutation is in flight.
+      summary[relativePath] = { name: '<incomplete>', version: '<incomplete>' };
+      continue;
+    }
+    if (typeof manifest.name !== 'string' || typeof manifest.version !== 'string') {
+      throw new Error(`installed package identity missing at ${relativePath}`);
+    }
+    summary[relativePath] = { name: manifest.name, version: manifest.version };
+  }
+  return summary;
+}
+
+async function readRiftyInstalledTree(
+  vfs: MemoryVfs,
+  root: string,
+  packageJsonPaths: readonly string[],
+): Promise<InstalledTreeSummary> {
+  const summary: Record<string, InstalledPackageIdentity> = {};
+  for (const relativePath of packageJsonPaths) {
+    const path = `${root}/${relativePath}`;
+    if (!(await vfs.exists(path))) continue;
+    const manifest = JSON.parse(await vfs.readFileText(path)) as {
+      name?: unknown;
+      version?: unknown;
+    };
+    if (typeof manifest.name !== 'string' || typeof manifest.version !== 'string') {
+      throw new Error(`installed package identity missing at ${relativePath}`);
+    }
+    summary[relativePath] = { name: manifest.name, version: manifest.version };
+  }
+  return summary;
+}
+
+function installedCount(summary: InstalledTreeSummary): number {
+  return Object.keys(summary).length;
+}
+
+function interruptNpmAtPartialTree(
+  cwd: string,
+  args: readonly string[],
+  registry: string,
+  packageJsonPaths: readonly string[],
+): Promise<{
+  signal: NodeJS.Signals | null;
+  partial: InstalledTreeSummary;
+}> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('npm', [...args], {
+      cwd,
+      env: {
+        ...process.env,
+        npm_config_cache: join(cwd, '.npm-cache'),
+        npm_config_registry: registry,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let output = '';
+    let frozenPartial: InstalledTreeSummary | null = null;
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, 10_000);
+    child.stdout.on('data', (chunk) => {
+      output += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      output += String(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (_code, signal) => {
+      clearTimeout(timeout);
+      if (timedOut) {
+        reject(new Error(`npm did not expose a partial package tree before timeout\n${output}`));
+        return;
+      }
+      if (!frozenPartial) {
+        reject(new Error(`npm exited before a partial package tree was observed\n${output}`));
+        return;
+      }
+      resolve({ signal, partial: frozenPartial });
+    });
+
+    const probe = (): void => {
+      if (child.exitCode !== null || child.signalCode !== null || frozenPartial) return;
+      const summary = readNativeInstalledTree(cwd, packageJsonPaths);
+      const count = installedCount(summary);
+      if (count > 0 && count < packageJsonPaths.length) {
+        child.kill('SIGSTOP');
+        setTimeout(() => {
+          frozenPartial = readNativeInstalledTree(cwd, packageJsonPaths);
+          child.kill('SIGKILL');
+        }, 10);
+        return;
+      }
+      setImmediate(probe);
+    };
+    probe();
+  });
+}
+
+async function waitForRiftyPartialTree(
+  vfs: MemoryVfs,
+  root: string,
+  packageJsonPaths: readonly string[],
+): Promise<InstalledTreeSummary> {
+  for (let attempt = 0; attempt < 100_000; attempt++) {
+    const summary = await readRiftyInstalledTree(vfs, root, packageJsonPaths);
+    const count = installedCount(summary);
+    if (count > 0 && count < packageJsonPaths.length) return summary;
+    if (count === packageJsonPaths.length) {
+      throw new Error('rifty completed the package tree before cancellation could interrupt it');
+    }
+    await Promise.resolve();
+  }
+  throw new Error('rifty did not expose a partial package tree');
+}
+
+async function startFixtureRegistry() {
+  const fixtureFetch = makeLocalFetcher().fetch;
+  let origin = '';
+  let requests = 0;
+  const server = createServer((request, response) => {
+    requests++;
+    void (async () => {
+      const path = decodeURIComponent(new URL(request.url ?? '/', 'http://fixture').pathname);
+      const served = await fixtureFetch(
+        path.startsWith('/tarball:') ? path.slice(1) : `packument:${path}`,
+      );
+      response.statusCode = served.status;
+      if (!served.ok) return response.end();
+      if (path.startsWith('/tarball:'))
+        return response.end(Buffer.from(await served.arrayBuffer()));
+      const packument = (await served.json()) as Packument;
+      for (const manifest of Object.values(packument.versions)) {
+        manifest.dist.tarball = `${origin}/${manifest.dist.tarball}`;
+      }
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify(packument));
+    })().catch((error: unknown) => {
+      response.statusCode = 500;
+      response.end(String(error));
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('fixture registry has no TCP port');
+  origin = `http://127.0.0.1:${address.port}`;
+  return { origin, server, requestCount: () => requests };
+}
+
+function driftSummary(lock: DriftLock, treeVersion: string) {
+  return {
+    edge: lock.packages['node_modules/diamond-conflict-parent']?.dependencies?.ms,
+    pin: lock.packages['node_modules/ms']?.version,
+    tree: treeVersion,
+  };
+}
+
 describe('install — lockfile reuse (ADR-0023)', () => {
   let vfs: MemoryVfs;
   let packuments: Record<string, Packument>;
@@ -124,10 +347,15 @@ describe('install — lockfile reuse (ADR-0023)', () => {
       }),
       'index.js': "module.exports = require('tiny') + 2;",
     });
+    const addedV1 = await makeTarGz({
+      'package.json': JSON.stringify({ name: 'added', version: '1.0.0' }),
+      'index.js': 'module.exports = 3;',
+    });
     tarballs = {
       'tarball:tiny-1.0.0.tgz': tinyV1,
       'tarball:wrapper-2.0.0.tgz': wrapperV2,
       'tarball:wrapper-3.0.0.tgz': wrapperV3,
+      'tarball:added-1.0.0.tgz': addedV1,
     };
     packuments = {
       tiny: {
@@ -154,6 +382,16 @@ describe('install — lockfile reuse (ADR-0023)', () => {
             version: '3.0.0',
             dependencies: { tiny: '^1.0.0' },
             dist: { tarball: 'tarball:wrapper-3.0.0.tgz' },
+          },
+        },
+      },
+      added: {
+        name: 'added',
+        versions: {
+          '1.0.0': {
+            name: 'added',
+            version: '1.0.0',
+            dist: { tarball: 'tarball:added-1.0.0.tgz' },
           },
         },
       },
@@ -197,14 +435,29 @@ describe('install — lockfile reuse (ADR-0023)', () => {
     calls.packument = 0;
     calls.tarball = 0;
 
-    // Bump wrapper to ^3.0.0 — tiny still satisfies its old pin, but the
-    // current implementation triggers a full re-resolve when any top-level
-    // range no longer matches the lockfile (simpler invariant; per-subgraph
-    // partial reuse is a future optimisation). The cache still saves the
-    // tarball roundtrip for tiny@1.0.0.
+    // Bump wrapper to ^3.0.0 — tiny still satisfies its old pin and is replayed
+    // without consulting moving registry metadata.
     await install('root', '0.0.0', { wrapper: '^3.0.0' }, { vfs, cwd: '/app', registry });
-    expect(calls.packument).toBeGreaterThan(0); // wrapper at minimum
+    expect(calls.packument).toBe(1);
     // tiny's tarball is served from cache; wrapper@3.0.0 is a new tarball.
+    expect(calls.tarball).toBe(1);
+  });
+
+  it('adding one direct dependency keeps the existing subgraph locked', async () => {
+    const { fetch, calls } = await makeCountingFetcher(packuments, tarballs);
+    const registry = new RegistryClient({ baseUrl: 'packument:', fetch });
+
+    await install('root', '0.0.0', { wrapper: '^2.0.0' }, { vfs, cwd: '/app', registry });
+    calls.packument = 0;
+    calls.tarball = 0;
+
+    await install(
+      'root',
+      '0.0.0',
+      { wrapper: '^2.0.0', added: '1.0.0' },
+      { vfs, cwd: '/app', registry },
+    );
+    expect(calls.packument).toBe(1);
     expect(calls.tarball).toBe(1);
   });
 
@@ -239,4 +492,173 @@ describe('install — lockfile reuse (ADR-0023)', () => {
     await install('root', '0.0.0', { tiny: '^1.0.0' }, { vfs, cwd: '/app', registry: registry2 });
     expect(calls2.tarball).toBe(1);
   });
+});
+
+describe('install — transitive lockfile range drift parity', () => {
+  it('[fault: frozen-assumption] matches npm install repair while npm ci rejects', async () => {
+    const { origin, server } = await startFixtureRegistry();
+    const workspace = mkdtempSync(join(tmpdir(), 'rifty-range-drift-'));
+    const request = { 'diamond-conflict-parent': '1.0.0' };
+    const rootPackage = JSON.stringify({
+      name: 'range-drift-probe',
+      version: '1.0.0',
+      private: true,
+      dependencies: request,
+    });
+    try {
+      writeFileSync(join(workspace, 'package.json'), rootPackage);
+      const flags = ['--ignore-scripts', '--no-audit', '--no-fund'];
+      expect((await runNpm(workspace, ['install', ...flags], origin)).code).toBe(0);
+      const lockPath = join(workspace, 'package-lock.json');
+      const drifted = JSON.parse(readFileSync(lockPath, 'utf8')) as DriftLock;
+      const parent = drifted.packages['node_modules/diamond-conflict-parent'];
+      if (!parent?.dependencies) throw new Error('npm seed lock missing parent edge');
+      parent.dependencies.ms = '2.1.3';
+      const driftText = JSON.stringify(drifted);
+      writeFileSync(lockPath, driftText);
+      const ci = await runNpm(workspace, ['ci', '--dry-run', ...flags], origin);
+      expect(ci.code).not.toBe(0);
+      expect(ci.output).toMatch(/ms@2\.0\.0 does not satisfy ms@2\.1\.3/);
+      expect(readFileSync(lockPath, 'utf8')).toBe(driftText);
+      expect((await runNpm(workspace, ['install', ...flags], origin)).code).toBe(0);
+      const nodeLock = JSON.parse(readFileSync(lockPath, 'utf8')) as DriftLock;
+      const nodeTree = JSON.parse(
+        readFileSync(join(workspace, 'node_modules/ms/package.json'), 'utf8'),
+      ) as { version: string };
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/app', { recursive: true });
+      await vfs.writeFile('/app/package-lock.json', driftText);
+      const rifty = await install('range-drift-probe', '1.0.0', request, {
+        vfs,
+        cwd: '/app',
+        registry: new RegistryClient({ baseUrl: origin }),
+      });
+      const riftyTree = JSON.parse(await vfs.readFileText('/app/node_modules/ms/package.json')) as {
+        version: string;
+      };
+      expect(driftSummary(rifty.lockfile, riftyTree.version)).toEqual(
+        driftSummary(nodeLock, nodeTree.version),
+      );
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  }, 30_000);
+});
+
+describe('install — interrupted tree repair parity', () => {
+  // Oracle recorded 2026-07-24: Node v24.16.0, npm 11.17.0.
+  it('[fault: torn-state] reconciles a partial tree from the existing lockfile and cache', async () => {
+    const { origin, server, requestCount } = await startFixtureRegistry();
+    const workspace = mkdtempSync(join(tmpdir(), 'rifty-interrupted-install-'));
+    const root = '/app';
+    const request = {
+      debug: '^4.4.1',
+      'diamond-conflict-parent': '1.0.0',
+      kleur: '4.1.5',
+      picocolors: '1.0.0',
+    };
+    const packageJsonPaths = [
+      'node_modules/debug/package.json',
+      'node_modules/ms/package.json',
+      'node_modules/diamond-conflict-parent/package.json',
+      'node_modules/diamond-conflict-parent/node_modules/ms/package.json',
+      'node_modules/kleur/package.json',
+      'node_modules/picocolors/package.json',
+    ] as const;
+    const rootPackage = JSON.stringify({
+      name: 'interrupted-install-probe',
+      version: '1.0.0',
+      private: true,
+      dependencies: request,
+    });
+    const flags = ['--ignore-scripts', '--no-audit', '--no-fund'];
+    try {
+      writeFileSync(join(workspace, 'package.json'), rootPackage);
+      expect((await runNpm(workspace, ['install', ...flags], origin)).code).toBe(0);
+      const nativeLockPath = join(workspace, 'package-lock.json');
+      const nativeLockText = readFileSync(nativeLockPath, 'utf8');
+      const expectedNativeTree = readNativeInstalledTree(workspace, packageJsonPaths);
+      expect(installedCount(expectedNativeTree)).toBe(packageJsonPaths.length);
+
+      const vfs = new MemoryVfs();
+      await vfs.mkdir(root, { recursive: true });
+      await vfs.writeFile(`${root}/package.json`, rootPackage);
+      await install({
+        vfs,
+        cwd: root,
+        registry: new RegistryClient({ baseUrl: origin }),
+      });
+      const riftyLockText = await vfs.readFileText(`${root}/package-lock.json`);
+      const expectedRiftyTree = await readRiftyInstalledTree(vfs, root, packageJsonPaths);
+      expect(expectedRiftyTree).toEqual(expectedNativeTree);
+      const registryRequestsAfterSeed = requestCount();
+
+      rmSync(join(workspace, 'node_modules'), { recursive: true });
+      const interruptedNative = await interruptNpmAtPartialTree(
+        workspace,
+        ['install', '--offline', ...flags],
+        origin,
+        packageJsonPaths,
+      );
+      expect(interruptedNative.signal).toBe('SIGKILL');
+      expect(installedCount(interruptedNative.partial)).toBeGreaterThan(0);
+      expect(installedCount(interruptedNative.partial)).toBeLessThan(packageJsonPaths.length);
+      expect(readFileSync(nativeLockPath, 'utf8')).toBe(nativeLockText);
+
+      await vfs.rm(`${root}/node_modules`, { recursive: true });
+      let riftyRegistryCalls = 0;
+      const offlineRegistry = new RegistryClient({
+        baseUrl: origin,
+        maxRetries: 0,
+        fetch: async () => {
+          riftyRegistryCalls++;
+          throw new Error('interrupted-install repair attempted network');
+        },
+      });
+      const controller = new AbortController();
+      const reason = new Error('interrupt package-tree mutation');
+      let markLinkReady!: () => void;
+      const linkReady = new Promise<void>((resolve) => {
+        markLinkReady = resolve;
+      });
+      const interruptedRifty = install({
+        vfs,
+        cwd: root,
+        registry: offlineRegistry,
+        signal: controller.signal,
+        assertPortablePaths: () => markLinkReady(),
+      });
+      await linkReady;
+      await waitForRiftyPartialTree(vfs, root, packageJsonPaths);
+      controller.abort(reason);
+      await expect(interruptedRifty).rejects.toBe(reason);
+      const riftyPartial = await readRiftyInstalledTree(vfs, root, packageJsonPaths);
+      expect(installedCount(riftyPartial)).toBeGreaterThan(0);
+      expect(installedCount(riftyPartial)).toBeLessThan(packageJsonPaths.length);
+      expect(await vfs.readFileText(`${root}/package-lock.json`)).toBe(riftyLockText);
+
+      expect((await runNpm(workspace, ['install', '--offline', ...flags], origin)).code).toBe(0);
+      const repairedNativeTree = readNativeInstalledTree(workspace, packageJsonPaths);
+      expect(repairedNativeTree).toEqual(expectedNativeTree);
+      expect(readFileSync(nativeLockPath, 'utf8')).toBe(nativeLockText);
+
+      const repairedRifty = await install({
+        vfs,
+        cwd: root,
+        registry: offlineRegistry,
+      });
+      expect(repairedRifty.provenance.resolution).toBe('lockfile');
+      expect(
+        repairedRifty.provenance.packages.every(({ transport }) => transport === 'cache'),
+      ).toBe(true);
+      expect(riftyRegistryCalls).toBe(0);
+      expect(requestCount()).toBe(registryRequestsAfterSeed);
+      expect(await readRiftyInstalledTree(vfs, root, packageJsonPaths)).toEqual(expectedRiftyTree);
+      expect(await vfs.readFileText(`${root}/package-lock.json`)).toBe(riftyLockText);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

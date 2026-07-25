@@ -91,6 +91,123 @@ async function makePackageTarballWithFiles(
   return await gzip(concat(...chunks, TAR_TRAILER));
 }
 
+describe('install — lifecycle cancellation (ADR-0314)', () => {
+  it('aborts a hung standard registry request with the caller reason before tree writes', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    let markFetchStarted!: () => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    const observedRequest: { signal?: AbortSignal } = {};
+    const registry = new RegistryClient({
+      baseUrl: '/registry',
+      maxRetries: 0,
+      fetch: async (_url, init) => {
+        if (init?.signal instanceof AbortSignal) observedRequest.signal = init.signal;
+        markFetchStarted();
+        return await new Promise<Response>(() => {});
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error('project closed during npm install');
+    const installing = install(
+      'root',
+      '1.0.0',
+      { kleur: '4.1.5' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        signal: controller.signal,
+      },
+    );
+
+    await fetchStarted;
+    controller.abort(reason);
+
+    await expect(installing).rejects.toBe(reason);
+    expect(observedRequest.signal?.aborted).toBe(true);
+    expect(await vfs.exists('/proj/node_modules')).toBe(false);
+    expect(await vfs.exists('/proj/package-lock.json')).toBe(false);
+  });
+
+  it('does not turn an Eddy abort into a standard-registry fallback', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const registry = new FakeRegistry(new Map());
+    const packument = vi.spyOn(registry, 'getPackument');
+    let markFetchStarted!: () => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    vi.stubGlobal('fetch', async () => {
+      markFetchStarted();
+      return await new Promise<Response>(() => {});
+    });
+    const controller = new AbortController();
+    const reason = new Error('project closed during Eddy acquisition');
+    try {
+      const installing = install(
+        'root',
+        '1.0.0',
+        { kleur: '4.1.5' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry,
+          resolverUrl: 'https://resolver.test/bundle',
+          signal: controller.signal,
+        },
+      );
+      await fetchStarted;
+      controller.abort(reason);
+
+      await expect(installing).rejects.toBe(reason);
+      expect(packument).not.toHaveBeenCalled();
+      expect(await vfs.exists('/proj/node_modules')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('aborts a stalled Eddy prefetch wait without trying another Eddy or registry request', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const registry = new FakeRegistry(new Map());
+    const packument = vi.spyOn(registry, 'getPackument');
+    const resolverPrefetch = {
+      take: () => new Promise<Response>(() => {}),
+    };
+    const fetch = vi.fn(async () => new Response('', { status: 500 }));
+    vi.stubGlobal('fetch', fetch);
+    const controller = new AbortController();
+    const reason = new Error('project closed during Eddy prefetch');
+    try {
+      const installing = install(
+        'root',
+        '1.0.0',
+        { kleur: '4.1.5' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry,
+          resolverUrl: 'https://resolver.test/bundle',
+          resolverPrefetch,
+          signal: controller.signal,
+        },
+      );
+      controller.abort(reason);
+
+      await expect(installing).rejects.toBe(reason);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(packument).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('install — package ingress preflight (ADR-0261)', () => {
   it('rejects a tar entry that escapes its package before linking any bytes', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
@@ -126,6 +243,70 @@ describe('install — package ingress preflight (ADR-0261)', () => {
     expect(await vfs.exists('/proj/node_modules')).toBe(false);
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
   });
+
+  it.each(['root', 'transitive', 'subtree-child'] as const)(
+    'keeps structural tar-path corruption loud across a %s optional boundary',
+    async (boundary) => {
+      const db = new Map<string, Map<string, FakeRegistryEntry>>();
+      db.set(
+        'evil',
+        new Map([
+          [
+            '1.0.0',
+            await makeEntry('evil', '1.0.0', {}, {}, { '../.rifty-install-stamp.json': 'forged' }),
+          ],
+        ]),
+      );
+      if (boundary !== 'root') {
+        const optionalName = boundary === 'transitive' ? 'evil' : 'optional-parent';
+        db.set(
+          'parent',
+          new Map([
+            [
+              '1.0.0',
+              await makeEntry(
+                'parent',
+                '1.0.0',
+                {},
+                { optionalDependencies: { [optionalName]: '1.0.0' } },
+              ),
+            ],
+          ]),
+        );
+        if (boundary === 'subtree-child') {
+          db.set(
+            'optional-parent',
+            new Map([['1.0.0', await makeEntry('optional-parent', '1.0.0', { evil: '1.0.0' })]]),
+          );
+        }
+      }
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+      if (boundary === 'root') {
+        await vfs.writeFile(
+          '/proj/package.json',
+          JSON.stringify({
+            name: 'root',
+            version: '1.0.0',
+            optionalDependencies: { evil: '1.0.0' },
+          }),
+        );
+      }
+
+      const installing =
+        boundary === 'root'
+          ? install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) })
+          : install(
+              'root',
+              '1.0.0',
+              { parent: '1.0.0' },
+              { vfs, cwd: '/proj', registry: new FakeRegistry(db) },
+            );
+
+      await expect(installing).rejects.toMatchObject({ code: 'EINVALIDPACKAGETAR' });
+      expect(await vfs.exists('/proj/node_modules')).toBe(false);
+    },
+  );
 
   it('preflights every actual target through the host policy before the first link write', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
@@ -505,24 +686,7 @@ describe('install — package.json defaults', () => {
     expect(await vfs.exists('/proj/node_modules/with-prepare/package.json')).toBe(true);
   });
 
-  it('uses the baked esbuild override before the registry lifecycle gate when the request admits 0.28.0', async () => {
-    const db = new Map<string, Map<string, FakeRegistryEntry>>();
-    db.set(
-      'esbuild',
-      new Map([
-        [
-          '0.28.0',
-          await makeEntry('esbuild', '0.28.0', {}, { scripts: { postinstall: 'node install.js' } }),
-        ],
-      ]),
-    );
-    db.set(
-      '@esbuild/wasi-preview1',
-      new Map([
-        ['0.28.0', await makeEntry('@esbuild/wasi-preview1', '0.28.0', {}, { cpu: ['wasm'] })],
-      ]),
-    );
-
+  it('materializes synthetic esbuild before registry lifecycle handling', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     await vfs.writeFile(
@@ -534,46 +698,23 @@ describe('install — package.json defaults', () => {
       }),
     );
 
-    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(new Map()) });
 
-    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual([
-      '@esbuild/wasi-preview1@0.28.0',
-    ]);
-    expect(await vfs.exists('/proj/node_modules/@esbuild/wasi-preview1/package.json')).toBe(true);
-    // ADR-0188: the installer now materializes the `esbuild` import name from
-    // the shadow-registry alias shim (was a playground boot-overlay concern).
+    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual(['esbuild@0.28.0']);
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
     expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.cjs')).toContain(
       '__rifty?.esbuild',
     );
+    expect(result.lockfile.packages['node_modules/esbuild']).toMatchObject({
+      version: '0.28.0',
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+    });
+    expect(result.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
   });
 
-  it('replays a transitive baked-override dep on the fast path without EBROKENLOCK', async () => {
-    // Regression (eddy fast-install, ADR-0182): a shadow-override target
-    // (esbuild → @esbuild/wasi-preview1) is stored in the lockfile under the
-    // TARGET key; the override SOURCE name (`esbuild`, here a transitive dep of
-    // `host`) has no entry of its own. `lockfileSubgraph` drops `esbuild` (no
-    // entry), so `subgraphFreeOfOverrideDivergence` never sees its redirect and
-    // the lockfile fast path is taken — the replay source must ALSO apply the
-    // override, else it looks up bare `esbuild`, misses, and throws
-    // EBROKENLOCK. Exactly the break the live eddy bundle hit on vite → esbuild.
+  it('replays a transitive synthetic esbuild recipe on the lockfile fast path', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { esbuild: '^0.28.0' })]]));
-    db.set(
-      'esbuild',
-      new Map([
-        [
-          '0.28.0',
-          await makeEntry('esbuild', '0.28.0', {}, { scripts: { postinstall: 'node install.js' } }),
-        ],
-      ]),
-    );
-    db.set(
-      '@esbuild/wasi-preview1',
-      new Map([
-        ['0.28.0', await makeEntry('@esbuild/wasi-preview1', '0.28.0', {}, { cpu: ['wasm'] })],
-      ]),
-    );
 
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
@@ -582,26 +723,24 @@ describe('install — package.json defaults', () => {
       JSON.stringify({ name: 'app', version: '1.0.0', dependencies: { host: '1.0.0' } }),
     );
 
-    // First install: live-resolve redirects esbuild → the pinned
-    // @esbuild/wasi-preview1 and writes the lockfile (no node_modules/esbuild).
     const first = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
-    expect(first.lockfile.packages['node_modules/@esbuild/wasi-preview1']?.version).toBe('0.28.0');
-    expect(first.lockfile.packages['node_modules/esbuild']).toBeUndefined();
+    expect(first.lockfile.packages['node_modules/esbuild']).toMatchObject({
+      version: '0.28.0',
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+    });
 
-    // Second install: the lockfile fast path replays. Must NOT throw EBROKENLOCK.
     const second = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
     expect(second.packages.map((p) => `${p.name}@${p.version}`).sort()).toEqual([
-      '@esbuild/wasi-preview1@0.28.0',
+      'esbuild@0.28.0',
       'host@1.0.0',
     ]);
+    expect(second.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
   });
 
-  it('throws EBROKENLOCK on replay when an override redirect no longer satisfies the locked version', async () => {
-    // The lockfile fast path replays the override TARGET name, but a stale
-    // target version must not be reused silently: if the override range moved
-    // (foo → bar@1.0.0 becomes foo → bar@2.0.0) while the lockfile still pins
-    // bar@1.0.0, the source name has no entry so `subgraphFreeOfOverrideDivergence`
-    // can't catch it — the replay itself must refuse, loudly, not install stale.
+  it('re-resolves an override redirect that no longer admits the locked target version', async () => {
+    // An override range is current package policy. If foo → bar@1.0.0 becomes
+    // foo → bar@2.0.0, ADR-0023 treats that edge as a metadata frontier rather
+    // than replaying the stale target or requiring lockfile deletion.
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { foo: '1.0.0' })]]));
     db.set(
@@ -627,17 +766,14 @@ describe('install — package.json defaults', () => {
     const first = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
     expect(first.lockfile.packages['node_modules/bar']?.version).toBe('1.0.0');
 
-    // Second install: the override now wants bar@2.0.0, but the lockfile still
-    // pins bar@1.0.0. The fast-path replay must throw EBROKENLOCK, not silently
-    // reuse 1.0.0.
+    // Second install: only the changed override edge re-resolves.
     await vfs.writeFile('/proj/package.json', pkg('bar@2.0.0'));
-    let caught: unknown;
-    try {
-      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
-    } catch (err) {
-      caught = err;
-    }
-    expect((caught as { code?: string })?.code).toBe('EBROKENLOCK');
+    const second = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    expect(second.lockfile.packages['node_modules/bar']?.version).toBe('2.0.0');
+    expect(second.packages.map((p) => `${p.name}@${p.version}`).sort()).toEqual([
+      'bar@2.0.0',
+      'host@1.0.0',
+    ]);
   });
 
   it('throws a deliberate error for malformed root package.json shapes', async () => {
@@ -840,8 +976,169 @@ describe('install — nested install for conflicting transitive versions (M11)',
   // install died. The live express experiment on 2026-05-27 hit exactly this
   // shape on `ms: 2.1.3 vs 2.0.0` and pinned M11 nested install as a
   // prerequisite for M9 closure. The contract below documents the M11
-  // semantics: first-seen wins flat; subsequent conflicting versions get
-  // placed under the requesting parent's `node_modules/`.
+  // semantics: direct requests reserve flat identities first; among descendant
+  // requests, first-seen wins and later conflicts nest under their parent.
+  it.each([
+    ['parent first', { parent: '1.0.0', shared: '2.0.0' }],
+    ['direct dependency first', { shared: '2.0.0', parent: '1.0.0' }],
+  ])(
+    '[fault: observable-order] reserves the root-visible slot for a direct dependency (%s)',
+    async (_label, request) => {
+      const db = new Map<string, Map<string, FakeRegistryEntry>>();
+      db.set(
+        'parent',
+        new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]),
+      );
+      db.set(
+        'shared',
+        new Map([
+          ['1.0.0', await makeEntry('shared', '1.0.0')],
+          ['2.0.0', await makeEntry('shared', '2.0.0')],
+        ]),
+      );
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+
+      const result = await install('root', '1.0.0', request, {
+        vfs,
+        cwd: '/proj',
+        registry: new FakeRegistry(db),
+      });
+
+      expect(result.lockfile.packages['node_modules/shared']?.version).toBe('2.0.0');
+      expect(result.lockfile.packages['node_modules/parent/node_modules/shared']?.version).toBe(
+        '1.0.0',
+      );
+      expect(result.lockfile.packages['/node_modules/shared']).toBeUndefined();
+    },
+  );
+
+  it('dedupes a direct root and an earlier transitive request for the same identity', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]));
+    db.set('shared', new Map([['1.0.0', await makeEntry('shared', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { parent: '1.0.0', shared: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new FakeRegistry(db) },
+    );
+
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('1.0.0');
+    expect(result.lockfile.packages['node_modules/parent/node_modules/shared']).toBeUndefined();
+    expect(result.packages.filter((pkg) => pkg.name === 'shared')).toHaveLength(1);
+  });
+
+  it('does not reserve a root slot for an optional direct dependency whose acquisition fails', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]));
+    db.set(
+      'shared',
+      new Map([
+        ['1.0.0', await makeEntry('shared', '1.0.0')],
+        ['2.0.0', await makeEntry('shared', '2.0.0')],
+      ]),
+    );
+    class FailingOptionalRegistry extends FakeRegistry {
+      override async getTarball(tarballUrl: string): Promise<Uint8Array> {
+        if (tarballUrl === 'fake://shared/2.0.0') {
+          throw new Error('optional shared@2 acquisition failed');
+        }
+        return await super.getTarball(tarballUrl);
+      }
+    }
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { parent: '1.0.0' },
+        optionalDependencies: { shared: '2.0.0' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FailingOptionalRegistry(db) });
+
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('1.0.0');
+    expect(result.lockfile.packages['node_modules/parent/node_modules/shared']).toBeUndefined();
+  });
+
+  it('[fault: torn-state] does not reserve a root slot for an optional direct dependency whose archive is invalid', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { shared: '1.0.0' })]]));
+    const invalidOptional = await makeEntry('shared', '2.0.0');
+    invalidOptional.tarball = new Uint8Array([1, 2, 3]);
+    db.set(
+      'shared',
+      new Map([
+        ['1.0.0', await makeEntry('shared', '1.0.0')],
+        ['2.0.0', invalidOptional],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { parent: '1.0.0' },
+        optionalDependencies: { shared: '2.0.0' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.lockfile.packages['node_modules/shared']?.version).toBe('1.0.0');
+    expect(result.lockfile.packages['node_modules/parent/node_modules/shared']).toBeUndefined();
+  });
+
+  it('[fault: torn-state] does not let a failed optional materialization suppress a later required visit', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'optional-parent',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'optional-parent',
+            '1.0.0',
+            {},
+            { optionalDependencies: { shared: '1.0.0' } },
+          ),
+        ],
+      ]),
+    );
+    db.set(
+      'required-parent',
+      new Map([['1.0.0', await makeEntry('required-parent', '1.0.0', { shared: '1.0.0' })]]),
+    );
+    const invalidShared = await makeEntry('shared', '1.0.0');
+    invalidShared.tarball = new Uint8Array([1, 2, 3]);
+    db.set('shared', new Map([['1.0.0', invalidShared]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(
+        install(
+          'root',
+          '1.0.0',
+          { 'optional-parent': '1.0.0', 'required-parent': '1.0.0' },
+          { vfs, cwd: '/proj', registry: new FakeRegistry(db) },
+        ),
+      ).rejects.toThrow();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('nests the second version under the requesting parent (simple diamond)', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('a', new Map([['1.0.0', await makeEntry('a', '1.0.0', { c: '1.0.0' })]]));
