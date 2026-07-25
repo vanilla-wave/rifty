@@ -8,8 +8,13 @@ import {
   planAppliedShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
 } from './planner.ts';
+import { strictShadowPlanCodecCases } from './strict-codec.contract-fixtures.ts';
 
 describe('shadow substitution planner contract', () => {
+  it.each(strictShadowPlanCodecCases)('strict-decodes $name at planner ingress', ({ value }) => {
+    expect(() => decodeShadowAssetPlan(value())).toThrow();
+  });
+
   it('replays exact synthetic esbuild identity and binding', () => {
     const applied = attestBuiltinShadowSubstitution({
       trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },

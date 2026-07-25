@@ -463,7 +463,20 @@ export function createOriginExclusiveShadowAssetManager(
     ensure(planValue) {
       if (state !== 'open')
         return Promise.reject(new ShadowAssetError('ready', `manager is ${state}`));
-      const plan = decodeShadowAssetPlan(planValue);
+      let plan: ShadowAssetPlan;
+      try {
+        plan = decodeShadowAssetPlan(planValue);
+      } catch (error) {
+        return Promise.reject(
+          new ShadowAssetError(
+            'ready',
+            `shadow asset plan rejected at manager ingress: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+            { cause: error },
+          ),
+        );
+      }
       const lifecycle = lifecycleController.signal;
       return track(
         (async () => {

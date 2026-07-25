@@ -4,14 +4,50 @@ import {
   createOriginExclusiveShadowAssetManager,
 } from './manager.ts';
 import { attestBuiltinShadowSubstitution, planAppliedShadowSubstitutions } from './planner.ts';
+import type { ShadowAssetPlan } from './planner.ts';
 import * as shadowPortModule from './port.ts';
 import {
   ShadowAssetPortError,
+  type ShadowAssetPortServer,
   createShadowAssetPortClient,
   serveTrustedReadyShadowAssets,
 } from './port.ts';
+import { strictShadowPlanCodecCases, validShadowPlan } from './strict-codec.contract-fixtures.ts';
 
 describe('ready-only shadow asset port', () => {
+  it.each(strictShadowPlanCodecCases)(
+    'strict-decodes $name at manager-owned server construction',
+    ({ value }) => {
+      const channel = new MessageChannel();
+      let server: ShadowAssetPortServer | undefined;
+      expect(() => {
+        server = serveTrustedReadyShadowAssets(channel.port1, {
+          plan: value() as ShadowAssetPlan,
+          read: async () => new Uint8Array(),
+        });
+      }).toThrow(ShadowAssetPortError);
+      server?.dispose();
+      channel.port1.close();
+      channel.port2.close();
+    },
+  );
+
+  it.each(strictShadowPlanCodecCases)(
+    'strict-decodes $name at port-client ready ingress',
+    async ({ value }) => {
+      const channel = new MessageChannel();
+      const client = createShadowAssetPortClient(channel.port2, { deadlineMs: 1_000 });
+      channel.port2.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'ready', plan: value(), bindings: validShadowPlan().bindings },
+        }),
+      );
+
+      await expect(client.ready).rejects.toBeInstanceOf(ShadowAssetPortError);
+      channel.port1.close();
+    },
+  );
+
   it('keeps ready server construction behind manager ownership', () => {
     expect(shadowPortModule).not.toHaveProperty('serveReadyShadowAssets');
   });

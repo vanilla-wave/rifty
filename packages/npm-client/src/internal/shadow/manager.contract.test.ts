@@ -4,6 +4,7 @@ import { canonicalShadowJson, shadowSha256 } from '@riftydev/shadow-registry/int
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import {
+  ShadowAssetError,
   type ShadowAssetStorage,
   type ShadowAssetStorageEntry,
   createMemoryShadowAssetStorage,
@@ -11,8 +12,13 @@ import {
   createVfsShadowAssetStorage,
   probeBrowserShadowAssetStorageClass,
 } from './manager.ts';
-import { attestBuiltinShadowSubstitution, planAppliedShadowSubstitutions } from './planner.ts';
+import {
+  type ShadowAssetPlan,
+  attestBuiltinShadowSubstitution,
+  planAppliedShadowSubstitutions,
+} from './planner.ts';
 import { createShadowAssetPortClient } from './port.ts';
+import { strictShadowPlanCodecCases } from './strict-codec.contract-fixtures.ts';
 
 const plan = planAppliedShadowSubstitutions([
   attestBuiltinShadowSubstitution({
@@ -59,6 +65,24 @@ function adaptVfs(
 }
 
 describe('shadow asset manager contract', () => {
+  it.each(strictShadowPlanCodecCases)(
+    'strict-decodes $name at manager ensure ingress',
+    async ({ value }) => {
+      const manager = createOriginExclusiveShadowAssetManager({
+        storage: createMemoryShadowAssetStorage(),
+        source: {
+          acquire: async () => {
+            throw new Error('invalid plan must not acquire');
+          },
+        },
+      });
+
+      await expect(
+        Promise.resolve().then(() => manager.ensure(value() as ShadowAssetPlan)),
+      ).rejects.toBeInstanceOf(ShadowAssetError);
+    },
+  );
+
   it('publishes object → receipt → ready and cold-reopens without acquisition', async () => {
     const base = createMemoryShadowAssetStorage();
     const writes: ShadowAssetStorageEntry[] = [];

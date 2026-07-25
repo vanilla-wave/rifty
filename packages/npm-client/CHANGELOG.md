@@ -60,6 +60,10 @@
 
 ### Fixed
 
+- Strict-decode the complete shadow-plan mutation matrix at planner, manager,
+  port-server, and port-client ingress; manager/port failures now retain their
+  typed boundary errors instead of leaking raw decoder exceptions.
+
 - Concurrent shadow-manager close callers join the same terminal
   storage-close outcome.
 - Install cancellation now checkpoints the package linker between settled

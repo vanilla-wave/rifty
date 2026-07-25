@@ -74,7 +74,15 @@ function frameRecord(value: unknown, label: string): Record<string, unknown> {
 }
 
 function descriptorFromFrame(frame: Record<string, unknown>): ShadowAssetPortDescriptor {
-  const plan = decodeShadowAssetPlan(frame.plan);
+  let plan: ShadowAssetPlan;
+  try {
+    plan = decodeShadowAssetPlan(frame.plan);
+  } catch (error) {
+    throw new ShadowAssetPortError(
+      `ready handshake plan is invalid: ${error instanceof Error ? error.message : String(error)}`,
+      false,
+    );
+  }
   let bindingValues: readonly unknown[];
   try {
     bindingValues = decodeDenseDataArray(frame.bindings, 'ready handshake bindings');
@@ -115,14 +123,22 @@ function descriptorFromFrame(frame: Record<string, unknown>): ShadowAssetPortDes
   return Object.freeze({ plan, bindings: plan.bindings });
 }
 
-/** Package-private core for owner-held decoded/frozen readiness. */
+/** Package-private server boundary; re-decodes even owner-held readiness. */
 export function serveTrustedReadyShadowAssets(
   port: MessagePort,
   reader: ReadyShadowAssetReader,
 ): ShadowAssetPortServer {
-  const plan = reader.plan;
-  if (!Object.isFrozen(plan) || !Object.isFrozen(plan.assets)) {
-    throw new TypeError('trusted ready shadow plan invariant failed');
+  let plan: ShadowAssetPlan;
+  try {
+    plan = decodeShadowAssetPlan(reader.plan);
+  } catch (error) {
+    port.close();
+    throw new ShadowAssetPortError(
+      `shadow asset server plan is invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      false,
+    );
   }
   const admitted = new Set(plan.assets.map((asset) => asset.id));
   const active = new Set<number>();
