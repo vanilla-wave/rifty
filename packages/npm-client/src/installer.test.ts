@@ -707,7 +707,7 @@ describe('install — package.json defaults', () => {
     );
     expect(result.lockfile.packages['node_modules/esbuild']).toMatchObject({
       version: '0.28.0',
-      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
     });
     expect(result.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
   });
@@ -726,7 +726,7 @@ describe('install — package.json defaults', () => {
     const first = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
     expect(first.lockfile.packages['node_modules/esbuild']).toMatchObject({
       version: '0.28.0',
-      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
     });
 
     const second = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });

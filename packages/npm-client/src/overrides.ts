@@ -28,11 +28,12 @@ export function resolveOverride(
   name: string,
   parent: string | undefined,
   userOverrides: OverrideMap = {},
+  builtinOverrides: Readonly<OverrideMap> = bakedOverrides,
 ): ResolvedOverrideTarget | null {
   const key = parent ? `${parent}>${name}` : name;
   const userMatch = userOverrides[key] ?? userOverrides[name];
   if (userMatch) return { ...parseTarget(userMatch), source: 'user' };
-  const builtin = bakedOverrides[name];
+  const builtin = builtinOverrides[name];
   if (builtin) return { ...parseTarget(builtin), source: 'baked' };
   return null;
 }

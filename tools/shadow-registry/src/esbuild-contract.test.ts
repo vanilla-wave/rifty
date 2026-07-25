@@ -38,7 +38,7 @@ async function loadCurrentSyntheticPackage(
   runtime: EsbuildContractApi,
 ): Promise<EsbuildContractModules> {
   const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-    (candidate) => candidate.id === 'rifty.shadow-substitution.esbuild.v1',
+    (candidate) => candidate.id === 'rifty.shadow-substitution.esbuild.v2',
   );
   if (!recipe) throw new Error('esbuild contract: synthetic recipe is missing');
   const container = mkdtempSync(join(tmpdir(), '.rifty-esbuild-synthetic-contract-'));
