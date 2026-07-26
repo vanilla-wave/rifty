@@ -3,6 +3,7 @@ import { gotoHarness, sealedWorkbenchFixtureUrl } from './fixtures.ts';
 
 const PREVIEW_PORT = 43892;
 const RESPONSE_MARKER = 'supervisor-descendant-alive';
+const SUCCESSOR_MARKER = 'successor-after-peer-death';
 
 test('supervisor peer death physically retires its descendant and invalidates the public preview', async ({
   page,
@@ -11,7 +12,7 @@ test('supervisor peer death physically retires its descendant and invalidates th
   await gotoHarness(page);
 
   const result = await page.evaluate(
-    async ({ fixtureUrl, port, responseMarker }) => {
+    async ({ fixtureUrl, port, responseMarker, successorMarker }) => {
       interface PreviewEntry {
         readonly port: number;
         readonly url: string;
@@ -91,9 +92,13 @@ test('supervisor peer death physically retires its descendant and invalidates th
           }
         | undefined;
       let run: ReturnType<NonNullable<typeof terminal>['run']> | undefined;
+      let successorTerminal: typeof terminal;
+      let successorRun: typeof run;
       let detachTerminal: (() => void) | undefined;
+      let detachSuccessorTerminal: (() => void) | undefined;
       let detachPreviews: (() => void) | undefined;
       let transcript = '';
+      let successorTranscript = '';
 
       try {
         await fixture.openSealedWorkbenchFixture({
@@ -149,6 +154,18 @@ crashChannel.addEventListener('message', (event) => {
       globalThis.close();
     });
   }
+});
+`,
+        );
+        await fixture.writeProjectText(
+          '/scratch/peer-death-successor.mjs',
+          `import { createServer } from 'node:http';
+
+const server = createServer((_request, response) => {
+  response.end(${JSON.stringify(successorMarker)});
+});
+server.listen(${String(port)}, '127.0.0.1', () => {
+  process.stdout.write('SUCCESSOR_BOUND_SAME_PORT\\n');
 });
 `,
         );
@@ -247,6 +264,39 @@ crashChannel.addEventListener('message', (event) => {
           15_000,
         );
 
+        const reopenedTerminal = project.terminals.open() as NonNullable<typeof terminal>;
+        successorTerminal = reopenedTerminal;
+        detachSuccessorTerminal = reopenedTerminal.attach((chunk: string) => {
+          successorTranscript += chunk;
+        });
+        const replacementRun = reopenedTerminal.run('node peer-death-successor.mjs');
+        successorRun = replacementRun;
+        await withTimeout(replacementRun.ready, 'same-port successor terminal admission', 15_000);
+        await waitUntil(
+          () =>
+            successorTranscript.includes('SUCCESSOR_BOUND_SAME_PORT') &&
+            previewSnapshots.some((snapshot) => snapshot.some((entry) => entry.port === port)),
+          'same-port successor bind and preview',
+          30_000,
+        );
+        const successorPreview = [...previewSnapshots]
+          .reverse()
+          .flat()
+          .find((entry) => entry.port === port);
+        if (successorPreview === undefined) {
+          throw new Error('same-port successor preview was lost');
+        }
+        const successorResponse = await withTimeout(
+          fetch(new URL(successorPreview.url, location.href), { cache: 'no-store' }),
+          'same-port successor routed response',
+          15_000,
+        );
+        const successorBody = await withTimeout(
+          successorResponse.text(),
+          'same-port successor routed response body',
+          15_000,
+        );
+
         return {
           before: {
             responseOk: beforeResponse.ok,
@@ -257,11 +307,29 @@ crashChannel.addEventListener('message', (event) => {
           exit,
           finalPreviewSnapshot: previewSnapshots.at(-1) ?? null,
           route,
+          successor: {
+            responseOk: successorResponse.ok,
+            body: successorBody,
+            transcript: successorTranscript,
+          },
         };
       } finally {
         detachTerminal?.();
+        detachSuccessorTerminal?.();
         detachPreviews?.();
         crashChannel.close();
+        if (successorRun !== undefined) {
+          await withTimeout(successorRun.close(), 'same-port successor cleanup', 10_000).catch(
+            () => {},
+          );
+        }
+        if (successorTerminal !== undefined) {
+          await withTimeout(
+            successorTerminal.close(),
+            'same-port successor terminal cleanup',
+            10_000,
+          ).catch(() => {});
+        }
         if (run !== undefined) {
           await withTimeout(run.close(), 'supervisor run cleanup', 10_000).catch(() => {});
         }
@@ -279,7 +347,12 @@ crashChannel.addEventListener('message', (event) => {
         }
       }
     },
-    { fixtureUrl: sealedWorkbenchFixtureUrl, port: PREVIEW_PORT, responseMarker: RESPONSE_MARKER },
+    {
+      fixtureUrl: sealedWorkbenchFixtureUrl,
+      port: PREVIEW_PORT,
+      responseMarker: RESPONSE_MARKER,
+      successorMarker: SUCCESSOR_MARKER,
+    },
   );
 
   expect(result.before.responseOk).toBe(true);
@@ -296,4 +369,9 @@ crashChannel.addEventListener('message', (event) => {
   } else {
     expect(result.route.message).not.toBe('');
   }
+  expect(result.successor).toMatchObject({
+    responseOk: true,
+    body: SUCCESSOR_MARKER,
+    transcript: expect.stringContaining('SUCCESSOR_BOUND_SAME_PORT'),
+  });
 });

@@ -676,6 +676,9 @@ process.stdout.write(
       handlePid: child.pid,
       ready: childReady,
     },
+    ps: {
+      handlePid: ps.pid,
+    },
     snapshot,
   }) + '\\n',
 );
@@ -709,6 +712,7 @@ await worker.terminate();
         readonly handlePid: number;
         readonly ready: { readonly pid: number; readonly ppid: number };
       };
+      readonly ps: { readonly handlePid: number };
       readonly snapshot: {
         readonly code: number | null;
         readonly signal: string | null;
@@ -748,6 +752,22 @@ await worker.terminate();
       pid: observed.child.handlePid,
     });
     expect(rows.filter(({ pid }) => pid === observed.parent.pid)).toHaveLength(1);
+    expect([...rows].sort((left, right) => left.pid - right.pid)).toEqual(
+      [
+        {
+          ppid: observed.parent.ppid,
+          pid: observed.parent.pid,
+        },
+        {
+          ppid: observed.parent.pid,
+          pid: observed.child.handlePid,
+        },
+        {
+          ppid: observed.parent.pid,
+          pid: observed.ps.handlePid,
+        },
+      ].sort((left, right) => left.pid - right.pid),
+    );
   } finally {
     await closeOwner(page);
   }
