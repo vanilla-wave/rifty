@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const GUARDED_STATUSES = new Set(['ready', 'in-progress']);
 const EXACT_SHA_RE = /^[0-9a-f]{40}$/u;
 const EPIC_PATH_RE = /^docs\/backlog\/epics\/(?!README\.md$|TEMPLATE\.md$)([\w-]+)\.md$/u;
-const BACKLOG_CONTRACT_RE = /^docs\/backlog\/.+\.md$/u;
+const BACKLOG_CONTRACT_RE = /^docs\/.+\.md$/u; // contract-side docs: backlog, ADR, process
 
 /** Every Goal-Baseline declaration from env or the GitHub PR body. */
 export function declaredGoals(env, readEvent) {
