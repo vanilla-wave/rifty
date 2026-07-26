@@ -245,6 +245,7 @@ server.listen(${String(port)}, '127.0.0.1', () => {
           'supervisor peer-death preview invalidation',
           15_000,
         );
+        const peerDeathPreviewSnapshot = previewSnapshots.at(-1) ?? null;
 
         const route = await withTimeout<RouteObservation>(
           fetch(new URL(livePreview.url, location.href), { cache: 'no-store' }).then(
@@ -264,6 +265,7 @@ server.listen(${String(port)}, '127.0.0.1', () => {
           15_000,
         );
 
+        const successorSnapshotStart = previewSnapshots.length;
         const reopenedTerminal = project.terminals.open() as NonNullable<typeof terminal>;
         successorTerminal = reopenedTerminal;
         detachSuccessorTerminal = reopenedTerminal.attach((chunk: string) => {
@@ -275,11 +277,14 @@ server.listen(${String(port)}, '127.0.0.1', () => {
         await waitUntil(
           () =>
             successorTranscript.includes('SUCCESSOR_BOUND_SAME_PORT') &&
-            previewSnapshots.some((snapshot) => snapshot.some((entry) => entry.port === port)),
+            previewSnapshots
+              .slice(successorSnapshotStart)
+              .some((snapshot) => snapshot.some((entry) => entry.port === port)),
           'same-port successor bind and preview',
           30_000,
         );
-        const successorPreview = [...previewSnapshots]
+        const successorSnapshots = previewSnapshots.slice(successorSnapshotStart);
+        const successorPreview = [...successorSnapshots]
           .reverse()
           .flat()
           .find((entry) => entry.port === port);
@@ -305,12 +310,13 @@ server.listen(${String(port)}, '127.0.0.1', () => {
             preview: livePreview,
           },
           exit,
-          finalPreviewSnapshot: previewSnapshots.at(-1) ?? null,
+          peerDeathPreviewSnapshot,
           route,
           successor: {
             responseOk: successorResponse.ok,
             body: successorBody,
             transcript: successorTranscript,
+            previewSnapshot: successorSnapshots.at(-1) ?? null,
           },
         };
       } finally {
@@ -363,7 +369,7 @@ server.listen(${String(port)}, '127.0.0.1', () => {
     kind: 'error',
     message: expect.stringMatching(/peer|exited unexpectedly|closed/u),
   });
-  expect(result.finalPreviewSnapshot).toEqual([]);
+  expect(result.peerDeathPreviewSnapshot).toEqual([]);
   if (result.route.kind === 'response') {
     expect(result.route.ok, result.route.body).toBe(false);
   } else {
@@ -373,5 +379,11 @@ server.listen(${String(port)}, '127.0.0.1', () => {
     responseOk: true,
     body: SUCCESSOR_MARKER,
     transcript: expect.stringContaining('SUCCESSOR_BOUND_SAME_PORT'),
+    previewSnapshot: [
+      expect.objectContaining({
+        port: PREVIEW_PORT,
+        source: 'node',
+      }),
+    ],
   });
 });
