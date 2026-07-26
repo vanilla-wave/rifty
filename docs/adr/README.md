@@ -183,6 +183,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0317 | Vite 8 build and preview through installed CLI |
 | 0320 | Define instant restore runtime asset availability |
 | 0327 | Installed nodemon owns the Workbench Node-server dev loop |
+| 0329 | Authority-owned project Save rebinds exact installed-tree trust |
 
 ### toolchain-build
 
@@ -380,6 +381,7 @@ superseded.
 | 0182 launch speed quote | 0182 note 2026-07-07 | production `auto` browser benchmark is 1.88x; the older ~6x remains only the Node/sandbox model, and h2/h3 claims stay gated by the transport-matrix item |
 | 0187 command-site "returns only when durable" clause | 0261 | `npm install` exit no longer awaits the drain; one stamp authority fences mutation and promotes in background (every other 0187 clause stands) |
 | 0194 §8 learned-pin 30-min hard-TTL clause | 0261 | freshness is SWR: fresh <1800s, stale from 1800s to <24h, dropped at 24h |
+| 0261 every copied project reinstalls consequence | 0329 | ordinary copies stay untrusted; authority-mediated destructive Save rebinds exact trust after destination proof |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |
 | 0188 bridge-backed dual esbuild entries | 0226 / note 2026-07-13 | one install-time CJS overlay reads the exact Worker-owned runtime slot; other 0188 installer/shim/provenance clauses stand |
 | 0310 no-generic-file-change Sass seam | 0328 / note 2026-07-25 | recipe v2 adds the missing generic admission, dependency-projection, and bin authorities once |
