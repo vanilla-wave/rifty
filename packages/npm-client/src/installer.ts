@@ -82,7 +82,11 @@ import {
   buildInstallLockfile,
   linkInstallTree,
 } from './linker.ts';
-import { type OverrideMap, type ResolvedOverrideTarget, resolveOverride } from './overrides.ts';
+import {
+  type OverrideMap,
+  type ResolvedOverrideTarget,
+  resolveOverrideWithBuiltinAuthority,
+} from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import {
@@ -1407,7 +1411,12 @@ function resolveEffectivePackageRequestWithAuthority(
   if (authority === BUILTIN_SHADOW_INSTALL_AUTHORITY) {
     return resolveEffectivePackageRequest(name, range, parent, userOverrides);
   }
-  const override = resolveOverride(name, parent, userOverrides, authority.builtinOverrides);
+  const override = resolveOverrideWithBuiltinAuthority(
+    name,
+    parent,
+    userOverrides ?? {},
+    authority.builtinOverrides,
+  );
   return {
     override,
     effectiveName: override?.name ?? name,

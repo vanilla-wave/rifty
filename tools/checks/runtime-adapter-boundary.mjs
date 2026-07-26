@@ -16,6 +16,7 @@ export const GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/npm-client/src/installer.ts',
   'packages/npm-client/src/linker.ts',
   'packages/npm-client/src/package-bin.ts',
+  'packages/npm-client/src/internal/shadow/admission.ts',
   'packages/npm-client/src/internal/shadow/planner.ts',
   'packages/npm-client/src/internal/shadow/manager.ts',
   'packages/npm-client/src/internal/shadow/port.ts',
@@ -40,14 +41,8 @@ export const PACKAGE_BIN_CONSUMER_MODULES = Object.freeze([
 const NPM_CLIENT_SOURCE_ROOT = 'packages/npm-client/src';
 const TYPESCRIPT_SOURCE = /\.(?:[cm]?ts|tsx)$/u;
 const NON_PRODUCTION_SOURCE =
-  /\.(?:test|spec|fixture|fixtures|contract-fixtures|generated)\.(?:[cm]?ts|tsx)$/u;
-const NON_PRODUCTION_DIRECTORIES = new Set([
-  '__tests__',
-  '_test-fixtures',
-  'generated',
-  'test',
-  'tests',
-]);
+  /\.(?:test|spec|fixture|fixtures|contract-fixtures)\.(?:[cm]?ts|tsx)$/u;
+const NON_PRODUCTION_DIRECTORIES = new Set(['__tests__', '_test-fixtures', 'test', 'tests']);
 
 const CONSUMER_NAME = /(?:^|[^a-z])(?:esbuild|vite|sass(?:-embedded)?|lightningcss)(?:[^a-z]|$)/iu;
 const CONSUMER_IDENTIFIER = /(?:esbuild|vite|sass|lightningcss)/iu;
