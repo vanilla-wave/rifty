@@ -21,8 +21,6 @@ export const EXTRACTION_MAP = [
   ['glue/install-stamp-authority.ts', 'glue/install-stamp-authority.ts'],
   ['glue/install-stamp.test.ts', 'glue/install-stamp.test.ts'],
   ['glue/install-stamp.ts', 'glue/install-stamp.ts'],
-  ['glue/node-child-ipc.test.ts', 'glue/node-child-ipc.test.ts'],
-  ['glue/node-child-ipc.ts', 'glue/node-child-ipc.ts'],
   ['glue/npm-shell-command.test.ts', 'glue/npm-shell-command.test.ts'],
   ['glue/npm-shell-command.ts', 'glue/npm-shell-command.ts'],
   ['glue/owner-bridge-key.ts', 'glue/owner-bridge-key.ts'],

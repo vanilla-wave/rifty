@@ -16,17 +16,16 @@ import { projectRuntimeShellWord } from '../workbench/internal/node-command.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
-import { binNameOf } from './vite-cli-prep.ts';
 import { readNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
-import { createOwnerProcessListCommand } from './owner-process-list-command.ts';
 import type {
   OwnerPackageConfig,
   OwnerPackageMutationKind,
   OwnerPackageState,
 } from './owner-package-state.ts';
+import { createOwnerProcessListCommand } from './owner-process-list-command.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
   createInstalledBinPreviewHooks,
@@ -40,7 +39,7 @@ import {
   createProjectTerminalNamespace,
 } from './project-terminal-namespace.ts';
 import { type PtyServer, createPtyServer } from './pty-server.ts';
-import { createPreviewScope } from './vite-cli-prep.ts';
+import { binNameOf, createPreviewScope } from './vite-cli-prep.ts';
 
 export interface WorkbenchProjectRuntimeOptions {
   /** Materializer-owned root. Page claims and project ids are resolved before this seam. */

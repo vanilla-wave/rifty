@@ -221,17 +221,17 @@ function resolvedExportEntries(): readonly string[] {
 }
 
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the reviewed 228-file move, including all 110 tests and three fixtures', () => {
-    expect(EXTRACTION_MAP).toHaveLength(228);
-    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(228);
-    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(228);
+  it('pins the retained 226-file move, including all 109 tests and three fixtures', () => {
+    expect(EXTRACTION_MAP).toHaveLength(226);
+    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(226);
+    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(226);
     expect(
       EXTRACTION_MAP.filter(([, target]) =>
         /(?:[\\/]test-fixtures[\\/]|(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$)/u.test(
           target,
         ),
       ),
-    ).toHaveLength(113);
+    ).toHaveLength(112);
 
     expect(
       EXTRACTION_MAP.filter(([source]) => existsSync(resolve(APP_SRC_ROOT, source))).map(

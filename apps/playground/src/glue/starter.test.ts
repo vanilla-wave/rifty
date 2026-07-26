@@ -171,7 +171,10 @@ describe('seedFilesForStarter (starter, root)', () => {
     // package.json declares the node-server dev script
     const nodePkg = files['/projects/p1/package.json'];
     expect(nodePkg).toBeTypeOf('string');
-    expect(JSON.parse(nodePkg ?? '').scripts.dev).toContain('node ');
+    expect(JSON.parse(nodePkg ?? '').scripts).toEqual({
+      dev: 'nodemon --legacy-watch --no-stdin --no-update-notifier src/main.js',
+      start: 'node src/main.js',
+    });
     // a worker-seeded extra file (public asset) lands under the root
     expect(files['/projects/p1/public/index.html']).toBeTypeOf('string');
     // NO index.html seeded at root for node-server (it would shadow the server)

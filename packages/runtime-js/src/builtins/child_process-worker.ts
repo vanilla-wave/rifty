@@ -4,8 +4,8 @@ import { NotImplementedError, type Readable } from '@riftydev/io';
 import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
-import { buildConfiguredNodeEntryWorkerEntry } from './node-entry-runtime-config.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { buildConfiguredNodeEntryWorkerEntry } from './node-entry-runtime-config.ts';
 
 type Listener = (...args: unknown[]) => void;
 

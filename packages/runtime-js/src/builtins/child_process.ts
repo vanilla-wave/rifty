@@ -15,7 +15,7 @@
  * no shell. `spawn('node', [script])` runs `script` through our loader.
  */
 
-import { Buffer, EventEmitter, NotImplementedError, Readable, Writable } from '@riftydev/io';
+import { Buffer, EventEmitter, NotImplementedError, Readable, type Writable } from '@riftydev/io';
 import {
   type ProcessHandle,
   type ProcessIO,
@@ -24,8 +24,8 @@ import {
   globalProcessManager,
   isSabIpcSupported,
 } from '@riftydev/kernel';
-import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';

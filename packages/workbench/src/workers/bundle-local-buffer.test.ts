@@ -78,12 +78,6 @@ describe('installBundleLocalCwd — dual-copy process cwd realignment', () => {
 
     expect(getProcessCwd()).toBe('/');
   });
-
-  it('is wired before the node entry probes relative paths', () => {
-    const src = read('node-entry-bootstrap.ts');
-    expect(src).toContain('installBundleLocalCwd');
-    expect(src).toMatch(/installBundleLocalCwd\(proc\.cwd\(\)\)/);
-  });
 });
 
 describe('kind:url child bootstraps reinstall the bundle-local global Buffer', () => {

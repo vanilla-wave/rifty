@@ -560,9 +560,7 @@ export function startBrowserWorkspaceOwner(
       (normal
         ? new ClosedHandleError('Workbench owner')
         : new Error(
-            `Workbench owner exited${closeRequested ? '' : ' unexpectedly'} ` +
-              `(code ${String(code)}, signal ${String(signal)})` +
-              (ownerStderr === '' ? '' : `\n${ownerStderr}${ownerStderrDecoder.decode()}`),
+            `Workbench owner exited${closeRequested ? '' : ' unexpectedly'} (code ${String(code)}, signal ${String(signal)})${ownerStderr === '' ? '' : `\n${ownerStderr}${ownerStderrDecoder.decode()}`}`,
           ));
     readyState.reject(exitError);
     rejectPending(exitError);
