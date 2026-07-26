@@ -69,6 +69,13 @@ describe('child_process validated stdio + optional default-JSON IPC plan', () =>
     expect(forked.stdio).toEqual([null, null, null, null]);
     expect(forked.connected).toBe(true);
     expect(typeof forked.send).toBe('function');
+    const forkIpc = forked as {
+      send(...args: unknown[]): boolean;
+      channel: { ref(): void; unref(): void };
+    };
+    expect(() => forkIpc.send({}, null)).toThrow(/child_process\.send\.arguments/);
+    expect(() => forkIpc.channel.ref()).toThrow(/child_process\.channel\.ref/);
+    expect(() => forkIpc.channel.unref()).toThrow(/child_process\.channel\.unref/);
 
     const input = new Readable({ read() {} });
     const output = { write: (_chunk: unknown) => true };

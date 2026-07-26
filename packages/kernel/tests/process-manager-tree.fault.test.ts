@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ProcessIO, ProcessManager } from '../src/process-manager.ts';
+import { type ProcessIO, ProcessManager, readRootProcessSnapshot } from '../src/process-manager.ts';
 import { KERNEL_SYNC_CALL_KEY, publishKernelSyncApi } from '../src/shared-globals.ts';
 import {
   type WorkerLike,
@@ -14,11 +14,13 @@ class BoundaryWorker implements WorkerLike {
   readonly terminate = vi.fn();
   readonly addEventListener = vi.fn();
   readonly removeEventListener = vi.fn();
+  readonly posted: unknown[] = [];
 
   constructor(private readonly postFailure?: Error) {}
 
-  postMessage(): void {
+  postMessage(message: unknown): void {
     if (this.postFailure) throw this.postFailure;
+    this.posted.push(message);
   }
 }
 
@@ -26,6 +28,15 @@ function liveUntilKilled(io: ProcessIO): Promise<void> {
   return new Promise((resolve) =>
     io.signal.addEventListener('abort', () => resolve(), { once: true }),
   );
+}
+
+function workerSpec(name = 'node'): Parameters<ProcessManager['spawnWorker']>[1] {
+  return {
+    entry: { kind: 'source', code: 'void 0;', sourceUrl: `/${name}.js` },
+    argv: ['rifty', `/${name}.js`],
+    env: {},
+    cwd: '/workspace',
+  };
 }
 
 describe('ProcessManager owner-root process tree (ADR-0326)', () => {
@@ -47,16 +58,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     const app = manager.spawn('node', liveUntilKilled, parent.pid);
     const worker = new BoundaryWorker();
     setWorkerFactoryForTests(() => worker);
-    const nested = manager.spawnWorker(
-      'node',
-      {
-        entry: { kind: 'source', code: 'void 0;', sourceUrl: '/nested.js' },
-        argv: ['rifty', '/nested.js'],
-        env: {},
-        cwd: '/workspace',
-      },
-      app.pid,
-    );
+    const nested = manager.spawnWorker('node', workerSpec('nested'), app.pid);
 
     const snapshot = manager
       .list()
@@ -112,31 +114,84 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     });
   });
 
+  it('reads nested ps state from one exact owner-root snapshot RPC', () => {
+    publishKernelSyncApi({
+      call(method, payload) {
+        expect({ method, payload }).toEqual({ method: 'process.snapshot', payload: {} });
+        return [
+          { pid: 1, ppid: 0, command: 'rifty' },
+          { pid: 8, ppid: 2, command: 'node' },
+        ];
+      },
+    });
+
+    expect(readRootProcessSnapshot()).toEqual([
+      { pid: 1, ppid: 0, command: 'rifty' },
+      { pid: 8, ppid: 2, command: 'node' },
+    ]);
+  });
+
+  it('rejects requested federation before allocating without an upstream authority', () => {
+    const manager = new ProcessManager();
+
+    expect(() =>
+      manager.spawn('node', liveUntilKilled, 7, {
+        cwd: '/workspace',
+        federated: true,
+      }),
+    ).toThrow(/federation.*without.*authority/i);
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+  });
+
+  it('keeps a remotely killed PID published until its physical settle proof', async () => {
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('nodemon', workerSpec('nodemon'));
+    const init = worker.posted[0] as { spec: { stdio: { ipc: MessagePort } } };
+    const controls: unknown[] = [];
+    init.spec.stdio.ipc.onmessage = (event) => controls.push(event.data);
+    init.spec.stdio.ipc.start();
+    const pid = 41;
+    manager.reserveForwardedProcess(pid, 'node', owner.pid, '/workspace', owner.pid);
+    manager.commitRemoteProcess(pid, owner.pid);
+
+    expect(manager.kill(pid, 'SIGTERM')).toBe(true);
+    expect(manager.snapshot()).toContainEqual({ pid, ppid: owner.pid, command: 'node' });
+    await vi.waitFor(() =>
+      expect(controls).toContainEqual({ kind: 'control:kill-tree', pid, signal: 'SIGTERM' }),
+    );
+
+    manager.settleRemoteProcess(pid, owner.pid, null, 'SIGTERM');
+    expect(manager.snapshot()).not.toContainEqual({ pid, ppid: owner.pid, command: 'node' });
+    owner.kill();
+  });
+
+  it('retires remote descendants when their physical owner Worker dies', () => {
+    const manager = new ProcessManager();
+    setWorkerFactoryForTests(() => new BoundaryWorker());
+    const owner = manager.spawnWorker('nodemon', workerSpec('nodemon'));
+    const pid = manager.reserveRemoteProcess('node', owner.pid, '/workspace', owner.pid);
+    manager.commitRemoteProcess(pid, owner.pid);
+
+    owner.kill();
+
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+  });
+
   it('aborts a failed Worker reservation without publication or PID reuse', () => {
     const manager = new ProcessManager();
     const initFailure = new DOMException('init clone failed', 'DataCloneError');
     const failedWorker = new BoundaryWorker(initFailure);
     setWorkerFactoryForTests(() => failedWorker);
 
-    expect(() =>
-      manager.spawnWorker('node', {
-        entry: { kind: 'source', code: 'void 0;', sourceUrl: '/failed.js' },
-        argv: ['rifty', '/failed.js'],
-        env: {},
-        cwd: '/workspace',
-      }),
-    ).toThrow(initFailure);
+    expect(() => manager.spawnWorker('node', workerSpec('failed'))).toThrow(initFailure);
     expect(manager.list()).toEqual([]);
     expect(failedWorker.terminate).toHaveBeenCalledTimes(1);
 
     const liveWorker = new BoundaryWorker();
     setWorkerFactoryForTests(() => liveWorker);
-    const next = manager.spawnWorker('node', {
-      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/next.js' },
-      argv: ['rifty', '/next.js'],
-      env: {},
-      cwd: '/workspace',
-    });
+    const next = manager.spawnWorker('node', workerSpec('next'));
 
     expect(next.pid).toBe(3);
     expect(manager.list()).toEqual([next]);
@@ -147,13 +202,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     const manager = new ProcessManager();
     const worker = new BoundaryWorker();
     setWorkerFactoryForTests(() => worker);
-    const owner = manager.spawnWorker('nodemon', {
-      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/nodemon.js' },
-      argv: ['rifty', '/nodemon.js'],
-      env: {},
-      cwd: '/workspace',
-      serve: true,
-    });
+    const owner = manager.spawnWorker('nodemon', { ...workerSpec('nodemon'), serve: true });
     const childPid = manager.reserveRemoteProcess('node', owner.pid, '/workspace', owner.pid);
 
     expect(owner.kill('SIGTERM')).toBe(true);

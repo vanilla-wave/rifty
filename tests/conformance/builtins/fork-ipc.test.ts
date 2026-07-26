@@ -20,7 +20,7 @@ describe('child_process.fork — IPC', () => {
   });
 
   it('child receives messages the parent sends via child.send', async () => {
-    writeFileSync('/echo.js', `__process.onMessage((m) => __process.send('echo:' + m));`);
+    writeFileSync('/echo.js', `__process.on('message', (m) => __process.send('echo:' + m));`);
     const child = fork('/echo.js');
     const replies: unknown[] = [];
     child.on('message', (m) => replies.push(m));

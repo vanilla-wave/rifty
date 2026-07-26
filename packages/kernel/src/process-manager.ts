@@ -160,11 +160,24 @@ export interface WorkerProcessHandle extends ProcessHandleBase {
  */
 export type ProcessHandle = SameRealmProcessHandle | WorkerProcessHandle;
 
+interface RemoteProcessHandle extends ProcessHandleBase {
+  readonly kind: 'remote';
+}
+
+type ManagedProcessHandle = ProcessHandle | RemoteProcessHandle;
+
+export interface ProcessSnapshot {
+  readonly pid: number;
+  readonly ppid: number;
+  readonly command: string;
+}
+
 interface ProcessRecord {
   readonly pid: number;
   readonly ppid: number;
   readonly treeParentPid: number;
   readonly published: boolean;
+  readonly upstreamAuthority: boolean;
   readonly remoteOwnerPid?: number;
   readonly command: string;
   /** Per-ADR-0019: cwd is owned here; children inherit a snapshot. */
@@ -174,7 +187,7 @@ interface ProcessRecord {
   /** Outgoing message bus: parent → child. */
   readonly parentToChild: EventEmitter;
   /** Handle for the parent side. Late-bound in {@link ProcessManager.spawn}. */
-  handle: ProcessHandle;
+  handle: ManagedProcessHandle;
   readonly abortController: AbortController;
   terminate(signal: string): boolean;
   fail(code: number): boolean;
@@ -184,9 +197,7 @@ interface ProcessRecord {
 export interface SpawnOptions {
   /** Working directory for the child. Defaults to the parent's cwd. */
   cwd?: string;
-  /** Internal worker_threads identity: same process, separate physical realm. */
   threadIdentity?: { readonly pid: number; readonly ppid: number };
-  /** Allocate/settle this child in the owner-root process table over sync-RPC. */
   federated?: boolean;
 }
 
@@ -201,8 +212,11 @@ const PROCESS_ABORT_RPC = 'process.abort';
 const PROCESS_SETTLE_RPC = 'process.settle';
 const PROCESS_LISTENING_RPC = 'process.listening';
 const PROCESS_PEER_DEATH_RPC = 'process.peer-death';
+const PROCESS_SNAPSHOT_RPC = 'process.snapshot';
 const ROUTE_REMOTE_LISTENING = Symbol('ProcessManager.routeRemoteListening');
 const ROUTE_REMOTE_PEER_DEATH = Symbol('ProcessManager.routeRemotePeerDeath');
+const ROUTES_UPSTREAM = Symbol('ProcessManager.routesUpstream');
+const HAS_LOCAL_AUTHORITY = Symbol('ProcessManager.hasLocalAuthority');
 
 interface ProcessFederationLease {
   readonly pid: number;
@@ -221,7 +235,9 @@ function reserveProcessFederation(
 ): ProcessFederationLease | null {
   if (!enabled) return null;
   const upstream = readKernelSyncApi();
-  if (upstream === null) return null;
+  if (upstream === null) {
+    throw new Error('process federation requested without an upstream kernel authority');
+  }
   const pid = positivePid(
     upstream.call(PROCESS_RESERVE_RPC, { command, ppid, cwd }),
     'process.reserve reply',
@@ -267,34 +283,90 @@ function ttyDimension(value: number, name: 'cols' | 'rows'): number {
   return value;
 }
 
-function listeningControl(frame: unknown): ProcessListeningControl | null {
-  if (typeof frame !== 'object' || frame === null) return null;
-  const value = frame as {
-    readonly kind?: unknown;
-    readonly ports?: unknown;
-    readonly previewScope?: unknown;
-  };
-  const expectedKeys =
-    value.previewScope === undefined ? ['kind', 'ports'] : ['kind', 'ports', 'previewScope'];
-  const keys = Object.keys(frame);
+function controlSignal(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new TypeError('process control signal must be a non-empty string');
+  }
+  return value;
+}
+
+function controlExitCode(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > 255) {
+    throw new RangeError('process control exit code must be an unsigned byte');
+  }
+  return value as number;
+}
+
+function listeningPorts(value: unknown): number[] {
   if (
-    value.kind !== 'control:listening' ||
-    keys.length !== expectedKeys.length ||
-    expectedKeys.some((key) => !Object.prototype.hasOwnProperty.call(frame, key)) ||
-    !Array.isArray(value.ports) ||
-    value.ports.some(
+    !Array.isArray(value) ||
+    value.some(
       (port) => !Number.isSafeInteger(port) || (port as number) <= 0 || (port as number) > 65_535,
     ) ||
-    new Set(value.ports).size !== value.ports.length ||
-    (value.previewScope !== undefined &&
-      (typeof value.previewScope !== 'string' || value.previewScope.length === 0))
+    new Set(value).size !== value.length
   ) {
-    return null;
+    throw new TypeError('process listening ports must be unique valid TCP ports');
   }
-  return {
-    ports: [...(value.ports as number[])],
-    ...(value.previewScope === undefined ? {} : { previewScope: value.previewScope }),
-  };
+  return [...(value as number[])];
+}
+
+export function decodeIpcFrame(value: unknown): IpcFrame {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError('process control frame must be an object');
+  }
+  const kind = (value as Record<string, unknown>).kind;
+  if (typeof kind !== 'string') throw new TypeError('process control frame kind must be a string');
+  const fields = (names: readonly string[]): Record<string, unknown> =>
+    rpcRecord(value, ['kind', ...names], 'process control frame');
+  switch (kind) {
+    case 'ipc:message': {
+      const record = fields(['payload']);
+      return { kind, payload: record.payload };
+    }
+    case 'ipc:tty-resize': {
+      const record = fields(['cols', 'rows']);
+      return {
+        kind,
+        cols: ttyDimension(record.cols as number, 'cols'),
+        rows: ttyDimension(record.rows as number, 'rows'),
+      };
+    }
+    case 'ipc:disconnect':
+    case 'control:peer-closing':
+      fields([]);
+      return { kind };
+    case 'control:signal':
+    case 'control:self-signal': {
+      const record = fields(['signal']);
+      return { kind, signal: controlSignal(record.signal) };
+    }
+    case 'control:self-exit':
+    case 'control:exiting': {
+      const record = fields(['code']);
+      return { kind, code: controlExitCode(record.code) };
+    }
+    case 'control:kill-tree': {
+      const record = fields(['pid', 'signal']);
+      return {
+        kind,
+        pid: positivePid(record.pid, 'process control target'),
+        signal: controlSignal(record.signal),
+      };
+    }
+    case 'control:listening': {
+      const hasScope = Object.prototype.hasOwnProperty.call(value, 'previewScope');
+      const record = fields(hasScope ? ['ports', 'previewScope'] : ['ports']);
+      const previewScope =
+        record.previewScope === undefined ? undefined : controlSignal(record.previewScope);
+      return {
+        kind,
+        ports: listeningPorts(record.ports),
+        ...(previewScope === undefined ? {} : { previewScope }),
+      };
+    }
+    default:
+      throw new TypeError(`unknown process control frame kind ${kind}`);
+  }
 }
 
 export class ProcessManager {
@@ -308,6 +380,7 @@ export class ProcessManager {
       readonly ppid: number;
       readonly cwd: string;
       readonly ownerPid: number;
+      readonly upstreamAuthority: boolean;
     }
   >();
 
@@ -338,6 +411,7 @@ export class ProcessManager {
       ppid,
       treeParentPid: ppid,
       published: true,
+      upstreamAuthority: federation !== null,
       command,
       cwd: initialCwd,
       exitCode: null,
@@ -401,7 +475,7 @@ export class ProcessManager {
     };
     record.peerFail = (error) => {
       if (!manager.isLive(record)) return false;
-      manager.retirePeerDescendants(pid, error);
+      manager.retireOwnerDescendants(record, error);
       abortController.abort();
       handle.emit('peererror', error);
       handle.emit('close', null, null);
@@ -471,7 +545,11 @@ export class ProcessManager {
    * Called from both spawn paths (kill + natural exit). The handle object
    * survives so callers can read `exitCode`. Idempotent.
    */
-  private finalize(record: ProcessRecord, handle: ProcessHandle, emitters: EventEmitter[]): void {
+  private finalize(
+    record: ProcessRecord,
+    handle: ManagedProcessHandle,
+    emitters: EventEmitter[],
+  ): void {
     if (!this.isLive(record)) return;
     if (record.published) this.table.delete(record.pid);
     else this.hiddenThreads.delete(record);
@@ -520,6 +598,7 @@ export class ProcessManager {
       ppid: processPpid,
       treeParentPid: ppid,
       published,
+      upstreamAuthority: federation !== null,
       command,
       cwd: initialCwd,
       exitCode: null,
@@ -582,8 +661,10 @@ export class ProcessManager {
         if (this.#ipcStarted) return;
         this.#ipcStarted = true;
         ports.ipc.onmessage = (ev: MessageEvent) => {
-          const frame = ev.data as IpcFrame | undefined;
-          if (!frame || typeof frame !== 'object' || typeof frame.kind !== 'string') {
+          let frame: IpcFrame;
+          try {
+            frame = decodeIpcFrame(ev.data);
+          } catch {
             manager.failRecord(record, 1);
             return;
           }
@@ -593,26 +674,23 @@ export class ProcessManager {
           } else if (frame.kind === 'ipc:disconnect') {
             this._disconnectIpc();
           } else if (frame.kind === 'control:listening') {
-            const control = listeningControl(frame);
-            if (control === null) {
-              manager.failRecord(record, 1);
-              return;
-            }
+            const control = {
+              ports: [...frame.ports],
+              ...(frame.previewScope
+                ? {
+                    previewScope: frame.previewScope,
+                  }
+                : {}),
+            };
             this.emit('control:listening', control);
             try {
               federation?.listening(control);
             } catch {
               manager.failRecord(record, 1);
             }
-          } else if (
-            frame.kind === 'control:exiting' &&
-            Object.keys(frame).length === 2 &&
-            Number.isSafeInteger(frame.code) &&
-            frame.code >= 0 &&
-            frame.code <= 255
-          ) {
+          } else if (frame.kind === 'control:exiting') {
             this.#peerExitCode = frame.code;
-          } else if (frame.kind === 'control:peer-closing' && Object.keys(frame).length === 1) {
+          } else if (frame.kind === 'control:peer-closing') {
             if (this.#peerExitCode === null) {
               manager.peerFailRecord(
                 record,
@@ -621,12 +699,7 @@ export class ProcessManager {
             }
           } else if (frame.kind === 'control:self-signal' && frame.signal === 'SIGUSR2') {
             manager.killRecordTree(record, frame.signal);
-          } else if (
-            frame.kind === 'control:self-exit' &&
-            Number.isSafeInteger(frame.code) &&
-            frame.code >= 0 &&
-            frame.code <= 255
-          ) {
+          } else if (frame.kind === 'control:self-exit') {
             manager.failRecord(record, frame.code);
           } else {
             manager.failRecord(record, 1);
@@ -748,12 +821,12 @@ export class ProcessManager {
         }
         return manager.killRecordTree(record, signal);
       }
-      /** Internal: terminate only this record after descendants are settled. */
       _terminate(signal: string): boolean {
         if (!manager.isLive(record)) return false;
         if (this.exitCode !== null || this.signalCode !== null) return false;
         abortController.abort();
         spawnResult.terminate();
+        manager.retireOwnerDescendants(record, new Error(`Worker owner PID ${pid} terminated`));
         this.signalCode = signal;
         this.exitCode = null;
         this._signalEof();
@@ -764,13 +837,13 @@ export class ProcessManager {
         federation?.settle(null, signal);
         return true;
       }
-      /** Internal: settle a malformed or failed run with a numeric exit. */
       _fail(code: number): boolean {
         if (!manager.isLive(record)) return false;
         if (this.exitCode !== null || this.signalCode !== null) return false;
         manager.terminateDescendants(pid, 'SIGTERM');
         abortController.abort();
         spawnResult.terminate();
+        manager.retireOwnerDescendants(record, new Error(`Worker owner PID ${pid} failed`));
         this.exitCode = code;
         this._signalEof();
         this._closeControl();
@@ -788,7 +861,7 @@ export class ProcessManager {
     record.fail = (code) => handle._fail(code);
     record.peerFail = (error) => {
       if (!manager.isLive(record)) return false;
-      manager.retirePeerDescendants(pid, error);
+      manager.retireOwnerDescendants(record, error);
       abortController.abort();
       spawnResult.terminate();
       handle._signalEof();
@@ -818,7 +891,7 @@ export class ProcessManager {
       if (handle.exitCode !== null || handle.signalCode !== null) return;
       deferWorkerExitUntilStdioSettled(() => {
         if (handle.exitCode !== null || handle.signalCode !== null) return;
-        manager.terminateDescendants(pid, 'SIGTERM');
+        manager.retireOwnerDescendants(record, new Error(`Worker owner PID ${pid} exited`));
         handle.exitCode = code;
         handle._signalEof();
         handle._closeControl();
@@ -847,11 +920,28 @@ export class ProcessManager {
   }
 
   get(pid: number): ProcessHandle | null {
-    return this.table.get(pid)?.handle ?? null;
+    const handle = this.table.get(pid)?.handle;
+    return handle === undefined || handle.kind === 'remote' ? null : handle;
   }
 
   list(): ProcessHandle[] {
-    return [...this.table.values()].map((r) => r.handle);
+    return [...this.table.values()]
+      .map((record) => record.handle)
+      .filter((handle): handle is ProcessHandle => handle.kind !== 'remote');
+  }
+
+  snapshot(): ProcessSnapshot[] {
+    return [
+      { pid: 1, ppid: 0, command: 'rifty' },
+      ...[...this.table.values()]
+        .filter((record) => record.published)
+        .map(({ pid, ppid, command }) => ({ pid, ppid, command })),
+    ];
+  }
+
+  kill(pid: number, signal = 'SIGTERM'): boolean {
+    const record = this.table.get(pid);
+    return record === undefined ? false : this.killRecordTree(record, signal);
   }
 
   private allocateLocalPid(): number {
@@ -866,8 +956,24 @@ export class ProcessManager {
       throw new Error(`process.reserve: ppid ${ppid} is outside caller ${ownerPid}'s subtree`);
     }
     const pid = this.allocateLocalPid();
-    this.pendingRemote.set(pid, { command, ppid, cwd, ownerPid });
+    this.pendingRemote.set(pid, { command, ppid, cwd, ownerPid, upstreamAuthority: false });
     return pid;
+  }
+
+  reserveForwardedProcess(
+    pid: number,
+    command: string,
+    ppid: number,
+    cwd: string,
+    ownerPid: number,
+  ): void {
+    if (this.table.has(pid) || this.pendingRemote.has(pid)) {
+      throw new Error(`process.reserve: forwarded PID ${pid} is already known`);
+    }
+    if (!this.ownsProcess(ownerPid, ppid)) {
+      throw new Error(`process.reserve: ppid ${ppid} is outside caller ${ownerPid}'s subtree`);
+    }
+    this.pendingRemote.set(pid, { command, ppid, cwd, ownerPid, upstreamAuthority: true });
   }
 
   commitRemoteProcess(pid: number, ownerPid: number): void {
@@ -880,14 +986,14 @@ export class ProcessManager {
       throw new Error(`process.commit: parent ${pending.ppid} is no longer owned by ${ownerPid}`);
     }
     this.pendingRemote.delete(pid);
-    const { command, cwd, ppid } = pending;
+    const { command, cwd, ppid, upstreamAuthority } = pending;
     const manager = this;
-    const abortController = new AbortController();
     const record: ProcessRecord = {
       pid,
       ppid,
       treeParentPid: ppid,
       published: true,
+      upstreamAuthority,
       remoteOwnerPid: ownerPid,
       command,
       cwd,
@@ -895,14 +1001,13 @@ export class ProcessManager {
       signalCode: null,
       parentToChild: new EventEmitter(),
       handle: undefined as unknown as ProcessHandle,
-      abortController,
+      abortController: new AbortController(),
       terminate: () => false,
       fail: () => false,
       peerFail: () => false,
     };
-    class RemoteHandle extends EventEmitter implements SameRealmProcessHandle {
-      readonly kind = 'same-realm' as const;
-      readonly ports = undefined;
+    class RemoteHandle extends EventEmitter implements RemoteProcessHandle {
+      readonly kind = 'remote' as const;
       readonly pid = pid;
       readonly ppid = ppid;
       readonly command = command;
@@ -914,42 +1019,25 @@ export class ProcessManager {
       setCwd(next: string): void {
         record.cwd = next;
       }
-      send(): boolean {
-        return false;
-      }
       kill(signal = 'SIGTERM'): boolean {
         return manager.killRecordTree(record, signal);
       }
     }
     const handle = new RemoteHandle();
     record.handle = handle;
+    let killRequested = false;
     record.terminate = (signal) => {
-      if (!manager.isLive(record)) return false;
+      if (!manager.isLive(record) || killRequested) return false;
       const route = manager.table.get(ownerPid)?.handle;
       if (route?.kind !== 'worker' || !route.controlKill(pid, signal)) return false;
-      abortController.abort();
-      handle.signalCode = signal;
-      manager.terminateDescendants(pid, signal);
-      handle.emit('exit', null, signal);
-      handle.emit('close', null, signal);
-      manager.finalize(record, handle, [record.parentToChild]);
+      killRequested = true;
       return true;
     };
-    record.fail = (code) => {
-      if (!manager.isLive(record)) return false;
-      handle.exitCode = code;
-      manager.terminateDescendants(pid, 'SIGTERM');
-      handle.emit('exit', code, null);
-      handle.emit('close', code, null);
-      manager.finalize(record, handle, [record.parentToChild]);
-      return true;
-    };
+    record.fail = () => false;
     record.peerFail = (error) => {
       if (!manager.isLive(record)) return false;
-      manager.retirePeerDescendants(pid, error);
-      abortController.abort();
-      handle.emit('peererror', error);
-      handle.emit('close', null, null);
+      manager.retireOwnerDescendants(record, error);
+      record.abortController.abort(error);
       manager.finalize(record, handle, [record.parentToChild]);
       return true;
     };
@@ -965,8 +1053,16 @@ export class ProcessManager {
     return this.pendingRemote.has(pid);
   }
 
-  hasRemoteProcess(pid: number): boolean {
-    return this.table.get(pid)?.remoteOwnerPid !== undefined;
+  [ROUTES_UPSTREAM](pid: number): boolean {
+    return (
+      this.pendingRemote.get(pid)?.upstreamAuthority ??
+      this.table.get(pid)?.upstreamAuthority ??
+      true
+    );
+  }
+
+  [HAS_LOCAL_AUTHORITY](): boolean {
+    return [...this.table.values()].some((record) => record.published && !record.upstreamAuthority);
   }
 
   [ROUTE_REMOTE_LISTENING](pid: number, ownerPid: number, control: ProcessListeningControl): void {
@@ -1002,15 +1098,12 @@ export class ProcessManager {
   ): void {
     const record = this.table.get(pid);
     if (record?.remoteOwnerPid !== ownerPid) return;
-    this.terminateDescendants(pid, signal ?? 'SIGTERM');
     record.handle.exitCode = code;
     record.handle.signalCode = signal;
-    record.handle.emit('exit', code, signal);
-    record.handle.emit('close', code, signal);
+    record.abortController.abort();
     this.finalize(record, record.handle, [record.parentToChild]);
   }
 
-  /** Spawn worker_threads in a physical Worker without a second process row. */
   spawnWorkerThread(
     spec: SpawnWorkerSpec,
     identity: { readonly pid: number; readonly ppid: number },
@@ -1022,10 +1115,6 @@ export class ProcessManager {
     });
   }
 
-  /**
-   * Terminate descendants before their ancestor so no live physical Worker can
-   * outlast the process tree that owns it.
-   */
   private killRecordTree(record: ProcessRecord, signal: string): boolean {
     if (!this.isLive(record)) return false;
     this.terminateDescendants(record.pid, signal);
@@ -1053,6 +1142,10 @@ export class ProcessManager {
 
   private peerFailRecord(record: ProcessRecord, error: Error): boolean {
     return this.isLive(record) && record.peerFail(error);
+  }
+
+  private retireOwnerDescendants(record: ProcessRecord, error: Error): void {
+    if (record.published) this.retirePeerDescendants(record.pid, error, new Set([record]));
   }
 
   private retirePeerDescendants(
@@ -1095,6 +1188,53 @@ export class ProcessManager {
 export const globalProcessManager = new ProcessManager();
 installProcessFederation(globalProcessManager);
 
+function processSnapshot(value: unknown): ProcessSnapshot[] {
+  if (!Array.isArray(value)) throw new TypeError('process.snapshot reply must be an array');
+  const seen = new Set<number>();
+  return value.map((entry) => {
+    const record = rpcRecord(entry, ['pid', 'ppid', 'command'], 'process.snapshot row');
+    const pid = positivePid(record.pid, 'process.snapshot pid');
+    if (seen.has(pid)) throw new TypeError(`process.snapshot contains duplicate PID ${pid}`);
+    seen.add(pid);
+    if (!Number.isSafeInteger(record.ppid) || (record.ppid as number) < 0) {
+      throw new TypeError('process.snapshot ppid must be a non-negative safe integer');
+    }
+    return {
+      pid,
+      ppid: record.ppid as number,
+      command: rpcString(record.command, 'process.snapshot command'),
+    };
+  });
+}
+
+export function readRootProcessSnapshot(): ProcessSnapshot[] {
+  const upstream = readKernelSyncApi();
+  return upstream === null || globalProcessManager[HAS_LOCAL_AUTHORITY]()
+    ? globalProcessManager.snapshot()
+    : processSnapshot(upstream.call(PROCESS_SNAPSHOT_RPC, {}));
+}
+
+export function formatProcessSnapshot(
+  args: readonly string[],
+  rows: readonly ProcessSnapshot[],
+): string | null {
+  if (args.length === 0) {
+    return [
+      '  PID TTY          TIME CMD',
+      ...rows.map(({ pid, command }) => `${String(pid).padStart(5)} ?        00:00:00 ${command}`),
+      '',
+    ].join('\n');
+  }
+  if (args.length === 3 && args[0] === '-A' && args[1] === '-o' && args[2] === 'ppid,pid') {
+    return [
+      ' PPID   PID',
+      ...rows.map(({ ppid, pid }) => `${String(ppid).padStart(5)} ${String(pid).padStart(5)}`),
+      '',
+    ].join('\n');
+  }
+  return null;
+}
+
 function positivePid(value: unknown, owner: string): number {
   if (!Number.isSafeInteger(value) || (value as number) <= 0) {
     throw new TypeError(`${owner} must be a positive safe integer PID`);
@@ -1111,7 +1251,7 @@ function rpcRecord(
     throw new TypeError(`${owner} payload must be an object`);
   }
   const record = value as Record<string, unknown>;
-  const keys = Object.keys(record);
+  const keys = Reflect.ownKeys(record);
   if (
     keys.length !== fields.length ||
     fields.some((field) => !Object.prototype.hasOwnProperty.call(record, field))
@@ -1141,44 +1281,38 @@ function installProcessFederation(manager: ProcessManager): void {
   dispatcher.register(PROCESS_RESERVE_RPC, (payload, context) => {
     const record = rpcRecord(payload, ['command', 'ppid', 'cwd'], PROCESS_RESERVE_RPC);
     const ppid = positivePid(record.ppid, 'process.reserve ppid');
-    if (manager.get(ppid) === null) {
-      const relayed = relay(PROCESS_RESERVE_RPC, payload);
-      if (relayed !== undefined) return relayed;
-    }
-    return manager.reserveRemoteProcess(
-      rpcString(record.command, 'process.reserve command'),
-      ppid,
-      rpcString(record.cwd, 'process.reserve cwd'),
-      rpcOwner(context, PROCESS_RESERVE_RPC),
-    );
+    const command = rpcString(record.command, 'process.reserve command');
+    const cwd = rpcString(record.cwd, 'process.reserve cwd');
+    const ownerPid = rpcOwner(context, PROCESS_RESERVE_RPC);
+    const relayed = manager[ROUTES_UPSTREAM](ppid)
+      ? relay(PROCESS_RESERVE_RPC, payload)
+      : undefined;
+    if (relayed === undefined) return manager.reserveRemoteProcess(command, ppid, cwd, ownerPid);
+    const pid = positivePid(relayed, 'process.reserve relay reply');
+    manager.reserveForwardedProcess(pid, command, ppid, cwd, ownerPid);
+    return pid;
   });
   dispatcher.register(PROCESS_COMMIT_RPC, (payload, context) => {
     const record = rpcRecord(payload, ['pid'], PROCESS_COMMIT_RPC);
     const pid = positivePid(record.pid, 'process.commit pid');
-    if (!manager.hasPendingRemoteProcess(pid)) {
-      const relayed = relay(PROCESS_COMMIT_RPC, payload);
-      if (relayed !== undefined) return relayed;
-    }
-    manager.commitRemoteProcess(pid, rpcOwner(context, PROCESS_COMMIT_RPC));
+    const ownerPid = rpcOwner(context, PROCESS_COMMIT_RPC);
+    const relayed = manager[ROUTES_UPSTREAM](pid) ? relay(PROCESS_COMMIT_RPC, payload) : undefined;
+    manager.commitRemoteProcess(pid, ownerPid);
+    if (relayed !== undefined) return relayed;
     return null;
   });
   dispatcher.register(PROCESS_ABORT_RPC, (payload, context) => {
     const record = rpcRecord(payload, ['pid'], PROCESS_ABORT_RPC);
     const pid = positivePid(record.pid, 'process.abort pid');
-    if (!manager.hasPendingRemoteProcess(pid)) {
-      const relayed = relay(PROCESS_ABORT_RPC, payload);
-      if (relayed !== undefined) return relayed;
-    }
-    manager.abortRemoteProcess(pid, rpcOwner(context, PROCESS_ABORT_RPC));
+    const ownerPid = rpcOwner(context, PROCESS_ABORT_RPC);
+    const relayed = manager[ROUTES_UPSTREAM](pid) ? relay(PROCESS_ABORT_RPC, payload) : undefined;
+    manager.abortRemoteProcess(pid, ownerPid);
+    if (relayed !== undefined) return relayed;
     return null;
   });
   dispatcher.register(PROCESS_SETTLE_RPC, (payload, context) => {
     const record = rpcRecord(payload, ['pid', 'code', 'signal'], PROCESS_SETTLE_RPC);
     const pid = positivePid(record.pid, 'process.settle pid');
-    if (!manager.hasRemoteProcess(pid)) {
-      const relayed = relay(PROCESS_SETTLE_RPC, payload);
-      if (relayed !== undefined) return relayed;
-    }
     const code =
       record.code === null
         ? null
@@ -1192,44 +1326,64 @@ function installProcessFederation(manager: ProcessManager): void {
     if ((code === null) === (signal === null)) {
       throw new TypeError('process.settle requires exactly one of code or signal');
     }
-    manager.settleRemoteProcess(pid, rpcOwner(context, PROCESS_SETTLE_RPC), code, signal);
+    const ownerPid = rpcOwner(context, PROCESS_SETTLE_RPC);
+    const relayed = manager[ROUTES_UPSTREAM](pid) ? relay(PROCESS_SETTLE_RPC, payload) : undefined;
+    manager.settleRemoteProcess(pid, ownerPid, code, signal);
+    if (relayed !== undefined) return relayed;
     return null;
   });
   dispatcher.register(PROCESS_LISTENING_RPC, (payload, context) => {
     const record = rpcRecord(payload, ['pid', 'ports', 'previewScope'], PROCESS_LISTENING_RPC);
     const pid = positivePid(record.pid, 'process.listening pid');
-    if (!manager.hasRemoteProcess(pid)) {
-      const relayed = relay(PROCESS_LISTENING_RPC, payload);
-      if (relayed !== undefined) return relayed;
-    }
     const previewScope =
       record.previewScope === null
         ? undefined
         : rpcString(record.previewScope, 'process.listening previewScope');
-    const control = listeningControl({
-      kind: 'control:listening',
-      ports: record.ports,
-      ...(previewScope === undefined ? {} : { previewScope }),
-    });
-    if (control === null) {
+    let control: ProcessListeningControl;
+    try {
+      const frame = decodeIpcFrame({
+        kind: 'control:listening',
+        ports: record.ports,
+        ...(previewScope === undefined ? {} : { previewScope }),
+      });
+      if (frame.kind !== 'control:listening') throw new TypeError('unreachable frame kind');
+      control = {
+        ports: [...frame.ports],
+        ...(frame.previewScope
+          ? {
+              previewScope: frame.previewScope,
+            }
+          : {}),
+      };
+    } catch {
       throw new TypeError('process.listening ports must be unique valid TCP ports');
     }
-    manager[ROUTE_REMOTE_LISTENING](pid, rpcOwner(context, PROCESS_LISTENING_RPC), control);
+    const ownerPid = rpcOwner(context, PROCESS_LISTENING_RPC);
+    const relayed = manager[ROUTES_UPSTREAM](pid)
+      ? relay(PROCESS_LISTENING_RPC, payload)
+      : undefined;
+    manager[ROUTE_REMOTE_LISTENING](pid, ownerPid, control);
+    if (relayed !== undefined) return relayed;
     return null;
   });
   dispatcher.register(PROCESS_PEER_DEATH_RPC, (payload, context) => {
     const record = rpcRecord(payload, ['pid', 'message'], PROCESS_PEER_DEATH_RPC);
     const pid = positivePid(record.pid, 'process.peer-death pid');
-    if (!manager.hasRemoteProcess(pid)) {
-      const relayed = relay(PROCESS_PEER_DEATH_RPC, payload);
-      if (relayed !== undefined) return relayed;
-    }
-    manager[ROUTE_REMOTE_PEER_DEATH](
-      pid,
-      rpcOwner(context, PROCESS_PEER_DEATH_RPC),
-      new Error(rpcString(record.message, 'process.peer-death message')),
-    );
+    const ownerPid = rpcOwner(context, PROCESS_PEER_DEATH_RPC);
+    const error = new Error(rpcString(record.message, 'process.peer-death message'));
+    const relayed = manager[ROUTES_UPSTREAM](pid)
+      ? relay(PROCESS_PEER_DEATH_RPC, payload)
+      : undefined;
+    manager[ROUTE_REMOTE_PEER_DEATH](pid, ownerPid, error);
+    if (relayed !== undefined) return relayed;
     return null;
+  });
+  dispatcher.register(PROCESS_SNAPSHOT_RPC, (payload) => {
+    rpcRecord(payload, [], PROCESS_SNAPSHOT_RPC);
+    const relayed = manager[HAS_LOCAL_AUTHORITY]()
+      ? undefined
+      : relay(PROCESS_SNAPSHOT_RPC, payload);
+    return relayed === undefined ? manager.snapshot() : relayed;
   });
 }
 

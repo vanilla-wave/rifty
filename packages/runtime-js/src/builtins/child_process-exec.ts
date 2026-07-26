@@ -10,6 +10,7 @@
 
 import { Buffer, EventEmitter, NotImplementedError, Writable, loadBuiltin } from '@riftydev/io';
 import type { ProcessHandle, ProcessIO } from '@riftydev/kernel';
+import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
@@ -146,10 +147,10 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       stdout: { write(c: string): void };
       stderr: { write(c: string): void };
       cwd(): string;
-      send?: (msg: unknown) => boolean;
+      send?: (msg: unknown, ...unsupported: unknown[]) => boolean;
       disconnect?: () => void;
       connected?: boolean;
-      channel?: object | null;
+      channel?: ReturnType<typeof nodeIpcChannel> | null;
       on(event: string, cb: Listener): unknown;
       once(event: string, cb: Listener): unknown;
       kill(pid: number, signal?: string): boolean;
@@ -280,8 +281,9 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
     };
     if (a.opts.__fork) {
       childProcess.connected = true;
-      childProcess.channel = {};
-      childProcess.send = (msg) => {
+      childProcess.channel = nodeIpcChannel('process');
+      childProcess.send = (msg, ...unsupported) => {
+        if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
         const serialized = serializeNodeIpcMessage(msg);
         queueMicrotask(() => a.outboundMessages.emit('message', serialized));
         return true;

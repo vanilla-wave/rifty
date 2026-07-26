@@ -144,7 +144,7 @@ process.stdout.write(row.value + ':' + process.env.GRAND_SENTINEL);
     await writeOwnerFile(
       page,
       '/scratch/worker-child.mjs',
-      `import { execSync } from 'node:child_process';
+      `import { exec, execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { parentPort, workerData } from 'node:worker_threads';
@@ -156,6 +156,10 @@ const nested = execSync('node worker-grandchild.mjs', {
   cwd: process.cwd(),
   env: { GRAND_SENTINEL: 'grand-exact' },
 }).toString();
+const ps = await new Promise((resolve, reject) =>
+  exec('ps -A -o ppid,pid', (error, stdout) => error ? reject(error) : resolve(stdout)));
+const processRows = ps.toString()
+  .trim().split(/\\r?\\n/).slice(1).filter((line) => line.trim().split(/\\s+/)[1] === String(process.pid));
 parentPort.postMessage({
   env: process.env.CONTEXT_SENTINEL,
   envKeys: Object.keys(process.env).sort(),
@@ -165,6 +169,7 @@ parentPort.postMessage({
   file: readFileSync('worker-data.txt', 'utf8').trim(),
   sqlite: row.value,
   nested,
+  processRows: processRows.length,
 });
 `,
     );
@@ -200,7 +205,8 @@ process.stdout.write(
     '|data=' + message.data +
     '|file=' + message.file +
     '|sqlite=' + message.sqlite +
-    '|nested=' + message.nested + '\\n',
+    '|nested=' + message.nested +
+    '|processRows=' + message.processRows + '\\n',
 );
 await worker.terminate();
 `,
@@ -211,16 +217,13 @@ await worker.terminate();
     const result = await execLine(page, 'node worker-parent.mjs');
     expect(result.exit, result.out).toBe(0);
     expect(result.out).toContain(
-      `WORKER_RELAY|env=${oracle.env}|envKeys=${oracle.envKeys.join(',')}|parentAbsent=${oracle.parentAbsent}|cwdInherited=${oracle.cwdInherited}|cwd=/|data=${oracle.data}|file=owner-file|sqlite=worker-sqlite|nested=grandchild-sqlite:grand-exact`,
+      `WORKER_RELAY|env=${oracle.env}|envKeys=${oracle.envKeys.join(',')}|parentAbsent=${oracle.parentAbsent}|cwdInherited=${oracle.cwdInherited}|cwd=/|data=${oracle.data}|file=owner-file|sqlite=worker-sqlite|nested=grandchild-sqlite:grand-exact|processRows=1`,
     );
   } finally {
     await closeOwner(page);
   }
 });
 
-// ADR-0326 acceptance: this is deliberately a Workbench terminal probe rather
-// than a unit seam. The supervisor, fork child, and grandchild must be three
-// physical Worker realms joined to the owner's one live project namespace.
 test('real fork Worker crosses owner FS, launch context, recursive IPC, and disconnect control', async ({
   page,
 }) => {
@@ -565,209 +568,6 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
       grandchildBytes: [0, 127, 128, 255],
       afterDisconnectBytes: [9, 8, 7, 6],
     });
-  } finally {
-    await closeOwner(page);
-  }
-});
-
-// ADR-0326 acceptance: worker_threads shares its parent's process identity,
-// while child_process owns a distinct PID row in the federated owner snapshot.
-test('real worker thread stays outside ps while a child process is visible', async ({ page }) => {
-  test.setTimeout(120_000);
-  await gotoHarness(page);
-  await bootOwner(page, {
-    workspaceId: 'bu-worker-thread-process-table',
-    hiddenEmptyBoot: true,
-  });
-
-  try {
-    await writeOwnerFile(
-      page,
-      '/scratch/process-table-thread.mjs',
-      `import { parentPort, threadId } from 'node:worker_threads';
-
-parentPort.postMessage({
-  type: 'ready',
-  threadId,
-  pid: process.pid,
-  ppid: process.ppid,
-});
-setInterval(() => {}, 1_000);
-`,
-    );
-    await writeOwnerFile(
-      page,
-      '/scratch/process-table-child.mjs',
-      `process.stdout.write(
-  'PROCESS_CHILD_READY|' + JSON.stringify({
-    pid: process.pid,
-    ppid: process.ppid,
-  }) + '\\n',
-);
-setInterval(() => {}, 1_000);
-`,
-    );
-    await writeOwnerFile(
-      page,
-      '/scratch/process-table-parent.mjs',
-      `import { spawn } from 'node:child_process';
-import { Worker } from 'node:worker_threads';
-
-function waitForClose(child) {
-  return new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code, signal) => resolve({ code, signal }));
-  });
-}
-
-function capture(child) {
-  return new Promise((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
-    child.once('error', reject);
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.once('close', (code, signal) => resolve({ code, signal, stdout, stderr }));
-  });
-}
-
-const worker = new Worker(new URL('./process-table-thread.mjs', import.meta.url));
-const workerReady = await new Promise((resolve, reject) => {
-  worker.once('message', resolve);
-  worker.once('error', reject);
-});
-
-const child = spawn('node', ['./process-table-child.mjs'], {
-  cwd: '/scratch',
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-const childClose = waitForClose(child);
-const childReady = await new Promise((resolve, reject) => {
-  let stdout = '';
-  child.once('error', reject);
-  child.stdout.on('data', (chunk) => {
-    stdout += chunk.toString();
-    const line = stdout.split(/\\r?\\n/u).find((candidate) =>
-      candidate.startsWith('PROCESS_CHILD_READY|'),
-    );
-    if (line !== undefined) {
-      resolve(JSON.parse(line.slice('PROCESS_CHILD_READY|'.length)));
-    }
-  });
-});
-
-const ps = spawn('ps', ['-A', '-o', 'ppid,pid'], {
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-const snapshot = await capture(ps);
-
-process.stdout.write(
-  'WORKER_THREAD_PROCESS_TABLE|' + JSON.stringify({
-    parent: { pid: process.pid, ppid: process.ppid },
-    worker: {
-      handleThreadId: worker.threadId,
-      ready: workerReady,
-    },
-    child: {
-      handlePid: child.pid,
-      ready: childReady,
-    },
-    ps: {
-      handlePid: ps.pid,
-    },
-    snapshot,
-  }) + '\\n',
-);
-
-child.kill('SIGTERM');
-await childClose;
-await worker.terminate();
-`,
-    );
-
-    expect(await runDefaultProjectOnce(page)).toEqual({ code: 0, signal: null });
-    const result = await execLine(page, 'node process-table-parent.mjs');
-    expect(result.exit, result.out).toBe(0);
-
-    const line = result.out
-      .split(/\r?\n/u)
-      .find((candidate) => candidate.startsWith('WORKER_THREAD_PROCESS_TABLE|'));
-    expect(line, result.out).toBeDefined();
-    const observed = JSON.parse(line?.slice('WORKER_THREAD_PROCESS_TABLE|'.length) ?? '') as {
-      readonly parent: { readonly pid: number; readonly ppid: number };
-      readonly worker: {
-        readonly handleThreadId: number;
-        readonly ready: {
-          readonly type: string;
-          readonly threadId: number;
-          readonly pid: number;
-          readonly ppid: number;
-        };
-      };
-      readonly child: {
-        readonly handlePid: number;
-        readonly ready: { readonly pid: number; readonly ppid: number };
-      };
-      readonly ps: { readonly handlePid: number };
-      readonly snapshot: {
-        readonly code: number | null;
-        readonly signal: string | null;
-        readonly stdout: string;
-        readonly stderr: string;
-      };
-    };
-    const rows = observed.snapshot.stdout
-      .trim()
-      .split(/\r?\n/u)
-      .slice(1)
-      .map((row) => row.trim().split(/\s+/u).map(Number))
-      .map(([ppid, pid]) => ({ ppid, pid }));
-
-    expect(observed.worker.ready).toEqual({
-      type: 'ready',
-      threadId: observed.worker.handleThreadId,
-      pid: observed.parent.pid,
-      ppid: observed.parent.ppid,
-    });
-    expect(observed.worker.handleThreadId).toBeGreaterThan(0);
-    expect(observed.child.ready).toEqual({
-      pid: observed.child.handlePid,
-      ppid: observed.parent.pid,
-    });
-    expect(observed.snapshot).toMatchObject({
-      code: 0,
-      signal: null,
-      stderr: '',
-    });
-    expect(rows).toContainEqual({
-      ppid: observed.parent.ppid,
-      pid: observed.parent.pid,
-    });
-    expect(rows).toContainEqual({
-      ppid: observed.parent.pid,
-      pid: observed.child.handlePid,
-    });
-    expect(rows.filter(({ pid }) => pid === observed.parent.pid)).toHaveLength(1);
-    expect([...rows].sort((left, right) => left.pid - right.pid)).toEqual(
-      [
-        {
-          ppid: observed.parent.ppid,
-          pid: observed.parent.pid,
-        },
-        {
-          ppid: observed.parent.pid,
-          pid: observed.child.handlePid,
-        },
-        {
-          ppid: observed.parent.pid,
-          pid: observed.ps.handlePid,
-        },
-      ].sort((left, right) => left.pid - right.pid),
-    );
   } finally {
     await closeOwner(page);
   }

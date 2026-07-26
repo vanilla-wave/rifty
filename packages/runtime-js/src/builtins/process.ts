@@ -17,9 +17,15 @@
  * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
  * real package breaks.
  */
-import { type IpcFrame, type KernelProcessSpec, globalProcessManager } from '@riftydev/kernel';
+import {
+  type IpcFrame,
+  type KernelProcessSpec,
+  decodeIpcFrame,
+  globalProcessManager,
+} from '@riftydev/kernel';
 import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
@@ -505,10 +511,10 @@ export class NodeProcess extends EventEmitter {
   nextTick = nextTick;
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
-  send?: (message: unknown) => boolean;
+  send?: (message: unknown, ...unsupported: unknown[]) => boolean;
   disconnect?: () => void;
   connected?: boolean;
-  channel?: object | null;
+  channel?: ReturnType<typeof nodeIpcChannel> | null;
 
   readonly #stdinPush: (data: string | Uint8Array) => void;
   #ipcPort: MessagePort | null = null;
@@ -583,7 +589,7 @@ export class NodeProcess extends EventEmitter {
         this.#publicIpc = true;
         this.#jsonIpc = launch?.kind === 'program';
         this.connected = true;
-        this.channel = {};
+        this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
       }
     } else {
@@ -712,8 +718,8 @@ export class NodeProcess extends EventEmitter {
     // Browsers auto-start a port only with `addEventListener('message')`; using
     // `onmessage = …` requires an explicit `start()` (called below).
     port.onmessage = (ev: MessageEvent): void => {
-      const frame = ev.data as IpcFrame | undefined;
-      if (!frame || typeof frame !== 'object' || typeof frame.kind !== 'string') return;
+      const frame = this.#receiveControlFrame(ev.data);
+      if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#ipcDisconnected) return;
         const payload = this.#jsonIpc ? serializeNodeIpcMessage(frame.payload) : frame.payload;
@@ -730,6 +736,8 @@ export class NodeProcess extends EventEmitter {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
         this.#killDescendant(frame.pid, frame.signal);
+      } else {
+        this.#rejectControlFrame();
       }
     };
     port.start();
@@ -751,13 +759,12 @@ export class NodeProcess extends EventEmitter {
       }, 0);
     });
 
-    this.send = (message: unknown): boolean => {
+    this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
+      if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
+      const payload = this.#jsonIpc ? serializeNodeIpcMessage(message) : message;
       try {
-        const frame: IpcFrame = {
-          kind: 'ipc:message',
-          payload: this.#jsonIpc ? serializeNodeIpcMessage(message) : message,
-        };
+        const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
         return true;
       } catch {
@@ -782,14 +789,16 @@ export class NodeProcess extends EventEmitter {
   #wireControl(port: MessagePort): void {
     this.#ipcPort = port;
     port.onmessage = (event: MessageEvent): void => {
-      const frame = event.data as IpcFrame | undefined;
-      if (!frame || typeof frame !== 'object') return;
+      const frame = this.#receiveControlFrame(event.data);
+      if (frame === null) return;
       if (frame.kind === 'ipc:tty-resize') {
         this.#resizeTty(frame.cols, frame.rows);
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
         this.#killDescendant(frame.pid, frame.signal);
+      } else {
+        this.#rejectControlFrame();
       }
     };
     port.start();
@@ -799,8 +808,8 @@ export class NodeProcess extends EventEmitter {
   #wireWorkerIpc(port: MessagePort): void {
     this.#ipcPort = port;
     port.onmessage = (event: MessageEvent): void => {
-      const frame = event.data as IpcFrame | undefined;
-      if (!frame || typeof frame !== 'object') return;
+      const frame = this.#receiveControlFrame(event.data);
+      if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#workerMessageListeners.size === 0) this.#workerIpcBacklog.push(frame.payload);
         else {
@@ -812,6 +821,8 @@ export class NodeProcess extends EventEmitter {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
         this.#killDescendant(frame.pid, frame.signal);
+      } else {
+        this.#rejectControlFrame();
       }
     };
     port.start();
@@ -858,13 +869,25 @@ export class NodeProcess extends EventEmitter {
     }
   }
 
+  #receiveControlFrame(value: unknown): IpcFrame | null {
+    try {
+      return decodeIpcFrame(value);
+    } catch {
+      this.#rejectControlFrame();
+      return null;
+    }
+  }
+
+  #rejectControlFrame(): void {
+    this.#requestSelfExit(1);
+  }
+
   #killDescendant(pid: number, signal: string): void {
-    const target = globalProcessManager.get(pid);
-    // A federated teardown can cross the child's settle frame. Absence is
-    // authoritative local proof that this exact PID is already physically
-    // retired, so the late idempotent kill is complete rather than fatal.
-    if (target === null) return;
-    if (!target.kill(signal) && globalProcessManager.get(pid) !== null) {
+    // Absence proves a federated descendant is already physically retired.
+    if (
+      !globalProcessManager.kill(pid, signal) &&
+      globalProcessManager.snapshot().some((row) => row.pid === pid)
+    ) {
       throw new Error(`process control could not kill descendant PID ${pid}`);
     }
   }

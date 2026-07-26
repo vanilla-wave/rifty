@@ -1,7 +1,12 @@
 /** Validated Worker launch and stdio plan shared by child_process adapters. */
 
 import { NotImplementedError, type Readable } from '@riftydev/io';
-import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import {
+  type ProcessHandle,
+  type SpawnWorkerSpec,
+  globalProcessManager,
+  readKernelProcessSpec,
+} from '@riftydev/kernel';
 import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -316,10 +321,6 @@ export function spawnWorkerChild(
     parent.entryPath !== undefined &&
     isAbsolute(parent.entryPath)
   ) {
-    // Workbench's public project namespace is mounted at `/` while the terminal
-    // keeps its shell cwd (for example `/scratch`). The active entry identifies
-    // that mount once; descendants keep the observable cwd but resolve a sibling
-    // entry in the same public namespace.
     const mountedEntry = normalizePath(joinPath(dirname(parent.entryPath), requestedEntry));
     if (syncMirror().existsSync(mountedEntry)) entryPath = mountedEntry;
   }
@@ -339,6 +340,6 @@ export function spawnWorkerChild(
   };
   return globalProcessManager.spawnWorker(command, spec, parent.pid, {
     cwd: plan.cwd,
-    federated: true,
+    federated: readKernelProcessSpec() !== null,
   });
 }

@@ -7,21 +7,18 @@ const INITIAL_BODY = 'nodemon-session-initial';
 const QUEUED_BODY = 'nodemon-session-must-not-resurrect';
 
 function serverSource(body: string, listenDelayMs: number): string {
-  return [
-    "import { createServer } from 'node:http';",
-    `console.log(${JSON.stringify(`APP_BOOT:${body}`)} + ' pid=' + process.pid + ' ppid=' + process.ppid);`,
-    ...(listenDelayMs === 0
-      ? []
-      : [`await new Promise((resolve) => setTimeout(resolve, ${String(listenDelayMs)}));`]),
-    'const server = createServer((_request, response) => {',
-    "  response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });",
-    `  response.end(${JSON.stringify(body)});`,
-    '});',
-    'server.listen(Number(process.env.PORT), () => {',
-    `  console.log(${JSON.stringify(`APP_LISTENING:${body}`)});`,
-    '});',
-    '',
-  ].join('\n');
+  const delay =
+    listenDelayMs === 0
+      ? ''
+      : `await new Promise((resolve) => setTimeout(resolve, ${String(listenDelayMs)}));`;
+  return `import { createServer } from 'node:http';
+console.log(${JSON.stringify(`APP_BOOT:${body}`)} + ' pid=' + process.pid + ' ppid=' + process.ppid);
+${delay}
+createServer((_request, response) => {
+  response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+  response.end(${JSON.stringify(body)});
+}).listen(Number(process.env.PORT), () => console.log(${JSON.stringify(`APP_LISTENING:${body}`)}));
+`;
 }
 
 test('session close fences an admitted nodemon restart without subtree or route resurrection', async ({

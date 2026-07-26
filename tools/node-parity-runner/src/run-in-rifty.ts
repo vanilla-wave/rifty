@@ -26,6 +26,7 @@ import { asyncVfs, syncMirror } from '@riftydev/vfs';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { transform as transformWithHostEsbuild } from 'esbuild';
 import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
+import type { NodeEntryBootstrapPayload } from '../../../packages/runtime-js/src/builtins/node-entry-url.ts';
 // vm-engine relative source imports (same `tools/`-harness precedent as
 // `formatArgs` below): `setVmEngineOverride` lets the runner reset the engine
 // selection between cases, and `ensureVmEngineReady` preloads the QuickJS WASM
@@ -586,12 +587,10 @@ async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
   );
   const { clearKernelWorkerUrl, clearWorkerFactoryForTests, setWorkerFactoryForTests } =
     await import('../../../packages/kernel/src/spawn-worker.ts');
-  const { configureNodeEntryWorker, resetNodeEntryWorkerUrl } = await import(
-    '../../../packages/runtime-js/src/builtins/node-entry-url.ts'
-  );
+  const { NODE_ENTRY_BOOTSTRAP_PROTOCOL, configureNodeEntryWorker, resetNodeEntryWorkerUrl } =
+    await import('../../../packages/runtime-js/src/builtins/node-entry-url.ts');
   type WorkerLike = import('../../../packages/kernel/src/spawn-worker.ts').WorkerLike;
   type WorkerInitMessage = import('../../../packages/kernel/src/worker-entry.ts').WorkerInitMessage;
-
   let nativeWorkerConstructions = 0;
   let validatedInitMessages = 0;
 
@@ -602,13 +601,14 @@ async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
       throw new TypeError('worker-env parity requires a URL kernel init message');
     }
     const envelope = entry.bootstrap;
-    if (envelope?.protocol !== 'rifty.node-entry/v1') {
+    if (envelope?.protocol !== NODE_ENTRY_BOOTSTRAP_PROTOCOL) {
       throw new TypeError('worker-env parity requires the typed node-entry bootstrap protocol');
     }
-    const payload = envelope.payload as
-      | { readonly hostRuntime?: Readonly<Record<string, unknown>> }
-      | undefined;
-    if (payload?.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only') {
+    const payload = envelope.payload as Partial<NodeEntryBootstrapPayload> | null;
+    if (
+      payload?.launch?.kind !== 'worker-thread' ||
+      payload.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only'
+    ) {
       throw new TypeError('worker-env parity init is missing its out-of-band host marker');
     }
     validatedInitMessages++;

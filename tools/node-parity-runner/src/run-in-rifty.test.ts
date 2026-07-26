@@ -14,6 +14,7 @@ import {
 } from '../../../packages/runtime-js/src/builtins/process.ts';
 import { asyncVfs, syncMirror } from '../../../packages/vfs/src/index.ts';
 import { setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
+import workerEnvCase from '../cases/worker_threads/env-semantics.case.ts';
 import { runInRifty } from './run-in-rifty.ts';
 
 function restoreGlobalDescriptor(name: string, descriptor: PropertyDescriptor | undefined): void {
@@ -27,6 +28,10 @@ function restoreKernelWorkerUrl(url: string | URL | null): void {
 }
 
 describe('runInRifty', () => {
+  it('accepts the atomic node-entry v2 bootstrap in physical Worker mode', async () => {
+    await expect(runInRifty(workerEnvCase)).resolves.toBe(workerEnvCase.expected);
+  });
+
   it('waits for keepalive-backed timers before restoring console capture', async () => {
     const stdout = await runInRifty({
       code: `

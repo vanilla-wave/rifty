@@ -1,5 +1,6 @@
-import type { KernelProcessSpec } from '@riftydev/kernel';
+import { type KernelProcessSpec, publishKernelEntryBootstrap } from '@riftydev/kernel';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
 import {
   applyNodeProcessTerminalBootstrap,
   postNodeProcessListeningControl,
@@ -29,6 +30,7 @@ function spec(): KernelProcessSpec {
 }
 
 afterEach(() => {
+  publishKernelEntryBootstrap(null);
   Object.defineProperty(globalThis, 'process', {
     value: originalProcess,
     writable: true,
@@ -50,6 +52,56 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     ipc.port2.postMessage({ kind: 'ipc:message', payload: { hello: 'world' } });
 
     await expect(received).resolves.toEqual({ hello: 'world' });
+  });
+
+  it('throws child-origin circular JSON synchronously without closing the channel', async () => {
+    const ipc = new MessageChannel();
+    const entry = buildNodeEntryWorkerEntry(
+      'https://host.test/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+      { kind: 'program', bin: false, remoteFs: true, ipc: 'json', nodeServe: true },
+    );
+    publishKernelEntryBootstrap(entry.bootstrap ?? null);
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const frames: unknown[] = [];
+    ipc.port2.onmessage = (event) => frames.push(event.data);
+    ipc.port2.start();
+    const circular: { self?: unknown } = {};
+    circular.self = circular;
+
+    expect(() => process.send?.(circular)).toThrow(/circular/i);
+    expect(process.send?.({ after: true })).toBe(true);
+    await tick();
+    expect(frames).toEqual([{ kind: 'ipc:message', payload: { after: true } }]);
+  });
+
+  it('reports an exact child-side failure for a malformed private frame', async () => {
+    const ipc = new MessageChannel();
+    installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const response = new Promise<unknown>((resolve) => {
+      ipc.port2.onmessage = (event) => resolve(event.data);
+      ipc.port2.start();
+    });
+
+    ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 80, rows: 24, extra: true });
+
+    await expect(response).resolves.toEqual({ kind: 'control:self-exit', code: 1 });
+  });
+
+  it('keeps unsupported process IPC arguments and channel controls loud by name', () => {
+    const process = installNodeProcessShim(spec());
+
+    expect(() => (process.send as (...args: unknown[]) => unknown)({}, null)).toThrow(
+      /process\.send\.arguments/,
+    );
+    expect(() => (process.channel as { ref(): void }).ref()).toThrow(/process\.channel\.ref/);
+    expect(() => (process.channel as { unref(): void }).unref()).toThrow(/process\.channel\.unref/);
   });
 
   it('delivers an ipc:message that arrives before a message listener attaches', async () => {

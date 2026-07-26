@@ -153,8 +153,6 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     // The write made it into the terminal as a db log line.
     await expectTerminalContains(page, '[db] INSERT todos #', 10_000);
 
-    // I2: the edit is observed by installed nodemon, replaces the app Worker on
-    // the same route, and resets realm-local SQLite state.
     const restartMarker = `express-nodemon-${Date.now()}`;
     await openShellTerminal(page);
     await runTerminalLineSettled(page, `echo "console.log('${restartMarker}')" >> src/main.js`);
@@ -170,8 +168,6 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
       .toBe(3);
     expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
 
-    // I4: writes inside the watch debounce may coalesce; final owner-VFS bytes
-    // must win without a stale route or port holder.
     const rapidMarker = `express-rapid-${Date.now()}`;
     const restartsBeforeRapid = (await terminalBuffer(page, 0)).split(
       '[nodemon] restarting due to changes',
@@ -208,8 +204,6 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     await expect(page.locator(`iframe[title="Preview port ${PORT}"]`)).toHaveCount(1);
     await expect(page.locator(`.rf-preview__switcher option[value="${PORT}"]`)).toHaveCount(1);
 
-    // I3: the real child parse failure reaches stderr; nodemon remains alive and
-    // a later valid edit recovers without another `npm run dev`.
     await runTerminalLineSettled(page, `echo 'const = ;' >> src/main.js`);
     await expect
       .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
@@ -227,8 +221,6 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     await expect.poll(async () => (await fetchTodos()).count, { timeout: 45_000 }).toBe(3);
     expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
 
-    // I5: Ctrl-C tears down nodemon, its app descendant, and the preview route;
-    // an already-admitted watch event cannot resurrect the subtree.
     const queuedMarker = `express-queued-after-close-${Date.now()}`;
     await runTerminalLine(page, `echo "console.log('${queuedMarker}')" >> src/main.js`);
     await page.getByRole('tab', { name: 'Express + SQLite scratch', exact: true }).click();
@@ -248,9 +240,6 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     );
     await expect(page.locator(`.rf-preview__switcher option[value="${PORT}"]`)).toHaveCount(0);
 
-    // Package provenance: a missing or corrupt exact launcher must fail
-    // visibly. Neither case may claim a supervisor start or execute the entry
-    // through Workbench's direct-node controller.
     const startsBeforeLaunchFaults = occurrences(
       await terminalBuffer(page, 0),
       '[nodemon] starting',

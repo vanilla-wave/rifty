@@ -1,9 +1,17 @@
-export { DEFAULT_CWD, ProcessManager, globalProcessManager } from './process-manager.ts';
+export {
+  DEFAULT_CWD,
+  ProcessManager,
+  decodeIpcFrame,
+  formatProcessSnapshot,
+  globalProcessManager,
+  readRootProcessSnapshot,
+} from './process-manager.ts';
 export type {
   IpcFrame,
   ProcessHandle,
   ProcessHandleKind,
   ProcessIO,
+  ProcessSnapshot,
   SameRealmProcessHandle,
   SpawnOptions,
   WorkerProcessHandle,

@@ -234,8 +234,9 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
 
     init.spec.stdio.ipc.postMessage({
       kind: 'control:listening',
-      ports: [0],
+      ports: [3000],
       previewScope: 'scope-a',
+      extra: true,
     });
 
     await vi.waitFor(() => expect(handle.exitCode).toBe(1), { timeout: 500 });

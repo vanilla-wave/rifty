@@ -19,13 +19,17 @@ import { Buffer, EventEmitter, NotImplementedError, Readable, type Writable } fr
 import {
   type ProcessHandle,
   type ProcessIO,
+  formatProcessSnapshot,
   getKernelDispatcher,
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
+  readKernelProcessSpec,
+  readRootProcessSnapshot,
 } from '@riftydev/kernel';
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
+import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
@@ -91,8 +95,8 @@ class ChildProcess extends EventEmitter {
   readonly stdio: readonly (Readable | Writable | null)[];
   killed = false;
   connected = false;
-  declare channel?: object | null;
-  declare send?: (message: unknown) => boolean;
+  declare channel?: ReturnType<typeof nodeIpcChannel> | null;
+  declare send?: (message: unknown, ...unsupported: unknown[]) => boolean;
   declare disconnect?: () => void;
   private readonly handle: ProcessHandle;
   private readonly ownerProcess: unknown;
@@ -142,8 +146,11 @@ class ChildProcess extends EventEmitter {
     });
     if (ipcEnabled) {
       this.connected = true;
-      this.channel = {};
-      this.send = (message: unknown): boolean => {
+      this.channel = nodeIpcChannel('child_process');
+      this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
+        if (unsupported.length > 0) {
+          throw new NotImplementedError('child_process.send.arguments');
+        }
         if (!this.connected) return false;
         const serialized = serializeNodeIpcMessage(message);
         if (handle.kind === 'worker') return handle.send(serialized);
@@ -325,7 +332,7 @@ function spawnViaSameRealm(
       });
     },
     parent.pid,
-    { cwd: execution.cwd, federated: true },
+    { cwd: execution.cwd, federated: readKernelProcessSpec() !== null },
   );
 
   wiring.handle = handle;
@@ -349,25 +356,8 @@ function spawnViaSameRealm(
 }
 
 function renderPs(args: readonly string[]): string {
-  const parent = activeChildProcessContext();
-  const rows = [
-    { pid: parent.pid, ppid: parent.pid === 1 ? 0 : 1, command: 'rifty' },
-    ...globalProcessManager.list().map(({ pid, ppid, command }) => ({ pid, ppid, command })),
-  ];
-  if (args.length === 0) {
-    return [
-      '  PID TTY          TIME CMD',
-      ...rows.map(({ pid, command }) => `${String(pid).padStart(5)} ?        00:00:00 ${command}`),
-      '',
-    ].join('\n');
-  }
-  if (args.length === 3 && args[0] === '-A' && args[1] === '-o' && args[2] === 'ppid,pid') {
-    return [
-      ' PPID   PID',
-      ...rows.map(({ ppid, pid }) => `${String(ppid).padStart(5)} ${String(pid).padStart(5)}`),
-      '',
-    ].join('\n');
-  }
+  const output = formatProcessSnapshot(args, readRootProcessSnapshot());
+  if (output !== null) return output;
   throw new NotImplementedError('child_process.ps', `unsupported ps form: ps ${args.join(' ')}`);
 }
 
@@ -378,8 +368,7 @@ function runKill(args: readonly string[]): void {
       `unsupported kill form: kill ${args.join(' ')}`,
     );
   }
-  const target = globalProcessManager.get(Number(args[1]));
-  if (target === null || !target.kill('SIGUSR2')) {
+  if (!globalProcessManager.kill(Number(args[1]), 'SIGUSR2')) {
     throw Object.assign(new Error(`kill: (${String(args[1])}) - No such process`), {
       code: 'ESRCH',
     });

@@ -1,5 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
-import { globalProcessManager } from '@riftydev/kernel';
+import { readRootProcessSnapshot } from '@riftydev/kernel';
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import {
   type BinExecutor,
@@ -296,13 +296,7 @@ export function createWorkbenchProjectRuntime(
         return namespace.rethrowOwnerError(error);
       }
     });
-    shell.registerCommand(
-      'ps',
-      createOwnerProcessListCommand(() => [
-        { pid: 1, ppid: 0, command: 'rifty' },
-        ...globalProcessManager.list().map(({ pid, ppid, command }) => ({ pid, ppid, command })),
-      ]),
-    );
+    shell.registerCommand('ps', createOwnerProcessListCommand(readRootProcessSnapshot));
     const spawnNodeEntry = (
       entryPath: string,
       scriptArgs: readonly string[],
