@@ -81,7 +81,8 @@ Contract+RED → Final+GREEN):
 4. `npm-client/shadow-recipe-v2-authority` —
    **recipe-v2-authority**: consumes the data-authority prerequisite, then owns
    exact acquisition execution, materialized bins, and strict replay authority
-   discovered by the Sass contract; required before the package-specific seam.
+   discovered by the Sass contract; draft until its registry/npm/bin evidence
+   gates close, and required before the package-specific seam.
 5. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
    generic-file no-change gate. Required for epic closure, not optional.

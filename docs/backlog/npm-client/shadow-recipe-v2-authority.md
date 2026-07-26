@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: ready
+status: draft
 title: Shadow recipe v2 authority — exact admission, acquisition projection, and materialized bins
 created: 2026-07-26
 why: the Sass RED proved recipe v1 admits unproven ranges, copies unproven registry dependencies, and can expose the acquired package bin instead of the substituted package bin; those are missing generic policy authorities, not Sass exceptions
@@ -27,16 +27,30 @@ item starts at execution, projection, materialization, and replay.
 
 ## Reference contract
 
-- Registry-backed builtin projections are pinned to committed npm packument
-  goldens under `tools/shadow-registry/src/fixtures/registry-metadata/`, keyed by
-  package, exact version, registry source, integrity, and captured date.
-- `lightningcss-wasm@1.32.0` is captured from the configured npm registry. Its
-  four dependency maps are compared to the recipe independently of catalog
-  source or installer fixtures; any new registry-backed builtin must add the
-  same external golden and shared differential case.
-- npm peer traversal remains pinned by the existing real npm differential.
-  Browser acceptance remains the existing real esbuild/Vite contract, never a
-  local fake of the package being substituted.
+- Before ready, registry-backed builtin projections must be pinned to committed
+  npm packument goldens keyed by package, exact version, registry source,
+  integrity, and captured date.
+- The `lightningcss-wasm@1.32.0` golden must compare all four dependency maps to
+  the recipe independently of catalog source or installer fixtures; future
+  registry-backed builtins inherit the same external-golden differential.
+- Real npm must pin peer placement/traversal and same-command `.bin`
+  ownership/order. Browser acceptance remains the real esbuild/Vite contract,
+  never a local fake of the package being substituted.
+
+## Readiness blockers
+
+- Commit a reproducible exact `lightningcss-wasm@1.32.0` registry capture
+  (source, integrity, date, and all four dependency maps); the referenced
+  golden does not exist yet.
+- Add the real-npm peer placement/traversal differential this contract
+  references; current peer tests use the fake registry and do not settle
+  traversal.
+- Pin real npm's same-command `.bin` winner/order, then specify how a
+  materialized alias participates. Existing package-order overwrite is not an
+  oracle.
+- Add `concurrent-same-key` coverage or a proven physical exclusion for
+  alias/bin/lock writes before this production-tier storage slice becomes
+  ready.
 
 ## Acceptance
 
