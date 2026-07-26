@@ -4,7 +4,10 @@ import { makeGit, vfsToGitFs } from '@riftydev/git';
 import { getKernelDispatcher } from '@riftydev/kernel';
 import { syncMirror } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
-import { ensureStarterInitialCommit } from '../glue/git-initial-baseline.ts';
+import {
+  createStarterBaselineFinalizer,
+  ensureStarterInitialCommit,
+} from '../glue/git-initial-baseline.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -254,6 +257,12 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
 
   const eddy = config.packageAcquisition.eddy;
   const ownerVfs = new SyncMirrorVfs();
+  const starterInitialOids = new Map<string, string>();
+  const amendGeneratedBaseline = createStarterBaselineFinalizer(
+    ownerVfs,
+    starterInitialOids,
+    async () => assertCleanDurability(await authority.flush()),
+  );
   const registry = createProxiedRegistryClient({
     proxyPrefix: config.packageAcquisition.registryUrl,
   });
@@ -283,6 +292,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     fsSync: authority,
     installStampClaims,
     flush: () => authority.flush(),
+    amendGeneratedBaseline,
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),
     registry,
@@ -470,9 +480,13 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         | Awaited<ReturnType<typeof createOwnerPlaygroundSessionTools>>
         | undefined;
       if (playgroundAuthority !== undefined) {
-        const vfs = new SyncMirrorVfs();
+        const vfs = ownerVfs;
         try {
-          await ensureStarterInitialCommit(vfs, projectRoot);
+          await packageState.mutations.guardedMutation([], async () => {
+            starterInitialOids.delete(projectRoot);
+            const initialOid = await ensureStarterInitialCommit(vfs, projectRoot);
+            if (initialOid !== null) starterInitialOids.set(projectRoot, initialOid);
+          });
           const git = makeGit({
             fs: vfsToGitFs(vfs),
             dir: projectRoot,

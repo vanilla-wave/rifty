@@ -30,6 +30,10 @@
 
 ### Fixed
 
+- Preserve the live `package.json` during deferred first install, and fold its
+  exact generated lockfile into the untouched Starter root under the
+  package/SCM FIFO. Staged or explicit user dependency changes stay visible.
+
 - Abort a terminal install waiter immediately when its lifecycle closes behind
   the package FIFO head, while retaining its cancelled admission until that
   FIFO position so quiescence and stamp ownership stay exact.

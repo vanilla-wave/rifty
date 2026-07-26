@@ -155,7 +155,8 @@ export function clearProjectTree(fsSync: WorkspaceArchiveFs, root: string): void
 }
 
 export interface PrepareProjectInstallTreeOptions {
-  readonly packageJsonText: string;
+  /** Optional owned manifest replacement; omit when the live project owns package.json. */
+  readonly packageJsonText?: string;
   readonly currentSlug: string;
   readonly priorSlug?: string;
   readonly priorTrustedTree: boolean;
@@ -172,10 +173,20 @@ export function prepareProjectInstallTree(
   if (opts.priorSlug !== undefined && opts.priorSlug !== opts.currentSlug) {
     fsSync.rmSync(joinPath(root, 'package-lock.json'), { force: true });
   }
-  fsSync.writeFileSync(
-    joinPath(root, 'package.json'),
-    new TextEncoder().encode(opts.packageJsonText),
-  );
+  if (opts.packageJsonText !== undefined) {
+    const packageJsonPath = joinPath(root, 'package.json');
+    const expectedPackageJson = new TextEncoder().encode(opts.packageJsonText);
+    const currentPackageJson = fsSync.existsSync(packageJsonPath)
+      ? fsSync.readFileBytesSync(packageJsonPath)
+      : undefined;
+    if (
+      currentPackageJson === undefined ||
+      currentPackageJson.byteLength !== expectedPackageJson.byteLength ||
+      currentPackageJson.some((byte, index) => byte !== expectedPackageJson[index])
+    ) {
+      fsSync.writeFileSync(packageJsonPath, expectedPackageJson);
+    }
+  }
 }
 
 function isTemplateNodeModulesFile(root: string, path: string): boolean {
