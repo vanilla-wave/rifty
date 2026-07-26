@@ -392,13 +392,21 @@ describe('evaluateMarkerHistory', () => {
     expect(closureIdentityViolations(histories)[0]).toContain('another epic identity');
   });
 
-  it('treats every non-backlog artifact as implementation in a bootstrap PR', () => {
+  it('treats every non-docs artifact as implementation in a bootstrap PR', () => {
     expect(isContractOnlyBootstrap(['docs/backlog/epics/goal.md'])).toBe(true);
+    expect(
+      isContractOnlyBootstrap([
+        'docs/backlog/epics/goal.md',
+        'docs/adr/net/0301-example.md',
+        'docs/process/decision-workflow.md',
+      ]),
+    ).toBe(true);
     for (const path of [
       'apps/playground/src/theme.css',
       'packages/x/package.json',
       'tools/build.mjs',
       'examples/demo/index.html',
+      'docs/public/compat/index.html',
     ]) {
       expect(isContractOnlyBootstrap(['docs/backlog/epics/goal.md', path])).toBe(false);
     }

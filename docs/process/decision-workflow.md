@@ -75,8 +75,9 @@ Run loop — starts only on an explicit whole-ready-epic hand-off or a task/PR
 carrying `Goal-Baseline`; never for ordinary items, single fixes, or
 process/docs/skill work:
 
-1. Bootstrap or inherit the write-once marker; declare the matching
-   `Goal-Baseline` and one `Budget-Slice`.
+1. Bootstrap or inherit the write-once marker (bootstrap = ONE contract-only PR:
+   epic commit, then marker-only commit pointing at it — never a chain of PRs);
+   declare the matching `Goal-Baseline` and one `Budget-Slice`.
 2. Pick one dependency-ready residual; compile a settled draft per §Backlog
    readiness above; surface only a remaining observable fork for manual
    `rifty-refine`.

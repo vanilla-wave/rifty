@@ -57,9 +57,11 @@ item, or an ADR explaining separation. Template: `epics/TEMPLATE.md`.
 Only an explicit whole-ready-epic hand-off or a task/PR carrying `Goal-Baseline`
 starts a run.
 
-1. Land the ready epic.
-2. In a later commit, add only
-   `goal_baseline: <parent ready-epic SHA>`.
+1. Land the ready epic (with its ADRs — the bootstrap PR is contract-only:
+   `docs/**.md`, zero source).
+2. In a later commit — the SAME contract-only PR is fine — add only
+   `goal_baseline: <the ready-epic commit's SHA>`. One bootstrap PR with two
+   commits (epic, then marker) is the normal shape; two PRs work too.
 3. Every source PR repeats exactly one same-epic pair:
 
 ```text
