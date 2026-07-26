@@ -2,10 +2,34 @@ name: CI
 
 on:
   pull_request:
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
+  # Keep the workflow unconditional: path-filtered required workflows remain
+  # pending. Gate jobs instead, then reduce matrix results into `CI gate`.
+  change-scope:
+    name: Change scope
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: classify
+        name: Classify changed paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tools/checks/ci-change-scope.mjs "$EVENT_NAME" "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -31,6 +55,8 @@ jobs:
       - run: pnpm check:arch # layer direction + cycles + foreign-internal + solid (D-002)
       - run: pnpm check:parity-coverage
       - run: pnpm check:e2e-coverage
+      - run: pnpm check:compat-drift # docs-only PRs still prove generated compatibility claims
+      - run: pnpm test:docs-contract # lightweight source↔compat/ADR honesty guards
       - run: pnpm check:shadow-catalog-drift
       - run: pnpm check:install-artifact-drift
       - run: pnpm check:snapshot-artifact-drift
@@ -46,6 +72,10 @@ jobs:
       - run: pnpm refs:check # blocking: ADR index + cross-ref integrity
 
   unit-and-conformance:
+    needs: change-scope
+    # bare needs.* implies success() and would skip the heavy suite when
+    # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     # run + parity as parallel matrix jobs: wall-clock = max(suite), not sum
     # (test:run ~3m dominates; parity ~1m rides a second runner).
@@ -71,6 +101,10 @@ jobs:
       - run: pnpm test:${{ matrix.suite }}
 
   e2e-chromium:
+    needs: change-scope
+    # bare needs.* implies success() and would skip the heavy suite when
+    # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     # Run the three lanes as PARALLEL matrix jobs (separate runners), not
     # sequential steps in one job: e2e wall-clock becomes max(lane) instead of
@@ -199,6 +233,10 @@ jobs:
           path: playwright-report
 
   browser-unit-chromium:
+    needs: change-scope
+    # bare needs.* implies success() and would skip the heavy suite when
+    # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     # Browser-unit lane (ADR-0196): worker-side playground modules behaviorally
     # tested against the REAL owner worker under COI — thin harness page, no App
     # boot. Own job (not an e2e matrix lane): different tier, different config.
@@ -231,3 +269,25 @@ jobs:
         with:
           name: playwright-report-browser-unit
           path: playwright-report
+
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs:
+      - change-scope
+      - lint-and-typecheck
+      - unit-and-conformance
+      - e2e-chromium
+      - browser-unit-chromium
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require every applicable job
+        env:
+          CODE: ${{ needs.change-scope.outputs.code }}
+          CHANGE_SCOPE_RESULT: ${{ needs.change-scope.result }}
+          LINT_RESULT: ${{ needs.lint-and-typecheck.result }}
+          UNIT_RESULT: ${{ needs.unit-and-conformance.result }}
+          E2E_RESULT: ${{ needs.e2e-chromium.result }}
+          BROWSER_UNIT_RESULT: ${{ needs.browser-unit-chromium.result }}
+        run: node tools/checks/ci-gate.mjs

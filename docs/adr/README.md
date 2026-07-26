@@ -199,6 +199,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0242 | Generated esbuild diagnostic provenance and target errno normalization |
 | 0255 | Disposable worker realm for seeded-process parity cases |
 | 0312 | Keep synchronous SHA-256 implementations layer-local |
+| 0323 | Gate heavy PR tests on code-affecting changes |
 
 ### protocol
 

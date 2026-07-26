@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Docs-only PRs skip 14 unit/browser jobs.** A first-party merge-base
+  classifier now treats only `docs/**` and conventional documentation files as
+  non-code; everything unknown fails open to the full gate. Unit/parity,
+  Chromium e2e, and browser-unit jobs skip documentation-only PRs, while
+  lint/type/build, generated-compat drift, and focused docs contract checks
+  still run. A stable non-matrix `CI gate` reduces applicable results for
+  future branch protection; the reducer lives in a unit-tested
+  `tools/checks/ci-gate.mjs`. A dead `change-scope` job fails open — heavy
+  jobs run via `!cancelled()` conditions instead of silently skipping
+  (fault class false-fallback). Baseline: docs-only PR #177 spent 3,091
+  runner-seconds across the 14 heavy jobs.
+
 - **PR CI wall-clock ~24m → ~5m: e2e lanes sharded, unit split.** The light
   lane (23.4m serialized: 107 tests × ~13s, `--workers=1` for owner cold-boot
   starvation) now runs as 8 `--shard=i/8` matrix jobs — each shard its own
