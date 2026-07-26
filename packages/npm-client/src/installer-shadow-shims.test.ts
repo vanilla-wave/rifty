@@ -497,6 +497,17 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
       ordinaryLockPath: 'node_modules/legacy-alias-ordinary-host/node_modules/lightningcss',
     },
     {
+      label: 'root alias declared after its ordinary host',
+      dependencies: {
+        [LEGACY_ALIAS_ORDINARY_HOST]: '1.0.0',
+        'lightningcss-wasm': '1.32.0',
+      },
+      acquisitionPath: 'node_modules/lightningcss-wasm',
+      aliasRoot: '/proj/node_modules/lightningcss',
+      ordinaryRoot: '/proj/node_modules/legacy-alias-ordinary-host/node_modules/lightningcss',
+      ordinaryLockPath: 'node_modules/legacy-alias-ordinary-host/node_modules/lightningcss',
+    },
+    {
       label: 'root ordinary package and nested alias',
       dependencies: {
         [LEGACY_ALIAS_ORDINARY_HOST]: '1.0.0',
