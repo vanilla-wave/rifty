@@ -1,6 +1,6 @@
 ---
 area: playground
-status: ready
+status: draft
 title: Install trust survives extraneous node_modules writes (re-scoped oracle)
 created: 2026-07-16
 why: live Vite repeatedly writes node_modules/.vite-temp after npm install; today any such write revokes the whole-tree claim, marks a fresh Scratch UNSAVED, and forces the next reopen to reacquire an otherwise usable tree — surveillance real npm does not perform (ADR-0307 probe)
@@ -20,6 +20,22 @@ package.json/lockfile comparison at open; extraneous writes into
 `node_modules` never invalidate — exactly real npm (probe evidence in
 ADR-0307). Vite stays byte-unmodified and writes its temp config modules to
 the real VFS as on Node.
+
+## Readiness blocker
+
+The production Save path copies Scratch to the named-project root with
+`copyClaims: false`, then `openProject()` runs acquisition against that new
+root. Chromium proof found a second snapshot acquisition during Save before
+the already-green B→A return. This violates the unchanged Acceptance below and
+epic invariant 5 even though `.vite-temp` itself no longer revokes trust.
+
+ADR-0261 currently requires Save to exclude claims and lets only ordinary
+destination acquisition mint trust. The frozen outcome instead requires Save
+to preserve the exact installed bytes with zero acquisition. Before this item
+can return to `ready`, a superseding ADR must place re-keying under the existing
+package-tree/install-stamp authority, pin crash and rollback order, and add a
+Save-inclusive Chromium RED. The pre-demotion `## Acceptance` and
+`## Parity cases` are retained verbatim below.
 
 ## User scenario
 
