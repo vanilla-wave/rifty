@@ -113,6 +113,7 @@ async function lightningRegistry(
 
 const CONTRACT_TRIGGER = 'contract-package';
 const CONTRACT_SOURCE = 'contract-source';
+const CONTRACT_ORDINARY_HOST = 'contract-ordinary-host';
 const CONTRACT_VERSION = '1.100.0';
 const CONTRACT_REQUIRED = '@scope/required';
 const CONTRACT_RETAINED = '@scope/retained';
@@ -160,6 +161,75 @@ const CONTRACT_PLACEMENTS = [
   },
 ] as const;
 
+const CONTRACT_COLLISION_PLACEMENTS = [
+  {
+    label: 'root recipe and nested ordinary package',
+    dependencies: {
+      [CONTRACT_TRIGGER]: CONTRACT_VERSION,
+      [CONTRACT_ORDINARY_HOST]: '1.0.0',
+    },
+    acquisitionPath: 'node_modules/contract-source',
+    materializationRoot: '/project/node_modules/contract-package',
+    materializationLockPath: 'node_modules/contract-package',
+    materializationLauncherDir: '/project/node_modules/.bin',
+    ordinaryRoot: '/project/node_modules/contract-ordinary-host/node_modules/contract-package',
+    ordinaryLockPath: 'node_modules/contract-ordinary-host/node_modules/contract-package',
+    ordinaryLauncherDir: '/project/node_modules/contract-ordinary-host/node_modules/.bin',
+  },
+  {
+    label: 'root ordinary package and nested recipe',
+    dependencies: {
+      [CONTRACT_ORDINARY_HOST]: '1.0.0',
+      'contract-host': '1.0.0',
+    },
+    acquisitionPath: 'node_modules/contract-host/node_modules/contract-source',
+    materializationRoot: '/project/node_modules/contract-host/node_modules/contract-package',
+    materializationLockPath: 'node_modules/contract-host/node_modules/contract-package',
+    materializationLauncherDir: '/project/node_modules/contract-host/node_modules/.bin',
+    ordinaryRoot: '/project/node_modules/contract-package',
+    ordinaryLockPath: 'node_modules/contract-package',
+    ordinaryLauncherDir: '/project/node_modules/.bin',
+  },
+] as const;
+
+const CONTRACT_MATERIALIZATION_BIN_CASES = [
+  ['non-empty bin map', CONTRACT_BIN],
+  ['empty bin map', {}],
+] as const;
+
+const LIGHTNING_ORDINARY_HOST = 'lightning-ordinary-host';
+const LIGHTNING_RECIPE_HOST = 'lightning-recipe-host';
+const LIGHTNING_COLLISION_PLACEMENTS = [
+  {
+    label: 'root',
+    dependencies: {
+      lightningcss: '1.32.0',
+      [LIGHTNING_ORDINARY_HOST]: '1.0.0',
+    },
+    acquisitionPath: 'node_modules/lightningcss-wasm',
+    materializationRoot: '/project/node_modules/lightningcss',
+    materializationLockPath: 'node_modules/lightningcss',
+    materializationLauncherDir: '/project/node_modules/.bin',
+    ordinaryRoot: '/project/node_modules/lightning-ordinary-host/node_modules/lightningcss',
+    ordinaryLockPath: 'node_modules/lightning-ordinary-host/node_modules/lightningcss',
+    ordinaryLauncherDir: '/project/node_modules/lightning-ordinary-host/node_modules/.bin',
+  },
+  {
+    label: 'nested',
+    dependencies: {
+      [LIGHTNING_ORDINARY_HOST]: '1.0.0',
+      [LIGHTNING_RECIPE_HOST]: '1.0.0',
+    },
+    acquisitionPath: 'node_modules/lightning-recipe-host/node_modules/lightningcss-wasm',
+    materializationRoot: '/project/node_modules/lightning-recipe-host/node_modules/lightningcss',
+    materializationLockPath: 'node_modules/lightning-recipe-host/node_modules/lightningcss',
+    materializationLauncherDir: '/project/node_modules/lightning-recipe-host/node_modules/.bin',
+    ordinaryRoot: '/project/node_modules/lightningcss',
+    ordinaryLockPath: 'node_modules/lightningcss',
+    ordinaryLauncherDir: '/project/node_modules/.bin',
+  },
+] as const;
+
 function freezeFixture<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) freezeFixture(child);
@@ -179,11 +249,12 @@ function contractFile(path: string, content: string) {
 
 function contractAuthority(
   admissionKind: 'exact-only' | 'semver-admits' = 'exact-only',
+  materializationBin: Readonly<Record<string, string>> = CONTRACT_BIN,
 ): ShadowInstallAuthority {
   const packageJson = JSON.stringify({
     name: CONTRACT_TRIGGER,
     version: CONTRACT_VERSION,
-    bin: CONTRACT_BIN,
+    ...(Object.keys(materializationBin).length === 0 ? {} : { bin: materializationBin }),
   });
   const recipePayload = {
     schema: 2 as const,
@@ -208,7 +279,7 @@ function contractAuthority(
     materialization: {
       name: CONTRACT_TRIGGER,
       version: CONTRACT_VERSION,
-      bin: CONTRACT_BIN,
+      bin: { ...materializationBin },
       files: [
         contractFile(
           'bin/contract.js',
@@ -336,8 +407,64 @@ async function contractRegistry(
       { 'index.js': 'module.exports = "host";\n' },
     ),
   );
+  add(
+    await contractRegistryEntry(
+      CONTRACT_ORDINARY_HOST,
+      '1.0.0',
+      { dependencies: { [CONTRACT_TRIGGER]: CONTRACT_VERSION } },
+      { 'index.js': 'module.exports = "ordinary-host";\n' },
+    ),
+  );
+  add(
+    await contractRegistryEntry(
+      CONTRACT_TRIGGER,
+      CONTRACT_VERSION,
+      { bin: { ordinary: 'bin/ordinary.js' } },
+      {
+        'bin/ordinary.js': '#!/usr/bin/env node\nthrow new Error("ordinary bin");\n',
+        'sentinel.txt': 'ordinary package bytes\n',
+      },
+    ),
+  );
   for (const name of [CONTRACT_REQUIRED, CONTRACT_RETAINED, CONTRACT_OMITTED, CONTRACT_PEER]) {
     add(await contractRegistryEntry(name, '1.0.0'));
+  }
+  return new ContractRegistry(entries);
+}
+
+async function lightningCollisionRegistry(): Promise<ContractRegistry> {
+  const entries = new Map<string, Map<string, ContractRegistryEntry>>();
+  const add = (entry: ContractRegistryEntry): void => {
+    const versions = entries.get(entry.manifest.name) ?? new Map();
+    versions.set(entry.manifest.version, entry);
+    entries.set(entry.manifest.name, versions);
+  };
+  add(
+    await contractRegistryEntry('lightningcss-wasm', '1.32.0', {
+      dependencies: { 'napi-wasm': '^1.0.1' },
+    }),
+  );
+  add(await contractRegistryEntry('napi-wasm', '1.0.1'));
+  add(
+    await contractRegistryEntry(
+      'lightningcss',
+      '1.32.0',
+      { bin: { realcss: 'bin/real.js' } },
+      {
+        'bin/real.js': '#!/usr/bin/env node\nthrow new Error("real lightningcss bin");\n',
+        'sentinel.txt': 'ordinary lightningcss bytes\n',
+      },
+    ),
+  );
+  for (const host of [LIGHTNING_ORDINARY_HOST, LIGHTNING_RECIPE_HOST]) {
+    add(
+      await contractRegistryEntry(
+        host,
+        '1.0.0',
+        { dependencies: { lightningcss: '1.32.0' } },
+        { 'index.js': `module.exports = ${JSON.stringify(host)};\n` },
+      ),
+    );
   }
   return new ContractRegistry(entries);
 }
@@ -349,7 +476,11 @@ async function installContract(
   transport: Partial<
     Pick<
       InstallOptions,
-      'onSubstitution' | 'resolverUrl' | 'resolverClosureHash' | 'resolverBundleBaseUrl'
+      | 'onSubstitution'
+      | 'overrides'
+      | 'resolverUrl'
+      | 'resolverClosureHash'
+      | 'resolverBundleBaseUrl'
     >
   > = {},
   authority: ShadowInstallAuthority = contractAuthority(),
@@ -1006,6 +1137,102 @@ describe('shadow substitution installer boundary', () => {
     expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
   });
 
+  describe.each(CONTRACT_COLLISION_PLACEMENTS)(
+    '[fault: provenance-lie] $label placement ownership',
+    (placement) => {
+      it.each(CONTRACT_MATERIALIZATION_BIN_CASES)(
+        'keeps recipe and ordinary bytes, provenance, and %s disjoint through replay',
+        async (_binLabel, materializationBin) => {
+          vi.spyOn(console, 'warn').mockImplementation(() => {});
+          const vfs = new MemoryVfs();
+          await vfs.mkdir('/project', { recursive: true });
+          const registry = await contractRegistry();
+          const authority = contractAuthority('exact-only', materializationBin);
+          const overrides = {
+            [`${CONTRACT_ORDINARY_HOST}>${CONTRACT_TRIGGER}`]: `${CONTRACT_TRIGGER}@${CONTRACT_VERSION}`,
+          };
+
+          const first = await installContract(
+            vfs,
+            registry,
+            placement.dependencies,
+            { overrides },
+            authority,
+          );
+          const recipeEntry = first.lockfile.packages[placement.materializationLockPath];
+          const acquisitionEntry = first.lockfile.packages[placement.acquisitionPath];
+          const ordinaryEntry = first.lockfile.packages[placement.ordinaryLockPath];
+          if (!recipeEntry || !acquisitionEntry || !ordinaryEntry) {
+            throw new Error(`collision fixture did not publish ${placement.label}`);
+          }
+
+          expect(await vfs.readFileText(`${placement.materializationRoot}/index.js`)).toBe(
+            'module.exports = "contract";\n',
+          );
+          await expect(vfs.exists(`${placement.materializationRoot}/sentinel.txt`)).resolves.toBe(
+            false,
+          );
+          expect(await vfs.readFileText(`${placement.ordinaryRoot}/sentinel.txt`)).toBe(
+            'ordinary package bytes\n',
+          );
+          expect(recipeEntry).toMatchObject({
+            version: CONTRACT_VERSION,
+            riftyShadowRecipe: 'rifty.shadow-substitution.contract-package.v2',
+          });
+          expect(recipeEntry).not.toHaveProperty('resolved');
+          expect(recipeEntry).not.toHaveProperty('integrity');
+          if (Object.keys(materializationBin).length === 0) {
+            expect(recipeEntry).not.toHaveProperty('bin');
+            await expect(
+              vfs.exists(`${placement.materializationLauncherDir}/contract`),
+            ).resolves.toBe(false);
+          } else {
+            expect(recipeEntry.bin).toEqual(CONTRACT_BIN);
+            expect(await vfs.readFileText(`${placement.materializationLauncherDir}/contract`)).toBe(
+              CONTRACT_LAUNCHER,
+            );
+          }
+          expect(acquisitionEntry).not.toHaveProperty('bin');
+          expect(ordinaryEntry).toMatchObject({
+            version: CONTRACT_VERSION,
+            bin: { ordinary: 'bin/ordinary.js' },
+          });
+          expect(ordinaryEntry).not.toHaveProperty('riftyShadowRecipe');
+          expect(await vfs.readFileText(`${placement.ordinaryLauncherDir}/ordinary`)).toContain(
+            '../contract-package/bin/ordinary.js',
+          );
+          await expect(
+            vfs.exists(`${placement.materializationLauncherDir}/ordinary`),
+          ).resolves.toBe(false);
+
+          const lockBefore = await vfs.readFile('/project/package-lock.json');
+          await vfs.rm(placement.materializationRoot, { recursive: true, force: true });
+          await vfs.rm(placement.ordinaryRoot, { recursive: true, force: true });
+          if (await vfs.exists(`${placement.materializationLauncherDir}/contract`)) {
+            await vfs.rm(`${placement.materializationLauncherDir}/contract`);
+          }
+          await vfs.rm(`${placement.ordinaryLauncherDir}/ordinary`);
+          registry.resetReads();
+
+          await installContract(vfs, registry, placement.dependencies, { overrides }, authority);
+
+          expect(registry.packumentReads).toEqual([]);
+          expect(registry.tarballReads).toEqual([]);
+          expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+          expect(await vfs.readFileText(`${placement.materializationRoot}/index.js`)).toBe(
+            'module.exports = "contract";\n',
+          );
+          await expect(vfs.exists(`${placement.materializationRoot}/sentinel.txt`)).resolves.toBe(
+            false,
+          );
+          expect(await vfs.readFileText(`${placement.ordinaryRoot}/sentinel.txt`)).toBe(
+            'ordinary package bytes\n',
+          );
+        },
+      );
+    },
+  );
+
   describe.each(CONTRACT_PLACEMENTS)(
     '[fault: provenance-lie] $label registry acquisition replay',
     (placement) => {
@@ -1226,6 +1453,84 @@ describe('shadow substitution installer boundary', () => {
     });
     expect(registry.tarballReads).toBe(0);
   });
+
+  it.each(LIGHTNING_COLLISION_PLACEMENTS)(
+    '[fault: sibling-drift/provenance-lie] keeps LightningCSS $label recipe placement disjoint from an ordinary override',
+    async (placement) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const registry = await lightningCollisionRegistry();
+      const overrides = {
+        [`${LIGHTNING_ORDINARY_HOST}>lightningcss`]: 'lightningcss@1.32.0',
+      };
+      const options = {
+        vfs,
+        cwd: '/project',
+        registry,
+        overrides,
+        onSubstitution: () => {},
+      } as const;
+
+      const first = await install('fixture', '1.0.0', placement.dependencies, options);
+      const recipeEntry = first.lockfile.packages[placement.materializationLockPath];
+      const acquisitionEntry = first.lockfile.packages[placement.acquisitionPath];
+      const ordinaryEntry = first.lockfile.packages[placement.ordinaryLockPath];
+      if (!recipeEntry || !acquisitionEntry || !ordinaryEntry) {
+        throw new Error(`LightningCSS collision fixture did not publish ${placement.label}`);
+      }
+
+      expect(await vfs.readFileText(`${placement.materializationRoot}/index.cjs`)).toBe(
+        "module.exports = require('lightningcss-wasm');\n",
+      );
+      await expect(vfs.exists(`${placement.materializationRoot}/sentinel.txt`)).resolves.toBe(
+        false,
+      );
+      expect(await vfs.readFileText(`${placement.ordinaryRoot}/sentinel.txt`)).toBe(
+        'ordinary lightningcss bytes\n',
+      );
+      expect(recipeEntry).toMatchObject({
+        version: '1.32.0',
+        riftyShadowRecipe: 'rifty.shadow-substitution.lightningcss.v2',
+      });
+      expect(recipeEntry).not.toHaveProperty('resolved');
+      expect(recipeEntry).not.toHaveProperty('integrity');
+      expect(recipeEntry).not.toHaveProperty('bin');
+      expect(acquisitionEntry).not.toHaveProperty('bin');
+      expect(ordinaryEntry).toMatchObject({
+        version: '1.32.0',
+        bin: { realcss: 'bin/real.js' },
+      });
+      expect(ordinaryEntry).not.toHaveProperty('riftyShadowRecipe');
+      await expect(vfs.exists(`${placement.materializationLauncherDir}/realcss`)).resolves.toBe(
+        false,
+      );
+      expect(await vfs.readFileText(`${placement.ordinaryLauncherDir}/realcss`)).toContain(
+        '../lightningcss/bin/real.js',
+      );
+
+      const lockBefore = await vfs.readFile('/project/package-lock.json');
+      await vfs.rm(placement.materializationRoot, { recursive: true, force: true });
+      await vfs.rm(placement.ordinaryRoot, { recursive: true, force: true });
+      await vfs.rm(`${placement.ordinaryLauncherDir}/realcss`);
+      registry.resetReads();
+
+      await install('fixture', '1.0.0', placement.dependencies, options);
+
+      expect(registry.packumentReads).toEqual([]);
+      expect(registry.tarballReads).toEqual([]);
+      expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+      expect(await vfs.readFileText(`${placement.materializationRoot}/index.cjs`)).toBe(
+        "module.exports = require('lightningcss-wasm');\n",
+      );
+      await expect(vfs.exists(`${placement.materializationRoot}/sentinel.txt`)).resolves.toBe(
+        false,
+      );
+      expect(await vfs.readFileText(`${placement.ordinaryRoot}/sentinel.txt`)).toBe(
+        'ordinary lightningcss bytes\n',
+      );
+    },
+  );
 
   it('[fault: torn-state] stops registry alias writes before success and retry reconciles exact bytes', async () => {
     const recipe = builtinShadowSubstitutionCatalog.recipes.find(
