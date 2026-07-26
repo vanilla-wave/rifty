@@ -25,18 +25,30 @@ These need a browser (or a Worker-capable bundler) and the prerequisites in the 
 [README](../../README.md#consuming-rifty-in-your-own-app--read-this-first) (COOP/COEP,
 module Workers). They are reference snippets, not Node-runnable:
 
+For Vite, set `worker: { format: 'es' }` and declare each package whose Worker
+entry the host imports as a direct dependency. The runtime example needs
+`npm install @riftydev/runtime-js`.
+
 **Evaluate JS in a Worker — `@riftydev/runtime-js`:**
 
 ```ts
+import workerUrl from '@riftydev/runtime-js/worker?worker&url';
 import { spawnRuntime } from '@riftydev/runtime-js';
 
-// workerUrl must resolve to the package's worker entry, e.g. with Vite:
-const workerUrl = new URL('@riftydev/runtime-js/worker', import.meta.url);
-const rt = spawnRuntime({ workerUrl });
-rt.on((e) => { if (e.type === 'stdout') console.log(e.chunk); });
-const result = await rt.eval('console.log(1 + 2); 40 + 2');
-console.log('result =', result);
-rt.dispose();
+async function main(): Promise<void> {
+  const rt = spawnRuntime({ workerUrl });
+  try {
+    rt.on((e) => {
+      if (e.type === 'stdout') console.log(e.chunk);
+    });
+    const result = await rt.eval('console.log(1 + 2); 40 + 2');
+    console.log('result =', result);
+  } finally {
+    rt.dispose();
+  }
+}
+
+void main();
 ```
 
 **Run a `.wasm` under WASI — `@riftydev/runtime-wasi`:**

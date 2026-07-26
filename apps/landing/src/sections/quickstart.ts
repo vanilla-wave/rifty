@@ -1,12 +1,14 @@
 import { icon } from '../icons';
+import { QUICKSTART_SNIPPET, type SnippetToken } from '../public-snippets';
 import './quickstart.css';
 
-// One token in a code line: [text, syntax-class | ''].
-type Tok = readonly [text: string, cls: string];
-
-function codeLine(toks: readonly Tok[]): HTMLDivElement {
+function codeLine(toks: readonly SnippetToken[]): HTMLDivElement {
   const div = document.createElement('div');
   div.className = 'qs-code-line';
+  if (toks.length === 0) {
+    div.textContent = ' ';
+    return div;
+  }
   for (const [text, cls] of toks) {
     const span = document.createElement('span');
     if (cls) {
@@ -15,13 +17,6 @@ function codeLine(toks: readonly Tok[]): HTMLDivElement {
     span.textContent = text;
     div.append(span);
   }
-  return div;
-}
-
-function blankLine(): HTMLDivElement {
-  const div = document.createElement('div');
-  div.className = 'qs-code-line';
-  div.textContent = ' ';
   return div;
 }
 
@@ -34,93 +29,11 @@ function buildCodeCard(): HTMLElement {
   const fileIcon = document.createElement('span');
   fileIcon.className = 'qs-code-tab-icon';
   fileIcon.innerHTML = icon('terminal-dot', 13);
-  tab.append(fileIcon, document.createTextNode('boot.ts'));
+  tab.append(fileIcon, document.createTextNode('boot.vite.ts'));
 
   const body = document.createElement('div');
   body.className = 'qs-code-body';
-
-  body.append(
-    codeLine([
-      ['import', 'syn-kw'],
-      [' { ', 'syn-punc'],
-      ['checkCapabilities', ''],
-      [', ', 'syn-punc'],
-      ['createSandbox', ''],
-      [' } ', 'syn-punc'],
-      ['from', 'syn-kw'],
-      [' ', ''],
-      ["'@riftydev/sdk'", 'syn-str'],
-    ]),
-  );
-  body.append(blankLine());
-  body.append(
-    codeLine([
-      ['const', 'syn-kw'],
-      [' caps ', ''],
-      ['= ', 'syn-punc'],
-      ['checkCapabilities', 'syn-fn'],
-      ['()', 'syn-punc'],
-    ]),
-  );
-  body.append(
-    codeLine([
-      ['if', 'syn-kw'],
-      [' (!caps.sufficient || !caps.capabilities.crossOriginIsolated)', 'syn-punc'],
-    ]),
-  );
-  body.append(
-    codeLine([
-      ['  throw', 'syn-kw'],
-      [' new ', 'syn-punc'],
-      ['Error', 'syn-fn'],
-      ['(caps.summary)', 'syn-punc'],
-    ]),
-  );
-  body.append(blankLine());
-  body.append(
-    codeLine([
-      ['const', 'syn-kw'],
-      [' sandbox ', ''],
-      ['=', 'syn-punc'],
-      [' ', ''],
-      ['await', 'syn-kw'],
-      [' ', ''],
-      ['createSandbox', 'syn-fn'],
-      ['({', 'syn-punc'],
-    ]),
-  );
-  body.append(
-    codeLine([
-      ['  workerUrl', ''],
-      [': ', 'syn-punc'],
-      ['new', 'syn-kw'],
-      [' ', ''],
-      ['URL', 'syn-fn'],
-      ['(', 'syn-punc'],
-      ["'@riftydev/runtime-js/worker'", 'syn-str'],
-      [', import.meta.url),', 'syn-punc'],
-    ]),
-  );
-  body.append(
-    codeLine([
-      ['  serviceWorkerUrl', ''],
-      [': ', 'syn-punc'],
-      ["'/sw.js'", 'syn-str'],
-      [',', 'syn-punc'],
-    ]),
-  );
-  body.append(codeLine([['})', 'syn-punc']]));
-  body.append(blankLine());
-  body.append(
-    codeLine([
-      ['await', 'syn-kw'],
-      [' sandbox.runtime.', 'syn-punc'],
-      ['eval', 'syn-fn'],
-      ['(', 'syn-punc'],
-      ['\'console.log("hello from a Worker")\'', 'syn-str'],
-      [')', 'syn-punc'],
-    ]),
-  );
+  for (const line of QUICKSTART_SNIPPET) body.append(codeLine(line));
 
   card.append(tab, body);
   return card;
@@ -137,7 +50,7 @@ function buildCallout(): HTMLElement {
   warnIcon.innerHTML = icon('warning-triangle', 15);
   const title = document.createElement('span');
   title.className = 'qs-callout-heading';
-  title.textContent = 'Cross-origin isolation required';
+  title.textContent = 'Cross-origin isolation + ESM Workers';
   titleRow.append(warnIcon, title);
 
   const body = document.createElement('p');
@@ -158,7 +71,14 @@ function buildCallout(): HTMLElement {
   const coi = document.createElement('code');
   coi.className = 'qs-code-inline';
   coi.textContent = 'crossOriginIsolated === true';
-  body.append(coi, document.createTextNode('. Header-less static hosts won’t boot it.'));
+  body.append(coi, document.createTextNode('. In Vite also set '));
+  const workerFormat = document.createElement('code');
+  workerFormat.className = 'qs-code-inline';
+  workerFormat.textContent = "worker: { format: 'es' }";
+  body.append(
+    workerFormat,
+    document.createTextNode('. Header-less static hosts and IIFE Worker builds won’t boot it.'),
+  );
 
   callout.append(titleRow, body);
   return callout;
@@ -170,11 +90,11 @@ function buildLeafCard(): HTMLElement {
 
   const heading = document.createElement('h3');
   heading.className = 'qs-leaf-heading';
-  heading.textContent = 'also fine on its own:';
+  heading.textContent = 'Vite host wiring';
 
   const list = document.createElement('div');
   list.className = 'qs-leaf-list';
-  const installs = ['npm i @riftydev/vfs', 'npm i @riftydev/npm-client', 'npm i @riftydev/shell'];
+  const installs = ['npm i @riftydev/sdk @riftydev/runtime-js'];
   for (const cmd of installs) {
     const row = document.createElement('div');
     row.className = 'qs-leaf-row';
@@ -188,13 +108,13 @@ function buildLeafCard(): HTMLElement {
   const note = document.createElement('p');
   note.className = 'qs-leaf-note';
   note.textContent =
-    'The leaf packages are plain isomorphic JS — no headers, no worker, runs anywhere.';
+    'Declare runtime-js because host code imports its Worker entry. This example is eval/files only; preview also needs a separately bundled same-origin Service Worker.';
 
   card.append(heading, list, note);
   return card;
 }
 
-/** Quick start — boot.ts code card + COI callout + leaf-installs card. */
+/** Quick start — production-buildable Vite host code and its deployment requirements. */
 export function renderQuickStart(): HTMLElement {
   const section = document.createElement('section');
   section.id = 'start';

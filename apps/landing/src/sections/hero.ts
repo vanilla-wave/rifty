@@ -1,12 +1,10 @@
 import { icon } from '../icons';
 import { buildPlaygroundHref } from '../playground-url';
+import { HERO_SNIPPET, type SnippetToken } from '../public-snippets';
 import { startTerminalLog } from '../terminal-log';
 import './hero.css';
 
-// Build a syntax-colored code line from [text, class] pairs.
-type Tok = readonly [text: string, cls: string];
-
-function codeLine(toks: readonly Tok[]): HTMLDivElement {
+function codeLine(toks: readonly SnippetToken[]): HTMLDivElement {
   const div = document.createElement('div');
   div.className = 'hero-code-line';
   for (const [text, cls] of toks) {
@@ -117,82 +115,7 @@ function buildWindow(): HTMLElement {
   // Code block: only methods on the current public Sandbox contract.
   const code = document.createElement('div');
   code.className = 'hero-code';
-  code.append(codeLine([['// public SDK: eval + filesystem + events', 'syn-com']]));
-  code.append(
-    codeLine([
-      ['import', 'syn-kw'],
-      [' { ', 'syn-punc'],
-      ['createSandbox', ''],
-      [' } ', 'syn-punc'],
-      ['from', 'syn-kw'],
-      [' ', ''],
-      ["'@riftydev/sdk'", 'syn-str'],
-    ]),
-  );
-  code.append(
-    codeLine([
-      ['const', 'syn-kw'],
-      [' sandbox ', ''],
-      ['=', 'syn-punc'],
-      [' ', ''],
-      ['await', 'syn-kw'],
-      [' ', ''],
-      ['createSandbox', 'syn-fn'],
-      ['({', 'syn-punc'],
-    ]),
-    codeLine([['  workerUrl,', '']]),
-    codeLine([
-      ['  skipServiceWorker: ', ''],
-      ['true', 'syn-kw'],
-      [',', 'syn-punc'],
-    ]),
-    codeLine([['})', 'syn-punc']]),
-  );
-  code.append(
-    codeLine([
-      ['sandbox', ''],
-      ['.', 'syn-punc'],
-      ['runtime', ''],
-      ['.', 'syn-punc'],
-      ['on', 'syn-fn'],
-      ['((event) => {', 'syn-punc'],
-    ]),
-    codeLine([
-      ['  if', 'syn-kw'],
-      [' (event.type === ', 'syn-punc'],
-      ["'stdout'", 'syn-str'],
-      [') console.log(event.chunk)', 'syn-punc'],
-    ]),
-    codeLine([['})', 'syn-punc']]),
-  );
-  code.append(
-    codeLine([
-      ['await', 'syn-kw'],
-      [' sandbox', ''],
-      ['.', 'syn-punc'],
-      ['fs', ''],
-      ['.', 'syn-punc'],
-      ['writeFile', 'syn-fn'],
-      ['(', 'syn-punc'],
-      ["'/hello.js'", 'syn-str'],
-      [', ', 'syn-punc'],
-      ['\'console.log("hello")\'', 'syn-str'],
-      [')', 'syn-punc'],
-    ]),
-  );
-  code.append(
-    codeLine([
-      ['await', 'syn-kw'],
-      [' sandbox', ''],
-      ['.', 'syn-punc'],
-      ['runtime', ''],
-      ['.', 'syn-punc'],
-      ['eval', 'syn-fn'],
-      ['(', 'syn-punc'],
-      ['\'console.log("hello")\'', 'syn-str'],
-      [')', 'syn-punc'],
-    ]),
-  );
+  for (const line of HERO_SNIPPET) code.append(codeLine(line));
 
   // terminal panel
   const term = document.createElement('div');
@@ -201,7 +124,7 @@ function buildWindow(): HTMLElement {
   termLabel.className = 'hero-term-label';
   const apiSpan = document.createElement('span');
   apiSpan.className = 'hero-term-vite';
-  apiSpan.textContent = '● runtime events';
+  apiSpan.textContent = '● public SDK';
   termLabel.append(apiSpan, document.createTextNode(' API TRACE'));
   const termLog = document.createElement('div');
   termLog.className = 'hero-term-log';
@@ -210,7 +133,7 @@ function buildWindow(): HTMLElement {
   const apiNote = document.createElement('p');
   apiNote.className = 'hero-api-note';
   apiNote.textContent =
-    'Shown API is the public Sandbox façade: runtime.eval/on + fs. Command execution lives at @riftydev/sdk/shell and preview routing at @riftydev/sdk/service-worker — neither is a Sandbox method.';
+    'The host supplies a bundled module-Worker URL. This eval-only example uses the public Sandbox façade: runtime.eval/on + fs. Command execution and preview routing are separate APIs.';
 
   win.append(titlebar, code, term, apiNote);
 

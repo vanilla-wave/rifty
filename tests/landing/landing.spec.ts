@@ -164,26 +164,53 @@ test('positions the open runtime honestly and shows only public Sandbox API', as
 
   const publicApi = page.locator('.hero-code');
   await expect(publicApi.locator('.hero-code-line')).toHaveText([
-    '// public SDK: eval + filesystem + events',
     "import { createSandbox } from '@riftydev/sdk'",
-    'const sandbox = await createSandbox({',
-    '  workerUrl,',
-    '  skipServiceWorker: true,',
-    '})',
-    'sandbox.runtime.on((event) => {',
-    "  if (event.type === 'stdout') console.log(event.chunk)",
-    '})',
-    "await sandbox.fs.writeFile('/hello.js', 'console.log(\"hello\")')",
-    'await sandbox.runtime.eval(\'console.log("hello")\')',
+    'export async function boot(workerUrl: string | URL) {',
+    '  const sandbox = await createSandbox({',
+    '    workerUrl,',
+    '    skipServiceWorker: true,',
+    '  })',
+    '  sandbox.runtime.on((event) => {',
+    "    if (event.type === 'stdout') console.log(event.chunk)",
+    '  })',
+    "  await sandbox.fs.writeFile('/hello.txt', 'hello')",
+    '  await sandbox.runtime.eval(\'console.log("hello")\')',
+    '  return sandbox',
+    '}',
   ]);
   expect(await publicApi.innerText()).not.toMatch(/\.spawn\s*\(/);
   expect(await publicApi.evaluate((code) => code.scrollWidth <= code.clientWidth)).toBe(true);
   await expect(
     page.getByText(
-      'Shown API is the public Sandbox façade: runtime.eval/on + fs. Command execution lives at @riftydev/sdk/shell and preview routing at @riftydev/sdk/service-worker — neither is a Sandbox method.',
+      'The host supplies a bundled module-Worker URL. This eval-only example uses the public Sandbox façade: runtime.eval/on + fs. Command execution and preview routing are separate APIs.',
       { exact: true },
     ),
   ).toBeVisible();
+
+  const quickStart = page.locator('.qs-code-body');
+  await expect(quickStart.locator('.qs-code-line')).toHaveText([
+    "import runtimeWorkerUrl from '@riftydev/runtime-js/worker?worker&url'",
+    "import { checkCapabilities, createSandbox } from '@riftydev/sdk'",
+    '',
+    'async function main() {',
+    '  const caps = checkCapabilities()',
+    '  if (!caps.capabilities.worker ||',
+    '      !caps.capabilities.crossOriginIsolated) {',
+    '    throw new Error(caps.summary)',
+    '  }',
+    '',
+    '  const sandbox = await createSandbox({',
+    '    workerUrl: runtimeWorkerUrl,',
+    '    skipServiceWorker: true,',
+    '  })',
+    '  sandbox.runtime.on((event) => {',
+    "    if (event.type === 'stdout') console.log(event.chunk)",
+    '  })',
+    '  await sandbox.runtime.eval(\'console.log("hello from a Worker")\')',
+    '}',
+    'void main()',
+  ]);
+  await expect(page.getByRole('heading', { name: 'Vite host wiring' })).toBeVisible();
 
   const howItWorks = page.getByRole('link', { name: 'How it works', exact: true });
   await expect(howItWorks).toBeVisible();
@@ -204,7 +231,7 @@ test('keeps the animated hero terminal height stable while rows appear', async (
   );
 
   await page.clock.runFor(3_200);
-  await expect(page.locator('.hero-term-row')).toHaveCount(6);
+  await expect(page.locator('.hero-term-row')).toHaveCount(5);
   expect(
     await measured.evaluateAll((elements) =>
       elements.map((element) => element.getBoundingClientRect().height),
@@ -313,7 +340,7 @@ test('renders semantic landmarks and subsection headings', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Embeddable Workbench' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'TypeScript + Git over VFS' })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Cross-origin isolation required' }),
+    page.getByRole('heading', { name: 'Cross-origin isolation + ESM Workers' }),
   ).toBeVisible();
 });
 
@@ -527,7 +554,7 @@ test('renders the favicon and respects reduced-motion preference', async ({ page
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
 
-  await expect(page.locator('.hero-term-row')).toHaveCount(6);
+  await expect(page.locator('.hero-term-row')).toHaveCount(5);
   const animationNames = await page
     .locator('.hero-eyebrow-dot, .hero-live-dot, .hero-term-cursor')
     .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).animationName));

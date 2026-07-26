@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Corrected the public SDK examples to be production-buildable Vite code: the runtime Worker now
+  uses a `?worker&url` asset import, the required direct dependency and ESM Worker configuration
+  are explicit, top-level await is avoided, and the headless example no longer implies that
+  preview Service Worker routing is active. A real Vite production build guards the displayed
+  source and emitted Worker asset.
 - Refreshed the public claim surface for project `v0.2` / M11: added the exact Vite 8.0.16
   Rolldown preset plus its proven build + preview path, and current Workbench, TypeScript, Git,
   npm tooling, preview streaming, registry proxy, and WASI boundaries. The explorer now

@@ -31,6 +31,9 @@
 
 ### Changed
 
+- Corrected Vite host-wiring examples to use a production-emitted
+  `@riftydev/runtime-js/worker?worker&url` asset with an ESM Worker build instead
+  of an indirect package URL that Vite could not bundle.
 - Clarified the SDK README host-wiring boundary: consumers still own COOP/COEP
   headers, bundler-resolved runtime Worker URLs, bundled same-origin `sw.js`
   from `@riftydev/service-worker/sw`, and same-origin WASM assets for
