@@ -13,6 +13,9 @@
 
 ### Changed (Workbench extraction)
 
+- TypeScript, Vite 7, and Vite 8 dependency snapshots are re-baked against the
+  schema-2 shadow catalog/install identity; stale schema-1 snapshots cannot be
+  restored (ADR-0328).
 - Instant Vite 7 restores still skip `npm install`, but an empty verified
   runtime CAS now has an explicit two-request esbuild-wasm acquisition contract
   and loud `ESHADOWASSET/acquire` offline failure; warm CAS and Vite 8 are

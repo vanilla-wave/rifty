@@ -1,5 +1,6 @@
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
+import schemaOneShadowLockfile from './fixtures/schema-1-shadow-lockfile.json';
 import {
   attestBuiltinShadowSubstitution,
   createShadowSubstitutionLockfileTrace,
@@ -9,6 +10,40 @@ import {
   planShadowSubstitutionsFromLockfile,
 } from './planner.ts';
 import { strictShadowPlanCodecCases } from './strict-codec.contract-fixtures.ts';
+
+function schemaOneSingleEsbuildLockfile(): unknown {
+  const lockfile = structuredClone(schemaOneShadowLockfile) as unknown as {
+    packages: Record<string, unknown>;
+    rifty: {
+      shadowSubstitutions: {
+        applied: Array<{ trigger: { name: string } }>;
+      };
+    };
+  };
+  const root = lockfile.packages[''];
+  const esbuild = lockfile.packages['node_modules/esbuild'];
+  if (!root || !esbuild) throw new Error('schema-1 fixture is missing esbuild entries');
+  lockfile.packages = {
+    '': {
+      version: '1.0.0',
+      dependencies: { esbuild: '0.28.0' },
+    },
+    'node_modules/esbuild': esbuild,
+  };
+  lockfile.rifty.shadowSubstitutions.applied = lockfile.rifty.shadowSubstitutions.applied.filter(
+    ({ trigger }) => trigger.name === 'esbuild',
+  );
+  return lockfile;
+}
+
+function captureError(run: () => unknown): unknown {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  return new Error('expected the schema-1 shadow trace to be rejected');
+}
 
 describe('shadow substitution planner contract', () => {
   it.each(strictShadowPlanCodecCases)(
@@ -128,6 +163,24 @@ describe('shadow substitution planner contract', () => {
     expect(Object.isFrozen(plan)).toBe(true);
     expect(plan.substitutions).toEqual([]);
   });
+
+  it.each([
+    ['one applied fact', schemaOneSingleEsbuildLockfile, 'esbuild'],
+    [
+      'reverse-ordered applied facts',
+      () => structuredClone(schemaOneShadowLockfile),
+      'lightningcss',
+    ],
+  ] as const)(
+    'rejects a schema-1 trace with %s and names its canonical-first package',
+    (_label, lockfile, packageName) => {
+      expect(captureError(() => planShadowSubstitutionsFromLockfile(lockfile()))).toMatchObject({
+        code: 'EBROKENLOCK',
+        reason: 'shadow-trace-drift',
+        packageName,
+      });
+    },
+  );
 
   it('rejects nested accessors without invoking them', () => {
     let getterRan = false;

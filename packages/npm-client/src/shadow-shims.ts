@@ -2,8 +2,8 @@
  * Install-time application of shadow-registry internals shims (ADR-0188).
  *
  * Data lives in `@riftydev/shadow-registry` (`internalsShims`, keyed by the
- * INSTALLED trigger package); this adapter owns the semver gate, the companion
- * lockstep contract, and the file writes into each pinned copy's actual
+ * INSTALLED trigger package); this adapter owns the companion lockstep
+ * contract and the file writes into each pinned copy's actual
  * install path (nested/hoisted-aware) — replacing the playground's boot-time
  * `/workspace`-rooted overlay. Runs on live resolve, lockfile replay, and the
  * eddy-seeded path alike (all converge on `install()`'s post-link step).
@@ -33,12 +33,8 @@ export interface EffectivePackageRequest {
   readonly effectiveRange: string | null;
 }
 
-function rangeAdmitsVersion(range: string | null, version: string): boolean {
-  return range === null || range === '' || range === '*' || matchesRange(version, range);
-}
-
 /**
- * One override/request authority for preflight, live resolve, and replay.
+ * One override/request authority for live resolve and replay.
  * Baked aliases preserve the caller's semver contract; explicit user overrides
  * intentionally replace it and therefore own the effective target range.
  */
@@ -51,16 +47,6 @@ export function resolveEffectivePackageRequest(
   const override = resolveOverride(name, parent, userOverrides);
   const effectiveName = override?.name ?? name;
   const effectiveRange = override?.range ?? range;
-  const shim = override ? internalsShims[effectiveName] : undefined;
-  if (override && shim?.into === name && shim.apiVersion) {
-    const admittedRange = override.source === 'baked' ? range : effectiveRange;
-    if (!rangeAdmitsVersion(admittedRange, shim.apiVersion)) {
-      throw new NotImplementedError(
-        `shadow-registry.${shim.into}@${admittedRange ?? '*'}`,
-        `alias exposes exact ${shim.into}@${shim.apiVersion}; requested range is unsupported`,
-      );
-    }
-  }
   return { override, effectiveName, effectiveRange };
 }
 

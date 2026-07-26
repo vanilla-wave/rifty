@@ -17,6 +17,9 @@
 
 ### Changed
 
+- Regenerated install-artifact identity now binds the schema-2 builtin shadow
+  catalog, invalidating stale worker install stamps after the policy authority
+  change (ADR-0328).
 - Removed dead zero-caller surface: `installStampAuthorityFor` + its
   `ownerAuthorities` registry and the two unused owner-VFS terminal equality
   helpers; module-surface tests pin their absence.

@@ -1,0 +1,120 @@
+{
+  "name": "schema-one-shadow-fixture",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "version": "1.0.0",
+      "dependencies": {
+        "esbuild": "0.28.0",
+        "lightningcss-wasm": "1.32.0"
+      }
+    },
+    "node_modules/esbuild": {
+      "version": "0.28.0",
+      "resolved": "rifty:shadow-substitution/rifty.shadow-substitution.esbuild.v1@0cf34400121b3ddd82ed19aa2b30c2ecd6e3e7a8c573aeba64155652f78167e6",
+      "riftyShadowRecipe": "rifty.shadow-substitution.esbuild.v1"
+    },
+    "node_modules/lightningcss": {
+      "version": "1.32.0",
+      "riftyShadowRecipe": "rifty.shadow-substitution.lightningcss.v1"
+    },
+    "node_modules/lightningcss-wasm": {
+      "version": "1.32.0",
+      "resolved": "https://registry.test/lightningcss-wasm-1.32.0.tgz",
+      "integrity": "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  },
+  "rifty": {
+    "shadowSubstitutions": {
+      "protocol": "rifty.shadow-substitutions/v1",
+      "applied": [
+        {
+          "catalog": {
+            "id": "rifty.shadow-substitutions.builtin.v1",
+            "digest": "0eb5dc4c53231efcbfca5c5b6aca6bc203f3013d5168b6e190a9bcf0152993ac"
+          },
+          "substitutionId": "rifty.shadow-substitution.esbuild.v1",
+          "recipeDigest": "0cf34400121b3ddd82ed19aa2b30c2ecd6e3e7a8c573aeba64155652f78167e6",
+          "trigger": {
+            "name": "esbuild",
+            "requestedRange": "^0.28.0",
+            "version": "0.28.0"
+          },
+          "acquisition": {
+            "kind": "synthetic"
+          },
+          "materialization": {
+            "installPath": "node_modules/esbuild",
+            "name": "esbuild",
+            "version": "0.28.0",
+            "files": [
+              {
+                "path": "bin/esbuild",
+                "sha256": "d1e76833fddb0febf70bfaf8d6942286382fbb549b0722e49de997fdaa773f47",
+                "bytes": 248
+              },
+              {
+                "path": "lib/main.cjs",
+                "sha256": "961d1a20258b40af980ed63ece45a0f3a2ca7e0df375cb5bfa3a99cde0386cb4",
+                "bytes": 175
+              },
+              {
+                "path": "package.json",
+                "sha256": "6ea61c374d8c8681e86b0e950c4c87dea840996284709d35af7e799169e064ab",
+                "bytes": 313
+              }
+            ]
+          },
+          "binding": {
+            "adapterId": "rifty.runtime-adapter.esbuild.v1",
+            "assets": ["esbuild-wasm@0.28.0/package/esbuild.wasm"]
+          }
+        },
+        {
+          "catalog": {
+            "id": "rifty.shadow-substitutions.builtin.v1",
+            "digest": "0eb5dc4c53231efcbfca5c5b6aca6bc203f3013d5168b6e190a9bcf0152993ac"
+          },
+          "substitutionId": "rifty.shadow-substitution.lightningcss.v1",
+          "recipeDigest": "0dd089ff66e159b0b53cfd90857ac02ea1d4f32dc97b483d9ed300f0dabe2d4e",
+          "trigger": {
+            "name": "lightningcss",
+            "requestedRange": "^1.32.0",
+            "version": "1.32.0"
+          },
+          "acquisition": {
+            "kind": "registry",
+            "name": "lightningcss-wasm",
+            "version": "1.32.0",
+            "resolved": "https://registry.test/lightningcss-wasm-1.32.0.tgz",
+            "integrity": "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+          },
+          "materialization": {
+            "installPath": "node_modules/lightningcss",
+            "name": "lightningcss",
+            "version": "1.32.0",
+            "files": [
+              {
+                "path": "index.cjs",
+                "sha256": "e862f01641a1b33713b5c205474ffb23379b4e66affdf08680fe4c00faf56e20",
+                "bytes": 47
+              },
+              {
+                "path": "index.mjs",
+                "sha256": "1be16085d6c090f58b459e45b2531616bff8836c3f3d95e363fc36c7ebfdb9cd",
+                "bytes": 239
+              },
+              {
+                "path": "package.json",
+                "sha256": "3ebddaa8830dd3bd37e01a4c798f73d5a493abb737fc24909e906b62fd8acfe1",
+                "bytes": 254
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

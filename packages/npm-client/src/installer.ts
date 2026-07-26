@@ -65,6 +65,7 @@ import {
   readExistingLockfile,
   writeLockfileIfChanged,
 } from './installer-lockfile-reader.ts';
+import { assertShadowRecipeAdmission } from './internal/shadow/admission.ts';
 import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
 import {
   type AppliedShadowSubstitution,
@@ -438,6 +439,7 @@ export async function install(
     opts,
   } = request;
   throwIfAborted(opts.signal);
+  assertDirectShadowRecipeAdmissions(dependencies, optionalDependencies, rootName, opts.overrides);
   const tarballCache: TarballCache = opts.tarballCache ?? new VfsTarballCache(opts.vfs);
   const fetchCtx: FetchAndUnpackCtx = {
     cache: tarballCache,
@@ -1323,44 +1325,49 @@ function createSubstitutionReporter(sink: (line: string) => void): SubstitutionR
   };
 }
 
-function syntheticRecipeForRequest(
+function builtinRecipeForRequest(
   name: string,
   range: string | null,
   parent: string | undefined,
   overrides: OverrideMap | undefined,
 ): BuiltinShadowSubstitutionRecipe | null {
   const { override } = resolveEffectivePackageRequest(name, range, parent, overrides);
-  if (override !== null) return null;
-  const candidates = builtinShadowSubstitutionCatalog.recipes.filter(
-    (recipe) => recipe.acquisition.kind === 'synthetic' && recipe.trigger.name === name,
+  if (override?.source === 'user') return null;
+  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+    (candidate) => candidate.trigger.name === name,
   );
-  if (candidates.length === 0) return null;
-  const match = candidates.find((recipe) => matchesRange(recipe.trigger.version, range));
-  if (match) return match;
-  throw new NotImplementedError(
-    `shadow-registry.${name}@${range ?? '*'}`,
-    'no built-in synthetic recipe admits the requested version range',
-  );
+  if (!recipe) return null;
+  assertShadowRecipeAdmission(recipe, range);
+  return recipe;
 }
 
 function registryRecipeForResolution(
-  requestedName: string,
-  requestedRange: string | null,
-  override: ReturnType<typeof resolveEffectivePackageRequest>['override'],
+  recipe: BuiltinShadowSubstitutionRecipe | null,
   effectiveName: string,
   version: string,
 ): BuiltinShadowSubstitutionRecipe | null {
-  if (override?.source !== 'baked') return null;
-  return (
-    builtinShadowSubstitutionCatalog.recipes.find(
-      (recipe) =>
-        recipe.acquisition.kind === 'registry' &&
-        recipe.trigger.name === requestedName &&
-        matchesRange(recipe.trigger.version, requestedRange) &&
-        recipe.acquisition.name === effectiveName &&
-        recipe.acquisition.version === version,
-    ) ?? null
-  );
+  if (
+    recipe?.acquisition.kind !== 'registry' ||
+    recipe.acquisition.name !== effectiveName ||
+    recipe.acquisition.version !== version
+  ) {
+    return null;
+  }
+  return recipe;
+}
+
+function assertDirectShadowRecipeAdmissions(
+  dependencies: Readonly<Record<string, string>>,
+  optionalDependencies: Readonly<Record<string, string>>,
+  rootName: string,
+  overrides: OverrideMap | undefined,
+): void {
+  for (const [name, range] of [
+    ...Object.entries(dependencies),
+    ...Object.entries(optionalDependencies),
+  ]) {
+    builtinRecipeForRequest(name, range, rootName, overrides);
+  }
 }
 
 function syntheticResolvedIdentity(recipe: BuiltinShadowSubstitutionRecipe): string {
@@ -1494,7 +1501,7 @@ function lockfileReuseDecision(
   ctx: ResolveContext,
   overrides: OverrideMap | undefined,
 ): LockfileReuseDecision {
-  const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides);
+  const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides);
   const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
     name,
     range,
@@ -1502,7 +1509,7 @@ function lockfileReuseDecision(
     overrides,
   );
   const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
-  const policyFrontier = override !== null || synthetic !== null;
+  const policyFrontier = override !== null || recipe !== null;
   if (!hit) return { kind: 'miss', reason: 'missing-entry', policyFrontier };
   if (
     (!rangeIsUnconstrained(effectiveRange) && !matchesRange(hit.entry.version, effectiveRange)) ||
@@ -1512,15 +1519,21 @@ function lockfileReuseDecision(
   ) {
     return { kind: 'miss', reason: 'range-drift', policyFrontier };
   }
-  const recipe =
-    synthetic ??
-    registryRecipeForResolution(name, range, override, effectiveName, hit.entry.version);
-  const materializationInstallPath = recipe
-    ? shadowMaterializationInstallPath(hit.installPath, effectiveName, recipe.materialization.name)
+  const shadowRecipe =
+    recipe?.acquisition.kind === 'synthetic'
+      ? recipe
+      : registryRecipeForResolution(recipe, effectiveName, hit.entry.version);
+  const materializationInstallPath = shadowRecipe
+    ? shadowMaterializationInstallPath(
+        hit.installPath,
+        effectiveName,
+        shadowRecipe.materialization.name,
+      )
     : undefined;
   if (
-    recipe &&
-    replayedShadowFact(shadowPlan, recipe, hit.entry, materializationInstallPath!) === undefined
+    shadowRecipe &&
+    replayedShadowFact(shadowPlan, shadowRecipe, hit.entry, materializationInstallPath!) ===
+      undefined
   ) {
     return { kind: 'miss', reason: 'missing-entry', policyFrontier: true };
   }
@@ -1575,7 +1588,7 @@ function analyzeLockfileRequest(
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
     }
-    const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides);
+    const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides);
     const { effectiveName } = resolveEffectivePackageRequest(
       name,
       range,
@@ -1583,7 +1596,10 @@ function analyzeLockfileRequest(
       overrides,
     );
     const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
-    if (!hit || (!synthetic && (!hit.entry.resolved || !hit.entry.integrity))) {
+    if (
+      !hit ||
+      (recipe?.acquisition.kind !== 'synthetic' && (!hit.entry.resolved || !hit.entry.integrity))
+    ) {
       recordOwnership('broken');
       return;
     }
@@ -2197,7 +2213,8 @@ function createLockfileSource(
 ): ResolutionSource {
   return {
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+      const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       // Apply the same retained redirect/user override as live resolution
       // before lookup. Synthetic catalog recipes keep their source identity
       // and are validated separately against the lockfile recipe trace.
@@ -2253,8 +2270,7 @@ function createLockfileSource(
         substitutions.redirect(name, range, effectiveName, entry.version);
       }
       const shadowRecipe =
-        synthetic ??
-        registryRecipeForResolution(name, range, override, effectiveName, entry.version);
+        synthetic ?? registryRecipeForResolution(recipe, effectiveName, entry.version);
       const shadowFact = shadowRecipe
         ? replayedShadowFact(
             shadowPlan,
@@ -2400,7 +2416,8 @@ function createRegistrySource(
 
   return {
     prefetch(name, range, ctx): void {
-      if (syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides)) return;
+      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+      if (recipe?.acquisition.kind === 'synthetic') return;
       const { effectiveName } = resolveEffectivePackageRequest(
         name,
         range,
@@ -2411,7 +2428,8 @@ function createRegistrySource(
     },
 
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+      const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       if (synthetic) {
         const manifest = syntheticManifest(synthetic);
         substitutions.line(
@@ -2485,7 +2503,7 @@ function createRegistrySource(
         }
       }
 
-      const shadowRecipe = registryRecipeForResolution(name, range, override, effectiveName, pick);
+      const shadowRecipe = registryRecipeForResolution(recipe, effectiveName, pick);
       return {
         origin: 'metadata',
         name: effectiveName,

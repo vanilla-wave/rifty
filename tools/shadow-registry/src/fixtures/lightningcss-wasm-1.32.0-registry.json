@@ -1,0 +1,13 @@
+{
+  "name": "lightningcss-wasm",
+  "version": "1.32.0",
+  "dist": {
+    "integrity": "sha512-SteAkCtRuSCDYPGHKhLV/dDs5Bk+7I4QUxWxfk4xwsTI1rQk8MQyYtpGcd3NECsUGzK0q2/KqoVS+YHCqKHUTQ=="
+  },
+  "dependencies": {
+    "napi-wasm": "^1.0.1"
+  },
+  "optionalDependencies": {},
+  "peerDependencies": {},
+  "bundleDependencies": ["napi-wasm"]
+}
