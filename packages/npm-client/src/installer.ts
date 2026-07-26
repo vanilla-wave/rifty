@@ -82,11 +82,7 @@ import {
   buildInstallLockfile,
   linkInstallTree,
 } from './linker.ts';
-import {
-  type OverrideMap,
-  type ResolvedOverrideTarget,
-  resolveOverrideWithBuiltinAuthority,
-} from './overrides.ts';
+import type { OverrideMap, ResolvedOverrideTarget } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import {
@@ -1401,29 +1397,6 @@ function createSubstitutionReporter(sink: (line: string) => void): SubstitutionR
   };
 }
 
-function resolveEffectivePackageRequestWithAuthority(
-  name: string,
-  range: string | null,
-  parent: string | undefined,
-  userOverrides: OverrideMap | undefined,
-  authority: ShadowInstallAuthority,
-): ReturnType<typeof resolveEffectivePackageRequest> {
-  if (authority === BUILTIN_SHADOW_INSTALL_AUTHORITY) {
-    return resolveEffectivePackageRequest(name, range, parent, userOverrides);
-  }
-  const override = resolveOverrideWithBuiltinAuthority(
-    name,
-    parent,
-    userOverrides ?? {},
-    authority.builtinOverrides,
-  );
-  return {
-    override,
-    effectiveName: override?.name ?? name,
-    effectiveRange: override?.range ?? range,
-  };
-}
-
 function syntheticRecipeForRequest(
   name: string,
   range: string | null,
@@ -1431,12 +1404,12 @@ function syntheticRecipeForRequest(
   overrides: OverrideMap | undefined,
   authority: ShadowInstallAuthority,
 ): BuiltinShadowSubstitutionRecipe | null {
-  const { override } = resolveEffectivePackageRequestWithAuthority(
+  const { override } = resolveEffectivePackageRequest(
     name,
     range,
     parent,
     overrides,
-    authority,
+    authority.builtinOverrides,
   );
   if (override !== null) return null;
   const candidates = authority.catalog.recipes.filter(
@@ -1607,12 +1580,12 @@ function lockfileReuseDecision(
   authority: ShadowInstallAuthority,
 ): LockfileReuseDecision {
   const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides, authority);
-  const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequestWithAuthority(
+  const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
     name,
     range,
     ctx.parentName,
     overrides,
-    authority,
+    authority.builtinOverrides,
   );
   const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
   const policyFrontier = override !== null || synthetic !== null;
@@ -1698,12 +1671,12 @@ function analyzeLockfileRequest(
       return;
     }
     const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides, authority);
-    const { effectiveName } = resolveEffectivePackageRequestWithAuthority(
+    const { effectiveName } = resolveEffectivePackageRequest(
       name,
       range,
       ctx.parentName,
       overrides,
-      authority,
+      authority.builtinOverrides,
     );
     const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
     if (!hit || (!synthetic && (!hit.entry.resolved || !hit.entry.integrity))) {
@@ -2348,12 +2321,12 @@ function createLockfileSource(
       // Apply the same retained redirect/user override as live resolution
       // before lookup. Synthetic catalog recipes keep their source identity
       // and are validated separately against the lockfile recipe trace.
-      const { override, effectiveName } = resolveEffectivePackageRequestWithAuthority(
+      const { override, effectiveName } = resolveEffectivePackageRequest(
         name,
         range,
         ctx.parentName,
         opts.overrides,
-        authority,
+        authority.builtinOverrides,
       );
       const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
       if (!hit) {
@@ -2552,12 +2525,12 @@ function createRegistrySource(
       if (syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides, authority)) {
         return;
       }
-      const { effectiveName } = resolveEffectivePackageRequestWithAuthority(
+      const { effectiveName } = resolveEffectivePackageRequest(
         name,
         range,
         ctx.parentName,
         opts.overrides,
-        authority,
+        authority.builtinOverrides,
       );
       void loadPackument(effectiveName);
     },
@@ -2595,14 +2568,13 @@ function createRegistrySource(
           },
         };
       }
-      const { override, effectiveName, effectiveRange } =
-        resolveEffectivePackageRequestWithAuthority(
-          name,
-          range,
-          ctx.parentName,
-          opts.overrides,
-          authority,
-        );
+      const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        authority.builtinOverrides,
+      );
 
       const packument = await loadPackument(effectiveName);
       const versions = Object.keys(packument.versions);
@@ -2707,12 +2679,12 @@ function hasEffectiveTopLevelNameCollision(
   const seen = new Set<string>();
   for (const request of [dependencies, optionalDependencies]) {
     for (const [name, range] of Object.entries(request)) {
-      const { effectiveName } = resolveEffectivePackageRequestWithAuthority(
+      const { effectiveName } = resolveEffectivePackageRequest(
         name,
         range,
         rootName,
         overrides,
-        authority,
+        authority.builtinOverrides,
       );
       if (seen.has(effectiveName)) return true;
       seen.add(effectiveName);

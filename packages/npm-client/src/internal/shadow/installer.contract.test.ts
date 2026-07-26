@@ -19,6 +19,8 @@ import {
   gzip,
   padToBlock,
 } from '../../_test-fixtures/tar-builder.ts';
+import { closureHashOf } from '../../closure-hash.ts';
+import { EDDY_BUNDLE_FORMAT, packEddyBundle } from '../../eddy-bundle.ts';
 import {
   type InstallOptions,
   type ShadowInstallAuthority,
@@ -136,6 +138,10 @@ const CONTRACT_PROJECTION_FIELDS = [
   'optionalDependencies',
   'peerDependencies',
 ] as const;
+const EXACT_ONLY_BYTE_DIFFERENT_RANGES = ['=1.100.0', 'v1.100.0', ' 1.100.0', '1.100.0 '] as const;
+const EXACT_ONLY_LIFECYCLES = ['fresh', 'replay', 'eddy'] as const;
+const EXACT_ONLY_PLACEMENTS = ['direct', 'transitive'] as const;
+const PROJECTION_MUTATIONS = ['add', 'remove', 'change'] as const;
 const CONTRACT_PARTIAL_WRITE_CASES = [
   ['registry alias', 'permission'],
   ['registry alias', 'quota'],
@@ -282,6 +288,150 @@ const LIGHTNING_COLLISION_PLACEMENTS = [
   },
 ] as const;
 
+const LIGHTNING_PROJECTION_PLACEMENTS = [
+  {
+    label: 'root',
+    dependencies: { lightningcss: '1.32.0' },
+  },
+  {
+    label: 'nested',
+    dependencies: {
+      'lightningcss-wasm': '1.33.0',
+      [LIGHTNING_RECIPE_HOST]: '1.0.0',
+    },
+  },
+] as const;
+
+type ProjectionMutation = (typeof PROJECTION_MUTATIONS)[number];
+type ProjectionManifestField = 'dependencies' | 'optionalDependencies' | 'peerDependencies';
+
+interface ProjectionSpec {
+  readonly label: string;
+  readonly manifestField: ProjectionManifestField;
+  readonly key?: string;
+}
+
+const CONTRACT_PROJECTION_SPECS = [
+  {
+    label: 'dependencies',
+    manifestField: 'dependencies',
+    key: CONTRACT_REQUIRED,
+  },
+  {
+    label: 'optionalDependencies',
+    manifestField: 'optionalDependencies',
+    key: CONTRACT_RETAINED,
+  },
+  {
+    label: 'omittedOptionalDependencies',
+    manifestField: 'optionalDependencies',
+    key: CONTRACT_OMITTED,
+  },
+  {
+    label: 'peerDependencies',
+    manifestField: 'peerDependencies',
+    key: CONTRACT_PEER,
+  },
+] as const satisfies readonly ProjectionSpec[];
+
+// Empty expected maps have no distinguishable remove/change input; add is their full fault surface.
+const BUILTIN_LIGHTNING_PROJECTION_SPECS = [
+  {
+    label: 'dependencies',
+    manifestField: 'dependencies',
+    key: 'napi-wasm',
+  },
+  {
+    label: 'optionalDependencies',
+    manifestField: 'optionalDependencies',
+  },
+  {
+    label: 'omittedOptionalDependencies',
+    manifestField: 'optionalDependencies',
+  },
+  {
+    label: 'peerDependencies',
+    manifestField: 'peerDependencies',
+  },
+] as const satisfies readonly ProjectionSpec[];
+
+const CONTRACT_PROJECTION_BASE = {
+  dependencies: { ...CONTRACT_DEPENDENCIES },
+  optionalDependencies: { ...CONTRACT_OPTIONAL_DEPENDENCIES },
+  peerDependencies: { ...CONTRACT_PEER_DEPENDENCIES },
+};
+const BUILTIN_LIGHTNING_PROJECTION_BASE = {
+  dependencies: { 'napi-wasm': '^1.0.1' },
+  optionalDependencies: {},
+  peerDependencies: {},
+};
+
+function exactOnlyByteCases() {
+  return EXACT_ONLY_BYTE_DIFFERENT_RANGES.flatMap((range) =>
+    EXACT_ONLY_PLACEMENTS.flatMap((placement) =>
+      EXACT_ONLY_LIFECYCLES.map((lifecycle) => ({ lifecycle, placement, range })),
+    ),
+  );
+}
+
+function projectionDriftCases<
+  TPlacement extends Readonly<{
+    label: string;
+    dependencies: Readonly<Record<string, string>>;
+  }>,
+>(specs: readonly ProjectionSpec[], placements: readonly TPlacement[]) {
+  return placements.flatMap((placement) =>
+    specs.flatMap((spec) =>
+      (spec.key === undefined ? (['add'] as const) : PROJECTION_MUTATIONS).map((mutation) => ({
+        label: `${placement.label} ${spec.label} ${mutation}`,
+        mutation,
+        placement,
+        spec,
+      })),
+    ),
+  );
+}
+
+function projectionManifestDrift(
+  baseline: Readonly<{
+    dependencies: Readonly<Record<string, string>>;
+    optionalDependencies: Readonly<Record<string, string>>;
+    peerDependencies: Readonly<Record<string, string>>;
+  }>,
+  spec: ProjectionSpec,
+  mutation: ProjectionMutation,
+): Partial<ContractManifestFields> {
+  const fields = {
+    dependencies: { ...baseline.dependencies },
+    optionalDependencies: { ...baseline.optionalDependencies },
+    peerDependencies: { ...baseline.peerDependencies },
+  };
+  const target = fields[spec.manifestField];
+  if (mutation === 'add') {
+    target[`@scope/unexpected-${spec.label}`] = '9.9.9';
+  } else {
+    if (spec.key === undefined) {
+      throw new Error(`${spec.label} ${mutation} is physically excluded for an empty map`);
+    }
+    const key = spec.key;
+    if (mutation === 'remove') {
+      delete target[key];
+    } else {
+      target[key] = '9.9.9';
+    }
+  }
+  return fields;
+}
+
+const CONTRACT_PROJECTION_DRIFT_CASES = projectionDriftCases(
+  CONTRACT_PROJECTION_SPECS,
+  CONTRACT_PLACEMENTS,
+);
+const BUILTIN_LIGHTNING_PROJECTION_DRIFT_CASES = projectionDriftCases(
+  BUILTIN_LIGHTNING_PROJECTION_SPECS,
+  LIGHTNING_PROJECTION_PLACEMENTS,
+);
+
 function freezeFixture<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) freezeFixture(child);
@@ -302,6 +452,7 @@ function contractFile(path: string, content: string) {
 function contractAuthority(
   admissionKind: 'exact-only' | 'semver-admits' = 'exact-only',
   materializationBin: Readonly<Record<string, string>> = CONTRACT_BIN,
+  acquisitionKind: 'registry' | 'synthetic' = 'registry',
 ): ShadowInstallAuthority {
   const packageJson = JSON.stringify({
     name: CONTRACT_TRIGGER,
@@ -316,18 +467,21 @@ function contractAuthority(
       unsupportedFeature: 'contract-package.version',
     },
     trigger: { name: CONTRACT_TRIGGER, version: CONTRACT_VERSION },
-    acquisition: {
-      kind: 'registry' as const,
-      name: CONTRACT_SOURCE,
-      version: CONTRACT_VERSION,
-      dependencyProjection: {
-        dependencies: CONTRACT_DEPENDENCIES,
-        optionalDependencies: { [CONTRACT_RETAINED]: '1.0.0' },
-        omittedOptionalDependencies: { [CONTRACT_OMITTED]: '1.0.0' },
-        peerDependencies: CONTRACT_PEER_DEPENDENCIES,
-        unsupportedFeature: 'contract-package.acquisitionDependencies',
-      },
-    },
+    acquisition:
+      acquisitionKind === 'synthetic'
+        ? { kind: 'synthetic' as const }
+        : {
+            kind: 'registry' as const,
+            name: CONTRACT_SOURCE,
+            version: CONTRACT_VERSION,
+            dependencyProjection: {
+              dependencies: CONTRACT_DEPENDENCIES,
+              optionalDependencies: { [CONTRACT_RETAINED]: '1.0.0' },
+              omittedOptionalDependencies: { [CONTRACT_OMITTED]: '1.0.0' },
+              peerDependencies: CONTRACT_PEER_DEPENDENCIES,
+              unsupportedFeature: 'contract-package.acquisitionDependencies',
+            },
+          },
     materialization: {
       name: CONTRACT_TRIGGER,
       version: CONTRACT_VERSION,
@@ -352,7 +506,10 @@ function contractAuthority(
   const catalog = { ...catalogPayload, digest: shadowDigest(catalogPayload) };
   return freezeFixture({
     catalog,
-    builtinOverrides: { [CONTRACT_TRIGGER]: `${CONTRACT_SOURCE}@${CONTRACT_VERSION}` },
+    builtinOverrides:
+      acquisitionKind === 'registry'
+        ? { [CONTRACT_TRIGGER]: `${CONTRACT_SOURCE}@${CONTRACT_VERSION}` }
+        : {},
   }) as unknown as ShadowInstallAuthority;
 }
 
@@ -429,6 +586,7 @@ class ContractRegistry extends RegistryClient {
 
 async function contractRegistry(
   sourceFields: Partial<ContractManifestFields> = {},
+  requiredRange = `^${CONTRACT_VERSION}`,
 ): Promise<ContractRegistry> {
   const entries = new Map<string, Map<string, ContractRegistryEntry>>();
   const add = (entry: ContractRegistryEntry): void => {
@@ -469,7 +627,7 @@ async function contractRegistry(
   );
   add(
     await contractRegistryEntry(CONTRACT_REQUIRED_RANGE_HOST, '1.0.0', {
-      dependencies: { [CONTRACT_TRIGGER]: `^${CONTRACT_VERSION}` },
+      dependencies: { [CONTRACT_TRIGGER]: requiredRange },
     }),
   );
   add(
@@ -513,7 +671,9 @@ async function contractRegistry(
   return new ContractRegistry(entries);
 }
 
-async function lightningCollisionRegistry(): Promise<ContractRegistry> {
+async function lightningCollisionRegistry(
+  sourceFields: Partial<ContractManifestFields> = {},
+): Promise<ContractRegistry> {
   const entries = new Map<string, Map<string, ContractRegistryEntry>>();
   const add = (entry: ContractRegistryEntry): void => {
     const versions = entries.get(entry.manifest.name) ?? new Map();
@@ -523,8 +683,10 @@ async function lightningCollisionRegistry(): Promise<ContractRegistry> {
   add(
     await contractRegistryEntry('lightningcss-wasm', '1.32.0', {
       dependencies: { 'napi-wasm': '^1.0.1' },
+      ...sourceFields,
     }),
   );
+  add(await contractRegistryEntry('lightningcss-wasm', '1.33.0'));
   add(await contractRegistryEntry('napi-wasm', '1.1.3'));
   add(
     await contractRegistryEntry(
@@ -828,6 +990,51 @@ async function freshLockfile(
   ).lockfile;
 }
 
+function lockfilePackageName(path: string): string {
+  const marker = 'node_modules/';
+  const index = path.lastIndexOf(marker);
+  if (index === -1) throw new Error(`Eddy fixture path is not a package: ${path}`);
+  return path.slice(index + marker.length);
+}
+
+async function exactOnlyEddyBundle(
+  lockfile: Lockfile,
+  registry: ContractRegistry,
+): Promise<Uint8Array> {
+  const tarballs = await Promise.all(
+    Object.entries(lockfile.packages).flatMap(([path, entry], index) => {
+      if (path === '' || entry.resolved === undefined || entry.resolved.startsWith('rifty:')) {
+        return [];
+      }
+      if (entry.integrity === undefined) {
+        throw new Error(`Eddy fixture package ${path} lacks integrity`);
+      }
+      const name = lockfilePackageName(path);
+      const descriptor = {
+        file: `tarballs/${index}-${encodeURIComponent(name)}-${entry.version}.tgz`,
+        name,
+        version: entry.version,
+        integrity: entry.integrity,
+      };
+      return [registry.getTarball(entry.resolved).then((bytes) => ({ bytes, entry: descriptor }))];
+    }),
+  );
+  return packEddyBundle({
+    manifest: {
+      format: EDDY_BUNDLE_FORMAT,
+      npmClientVersion: '0.1.0-test',
+      asOf: {
+        resolvedAt: '2026-07-26T00:00:00.000Z',
+        registry: 'https://registry.test',
+        closureHash: await closureHashOf(lockfile),
+      },
+      tarballs: tarballs.map(({ entry }) => entry),
+    },
+    lockfileText: JSON.stringify(lockfile),
+    tarballs,
+  });
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -864,19 +1071,23 @@ function observeVfsMutations(vfs: MemoryVfs): () => void {
   };
 }
 
-function admissionBoundarySpies() {
+function admissionBoundarySpies(retainTarballs = false) {
+  const retainedTarballs = new Map<string, Uint8Array>();
+  const tarballKey = (name: string, version: string, integrity: string): string =>
+    `${name}\0${version}\0${integrity}`;
   const packumentCache = {
     get: vi.fn((_name: string): Packument | undefined => undefined),
     set: vi.fn((_name: string, _packument: Packument): void => {}),
   };
   const tarballCache = {
     get: vi.fn(
-      async (_name: string, _version: string, _integrity: string) => null as Uint8Array | null,
+      async (name: string, version: string, integrity: string) =>
+        retainedTarballs.get(tarballKey(name, version, integrity))?.slice() ?? null,
     ),
-    put: vi.fn(
-      async (_name: string, _version: string, _integrity: string, _bytes: Uint8Array) =>
-        '/must-not-write',
-    ),
+    put: vi.fn(async (name: string, version: string, integrity: string, bytes: Uint8Array) => {
+      if (retainTarballs) retainedTarballs.set(tarballKey(name, version, integrity), bytes.slice());
+      return '/memory-tarball-cache';
+    }),
   };
   const resolverPrefetch = {
     take: vi.fn((_requestKey: string): Promise<Response> | null => null),
@@ -891,6 +1102,19 @@ function admissionBoundarySpies() {
       expect(resolverPrefetch.take).not.toHaveBeenCalled();
     },
   };
+}
+
+function admissionFeature(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const feature = (error as Error & { feature?: unknown }).feature;
+  if (typeof feature === 'string') return feature;
+  if (error instanceof AggregateError) {
+    for (const cause of error.errors) {
+      const nested = admissionFeature(cause);
+      if (nested !== undefined) return nested;
+    }
+  }
+  return admissionFeature(error.cause);
 }
 
 // Captured from baseline 061de47c/b959e37d; never derived from the current catalog.
@@ -1201,6 +1425,20 @@ describe('shadow substitution installer boundary', () => {
       version: CONTRACT_VERSION,
       riftyShadowRecipe: 'rifty.shadow-substitution.contract-package.v2',
     });
+    expect(first.lockfile.rifty?.shadowSubstitutions.applied).toContainEqual(
+      expect.objectContaining({
+        acquisition: expect.objectContaining({
+          kind: 'registry',
+          name: CONTRACT_SOURCE,
+          version: CONTRACT_VERSION,
+        }),
+        trigger: {
+          name: CONTRACT_TRIGGER,
+          requestedRange: '^1.100.0',
+          version: CONTRACT_VERSION,
+        },
+      }),
+    );
     expect(await vfs.readFileText('/project/node_modules/contract-package/index.js')).toBe(
       'module.exports = "contract";\n',
     );
@@ -1224,6 +1462,248 @@ describe('shadow substitution installer boundary', () => {
       'module.exports = "contract";\n',
     );
   });
+
+  it('pins the finite exact-only byte and projection sibling sweeps', () => {
+    const exactLabels = exactOnlyByteCases().map(
+      ({ lifecycle, placement, range }) => `${placement}/${lifecycle}/${JSON.stringify(range)}`,
+    );
+    const projectionLabels = [
+      ...CONTRACT_PROJECTION_DRIFT_CASES.map(({ label }) => `fixture/${label}`),
+      ...BUILTIN_LIGHTNING_PROJECTION_DRIFT_CASES.map(({ label }) => `builtin/${label}`),
+    ];
+
+    expect(exactLabels).toHaveLength(24);
+    expect(new Set(exactLabels)).toHaveLength(24);
+    expect(CONTRACT_PROJECTION_DRIFT_CASES).toHaveLength(24);
+    expect(BUILTIN_LIGHTNING_PROJECTION_DRIFT_CASES).toHaveLength(12);
+    expect(new Set(projectionLabels)).toHaveLength(36);
+  });
+
+  it.each(exactOnlyByteCases())(
+    '[fault: lossy-aggregate/observable-order] exact-only rejects byte-different $range at $placement/$lifecycle',
+    async ({ lifecycle, placement, range }) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const eddyTransitive = lifecycle === 'eddy' && placement === 'transitive';
+      let eddyBundle: Uint8Array | undefined;
+      if (eddyTransitive) {
+        const seedVfs = new MemoryVfs();
+        await seedVfs.mkdir('/project', { recursive: true });
+        const seedRegistry = await contractRegistry({}, CONTRACT_VERSION);
+        const seed = await installContract(seedVfs, seedRegistry, {
+          [CONTRACT_REQUIRED_RANGE_HOST]: '1.0.0',
+        });
+        const bundleLockfile = structuredClone(seed.lockfile);
+        const host = bundleLockfile.packages[`node_modules/${CONTRACT_REQUIRED_RANGE_HOST}`];
+        if (!host) throw new Error('exact-only transitive Eddy host is missing');
+        host.dependencies = { [CONTRACT_TRIGGER]: range };
+        eddyBundle = await exactOnlyEddyBundle(bundleLockfile, seedRegistry);
+      }
+
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const replay = lifecycle === 'replay';
+      const registry =
+        placement === 'transitive' && !replay
+          ? await contractRegistry({}, range)
+          : await contractRegistry();
+      const dependencies: Readonly<Record<string, string>> =
+        placement === 'direct'
+          ? { [CONTRACT_TRIGGER]: range }
+          : {
+              [replay ? 'contract-host' : CONTRACT_REQUIRED_RANGE_HOST]: '1.0.0',
+            };
+
+      let lockBefore: Uint8Array | undefined;
+      if (replay) {
+        const seedDependencies: Readonly<Record<string, string>> =
+          placement === 'direct'
+            ? { [CONTRACT_TRIGGER]: CONTRACT_VERSION }
+            : { 'contract-host': '1.0.0' };
+        await installContract(vfs, registry, seedDependencies);
+        if (placement === 'transitive') {
+          const lockfile = structuredClone(
+            JSON.parse(await vfs.readFileText('/project/package-lock.json')) as Lockfile,
+          );
+          const host = lockfile.packages['node_modules/contract-host'];
+          if (!host) throw new Error('exact-only transitive replay host is missing');
+          host.dependencies = { [CONTRACT_TRIGGER]: range };
+          await vfs.writeFile('/project/package-lock.json', JSON.stringify(lockfile));
+        }
+        lockBefore = await vfs.readFile('/project/package-lock.json');
+        registry.resetReads();
+      }
+
+      const resolverFetch =
+        lifecycle === 'eddy'
+          ? vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+              if (eddyBundle !== undefined) {
+                return new Response(eddyBundle as unknown as BodyInit);
+              }
+              throw new Error('Eddy must not start before exact admission');
+            })
+          : undefined;
+      const boundaries = admissionBoundarySpies(eddyTransitive);
+      const assertNoVfsMutations = observeVfsMutations(vfs);
+      const assertNoVfsReads = placement === 'direct' ? observeVfsReads(vfs) : (): void => {};
+      const operation = installContract(vfs, registry, dependencies, {
+        ...(lifecycle === 'eddy'
+          ? eddyTransitive
+            ? { resolverUrl: 'https://eddy.test/resolve' }
+            : {
+                resolverUrl: 'https://eddy.test/resolve',
+                resolverClosureHash: '0'.repeat(64),
+                resolverBundleBaseUrl: 'https://eddy-cdn.test',
+              }
+          : {}),
+        ...boundaries.transport,
+      });
+      if (eddyTransitive) {
+        let caught: unknown;
+        try {
+          await operation;
+        } catch (error) {
+          caught = error;
+        }
+        expect(admissionFeature(caught)).toBe('contract-package.version');
+      } else {
+        await expect(operation).rejects.toMatchObject({
+          name: 'NotImplementedError',
+          feature: 'contract-package.version',
+        });
+      }
+
+      if (resolverFetch) {
+        if (eddyTransitive) {
+          expect(resolverFetch.mock.calls.map(([, init]) => init?.method ?? 'GET')).toEqual([
+            'POST',
+          ]);
+          expect(warn.mock.calls.map(([message]) => String(message)).join('\n')).toContain(
+            'contract-package.version',
+          );
+          expect(boundaries.transport.resolverPrefetch.take).toHaveBeenCalledTimes(1);
+        } else {
+          expect(resolverFetch).not.toHaveBeenCalled();
+        }
+      }
+      expect(registry.tarballReads).not.toContain(
+        `https://registry.test/${encodeURIComponent(CONTRACT_SOURCE)}-${CONTRACT_VERSION}.tgz`,
+      );
+      if (placement === 'transitive' && !replay) {
+        const packumentNames = boundaries.transport.packumentCache.get.mock.calls.map(
+          ([name]) => name,
+        );
+        const tarballNames = boundaries.transport.tarballCache.get.mock.calls.map(([name]) => name);
+        expect(packumentNames).toContain(CONTRACT_REQUIRED_RANGE_HOST);
+        expect(packumentNames).not.toContain(CONTRACT_SOURCE);
+        expect(tarballNames).toContain(CONTRACT_REQUIRED_RANGE_HOST);
+        expect(tarballNames).not.toContain(CONTRACT_SOURCE);
+        expect(registry.packumentReads).toEqual([CONTRACT_REQUIRED_RANGE_HOST]);
+        expect(registry.tarballReads).toHaveLength(1);
+      } else {
+        expect(registry.packumentReads).toEqual([]);
+        expect(registry.tarballReads).toEqual([]);
+        boundaries.assertUntouched();
+      }
+      assertNoVfsMutations();
+      assertNoVfsReads();
+      if (lockBefore === undefined) {
+        await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
+        await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+      } else {
+        expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+      }
+    },
+  );
+
+  it('accepts and byte-identically replays an exact-only synthetic acquisition', async () => {
+    const authority = contractAuthority('exact-only', CONTRACT_BIN, 'synthetic');
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const registry = await contractRegistry();
+
+    const first = await installContract(
+      vfs,
+      registry,
+      { [CONTRACT_TRIGGER]: CONTRACT_VERSION },
+      {},
+      authority,
+    );
+    const materializationRoot = '/project/node_modules/contract-package';
+    const materialization = await snapshotContractMaterialization(vfs, materializationRoot);
+    const lockBefore = await vfs.readFile('/project/package-lock.json');
+    expect(registry.packumentReads).toEqual([]);
+    expect(registry.tarballReads).toEqual([]);
+    expect(first.lockfile.packages['node_modules/contract-package']).toMatchObject({
+      version: CONTRACT_VERSION,
+      riftyShadowRecipe: 'rifty.shadow-substitution.contract-package.v2',
+    });
+
+    await damageContractMaterialization(vfs, materializationRoot);
+    await vfs.rm('/project/node_modules/.bin/contract');
+    registry.resetReads();
+    await installContract(vfs, registry, { [CONTRACT_TRIGGER]: CONTRACT_VERSION }, {}, authority);
+
+    expect(registry.packumentReads).toEqual([]);
+    expect(registry.tarballReads).toEqual([]);
+    await expectContractMaterialization(vfs, materializationRoot, materialization);
+    expect(await vfs.readFileText('/project/node_modules/.bin/contract')).toBe(CONTRACT_LAUNCHER);
+    expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+  });
+
+  it.each(
+    EXACT_ONLY_BYTE_DIFFERENT_RANGES.flatMap((range) =>
+      (['fresh', 'replay'] as const).map((lifecycle) => ({ lifecycle, range })),
+    ),
+  )(
+    '[fault: sibling-drift/observable-order] exact-only synthetic rejects $range at $lifecycle',
+    async ({ lifecycle, range }) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const authority = contractAuthority('exact-only', CONTRACT_BIN, 'synthetic');
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const registry = await contractRegistry();
+      let lockBefore: Uint8Array | undefined;
+      if (lifecycle === 'replay') {
+        await installContract(
+          vfs,
+          registry,
+          { [CONTRACT_TRIGGER]: CONTRACT_VERSION },
+          {},
+          authority,
+        );
+        lockBefore = await vfs.readFile('/project/package-lock.json');
+        registry.resetReads();
+      }
+      const boundaries = admissionBoundarySpies();
+      const assertNoVfsMutations = observeVfsMutations(vfs);
+      const assertNoVfsReads = observeVfsReads(vfs);
+
+      await expect(
+        installContract(
+          vfs,
+          registry,
+          { [CONTRACT_TRIGGER]: range },
+          boundaries.transport,
+          authority,
+        ),
+      ).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'contract-package.version',
+      });
+
+      expect(registry.packumentReads).toEqual([]);
+      expect(registry.tarballReads).toEqual([]);
+      boundaries.assertUntouched();
+      assertNoVfsMutations();
+      assertNoVfsReads();
+      if (lockBefore === undefined) {
+        await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
+        await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+      } else {
+        expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+      }
+    },
+  );
 
   it.each([null, 'latest', '*', '^1.100.0', '~1.100.0', '>=1.100.0'] as const)(
     '[fault: observable-order] exact-only %s rejects before acquisition or mutation',
@@ -1518,6 +1998,63 @@ describe('shadow substitution installer boundary', () => {
       expect(mkdir).not.toHaveBeenCalled();
       expect(writeFile).not.toHaveBeenCalled();
       expect(rm).not.toHaveBeenCalled();
+      await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
+      await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+    },
+  );
+
+  it.each(CONTRACT_PROJECTION_DRIFT_CASES)(
+    '[fault: provenance-lie/observable-order] fixture rejects $label projection drift before source tarball work',
+    async ({ mutation, placement, spec }) => {
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const registry = await contractRegistry(
+        projectionManifestDrift(CONTRACT_PROJECTION_BASE, spec, mutation),
+      );
+      const assertNoVfsMutations = observeVfsMutations(vfs);
+
+      await expect(installContract(vfs, registry, placement.dependencies)).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'contract-package.acquisitionDependencies',
+      });
+
+      expect(registry.packumentReads).toContain(CONTRACT_SOURCE);
+      expect(registry.tarballReads).not.toContain(
+        `https://registry.test/${encodeURIComponent(CONTRACT_SOURCE)}-${CONTRACT_VERSION}.tgz`,
+      );
+      assertNoVfsMutations();
+      await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
+      await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+    },
+  );
+
+  it.each(BUILTIN_LIGHTNING_PROJECTION_DRIFT_CASES)(
+    '[fault: provenance-lie/observable-order] builtin rejects $label reachable projection drift before source tarball work',
+    async ({ mutation, placement, spec }) => {
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const registry = await lightningCollisionRegistry(
+        projectionManifestDrift(BUILTIN_LIGHTNING_PROJECTION_BASE, spec, mutation),
+      );
+      const assertNoVfsMutations = observeVfsMutations(vfs);
+
+      await expect(
+        install('fixture', '1.0.0', placement.dependencies, {
+          vfs,
+          cwd: '/project',
+          registry,
+          onSubstitution: () => {},
+        }),
+      ).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'lightningcss.acquisitionDependencies',
+      });
+
+      expect(registry.packumentReads).toContain('lightningcss-wasm');
+      expect(registry.tarballReads).not.toContain(
+        'https://registry.test/lightningcss-wasm-1.32.0.tgz',
+      );
+      assertNoVfsMutations();
       await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
       await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
     },
