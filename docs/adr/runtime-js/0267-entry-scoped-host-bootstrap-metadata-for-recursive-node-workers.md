@@ -84,3 +84,9 @@ Rejected:
   change requires a new protocol version, never permissive option-bag growth.
 - Supersedes ADR-0231. Product/operator settings intentionally exposed as env
   remain env; this decision covers host bootstrap and process-launch control.
+
+> **Correction 2026-07-26 (ADR-0326):** the next atomic shape is
+> `rifty.node-entry/v2`, adding exact public-IPC discrimination while retaining
+> launch role, remote-FS root, preview scope, terminal shape, and exact guest
+> env. V1 has no dual reader or fallback. PID/tree and private-control identity
+> remain bound runtime state, not guest bootstrap metadata.

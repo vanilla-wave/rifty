@@ -77,3 +77,8 @@ not behavior-preserving refactors — hence an ADR rather than CHANGELOG-only.
   `backlog: runtime-js/ipc-backlog-flush-entry-resolution`,
   `backlog: playground/baked-snapshot-regeneration` (snapshot size). HMR on the
   Vite 8 path stays disabled (ADR-0161).
+
+> **Correction 2026-07-26 (ADR-0326):** worker-thread parent/child messages keep
+> structured-clone semantics on their explicit worker-thread lane. They are not
+> fork JSON IPC and do not create a process-table PID; `threadId` remains the
+> distinct observable identity.
