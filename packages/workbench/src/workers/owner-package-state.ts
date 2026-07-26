@@ -216,7 +216,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   let activeProject = options.initial ? packageProject(options.initial) : null;
   let activeTemplateId: string | null = null;
   const firstMaterializationPhases = new Map<string, 'preparing' | 'deferred' | 'consuming'>();
-  const firstMaterializationBaselineResults = new WeakMap<CommandContext, 'clean' | 'visible'>();
   if (options.initial) {
     configs.set(configKey(options.initial.cfg.root, options.initial.slug), options.initial);
   }
@@ -771,18 +770,19 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     transition,
     reassertTemplateNodeModules,
     createNpmCommand: (runScript, commandOptions = {}) => {
-      const command = createNpmShellCommand({
-        ...baseNpmDeps,
-        packageAcquisitionAuthority: packages,
-        runScript,
-        ...(commandOptions.mapInvocationContext === undefined
-          ? {}
-          : { mapInvocationContext: commandOptions.mapInvocationContext }),
-        observeGeneratedBaseline: (context, clean) => {
-          firstMaterializationBaselineResults.set(context, clean ? 'clean' : 'visible');
-        },
-      });
       return async (args, context) => {
+        let generatedBaselineClean = false;
+        const command = createNpmShellCommand({
+          ...baseNpmDeps,
+          packageAcquisitionAuthority: packages,
+          runScript,
+          ...(commandOptions.mapInvocationContext === undefined
+            ? {}
+            : { mapInvocationContext: commandOptions.mapInvocationContext }),
+          observeGeneratedBaseline: (clean) => {
+            generatedBaselineClean = clean;
+          },
+        });
         const config = configured;
         const reflectionContext = commandOptions.mapInvocationContext?.(context) ?? context;
         if (
@@ -804,7 +804,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           isBareInstallCommand(args) &&
           priorPackageLock === null &&
           equalOptionalBytes(priorPackageJson, enc.encode(config.cfg.packageJson));
-        firstMaterializationBaselineResults.delete(context);
         let result: ShellCommandResult | undefined;
         let commandFailure: unknown;
         try {
@@ -821,8 +820,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
               commandFailure === undefined &&
               result !== undefined &&
               shellCommandExitCode(result) === 0;
-            const generatedBaselineClean =
-              firstMaterializationBaselineResults.get(context) === 'clean';
             if (firstDependencyArrival && commandSucceeded && generatedBaselineClean) {
               await commandOptions.recordMutation('dependency', treeRevision);
             } else {
@@ -844,8 +841,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           }
         } catch (error) {
           recordFailure = error;
-        } finally {
-          firstMaterializationBaselineResults.delete(context);
         }
 
         if (commandFailure !== undefined && recordFailure !== undefined) {

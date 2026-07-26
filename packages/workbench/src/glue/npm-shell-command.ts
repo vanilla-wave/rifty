@@ -87,7 +87,7 @@ export interface NpmShellCommandDeps {
   /** Translate a fully parsed terminal invocation into the owner's storage namespace. */
   readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
   /** Reflect one exact invocation's generated Starter Git baseline outcome. */
-  readonly observeGeneratedBaseline?: (context: CommandContext, clean: boolean) => void;
+  readonly observeGeneratedBaseline?: (clean: boolean) => void;
   /** Pre-install tree preparation (e.g. the from-scratch clean-start
    *  clear/reseed) — runs INSIDE the owner acquisition FIFO, before any
    *  read or mutation of this install: a preparation that deletes/reseeds the
@@ -327,15 +327,7 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
       );
     }
     if (sub === 'install' || sub === 'i' || sub === 'add') {
-      return runInstall(
-        args.slice(1),
-        ctx,
-        deps,
-        packages,
-        deps.observeGeneratedBaseline === undefined
-          ? undefined
-          : (clean) => deps.observeGeneratedBaseline?.(rawContext, clean),
-      );
+      return runInstall(args.slice(1), ctx, deps, packages, deps.observeGeneratedBaseline);
     }
     if (sub === 'run' || sub === 'run-script') {
       return runPackageScript(args.slice(1), ctx, deps);

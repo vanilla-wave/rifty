@@ -5,7 +5,7 @@ import { getKernelDispatcher } from '@riftydev/kernel';
 import { syncMirror } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import {
-  amendStarterGeneratedBaseline,
+  createStarterBaselineFinalizer,
   ensureStarterInitialCommit,
 } from '../glue/git-initial-baseline.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
@@ -258,20 +258,11 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   const eddy = config.packageAcquisition.eddy;
   const ownerVfs = new SyncMirrorVfs();
   const starterInitialOids = new Map<string, string>();
-  const amendGeneratedBaseline = async (root: string, lockfile: Uint8Array): Promise<boolean> => {
-    const expectedInitialOid = starterInitialOids.get(root);
-    starterInitialOids.delete(root);
-    if (expectedInitialOid === undefined) return false;
-    const amended = await amendStarterGeneratedBaseline(
-      ownerVfs,
-      root,
-      expectedInitialOid,
-      lockfile,
-    );
-    if (!amended) return false;
-    assertCleanDurability(await authority.flush());
-    return true;
-  };
+  const amendGeneratedBaseline = createStarterBaselineFinalizer(
+    ownerVfs,
+    starterInitialOids,
+    async () => assertCleanDurability(await authority.flush()),
+  );
   const registry = createProxiedRegistryClient({
     proxyPrefix: config.packageAcquisition.registryUrl,
   });

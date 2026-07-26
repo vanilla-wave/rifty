@@ -159,3 +159,25 @@ export async function amendStarterGeneratedBaseline(
   }
   return true;
 }
+
+/**
+ * Bind first-install finalization to its exact Starter root: consume the
+ * recorded initial OID once, amend, then settle durability. Declines skip the
+ * flush; a rejected flush propagates loud after the in-memory amend landed.
+ */
+export function createStarterBaselineFinalizer(
+  vfs: Vfs,
+  starterInitialOids: Map<string, string>,
+  settleDurability: () => Promise<void>,
+): (root: string, lockfile: Uint8Array) => Promise<boolean> {
+  return async (root, lockfile) => {
+    const expectedInitialOid = starterInitialOids.get(root);
+    starterInitialOids.delete(root);
+    if (expectedInitialOid === undefined) return false;
+    if (!(await amendStarterGeneratedBaseline(vfs, root, expectedInitialOid, lockfile))) {
+      return false;
+    }
+    await settleDurability();
+    return true;
+  };
+}
