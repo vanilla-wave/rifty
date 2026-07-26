@@ -115,6 +115,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
   };
 
   if (a.command !== 'node') {
+    writeStderr(`spawn ${a.command} ENOENT\n`);
     closeStreams();
     finish(127);
     return;

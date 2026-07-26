@@ -1019,7 +1019,7 @@ describe('Workbench project runtime', () => {
       )
       .map((frame) => new TextDecoder().decode(frame.data))
       .join('');
-    expect(output).toBe('/\n');
+    expect(output).toBe('> pwd\n/\n');
     expect(output).not.toContain(ROOT);
     expect(h.frames).toContainEqual(
       expect.objectContaining({

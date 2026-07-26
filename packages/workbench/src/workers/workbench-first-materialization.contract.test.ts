@@ -900,6 +900,10 @@ class ChildWorker extends EventEmitter {
 
   disconnect(): void {}
 
+  onListeningControl(): () => void {
+    return () => {};
+  }
+
   setCwd(): void {}
 
   finish(output: string, exit: ProcessExit = { code: 0, signal: null }): void {
