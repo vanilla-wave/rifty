@@ -4,11 +4,9 @@
 
 ### Added (real Node server dev loop)
 
-- Express, Hono, and Koa now pin real `nodemon@3.1.14`; `npm run dev`
-  executes its exact legacy-watch command so owner-VFS edits replace the app
-  Worker on the same preview port, including syntax-crash recovery and
-  teardown. Direct `start` commands and non-server templates keep their
-  existing paths (ADR-0324–0327).
+- Express, Hono, and Koa pin real `nodemon@3.1.14`; owner-VFS edits now replace
+  the app Worker on the same preview port with crash recovery and teardown.
+  Direct `start` and non-server templates keep their paths (ADR-0324–0327).
 
 ### Fixed
 

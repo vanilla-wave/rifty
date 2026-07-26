@@ -150,9 +150,7 @@ export interface WorkerProcessHandle extends ProcessHandleBase {
    * remains available for process controls such as TTY resize until exit.
    */
   disconnect(): void;
-  /** Private owner→descendant process control; never exposed on ChildProcess. */
   controlKill(pid: number, signal: string): boolean;
-  /** Private descendant→owner listening lifecycle; never a guest IPC message. */
   onListeningControl(listener: (control: ProcessListeningControl) => void): () => void;
 }
 
@@ -165,7 +163,6 @@ export type ProcessHandle = SameRealmProcessHandle | WorkerProcessHandle;
 interface ProcessRecord {
   readonly pid: number;
   readonly ppid: number;
-  /** Ownership edge; a worker thread keeps its process-visible ppid. */
   readonly treeParentPid: number;
   readonly published: boolean;
   readonly remoteOwnerPid?: number;
@@ -179,11 +176,8 @@ interface ProcessRecord {
   /** Handle for the parent side. Late-bound in {@link ProcessManager.spawn}. */
   handle: ProcessHandle;
   readonly abortController: AbortController;
-  /** Terminate only this physical/logical record; tree ordering is manager-owned. */
   terminate(signal: string): boolean;
-  /** Settle one malformed/failed process run with a numeric exit. */
   fail(code: number): boolean;
-  /** Settle a physically closed peer without inventing an exit code or signal. */
   peerFail(error: Error): boolean;
 }
 
