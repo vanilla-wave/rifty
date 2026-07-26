@@ -15,7 +15,6 @@
  * Every transition is owned by `install-stamp-authority.ts`; pending stamps
  * never satisfy reuse and are promoted only after a clean durability proof.
  */
-// TODO(backlog: playground/install-stamp-invalidation)
 import {
   type PersistFailureReport,
   type Vfs,

@@ -2273,9 +2273,9 @@
   other's tree, so a from-scratch preset always shows its install even when an
   instant preset already warmed OPFS — re-selecting the same project reuses
   (fast). Switching projects clears the terminal first. Template switcher groups
-  presets under "Instant start" / "From scratch" with kind pills. Stamp
-  invalidation is provisional —
-  `docs/backlog/playground/install-stamp-invalidation.md`.
+  presets under "Instant start" / "From scratch" with kind pills. Later
+  corrected by ADR-0307: post-install tree surveillance is rejected; explicit
+  install reconciles.
 
 ### Changed
 
