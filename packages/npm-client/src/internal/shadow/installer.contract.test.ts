@@ -1,5 +1,7 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NotImplementedError } from '@riftydev/io';
@@ -428,50 +430,138 @@ function storageWriteFault(kind: 'permission' | 'quota'): Error {
 }
 
 interface PeerTraversalEvidence {
+  readonly nodeVersion: string;
+  readonly npmVersion: string;
   readonly freshPeerInstalled: boolean;
   readonly freshPeerLocked: boolean;
   readonly replayPeerRestored: boolean;
   readonly replayLockStable: boolean;
 }
 
-// Oracle recorded 2026-07-26 with Node v24.16.0 and npm 11.17.0.
-function nativePeerTraversalEvidence(): PeerTraversalEvidence {
+const PEER_ORACLE_NODE_VERSION = 'v24.16.0';
+const PEER_ORACLE_NPM_VERSION = '11.17.0';
+
+function runNativeNpm(cwd: string, cache: string, args: readonly string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'npm',
+      [...args],
+      {
+        cwd,
+        env: { ...process.env, npm_config_cache: cache },
+        encoding: 'utf8',
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(
+            new Error(`native npm failed: ${String(stderr).trim() || error.message}`, {
+              cause: error,
+            }),
+          );
+          return;
+        }
+        resolve(String(stdout));
+      },
+    );
+  });
+}
+
+// Live differential pinned 2026-07-26; version drift must re-probe, never silently bless.
+async function nativePeerTraversalEvidence(): Promise<PeerTraversalEvidence> {
   const root = mkdtempSync(join(tmpdir(), 'rifty-shadow-peer-oracle-'));
   const source = join(root, 'packages/source');
-  const peer = join(root, 'packages/peer');
+  const cache = join(root, '.npm-cache');
+  const peerPackageJson = new TextEncoder().encode(
+    `${JSON.stringify({ name: CONTRACT_PEER, version: '1.0.0' })}\n`,
+  );
+  const peerTarball = await gzip(
+    concat(
+      buildHeader('package/package.json', peerPackageJson.length),
+      padToBlock(peerPackageJson),
+      TAR_TRAILER,
+    ),
+  );
+  let registryOrigin = '';
+  const registry = createServer((request, response) => {
+    const pathname = decodeURIComponent(new URL(request.url ?? '/', registryOrigin).pathname);
+    if (pathname === `/${CONTRACT_PEER}`) {
+      const body = JSON.stringify({
+        name: CONTRACT_PEER,
+        'dist-tags': { latest: '1.0.0' },
+        versions: {
+          '1.0.0': {
+            name: CONTRACT_PEER,
+            version: '1.0.0',
+            dist: {
+              tarball: `${registryOrigin}/${CONTRACT_PEER}/-/peer-1.0.0.tgz`,
+            },
+          },
+        },
+      });
+      response.writeHead(200, {
+        'content-length': String(Buffer.byteLength(body)),
+        'content-type': 'application/json',
+      });
+      response.end(body);
+      return;
+    }
+    if (pathname === `/${CONTRACT_PEER}/-/peer-1.0.0.tgz`) {
+      response.writeHead(200, {
+        'content-length': String(peerTarball.byteLength),
+        'content-type': 'application/octet-stream',
+      });
+      response.end(peerTarball);
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise<void>((resolve, reject) => {
+    registry.once('error', reject);
+    registry.listen(0, '127.0.0.1', resolve);
+  });
+  const address = registry.address();
+  if (address === null || typeof address === 'string') {
+    throw new Error('native peer oracle registry did not bind a TCP address');
+  }
+  registryOrigin = `http://127.0.0.1:${(address as AddressInfo).port}`;
+  let registryOpen = true;
+  const closeRegistry = async (): Promise<void> => {
+    if (!registryOpen) return;
+    registryOpen = false;
+    await new Promise<void>((resolve, reject) => {
+      registry.close((error) => (error ? reject(error) : resolve()));
+    });
+  };
   try {
     mkdirSync(source, { recursive: true });
-    mkdirSync(peer, { recursive: true });
     writeFileSync(
       join(root, 'package.json'),
       `${JSON.stringify({
         name: 'shadow-peer-oracle',
         version: '1.0.0',
         private: true,
-        dependencies: { 'contract-source': 'file:packages/source' },
+        dependencies: { [CONTRACT_TRIGGER]: 'file:packages/source' },
       })}\n`,
     );
     writeFileSync(
       join(source, 'package.json'),
       `${JSON.stringify({
-        name: 'contract-source',
+        name: CONTRACT_TRIGGER,
         version: CONTRACT_VERSION,
-        peerDependencies: { [CONTRACT_PEER]: 'file:../peer' },
+        peerDependencies: CONTRACT_PEER_DEPENDENCIES,
       })}\n`,
     );
-    writeFileSync(
-      join(peer, 'package.json'),
-      `${JSON.stringify({ name: CONTRACT_PEER, version: '1.0.0' })}\n`,
-    );
-    const install = (): void => {
-      execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--offline'], {
-        cwd: root,
-        env: { ...process.env, npm_config_cache: join(root, '.npm-cache') },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    };
+    const npmVersion = (await runNativeNpm(root, cache, ['--version'])).trim();
+    const installArgs = [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      `--registry=${registryOrigin}`,
+    ] as const;
 
-    install();
+    await runNativeNpm(root, cache, installArgs);
     const lockPath = join(root, 'package-lock.json');
     const lockBefore = readFileSync(lockPath);
     const lock = JSON.parse(lockBefore.toString('utf8')) as {
@@ -490,15 +580,19 @@ function nativePeerTraversalEvidence(): PeerTraversalEvidence {
           lock.packages?.[peerLock.resolved]?.version === '1.0.0'));
 
     rmSync(peerPath, { recursive: true, force: true });
-    install();
+    await closeRegistry();
+    await runNativeNpm(root, cache, [...installArgs, '--offline']);
 
     return {
+      nodeVersion: process.version,
+      npmVersion,
       freshPeerInstalled,
       freshPeerLocked,
       replayPeerRestored: existsSync(join(peerPath, 'package.json')),
       replayLockStable: readFileSync(lockPath).equals(lockBefore),
     };
   } finally {
+    await closeRegistry();
     rmSync(root, { recursive: true, force: true });
   }
 }
@@ -538,8 +632,13 @@ function expectShadowTraceDrift(lockfile: Lockfile): void {
 
 describe('shadow substitution installer boundary', () => {
   it('[fault: frozen-assumption] matches npm peer traversal and lock replay', async () => {
-    const oracle = nativePeerTraversalEvidence();
-    expect(oracle).toEqual({
+    const oracle = await nativePeerTraversalEvidence();
+    const { nodeVersion, npmVersion, ...nativeBehavior } = oracle;
+    expect({ nodeVersion, npmVersion }).toEqual({
+      nodeVersion: PEER_ORACLE_NODE_VERSION,
+      npmVersion: PEER_ORACLE_NPM_VERSION,
+    });
+    expect(nativeBehavior).toEqual({
       freshPeerInstalled: true,
       freshPeerLocked: true,
       replayPeerRestored: true,
@@ -574,23 +673,43 @@ describe('shadow substitution installer boundary', () => {
       replayLockStable:
         lockAfter.byteLength === lockBefore.byteLength &&
         lockAfter.every((byte, index) => byte === lockBefore[index]),
-    }).toEqual(oracle);
+    }).toEqual(nativeBehavior);
   });
 
-  it('preserves semver-admits policy through the package-private install authority', async () => {
+  it('preserves semver-admits policy through fresh and replay authority paths', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/project', { recursive: true });
     const registry = await contractRegistry();
+    const authority = contractAuthority('semver-admits');
 
-    const result = await installContract(
+    const first = await installContract(
       vfs,
       registry,
       { [CONTRACT_TRIGGER]: '^1.100.0' },
       {},
-      contractAuthority('semver-admits'),
+      authority,
     );
 
-    expect(result.lockfile.packages['node_modules/contract-package']).toMatchObject({
+    expect(first.lockfile.packages['node_modules/contract-package']).toMatchObject({
+      version: CONTRACT_VERSION,
+      riftyShadowRecipe: 'rifty.shadow-substitution.contract-package.v2',
+    });
+    expect(await vfs.readFileText('/project/node_modules/contract-package/index.js')).toBe(
+      'module.exports = "contract";\n',
+    );
+
+    registry.resetReads();
+    const replay = await installContract(
+      vfs,
+      registry,
+      { [CONTRACT_TRIGGER]: '^1.100.0' },
+      {},
+      authority,
+    );
+
+    expect(registry.packumentReads).toEqual([]);
+    expect(registry.tarballReads).toEqual([]);
+    expect(replay.lockfile.packages['node_modules/contract-package']).toMatchObject({
       version: CONTRACT_VERSION,
       riftyShadowRecipe: 'rifty.shadow-substitution.contract-package.v2',
     });
@@ -599,7 +718,7 @@ describe('shadow substitution installer boundary', () => {
     );
   });
 
-  it.each(['latest', '*', '^1.100.0', '~1.100.0', '>=1.100.0'])(
+  it.each([null, 'latest', '*', '^1.100.0', '~1.100.0', '>=1.100.0'] as const)(
     '[fault: observable-order] exact-only %s rejects before acquisition or mutation',
     async (range) => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -611,7 +730,9 @@ describe('shadow substitution installer boundary', () => {
       const rm = vi.spyOn(vfs, 'rm');
 
       await expect(
-        installContract(vfs, registry, { [CONTRACT_TRIGGER]: range }),
+        installContract(vfs, registry, {
+          [CONTRACT_TRIGGER]: range,
+        } as unknown as Readonly<Record<string, string>>),
       ).rejects.toMatchObject({
         name: 'NotImplementedError',
         feature: 'contract-package.version',
@@ -665,51 +786,58 @@ describe('shadow substitution installer boundary', () => {
     await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
   });
 
-  it('[fault: observable-order] exact-only replay rejects drift without reads or mutation', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const vfs = new MemoryVfs();
-    await vfs.mkdir('/project', { recursive: true });
-    const registry = await contractRegistry();
-    await installContract(vfs, registry, { [CONTRACT_TRIGGER]: CONTRACT_VERSION });
-    const lockBefore = await vfs.readFile('/project/package-lock.json');
-    const packageBefore = await vfs.readFile('/project/node_modules/contract-package/package.json');
-    const launcherBefore = await vfs.readFile('/project/node_modules/.bin/contract');
+  it.each([null, 'latest', '*', '^1.100.0', '~1.100.0', '>=1.100.0'] as const)(
+    '[fault: observable-order] exact-only replay rejects %s without reads or mutation',
+    async (range) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const registry = await contractRegistry();
+      await installContract(vfs, registry, { [CONTRACT_TRIGGER]: CONTRACT_VERSION });
+      const lockBefore = await vfs.readFile('/project/package-lock.json');
+      const packageBefore = await vfs.readFile(
+        '/project/node_modules/contract-package/package.json',
+      );
+      const launcherBefore = await vfs.readFile('/project/node_modules/.bin/contract');
 
-    registry.resetReads();
-    const resolverFetch = vi
-      .spyOn(globalThis, 'fetch')
-      .mockRejectedValue(new Error('Eddy must not start during exact replay rejection'));
-    const mkdir = vi.spyOn(vfs, 'mkdir');
-    const writeFile = vi.spyOn(vfs, 'writeFile');
-    const rm = vi.spyOn(vfs, 'rm');
-    await expect(
-      installContract(
-        vfs,
-        registry,
-        { [CONTRACT_TRIGGER]: '^1.100.0' },
-        {
-          resolverUrl: 'https://eddy.test/resolve',
-          resolverClosureHash: '0'.repeat(64),
-          resolverBundleBaseUrl: 'https://eddy-cdn.test',
-        },
-      ),
-    ).rejects.toMatchObject({
-      name: 'NotImplementedError',
-      feature: 'contract-package.version',
-    });
+      registry.resetReads();
+      const resolverFetch = vi
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('Eddy must not start during exact replay rejection'));
+      const mkdir = vi.spyOn(vfs, 'mkdir');
+      const writeFile = vi.spyOn(vfs, 'writeFile');
+      const rm = vi.spyOn(vfs, 'rm');
+      await expect(
+        installContract(
+          vfs,
+          registry,
+          {
+            [CONTRACT_TRIGGER]: range,
+          } as unknown as Readonly<Record<string, string>>,
+          {
+            resolverUrl: 'https://eddy.test/resolve',
+            resolverClosureHash: '0'.repeat(64),
+            resolverBundleBaseUrl: 'https://eddy-cdn.test',
+          },
+        ),
+      ).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'contract-package.version',
+      });
 
-    expect(resolverFetch).not.toHaveBeenCalled();
-    expect(registry.packumentReads).toEqual([]);
-    expect(registry.tarballReads).toEqual([]);
-    expect(mkdir).not.toHaveBeenCalled();
-    expect(writeFile).not.toHaveBeenCalled();
-    expect(rm).not.toHaveBeenCalled();
-    expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
-    expect(await vfs.readFile('/project/node_modules/contract-package/package.json')).toEqual(
-      packageBefore,
-    );
-    expect(await vfs.readFile('/project/node_modules/.bin/contract')).toEqual(launcherBefore);
-  });
+      expect(resolverFetch).not.toHaveBeenCalled();
+      expect(registry.packumentReads).toEqual([]);
+      expect(registry.tarballReads).toEqual([]);
+      expect(mkdir).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(rm).not.toHaveBeenCalled();
+      expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+      expect(await vfs.readFile('/project/node_modules/contract-package/package.json')).toEqual(
+        packageBefore,
+      );
+      expect(await vfs.readFile('/project/node_modules/.bin/contract')).toEqual(launcherBefore);
+    },
+  );
 
   it.each([
     ['required', { dependencies: { [CONTRACT_REQUIRED]: '2.0.0' } }],
