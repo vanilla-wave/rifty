@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Builtin substitution recipes now use strict clone-safe schema 2: recipe data
+  owns admission features, exact registry dependency projections, and
+  user-visible bin maps; one deeply freezing codec admits the generated
+  catalog before internal export (ADR-0328).
 - Install-artifact identity now hashes only behavior-bearing policy fields
   (`schema`/`api`/`version`/`consumer`/`source`/`wasm`/`patches`); compat prose
   edits no longer invalidate deployed stamps or force snapshot rebakes. One-time

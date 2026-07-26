@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import { MemoryVfs } from '@riftydev/vfs';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   TAR_TRAILER,
   buildHeader,
@@ -12,8 +12,23 @@ import { install } from '../../installer.ts';
 import type { Lockfile, LockfileEntry } from '../../linker.ts';
 import type { Packument, VersionManifest } from '../../registry.ts';
 import { RegistryClient } from '../../registry.ts';
+import type { TarballCache } from '../../tarball-cache.ts';
+import schemaOneShadowLockfile from './fixtures/schema-1-shadow-lockfile.json';
 import { shadowAssetPlanForInstallResult } from './install-result.ts';
 import { planShadowSubstitutionsFromLockfile } from './planner.ts';
+
+class MemoryTarballCache implements TarballCache {
+  readonly #entries = new Map<string, Uint8Array>();
+
+  async get(name: string, version: string, integrity: string): Promise<Uint8Array | null> {
+    return this.#entries.get(`${name}\0${version}\0${integrity}`)?.slice() ?? null;
+  }
+
+  async put(name: string, version: string, integrity: string, bytes: Uint8Array): Promise<string> {
+    this.#entries.set(`${name}\0${version}\0${integrity}`, bytes.slice());
+    return `memory:${name}@${version}`;
+  }
+}
 
 class RejectingRegistry extends RegistryClient {
   reads = 0;
@@ -107,6 +122,35 @@ function expectShadowTraceDrift(lockfile: Lockfile): void {
   });
 }
 
+function schemaOneInstallerLockfile(kind: 'single' | 'reverse-multi'): unknown {
+  const lockfile = structuredClone(schemaOneShadowLockfile) as unknown as {
+    packages: Record<string, unknown>;
+    rifty: {
+      shadowSubstitutions: {
+        applied: Array<{ trigger: { name: string } }>;
+      };
+    };
+  };
+  if (kind === 'reverse-multi') return lockfile;
+  const esbuild = lockfile.packages['node_modules/esbuild'];
+  if (!esbuild) throw new Error('schema-1 fixture is missing the esbuild entry');
+  lockfile.packages = {
+    '': {
+      version: '1.0.0',
+      dependencies: { esbuild: '0.28.0' },
+    },
+    'node_modules/esbuild': esbuild,
+  };
+  lockfile.rifty.shadowSubstitutions.applied = lockfile.rifty.shadowSubstitutions.applied.filter(
+    ({ trigger }) => trigger.name === 'esbuild',
+  );
+  return lockfile;
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('shadow substitution installer boundary', () => {
   it('materializes and lockfile-replays esbuild without registry acquisition', async () => {
     const vfs = new MemoryVfs();
@@ -127,7 +171,7 @@ describe('shadow substitution installer boundary', () => {
     expect(firstRegistry.reads).toBe(0);
     expect(first.lockfile.packages['node_modules/esbuild']).toMatchObject({
       version: '0.28.0',
-      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
     });
     expect(first.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
     expect(plan.bindings).toEqual([
@@ -151,6 +195,59 @@ describe('shadow substitution installer boundary', () => {
     expect(await vfs.readFile('/project/node_modules/esbuild/package.json')).toEqual(firstPackage);
     expect(shadowAssetPlanForInstallResult(replay)).toEqual(plan);
   });
+
+  it.each([
+    ['single', { esbuild: '^0.28.0' }, 'esbuild'],
+    ['reverse-multi', { esbuild: '^0.28.0', lightningcss: '^1.32.0' }, 'lightningcss'],
+  ] as const)(
+    'rejects the schema-1 %s trace before registry, Eddy, or VFS mutation',
+    async (kind, dependencies, packageName) => {
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      await vfs.writeFile(
+        '/project/package.json',
+        JSON.stringify({ name: 'fixture', version: '1.0.0', dependencies }),
+      );
+      await vfs.writeFile(
+        '/project/package-lock.json',
+        JSON.stringify(schemaOneInstallerLockfile(kind)),
+      );
+
+      const registry = new RejectingRegistry();
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('', { status: 599 }));
+      const writers = [
+        vi.spyOn(vfs, 'writeFile'),
+        vi.spyOn(vfs, 'mkdir'),
+        vi.spyOn(vfs, 'rm'),
+        vi.spyOn(vfs, 'utimes'),
+      ];
+
+      let caught: unknown;
+      try {
+        await install({
+          vfs,
+          cwd: '/project',
+          registry,
+          resolverUrl: 'https://eddy.test/resolve',
+          tarballCache: new MemoryTarballCache(),
+          onSubstitution: () => {},
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toMatchObject({
+        code: 'EBROKENLOCK',
+        reason: 'shadow-trace-drift',
+        packageName,
+      });
+      expect(registry.reads).toBe(0);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      for (const writer of writers) expect(writer).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('shadow substitution lockfile provenance', () => {
@@ -191,7 +288,7 @@ describe('shadow substitution lockfile provenance', () => {
     [
       'missing rifty scheme',
       (entry: LockfileEntry) => {
-        entry.resolved = 'shadow-substitution/rifty.shadow-substitution.esbuild.v1';
+        entry.resolved = 'shadow-substitution/rifty.shadow-substitution.esbuild.v2';
       },
     ],
     [
@@ -209,7 +306,7 @@ describe('shadow substitution lockfile provenance', () => {
     [
       'wrong recipe digest',
       (entry: LockfileEntry) => {
-        entry.resolved = `rifty:shadow-substitution/rifty.shadow-substitution.esbuild.v1@${'0'.repeat(64)}`;
+        entry.resolved = `rifty:shadow-substitution/rifty.shadow-substitution.esbuild.v2@${'0'.repeat(64)}`;
       },
     ],
     [

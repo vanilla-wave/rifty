@@ -1272,7 +1272,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
     const secondEvidence = await readOwnerFile(page, `/scratch${resultPath}`);
 
     expect(unsupported.exit, unsupported.out).toBe(1);
-    expect(unsupported.out).toContain('shadow-registry.esbuild@');
+    expect(unsupported.out).toContain('esbuild.version');
     expect(packageJsonAfter).toEqual(packageJsonBefore);
     expect(lockfileAfter).toEqual(lockfileBefore);
     expect(modulesAfter).toEqual(modulesBefore);

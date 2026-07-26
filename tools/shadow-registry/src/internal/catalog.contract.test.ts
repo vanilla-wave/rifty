@@ -31,9 +31,16 @@ describe('builtin shadow substitution catalog contract', () => {
     );
 
     expect(esbuild).toMatchObject({
+      schema: 2,
+      id: 'rifty.shadow-substitution.esbuild.v2',
       trigger: { name: 'esbuild', version: '0.28.0' },
+      admission: { kind: 'semver-admits', unsupportedFeature: 'esbuild.version' },
       acquisition: { kind: 'synthetic' },
-      materialization: { name: 'esbuild', version: '0.28.0' },
+      materialization: {
+        name: 'esbuild',
+        version: '0.28.0',
+        bin: { esbuild: 'bin/esbuild' },
+      },
       binding: {
         adapterId: 'rifty.runtime-adapter.esbuild.v1',
         assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
@@ -52,9 +59,24 @@ describe('builtin shadow substitution catalog contract', () => {
       esbuild?.materialization.files.find((file) => file.path === 'bin/esbuild')?.content,
     ).toContain("new NotImplementedError('esbuild.cli')");
     expect(lightningcss).toMatchObject({
+      schema: 2,
+      id: 'rifty.shadow-substitution.lightningcss.v2',
       trigger: { name: 'lightningcss', version: '1.32.0' },
-      acquisition: { kind: 'registry', name: 'lightningcss-wasm', version: '1.32.0' },
-      materialization: { name: 'lightningcss', version: '1.32.0' },
+      admission: { kind: 'semver-admits', unsupportedFeature: 'lightningcss.version' },
+      acquisition: {
+        kind: 'registry',
+        name: 'lightningcss-wasm',
+        version: '1.32.0',
+        dependencyProjection: {
+          dependencies: { 'napi-wasm': '^1.0.1' },
+          optionalDependencies: {},
+          omittedOptionalDependencies: {},
+          peerDependencies: {},
+          bundledDependencies: ['napi-wasm'],
+          unsupportedFeature: 'lightningcss.acquisition',
+        },
+      },
+      materialization: { name: 'lightningcss', version: '1.32.0', bin: {} },
     });
     expect(lightningcss?.binding).toBeUndefined();
     expect(structuredClone(builtinShadowSubstitutionCatalog)).toEqual(
@@ -86,7 +108,7 @@ describe('builtin shadow substitution catalog contract', () => {
         ...duplicate.recipes.slice(1),
       ],
     };
-    expect(() => decodeBuiltinShadowSubstitutionCatalog(forged)).toThrow(/duplicate.*file/i);
+    expect(() => decodeBuiltinShadowSubstitutionCatalog(forged)).toThrow(/duplicate path/i);
   });
 
   it('rejects getters, non-normal paths, invalid SRI, and recomputed foreign builtin ids', () => {
@@ -109,7 +131,9 @@ describe('builtin shadow substitution catalog contract', () => {
         return getter.recipes[0];
       },
     });
-    expect(() => decodeBuiltinShadowSubstitutionCatalog(arrayGetter)).toThrow(/data element/i);
+    expect(() => decodeBuiltinShadowSubstitutionCatalog(arrayGetter)).toThrow(
+      /element 0 must be a data property/i,
+    );
     expect(getterRan).toBe(false);
 
     for (const path of ['.', '..', 'double//slash', 'dir/..', String.raw`dir\file`]) {

@@ -480,7 +480,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
   }
 
   const MATERIALIZE_LINE =
-    'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v1)';
+    'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)';
 
   it('materializes synthetic esbuild on fresh + replay, byte-identical', async () => {
     const vfs = new MemoryVfs();
@@ -558,7 +558,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
   it('attests and replays the registry-backed lightningcss recipe', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const recipeId = 'rifty.shadow-substitution.lightningcss.v1';
+    const recipeId = 'rifty.shadow-substitution.lightningcss.v2';
     const materializeLine = `npm: lightningcss@^1.32.0 materialized from shadow registry (${recipeId})`;
     const registry = new FakeRegistry(
       db([
@@ -625,7 +625,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
   const UNSUPPORTED_REQUEST = '0.21.5';
   const unsupportedRequestError = {
     name: 'NotImplementedError',
-    feature: `shadow-registry.esbuild@${UNSUPPORTED_REQUEST}`,
+    feature: 'esbuild.version',
   };
 
   it('refuses a direct synthetic substitution when the request excludes exact esbuild 0.28.0', async () => {

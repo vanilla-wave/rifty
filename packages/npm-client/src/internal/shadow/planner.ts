@@ -9,6 +9,7 @@ import {
   shadowDigest,
 } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import { isSchemaOneBuiltinShadowSubstitutionIdentity } from './schema-one-identity.ts';
 
 export interface AppliedShadowSubstitution {
   readonly catalog: Readonly<{ id: string; digest: string }>;
@@ -516,6 +517,48 @@ function isBrokenShadowTrace(error: unknown): boolean {
   );
 }
 
+function ownDataProperty(value: unknown, key: string): unknown {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
+    return undefined;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+}
+
+function schemaOneFactPackageName(value: unknown): string | null {
+  const catalog = ownDataProperty(value, 'catalog');
+  const substitutionId = ownDataProperty(value, 'substitutionId');
+  if (
+    !isSchemaOneBuiltinShadowSubstitutionIdentity(ownDataProperty(catalog, 'id'), substitutionId)
+  ) {
+    return null;
+  }
+  const packageName = ownDataProperty(ownDataProperty(value, 'trigger'), 'name');
+  return typeof packageName === 'string' && packageName.length > 0 ? packageName : null;
+}
+
+function rejectSchemaOneTrace(applied: readonly unknown[]): void {
+  const offenders = applied.flatMap((fact) => {
+    const packageName = schemaOneFactPackageName(fact);
+    return packageName === null
+      ? []
+      : [{ canonical: canonicalShadowJson(fact), packageName, fact }];
+  });
+  offenders.sort((left, right) =>
+    left.canonical < right.canonical ? -1 : left.canonical > right.canonical ? 1 : 0,
+  );
+  const first = offenders[0];
+  if (!first) return;
+  throw Object.assign(
+    brokenShadowTrace(`schema-1 shadow substitution for ${first.packageName} cannot replay as v2`),
+    { packageName: first.packageName },
+  );
+}
+
 function hasReservedShadowIdentity(value: unknown): boolean {
   if (value === null || typeof value !== 'object') return false;
   const descriptor = Object.getOwnPropertyDescriptor(value, 'resolved');
@@ -617,10 +660,9 @@ export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowAsset
     );
     if (trace.protocol !== SHADOW_LOCKFILE_PROTOCOL)
       throw new TypeError('shadow lockfile trace protocol is unsupported');
-    const suppliedApplied = decodeDenseDataArray(
-      trace.applied,
-      'shadow lockfile trace applied',
-    ).map(decodeApplied);
+    const rawApplied = decodeDenseDataArray(trace.applied, 'shadow lockfile trace applied');
+    rejectSchemaOneTrace(rawApplied);
+    const suppliedApplied = rawApplied.map(decodeApplied);
     const plan = planTrustedAppliedShadowSubstitutions(suppliedApplied);
     for (const substitution of plan.substitutions) {
       validateLockfileEntryProvenance(packages, substitution);

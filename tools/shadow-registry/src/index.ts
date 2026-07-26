@@ -35,7 +35,7 @@ export interface OverrideMap {
  * cannot load in a browser realm AND a drop-in pure-JS alternative exists.
  */
 const lightningcssRecipe = builtinShadowSubstitutionCatalog.recipes.find(
-  (recipe) => recipe.id === 'rifty.shadow-substitution.lightningcss.v1',
+  (recipe) => recipe.id === 'rifty.shadow-substitution.lightningcss.v2',
 );
 if (!lightningcssRecipe || lightningcssRecipe.acquisition.kind !== 'registry') {
   throw new Error('shadow-registry builtin lightningcss recipe is missing');

@@ -6,7 +6,6 @@ created: 2026-07-26
 why: the Sass RED proved recipe v1 admits unproven ranges, copies unproven registry dependencies, and can expose the acquired package bin instead of the substituted package bin; those are missing generic policy authorities, not Sass exceptions
 user_story: As a browser-IDE user installing a builtin-substituted package, I want its accepted request, fetched dependency closure, visible bins, and replay provenance to be exactly the reviewed recipe, but today recipe v1 can widen each of those boundaries
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-recipe-v2-data-authority]
 sources: [ADR-0310, ADR-0328, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md]
 code:
   - packages/npm-client/src/installer.ts
@@ -20,18 +19,17 @@ code:
 Recipe v1 admits semver ranges, copies registry optionals, and links acquired
 bins before alias materialization. Those policies were implicit and cannot
 faithfully express an exact-only package with omitted native optionals and a
-loud replacement CLI. ADR-0328 supersedes ADR-0308 with one generic authority;
-this prerequisite lands it without shipping the Sass recipe. The blocked data
-slice owns schema 2, strict codec/ingress, and admission feature identity; this
-item starts at execution, projection, materialization, and replay.
+loud replacement CLI. ADR-0328 supersedes ADR-0308 with one generic authority.
+The completed data-authority slice owns schema 2, strict codec/ingress, and
+admission feature identity; this item starts at execution, projection,
+materialization, and replay without shipping the Sass recipe.
 
 ## Reference contract
 
 - `lightningcss-wasm@1.32.0` registry identity, integrity, dependency maps, and
-  bundled `napi-wasm` membership are pinned by the committed capture. Before
-  ready, turn that evidence into a machine-checked fixture independent of
-  catalog source or installer fakes; future registry-backed builtins inherit
-  the same external-golden differential.
+  bundled `napi-wasm` membership are pinned by a machine-checked fixture
+  independent of catalog source or installer fakes; future registry-backed
+  builtins inherit the same external-golden differential.
 - Real npm must pin peer placement/traversal. The committed npm 11 collision
   probe pins same-command `.bin` ownership independent of manifest order and
   across incremental reconciliation. Browser acceptance remains the real
@@ -39,8 +37,6 @@ item starts at execution, projection, materialization, and replay.
 
 ## Readiness blockers
 
-- Convert the committed exact `lightningcss-wasm@1.32.0` registry capture into
-  a machine-checked golden, including bundled `napi-wasm` membership.
 - Add the real-npm peer placement/traversal differential this contract
   references; current peer tests use the fake registry and do not settle
   traversal.
@@ -118,9 +114,9 @@ item starts at execution, projection, materialization, and replay.
 
 ## Decisions
 
-- ADR-0328 owns the complete recipe authority. The blocked data slice owns
-  schema 2, codec/ingress, admission, and the schema-1 replay guard; this item
-  owns projection execution, materialized-bin execution, and v2
+- ADR-0328 owns the complete recipe authority. The completed data-authority
+  slice owns schema 2, codec/ingress, admission, and the schema-1 replay guard;
+  this item owns projection execution, materialized-bin execution, and v2
   acquisition/materialization provenance.
 - The recipe model remains clone-safe data. Generic consumers execute policy
   fields and never recognize Sass, esbuild, LightningCSS, Vite, or entry kind.

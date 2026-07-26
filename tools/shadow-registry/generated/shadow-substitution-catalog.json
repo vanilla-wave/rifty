@@ -1,13 +1,17 @@
 {
-  "schema": 1,
-  "id": "rifty.shadow-substitutions.builtin.v1",
+  "schema": 2,
+  "id": "rifty.shadow-substitutions.builtin.v2",
   "recipes": [
     {
-      "schema": 1,
-      "id": "rifty.shadow-substitution.esbuild.v1",
+      "schema": 2,
+      "id": "rifty.shadow-substitution.esbuild.v2",
       "trigger": {
         "name": "esbuild",
         "version": "0.28.0"
+      },
+      "admission": {
+        "kind": "semver-admits",
+        "unsupportedFeature": "esbuild.version"
       },
       "acquisition": {
         "kind": "synthetic"
@@ -15,6 +19,9 @@
       "materialization": {
         "name": "esbuild",
         "version": "0.28.0",
+        "bin": {
+          "esbuild": "bin/esbuild"
+        },
         "files": [
           {
             "path": "bin/esbuild",
@@ -42,23 +49,40 @@
           "esbuild-wasm@0.28.0/package/esbuild.wasm"
         ]
       },
-      "digest": "0cf34400121b3ddd82ed19aa2b30c2ecd6e3e7a8c573aeba64155652f78167e6"
+      "digest": "e6af53d0b43aa2a4cf83d46818de1b7313f7ad5345cfe0db298b981d3f89368a"
     },
     {
-      "schema": 1,
-      "id": "rifty.shadow-substitution.lightningcss.v1",
+      "schema": 2,
+      "id": "rifty.shadow-substitution.lightningcss.v2",
       "trigger": {
         "name": "lightningcss",
         "version": "1.32.0"
       },
+      "admission": {
+        "kind": "semver-admits",
+        "unsupportedFeature": "lightningcss.version"
+      },
       "acquisition": {
         "kind": "registry",
         "name": "lightningcss-wasm",
-        "version": "1.32.0"
+        "version": "1.32.0",
+        "dependencyProjection": {
+          "dependencies": {
+            "napi-wasm": "^1.0.1"
+          },
+          "optionalDependencies": {},
+          "omittedOptionalDependencies": {},
+          "peerDependencies": {},
+          "bundledDependencies": [
+            "napi-wasm"
+          ],
+          "unsupportedFeature": "lightningcss.acquisition"
+        }
       },
       "materialization": {
         "name": "lightningcss",
         "version": "1.32.0",
+        "bin": {},
         "files": [
           {
             "path": "index.cjs",
@@ -80,7 +104,7 @@
           }
         ]
       },
-      "digest": "0dd089ff66e159b0b53cfd90857ac02ea1d4f32dc97b483d9ed300f0dabe2d4e"
+      "digest": "1800acdcf6efc1eb97de67a1fa4bb27d7f0c77c583b270644e258543be0dcfc4"
     }
   ],
   "assets": [
@@ -98,5 +122,5 @@
       "maxUnpackedBytes": 14483968
     }
   ],
-  "digest": "0eb5dc4c53231efcbfca5c5b6aca6bc203f3013d5168b6e190a9bcf0152993ac"
+  "digest": "a037016265e1c348254b3f067403278f5baee8b1f39e2bcd16f535fd0b9c3b52"
 }

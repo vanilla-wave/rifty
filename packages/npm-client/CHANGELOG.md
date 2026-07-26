@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Builtin shadow admission now executes the attested recipe policy before
+  rejected-package cache, registry, Eddy, or VFS work. Schema-1 substitution
+  traces loud-fail with canonical trigger attribution instead of being
+  reinterpreted under schema 2 (ADR-0328).
+
 ### Added
 
 - **Cancellable package acquisition (ADR-0314).** `InstallOptions.signal` plus
