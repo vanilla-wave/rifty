@@ -85,8 +85,10 @@ process/docs/skill work:
    and expected RED never invoke `rifty-fix`.
 4. Classify discoveries against the frozen goal/tier/Fidelity: required →
    reverse-linked goal residual; outside → `rifty-to-backlog`.
-5. Budget trip or Final+GREEN unit residual → re-cut the unit/mechanism; never
-   narrow the goal, detach required work, auto-fix, or start review three.
+5. Budget trip or Final+GREEN unit residual → re-cut the unit: shrink/split its
+   boundary IN PLACE — same branch/PR lineage, attempt + checkpoint count carries;
+   a successor PR (unit split only) names its predecessor. Never a fresh start,
+   never narrow the goal, detach required work, auto-fix, or start review three.
 6. Unit clean with goal residuals → close only that unit and continue.
 7. Close per `docs/backlog/README.md` §Autonomous goal — incl. end-to-end proof
    of the baseline `## Invariants`; then delete the epic.

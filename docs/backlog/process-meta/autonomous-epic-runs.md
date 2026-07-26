@@ -20,3 +20,10 @@ Exploit-hardening detectors (2026-07-25 six-agent audit): posted verdict
 artifacts + SHA-lineage review counter (kills retry-until-green via slice
 rename); reviewed-SHA == merge-head binding; falsified-on-main proof per epic
 invariant (kills trivially-true `## Invariants`).
+
+Field evidence 2026-07-26 (recipe-v2 authority, PR #180–#195): eleven abandoned
+draft PRs from one over-broad contract — every Contract+RED blocker minted a
+fresh PR, resetting attempt counts (the predicted retry-until-green shape, by
+literal reading not malice). Canon patched (§Review convergence Lineage +
+Contract escalation rows, serial slices, RED-mass tripwire); the SHA-lineage
+counter + posted-verdict detectors remain the mechanical kill.

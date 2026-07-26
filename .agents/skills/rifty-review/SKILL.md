@@ -31,8 +31,10 @@ Cite `file:line`.
 One fresh isolated reviewer per named checkpoint — raw evidence only, never the
 implementer's diagnosis. Setup: resolve the PR branch + raw body (`gh pr view
 <arg> --json body,headRefName,baseRefName`), `BASE=origin/<baseRefName>`, refuse
-a dirty tree, name `CHECKPOINT` (ambiguity stops). Final+GREEN first runs
-`pnpm pr:check` on the committed SHA.
+a dirty tree, name `CHECKPOINT` (ambiguity stops). No PR yet → open the unit's
+single draft PR; that PR lives through every checkpoint, blocker, and re-cut
+until merge — checkpoints spend attempts, never the PR (`fault-classes.md`
+Lineage row). Final+GREEN first runs `pnpm pr:check` on the committed SHA.
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
@@ -43,6 +45,7 @@ node tools/review/blockers.mjs "$RUN/verdict.json"
 ```
 
 Exit 0 → unit passes (`goal_complete:false` = continue the goal); exit 1 →
-redesign/re-cut, no auto-fix, never a third review; exit 2 → retry once, then
-stop. The verdict binds to the reviewed SHA — new commits invalidate it; merge
+re-cut in place — same PR/branch lineage, count carries (`fault-classes.md`
+§Review convergence, Lineage row); no auto-fix, never a third review; exit 2 →
+retry once, then stop. The verdict binds to the reviewed SHA — new commits invalidate it; merge
 requires PR head == reviewed SHA. Do not edit or push.
