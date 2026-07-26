@@ -130,7 +130,8 @@ function rawSchema2Catalog() {
         name: 'lightningcss-wasm',
         version: '1.32.0',
         dependencyProjection: {
-          dependencies: {},
+          // npm packument 2026-07-26; 1.32.0 tarball sha1 88ff9de4e243c3294461f96248930a571288faf8.
+          dependencies: { 'napi-wasm': '^1.0.1' },
           optionalDependencies: {},
           omittedOptionalDependencies: {},
           peerDependencies: {},
@@ -180,11 +181,36 @@ type RawRegistryRecipe = Extract<
   Readonly<{ acquisition: Readonly<{ kind: 'registry' }> }>
 >;
 
+function isRawRegistryRecipe(recipe: RawSchema2Recipe): recipe is RawRegistryRecipe {
+  return recipe.acquisition.kind === 'registry';
+}
+
 function registryRecipe(catalog: RawSchema2Catalog): RawRegistryRecipe {
-  const recipe = catalog.recipes.find(
-    (candidate): candidate is RawRegistryRecipe => candidate.acquisition.kind === 'registry',
-  );
+  const recipe = catalog.recipes.find(isRawRegistryRecipe);
   if (!recipe) throw new Error('schema-2 fixture lacks registry recipe');
+  return recipe;
+}
+
+const PROJECTION_FIELDS = [
+  'dependencies',
+  'optionalDependencies',
+  'omittedOptionalDependencies',
+  'peerDependencies',
+] as const;
+
+function registryProjectionCases() {
+  return rawSchema2Catalog().recipes.flatMap((recipe, recipeIndex) =>
+    recipe.acquisition.kind === 'registry'
+      ? PROJECTION_FIELDS.map((field) => ({ recipeId: recipe.id, recipeIndex, field }))
+      : [],
+  );
+}
+
+function registryRecipeAt(catalog: RawSchema2Catalog, index: number): RawRegistryRecipe {
+  const recipe = catalog.recipes[index];
+  if (!recipe || !isRawRegistryRecipe(recipe)) {
+    throw new Error(`schema-2 fixture recipe ${index} is not registry-backed`);
+  }
   return recipe;
 }
 
@@ -230,9 +256,9 @@ describe('builtin shadow substitution catalog contract', () => {
 
     expect(catalog.recipes.map((recipe) => recipe.digest)).toEqual([
       '0d8bdcbf6317aa855da9cf0e8848ee081f3ece2b1b20b1d9b83a38d5bc9f4564',
-      '63b1b541baa151411eba6bfab330f2d07533da560e639a2e2ccf19a6f45df555',
+      '20d81fbeb4afcaed82801f2413ed3f627cb1315752f880dca7a921ade2e78e07',
     ]);
-    expect(catalog.digest).toBe('dda257c2f56c593fe036c24847d678d680197d306da951d864434f49120f107f');
+    expect(catalog.digest).toBe('5d8462c761268643956d81b299007e536238484a48de11c6d9d16f9a16f818dc');
 
     const decoded = decodeBuiltinShadowSubstitutionCatalog(catalog);
     expect(decoded).toEqual(catalog);
@@ -275,7 +301,18 @@ describe('builtin shadow substitution catalog contract', () => {
     ).toContain("new NotImplementedError('esbuild.cli')");
     expect(lightningcss).toMatchObject({
       trigger: { name: 'lightningcss', version: '1.32.0' },
-      acquisition: { kind: 'registry', name: 'lightningcss-wasm', version: '1.32.0' },
+      acquisition: {
+        kind: 'registry',
+        name: 'lightningcss-wasm',
+        version: '1.32.0',
+        dependencyProjection: {
+          dependencies: { 'napi-wasm': '^1.0.1' },
+          optionalDependencies: {},
+          omittedOptionalDependencies: {},
+          peerDependencies: {},
+          unsupportedFeature: 'lightningcss.acquisitionDependencies',
+        },
+      },
       materialization: { name: 'lightningcss', version: '1.32.0' },
     });
     expect(lightningcss?.binding).toBeUndefined();
@@ -293,57 +330,43 @@ describe('builtin shadow substitution catalog contract', () => {
     expectCodecFailure(catalog, 'catalog', /not the admitted builtin catalog identity/i);
   });
 
-  it.each([
-    'dependencies',
-    'optionalDependencies',
-    'omittedOptionalDependencies',
-    'peerDependencies',
-  ] as const)('accepts scoped package names in registry %s', (field) => {
-    const catalog = rawSchema2Catalog();
-    const recipe = registryRecipe(catalog);
-    Reflect.set(recipe.acquisition.dependencyProjection[field], '@scope/package', '1.0.0');
-    resignCatalog(catalog, recipe);
+  it.each(registryProjectionCases())(
+    '$recipeId validates registry $field generically',
+    ({ recipeIndex, field }) => {
+      const accepted = rawSchema2Catalog();
+      const acceptedRecipe = registryRecipeAt(accepted, recipeIndex);
+      Reflect.set(
+        acceptedRecipe.acquisition.dependencyProjection[field],
+        '@scope/package',
+        '1.0.0',
+      );
+      resignCatalog(accepted, acceptedRecipe);
+      expectCodecFailure(accepted, 'catalog', /not the admitted builtin catalog identity/i);
 
-    expectCodecFailure(catalog, 'catalog', /not the admitted builtin catalog identity/i);
-  });
-
-  it.each([
-    'dependencies',
-    'optionalDependencies',
-    'omittedOptionalDependencies',
-    'peerDependencies',
-  ] as const)('rejects invalid package names in registry %s', (field) => {
-    const catalog = rawSchema2Catalog();
-    const recipe = registryRecipe(catalog);
-    Reflect.set(recipe.acquisition.dependencyProjection[field], 'unscoped/slash', '1.0.0');
-
-    expectCodecFailure(
-      catalog,
-      `catalog.recipes[1].acquisition.dependencyProjection.${field} key`,
-      /invalid string/i,
-    );
-  });
-
-  it('keeps every dependency projection map independently owned', () => {
-    for (const field of [
-      'dependencies',
-      'optionalDependencies',
-      'omittedOptionalDependencies',
-      'peerDependencies',
-    ] as const) {
-      const catalog = rawSchema2Catalog();
-      const recipe = registryRecipe(catalog);
-      Reflect.set(recipe.acquisition.dependencyProjection[field], 'sibling', '1.0.0');
-      const collision = field === 'dependencies' ? 'peerDependencies' : 'dependencies';
-      Reflect.set(recipe.acquisition.dependencyProjection[collision], 'sibling', '1.0.0');
-
+      const invalid = rawSchema2Catalog();
+      Reflect.set(
+        registryRecipeAt(invalid, recipeIndex).acquisition.dependencyProjection[field],
+        'unscoped/slash',
+        '1.0.0',
+      );
       expectCodecFailure(
-        catalog,
-        'catalog.recipes[1].acquisition.dependencyProjection',
+        invalid,
+        `catalog.recipes[${recipeIndex}].acquisition.dependencyProjection.${field} key`,
+        /invalid string/i,
+      );
+
+      const overlap = rawSchema2Catalog();
+      const projection = registryRecipeAt(overlap, recipeIndex).acquisition.dependencyProjection;
+      const sibling = field === 'dependencies' ? 'peerDependencies' : 'dependencies';
+      Reflect.set(projection[field], '@rifty-test/projection-sibling', '1.0.0');
+      Reflect.set(projection[sibling], '@rifty-test/projection-sibling', '1.0.0');
+      expectCodecFailure(
+        overlap,
+        `catalog.recipes[${recipeIndex}].acquisition.dependencyProjection`,
         /overlaps/i,
       );
-    }
-  });
+    },
+  );
 
   it('rejects forged identity and duplicate materialization members at ingress', () => {
     expectCodecFailure(

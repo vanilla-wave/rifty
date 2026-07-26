@@ -507,7 +507,7 @@ async function lightningCollisionRegistry(): Promise<ContractRegistry> {
       dependencies: { 'napi-wasm': '^1.0.1' },
     }),
   );
-  add(await contractRegistryEntry('napi-wasm', '1.0.1'));
+  add(await contractRegistryEntry('napi-wasm', '1.1.3'));
   add(
     await contractRegistryEntry(
       'lightningcss',
@@ -1695,7 +1695,7 @@ describe('shadow substitution installer boundary', () => {
         {
           vfs,
           cwd: '/project',
-          registry: await lightningRegistry(),
+          registry: await lightningCollisionRegistry(),
           signal: controller.signal,
           onSubstitution: (line) => report.push(line),
         },
@@ -1720,7 +1720,7 @@ describe('shadow substitution installer boundary', () => {
       {
         vfs,
         cwd: '/project',
-        registry: await lightningRegistry(),
+        registry: await lightningCollisionRegistry(),
         onSubstitution: () => {},
       },
     );
@@ -1746,7 +1746,7 @@ describe('shadow substitution lockfile provenance', () => {
 
   beforeAll(async () => {
     synthetic = await freshLockfile({ esbuild: '^0.28.0' }, new RejectingRegistry());
-    registry = await freshLockfile({ lightningcss: '^1.32.0' }, await lightningRegistry());
+    registry = await freshLockfile({ lightningcss: '^1.32.0' }, await lightningCollisionRegistry());
   });
 
   it.each([

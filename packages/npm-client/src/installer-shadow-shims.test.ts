@@ -697,17 +697,20 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     const recipeId = 'rifty.shadow-substitution.lightningcss.v2';
     const materializeLine = `npm: lightningcss@^1.32.0 materialized from shadow registry (${recipeId})`;
     const registry = new FakeRegistry(
-      db([
-        'lightningcss-wasm',
-        await makeEntry(
+      db(
+        [
           'lightningcss-wasm',
-          '1.32.0',
-          {},
-          {
-            'index.js': 'module.exports = { transform() {} };',
-          },
-        ),
-      ]),
+          await makeEntry(
+            'lightningcss-wasm',
+            '1.32.0',
+            { 'napi-wasm': '^1.0.1' },
+            {
+              'index.js': 'module.exports = { transform() {} };',
+            },
+          ),
+        ],
+        ['napi-wasm', await makeEntry('napi-wasm', '1.1.3')],
+      ),
     );
 
     const freshTrace: string[] = [];
@@ -717,30 +720,20 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
       { lightningcss: '^1.32.0' },
       { vfs, cwd: '/proj', registry, onSubstitution: (line) => freshTrace.push(line) },
     );
-    expect(first.lockfile.packages['node_modules/lightningcss']).toMatchObject({
-      version: '1.32.0',
-      riftyShadowRecipe: recipeId,
-    });
     expect(first.lockfile.packages['node_modules/lightningcss-wasm']).toMatchObject({
       version: '1.32.0',
+      dependencies: { 'napi-wasm': '^1.0.1' },
     });
-    expect(
-      first.lockfile.rifty?.shadowSubstitutions.applied.map(
-        (substitution) => substitution.substitutionId,
-      ),
-    ).toEqual([recipeId]);
-    expect(freshTrace).toContain(materializeLine);
-    expect(freshTrace.filter((line) => line.includes('internals patched'))).toEqual([]);
+    expect(first.lockfile.packages['node_modules/napi-wasm']?.version).toBe('1.1.3');
     expect(await readText(vfs, '/proj/node_modules/lightningcss/index.mjs')).toContain(
       "from 'lightningcss-wasm'",
     );
-    expect(shadowAssetPlanForInstallResult(first)).toMatchObject({
-      assets: [],
-      bindings: [],
-      substitutions: [{ substitutionId: recipeId }],
-    });
 
+    const napiBefore = await vfs.readFile('/proj/node_modules/napi-wasm/package.json');
+    const lockBefore = await vfs.readFile('/proj/package-lock.json');
+    await vfs.rm('/proj/node_modules/napi-wasm', { recursive: true });
     const packument = vi.spyOn(registry, 'getPackument');
+    const tarball = vi.spyOn(registry, 'getTarball');
     const replayTrace: string[] = [];
     const replay = await install(
       'root',
@@ -749,13 +742,32 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
       { vfs, cwd: '/proj', registry, onSubstitution: (line) => replayTrace.push(line) },
     );
     expect(packument).not.toHaveBeenCalled();
+    expect(tarball).not.toHaveBeenCalled();
+    expect(await vfs.readFile('/proj/node_modules/napi-wasm/package.json')).toEqual(napiBefore);
+    expect(await vfs.readFile('/proj/package-lock.json')).toEqual(lockBefore);
     expect(replayTrace).toEqual(freshTrace);
+    expect(first.lockfile.packages['node_modules/lightningcss']).toMatchObject({
+      version: '1.32.0',
+      riftyShadowRecipe: recipeId,
+    });
+    expect(
+      first.lockfile.rifty?.shadowSubstitutions.applied.map(
+        (substitution) => substitution.substitutionId,
+      ),
+    ).toEqual([recipeId]);
+    expect(freshTrace).toContain(materializeLine);
+    expect(freshTrace.filter((line) => line.includes('internals patched'))).toEqual([]);
     expect(replay.lockfile.rifty?.shadowSubstitutions).toEqual(
       first.lockfile.rifty?.shadowSubstitutions,
     );
     expect(await readText(vfs, '/proj/node_modules/lightningcss/index.cjs')).toContain(
       "require('lightningcss-wasm')",
     );
+    expect(shadowAssetPlanForInstallResult(first)).toMatchObject({
+      assets: [],
+      bindings: [],
+      substitutions: [{ substitutionId: recipeId }],
+    });
   });
 
   const UNSUPPORTED_REQUEST = '0.21.5';
