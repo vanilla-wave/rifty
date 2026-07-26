@@ -340,6 +340,131 @@ function malformedMaterializationBinCases() {
   });
 }
 
+type GetterProbe = { invocations: number };
+
+function replaceWithCountedGetter(
+  target: object,
+  property: PropertyKey,
+  probe: GetterProbe,
+  fallback?: unknown,
+): void {
+  const descriptor = Object.getOwnPropertyDescriptor(target, property);
+  const value = descriptor && 'value' in descriptor ? descriptor.value : fallback;
+  Object.defineProperty(target, property, {
+    configurable: true,
+    enumerable: true,
+    get() {
+      probe.invocations += 1;
+      return value;
+    },
+  });
+}
+
+function schema2AccessorCases() {
+  const cases: Array<{
+    label: string;
+    path: string;
+    forge: (catalog: RawSchema2Catalog, probe: GetterProbe) => void;
+  }> = [];
+
+  for (const { label, recipeIndex } of [
+    { label: 'synthetic', recipeIndex: 0 },
+    { label: 'registry', recipeIndex: 1 },
+  ] as const) {
+    cases.push(
+      {
+        label: `${label} admission object`,
+        path: `catalog.recipes[${recipeIndex}]`,
+        forge(catalog, probe) {
+          replaceWithCountedGetter(catalog.recipes[recipeIndex]!, 'admission', probe);
+        },
+      },
+      {
+        label: `${label} admission value`,
+        path: `catalog.recipes[${recipeIndex}].admission`,
+        forge(catalog, probe) {
+          replaceWithCountedGetter(catalog.recipes[recipeIndex]!.admission, 'kind', probe);
+        },
+      },
+      {
+        label: `${label} materialization bin object`,
+        path: `catalog.recipes[${recipeIndex}].materialization`,
+        forge(catalog, probe) {
+          replaceWithCountedGetter(catalog.recipes[recipeIndex]!.materialization, 'bin', probe);
+        },
+      },
+      {
+        label: `${label} materialization bin entry`,
+        path: `catalog.recipes[${recipeIndex}].materialization.bin`,
+        forge(catalog, probe) {
+          const recipe = catalog.recipes[recipeIndex]!;
+          const command = label === 'synthetic' ? 'esbuild' : 'lightningcss';
+          replaceWithCountedGetter(recipe.materialization.bin, command, probe, 'index.cjs');
+        },
+      },
+    );
+  }
+
+  cases.push(
+    {
+      label: 'registry acquisition value',
+      path: 'catalog.recipes[1].acquisition',
+      forge(catalog, probe) {
+        replaceWithCountedGetter(registryRecipe(catalog).acquisition, 'name', probe);
+      },
+    },
+    {
+      label: 'registry dependency projection object',
+      path: 'catalog.recipes[1].acquisition',
+      forge(catalog, probe) {
+        replaceWithCountedGetter(
+          registryRecipe(catalog).acquisition,
+          'dependencyProjection',
+          probe,
+        );
+      },
+    },
+    {
+      label: 'registry dependency projection value',
+      path: 'catalog.recipes[1].acquisition.dependencyProjection',
+      forge(catalog, probe) {
+        replaceWithCountedGetter(
+          registryRecipe(catalog).acquisition.dependencyProjection,
+          'unsupportedFeature',
+          probe,
+        );
+      },
+    },
+  );
+
+  for (const field of PROJECTION_FIELDS) {
+    cases.push(
+      {
+        label: `registry ${field} map object`,
+        path: 'catalog.recipes[1].acquisition.dependencyProjection',
+        forge(catalog, probe) {
+          replaceWithCountedGetter(
+            registryRecipe(catalog).acquisition.dependencyProjection,
+            field,
+            probe,
+          );
+        },
+      },
+      {
+        label: `registry ${field} map entry`,
+        path: `catalog.recipes[1].acquisition.dependencyProjection.${field}`,
+        forge(catalog, probe) {
+          const map = registryRecipe(catalog).acquisition.dependencyProjection[field];
+          const name = field === 'dependencies' ? 'napi-wasm' : '@rifty-test/accessor';
+          replaceWithCountedGetter(map, name, probe, '1.0.0');
+        },
+      },
+    );
+  }
+
+  return cases;
+}
+
 function expectCodecFailure(value: unknown, path: string, detail: RegExp): void {
   let caught: unknown;
   try {
@@ -831,6 +956,17 @@ describe('builtin shadow substitution catalog contract', () => {
     resignCatalog(foreign);
     expectCodecFailure(foreign, 'catalog', /admitted builtin/i);
   });
+
+  it.each(schema2AccessorCases())(
+    'rejects $label getter before property access',
+    ({ forge, path }) => {
+      const catalog = rawSchema2Catalog();
+      const probe = { invocations: 0 };
+      forge(catalog, probe);
+      expectCodecFailure(catalog, path, /accessor/i);
+      expect(probe.invocations).toBe(0);
+    },
+  );
 
   it('shares the fixed SHA vectors used by the esbuild contract probe', () => {
     for (const vector of sha256FixedVectors) {

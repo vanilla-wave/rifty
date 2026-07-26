@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "package": "lightningcss-wasm",
+  "version": "1.32.0",
+  "source": {
+    "kind": "npm-registry-version-metadata",
+    "identity": "npm-registry:lightningcss-wasm@1.32.0",
+    "capturedDate": "2026-07-26",
+    "publishedAt": "2026-03-09T04:23:36.219Z"
+  },
+  "dist": {
+    "integrity": "sha512-SteAkCtRuSCDYPGHKhLV/dDs5Bk+7I4QUxWxfk4xwsTI1rQk8MQyYtpGcd3NECsUGzK0q2/KqoVS+YHCqKHUTQ==",
+    "shasum": "88ff9de4e243c3294461f96248930a571288faf8"
+  },
+  "dependencies": {
+    "napi-wasm": "^1.0.1"
+  },
+  "optionalDependencies": {},
+  "peerDependencies": {},
+  "bundleDependencies": ["napi-wasm"],
+  "projection": {
+    "dependencies": {
+      "napi-wasm": "^1.0.1"
+    },
+    "optionalDependencies": {},
+    "omittedOptionalDependencies": {},
+    "peerDependencies": {}
+  }
+}

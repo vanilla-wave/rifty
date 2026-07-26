@@ -793,6 +793,27 @@ async function expectContractRecipeMaterialization(vfs: MemoryVfs, root: string)
   }
 }
 
+async function seedContractReplayRepair(placement: (typeof CONTRACT_PLACEMENTS)[number]): Promise<{
+  readonly vfs: MemoryVfs;
+  readonly registry: ContractRegistry;
+  readonly lockBefore: Uint8Array;
+  readonly materializationBefore: ReadonlyMap<string, Uint8Array>;
+}> {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/project', { recursive: true });
+  const registry = await contractRegistry();
+  await installContract(vfs, registry, placement.dependencies);
+  // Establish the valid v2 shared-bin owner independently of the replay under test.
+  await vfs.writeFile(placement.launcherPath, CONTRACT_LAUNCHER);
+  const lockBefore = await vfs.readFile('/project/package-lock.json');
+  const materializationBefore = await snapshotContractMaterialization(
+    vfs,
+    placement.materializationRoot,
+  );
+  registry.resetReads();
+  return { vfs, registry, lockBefore, materializationBefore };
+}
+
 function partialWriteData(data: Uint8Array | string): Uint8Array | string {
   const length = typeof data === 'string' ? data.length : data.byteLength;
   const end = Math.max(1, Math.floor(length / 2));
@@ -2522,6 +2543,124 @@ describe('shadow substitution installer boundary', () => {
           });
         },
       );
+
+      it.each(CONTRACT_PARTIAL_WRITE_CASES)(
+        'keeps replay zero-read and retry exact after %s %s partial write',
+        async (writer, faultKind) => {
+          vi.spyOn(console, 'warn').mockImplementation(() => {});
+          const { vfs, registry, lockBefore, materializationBefore } =
+            await seedContractReplayRepair(placement);
+          const report: string[] = [];
+          const faultPath =
+            writer === 'registry alias'
+              ? `${placement.materializationRoot}/index.js`
+              : placement.launcherPath;
+          await vfs.writeFile(faultPath, 'damaged');
+          const fault = storageWriteFault(faultKind);
+          const writeFile = vfs.writeFile.bind(vfs);
+          let injected = false;
+          const writeSpy = vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+            if (!injected && path === faultPath) {
+              injected = true;
+              await writeFile(path, partialWriteData(data));
+              throw fault;
+            }
+            await writeFile(path, data);
+          });
+
+          await expect(
+            installContract(vfs, registry, placement.dependencies, {
+              onSubstitution: (line) => report.push(line),
+            }),
+          ).rejects.toBe(fault);
+
+          expect(injected).toBe(true);
+          expect(
+            report.filter((line) => line.includes('materialized from shadow registry')),
+          ).toEqual([]);
+          expect(registry.packumentReads).toEqual([]);
+          expect(registry.tarballReads).toEqual([]);
+          expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+
+          writeSpy.mockRestore();
+          registry.resetReads();
+          await installContract(vfs, registry, placement.dependencies);
+
+          expect(registry.packumentReads).toEqual([]);
+          expect(registry.tarballReads).toEqual([]);
+          expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+          await expectContractMaterialization(
+            vfs,
+            placement.materializationRoot,
+            materializationBefore,
+          );
+          expect(await vfs.readFileText(placement.launcherPath)).toBe(CONTRACT_LAUNCHER);
+        },
+      );
+    },
+  );
+
+  it.each(CONTRACT_PLACEMENTS)(
+    '[fault: torn-state] stops replayed $label alias writes before success and retries zero-read',
+    async (placement) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { vfs, registry, lockBefore, materializationBefore } =
+        await seedContractReplayRepair(placement);
+      await damageContractMaterialization(vfs, placement.materializationRoot);
+      const [first, ...remaining] = CONTRACT_MATERIALIZATION_PATHS;
+      const firstPath = `${placement.materializationRoot}/${first}`;
+      const controller = new AbortController();
+      const abortReason = new Error(`abort replayed ${placement.label} alias repair`);
+      const report: string[] = [];
+      const writeFile = vfs.writeFile.bind(vfs);
+      const writeSpy = vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+        await writeFile(path, data);
+        if (path === firstPath) controller.abort(abortReason);
+      });
+
+      await expect(
+        installWithShadowAuthority(
+          {
+            rootName: 'fixture',
+            rootVersion: '1.0.0',
+            dependencies: { ...placement.dependencies },
+            opts: {
+              vfs,
+              cwd: '/project',
+              registry,
+              signal: controller.signal,
+              onSubstitution: (line) => report.push(line),
+            },
+          },
+          contractAuthority(),
+        ),
+      ).rejects.toBe(abortReason);
+
+      for (const path of remaining) {
+        await expect(vfs.exists(`${placement.materializationRoot}/${path}`), path).resolves.toBe(
+          false,
+        );
+      }
+      expect(report.filter((line) => line.includes('materialized from shadow registry'))).toEqual(
+        [],
+      );
+      expect(registry.packumentReads).toEqual([]);
+      expect(registry.tarballReads).toEqual([]);
+      expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+
+      writeSpy.mockRestore();
+      registry.resetReads();
+      await installContract(vfs, registry, placement.dependencies);
+
+      expect(registry.packumentReads).toEqual([]);
+      expect(registry.tarballReads).toEqual([]);
+      expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+      await expectContractMaterialization(
+        vfs,
+        placement.materializationRoot,
+        materializationBefore,
+      );
+      expect(await vfs.readFileText(placement.launcherPath)).toBe(CONTRACT_LAUNCHER);
     },
   );
 
