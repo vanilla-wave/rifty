@@ -32,12 +32,17 @@ Cite `file:line`.
 ## Checkpoint run (Contract+RED / Final+GREEN)
 
 One fresh isolated reviewer per named checkpoint — raw evidence only, never the
-implementer's diagnosis. Setup: resolve the PR branch + raw body (`gh pr view
-<arg> --json body,headRefName,baseRefName`), `BASE=origin/<baseRefName>`, refuse
-a dirty tree, name `CHECKPOINT` (ambiguity stops). No PR yet → open the unit's
-single draft PR; that PR lives through every checkpoint, blocker, and re-cut
-until merge — checkpoints spend attempts, never the PR (`fault-classes.md`
-Lineage row). Final+GREEN first runs `pnpm pr:check` on the committed SHA.
+implementer's diagnosis. Setup: with a PR — resolve branch + raw body (`gh pr
+view <arg> --json body,headRefName,baseRefName`), `BASE=origin/<baseRefName>`;
+without one — Contract+RED runs locally: `BASE=origin/main` (or the declared
+base), Goal-Baseline via `RIFTY_GOAL_BASELINE` env. A PR is never a prerequisite
+for Contract+RED; attempts count per unit either way — keep every verdict.
+Refuse a dirty tree; name `CHECKPOINT` (ambiguity stops). Open the unit's single
+draft PR at the first Contract+RED pass — never one per attempt; it lives
+through every later checkpoint, blocker, and re-cut until merge (checkpoints
+spend attempts, never the PR — `fault-classes.md` Lineage row), its body naming
+prior local verdict SHAs. Final+GREEN requires the PR and first runs
+`pnpm pr:check` on the committed SHA.
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
