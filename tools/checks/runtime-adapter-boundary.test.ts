@@ -4,6 +4,7 @@ import {
   PACKAGE_BIN_AUTHORITY_MODULE,
   PACKAGE_BIN_CONSUMER_MODULES,
   evaluatePackageBinAuthority,
+  listNpmClientProductionTypeScriptSources,
   packageBinAuthorityViolations,
   runtimeAdapterBoundaryViolations,
 } from './runtime-adapter-boundary.mjs';
@@ -69,6 +70,17 @@ prepareVite(input);
     expect(evaluatePackageBinAuthority()).toEqual([]);
   });
 
+  it('inventories npm-client production TypeScript beyond the required package-bin surface', () => {
+    const inventory = listNpmClientProductionTypeScriptSources();
+    expect(inventory).toContain('packages/npm-client/src/bounded-fetch.ts');
+    expect(inventory).toContain('packages/npm-client/src/internal/shadow/source.ts');
+    expect(inventory).not.toContain('packages/npm-client/src/installer.test.ts');
+    expect(inventory).not.toContain('packages/npm-client/src/_test-fixtures/tar-builder.ts');
+    expect(inventory).not.toContain(
+      'packages/npm-client/src/internal/shadow/strict-codec.contract-fixtures.ts',
+    );
+  });
+
   it('rejects a missing consumer and a duplicate package-bin owner', () => {
     const owner =
       "export function linkPackageBins() {\n  const shim = `#!/usr/bin/env node\\nimport('../${pkg.name}/${target}');\\n`;\n}\n";
@@ -90,6 +102,31 @@ prepareVite(input);
     duplicate.set('packages/npm-client/src/installer.ts', owner);
     expect(packageBinAuthorityViolations(duplicate)).toEqual([
       'packages/npm-client/src/installer.ts: duplicates package-bin implementation',
+    ]);
+  });
+
+  it('rejects a duplicate launcher in any production TypeScript source', () => {
+    const owner =
+      "export function linkPackageBins() {\n  const shim = `#!/usr/bin/env node\\nimport('../${pkg.name}/${target}');\\n`;\n}\n";
+    const consumer = "import { linkPackageBins } from './package-bin.ts';\nlinkPackageBins();\n";
+    const duplicateFile = 'packages/npm-client/src/internal/late-package-launcher.ts';
+    const unexpectedCallerFile = 'packages/npm-client/src/internal/late-package-bin-caller.ts';
+    const duplicateLauncher =
+      "export const launcher = `#!/usr/bin/env node\\nimport('../${pkg.name}/${target}');\\n`;\n";
+    const sources = new Map<string, string>([
+      [PACKAGE_BIN_AUTHORITY_MODULE, owner],
+      [PACKAGE_BIN_CONSUMER_MODULES[0]!, consumer],
+      [PACKAGE_BIN_CONSUMER_MODULES[1]!, consumer],
+      ['packages/npm-client/src/installer.ts', 'export const installer = true;\n'],
+      [duplicateFile, duplicateLauncher],
+      [unexpectedCallerFile, consumer],
+      ['packages/npm-client/src/internal/late-package-launcher.test.ts', duplicateLauncher],
+      ['packages/npm-client/src/generated/late-package-launcher.ts', duplicateLauncher],
+    ]);
+
+    expect(packageBinAuthorityViolations(sources)).toEqual([
+      `${duplicateFile}: duplicates package-bin implementation`,
+      `${unexpectedCallerFile}: unexpected package-bin owner caller`,
     ]);
   });
 });

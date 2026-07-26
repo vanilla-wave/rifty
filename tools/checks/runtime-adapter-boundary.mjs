@@ -7,7 +7,8 @@
  * this list. Imports may delegate to such an edge; runtime branches and
  * literals here may not name a concrete shadow consumer.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
@@ -36,10 +37,16 @@ export const PACKAGE_BIN_CONSUMER_MODULES = Object.freeze([
   'packages/npm-client/src/linker.ts',
   'packages/npm-client/src/internal/shadow/planner.ts',
 ]);
-const PACKAGE_BIN_SURFACE = Object.freeze([
-  PACKAGE_BIN_AUTHORITY_MODULE,
-  ...PACKAGE_BIN_CONSUMER_MODULES,
-  'packages/npm-client/src/installer.ts',
+const NPM_CLIENT_SOURCE_ROOT = 'packages/npm-client/src';
+const TYPESCRIPT_SOURCE = /\.(?:[cm]?ts|tsx)$/u;
+const NON_PRODUCTION_SOURCE =
+  /\.(?:test|spec|fixture|fixtures|contract-fixtures|generated)\.(?:[cm]?ts|tsx)$/u;
+const NON_PRODUCTION_DIRECTORIES = new Set([
+  '__tests__',
+  '_test-fixtures',
+  'generated',
+  'test',
+  'tests',
 ]);
 
 const CONSUMER_NAME = /(?:^|[^a-z])(?:esbuild|vite|sass(?:-embedded)?|lightningcss)(?:[^a-z]|$)/iu;
@@ -154,16 +161,49 @@ function packageBinFacts(file, source) {
   return { declarations, imports, calls, launchers };
 }
 
+function normalizedRepositoryPath(file) {
+  return sep === '/' ? file : file.split(sep).join('/');
+}
+
+function isNpmClientProductionTypeScriptSource(file) {
+  const normalized = normalizedRepositoryPath(file);
+  if (!normalized.startsWith(`${NPM_CLIENT_SOURCE_ROOT}/`)) return false;
+  if (!TYPESCRIPT_SOURCE.test(normalized) || /\.d\.[cm]?ts$/u.test(normalized)) return false;
+  if (NON_PRODUCTION_SOURCE.test(normalized)) return false;
+  const segments = normalized.split('/');
+  return !segments.some((segment) => NON_PRODUCTION_DIRECTORIES.has(segment));
+}
+
+export function listNpmClientProductionTypeScriptSources(root = process.cwd()) {
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolute = join(directory, entry.name);
+      const file = normalizedRepositoryPath(relative(root, absolute));
+      if (entry.isDirectory()) {
+        if (!NON_PRODUCTION_DIRECTORIES.has(entry.name)) visit(absolute);
+      } else if (entry.isFile() && isNpmClientProductionTypeScriptSource(file)) {
+        files.push(file);
+      }
+    }
+  };
+  visit(join(root, NPM_CLIENT_SOURCE_ROOT));
+  return files.sort();
+}
+
 export function packageBinAuthorityViolations(sources) {
   const violations = [];
   const facts = new Map();
-  for (const file of PACKAGE_BIN_SURFACE) {
-    const source = sources.get(file);
-    if (source === undefined) {
-      violations.push(`${file}: missing package-bin authority surface`);
-      continue;
+  for (const [rawFile, source] of sources) {
+    const file = normalizedRepositoryPath(rawFile);
+    if (isNpmClientProductionTypeScriptSource(file)) {
+      facts.set(file, packageBinFacts(file, source));
     }
-    facts.set(file, packageBinFacts(file, source));
+  }
+  for (const file of [PACKAGE_BIN_AUTHORITY_MODULE, ...PACKAGE_BIN_CONSUMER_MODULES]) {
+    if (!facts.has(file)) {
+      violations.push(`${file}: missing package-bin authority surface`);
+    }
   }
   const owner = facts.get(PACKAGE_BIN_AUTHORITY_MODULE);
   if (owner && (owner.declarations !== 1 || owner.launchers !== 1)) {
@@ -184,19 +224,24 @@ export function packageBinAuthorityViolations(sources) {
     ) {
       violations.push(`${file}: duplicates package-bin implementation`);
     }
+    if (
+      file !== PACKAGE_BIN_AUTHORITY_MODULE &&
+      !PACKAGE_BIN_CONSUMER_MODULES.includes(file) &&
+      (value.imports !== 0 || value.calls !== 0)
+    ) {
+      violations.push(`${file}: unexpected package-bin owner caller`);
+    }
   }
   return violations;
 }
 
 export function evaluatePackageBinAuthority(root = process.cwd()) {
-  const sources = new Map();
-  for (const file of PACKAGE_BIN_SURFACE) {
-    try {
-      sources.set(file, readFileSync(`${root}/${file}`, 'utf8'));
-    } catch {
-      // The pure checker reports the exact missing surface.
-    }
-  }
+  const sources = new Map(
+    listNpmClientProductionTypeScriptSources(root).map((file) => [
+      file,
+      readFileSync(join(root, file), 'utf8'),
+    ]),
+  );
   return packageBinAuthorityViolations(sources);
 }
 
