@@ -210,6 +210,21 @@ function registryProjectionCases() {
   );
 }
 
+function registryProjectionOverlapCases() {
+  return rawSchema2Catalog().recipes.flatMap((recipe, recipeIndex) =>
+    recipe.acquisition.kind === 'registry'
+      ? PROJECTION_FIELDS.flatMap((leftField, leftIndex) =>
+          PROJECTION_FIELDS.slice(leftIndex + 1).map((rightField) => ({
+            recipeId: recipe.id,
+            recipeIndex,
+            leftField,
+            rightField,
+          })),
+        )
+      : [],
+  );
+}
+
 function registryRecipeAt(catalog: RawSchema2Catalog, index: number): RawRegistryRecipe {
   const recipe = catalog.recipes[index];
   if (!recipe || !isRawRegistryRecipe(recipe)) {
@@ -225,6 +240,15 @@ function resignCatalog(catalog: RawSchema2Catalog, recipe?: RawSchema2Recipe): v
   }
   const { digest: _digest, ...payload } = catalog;
   Reflect.set(catalog, 'digest', shadowDigest(payload));
+}
+
+function rawSchema2CatalogWithExactOnlyAdmission(recipeIndex: number): RawSchema2Catalog {
+  const catalog = rawSchema2Catalog();
+  const recipe = catalog.recipes[recipeIndex];
+  if (!recipe) throw new Error(`schema-2 fixture lacks recipe ${recipeIndex}`);
+  Reflect.set(recipe.admission, 'kind', 'exact-only');
+  resignCatalog(catalog, recipe);
+  return catalog;
 }
 
 function rawSchema2CatalogWithRegistryBin(): RawSchema2Catalog {
@@ -429,14 +453,22 @@ describe('builtin shadow substitution catalog contract', () => {
     );
   });
 
-  it('accepts exact-only admission at the strict recipe shape boundary', () => {
-    const catalog = rawSchema2Catalog();
-    const recipe = registryRecipe(catalog);
-    Reflect.set(recipe.admission, 'kind', 'exact-only');
-    resignCatalog(catalog, recipe);
-
-    expectCodecFailure(catalog, 'catalog', /not the admitted builtin catalog identity/i);
-  });
+  it.each(
+    rawSchema2Catalog().recipes.map((recipe, recipeIndex) => ({
+      acquisitionKind: recipe.acquisition.kind,
+      recipeId: recipe.id,
+      recipeIndex,
+    })),
+  )(
+    '$recipeId accepts exact-only admission with $acquisitionKind acquisition at the strict shape boundary',
+    ({ recipeIndex }) => {
+      expectCodecFailure(
+        rawSchema2CatalogWithExactOnlyAdmission(recipeIndex),
+        'catalog',
+        /not the admitted builtin catalog identity/i,
+      );
+    },
+  );
 
   it.each(registryProjectionCases())(
     '$recipeId validates registry $field generically',
@@ -462,12 +494,16 @@ describe('builtin shadow substitution catalog contract', () => {
         `catalog.recipes[${recipeIndex}].acquisition.dependencyProjection.${field} key`,
         /invalid string/i,
       );
+    },
+  );
 
+  it.each(registryProjectionOverlapCases())(
+    '$recipeId rejects overlap between registry $leftField and $rightField',
+    ({ recipeIndex, leftField, rightField }) => {
       const overlap = rawSchema2Catalog();
       const projection = registryRecipeAt(overlap, recipeIndex).acquisition.dependencyProjection;
-      const sibling = field === 'dependencies' ? 'peerDependencies' : 'dependencies';
-      Reflect.set(projection[field], '@rifty-test/projection-sibling', '1.0.0');
-      Reflect.set(projection[sibling], '@rifty-test/projection-sibling', '1.0.0');
+      Reflect.set(projection[leftField], '@rifty-test/projection-sibling', '1.0.0');
+      Reflect.set(projection[rightField], '@rifty-test/projection-sibling', '1.0.0');
       expectCodecFailure(
         overlap,
         `catalog.recipes[${recipeIndex}].acquisition.dependencyProjection`,
@@ -647,18 +683,6 @@ describe('builtin shadow substitution catalog contract', () => {
       },
       'catalog.recipes[1].acquisition.dependencyProjection',
       /extra or missing fields/i,
-    ],
-    [
-      'overlapping dependency projection',
-      () => {
-        const forged = rawSchema2Catalog();
-        const recipe = registryRecipe(forged);
-        Reflect.set(recipe.acquisition.dependencyProjection.dependencies, 'collision', '1.0.0');
-        Reflect.set(recipe.acquisition.dependencyProjection.peerDependencies, 'collision', '1.0.0');
-        return forged;
-      },
-      'catalog.recipes[1].acquisition.dependencyProjection',
-      /overlaps/i,
     ],
     [
       'invalid trigger package name',

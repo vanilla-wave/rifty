@@ -11,7 +11,11 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
 import { type Vfs, joinPath } from '@riftydev/vfs';
-import { type OverrideMap, type ResolvedOverrideTarget, resolveOverride } from './overrides.ts';
+import {
+  type OverrideMap,
+  type ResolvedOverrideTarget,
+  resolveOverrideWithBuiltinAuthority,
+} from './overrides.ts';
 import { matchesRange } from './semver.ts';
 
 /** Minimal pinned-package view the applier needs. */
@@ -47,8 +51,14 @@ export function resolveEffectivePackageRequest(
   range: string | null,
   parent: string | undefined,
   userOverrides: OverrideMap | undefined,
+  builtinOverrides: Readonly<OverrideMap>,
 ): EffectivePackageRequest {
-  const override = resolveOverride(name, parent, userOverrides);
+  const override = resolveOverrideWithBuiltinAuthority(
+    name,
+    parent,
+    userOverrides ?? {},
+    builtinOverrides,
+  );
   const effectiveName = override?.name ?? name;
   const effectiveRange = override?.range ?? range;
   const shim = override ? internalsShims[effectiveName] : undefined;
