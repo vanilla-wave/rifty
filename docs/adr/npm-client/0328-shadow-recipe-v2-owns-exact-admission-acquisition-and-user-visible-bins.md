@@ -41,7 +41,9 @@ ADR-0308 and grafts its remaining decisions.
   requested range byte-equal to the trigger version; null, tags, wildcards,
   and semver ranges loud-throw before metadata, tarball, or VFS work. User
   overrides remain outside builtin admission and receive no builtin
-  provenance.
+  provenance. The concrete features are `esbuild.version`,
+  `lightningcss.version`, and `sass-embedded.version`; request text never
+  changes their identity.
 - **Registry acquisition is exact.** A registry recipe records required,
   optional, omitted-optional, and peer dependency maps plus a stable drift
   feature. Metadata must equal that complete projection before tarball work.
@@ -56,11 +58,18 @@ ADR-0308 and grafts its remaining decisions.
 - **Strict ingress.** The codec rejects v1, unknown fields, accessors, sparse
   data, invalid or overlapping dependency maps, escaping/missing bin targets,
   and disagreement between materialization data and synthesized
-  `package.json`. Recipe/catalog digests cover all behavior-bearing fields.
-- **One ingress owner.** Every published or clone boundary strictly decodes a
-  substitution plan exactly once; frozen owner-internal values use invariants.
-  Root exports resolve per symbol: delete unused exports, or use a declared
-  internal subpath plus shared consumer contract suite for repo-shared values.
+  `package.json`. Package-bearing catalog fields use the internal ASCII key
+  grammar `[A-Za-z0-9][A-Za-z0-9._@/+-]*`; exact versions use
+  `MAJOR.MINOR.PATCH` plus optional ASCII prerelease. These are clone-format
+  constraints, not a replacement npm request parser. Recipe/catalog digests
+  cover all behavior-bearing fields.
+- **One ingress owner.** Shadow-registry strictly decodes the generated catalog
+  once before its existing declared `/internal` export; consumers receive that
+  attested deeply frozen value and do not accept injected catalogs. Structured
+  clone is a codec differential, not a test-only installer carrier. Any future
+  published or clone ingress must decode exactly once. Root exports resolve per
+  symbol: delete unused exports, or use a declared internal subpath plus shared
+  consumer contract suite for repo-shared values.
 - **Runtime binding stays optional.** Recipes with a binding feed the one
   owner-bundled executable-adapter registry. Install-only recipes yield exact
   substitution facts and an empty asset/binding plan. Generic

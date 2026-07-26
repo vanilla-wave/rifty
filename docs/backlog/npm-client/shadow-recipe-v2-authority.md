@@ -85,9 +85,9 @@ item starts at execution, projection, materialization, and replay.
    invoking the unsupported CLI names `NotImplementedError('esbuild.cli')`.
 4. LightningCSS accepts its current semver requests, verifies exact registry
    metadata, omits no undeclared dependency, and replays without registry I/O.
-5. The data-authority fixture runs through the real install core to exercise
-   non-empty dependency/bin policy without exposing a public/custom recipe SPI
-   or shipping a fake package.
+5. The committed LightningCSS recipe exercises non-empty dependency policy and
+   the committed esbuild recipe exercises a materialized bin through the real
+   install core; no injected/custom recipe SPI or fake package is added.
 
 ## Fault matrix
 
@@ -119,6 +119,6 @@ item starts at execution, projection, materialization, and replay.
   fields and never recognize Sass, esbuild, LightningCSS, Vite, or entry kind.
 - The package-bin linker is the sole bin implementation. Runtime binding stays
   optional; kernel and runtime-asset boundaries do not change.
-- A package-private injected authority drives the same install core in contract
-  tests. The public root export remains builtin-only; remote/custom recipes
-  cannot reach executable policy.
+- The committed owner-decoded builtin catalog drives the real install core in
+  contract tests. The public root export remains builtin-only; remote/custom
+  recipes cannot reach executable policy.

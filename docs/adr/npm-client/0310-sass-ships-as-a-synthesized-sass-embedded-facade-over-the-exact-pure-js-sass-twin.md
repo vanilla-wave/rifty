@@ -36,6 +36,10 @@ one parameterized probe script):
   `dispose`, prefers the `sass-embedded` name, passes no logger, never reads
   `info`, and already falls back to pure `sass` through the same code path —
   every surface it touches is in the MATCH set.
+- Exact Sass 1.100.0 source and Node v24.16.0 probe
+  (`docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md`) prove
+  its Node path checks `process.versions.node`; deleting `process.release`
+  preserves Node filesystem behavior.
 - Payload: sass-embedded = 1.2 MB host + 10 MB per-platform dart binary from
   18 platform optionalDependencies; pure sass = 5.7 MB, no platform packages
   (its optional `@parcel/watcher` native dep serves watch mode only and is not

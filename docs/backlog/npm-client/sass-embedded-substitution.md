@@ -6,7 +6,7 @@ created: 2026-07-23
 why: real Vite SCSS projects pin sass-embedded, whose dart platform binary cannot run in the browser; ADR-0310's spike proved the exact pure-JS sass twin matches every surface Vite and direct consumers touch, so Sass ships as the registry's second substitution and proves the seam is package-generic
 epic: honest-shadow-substitutions
 blocked_by: [npm-client/shadow-recipe-v2-authority]
-sources: [ADR-0310, ADR-0328]
+sources: [ADR-0310, ADR-0328, docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md]
 ---
 
 ## Context
@@ -78,5 +78,7 @@ ADR-0310 spike; each is a differential test:
 
 - ADR-0310 owns the carrier and the adapted-divergence list.
 - ADR-0328 owns the recipe/materialization model this slice instantiates.
+- The pinned Sass 1.100.0 selector probe proves `process.versions.node` is the
+  Node-path selector; `process.release` is not a prerequisite.
 - Delete-on-done with the sass-scale-proof PR; epic closure requires this
   slice (not optional downstream).

@@ -24,9 +24,9 @@ Non-negotiable merge outcome:
   Vite/esbuild integration edge;
 - a fresh project pins `sass-embedded@1.100.0`, imports SCSS, and passes direct
   CJS/ESM Sass lifecycle parity plus real Vite 7.3.6 dev/HMR/build acceptance;
-- adding the Sass capsule after the registry core changes only Sass
-  policy/capsule/oracle/fixtures, generated data, compat docs, and acceptance
-  tests — the seam proof;
+- after recipe v2's generic data/execution authorities land, adding the Sass
+  capsule changes only Sass policy/capsule/oracle/fixtures, generated data,
+  compat docs, and acceptance tests — the seam proof;
 - unsupported versions/surfaces stay named `NotImplementedError` + compat ❌ —
   no fallback to host bytes, native binaries, or approximate output.
 
@@ -55,8 +55,9 @@ through the same adapter, Sass lifecycle parity, and trust surviving extraneous
    npm-proven bytes; recognition remains inside the concrete Vite/esbuild edge.
 3. `sass-embedded@1.100.0` passes direct CJS/ESM lifecycle parity and real Vite
    7.3.6 dev/HMR/build acceptance with exact CSS/map output.
-4. Adding Sass changes only Sass policy/capsule/oracle/fixtures, generated data,
-   compat docs, and acceptance tests.
+4. After recipe v2's generic data/execution authorities land, adding Sass
+   changes only Sass policy/capsule/oracle/fixtures, generated data, compat
+   docs, and acceptance tests.
 5. A→B→A with acquisition network disabled reuses the exact tree with zero
    install/registry work; extraneous `node_modules` writes do not break trust.
 6. Unsupported versions and surfaces throw named `NotImplementedError` and stay
@@ -77,7 +78,7 @@ Contract+RED → Final+GREEN):
    touching trust/epoch/shadow. May proceed in parallel with the decision PR.
 3. `npm-client/shadow-recipe-v2-data-authority` —
    **recipe-v2-data-authority**: strict clone-safe schema 2, data-owned
-   admission features, and one side-effect-free package-private ingress.
+   admission features, and one owner-decoded frozen internal catalog.
 4. `npm-client/shadow-recipe-v2-authority` —
    **recipe-v2-authority**: consumes the data-authority prerequisite, then owns
    exact acquisition execution, materialized bins, and strict replay authority
