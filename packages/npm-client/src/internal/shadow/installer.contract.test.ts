@@ -114,6 +114,9 @@ async function lightningRegistry(
 const CONTRACT_TRIGGER = 'contract-package';
 const CONTRACT_SOURCE = 'contract-source';
 const CONTRACT_ORDINARY_HOST = 'contract-ordinary-host';
+const CONTRACT_REQUIRED_RANGE_HOST = 'contract-required-range-host';
+const CONTRACT_OPTIONAL_RANGE_HOST = 'contract-optional-range-host';
+const CONTRACT_OPTIONAL_EXACT_HOST = 'contract-optional-exact-host';
 const CONTRACT_VERSION = '1.100.0';
 const CONTRACT_REQUIRED = '@scope/required';
 const CONTRACT_RETAINED = '@scope/retained';
@@ -464,6 +467,21 @@ async function contractRegistry(
       { 'index.js': 'module.exports = "ordinary-host";\n' },
     ),
   );
+  add(
+    await contractRegistryEntry(CONTRACT_REQUIRED_RANGE_HOST, '1.0.0', {
+      dependencies: { [CONTRACT_TRIGGER]: `^${CONTRACT_VERSION}` },
+    }),
+  );
+  add(
+    await contractRegistryEntry(CONTRACT_OPTIONAL_RANGE_HOST, '1.0.0', {
+      optionalDependencies: { [CONTRACT_TRIGGER]: `^${CONTRACT_VERSION}` },
+    }),
+  );
+  add(
+    await contractRegistryEntry(CONTRACT_OPTIONAL_EXACT_HOST, '1.0.0', {
+      optionalDependencies: { [CONTRACT_TRIGGER]: CONTRACT_VERSION },
+    }),
+  );
   for (const version of ['1.98.0', '1.99.0', CONTRACT_VERSION]) {
     add(
       await contractRegistryEntry(
@@ -544,6 +562,9 @@ async function installContract(
       | 'resolverUrl'
       | 'resolverClosureHash'
       | 'resolverBundleBaseUrl'
+      | 'resolverPrefetch'
+      | 'packumentCache'
+      | 'tarballCache'
     >
   > = {},
   authority: ShadowInstallAuthority = contractAuthority(),
@@ -828,6 +849,281 @@ function observeVfsReads(vfs: MemoryVfs): () => void {
   };
 }
 
+function observeVfsMutations(vfs: MemoryVfs): () => void {
+  const mutations = [
+    vi.spyOn(vfs, 'writeFile'),
+    vi.spyOn(vfs, 'mkdir'),
+    vi.spyOn(vfs, 'rm'),
+    vi.spyOn(vfs, 'utimes'),
+  ];
+  return () => {
+    for (const mutation of mutations) {
+      expect(mutation).not.toHaveBeenCalled();
+      mutation.mockRestore();
+    }
+  };
+}
+
+function admissionBoundarySpies() {
+  const packumentCache = {
+    get: vi.fn((_name: string): Packument | undefined => undefined),
+    set: vi.fn((_name: string, _packument: Packument): void => {}),
+  };
+  const tarballCache = {
+    get: vi.fn(
+      async (_name: string, _version: string, _integrity: string) => null as Uint8Array | null,
+    ),
+    put: vi.fn(
+      async (_name: string, _version: string, _integrity: string, _bytes: Uint8Array) =>
+        '/must-not-write',
+    ),
+  };
+  const resolverPrefetch = {
+    take: vi.fn((_requestKey: string): Promise<Response> | null => null),
+  };
+  return {
+    transport: { packumentCache, resolverPrefetch, tarballCache },
+    assertUntouched(): void {
+      expect(packumentCache.get).not.toHaveBeenCalled();
+      expect(packumentCache.set).not.toHaveBeenCalled();
+      expect(tarballCache.get).not.toHaveBeenCalled();
+      expect(tarballCache.put).not.toHaveBeenCalled();
+      expect(resolverPrefetch.take).not.toHaveBeenCalled();
+    },
+  };
+}
+
+// Captured from baseline 061de47c/b959e37d; never derived from the current catalog.
+const V1_CATALOG_IDENTITY = {
+  id: 'rifty.shadow-substitutions.builtin.v1',
+  digest: '0eb5dc4c53231efcbfca5c5b6aca6bc203f3013d5168b6e190a9bcf0152993ac',
+} as const;
+const V1_ESBUILD_FILES = [
+  {
+    path: 'bin/esbuild',
+    sha256: 'd1e76833fddb0febf70bfaf8d6942286382fbb549b0722e49de997fdaa773f47',
+    bytes: 248,
+  },
+  {
+    path: 'lib/main.cjs',
+    sha256: '961d1a20258b40af980ed63ece45a0f3a2ca7e0df375cb5bfa3a99cde0386cb4',
+    bytes: 175,
+  },
+  {
+    path: 'package.json',
+    sha256: '6ea61c374d8c8681e86b0e950c4c87dea840996284709d35af7e799169e064ab',
+    bytes: 313,
+  },
+] as const;
+const V1_LIGHTNING_FILES = [
+  {
+    path: 'index.cjs',
+    sha256: 'e862f01641a1b33713b5c205474ffb23379b4e66affdf08680fe4c00faf56e20',
+    bytes: 47,
+  },
+  {
+    path: 'index.mjs',
+    sha256: '1be16085d6c090f58b459e45b2531616bff8836c3f3d95e363fc36c7ebfdb9cd',
+    bytes: 239,
+  },
+  {
+    path: 'package.json',
+    sha256: '3ebddaa8830dd3bd37e01a4c798f73d5a493abb737fc24909e906b62fd8acfe1',
+    bytes: 254,
+  },
+] as const;
+const V1_LIGHTNING_INTEGRITY =
+  'sha512-2fA6TgRask5pe+6ea9BsId5+WjLa4PPB6GKdr6gkTGLk/pjqRvLy1lbeLUL95OiXuCnc5orB/1AOi/arpf/NlA==';
+
+function v1Lockfile(
+  packages: Readonly<Record<string, LockfileEntry>>,
+  substitution: Readonly<Record<string, unknown>>,
+): Lockfile {
+  return freezeFixture({
+    name: 'fixture',
+    version: '1.0.0',
+    lockfileVersion: 3,
+    requires: true,
+    packages,
+    rifty: {
+      shadowSubstitutions: {
+        protocol: 'rifty.shadow-substitutions/v1',
+        applied: [substitution],
+      },
+    },
+  }) as unknown as Lockfile;
+}
+
+function v1SyntheticFact(installPath: string) {
+  return {
+    catalog: V1_CATALOG_IDENTITY,
+    substitutionId: 'rifty.shadow-substitution.esbuild.v1',
+    recipeDigest: '0cf34400121b3ddd82ed19aa2b30c2ecd6e3e7a8c573aeba64155652f78167e6',
+    trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
+    acquisition: { kind: 'synthetic' },
+    materialization: {
+      installPath,
+      name: 'esbuild',
+      version: '0.28.0',
+      files: V1_ESBUILD_FILES,
+    },
+    binding: {
+      adapterId: 'rifty.runtime-adapter.esbuild.v1',
+      assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
+    },
+  } as const;
+}
+
+function v1RegistryFact(installPath: string) {
+  return {
+    catalog: V1_CATALOG_IDENTITY,
+    substitutionId: 'rifty.shadow-substitution.lightningcss.v1',
+    recipeDigest: '0dd089ff66e159b0b53cfd90857ac02ea1d4f32dc97b483d9ed300f0dabe2d4e',
+    trigger: { name: 'lightningcss', requestedRange: '^1.32.0', version: '1.32.0' },
+    acquisition: {
+      kind: 'registry',
+      name: 'lightningcss-wasm',
+      version: '1.32.0',
+      resolved: 'https://registry.test/lightningcss-wasm-1.32.0.tgz',
+      integrity: V1_LIGHTNING_INTEGRITY,
+    },
+    materialization: {
+      installPath,
+      name: 'lightningcss',
+      version: '1.32.0',
+      files: V1_LIGHTNING_FILES,
+    },
+  } as const;
+}
+
+const V1_LOCKFILE_GOLDENS = [
+  {
+    label: 'synthetic root',
+    dependencies: { esbuild: '^0.28.0' },
+    overrides: undefined,
+    lockfile: v1Lockfile(
+      {
+        '': { version: '1.0.0', dependencies: { esbuild: '0.28.0' } },
+        'node_modules/esbuild': {
+          version: '0.28.0',
+          dependencies: {},
+          resolved:
+            'rifty:shadow-substitution/rifty.shadow-substitution.esbuild.v1@0cf34400121b3ddd82ed19aa2b30c2ecd6e3e7a8c573aeba64155652f78167e6',
+          bin: { esbuild: './bin/esbuild' },
+          riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+        },
+      },
+      v1SyntheticFact('node_modules/esbuild'),
+    ),
+  },
+  {
+    label: 'synthetic nested',
+    dependencies: { 'ordinary-host': '1.0.0', 'synthetic-host': '1.0.0' },
+    overrides: { 'ordinary-host>esbuild': 'esbuild@0.21.5' },
+    lockfile: v1Lockfile(
+      {
+        '': {
+          version: '1.0.0',
+          dependencies: {
+            'ordinary-host': '1.0.0',
+            esbuild: '0.21.5',
+            'synthetic-host': '1.0.0',
+          },
+        },
+        'node_modules/ordinary-host': {
+          version: '1.0.0',
+          dependencies: { esbuild: '0.21.5' },
+          resolved: 'https://registry.test/ordinary-host-1.0.0.tgz',
+          integrity:
+            'sha512-HF3zhMxRDUDP0jy50eCo/6U6TJd5EzPfPP25VdZ3yMGdrgQTVrAc4N0l5NZb3fWrve3GMumUEV0/r+XM/wTGmg==',
+        },
+        'node_modules/esbuild': {
+          version: '0.21.5',
+          dependencies: {},
+          resolved: 'https://registry.test/esbuild-0.21.5.tgz',
+          integrity:
+            'sha512-SXeVloAEGEuNXp3TJHI9KYcdhrcTycSXlCAce5Y4+1vLRJELNJH8hYq2PnFHDRo2WygAMEcWOuLVI8Xkh38myA==',
+        },
+        'node_modules/synthetic-host': {
+          version: '1.0.0',
+          dependencies: { esbuild: '^0.28.0' },
+          resolved: 'https://registry.test/synthetic-host-1.0.0.tgz',
+          integrity:
+            'sha512-OQbGnevY6jYBWPEZYeLlDAoAhzI2Gc7yvDzYJsiXv9CZykGnXilqr0RLj2e5LLC6IZqs7X9VJ976Mp0jxZ1Cbg==',
+        },
+        'node_modules/synthetic-host/node_modules/esbuild': {
+          version: '0.28.0',
+          dependencies: {},
+          resolved:
+            'rifty:shadow-substitution/rifty.shadow-substitution.esbuild.v1@0cf34400121b3ddd82ed19aa2b30c2ecd6e3e7a8c573aeba64155652f78167e6',
+          bin: { esbuild: './bin/esbuild' },
+          riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v1',
+        },
+      },
+      v1SyntheticFact('node_modules/synthetic-host/node_modules/esbuild'),
+    ),
+  },
+  {
+    label: 'registry root',
+    dependencies: { lightningcss: '^1.32.0' },
+    overrides: undefined,
+    lockfile: v1Lockfile(
+      {
+        '': { version: '1.0.0', dependencies: { 'lightningcss-wasm': '1.32.0' } },
+        'node_modules/lightningcss-wasm': {
+          version: '1.32.0',
+          dependencies: {},
+          resolved: 'https://registry.test/lightningcss-wasm-1.32.0.tgz',
+          integrity: V1_LIGHTNING_INTEGRITY,
+        },
+        'node_modules/lightningcss': {
+          version: '1.32.0',
+          riftyShadowRecipe: 'rifty.shadow-substitution.lightningcss.v1',
+        },
+      },
+      v1RegistryFact('node_modules/lightningcss'),
+    ),
+  },
+  {
+    label: 'registry nested',
+    dependencies: { 'lightningcss-wasm': '1.33.0', 'registry-host': '1.0.0' },
+    overrides: undefined,
+    lockfile: v1Lockfile(
+      {
+        '': {
+          version: '1.0.0',
+          dependencies: { 'lightningcss-wasm': '1.33.0', 'registry-host': '1.0.0' },
+        },
+        'node_modules/lightningcss-wasm': {
+          version: '1.33.0',
+          dependencies: {},
+          resolved: 'https://registry.test/lightningcss-wasm-1.33.0.tgz',
+          integrity:
+            'sha512-FWdx/50pVus0htlwCyjd0xtXOy0oQD9y1XYtBm6QpzdpEZ1BW+sSw/Vqo6sC5SIqpcCkxz5BnFq+D6dY7EcgyA==',
+        },
+        'node_modules/registry-host': {
+          version: '1.0.0',
+          dependencies: { lightningcss: '^1.32.0' },
+          resolved: 'https://registry.test/registry-host-1.0.0.tgz',
+          integrity:
+            'sha512-v83xG10LFKDGGSn/ut4glX//6A+vqlhK4F20xqpcM4weZOOKG6H479pWmfO+IZ75cTBAGNBg1WuOe0HWyHHTvA==',
+        },
+        'node_modules/registry-host/node_modules/lightningcss-wasm': {
+          version: '1.32.0',
+          dependencies: {},
+          resolved: 'https://registry.test/lightningcss-wasm-1.32.0.tgz',
+          integrity: V1_LIGHTNING_INTEGRITY,
+        },
+        'node_modules/registry-host/node_modules/lightningcss': {
+          version: '1.32.0',
+          riftyShadowRecipe: 'rifty.shadow-substitution.lightningcss.v1',
+        },
+      },
+      v1RegistryFact('node_modules/registry-host/node_modules/lightningcss'),
+    ),
+  },
+] as const;
+
 function expectShadowTraceDrift(lockfile: Lockfile): void {
   let caught: unknown;
   try {
@@ -936,15 +1232,19 @@ describe('shadow substitution installer boundary', () => {
       const vfs = new MemoryVfs();
       await vfs.mkdir('/project', { recursive: true });
       const registry = await contractRegistry();
-      const mkdir = vi.spyOn(vfs, 'mkdir');
-      const writeFile = vi.spyOn(vfs, 'writeFile');
-      const rm = vi.spyOn(vfs, 'rm');
+      const boundaries = admissionBoundarySpies();
+      const assertNoVfsMutations = observeVfsMutations(vfs);
       const assertNoVfsReads = observeVfsReads(vfs);
 
       await expect(
-        installContract(vfs, registry, {
-          [CONTRACT_TRIGGER]: range,
-        } as unknown as Readonly<Record<string, string>>),
+        installContract(
+          vfs,
+          registry,
+          {
+            [CONTRACT_TRIGGER]: range,
+          } as unknown as Readonly<Record<string, string>>,
+          boundaries.transport,
+        ),
       ).rejects.toMatchObject({
         name: 'NotImplementedError',
         feature: 'contract-package.version',
@@ -952,9 +1252,8 @@ describe('shadow substitution installer boundary', () => {
 
       expect(registry.packumentReads).toEqual([]);
       expect(registry.tarballReads).toEqual([]);
-      expect(mkdir).not.toHaveBeenCalled();
-      expect(writeFile).not.toHaveBeenCalled();
-      expect(rm).not.toHaveBeenCalled();
+      boundaries.assertUntouched();
+      assertNoVfsMutations();
       assertNoVfsReads();
       await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
       await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
@@ -969,9 +1268,8 @@ describe('shadow substitution installer boundary', () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/project', { recursive: true });
     const registry = await contractRegistry();
-    const mkdir = vi.spyOn(vfs, 'mkdir');
-    const writeFile = vi.spyOn(vfs, 'writeFile');
-    const rm = vi.spyOn(vfs, 'rm');
+    const boundaries = admissionBoundarySpies();
+    const assertNoVfsMutations = observeVfsMutations(vfs);
     const assertNoVfsReads = observeVfsReads(vfs);
 
     await expect(
@@ -983,6 +1281,7 @@ describe('shadow substitution installer boundary', () => {
           resolverUrl: 'https://eddy.test/resolve',
           resolverClosureHash: '0'.repeat(64),
           resolverBundleBaseUrl: 'https://eddy-cdn.test',
+          ...boundaries.transport,
         },
       ),
     ).rejects.toMatchObject({
@@ -993,9 +1292,8 @@ describe('shadow substitution installer boundary', () => {
     expect(resolverFetch).not.toHaveBeenCalled();
     expect(registry.packumentReads).toEqual([]);
     expect(registry.tarballReads).toEqual([]);
-    expect(mkdir).not.toHaveBeenCalled();
-    expect(writeFile).not.toHaveBeenCalled();
-    expect(rm).not.toHaveBeenCalled();
+    boundaries.assertUntouched();
+    assertNoVfsMutations();
     assertNoVfsReads();
     await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
     await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
@@ -1019,9 +1317,8 @@ describe('shadow substitution installer boundary', () => {
       const resolverFetch = vi
         .spyOn(globalThis, 'fetch')
         .mockRejectedValue(new Error('Eddy must not start during exact replay rejection'));
-      const mkdir = vi.spyOn(vfs, 'mkdir');
-      const writeFile = vi.spyOn(vfs, 'writeFile');
-      const rm = vi.spyOn(vfs, 'rm');
+      const boundaries = admissionBoundarySpies();
+      const assertNoVfsMutations = observeVfsMutations(vfs);
       const assertNoVfsReads = observeVfsReads(vfs);
       await expect(
         installContract(
@@ -1034,6 +1331,7 @@ describe('shadow substitution installer boundary', () => {
             resolverUrl: 'https://eddy.test/resolve',
             resolverClosureHash: '0'.repeat(64),
             resolverBundleBaseUrl: 'https://eddy-cdn.test',
+            ...boundaries.transport,
           },
         ),
       ).rejects.toMatchObject({
@@ -1044,15 +1342,144 @@ describe('shadow substitution installer boundary', () => {
       expect(resolverFetch).not.toHaveBeenCalled();
       expect(registry.packumentReads).toEqual([]);
       expect(registry.tarballReads).toEqual([]);
-      expect(mkdir).not.toHaveBeenCalled();
-      expect(writeFile).not.toHaveBeenCalled();
-      expect(rm).not.toHaveBeenCalled();
+      boundaries.assertUntouched();
+      assertNoVfsMutations();
       assertNoVfsReads();
       expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
       expect(await vfs.readFile('/project/node_modules/contract-package/package.json')).toEqual(
         packageBefore,
       );
       expect(await vfs.readFile('/project/node_modules/.bin/contract')).toEqual(launcherBefore);
+    },
+  );
+
+  it.each([
+    ['required', CONTRACT_REQUIRED_RANGE_HOST],
+    ['optional', CONTRACT_OPTIONAL_RANGE_HOST],
+  ] as const)(
+    '[fault: observable-order/sibling-drift] exact-only rejects a fresh transitive %s range before child work',
+    async (_edge, host) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const registry = await contractRegistry();
+      const boundaries = admissionBoundarySpies();
+      const assertNoVfsMutations = observeVfsMutations(vfs);
+
+      await expect(
+        installContract(vfs, registry, { [host]: '1.0.0' }, boundaries.transport),
+      ).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'contract-package.version',
+      });
+
+      const packumentNames = boundaries.transport.packumentCache.get.mock.calls.map(
+        ([name]) => name,
+      );
+      const tarballNames = boundaries.transport.tarballCache.get.mock.calls.map(([name]) => name);
+      expect(packumentNames).toContain(host);
+      expect(packumentNames).not.toContain(CONTRACT_SOURCE);
+      expect(tarballNames).toContain(host);
+      expect(tarballNames).not.toContain(CONTRACT_SOURCE);
+      expect(registry.packumentReads).toEqual([host]);
+      expect(registry.tarballReads).toHaveLength(1);
+      expect(registry.tarballReads[0]).toContain(encodeURIComponent(host));
+      expect(boundaries.transport.resolverPrefetch.take).not.toHaveBeenCalled();
+      assertNoVfsMutations();
+    },
+  );
+
+  it.each([
+    ['required', 'contract-host', 'dependencies'],
+    ['optional', CONTRACT_OPTIONAL_EXACT_HOST, 'optionalDependencies'],
+  ] as const)(
+    '[fault: observable-order/sibling-drift] exact-only rejects a replayed transitive %s range before caches, Eddy, or VFS mutation',
+    async (_edge, host, field) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const registry = await contractRegistry();
+      await installContract(vfs, registry, { [host]: '1.0.0' });
+      const lockfile = structuredClone(
+        JSON.parse(await vfs.readFileText('/project/package-lock.json')) as Lockfile,
+      );
+      const hostEntry = lockfile.packages[`node_modules/${host}`];
+      if (!hostEntry) throw new Error(`transitive replay host ${host} is missing`);
+      Object.assign(hostEntry, {
+        [field]: { [CONTRACT_TRIGGER]: `^${CONTRACT_VERSION}` },
+      });
+      await vfs.writeFile('/project/package-lock.json', JSON.stringify(lockfile));
+      const lockBefore = await vfs.readFile('/project/package-lock.json');
+
+      registry.resetReads();
+      const resolverFetch = vi
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('Eddy must not start before transitive replay admission'));
+      const boundaries = admissionBoundarySpies();
+      const assertNoVfsMutations = observeVfsMutations(vfs);
+      await expect(
+        installContract(
+          vfs,
+          registry,
+          { [host]: '1.0.0' },
+          { resolverUrl: 'https://eddy.test/resolve', ...boundaries.transport },
+        ),
+      ).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'contract-package.version',
+      });
+
+      expect(resolverFetch).not.toHaveBeenCalled();
+      expect(registry.packumentReads).toEqual([]);
+      expect(registry.tarballReads).toEqual([]);
+      boundaries.assertUntouched();
+      assertNoVfsMutations();
+      expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+    },
+  );
+
+  it.each([
+    ['required', CONTRACT_REQUIRED_RANGE_HOST],
+    ['optional', CONTRACT_OPTIONAL_RANGE_HOST],
+  ] as const)(
+    'keeps parent-scoped user override priority for transitive %s fresh and replay',
+    async (_edge, host) => {
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const registry = await contractRegistry();
+      const report: string[] = [];
+      const overrides = {
+        [`${host}>${CONTRACT_TRIGGER}`]: `${CONTRACT_SOURCE}@${CONTRACT_VERSION}`,
+      };
+      const first = await installContract(
+        vfs,
+        registry,
+        { [host]: '1.0.0' },
+        {
+          overrides,
+          onSubstitution: (line) => report.push(line),
+        },
+      );
+
+      expect(first.lockfile.packages['node_modules/contract-source']).toMatchObject({
+        version: CONTRACT_VERSION,
+      });
+      expect(first.lockfile.packages['node_modules/contract-package']).toBeUndefined();
+      expect(report).toEqual([]);
+
+      registry.resetReads();
+      await installContract(
+        vfs,
+        registry,
+        { [host]: '1.0.0' },
+        {
+          overrides,
+          onSubstitution: (line) => report.push(line),
+        },
+      );
+      expect(registry.packumentReads).toEqual([]);
+      expect(registry.tarballReads).toEqual([]);
+      expect(report).toEqual([]);
     },
   );
 
@@ -1407,6 +1834,98 @@ describe('shadow substitution installer boundary', () => {
   );
 
   describe.each(CONTRACT_PLACEMENTS)(
+    '[fault: provenance-lie] $label registry bin replay',
+    (placement) => {
+      describe.each(CONTRACT_MATERIALIZATION_BIN_CASES)('%s', (binLabel, materializationBin) => {
+        const hasMaterializationBin = Object.keys(materializationBin).length !== 0;
+        const driftCases: readonly Readonly<{
+          label: string;
+          entry: 'acquisition' | 'materialization';
+          tamper: (entry: LockfileEntry) => void;
+        }>[] = [
+          {
+            label: 'unexpected acquisition bin',
+            entry: 'acquisition',
+            tamper: (entry) => {
+              entry.bin = { leaked: 'bin/source.js' };
+            },
+          },
+          {
+            label: hasMaterializationBin
+              ? 'missing materialization bin'
+              : 'unexpected materialization bin',
+            entry: 'materialization',
+            tamper: (entry) => {
+              if (hasMaterializationBin) {
+                // biome-ignore lint/performance/noDelete: corruption fixture removes recipe data.
+                delete entry.bin;
+              } else {
+                entry.bin = CONTRACT_BIN;
+              }
+            },
+          },
+          ...(hasMaterializationBin
+            ? [
+                {
+                  label: 'changed materialization bin',
+                  entry: 'materialization' as const,
+                  tamper: (entry: LockfileEntry) => {
+                    entry.bin = { contract: 'index.js' };
+                  },
+                },
+              ]
+            : []),
+        ];
+
+        it.each(driftCases)(
+          `rejects $label with ${binLabel} before registry or VFS repair`,
+          async ({ entry, tamper }) => {
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const vfs = new MemoryVfs();
+            await vfs.mkdir('/project', { recursive: true });
+            const registry = await contractRegistry();
+            const authority = contractAuthority('exact-only', materializationBin);
+            const first = await installContract(
+              vfs,
+              registry,
+              placement.dependencies,
+              {},
+              authority,
+            );
+            const lockfile = structuredClone(first.lockfile);
+            const path =
+              entry === 'acquisition'
+                ? placement.acquisitionPath
+                : placement.materializationRoot.slice('/project/'.length);
+            const lockEntry = lockfile.packages[path];
+            if (!lockEntry) throw new Error(`contract ${entry} missing at ${path}`);
+            tamper(lockEntry);
+
+            await vfs.writeFile('/project/package-lock.json', JSON.stringify(lockfile));
+            await vfs.writeFile(`${placement.materializationRoot}/index.js`, 'damaged');
+            registry.resetReads();
+            const writeFile = vi.spyOn(vfs, 'writeFile');
+
+            await expect(
+              installContract(vfs, registry, placement.dependencies, {}, authority),
+            ).rejects.toMatchObject({
+              code: 'EBROKENLOCK',
+              reason: 'shadow-trace-drift',
+            });
+
+            expect(registry.packumentReads).toEqual([]);
+            expect(registry.tarballReads).toEqual([]);
+            expect(writeFile).not.toHaveBeenCalled();
+            await expect(
+              vfs.readFileText(`${placement.materializationRoot}/index.js`),
+            ).resolves.toBe('damaged');
+          },
+        );
+      });
+    },
+  );
+
+  describe.each(CONTRACT_PLACEMENTS)(
     '[fault: quota-perm-fail/torn-state] $label materialization',
     (placement) => {
       it.each(CONTRACT_PARTIAL_WRITE_CASES)(
@@ -1743,6 +2262,44 @@ describe('shadow substitution installer boundary', () => {
 describe('shadow substitution lockfile provenance', () => {
   let synthetic: Lockfile;
   let registry: Lockfile;
+
+  it.each(V1_LOCKFILE_GOLDENS)(
+    '[fault: frozen-assumption/provenance-lie] rejects frozen real-v1 $label replay before side effects',
+    async ({ dependencies, lockfile, overrides }) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      await vfs.writeFile('/project/package-lock.json', JSON.stringify(lockfile));
+      const lockBefore = await vfs.readFile('/project/package-lock.json');
+      const rejectingRegistry = new RejectingRegistry();
+      const resolverFetch = vi
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('Eddy must not start before v1 rejection'));
+      const boundaries = admissionBoundarySpies();
+      const assertNoVfsMutations = observeVfsMutations(vfs);
+
+      await expect(
+        install('fixture', '1.0.0', dependencies, {
+          vfs,
+          cwd: '/project',
+          registry: rejectingRegistry,
+          resolverUrl: 'https://eddy.test/resolve',
+          ...boundaries.transport,
+          ...(overrides === undefined ? {} : { overrides }),
+          onSubstitution: () => {},
+        }),
+      ).rejects.toMatchObject({
+        code: 'EBROKENLOCK',
+        reason: 'shadow-trace-drift',
+      });
+
+      expect(resolverFetch).not.toHaveBeenCalled();
+      expect(rejectingRegistry.reads).toBe(0);
+      boundaries.assertUntouched();
+      assertNoVfsMutations();
+      expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+    },
+  );
 
   beforeAll(async () => {
     synthetic = await freshLockfile({ esbuild: '^0.28.0' }, new RejectingRegistry());
