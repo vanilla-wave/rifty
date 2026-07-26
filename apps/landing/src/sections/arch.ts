@@ -1,8 +1,7 @@
 import './arch.css';
 
-const INTRO_HEAD = 'An interactive map of the runtime. Pick a scenario — ';
-const INTRO_TAIL =
-  ', an Express server, Vite HMR, a raw WASI guest — and follow its narrated steps through the selected runtime topology. Drag nodes, switch to the realm view, or inspect any module.';
+const INTRO =
+  'Pick a representative workflow and follow it through the browser runtime. Switch views or inspect a module when you want more detail.';
 
 /**
  * "How it actually works" — section chrome + intro + an empty explorer-root
@@ -26,12 +25,7 @@ export function renderArch(): HTMLElement {
 
   const intro = document.createElement('p');
   intro.className = 'arch-intro';
-  intro.append(document.createTextNode(INTRO_HEAD));
-  const emphasis = document.createElement('span');
-  emphasis.className = 'arch-intro-em';
-  emphasis.textContent = 'npm install';
-  intro.append(emphasis);
-  intro.append(document.createTextNode(INTRO_TAIL));
+  intro.textContent = INTRO;
 
   const root = document.createElement('div');
   root.id = 'explorer-root';

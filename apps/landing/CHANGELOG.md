@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Simplified the landing copy around supported capability classes and reduced the preset gallery
+  to three representative workflows: dev server, HTTP app + database, and CLI + project files.
+  The complete preset catalog remains in the playground.
 - Corrected the public SDK examples to be production-buildable Vite code: the runtime Worker now
   uses a `?worker&url` asset import, the required direct dependency and ESM Worker configuration
   are explicit, top-level await is avoided, and the headless example no longer implies that
@@ -26,14 +29,13 @@
   terminal, truthful structural-scenario wording, keyboard-operable graph nodes, drag no longer
   pins a node, clipboard errors recover, and all mobile navigation exits close the drawer.
 - Review polish: the animated hero terminal reserves its final row viewport instead of shifting the
-  whole hero as lines appear; restored `How it works` → architecture as the secondary CTA; balanced
-  preset-card footer spacing around an explicit divider. `Run something real` now opens the
-  configured playground directly instead of scrolling to the preset cards.
+  whole hero as lines appear; restored `How it works` → architecture as the secondary CTA.
+  `Run something real` now opens the configured playground directly instead of scrolling to the
+  preset cards.
 - Repositioned the landing around Rifty's real wedge: open, MIT, self-hostable browser runtime
   infrastructure. Hero code now uses only the public `Sandbox` API (`runtime.eval`, `fs`, events),
-  and five "Run something real" cards deep-link into proven Vite 7, Vite 8, Express + SQLite,
-  CLI, and Markdown SSG presets. Their playground base is the required
-  `VITE_RIFTY_PLAYGROUND_URL`, so
+  and three representative "Run something real" cards cover dev tooling, Node servers, and
+  CLI/filesystem workflows. Their playground base is the required `VITE_RIFTY_PLAYGROUND_URL`, so
   self-hosters explicitly choose their own origin or mount instead of receiving a false local
   fallback. Added an accessible mobile nav drawer, one-column mobile content, and a mobile-first
   Realms architecture view; browser regressions cover exact API copy, preset links, and zero

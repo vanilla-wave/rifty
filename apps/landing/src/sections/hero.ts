@@ -44,16 +44,11 @@ function buildLeft(): HTMLElement {
     'rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium.';
   sub.append(subLead);
   sub.append(document.createElement('br'));
-  sub.append(document.createTextNode('Run tested Express, Vite 7 HMR, Vite 8/Rolldown, '));
-  const npmChip = document.createElement('code');
-  npmChip.className = 'hero-chip hero-chip-ac';
-  npmChip.textContent = 'Prettier + ESLint';
-  sub.append(npmChip);
-  sub.append(document.createTextNode(' and WASI preview1 '));
-  const wasmChip = document.createElement('code');
-  wasmChip.className = 'hero-chip';
-  wasmChip.textContent = '.wasm';
-  sub.append(wasmChip, document.createTextNode(' guests. Execution and files stay in the tab.'));
+  sub.append(
+    document.createTextNode(
+      'Install packages, run Node-compatible apps and CLIs, or execute WASI guests. Execution and files stay in the tab.',
+    ),
+  );
 
   const cta = document.createElement('div');
   cta.className = 'hero-cta';

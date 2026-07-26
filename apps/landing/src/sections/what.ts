@@ -11,32 +11,32 @@ interface Feature {
 const FEATURES: readonly Feature[] = [
   {
     title: 'A Node-compatible runtime',
-    body: 'CJS + ESM loader and tested Node 24 builtin subsets. Real require/import; gaps stay loud.',
+    body: 'Run CommonJS and ESM projects against the supported Node API surface. Missing behavior fails loudly.',
     icon: 'feature-runtime',
   },
   {
     title: 'npm install, in-browser',
-    body: 'Install registry packages and run project npm scripts, Prettier, ESLint and type-aware linting in-browser.',
+    body: 'Install packages and run project scripts and JavaScript tooling in the browser.',
     icon: 'feature-npm',
   },
   {
     title: 'WASI preview1 runner',
-    body: 'Run WASI preview1 .wasm guests with VFS-backed preopens and process-shaped stdio/exit.',
+    body: 'Run compatible WebAssembly programs against project files with standard input and output.',
     icon: 'feature-wasi',
   },
   {
     title: 'Virtual FS + OPFS',
-    body: 'Memory and OPFS backends with sync mirrors; the Workbench owner holds the editable-tree authority.',
+    body: 'Keep project files in memory or persist them in browser storage.',
     icon: 'feature-vfs',
   },
   {
     title: 'Embeddable Workbench',
-    body: 'Framework-free project, run, file, terminal and preview APIs backed by one owner Worker.',
+    body: 'Embed project, terminal, run and preview workflows through public APIs.',
     icon: 'feature-runtime',
   },
   {
     title: 'TypeScript + Git over VFS',
-    body: 'Project-aware diagnostics and navigation plus a tested Git porcelain subset against the workspace tree.',
+    body: 'Use TypeScript language features and Git workflows against the same workspace.',
     icon: 'feature-vfs',
   },
 ];
