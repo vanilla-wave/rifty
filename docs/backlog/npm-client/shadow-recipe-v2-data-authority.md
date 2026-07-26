@@ -36,6 +36,19 @@ data-authority item. ADR-0328 already decides clone-safe schema 2, named
 admission features, strict ingress, and one decoder owner; this item extracts
 that decided substrate from the oversized integration slice.
 
+## Reference contract
+
+- Primary npm registry metadata for exact `lightningcss-wasm@1.32.0` is pinned
+  by the reproducible 2026-07-26 capture in
+  `reference/lightningcss-wasm-1.32.0-packument.md`: exact SRI, required
+  `napi-wasm@^1.0.1`, empty optional/peer maps, and bundled `napi-wasm`.
+- The capture command reads the version endpoint and projects only the fields
+  schema 2 owns. Contract tests consume an independent checked-in golden of
+  that projection; fake-registry empty metadata cannot settle the recipe.
+- Real Node behavior is not copied in this data-only slice. Direct esbuild and
+  Vite Chromium acceptance remain the observable regression oracle for the
+  regenerated catalog/install/snapshot identities.
+
 ## User scenario
 
 A fresh Workbench project installs either `esbuild@0.28.0` or
