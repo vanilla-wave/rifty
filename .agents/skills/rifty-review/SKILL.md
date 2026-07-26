@@ -31,8 +31,10 @@ Cite `file:line`.
 One fresh isolated reviewer per named checkpoint — raw evidence only, never the
 implementer's diagnosis. Setup: resolve the PR branch + raw body (`gh pr view
 <arg> --json body,headRefName,baseRefName`), `BASE=origin/<baseRefName>`, refuse
-a dirty tree, name `CHECKPOINT` (ambiguity stops). Final+GREEN first runs
-`pnpm pr:check` on the committed SHA.
+a dirty tree, name `CHECKPOINT` (ambiguity stops). No PR yet → open the unit's
+single draft PR; that PR lives through every checkpoint, blocker, and re-cut
+until merge — checkpoints spend attempts, never the PR (`fault-classes.md`
+Lineage row). Final+GREEN first runs `pnpm pr:check` on the committed SHA.
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
