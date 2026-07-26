@@ -50,7 +50,7 @@ fault-labelled suite; use small boundary decorators, not one framework.
 
 ## Review convergence
 
-Applies to parity work and changes touching cache, persistence, network, or concurrency.
+Applies to parity work and changes touching cache, persistence, network, or concurrency. Outside this scope (docs/CI/process/tooling) a PR gets one ordinary review — blockers fixed in place, no checkpoints demanded.
 
 | Gate | Required evidence |
 |---|---|

@@ -17,9 +17,12 @@ Report these axes once, in order:
 7. **Regressions** — existing behavior holds.
 8. **Ecosystem UX** — observable behavior matches real Node software.
 
-Contract+RED checks oracle/RED coverage and ALWAYS precedes implementation — a PR
-that skipped it cannot jump to Final+GREEN; Final+GREEN checks delivery. Correctness
-blockers name class, RED, and sibling sweep; other blockers cite their rule.
+Checkpoint machinery covers work under §Review convergence (parity/stateful) —
+there Contract+RED always precedes implementation and a unit that skipped it
+cannot jump to Final+GREEN; Final+GREEN checks delivery. Outside that scope
+(docs/CI/process/tooling) a PR gets ONE review on these axes: blockers are fixed
+in the same PR, "missing Contract+RED" is not a finding. Correctness blockers
+name class, RED, and sibling sweep; other blockers cite their rule.
 
 Open with verdict + merge call. Return `checkpoint`, exact `unit_goal_source`,
 ordered axes, `unit_residuals` (slice blockers), `goal_residuals` (continuation),
@@ -29,12 +32,17 @@ Cite `file:line`.
 ## Checkpoint run (Contract+RED / Final+GREEN)
 
 One fresh isolated reviewer per named checkpoint — raw evidence only, never the
-implementer's diagnosis. Setup: resolve the PR branch + raw body (`gh pr view
-<arg> --json body,headRefName,baseRefName`), `BASE=origin/<baseRefName>`, refuse
-a dirty tree, name `CHECKPOINT` (ambiguity stops). No PR yet → open the unit's
-single draft PR; that PR lives through every checkpoint, blocker, and re-cut
-until merge — checkpoints spend attempts, never the PR (`fault-classes.md`
-Lineage row). Final+GREEN first runs `pnpm pr:check` on the committed SHA.
+implementer's diagnosis. Setup: with a PR — resolve branch + raw body (`gh pr
+view <arg> --json body,headRefName,baseRefName`), `BASE=origin/<baseRefName>`;
+without one — Contract+RED runs locally: `BASE=origin/main` (or the declared
+base), Goal-Baseline via `RIFTY_GOAL_BASELINE` env. A PR is never a prerequisite
+for Contract+RED; attempts count per unit either way — keep every verdict.
+Refuse a dirty tree; name `CHECKPOINT` (ambiguity stops). Open the unit's single
+draft PR at the first Contract+RED pass — never one per attempt; it lives
+through every later checkpoint, blocker, and re-cut until merge (checkpoints
+spend attempts, never the PR — `fault-classes.md` Lineage row), its body naming
+prior local verdict SHAs. Final+GREEN requires the PR and first runs
+`pnpm pr:check` on the committed SHA.
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
