@@ -1,5 +1,5 @@
 import { type InstallOptions, type InstallResult, RegistryClient } from '@riftydev/npm-client';
-import { Shell } from '@riftydev/shell';
+import { type CommandContext, Shell } from '@riftydev/shell';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, expect, it, vi } from 'vitest';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
@@ -52,7 +52,16 @@ async function installResult(): Promise<InstallResult> {
 
 afterEach(resetSyncMirror);
 
-async function packageMutationHarness(ownerEpoch: string) {
+async function packageMutationHarness(
+  ownerEpoch: string,
+  options: {
+    readonly declineFinalize?: boolean;
+    readonly failInstallAttempts?: number;
+    readonly failFinalizeAttempts?: number;
+    readonly afterInstallFlush?: () => Promise<void>;
+    readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
+  } = {},
+) {
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
     ownerEpoch,
@@ -69,11 +78,23 @@ async function packageMutationHarness(ownerEpoch: string) {
     firstMaterialization: { kind: 'install' },
   };
   let installInvocation = 0;
+  let finalizeInvocation = 0;
+  const amendGeneratedBaseline = vi.fn(async (_root: string, _lockfile: Uint8Array) => {
+    finalizeInvocation += 1;
+    if (finalizeInvocation <= (options.failFinalizeAttempts ?? 0)) {
+      throw new Error('baseline finalization failed');
+    }
+    return options.declineFinalize !== true;
+  });
   const state = createOwnerPackageState({
     vfs: new SyncMirrorVfs(),
     fsSync: authority,
     installStampClaims,
-    flush: async () => ({ failures: [], total: 0 }),
+    flush: async () => {
+      if (installInvocation > 0) await options.afterInstallFlush?.();
+      return { failures: [], total: 0 };
+    },
+    amendGeneratedBaseline,
     nodeWorkerRuntimeEnv: {},
     log: () => {},
     registry: new RegistryClient({
@@ -92,6 +113,9 @@ async function packageMutationHarness(ownerEpoch: string) {
         `${opts.cwd}/package-lock.json`,
         `${JSON.stringify({ lockfileVersion: 3, packages: {}, installInvocation })}\n`,
       );
+      if (installInvocation <= (options.failInstallAttempts ?? 0)) {
+        throw new Error('install failed');
+      }
       return installResult();
     },
     resolverUrl: () => undefined,
@@ -106,10 +130,15 @@ async function packageMutationHarness(ownerEpoch: string) {
   const shell = new Shell({ cwd: ROOT });
   shell.registerCommand(
     'npm',
-    state.createNpmCommand(async () => 0, { recordMutation }),
+    state.createNpmCommand(async () => 0, {
+      recordMutation,
+      ...(options.mapInvocationContext === undefined
+        ? {}
+        : { mapInvocationContext: options.mapInvocationContext }),
+    }),
   );
 
-  return { authority, recordMutation, shell, state };
+  return { authority, amendGeneratedBaseline, recordMutation, shell, state };
 }
 
 it('admits a deferred first-materialization child only while its package tree stays empty', async () => {
@@ -252,12 +281,16 @@ it('does not fall through a known nested root after production empty proof fails
 });
 
 it('classifies first dependency arrival separately from user package manifest/lock edits', async () => {
-  const { recordMutation, shell } = await packageMutationHarness(
+  const { authority, amendGeneratedBaseline, recordMutation, shell } = await packageMutationHarness(
     'owner-package-mutation-classification-test',
   );
 
   expect((await shell.run('npm install')).exitCode).toBe(0);
   expect(recordMutation).toHaveBeenCalledWith('dependency', expect.any(Number));
+  expect(amendGeneratedBaseline).toHaveBeenCalledWith(
+    ROOT,
+    authority.readFileBytesSync(`${ROOT}/package-lock.json`),
+  );
 
   recordMutation.mockClear();
   expect((await shell.run('npm install user-pkg@1.0.0')).exitCode).toBe(0);
@@ -265,12 +298,230 @@ it('classifies first dependency arrival separately from user package manifest/lo
     'package-manifest',
     'package-lock',
   ]);
+  expect(amendGeneratedBaseline).toHaveBeenCalledTimes(1);
+});
+
+// Fault class: concurrent-same-key. Baseline-fold provenance belongs to the
+// exact terminal invocation, not a shared project key another waiter can clear.
+it('keeps first-install baseline classification bound to its terminal invocation', async () => {
+  let notePromotionFlush!: () => void;
+  const promotionFlushStarted = new Promise<void>((resolve) => {
+    notePromotionFlush = resolve;
+  });
+  let releasePromotionFlush!: () => void;
+  const promotionFlushGate = new Promise<void>((resolve) => {
+    releasePromotionFlush = resolve;
+  });
+  let holdFirstFlush = true;
+  const { recordMutation, shell } = await packageMutationHarness(
+    'owner-package-baseline-result-correlation-test',
+    {
+      afterInstallFlush: async () => {
+        if (!holdFirstFlush) return;
+        holdFirstFlush = false;
+        notePromotionFlush();
+        await promotionFlushGate;
+      },
+      mapInvocationContext: (context) => ({ ...context }),
+    },
+  );
+
+  const first = shell.run('npm install');
+  await promotionFlushStarted;
+  const second = shell.run('npm install');
+  releasePromotionFlush();
+  expect((await first).exitCode).toBe(0);
+  expect((await second).exitCode).toBe(0);
+
+  expect(recordMutation.mock.calls.map(([kind]) => kind).sort()).toEqual([
+    'dependency',
+    'package-lock',
+  ]);
+});
+
+it('preserves the seeded package.json version during first dependency arrival', async () => {
+  const { authority, shell } = await packageMutationHarness(
+    'owner-package-first-install-manifest-version-test',
+  );
+  const packageJsonPath = `${ROOT}/package.json`;
+  const seededVersion = authority.versionOf(packageJsonPath);
+
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+
+  expect(authority.versionOf(packageJsonPath)).toBe(seededVersion);
+});
+
+it('preserves exact user package.json bytes and version across the first bare install', async () => {
+  const { authority, shell, state } = await packageMutationHarness(
+    'owner-package-first-install-user-manifest-test',
+  );
+  const packageJsonPath = `${ROOT}/package.json`;
+  const editedPackageJson = new TextEncoder().encode(
+    `${JSON.stringify({
+      name: 'user-edited-app',
+      private: true,
+      dependencies: { vite: '6.0.0' },
+    })}\n`,
+  );
+  await state.mutations.guardedMutation([{ kind: 'write', path: packageJsonPath }], async () =>
+    authority.writeFileSync(packageJsonPath, editedPackageJson),
+  );
+  const editedVersion = authority.versionOf(packageJsonPath);
+
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+
+  expect(authority.readFileBytesSync(packageJsonPath)).toEqual(editedPackageJson);
+  expect(authority.versionOf(packageJsonPath)).toBe(editedVersion);
+});
+
+it('replaces a foreign stamped manifest on a cold owner first install', async () => {
+  const pair = createMemoryFs();
+  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+    ownerEpoch: 'owner-package-cold-foreign-manifest-test',
+    initialRoots: ['/'],
+  });
+  setSyncMirror(authority, { async: pair.vfs });
+  const foreignPackageJson = `${JSON.stringify({
+    name: 'foreign-app',
+    version: '1.0.0',
+    dependencies: { cowsay: '1.6.0' },
+  })}\n`;
+  authority.mkdirSync(`${ROOT}/node_modules/cowsay`, { recursive: true });
+  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(foreignPackageJson));
+  authority.writeFileSync(
+    `${ROOT}/package-lock.json`,
+    new TextEncoder().encode('{"foreign":true}\n'),
+  );
+  const seedStamps = createInstallStampAuthority({
+    vfs: pair.vfs,
+    fsSync: authority,
+    claimIo: installStampClaims,
+  });
+  const foreignClaim = await seedStamps.demote({ root: ROOT, slug: 'foreign-project' });
+  await expect(
+    seedStamps.promote(
+      { root: ROOT, slug: 'foreign-project', packageJsonText: foreignPackageJson },
+      { epoch: foreignClaim.epoch, packages: 1 },
+    ),
+  ).resolves.toMatchObject({ status: 'trusted' });
+
+  let installedPackageJson: string | undefined;
+  const current = {
+    cfg: config,
+    templateId: 'vite',
+    slug: 'scratch',
+    fromScratch: true,
+  };
+  const state = createOwnerPackageState({
+    initial: current,
+    primeInitialPrefetch: false,
+    vfs: new SyncMirrorVfs(),
+    fsSync: authority,
+    installStampClaims,
+    flush: async () => ({ failures: [], total: 0 }),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry: new RegistryClient({
+      baseUrl: '/unused',
+      fetch: async () => new Response('', { status: 599 }),
+    }),
+    install: async (arg1) => {
+      const opts = arg1 as InstallOptions;
+      installedPackageJson = new TextDecoder().decode(
+        authority.readFileBytesSync(`${opts.cwd}/package.json`),
+      );
+      authority.mkdirSync(`${opts.cwd}/node_modules/vite`, { recursive: true });
+      authority.writeFileSync(
+        `${opts.cwd}/node_modules/vite/package.json`,
+        new TextEncoder().encode('{}\n'),
+      );
+      await opts.vfs.writeFile(
+        `${opts.cwd}/package-lock.json`,
+        '{"lockfileVersion":3,"packages":{}}\n',
+      );
+      return installResult();
+    },
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+  const shell = new Shell({ cwd: ROOT });
+  shell.registerCommand(
+    'npm',
+    state.createNpmCommand(async () => 0),
+  );
+
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+  expect(installedPackageJson).toBe(BASE_PACKAGE_JSON);
+  expect(new TextDecoder().decode(authority.readFileBytesSync(`${ROOT}/package.json`))).toBe(
+    BASE_PACKAGE_JSON,
+  );
+});
+
+it('withholds generated-baseline ownership when a lockfile predates the first bare install', async () => {
+  const { authority, amendGeneratedBaseline, recordMutation, shell, state } =
+    await packageMutationHarness('owner-package-first-install-user-lock-test');
+  const packageLockPath = `${ROOT}/package-lock.json`;
+  await state.mutations.guardedMutation([{ kind: 'write', path: packageLockPath }], async () =>
+    authority.writeFileSync(packageLockPath, new TextEncoder().encode('{"user":true}\n')),
+  );
+
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+
+  expect(amendGeneratedBaseline).not.toHaveBeenCalled();
+  expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual(['package-lock']);
+});
+
+it('does not absorb a failed first install lockfile into dependency arrival', async () => {
+  const { amendGeneratedBaseline, recordMutation, shell } = await packageMutationHarness(
+    'owner-package-failed-first-install-classification-test',
+    { failInstallAttempts: 1 },
+  );
+
+  expect((await shell.run('npm install')).exitCode).toBe(1);
+  expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual(['package-lock']);
+  expect(amendGeneratedBaseline).not.toHaveBeenCalled();
+
+  recordMutation.mockClear();
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+  expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual(['package-lock']);
+  expect(amendGeneratedBaseline).not.toHaveBeenCalled();
+});
+
+// Fault class: quota/permission rejection at the Git durability boundary must
+// fail npm loudly; the generated lock remains visible on the next attempt.
+it('leaves the generated lock visible after baseline finalization fails', async () => {
+  const { amendGeneratedBaseline, recordMutation, shell } = await packageMutationHarness(
+    'owner-package-failed-baseline-finalization-test',
+    { failFinalizeAttempts: 1 },
+  );
+
+  expect((await shell.run('npm install')).exitCode).toBe(1);
+  expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual(['package-lock']);
+  expect(amendGeneratedBaseline).toHaveBeenCalledTimes(1);
+
+  recordMutation.mockClear();
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+  expect(amendGeneratedBaseline).toHaveBeenCalledTimes(1);
+  expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual(['package-lock']);
+});
+
+it('classifies a declined baseline amend as a visible package-lock mutation', async () => {
+  const { amendGeneratedBaseline, recordMutation, shell } = await packageMutationHarness(
+    'owner-package-declined-baseline-finalization-test',
+    { declineFinalize: true },
+  );
+
+  expect((await shell.run('npm install')).exitCode).toBe(0);
+
+  expect(amendGeneratedBaseline).toHaveBeenCalledTimes(1);
+  expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual(['package-lock']);
 });
 
 it.each(['install', 'i', 'add'] as const)(
   'classifies a first deferred npm %s with a package spec as manifest/lock mutations',
   async (subcommand) => {
-    const { recordMutation, shell } = await packageMutationHarness(
+    const { amendGeneratedBaseline, recordMutation, shell } = await packageMutationHarness(
       `owner-package-first-user-${subcommand}-classification-test`,
     );
 
@@ -279,6 +530,7 @@ it.each(['install', 'i', 'add'] as const)(
       'package-manifest',
       'package-lock',
     ]);
+    expect(amendGeneratedBaseline).not.toHaveBeenCalled();
   },
 );
 

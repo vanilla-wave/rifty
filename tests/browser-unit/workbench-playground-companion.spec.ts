@@ -148,6 +148,14 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
         readonly exited: Promise<ProcessExit>;
         close(): Promise<ProcessExit>;
       };
+      type ScmSnapshot = {
+        readonly changes: readonly { readonly path: string }[];
+      };
+      type PlaygroundScm = {
+        snapshot(): ScmSnapshot;
+        subscribe(listener: (snapshot: ScmSnapshot) => void): () => void;
+        refresh(): Promise<ScmSnapshot>;
+      };
       type ProjectSession = {
         readonly files: {
           readFile(path: string): Promise<{ readonly bytes: Uint8Array }>;
@@ -190,6 +198,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
             }): Promise<CatalogSnapshot>;
             snapshot(): CatalogSnapshot;
           };
+          forSession(session: ProjectSession): { readonly scm: PlaygroundScm };
         };
         openProject(definition: ProjectDefinition): Promise<ProjectSession>;
         close(): Promise<void>;
@@ -264,6 +273,7 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
       let session: ProjectSession | null = null;
       let run: ProjectRun | null = null;
       let detach: (() => void) | null = null;
+      let detachScm: (() => void) | null = null;
       try {
         workbench = await withTimeout(
           companionEntry.openPlaygroundWorkbench({
@@ -305,12 +315,27 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           30_000,
         );
         session = await withTimeout(workbench.openProject(definition), 'Scratch open', 120_000);
+        const scm = workbench.playground.forSession(session).scm;
+        const scmSnapshotPaths: string[][] = [];
+        const recordScmSnapshot = (snapshot: ScmSnapshot): void => {
+          scmSnapshotPaths.push(snapshot.changes.map(({ path }) => path));
+        };
+        recordScmSnapshot(scm.snapshot());
+        detachScm = scm.subscribe(recordScmSnapshot);
         run = session.run();
         const chunks: { readonly chunk: string; readonly stream: 'stdout' | 'stderr' }[] = [];
         detach = run.terminal.attach((chunk, stream) => chunks.push({ chunk, stream }));
 
         await withTimeout(run.ready, 'Node CLI admission', 30_000);
         const exit = await withTimeout(run.exited, 'Node CLI exit', 180_000);
+        const finalScmSnapshot = await withTimeout(
+          scm.refresh(),
+          'post-install SCM refresh',
+          30_000,
+        );
+        recordScmSnapshot(finalScmSnapshot);
+        detachScm();
+        detachScm = null;
         const closeExit = await withTimeout(run.close(), 'Node CLI run close', 30_000);
         run = null;
         detach();
@@ -407,12 +432,15 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
           closeExit,
           concurrentWrite,
           installedVersion,
+          finalScmPaths: finalScmSnapshot.changes.map(({ path }) => path),
+          scmSnapshotPaths,
           output: chunks.map(({ chunk }) => chunk).join(''),
           reopenedManifestText: new TextDecoder().decode(reopenedManifest.bytes),
           reopenedCloseRaceText: new TextDecoder().decode(reopenedCloseRace.bytes),
         };
       } finally {
         detach?.();
+        detachScm?.();
         if (run !== null) await run.close().catch(() => {});
         if (session !== null) await session.close().catch(() => {});
         if (workbench !== null) await workbench.close().catch(() => {});
@@ -438,6 +466,8 @@ test('Playground companion installs a Node CLI and keeps its owner live when a w
     },
   });
   expect(result.installedVersion).toBe('4.1.5');
+  expect(result.finalScmPaths).not.toContain('/package-lock.json');
+  expect(result.scmSnapshotPaths.flat()).not.toContain('/package-lock.json');
   expect(result.reopenedManifestText).toContain('"name":"companion-kleur"');
   expect(result.reopenedCloseRaceText).toBe('write admitted before session close\n');
 

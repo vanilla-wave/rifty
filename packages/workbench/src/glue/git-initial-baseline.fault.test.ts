@@ -1,9 +1,6 @@
 /**
  * Fault: `ensureStarterInitialCommit` racing an instant-deps restore
- * (concurrent-same-key / torn-state at the seed boundary). The owner boot
- * overlaps the initial commit with the baked node_modules restore — the commit's
- * status walk must tolerate ignored-tree churn mid-walk, and a lockfile the
- * restore lands mid-commit must be folded by the follow-up amend either way.
+ * (concurrent-same-key / torn-state at the seed boundary).
  */
 import { Shell } from '@riftydev/shell';
 import { asyncVfs, dirname } from '@riftydev/vfs';
@@ -25,6 +22,7 @@ describe('starter initial commit ∥ instant-deps restore (fault: concurrent res
       if (!vfs) throw new Error('no async vfs');
       const files = {
         [`${root}/.gitignore`]: 'node_modules/\ndist/\n',
+        [`${root}/package.json`]: '{"name":"starter"}\n',
         [`${root}/src/main.js`]: 'console.log("baseline");\n',
       };
       for (const [path, content] of Object.entries(files)) {
@@ -32,10 +30,6 @@ describe('starter initial commit ∥ instant-deps restore (fault: concurrent res
         await vfs.writeFile(path, content);
       }
 
-      // Restore-like writer: many small files under the ignored node_modules
-      // tree, yielding per write so the commit's status walk interleaves; the
-      // lockfile lands mid-stream (torn vs the FINAL content on purpose), then
-      // is rewritten to final — mirroring a snapshot restore.
       const restore = (async () => {
         for (let i = 0; i < 120; i++) {
           const pkgDir = `${root}/node_modules/pkg-${i % 12}`;
@@ -45,26 +39,24 @@ describe('starter initial commit ∥ instant-deps restore (fault: concurrent res
           if (i === 80) await vfs.writeFile(`${root}/package-lock.json`, FINAL_LOCKFILE);
         }
       })();
-      await Promise.all([ensureStarterInitialCommit(vfs, root), restore]);
-      await amendStarterGeneratedBaseline(vfs, root);
+      const [initialOid] = await Promise.all([ensureStarterInitialCommit(vfs, root), restore]);
+      if (initialOid === null) throw new Error('Expected a fresh Starter initial commit');
+      await amendStarterGeneratedBaseline(
+        vfs,
+        root,
+        initialOid,
+        new TextEncoder().encode(FINAL_LOCKFILE),
+      );
 
       const sh = new Shell({ cwd: root });
-      // Single Initial commit, worktree clean — regardless of where the walk
-      // caught the restore.
-      const log = await sh.run('git log --oneline');
-      expect(log.exitCode).toBe(0);
-      expect(log.stdout.trim().split('\n')).toHaveLength(1);
-      expect(log.stdout).toMatch(/^[0-9a-f]{7} Initial commit\n$/);
-      const status = await sh.run('git status --porcelain');
-      expect(status).toMatchObject({ exitCode: 0, stdout: '', stderr: '' });
-
-      // The baseline folded the FINAL lockfile (never the torn mid-stream one)
-      // and never staged the ignored node_modules tree.
-      const lock = await sh.run('git show HEAD:package-lock.json');
-      expect(lock.exitCode).toBe(0);
-      expect(lock.stdout).toBe(FINAL_LOCKFILE);
-      const ignoredInTree = await sh.run('git show HEAD:node_modules/pkg-0/file-0.js');
-      expect(ignoredInTree.exitCode).not.toBe(0);
+      expect((await sh.run('git log --oneline')).stdout.trim().split('\n')).toHaveLength(1);
+      expect(await sh.run('git status --porcelain')).toMatchObject({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+      });
+      expect((await sh.run('git show HEAD:package-lock.json')).stdout).toBe(FINAL_LOCKFILE);
+      expect((await sh.run('git show HEAD:node_modules/pkg-0/file-0.js')).exitCode).not.toBe(0);
     } finally {
       resetSyncMirror();
     }

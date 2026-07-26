@@ -772,6 +772,214 @@ describe('owner-resident Playground session tools', () => {
     expect(vfsFrames.length).toBeGreaterThan(0);
   });
 
+  // Fault class: concurrent-same-key × Git index/ref. Session SCM must enter
+  // the same package FIFO as first-install baseline settlement.
+  it('queues SCM mutation and diff work behind the active package mutation', async () => {
+    const fs = new MemoryFsSync();
+    const vfs = new SyncMirrorVfs();
+    const owner = createOwnerVfsAuthorityComposition(fs, {
+      ownerEpoch: 'session-tools-package-fifo-owner',
+      initialRoots: ['/', '/.rifty'],
+    });
+    setSyncMirror(owner.authority, { async: vfs });
+    write(owner.authority, `${PROJECT_ROOT}/package.json`, PACKAGE_JSON);
+    write(owner.authority, SOURCE, 'export const value = 1;\n');
+
+    const git = makeGit({ fs: vfsToGitFs(vfs), dir: PROJECT_ROOT });
+    await git.init();
+    await git.add('package.json');
+    await git.add('src/main.ts');
+    await git.commit({
+      message: 'initial',
+      author: COMMIT_IDENTITY,
+      committer: COMMIT_IDENTITY,
+    });
+    write(owner.authority, SOURCE, 'export const value = 2;\n');
+
+    const timeline: string[] = [];
+    let activeOperation: 'diff' | 'stage' | null = null;
+    let enqueuePostStagePackageMutation: (() => Promise<void>) | null = null;
+    let postStagePackageMutation: Promise<void> | null = null;
+    let scmRevisionAfterAdd: number | null = null;
+    let postStagePackageRevision: number | null = null;
+    const serviceGit = new Proxy(git, {
+      get(target, property, receiver) {
+        if (property === 'status') {
+          return async () => {
+            if (activeOperation !== null) timeline.push(`${activeOperation}:status`);
+            return target.status();
+          };
+        }
+        if (property === 'show') {
+          return async (rev: string) => {
+            if (activeOperation !== null) timeline.push(`${activeOperation}:show`);
+            return target.show(rev);
+          };
+        }
+        if (property === 'add') {
+          return async (filepath: string) => {
+            await target.add(filepath);
+            if (activeOperation !== 'stage') return;
+            scmRevisionAfterAdd = owner.authority.treeRevision;
+            postStagePackageMutation = enqueuePostStagePackageMutation?.() ?? null;
+          };
+        }
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+
+    const packages = createActivePackageState(owner, vfs);
+    const postStagePackagePath = `${PROJECT_ROOT}/post-stage-package.txt`;
+    enqueuePostStagePackageMutation = () =>
+      packages.mutations.guardedMutation(
+        [{ kind: 'write', path: postStagePackagePath }],
+        async () => {
+          write(owner.authority, postStagePackagePath, 'queued after git add\n');
+          postStagePackageRevision = owner.authority.treeRevision;
+        },
+      );
+    const vfsFailures: Error[] = [];
+    const projectVfs = createWorkbenchProjectVfs({
+      projectRoot: PROJECT_ROOT,
+      authority: owner.authority,
+      appliedMutations: owner.appliedMutations,
+      packageMutations: packages.mutations,
+      durability: 'ephemeral',
+      emit: () => {},
+      fatal: (error) => vfsFailures.push(error),
+    });
+    projectVfs.publishSnapshot();
+
+    const frames: OwnerPlaygroundSessionToolsFrame[] = [];
+    const backgroundFailures: Error[] = [];
+    let postStageRevisionSeenByRecord: number | null = null;
+    const recordMutation = vi.fn(async (_kind: 'scm' | 'archive', _treeRevision: number) => {
+      postStageRevisionSeenByRecord = postStagePackageRevision;
+    });
+    const service = await createOwnerPlaygroundSessionTools({
+      projectRoot: PROJECT_ROOT,
+      owner,
+      packages,
+      projectVfs,
+      vfs,
+      git: serviceGit,
+      commitIdentity: COMMIT_IDENTITY,
+      tsWorkerUrl: 'ts-lsp-worker.js',
+      nodeWorkerRuntimeEnv: {},
+      spawnTsWorker: () => {
+        throw new Error('TS worker must remain lazy in the package FIFO contract');
+      },
+      send(frame) {
+        frames.push(structuredClone(frame));
+        return undefined;
+      },
+      recordMutation,
+      fatal: (error) => backgroundFailures.push(error),
+      log: () => {},
+    });
+
+    let requestSequence = 0;
+    const expectQueuedBehindPackageHead = async (
+      operation: Extract<PlaygroundSessionToolOperation, { readonly type: `scm:${string}` }>,
+      marker: string,
+    ): Promise<void> => {
+      const label = operation.type === 'scm:diff' ? 'diff' : 'stage';
+      let enterHead!: () => void;
+      const headEntered = new Promise<void>((resolve) => {
+        enterHead = resolve;
+      });
+      let releaseHead!: () => void;
+      const headGate = new Promise<void>((resolve) => {
+        releaseHead = resolve;
+      });
+      const packageHead = packages.mutations.guardedMutation([], async () => {
+        timeline.push(`${label}:head`);
+        enterHead();
+        await headGate;
+        timeline.push(`${label}:head-done`);
+      });
+      await headEntered;
+
+      activeOperation = label;
+      const requestId = `package-fifo-${String(++requestSequence)}`;
+      const scmRequest = service.handle({
+        type: 'workbench:playground-session-tools-request',
+        requestId,
+        operation,
+      });
+      queueMicrotask(releaseHead);
+      await Promise.all([packageHead, scmRequest]);
+      activeOperation = null;
+
+      expect(timeline.indexOf(marker)).toBeGreaterThan(timeline.indexOf(`${label}:head-done`));
+      expect(
+        frames.find(
+          (frame) =>
+            frame.type === 'workbench:playground-session-tools-response' &&
+            frame.requestId === requestId,
+        ),
+      ).toMatchObject({ response: { ok: true } });
+    };
+
+    await expectQueuedBehindPackageHead(
+      {
+        type: 'scm:diff',
+        change: { path: '/src/main.ts', code: ' M', area: 'working' },
+      },
+      'diff:show',
+    );
+    await expectQueuedBehindPackageHead(
+      { type: 'scm:stage', path: '/src/main.ts' },
+      'stage:status',
+    );
+    await postStagePackageMutation;
+
+    expect(scmRevisionAfterAdd).not.toBeNull();
+    expect(postStagePackageRevision).not.toBeNull();
+    expect(postStagePackageRevision).toBeGreaterThan(
+      scmRevisionAfterAdd ?? Number.MAX_SAFE_INTEGER,
+    );
+    expect(postStageRevisionSeenByRecord).toBeNull();
+    expect(recordMutation).toHaveBeenCalledWith('scm', scmRevisionAfterAdd);
+
+    const packageJsonPath = `${PROJECT_ROOT}/package.json`;
+    await packages.mutations.guardedMutation(
+      [{ kind: 'write', path: packageJsonPath }],
+      async () => {
+        write(owner.authority, packageJsonPath, '{"name":"user-edit"}\n');
+      },
+    );
+    const guardedMutation = vi.spyOn(packages.mutations, 'guardedMutation');
+    const discardRequestId = `package-fifo-${String(++requestSequence)}`;
+    await service.handle({
+      type: 'workbench:playground-session-tools-request',
+      requestId: discardRequestId,
+      operation: { type: 'scm:discard', path: '/package.json' },
+    });
+    expect(guardedMutation).toHaveBeenCalledWith(
+      [
+        { kind: 'write', path: `${PROJECT_ROOT}/.git` },
+        { kind: 'replace', path: packageJsonPath },
+      ],
+      expect.any(Function),
+    );
+    expect(decoder.decode(owner.authority.readFileBytesSync(packageJsonPath))).toBe(PACKAGE_JSON);
+    expect(
+      frames.find(
+        (frame) =>
+          frame.type === 'workbench:playground-session-tools-response' &&
+          frame.requestId === discardRequestId,
+      ),
+    ).toMatchObject({ response: { ok: true } });
+    guardedMutation.mockRestore();
+
+    await service.close();
+    await packages.quiesce();
+    await projectVfs.close();
+    expect(backgroundFailures).toEqual([]);
+    expect(vfsFailures).toEqual([]);
+  });
+
   // Fault class: starvation/unbounded-read. Continuous publications
   // may coalesce, but each automatic pass must yield the shared tail to explicit work.
   it('requeues publication catch-up behind finite durability and SCM requests', async () => {

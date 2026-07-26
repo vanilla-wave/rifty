@@ -80,6 +80,8 @@ export interface TerminalInstallCommand {
   readonly argv: readonly string[];
   /** Present for the real npm shell adapter; authority tests may omit it. */
   readonly context?: CommandContext;
+  /** Invocation-local reflection of the generated Starter Git baseline outcome. */
+  readonly onGeneratedBaseline?: (clean: boolean) => void;
   readonly onPromotion?: (result: InstallStampPromotionResult) => void;
 }
 

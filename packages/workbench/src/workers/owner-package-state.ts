@@ -9,7 +9,12 @@ import {
   planShadowSubstitutionsFromLockfile,
   shadowAssetPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
-import type { CommandContext, ShellCommand, ShellCommandResult } from '@riftydev/shell';
+import {
+  type CommandContext,
+  type ShellCommand,
+  type ShellCommandResult,
+  shellCommandExitCode,
+} from '@riftydev/shell';
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import { normalizePath } from '@riftydev/vfs';
 import {
@@ -99,6 +104,8 @@ export interface OwnerPackageStateOptions {
   readonly shadowAssets?: PackageTreeShadowAssetBoundary;
   /** Test seam at the external registry/install boundary. */
   readonly install?: InstallFn;
+  /** Fold one exact first-install lock into the fresh Starter Git baseline. */
+  readonly amendGeneratedBaseline?: (root: string, lockfile: Uint8Array) => Promise<boolean>;
   readonly resolverUrl: () => string | undefined;
   readonly resolverBundleBaseUrl: () => string | undefined;
   readonly resolverPin: (templateId: string) => string | undefined;
@@ -209,6 +216,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   let activeProject = options.initial ? packageProject(options.initial) : null;
   let activeTemplateId: string | null = null;
   const firstMaterializationPhases = new Map<string, 'preparing' | 'deferred' | 'consuming'>();
+  const firstMaterializationBaselineResults = new WeakMap<CommandContext, 'clean' | 'visible'>();
   if (options.initial) {
     configs.set(configKey(options.initial.cfg.root, options.initial.slug), options.initial);
   }
@@ -405,8 +413,12 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                 if (normalizePath(ctx.cwd) !== normalizePath(request.project.root)) return;
                 if (info.priorTrustedTree) return;
                 if (info.priorSessionSlug === request.project.slug) return;
+                const manifestIsForeign =
+                  (info.priorSessionSlug !== undefined &&
+                    info.priorSessionSlug !== request.project.slug) ||
+                  (info.priorSlug !== undefined && info.priorSlug !== request.project.slug);
                 prepareProjectInstallTree(options.fsSync, request.project.root, {
-                  packageJsonText: config.cfg.packageJson,
+                  ...(manifestIsForeign ? { packageJsonText: config.cfg.packageJson } : {}),
                   currentSlug: request.project.slug,
                   ...(info.priorSlug ? { priorSlug: info.priorSlug } : {}),
                   priorTrustedTree: info.priorTrustedTree,
@@ -448,10 +460,20 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           config !== undefined && hasFirstMaterialization(config)
             ? configKey(config.cfg.root, config.slug)
             : null;
-        if (
+        const consumesFirstMaterialization =
           firstMaterializationKey !== null &&
-          firstMaterializationPhases.get(firstMaterializationKey) === 'deferred'
-        ) {
+          firstMaterializationPhases.get(firstMaterializationKey) === 'deferred';
+        const generatedBaselineEligible =
+          consumesFirstMaterialization &&
+          request.type === 'terminal-install' &&
+          parsed.request.packageSpecs.length === 0 &&
+          config !== undefined &&
+          optionalFile(options.fsSync, `${request.project.root}/package-lock.json`) === null &&
+          equalOptionalBytes(
+            optionalFile(options.fsSync, `${request.project.root}/package.json`),
+            enc.encode(config.cfg.packageJson),
+          );
+        if (consumesFirstMaterialization) {
           firstMaterializationPhases.set(firstMaterializationKey, 'consuming');
         }
         try {
@@ -476,7 +498,17 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                 : {}),
             });
           }
-          if (firstMaterializationKey !== null) {
+          if (consumesFirstMaterialization) {
+            const generatedLockfile = optionalFile(
+              options.fsSync,
+              `${request.project.root}/package-lock.json`,
+            );
+            const folded =
+              generatedBaselineEligible &&
+              generatedLockfile !== null &&
+              (await options.amendGeneratedBaseline?.(request.project.root, generatedLockfile)) ===
+                true;
+            if (request.type === 'terminal-install') request.onGeneratedBaseline?.(folded);
             firstMaterializationPhases.delete(firstMaterializationKey);
           }
           if ('status' in installed) return installed;
@@ -485,7 +517,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             shadowPlan: shadowAssetPlanForInstallResult(installed.result),
           };
         } catch (error) {
-          if (firstMaterializationKey !== null) {
+          if (consumesFirstMaterialization) {
             firstMaterializationPhases.set(firstMaterializationKey, 'deferred');
           }
           throw error;
@@ -746,6 +778,9 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         ...(commandOptions.mapInvocationContext === undefined
           ? {}
           : { mapInvocationContext: commandOptions.mapInvocationContext }),
+        observeGeneratedBaseline: (context, clean) => {
+          firstMaterializationBaselineResults.set(context, clean ? 'clean' : 'visible');
+        },
       });
       return async (args, context) => {
         const config = configured;
@@ -759,13 +794,17 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         }
 
         const key = configKey(config.cfg.root, config.slug);
-        const firstDependencyArrival =
-          firstMaterializationPhases.has(key) && isBareInstallCommand(args);
         const packageJsonPath = normalizePath(`${config.cfg.root}/package.json`);
         const packageLockPath = normalizePath(`${config.cfg.root}/package-lock.json`);
         const priorTreeRevision = options.fsSync.treeRevision;
         const priorPackageJson = optionalFile(options.fsSync, packageJsonPath);
         const priorPackageLock = optionalFile(options.fsSync, packageLockPath);
+        const firstDependencyArrival =
+          firstMaterializationPhases.has(key) &&
+          isBareInstallCommand(args) &&
+          priorPackageLock === null &&
+          equalOptionalBytes(priorPackageJson, enc.encode(config.cfg.packageJson));
+        firstMaterializationBaselineResults.delete(context);
         let result: ShellCommandResult | undefined;
         let commandFailure: unknown;
         try {
@@ -778,7 +817,13 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         try {
           const treeRevision = options.fsSync.treeRevision;
           if (treeRevision > priorTreeRevision) {
-            if (firstDependencyArrival) {
+            const commandSucceeded =
+              commandFailure === undefined &&
+              result !== undefined &&
+              shellCommandExitCode(result) === 0;
+            const generatedBaselineClean =
+              firstMaterializationBaselineResults.get(context) === 'clean';
+            if (firstDependencyArrival && commandSucceeded && generatedBaselineClean) {
               await commandOptions.recordMutation('dependency', treeRevision);
             } else {
               const packageJsonChanged = !equalOptionalBytes(
@@ -799,6 +844,8 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           }
         } catch (error) {
           recordFailure = error;
+        } finally {
+          firstMaterializationBaselineResults.delete(context);
         }
 
         if (commandFailure !== undefined && recordFailure !== undefined) {

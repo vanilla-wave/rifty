@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- From-scratch preset autorun now leaves `package.json` openable and its first
+  generated `package-lock.json` clean against the Starter baseline.
+
 - Preview switcher now auto-selects every server on its FIRST appearance
   regardless of registry position/source (registry orders [dev-server,
   preview, node], so `npm run dev` inserting before a live node server no

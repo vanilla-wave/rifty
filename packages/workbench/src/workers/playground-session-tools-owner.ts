@@ -1,6 +1,6 @@
 import type { GitIdentity, makeGit } from '@riftydev/git';
 import type { SpawnWorkerSpec } from '@riftydev/kernel';
-import type { Vfs } from '@riftydev/vfs';
+import type { Vfs, VfsMutationIntent } from '@riftydev/vfs';
 import { serializeWorkbenchOwnerError } from '../workbench/errors.ts';
 import { ClosedHandleError } from '../workbench/errors.ts';
 import {
@@ -20,7 +20,10 @@ import {
   inspectPlaygroundScmSnapshot,
   operationalHealthForScmSnapshot,
 } from '../workbench/internal/playground-session-tools-transport.ts';
-import { formatProjectPersistenceFailure } from '../workbench/project-file-boundary.ts';
+import {
+  formatProjectPersistenceFailure,
+  toOwnerProjectPath,
+} from '../workbench/project-file-boundary.ts';
 import type { OwnerPackageState } from './owner-package-state.ts';
 import type { OwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import {
@@ -209,13 +212,16 @@ export async function createOwnerPlaygroundSessionTools(
     if (failed !== null) throw failed;
   };
 
+  const readScmConsistent = <T>(operation: () => Promise<T>): Promise<T> =>
+    options.projectVfs.readConsistent(operation);
+
   const readScm = async (): Promise<{
     readonly targetRevision: number;
     readonly failure: Error | null;
   }> => {
     let targetRevision = requestedScmRevision;
     let failure: Error | null = null;
-    await options.projectVfs.readConsistent(async () => {
+    await readScmConsistent(async () => {
       targetRevision = requestedScmRevision;
       try {
         await scm.refresh();
@@ -300,11 +306,24 @@ export async function createOwnerPlaygroundSessionTools(
   const unsubscribeProjectPublications =
     options.projectVfs.subscribePublications(noteProjectPublication);
 
-  const mutateScm = async <T>(operation: () => Promise<T>): Promise<T> => {
-    const priorTreeRevision = options.owner.authority.treeRevision;
-    const result = await operation();
-    if (options.owner.authority.treeRevision > priorTreeRevision) {
-      await options.recordMutation?.('scm', options.owner.authority.treeRevision);
+  const scmMetadataIntent = Object.freeze({
+    kind: 'write' as const,
+    path: `${options.projectRoot}/.git`,
+  });
+  const mutateScm = async <T>(
+    intents: readonly VfsMutationIntent[],
+    operation: () => Promise<T>,
+  ): Promise<T> => {
+    let priorTreeRevision = options.owner.authority.treeRevision;
+    let finalTreeRevision = priorTreeRevision;
+    const result = await options.packages.mutations.guardedMutation(intents, async () => {
+      priorTreeRevision = options.owner.authority.treeRevision;
+      const value = await operation();
+      finalTreeRevision = options.owner.authority.treeRevision;
+      return value;
+    });
+    if (finalTreeRevision > priorTreeRevision) {
+      await options.recordMutation?.('scm', finalTreeRevision);
     }
     await settleScmMutation();
     publishScm();
@@ -319,18 +338,27 @@ export async function createOwnerPlaygroundSessionTools(
       case 'scm:refresh':
         return Object.freeze({ type: 'scm:snapshot', snapshot: await refreshScm() });
       case 'scm:diff':
-        return Object.freeze({ type: 'scm:diff', diff: await scm.diff(operation.change) });
+        return Object.freeze({
+          type: 'scm:diff',
+          diff: await readScmConsistent(() => scm.diff(operation.change)),
+        });
       case 'scm:stage':
-        await mutateScm(() => scm.stage(operation.path));
+        await mutateScm([scmMetadataIntent], () => scm.stage(operation.path));
         return Object.freeze({ type: 'scm:void' });
       case 'scm:unstage':
-        await mutateScm(() => scm.unstage(operation.path));
+        await mutateScm([scmMetadataIntent], () => scm.unstage(operation.path));
         return Object.freeze({ type: 'scm:void' });
       case 'scm:discard':
-        await mutateScm(() => scm.discard(operation.path));
+        await mutateScm(
+          [
+            scmMetadataIntent,
+            { kind: 'replace', path: toOwnerProjectPath(options.projectRoot, operation.path) },
+          ],
+          () => scm.discard(operation.path),
+        );
         return Object.freeze({ type: 'scm:revision', revision: revision() });
       case 'scm:commit': {
-        const oid = await mutateScm(() => scm.commit(operation.message));
+        const oid = await mutateScm([scmMetadataIntent], () => scm.commit(operation.message));
         return Object.freeze({ type: 'scm:commit', oid });
       }
       case 'archive:export':
