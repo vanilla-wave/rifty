@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Shadow recipe v2 now owns exact request admission, complete registry
+  dependency projection, materialized bins, and replay provenance. One shared
+  bin linker serves acquired and substituted packages; lockfiles retain only
+  the successfully reachable optional graph (ADR-0323).
+
 ### Added
 
 - **Cancellable package acquisition (ADR-0314).** `InstallOptions.signal` plus

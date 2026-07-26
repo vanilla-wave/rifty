@@ -17,6 +17,9 @@
 
 ### Changed
 
+- Install-artifact identity now includes shadow recipe-v2 admission,
+  dependency projection, materialized-bin, and replay policy (ADR-0323).
+
 - Removed dead zero-caller surface: `installStampAuthorityFor` + its
   `ownerAuthorities` registry and the two unused owner-VFS terminal equality
   helpers; module-surface tests pin their absence.

@@ -4,6 +4,13 @@
 
 ### Changed
 
+- Builtin catalog/recipe schema v2 records admission, exact registry dependency
+  projections, and materialization-owned bins; esbuild and LightningCSS carry
+  new identities and old v1 lockfile facts fail loudly (ADR-0323).
+- LightningCSS acquisition authority records the pinned
+  `lightningcss-wasm@1.32.0` manifest dependency on `napi-wasm@^1.0.1`; live
+  rebakes fail closed if that projection drifts.
+
 - Install-artifact identity now hashes only behavior-bearing policy fields
   (`schema`/`api`/`version`/`consumer`/`source`/`wasm`/`patches`); compat prose
   edits no longer invalidate deployed stamps or force snapshot rebakes. One-time

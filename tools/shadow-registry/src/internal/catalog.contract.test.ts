@@ -130,7 +130,7 @@ function rawSchema2Catalog() {
         name: 'lightningcss-wasm',
         version: '1.32.0',
         dependencyProjection: {
-          dependencies: {},
+          dependencies: { 'napi-wasm': '^1.0.1' },
           optionalDependencies: {},
           omittedOptionalDependencies: {},
           peerDependencies: {},
@@ -230,9 +230,9 @@ describe('builtin shadow substitution catalog contract', () => {
 
     expect(catalog.recipes.map((recipe) => recipe.digest)).toEqual([
       '0d8bdcbf6317aa855da9cf0e8848ee081f3ece2b1b20b1d9b83a38d5bc9f4564',
-      '63b1b541baa151411eba6bfab330f2d07533da560e639a2e2ccf19a6f45df555',
+      '20d81fbeb4afcaed82801f2413ed3f627cb1315752f880dca7a921ade2e78e07',
     ]);
-    expect(catalog.digest).toBe('dda257c2f56c593fe036c24847d678d680197d306da951d864434f49120f107f');
+    expect(catalog.digest).toBe('5d8462c761268643956d81b299007e536238484a48de11c6d9d16f9a16f818dc');
 
     const decoded = decodeBuiltinShadowSubstitutionCatalog(catalog);
     expect(decoded).toEqual(catalog);
@@ -275,7 +275,12 @@ describe('builtin shadow substitution catalog contract', () => {
     ).toContain("new NotImplementedError('esbuild.cli')");
     expect(lightningcss).toMatchObject({
       trigger: { name: 'lightningcss', version: '1.32.0' },
-      acquisition: { kind: 'registry', name: 'lightningcss-wasm', version: '1.32.0' },
+      acquisition: {
+        kind: 'registry',
+        name: 'lightningcss-wasm',
+        version: '1.32.0',
+        dependencyProjection: { dependencies: { 'napi-wasm': '^1.0.1' } },
+      },
       materialization: { name: 'lightningcss', version: '1.32.0' },
     });
     expect(lightningcss?.binding).toBeUndefined();
@@ -533,7 +538,7 @@ describe('builtin shadow substitution catalog contract', () => {
       'invalid trigger package name',
       () => {
         const forged = rawSchema2Catalog();
-        Reflect.set(forged.recipes[0]!.trigger, 'name', 'bad package');
+        Reflect.set(forged.recipes[0]!.trigger, 'name', 'unscoped/slash');
         return forged;
       },
       'catalog.recipes[0].trigger.name',
@@ -543,10 +548,30 @@ describe('builtin shadow substitution catalog contract', () => {
       'invalid registry acquisition package name',
       () => {
         const forged = rawSchema2Catalog();
-        Reflect.set(registryRecipe(forged).acquisition, 'name', 'bad package');
+        Reflect.set(registryRecipe(forged).acquisition, 'name', 'unscoped/slash');
         return forged;
       },
       'catalog.recipes[1].acquisition.name',
+      /invalid string/i,
+    ],
+    [
+      'invalid materialization package name',
+      () => {
+        const forged = rawSchema2Catalog();
+        Reflect.set(forged.recipes[0]!.materialization, 'name', 'unscoped/slash');
+        return forged;
+      },
+      'catalog.recipes[0].materialization.name',
+      /invalid string/i,
+    ],
+    [
+      'invalid asset source package name',
+      () => {
+        const forged = rawSchema2Catalog();
+        Reflect.set(forged.assets[0]!.source, 'name', 'unscoped/slash');
+        return forged;
+      },
+      'catalog.assets[0].source.name',
       /invalid string/i,
     ],
     [

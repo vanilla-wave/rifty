@@ -35,7 +35,7 @@ export interface OverrideMap {
  * cannot load in a browser realm AND a drop-in pure-JS alternative exists.
  */
 const lightningcssRecipe = builtinShadowSubstitutionCatalog.recipes.find(
-  (recipe) => recipe.id === 'rifty.shadow-substitution.lightningcss.v1',
+  (recipe) => recipe.trigger.name === 'lightningcss',
 );
 if (!lightningcssRecipe || lightningcssRecipe.acquisition.kind !== 'registry') {
   throw new Error('shadow-registry builtin lightningcss recipe is missing');
@@ -44,9 +44,18 @@ if (!lightningcssRecipe || lightningcssRecipe.acquisition.kind !== 'registry') {
 export const bakedOverrides: OverrideMap = {
   // bcrypt's native bindings don't load in the browser; bcryptjs is a drop-in.
   bcrypt: 'bcryptjs',
-  // Vite 8 imports lightningcss lazily. The native package loads `.node`
-  // bindings; lightningcss-wasm ships the same NAPI surface backed by WASM.
-  lightningcss: `${lightningcssRecipe.acquisition.name}@${lightningcssRecipe.acquisition.version}`,
+  ...Object.fromEntries(
+    builtinShadowSubstitutionCatalog.recipes.flatMap((recipe) =>
+      recipe.acquisition.kind === 'registry'
+        ? [
+            [
+              recipe.trigger.name,
+              `${recipe.acquisition.name}@${recipe.acquisition.version}`,
+            ] as const,
+          ]
+        : [],
+    ),
+  ),
 };
 
 // ONE mode-independent rollup native entry (ADR-0188): always the real WASM

@@ -13,6 +13,10 @@
 
 ### Changed (Workbench extraction)
 
+- Baked Vite 7, Vite 8, and TypeScript snapshots now carry recipe-v2 catalog,
+  materialization-bin, and replay identities. Live-registry rebake changed no
+  package versions; Vite 8 additionally records its retained Rolldown WASI
+  optional edge (ADR-0323).
 - Instant Vite 7 restores still skip `npm install`, but an empty verified
   runtime CAS now has an explicit two-request esbuild-wasm acquisition contract
   and loud `ESHADOWASSET/acquire` offline failure; warm CAS and Vite 8 are

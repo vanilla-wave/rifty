@@ -1,10 +1,14 @@
 {
-  "schema": 1,
-  "id": "rifty.shadow-substitutions.builtin.v1",
+  "schema": 2,
+  "id": "rifty.shadow-substitutions.builtin.v2",
   "recipes": [
     {
-      "schema": 1,
-      "id": "rifty.shadow-substitution.esbuild.v1",
+      "schema": 2,
+      "id": "rifty.shadow-substitution.esbuild.v2",
+      "admission": {
+        "kind": "semver-admits",
+        "unsupportedFeature": "esbuild.version"
+      },
       "trigger": {
         "name": "esbuild",
         "version": "0.28.0"
@@ -15,6 +19,9 @@
       "materialization": {
         "name": "esbuild",
         "version": "0.28.0",
+        "bin": {
+          "esbuild": "bin/esbuild"
+        },
         "files": [
           {
             "path": "bin/esbuild",
@@ -30,9 +37,9 @@
           },
           {
             "path": "package.json",
-            "content": "{\n  \"name\": \"esbuild\",\n  \"version\": \"0.28.0\",\n  \"main\": \"./lib/main.cjs\",\n  \"module\": \"./lib/main.cjs\",\n  \"type\": \"commonjs\",\n  \"bin\": {\n    \"esbuild\": \"./bin/esbuild\"\n  },\n  \"exports\": {\n    \".\": {\n      \"import\": \"./lib/main.cjs\",\n      \"require\": \"./lib/main.cjs\",\n      \"default\": \"./lib/main.cjs\"\n    }\n  }\n}",
-            "sha256": "6ea61c374d8c8681e86b0e950c4c87dea840996284709d35af7e799169e064ab",
-            "bytes": 313
+            "content": "{\n  \"name\": \"esbuild\",\n  \"version\": \"0.28.0\",\n  \"main\": \"./lib/main.cjs\",\n  \"module\": \"./lib/main.cjs\",\n  \"type\": \"commonjs\",\n  \"bin\": {\n    \"esbuild\": \"bin/esbuild\"\n  },\n  \"exports\": {\n    \".\": {\n      \"import\": \"./lib/main.cjs\",\n      \"require\": \"./lib/main.cjs\",\n      \"default\": \"./lib/main.cjs\"\n    }\n  }\n}",
+            "sha256": "c755bf4526fbd1674960b6da1ace508b5362cb9759aeb342da187852d0a390ea",
+            "bytes": 311
           }
         ]
       },
@@ -42,11 +49,15 @@
           "esbuild-wasm@0.28.0/package/esbuild.wasm"
         ]
       },
-      "digest": "0cf34400121b3ddd82ed19aa2b30c2ecd6e3e7a8c573aeba64155652f78167e6"
+      "digest": "0d8bdcbf6317aa855da9cf0e8848ee081f3ece2b1b20b1d9b83a38d5bc9f4564"
     },
     {
-      "schema": 1,
-      "id": "rifty.shadow-substitution.lightningcss.v1",
+      "schema": 2,
+      "id": "rifty.shadow-substitution.lightningcss.v2",
+      "admission": {
+        "kind": "semver-admits",
+        "unsupportedFeature": "lightningcss.version"
+      },
       "trigger": {
         "name": "lightningcss",
         "version": "1.32.0"
@@ -54,11 +65,21 @@
       "acquisition": {
         "kind": "registry",
         "name": "lightningcss-wasm",
-        "version": "1.32.0"
+        "version": "1.32.0",
+        "dependencyProjection": {
+          "dependencies": {
+            "napi-wasm": "^1.0.1"
+          },
+          "optionalDependencies": {},
+          "omittedOptionalDependencies": {},
+          "peerDependencies": {},
+          "unsupportedFeature": "lightningcss.acquisitionDependencies"
+        }
       },
       "materialization": {
         "name": "lightningcss",
         "version": "1.32.0",
+        "bin": {},
         "files": [
           {
             "path": "index.cjs",
@@ -80,7 +101,7 @@
           }
         ]
       },
-      "digest": "0dd089ff66e159b0b53cfd90857ac02ea1d4f32dc97b483d9ed300f0dabe2d4e"
+      "digest": "20d81fbeb4afcaed82801f2413ed3f627cb1315752f880dca7a921ade2e78e07"
     }
   ],
   "assets": [
@@ -98,5 +119,5 @@
       "maxUnpackedBytes": 14483968
     }
   ],
-  "digest": "0eb5dc4c53231efcbfca5c5b6aca6bc203f3013d5168b6e190a9bcf0152993ac"
+  "digest": "5d8462c761268643956d81b299007e536238484a48de11c6d9d16f9a16f818dc"
 }

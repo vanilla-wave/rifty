@@ -8,12 +8,13 @@
  * there. Placement is decided in `installer.ts` (`walkAndPin`), not here.
  */
 
-import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
+import { type Vfs, joinPath } from '@riftydev/vfs';
 import {
   type ShadowAssetPlan,
   type ShadowSubstitutionLockfileTrace,
   createShadowSubstitutionLockfileTrace,
 } from './internal/shadow/planner.ts';
+import { linkPackageBins } from './package-bin.ts';
 
 export interface ResolvedPackage {
   name: string;
@@ -102,76 +103,18 @@ async function linkTree(
     );
     checkpoint();
     if (failures.length > 0) throw failures[0];
-    await linkBins(vfs, root, target, pkg, checkpoint);
+    await linkPackageBins(
+      vfs,
+      root,
+      {
+        name: pkg.name,
+        installPath: relPath,
+        bin: pkg.bin,
+      },
+      checkpoint,
+    );
     checkpoint();
   }
-}
-
-const shimEncoder = new TextEncoder();
-
-async function linkBins(
-  vfs: Vfs,
-  root: string,
-  packageRoot: string,
-  pkg: ResolvedPackage,
-  checkpoint: () => void,
-): Promise<void> {
-  const installPath = pkg.installPath ?? `node_modules/${pkg.name}`;
-  const bins = normalizeBin(pkg.name, pkg.bin);
-  const entries = Object.entries(bins);
-  if (entries.length === 0) return;
-
-  const binDir = joinPath(root, packageNodeModulesDir(installPath, pkg.name), '.bin');
-  await vfs.mkdir(binDir, { recursive: true });
-  checkpoint();
-  for (const [command, target] of entries) {
-    checkpoint();
-    const relTarget = normalizeBinTarget(target);
-    // Existence check: a manifest pointing at a file the tarball lacks fails
-    // loudly here rather than at first exec.
-    await vfs.readFile(joinPath(packageRoot, relTarget));
-    checkpoint();
-    // Launcher shim, NOT a byte copy (ADR-0050: no symlinks). A copy breaks the
-    // moment the bin does a relative require/import (vite's bin/vite.js loads
-    // '../dist/...'): relative resolution must happen at the REAL file's path.
-    // Dynamic import() loads both CJS and ESM targets.
-    const shim = `#!/usr/bin/env node\nimport('../${pkg.name}/${relTarget}');\n`;
-    await vfs.writeFile(joinPath(binDir, command), shimEncoder.encode(shim));
-    checkpoint();
-  }
-}
-
-function packageNodeModulesDir(installPath: string, packageName: string): string {
-  const suffix = `node_modules/${packageName}`;
-  if (!installPath.endsWith(suffix)) {
-    throw new Error(`Invalid package installPath for ${packageName}: ${installPath}`);
-  }
-  return installPath.slice(0, installPath.length - packageName.length - 1);
-}
-
-function normalizeBin(name: string, bin: ResolvedPackage['bin']): Record<string, string> {
-  if (!bin) return {};
-  if (typeof bin === 'string') return { [defaultBinName(name)]: bin };
-  const out: Record<string, string> = {};
-  for (const [command, target] of Object.entries(bin)) {
-    if (command.includes('/') || command === '' || typeof target !== 'string' || target === '') {
-      continue;
-    }
-    out[command] = target;
-  }
-  return out;
-}
-
-function defaultBinName(name: string): string {
-  return name.startsWith('@') ? (name.split('/')[1] ?? name) : name;
-}
-
-function normalizeBinTarget(target: string): string {
-  const normalized = normalizePath(target.replace(/^\.\//, ''));
-  if (normalized.startsWith('/') || normalized === '..' || normalized.startsWith('../')) {
-    throw new Error(`Invalid package bin target: ${target}`);
-  }
-  return normalized;
 }
 
 /** Lockfile shape — npm-compatible "v3"-ish subset. */
@@ -191,6 +134,7 @@ export interface LockfileEntry {
   resolved?: string;
   integrity?: string;
   dependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
   bin?: string | Record<string, string>;
   /**
    * Persisted so the fast path can run the post-install missing-peer warn
@@ -216,6 +160,7 @@ export function buildLockfile(
   packages: readonly (ResolvedPackage & {
     resolved?: string;
     integrity?: string;
+    optionalDependencies?: Record<string, string>;
     peerDependencies?: Record<string, string>;
   })[],
 ): Lockfile {
@@ -243,6 +188,9 @@ export function buildLockfile(
     };
     if (p.resolved) entry.resolved = p.resolved;
     if (p.integrity) entry.integrity = p.integrity;
+    if (p.optionalDependencies && Object.keys(p.optionalDependencies).length > 0) {
+      entry.optionalDependencies = p.optionalDependencies;
+    }
     if (p.bin) entry.bin = p.bin;
     if (p.peerDependencies && Object.keys(p.peerDependencies).length > 0) {
       entry.peerDependencies = p.peerDependencies;
@@ -275,6 +223,9 @@ export function buildInstallLockfile(
       lockfile.packages[substitution.materialization.installPath] = entry;
     } else if (entry.version !== substitution.materialization.version) {
       throw new TypeError(`shadow substitution ${substitution.substitutionId} entry drifted`);
+    }
+    if (Object.keys(substitution.materialization.bin).length > 0) {
+      entry.bin = { ...substitution.materialization.bin };
     }
     entry.riftyShadowRecipe = substitution.substitutionId;
   }

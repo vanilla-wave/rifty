@@ -121,8 +121,14 @@ export function lockfileSubgraph(lockfile: Lockfile, roots: string[]): Set<strin
     for (const path of paths) {
       const entry = lockfile.packages[path];
       if (!entry) continue;
-      for (const dep of Object.keys(entry.dependencies ?? {})) {
-        queue.push(dep);
+      for (const edges of [
+        entry.dependencies,
+        entry.optionalDependencies,
+        entry.peerDependencies,
+      ]) {
+        for (const dep of Object.keys(edges ?? {})) {
+          queue.push(dep);
+        }
       }
     }
   }

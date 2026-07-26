@@ -9,6 +9,8 @@ import {
   shadowDigest,
 } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import { linkPackageBins } from '../../package-bin.ts';
+import { assertShadowRecipeAdmission } from './admission.ts';
 
 export type ShadowSubstitutionCatalog = typeof builtinShadowSubstitutionCatalog;
 
@@ -30,6 +32,7 @@ export interface AppliedShadowSubstitution {
     installPath: string;
     name: string;
     version: string;
+    bin: Readonly<Record<string, string>>;
     files: readonly Readonly<{ path: string; sha256: string; bytes: number }>[];
   }>;
   readonly binding?: Readonly<{ adapterId: string; assets: readonly string[] }>;
@@ -95,6 +98,25 @@ function text(value: unknown, label: string): string {
   return value;
 }
 
+function stringRecord(value: unknown, label: string): Record<string, string> {
+  const input = plain(value, label);
+  if (
+    Object.values(Object.getOwnPropertyDescriptors(input)).some(
+      (descriptor) => descriptor.enumerable !== true,
+    )
+  ) {
+    throw new TypeError(`${label} has non-enumerable fields`);
+  }
+  const output: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(input)) {
+    if (key.length === 0 || typeof entry !== 'string' || entry.length === 0) {
+      throw new TypeError(`${label} is invalid`);
+    }
+    output[key] = entry;
+  }
+  return output;
+}
+
 function strictIntegrity(value: unknown, label: string): string {
   const result = text(value, label);
   if (!SRI.test(result)) throw new TypeError(`${label} is not canonical SRI`);
@@ -147,6 +169,7 @@ function materializationFact(recipe: BuiltinShadowSubstitutionRecipe, installPat
     installPath,
     name: recipe.materialization.name,
     version: recipe.materialization.version,
+    bin: { ...recipe.materialization.bin },
     files: recipe.materialization.files.map(({ path, sha256, bytes }) => ({ path, sha256, bytes })),
   };
 }
@@ -201,6 +224,7 @@ export function attestBuiltinShadowSubstitution(
     throw new TypeError('shadow requestedRange must be a non-empty string or null');
   }
   const recipe = recipeForTrigger(catalog, name, version);
+  assertShadowRecipeAdmission(recipe, requestedRange);
   const fact: AppliedShadowSubstitution = {
     catalog: {
       id: catalog.id,
@@ -270,9 +294,10 @@ function decodeApplied(
   const acquisition = acquisitionFact(recipe, raw.acquisition);
   const materialization = exact(
     raw.materialization,
-    ['files', 'installPath', 'name', 'version'],
+    ['bin', 'files', 'installPath', 'name', 'version'],
     'applied materialization',
   );
+  const suppliedBin = stringRecord(materialization.bin, 'applied materialization bin');
   const suppliedFiles = decodeDenseDataArray(
     materialization.files,
     'applied materialization files',
@@ -330,6 +355,7 @@ function decodeApplied(
       installPath,
       name: text(materialization.name, 'applied materialization name'),
       version: text(materialization.version, 'applied materialization version'),
+      bin: suppliedBin,
       files: suppliedFiles,
     },
     ...(suppliedBinding ? { binding: suppliedBinding } : {}),
@@ -497,7 +523,7 @@ export function decodeShadowAssetPlan(
   return plan;
 }
 
-export const SHADOW_LOCKFILE_PROTOCOL = 'rifty.shadow-substitutions/v1' as const;
+export const SHADOW_LOCKFILE_PROTOCOL = 'rifty.shadow-substitutions/v2' as const;
 const SHADOW_RESOLVED_PREFIX = 'rifty:shadow-substitution/';
 
 export interface ShadowSubstitutionLockfileTrace {
@@ -562,6 +588,7 @@ function registryAcquisitionInstallPath(substitution: AppliedShadowSubstitution)
 function validateLockfileEntryProvenance(
   packages: Record<string, unknown>,
   substitution: AppliedShadowSubstitution,
+  catalog: ShadowSubstitutionCatalog,
 ): void {
   const materializationPath = substitution.materialization.installPath;
   const entry = plain(
@@ -574,6 +601,20 @@ function validateLockfileEntryProvenance(
   ) {
     throw brokenShadowTrace(
       `shadow substitution ${substitution.substitutionId} does not match its materialized lockfile entry`,
+    );
+  }
+  const materializationBin = substitution.materialization.bin;
+  const hasMaterializationBin = Object.keys(materializationBin).length > 0;
+  const suppliedMaterializationBin = Object.hasOwn(entry, 'bin')
+    ? stringRecord(entry.bin, `lockfile package ${materializationPath} bin`)
+    : undefined;
+  if (
+    hasMaterializationBin !== (suppliedMaterializationBin !== undefined) ||
+    (hasMaterializationBin &&
+      canonicalShadowJson(suppliedMaterializationBin) !== canonicalShadowJson(materializationBin))
+  ) {
+    throw brokenShadowTrace(
+      `shadow substitution ${substitution.substitutionId} materialized bin drifted`,
     );
   }
 
@@ -596,6 +637,46 @@ function validateLockfileEntryProvenance(
   ) {
     throw brokenShadowTrace(
       `registry shadow substitution ${substitution.substitutionId} does not match its acquisition entry`,
+    );
+  }
+  const recipe = catalog.recipes.find((candidate) => candidate.id === substitution.substitutionId);
+  if (!recipe || recipe.acquisition.kind !== 'registry') {
+    throw brokenShadowTrace(
+      `registry shadow substitution ${substitution.substitutionId} recipe is unavailable`,
+    );
+  }
+  const projection = recipe.acquisition.dependencyProjection;
+  const dependencies = Object.hasOwn(acquisitionEntry, 'dependencies')
+    ? stringRecord(
+        acquisitionEntry.dependencies,
+        `lockfile package ${acquisitionPath} dependencies`,
+      )
+    : {};
+  const optionalDependencies = Object.hasOwn(acquisitionEntry, 'optionalDependencies')
+    ? stringRecord(
+        acquisitionEntry.optionalDependencies,
+        `lockfile package ${acquisitionPath} optionalDependencies`,
+      )
+    : {};
+  const peerDependencies = Object.hasOwn(acquisitionEntry, 'peerDependencies')
+    ? stringRecord(
+        acquisitionEntry.peerDependencies,
+        `lockfile package ${acquisitionPath} peerDependencies`,
+      )
+    : {};
+  if (
+    canonicalShadowJson(dependencies) !== canonicalShadowJson(projection.dependencies) ||
+    canonicalShadowJson(optionalDependencies) !==
+      canonicalShadowJson(projection.optionalDependencies) ||
+    canonicalShadowJson(peerDependencies) !== canonicalShadowJson(projection.peerDependencies)
+  ) {
+    throw brokenShadowTrace(
+      `registry shadow substitution ${substitution.substitutionId} dependency projection drifted`,
+    );
+  }
+  if (acquisitionPath !== materializationPath && Object.hasOwn(acquisitionEntry, 'bin')) {
+    throw brokenShadowTrace(
+      `registry shadow substitution ${substitution.substitutionId} acquisition bin leaked`,
     );
   }
   if (
@@ -644,7 +725,7 @@ export function planShadowSubstitutionsFromLockfile(
     ).map((entry) => decodeApplied(entry, catalog));
     const plan = planTrustedAppliedShadowSubstitutions(suppliedApplied, catalog);
     for (const substitution of plan.substitutions) {
-      validateLockfileEntryProvenance(packages, substitution);
+      validateLockfileEntryProvenance(packages, substitution, catalog);
     }
     for (const [installPath, entryValue] of Object.entries(packages)) {
       if (
@@ -689,6 +770,7 @@ export async function materializeRegistryShadowSubstitutions(
   plan: ShadowAssetPlan,
   report: (line: string) => void,
   catalog: ShadowSubstitutionCatalog = builtinShadowSubstitutionCatalog,
+  checkpoint: () => void = () => {},
 ): Promise<void> {
   if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
     throw new TypeError('trusted shadow plan invariant failed');
@@ -703,10 +785,22 @@ export async function materializeRegistryShadowSubstitutions(
         `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,
       );
     for (const file of recipe.materialization.files) {
+      checkpoint();
       const path = joinPath(root, `${substitution.materialization.installPath}/${file.path}`);
       await vfs.mkdir(path.slice(0, path.lastIndexOf('/')), { recursive: true });
       await vfs.writeFile(path, new TextEncoder().encode(file.content));
     }
+    await linkPackageBins(
+      vfs,
+      root,
+      {
+        name: recipe.materialization.name,
+        installPath: substitution.materialization.installPath,
+        bin: recipe.materialization.bin,
+      },
+      checkpoint,
+    );
+    checkpoint();
     report(
       `npm: ${substitution.trigger.name}@${substitution.trigger.requestedRange ?? '*'} materialized from shadow registry (${substitution.substitutionId})`,
     );

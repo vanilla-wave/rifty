@@ -50,24 +50,38 @@ class RejectingRegistry extends RegistryClient {
 }
 
 class LightningRegistry extends RegistryClient {
-  readonly #tarball: Uint8Array;
+  readonly #tarballs: ReadonlyMap<string, Uint8Array>;
   readonly #fields: Readonly<
     Pick<VersionManifest, 'dependencies' | 'optionalDependencies' | 'peerDependencies'>
   >;
+  readonly packumentReads: string[] = [];
   tarballReads = 0;
 
   constructor(
-    tarball: Uint8Array,
+    tarballs: ReadonlyMap<string, Uint8Array>,
     fields: Readonly<
       Pick<VersionManifest, 'dependencies' | 'optionalDependencies' | 'peerDependencies'>
     >,
   ) {
     super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
-    this.#tarball = tarball;
+    this.#tarballs = tarballs;
     this.#fields = fields;
   }
 
   override async getPackument(name: string): Promise<Packument> {
+    this.packumentReads.push(name);
+    if (name === 'napi-wasm') {
+      const manifest: VersionManifest = {
+        name,
+        version: '1.0.1',
+        dist: { tarball: 'https://registry.test/napi-wasm-1.0.1.tgz' },
+      };
+      return {
+        name,
+        'dist-tags': { latest: manifest.version },
+        versions: { [manifest.version]: manifest },
+      };
+    }
     if (name !== 'lightningcss-wasm') throw new Error(`unexpected registry package ${name}`);
     const manifest: VersionManifest = {
       name,
@@ -84,29 +98,35 @@ class LightningRegistry extends RegistryClient {
 
   override async getTarball(url: string): Promise<Uint8Array> {
     this.tarballReads += 1;
-    if (url !== 'https://registry.test/lightningcss-wasm-1.32.0.tgz') {
-      throw new Error(`unexpected registry tarball ${url}`);
-    }
-    return this.#tarball.slice();
+    const tarball = this.#tarballs.get(url);
+    if (!tarball) throw new Error(`unexpected registry tarball ${url}`);
+    return tarball.slice();
   }
 }
 
 async function lightningRegistry(
   fields: Readonly<
     Pick<VersionManifest, 'dependencies' | 'optionalDependencies' | 'peerDependencies'>
-  > = {},
+  > = { dependencies: { 'napi-wasm': '^1.0.1' } },
 ): Promise<LightningRegistry> {
-  const packageJson = new TextEncoder().encode(
-    JSON.stringify({ name: 'lightningcss-wasm', version: '1.32.0' }),
-  );
-  return new LightningRegistry(
-    await gzip(
+  const packageTarball = async (name: string, version: string): Promise<Uint8Array> => {
+    const packageJson = new TextEncoder().encode(JSON.stringify({ name, version }));
+    return await gzip(
       concat(
         buildHeader('package/package.json', packageJson.length),
         padToBlock(packageJson),
         TAR_TRAILER,
       ),
-    ),
+    );
+  };
+  return new LightningRegistry(
+    new Map([
+      [
+        'https://registry.test/lightningcss-wasm-1.32.0.tgz',
+        await packageTarball('lightningcss-wasm', '1.32.0'),
+      ],
+      ['https://registry.test/napi-wasm-1.0.1.tgz', await packageTarball('napi-wasm', '1.0.1')],
+    ]),
     fields,
   );
 }
@@ -1225,6 +1245,78 @@ describe('shadow substitution installer boundary', () => {
       feature: 'lightningcss.acquisitionDependencies',
     });
     expect(registry.tarballReads).toBe(0);
+  });
+
+  it('[fault: sibling-drift] gives the registry recipe sole admission authority on fresh and replay', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const registry = await lightningRegistry();
+
+    await expect(
+      install(
+        'fixture',
+        '1.0.0',
+        { lightningcss: '^2.0.0' },
+        { vfs, cwd: '/project', registry, onSubstitution: () => {} },
+      ),
+    ).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'lightningcss.version',
+    });
+    expect(registry.packumentReads).toEqual([]);
+    expect(registry.tarballReads).toBe(0);
+    await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
+
+    await install(
+      'fixture',
+      '1.0.0',
+      { lightningcss: '^1.32.0' },
+      { vfs, cwd: '/project', registry, onSubstitution: () => {} },
+    );
+    const lockBefore = await vfs.readFile('/project/package-lock.json');
+    registry.packumentReads.length = 0;
+    registry.tarballReads = 0;
+
+    await expect(
+      install(
+        'fixture',
+        '1.0.0',
+        { lightningcss: '^2.0.0' },
+        { vfs, cwd: '/project', registry, onSubstitution: () => {} },
+      ),
+    ).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'lightningcss.version',
+    });
+    expect(registry.packumentReads).toEqual([]);
+    expect(registry.tarballReads).toBe(0);
+    expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
+  });
+
+  it('[fault: sibling-drift] lets an explicit user override bypass builtin recipe admission', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const registry = await contractRegistry();
+
+    const result = await install(
+      'fixture',
+      '1.0.0',
+      { lightningcss: '^2.0.0' },
+      {
+        vfs,
+        cwd: '/project',
+        registry,
+        overrides: { lightningcss: `${CONTRACT_SOURCE}@${CONTRACT_VERSION}` },
+        onSubstitution: () => {},
+      },
+    );
+
+    expect(result.lockfile.rifty?.shadowSubstitutions.applied ?? []).toEqual([]);
+    expect(result.lockfile.packages['node_modules/contract-source']?.version).toBe(
+      CONTRACT_VERSION,
+    );
+    await expect(vfs.exists('/project/node_modules/lightningcss')).resolves.toBe(false);
   });
 
   it('[fault: torn-state] stops registry alias writes before success and retry reconciles exact bytes', async () => {

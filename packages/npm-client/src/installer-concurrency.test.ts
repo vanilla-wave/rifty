@@ -410,6 +410,24 @@ describe('install — optional-dep fetch failure stays non-fatal under concurren
         m.includes('optional dependency opt@1.0.0 of main could not be installed'),
       ),
     ).toBe(true);
+
+    // Publication must describe the salvaged graph, not the source manifest's
+    // missing required edge; otherwise the next lockfile replay is EBROKENLOCK.
+    expect(result.lockfile.packages['node_modules/main']?.optionalDependencies).toEqual({
+      opt: '1.0.0',
+    });
+    expect(result.lockfile.packages['node_modules/opt']?.dependencies).toEqual({
+      gcOK: '1.0.0',
+    });
+    const lockBefore = await vfs.readFile('/proj/package-lock.json');
+    const replay = await install(
+      'root',
+      '1.0.0',
+      { main: '1.0.0' },
+      { vfs, cwd: '/proj', registry },
+    );
+    expect(replay.lockfile).toEqual(result.lockfile);
+    expect(await vfs.readFile('/proj/package-lock.json')).toEqual(lockBefore);
   });
 
   it('a failed REQUIRED dep fetch still rejects the install', async () => {

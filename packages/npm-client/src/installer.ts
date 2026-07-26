@@ -66,6 +66,10 @@ import {
   readExistingLockfile,
   writeLockfileIfChanged,
 } from './installer-lockfile-reader.ts';
+import {
+  assertShadowRecipeAdmission,
+  shadowRecipeAdmitsRequest,
+} from './internal/shadow/admission.ts';
 import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
 import {
   type AppliedShadowSubstitution,
@@ -82,7 +86,7 @@ import {
   buildInstallLockfile,
   linkInstallTree,
 } from './linker.ts';
-import { type OverrideMap, type ResolvedOverrideTarget, resolveOverride } from './overrides.ts';
+import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import {
@@ -293,6 +297,7 @@ export interface InstallAcquisitionProvenance {
 type PinnedPackage = ResolvedPackage & {
   resolved?: string;
   integrity?: string;
+  optionalDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
   installPath: string;
 };
@@ -462,8 +467,6 @@ export async function installWithShadowAuthority(
 ): Promise<InstallResult> {
   const dependencies = { ...request.dependencies };
   const optionalDependencies = { ...(request.optionalDependencies ?? {}) };
-  assertRegistryDependencySpecs(dependencies, optionalDependencies);
-  assertRegistryOverrideTargets(request.opts.overrides);
   return await installNormalized(
     {
       rootName: request.rootName,
@@ -488,6 +491,15 @@ async function installNormalized(
     opts,
   } = request;
   throwIfAborted(opts.signal);
+  assertRegistryOverrideTargets(opts.overrides);
+  assertDirectShadowRecipeAdmissions(
+    dependencies,
+    optionalDependencies,
+    rootName,
+    opts.overrides,
+    authority,
+  );
+  assertRegistryDependencySpecs(dependencies, optionalDependencies);
   const tarballCache: TarballCache = opts.tarballCache ?? new VfsTarballCache(opts.vfs);
   const fetchCtx: FetchAndUnpackCtx = {
     cache: tarballCache,
@@ -581,6 +593,7 @@ async function installNormalized(
       rootName,
       fetchCtx,
       authority,
+      opts.overrides,
       (event) => {
         cacheHits.set(`${event.name}@${event.version}`, event.cacheHit);
         opts.onPackage?.(event);
@@ -647,6 +660,7 @@ async function installNormalized(
     shadowPlan,
     substitutions.line,
     authority.catalog,
+    () => throwIfAborted(opts.signal),
   );
   throwIfAborted(opts.signal);
   // ADR-0188: install-time internals shims into the actual installed dirs —
@@ -769,8 +783,6 @@ async function normalizeInstallArgs(
   dependencies ??= {};
   rootName ??= 'root';
   normalizedRootVersion ??= '0.0.0';
-  assertRegistryDependencySpecs(dependencies, optionalDependencies);
-  assertRegistryOverrideTargets(opts.overrides);
   return { rootName, rootVersion: normalizedRootVersion, dependencies, optionalDependencies, opts };
 }
 
@@ -1404,63 +1416,111 @@ function resolveEffectivePackageRequestWithAuthority(
   userOverrides: OverrideMap | undefined,
   authority: ShadowInstallAuthority,
 ): ReturnType<typeof resolveEffectivePackageRequest> {
-  if (authority === BUILTIN_SHADOW_INSTALL_AUTHORITY) {
-    return resolveEffectivePackageRequest(name, range, parent, userOverrides);
-  }
   const override = resolveOverride(name, parent, userOverrides, authority.builtinOverrides);
-  return {
+  const request = {
     override,
     effectiveName: override?.name ?? name,
     effectiveRange: override?.range ?? range,
   };
+  if (
+    authority === BUILTIN_SHADOW_INSTALL_AUTHORITY &&
+    recipeCandidatesForRequest(name, request.override, request.effectiveName, authority).length ===
+      0
+  ) {
+    return resolveEffectivePackageRequest(name, range, parent, userOverrides);
+  }
+  return request;
+}
+
+function recipeCandidatesForRequest(
+  name: string,
+  override: ReturnType<typeof resolveEffectivePackageRequest>['override'],
+  effectiveName: string,
+  authority: ShadowInstallAuthority,
+): readonly BuiltinShadowSubstitutionRecipe[] {
+  return authority.catalog.recipes.filter(
+    (recipe) =>
+      recipe.trigger.name === name &&
+      (recipe.acquisition.kind === 'synthetic'
+        ? override === null
+        : override?.source === 'baked' &&
+          recipe.acquisition.name === effectiveName &&
+          recipe.acquisition.version === override.range),
+  );
+}
+
+function builtinRecipeForRequest(
+  name: string,
+  range: string | null,
+  parent: string | undefined,
+  userOverrides: OverrideMap | undefined,
+  authority: ShadowInstallAuthority,
+): BuiltinShadowSubstitutionRecipe | null {
+  const { override, effectiveName } = resolveEffectivePackageRequestWithAuthority(
+    name,
+    range,
+    parent,
+    userOverrides,
+    authority,
+  );
+  const candidates = recipeCandidatesForRequest(name, override, effectiveName, authority);
+  if (candidates.length === 0) return null;
+  const match = candidates.find((recipe) => shadowRecipeAdmitsRequest(recipe, range));
+  if (match) return match;
+  assertShadowRecipeAdmission(candidates[0]!, range);
+  throw new TypeError('unreachable shadow recipe admission');
 }
 
 function syntheticRecipeForRequest(
   name: string,
   range: string | null,
   parent: string | undefined,
-  overrides: OverrideMap | undefined,
+  userOverrides: OverrideMap | undefined,
   authority: ShadowInstallAuthority,
 ): BuiltinShadowSubstitutionRecipe | null {
-  const { override } = resolveEffectivePackageRequestWithAuthority(
-    name,
-    range,
-    parent,
-    overrides,
-    authority,
-  );
-  if (override !== null) return null;
-  const candidates = authority.catalog.recipes.filter(
-    (recipe) => recipe.acquisition.kind === 'synthetic' && recipe.trigger.name === name,
-  );
-  if (candidates.length === 0) return null;
-  const match = candidates.find((recipe) => matchesRange(recipe.trigger.version, range));
-  if (match) return match;
-  throw new NotImplementedError(
-    `shadow-registry.${name}@${range ?? '*'}`,
-    'no built-in synthetic recipe admits the requested version range',
-  );
+  const recipe = builtinRecipeForRequest(name, range, parent, userOverrides, authority);
+  return recipe?.acquisition.kind === 'synthetic' ? recipe : null;
+}
+
+function assertDirectShadowRecipeAdmissions(
+  dependencies: Record<string, string>,
+  optionalDependencies: Record<string, string>,
+  rootName: string,
+  userOverrides: OverrideMap | undefined,
+  authority: ShadowInstallAuthority,
+): void {
+  for (const requests of [dependencies, optionalDependencies]) {
+    for (const [name, range] of Object.entries(requests)) {
+      builtinRecipeForRequest(name, range, rootName, userOverrides, authority);
+    }
+  }
 }
 
 function registryRecipeForResolution(
   requestedName: string,
   requestedRange: string | null,
-  override: ResolvedOverrideTarget | null,
+  parent: string | undefined,
+  userOverrides: OverrideMap | undefined,
   effectiveName: string,
   version: string,
   authority: ShadowInstallAuthority,
 ): BuiltinShadowSubstitutionRecipe | null {
-  if (override?.source !== 'baked') return null;
-  return (
-    authority.catalog.recipes.find(
-      (recipe) =>
-        recipe.acquisition.kind === 'registry' &&
-        recipe.trigger.name === requestedName &&
-        matchesRange(recipe.trigger.version, requestedRange) &&
-        recipe.acquisition.name === effectiveName &&
-        recipe.acquisition.version === version,
-    ) ?? null
+  const recipe = builtinRecipeForRequest(
+    requestedName,
+    requestedRange,
+    parent,
+    userOverrides,
+    authority,
   );
+  if (
+    !recipe ||
+    recipe.acquisition.kind !== 'registry' ||
+    recipe.acquisition.name !== effectiveName ||
+    recipe.acquisition.version !== version
+  ) {
+    return null;
+  }
+  return recipe;
 }
 
 function syntheticResolvedIdentity(recipe: BuiltinShadowSubstitutionRecipe): string {
@@ -1501,21 +1561,64 @@ function syntheticManifest(recipe: BuiltinShadowSubstitutionRecipe): Readonly<{
     }
     return output;
   };
-  const binValue = manifest.bin;
-  let bin: string | Record<string, string> | undefined;
-  if (typeof binValue === 'string') bin = binValue;
-  else if (binValue !== undefined) {
-    if (binValue === null || typeof binValue !== 'object' || Array.isArray(binValue)) {
-      throw new TypeError(`synthetic recipe ${recipe.id} bin is invalid`);
-    }
-    bin = record('bin');
-  }
   const peerDependencies = record('peerDependencies');
   return {
     dependencies: record('dependencies'),
     optionalDependencies: record('optionalDependencies'),
     ...(Object.keys(peerDependencies).length === 0 ? {} : { peerDependencies }),
-    ...(bin === undefined ? {} : { bin }),
+    ...(Object.keys(recipe.materialization.bin).length === 0
+      ? {}
+      : { bin: { ...recipe.materialization.bin } }),
+  };
+}
+
+function sameDependencyMap(
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Record<string, string>>,
+): boolean {
+  const leftEntries = Object.entries(left).sort(([a], [b]) => a.localeCompare(b));
+  const rightEntries = Object.entries(right).sort(([a], [b]) => a.localeCompare(b));
+  return (
+    leftEntries.length === rightEntries.length &&
+    leftEntries.every(
+      ([name, range], index) =>
+        rightEntries[index]?.[0] === name && rightEntries[index]?.[1] === range,
+    )
+  );
+}
+
+function projectedRegistryManifest(
+  recipe: BuiltinShadowSubstitutionRecipe,
+  manifest: VersionManifest,
+): Readonly<{
+  dependencies: Record<string, string>;
+  optionalDependencies: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+}> {
+  if (recipe.acquisition.kind !== 'registry') {
+    throw new TypeError(`shadow recipe ${recipe.id} is not registry-backed`);
+  }
+  const projection = recipe.acquisition.dependencyProjection;
+  const expectedOptionalDependencies = {
+    ...projection.optionalDependencies,
+    ...projection.omittedOptionalDependencies,
+  };
+  if (
+    !sameDependencyMap(manifest.dependencies ?? {}, projection.dependencies) ||
+    !sameDependencyMap(manifest.optionalDependencies ?? {}, expectedOptionalDependencies) ||
+    !sameDependencyMap(manifest.peerDependencies ?? {}, projection.peerDependencies)
+  ) {
+    throw new NotImplementedError(
+      projection.unsupportedFeature,
+      `registry metadata for ${recipe.acquisition.name}@${recipe.acquisition.version} drifted from the shadow recipe`,
+    );
+  }
+  return {
+    dependencies: { ...projection.dependencies },
+    optionalDependencies: { ...projection.optionalDependencies },
+    ...(Object.keys(projection.peerDependencies).length === 0
+      ? {}
+      : { peerDependencies: { ...projection.peerDependencies } }),
   };
 }
 
@@ -1618,7 +1721,15 @@ function lockfileReuseDecision(
   }
   const recipe =
     synthetic ??
-    registryRecipeForResolution(name, range, override, effectiveName, hit.entry.version, authority);
+    registryRecipeForResolution(
+      name,
+      range,
+      ctx.parentName,
+      overrides,
+      effectiveName,
+      hit.entry.version,
+      authority,
+    );
   const materializationInstallPath = recipe
     ? shadowMaterializationInstallPath(hit.installPath, effectiveName, recipe.materialization.name)
     : undefined;
@@ -1688,7 +1799,8 @@ function analyzeLockfileRequest(
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
     }
-    const synthetic = syntheticRecipeForRequest(name, range, ctx.parentName, overrides, authority);
+    const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides, authority);
+    const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
     const { effectiveName } = resolveEffectivePackageRequestWithAuthority(
       name,
       range,
@@ -1713,6 +1825,14 @@ function analyzeLockfileRequest(
     };
     for (const [childName, childRange] of Object.entries(hit.entry.dependencies ?? {})) {
       visit(childName, childRange, childContext);
+    }
+    for (const [childName, childRange] of Object.entries(hit.entry.optionalDependencies ?? {})) {
+      visit(childName, childRange, childContext);
+    }
+    if (recipe?.acquisition.kind === 'registry') {
+      for (const [childName, childRange] of Object.entries(hit.entry.peerDependencies ?? {})) {
+        visit(childName, childRange, childContext);
+      }
     }
     for (const [companionName, companionRange] of Object.entries(
       companionRequestsFor(effectiveName, hit.entry.version),
@@ -1824,6 +1944,7 @@ async function walkAndPin(
   rootName: string,
   fetchCtx: FetchAndUnpackCtx,
   authority: ShadowInstallAuthority,
+  overrides: OverrideMap | undefined,
   onPackage?: (event: InstallProgressEvent) => void,
 ): Promise<Map<string, PinnedPackage>> {
   // Direct roots resolve first and surviving identities reserve flat slots
@@ -1920,7 +2041,7 @@ async function walkAndPin(
     // fetch failure warns-and-skips instead of aborting, with this descriptor.
     optional: { depName: string; depRange: string; parentName: string } | null,
     preparedPin?: ResolvedPin,
-  ): Promise<void> {
+  ): Promise<string> {
     return (async () => {
       const pin = preparedPin ?? (await source.resolve(name, range, ctx));
       // ADR-0188: a shimmed package outside its shim's proven range must fail
@@ -1966,7 +2087,7 @@ async function walkAndPin(
             { code: 'EINSTALLPATHCONFLICT', installPath },
           );
         }
-        return;
+        return installPath;
       }
       scheduled.set(installPath, key);
       const claimedFlat = flatSlotFreeBefore && installPath === `node_modules/${pin.name}`;
@@ -2053,6 +2174,12 @@ async function walkAndPin(
           warnOptional(desc, err);
         }
       }
+      if (pin.shadow?.recipe.acquisition.kind === 'registry' && pin.peerDependencies) {
+        prefetchPackuments(pin.peerDependencies, childContext);
+        for (const [depName, depRange] of Object.entries(pin.peerDependencies)) {
+          await visit(depName, depRange, childContext, optional);
+        }
+      }
       // ADR-0188: same-version companion pins for shadow internals shims
       // (rollup ↔ @rollup/wasm-node lockstep). Injected on BOTH sources —
       // replay re-derives them from (name, version); a pre-shim lockfile
@@ -2062,6 +2189,7 @@ async function walkAndPin(
       for (const [depName, depRange] of Object.entries(companions)) {
         await visit(depName, depRange, childContext, optional);
       }
+      return installPath;
     })();
   }
 
@@ -2168,6 +2296,61 @@ async function walkAndPin(
       warnOptional(optionalFailure, error);
     }
   }
+
+  // Reuse the lockfile request analyzer as the sole exact-path graph authority:
+  // successful acquisitions form a provisional tree; the existing traversal
+  // selects only nodes still reachable after optional failures.
+  const provisionalPackages = [...pinned.values()];
+  const provisionalShadowPlan = planTrustedAppliedShadowSubstitutions(
+    provisionalPackages.flatMap((pkg) => {
+      const substitution = pinnedShadowSubstitutions.get(pkg);
+      return substitution ? [substitution] : [];
+    }),
+    authority.catalog,
+  );
+  const provisionalLockfile = buildInstallLockfile(
+    rootName,
+    '0.0.0',
+    provisionalPackages,
+    provisionalShadowPlan,
+  );
+  const { reachablePaths } = analyzeLockfileRequest(
+    provisionalLockfile,
+    provisionalShadowPlan,
+    topLevelDependencies,
+    topLevelOptionalDependencies,
+    rootName,
+    overrides,
+    authority,
+  );
+  for (const [path] of pinned) {
+    if (!reachablePaths.has(path)) pinned.delete(path);
+  }
+  for (const [path, pkg] of pinned) {
+    const retained = (name: string, range: string): boolean => {
+      const { effectiveName, effectiveRange } = resolveEffectivePackageRequestWithAuthority(
+        name,
+        range,
+        pkg.name,
+        overrides,
+        authority,
+      );
+      const hit = pinnedEntryForParent(provisionalLockfile, effectiveName, path);
+      return (
+        hit !== undefined &&
+        reachablePaths.has(hit.installPath) &&
+        (rangeIsUnconstrained(effectiveRange) || matchesRange(hit.entry.version, effectiveRange))
+      );
+    };
+    pkg.dependencies = Object.fromEntries(
+      Object.entries(pkg.dependencies).filter(([name, range]) => retained(name, range)),
+    );
+    pkg.optionalDependencies = Object.fromEntries(
+      Object.entries(pkg.optionalDependencies ?? {}).filter(([name, range]) =>
+        retained(name, range),
+      ),
+    );
+  }
   return pinned;
 }
 
@@ -2260,6 +2443,7 @@ async function pinToPackage(
     version: pin.version,
     files,
     dependencies: pin.dependencies,
+    optionalDependencies: pin.optionalDependencies,
     bin: pin.bin,
     resolved: pin.resolved,
     installPath,
@@ -2393,7 +2577,15 @@ function createLockfileSource(
       }
       const shadowRecipe =
         synthetic ??
-        registryRecipeForResolution(name, range, override, effectiveName, entry.version, authority);
+        registryRecipeForResolution(
+          name,
+          range,
+          ctx.parentName,
+          opts.overrides,
+          effectiveName,
+          entry.version,
+          authority,
+        );
       const shadowFact = shadowRecipe
         ? replayedShadowFact(
             shadowPlan,
@@ -2432,8 +2624,7 @@ function createLockfileSource(
         dependencies: entry.dependencies ?? {},
         bin: entry.bin,
         peerDependencies: entry.peerDependencies,
-        // Optionals already filtered at lockfile-write time.
-        optionalDependencies: {},
+        optionalDependencies: entry.optionalDependencies ?? {},
         installPath,
         ...(shadowRecipe
           ? {
@@ -2540,7 +2731,14 @@ function createRegistrySource(
 
   return {
     prefetch(name, range, ctx): void {
-      if (syntheticRecipeForRequest(name, range, ctx.parentName, opts.overrides, authority)) {
+      const recipe = builtinRecipeForRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        authority,
+      );
+      if (recipe?.acquisition.kind === 'synthetic') {
         return;
       }
       const { effectiveName } = resolveEffectivePackageRequestWithAuthority(
@@ -2554,13 +2752,14 @@ function createRegistrySource(
     },
 
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const synthetic = syntheticRecipeForRequest(
+      const recipe = builtinRecipeForRequest(
         name,
         range,
         ctx.parentName,
         opts.overrides,
         authority,
       );
+      const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       if (synthetic) {
         const manifest = syntheticManifest(synthetic);
         substitutions.line(
@@ -2609,6 +2808,18 @@ function createRegistrySource(
       if (!manifest) {
         throw new Error(`Packument missing version manifest ${effectiveName}@${pick}`);
       }
+      const shadowRecipe = registryRecipeForResolution(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        effectiveName,
+        pick,
+        authority,
+      );
+      const shadowManifest = shadowRecipe
+        ? projectedRegistryManifest(shadowRecipe, manifest)
+        : undefined;
 
       // ADR-0188: baked redirects are never silent — user-visible provenance.
       if (override && override.source === 'baked' && override.name !== name) {
@@ -2636,24 +2847,17 @@ function createRegistrySource(
         }
       }
 
-      const shadowRecipe = registryRecipeForResolution(
-        name,
-        range,
-        override,
-        effectiveName,
-        pick,
-        authority,
-      );
       return {
         origin: 'metadata',
         name: effectiveName,
         version: pick,
         resolved: manifest.dist.tarball,
         integrity: expectedIntegrity,
-        dependencies: manifest.dependencies ?? {},
-        bin: manifest.bin,
-        peerDependencies: manifest.peerDependencies,
-        optionalDependencies: manifest.optionalDependencies ?? {},
+        dependencies: shadowManifest?.dependencies ?? manifest.dependencies ?? {},
+        bin: shadowRecipe ? undefined : manifest.bin,
+        peerDependencies: shadowManifest?.peerDependencies ?? manifest.peerDependencies,
+        optionalDependencies:
+          shadowManifest?.optionalDependencies ?? manifest.optionalDependencies ?? {},
         ...(shadowRecipe
           ? {
               shadow: {

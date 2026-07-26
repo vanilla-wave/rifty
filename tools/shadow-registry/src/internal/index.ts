@@ -7,6 +7,8 @@ export {
 export { builtinShadowSubstitutionCatalog } from './codec.ts';
 export type {
   BuiltinShadowSubstitutionRecipe,
+  ShadowDependencyProjection,
+  ShadowRecipeAdmission,
   ShadowRecipeAcquisition,
   ShadowRuntimeAsset,
 } from './model.ts';

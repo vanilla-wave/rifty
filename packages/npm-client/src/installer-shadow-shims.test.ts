@@ -576,17 +576,20 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     const recipeId = 'rifty.shadow-substitution.lightningcss.v2';
     const materializeLine = `npm: lightningcss@^1.32.0 materialized from shadow registry (${recipeId})`;
     const registry = new FakeRegistry(
-      db([
-        'lightningcss-wasm',
-        await makeEntry(
+      db(
+        [
           'lightningcss-wasm',
-          '1.32.0',
-          {},
-          {
-            'index.js': 'module.exports = { transform() {} };',
-          },
-        ),
-      ]),
+          await makeEntry(
+            'lightningcss-wasm',
+            '1.32.0',
+            { 'napi-wasm': '^1.0.1' },
+            {
+              'index.js': 'module.exports = { transform() {} };',
+            },
+          ),
+        ],
+        ['napi-wasm', await makeEntry('napi-wasm', '1.0.1')],
+      ),
     );
 
     const freshTrace: string[] = [];
@@ -602,7 +605,10 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     });
     expect(first.lockfile.packages['node_modules/lightningcss-wasm']).toMatchObject({
       version: '1.32.0',
+      dependencies: { 'napi-wasm': '^1.0.1' },
     });
+    expect(first.lockfile.packages['node_modules/napi-wasm']?.version).toBe('1.0.1');
+    expect(await vfs.exists('/proj/node_modules/napi-wasm/package.json')).toBe(true);
     expect(
       first.lockfile.rifty?.shadowSubstitutions.applied.map(
         (substitution) => substitution.substitutionId,

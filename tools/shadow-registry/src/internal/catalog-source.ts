@@ -26,7 +26,7 @@ export const ESBUILD_ALIAS_PACKAGE = JSON.stringify(
     main: './lib/main.cjs',
     module: './lib/main.cjs',
     type: 'commonjs',
-    bin: { esbuild: './bin/esbuild' },
+    bin: { esbuild: 'bin/esbuild' },
     exports: {
       '.': { import: './lib/main.cjs', require: './lib/main.cjs', default: './lib/main.cjs' },
     },
@@ -75,17 +75,22 @@ function file(path: string, content: string): ShadowMaterializationFile {
 }
 
 export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
-  schema: 1,
-  id: 'rifty.shadow-substitutions.builtin.v1',
+  schema: 2,
+  id: 'rifty.shadow-substitutions.builtin.v2',
   recipes: [
     {
-      schema: 1,
-      id: 'rifty.shadow-substitution.esbuild.v1',
+      schema: 2,
+      id: 'rifty.shadow-substitution.esbuild.v2',
+      admission: {
+        kind: 'semver-admits',
+        unsupportedFeature: 'esbuild.version',
+      },
       trigger: { name: 'esbuild', version: '0.28.0' },
       acquisition: { kind: 'synthetic' },
       materialization: {
         name: 'esbuild',
         version: '0.28.0',
+        bin: { esbuild: 'bin/esbuild' },
         files: [
           file('bin/esbuild', ESBUILD_ALIAS_BIN),
           file('lib/main.cjs', ESBUILD_ALIAS_MAIN),
@@ -98,13 +103,29 @@ export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
       },
     },
     {
-      schema: 1,
-      id: 'rifty.shadow-substitution.lightningcss.v1',
+      schema: 2,
+      id: 'rifty.shadow-substitution.lightningcss.v2',
+      admission: {
+        kind: 'semver-admits',
+        unsupportedFeature: 'lightningcss.version',
+      },
       trigger: { name: 'lightningcss', version: '1.32.0' },
-      acquisition: { kind: 'registry', name: 'lightningcss-wasm', version: '1.32.0' },
+      acquisition: {
+        kind: 'registry',
+        name: 'lightningcss-wasm',
+        version: '1.32.0',
+        dependencyProjection: {
+          dependencies: { 'napi-wasm': '^1.0.1' },
+          optionalDependencies: {},
+          omittedOptionalDependencies: {},
+          peerDependencies: {},
+          unsupportedFeature: 'lightningcss.acquisitionDependencies',
+        },
+      },
       materialization: {
         name: 'lightningcss',
         version: '1.32.0',
+        bin: {},
         files: [
           file('index.cjs', LIGHTNINGCSS_ALIAS_CJS),
           file('index.mjs', LIGHTNINGCSS_ALIAS_ESM),
