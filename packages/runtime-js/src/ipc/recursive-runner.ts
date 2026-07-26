@@ -93,7 +93,7 @@ export function makeRecursiveRunner(): NodeEntryRunner {
       // needs the bootstrap worker URL. Reachable only from a realm that serves
       // `fs.*` (the owner) — if the host hasn't wired the node-entry URL there,
       // fail at the spawn site rather than spawn an ENOENT child.
-      // TODO(backlog: runtime-js/generic-spawn-worker-remote-fs)
+      // TODO(backlog: playground/node-server-restart-on-edit)
       throw new Error(
         'recursive-runner: node-entry worker URL not configured — call ' +
           'setNodeEntryWorkerUrl(...) at host boot so execSync can route ' +

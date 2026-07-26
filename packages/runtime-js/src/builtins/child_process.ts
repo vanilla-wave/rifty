@@ -219,7 +219,7 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
   // instead of silently spawning an ENOENT child. The supervised-child realm
   // (URLs unset) falls through to the working same-realm path below, which reads
   // the installed remote mirror.
-  // TODO(backlog: runtime-js/generic-spawn-worker-remote-fs)
+  // TODO(backlog: playground/node-server-restart-on-edit)
   if (
     command === 'node' &&
     args[0] !== undefined &&
