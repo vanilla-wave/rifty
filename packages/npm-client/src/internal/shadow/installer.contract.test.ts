@@ -811,6 +811,23 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function observeVfsReads(vfs: MemoryVfs): () => void {
+  const reads = [
+    vi.spyOn(vfs, 'readFile'),
+    vi.spyOn(vfs, 'readFileText'),
+    vi.spyOn(vfs, 'exists'),
+    vi.spyOn(vfs, 'stat'),
+    vi.spyOn(vfs, 'readdir'),
+    vi.spyOn(vfs, 'openReadable'),
+  ];
+  return () => {
+    for (const read of reads) {
+      expect(read).not.toHaveBeenCalled();
+      read.mockRestore();
+    }
+  };
+}
+
 function expectShadowTraceDrift(lockfile: Lockfile): void {
   let caught: unknown;
   try {
@@ -922,6 +939,7 @@ describe('shadow substitution installer boundary', () => {
       const mkdir = vi.spyOn(vfs, 'mkdir');
       const writeFile = vi.spyOn(vfs, 'writeFile');
       const rm = vi.spyOn(vfs, 'rm');
+      const assertNoVfsReads = observeVfsReads(vfs);
 
       await expect(
         installContract(vfs, registry, {
@@ -937,6 +955,7 @@ describe('shadow substitution installer boundary', () => {
       expect(mkdir).not.toHaveBeenCalled();
       expect(writeFile).not.toHaveBeenCalled();
       expect(rm).not.toHaveBeenCalled();
+      assertNoVfsReads();
       await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
       await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
     },
@@ -953,6 +972,7 @@ describe('shadow substitution installer boundary', () => {
     const mkdir = vi.spyOn(vfs, 'mkdir');
     const writeFile = vi.spyOn(vfs, 'writeFile');
     const rm = vi.spyOn(vfs, 'rm');
+    const assertNoVfsReads = observeVfsReads(vfs);
 
     await expect(
       installContract(
@@ -976,6 +996,7 @@ describe('shadow substitution installer boundary', () => {
     expect(mkdir).not.toHaveBeenCalled();
     expect(writeFile).not.toHaveBeenCalled();
     expect(rm).not.toHaveBeenCalled();
+    assertNoVfsReads();
     await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
     await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
   });
@@ -1001,6 +1022,7 @@ describe('shadow substitution installer boundary', () => {
       const mkdir = vi.spyOn(vfs, 'mkdir');
       const writeFile = vi.spyOn(vfs, 'writeFile');
       const rm = vi.spyOn(vfs, 'rm');
+      const assertNoVfsReads = observeVfsReads(vfs);
       await expect(
         installContract(
           vfs,
@@ -1025,6 +1047,7 @@ describe('shadow substitution installer boundary', () => {
       expect(mkdir).not.toHaveBeenCalled();
       expect(writeFile).not.toHaveBeenCalled();
       expect(rm).not.toHaveBeenCalled();
+      assertNoVfsReads();
       expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
       expect(await vfs.readFile('/project/node_modules/contract-package/package.json')).toEqual(
         packageBefore,
