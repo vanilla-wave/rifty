@@ -44,6 +44,10 @@ Shape and validation: `docs/backlog/README.md`. Never implement a draft.
    `## Decisions`: `ready-verdict: <date> — <what settled each section>`. Clean →
    set `ready`, run `pnpm backlog:check`, continue; open fork → step 3;
    missing/unverifiable evidence → step 1. No «settled with caveats».
+   Inside an active goal run the judge is skipped — the unit's Contract+RED
+   checkpoint (fresh reviewer, raw contract) IS this verification; the flip
+   records `ready-verdict: <date> — Contract+RED @ <sha>` instead. One fresh
+   context per contract, never two.
 5. An unsettled fork discovered in an already-`ready` item (mid-build or review) →
    demote to `draft` in a separate PR recording the fork AND the pre-demotion
    Acceptance/Parity verbatim; the re-flip judge diffs against them — any weakening
