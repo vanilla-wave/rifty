@@ -60,8 +60,8 @@ Applies to parity work and changes touching cache, persistence, network, or conc
 | External API | Proxy/wrapper semantic copy requires an ADR + differential suite |
 | Testing | Same scenario runs against reference and rifty; a fake cannot close acceptance |
 | Checkpoints | Contract+RED before implementation; Final+GREEN on one checked SHA; blocker → re-cut in place, never checkpoint three |
-| Lineage | A blocker iterates in the SAME PR/branch; re-cut = new unit boundary in place, attempt + checkpoint count carries; a successor PR (unit split only) names its predecessor — closed attempts never orphan |
-| Contract escalation | 2nd consecutive Contract+RED blocker on one unit → the contract is wrong: split/re-refine it, never attempt three |
+| Lineage | A blocker iterates in the SAME PR/branch; re-cut = new unit boundary in place; a successor PR (unit split only) names its predecessor — closed attempts never orphan. A boundary-CHANGING re-cut (contract diff proves it) re-arms Contract+RED with a fresh count; an unchanged boundary is a rename — count carries |
+| Contract escalation | 2nd consecutive Contract+RED blocker on one unit → the contract is wrong: split/re-refine it, never attempt three on THAT boundary. Default shape: shrink the unit in place (same PR), remainder → later slices |
 | Repair anchor | An unplanned-fix PR reviews against its own RED + named class (`rifty-fix`); Budget/Goal axes N/A; one review, blockers fixed in place, second is final |
 | Unit closure | Current contract proof + empty unit residuals |
 | Goal closure | No linked children + empty goal residuals + end-to-end baseline proof; never source grep, warning, backlog record, or one green slice |

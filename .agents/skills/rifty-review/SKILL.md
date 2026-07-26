@@ -69,7 +69,9 @@ node tools/review/blockers.mjs "$RUN/verdict.json"
 ```
 
 Exit 0 → unit passes (`goal_complete:false` = continue the goal); exit 1 →
-re-cut in place — same PR/branch lineage, count carries (`fault-classes.md`
-§Review convergence, Lineage row); no auto-fix, never a third review; exit 2 →
+re-cut in place — same PR/branch lineage (`fault-classes.md` §Review
+convergence, Lineage row: a boundary-changing re-cut re-arms Contract+RED, a
+rename carries the count); no auto-fix, never a third review of the same unit
+boundary; exit 2 →
 retry once, then stop. The verdict binds to the reviewed SHA — new commits invalidate it; merge
 requires PR head == reviewed SHA. Do not edit or push.

@@ -89,7 +89,7 @@ Each autonomous source PR selects one epic `## Budget` row. Tripwires:
 - scope implemented outside ready items: `0`;
 - ready-contract edits beside source: `0`;
 - new coordination mechanisms: `0`, unless the named substrate item owns one;
-- review checkpoints per slice: exactly `2`;
+- review checkpoints per unit boundary: exactly `2` (a boundary-changing re-cut re-arms Contract+RED; a rename does not);
 - hand-written insertion band = inserted lines in the slice source PR (tests/
   generated globs excluded — `check:budget`): above high warns; at `2×` high re-cut;
 - expected-RED batch far above the slice band → the unit is too big: split it

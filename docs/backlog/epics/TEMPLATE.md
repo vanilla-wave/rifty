@@ -39,7 +39,7 @@ tier: <works|robust|production — required for an autonomous goal>
 - scope implemented outside `ready` items: 0
 - in-place ready-contract edits alongside source changes: 0
 - new coordination mechanisms: 0
-- review checkpoints per slice: exactly 2
+- review checkpoints per unit boundary: exactly 2 (boundary-changing re-cut re-arms Contract+RED)
 
 | slice | band |
 |---|---|
