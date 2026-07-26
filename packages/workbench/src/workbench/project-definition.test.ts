@@ -867,6 +867,27 @@ describe('package-private finite Node project definitions', () => {
     });
   });
 
+  it('preserves an exact declared dev script so Workbench can select installed nodemon by bytes', () => {
+    const exactDev = 'nodemon --legacy-watch --no-stdin --no-update-notifier src/main.mjs';
+    const inspected = serverSnapshot({
+      id: 'server-installed-nodemon',
+      files: {
+        [NODE_ENTRY]: 'console.log("server");\n',
+        '/package.json': JSON.stringify({
+          scripts: { dev: exactDev, start: 'node src/main.mjs' },
+          dependencies: { nodemon: '3.1.14' },
+        }),
+      },
+      entryPath: NODE_ENTRY,
+      port: 4321,
+    });
+
+    expect(nodeManifest(inspected)).toMatchObject({
+      scripts: { dev: exactDev, start: 'node src/main.mjs' },
+      dependencies: { nodemon: '3.1.14' },
+    });
+  });
+
   // Fault classes: corrupt-input + lossy-aggregate. Every own JSON key must
   // survive normalization before the normalized bytes become exact identity.
   it('preserves prototype-colliding scripts before exact Node-server identity', () => {

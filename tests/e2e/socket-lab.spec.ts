@@ -6,7 +6,7 @@
  * socket probes in the worker that owns the HTTP/WebSocket port registry.
  */
 import { type Page, expect, test } from '@playwright/test';
-import { expectTerminalContains, pickStarter } from './helpers/playground.ts';
+import { expectTerminalContains, pickStarter, terminalBuffer } from './helpers/playground.ts';
 
 const PORT = 3220;
 
@@ -61,6 +61,7 @@ test.describe('Socket Lab preset — honest socket capability gate', () => {
     // line below proves that boot proceeds.
     await pickStarter(page, 'socket-lab');
     await expectTerminalContains(page, 'socket lab listening on port 3220', 180_000);
+    expect(await terminalBuffer(page)).not.toContain('[nodemon]');
 
     const matrix = await pollJson<{ rows: CapabilityRow[] }>(
       page,

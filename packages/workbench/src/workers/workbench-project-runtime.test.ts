@@ -89,6 +89,23 @@ const nodeServerPackageConfig: OwnerPackageConfig = {
   slug: 'project-a',
   fromScratch: true,
 };
+const NODEMON_DEV = 'nodemon --legacy-watch --no-stdin --no-update-notifier src/server.mjs';
+const nodemonNodeServerPackageConfig: OwnerPackageConfig = {
+  cfg: {
+    ...nodeServerPackageConfig.cfg,
+    installDeps: { nodemon: '3.1.14' },
+    packageJson: `${JSON.stringify({
+      name: 'workbench-node-server',
+      version: '1.0.0',
+      type: 'module',
+      scripts: { dev: NODEMON_DEV, start: 'node src/server.mjs' },
+      dependencies: { nodemon: '3.1.14' },
+    })}\n`,
+  },
+  templateId: 'workbench-node-server',
+  slug: 'project-a',
+  fromScratch: true,
+};
 
 const NODE_CLI_PACKAGE_JSON = `${JSON.stringify({
   name: 'workbench-node-cli',
@@ -130,17 +147,25 @@ function preparedTreeInstall(config: OwnerPackageConfig): InstallFn {
     if (options === undefined) throw new Error('test install options missing');
 
     await options.vfs.mkdir(`${options.cwd}/node_modules`, { recursive: true });
+    const nodemonVersion = config.cfg.installDeps.nodemon;
     if (config.cfg.runtime === 'vite') {
       await options.vfs.mkdir(`${options.cwd}/node_modules/.bin`, { recursive: true });
       await options.vfs.writeFile(`${options.cwd}/node_modules/.bin/vite`, '#!/usr/bin/env node\n');
     }
+    if (nodemonVersion !== undefined) {
+      await options.vfs.mkdir(`${options.cwd}/node_modules/.bin`, { recursive: true });
+      await options.vfs.writeFile(
+        `${options.cwd}/node_modules/.bin/nodemon`,
+        '#!/usr/bin/env node\n',
+      );
+    }
     const viteVersion = config.cfg.installDeps.vite;
-    const lockfilePackages: InstallResult['lockfile']['packages'] =
-      viteVersion === undefined
+    const lockfilePackages: InstallResult['lockfile']['packages'] = {
+      ...(viteVersion === undefined ? {} : { 'node_modules/vite': { version: viteVersion } }),
+      ...(nodemonVersion === undefined
         ? {}
-        : {
-            'node_modules/vite': { version: viteVersion },
-          };
+        : { 'node_modules/nodemon': { version: nodemonVersion } }),
+    };
     const lockfile = {
       name: config.cfg.packageName,
       version: config.cfg.packageVersion,
@@ -153,18 +178,26 @@ function preparedTreeInstall(config: OwnerPackageConfig): InstallFn {
       `${JSON.stringify(lockfile)}\n`,
     );
     const result: InstallResult = {
-      packages:
-        viteVersion === undefined
+      packages: [
+        ...(viteVersion === undefined
           ? []
-          : [{ name: 'vite', version: viteVersion, dependencies: {}, files: {} }],
+          : [{ name: 'vite', version: viteVersion, dependencies: {}, files: {} }]),
+        ...(nodemonVersion === undefined
+          ? []
+          : [{ name: 'nodemon', version: nodemonVersion, dependencies: {}, files: {} }]),
+      ],
       lockfile,
       conflicts: [],
       provenance: {
         resolution: 'metadata',
-        packages:
-          viteVersion === undefined
+        packages: [
+          ...(viteVersion === undefined
             ? []
-            : [{ name: 'vite', version: viteVersion, transport: 'registry' }],
+            : [{ name: 'vite', version: viteVersion, transport: 'registry' as const }]),
+          ...(nodemonVersion === undefined
+            ? []
+            : [{ name: 'nodemon', version: nodemonVersion, transport: 'registry' as const }]),
+        ],
       },
     };
     return await createNoShadowInstallResultFixture(result);
@@ -409,6 +442,48 @@ afterEach(() => {
 });
 
 describe('Workbench finite Node owner lifecycle Contract+RED', () => {
+  it('selects the installed-bin path only for the exact nodemon dev script bytes', async () => {
+    const worker = boundaryWorker();
+    const h = await harness(undefined, nodemonNodeServerPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-nodemon' });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-nodemon',
+        rid: 'run-nodemon',
+        line: 'npm run dev',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+
+    expect(worker.command()).toBe('/node_modules/.bin/nodemon');
+    expect(worker.spec()).toMatchObject({
+      argv: [
+        'rifty',
+        '/node_modules/.bin/nodemon',
+        '--legacy-watch',
+        '--no-stdin',
+        '--no-update-notifier',
+        'src/server.mjs',
+      ],
+      entry: {
+        kind: 'url',
+        url: NODE_ENTRY_WORKER_URL,
+      },
+    });
+    expect(worker.spec()?.entry).not.toMatchObject({
+      url: DEV_SERVER_WORKER_URL,
+    });
+
+    worker.emitExit(0);
+    await running;
+    await h.runtime.close();
+  });
+
   it('runs node-server npm dev in its dedicated entry-scoped child with PTY provenance', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, nodeServerPackageConfig);

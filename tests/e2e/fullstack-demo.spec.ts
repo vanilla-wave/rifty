@@ -11,13 +11,19 @@
  * generous polls, network required.
  */
 import { expect, test } from '@playwright/test';
-import { expectTerminalContains, pickStarter } from './helpers/playground.ts';
+import {
+  expectTerminalContains,
+  openShellTerminal,
+  pickStarter,
+  runTerminalLineSettled,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 const PORT = 3210;
 
 test.describe('Fullstack demo — Express + node:sqlite through the SW preview bridge', () => {
   test('preset boots the server; API and client both round-trip', async ({ page }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(420_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
     page.on('console', (msg) => {
       if (msg.type() === 'error') console.log('[console.error]', msg.text());
@@ -37,6 +43,13 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     // the OWNER realm (which serves the preview), streaming each package to the
     // terminal before the node server boots co-resident in the owner (ADR-0148).
     await expectTerminalContains(page, 'npm: + express@', 120_000);
+    await expectTerminalContains(page, 'npm: + nodemon@3.1.14', 120_000);
+    await expectTerminalContains(
+      page,
+      '> nodemon --legacy-watch --no-stdin --no-update-notifier src/main.js',
+      45_000,
+    );
+    await expectTerminalContains(page, '[nodemon] starting `node src/main.js`', 45_000);
 
     // Express + engine boot behind a live npm install — poll the API route.
     // The predicate demands PARSEABLE JSON: a transient 200 from a non-SW
@@ -134,5 +147,76 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
 
     // The write made it into the terminal as a db log line.
     await expectTerminalContains(page, '[db] INSERT todos #', 10_000);
+
+    // I2: the edit is observed by installed nodemon, replaces the app Worker on
+    // the same route, and resets realm-local SQLite state.
+    const restartMarker = `express-nodemon-${Date.now()}`;
+    await openShellTerminal(page);
+    await runTerminalLineSettled(page, `echo "console.log('${restartMarker}')" >> src/main.js`);
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('[nodemon] restarting due to changes');
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(restartMarker);
+    await expect
+      .poll(async () => (await fetchTodos()).count, {
+        timeout: 45_000,
+        intervals: [250, 500, 1_000],
+      })
+      .toBe(3);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    // I4: writes inside the watch debounce may coalesce; final owner-VFS bytes
+    // must win without a stale route or port holder.
+    const rapidMarker = `express-rapid-${Date.now()}`;
+    const restartsBeforeRapid = (await terminalBuffer(page, 0)).split(
+      '[nodemon] restarting due to changes',
+    ).length;
+    await runTerminalLineSettled(
+      page,
+      `echo "console.log('rapid-intermediate')" >> src/main.js && echo "console.log('${rapidMarker}')" >> src/main.js`,
+    );
+    await expect
+      .poll(
+        async () =>
+          (await terminalBuffer(page, 0)).split('[nodemon] restarting due to changes').length,
+        { timeout: 45_000 },
+      )
+      .toBeGreaterThan(restartsBeforeRapid);
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(rapidMarker);
+    await expect.poll(async () => (await fetchTodos()).count, { timeout: 45_000 }).toBe(3);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    // I3: the real child parse failure reaches stderr; nodemon remains alive and
+    // a later valid edit recovers without another `npm run dev`.
+    await runTerminalLineSettled(page, `echo 'const = ;' >> src/main.js`);
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('Failed to parse ESM source');
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('[nodemon] app crashed - waiting for file changes before starting');
+
+    const recoveryMarker = `express-recovered-${Date.now()}`;
+    await runTerminalLineSettled(
+      page,
+      `head -n -1 src/main.js > src/main.fixed && echo "console.log('${recoveryMarker}')" >> src/main.fixed && mv src/main.fixed src/main.js`,
+    );
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(recoveryMarker);
+    await expect.poll(async () => (await fetchTodos()).count, { timeout: 45_000 }).toBe(3);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    // I5: Ctrl-C tears down nodemon, its app descendant, and the preview route;
+    // an already-admitted watch event cannot resurrect the subtree.
+    await page.getByRole('tab', { name: 'Terminal 1', exact: true }).click();
+    await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
+    await page.keyboard.press('Control+c');
+    await expect
+      .poll(async () => (await fetchTodos()).ok, {
+        timeout: 45_000,
+        intervals: [250, 500, 1_000],
+      })
+      .toBe(false);
+    await page.waitForTimeout(1_500);
+    expect((await fetchTodos()).ok).toBe(false);
   });
 });

@@ -3,7 +3,15 @@
  * handlers and JSON body parsing through the SW preview bridge.
  */
 import { expect, test } from '@playwright/test';
-import { capturePageProblems, expectTerminalContains, selectPreset } from './helpers/playground.ts';
+import {
+  capturePageProblems,
+  expectTerminalContains,
+  openShellTerminal,
+  pickStarter,
+  runTerminalLineSettled,
+  selectPreset,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 const PORT = 3321;
 
@@ -19,13 +27,10 @@ test.describe('Hono API template through the SW preview bridge', () => {
 
     await selectPreset(page, 'hono-api');
 
-    await expectTerminalContains(
-      page,
-      '[real-vite/worker] starting server /src/main.js on port 3321',
-      150_000,
-    );
     await expectTerminalContains(page, 'npm: + hono@', 120_000);
     await expectTerminalContains(page, 'npm: + @hono/node-server@', 120_000);
+    await expectTerminalContains(page, 'npm: + nodemon@3.1.14', 120_000);
+    await expectTerminalContains(page, '[nodemon] starting `node src/main.js`', 45_000);
 
     const fetchMessages = async () =>
       page.evaluate(async (port: number) => {
@@ -111,6 +116,26 @@ test.describe('Hono API template through the SW preview bridge', () => {
     });
 
     await expectTerminalContains(page, '[hono] INSERT message #', 10_000);
+
+    const restartMarker = `hono-nodemon-${Date.now()}`;
+    await openShellTerminal(page);
+    await runTerminalLineSettled(page, `echo "console.log('${restartMarker}')" >> src/main.js`);
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('[nodemon] restarting due to changes');
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(restartMarker);
+    await expect.poll(async () => (await fetchMessages()).count, { timeout: 45_000 }).toBe(2);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    // Project replacement owns the supervisor subtree; the old routed response
+    // must stay unavailable after the switch.
+    await pickStarter(page, 'project-files');
+    await expect
+      .poll(async () => (await fetchMessages()).ok, {
+        timeout: 45_000,
+        intervals: [250, 500, 1_000],
+      })
+      .toBe(false);
     problems.assertNoViteImportErrors();
   });
 });
