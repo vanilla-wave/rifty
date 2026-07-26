@@ -4,7 +4,7 @@ status: ready
 title: Shadow recipe v2 data authority
 created: 2026-07-26
 why: repeated recipe-authority reviews found schema, admission-feature, and clone-ingress policy duplicated across catalog and installer boundaries
-user_story: As a browser-IDE user installing a builtin-substituted package, I want the exact reviewed recipe to survive worker cloning and reject unsupported requests before network or storage effects, but today v1 computes drifting errors and trusts injected clones
+user_story: As a browser-IDE user installing a builtin-substituted package, I want the exact reviewed recipe to remain authoritative after structured clone and reject malformed policy before effects, but today v1 computes drifting errors and the package-private clone seam trusts injected data
 epic: honest-shadow-substitutions
 sources: [ADR-0323]
 code:
@@ -32,11 +32,12 @@ that decided substrate from the oversized integration slice.
 ## User scenario
 
 A fresh Workbench project installs either `esbuild@0.28.0` or
-`lightningcss@1.32.0`. The builtin authority crosses the worker boundary by
-structured clone and produces the same admitted recipe, rejection feature,
-error, and event order as the canonical catalog. If the cloned authority is
-malformed, installation rejects it before a getter, registry read, Eddy
-request, VFS read/write, override lookup, warning, or substitution report.
+`lightningcss@1.32.0` through the normal builtin authority. The package-private
+contract seam then passes the same authority through `structuredClone()` and
+observes the same admitted recipe, rejection feature, error, and event order.
+If that cloned authority is malformed, installation rejects it before a getter,
+registry read, Eddy request, VFS read/write, override lookup, warning, or
+substitution report.
 
 ## Acceptance
 
@@ -44,19 +45,26 @@ request, VFS read/write, override lookup, warning, or substitution report.
   data owns `semver-admits` admission and the stable unsupported features
   `esbuild.version` and `lightningcss.version`; neither feature is computed
   from request text.
-- One shadow-registry decoder validates any package-private schema-2 catalog
-  shape, behavior-bearing digests, dense arrays, data properties, and exact
-  fields, then returns a deeply frozen value. The builtin decoder adds only the
-  committed builtin identity check; it does not reimplement shape validation.
+- One shadow-registry decoder validates any package-private schema-2 catalog,
+  including admission, acquisition kind and dependency projection maps,
+  non-overlap, names, versions, materialization paths/files/bin targets,
+  `package.json` identity/bin agreement, bindings/assets, behavior-bearing
+  digests, dense arrays, data properties, and exact fields, then returns a
+  deeply frozen value. The builtin decoder adds only the committed builtin
+  identity check; it does not reimplement shape validation.
 - The package-private install seam accepts an `unknown` authority value and
-  strict-decodes exactly once at ingress, before reading authority fields or
-  performing registry, Eddy, VFS, override, warning, or reporter effects.
+  validates the exact data-property envelope and string-only
+  `builtinOverrides` map without invoking accessors, then strict-decodes the
+  catalog exactly once at ingress. All validation precedes authority reads,
+  registry, Eddy, VFS, override, warning, or reporter effects.
 - Canonical and `structuredClone()` authorities produce the same outcome,
   exact error feature/message, and observable event order for direct and
   transitive requests through fresh install, lock replay, and Eddy attempt.
-- Schema 1, unknown fields, accessors, sparse arrays, malformed values, and
-  forged catalog or recipe digests reject with `ShadowRegistryCodecError`.
-  Invalid input never falls back to builtin data or a normal registry install.
+- Schema 1, unknown fields, accessors, sparse arrays, malformed projection/bin
+  data, invalid names/paths, projection overlap, `package.json` disagreement,
+  and forged catalog or recipe digests reject with
+  `ShadowRegistryCodecError`. Invalid input never falls back to builtin data or
+  a normal registry install.
 - Existing esbuild and LightningCSS builtin install behavior remains green.
   Root exports remain builtin-only; the injected authority is package-private
   test infrastructure, not a public custom-recipe or executable-policy API.
@@ -68,29 +76,37 @@ request, VFS read/write, override lookup, warning, or substitution report.
    canonical versus structured clone has the same admitted recipe in fresh,
    replay, and Eddy-attempt paths.
 2. The same 2 × 2 × 3 matrix with an unsupported request rejects with exact
-   recipe-declared feature `esbuild.version` or `lightningcss.version`, before
-   metadata, tarball, or VFS work.
+   recipe-declared feature `esbuild.version` or `lightningcss.version`.
+   Direct rejection has zero metadata/tarball/Eddy/VFS effects; transitive
+   rejection pins the necessary ancestor packument/tarball (and attempted Eddy
+   fallback) order, then performs no rejected-child acquisition or writes.
 3. A valid package-private schema-2 fixture survives structured clone and runs
    through the real install ingress without exposing a public recipe SPI.
-4. Unknown catalog/recipe fields, accessor-backed fields, sparse arrays,
-   schema 1, malformed digests, and post-clone digest drift each reject with
-   the same codec error class and zero downstream effects.
+4. Catalog/recipe/admission/acquisition/projection/materialization/bin/binding
+   mutation tables cover exact fields, data descriptors, dense arrays, map
+   overlap, names, paths, manifest agreement, schema 1, and behavior digests.
+5. Unknown authority envelope fields, envelope/catalog/override accessors,
+   non-string override values, malformed clones, and post-clone digest drift
+   each reject with the same codec error class, zero getter calls, exactly one
+   catalog decode where the envelope is valid, and zero downstream effects.
 
 ## Fault matrix
 
 | Fault class | Required outcome | Proof |
 |---|---|---|
-| corrupt-input | strict decoder rejects malformed schema, fields, descriptors, arrays, and digests | codec mutation table plus cloned-ingress cases |
-| observable-order | invalid ingress and unsupported admission reject before getter/network/Eddy/VFS/override/report effects | ordered effect ledger |
+| corrupt-input | strict decoder rejects malformed envelope, schema, projections, bins, fields, descriptors, arrays, manifests, and digests | codec mutation table plus cloned-ingress cases |
+| observable-order | invalid ingress/direct admission has zero effects; transitive admission stops after pinned ancestor discovery | ordered effect ledger |
 | sibling-drift | both builtin recipes, direct/transitive, and fresh/replay/Eddy share the same data-driven admission | full cross-product contract |
 | provenance-lie | canonical and cloned authority cannot disagree or fall back after digest drift | structured-clone differential |
 
 ## Out of scope
 
-- Registry dependency projection, bundled-dependency acquisition, or lockfile
-  bundle provenance. Those require the later dedicated acquisition slice.
-- Same-command `.bin` ownership and materialized-bin conflict policy. Those
-  require the dedicated bin-ownership slice.
+- Executing registry dependency projection, bundled-dependency acquisition, or
+  lockfile bundle provenance; `npm-client/shadow-recipe-v2-authority` owns that
+  integration until a narrower reverse-linked child is created.
+- Same-command `.bin` ownership and materialized-bin conflict policy;
+  `npm-client/shadow-recipe-v2-authority` owns that integration until a
+  narrower reverse-linked child is created.
 - Recipe-v2 acquisition/materialization integration, v1 lock migration,
   browser artifact regeneration, and Sass. Until their named slices land,
   existing unsupported surfaces keep their current loud errors and compat ❌.
@@ -105,5 +121,6 @@ request, VFS read/write, override lookup, warning, or substitution report.
   LightningCSS, Vite, an entry kind, or test-fixture identity.
 - The generic strict decoder is internal. Public exports continue to expose
   only the attested builtin catalog and legacy builtin tables.
-- No new dependency, wire format, storage authority, or coordination
-  mechanism is introduced.
+- Schema 2 is the new ADR-0323-owned internal clone format. This slice adds no
+  public API/wire format, dependency, storage authority, or coordination
+  mechanism.

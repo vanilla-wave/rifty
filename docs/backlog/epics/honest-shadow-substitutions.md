@@ -79,9 +79,9 @@ Contract+RED → Final+GREEN):
    **recipe-v2-data-authority**: strict clone-safe schema 2, data-owned
    admission features, and one side-effect-free package-private ingress.
 4. `npm-client/shadow-recipe-v2-authority` —
-   **recipe-v2-authority**: generic admission, exact acquisition projection,
-   materialization-owned bins, and strict replay authority discovered by the
-   Sass contract; required before the package-specific seam proof.
+   **recipe-v2-authority**: consumes the data-authority prerequisite, then owns
+   exact acquisition execution, materialized bins, and strict replay authority
+   discovered by the Sass contract; required before the package-specific seam.
 5. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
    generic-file no-change gate. Required for epic closure, not optional.

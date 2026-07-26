@@ -10,13 +10,9 @@ blocked_by: [npm-client/shadow-recipe-v2-data-authority]
 sources: [ADR-0310, ADR-0323]
 code:
   - packages/npm-client/src/installer.ts
-  - packages/npm-client/src/internal/shadow/admission.ts
   - packages/npm-client/src/internal/shadow/planner.ts
   - packages/npm-client/src/linker.ts
   - packages/npm-client/src/package-bin.ts
-  - tools/shadow-registry/src/internal/catalog-source.ts
-  - tools/shadow-registry/src/internal/codec.ts
-  - tools/shadow-registry/src/internal/model.ts
 ---
 
 ## Context
@@ -25,7 +21,9 @@ Recipe v1 admits semver ranges, copies registry optionals, and links acquired
 bins before alias materialization. Those policies were implicit and cannot
 faithfully express an exact-only package with omitted native optionals and a
 loud replacement CLI. ADR-0323 supersedes ADR-0308 with one generic authority;
-this prerequisite lands it without shipping the Sass recipe.
+this prerequisite lands it without shipping the Sass recipe. The blocked data
+slice owns schema 2, strict codec/ingress, and admission feature identity; this
+item starts at execution, projection, materialization, and replay.
 
 ## Reference contract
 
@@ -42,9 +40,9 @@ this prerequisite lands it without shipping the Sass recipe.
 
 ## Acceptance
 
-- Every builtin catalog and recipe is strict clone-safe schema 2. Recipe data
-  owns `semver-admits` or `exact-only` admission plus a named unsupported
-  feature; rejection occurs before metadata, tarball, or VFS work.
+- Consume the completed clone-safe schema-2 data authority and preserve its
+  `semver-admits`/`exact-only` result and named feature through every execution
+  path; this item does not add a second codec or admission owner.
 - Registry acquisition verifies the complete required, retained optional,
   omitted optional, and peer dependency projection before tarball work. Only
   retained maps enter resolution and lockfile state; scoped package names are
@@ -53,9 +51,6 @@ this prerequisite lands it without shipping the Sass recipe.
   never leak into linking or their lock entry; one shared package-bin linker
   validates and links the materialized targets for registry and synthetic
   recipes.
-- Strict ingress rejects v1, unknown/accessor/sparse data, overlapping
-  dependency maps, invalid names and paths, missing or escaping bin targets,
-  manifest/bin disagreement, and forged behavior-bearing digests.
 - Matching v2 replay regenerates byte-identical materialization and bins with
   zero registry reads. V1 or drifted acquisition/materialization provenance
   loud-fails `EBROKENLOCK`; it is never reinterpreted.
@@ -76,9 +71,9 @@ this prerequisite lands it without shipping the Sass recipe.
    invoking the unsupported CLI names `NotImplementedError('esbuild.cli')`.
 4. LightningCSS accepts its current semver requests, verifies exact registry
    metadata, omits no undeclared dependency, and replays without registry I/O.
-5. A package-private strict authority fixture runs through the real install
-   core to exercise exact-only rejection and non-empty dependency/bin policy
-   without exposing a public/custom recipe SPI or shipping a fake package.
+5. The data-authority fixture runs through the real install core to exercise
+   non-empty dependency/bin policy without exposing a public/custom recipe SPI
+   or shipping a fake package.
 
 ## Fault matrix
 
@@ -103,8 +98,9 @@ this prerequisite lands it without shipping the Sass recipe.
 
 ## Decisions
 
-- ADR-0323 owns schema 2, admission, dependency projection, bin authority, and
-  loud v1 replay failure.
+- ADR-0323 owns the complete recipe authority. The blocked data slice owns
+  schema 2, codec/ingress, and admission; this item owns projection execution,
+  materialized-bin execution, provenance, and loud v1 replay failure.
 - The recipe model remains clone-safe data. Generic consumers execute policy
   fields and never recognize Sass, esbuild, LightningCSS, Vite, or entry kind.
 - The package-bin linker is the sole bin implementation. Runtime binding stays
