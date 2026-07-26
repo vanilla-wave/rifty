@@ -15,9 +15,17 @@ const DEMOS: readonly Demo[] = [
     id: 'real-vite',
     kicker: 'TOOLING',
     glyph: 'V7',
-    title: 'Vite 7 + npm',
-    body: 'Run a visible npm install, then start the real Vite 7 dev server with module transforms and HMR.',
-    meta: 'npm install · live preview',
+    title: 'Vite 7 + HMR',
+    body: 'Run a visible npm install, then start the installed Vite 7 dev server with esbuild-backed transforms and HMR.',
+    meta: 'install · live HMR',
+  },
+  {
+    id: 'vite8',
+    kicker: 'ROLLDOWN',
+    glyph: 'V8',
+    title: 'Vite 8 + Rolldown',
+    body: 'Start exact Vite 8.0.16 with Rolldown; production build and preview are also proven. HMR stays disabled.',
+    meta: 'dev · build · preview',
   },
   {
     id: 'express-sqlite',
@@ -25,7 +33,7 @@ const DEMOS: readonly Demo[] = [
     glyph: 'EX',
     title: 'Express + SQLite',
     body: 'Install Express, run an HTTP server in a Worker, and query SQLite compiled to WebAssembly.',
-    meta: 'npm install · live preview',
+    meta: 'install · preview',
   },
   {
     id: 'cli-report',
@@ -33,7 +41,7 @@ const DEMOS: readonly Demo[] = [
     glyph: 'CLI',
     title: 'CLI report',
     body: 'Install a real npm dependency, read VFS input through node:fs, stream stdout, and exit cleanly.',
-    meta: 'npm install · run to completion',
+    meta: 'install · run',
   },
   {
     id: 'markdown-ssg',
@@ -41,7 +49,7 @@ const DEMOS: readonly Demo[] = [
     glyph: 'MD',
     title: 'Markdown SSG',
     body: 'Run a filesystem-heavy static-site build: Markdown in, generated HTML out, then serve the result.',
-    meta: 'npm install · generated preview',
+    meta: 'install · build + preview',
   },
 ];
 

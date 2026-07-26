@@ -52,7 +52,7 @@ function buildFooter(): HTMLElement {
 
   const stamp = document.createElement('span');
   stamp.className = 'cta-footer-stamp';
-  stamp.textContent = 'v0.1 · M11 active';
+  stamp.textContent = 'v0.2 · M11 active';
 
   footer.append(mark, name, stamp);
   return footer;

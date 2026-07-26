@@ -11,22 +11,32 @@ interface Feature {
 const FEATURES: readonly Feature[] = [
   {
     title: 'A Node-compatible runtime',
-    body: 'CJS + ESM loader and tested node: builtin subsets. Real require, real import.',
+    body: 'CJS + ESM loader and tested Node 24 builtin subsets. Real require/import; gaps stay loud.',
     icon: 'feature-runtime',
   },
   {
     title: 'npm install, in-browser',
-    body: 'Resolve, fetch, verify, unpack and link packages; execution stays browser-local.',
+    body: 'Install registry packages and run project npm scripts, Prettier, ESLint and type-aware linting in-browser.',
     icon: 'feature-npm',
   },
   {
     title: 'WASI preview1 runner',
-    body: 'Run .wasm guests next to your JS, on the same virtual FS.',
+    body: 'Run WASI preview1 .wasm guests with VFS-backed preopens and process-shaped stdio/exit.',
     icon: 'feature-wasi',
   },
   {
     title: 'Virtual FS + OPFS',
-    body: 'In-memory and persistent backends with a synchronous mirror.',
+    body: 'Memory and OPFS backends with sync mirrors; the Workbench owner holds the editable-tree authority.',
+    icon: 'feature-vfs',
+  },
+  {
+    title: 'Embeddable Workbench',
+    body: 'Framework-free project, run, file, terminal and preview APIs backed by one owner Worker.',
+    icon: 'feature-runtime',
+  },
+  {
+    title: 'TypeScript + Git over VFS',
+    body: 'Project-aware diagnostics and navigation plus a tested Git porcelain subset against the workspace tree.',
     icon: 'feature-vfs',
   },
 ];
@@ -60,7 +70,7 @@ function makeCell(feature: Feature): HTMLElement {
   return cell;
 }
 
-/** "What you get" — 4-col hairline-gap feature grid. */
+/** "What you get" — compact hairline-gap feature grid. */
 export function renderWhat(): HTMLElement {
   const section = document.createElement('section');
   section.id = 'what';

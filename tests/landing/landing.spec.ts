@@ -58,6 +58,9 @@ test('serves configured search, sharing, crawl, and pre-JavaScript contracts', a
   await page.goto('/');
 
   await expect(page).toHaveTitle('Open Node-compatible runtime for the browser | rifty');
+  await expect(page.locator('.nav-version')).toHaveText('v0.2 · M11');
+  await expect(page.locator('.hero-host')).toHaveText('@riftydev/sdk · v0.2');
+  await expect(page.locator('.cta-footer-stamp')).toHaveText('v0.2 · M11 active');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
     'https://site.example.test/',
@@ -141,6 +144,7 @@ test('serves configured search, sharing, crawl, and pre-JavaScript contracts', a
   await expect(
     noScriptPage.getByRole('heading', { name: /Node, npm, and a dev server/ }),
   ).toBeVisible();
+  await expect(noScriptPage.getByText(/Vite 7 HMR, Vite 8\/Rolldown/)).toBeVisible();
   await expect(noScriptPage.getByRole('link', { name: 'View rifty on GitHub' })).toHaveAttribute(
     'href',
     'https://forge.example.test/org/rifty',
@@ -212,14 +216,22 @@ test('offers proven preset outcomes before the architecture deep dive', async ({
   await page.goto('/');
 
   const cards = page.locator('[data-preset-card]');
-  await expect(cards).toHaveCount(4);
-  await expect(page.getByRole('link', { name: /Vite 7 \+ npm/ })).toBeVisible();
+  await expect(cards).toHaveCount(5);
+  await expect(page.getByRole('link', { name: /Vite 7 \+ HMR/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Vite 8 \+ Rolldown/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /Express \+ SQLite/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /CLI report/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /Markdown SSG/ })).toBeVisible();
   await expect(page.locator('[data-preset-card="real-vite"]')).toHaveAttribute(
     'href',
     'https://play.example.test/?preset=real-vite&autorun=1',
+  );
+  await expect(page.locator('[data-preset-card="vite8"]')).toHaveAttribute(
+    'href',
+    'https://play.example.test/?preset=vite8&autorun=1',
+  );
+  await expect(page.locator('[data-preset-card="vite8"]')).toContainText(
+    'production build and preview are also proven. HMR stays disabled.',
   );
   await expect(page.locator('[data-preset-card="express-sqlite"]')).toHaveAttribute(
     'href',
@@ -258,7 +270,7 @@ test('keeps the preset footer divider and labels on a balanced rhythm', async ({
   await page.goto('/');
 
   const dividers = page.locator('.demo-divider');
-  await expect(dividers).toHaveCount(4);
+  await expect(dividers).toHaveCount(5);
   const rhythm = await page.locator('[data-preset-card]').evaluateAll((cards) =>
     cards.map((card) => {
       const body = card.querySelector<HTMLElement>('.demo-body');
@@ -298,6 +310,8 @@ test('renders semantic landmarks and subsection headings', async ({ page }) => {
   await expect(page.getByRole('main')).toHaveCount(1);
   await expect(page.getByRole('contentinfo')).toHaveCount(1);
   await expect(page.getByRole('heading', { name: 'A Node-compatible runtime' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Embeddable Workbench' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'TypeScript + Git over VFS' })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'Cross-origin isolation required' }),
   ).toBeVisible();
@@ -343,6 +357,7 @@ test('renders raw WASI separately from the npm esbuild CLI gap', async ({ page }
   await expect(visibleBoard.locator('[data-ed-code]')).toContainText('createWasiProcess');
   await expect(visibleBoard.locator('[data-ed-code]')).not.toContainText('esbuild');
   await expect(visibleBoard.locator('[data-pv-body]')).toContainText('raw WASI guest · exit 0');
+  await expect(page.locator('[data-step-caption]')).not.toContainText('SAB');
 
   const esbuild = visibleBoard.locator('[data-node="esbuild"]');
   await expect(esbuild).toHaveAttribute('aria-label', 'esbuild JS API');
@@ -351,6 +366,28 @@ test('renders raw WASI separately from the npm esbuild CLI gap', async ({ page }
   await expect(inspector.locator('.exp-ins-role')).toHaveText(
     "npm esbuild@0.28.0 transform APIs use the registry-attested esbuild-wasm adapter. The esbuild CLI/bin throws NotImplementedError('esbuild.cli').",
   );
+});
+
+test('shows the Workbench owner topology and keeps external registry egress separate', async ({
+  page,
+}) => {
+  await page.goto('/#arch');
+  await expect(page.getByRole('button', { name: '01 Schema', exact: true })).toBeVisible();
+
+  const schema = page.locator('.exp-board:visible');
+  await expect(schema.locator('[data-node="workbench"]')).toHaveAttribute(
+    'aria-label',
+    '@riftydev/workbench',
+  );
+  await expect(schema.locator('[data-node="owner"]')).toHaveAttribute(
+    'aria-label',
+    'workspace owner',
+  );
+
+  await page.getByRole('button', { name: '02 Realms', exact: true }).click();
+  const external = page.locator('.exp-realms:visible [data-realm="ext"]');
+  await expect(external).toContainText('EXTERNAL');
+  await expect(external.locator('[data-lane-node="registry"]')).toBeVisible();
 });
 
 test('keeps secondary explorer labels at WCAG AA text contrast', async ({ page }) => {
@@ -543,7 +580,7 @@ for (const viewport of [
     const tryDemos = page.getByRole('link', { name: 'Try demos', exact: true });
     await expect(tryDemos).toBeVisible();
     await expect(tryDemos).toHaveAttribute('href', '#demos');
-    await expect(page.locator('[data-preset-card]')).toHaveCount(4);
+    await expect(page.locator('[data-preset-card]')).toHaveCount(5);
 
     const layout = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,

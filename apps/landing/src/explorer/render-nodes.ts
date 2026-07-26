@@ -79,7 +79,7 @@ const SURF: Record<ScenarioId, Surface> = {
       '<span style="color:var(--syn-com)">// blocks via SAB</span>',
     pv:
       '<div style="font-weight:700; font-size:13px;">It works.</div>' +
-      '<div style="font-size:9.5px; color:#4b5563; margin-top:3px;">sync fs over SharedArrayBuffer</div>',
+      '<div style="font-size:9.5px; color:#4b5563; margin-top:3px;">Workbench child · sync fs over SAB</div>',
   },
 };
 
