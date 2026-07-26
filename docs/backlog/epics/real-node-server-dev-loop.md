@@ -6,6 +6,7 @@ created: 2026-07-17
 value: A developer runs a real Node server under real nodemon in the browser; source edits replace the app faithfully on the same preview port, including crash recovery and teardown.
 user_story: As a developer using Express, Hono, or Koa in rifty, I want `npm run dev` to run real nodemon so edits restart my app and preview automatically, but today the server keeps stale code until I stop and rerun it.
 tier: robust
+goal_baseline: a11c05addb0760edceb3b61c0261e7943d2a0d09
 sources: [ADR-0150, ADR-0174, ADR-0225, ADR-0230, ADR-0257, ADR-0265, ADR-0267, ADR-0278, ADR-0324, ADR-0325, ADR-0326, ADR-0327, Node-v24.16.0-probe, nodemon-3.1.14-reachability]
 ---
 
