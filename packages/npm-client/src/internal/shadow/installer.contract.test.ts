@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { NotImplementedError } from '@riftydev/io';
 import {
   builtinShadowSubstitutionCatalog,
@@ -423,6 +427,82 @@ function storageWriteFault(kind: 'permission' | 'quota'): Error {
   });
 }
 
+interface PeerTraversalEvidence {
+  readonly freshPeerInstalled: boolean;
+  readonly freshPeerLocked: boolean;
+  readonly replayPeerRestored: boolean;
+  readonly replayLockStable: boolean;
+}
+
+// Oracle recorded 2026-07-26 with Node v24.16.0 and npm 11.17.0.
+function nativePeerTraversalEvidence(): PeerTraversalEvidence {
+  const root = mkdtempSync(join(tmpdir(), 'rifty-shadow-peer-oracle-'));
+  const source = join(root, 'packages/source');
+  const peer = join(root, 'packages/peer');
+  try {
+    mkdirSync(source, { recursive: true });
+    mkdirSync(peer, { recursive: true });
+    writeFileSync(
+      join(root, 'package.json'),
+      `${JSON.stringify({
+        name: 'shadow-peer-oracle',
+        version: '1.0.0',
+        private: true,
+        dependencies: { 'contract-source': 'file:packages/source' },
+      })}\n`,
+    );
+    writeFileSync(
+      join(source, 'package.json'),
+      `${JSON.stringify({
+        name: 'contract-source',
+        version: CONTRACT_VERSION,
+        peerDependencies: { [CONTRACT_PEER]: 'file:../peer' },
+      })}\n`,
+    );
+    writeFileSync(
+      join(peer, 'package.json'),
+      `${JSON.stringify({ name: CONTRACT_PEER, version: '1.0.0' })}\n`,
+    );
+    const install = (): void => {
+      execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--offline'], {
+        cwd: root,
+        env: { ...process.env, npm_config_cache: join(root, '.npm-cache') },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    };
+
+    install();
+    const lockPath = join(root, 'package-lock.json');
+    const lockBefore = readFileSync(lockPath);
+    const lock = JSON.parse(lockBefore.toString('utf8')) as {
+      packages?: Readonly<
+        Record<string, Readonly<{ version?: string; resolved?: string; link?: boolean }>>
+      >;
+    };
+    const peerPath = join(root, 'node_modules/@scope/peer');
+    const freshPeerInstalled = existsSync(join(peerPath, 'package.json'));
+    const peerLock = lock.packages?.['node_modules/@scope/peer'];
+    const freshPeerLocked =
+      peerLock !== undefined &&
+      (peerLock.version === '1.0.0' ||
+        (peerLock.link === true &&
+          peerLock.resolved !== undefined &&
+          lock.packages?.[peerLock.resolved]?.version === '1.0.0'));
+
+    rmSync(peerPath, { recursive: true, force: true });
+    install();
+
+    return {
+      freshPeerInstalled,
+      freshPeerLocked,
+      replayPeerRestored: existsSync(join(peerPath, 'package.json')),
+      replayLockStable: readFileSync(lockPath).equals(lockBefore),
+    };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function freshLockfile(
   dependency: Readonly<Record<string, string>>,
   registry: RegistryClient,
@@ -457,6 +537,46 @@ function expectShadowTraceDrift(lockfile: Lockfile): void {
 }
 
 describe('shadow substitution installer boundary', () => {
+  it('[fault: frozen-assumption] matches npm peer traversal and lock replay', async () => {
+    const oracle = nativePeerTraversalEvidence();
+    expect(oracle).toEqual({
+      freshPeerInstalled: true,
+      freshPeerLocked: true,
+      replayPeerRestored: true,
+      replayLockStable: true,
+    });
+
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const registry = await contractRegistry();
+    const first = await installContract(vfs, registry, {
+      [CONTRACT_TRIGGER]: CONTRACT_VERSION,
+    });
+    const lockPath = '/project/package-lock.json';
+    const lockBefore = await vfs.readFile(lockPath);
+    const peerPath = `/project/node_modules/${CONTRACT_PEER}`;
+    const freshPeerInstalled = await vfs.exists(`${peerPath}/package.json`);
+    const freshPeerLocked =
+      first.lockfile.packages[`node_modules/${CONTRACT_PEER}`]?.version === '1.0.0';
+
+    await vfs.rm(peerPath, { recursive: true, force: true });
+    registry.resetReads();
+    await installContract(vfs, registry, { [CONTRACT_TRIGGER]: CONTRACT_VERSION });
+    const lockAfter = await vfs.readFile(lockPath);
+
+    expect(registry.packumentReads).toEqual([]);
+    expect(registry.tarballReads).toEqual([]);
+    expect({
+      freshPeerInstalled,
+      freshPeerLocked,
+      replayPeerRestored: await vfs.exists(`${peerPath}/package.json`),
+      replayLockStable:
+        lockAfter.byteLength === lockBefore.byteLength &&
+        lockAfter.every((byte, index) => byte === lockBefore[index]),
+    }).toEqual(oracle);
+  });
+
   it('preserves semver-admits policy through the package-private install authority', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/project', { recursive: true });
