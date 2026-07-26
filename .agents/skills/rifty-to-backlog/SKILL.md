@@ -33,5 +33,5 @@ observed `## Context`, honest sources, optional real-path `user_story`, and a co
 marker when anchored. Done when `pnpm backlog:check` passes.
 
 After capture: `decision-workflow.md` §Backlog readiness owns draft→ready
-(judge verdict; an unresolved observable fork = request manual `rifty-refine`,
+(judge verdict — in an active goal run the unit's Contract+RED plays that role; an unresolved observable fork = request manual `rifty-refine`,
 don't self-run the interview).

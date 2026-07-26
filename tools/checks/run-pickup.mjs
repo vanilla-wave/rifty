@@ -5,10 +5,10 @@ export const PRODUCTION_SOURCE_RE = /^(?:apps|packages|services)\/.+\.(?:ts|tsx|
  * Parent of the first production-source commit. Contract+RED commits may
  * precede it in one PR; implementation cannot rewrite their authority later.
  */
-export function pickupCommit(base, git) {
-  const prPaths = git('diff', '--name-only', base, 'HEAD').trim().split('\n').filter(Boolean);
+export function pickupCommit(base, git, head = 'HEAD') {
+  const prPaths = git('diff', '--name-only', base, head).trim().split('\n').filter(Boolean);
   if (!prPaths.some((path) => PRODUCTION_SOURCE_RE.test(path))) return base;
-  const commits = git('rev-list', '--first-parent', '--reverse', `${base}..HEAD`)
+  const commits = git('rev-list', '--first-parent', '--reverse', `${base}..${head}`)
     .trim()
     .split('\n')
     .filter(Boolean);

@@ -30,7 +30,8 @@ A draft needs `## Context`. A ready item needs:
 - `## Parity cases`: enumerated oracle behaviors and RED targets;
 - `## Out of scope`: named loud throws + compat ❌;
 - `## Decisions`: every fork resolved or ADR-linked;
-- any `draft→ready` flip: a `ready-verdict:` line from the fresh-context judge
+- any `draft→ready` flip: a `ready-verdict:` line — from the fresh-context
+  judge, or inside an active goal run from the unit's Contract+RED checkpoint
   (`decision-workflow.md` §Backlog readiness).
 
 External-oracle work adds `## Reference contract` with pinned version/mechanism;
