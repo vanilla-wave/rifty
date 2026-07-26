@@ -263,7 +263,7 @@ export const HONO_API_TEMPLATE: NodeServerProjectSpec = {
   id: 'hono-api',
   displayName: 'Hono API',
   runtime: 'node-server',
-  install: { hono: '^4.6.0', '@hono/node-server': '^1.13.0' },
+  install: { hono: '^4.6.0', '@hono/node-server': '^1.13.0', nodemon: '3.1.14' },
   entry: { relativePath: '/src/main.js', content: HONO_API_SERVER_SOURCE },
   defaultPort: 3321,
   estimatedBootSeconds: 15,

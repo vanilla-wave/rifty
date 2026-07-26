@@ -1,6 +1,9 @@
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyNodeProcessTerminalBootstrap } from '../builtins/process.ts';
+import {
+  applyNodeProcessTerminalBootstrap,
+  postNodeProcessListeningControl,
+} from '../builtins/process.ts';
 import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
@@ -140,8 +143,12 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     ipc.port2.start();
 
     process.disconnect?.();
+    postNodeProcessListeningControl(process, [3000], 'scope-a');
     await tick();
-    expect(frames).toEqual([{ kind: 'ipc:disconnect' }]);
+    expect(frames).toEqual([
+      { kind: 'ipc:disconnect' },
+      { kind: 'control:listening', ports: [3000], previewScope: 'scope-a' },
+    ]);
     expect(close).not.toHaveBeenCalled();
 
     ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols: 100, rows: 30 });
@@ -212,5 +219,21 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     expect(process.stderr).not.toHaveProperty('columns');
     expect(process.stderr).not.toHaveProperty('rows');
     expect(process.stderr).not.toHaveProperty('getWindowSize');
+  });
+
+  it('treats a teardown kill for an already-retired descendant as idempotent', async () => {
+    const ipc = new MessageChannel();
+    installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+
+    ipc.port2.postMessage({
+      kind: 'control:kill-tree',
+      pid: 987_654,
+      signal: 'SIGTERM',
+    });
+
+    await expect(tick()).resolves.toBeUndefined();
   });
 });

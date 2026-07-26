@@ -263,6 +263,14 @@ export function startBrowserWorkspaceOwner(
   dependencies: BrowserOwnerDependencies,
 ): RawWorkspaceOwnerHandle {
   const worker = dependencies.spawnOwner(input);
+  const ownerStderrDecoder = new TextDecoder();
+  let ownerStderr = '';
+  worker.stderr().on('data', (chunk: unknown) => {
+    if (!(chunk instanceof Uint8Array)) return;
+    ownerStderr = `${ownerStderr}${ownerStderrDecoder.decode(chunk, { stream: true })}`.slice(
+      -16_384,
+    );
+  });
   const playgroundUrlContext = input.playgroundUrlContext;
   const companionMode = playgroundUrlContext !== undefined;
   const readyState = deferred<void>();
@@ -553,7 +561,8 @@ export function startBrowserWorkspaceOwner(
         ? new ClosedHandleError('Workbench owner')
         : new Error(
             `Workbench owner exited${closeRequested ? '' : ' unexpectedly'} ` +
-              `(code ${String(code)}, signal ${String(signal)})`,
+              `(code ${String(code)}, signal ${String(signal)})` +
+              (ownerStderr === '' ? '' : `\n${ownerStderr}${ownerStderrDecoder.decode()}`),
           ));
     readyState.reject(exitError);
     rejectPending(exitError);

@@ -497,7 +497,7 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
           stderr: 'stream',
           send: 'undefined',
           disconnect: 'undefined',
-          connected: 'undefined',
+          connected: 'boolean',
           channel: 'undefined',
         },
         events: ['stdout', 'exit:0/null', 'close:0/null'],

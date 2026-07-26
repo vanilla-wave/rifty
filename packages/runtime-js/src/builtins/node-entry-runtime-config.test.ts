@@ -143,6 +143,42 @@ describe('node-entry host bootstrap config', () => {
     }
   });
 
+  it('inherits the private preview scope into recursively configured programs', () => {
+    publishKernelEntryBootstrap({
+      protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+      payload: {
+        hostRuntime: HOST_RUNTIME,
+        launch: {
+          kind: 'program',
+          bin: true,
+          remoteFs: true,
+          remoteFsRoot: REMOTE_FS_ROOT,
+          nodeServe: true,
+          previewScope: 'owner-preview',
+        },
+      },
+    });
+    configureNodeEntryWorker('https://host.test/node.js', HOST_RUNTIME);
+
+    expect(
+      buildConfiguredNodeEntryWorkerEntry({
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        nodeServe: true,
+      }),
+    ).toMatchObject({
+      bootstrap: {
+        payload: {
+          launch: {
+            previewScope: 'owner-preview',
+            remoteFsRoot: REMOTE_FS_ROOT,
+          },
+        },
+      },
+    });
+  });
+
   it('rejects recursive remote FS before spawn when the parent has no owner-root proof', () => {
     publishKernelEntryBootstrap({
       protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,

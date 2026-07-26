@@ -74,6 +74,7 @@ export {
 } from './ipc/sync-rpc.ts';
 export {
   SyncRpcDispatcher,
+  type SyncRpcCallerContext,
   type SyncRpcDispatcherOptions,
   type SyncRpcHandler,
 } from './ipc/sync-dispatch.ts';

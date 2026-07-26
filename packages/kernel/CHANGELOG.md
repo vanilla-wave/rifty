@@ -4,6 +4,13 @@
 
 ### Added
 
+- **One federated Worker process tree (ADR-0326).** The owner-root
+  `ProcessManager` now reserves, publishes, snapshots, signals, and settles
+  recursive Worker descendants over the existing trusted SAB chain. Public
+  fork JSON IPC, worker-thread messages, and private lifecycle control share
+  one physical port but remain logically separate; subtree and peer-death
+  teardown physically settle records once.
+
 - **One-shot opaque URL-entry capabilities (ADR-0313).** A spawned URL entry
   can carry a validated frozen map of named `MessagePort`s in its existing init
   transaction. The worker publishes them before pre-entry, privileged

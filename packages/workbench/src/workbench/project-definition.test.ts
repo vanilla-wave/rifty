@@ -847,14 +847,14 @@ describe('package-private finite Node project definitions', () => {
     expect(Object.isFrozen(inspected.args)).toBe(true);
   });
 
-  it('derives the Node-server dev lifecycle from the exact declared entry', () => {
+  it('preserves an explicitly declared Node-server dev lifecycle body', () => {
     const entryPath = "/scripts/server report's.mjs";
     const inspected = serverSnapshot({
       id: 'server-dev-script',
       files: {
         [entryPath]: 'console.log("server");\n',
         '/package.json': JSON.stringify({
-          scripts: { dev: 'node stale.mjs', build: 'node build.mjs' },
+          scripts: { dev: 'node custom-dev.mjs', build: 'node build.mjs' },
         }),
       },
       entryPath,
@@ -863,7 +863,7 @@ describe('package-private finite Node project definitions', () => {
 
     expect(nodeManifest(inspected).scripts).toEqual({
       build: 'node build.mjs',
-      dev: "node './scripts/server report'\\''s.mjs'",
+      dev: 'node custom-dev.mjs',
     });
   });
 
@@ -914,7 +914,7 @@ describe('package-private finite Node project definitions', () => {
     expect.soft(Object.prototype.hasOwnProperty.call(firstScripts, '__proto__')).toBe(true);
     expect.soft(Object.prototype.propertyIsEnumerable.call(firstScripts, '__proto__')).toBe(true);
     expect.soft(Reflect.get(firstScripts ?? {}, '__proto__')).toBe('node first.mjs');
-    expect.soft(firstScripts?.dev).toBe("node './scripts/server report'\\''s.mjs'");
+    expect.soft(firstScripts?.dev).toBe("node 'scripts/server report'\\''s.mjs'");
     expect.soft(decoder.decode(firstPackageJson)).not.toBe(decoder.decode(secondPackageJson));
     expect.soft(first.identity).not.toBe(second.identity);
   });

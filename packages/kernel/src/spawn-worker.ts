@@ -367,7 +367,7 @@ export function spawnKernelWorker(
 
     worker = makeKernelWorker(url);
     dispatcher = getKernelDispatcher();
-    dispatcher.attach(ring);
+    dispatcher.attach(ring, { callerPid: pid });
 
     const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
     worker.postMessage(init, [

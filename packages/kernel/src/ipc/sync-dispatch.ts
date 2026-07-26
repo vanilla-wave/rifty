@@ -50,7 +50,14 @@ const hostClearInterval = globalThis.clearInterval.bind(globalThis);
  * defers the reply until the promise settles; rejections become
  * `{ok:false, error}` replies.
  */
-export type SyncRpcHandler<T = unknown> = (payload: unknown) => T | Promise<T>;
+export interface SyncRpcCallerContext {
+  readonly callerPid?: number;
+}
+
+export type SyncRpcHandler<T = unknown> = (
+  payload: unknown,
+  context?: SyncRpcCallerContext,
+) => T | Promise<T>;
 
 /** Options accepted by {@link SyncRpcDispatcher}. */
 export interface SyncRpcDispatcherOptions {
@@ -97,6 +104,7 @@ export class SyncRpcDispatcher {
   private readonly handlers = new Map<string, SyncRpcHandler>();
   private readonly pollIntervalMs: number;
   private readonly attachments = new Set<SabRing>();
+  private readonly callerContexts = new WeakMap<SabRing, SyncRpcCallerContext>();
   private timer: ReturnType<typeof setInterval> | null = null;
   /** ADR-0084 #17: event-driven when `Atomics.waitAsync` exists; else busy-poll. */
   private readonly eventDriven: boolean;
@@ -170,9 +178,10 @@ export class SyncRpcDispatcher {
    * worker exit so neither the timer nor a parked promise keeps the realm
    * alive past the ring.
    */
-  attach(ring: SabRing): void {
+  attach(ring: SabRing, context: SyncRpcCallerContext = {}): void {
     if (this.attachments.has(ring)) return;
     this.attachments.add(ring);
+    this.callerContexts.set(ring, Object.freeze({ ...context }));
     this.ensureTimer();
     if (this.eventDriven) this.arm(ring);
   }
@@ -180,6 +189,7 @@ export class SyncRpcDispatcher {
   /** Stop watching `ring`. Safe to call when not attached (no-op). */
   detach(ring: SabRing): void {
     if (!this.attachments.delete(ring)) return;
+    this.callerContexts.delete(ring);
     this.inFlight.delete(ring);
     // Bump the generation so the still-parked waitAsync promise no-ops on settle,
     // and drop the arm guard so a later re-attach can arm fresh.
@@ -192,6 +202,7 @@ export class SyncRpcDispatcher {
   detachAll(): void {
     for (const ring of [...this.attachments]) {
       this.inFlight.delete(ring);
+      this.callerContexts.delete(ring);
       this.armGeneration.set(ring, (this.armGeneration.get(ring) ?? 0) + 1);
       this.pendingArm.delete(ring);
     }
@@ -315,7 +326,7 @@ export class SyncRpcDispatcher {
     }
     let result: unknown;
     try {
-      result = handler(req.payload);
+      result = handler(req.payload, this.callerContexts.get(ring) ?? {});
     } catch (err) {
       this.writeError(ring, err, req.method);
       return;

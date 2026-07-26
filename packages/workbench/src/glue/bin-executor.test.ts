@@ -161,7 +161,7 @@ describe('createBinExecutor', () => {
     expect(await p).toEqual({ code: 3, signal: null });
   });
 
-  it('forwards child messages and exit through request-aware hooks', async () => {
+  it('forwards guest IPC messages and exit through request-aware hooks', async () => {
     const fake = makeFakeSpawn();
     const onMessage = vi.fn();
     const onExit = vi.fn();
@@ -169,13 +169,13 @@ describe('createBinExecutor', () => {
     const { ctx } = makeCtx();
 
     const p = exec('/proj/node_modules/.bin/vite', [], ctx);
-    fake.emitMessage({ type: 'rifty:node-listening', ports: [5174] });
+    fake.emitMessage({ hello: 'guest' });
     fake.emitExit(0);
 
     expect(await p).toEqual({ code: 0, signal: null });
     expect(onMessage).toHaveBeenCalledWith(
       expect.objectContaining({ shimPath: '/proj/node_modules/.bin/vite' }),
-      { type: 'rifty:node-listening', ports: [5174] },
+      { hello: 'guest' },
       ctx,
     );
     expect(onExit).toHaveBeenCalledWith(

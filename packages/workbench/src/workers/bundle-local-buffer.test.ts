@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Buffer as RuntimeJsBuffer } from '@riftydev/runtime-js/builtins/buffer';
+import { getProcessCwd, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
+import { installBundleLocalBuffer, installBundleLocalCwd } from './worker-runtime-globals.ts';
 
 /**
  * Regression guard for the dual-copy `Buffer` etag crash (express + sqlite preset:
@@ -60,6 +61,28 @@ describe('installBundleLocalBuffer — dual-copy Buffer realignment', () => {
     // `Buffer.isBuffer(chunk)` (chunk built by the same loader) is true again.
     expect(realignedGlobal).toBe(RuntimeJsBuffer);
     expect(realignedAcceptsLoaderBuffer).toBe(true);
+  });
+});
+
+describe('installBundleLocalCwd — dual-copy process cwd realignment', () => {
+  const savedCwd = getProcessCwd();
+
+  afterEach(() => {
+    setProcessCwd(savedCwd);
+  });
+
+  it('seeds this bundle fs/path cell from the installed process cwd', () => {
+    setProcessCwd('/workspace');
+
+    installBundleLocalCwd('/');
+
+    expect(getProcessCwd()).toBe('/');
+  });
+
+  it('is wired before the node entry probes relative paths', () => {
+    const src = read('node-entry-bootstrap.ts');
+    expect(src).toContain('installBundleLocalCwd');
+    expect(src).toMatch(/installBundleLocalCwd\(proc\.cwd\(\)\)/);
   });
 });
 

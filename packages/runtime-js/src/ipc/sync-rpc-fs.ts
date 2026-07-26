@@ -45,10 +45,11 @@ export class SyncRpcFsSync implements FsSync {
     const out = new Uint8Array(size);
     let offset = 0;
     while (offset < size) {
+      const requested = Math.min(FS_RPC_CHUNK, size - offset);
       const chunk = this.call(FS_METHODS.readChunk, {
         path,
         offset,
-        length: Math.min(FS_RPC_CHUNK, size - offset),
+        length: requested,
       }) as Uint8Array;
       // Empty chunk before the stat'd size means the owner store shrank mid-read
       // (snapshot inconsistent). ADR-0150 forbids silent truncation — fail loud
@@ -58,11 +59,13 @@ export class SyncRpcFsSync implements FsSync {
           `sync-rpc-fs: short read for ${path} — got ${offset} of ${size} bytes (owner store changed mid-read)`,
         );
       }
-      // Defensive clamp: if the owner returns more bytes than requested (concurrent
-      // grow race), copy only what fits the originally-stat'd snapshot (ADR-0150).
-      const usable = Math.min(chunk.length, size - offset);
-      out.set(chunk.subarray(0, usable), offset);
-      offset += usable;
+      if (chunk.length > requested) {
+        throw new Error(
+          `sync-rpc-fs: oversized read for ${path} — ${chunk.length} bytes exceeds ${requested} remaining in the stat snapshot`,
+        );
+      }
+      out.set(chunk, offset);
+      offset += chunk.length;
     }
     return out;
   }

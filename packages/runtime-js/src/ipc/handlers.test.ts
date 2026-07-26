@@ -15,7 +15,11 @@
  * suite).
  */
 
-import { SyncRpcDispatcher } from '@riftydev/kernel';
+import {
+  type SyncRpcCallerContext,
+  SyncRpcDispatcher,
+  type SyncRpcHandler,
+} from '@riftydev/kernel';
 import { describe, expect, it } from 'vitest';
 import { installRuntimeJsExecSyncHandler } from './handlers.ts';
 import type { NodeEntryRunner } from './recursive-runner.ts';
@@ -29,13 +33,13 @@ import type { NodeEntryRunner } from './recursive-runner.ts';
 function installAndCapture(
   resolveScript: (path: string) => Uint8Array | null,
   runWorker?: NodeEntryRunner,
-): (payload: unknown) => unknown | Promise<unknown> {
+): (payload: unknown, context?: SyncRpcCallerContext) => unknown | Promise<unknown> {
   const dispatcher = new SyncRpcDispatcher();
-  let captured: ((payload: unknown) => unknown | Promise<unknown>) | null = null;
+  let captured: SyncRpcHandler | null = null;
   // Wrap `register` so the test sees what `installRuntimeJsExecSyncHandler`
   // installs without coupling to the dispatcher's internal map.
   const originalRegister = dispatcher.register.bind(dispatcher);
-  dispatcher.register = (m: string, h: (p: unknown) => unknown | Promise<unknown>) => {
+  dispatcher.register = (m: string, h: SyncRpcHandler) => {
     if (m === 'execSync') captured = h;
     originalRegister(m, h);
   };
@@ -100,6 +104,21 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
     });
     expect(result).toBeInstanceOf(Uint8Array);
     expect(new TextDecoder().decode(result as Uint8Array)).toBe('hello-from-child');
+  });
+
+  it('passes the trusted ring caller PID to recursive process allocation', async () => {
+    const seen: unknown[] = [];
+    const handler = installAndCapture(
+      () => new Uint8Array(),
+      async (_spec, context) => {
+        seen.push(context);
+        return { stdout: new Uint8Array(), exitCode: 0 };
+      },
+    );
+
+    await handler({ cmd: 'node /run.js', opts: { cwd: '/workspace', env: {} } }, { callerPid: 42 });
+
+    expect(seen).toEqual([{ parentPid: 42 }]);
   });
 
   it('propagates child failure as ECHILDFAILED with the exit code', async () => {

@@ -400,7 +400,7 @@ export const EXPRESS_SQLITE_TEMPLATE: NodeServerProjectSpec = {
   id: 'express-sqlite',
   displayName: 'Express + SQLite',
   runtime: 'node-server',
-  install: { express: '^4.19.0' },
+  install: { express: '^4.19.0', nodemon: '3.1.14' },
   entry: { relativePath: '/src/main.js', content: EXPRESS_SQLITE_SERVER_SOURCE },
   defaultPort: 3210,
   estimatedBootSeconds: 15,

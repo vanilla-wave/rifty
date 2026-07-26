@@ -490,6 +490,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
   }
 
   function ptyRunResult(frame: Extract<OwnerToPageFrame, { type: 'pty:exit' }>): PtyRunResult {
+    if (frame.error !== undefined) throw new Error(frame.error);
     if (!Number.isSafeInteger(frame.code) || frame.code < 0) {
       throw new TypeError(
         `pty:exit shell status must be a non-negative safe integer; received ${frame.code}`,

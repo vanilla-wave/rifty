@@ -122,7 +122,13 @@ test('session close fences an admitted nodemon restart without subtree or route 
         };
 
         try {
-          await run.ready;
+          try {
+            await run.ready;
+          } catch (error) {
+            throw new Error(
+              `${error instanceof Error ? error.message : String(error)}\nterminal:\n${output}`,
+            );
+          }
           if (!output.includes(`> ${devScript}`) || !output.includes('[nodemon] starting')) {
             throw new Error(`project did not execute real installed nodemon\n${output}`);
           }

@@ -75,7 +75,7 @@ export function installRuntimeJsExecSyncHandler(
 ): void {
   const runWorker = options.runWorker ?? makeRecursiveRunner();
 
-  dispatcher.register('execSync', async (rawPayload) => {
+  dispatcher.register('execSync', async (rawPayload, caller) => {
     const payload = coerceExecSyncPayload(rawPayload);
     const tokens = payload.cmd.split(/\s+/).filter(Boolean);
     if (tokens[0] !== 'node' || tokens.length < 2) {
@@ -100,12 +100,15 @@ export function installRuntimeJsExecSyncHandler(
         code: 'ENOENT',
       });
     }
-    const result = await runWorker({
-      entryPath: scriptPath,
-      argv: ['rifty', scriptPath, ...tokens.slice(2)],
-      env: payload.opts.env,
-      cwd,
-    });
+    const result = await runWorker(
+      {
+        entryPath: scriptPath,
+        argv: ['rifty', scriptPath, ...tokens.slice(2)],
+        env: payload.opts.env,
+        cwd,
+      },
+      caller?.callerPid === undefined ? undefined : { parentPid: caller.callerPid },
+    );
     if (result.exitCode !== 0) {
       // Surface the child's stderr in the failure message (Node's `execSync`
       // attaches the child stderr to the thrown error on failure). The recursive

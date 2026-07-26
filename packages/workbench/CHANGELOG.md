@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Installed nodemon owns curated Node-server development (ADR-0327).**
+  Exact script bytes select the existing direct-entry or installed-bin path;
+  recursive app lifecycle events reuse PTY admission, preview scope, and
+  `PreviewRegistry`, while the owner-root process ledger supplies only the
+  finite `ps` forms required by nodemon.
+
 - Initial sealed Workbench root, Playground companion, and five explicit worker
   deployment entries (ADR-0263, ADR-0282).
 

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added (real Node server dev loop)
+
+- Express, Hono, and Koa now pin real `nodemon@3.1.14`; `npm run dev`
+  executes its exact legacy-watch command so owner-VFS edits replace the app
+  Worker on the same preview port, including syntax-crash recovery and
+  teardown. Direct `start` commands and non-server templates keep their
+  existing paths (ADR-0324–0327).
+
 ### Fixed
 
 - Failed saved-project activation now restores the prior catalog ref and live

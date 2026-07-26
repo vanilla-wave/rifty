@@ -9,7 +9,7 @@ import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
 import { type TransformSourceHook, executeEsm } from './esm.ts';
 import { cjsNamespaceFor } from './interop.ts';
-import { type ModuleRecord, ModuleRegistry } from './registry.ts';
+import { type CjsModule, type ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { PathAliases, ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
 import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
@@ -270,26 +270,24 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
     },
-    loadSync(id: string): Record<string, unknown> {
-      if (id.startsWith('node:')) {
-        return loadBuiltinOrThrow(id);
+    loadSync(resolved: ResolvedModule, parent?: CjsModule): Record<string, unknown> {
+      if (resolved.kind === 'builtin') {
+        return loadBuiltinOrThrow(resolved.id);
       }
-      const cached = registry.get(id);
-      if (cached && cached.state === 'loaded') return cached.exports;
-      if (cached && cached.state === 'loading' && cached.kind !== 'esm') {
-        return cached.cjsModule?.exports ?? cached.exports;
-      }
-      const resolved = readResolvedById(id);
       if (resolved.kind === 'esm') {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
-          id,
+          resolved.id,
           'Synchronous require() of ESM is not supported.',
         );
       }
-      return executeCjs(resolved, {
-        ...deps,
-      });
+      return executeCjs(
+        resolved,
+        {
+          ...deps,
+        },
+        parent,
+      );
     },
     async loadAsync(id: string): Promise<Record<string, unknown>> {
       if (id.startsWith('node:')) {
@@ -336,7 +334,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     return resolver.resolve(id, { fromFile: id, esm: false });
   }
 
-  function makeRequire(from: string): CjsRequire {
+  function makeRequire(from: string, parent?: CjsModule): CjsRequire {
     const req = ((specifier: string): unknown => {
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: false });
       if (resolved.kind === 'esm') {
@@ -347,7 +345,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
           from,
         );
       }
-      return deps.loadSync(resolved.id);
+      return deps.loadSync(resolved, parent);
     }) as CjsRequire;
     req.resolve = (specifier: string): string =>
       resolver.resolve(specifier, { fromFile: from, esm: false }).id;
@@ -381,7 +379,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
           `require() of ES Module ${resolved.id} is not supported. Use import() instead.`,
         );
       }
-      return executeCjs(resolved, { ...deps });
+      return deps.loadSync(resolved);
     },
     async import(specifier, from = cwd) {
       keepaliveRef();

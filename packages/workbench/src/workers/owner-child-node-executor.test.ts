@@ -49,6 +49,11 @@ function fakeHandle() {
       listeners[ev] = list;
       list.push(cb);
     },
+    onListeningControl: (cb: (...args: unknown[]) => void) => {
+      const list = listeners['control:listening'] ?? [];
+      listeners['control:listening'] = list;
+      list.push(cb);
+    },
     send: vi.fn(),
     // Real WorkerHandle.kill() emits 'exit' synchronously — mirror that so the
     // executor's pre-abort listener ordering is exercised.
@@ -208,12 +213,15 @@ describe('owner-child-node-executor', () => {
       spawn,
     );
 
-    const result = run({
-      entryPath: '/packages/nested/child.mjs',
-      argv: ['rifty', '/packages/nested/child.mjs', '--exact'],
-      env: { USER_VALUE: 'kept' },
-      cwd: '/',
-    });
+    const result = run(
+      {
+        entryPath: '/packages/nested/child.mjs',
+        argv: ['rifty', '/packages/nested/child.mjs', '--exact'],
+        env: { USER_VALUE: 'kept' },
+        cwd: '/',
+      },
+      { parentPid: 42 },
+    );
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     fake.stdout(new Uint8Array([0x00, 0xff]));
     fake.stdout(new Uint8Array([0x7f]));
@@ -246,7 +254,7 @@ describe('owner-child-node-executor', () => {
         env: { USER_VALUE: 'kept' },
         cwd: '/',
       }),
-      expect.objectContaining({ ppid: 1 }),
+      42,
     );
     expect(reserve).toHaveBeenCalledWith(`${REMOTE_FS_ROOT}/packages/nested/child.mjs`);
     expect(JSON.stringify(spawn.mock.calls[0]?.[0].env)).not.toContain(REMOTE_FS_ROOT);
@@ -448,7 +456,7 @@ describe('owner-child-node-executor', () => {
     const p = exec('/w/server.js', [], ctx, { sid: 's1', onListening, onExit });
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     fake.out(new TextEncoder().encode('hi\n'));
-    fake.emit('message', { type: 'rifty:node-listening', ports: [3000] });
+    fake.emit('control:listening', { ports: [3000] });
     fake.emit('exit', 0, null);
     expect(await p).toEqual({ code: 0, signal: null });
     expect(stdout.join('')).toBe('hi\n');
@@ -472,8 +480,7 @@ describe('owner-child-node-executor', () => {
       onExit: () => {},
     });
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
-    fake.emit('message', {
-      type: 'rifty:node-listening',
+    fake.emit('control:listening', {
       ports: [3000],
       previewScope: 'node-run-scope',
     });

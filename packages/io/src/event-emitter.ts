@@ -13,10 +13,7 @@ type Listener = (...args: unknown[]) => void;
 const captureRejectionSymbol = Symbol.for('nodejs.rejection');
 const DEFAULT_MAX_LISTENERS = 10;
 
-export class EventEmitter {
-  static defaultMaxListeners = DEFAULT_MAX_LISTENERS;
-  static captureRejectionSymbol = captureRejectionSymbol;
-
+class EventEmitterPrototype {
   // State is lazily created so methods work when the constructor never ran —
   // e.g. express mixing `EventEmitter.prototype` onto a plain function via
   // `merge-descriptors`, or send's `SendStream` via `EventEmitter.call(this)`
@@ -207,6 +204,38 @@ export class EventEmitter {
     }
   }
 }
+
+/**
+ * Node exposes EventEmitter as one function that supports BOTH construction
+ * (`new EventEmitter()`) and legacy initialisation (`EventEmitter.call(this)`).
+ * Keep the listener implementation class-shaped for private state and method
+ * typing, but publish its prototype through that single callable boundary.
+ */
+export type EventEmitter = EventEmitterPrototype;
+
+interface EventEmitterConstructor {
+  new (): EventEmitter;
+  (this: EventEmitter): void;
+  readonly prototype: EventEmitter;
+  defaultMaxListeners: number;
+  captureRejectionSymbol: symbol;
+}
+
+const CallableEventEmitter = function EventEmitter(this: EventEmitter): void {
+  // Listener state stays lazy so this also supports prototype mixins whose
+  // constructors never call EventEmitter, matching Node's EventEmitter.init.
+};
+
+CallableEventEmitter.prototype = EventEmitterPrototype.prototype;
+Object.defineProperty(CallableEventEmitter.prototype, 'constructor', {
+  configurable: true,
+  value: CallableEventEmitter,
+  writable: true,
+});
+
+export const EventEmitter = CallableEventEmitter as EventEmitterConstructor;
+EventEmitter.defaultMaxListeners = DEFAULT_MAX_LISTENERS;
+EventEmitter.captureRejectionSymbol = captureRejectionSymbol;
 
 export function once(emitter: EventEmitter, event: string | symbol): Promise<unknown[]> {
   return new Promise((resolve, reject) => {

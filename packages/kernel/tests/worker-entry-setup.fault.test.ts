@@ -31,7 +31,8 @@ function fakePort(): MessagePort & {
 
 class DispatchableWorkerTarget {
   readonly postMessage = vi.fn();
-  readonly close = vi.fn();
+  readonly nativeClose = vi.fn();
+  close = this.nativeClose;
   private listener: EventListener | null = null;
 
   addEventListener(type: string, listener: EventListener): void {
@@ -88,7 +89,11 @@ function expectReaped(
   ports: readonly ReturnType<typeof fakePort>[],
 ): void {
   expect(target.postMessage).toHaveBeenCalledWith({ type: 'exit', code: 1 });
-  expect(target.close).toHaveBeenCalledTimes(1);
+  expect(ports[3]?.postMessage).toHaveBeenCalledWith({
+    kind: 'control:exiting',
+    code: 1,
+  });
+  expect(target.nativeClose).toHaveBeenCalledTimes(1);
   for (const port of ports) expect(port.close).toHaveBeenCalledTimes(1);
 }
 

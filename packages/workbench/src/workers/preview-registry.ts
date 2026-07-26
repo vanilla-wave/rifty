@@ -161,7 +161,8 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   };
 
   const emit = (): void => {
-    deps.send({ type: 'pty:preview', ports: snapshot().map((t) => t.entry) });
+    const ports = snapshot().map((t) => t.entry);
+    deps.send({ type: 'pty:preview', ports });
     emitDev();
   };
 

@@ -318,7 +318,7 @@ export const KOA_API_TEMPLATE: NodeServerProjectSpec = {
   id: 'koa-api',
   displayName: 'Koa API',
   runtime: 'node-server',
-  install: { koa: '^2.15.0', '@koa/router': '^12.0.0' },
+  install: { koa: '^2.15.0', '@koa/router': '^12.0.0', nodemon: '3.1.14' },
   entry: { relativePath: '/src/main.js', content: KOA_API_SERVER_SOURCE },
   defaultPort: 3332,
   estimatedBootSeconds: 15,

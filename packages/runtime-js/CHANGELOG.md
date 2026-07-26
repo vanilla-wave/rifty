@@ -4,6 +4,16 @@
 
 ### Added
 
+- **Worker-backed `child_process` plan and Node IPC (ADR-0326).** Recursive
+  `spawn`/`fork` validate cwd/env/stdio before allocation, execute `node
+  <entry>` in a fresh owner-FS Worker, expose default-JSON fork IPC only when
+  requested, and support nodemon's finite `ps`/`SIGUSR2` forms. Unsupported
+  descriptors, serialization, commands, and signals remain loud gaps.
+- **One CJS module record owns Node metadata and lifecycle (ADR-0325).**
+  Published records now carry first-parent/children identity, `loaded`
+  transitions, cycle visibility, cache identity, and failed-load unlink
+  without a parallel metadata graph.
+
 - Owner `fs.*` sync-RPC handlers now publish every write, mkdir, remove,
   metadata update, rename, and copy through the optional shared VFS mutation
   guard; async guards defer the reply while unguarded calls stay synchronous

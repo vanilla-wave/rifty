@@ -26,7 +26,7 @@ import {
 } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
-import { getProcessCwd } from './process.ts';
+import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
@@ -172,7 +172,11 @@ export class Worker extends EventEmitter {
         // TODO(backlog: runtime-js/worker-threads-kernel-run-to-completion-exit).
         serve: true,
       };
-      const handle = globalProcessManager.spawnWorker('node', spec);
+      const handle = globalProcessManager.spawnWorkerThread(
+        spec,
+        { pid: this.processContext.pid, ppid: this.processContext.ppid },
+        { cwd: this.processContext.cwd },
+      );
       this.workerHandle = handle;
       if (handle.kind === 'worker') {
         handle.stdout().on('data', (chunk) => this.emit('stdout', chunk));
@@ -549,35 +553,30 @@ function withSameRealmWorkerContextSync<T>(context: WorkerThreadContext, fn: () 
   }
 }
 
-interface ProcessWithWorkerIpc {
-  on?(event: 'message', handler: (message: unknown) => void): unknown;
-  send?(message: unknown): unknown;
-}
-
 function readProcessWorkerContext(): WorkerThreadContext | null {
   if (cachedProcessWorkerContext !== undefined) return cachedProcessWorkerContext;
-  const proc = globalThis.process as unknown as ProcessWithWorkerIpc | undefined;
+  const proc = globalThis.process as unknown;
   const bootstrap = readNodeEntryBootstrapIfPresent();
   if (proc === undefined || bootstrap?.launch.kind !== 'worker-thread') {
     cachedProcessWorkerContext = null;
     return null;
   }
   const launch = bootstrap.launch;
+  const ipc = nodeProcessWorkerIpc(proc);
   const parentPort = createWorkerPort((msg) => {
-    if (typeof proc.send !== 'function') {
+    if (!ipc.send(msg)) {
       throw new NotImplementedError(
         'worker_threads.parentPort.postMessage',
-        'kernel process IPC is not available',
+        'kernel worker_threads IPC is closed',
       );
     }
-    proc.send(msg);
   });
   const context: WorkerThreadContext = {
     parentPort,
     workerData: decodeWorkerData(launch.workerDataJson),
     threadId: launch.threadId,
   };
-  proc.on?.('message', (msg) => {
+  ipc.onMessage((msg) => {
     withSameRealmWorkerContextSync(context, () => deliverToPort(parentPort, msg));
   });
   cachedProcessWorkerContext = context;

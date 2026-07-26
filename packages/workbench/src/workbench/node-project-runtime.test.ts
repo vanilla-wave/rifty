@@ -296,7 +296,7 @@ describe('Node server project runtime Contract+RED', () => {
       advertisement({ ownerToken: 'owner-sibling', sid: 'wrong-owner' }),
       advertisement({ ptySid: 'terminal-sibling', sid: 'wrong-terminal' }),
       advertisement({ ptyRid: 'run-stale', sid: 'stale-run' }),
-      advertisement({ source: 'node', sid: 'wrong-source' }),
+      advertisement({ source: 'preview', sid: 'wrong-source' }),
       advertisement({ port: 5199, url: '/preview/5199/', sid: 'wrong-port' }),
     ]);
     await settleMicrotasks();
@@ -310,6 +310,23 @@ describe('Node server project runtime Contract+RED', () => {
     ).toBe('pending');
 
     await proveServerPreview(h);
+    await expect(run.ready).resolves.toEqual({
+      port: SERVER_PORT,
+      url: `/preview/${SERVER_PORT}/`,
+    });
+    await finishServerRun(h);
+  });
+
+  it('accepts the configured port from an installed Node supervisor', async () => {
+    const h = createServerHarness();
+    const run = h.session.run();
+    await admitServerRun(h);
+
+    h.previews.publish([advertisement({ source: 'node', label: 'nodemon :5174' })]);
+    h.previews.swProofs[0]?.resolve();
+    await settleMicrotasks();
+    h.previews.httpProofs[0]?.resolve({ ok: true, status: 200 });
+
     await expect(run.ready).resolves.toEqual({
       port: SERVER_PORT,
       url: `/preview/${SERVER_PORT}/`,

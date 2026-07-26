@@ -5,17 +5,18 @@
  */
 import {
   type KernelEntryCapabilityPorts,
-  type SpawnWorkerIdentity,
   type SpawnWorkerSpec,
   globalProcessManager,
-  spawnKernelWorker,
 } from '@riftydev/kernel';
 import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { InstallRuntimeJsExecSyncOptions } from '@riftydev/runtime-js/ipc/exec-sync-handler';
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
-import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
-import { type ForegroundWritable, runForegroundChild } from '../glue/run-foreground-child.ts';
+import {
+  type ForegroundListeningControl,
+  type ForegroundWritable,
+  runForegroundChild,
+} from '../glue/run-foreground-child.ts';
 import { toOwnerProjectPath } from '../workbench/project-file-boundary.ts';
 import {
   type ReserveOwnerChildAdmission,
@@ -43,10 +44,27 @@ interface OwnerExecSyncChild {
   terminate(): void;
 }
 
-type OwnerExecSyncSpawn = (
-  spec: SpawnWorkerSpec,
-  identity: SpawnWorkerIdentity,
-) => OwnerExecSyncChild;
+type OwnerExecSyncSpawn = (spec: SpawnWorkerSpec, parentPid: number) => OwnerExecSyncChild;
+
+const spawnOwnerExecSyncChild: OwnerExecSyncSpawn = (spec, parentPid) => {
+  const handle = globalProcessManager.spawnWorker('node', spec, parentPid, {
+    cwd: spec.cwd,
+  });
+  if (handle.kind !== 'worker') {
+    throw new Error('owner execSync runner expected a Worker process handle');
+  }
+  return {
+    ports: handle.ports,
+    onExit(listener) {
+      const onExit = (code: unknown): void => listener(typeof code === 'number' ? code : 1);
+      handle.on('exit', onExit);
+      return () => handle.off('exit', onExit);
+    },
+    terminate() {
+      handle.kill('SIGTERM');
+    },
+  };
+};
 
 function concatChunks(chunks: readonly Uint8Array[]): Uint8Array {
   const output = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
@@ -64,10 +82,9 @@ export function createOwnerExecSyncRunner(
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
   getActiveProjectRoot: () => string,
   reserveAdmission: ReserveOwnerChildAdmission,
-  spawn: OwnerExecSyncSpawn = spawnKernelWorker,
+  spawn: OwnerExecSyncSpawn = spawnOwnerExecSyncChild,
 ): OwnerExecSyncRunner {
-  let nextNestedPid = 0xc0000000;
-  return async (spec) => {
+  return async (spec, context) => {
     const remoteFsRoot = getActiveProjectRoot();
     const reservation = await reserveAdmission(toOwnerProjectPath(remoteFsRoot, spec.entryPath));
     let child: OwnerExecSyncChild;
@@ -88,7 +105,7 @@ export function createOwnerExecSyncRunner(
           env: { ...spec.env },
           cwd: spec.cwd,
         },
-        { pid: nextNestedPid++, ppid: 1 },
+        context?.parentPid ?? 1,
       );
     } catch (error) {
       abortOwnerChildAdmissionBeforeSpawn(reservation, error);
@@ -201,6 +218,7 @@ export interface NodeChildHandle {
   stdin(): ForegroundWritable;
   on(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
+  onListeningControl?: (listener: (control: ForegroundListeningControl) => void) => unknown;
   send(message: unknown): unknown;
   resize(cols: number, rows: number): unknown;
   kill(signal?: string): unknown;
@@ -267,15 +285,12 @@ export function createOwnerChildNodeExecutor(
       throw error;
     }
     const physicalExit = observeOwnerChildExit(handle);
-    // Shared foreground driver (stream/abort/exit). A server child posts
-    // `rifty:node-listening` → register a preview slot; the slot is removed on
-    // exit. (run-foreground-child owns the exit-before-pre-abort ordering.)
+    // Shared foreground driver owns stream/abort/exit plus private listening
+    // control; preview removal remains ordered before the run settles.
     let running: Promise<ProcessExit>;
     try {
       running = runForegroundChild(handle, ctx, {
-        onMessage: (m) => {
-          if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports, m.previewScope);
-        },
+        onListening: (control) => hooks.onListening(hooks.sid, control.ports, control.previewScope),
         onExit: () => hooks.onExit(hooks.sid),
       });
       commitOwnerChildAdmission(reservation, physicalExit);

@@ -14,10 +14,6 @@ export interface OwnerChildAdmissionReservation {
 
 export type ReserveOwnerChildAdmission = (root: string) => Promise<OwnerChildAdmissionReservation>;
 
-interface ExitObservable {
-  on(event: 'exit', listener: (...args: unknown[]) => void): unknown;
-}
-
 /** Attach owner-minted endpoints only to the one URL entry being spawned. */
 export function attachOwnerChildCapabilities(
   entry: WorkerEntryDescriptor,
@@ -31,9 +27,19 @@ export function attachOwnerChildCapabilities(
 }
 
 /** Physical exit evidence, registered immediately after spawn returns. */
-export function observeOwnerChildExit(handle: ExitObservable): Promise<void> {
+export function observeOwnerChildExit(handle: object): Promise<void> {
+  const observable = handle as {
+    on(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void): unknown;
+  };
   return new Promise<void>((resolve) => {
-    handle.on('exit', () => resolve());
+    let settled = false;
+    const settle = (): void => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    observable.on('exit', settle);
+    observable.on('peererror', settle);
   });
 }
 

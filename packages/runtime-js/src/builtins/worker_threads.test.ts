@@ -37,9 +37,6 @@ import '../module-loader/loader.ts';
 let warnSpy: ReturnType<typeof vi.spyOn>;
 type Coi = { crossOriginIsolated?: boolean };
 type WorkerProcessHandle = Extract<ProcessHandle, { kind: 'worker' }>;
-type ProcessWithWorkerIpc = NodeJS.Process & {
-  send?: (message: unknown) => unknown;
-};
 type NodeEntryUrlContract = typeof nodeEntryUrl & {
   configureNodeEntryWorker(url: string | URL, runtimeEnv: Readonly<Record<string, string>>): void;
 };
@@ -507,16 +504,7 @@ globalThis.onmessage = ({ data }) => {
     expect(globalProcessManager.spawnWorker).not.toHaveBeenCalled();
   });
 
-  it('exposes parentPort and workerData inside a kernel-backed worker child', () => {
-    const proc = globalThis.process as ProcessWithWorkerIpc;
-    const originalSend = proc.send;
-    const originalOn = proc.on;
-    const sent: unknown[] = [];
-    let capturedMessageHandler: ((message: unknown) => void) | undefined;
-
-    proc.env.RIFTY_WORKER_THREADS = 'guest-poison';
-    proc.env.RIFTY_WORKER_THREAD_ID = '999';
-    proc.env.RIFTY_WORKER_DATA_JSON = '{"mode":"guest-poison"}';
+  it('exposes parentPort without exposing process IPC inside a kernel worker child', async () => {
     publishKernelEntryBootstrap({
       protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
       payload: {
@@ -529,19 +517,25 @@ globalThis.onmessage = ({ data }) => {
         },
       },
     });
-    proc.send = (message: unknown) => {
-      sent.push(message);
-      return true;
-    };
-    proc.on = ((event: string | symbol, handler: (...args: unknown[]) => void) => {
-      if (event === 'message') {
-        capturedMessageHandler = handler as (message: unknown) => void;
-        return proc;
-      }
-      return originalOn.call(proc, event, handler as never);
-    }) as NodeJS.Process['on'];
+    const ipc = new MessageChannel();
+    const port = (): MessagePort => new MessageChannel().port1;
+    const proc = new NodeProcess({
+      pid: 3,
+      ppid: 2,
+      argv: ['rifty', '/workspace/worker.mjs'],
+      env: {
+        RIFTY_WORKER_THREADS: 'guest-poison',
+        RIFTY_WORKER_THREAD_ID: '999',
+        RIFTY_WORKER_DATA_JSON: '{"mode":"guest-poison"}',
+      },
+      cwd: '/workspace',
+      stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: ipc.port1 },
+    });
+    const sent: unknown[] = [];
+    ipc.port2.onmessage = (event) => sent.push(event.data);
+    ipc.port2.start();
 
-    try {
+    await withProcessGlobal(proc, async () => {
       _resetFallbackWarnState();
       const wt = workerThreadsModule as {
         isMainThread: boolean;
@@ -557,20 +551,21 @@ globalThis.onmessage = ({ data }) => {
       expect(wt.isMainThread).toBe(false);
       expect(wt.threadId).toBe(77);
       expect(wt.workerData).toEqual({ mode: 'rolldown' });
+      expect(typeof proc.send).toBe('undefined');
+      expect(typeof proc.disconnect).toBe('undefined');
+      expect(typeof proc.connected).toBe('undefined');
+      expect(typeof proc.channel).toBe('undefined');
       wt.parentPort.postMessage({ from: 'child' });
-      capturedMessageHandler?.({ from: 'parent' });
+      ipc.port2.postMessage({ kind: 'ipc:message', payload: { from: 'parent' } });
 
-      expect(sent).toEqual([{ from: 'child' }]);
-      expect(received).toEqual([{ from: 'parent' }]);
-    } finally {
-      proc.env.RIFTY_WORKER_THREADS = undefined;
-      proc.env.RIFTY_WORKER_THREAD_ID = undefined;
-      proc.env.RIFTY_WORKER_DATA_JSON = undefined;
-      publishKernelEntryBootstrap(null);
-      proc.send = originalSend;
-      proc.on = originalOn;
+      await vi.waitFor(() =>
+        expect(sent).toEqual([{ kind: 'ipc:message', payload: { from: 'child' } }]),
+      );
+      await vi.waitFor(() => expect(received).toEqual([{ from: 'parent' }]));
       _resetFallbackWarnState();
-    }
+    });
+    ipc.port1.close();
+    ipc.port2.close();
   });
 });
 

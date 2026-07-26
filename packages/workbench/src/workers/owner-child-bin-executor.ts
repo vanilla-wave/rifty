@@ -72,7 +72,7 @@ export function createOwnerChildBinExecutor(
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
   reserveAdmission: ReserveOwnerChildAdmission,
-  hooks: Pick<BinExecutorDeps, 'onStart' | 'onSpawn' | 'onMessage' | 'onExit'> = {},
+  hooks: Pick<BinExecutorDeps, 'onStart' | 'onSpawn' | 'onMessage' | 'onListening' | 'onExit'> = {},
   enrichRequest?: OwnerChildBinRequestEnricher,
 ): BinExecutor {
   return async (binPath, args, ctx) => {
@@ -116,6 +116,9 @@ export function createOwnerChildBinExecutor(
       hooks.onSpawn?.(req, handle, ctx);
       running = runForegroundChild(handle, ctx, {
         onMessage: hooks.onMessage ? (message) => hooks.onMessage?.(req, message, ctx) : undefined,
+        onListening: hooks.onListening
+          ? (control) => hooks.onListening?.(req, control, ctx)
+          : undefined,
         onExit: hooks.onExit ? () => hooks.onExit?.(req, ctx) : undefined,
       });
       commitOwnerChildAdmission(reservation, physicalExit);

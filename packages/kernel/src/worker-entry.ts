@@ -400,9 +400,14 @@ export function finalizeWorkerEntry(
   const exitMessage: WorkerExitMessage = { type: 'exit', code: outcome.code };
   let firstError: unknown;
   try {
-    target.postMessage(exitMessage);
+    spec.stdio.ipc.postMessage({ kind: 'control:exiting', code: outcome.code });
   } catch (error) {
     firstError = error;
+  }
+  try {
+    target.postMessage(exitMessage);
+  } catch (error) {
+    firstError ??= error;
   }
   closePorts(spec.stdio);
   closeCapabilityPorts(spec.entry);
@@ -412,6 +417,27 @@ export function finalizeWorkerEntry(
     firstError ??= error;
   }
   if (firstError !== undefined) throw firstError;
+}
+
+/** Bind the realm's native close to one generation-scoped peer-death proof. */
+export function installWorkerPeerCloseAttestation(
+  target: { close(): void },
+  ipc: Pick<MessagePort, 'postMessage'>,
+): void {
+  const nativeClose = target.close.bind(target);
+  let closing = false;
+  target.close = (): void => {
+    if (closing) {
+      nativeClose();
+      return;
+    }
+    closing = true;
+    try {
+      ipc.postMessage({ kind: 'control:peer-closing' });
+    } finally {
+      nativeClose();
+    }
+  };
 }
 
 /**
@@ -435,6 +461,7 @@ export function installWorkerEntry(
     target.removeEventListener('message', onMessage as unknown as EventListener);
 
     const spec = msg.spec;
+    installWorkerPeerCloseAttestation(target, spec.stdio.ipc);
     // Run pre-entry hook + entry, drain a run-to-completion child's loop, and
     // compute the outcome — the realm-independent core (unit-tested via
     // runEntryLifecycle). ADR-0152: serve workers are kept

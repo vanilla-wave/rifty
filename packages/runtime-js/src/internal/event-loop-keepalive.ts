@@ -14,35 +14,54 @@
 
 import { setKernelDrainHook } from '@riftydev/kernel';
 
-// awaitDrain polls on a macrotask. It MUST use the HOST setTimeout, NOT the
-// global one — installTimerGlobals() replaces global setTimeout with a
-// keepalive-REFCOUNTED wrapper, so polling via the global would make the
-// drain's own poll timer hold a ref it is waiting to release → it could never
-// drain setTimeout-scheduled work (it would hang to the cap). Captured at
-// module-load, before installTimerGlobals runs, so this is the real host timer.
-const hostSetTimeout = globalThis.setTimeout.bind(globalThis);
+interface KeepaliveState {
+  refCount: number;
+  rejection: { reason: unknown } | null;
+  readonly hostSetTimeout: typeof globalThis.setTimeout;
+}
 
-let refCount = 0;
-let rejection: { reason: unknown } | null = null;
+const KEEPALIVE_STATE = Symbol.for('rifty.runtime-js.event-loop-keepalive.v1');
+
+function keepaliveState(): KeepaliveState {
+  const realm = globalThis as typeof globalThis & { [KEEPALIVE_STATE]?: KeepaliveState };
+  if (realm[KEEPALIVE_STATE] === undefined) {
+    Object.defineProperty(realm, KEEPALIVE_STATE, {
+      value: {
+        refCount: 0,
+        rejection: null,
+        // awaitDrain MUST use the host timer, not installTimerGlobals' ref-counted
+        // wrapper. Store the first bundle's capture on the realm so later
+        // node-entry chunks share both the counter and the original timer.
+        hostSetTimeout: globalThis.setTimeout.bind(globalThis),
+      } satisfies KeepaliveState,
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    });
+  }
+  return realm[KEEPALIVE_STATE] as KeepaliveState;
+}
 
 /** Increment the active-handle count (timer/immediate/import scheduled). */
 export function ref(): void {
-  refCount += 1;
+  keepaliveState().refCount += 1;
 }
 
 /** Decrement the active-handle count (handle fired/cleared/settled). Floors at 0. */
 export function unref(): void {
-  if (refCount > 0) refCount -= 1;
+  const state = keepaliveState();
+  if (state.refCount > 0) state.refCount -= 1;
 }
 
 /** Current active-handle count. */
 export function activeRefs(): number {
-  return refCount;
+  return keepaliveState().refCount;
 }
 
 /** Record the first unhandled rejection so `awaitDrain` surfaces it loudly. */
 export function recordRejection(reason: unknown): void {
-  if (rejection === null) rejection = { reason };
+  const state = keepaliveState();
+  if (state.rejection === null) state.rejection = { reason };
 }
 
 /**
@@ -65,8 +84,9 @@ export function trackKeepalivePromise(promise: PromiseLike<unknown>): void {
 
 /** Test-only: reset module state between cases. */
 export function resetKeepalive(): void {
-  refCount = 0;
-  rejection = null;
+  const state = keepaliveState();
+  state.refCount = 0;
+  state.rejection = null;
 }
 
 /** Generous default cap — a safety-net against a genuine hang/leak, not Node parity. */
@@ -94,25 +114,26 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
   const schedule =
     opts.scheduleMacrotask ??
     ((cb: () => void) => {
-      hostSetTimeout(cb, 0);
+      keepaliveState().hostSetTimeout(cb, 0);
     });
   const now = opts.now ?? (() => performance.now());
   const start = now();
   return new Promise<void>((resolve, reject) => {
     const tick = (): void => {
-      if (rejection !== null) {
-        const r = rejection.reason;
+      const state = keepaliveState();
+      if (state.rejection !== null) {
+        const r = state.rejection.reason;
         reject(r instanceof Error ? r : new Error(String(r)));
         return;
       }
-      if (refCount <= 0) {
+      if (state.refCount <= 0) {
         resolve();
         return;
       }
       if (now() - start > capMs) {
         reject(
           new Error(
-            `child realm exceeded keepalive drain cap (${capMs}ms) — suspected hang or leaked handle (${refCount} active ref(s))`,
+            `child realm exceeded keepalive drain cap (${capMs}ms) — suspected hang or leaked handle (${state.refCount} active ref(s))`,
           ),
         );
         return;

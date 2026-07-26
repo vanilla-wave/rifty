@@ -1,6 +1,8 @@
 import { NodeProcess } from './process.ts';
 
 export interface NodeProcessContextSnapshot {
+  readonly pid: number;
+  readonly ppid: number;
   readonly cwd: string;
   readonly env: Readonly<Record<string, string>>;
 }
@@ -21,6 +23,8 @@ export function snapshotNodeProcessContext(): NodeProcessContextSnapshot | null 
   const process = (globalThis as { process?: unknown }).process;
   if (!(process instanceof NodeProcess)) return null;
   return {
+    pid: process.pid,
+    ppid: process.ppid,
     cwd: process.cwd(),
     env: snapshotProcessEnv(process.env),
   };

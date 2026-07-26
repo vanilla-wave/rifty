@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ProcessIO, ProcessManager } from '../src/process-manager.ts';
+import { KERNEL_SYNC_CALL_KEY, publishKernelSyncApi } from '../src/shared-globals.ts';
 import {
   type WorkerLike,
   clearKernelDispatcher,
@@ -33,6 +34,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
   });
 
   afterEach(() => {
+    Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
     clearWorkerFactoryForTests();
     clearKernelWorkerUrl();
     clearKernelDispatcher();
@@ -78,6 +80,38 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(duplicateKill).toBe(false);
   });
 
+  it('allocates a same-realm descendant in the owner-root PID ledger', () => {
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    publishKernelSyncApi({
+      call(method, payload) {
+        calls.push({ method, payload });
+        if (method === 'process.reserve') return 41;
+        return null;
+      },
+    });
+    const manager = new ProcessManager();
+
+    const child = manager.spawn('ps', liveUntilKilled, 7, {
+      cwd: '/workspace',
+      federated: true,
+    });
+
+    expect(child.pid).toBe(41);
+    expect(calls).toEqual([
+      {
+        method: 'process.reserve',
+        payload: { command: 'ps', ppid: 7, cwd: '/workspace' },
+      },
+      { method: 'process.commit', payload: { pid: 41 } },
+    ]);
+
+    expect(child.kill('SIGTERM')).toBe(true);
+    expect(calls.at(-1)).toEqual({
+      method: 'process.settle',
+      payload: { pid: 41, code: null, signal: 'SIGTERM' },
+    });
+  });
+
   it('aborts a failed Worker reservation without publication or PID reuse', () => {
     const manager = new ProcessManager();
     const initFailure = new DOMException('init clone failed', 'DataCloneError');
@@ -107,6 +141,27 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(next.pid).toBe(3);
     expect(manager.list()).toEqual([next]);
     next.kill();
+  });
+
+  it('rejects a reserved descendant when its owner dies before commit', () => {
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('nodemon', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/nodemon.js' },
+      argv: ['rifty', '/nodemon.js'],
+      env: {},
+      cwd: '/workspace',
+      serve: true,
+    });
+    const childPid = manager.reserveRemoteProcess('node', owner.pid, '/workspace', owner.pid);
+
+    expect(owner.kill('SIGTERM')).toBe(true);
+    expect(() => manager.commitRemoteProcess(childPid, owner.pid)).toThrow(
+      `process.commit: PID ${String(childPid)} has no matching reservation`,
+    );
+    expect(manager.hasPendingRemoteProcess(childPid)).toBe(false);
+    expect(manager.list()).toEqual([]);
   });
 
   it('returns a whole old or whole replacement table when snapshot races restart', async () => {

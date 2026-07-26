@@ -59,7 +59,7 @@ describe('child_process validated stdio + optional default-JSON IPC plan', () =>
     expect(typeof plain.send).toBe('undefined');
     expect(typeof plain.disconnect).toBe('undefined');
     expect(plain.connected).toBe(false);
-    expect(plain.channel).toBeNull();
+    expect(typeof plain.channel).toBe('undefined');
 
     const forked = fork('/empty.js', [], {
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'],

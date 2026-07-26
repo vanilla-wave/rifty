@@ -217,6 +217,7 @@ interface BoundaryWorker {
   readonly spec: () => Parameters<typeof globalProcessManager.spawnWorker>[1] | null;
   readonly killedWith: () => string | null;
   emitMessage(message: unknown): void;
+  emitListening(control: { ports: number[]; previewScope?: string }): void;
   emitExit(code: number | null, signal?: string | null): void;
 }
 
@@ -290,6 +291,12 @@ function boundaryWorker(): BoundaryWorker {
       listeners.set(event, current);
       return rawHandle;
     },
+    onListeningControl(listener: (...args: unknown[]) => void) {
+      const current = listeners.get('control:listening') ?? [];
+      current.push(listener);
+      listeners.set('control:listening', current);
+      return () => {};
+    },
     send: () => true,
     resize: () => true,
     kill(signal = 'SIGTERM') {
@@ -314,6 +321,9 @@ function boundaryWorker(): BoundaryWorker {
     killedWith: () => killedWith,
     emitMessage(message) {
       for (const listener of listeners.get('message') ?? []) listener(message);
+    },
+    emitListening(control) {
+      for (const listener of listeners.get('control:listening') ?? []) listener(control);
     },
     emitExit(code, signal = null) {
       control.port1.close();
@@ -487,6 +497,9 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
 
     expect(command).toBe('/node_modules/.bin/nodemon');
     expect(spec).toMatchObject({
+      env: {
+        PORT: '4317',
+      },
       argv: [
         'rifty',
         '/node_modules/.bin/nodemon',
@@ -498,6 +511,14 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       entry: {
         kind: 'url',
         url: NODE_ENTRY_WORKER_URL,
+        bootstrap: {
+          protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+          payload: {
+            launch: {
+              previewScope: expect.any(String),
+            },
+          },
+        },
       },
     });
     expect(spec?.entry).not.toMatchObject({
@@ -894,8 +915,7 @@ describe('Workbench project runtime', () => {
     if (payload.launch.kind !== 'program') throw new Error('expected program launch');
     expect(payload.launch.previewScope).not.toBe('scope-forged');
 
-    worker.emitMessage({
-      type: 'rifty:node-listening',
+    worker.emitListening({
       ports: [5173],
       previewScope: 'scope-a',
     });
@@ -923,8 +943,7 @@ describe('Workbench project runtime', () => {
       { type: 'pty:dev-server', status: 'stopped' },
     ]);
 
-    worker.emitMessage({
-      type: 'rifty:node-listening',
+    worker.emitListening({
       ports: [5999],
       previewScope: 'late-scope',
     });

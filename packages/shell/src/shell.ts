@@ -77,6 +77,11 @@ export interface RunResult {
   stderr: string;
 }
 
+/** Host process-control failure: terminal ownership is lost, so no exit can be invented. */
+export class ShellCommandLifecycleError extends Error {
+  override readonly name = 'ShellCommandLifecycleError';
+}
+
 /** Stream identifier for `RunOptions.onChunk`. */
 export type ChunkStream = 'stdout' | 'stderr';
 
@@ -938,6 +943,7 @@ export class Shell {
         commandResult = raced;
       }
     } catch (err) {
+      if (err instanceof ShellCommandLifecycleError) throw err;
       // Clean shell diagnostic — never dump a JS stack trace to the terminal.
       // Commands throw NotImplementedError for unsupported flags/features; its
       // message ("Not implemented: shell.X.flag (…)") is the right altitude.

@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Host process-control failures now escape as
+  `ShellCommandLifecycleError` instead of being converted into an invented
+  command exit; Workbench can invalidate the owning terminal and process tree
+  honestly when a Worker peer dies (ADR-0326).
+
 - `git status` and `git status --porcelain` preserve row multiplicity when a
   staged deletion is followed by an untracked same-path recreation, matching
   real Git's ordered `D ` plus `??` output instead of collapsing one path to a

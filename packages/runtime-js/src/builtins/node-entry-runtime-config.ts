@@ -1,7 +1,7 @@
 import { type WorkerEntryDescriptor, readKernelEntryBootstrap } from '@riftydev/kernel';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 
-export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v1' as const;
+export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v2' as const;
 
 export interface NodeEntryTerminalBootstrap {
   readonly stdinIsTTY: boolean;
@@ -15,6 +15,8 @@ export interface NodeEntryProgramLaunch {
   readonly kind: 'program';
   readonly bin: boolean;
   readonly remoteFs: boolean;
+  /** Public Node fork lane. Omitted and `none` are equivalent for non-fork launches. */
+  readonly ipc?: 'none' | 'json';
   /** Host-only physical root behind the child's public `/` namespace. */
   readonly remoteFsRoot?: string;
   readonly nodeServe: boolean;
@@ -168,12 +170,16 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
   if (kind === 'program') {
     assertAllowedOwnFields(
       record,
-      ['kind', 'bin', 'remoteFs', 'remoteFsRoot', 'nodeServe', 'previewScope', 'terminal'],
+      ['kind', 'bin', 'remoteFs', 'remoteFsRoot', 'ipc', 'nodeServe', 'previewScope', 'terminal'],
       'node-entry bootstrap program launch',
     );
     const bin = booleanOwnField(record, 'bin', 'node-entry bootstrap launch');
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
     const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
+    const ipc = optionalOwnField(record, 'ipc');
+    if (ipc !== undefined && ipc !== 'none' && ipc !== 'json') {
+      throw new TypeError('node-entry bootstrap launch.ipc must be none or json');
+    }
     const nodeServe = booleanOwnField(record, 'nodeServe', 'node-entry bootstrap launch');
     const previewScope = optionalOwnField(record, 'previewScope');
     if (previewScope !== undefined && (typeof previewScope !== 'string' || previewScope === '')) {
@@ -185,6 +191,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       bin,
       remoteFs,
       ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+      ...(ipc === undefined ? {} : { ipc }),
       nodeServe,
       ...(previewScope === undefined ? {} : { previewScope }),
       ...(terminal === undefined ? {} : { terminal: snapshotNodeEntryTerminalBootstrap(terminal) }),
@@ -260,6 +267,11 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
   }
   const current = readNodeEntryBootstrapIfPresent();
   const inheritedRoot = current?.launch.remoteFsRoot;
+  const inheritedPreviewScope =
+    current?.launch.kind === 'program' ? current.launch.previewScope : undefined;
+  if (current?.launch.remoteFs === true && launch.remoteFs && inheritedRoot === undefined) {
+    throw new TypeError('recursive node-entry remote FS requires an inherited owner remoteFsRoot');
+  }
   if (
     inheritedRoot !== undefined &&
     launch.remoteFsRoot !== undefined &&
@@ -267,10 +279,23 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
   ) {
     throw new TypeError('nested node-entry launch cannot replace the inherited remoteFsRoot');
   }
-  const nestedLaunch =
-    inheritedRoot === undefined || !launch.remoteFs
-      ? launch
-      : { ...launch, remoteFsRoot: inheritedRoot };
+  if (
+    inheritedPreviewScope !== undefined &&
+    launch.kind === 'program' &&
+    launch.previewScope !== undefined &&
+    launch.previewScope !== inheritedPreviewScope
+  ) {
+    throw new TypeError('nested node-entry launch cannot replace the inherited previewScope');
+  }
+  const nestedLaunch: NodeEntryLaunch = {
+    ...launch,
+    ...(inheritedRoot !== undefined && launch.remoteFs ? { remoteFsRoot: inheritedRoot } : {}),
+    ...(inheritedPreviewScope !== undefined &&
+    launch.kind === 'program' &&
+    launch.previewScope === undefined
+      ? { previewScope: inheritedPreviewScope }
+      : {}),
+  };
   return buildNodeEntryWorkerEntry(config.url, config.hostRuntime, nestedLaunch);
 }
 

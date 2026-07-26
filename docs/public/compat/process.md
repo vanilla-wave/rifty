@@ -52,6 +52,21 @@ unchanged loader, so it adds no duplicate parity case.
 | `node:sqlite` (`DatabaseSync`) in a bare `node <file>` | ✅ | Registered for every `node <file>` run; the sql.js engine comes up SYNCHRONOUSLY at the first `require('node:sqlite')` via the realm-installed wasm-bytes provider (no preset flag, no eager 30 s boot — preset-deglue epic) |
 | A bare node server reachable from ANOTHER child (loopback) | ❌ | Reachable via `/preview/<port>/` only; cross-realm HTTP loopback is `backlog/net/cross-realm-http-loopback` |
 
+## Recursive `child_process` and nodemon dev loop (ADR-0324–0327)
+
+The claimed surface is the exact installed `nodemon@3.1.14` forcing path, not
+general OS process emulation. Node 24 parity covers the primitives; built
+Chromium covers the real supervisor → application Worker journey.
+
+| Feature | Status | Notes |
+|---|---|---|
+| Callable `EventEmitter` legacy construction | ✅ | `new`, subclassing, `EventEmitter.call(target)`, and `util.inherits` share one listener state and prototype identity. |
+| Recursive `spawn('node', …)` / `fork()` | ✅ | Each process child is a fresh Worker over the same owner-backed VFS; relative entry, argv, cwd, inherited/replacement env, reads, and writes are parity-proven. Missing launch provenance fails before guest execution; there is no project snapshot or direct-entry fallback. |
+| Child stdio and fork IPC | ⚠️ | Claimed `pipe`/`inherit`/`ignore`, explicit process stream targets, fork's single `ipc` slot, final drain, exit-before-close, and default JSON messages work. Numeric extra descriptors, unrestricted inheritance, advanced serialization, handles, callbacks/options, and channel `ref()`/`unref()` throw loudly. |
+| PID/PPID tree, `ps`, and signals | ⚠️ | One owner-root ledger covers recursive Workers. Bare `ps`, `ps -A -o ppid,pid`, `SIGUSR2` child kill, and `kill -USR2 <pid>` work for nodemon/pstree; arbitrary formats, other signals, process groups, job control, and `/proc` remain loud gaps. |
+| Real nodemon restart loop | ✅ | Express, Hono, and Koa execute pinned installed nodemon. Chromium proves same-port edit/restart; Express additionally proves fresh realm state, rapid-edit convergence, syntax-crash recovery, and Ctrl-C/session-close subtree teardown without resurrection. |
+| Public IPC vs private process control | ✅ | Plain spawn has no `process.send`; fork uses logical default-JSON IPC. Listening, port removal, physical exit, peer death, and subtree control stay private and remain live after public disconnect. |
+
 ## Known limitations
 
 - The drain cap uses wall-clock (`performance.now()`), so a CPU-busy worker could in principle trip

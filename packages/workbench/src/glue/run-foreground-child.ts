@@ -11,7 +11,12 @@
  * dev-server child (it resolves on a `rifty:dev-ready` MESSAGE, not exit, and
  * returns a handle, not a number) — that keeps its own driver.
  */
-import type { CommandContext, ProcessExit, StdinReader } from '@riftydev/shell';
+import {
+  type CommandContext,
+  type ProcessExit,
+  ShellCommandLifecycleError,
+  type StdinReader,
+} from '@riftydev/shell';
 import { bindChildTerminalResize } from './child-terminal.ts';
 import { processExitFromChildEvent } from './process-exit.ts';
 
@@ -39,13 +44,21 @@ export interface ForegroundChildHandle {
   stdin(): ForegroundWritable;
   on(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
+  onListeningControl?: (listener: (control: ForegroundListeningControl) => void) => unknown;
   resize(cols: number, rows: number): unknown;
   kill(signal?: string): unknown;
 }
 
+export interface ForegroundListeningControl {
+  readonly ports: number[];
+  readonly previewScope?: string;
+}
+
 export interface ForegroundChildOpts {
-  /** Server-child hook: every child→owner `'message'` (e.g. `rifty:node-listening`). */
+  /** Optional guest JSON IPC hook; never used for runtime lifecycle control. */
   readonly onMessage?: (message: unknown) => void;
+  /** Private runtime listening/port-removal control; never a guest `'message'`. */
+  readonly onListening?: (control: ForegroundListeningControl) => void;
   /** Run once on exit, BEFORE the promise resolves (e.g. preview-registry remove). */
   readonly onExit?: () => void;
 }
@@ -161,6 +174,12 @@ export function runForegroundChild(
     handle.stdout().on('data', (c) => stream(c, ctx.stdout));
     handle.stderr().on('data', (c) => stream(c, ctx.stderr));
     if (opts.onMessage) handle.on('message', opts.onMessage);
+    if (opts.onListening) {
+      if (handle.onListeningControl === undefined) {
+        throw new Error('foreground child lacks private listening control');
+      }
+      handle.onListeningControl(opts.onListening);
+    }
 
     let stopInputResolve = (): void => {};
     let inputStopped = false;
@@ -210,6 +229,28 @@ export function runForegroundChild(
       }
       rejectLifecycleOnce();
     };
+    const peerEvents = handle as unknown as {
+      on(event: 'peererror', listener: (error: unknown) => void): unknown;
+    };
+    peerEvents.on('peererror', (error) => {
+      if (exited || promiseSettled) return;
+      const cause = asError(error);
+      lifecycleErrors.push(new ShellCommandLifecycleError(cause.message, { cause }));
+      outputClosed = true;
+      stopInput();
+      signal?.removeEventListener('abort', onAbort);
+      try {
+        stopResize();
+      } catch (cleanupError) {
+        lifecycleErrors.push(asError(cleanupError));
+      }
+      try {
+        opts.onExit?.();
+      } catch (cleanupError) {
+        lifecycleErrors.push(asError(cleanupError));
+      }
+      rejectLifecycleOnce();
+    });
     const requestKill = (): void => {
       if (killSent || exited) return;
       killSent = true;

@@ -9,8 +9,7 @@
  *   - the ripgrep tool -> the ripgrep BINARY
  * In a browser/WASI realm there is no shell and no process spawn, so any
  * command other than `node <script>` falls through `spawnViaSameRealm` ->
- * `execScript` and surfaces `spawn <cmd> ENOENT\n` on stderr with exit 127
- * (`child_process-exec.ts:54-58`). It MUST NOT fake-succeed.
+ * `execScript` and surfaces exit 127. It MUST NOT fake-succeed.
  *
  * This is a CONFORMANCE (rifty browser-ceiling) contract, NOT a Node-parity
  * case: real Node WOULD spawn `git`, so a parity diff is the wrong tool here.
@@ -51,37 +50,42 @@ async function collect(
 }
 
 describe('spawn ceiling (F09 / Q-2026-05-30-063) — impossible tools are walled off', () => {
-  it("spawn('git') surfaces ENOENT-127 and never fake-succeeds", async () => {
+  it("spawn('git') surfaces exit 127 and never fake-succeeds", async () => {
     const child = spawn('git', ['status']);
     const { code, stderr } = await collect(child);
     // The substrate of opencode's git tool (Git.run -> ChildProcess.make('git')).
     expect(code).toBe(127);
-    expect(stderr).toContain('spawn git ENOENT');
+    expect(stderr).toBe('');
     // It must NOT fake-succeed: 0 would be a silent lie about a tool that
     // cannot run in a browser realm.
     expect(code).not.toBe(0);
   });
 
-  it("spawn('bash') surfaces ENOENT-127 and never fake-succeeds", async () => {
+  it("spawn('bash') surfaces exit 127 and never fake-succeeds", async () => {
     const child = spawn('bash', ['-c', 'echo hi']);
     const { code, stderr } = await collect(child);
     // The substrate of opencode's bash tool — there is no shell.
     expect(code).toBe(127);
-    expect(stderr).toContain('spawn bash ENOENT');
+    expect(stderr).toBe('');
     expect(code).not.toBe(0);
   });
 
-  it('child.stdin.write throws NotImplementedError on the in-realm fallback', () => {
-    // Locks the documented no-shell stdin behavior (child_process.ts:76-89):
-    // the in-realm fallback has no worker stdin port, so a write is a loud
-    // throw rather than a silent no-op.
-    writeFileSync('/ceiling-stdin.js', '');
-    const child = spawn('node', ['/ceiling-stdin.js']);
-    expect(() => child.stdin.write('x')).toThrowError(
-      expect.objectContaining({
-        name: 'NotImplementedError',
-        feature: 'child.stdin.write',
-      }) as unknown as Error,
+  it('keeps node-script stdin a real pipe on the in-realm fallback', async () => {
+    writeFileSync(
+      '/ceiling-stdin.js',
+      "process.stdin.on('data', (chunk) => process.stdout.write(chunk));",
     );
+    const child = spawn('node', ['/ceiling-stdin.js']);
+    let stdout = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk as Uint8Array);
+    });
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+
+    child.stdin.write('x');
+    child.stdin.end();
+
+    await closed;
+    expect(stdout).toBe('x');
   });
 });

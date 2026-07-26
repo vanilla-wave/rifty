@@ -22,7 +22,7 @@
 import { syncMirror } from '@riftydev/vfs';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type BinExecutor, Shell } from '../src/index.ts';
+import { type BinExecutor, Shell, ShellCommandLifecycleError } from '../src/index.ts';
 
 afterEach(() => {
   resetSyncMirror();
@@ -213,6 +213,18 @@ describe('Shell — node_modules/.bin resolution', () => {
     const r = await sh.run('tool');
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toMatch(/tool: spawn unavailable/);
+  });
+
+  it('a host lifecycle failure rejects because no process exit is known', async () => {
+    seedBin('/proj', 'tool');
+    const sh = new Shell({
+      cwd: '/proj',
+      execBin: async () => {
+        throw new ShellCommandLifecycleError('Worker peer closed unexpectedly');
+      },
+    });
+
+    await expect(sh.run('tool')).rejects.toThrow(/peer closed unexpectedly/i);
   });
 
   it('background (&) jobs can run a resolved bin (execBin threads to the clone)', async () => {

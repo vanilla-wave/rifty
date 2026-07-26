@@ -34,7 +34,7 @@ test.describe('production build — admitted nodemon terminal outcome', () => {
       timeout: 180_000,
     });
 
-    await page.getByRole('tab', { name: 'Terminal 1', exact: true }).click();
+    await page.getByRole('tab', { name: 'Express + SQLite scratch', exact: true }).click();
     const terminal = page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]');
     await terminal.click();
     await page.keyboard.press('Control+c');

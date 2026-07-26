@@ -231,7 +231,7 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     // an already-admitted watch event cannot resurrect the subtree.
     const queuedMarker = `express-queued-after-close-${Date.now()}`;
     await runTerminalLine(page, `echo "console.log('${queuedMarker}')" >> src/main.js`);
-    await page.getByRole('tab', { name: 'Terminal 1', exact: true }).click();
+    await page.getByRole('tab', { name: 'Express + SQLite scratch', exact: true }).click();
     await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
     await page.keyboard.press('Control+c');
     await expect
