@@ -73,7 +73,9 @@ jobs:
 
   unit-and-conformance:
     needs: change-scope
-    if: needs.change-scope.outputs.code == 'true'
+    # bare needs.* implies success() and would skip the heavy suite when
+    # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     # run + parity as parallel matrix jobs: wall-clock = max(suite), not sum
     # (test:run ~3m dominates; parity ~1m rides a second runner).
@@ -100,7 +102,9 @@ jobs:
 
   e2e-chromium:
     needs: change-scope
-    if: needs.change-scope.outputs.code == 'true'
+    # bare needs.* implies success() and would skip the heavy suite when
+    # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     # Run the three lanes as PARALLEL matrix jobs (separate runners), not
     # sequential steps in one job: e2e wall-clock becomes max(lane) instead of
@@ -230,7 +234,9 @@ jobs:
 
   browser-unit-chromium:
     needs: change-scope
-    if: needs.change-scope.outputs.code == 'true'
+    # bare needs.* implies success() and would skip the heavy suite when
+    # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     # Browser-unit lane (ADR-0196): worker-side playground modules behaviorally
     # tested against the REAL owner worker under COI — thin harness page, no App
     # boot. Own job (not an e2e matrix lane): different tier, different config.
@@ -275,6 +281,7 @@ jobs:
       - browser-unit-chromium
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Require every applicable job
         env:
           CODE: ${{ needs.change-scope.outputs.code }}
@@ -283,37 +290,4 @@ jobs:
           UNIT_RESULT: ${{ needs.unit-and-conformance.result }}
           E2E_RESULT: ${{ needs.e2e-chromium.result }}
           BROWSER_UNIT_RESULT: ${{ needs.browser-unit-chromium.result }}
-        run: |
-          set -euo pipefail
-          failed=0
-
-          require_result() {
-            local name="$1"
-            local actual="$2"
-            local expected="$3"
-            if [[ "$actual" != "$expected" ]]; then
-              echo "::error::$name concluded '$actual'; expected '$expected'"
-              failed=1
-            fi
-          }
-
-          require_result change-scope "$CHANGE_SCOPE_RESULT" success
-          require_result lint-and-typecheck "$LINT_RESULT" success
-
-          case "$CODE" in
-            true) heavy_expected=success ;;
-            false) heavy_expected=skipped ;;
-            *)
-              echo "::error::change-scope emitted invalid code='$CODE'"
-              failed=1
-              heavy_expected=success
-              ;;
-          esac
-
-          require_result unit-and-conformance "$UNIT_RESULT" "$heavy_expected"
-          require_result e2e-chromium "$E2E_RESULT" "$heavy_expected"
-          require_result browser-unit-chromium "$BROWSER_UNIT_RESULT" "$heavy_expected"
-
-          if [[ "$failed" -ne 0 ]]; then
-            exit 1
-          fi
+        run: node tools/checks/ci-gate.mjs

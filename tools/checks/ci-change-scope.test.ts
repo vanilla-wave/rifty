@@ -133,12 +133,18 @@ describe('CI change scope', () => {
     for (const job of ['unit-and-conformance', 'e2e-chromium', 'browser-unit-chromium']) {
       const block = jobBlock(workflow, job);
       expect(block, job).toContain('needs: change-scope');
-      expect(block, job).toContain("if: needs.change-scope.outputs.code == 'true'");
+      // A bare `needs.*` condition implies success() and silently skips the
+      // heavy suite when change-scope dies; !cancelled() + != 'false' fails
+      // open to the full gate (ADR-0323 §2, fault class false-fallback).
+      expect(block, job).toContain(
+        "if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}",
+      );
     }
 
     const gate = jobBlock(workflow, 'ci-gate');
     expect(gate).toContain('name: CI gate');
     expect(gate).toContain('if: always()');
+    expect(gate).toContain('node tools/checks/ci-gate.mjs');
     for (const dependency of [
       'change-scope',
       'lint-and-typecheck',
