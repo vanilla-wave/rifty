@@ -177,6 +177,20 @@ const CONTRACT_COLLISION_PLACEMENTS = [
     ordinaryLauncherDir: '/project/node_modules/contract-ordinary-host/node_modules/.bin',
   },
   {
+    label: 'root recipe declared after its ordinary host',
+    dependencies: {
+      [CONTRACT_ORDINARY_HOST]: '1.0.0',
+      [CONTRACT_TRIGGER]: CONTRACT_VERSION,
+    },
+    acquisitionPath: 'node_modules/contract-source',
+    materializationRoot: '/project/node_modules/contract-package',
+    materializationLockPath: 'node_modules/contract-package',
+    materializationLauncherDir: '/project/node_modules/.bin',
+    ordinaryRoot: '/project/node_modules/contract-ordinary-host/node_modules/contract-package',
+    ordinaryLockPath: 'node_modules/contract-ordinary-host/node_modules/contract-package',
+    ordinaryLauncherDir: '/project/node_modules/contract-ordinary-host/node_modules/.bin',
+  },
+  {
     label: 'root ordinary package and nested recipe',
     dependencies: {
       [CONTRACT_ORDINARY_HOST]: '1.0.0',
@@ -197,6 +211,27 @@ const CONTRACT_MATERIALIZATION_BIN_CASES = [
   ['empty bin map', {}],
 ] as const;
 
+const CONTRACT_FLAT_HOST = 'contract-flat-host';
+const CONTRACT_ORDINARY_ALIAS = 'contract-ordinary-alias';
+const CONTRACT_SAME_PARENT_COLLISIONS = [
+  {
+    label: 'recipe first',
+    host: 'contract-collision-recipe-first',
+    dependencies: {
+      [CONTRACT_TRIGGER]: CONTRACT_VERSION,
+      [CONTRACT_ORDINARY_ALIAS]: '1.0.0',
+    },
+  },
+  {
+    label: 'ordinary first',
+    host: 'contract-collision-ordinary-first',
+    dependencies: {
+      [CONTRACT_ORDINARY_ALIAS]: '1.0.0',
+      [CONTRACT_TRIGGER]: CONTRACT_VERSION,
+    },
+  },
+] as const;
+
 const LIGHTNING_ORDINARY_HOST = 'lightning-ordinary-host';
 const LIGHTNING_RECIPE_HOST = 'lightning-recipe-host';
 const LIGHTNING_COLLISION_PLACEMENTS = [
@@ -205,6 +240,20 @@ const LIGHTNING_COLLISION_PLACEMENTS = [
     dependencies: {
       lightningcss: '1.32.0',
       [LIGHTNING_ORDINARY_HOST]: '1.0.0',
+    },
+    acquisitionPath: 'node_modules/lightningcss-wasm',
+    materializationRoot: '/project/node_modules/lightningcss',
+    materializationLockPath: 'node_modules/lightningcss',
+    materializationLauncherDir: '/project/node_modules/.bin',
+    ordinaryRoot: '/project/node_modules/lightning-ordinary-host/node_modules/lightningcss',
+    ordinaryLockPath: 'node_modules/lightning-ordinary-host/node_modules/lightningcss',
+    ordinaryLauncherDir: '/project/node_modules/lightning-ordinary-host/node_modules/.bin',
+  },
+  {
+    label: 'root declared after its ordinary host',
+    dependencies: {
+      [LIGHTNING_ORDINARY_HOST]: '1.0.0',
+      lightningcss: '1.32.0',
     },
     acquisitionPath: 'node_modules/lightningcss-wasm',
     materializationRoot: '/project/node_modules/lightningcss',
@@ -415,17 +464,31 @@ async function contractRegistry(
       { 'index.js': 'module.exports = "ordinary-host";\n' },
     ),
   );
+  for (const version of ['1.98.0', '1.99.0', CONTRACT_VERSION]) {
+    add(
+      await contractRegistryEntry(
+        CONTRACT_TRIGGER,
+        version,
+        { bin: { ordinary: 'bin/ordinary.js' } },
+        {
+          'bin/ordinary.js': '#!/usr/bin/env node\nthrow new Error("ordinary bin");\n',
+          'sentinel.txt': `ordinary package ${version} bytes\n`,
+        },
+      ),
+    );
+  }
   add(
-    await contractRegistryEntry(
-      CONTRACT_TRIGGER,
-      CONTRACT_VERSION,
-      { bin: { ordinary: 'bin/ordinary.js' } },
-      {
-        'bin/ordinary.js': '#!/usr/bin/env node\nthrow new Error("ordinary bin");\n',
-        'sentinel.txt': 'ordinary package bytes\n',
-      },
-    ),
+    await contractRegistryEntry(CONTRACT_FLAT_HOST, '1.0.0', {
+      dependencies: { [CONTRACT_TRIGGER]: '1.99.0' },
+    }),
   );
+  for (const collision of CONTRACT_SAME_PARENT_COLLISIONS) {
+    add(
+      await contractRegistryEntry(collision.host, '1.0.0', {
+        dependencies: collision.dependencies,
+      }),
+    );
+  }
   for (const name of [CONTRACT_REQUIRED, CONTRACT_RETAINED, CONTRACT_OMITTED, CONTRACT_PEER]) {
     add(await contractRegistryEntry(name, '1.0.0'));
   }
@@ -1173,7 +1236,7 @@ describe('shadow substitution installer boundary', () => {
             false,
           );
           expect(await vfs.readFileText(`${placement.ordinaryRoot}/sentinel.txt`)).toBe(
-            'ordinary package bytes\n',
+            'ordinary package 1.100.0 bytes\n',
           );
           expect(recipeEntry).toMatchObject({
             version: CONTRACT_VERSION,
@@ -1226,8 +1289,53 @@ describe('shadow substitution installer boundary', () => {
             false,
           );
           expect(await vfs.readFileText(`${placement.ordinaryRoot}/sentinel.txt`)).toBe(
-            'ordinary package bytes\n',
+            'ordinary package 1.100.0 bytes\n',
           );
+        },
+      );
+    },
+  );
+
+  describe.each(CONTRACT_SAME_PARENT_COLLISIONS)(
+    '[fault: provenance-lie] same-parent $label materialization collision',
+    (collision) => {
+      it.each(CONTRACT_MATERIALIZATION_BIN_CASES)(
+        'rejects distinct ordinary and recipe claims with %s before writes',
+        async (_binLabel, materializationBin) => {
+          vi.spyOn(console, 'warn').mockImplementation(() => {});
+          const vfs = new MemoryVfs();
+          await vfs.mkdir('/project', { recursive: true });
+          const report: string[] = [];
+          const registry = await contractRegistry();
+          const installPath = `node_modules/${collision.host}/node_modules/${CONTRACT_TRIGGER}`;
+
+          await expect(
+            installContract(
+              vfs,
+              registry,
+              {
+                [CONTRACT_FLAT_HOST]: '1.0.0',
+                [collision.host]: '1.0.0',
+              },
+              {
+                overrides: {
+                  [`${CONTRACT_FLAT_HOST}>${CONTRACT_TRIGGER}`]: `${CONTRACT_TRIGGER}@1.99.0`,
+                  [`${collision.host}>${CONTRACT_ORDINARY_ALIAS}`]: `${CONTRACT_TRIGGER}@1.98.0`,
+                },
+                onSubstitution: (line) => report.push(line),
+              },
+              contractAuthority('exact-only', materializationBin),
+            ),
+          ).rejects.toMatchObject({
+            code: 'EINSTALLPATHCONFLICT',
+            installPath,
+          });
+
+          await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
+          await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+          expect(
+            report.filter((line) => line.includes('materialized from shadow registry')),
+          ).toEqual([]);
         },
       );
     },
