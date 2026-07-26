@@ -129,7 +129,35 @@ function packageBinFacts(file, source) {
   let declarations = 0;
   let imports = 0;
   let calls = 0;
-  let launchers = 0;
+  let writes = 0;
+  let hasBinDirectory = false;
+  let hasNodeLauncher = false;
+  const importedNames = new Set(['linkPackageBins']);
+  const staticString = (node) => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      const left = staticString(node.left);
+      const right = staticString(node.right);
+      return left === undefined || right === undefined ? undefined : `${left}${right}`;
+    }
+    if (ts.isTemplateExpression(node)) {
+      let value = node.head.text;
+      for (const span of node.templateSpans) {
+        value += staticString(span.expression) ?? '\0';
+        value += span.literal.text;
+      }
+      return value;
+    }
+    return undefined;
+  };
+  const callName = (node) => {
+    if (ts.isIdentifier(node)) return node.text;
+    if (ts.isPropertyAccessExpression(node)) return node.name.text;
+    if (ts.isElementAccessExpression(node) && node.argumentExpression) {
+      return staticString(node.argumentExpression);
+    }
+    return undefined;
+  };
   const visit = (node) => {
     if (ts.isFunctionDeclaration(node) && node.name?.text === 'linkPackageBins') {
       declarations += 1;
@@ -139,26 +167,27 @@ function packageBinFacts(file, source) {
       (node.propertyName?.text ?? node.name.text) === 'linkPackageBins'
     ) {
       imports += 1;
+      importedNames.add(node.name.text);
     }
-    if (
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === 'linkPackageBins'
-    ) {
-      calls += 1;
+    if (ts.isCallExpression(node)) {
+      const name = callName(node.expression);
+      if (name !== undefined && importedNames.has(name)) calls += 1;
+      if (name === 'writeFile') writes += 1;
     }
-    const launcherHead = ts.isTemplateExpression(node)
-      ? node.head.text
-      : ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
-        ? node.text
-        : undefined;
-    if (launcherHead?.startsWith("#!/usr/bin/env node\nimport('../")) {
-      launchers += 1;
+    const literal = staticString(node);
+    if (literal !== undefined) {
+      if (/(?:^|[/\\])\.bin(?:[/\\]|$)/u.test(literal)) hasBinDirectory = true;
+      if (literal.includes('#!/usr/bin/env node')) hasNodeLauncher = true;
     }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return { declarations, imports, calls, launchers };
+  return {
+    declarations,
+    imports,
+    calls,
+    implementations: hasNodeLauncher || (hasBinDirectory && writes > 0) ? 1 : 0,
+  };
 }
 
 function normalizedRepositoryPath(file) {
@@ -206,9 +235,9 @@ export function packageBinAuthorityViolations(sources) {
     }
   }
   const owner = facts.get(PACKAGE_BIN_AUTHORITY_MODULE);
-  if (owner && (owner.declarations !== 1 || owner.launchers !== 1)) {
+  if (owner && (owner.declarations !== 1 || owner.implementations !== 1)) {
     violations.push(
-      `${PACKAGE_BIN_AUTHORITY_MODULE}: want one linkPackageBins owner and one launcher template`,
+      `${PACKAGE_BIN_AUTHORITY_MODULE}: want one linkPackageBins owner and one bin implementation`,
     );
   }
   for (const file of PACKAGE_BIN_CONSUMER_MODULES) {
@@ -220,7 +249,7 @@ export function packageBinAuthorityViolations(sources) {
   for (const [file, value] of facts) {
     if (
       file !== PACKAGE_BIN_AUTHORITY_MODULE &&
-      (value.declarations !== 0 || value.launchers !== 0)
+      (value.declarations !== 0 || value.implementations !== 0)
     ) {
       violations.push(`${file}: duplicates package-bin implementation`);
     }
