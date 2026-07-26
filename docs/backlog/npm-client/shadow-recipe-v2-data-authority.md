@@ -6,7 +6,7 @@ created: 2026-07-26
 why: repeated recipe-authority reviews found schema, admission-feature, and clone-ingress policy duplicated across catalog and installer boundaries
 user_story: As a browser-IDE user installing a builtin-substituted package, I want the exact reviewed recipe to remain authoritative after structured clone and reject malformed policy before effects, but today v1 computes drifting errors and the package-private clone seam trusts injected data
 epic: honest-shadow-substitutions
-sources: [ADR-0323]
+sources: [ADR-0328]
 code:
   - tools/shadow-registry/src/internal/model.ts
   - tools/shadow-registry/src/internal/codec.ts
@@ -25,7 +25,7 @@ authority data without validation. Canonical/structured-clone behavior can
 therefore drift before later acquisition and materialization work begins.
 
 Dedup on titles, code owners, epic Items, and `epic:` links found no separate
-data-authority item. ADR-0323 already decides clone-safe schema 2, named
+data-authority item. ADR-0328 already decides clone-safe schema 2, named
 admission features, strict ingress, and one decoder owner; this item extracts
 that decided substrate from the oversized integration slice.
 
@@ -115,12 +115,12 @@ substitution report.
 
 ## Decisions
 
-- ADR-0323 owns schema 2, data-owned admission, strict ingress, and one decoder
+- ADR-0328 owns schema 2, data-owned admission, strict ingress, and one decoder
   owner. This slice implements only that reusable substrate.
 - Generic consumers branch on recipe fields, never on esbuild,
   LightningCSS, Vite, an entry kind, or test-fixture identity.
 - The generic strict decoder is internal. Public exports continue to expose
   only the attested builtin catalog and legacy builtin tables.
-- Schema 2 is the new ADR-0323-owned internal clone format. This slice adds no
+- Schema 2 is the new ADR-0328-owned internal clone format. This slice adds no
   public API/wire format, dependency, storage authority, or coordination
   mechanism.

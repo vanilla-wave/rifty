@@ -68,7 +68,7 @@ one parameterized probe script):
 
 ## Consequences
 
-- Correction 2026-07-25 (ADR-0323): the no-generic-file-change seam premise
+- Correction 2026-07-25 (ADR-0328): the no-generic-file-change seam premise
   was false. Sass exposed missing generic admission, acquisition-projection,
   and bin authorities; recipe v2 adds those once without Sass recognition.
 - (+) Sass proves recipe v2 with an install-only substitution; after the v2

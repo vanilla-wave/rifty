@@ -7,7 +7,7 @@ why: the Sass RED proved recipe v1 admits unproven ranges, copies unproven regis
 user_story: As a browser-IDE user installing a builtin-substituted package, I want its accepted request, fetched dependency closure, visible bins, and replay provenance to be exactly the reviewed recipe, but today recipe v1 can widen each of those boundaries
 epic: honest-shadow-substitutions
 blocked_by: [npm-client/shadow-recipe-v2-data-authority]
-sources: [ADR-0310, ADR-0323]
+sources: [ADR-0310, ADR-0328]
 code:
   - packages/npm-client/src/installer.ts
   - packages/npm-client/src/internal/shadow/planner.ts
@@ -20,7 +20,7 @@ code:
 Recipe v1 admits semver ranges, copies registry optionals, and links acquired
 bins before alias materialization. Those policies were implicit and cannot
 faithfully express an exact-only package with omitted native optionals and a
-loud replacement CLI. ADR-0323 supersedes ADR-0308 with one generic authority;
+loud replacement CLI. ADR-0328 supersedes ADR-0308 with one generic authority;
 this prerequisite lands it without shipping the Sass recipe. The blocked data
 slice owns schema 2, strict codec/ingress, and admission feature identity; this
 item starts at execution, projection, materialization, and replay.
@@ -98,7 +98,7 @@ item starts at execution, projection, materialization, and replay.
 
 ## Decisions
 
-- ADR-0323 owns the complete recipe authority. The blocked data slice owns
+- ADR-0328 owns the complete recipe authority. The blocked data slice owns
   schema 2, codec/ingress, and admission; this item owns projection execution,
   materialized-bin execution, provenance, and loud v1 replay failure.
 - The recipe model remains clone-safe data. Generic consumers execute policy

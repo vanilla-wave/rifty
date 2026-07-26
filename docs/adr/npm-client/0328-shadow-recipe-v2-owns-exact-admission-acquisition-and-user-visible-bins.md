@@ -1,4 +1,4 @@
-# ADR 0323: Shadow recipe v2 owns exact admission acquisition and user-visible bins
+# ADR 0328: Shadow recipe v2 owns exact admission acquisition and user-visible bins
 
 Status: Accepted
 Date: 2026-07
