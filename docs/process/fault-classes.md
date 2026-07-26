@@ -59,6 +59,8 @@ Applies to parity work and changes touching cache, persistence, network, or conc
 | Repeat | Same class at one boundary, or a review change adding a state owner → redesign/split |
 | External API | Proxy/wrapper semantic copy requires an ADR + differential suite |
 | Testing | Same scenario runs against reference and rifty; a fake cannot close acceptance |
-| Checkpoints | Contract+RED before implementation; Final+GREEN on one checked SHA; blocker → redesign/re-cut, never checkpoint three |
+| Checkpoints | Contract+RED before implementation; Final+GREEN on one checked SHA; blocker → re-cut in place, never checkpoint three |
+| Lineage | A blocker iterates in the SAME PR/branch; re-cut = new unit boundary in place, attempt + checkpoint count carries; a successor PR (unit split only) names its predecessor — closed attempts never orphan |
+| Contract escalation | 2nd consecutive Contract+RED blocker on one unit → the contract is wrong: split/re-refine it, never attempt three |
 | Unit closure | Current contract proof + empty unit residuals |
 | Goal closure | No linked children + empty goal residuals + end-to-end baseline proof; never source grep, warning, backlog record, or one green slice |

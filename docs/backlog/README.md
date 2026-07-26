@@ -75,7 +75,8 @@ Budget are live run state.
 
 Required discoveries stay reverse-linked; only outside-goal work enters normal
 backlog. A required discovery may mint a `draft` child (`epic:` link) at any
-time; its readiness, Items mapping, and Budget row wait for a pre-pickup window. A clean slice may merge while goal residuals remain. Close the goal
+time; its readiness, Items mapping, and Budget row wait for a pre-pickup window. A clean slice may merge while goal residuals remain. Slices land serially —
+never stack a slice PR on an unmerged one (the marker inherits from merge-base). Close the goal
 only with no linked children, empty unit/goal residuals, end-to-end baseline
 proof, fresh `goal_complete: true`, and DoD green on one SHA; then delete it.
 
@@ -88,7 +89,9 @@ Each autonomous source PR selects one epic `## Budget` row. Tripwires:
 - new coordination mechanisms: `0`, unless the named substrate item owns one;
 - review checkpoints per slice: exactly `2`;
 - hand-written insertion band = inserted lines in the slice source PR (tests/
-  generated globs excluded — `check:budget`): above high warns; at `2×` high re-cut.
+  generated globs excluded — `check:budget`): above high warns; at `2×` high re-cut;
+- expected-RED batch far above the slice band → the unit is too big: split it
+  before implementation.
 
 Pickup is the parent of the first production-source commit. Before pickup,
 Contract+RED may append one ready JIT child, its Items mapping, and its Budget
