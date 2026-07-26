@@ -34,6 +34,32 @@ export function parseGoalBaseline(value) {
   return match ? { epicSlug: match[1], sha: match[2] } : null;
 }
 
+/**
+ * History to audit. GitHub checks out a synthetic merge commit for PR jobs;
+ * its first parent is main, so marker lineage must instead walk the exact PR
+ * head recorded in the event.
+ */
+export function historyHeadRevision(env, readEvent) {
+  if (!env.GITHUB_EVENT_PATH) return { revision: 'HEAD', kind: 'checkout', error: null };
+  let event;
+  try {
+    event = JSON.parse(readEvent(env.GITHUB_EVENT_PATH));
+  } catch {
+    return { revision: null, kind: 'event', error: 'cannot read GitHub event for history head' };
+  }
+  if (event?.pull_request === undefined) {
+    return { revision: 'HEAD', kind: 'checkout', error: null };
+  }
+  const revision = event.pull_request?.head?.sha;
+  return EXACT_SHA_RE.test(revision ?? '')
+    ? { revision, kind: 'pull-request', error: null }
+    : {
+        revision: null,
+        kind: 'pull-request',
+        error: 'pull_request.head.sha must be one exact 40-hex commit',
+      };
+}
+
 function frontmatterValue(text, key) {
   return frontmatterValues(text, key)[0] ?? null;
 }
@@ -297,19 +323,27 @@ function linkedItems(epicSlug) {
 
 function main() {
   const declarations = declaredGoals(process.env, (path) => readFileSync(path, 'utf8'));
+  const historyHead = historyHeadRevision(process.env, (path) => readFileSync(path, 'utf8'));
+  if (historyHead.error !== null) {
+    console.error(`goal-contract: ✗ ${historyHead.error}`);
+    process.exit(1);
+  }
+  const revision = historyHead.revision;
   let mergeBase;
   try {
-    mergeBase = git('merge-base', 'origin/main', 'HEAD').trim();
+    mergeBase = git('merge-base', 'origin/main', revision).trim();
   } catch {
-    if (declarations.length === 0) {
+    if (declarations.length === 0 && historyHead.kind !== 'pull-request') {
       console.log('goal-contract: SKIPPED — no origin/main merge-base');
       return;
     }
-    console.error('goal-contract: ✗ no origin/main merge-base; run marker cannot be checked');
+    console.error(
+      `goal-contract: ✗ no origin/main merge-base for ${historyHead.kind} history; marker cannot be checked`,
+    );
     process.exit(1);
   }
 
-  const commits = git('rev-list', '--first-parent', '--reverse', `${mergeBase}..HEAD`)
+  const commits = git('rev-list', '--first-parent', '--reverse', `${mergeBase}..${revision}`)
     .trim()
     .split('\n')
     .filter(Boolean);
@@ -330,7 +364,7 @@ function main() {
     markerViolations.push(...result.violations);
     if (result.canonical !== null && !result.deleted) {
       try {
-        git('merge-base', '--is-ancestor', result.canonical, 'HEAD');
+        git('merge-base', '--is-ancestor', result.canonical, revision);
       } catch {
         markerViolations.push(
           `${path}: goal_baseline ${result.canonical} is unavailable or not an ancestor`,

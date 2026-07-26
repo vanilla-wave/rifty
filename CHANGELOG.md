@@ -57,6 +57,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Goal-marker CI audits the pull-request lineage.** GitHub checks out a
+  synthetic merge commit whose first parent is `main`; `check:goal-contract`
+  now walks the exact event `pull_request.head.sha` while retaining the merged
+  worktree for all content checks. A bootstrap marker can no longer fail CI by
+  being misread as one combined merge commit, and malformed PR head identity
+  fails loudly.
+
 - Snapshot drift checks now compare canonical decompressed bytes, so valid gzip
   output from different Node/zlib platforms does not fail CI.
 
