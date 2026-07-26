@@ -17,9 +17,12 @@ Report these axes once, in order:
 7. **Regressions** — existing behavior holds.
 8. **Ecosystem UX** — observable behavior matches real Node software.
 
-Contract+RED checks oracle/RED coverage and ALWAYS precedes implementation — a PR
-that skipped it cannot jump to Final+GREEN; Final+GREEN checks delivery. Correctness
-blockers name class, RED, and sibling sweep; other blockers cite their rule.
+Checkpoint machinery covers work under §Review convergence (parity/stateful) —
+there Contract+RED always precedes implementation and a unit that skipped it
+cannot jump to Final+GREEN; Final+GREEN checks delivery. Outside that scope
+(docs/CI/process/tooling) a PR gets ONE review on these axes: blockers are fixed
+in the same PR, "missing Contract+RED" is not a finding. Correctness blockers
+name class, RED, and sibling sweep; other blockers cite their rule.
 
 Open with verdict + merge call. Return `checkpoint`, exact `unit_goal_source`,
 ordered axes, `unit_residuals` (slice blockers), `goal_residuals` (continuation),
