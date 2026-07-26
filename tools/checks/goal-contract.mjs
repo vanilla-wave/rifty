@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { prHead } from './run-pickup.mjs';
 
 const GUARDED_STATUSES = new Set(['ready', 'in-progress']);
 const EXACT_SHA_RE = /^[0-9a-f]{40}$/u;
@@ -297,9 +298,10 @@ function linkedItems(epicSlug) {
 
 function main() {
   const declarations = declaredGoals(process.env, (path) => readFileSync(path, 'utf8'));
+  const head = prHead(git);
   let mergeBase;
   try {
-    mergeBase = git('merge-base', 'origin/main', 'HEAD').trim();
+    mergeBase = git('merge-base', 'origin/main', head).trim();
   } catch {
     if (declarations.length === 0) {
       console.log('goal-contract: SKIPPED — no origin/main merge-base');
@@ -309,7 +311,7 @@ function main() {
     process.exit(1);
   }
 
-  const commits = git('rev-list', '--first-parent', '--reverse', `${mergeBase}..HEAD`)
+  const commits = git('rev-list', '--first-parent', '--reverse', `${mergeBase}..${head}`)
     .trim()
     .split('\n')
     .filter(Boolean);

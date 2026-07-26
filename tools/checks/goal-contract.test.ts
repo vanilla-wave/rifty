@@ -412,3 +412,46 @@ describe('evaluateMarkerHistory', () => {
     }
   });
 });
+
+describe('synthetic merge ref (CI)', () => {
+  it('accepts the one-PR bootstrap (epic commit + marker commit) behind a GitHub merge ref', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rifty-goal-merge-'));
+    const g = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=R', '-c', 'user.email=r@e.t', ...args], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+    try {
+      mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
+      writeFileSync(join(root, 'docs/backlog/epics/README.md'), '# epics\n');
+      g('init', '-b', 'main');
+      g('add', '.');
+      g('commit', '-m', 'base');
+      g('update-ref', 'refs/remotes/origin/main', g('rev-parse', 'HEAD').trim());
+      g('checkout', '-b', 'pr');
+      writeFileSync(join(root, 'docs/backlog/epics/goal.md'), epic());
+      g('add', '.');
+      g('commit', '-m', 'ready epic');
+      const epicSha = g('rev-parse', 'HEAD').trim();
+      writeFileSync(join(root, 'docs/backlog/epics/goal.md'), withMarker(epic(), epicSha));
+      g('add', '.');
+      g('commit', '-m', 'marker only');
+      g('checkout', 'main');
+      g('merge', '--no-ff', '--no-edit', 'pr');
+      const script = fileURLToPath(new URL('./goal-contract.mjs', import.meta.url));
+      const noGoal = {
+        ...process.env,
+        RIFTY_GOAL_BASELINE: undefined,
+        GITHUB_EVENT_PATH: undefined,
+      };
+      const result = execFileSync(process.execPath, [script], {
+        cwd: root,
+        encoding: 'utf8',
+        env: noGoal,
+      });
+      expect(result).toContain('1 marker(s) established');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

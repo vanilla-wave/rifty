@@ -153,3 +153,43 @@ blocked_by: [playground/x, playground/z]
     );
   });
 });
+
+describe('synthetic merge ref (CI)', () => {
+  it('honors in-PR commit sequencing behind a GitHub merge ref', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const root = mkdtempSync(join(tmpdir(), 'rifty-drift-merge-'));
+    const g = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=R', '-c', 'user.email=r@e.t', ...args], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+    try {
+      mkdirSync(join(root, 'docs/backlog/net'), { recursive: true });
+      mkdirSync(join(root, 'packages/x/src'), { recursive: true });
+      writeFileSync(join(root, 'docs/backlog/net/x.md'), item('draft'));
+      writeFileSync(join(root, 'packages/x/src/a.ts'), 'export const a = 1;\n');
+      g('init', '-b', 'main');
+      g('add', '.');
+      g('commit', '-m', 'base');
+      g('update-ref', 'refs/remotes/origin/main', g('rev-parse', 'HEAD').trim());
+      g('checkout', '-b', 'pr');
+      writeFileSync(join(root, 'docs/backlog/net/x.md'), item('ready'));
+      g('add', '.');
+      g('commit', '-m', 'contract flip first');
+      writeFileSync(join(root, 'packages/x/src/a.ts'), 'export const a = 2;\n');
+      g('add', '.');
+      g('commit', '-m', 'source second');
+      g('checkout', 'main');
+      g('merge', '--no-ff', '--no-edit', 'pr');
+      const script = fileURLToPath(new URL('./contract-drift.mjs', import.meta.url));
+      const result = execFileSync(process.execPath, [script], { cwd: root, encoding: 'utf8' });
+      expect(result).toContain('contract-drift: OK');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

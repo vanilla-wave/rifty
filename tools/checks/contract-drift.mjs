@@ -7,7 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { PRODUCTION_SOURCE_RE as SOURCE_RE, pickupCommit } from './run-pickup.mjs';
+import { PRODUCTION_SOURCE_RE as SOURCE_RE, pickupCommit, prHead } from './run-pickup.mjs';
 
 const CONTRACT_RE = /^docs\/backlog\/.+\.md$/;
 const SKIP_RE = /\/(?:README|TEMPLATE)\.md$/;
@@ -91,14 +91,15 @@ function git(...args) {
 }
 
 function main() {
+  const head = prHead(git);
   let base;
   try {
-    base = git('merge-base', 'origin/main', 'HEAD').trim();
+    base = git('merge-base', 'origin/main', head).trim();
   } catch {
     console.log('contract-drift: SKIPPED — no origin/main merge-base (shallow clone?)');
     return;
   }
-  const pickup = pickupCommit(base, git);
+  const pickup = pickupCommit(base, git, head);
   const parseEntries = (text) =>
     text
       .trim()
@@ -108,11 +109,12 @@ function main() {
         const parts = line.split('\t');
         return { status: parts[0][0], path: parts[parts.length - 1] };
       });
-  const fullEntries = parseEntries(git('diff', '--name-status', base));
-  const entries = parseEntries(git('diff', '--name-status', pickup));
+  const fullEntries = parseEntries(git('diff', '--name-status', base, head));
+  const entries = parseEntries(git('diff', '--name-status', pickup, head));
   const read = (path, side) => {
     try {
-      return side === 'base' ? git('show', `${pickup}:${path}`) : readFileSync(path, 'utf8');
+      if (side === 'base') return git('show', `${pickup}:${path}`);
+      return head === 'HEAD' ? readFileSync(path, 'utf8') : git('show', `${head}:${path}`);
     } catch {
       return null;
     }

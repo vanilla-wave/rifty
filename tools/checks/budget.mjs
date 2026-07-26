@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as ts from 'typescript';
 import { declaredGoals, parseGoalBaseline } from './goal-contract.mjs';
-import { PRODUCTION_SOURCE_RE as SOURCE_RE, pickupCommit } from './run-pickup.mjs';
+import { PRODUCTION_SOURCE_RE as SOURCE_RE, pickupCommit, prHead } from './run-pickup.mjs';
 
 const MECHANISM_RE = /\b(epoch|generation|fifo|ledger|lease|seenRequest\w*|opId)\b/i;
 const TEST_SOURCE_RE =
@@ -312,14 +312,15 @@ function main() {
     process.exit(1);
   }
   const { declaration, epicSlug, slice } = run;
+  const HEAD_REF = prHead(git);
   let mergeBase;
   try {
-    mergeBase = git('merge-base', 'origin/main', 'HEAD').trim();
+    mergeBase = git('merge-base', 'origin/main', HEAD_REF).trim();
   } catch {
     console.error('budget: ✗ no origin/main merge-base; declared tripwire cannot be checked');
     process.exit(1);
   }
-  const pickup = pickupCommit(mergeBase, git);
+  const pickup = pickupCommit(mergeBase, git, HEAD_REF);
   const readAtPickup = (path) => {
     try {
       return git('show', `${pickup}:${path}`);
@@ -360,7 +361,7 @@ function main() {
     for (const violation of itemViolations) console.error(`  ✗ ${violation}`);
     process.exit(1);
   }
-  const numstat = git('diff', '-M', '--numstat', pickup)
+  const numstat = git('diff', '-M', '--numstat', pickup, HEAD_REF)
     .trim()
     .split('\n')
     .filter(Boolean)
