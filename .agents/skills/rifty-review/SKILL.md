@@ -6,6 +6,13 @@ description: Manually perform one read-only rifty PR review against its frozen c
 Review raw contract, baseline, PR body, diff, and tests. Apply
 `docs/process/fault-classes.md` §Review convergence.
 
+Anchor (`unit_goal_source`), resolved in order: `Goal-Baseline` in the PR body →
+the claimed ready item's contract → **repair** (unplanned observed defect:
+neither declared, fault/regression tests present) — the contract is the
+`rifty-fix` discipline itself: named fault class + RED tests + sweep; fill
+`unit_goal_source` as `repair: <axis>@<boundary>` → else ordinary
+(docs/CI/process/tooling: one review, checkpoint machinery out of scope).
+
 Report these axes once, in order:
 
 1. **Completeness** — every unit clause covered; no required deferral.
@@ -16,6 +23,15 @@ Report these axes once, in order:
 6. **Bugs** — no correctness defect.
 7. **Regressions** — existing behavior holds.
 8. **Ecosystem UX** — observable behavior matches real Node software.
+
+Repair anchor reinterprets the axes: Completeness = class closed (siblings
+enumerated; strikes on the step-1 birth boundary, listed with trace; surviving
+axes keep fault tests); Goal drift = fix scope (one class, zero drive-by, zero
+contract/backlog renarration beside the fix); Bugs/Regressions = RED-first
+proven (revert-check: a guard whose test survives the fix's revert is false) +
+honest outcome asserted; Budget = N/A, don't ask. One review; blockers fixed in
+the same PR; the second review is final; a repeating class → §Class-kill
+redesign.
 
 Checkpoint machinery covers work under §Review convergence (parity/stateful) —
 there Contract+RED always precedes implementation and a unit that skipped it
