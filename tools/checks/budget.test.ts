@@ -376,6 +376,7 @@ epic: goal
         encoding: 'utf8',
         env: {
           ...process.env,
+          GITHUB_EVENT_PATH: undefined,
           RIFTY_GOAL_BASELINE: `goal@${baseline}`,
           RIFTY_BUDGET_SLICE: 'goal/jit',
         },
