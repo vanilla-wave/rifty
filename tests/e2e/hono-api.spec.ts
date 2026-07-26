@@ -8,6 +8,7 @@ import {
   expectTerminalContains,
   openShellTerminal,
   pickStarter,
+  runTerminalLine,
   runTerminalLineSettled,
   selectPreset,
   terminalBuffer,
@@ -129,6 +130,10 @@ test.describe('Hono API template through the SW preview bridge', () => {
 
     // Project replacement owns the supervisor subtree; the old routed response
     // must stay unavailable after the switch.
+    await runTerminalLine(
+      page,
+      `echo "console.log('hono-queued-switch-${Date.now()}')" >> src/main.js`,
+    );
     await pickStarter(page, 'project-files');
     await expect
       .poll(async () => (await fetchMessages()).ok, {
@@ -136,6 +141,9 @@ test.describe('Hono API template through the SW preview bridge', () => {
         intervals: [250, 500, 1_000],
       })
       .toBe(false);
+    await page.waitForTimeout(2_000);
+    expect((await fetchMessages()).ok).toBe(false);
+    await expect(page.locator(`.rf-preview__switcher option[value="${PORT}"]`)).toHaveCount(0);
     problems.assertNoViteImportErrors();
   });
 });

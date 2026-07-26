@@ -33,10 +33,10 @@ type WorkerListener = (ev: MessageEvent) => void;
 class FakeWorker implements WorkerLike {
   private readonly listeners = new Map<string, Set<WorkerListener>>();
   readonly posted: unknown[] = [];
+  readonly terminate = vi.fn();
   postMessage(message: unknown): void {
     this.posted.push(message);
   }
-  terminate(): void {}
   addEventListener(type: string, listener: WorkerListener): void {
     let set = this.listeners.get(type);
     if (!set) {
@@ -180,6 +180,58 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     } finally {
       handle.kill('SIGTERM');
     }
+  });
+
+  it('settles only the exact run when a live private-control frame is malformed', async () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    const init = (factoryWorker as FakeWorker).posted[0] as {
+      spec: { stdio: { ipc: MessagePort } };
+    };
+    const events: string[] = [];
+    handle.on('exit', (code) => events.push(`exit:${String(code)}`));
+    handle.on('close', (code) => events.push(`close:${String(code)}`));
+
+    init.spec.stdio.ipc.postMessage({ kind: 'ipc:tty-resize', cols: 'wide', rows: 40 });
+
+    await vi.waitFor(() => expect(handle.exitCode).toBe(1), { timeout: 500 });
+    expect(events).toEqual(['exit:1', 'close:1']);
+    expect(pm.list()).toEqual([]);
+    expect((factoryWorker as FakeWorker).terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles current-session Worker peer death exactly once despite a late exit frame', async () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    const events: string[] = [];
+    handle.on('exit', (code) => events.push(`exit:${String(code)}`));
+    handle.on('close', (code) => events.push(`close:${String(code)}`));
+    const worker = factoryWorker as FakeWorker;
+
+    worker.fire(
+      'error',
+      new MessageEvent('error', {
+        data: new Error('supervisor peer died with an active descendant'),
+      }),
+    );
+    worker.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+
+    await vi.waitFor(() => expect(handle.exitCode).toBe(1));
+    expect(events).toEqual(['exit:1', 'close:1']);
+    expect(pm.list()).toEqual([]);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
 
   it("worker exit emits 'disconnect' once and subsequent send returns false", async () => {

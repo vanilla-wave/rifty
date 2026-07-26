@@ -5,7 +5,7 @@ import {
   type BinWorkerHandle,
   createBinExecutor,
 } from '../glue/bin-executor.ts';
-import type { OwnerPtyRunAdmission, OwnerToPageFrame } from '../glue/pty-protocol.ts';
+import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import {
   type DevServerFailure,
   type SupervisedDevServerHandle,
@@ -109,16 +109,7 @@ function previewHarness() {
     if (frame === undefined) throw new Error('preview registry emitted no snapshot');
     return frame;
   };
-  const entries = () => {
-    const frame = sent
-      .filter(
-        (candidate): candidate is Extract<OwnerToPageFrame, { type: 'pty:preview' }> =>
-          candidate.type === 'pty:preview',
-      )
-      .at(-1);
-    return frame?.ports ?? [];
-  };
-  return { previews, latest, entries };
+  return { previews, latest };
 }
 
 async function replaceActorRun(
@@ -194,51 +185,6 @@ function controllableNodeSpawn() {
 }
 
 describe('owner preview producer admission capture', () => {
-  it('accepts listening provenance only on private descendant control, never public Node IPC', () => {
-    const preview = previewHarness();
-    const hooks = createInstalledBinPreviewHooks({
-      captureOrigin: () => ({
-        kind: 'pty',
-        admission: Object.freeze({
-          ptySid: 'terminal-private',
-          ptyRid: 'run-private',
-        }) as OwnerPtyRunAdmission,
-      }),
-      allocateSid: () => 'nodemon-supervisor',
-      previews: preview.previews,
-    });
-    const request: BinSpawnRequest = {
-      shimPath: '/node_modules/.bin/nodemon',
-      args: ['--legacy-watch', '--no-stdin', '--no-update-notifier', 'src/main.js'],
-      env: {},
-      cwd: '/',
-      isTTY: true,
-    };
-    const controlFrame = {
-      type: 'rifty:node-listening',
-      ports: [3210],
-      previewScope: 'scope-private',
-    } as const;
-    const privateHooks = hooks as typeof hooks & {
-      onDescendantControl?: (req: BinSpawnRequest, frame: unknown, ctx: CommandContext) => void;
-    };
-
-    hooks.onStart?.(request, producerContext());
-    hooks.onMessage?.(request, controlFrame, producerContext());
-    expect(preview.entries()).toEqual([]);
-
-    expect(privateHooks.onDescendantControl).toBeTypeOf('function');
-    privateHooks.onDescendantControl?.(request, controlFrame, producerContext());
-    expect(preview.entries()).toEqual([
-      expect.objectContaining({
-        port: 3210,
-        ptySid: 'terminal-private',
-        ptyRid: 'run-private',
-        previewScope: 'scope-private',
-      }),
-    ]);
-  });
-
   it('uses the exact host singleton without consulting PTY admission for a host producer', () => {
     const activeAdmission = vi.fn();
     const captureOrigin = createPreviewOriginCapture(activeAdmission);

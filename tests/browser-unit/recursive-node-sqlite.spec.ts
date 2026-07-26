@@ -218,6 +218,358 @@ await worker.terminate();
   }
 });
 
+// ADR-0326 acceptance: this is deliberately a Workbench terminal probe rather
+// than a unit seam. The supervisor, fork child, and grandchild must be three
+// physical Worker realms joined to the owner's one live project namespace.
+test('real fork Worker crosses owner FS, launch context, recursive IPC, and disconnect control', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-real-fork-worker-boundary',
+    hiddenEmptyBoot: true,
+  });
+
+  try {
+    await writeOwnerFile(
+      page,
+      '/scratch/plain-spawn.mjs',
+      `import { readFileSync, writeFileSync } from 'node:fs';
+
+writeFileSync('/plain-spawn.bin', new Uint8Array([3, 2, 1, 0]));
+process.stdout.write(JSON.stringify({
+  argv: process.argv.slice(2),
+  cwd: process.cwd(),
+  env: {
+    plain: process.env.PLAIN_ONLY,
+    inherited: process.env.INHERITED_ONLY ?? null,
+  },
+  ownerBytes: [...readFileSync('/fork-parent.bin')],
+  publicIpc: {
+    send: typeof process.send,
+    disconnect: typeof process.disconnect,
+    connected: typeof process.connected,
+    channel: typeof process.channel,
+  },
+}) + '\\n');
+`,
+    );
+    await writeOwnerFile(
+      page,
+      '/scratch/fork-inherited.mjs',
+      `process.send({
+  argv: process.argv.slice(2),
+  cwd: process.cwd(),
+  inherited: process.env.INHERITED_ONLY,
+  parentRealmLeaked: globalThis.__forkParentRealm === true,
+});
+process.disconnect();
+setTimeout(() => process.exit(0), 0);
+`,
+    );
+    await writeOwnerFile(
+      page,
+      '/scratch/fork-grandchild.mjs',
+      `import { readFileSync, writeFileSync } from 'node:fs';
+
+process.once('message', (message) => {
+  const ownerBytes = [...readFileSync('/fork-parent.bin')];
+  writeFileSync('/fork-grandchild.bin', new Uint8Array([0, 127, 128, 255]));
+  process.send({
+    echo: message,
+    argv: process.argv.slice(2),
+    cwd: process.cwd(),
+    env: {
+      grand: process.env.GRAND_ONLY,
+      child: process.env.CHILD_ONLY ?? null,
+      inherited: process.env.INHERITED_ONLY ?? null,
+    },
+    ownerBytes,
+    parentRealmLeaked: globalThis.__forkParentRealm === true,
+    childRealmLeaked: globalThis.__forkChildRealm === true,
+  });
+});
+`,
+    );
+    await writeOwnerFile(
+      page,
+      '/scratch/fork-child.mjs',
+      `import { fork } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+
+globalThis.__forkChildRealm = true;
+process.once('message', (message) => {
+  const grandchild = fork('./fork-grandchild.mjs', ['grand-argv', 'λ'], {
+    cwd: process.cwd(),
+    env: { GRAND_ONLY: 'grand-replacement' },
+    stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+  });
+  const grandchildExit = new Promise((resolve, reject) => {
+    grandchild.once('error', reject);
+    grandchild.once('exit', (code, signal) => resolve({ code, signal }));
+  });
+  grandchild.once('message', async (grandchildMessage) => {
+    const exit = await grandchildExit;
+    writeFileSync('/fork-child.bin', new Uint8Array([255, 128, 127, 0]));
+    process.send({
+      echo: message,
+      argv: process.argv.slice(2),
+      cwd: process.cwd(),
+      env: {
+        child: process.env.CHILD_ONLY,
+        inherited: process.env.INHERITED_ONLY ?? null,
+      },
+      ownerBytes: [...readFileSync('/fork-parent.bin')],
+      parentRealmLeaked: globalThis.__forkParentRealm === true,
+      grandchild: { message: grandchildMessage, exit },
+    });
+    process.disconnect();
+    setTimeout(() => {
+      writeFileSync('/fork-after-disconnect.bin', new Uint8Array([9, 8, 7, 6]));
+      process.exit(0);
+    }, 20);
+  });
+  grandchild.send({ direction: 'child-to-grandchild', text: 'π\\u0000終' });
+});
+`,
+    );
+    await writeOwnerFile(
+      page,
+      '/scratch/fork-parent.mjs',
+      `import { fork, spawn } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+
+globalThis.__forkParentRealm = true;
+process.env.INHERITED_ONLY = 'must-not-survive-replacement';
+writeFileSync('/fork-parent.bin', new Uint8Array([0, 1, 127, 128, 254, 255]));
+
+const plain = spawn('node', ['./plain-spawn.mjs', 'plain-argv'], {
+  cwd: '/scratch',
+  env: { PLAIN_ONLY: 'plain-replacement' },
+});
+let plainOut = '';
+let plainErr = '';
+const plainEvents = [];
+plain.stdout.on('data', (chunk) => {
+  plainEvents.push('stdout');
+  plainOut += Buffer.from(chunk).toString('utf8');
+});
+plain.stderr.on('data', (chunk) => {
+  plainEvents.push('stderr');
+  plainErr += Buffer.from(chunk).toString('utf8');
+});
+const plainSurface = {
+  stdin: plain.stdin === null ? 'null' : 'stream',
+  stdout: plain.stdout === null ? 'null' : 'stream',
+  stderr: plain.stderr === null ? 'null' : 'stream',
+  send: typeof plain.send,
+  disconnect: typeof plain.disconnect,
+  connected: typeof plain.connected,
+  channel: typeof plain.channel,
+};
+const plainOutcome = await new Promise((resolve, reject) => {
+  plain.once('error', reject);
+  plain.once('exit', (code, signal) => plainEvents.push('exit:' + code + '/' + signal));
+  plain.once('close', (code, signal) => {
+    plainEvents.push('close:' + code + '/' + signal);
+    resolve({ code, signal });
+  });
+});
+
+const inheritedChild = fork('./fork-inherited.mjs', ['inherited-argv'], {
+  cwd: '/scratch',
+  stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+});
+const inheritedOutcome = await new Promise((resolve, reject) => {
+  let message;
+  inheritedChild.once('error', reject);
+  inheritedChild.once('message', (value) => {
+    message = value;
+  });
+  inheritedChild.once('close', (code, signal) => resolve({ message, code, signal }));
+});
+
+const child = fork('./fork-child.mjs', ['child-argv', 'β'], {
+  cwd: '/scratch',
+  env: { CHILD_ONLY: 'child-replacement' },
+  stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+});
+const events = [];
+const outcome = await new Promise((resolve, reject) => {
+  let message;
+  child.once('error', reject);
+  child.once('message', (value) => {
+    events.push('message');
+    message = value;
+  });
+  child.once('disconnect', () => events.push('disconnect'));
+  child.once('exit', (code, signal) => events.push('exit:' + code + '/' + signal));
+  child.once('close', (code, signal) => {
+    events.push('close:' + code + '/' + signal);
+    resolve({ message, code, signal });
+  });
+  child.send({ direction: 'parent-to-child', text: 'π\\u0000終' });
+});
+
+console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
+  plain: {
+    outcome: plainOutcome,
+    surface: plainSurface,
+    events: plainEvents,
+    stdout: plainOut,
+    stderr: plainErr,
+    bytes: [...readFileSync('/plain-spawn.bin')],
+  },
+  inheritedOutcome,
+  outcome,
+  events,
+  childBytes: [...readFileSync('/fork-child.bin')],
+  grandchildBytes: [...readFileSync('/fork-grandchild.bin')],
+  afterDisconnectBytes: [...readFileSync('/fork-after-disconnect.bin')],
+}));
+`,
+    );
+
+    expect(await runDefaultProjectOnce(page)).toEqual({ code: 0, signal: null });
+    const result = await execLine(page, 'node fork-parent.mjs');
+    expect(result.exit, result.out).toBe(0);
+
+    const line = result.out
+      .split(/\r?\n/u)
+      .find((candidate) => candidate.startsWith('REAL_FORK_BOUNDARY|'));
+    expect(line, result.out).toBeDefined();
+    const observed = JSON.parse(line?.slice('REAL_FORK_BOUNDARY|'.length) ?? '') as {
+      readonly plain: {
+        readonly outcome: { readonly code: number | null; readonly signal: string | null };
+        readonly surface: Readonly<Record<string, string>>;
+        readonly events: readonly string[];
+        readonly stdout: string;
+        readonly stderr: string;
+        readonly bytes: readonly number[];
+      };
+      readonly inheritedOutcome: {
+        readonly message: {
+          readonly argv: readonly string[];
+          readonly cwd: string;
+          readonly inherited: string;
+          readonly parentRealmLeaked: boolean;
+        };
+        readonly code: number | null;
+        readonly signal: string | null;
+      };
+      readonly outcome: {
+        readonly message: {
+          readonly echo: unknown;
+          readonly argv: readonly string[];
+          readonly cwd: string;
+          readonly env: Readonly<Record<string, string | null>>;
+          readonly ownerBytes: readonly number[];
+          readonly parentRealmLeaked: boolean;
+          readonly grandchild: {
+            readonly message: {
+              readonly echo: unknown;
+              readonly argv: readonly string[];
+              readonly cwd: string;
+              readonly env: Readonly<Record<string, string | null>>;
+              readonly ownerBytes: readonly number[];
+              readonly parentRealmLeaked: boolean;
+              readonly childRealmLeaked: boolean;
+            };
+            readonly exit: { readonly code: number | null; readonly signal: string | null };
+          };
+        };
+        readonly code: number | null;
+        readonly signal: string | null;
+      };
+      readonly events: readonly string[];
+      readonly childBytes: readonly number[];
+      readonly grandchildBytes: readonly number[];
+      readonly afterDisconnectBytes: readonly number[];
+    };
+
+    expect(observed).toEqual({
+      plain: {
+        outcome: { code: 0, signal: null },
+        surface: {
+          stdin: 'stream',
+          stdout: 'stream',
+          stderr: 'stream',
+          send: 'undefined',
+          disconnect: 'undefined',
+          connected: 'undefined',
+          channel: 'undefined',
+        },
+        events: ['stdout', 'exit:0/null', 'close:0/null'],
+        stdout: `${JSON.stringify({
+          argv: ['plain-argv'],
+          cwd: '/scratch',
+          env: {
+            plain: 'plain-replacement',
+            inherited: null,
+          },
+          ownerBytes: [0, 1, 127, 128, 254, 255],
+          publicIpc: {
+            send: 'undefined',
+            disconnect: 'undefined',
+            connected: 'undefined',
+            channel: 'undefined',
+          },
+        })}\n`,
+        stderr: '',
+        bytes: [3, 2, 1, 0],
+      },
+      inheritedOutcome: {
+        message: {
+          argv: ['inherited-argv'],
+          cwd: '/scratch',
+          inherited: 'must-not-survive-replacement',
+          parentRealmLeaked: false,
+        },
+        code: 0,
+        signal: null,
+      },
+      outcome: {
+        message: {
+          echo: { direction: 'parent-to-child', text: 'π\u0000終' },
+          argv: ['child-argv', 'β'],
+          cwd: '/scratch',
+          env: {
+            child: 'child-replacement',
+            inherited: null,
+          },
+          ownerBytes: [0, 1, 127, 128, 254, 255],
+          parentRealmLeaked: false,
+          grandchild: {
+            message: {
+              echo: { direction: 'child-to-grandchild', text: 'π\u0000終' },
+              argv: ['grand-argv', 'λ'],
+              cwd: '/scratch',
+              env: {
+                grand: 'grand-replacement',
+                child: null,
+                inherited: null,
+              },
+              ownerBytes: [0, 1, 127, 128, 254, 255],
+              parentRealmLeaked: false,
+              childRealmLeaked: false,
+            },
+            exit: { code: 0, signal: null },
+          },
+        },
+        code: 0,
+        signal: null,
+      },
+      events: ['message', 'disconnect', 'exit:0/null', 'close:0/null'],
+      childBytes: [255, 128, 127, 0],
+      grandchildBytes: [0, 127, 128, 255],
+      afterDisconnectBytes: [9, 8, 7, 6],
+    });
+  } finally {
+    await closeOwner(page);
+  }
+});
+
 // Fault class: sibling-drift — dev-server children must relay one project namespace
 // for every nested Node mechanism, not only the node-entry bootstrap sibling.
 test('node-server execSync relays the public project root to its nested child', async ({

@@ -108,4 +108,40 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(manager.list()).toEqual([next]);
     next.kill();
   });
+
+  it('returns a whole old or whole replacement table when snapshot races restart', async () => {
+    const manager = new ProcessManager();
+    const supervisor = manager.spawn('nodemon', liveUntilKilled);
+    const oldApp = manager.spawn('node', liveUntilKilled, supervisor.pid);
+    let replacement: ReturnType<ProcessManager['spawn']> | null = null;
+
+    queueMicrotask(() => {
+      oldApp.kill('SIGUSR2');
+      replacement = manager.spawn('node', liveUntilKilled, supervisor.pid);
+    });
+    const racingSnapshot = manager
+      .list()
+      .map(({ pid, ppid, command }) => ({ pid, ppid, command }))
+      .sort((left, right) => left.pid - right.pid);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (replacement === null) throw new Error('replacement microtask did not run');
+    const replacementHandle = replacement as ReturnType<ProcessManager['spawn']>;
+    const settledSnapshot = manager
+      .list()
+      .map(({ pid, ppid, command }) => ({ pid, ppid, command }))
+      .sort((left, right) => left.pid - right.pid);
+
+    expect(racingSnapshot).toEqual([
+      { pid: supervisor.pid, ppid: 1, command: 'nodemon' },
+      { pid: oldApp.pid, ppid: supervisor.pid, command: 'node' },
+    ]);
+    expect(settledSnapshot).toEqual([
+      { pid: supervisor.pid, ppid: 1, command: 'nodemon' },
+      { pid: replacementHandle.pid, ppid: supervisor.pid, command: 'node' },
+    ]);
+    expect(replacementHandle.pid).toBeGreaterThan(oldApp.pid);
+
+    replacementHandle.kill();
+    supervisor.kill();
+  });
 });

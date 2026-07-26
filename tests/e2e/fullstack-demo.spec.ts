@@ -15,11 +15,16 @@ import {
   expectTerminalContains,
   openShellTerminal,
   pickStarter,
+  runTerminalLine,
   runTerminalLineSettled,
   terminalBuffer,
 } from './helpers/playground.ts';
 
 const PORT = 3210;
+
+function occurrences(text: string, needle: string): number {
+  return text.split(needle).length - 1;
+}
 
 test.describe('Fullstack demo — Express + node:sqlite through the SW preview bridge', () => {
   test('preset boots the server; API and client both round-trip', async ({ page }) => {
@@ -173,7 +178,7 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     ).length;
     await runTerminalLineSettled(
       page,
-      `echo "console.log('rapid-intermediate')" >> src/main.js && echo "console.log('${rapidMarker}')" >> src/main.js`,
+      `echo "console.log('rapid-intermediate')" >> src/main.js && echo "console.log('${rapidMarker} pid=' + process.pid + ' ppid=' + process.ppid)" >> src/main.js`,
     );
     await expect
       .poll(
@@ -185,6 +190,23 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(rapidMarker);
     await expect.poll(async () => (await fetchTodos()).count, { timeout: 45_000 }).toBe(3);
     expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    const appIdentity = new RegExp(`${rapidMarker} pid=(\\d+) ppid=(\\d+)`, 'u').exec(
+      await terminalBuffer(page, 0),
+    );
+    expect(appIdentity, 'edited app must expose its real PID/PPID').not.toBeNull();
+    const appPid = Number(appIdentity?.[1]);
+    const supervisorPid = Number(appIdentity?.[2]);
+    await runTerminalLineSettled(page, 'ps -A -o ppid,pid');
+    const processRows = [...(await terminalBuffer(page)).matchAll(/^\s*(\d+)\s+(\d+)\s*$/gmu)].map(
+      (match) => ({ ppid: Number(match[1]), pid: Number(match[2]) }),
+    );
+    expect(processRows).toContainEqual({ ppid: supervisorPid, pid: appPid });
+    expect(processRows.filter((row) => row.ppid === supervisorPid)).toEqual([
+      { ppid: supervisorPid, pid: appPid },
+    ]);
+    await expect(page.locator(`iframe[title="Preview port ${PORT}"]`)).toHaveCount(1);
+    await expect(page.locator(`.rf-preview__switcher option[value="${PORT}"]`)).toHaveCount(1);
 
     // I3: the real child parse failure reaches stderr; nodemon remains alive and
     // a later valid edit recovers without another `npm run dev`.
@@ -207,6 +229,8 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
 
     // I5: Ctrl-C tears down nodemon, its app descendant, and the preview route;
     // an already-admitted watch event cannot resurrect the subtree.
+    const queuedMarker = `express-queued-after-close-${Date.now()}`;
+    await runTerminalLine(page, `echo "console.log('${queuedMarker}')" >> src/main.js`);
     await page.getByRole('tab', { name: 'Terminal 1', exact: true }).click();
     await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
     await page.keyboard.press('Control+c');
@@ -216,7 +240,51 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
         intervals: [250, 500, 1_000],
       })
       .toBe(false);
-    await page.waitForTimeout(1_500);
+    const startsAfterStop = (await terminalBuffer(page, 0)).split('[nodemon] starting').length;
+    await page.waitForTimeout(2_000);
+    expect((await fetchTodos()).ok).toBe(false);
+    expect((await terminalBuffer(page, 0)).split('[nodemon] starting')).toHaveLength(
+      startsAfterStop,
+    );
+    await expect(page.locator(`.rf-preview__switcher option[value="${PORT}"]`)).toHaveCount(0);
+
+    // Package provenance: a missing or corrupt exact launcher must fail
+    // visibly. Neither case may claim a supervisor start or execute the entry
+    // through Workbench's direct-node controller.
+    const startsBeforeLaunchFaults = occurrences(
+      await terminalBuffer(page, 0),
+      '[nodemon] starting',
+    );
+    const missingMarker = `MISSING_NODEMON_${Date.now()}`;
+    await runTerminalLineSettled(
+      page,
+      'mv node_modules/.bin/nodemon node_modules/.bin/nodemon.saved',
+    );
+    await runTerminalLineSettled(
+      page,
+      `npm run dev && echo ${missingMarker}_UNEXPECTED || echo ${missingMarker}_SETTLED`,
+      45_000,
+    );
+    let launchFaultBuffer = await terminalBuffer(page, 0);
+    expect(occurrences(launchFaultBuffer, `${missingMarker}_SETTLED`)).toBe(2);
+    expect(occurrences(launchFaultBuffer, `${missingMarker}_UNEXPECTED`)).toBe(1);
+    expect(occurrences(launchFaultBuffer, '[nodemon] starting')).toBe(startsBeforeLaunchFaults);
+    expect((await fetchTodos()).ok).toBe(false);
+
+    const corruptMarker = `CORRUPT_NODEMON_${Date.now()}`;
+    await runTerminalLineSettled(
+      page,
+      `echo 'this is not a valid node launcher' > node_modules/.bin/nodemon`,
+    );
+    await runTerminalLineSettled(
+      page,
+      `npm run dev && echo ${corruptMarker}_UNEXPECTED || echo ${corruptMarker}_SETTLED`,
+      45_000,
+    );
+    launchFaultBuffer = await terminalBuffer(page, 0);
+    expect(occurrences(launchFaultBuffer, `${corruptMarker}_SETTLED`)).toBe(2);
+    expect(occurrences(launchFaultBuffer, `${corruptMarker}_UNEXPECTED`)).toBe(1);
+    expect(occurrences(launchFaultBuffer, '[nodemon] starting')).toBe(startsBeforeLaunchFaults);
     expect((await fetchTodos()).ok).toBe(false);
   });
 });

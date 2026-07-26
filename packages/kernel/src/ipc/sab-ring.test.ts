@@ -197,6 +197,16 @@ describe('SabRing — configurable capacity agreement (ADR-0084 #19)', () => {
 });
 
 describe('SabRing — protocol violations', () => {
+  it('rejects a second attached caller before it mutates one live exchange', () => {
+    const { sab, ring: firstCaller } = createSabRing({ payloadCapacity: 16 });
+    const secondCaller = SabRing.attach(sab, 16);
+
+    firstCaller.writeRequest(new Uint8Array([1, 2, 3]));
+    expect(() => secondCaller.writeRequest(new Uint8Array([4, 5, 6]))).toThrow(
+      /previous request is unread/,
+    );
+  });
+
   it('writeRequest while a reply is still unread throws', async () => {
     const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
     const responder = SabRing.attach(sab, 16);

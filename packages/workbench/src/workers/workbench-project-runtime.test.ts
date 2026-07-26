@@ -106,6 +106,13 @@ const nodemonNodeServerPackageConfig: OwnerPackageConfig = {
   slug: 'project-a',
   fromScratch: true,
 };
+const missingNodemonNodeServerPackageConfig: OwnerPackageConfig = {
+  ...nodemonNodeServerPackageConfig,
+  cfg: {
+    ...nodemonNodeServerPackageConfig.cfg,
+    installDeps: {},
+  },
+};
 
 const NODE_CLI_PACKAGE_JSON = `${JSON.stringify({
   name: 'workbench-node-cli',
@@ -459,9 +466,27 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       }),
     );
     await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+    const command = worker.command();
+    const spec = worker.spec();
 
-    expect(worker.command()).toBe('/node_modules/.bin/nodemon');
-    expect(worker.spec()).toMatchObject({
+    const close = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:close',
+        sid: 'terminal-nodemon',
+        opId: 'close-nodemon-session',
+      }),
+    );
+    await vi.waitFor(() => expect(worker.killedWith()).toBe('SIGTERM'));
+    expect(
+      h.frames.some(
+        (frame) => frame.type === 'pty:close-ack' && frame.opId === 'close-nodemon-session',
+      ),
+    ).toBe(false);
+    worker.emitExit(null, 'SIGTERM');
+    await Promise.all([running, close]);
+
+    expect(command).toBe('/node_modules/.bin/nodemon');
+    expect(spec).toMatchObject({
       argv: [
         'rifty',
         '/node_modules/.bin/nodemon',
@@ -475,12 +500,66 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         url: NODE_ENTRY_WORKER_URL,
       },
     });
-    expect(worker.spec()?.entry).not.toMatchObject({
+    expect(spec?.entry).not.toMatchObject({
       url: DEV_SERVER_WORKER_URL,
     });
+    expect(h.frames).toContainEqual({
+      type: 'pty:close-ack',
+      sid: 'terminal-nodemon',
+      opId: 'close-nodemon-session',
+      ok: true,
+    });
+    expect(h.frames.filter((frame) => frame.type === 'pty:preview').at(-1)).toEqual({
+      type: 'pty:preview',
+      ports: [],
+    });
+    await h.runtime.close();
+  });
 
-    worker.emitExit(0);
-    await running;
+  it('surfaces an unresolved nodemon launcher without a direct-node or dev-server fallback', async () => {
+    const worker = boundaryWorker();
+    const h = await harness(undefined, missingNodemonNodeServerPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-missing-nodemon' });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-missing-nodemon',
+        rid: 'run-missing-nodemon',
+        line: 'npm run dev',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    if (
+      (await settledOr(
+        running.then(() => 'settled'),
+        'pending',
+      )) === 'pending'
+    ) {
+      await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+      worker.emitExit(127);
+      await running;
+    }
+
+    const output = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' && frame.rid === 'run-missing-nodemon',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(worker.spec()).toBeNull();
+    expect(output).toMatch(/nodemon.*(not found|missing|resolve)/iu);
+    expect(output).not.toContain('[nodemon] starting');
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-missing-nodemon',
+        code: 127,
+      }),
+    );
     await h.runtime.close();
   });
 
