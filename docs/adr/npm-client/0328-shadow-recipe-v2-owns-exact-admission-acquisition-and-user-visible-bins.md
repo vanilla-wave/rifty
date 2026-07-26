@@ -45,24 +45,33 @@ ADR-0308 and grafts its remaining decisions.
   `lightningcss.version`, and `sass-embedded.version`; request text never
   changes their identity.
 - **Registry acquisition is exact.** A registry recipe records required,
-  optional, omitted-optional, and peer dependency maps plus a stable drift
-  feature. Metadata must equal that complete projection before tarball work.
-  Only required, retained optional, and peer maps enter the walk and lockfile;
-  omitted optionals never resolve or fetch. Omission records the exact range,
-  so changed metadata cannot silently widen the policy.
+  optional, omitted-optional, and peer dependency maps, bundled membership,
+  plus a stable drift feature. Bundled names must belong to a retained required
+  or optional map. Metadata must equal that complete projection before tarball
+  work. Only non-bundled required/retained optional and peer maps enter the
+  external walk; omitted optionals never resolve or fetch. Omission and bundle
+  membership retain the exact range, so changed metadata cannot silently widen
+  policy.
 - **Materialization owns bins.** A recipe records its exact bin map. Acquired
   registry bins never enter linking or their lock entry. After alias files are
   materialized, the shared package-bin linker creates `.bin` launchers from
   the materialized package and validates every target. Synthetic recipes use
-  the same bin authority. No second bin implementation is allowed.
+  the same bin authority. When user-visible packages in one `node_modules`
+  scope claim the same command, the lexicographically first package name wins
+  independently of manifest order; each install reconciles an existing
+  launcher to that winner. Acquired registry twins are suppressed before this
+  policy runs. No second bin implementation is allowed.
 - **Strict ingress.** The codec rejects v1, unknown fields, accessors, sparse
   data, invalid or overlapping dependency maps, escaping/missing bin targets,
   and disagreement between materialization data and synthesized
-  `package.json`. Package-bearing catalog fields use the internal ASCII key
-  grammar `[A-Za-z0-9][A-Za-z0-9._@/+-]*`; exact versions use
-  `MAJOR.MINOR.PATCH` plus optional ASCII prerelease. These are clone-format
-  constraints, not a replacement npm request parser. Recipe/catalog digests
-  cover all behavior-bearing fields.
+  `package.json`. Package-bearing catalog fields use one internal ASCII key
+  grammar: unscoped `[A-Za-z0-9][A-Za-z0-9._+-]*`, or scoped
+  `@[A-Za-z0-9][A-Za-z0-9._+-]*/[A-Za-z0-9][A-Za-z0-9._+-]*`. Exact versions
+  use `MAJOR.MINOR.PATCH` plus optional ASCII prerelease; bin commands use the
+  unscoped key form and their normalized relative targets must exist in the
+  materialization. These are clone-format constraints, not replacement npm
+  request/bin parsers. Recipe/catalog digests cover all behavior-bearing
+  fields.
 - **One ingress owner.** Shadow-registry strictly decodes the generated catalog
   once before its existing declared `/internal` export; consumers receive that
   attested deeply frozen value and do not accept injected catalogs. Structured
@@ -82,17 +91,23 @@ ADR-0308 and grafts its remaining decisions.
   npm Eddy is unchanged.
 - **Lockfile provenance stays authoritative.** Matching replay regenerates
   exact files and bins with zero registry reads. A v1 recipe identity or any
-  acquisition/materialization drift loud-fails `EBROKENLOCK`; it is never
-  reinterpreted as v2. Pre-shadow lockfiles remain ordinary empty plans.
+  acquisition/materialization drift loud-fails `EBROKENLOCK` with reason
+  `shadow-trace-drift`; it is never reinterpreted as v2. A v1 identity is
+  attributed to its trigger package, with the lexicographically smallest
+  `canonicalShadowJson(appliedFact)` winning when multiple legacy facts exist.
+  Pre-shadow lockfiles remain ordinary empty plans.
 - **Concrete recipes.**
   - esbuild keeps semver admission, synthetic materialization, the existing
     optional runtime binding, and a materialized `esbuild` bin;
   - LightningCSS keeps semver admission and the exact `lightningcss-wasm`
-    registry twin with no runtime binding;
+    registry twin with required bundled `napi-wasm@^1.0.1`, no optional/peer
+    dependencies, acquisition-drift feature `lightningcss.acquisition`, and no
+    runtime binding;
   - `sass-embedded@1.100.0` is exact-only, acquires exact `sass@1.100.0`,
     projects its three required dependencies, omits only exact
     `@parcel/watcher`, materializes the ADR-0310 facade and loud CLI, and
-    creates no runtime binding.
+    creates no runtime binding; its acquisition-drift feature is
+    `sass-embedded.acquisition`.
 - **Existing boundaries stand.** Kernel entry ports are unchanged. Vite is an
   acceptance consumer, never an activation condition. The runtime-asset seam
   remains N=1 until a real second Pattern-2 consumer lands.

@@ -24,9 +24,9 @@ Non-negotiable merge outcome:
   Vite/esbuild integration edge;
 - a fresh project pins `sass-embedded@1.100.0`, imports SCSS, and passes direct
   CJS/ESM Sass lifecycle parity plus real Vite 7.3.6 dev/HMR/build acceptance;
-- after recipe v2's generic data/execution authorities land, adding the Sass
-  capsule changes only Sass policy/capsule/oracle/fixtures, generated data,
-  compat docs, and acceptance tests — the seam proof;
+- the Sass substitution creates no runtime binding or asset capability and
+  performs zero runtime manager/store operations while direct and Vite Sass
+  behavior remains faithful;
 - unsupported versions/surfaces stay named `NotImplementedError` + compat ❌ —
   no fallback to host bytes, native binaries, or approximate output.
 
@@ -55,9 +55,8 @@ through the same adapter, Sass lifecycle parity, and trust surviving extraneous
    npm-proven bytes; recognition remains inside the concrete Vite/esbuild edge.
 3. `sass-embedded@1.100.0` passes direct CJS/ESM lifecycle parity and real Vite
    7.3.6 dev/HMR/build acceptance with exact CSS/map output.
-4. After recipe v2's generic data/execution authorities land, adding Sass
-   changes only Sass policy/capsule/oracle/fixtures, generated data, compat
-   docs, and acceptance tests.
+4. The Sass substitution creates no runtime binding or asset capability and
+   performs zero runtime manager/store operations.
 5. A→B→A with acquisition network disabled reuses the exact tree with zero
    install/registry work; extraneous `node_modules` writes do not break trust.
 6. Unsupported versions and surfaces throw named `NotImplementedError` and stay
@@ -86,7 +85,8 @@ Contract+RED → Final+GREEN):
    gates close, and required before the package-specific seam.
 5. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
-   generic-file no-change gate. Required for epic closure, not optional.
+   generic-file no-change gate. Draft until its full differential artifact and
+   fault matrix are committed; required for epic closure, not optional.
 6. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption
    narrowing, owner READMEs, dead code imported by extraction).
@@ -107,7 +107,8 @@ Run tripwires (`docs/backlog/README.md` §Budget):
   (`pnpm check:contract-drift`)
 - new coordination mechanisms: 0
 - review checkpoints per slice: exactly 2
-- generated globs: `docs/public/compat/**`, `**/generated/**`, `pnpm-lock.yaml`
+- generated globs: `docs/public/compat/**`, `**/generated/**`,
+  `apps/playground/public/snapshots/**`, `pnpm-lock.yaml`
 - slices:
 
 | slice | band |

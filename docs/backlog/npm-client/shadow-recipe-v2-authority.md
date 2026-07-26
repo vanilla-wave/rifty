@@ -7,7 +7,7 @@ why: the Sass RED proved recipe v1 admits unproven ranges, copies unproven regis
 user_story: As a browser-IDE user installing a builtin-substituted package, I want its accepted request, fetched dependency closure, visible bins, and replay provenance to be exactly the reviewed recipe, but today recipe v1 can widen each of those boundaries
 epic: honest-shadow-substitutions
 blocked_by: [npm-client/shadow-recipe-v2-data-authority]
-sources: [ADR-0310, ADR-0328]
+sources: [ADR-0310, ADR-0328, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md]
 code:
   - packages/npm-client/src/installer.ts
   - packages/npm-client/src/internal/shadow/planner.ts
@@ -27,27 +27,23 @@ item starts at execution, projection, materialization, and replay.
 
 ## Reference contract
 
-- Before ready, registry-backed builtin projections must be pinned to committed
-  npm packument goldens keyed by package, exact version, registry source,
-  integrity, and captured date.
-- The `lightningcss-wasm@1.32.0` golden must compare all four dependency maps to
-  the recipe independently of catalog source or installer fixtures; future
-  registry-backed builtins inherit the same external-golden differential.
-- Real npm must pin peer placement/traversal and same-command `.bin`
-  ownership/order. Browser acceptance remains the real esbuild/Vite contract,
-  never a local fake of the package being substituted.
+- `lightningcss-wasm@1.32.0` registry identity, integrity, dependency maps, and
+  bundled `napi-wasm` membership are pinned by the committed capture. Before
+  ready, turn that evidence into a machine-checked fixture independent of
+  catalog source or installer fakes; future registry-backed builtins inherit
+  the same external-golden differential.
+- Real npm must pin peer placement/traversal. The committed npm 11 collision
+  probe pins same-command `.bin` ownership independent of manifest order and
+  across incremental reconciliation. Browser acceptance remains the real
+  esbuild/Vite contract, never a local fake of the package being substituted.
 
 ## Readiness blockers
 
-- Commit a reproducible exact `lightningcss-wasm@1.32.0` registry capture
-  (source, integrity, date, and all four dependency maps); the referenced
-  golden does not exist yet.
+- Convert the committed exact `lightningcss-wasm@1.32.0` registry capture into
+  a machine-checked golden, including bundled `napi-wasm` membership.
 - Add the real-npm peer placement/traversal differential this contract
   references; current peer tests use the fake registry and do not settle
   traversal.
-- Pin real npm's same-command `.bin` winner/order, then specify how a
-  materialized alias participates. Existing package-order overwrite is not an
-  oracle.
 - Add `concurrent-same-key` coverage or a proven physical exclusion for
   alias/bin/lock writes before this production-tier storage slice becomes
   ready.
@@ -64,16 +60,21 @@ item starts at execution, projection, materialization, and replay.
 - Recipe materialization owns the exact user-visible bin map. Acquired bins
   never leak into linking or their lock entry; one shared package-bin linker
   validates and links the materialized targets for registry and synthetic
-  recipes.
+  recipes. For a shared command in one `node_modules` scope, the
+  lexicographically first user-visible package name wins, independent of
+  manifest order; every install reconciles an existing launcher to that
+  winner. The acquired registry twin is suppressed before this policy runs.
 - Matching v2 replay regenerates byte-identical materialization and bins with
-  zero registry reads. V1 or drifted acquisition/materialization provenance
-  loud-fails `EBROKENLOCK`; it is never reinterpreted.
+  zero registry reads. The data slice's schema-1 identity rejection remains;
+  drifted acquisition/materialization provenance loud-fails `EBROKENLOCK` and
+  is never reinterpreted.
 - Existing esbuild and LightningCSS fresh/replay behavior remains faithful.
   Direct guest CJS/ESM esbuild and real Vite 7.3.6 acceptance stay green, with
   v2 lock identity and the loud esbuild CLI observed in Chromium.
-- Catalog/install-artifact identities and all committed dependency snapshots
-  are regenerated from v2. Add concise npm-client, shadow-registry, Workbench,
-  and playground CHANGELOG entries.
+- Preserve the data slice's v2 catalog/install/snapshot identity migration and
+  keep every drift gate green; any behavior-data change regenerates its derived
+  artifacts in this PR. Add concise npm-client, shadow-registry, Workbench, and
+  playground CHANGELOG entries.
 
 ## Parity cases
 
@@ -88,6 +89,10 @@ item starts at execution, projection, materialization, and replay.
 5. The committed LightningCSS recipe exercises non-empty dependency policy and
    the committed esbuild recipe exercises a materialized bin through the real
    install core; no injected/custom recipe SPI or fake package is added.
+6. Opposite manifest order and incremental-install fixtures match the committed
+   npm 11 collision probe: the lexicographically first user-visible package
+   name owns a shared command, while an acquired registry twin never
+   participates.
 
 ## Fault matrix
 
@@ -100,6 +105,7 @@ item starts at execution, projection, materialization, and replay.
 | torn-state | abort during reachable registry alias writes stops later writes and the success claim, publishes no lock, and retry reconciles exact bytes; shared-bin cancellation remains inherited | installer materialization fault plus linker fault suite |
 | quota-perm-fail | quota/permission rejection during alias or bin writes publishes no success report or lock; retry reconciles exact bytes | root/nested registry alias and shared-bin write faults |
 | sibling-drift | esbuild and LightningCSS share the same policy/linker path | both recipe contract suites plus source boundary gate |
+| observable-order / sibling-drift | shared commands choose the lexical-min user-visible package independently of manifest order and reconcile incremental installs; acquired twins are absent | opposite-order + incremental collision fixtures against npm 11 probe |
 
 ## Out of scope
 
@@ -113,8 +119,9 @@ item starts at execution, projection, materialization, and replay.
 ## Decisions
 
 - ADR-0328 owns the complete recipe authority. The blocked data slice owns
-  schema 2, codec/ingress, and admission; this item owns projection execution,
-  materialized-bin execution, provenance, and loud v1 replay failure.
+  schema 2, codec/ingress, admission, and the schema-1 replay guard; this item
+  owns projection execution, materialized-bin execution, and v2
+  acquisition/materialization provenance.
 - The recipe model remains clone-safe data. Generic consumers execute policy
   fields and never recognize Sass, esbuild, LightningCSS, Vite, or entry kind.
 - The package-bin linker is the sole bin implementation. Runtime binding stays
