@@ -47,6 +47,21 @@ smoke proves these coarse invariants: direct-esbuild activation, Vite parity
 through the same adapter, Sass lifecycle parity, and trust surviving extraneous
 `node_modules` writes.
 
+## Invariants
+
+1. Direct guest `require('esbuild')` and `import('esbuild')` run the proven
+   `transform()` surface without Vite installed or recognized.
+2. Vite 7.3.6 dev/build/preview/optimize uses the same esbuild adapter and
+   npm-proven bytes; recognition remains inside the concrete Vite/esbuild edge.
+3. `sass-embedded@1.100.0` passes direct CJS/ESM lifecycle parity and real Vite
+   7.3.6 dev/HMR/build acceptance with exact CSS/map output.
+4. Adding Sass changes only Sass policy/capsule/oracle/fixtures, generated data,
+   compat docs, and acceptance tests.
+5. A→B→A with acquisition network disabled reuses the exact tree with zero
+   install/registry work; extraneous `node_modules` writes do not break trust.
+6. Unsupported versions and surfaces throw named `NotImplementedError` and stay
+   compat ❌ without host-byte, native-binary, or approximate fallback.
+
 ## Items
 
 Dependency order (slice names = §Budget rows; each source slice gets its own
