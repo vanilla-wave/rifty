@@ -138,9 +138,17 @@ const CONTRACT_PROJECTION_FIELDS = [
   'optionalDependencies',
   'peerDependencies',
 ] as const;
-const EXACT_ONLY_BYTE_DIFFERENT_RANGES = ['=1.100.0', 'v1.100.0', ' 1.100.0', '1.100.0 '] as const;
+const EXACT_ONLY_BYTE_DIFFERENT_RANGES = [
+  '',
+  '=1.100.0',
+  'v1.100.0',
+  ' 1.100.0',
+  '1.100.0 ',
+] as const;
+const EXACT_ONLY_ACQUISITION_KINDS = ['registry', 'synthetic'] as const;
 const EXACT_ONLY_LIFECYCLES = ['fresh', 'replay', 'eddy'] as const;
 const EXACT_ONLY_PLACEMENTS = ['direct', 'transitive'] as const;
+const EXACT_ONLY_AUTHORITY_SHAPES = ['canonical', 'structured-clone'] as const;
 const PROJECTION_MUTATIONS = ['add', 'remove', 'change'] as const;
 const CONTRACT_PARTIAL_WRITE_CASES = [
   ['registry alias', 'permission'],
@@ -368,8 +376,21 @@ const BUILTIN_LIGHTNING_PROJECTION_BASE = {
 
 function exactOnlyByteCases() {
   return EXACT_ONLY_BYTE_DIFFERENT_RANGES.flatMap((range) =>
-    EXACT_ONLY_PLACEMENTS.flatMap((placement) =>
-      EXACT_ONLY_LIFECYCLES.map((lifecycle) => ({ lifecycle, placement, range })),
+    EXACT_ONLY_ACQUISITION_KINDS.flatMap((acquisitionKind) =>
+      EXACT_ONLY_PLACEMENTS.flatMap((placement) =>
+        EXACT_ONLY_LIFECYCLES.flatMap((lifecycle) =>
+          (range === '' ? EXACT_ONLY_AUTHORITY_SHAPES : (['canonical'] as const)).map(
+            (authorityShape) => ({
+              acquisitionKind,
+              authorityShape,
+              lifecycle,
+              placement,
+              range,
+              rangeLabel: JSON.stringify(range),
+            }),
+          ),
+        ),
+      ),
     ),
   );
 }
@@ -1125,17 +1146,21 @@ function admissionBoundarySpies(retainTarballs = false) {
   };
 }
 
-function admissionFeature(error: unknown): string | undefined {
+function admissionError(
+  error: unknown,
+): (Error & { readonly feature: 'contract-package.version' }) | undefined {
   if (!(error instanceof Error)) return undefined;
   const feature = (error as Error & { feature?: unknown }).feature;
-  if (typeof feature === 'string') return feature;
+  if (feature === 'contract-package.version') {
+    return error as Error & { readonly feature: 'contract-package.version' };
+  }
   if (error instanceof AggregateError) {
     for (const cause of error.errors) {
-      const nested = admissionFeature(cause);
+      const nested = admissionError(cause);
       if (nested !== undefined) return nested;
     }
   }
-  return admissionFeature(error.cause);
+  return admissionError(error.cause);
 }
 
 // Captured from baseline 061de47c/b959e37d; never derived from the current catalog.
@@ -1485,34 +1510,55 @@ describe('shadow substitution installer boundary', () => {
   });
 
   it('pins the finite exact-only byte and projection sibling sweeps', () => {
-    const exactLabels = exactOnlyByteCases().map(
-      ({ lifecycle, placement, range }) => `${placement}/${lifecycle}/${JSON.stringify(range)}`,
+    const exactCases = exactOnlyByteCases();
+    const exactLabels = exactCases.map(
+      ({ acquisitionKind, authorityShape, lifecycle, placement, range }) =>
+        `${acquisitionKind}/${authorityShape}/${placement}/${lifecycle}/${JSON.stringify(range)}`,
     );
+    const emptyRangeLabels = exactCases
+      .filter(({ range }) => range === '')
+      .map(
+        ({ acquisitionKind, authorityShape, lifecycle, placement }) =>
+          `${acquisitionKind}/${authorityShape}/${placement}/${lifecycle}`,
+      );
     const projectionLabels = [
       ...CONTRACT_PROJECTION_DRIFT_CASES.map(({ label }) => `fixture/${label}`),
       ...BUILTIN_LIGHTNING_PROJECTION_DRIFT_CASES.map(({ label }) => `builtin/${label}`),
     ];
 
-    expect(exactLabels).toHaveLength(24);
-    expect(new Set(exactLabels)).toHaveLength(24);
+    expect(exactLabels).toHaveLength(72);
+    expect(new Set(exactLabels)).toHaveLength(72);
+    expect(emptyRangeLabels).toHaveLength(24);
+    expect(new Set(emptyRangeLabels)).toHaveLength(24);
     expect(CONTRACT_PROJECTION_DRIFT_CASES).toHaveLength(24);
     expect(BUILTIN_LIGHTNING_PROJECTION_DRIFT_CASES).toHaveLength(12);
     expect(new Set(projectionLabels)).toHaveLength(36);
   });
 
   it.each(exactOnlyByteCases())(
-    '[fault: lossy-aggregate/observable-order] exact-only rejects byte-different $range at $placement/$lifecycle',
-    async ({ lifecycle, placement, range }) => {
+    '[fault: lossy-aggregate/observable-order] exact-only $acquisitionKind/$authorityShape rejects byte-different $rangeLabel at $placement/$lifecycle',
+    async ({ acquisitionKind, authorityShape, lifecycle, placement, range }) => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const canonicalAuthority = contractAuthority('exact-only', CONTRACT_BIN, acquisitionKind);
+      const authority =
+        authorityShape === 'canonical' ? canonicalAuthority : structuredClone(canonicalAuthority);
+      const forbiddenAcquisitionName =
+        acquisitionKind === 'registry' ? CONTRACT_SOURCE : CONTRACT_TRIGGER;
       const eddyTransitive = lifecycle === 'eddy' && placement === 'transitive';
       let eddyBundle: Uint8Array | undefined;
       if (eddyTransitive) {
         const seedVfs = new MemoryVfs();
         await seedVfs.mkdir('/project', { recursive: true });
         const seedRegistry = await contractRegistry({}, CONTRACT_VERSION);
-        const seed = await installContract(seedVfs, seedRegistry, {
-          [CONTRACT_REQUIRED_RANGE_HOST]: '1.0.0',
-        });
+        const seed = await installContract(
+          seedVfs,
+          seedRegistry,
+          {
+            [CONTRACT_REQUIRED_RANGE_HOST]: '1.0.0',
+          },
+          {},
+          authority,
+        );
         const bundleLockfile = structuredClone(seed.lockfile);
         const host = bundleLockfile.packages[`node_modules/${CONTRACT_REQUIRED_RANGE_HOST}`];
         if (!host) throw new Error('exact-only transitive Eddy host is missing');
@@ -1540,7 +1586,7 @@ describe('shadow substitution installer boundary', () => {
           placement === 'direct'
             ? { [CONTRACT_TRIGGER]: CONTRACT_VERSION }
             : { 'contract-host': '1.0.0' };
-        await installContract(vfs, registry, seedDependencies);
+        await installContract(vfs, registry, seedDependencies, {}, authority);
         if (placement === 'transitive') {
           const lockfile = structuredClone(
             JSON.parse(await vfs.readFileText('/project/package-lock.json')) as Lockfile,
@@ -1566,18 +1612,24 @@ describe('shadow substitution installer boundary', () => {
       const boundaries = admissionBoundarySpies(eddyTransitive);
       const assertNoVfsMutations = observeVfsMutations(vfs);
       const assertNoVfsReads = placement === 'direct' ? observeVfsReads(vfs) : (): void => {};
-      const operation = installContract(vfs, registry, dependencies, {
-        ...(lifecycle === 'eddy'
-          ? eddyTransitive
-            ? { resolverUrl: 'https://eddy.test/resolve' }
-            : {
-                resolverUrl: 'https://eddy.test/resolve',
-                resolverClosureHash: '0'.repeat(64),
-                resolverBundleBaseUrl: 'https://eddy-cdn.test',
-              }
-          : {}),
-        ...boundaries.transport,
-      });
+      const operation = installContract(
+        vfs,
+        registry,
+        dependencies,
+        {
+          ...(lifecycle === 'eddy'
+            ? eddyTransitive
+              ? { resolverUrl: 'https://eddy.test/resolve' }
+              : {
+                  resolverUrl: 'https://eddy.test/resolve',
+                  resolverClosureHash: '0'.repeat(64),
+                  resolverBundleBaseUrl: 'https://eddy-cdn.test',
+                }
+            : {}),
+          ...boundaries.transport,
+        },
+        authority,
+      );
       if (eddyTransitive) {
         let caught: unknown;
         try {
@@ -1585,7 +1637,10 @@ describe('shadow substitution installer boundary', () => {
         } catch (error) {
           caught = error;
         }
-        expect(admissionFeature(caught)).toBe('contract-package.version');
+        expect(admissionError(caught)).toMatchObject({
+          name: 'NotImplementedError',
+          feature: 'contract-package.version',
+        });
       } else {
         await expect(operation).rejects.toMatchObject({
           name: 'NotImplementedError',
@@ -1607,7 +1662,7 @@ describe('shadow substitution installer boundary', () => {
         }
       }
       expect(registry.tarballReads).not.toContain(
-        `https://registry.test/${encodeURIComponent(CONTRACT_SOURCE)}-${CONTRACT_VERSION}.tgz`,
+        `https://registry.test/${encodeURIComponent(forbiddenAcquisitionName)}-${CONTRACT_VERSION}.tgz`,
       );
       if (placement === 'transitive' && !replay) {
         const packumentNames = boundaries.transport.packumentCache.get.mock.calls.map(
@@ -1615,9 +1670,9 @@ describe('shadow substitution installer boundary', () => {
         );
         const tarballNames = boundaries.transport.tarballCache.get.mock.calls.map(([name]) => name);
         expect(packumentNames).toContain(CONTRACT_REQUIRED_RANGE_HOST);
-        expect(packumentNames).not.toContain(CONTRACT_SOURCE);
+        expect(packumentNames).not.toContain(forbiddenAcquisitionName);
         expect(tarballNames).toContain(CONTRACT_REQUIRED_RANGE_HOST);
-        expect(tarballNames).not.toContain(CONTRACT_SOURCE);
+        expect(tarballNames).not.toContain(forbiddenAcquisitionName);
         expect(registry.packumentReads).toEqual([CONTRACT_REQUIRED_RANGE_HOST]);
         expect(registry.tarballReads).toHaveLength(1);
       } else {
@@ -1670,61 +1725,6 @@ describe('shadow substitution installer boundary', () => {
     expect(await vfs.readFileText('/project/node_modules/.bin/contract')).toBe(CONTRACT_LAUNCHER);
     expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
   });
-
-  it.each(
-    EXACT_ONLY_BYTE_DIFFERENT_RANGES.flatMap((range) =>
-      (['fresh', 'replay'] as const).map((lifecycle) => ({ lifecycle, range })),
-    ),
-  )(
-    '[fault: sibling-drift/observable-order] exact-only synthetic rejects $range at $lifecycle',
-    async ({ lifecycle, range }) => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const authority = contractAuthority('exact-only', CONTRACT_BIN, 'synthetic');
-      const vfs = new MemoryVfs();
-      await vfs.mkdir('/project', { recursive: true });
-      const registry = await contractRegistry();
-      let lockBefore: Uint8Array | undefined;
-      if (lifecycle === 'replay') {
-        await installContract(
-          vfs,
-          registry,
-          { [CONTRACT_TRIGGER]: CONTRACT_VERSION },
-          {},
-          authority,
-        );
-        lockBefore = await vfs.readFile('/project/package-lock.json');
-        registry.resetReads();
-      }
-      const boundaries = admissionBoundarySpies();
-      const assertNoVfsMutations = observeVfsMutations(vfs);
-      const assertNoVfsReads = observeVfsReads(vfs);
-
-      await expect(
-        installContract(
-          vfs,
-          registry,
-          { [CONTRACT_TRIGGER]: range },
-          boundaries.transport,
-          authority,
-        ),
-      ).rejects.toMatchObject({
-        name: 'NotImplementedError',
-        feature: 'contract-package.version',
-      });
-
-      expect(registry.packumentReads).toEqual([]);
-      expect(registry.tarballReads).toEqual([]);
-      boundaries.assertUntouched();
-      assertNoVfsMutations();
-      assertNoVfsReads();
-      if (lockBefore === undefined) {
-        await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
-        await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
-      } else {
-        expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
-      }
-    },
-  );
 
   it.each([null, 'latest', '*', '^1.100.0', '~1.100.0', '>=1.100.0'] as const)(
     '[fault: observable-order] exact-only %s rejects before acquisition or mutation',
