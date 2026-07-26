@@ -171,7 +171,9 @@ function contractFile(path: string, content: string) {
   };
 }
 
-function contractAuthority(): ShadowInstallAuthority {
+function contractAuthority(
+  admissionKind: 'exact-only' | 'semver-admits' = 'exact-only',
+): ShadowInstallAuthority {
   const packageJson = JSON.stringify({
     name: CONTRACT_TRIGGER,
     version: CONTRACT_VERSION,
@@ -181,7 +183,7 @@ function contractAuthority(): ShadowInstallAuthority {
     schema: 2 as const,
     id: 'rifty.shadow-substitution.contract-package.v2',
     admission: {
-      kind: 'exact-only' as const,
+      kind: admissionKind,
       unsupportedFeature: 'contract-package.version',
     },
     trigger: { name: CONTRACT_TRIGGER, version: CONTRACT_VERSION },
@@ -344,6 +346,7 @@ async function installContract(
       'onSubstitution' | 'resolverUrl' | 'resolverClosureHash' | 'resolverBundleBaseUrl'
     >
   > = {},
+  authority: ShadowInstallAuthority = contractAuthority(),
 ) {
   return await installWithShadowAuthority(
     {
@@ -358,7 +361,7 @@ async function installContract(
         ...transport,
       },
     },
-    contractAuthority(),
+    authority,
   );
 }
 
@@ -454,6 +457,28 @@ function expectShadowTraceDrift(lockfile: Lockfile): void {
 }
 
 describe('shadow substitution installer boundary', () => {
+  it('preserves semver-admits policy through the package-private install authority', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const registry = await contractRegistry();
+
+    const result = await installContract(
+      vfs,
+      registry,
+      { [CONTRACT_TRIGGER]: '^1.100.0' },
+      {},
+      contractAuthority('semver-admits'),
+    );
+
+    expect(result.lockfile.packages['node_modules/contract-package']).toMatchObject({
+      version: CONTRACT_VERSION,
+      riftyShadowRecipe: 'rifty.shadow-substitution.contract-package.v2',
+    });
+    expect(await vfs.readFileText('/project/node_modules/contract-package/index.js')).toBe(
+      'module.exports = "contract";\n',
+    );
+  });
+
   it.each(['latest', '*', '^1.100.0', '~1.100.0', '>=1.100.0'])(
     '[fault: observable-order] exact-only %s rejects before acquisition or mutation',
     async (range) => {
