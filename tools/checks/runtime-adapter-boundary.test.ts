@@ -15,6 +15,7 @@ describe('runtime adapter generic-module boundary', () => {
       'packages/npm-client/src/installer.ts',
       'packages/npm-client/src/linker.ts',
       'packages/npm-client/src/package-bin.ts',
+      'packages/npm-client/src/internal/shadow/admission.ts',
       'packages/npm-client/src/internal/shadow/planner.ts',
       'packages/npm-client/src/internal/shadow/manager.ts',
       'packages/npm-client/src/internal/shadow/port.ts',
@@ -105,11 +106,14 @@ prepareVite(input);
     ]);
   });
 
-  it('rejects a duplicate launcher in any production TypeScript source', () => {
+  it('rejects a duplicate launcher in handwritten and generated production TypeScript', () => {
     const owner =
       "export function linkPackageBins() {\n  const shim = `#!/usr/bin/env node\\nimport('../${pkg.name}/${target}');\\n`;\n}\n";
     const consumer = "import { linkPackageBins } from './package-bin.ts';\nlinkPackageBins();\n";
     const duplicateFile = 'packages/npm-client/src/internal/late-package-launcher.ts';
+    const generatedDirectoryFile = 'packages/npm-client/src/generated/late-package-launcher.ts';
+    const generatedSuffixFile =
+      'packages/npm-client/src/internal/late-package-launcher.generated.ts';
     const unexpectedCallerFile = 'packages/npm-client/src/internal/late-package-bin-caller.ts';
     const duplicateLauncher =
       "export const launcher = `#!/usr/bin/env node\\nimport('../${pkg.name}/${target}');\\n`;\n";
@@ -119,13 +123,16 @@ prepareVite(input);
       [PACKAGE_BIN_CONSUMER_MODULES[1]!, consumer],
       ['packages/npm-client/src/installer.ts', 'export const installer = true;\n'],
       [duplicateFile, duplicateLauncher],
+      [generatedDirectoryFile, duplicateLauncher],
+      [generatedSuffixFile, duplicateLauncher],
       [unexpectedCallerFile, consumer],
       ['packages/npm-client/src/internal/late-package-launcher.test.ts', duplicateLauncher],
-      ['packages/npm-client/src/generated/late-package-launcher.ts', duplicateLauncher],
     ]);
 
     expect(packageBinAuthorityViolations(sources)).toEqual([
       `${duplicateFile}: duplicates package-bin implementation`,
+      `${generatedDirectoryFile}: duplicates package-bin implementation`,
+      `${generatedSuffixFile}: duplicates package-bin implementation`,
       `${unexpectedCallerFile}: unexpected package-bin owner caller`,
     ]);
   });

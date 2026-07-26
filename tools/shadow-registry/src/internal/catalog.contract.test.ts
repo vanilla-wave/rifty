@@ -60,6 +60,10 @@ import * as lightningcss from 'lightningcss-wasm';
 export default lightningcss;
 `;
 
+const LIGHTNINGCSS_V2_BIN = `#!/usr/bin/env node
+throw new Error('registry fixture cli');
+`;
+
 const LIGHTNINGCSS_V2_PACKAGE = JSON.stringify(
   {
     name: 'lightningcss',
@@ -223,6 +227,95 @@ function resignCatalog(catalog: RawSchema2Catalog, recipe?: RawSchema2Recipe): v
   Reflect.set(catalog, 'digest', shadowDigest(payload));
 }
 
+function rawSchema2CatalogWithRegistryBin(): RawSchema2Catalog {
+  const catalog = rawSchema2Catalog();
+  const recipe = registryRecipe(catalog);
+  const manifestFile = recipe.materialization.files.find((file) => file.path === 'package.json');
+  if (!manifestFile) throw new Error('schema-2 registry fixture lacks package.json');
+  const manifest = JSON.parse(manifestFile.content) as Record<string, unknown>;
+  const bin = { lightningcss: 'bin/lightningcss' };
+  Reflect.set(recipe.materialization, 'bin', bin);
+  Reflect.set(
+    recipe.materialization,
+    'files',
+    [
+      rawFile('bin/lightningcss', LIGHTNINGCSS_V2_BIN),
+      ...recipe.materialization.files.map((file) =>
+        file.path === 'package.json'
+          ? rawFile('package.json', JSON.stringify({ ...manifest, bin }, null, 2))
+          : file,
+      ),
+    ].sort((left, right) => left.path.localeCompare(right.path)),
+  );
+  resignCatalog(catalog, recipe);
+  return catalog;
+}
+
+function malformedMaterializationBinCases() {
+  return [
+    { label: 'synthetic', recipeIndex: 0, command: 'esbuild', existingTarget: 'lib/main.cjs' },
+    {
+      label: 'registry',
+      recipeIndex: 1,
+      command: 'lightningcss',
+      existingTarget: 'index.cjs',
+    },
+  ].flatMap(({ label, recipeIndex, command, existingTarget }) => {
+    const catalog = () =>
+      label === 'synthetic' ? rawSchema2Catalog() : rawSchema2CatalogWithRegistryBin();
+    return [
+      {
+        label,
+        fault: 'invalid command',
+        value: () => {
+          const forged = catalog();
+          Reflect.set(
+            forged.recipes[recipeIndex]!.materialization.bin,
+            'bad/command',
+            existingTarget,
+          );
+          return forged;
+        },
+        path: `catalog.recipes[${recipeIndex}].materialization.bin.bad/command`,
+        expected: /invalid command/i,
+      },
+      {
+        label,
+        fault: 'escaping target',
+        value: () => {
+          const forged = catalog();
+          Reflect.set(forged.recipes[recipeIndex]!.materialization.bin, command, '../escape');
+          return forged;
+        },
+        path: `catalog.recipes[${recipeIndex}].materialization.bin.${command}`,
+        expected: /normalized relative path/i,
+      },
+      {
+        label,
+        fault: 'missing target',
+        value: () => {
+          const forged = catalog();
+          Reflect.set(forged.recipes[recipeIndex]!.materialization.bin, command, 'bin/missing');
+          return forged;
+        },
+        path: `catalog.recipes[${recipeIndex}].materialization.bin.${command}`,
+        expected: /target.*missing/i,
+      },
+      {
+        label,
+        fault: 'package manifest disagreement',
+        value: () => {
+          const forged = catalog();
+          Reflect.set(forged.recipes[recipeIndex]!.materialization.bin, command, existingTarget);
+          return forged;
+        },
+        path: `catalog.recipes[${recipeIndex}].materialization.files.package.json.bin`,
+        expected: /disagrees.*bin/i,
+      },
+    ];
+  });
+}
+
 function expectCodecFailure(value: unknown, path: string, detail: RegExp): void {
   let caught: unknown;
   try {
@@ -269,6 +362,21 @@ describe('builtin shadow substitution catalog contract', () => {
     ]);
     expect(Object.isFrozen(decoded)).toBe(true);
   });
+
+  it('accepts a non-empty registry bin at the strict shape boundary', () => {
+    expectCodecFailure(
+      rawSchema2CatalogWithRegistryBin(),
+      'catalog',
+      /not the admitted builtin catalog identity/i,
+    );
+  });
+
+  it.each(malformedMaterializationBinCases())(
+    'rejects $label recipe bin: $fault',
+    ({ value, path, expected }) => {
+      expectCodecFailure(value(), path, expected);
+    },
+  );
 
   it('models runtime-bound esbuild and install-only lightningcss with one clone-safe recipe', () => {
     const esbuild = builtinShadowSubstitutionCatalog.recipes.find(
@@ -611,46 +719,6 @@ describe('builtin shadow substitution catalog contract', () => {
       },
       'catalog.assets[0].source.name',
       /invalid string/i,
-    ],
-    [
-      'invalid bin command',
-      () => {
-        const forged = rawSchema2Catalog();
-        Reflect.set(forged.recipes[0]!.materialization.bin, 'bad/command', 'bin/esbuild');
-        return forged;
-      },
-      'catalog.recipes[0].materialization.bin.bad/command',
-      /invalid command/i,
-    ],
-    [
-      'escaping bin target',
-      () => {
-        const forged = rawSchema2Catalog();
-        Reflect.set(forged.recipes[0]!.materialization.bin, 'esbuild', '../escape');
-        return forged;
-      },
-      'catalog.recipes[0].materialization.bin.esbuild',
-      /normalized relative path/i,
-    ],
-    [
-      'missing bin target',
-      () => {
-        const forged = rawSchema2Catalog();
-        Reflect.set(forged.recipes[0]!.materialization.bin, 'esbuild', 'bin/missing');
-        return forged;
-      },
-      'catalog.recipes[0].materialization.bin.esbuild',
-      /target.*missing/i,
-    ],
-    [
-      'package manifest bin disagreement',
-      () => {
-        const forged = rawSchema2Catalog();
-        Reflect.set(forged.recipes[0]!.materialization.bin, 'esbuild', 'lib/main.cjs');
-        return forged;
-      },
-      'catalog.recipes[0].materialization.files.package.json.bin',
-      /disagrees.*bin/i,
     ],
     [
       'forged synthetic recipe behavior digest',

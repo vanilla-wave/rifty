@@ -57,11 +57,20 @@ ADR-0308 and grafts its remaining decisions.
   data, invalid or overlapping dependency maps, escaping/missing bin targets,
   and disagreement between materialization data and synthesized
   `package.json`. Recipe/catalog digests cover all behavior-bearing fields.
+- **One ingress owner.** Every published or clone boundary strictly decodes a
+  substitution plan exactly once; frozen owner-internal values use invariants.
+  Root exports resolve per symbol: delete unused exports, or use a declared
+  internal subpath plus shared consumer contract suite for repo-shared values.
 - **Runtime binding stays optional.** Recipes with a binding feed the one
   owner-bundled executable-adapter registry. Install-only recipes yield exact
   substitution facts and an empty asset/binding plan. Generic
   owner/admission/bootstrap sees only attested facts and adapter ids; remote
-  data never activates host code.
+  data never activates host code. No public callback/plugin SPI admits
+  third-party executable policy.
+- **Standard asset sourcing stays.** The quarry's shadow-specific Eddy source
+  measured slower than the standard registry path on the same required set
+  (median 1517 ms vs 1358 ms, speedup 0.89×), so it remains rejected. General
+  npm Eddy is unchanged.
 - **Lockfile provenance stays authoritative.** Matching replay regenerates
   exact files and bins with zero registry reads. A v1 recipe identity or any
   acquisition/materialization drift loud-fails `EBROKENLOCK`; it is never

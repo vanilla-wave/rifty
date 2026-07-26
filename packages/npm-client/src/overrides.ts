@@ -28,7 +28,16 @@ export function resolveOverride(
   name: string,
   parent: string | undefined,
   userOverrides: OverrideMap = {},
-  builtinOverrides: Readonly<OverrideMap> = bakedOverrides,
+): ResolvedOverrideTarget | null {
+  return resolveOverrideWithBuiltinAuthority(name, parent, userOverrides, bakedOverrides);
+}
+
+/** Package-private contract seam; public callers always use the baked authority. */
+export function resolveOverrideWithBuiltinAuthority(
+  name: string,
+  parent: string | undefined,
+  userOverrides: OverrideMap,
+  builtinOverrides: Readonly<OverrideMap>,
 ): ResolvedOverrideTarget | null {
   const key = parent ? `${parent}>${name}` : name;
   const userMatch = userOverrides[key] ?? userOverrides[name];
