@@ -482,6 +482,116 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
   const MATERIALIZE_LINE =
     'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)';
 
+  const LEGACY_ALIAS_ORDINARY_HOST = 'legacy-alias-ordinary-host';
+  const LEGACY_ALIAS_RECIPE_HOST = 'legacy-alias-recipe-host';
+  const LEGACY_ALIAS_COLLISION_PLACEMENTS = [
+    {
+      label: 'root alias and nested ordinary package',
+      dependencies: {
+        'lightningcss-wasm': '1.32.0',
+        [LEGACY_ALIAS_ORDINARY_HOST]: '1.0.0',
+      },
+      acquisitionPath: 'node_modules/lightningcss-wasm',
+      aliasRoot: '/proj/node_modules/lightningcss',
+      ordinaryRoot: '/proj/node_modules/legacy-alias-ordinary-host/node_modules/lightningcss',
+      ordinaryLockPath: 'node_modules/legacy-alias-ordinary-host/node_modules/lightningcss',
+    },
+    {
+      label: 'root ordinary package and nested alias',
+      dependencies: {
+        [LEGACY_ALIAS_ORDINARY_HOST]: '1.0.0',
+        [LEGACY_ALIAS_RECIPE_HOST]: '1.0.0',
+      },
+      acquisitionPath: 'node_modules/legacy-alias-recipe-host/node_modules/lightningcss-wasm',
+      aliasRoot: '/proj/node_modules/legacy-alias-recipe-host/node_modules/lightningcss',
+      ordinaryRoot: '/proj/node_modules/lightningcss',
+      ordinaryLockPath: 'node_modules/lightningcss',
+    },
+  ] as const;
+
+  async function legacyAliasCollisionDb() {
+    return db(
+      ['lightningcss-wasm', await makeEntry('lightningcss-wasm', '1.32.0')],
+      [
+        'lightningcss',
+        await makeEntry(
+          'lightningcss',
+          '1.32.0',
+          {},
+          { 'sentinel.txt': 'ordinary lightningcss bytes\n' },
+        ),
+      ],
+      [
+        LEGACY_ALIAS_ORDINARY_HOST,
+        await makeEntry(LEGACY_ALIAS_ORDINARY_HOST, '1.0.0', {
+          lightningcss: '1.32.0',
+        }),
+      ],
+      [
+        LEGACY_ALIAS_RECIPE_HOST,
+        await makeEntry(LEGACY_ALIAS_RECIPE_HOST, '1.0.0', {
+          'lightningcss-wasm': '1.32.0',
+        }),
+      ],
+    );
+  }
+
+  it.each(LEGACY_ALIAS_COLLISION_PLACEMENTS)(
+    '[fault: sibling-drift/provenance-lie] keeps the legacy LightningCSS $label placement disjoint through replay',
+    async (placement) => {
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+      const registry = new FakeRegistry(await legacyAliasCollisionDb());
+      const overrides = {
+        [`${LEGACY_ALIAS_ORDINARY_HOST}>lightningcss`]: 'lightningcss@1.32.0',
+      };
+      const options = {
+        vfs,
+        cwd: '/proj',
+        registry,
+        overrides,
+        onSubstitution: () => {},
+      } as const;
+
+      const first = await install('root', '1.0.0', placement.dependencies, options);
+
+      expect(await readText(vfs, `${placement.aliasRoot}/index.cjs`)).toContain(
+        "require('lightningcss-wasm')",
+      );
+      await expect(vfs.exists(`${placement.aliasRoot}/sentinel.txt`)).resolves.toBe(false);
+      expect(await readText(vfs, `${placement.ordinaryRoot}/sentinel.txt`)).toBe(
+        'ordinary lightningcss bytes\n',
+      );
+      expect(first.lockfile.packages[placement.acquisitionPath]).toMatchObject({
+        version: '1.32.0',
+      });
+      expect(first.lockfile.packages[placement.ordinaryLockPath]).toMatchObject({
+        version: '1.32.0',
+      });
+      expect(first.lockfile.packages[placement.ordinaryLockPath]).not.toHaveProperty(
+        'riftyShadowRecipe',
+      );
+      const lockBefore = await vfs.readFile('/proj/package-lock.json');
+      await vfs.rm(placement.aliasRoot, { recursive: true, force: true });
+      await vfs.rm(placement.ordinaryRoot, { recursive: true, force: true });
+      const packument = vi.spyOn(registry, 'getPackument');
+      const tarball = vi.spyOn(registry, 'getTarball');
+
+      await install('root', '1.0.0', placement.dependencies, options);
+
+      expect(packument).not.toHaveBeenCalled();
+      expect(tarball).not.toHaveBeenCalled();
+      expect(await vfs.readFile('/proj/package-lock.json')).toEqual(lockBefore);
+      expect(await readText(vfs, `${placement.aliasRoot}/index.cjs`)).toContain(
+        "require('lightningcss-wasm')",
+      );
+      await expect(vfs.exists(`${placement.aliasRoot}/sentinel.txt`)).resolves.toBe(false);
+      expect(await readText(vfs, `${placement.ordinaryRoot}/sentinel.txt`)).toBe(
+        'ordinary lightningcss bytes\n',
+      );
+    },
+  );
+
   it('materializes synthetic esbuild on fresh + replay, byte-identical', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
