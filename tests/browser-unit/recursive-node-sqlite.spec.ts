@@ -570,6 +570,189 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
   }
 });
 
+// ADR-0326 acceptance: worker_threads shares its parent's process identity,
+// while child_process owns a distinct PID row in the federated owner snapshot.
+test('real worker thread stays outside ps while a child process is visible', async ({ page }) => {
+  test.setTimeout(120_000);
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-worker-thread-process-table',
+    hiddenEmptyBoot: true,
+  });
+
+  try {
+    await writeOwnerFile(
+      page,
+      '/scratch/process-table-thread.mjs',
+      `import { parentPort, threadId } from 'node:worker_threads';
+
+parentPort.postMessage({
+  type: 'ready',
+  threadId,
+  pid: process.pid,
+  ppid: process.ppid,
+});
+setInterval(() => {}, 1_000);
+`,
+    );
+    await writeOwnerFile(
+      page,
+      '/scratch/process-table-child.mjs',
+      `process.stdout.write(
+  'PROCESS_CHILD_READY|' + JSON.stringify({
+    pid: process.pid,
+    ppid: process.ppid,
+  }) + '\\n',
+);
+setInterval(() => {}, 1_000);
+`,
+    );
+    await writeOwnerFile(
+      page,
+      '/scratch/process-table-parent.mjs',
+      `import { spawn } from 'node:child_process';
+import { Worker } from 'node:worker_threads';
+
+function waitForClose(child) {
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => resolve({ code, signal }));
+  });
+}
+
+function capture(child) {
+  return new Promise((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    child.once('error', reject);
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.once('close', (code, signal) => resolve({ code, signal, stdout, stderr }));
+  });
+}
+
+const worker = new Worker(new URL('./process-table-thread.mjs', import.meta.url));
+const workerReady = await new Promise((resolve, reject) => {
+  worker.once('message', resolve);
+  worker.once('error', reject);
+});
+
+const child = spawn('node', ['./process-table-child.mjs'], {
+  cwd: '/scratch',
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+const childClose = waitForClose(child);
+const childReady = await new Promise((resolve, reject) => {
+  let stdout = '';
+  child.once('error', reject);
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk.toString();
+    const line = stdout.split(/\\r?\\n/u).find((candidate) =>
+      candidate.startsWith('PROCESS_CHILD_READY|'),
+    );
+    if (line !== undefined) {
+      resolve(JSON.parse(line.slice('PROCESS_CHILD_READY|'.length)));
+    }
+  });
+});
+
+const ps = spawn('ps', ['-A', '-o', 'ppid,pid'], {
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+const snapshot = await capture(ps);
+
+process.stdout.write(
+  'WORKER_THREAD_PROCESS_TABLE|' + JSON.stringify({
+    parent: { pid: process.pid, ppid: process.ppid },
+    worker: {
+      handleThreadId: worker.threadId,
+      ready: workerReady,
+    },
+    child: {
+      handlePid: child.pid,
+      ready: childReady,
+    },
+    snapshot,
+  }) + '\\n',
+);
+
+child.kill('SIGTERM');
+await childClose;
+await worker.terminate();
+`,
+    );
+
+    expect(await runDefaultProjectOnce(page)).toEqual({ code: 0, signal: null });
+    const result = await execLine(page, 'node process-table-parent.mjs');
+    expect(result.exit, result.out).toBe(0);
+
+    const line = result.out
+      .split(/\r?\n/u)
+      .find((candidate) => candidate.startsWith('WORKER_THREAD_PROCESS_TABLE|'));
+    expect(line, result.out).toBeDefined();
+    const observed = JSON.parse(line?.slice('WORKER_THREAD_PROCESS_TABLE|'.length) ?? '') as {
+      readonly parent: { readonly pid: number; readonly ppid: number };
+      readonly worker: {
+        readonly handleThreadId: number;
+        readonly ready: {
+          readonly type: string;
+          readonly threadId: number;
+          readonly pid: number;
+          readonly ppid: number;
+        };
+      };
+      readonly child: {
+        readonly handlePid: number;
+        readonly ready: { readonly pid: number; readonly ppid: number };
+      };
+      readonly snapshot: {
+        readonly code: number | null;
+        readonly signal: string | null;
+        readonly stdout: string;
+        readonly stderr: string;
+      };
+    };
+    const rows = observed.snapshot.stdout
+      .trim()
+      .split(/\r?\n/u)
+      .slice(1)
+      .map((row) => row.trim().split(/\s+/u).map(Number))
+      .map(([ppid, pid]) => ({ ppid, pid }));
+
+    expect(observed.worker.ready).toEqual({
+      type: 'ready',
+      threadId: observed.worker.handleThreadId,
+      pid: observed.parent.pid,
+      ppid: observed.parent.ppid,
+    });
+    expect(observed.worker.handleThreadId).toBeGreaterThan(0);
+    expect(observed.child.ready).toEqual({
+      pid: observed.child.handlePid,
+      ppid: observed.parent.pid,
+    });
+    expect(observed.snapshot).toMatchObject({
+      code: 0,
+      signal: null,
+      stderr: '',
+    });
+    expect(rows).toContainEqual({
+      ppid: observed.parent.ppid,
+      pid: observed.parent.pid,
+    });
+    expect(rows).toContainEqual({
+      ppid: observed.parent.pid,
+      pid: observed.child.handlePid,
+    });
+    expect(rows.filter(({ pid }) => pid === observed.parent.pid)).toHaveLength(1);
+  } finally {
+    await closeOwner(page);
+  }
+});
+
 // Fault class: sibling-drift — dev-server children must relay one project namespace
 // for every nested Node mechanism, not only the node-entry bootstrap sibling.
 test('node-server execSync relays the public project root to its nested child', async ({
