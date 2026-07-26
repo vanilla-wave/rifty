@@ -129,4 +129,35 @@ prepareVite(input);
       `${unexpectedCallerFile}: unexpected package-bin owner caller`,
     ]);
   });
+
+  it('rejects renamed concatenated bin writers and aliased unexpected callers', () => {
+    const owner =
+      "export function linkPackageBins() {\n  const shim = `#!/usr/bin/env node\\nimport('../${pkg.name}/${target}');\\n`;\n}\n";
+    const consumer = "import { linkPackageBins } from './package-bin.ts';\nlinkPackageBins();\n";
+    const renamedWriterFile = 'packages/npm-client/src/internal/late-command-writer.ts';
+    const aliasedCallerFile = 'packages/npm-client/src/internal/late-aliased-caller.ts';
+    const sources = new Map<string, string>([
+      [PACKAGE_BIN_AUTHORITY_MODULE, owner],
+      [PACKAGE_BIN_CONSUMER_MODULES[0]!, consumer],
+      [PACKAGE_BIN_CONSUMER_MODULES[1]!, consumer],
+      [
+        renamedWriterFile,
+        `export async function emitCommands(vfs, root, command) {
+  const directory = root + '/node_modules/' + ('.' + 'bin');
+  const launcher = '#' + '!/usr/bin/env node\\n' + "import('../pkg/cli.js');\\n";
+  await vfs['write' + 'File'](directory + '/' + command, launcher);
+}
+`,
+      ],
+      [
+        aliasedCallerFile,
+        "import { linkPackageBins as emitCommands } from '../package-bin.ts';\nemitCommands();\n",
+      ],
+    ]);
+
+    expect(packageBinAuthorityViolations(sources)).toEqual([
+      `${renamedWriterFile}: duplicates package-bin implementation`,
+      `${aliasedCallerFile}: unexpected package-bin owner caller`,
+    ]);
+  });
 });
