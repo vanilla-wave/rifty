@@ -120,6 +120,39 @@ const CONTRACT_OPTIONAL_DEPENDENCIES = {
 const CONTRACT_PEER_DEPENDENCIES = { [CONTRACT_PEER]: '^1.0.0' };
 const CONTRACT_BIN = { contract: 'bin/contract.js' };
 const CONTRACT_MATERIALIZATION_PATHS = ['bin/contract.js', 'index.js', 'package.json'] as const;
+const CONTRACT_TRAVERSED_PACKAGES = [CONTRACT_REQUIRED, CONTRACT_RETAINED, CONTRACT_PEER] as const;
+const CONTRACT_PROJECTION_FIELDS = [
+  'dependencies',
+  'optionalDependencies',
+  'peerDependencies',
+] as const;
+const CONTRACT_PARTIAL_WRITE_CASES = [
+  ['registry alias', 'permission'],
+  ['registry alias', 'quota'],
+  ['shared bin', 'permission'],
+  ['shared bin', 'quota'],
+] as const;
+const CONTRACT_LAUNCHER = "#!/usr/bin/env node\nimport('../contract-package/bin/contract.js');\n";
+
+const CONTRACT_PLACEMENTS = [
+  {
+    label: 'root',
+    dependencies: { [CONTRACT_TRIGGER]: CONTRACT_VERSION },
+    acquisitionPath: 'node_modules/contract-source',
+    materializationRoot: '/project/node_modules/contract-package',
+    launcherPath: '/project/node_modules/.bin/contract',
+  },
+  {
+    label: 'nested',
+    dependencies: {
+      [CONTRACT_SOURCE]: '1.99.0',
+      'contract-host': '1.0.0',
+    },
+    acquisitionPath: 'node_modules/contract-host/node_modules/contract-source',
+    materializationRoot: '/project/node_modules/contract-host/node_modules/contract-package',
+    launcherPath: '/project/node_modules/contract-host/node_modules/.bin/contract',
+  },
+] as const;
 
 function freezeFixture<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -306,7 +339,10 @@ async function installContract(
   registry: ContractRegistry,
   dependencies: Readonly<Record<string, string>>,
   transport: Partial<
-    Pick<InstallOptions, 'resolverUrl' | 'resolverClosureHash' | 'resolverBundleBaseUrl'>
+    Pick<
+      InstallOptions,
+      'onSubstitution' | 'resolverUrl' | 'resolverClosureHash' | 'resolverBundleBaseUrl'
+    >
   > = {},
 ) {
   return await installWithShadowAuthority(
@@ -357,6 +393,31 @@ async function expectContractMaterialization(
     expect(restored, path).toEqual(before);
     expect(shadowSha256(restored), path).toBe(shadowSha256(before));
   }
+}
+
+async function expectContractRecipeMaterialization(vfs: MemoryVfs, root: string): Promise<void> {
+  const recipe = contractAuthority().catalog.recipes.find(
+    (candidate) => candidate.trigger.name === CONTRACT_TRIGGER,
+  );
+  if (!recipe) throw new Error('contract authority recipe missing');
+  for (const file of recipe.materialization.files) {
+    const restored = await vfs.readFile(`${root}/${file.path}`);
+    expect(restored.byteLength, file.path).toBe(file.bytes);
+    expect(shadowSha256(restored), file.path).toBe(file.sha256);
+  }
+}
+
+function partialWriteData(data: Uint8Array | string): Uint8Array | string {
+  const length = typeof data === 'string' ? data.length : data.byteLength;
+  const end = Math.max(1, Math.floor(length / 2));
+  return data.slice(0, end);
+}
+
+function storageWriteFault(kind: 'permission' | 'quota'): Error {
+  return Object.assign(new Error(`${kind} partial write`), {
+    name: kind === 'quota' ? 'QuotaExceededError' : 'NotAllowedError',
+    code: kind === 'quota' ? 'EDQUOT' : 'EACCES',
+  });
 }
 
 async function freshLockfile(
@@ -545,7 +606,7 @@ describe('shadow substitution installer boundary', () => {
     },
   );
 
-  it('[fault: provenance-lie] retains only projected dependencies and materialized bins', async () => {
+  it('[fault: provenance-lie] traverses and replays the complete retained root projection', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const vfs = new MemoryVfs();
     await vfs.mkdir('/project', { recursive: true });
@@ -561,15 +622,13 @@ describe('shadow substitution installer boundary', () => {
     const installedNames = first.packages.map(({ name }) => name);
 
     expect(installedNames).toContain(CONTRACT_SOURCE);
-    expect(installedNames).toContain(CONTRACT_REQUIRED);
-    expect(installedNames).toContain(CONTRACT_RETAINED);
+    for (const name of CONTRACT_TRAVERSED_PACKAGES) expect(installedNames).toContain(name);
     expect(installedNames).not.toContain(CONTRACT_OMITTED);
-    expect(installedNames).not.toContain(CONTRACT_PEER);
     expect(registry.packumentReads).not.toContain(CONTRACT_OMITTED);
-    expect(registry.packumentReads).not.toContain(CONTRACT_PEER);
-    expect(registry.tarballReads).toHaveLength(3);
+    expect(registry.tarballReads).toHaveLength(4);
     expect(first.lockfile.packages['node_modules/contract-source']).toMatchObject({
       dependencies: CONTRACT_DEPENDENCIES,
+      optionalDependencies: { [CONTRACT_RETAINED]: '1.0.0' },
       peerDependencies: CONTRACT_PEER_DEPENDENCIES,
     });
     expect(first.lockfile.packages['node_modules/contract-source']).not.toHaveProperty('bin');
@@ -578,16 +637,16 @@ describe('shadow substitution installer boundary', () => {
       bin: CONTRACT_BIN,
       riftyShadowRecipe: 'rifty.shadow-substitution.contract-package.v2',
     });
-    expect(first.lockfile.packages[`node_modules/${CONTRACT_RETAINED}`]).toBeDefined();
+    for (const name of CONTRACT_TRAVERSED_PACKAGES) {
+      expect(first.lockfile.packages[`node_modules/${name}`], name).toBeDefined();
+    }
     expect(first.lockfile.packages[`node_modules/${CONTRACT_OMITTED}`]).toBeUndefined();
-    expect(first.lockfile.packages[`node_modules/${CONTRACT_PEER}`]).toBeUndefined();
-    expect(launcher).toBe("#!/usr/bin/env node\nimport('../contract-package/bin/contract.js');\n");
+    expect(launcher).toBe(CONTRACT_LAUNCHER);
     expect(writeFile.mock.calls.filter(([path]) => path === launcherPath)).toHaveLength(1);
 
-    await vfs.rm(`/project/node_modules/${CONTRACT_RETAINED}`, {
-      recursive: true,
-      force: true,
-    });
+    for (const name of CONTRACT_TRAVERSED_PACKAGES) {
+      await vfs.rm(`/project/node_modules/${name}`, { recursive: true, force: true });
+    }
     await vfs.rm(launcherPath);
     registry.resetReads();
     writeFile.mockClear();
@@ -597,16 +656,20 @@ describe('shadow substitution installer boundary', () => {
     });
     expect(registry.packumentReads).toEqual([]);
     expect(registry.tarballReads).toEqual([]);
-    expect(replay.packages.map(({ name }) => name)).toContain(CONTRACT_RETAINED);
-    await expect(
-      vfs.exists(`/project/node_modules/${CONTRACT_RETAINED}/package.json`),
-    ).resolves.toBe(true);
+    const replayedNames = replay.packages.map(({ name }) => name);
+    for (const name of CONTRACT_TRAVERSED_PACKAGES) {
+      expect(replayedNames, name).toContain(name);
+      await expect(vfs.exists(`/project/node_modules/${name}/package.json`), name).resolves.toBe(
+        true,
+      );
+    }
+    await expect(vfs.exists(`/project/node_modules/${CONTRACT_OMITTED}`)).resolves.toBe(false);
     expect(await vfs.readFileText(launcherPath)).toBe(launcher);
     expect(writeFile.mock.calls.filter(([path]) => path === launcherPath)).toHaveLength(1);
     expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
   });
 
-  it('[fault: sibling-drift] applies the same bin authority to a nested registry recipe', async () => {
+  it('[fault: sibling-drift] traverses and replays the complete retained nested projection', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const vfs = new MemoryVfs();
     await vfs.mkdir('/project', { recursive: true });
@@ -622,16 +685,33 @@ describe('shadow substitution installer boundary', () => {
     const nestedAlias = 'node_modules/contract-host/node_modules/contract-package';
     const launcherPath = '/project/node_modules/contract-host/node_modules/.bin/contract';
     const launcher = await vfs.readFileText(launcherPath);
+    const lockBefore = await vfs.readFile('/project/package-lock.json');
+    const installedNames = first.packages.map(({ name }) => name);
 
+    for (const name of CONTRACT_TRAVERSED_PACKAGES) {
+      expect(installedNames, name).toContain(name);
+      expect(first.lockfile.packages[`node_modules/${name}`], name).toBeDefined();
+    }
+    expect(installedNames).not.toContain(CONTRACT_OMITTED);
+    expect(registry.packumentReads).not.toContain(CONTRACT_OMITTED);
+    expect(first.lockfile.packages[nestedSource]).toMatchObject({
+      dependencies: CONTRACT_DEPENDENCIES,
+      optionalDependencies: { [CONTRACT_RETAINED]: '1.0.0' },
+      peerDependencies: CONTRACT_PEER_DEPENDENCIES,
+    });
     expect(first.lockfile.packages[nestedSource]).not.toHaveProperty('bin');
     expect(first.lockfile.packages[nestedAlias]).toMatchObject({
       version: CONTRACT_VERSION,
       bin: CONTRACT_BIN,
       riftyShadowRecipe: 'rifty.shadow-substitution.contract-package.v2',
     });
-    expect(launcher).toBe("#!/usr/bin/env node\nimport('../contract-package/bin/contract.js');\n");
+    expect(first.lockfile.packages[`node_modules/${CONTRACT_OMITTED}`]).toBeUndefined();
+    expect(launcher).toBe(CONTRACT_LAUNCHER);
     expect(writeFile.mock.calls.filter(([path]) => path === launcherPath)).toHaveLength(1);
 
+    for (const name of CONTRACT_TRAVERSED_PACKAGES) {
+      await vfs.rm(`/project/node_modules/${name}`, { recursive: true, force: true });
+    }
     await vfs.rm(launcherPath);
     registry.resetReads();
     writeFile.mockClear();
@@ -640,9 +720,123 @@ describe('shadow substitution installer boundary', () => {
     expect(registry.packumentReads).toEqual([]);
     expect(registry.tarballReads).toEqual([]);
     expect(replay.lockfile.packages[nestedSource]).not.toHaveProperty('bin');
+    const replayedNames = replay.packages.map(({ name }) => name);
+    for (const name of CONTRACT_TRAVERSED_PACKAGES) {
+      expect(replayedNames, name).toContain(name);
+      await expect(vfs.exists(`/project/node_modules/${name}/package.json`), name).resolves.toBe(
+        true,
+      );
+    }
+    await expect(vfs.exists(`/project/node_modules/${CONTRACT_OMITTED}`)).resolves.toBe(false);
     expect(await vfs.readFileText(launcherPath)).toBe(launcher);
     expect(writeFile.mock.calls.filter(([path]) => path === launcherPath)).toHaveLength(1);
+    expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
   });
+
+  describe.each(CONTRACT_PLACEMENTS)(
+    '[fault: provenance-lie] $label registry acquisition replay',
+    (placement) => {
+      it.each(CONTRACT_PROJECTION_FIELDS)(
+        'rejects tampered %s before registry or VFS repair',
+        async (field) => {
+          vi.spyOn(console, 'warn').mockImplementation(() => {});
+          const vfs = new MemoryVfs();
+          await vfs.mkdir('/project', { recursive: true });
+          const registry = await contractRegistry();
+          const first = await installContract(vfs, registry, placement.dependencies);
+          const lockfile = structuredClone(first.lockfile);
+          const acquisition = lockfile.packages[placement.acquisitionPath];
+          if (!acquisition) {
+            throw new Error(`contract acquisition missing at ${placement.acquisitionPath}`);
+          }
+          const drift =
+            field === 'dependencies'
+              ? { [CONTRACT_REQUIRED]: '2.0.0' }
+              : field === 'optionalDependencies'
+                ? { [CONTRACT_RETAINED]: '2.0.0' }
+                : { [CONTRACT_PEER]: '^2.0.0' };
+          Reflect.set(acquisition, field, drift);
+          await vfs.writeFile('/project/package-lock.json', JSON.stringify(lockfile));
+          registry.resetReads();
+          const writeFile = vi.spyOn(vfs, 'writeFile');
+
+          await expect(
+            installContract(vfs, registry, placement.dependencies),
+          ).rejects.toMatchObject({
+            code: 'EBROKENLOCK',
+            reason: 'shadow-trace-drift',
+          });
+
+          expect(registry.packumentReads).toEqual([]);
+          expect(registry.tarballReads).toEqual([]);
+          expect(writeFile).not.toHaveBeenCalled();
+        },
+      );
+    },
+  );
+
+  describe.each(CONTRACT_PLACEMENTS)(
+    '[fault: quota-perm-fail/torn-state] $label materialization',
+    (placement) => {
+      it.each(CONTRACT_PARTIAL_WRITE_CASES)(
+        'recovers exact bytes after %s %s partial write',
+        async (writer, faultKind) => {
+          vi.spyOn(console, 'warn').mockImplementation(() => {});
+          const vfs = new MemoryVfs();
+          await vfs.mkdir('/project', { recursive: true });
+          const registry = await contractRegistry();
+          const report: string[] = [];
+          const faultPath =
+            writer === 'registry alias'
+              ? `${placement.materializationRoot}/index.js`
+              : placement.launcherPath;
+          const expectedLength =
+            writer === 'registry alias'
+              ? new TextEncoder().encode('module.exports = "contract";\n').byteLength
+              : new TextEncoder().encode(CONTRACT_LAUNCHER).byteLength;
+          const fault = storageWriteFault(faultKind);
+          const writeFile = vfs.writeFile.bind(vfs);
+          let injected = false;
+          const writeSpy = vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+            if (!injected && path === faultPath) {
+              injected = true;
+              await writeFile(path, partialWriteData(data));
+              throw fault;
+            }
+            await writeFile(path, data);
+          });
+
+          await expect(
+            installContract(vfs, registry, placement.dependencies, {
+              onSubstitution: (line) => report.push(line),
+            }),
+          ).rejects.toBe(fault);
+
+          expect(injected).toBe(true);
+          const partial = await vfs.readFile(faultPath);
+          expect(partial.byteLength).toBeGreaterThan(0);
+          expect(partial.byteLength).toBeLessThan(expectedLength);
+          expect(
+            report.filter((line) => line.includes('materialized from shadow registry')),
+          ).toEqual([]);
+          await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+
+          writeSpy.mockRestore();
+          const retry = await installContract(vfs, registry, placement.dependencies);
+
+          await expectContractRecipeMaterialization(vfs, placement.materializationRoot);
+          expect(await vfs.readFileText(placement.launcherPath)).toBe(CONTRACT_LAUNCHER);
+          expect(
+            retry.lockfile.packages[placement.materializationRoot.slice('/project/'.length)],
+          ).toMatchObject({
+            version: CONTRACT_VERSION,
+            bin: CONTRACT_BIN,
+            riftyShadowRecipe: 'rifty.shadow-substitution.contract-package.v2',
+          });
+        },
+      );
+    },
+  );
 
   it('[fault: poisoned-cache/provenance-lie] regenerates destroyed root registry materialization', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
