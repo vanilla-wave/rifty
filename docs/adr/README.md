@@ -26,9 +26,9 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0012 | `@riftydev/io` owns shared primitives; `@riftydev/kernel` owns processes |
 | 0019 | `cwd` lives in `kernel.ProcessRecord` |
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
-| 0045 | Worker-process IPC — fork-mode `send` / `'message'` / `disconnect` over a parent↔child MessagePort |
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
 | 0313 | One-shot opaque Worker entry capability ports |
+| 0326 | Federated Worker child tree with separate public IPC and private control |
 
 ### runtime-js
 
@@ -67,6 +67,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0270 | worker_threads.Worker parent events are EventEmitter-only |
 | 0272 | Late typed process terminal bootstrap |
 | 0294 | Node-compatible require.extensions suffix dispatch |
+| 0324 | Callable EventEmitter constructor over one listener state |
+| 0325 | CJS module records own Node metadata and lifecycle |
 
 ### runtime-wasi
 
@@ -180,6 +182,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0307 | Install trust is an install-protocol commit, not tree surveillance |
 | 0317 | Vite 8 build and preview through installed CLI |
 | 0320 | Define instant restore runtime asset availability |
+| 0327 | Installed nodemon owns the Workbench Node-server dev loop |
 
 ### toolchain-build
 
@@ -301,6 +304,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0179 | 0284 | git-facade ownership retained; scalar result replaced by ordered rows plus explicit path gaps |
 | 0197 | 0292 | Solid testability motive retained; Workbench companion now owns lifecycle and semantic test seams |
 | 0269 | 0294 | shared table and `_compile` retained; `.js`-only dispatch replaced by Node suffix selection |
+| 0045 | 0326 | dedicated MessagePort rationale retained; unconditional structured-clone fork IPC and mixed public/control frames replaced |
 
 ## Corrections (active)
 
@@ -309,6 +313,16 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0011 recursive private PID allocator clause | 0326 / note 2026-07-26 | recursive children reserve owner-root ProcessManager identities over the trusted SAB attachment |
+| 0012 realm-local unified-registry clause | 0326 / note 2026-07-26 | one federated owner-root process tree; nested managers own only direct physical Workers |
+| 0130 D4 generated direct-command selector | 0327 / note 2026-07-26 | exact script bytes select canonical direct entry versus installed `.bin`; no template-ID dispatch |
+| 0146 PTY-over-fork-IPC clause | 0326 / note 2026-07-26 | PTY frames use the private control lane on the same physical port |
+| 0150 P6b fork-control / all-node-server dedicated path clauses | 0326 + 0327 / note 2026-07-26 | private frames carry control; only canonical direct-entry scripts use the dedicated controller |
+| 0155 public `rifty:node-listening` clause | 0326 / note 2026-07-26 | typed private descendant control reports listening/removal/physical exit |
+| 0157 unconditional process IPC / `postListening` clauses | 0326 / note 2026-07-26 | public JSON IPC exists only for fork; private host adapter reports lifecycle |
+| 0162 worker-thread IPC lane clause | 0326 / note 2026-07-26 | worker threads keep structured clone and thread identity, outside the process table |
+| 0174 generic `.bin` dedicated-node lifecycle wording | 0327 / note 2026-07-26 | installed nodemon uses generic `.bin`; canonical direct scripts retain their controller |
+| 0267 v1-only bootstrap-shape clause | 0326 / note 2026-07-26 | atomic v2 adds exact public-IPC discrimination with no dual reader |
 | 0042 global first-wins-flat clause | 0303 | surviving direct identities reserve root-visible slots before serial descendant first-wins placement |
 | 0175 globally request-ordered placement clause | 0303 | direct reservation precedes descendant DFS; prefetch/network completion remains non-authoritative |
 | 0263 generic origin-contention rejection clause | 0293 / note 2026-07-18 | callback-null origin contention has public `WorkbenchOriginOccupiedError`; same-page/capability/request/init failures remain fatal |

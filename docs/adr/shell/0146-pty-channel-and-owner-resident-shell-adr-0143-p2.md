@@ -65,3 +65,8 @@ owner → page: pty:ready{sid}
 ## Reversibility
 
 IRREVERSIBLE — defines a wire contract (the `pty:*` frame protocol), moves which realm owns execution + `node_modules`, and adds PAGE/owner public surfaces (the pty client + workspace-owner handle). Builds on ADR-0143 (its P2), ADR-0144 (`serve` gate), ADR-0137 (frozen `BinExecutor`/`runNodeEntry`), ADR-0089 (cooperative SIGINT), ADR-0045 (fork IPC). Relates: ADR-0072, ADR-0080, ADR-0087, ADR-0135, ADR-0011.
+
+> **Correction 2026-07-26 (ADR-0326):** PTY frames remain on the same dedicated
+> physical child port but occupy the private typed control lane, never public
+> fork IPC. This preserves ordered PTY/control lifetime after a guest
+> `disconnect()` without exposing host frames through Node `'message'`.

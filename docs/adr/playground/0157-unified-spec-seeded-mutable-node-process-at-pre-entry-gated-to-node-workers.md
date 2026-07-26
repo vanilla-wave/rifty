@@ -51,3 +51,9 @@ ADR-0155 §5 already fixed observable behavior loudly (stdin guard) but on the o
 - (−) IRREVERSIBLE: changes the shared pre-entry seam behavior + merges two public-subpath shims (`./install-process`, `./builtins/process`). Gate reads an existing env key (`__RIFTY_WASI_WASM_URL`) — NO new kernel public API, no `WorkerSpawnSpec` widening.
 - (−) `patchPromiseForNextTick` (global, irreversible per realm) now runs in `.bin`/execSync realms too — same blast radius as the owner already had; must run inside the install before any user/library import. NEGATIVE guard: a WASI/non-Node realm leaves `Promise.prototype.then` native.
 - Builds on ADR-0039 (process in runtime-js), ADR-0045 (fork-IPC), ADR-0150 (supervised child), ADR-0152 (drain/serve). Relationship to ADR-0155: §2 bootstrap-owns-drain is unchanged; ADR-0155 §1 (reuse claim) + the keepalive-comment are Corrected in place (not superseded). Follow-up: faithful stdin forward pump.
+
+> **Correction 2026-07-26 (ADR-0326):** `NodeProcess` installs public
+> `send`/`disconnect`/`'message'` only when the v2 launch plan declares a real
+> fork JSON channel. Plain spawn, `.bin`, direct Node, and host Workers expose
+> none. `postListening` uses the private runtime host adapter, which stays live
+> after logical public disconnect; the one seeded mutable process stands.

@@ -50,3 +50,8 @@ Two genuine forks resolved by the user (2026-06-18): (1) SCOPE = full (run-to-co
 ## Reversibility
 
 IRREVERSIBLE — adds wire contracts (`pty:preview`, `pty:preview-req`, `rifty:node-listening`), a new public terminal command, and widens the page preview model to multi-port. Builds on (does NOT supersede) ADR-0137 (`runNodeEntry`/`BinExecutor` seam), ADR-0150 (supervised child + `fs.*` RPC), ADR-0152 (drain + `serve:true`), ADR-0148 (dev-server preview + single-active → generalized), ADR-0130 (honest-not-fake `node`), ADR-0144 (`serve`). Closes `docs/backlog/playground/terminal-node-command.md`.
+
+> **Correction 2026-07-26 (ADR-0326):** `rifty:node-listening` is no longer a
+> public `process.send` message. The runtime publishes typed listening, removal,
+> and physical-exit facts on private descendant control; Workbench's existing
+> preview registry and request/snapshot recovery remain the only route owner.

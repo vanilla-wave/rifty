@@ -88,3 +88,9 @@ A-008 (esbuild as a real toolchain binary) lands in M11 on the worker-as-process
 - Conformance: parity test bundling a 2-file project, diffing output against host-installed `esbuild` (skip when host esbuild absent, like the `tools/node-parity-runner` toolchain checks).
 
 Split from the three phases because the WASI host-program test is gated on the vendored binary and the ADR-0014 shared VFS backing tree, neither of which exists when phase 3 lands.
+
+> **Correction 2026-07-26 (ADR-0326):** recursive Node children no longer use a
+> dedicated `0xC0000000+` allocator or a realm-local process identity. The
+> existing SAB chain binds each child ring to trusted parent context and
+> federates reserve/commit/abort/settle with one owner-root ProcessManager.
+> Sync RPC, Worker-as-process, and its loud capability gates otherwise stand.

@@ -48,3 +48,9 @@ Feasibility verified: recursive spawn from the owner works (COI proof: `execsync
 ## Reversibility
 
 IRREVERSIBLE — adds a public `fs.*` sync-RPC method surface (new wire contract over the ADR-0011/0084/0032 ring) + a child-resident remote `FsSync`. Builds on frozen seams (ADR-0137 `BinExecutor`, ADR-0039 pre-entry hook + recursive spawn, ADR-0144 serve, ADR-0148 dev-server-controller). Does not supersede them. Relates: ADR-0143, 0011, 0084, 0032, 0039, 0137, 0144, 0146, 0148, 0072.
+
+> **Correction 2026-07-26 (ADR-0326/0327):** P6b `rifty:dev-*` and descendant
+> lifecycle frames use ADR-0326's private control lane, not public fork IPC.
+> The dedicated Node-server controller applies only to canonical direct-entry
+> script bytes; installed nodemon executes through the generic `.bin` child.
+> Owner-backed sync-FS and supervised-child isolation stand.

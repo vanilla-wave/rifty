@@ -62,3 +62,8 @@ has that lifecycle (ADR-0155).
   future cleanup; they must not be registered as the `vite` command again.
 - Vite 8/Rolldown/browser ceilings remain honest failures unless the real CLI
   path plus WASI/worker-thread support can run them end-to-end.
+
+> **Correction 2026-07-26 (ADR-0327):** the dedicated Node-server lifecycle is
+> selected only by canonical direct-entry script bytes. Installed nodemon uses
+> the generic server-capable `.bin` path and remains the sole watcher/restart
+> owner. Vite's installed-bin ownership is unchanged.

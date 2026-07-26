@@ -43,3 +43,9 @@ Promote `io` to the shared-primitives layer; commit `kernel` to the process laye
 - `packages/runtime-js/src/builtins/buffer.ts` also drops from EXCEPTIONS; Buffer now lives in `packages/io/src/buffer{,-codec,-methods}.ts`, each ≤ 260 lines.
 - `packages/net/src/{http,net,ws}.ts` import primitives from `@riftydev/io` directly. `packages/net/src/register-builtins.ts` still imports `registerBuiltin` from `@riftydev/runtime-js` — a forward-direction wiring call from a higher-layer side-effect entrypoint (used by `apps/playground` to plug `net` into runtime-js's loader registry), not a reverse import of primitives.
 - `child_process` synchronous fallback (`execSync`) keeps the legacy in-realm `new Function` path; the proper SAB-Atomics route is ADR-0011's scope.
+
+> **Correction 2026-07-26 (ADR-0326):** the promised unified ProcessManager
+> registry is owner-wide, not one independent registry per Worker realm.
+> Nested managers retain direct physical-Worker ownership but proxy process
+> identity/tree transitions to the owner-root kernel authority. `threadId`
+> remains distinct from Node process PID.
