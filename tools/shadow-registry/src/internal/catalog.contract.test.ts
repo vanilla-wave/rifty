@@ -315,7 +315,7 @@ describe('builtin shadow substitution catalog contract', () => {
   ] as const)('rejects invalid package names in registry %s', (field) => {
     const catalog = rawSchema2Catalog();
     const recipe = registryRecipe(catalog);
-    Reflect.set(recipe.acquisition.dependencyProjection[field], '@scope', '1.0.0');
+    Reflect.set(recipe.acquisition.dependencyProjection[field], 'unscoped/slash', '1.0.0');
 
     expectCodecFailure(
       catalog,
@@ -533,20 +533,60 @@ describe('builtin shadow substitution catalog contract', () => {
       'invalid trigger package name',
       () => {
         const forged = rawSchema2Catalog();
-        Reflect.set(forged.recipes[0]!.trigger, 'name', 'bad package');
+        Reflect.set(forged.recipes[0]!.trigger, 'name', 'unscoped/slash');
         return forged;
       },
       'catalog.recipes[0].trigger.name',
       /invalid string/i,
     ],
     [
+      'invalid synthetic materialization package name',
+      () => {
+        const forged = rawSchema2Catalog();
+        Reflect.set(forged.recipes[0]!.materialization, 'name', 'unscoped/slash');
+        return forged;
+      },
+      'catalog.recipes[0].materialization.name',
+      /invalid string/i,
+    ],
+    [
+      'invalid registry trigger package name',
+      () => {
+        const forged = rawSchema2Catalog();
+        Reflect.set(registryRecipe(forged).trigger, 'name', 'unscoped/slash');
+        return forged;
+      },
+      'catalog.recipes[1].trigger.name',
+      /invalid string/i,
+    ],
+    [
       'invalid registry acquisition package name',
       () => {
         const forged = rawSchema2Catalog();
-        Reflect.set(registryRecipe(forged).acquisition, 'name', 'bad package');
+        Reflect.set(registryRecipe(forged).acquisition, 'name', 'unscoped/slash');
         return forged;
       },
       'catalog.recipes[1].acquisition.name',
+      /invalid string/i,
+    ],
+    [
+      'invalid registry materialization package name',
+      () => {
+        const forged = rawSchema2Catalog();
+        Reflect.set(registryRecipe(forged).materialization, 'name', 'unscoped/slash');
+        return forged;
+      },
+      'catalog.recipes[1].materialization.name',
+      /invalid string/i,
+    ],
+    [
+      'invalid asset source package name',
+      () => {
+        const forged = rawSchema2Catalog();
+        Reflect.set(forged.assets[0]!.source, 'name', 'unscoped/slash');
+        return forged;
+      },
+      'catalog.assets[0].source.name',
       /invalid string/i,
     ],
     [
