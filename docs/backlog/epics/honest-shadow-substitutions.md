@@ -6,12 +6,13 @@ created: 2026-07-23
 value: Real projects that depend on native-backed packages (esbuild directly or through Vite, sass-embedded) install and run faithfully in the browser through one builtin, parity-proven substitution registry
 user_story: As a browser-IDE user, I want npm install of a project using esbuild or sass-embedded to just work — direct require, through Vite, offline on reopen — but today each native binding stops the project or costs a re-acquisition
 tier: production
-sources: [ADR-0307, ADR-0308, ADR-0309, ADR-0310, PR-160]
+sources: [ADR-0307, ADR-0309, ADR-0310, ADR-0328, PR-160]
+goal_baseline: e34bd3db82c5088f57c32934b3a45b001b578d3e
 ---
 
 ## Outcome
 
-One builtin package-generic shadow-substitution registry (ADR-0308): a recipe
+One builtin package-generic shadow-substitution registry (ADR-0328): a recipe
 owns trigger/version, exact materialization/provenance, and an OPTIONAL runtime
 binding dispatched through one owner-bundled executable-adapter registry.
 Non-negotiable merge outcome:
@@ -24,9 +25,9 @@ Non-negotiable merge outcome:
   Vite/esbuild integration edge;
 - a fresh project pins `sass-embedded@1.100.0`, imports SCSS, and passes direct
   CJS/ESM Sass lifecycle parity plus real Vite 7.3.6 dev/HMR/build acceptance;
-- adding the Sass capsule after the registry core changes only Sass
-  policy/capsule/oracle/fixtures, generated data, compat docs, and acceptance
-  tests — the seam proof;
+- the Sass substitution creates no runtime binding or asset capability and
+  performs zero runtime manager/store operations while direct and Vite Sass
+  behavior remains faithful;
 - unsupported versions/surfaces stay named `NotImplementedError` + compat ❌ —
   no fallback to host bytes, native binaries, or approximate output.
 
@@ -55,8 +56,8 @@ through the same adapter, Sass lifecycle parity, and trust surviving extraneous
    npm-proven bytes; recognition remains inside the concrete Vite/esbuild edge.
 3. `sass-embedded@1.100.0` passes direct CJS/ESM lifecycle parity and real Vite
    7.3.6 dev/HMR/build acceptance with exact CSS/map output.
-4. Adding Sass changes only Sass policy/capsule/oracle/fixtures, generated data,
-   compat docs, and acceptance tests.
+4. The Sass substitution creates no runtime binding or asset capability and
+   performs zero runtime manager/store operations.
 5. A→B→A with acquisition network disabled reuses the exact tree with zero
    install/registry work; extraneous `node_modules` writes do not break trust.
 6. Unsupported versions and surfaces throw named `NotImplementedError` and stay
@@ -75,10 +76,19 @@ Contract+RED → Final+GREEN):
    mechanical subtraction from the #160 quarry (renames, sealed entrypoints,
    installer per-edge replay + direct-slot reservation); hard cut line, nothing
    touching trust/epoch/shadow. May proceed in parallel with the decision PR.
-6. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
+3. `npm-client/shadow-recipe-v2-data-authority` —
+   **recipe-v2-data-authority**: strict clone-safe schema 2, data-owned
+   admission features, and one owner-decoded frozen internal catalog.
+4. `npm-client/shadow-recipe-v2-authority` —
+   **recipe-v2-authority**: consumes the data-authority prerequisite, then owns
+   exact acquisition execution, materialized bins, and strict replay authority
+   discovered by the Sass contract; draft until its registry/npm/bin evidence
+   gates close, and required before the package-specific seam.
+5. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
-   generic-file no-change gate. Required for epic closure, not optional.
-7. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
+   generic-file no-change gate. Draft until its full differential artifact and
+   fault matrix are committed; required for epic closure, not optional.
+6. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption
    narrowing, owner READMEs, dead code imported by extraction).
 
@@ -98,12 +108,15 @@ Run tripwires (`docs/backlog/README.md` §Budget):
   (`pnpm check:contract-drift`)
 - new coordination mechanisms: 0
 - review checkpoints per slice: exactly 2
-- generated globs: `docs/public/compat/**`, `**/generated/**`, `pnpm-lock.yaml`
+- generated globs: `docs/public/compat/**`, `**/generated/**`,
+  `apps/playground/public/snapshots/**`, `pnpm-lock.yaml`
 - slices:
 
 | slice | band |
 |---|---|
 | oracle-slice | 300–1000 |
 | workbench-extraction | 2000–4000 |
+| recipe-v2-data-authority | 1200–2500 |
+| recipe-v2-authority | 1800–3000 |
 | sass-scale-proof | 1000–3000 |
 | measured-cleanup | 1000–3000 |
