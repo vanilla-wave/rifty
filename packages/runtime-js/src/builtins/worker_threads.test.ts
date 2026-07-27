@@ -217,6 +217,33 @@ globalThis.onmessage = ({ data }) => {
     });
   });
 
+  it('closes the public Worker lifecycle when its kernel peer dies', async () => {
+    const fakeHandle = makeFakeWorkerHandle([]);
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockReturnValue(fakeHandle);
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const parent = new NodeProcess();
+
+    await withProcessGlobal(parent, async () => {
+      const events: unknown[] = [];
+      const worker = new Worker('/workspace/w-peer-death.mjs');
+      worker.on('error', (error) => events.push(['error', error]));
+      worker.on('exit', (code) => events.push(['exit', code]));
+      await Promise.resolve();
+      const peerError = new Error('worker peer died');
+
+      fakeHandle.emit('peererror', peerError);
+
+      expect(events).toEqual([
+        ['error', peerError],
+        ['exit', 1],
+      ]);
+    });
+  });
+
   it("delivers one kernel construction fault once through emnapi's Node bridge", async () => {
     const constructionError = new Error('kernel spawn failed once');
     vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
