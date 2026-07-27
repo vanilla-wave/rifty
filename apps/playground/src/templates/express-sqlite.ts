@@ -386,8 +386,9 @@ A real client-server app: \`express@4\` installed from npm inside a Web Worker,
 serving a static client from the VFS and a JSON API backed by \`node:sqlite\` —
 rifty's DatabaseSync over SQLite compiled to WebAssembly.
 
-- \`src/main.js\` — the server. Edit it, then re-run the dev script from the
-  terminal to restart.
+- \`src/main.js\` — the server. Save it and nodemon restarts the app on the
+  same preview port; a syntax error shows the real crash and the next good
+  save recovers.
 - \`public/\` — the client the server serves with \`express.static\`.
 - The preview iframe talks to the server through the Service Worker: every
   fetch crosses iframe -> SW -> Worker -> Express -> sqlite.wasm and back.

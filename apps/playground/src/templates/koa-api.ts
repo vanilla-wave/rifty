@@ -311,7 +311,8 @@ A small Koa server running as a node-server template.
 - \`/api/notes/:id\` — router params.
 - \`/api/notes\` — JSON POST flow through Koa's Node request stream.
 
-The data is in memory. Re-run the dev script to restart the server.
+The data is in memory, so every nodemon restart — any save to \`src/main.js\` —
+starts from the seeded notes again.
 `;
 
 export const KOA_API_TEMPLATE: NodeServerProjectSpec = {

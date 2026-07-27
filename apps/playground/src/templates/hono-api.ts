@@ -256,7 +256,8 @@ A small Hono server running as a node-server template.
 - \`/\` — HTML returned by \`ctx.html()\`.
 - \`/api/messages\` — JSON GET/POST flow through Hono's \`ctx\` API.
 
-The data is in memory. Re-run the dev script to restart the server.
+The data is in memory, so every nodemon restart — any save to \`src/main.js\` —
+starts from the seeded messages again.
 `;
 
 export const HONO_API_TEMPLATE: NodeServerProjectSpec = {
