@@ -239,9 +239,20 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
       startsAfterStop,
     );
     await expect(page.locator(`.rf-preview__switcher option[value="${PORT}"]`)).toHaveCount(0);
-    const closeMarker = `PROCESS_TABLE_AFTER_CLOSE_${Date.now()}`;
-    await runTerminalLineSettled(page, `echo ${closeMarker} && ps -A -o ppid,pid`);
-    const closeTable = (await terminalBuffer(page)).split(closeMarker).at(-1) ?? '';
+    const closeStart = `PROCESS_TABLE_START_${Date.now()}`;
+    const closeDone = `PROCESS_TABLE_DONE_${Date.now()}`;
+    await runTerminalLineSettled(
+      page,
+      `echo ${closeStart} && ps -A -o ppid,pid && echo ${closeDone}`,
+    );
+    const closeBuffer = await terminalBuffer(page);
+    const closeTable = closeBuffer.slice(
+      closeBuffer.lastIndexOf(closeStart) + closeStart.length,
+      closeBuffer.lastIndexOf(closeDone),
+    );
+    expect(closeBuffer.lastIndexOf(closeDone)).toBeGreaterThan(closeBuffer.lastIndexOf(closeStart));
+    expect(closeTable).toMatch(/^\s*PPID\s+PID\s*$/mu);
+    expect(closeTable).toMatch(/^\s*0\s+1\s*$/mu);
     const closedPids = new Set([appPid, supervisorPid]);
     expect(
       [...closeTable.matchAll(/^\s*(\d+)\s+(\d+)\s*$/gmu)].some(
