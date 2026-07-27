@@ -36,7 +36,7 @@ interface BoundaryInit {
   readonly spec: {
     readonly syncRing: SharedArrayBuffer;
     readonly payloadCapacity: number;
-    readonly stdio: { readonly ipc: MessagePort };
+    readonly stdio: { readonly ipc: MessagePort; readonly stdout: MessagePort };
   };
 }
 
@@ -153,6 +153,38 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       method: 'process.settle',
       payload: { pid: 41, code: null, signal: 'SIGTERM' },
     });
+  });
+
+  it('settles a federated same-realm descendant that publishes its own exit code', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    publishKernelSyncApi({
+      call(method, payload) {
+        calls.push({ method, payload });
+        return method === 'process.reserve' ? 41 : null;
+      },
+    });
+    let finishHandler!: () => void;
+    const handlerDone = new Promise<void>((resolve) => {
+      finishHandler = resolve;
+    });
+    const manager = new ProcessManager();
+    const child = manager.spawn('git', () => handlerDone, 7, {
+      cwd: '/workspace',
+      federated: true,
+    });
+
+    child.exitCode = 127;
+    child.emit('exit', 127, null);
+    child.emit('close', 127, null);
+    finishHandler();
+
+    await vi.waitFor(() =>
+      expect(calls).toContainEqual({
+        method: 'process.settle',
+        payload: { pid: 41, code: 127, signal: null },
+      }),
+    );
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
   });
 
   it('reads nested ps state from one exact owner-root snapshot RPC', () => {
@@ -331,6 +363,76 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       command: 'node',
     });
     process.kill();
+  });
+
+  it('terminates one hidden worker thread without killing its process siblings', () => {
+    const processWorker = new BoundaryWorker();
+    const childWorker = new BoundaryWorker();
+    const targetThreadWorker = new BoundaryWorker();
+    const siblingThreadWorker = new BoundaryWorker();
+    const workers = [processWorker, childWorker, targetThreadWorker, siblingThreadWorker];
+    setWorkerFactoryForTests(() => workers.shift() ?? new BoundaryWorker());
+    const manager = new ProcessManager();
+    const process = manager.spawnWorker('node', workerSpec('process'));
+    const child = manager.spawnWorker('node', workerSpec('child'), process.pid);
+    const identity = { pid: process.pid, ppid: process.ppid };
+    const targetThread = manager.spawnWorkerThread(workerSpec('target-thread'), identity);
+    manager.spawnWorkerThread(workerSpec('sibling-thread'), identity);
+
+    expect(manager.snapshot()).toEqual([
+      { pid: 1, ppid: 0, command: 'rifty' },
+      { pid: process.pid, ppid: 1, command: 'node' },
+      { pid: child.pid, ppid: process.pid, command: 'node' },
+    ]);
+    expect(targetThread.kill('SIGTERM')).toBe(true);
+    expect(targetThreadWorker.terminate).toHaveBeenCalledTimes(1);
+    expect(processWorker.terminate).not.toHaveBeenCalled();
+    expect(childWorker.terminate).not.toHaveBeenCalled();
+    expect(siblingThreadWorker.terminate).not.toHaveBeenCalled();
+    expect(manager.list()).toEqual([process, child]);
+
+    expect(process.kill('SIGTERM')).toBe(true);
+    expect(processWorker.terminate).toHaveBeenCalledTimes(1);
+    expect(childWorker.terminate).toHaveBeenCalledTimes(1);
+    expect(siblingThreadWorker.terminate).toHaveBeenCalledTimes(1);
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+  });
+
+  it.each([
+    {
+      terminal: 'attested control-port close',
+      trigger(port: MessagePort) {
+        port.dispatchEvent(
+          new MessageEvent('message', { data: { kind: 'control:exiting', code: 7 } }),
+        );
+        port.dispatchEvent(new Event('close'));
+      },
+    },
+    {
+      terminal: 'control:self-exit',
+      trigger(port: MessagePort) {
+        port.dispatchEvent(
+          new MessageEvent('message', { data: { kind: 'control:self-exit', code: 7 } }),
+        );
+      },
+    },
+  ])('drains final stdout before $terminal settles the Worker', async ({ trigger }) => {
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const manager = new ProcessManager();
+    const child = manager.spawnWorker('node', workerSpec('late-stdout'));
+    if (child.kind !== 'worker') throw new Error('expected worker handle');
+    const chunks: string[] = [];
+    child.stdout().on('data', (chunk: unknown) => {
+      chunks.push(new TextDecoder().decode(chunk as Uint8Array));
+    });
+
+    trigger(child.ports.ipc);
+    initOf(worker).spec.stdio.stdout.postMessage(new TextEncoder().encode('late\n'));
+
+    await vi.waitFor(() => expect(child.exitCode).toBe(7));
+    expect(chunks.join('')).toBe('late\n');
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
   });
 
   it('retires remote descendants when their physical owner Worker dies', () => {
