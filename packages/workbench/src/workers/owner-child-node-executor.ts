@@ -239,7 +239,7 @@ export interface NodeRunHooks {
   readonly previewScope?: string;
   /** Host-only physical root behind the child process's public `/` namespace. */
   readonly remoteFsRoot?: string;
-  readonly onListening: (sid: string, ports: number[], previewScope?: string) => void;
+  readonly onListening: (sid: string, pid: number, ports: number[], previewScope?: string) => void;
   readonly onExit: (sid: string) => void;
 }
 export type OwnerNodeExecutor = (
@@ -298,7 +298,8 @@ export function createOwnerChildNodeExecutor(
     let running: Promise<ProcessExit>;
     try {
       running = runForegroundChild(handle, ctx, {
-        onListening: (control) => hooks.onListening(hooks.sid, control.ports, control.previewScope),
+        onListening: (control) =>
+          hooks.onListening(hooks.sid, control.pid, control.ports, control.previewScope),
         onExit: () => hooks.onExit(hooks.sid),
       });
       commitOwnerChildAdmission(reservation, physicalExit);

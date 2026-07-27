@@ -20,13 +20,16 @@ const buildRecursiveWorkerEnv = (recursiveRunner as RecursiveRunnerContract)
 
 function seededProcess(env: Readonly<Record<string, string>>): NodeProcess {
   const port = (): MessagePort => new MessageChannel().port1;
+  const writer = (target: MessagePort) => ({
+    write: (bytes: Uint8Array) => target.postMessage(bytes),
+  });
   return new NodeProcess({
     pid: 2,
     ppid: 1,
     argv: ['rifty', '/child.js'],
     env,
     cwd: '/workspace',
-    stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
+    stdio: { stdout: writer(port()), stderr: writer(port()), stdin: port(), ipc: port() },
   } satisfies KernelProcessSpec);
 }
 

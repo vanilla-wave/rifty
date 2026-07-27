@@ -38,7 +38,7 @@
  *     the stack to stderr and reports exit 1.
  */
 
-import { readKernelProcessSpec } from '@riftydev/kernel';
+import { type KernelStdioOutputWriter, readKernelProcessSpec } from '@riftydev/kernel';
 import { WASI_PREOPENS_ENV, WASI_WASM_URL_ENV } from './wasi-channel-env.ts';
 import { Wasi, WasiExit } from './wasi.ts';
 
@@ -63,18 +63,13 @@ interface WasiProcess {
 
 const STDIO_ENCODER = new TextEncoder();
 
-function makeStdioWriter(port: MessagePort): { write(chunk: string | Uint8Array): boolean } {
+function makeStdioWriter(port: KernelStdioOutputWriter): {
+  write(chunk: string | Uint8Array): boolean;
+} {
   return {
     write(chunk) {
       const bytes = typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
-      // Transfer only the buffer we own (from TextEncoder). A pre-existing
-      // Uint8Array may share its backing buffer with the caller — copy instead.
-      if (typeof chunk === 'string') {
-        port.postMessage(bytes, [bytes.buffer]);
-      } else {
-        const copy = new Uint8Array(bytes);
-        port.postMessage(copy, [copy.buffer]);
-      }
+      port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
       return true;
     },
   };

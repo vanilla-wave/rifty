@@ -262,8 +262,8 @@ export function createWorkbenchProjectRuntime(
       assertPortablePaths: namespace.assertPortablePaths,
     });
     const npm = options.packageState.createNpmCommand(
-      async (_name, command, ctx) => {
-        if (command === directNodeServerCommand && devServer !== null) {
+      async (name, command, ctx) => {
+        if (name === 'dev' && command === directNodeServerCommand && devServer !== null) {
           await options.packageState.reassertTemplateNodeModules(options.packageConfig);
           return runPtyDevServerShellCommand({
             captureOrigin,

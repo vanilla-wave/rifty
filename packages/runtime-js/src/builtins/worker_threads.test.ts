@@ -349,8 +349,8 @@ globalThis.onmessage = ({ data }) => {
       env: {},
       cwd: '/workspace',
       stdio: {
-        stdout: channels[0]!.port1,
-        stderr: channels[1]!.port1,
+        stdout: { write: (bytes: Uint8Array) => channels[0]!.port1.postMessage(bytes) },
+        stderr: { write: (bytes: Uint8Array) => channels[1]!.port1.postMessage(bytes) },
         stdin: channels[2]!.port1,
         ipc: channels[3]!.port1,
       },
@@ -612,6 +612,9 @@ globalThis.onmessage = ({ data }) => {
     });
     const ipc = new MessageChannel();
     const port = (): MessagePort => new MessageChannel().port1;
+    const writer = (target: MessagePort) => ({
+      write: (bytes: Uint8Array) => target.postMessage(bytes),
+    });
     const proc = new NodeProcess({
       pid: 3,
       ppid: 2,
@@ -622,7 +625,12 @@ globalThis.onmessage = ({ data }) => {
         RIFTY_WORKER_DATA_JSON: '{"mode":"guest-poison"}',
       },
       cwd: '/workspace',
-      stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: ipc.port1 },
+      stdio: {
+        stdout: writer(port()),
+        stderr: writer(port()),
+        stdin: port(),
+        ipc: ipc.port1,
+      },
     });
     const sent: unknown[] = [];
     ipc.port2.onmessage = (event) => sent.push(event.data);
@@ -801,13 +809,16 @@ function makeFakeWorkerHandle(sent: unknown[]): WorkerProcessHandle {
 
 function seededWorkerProcess(env: Readonly<Record<string, string>>): NodeProcess {
   const port = (): MessagePort => new MessageChannel().port1;
+  const writer = (target: MessagePort) => ({
+    write: (bytes: Uint8Array) => target.postMessage(bytes),
+  });
   return new NodeProcess({
     pid: 3,
     ppid: 2,
     argv: ['rifty', '/workspace/worker.mjs'],
     env,
     cwd: '/workspace',
-    stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
+    stdio: { stdout: writer(port()), stderr: writer(port()), stdin: port(), ipc: port() },
   });
 }
 

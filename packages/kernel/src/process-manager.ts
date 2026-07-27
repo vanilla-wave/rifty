@@ -21,6 +21,11 @@ import type { SyncRpcCallerContext } from './ipc/sync-dispatch.ts';
 import { readKernelProcessSpec, readKernelSyncApi } from './shared-globals.ts';
 import { type SpawnWorkerSpec, spawnKernelWorker } from './spawn-worker.ts';
 import type { WorkerStdioPorts } from './worker-entry.ts';
+import {
+  abandonWorkerOutput,
+  cutWorkerOutput,
+  isWorkerOutputChildSealed,
+} from './worker-stdio-drain.ts';
 
 export interface ProcessIO {
   write(stream: 'stdout' | 'stderr', chunk: string): void;
@@ -56,7 +61,6 @@ export type IpcFrame =
   | { readonly kind: 'control:signal'; readonly signal: string }
   | { readonly kind: 'control:self-signal'; readonly signal: string }
   | { readonly kind: 'control:self-exit'; readonly code: number }
-  | { readonly kind: 'control:exiting'; readonly code: number }
   | { readonly kind: 'control:peer-closing' }
   | { readonly kind: 'control:kill-tree'; readonly pid: number; readonly signal: string }
   | {
@@ -66,6 +70,8 @@ export type IpcFrame =
     };
 
 export interface ProcessListeningControl {
+  /** Kernel-attested process identity; never accepted from the guest frame. */
+  readonly pid: number;
   readonly ports: number[];
   readonly previewScope?: string;
 }
@@ -175,6 +181,7 @@ interface ProcessRecord {
   readonly physicalRoute?: SyncRpcCallerContext;
   readonly remoteOwnerPid?: number;
   readonly remoteOwnerRoute?: SyncRpcCallerContext;
+  remoteListening: boolean;
   readonly command: string;
   /** Per-ADR-0019: cwd is owned here; children inherit a snapshot. */
   cwd: string;
@@ -189,6 +196,16 @@ interface ProcessRecord {
   fail(code: number): boolean;
   peerFail(error: Error): boolean;
 }
+
+type WorkerTerminalOutcome =
+  | {
+      readonly kind: 'exit';
+      readonly code: number;
+      readonly cause: 'natural' | 'failure';
+      readonly error?: Error;
+    }
+  | { readonly kind: 'signal'; readonly signal: string }
+  | { readonly kind: 'peererror'; readonly error: Error };
 
 interface ProcessRouteOwner {
   readonly ownerPid: number;
@@ -230,6 +247,12 @@ function callRequiredUpstream(method: string, payload: unknown): unknown {
   const upstream = readKernelSyncApi();
   if (upstream === null) throw new Error(`${method}: upstream authority is unavailable`);
   return upstream.call(method, payload);
+}
+
+function throwCollectedErrors(label: string, errors: readonly unknown[]): void {
+  if (errors.length === 0) return;
+  if (errors.length === 1) throw errors[0];
+  throw new AggregateError(errors, `${label}: ${errors.map((error) => String(error)).join('; ')}`);
 }
 
 interface ProcessFederationLease {
@@ -354,8 +377,7 @@ export function decodeIpcFrame(value: unknown): IpcFrame {
       const record = fields(['signal']);
       return { kind, signal: controlSignal(record.signal) };
     }
-    case 'control:self-exit':
-    case 'control:exiting': {
+    case 'control:self-exit': {
       const record = fields(['code']);
       return { kind, code: controlExitCode(record.code) };
     }
@@ -427,6 +449,7 @@ export class ProcessManager {
       treeParentPid: ppid,
       published: true,
       upstreamAuthority: federation !== null,
+      remoteListening: false,
       command,
       cwd: initialCwd,
       exitCode: null,
@@ -555,13 +578,27 @@ export class ProcessManager {
     handle: ProcessHandle | null,
     emitters: EventEmitter[],
   ): void {
-    if (!this.isLive(record)) return;
-    if (record.physicalRoute !== undefined) this.retirePhysicalRoutes(record);
+    if (!this.retire(record, emitters)) return;
+    handle?.removeAllListeners();
+  }
+
+  /** Retire process authority now while preserving handle listeners until close. */
+  private retire(record: ProcessRecord, emitters: EventEmitter[]): boolean {
+    if (!this.isLive(record)) return false;
+    const errors: unknown[] = [];
+    if (record.physicalRoute !== undefined) {
+      try {
+        this.retirePhysicalRoutes(record);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
     if (record.published) this.table.delete(record.pid);
     else this.hiddenThreads.delete(record);
     if (record.physicalRoute !== undefined) this.physicalRoutes.delete(record.physicalRoute);
     for (const e of emitters) e.removeAllListeners();
-    handle?.removeAllListeners();
+    throwCollectedErrors(`Worker owner PID ${String(record.pid)} route retirement failed`, errors);
+    return true;
   }
 
   /** Spawn into its own Worker realm (ADR-0011). See `spawnKernelWorker`. */
@@ -602,6 +639,7 @@ export class ProcessManager {
       published,
       upstreamAuthority: federation !== null,
       physicalRoute: spawnResult.callerContext,
+      remoteListening: false,
       command,
       cwd: initialCwd,
       exitCode: null,
@@ -626,8 +664,8 @@ export class ProcessManager {
       signalCode: string | null = null;
       readonly ports = ports;
 
-      #stdoutReadable: Readable | null = null;
-      #stderrReadable: Readable | null = null;
+      #stdoutReadable: Readable;
+      #stderrReadable: Readable;
       #stdinWritable: Writable | null = null;
 
       // User IPC disconnect is logical: TTY/process controls keep using this
@@ -635,7 +673,28 @@ export class ProcessManager {
       #ipcStarted = false;
       #ipcDisconnected = false;
       #controlClosed = false;
-      #peerExitCode: number | null = null;
+      #stdoutReceived = 0;
+      #stderrReceived = 0;
+      #stdoutExpected: number | null = null;
+      #stderrExpected: number | null = null;
+      #terminalOutcome: WorkerTerminalOutcome | null = null;
+      #terminalFinishing = false;
+      #terminalScheduled = false;
+      #terminalAbandoned = false;
+      #cutStarted = false;
+      #terminalDiagnostic: Uint8Array | null = null;
+
+      constructor() {
+        super();
+        this.#stdoutReadable = bindPortAsReadable(ports.stdout, {
+          onChunk: () => this._markStdioChunk('stdout'),
+          onProtocolError: (error) => this._failStdioProtocol(error),
+        });
+        this.#stderrReadable = bindPortAsReadable(ports.stderr, {
+          onChunk: () => this._markStdioChunk('stderr'),
+          onProtocolError: (error) => this._failStdioProtocol(error),
+        });
+      }
 
       get cwd(): string {
         return record.cwd;
@@ -644,11 +703,9 @@ export class ProcessManager {
         record.cwd = next;
       }
       stdout(): Readable {
-        if (!this.#stdoutReadable) this.#stdoutReadable = bindPortAsReadable(ports.stdout);
         return this.#stdoutReadable;
       }
       stderr(): Readable {
-        if (!this.#stderrReadable) this.#stderrReadable = bindPortAsReadable(ports.stderr);
         return this.#stderrReadable;
       }
       stdin(): Writable {
@@ -678,6 +735,7 @@ export class ProcessManager {
             this._disconnectIpc();
           } else if (frame.kind === 'control:listening') {
             const control = {
+              pid: record.pid,
               ports: [...frame.ports],
               ...(frame.previewScope
                 ? {
@@ -691,15 +749,8 @@ export class ProcessManager {
             } catch {
               manager.failRecord(record, 1);
             }
-          } else if (frame.kind === 'control:exiting') {
-            this.#peerExitCode = frame.code;
           } else if (frame.kind === 'control:peer-closing') {
-            if (this.#peerExitCode === null) {
-              manager.peerFailRecord(
-                record,
-                new Error(`Worker peer for PID ${String(pid)} closed unexpectedly`),
-              );
-            }
+            this._peerClose(new Error(`Worker peer for PID ${String(pid)} closed unexpectedly`));
           } else if (frame.kind === 'control:self-signal' && frame.signal === 'SIGUSR2') {
             manager.killRecordTree(record, frame.signal);
           } else if (frame.kind === 'control:self-exit') {
@@ -708,18 +759,11 @@ export class ProcessManager {
             manager.failRecord(record, 1);
           }
         };
-        ports.ipc.addEventListener('close', () => {
-          if (this.#controlClosed || !manager.isLive(record)) return;
-          const exitCode = this.#peerExitCode;
-          if (exitCode !== null) {
-            this._settleAfterStdio(exitCode);
-            return;
-          }
-          manager.peerFailRecord(
-            record,
-            new Error(`Worker peer for PID ${String(pid)} closed unexpectedly`),
+        ports.ipc.onmessageerror = () => {
+          this._failStdioProtocol(
+            new Error('Worker process-control port failed to deserialize a frame'),
           );
-        });
+        };
         ports.ipc.start();
       }
       /** Internal: close user IPC without destroying the control transport. */
@@ -741,10 +785,19 @@ export class ProcessManager {
       }
       /** Internal: push EOF on the read-side streams; called once on exit. */
       _signalEof(): void {
-        if (this.#stdoutReadable) this.#stdoutReadable.push(null);
-        if (this.#stderrReadable) this.#stderrReadable.push(null);
+        this.#stdoutReadable.push(null);
+        this.#stderrReadable.push(null);
         if (this.#stdinWritable && !this.#stdinWritable._writableState.ending) {
           this.#stdinWritable.end();
+        }
+      }
+      _closeOutputPorts(): void {
+        for (const port of [ports.stdout, ports.stderr]) {
+          try {
+            port.close();
+          } catch {
+            /* peer may have closed already */
+          }
         }
       }
       send(message: unknown): boolean {
@@ -825,53 +878,315 @@ export class ProcessManager {
         return manager.killRecordTree(record, signal);
       }
       _terminate(signal: string): boolean {
-        if (!manager.isLive(record)) return false;
-        if (this.exitCode !== null || this.signalCode !== null) return false;
-        abortController.abort();
-        spawnResult.terminate();
-        manager.retireOwnerDescendants(record, new Error(`Worker owner PID ${pid} terminated`));
-        this.signalCode = signal;
-        this.exitCode = null;
-        this._signalEof();
-        this._closeControl();
-        this.emit('exit', null, signal);
-        this.emit('close', null, signal);
-        manager.finalize(record, this, [record.parentToChild]);
-        federation?.settle(null, signal);
-        return true;
+        return this._transition({ kind: 'signal', signal });
       }
       _fail(code: number): boolean {
-        if (!manager.isLive(record)) return false;
-        if (this.exitCode !== null || this.signalCode !== null) return false;
-        manager.terminateDescendants(pid, 'SIGTERM');
-        abortController.abort();
-        spawnResult.terminate();
-        manager.retireOwnerDescendants(record, new Error(`Worker owner PID ${pid} failed`));
-        this.exitCode = code;
-        this._signalEof();
-        this._closeControl();
-        this.emit('exit', code, null);
-        this.emit('close', code, null);
-        manager.finalize(record, this, [record.parentToChild]);
-        federation?.settle(code, null);
-        return true;
+        return this._transition({ kind: 'exit', code, cause: 'failure' });
       }
       _settleAfterStdio(code: number): void {
-        if (!manager.isLive(record)) return;
-        if (this.exitCode !== null || this.signalCode !== null) return;
-        deferWorkerExitUntilStdioSettled(() => {
-          if (!manager.isLive(record)) return;
-          if (this.exitCode !== null || this.signalCode !== null) return;
-          manager.retireOwnerDescendants(record, new Error(`Worker owner PID ${pid} exited`));
-          abortController.abort();
-          spawnResult.terminate();
-          this.exitCode = code;
-          this._signalEof();
-          this._closeControl();
-          this.emit('exit', code, null);
-          this.emit('close', code, null);
-          manager.finalize(record, this, [record.parentToChild]);
-          federation?.settle(code, null);
+        this._transition({ kind: 'exit', code, cause: 'natural' });
+      }
+      _peerFail(error: Error): boolean {
+        const outcome = { kind: 'peererror', error } satisfies WorkerTerminalOutcome;
+        if (!this._acceptOutcome(outcome)) {
+          if (manager.isLive(record)) {
+            try {
+              if (!isWorkerOutputChildSealed(spawnResult.spec.outputState)) {
+                this._abandonTerminal();
+              }
+            } catch (failure) {
+              this._failStdioProtocol(
+                failure instanceof Error ? failure : new Error(String(failure)),
+              );
+            }
+          }
+          return false;
+        }
+        this._abandonTerminal();
+        return true;
+      }
+      _peerClose(error: Error): boolean {
+        let outputSealedByChild: boolean;
+        try {
+          outputSealedByChild = isWorkerOutputChildSealed(spawnResult.spec.outputState);
+        } catch (failure) {
+          this._failStdioProtocol(failure instanceof Error ? failure : new Error(String(failure)));
+          return true;
+        }
+        if (!outputSealedByChild) {
+          return this._peerFail(error);
+        }
+        return this._transition({ kind: 'peererror', error });
+      }
+      _markStdioChunk(stream: 'stdout' | 'stderr'): void {
+        if (stream === 'stdout') this.#stdoutReceived++;
+        else this.#stderrReceived++;
+        const received = stream === 'stdout' ? this.#stdoutReceived : this.#stderrReceived;
+        const expected = stream === 'stdout' ? this.#stdoutExpected : this.#stderrExpected;
+        if (expected !== null && received > expected) {
+          this._failStdioProtocol(
+            new Error(
+              `Worker ${stream} received ${String(received)} chunks after terminal target ${String(expected)}`,
+            ),
+          );
+          return;
+        }
+        this._finishTerminalIfDrained();
+      }
+      _setStdioTarget(stream: 'stdout' | 'stderr', chunks: number): void {
+        const current = stream === 'stdout' ? this.#stdoutExpected : this.#stderrExpected;
+        if (current !== null && current !== chunks) {
+          this._failStdioProtocol(
+            new Error(
+              `Worker ${stream} terminal target changed from ${String(current)} to ${String(chunks)}`,
+            ),
+          );
+          return;
+        }
+        if (stream === 'stdout') this.#stdoutExpected = chunks;
+        else this.#stderrExpected = chunks;
+        const received = stream === 'stdout' ? this.#stdoutReceived : this.#stderrReceived;
+        if (received > chunks) {
+          this._failStdioProtocol(
+            new Error(
+              `Worker ${stream} received ${String(received)} chunks beyond terminal target ${String(chunks)}`,
+            ),
+          );
+          return;
+        }
+        this._finishTerminalIfDrained();
+      }
+      _failStdioProtocol(error: Error): void {
+        if (!manager.isLive(record) || this.#terminalFinishing) return;
+        this._queueTerminalDiagnostic(`${error.message}\n`);
+        const current = this.#terminalOutcome;
+        if (current?.kind === 'signal' || current?.kind === 'peererror') {
+          this._abandonTerminal();
+          return;
+        }
+        const failure: WorkerTerminalOutcome = {
+          kind: 'exit',
+          code: 1,
+          cause: 'failure',
+          error,
+        };
+        this.#terminalOutcome = failure;
+        this._abandonTerminal();
+      }
+      _transition(outcome: WorkerTerminalOutcome): boolean {
+        if (!this._acceptOutcome(outcome)) return false;
+        this._startOutputCut();
+        return true;
+      }
+      _acceptOutcome(outcome: WorkerTerminalOutcome): boolean {
+        if (!manager.isLive(record) || this.#terminalFinishing) return false;
+        if (this.#terminalOutcome !== null) return false;
+        this.#terminalOutcome = outcome;
+        return true;
+      }
+      _workerError(message: string, outputSealedByChild: boolean): void {
+        if (!manager.isLive(record) || this.#terminalFinishing) return;
+        this._queueTerminalDiagnostic(message);
+        if (this.#terminalOutcome !== null) {
+          if (!outputSealedByChild) this._abandonTerminal();
+          else this._finishTerminalIfDrained();
+          return;
+        }
+        this.#terminalOutcome = {
+          kind: 'exit',
+          code: 1,
+          cause: 'failure',
+          error: new Error(message.trimEnd() || 'Worker terminated by an uncaught error'),
+        };
+        if (outputSealedByChild) {
+          this._startOutputCut();
+        } else {
+          this._abandonTerminal();
+        }
+      }
+      _startOutputCut(): void {
+        if (this.#cutStarted || this.#terminalAbandoned) return;
+        this.#cutStarted = true;
+        let cut: ReturnType<typeof cutWorkerOutput>;
+        try {
+          cut = cutWorkerOutput(spawnResult.spec.outputState);
+        } catch (error) {
+          this._failStdioProtocol(error instanceof Error ? error : new Error(String(error)));
+          return;
+        }
+        if (!(cut instanceof Promise)) {
+          this._applyOutputTargets(cut.stdout, cut.stderr);
+          return;
+        }
+        void cut.then(
+          ({ stdout, stderr }) => {
+            this._applyOutputTargets(stdout, stderr);
+          },
+          (error: unknown) => {
+            const failure = error instanceof Error ? error : new Error(String(error));
+            this._failStdioProtocol(failure);
+          },
+        );
+      }
+      _applyOutputTargets(stdout: number, stderr: number): void {
+        if (!manager.isLive(record) || this.#terminalFinishing || this.#terminalAbandoned) {
+          return;
+        }
+        this._setStdioTarget('stdout', stdout);
+        this._setStdioTarget('stderr', stderr);
+      }
+      _abandonTerminal(): void {
+        if (!manager.isLive(record) || this.#terminalFinishing) {
+          return;
+        }
+        this.#terminalAbandoned = true;
+        try {
+          abandonWorkerOutput(spawnResult.spec.outputState);
+        } catch (error) {
+          this._queueTerminalDiagnostic(
+            `${error instanceof Error ? error.message : String(error)}\n`,
+          );
+        }
+        this._emitTerminalDiagnostic();
+        this._scheduleTerminalFinish();
+      }
+      _queueTerminalDiagnostic(message: string): void {
+        if (this.#terminalDiagnostic !== null) return;
+        this.#terminalDiagnostic = STDERR_ENCODER.encode(message);
+      }
+      _emitTerminalDiagnostic(): boolean {
+        const diagnostic = this.#terminalDiagnostic;
+        if (diagnostic === null) return false;
+        this.#terminalDiagnostic = null;
+        this.#stderrReadable.push(diagnostic);
+        return true;
+      }
+      _finishTerminalIfDrained(): void {
+        const outcome = this.#terminalOutcome;
+        if (
+          this.#terminalAbandoned ||
+          outcome === null ||
+          this.#stdoutExpected === null ||
+          this.#stderrExpected === null ||
+          this.#stdoutReceived !== this.#stdoutExpected ||
+          this.#stderrReceived !== this.#stderrExpected
+        ) {
+          return;
+        }
+        const diagnosticEmitted = this._emitTerminalDiagnostic();
+        if (this.#stdoutReceived === 0 && this.#stderrReceived === 0 && !diagnosticEmitted) {
+          this._finishTerminal(outcome);
+          return;
+        }
+        this._scheduleTerminalFinish();
+      }
+      _scheduleTerminalFinish(): void {
+        if (this.#terminalScheduled || this.#terminalFinishing) return;
+        this.#terminalScheduled = true;
+        queueMicrotask(() => {
+          this.#terminalScheduled = false;
+          const outcome = this.#terminalOutcome;
+          if (outcome === null || !manager.isLive(record) || this.#terminalFinishing) {
+            return;
+          }
+          if (
+            !this.#terminalAbandoned &&
+            (this.#stdoutExpected === null ||
+              this.#stderrExpected === null ||
+              this.#stdoutReceived !== this.#stdoutExpected ||
+              this.#stderrReceived !== this.#stderrExpected)
+          ) {
+            return;
+          }
+          this._finishTerminal(outcome);
+        });
+      }
+      _finishTerminal(outcome: WorkerTerminalOutcome): void {
+        if (
+          !manager.isLive(record) ||
+          this.#terminalOutcome !== outcome ||
+          this.#terminalFinishing
+        ) {
+          return;
+        }
+        this.#terminalFinishing = true;
+        if (outcome.kind === 'exit' && outcome.cause === 'failure') {
+          manager.terminateDescendants(pid, 'SIGTERM');
+        }
+        abortController.abort();
+        spawnResult.terminate();
+        const reason =
+          outcome.kind === 'peererror'
+            ? outcome.error
+            : outcome.kind === 'exit' && outcome.error !== undefined
+              ? outcome.error
+              : new Error(
+                  `Worker owner PID ${String(pid)} ${
+                    outcome.kind === 'signal'
+                      ? 'terminated'
+                      : outcome.cause === 'failure'
+                        ? 'failed'
+                        : 'exited'
+                  }`,
+                );
+        manager.retireOwnerDescendants(record, reason);
+        this._closeOutputPorts();
+        this._signalEof();
+        this._closeControl();
+        if (outcome.kind === 'peererror') {
+          this.emit('peererror', outcome.error);
+          this._retireAndScheduleTerminalClose(null, null, () =>
+            federation?.peerDeath(outcome.error),
+          );
+          return;
+        }
+        if (outcome.kind === 'signal') {
+          this.signalCode = outcome.signal;
+          this.exitCode = null;
+          this.emit('exit', null, outcome.signal);
+          this._retireAndScheduleTerminalClose(null, outcome.signal, () =>
+            federation?.settle(null, outcome.signal),
+          );
+          return;
+        }
+        this.exitCode = outcome.code;
+        this.signalCode = null;
+        this.emit('exit', outcome.code, null);
+        this._retireAndScheduleTerminalClose(outcome.code, null, () =>
+          federation?.settle(outcome.code, null),
+        );
+      }
+      _retireAndScheduleTerminalClose(
+        code: number | null,
+        signal: string | null,
+        settleFederation: () => void,
+      ): void {
+        const errors: unknown[] = [];
+        try {
+          manager.retire(record, [record.parentToChild]);
+        } catch (error) {
+          errors.push(error);
+        }
+        this._scheduleTerminalClose(code, signal);
+        try {
+          settleFederation();
+        } catch (error) {
+          errors.push(error);
+        }
+        throwCollectedErrors(`Worker PID ${String(pid)} terminal settlement failed`, errors);
+      }
+      _scheduleTerminalClose(code: number | null, signal: string | null): void {
+        // A flowing local Readable needs one turn to consume its final chunk
+        // and one to emit 'end'. Node permits 'end' on either side of 'exit',
+        // but ChildProcess 'close' follows stdio EOF.
+        queueMicrotask(() => {
+          queueMicrotask(() => {
+            try {
+              this.emit('close', code, signal);
+            } finally {
+              this.removeAllListeners();
+            }
+          });
         });
       }
     }
@@ -880,19 +1195,7 @@ export class ProcessManager {
     record.handle = handle;
     record.terminate = (signal) => handle._terminate(signal);
     record.fail = (code) => handle._fail(code);
-    record.peerFail = (error) => {
-      if (!manager.isLive(record)) return false;
-      manager.retireOwnerDescendants(record, error);
-      abortController.abort();
-      spawnResult.terminate();
-      handle._signalEof();
-      handle._closeControl();
-      handle.emit('peererror', error);
-      handle.emit('close', null, null);
-      manager.finalize(record, handle, [record.parentToChild]);
-      federation?.peerDeath(error);
-      return true;
-    };
+    record.peerFail = (error) => handle._peerFail(error);
     if (published) this.table.set(pid, record);
     else this.hiddenThreads.add(record);
     this.physicalRoutes.set(spawnResult.callerContext, record);
@@ -909,7 +1212,9 @@ export class ProcessManager {
     // handle. The IPC port is otherwise inert (no auto-start).
     handle._startIpc();
 
-    spawnResult.onExit((code) => handle._settleAfterStdio(code));
+    spawnResult.onExit((code) => {
+      handle._settleAfterStdio(code);
+    });
 
     // Surface `messageerror` events on the handle so callers don't have
     // to reach into `SpawnWorkerResult` (review §1.10).
@@ -917,12 +1222,11 @@ export class ProcessManager {
       handle.emit('messageerror', ev);
     });
 
-    // backlog/kernel/worker-global-error-to-stderr: a worker error that escaped
-    // worker-entry's try/catch left NO text on the child stderr — forward its
-    // message onto the stderr stream here (BEFORE the onExit handler above EOFs
-    // it) so `handle.stderr().on('data')` sees the diagnostic, not just exit 1.
-    spawnResult.onUncaughtError((message) => {
-      handle.stderr().push(STDERR_ENCODER.encode(message));
+    // A worker error that escaped worker-entry's try/catch left no child-side
+    // stack. The handle appends the parent diagnostic only after all attested
+    // child output, then schedules terminal delivery behind local Readable flow.
+    spawnResult.onUncaughtError((message, outputSealedByChild) => {
+      handle._workerError(message, outputSealedByChild);
     });
 
     return handle;
@@ -1043,6 +1347,7 @@ export class ProcessManager {
       upstreamAuthority,
       remoteOwnerPid: ownerPid,
       ...(ownerRoute === undefined ? {} : { remoteOwnerRoute: ownerRoute }),
+      remoteListening: false,
       command,
       cwd,
       exitCode: null,
@@ -1133,7 +1438,8 @@ export class ProcessManager {
     if (route?.kind !== 'worker') {
       throw new Error(`process.listening: owner PID ${ownerPid} has no live worker route`);
     }
-    route.emit('control:listening', control);
+    route.emit('control:listening', { ...control, pid });
+    if (record !== undefined) record.remoteListening = control.ports.length > 0;
   }
 
   [ROUTE_REMOTE_PEER_DEATH](
@@ -1156,7 +1462,10 @@ export class ProcessManager {
     if (owner?.kind !== 'worker') {
       throw new Error(`process.peer-death: owner PID ${ownerPid} has no live worker route`);
     }
-    owner.emit('control:listening', { ports: [] } satisfies ProcessListeningControl);
+    if (record?.remoteListening) {
+      owner.emit('control:listening', { pid, ports: [] } satisfies ProcessListeningControl);
+      record.remoteListening = false;
+    }
     record?.peerFail(error);
   }
 
@@ -1175,6 +1484,14 @@ export class ProcessManager {
       return;
     }
     if (!this.sameRoute(record, ownerPid, ownerRoute, true)) return;
+    if (record.remoteListening) {
+      const owner = this.physicalOwnerHandle(ownerPid, ownerRoute);
+      if (owner?.kind !== 'worker') {
+        throw new Error(`process.settle: owner PID ${ownerPid} has no live worker route`);
+      }
+      owner.emit('control:listening', { pid, ports: [] } satisfies ProcessListeningControl);
+      record.remoteListening = false;
+    }
     record.exitCode = code;
     record.signalCode = signal;
     record.abortController.abort();
@@ -1298,19 +1615,30 @@ export class ProcessManager {
 
   private retirePhysicalRoutes(owner: ProcessRecord): void {
     const error = new Error(`Worker owner PID ${String(owner.pid)} closed`);
+    const errors: unknown[] = [];
     const owns = (route: ProcessRouteOwner) =>
       this.isPhysicalOwner(owner, route.ownerPid, route.ownerRoute);
     for (const [pid, pending] of [...this.pendingRemote]) {
       if (!owns(pending)) continue;
-      if (pending.upstreamAuthority) callRequiredUpstream(PROCESS_ABORT_RPC, { pid });
-      this.pendingRemote.delete(pid);
+      try {
+        if (pending.upstreamAuthority) callRequiredUpstream(PROCESS_ABORT_RPC, { pid });
+      } catch (failure) {
+        errors.push(failure);
+      } finally {
+        this.pendingRemote.delete(pid);
+      }
     }
     const forwarded = [...this.forwardedRoutes].filter(([, route]) => owns(route));
     const forwardedPids = new Set(forwarded.map(([pid]) => pid));
     for (const [pid, route] of forwarded) {
       if (forwardedPids.has(route.ppid)) continue;
-      callRequiredUpstream(PROCESS_PEER_DEATH_RPC, { pid, message: error.message });
-      this.deleteForwardedSubtree(pid);
+      try {
+        callRequiredUpstream(PROCESS_PEER_DEATH_RPC, { pid, message: error.message });
+      } catch (failure) {
+        errors.push(failure);
+      } finally {
+        this.deleteForwardedSubtree(pid);
+      }
     }
     const remote = [...this.table.values()].filter(
       (record) =>
@@ -1319,8 +1647,17 @@ export class ProcessManager {
     );
     const remotePids = new Set(remote.map(({ pid }) => pid));
     for (const record of remote) {
-      if (!remotePids.has(record.ppid)) record.peerFail(error);
+      if (remotePids.has(record.ppid)) continue;
+      try {
+        record.peerFail(error);
+      } catch (failure) {
+        errors.push(failure);
+      }
     }
+    throwCollectedErrors(
+      `Worker owner PID ${String(owner.pid)} descendant retirement failed`,
+      errors,
+    );
   }
 
   private deleteForwardedSubtree(pid: number): void {
@@ -1525,6 +1862,7 @@ export function installProcessFederation(manager: ProcessManager): void {
       });
       if (frame.kind !== 'control:listening') throw new TypeError('unreachable frame kind');
       control = {
+        pid,
         ports: [...frame.ports],
         ...(frame.previewScope
           ? {
@@ -1579,32 +1917,29 @@ export function installProcessFederation(manager: ProcessManager): void {
  * `Readable` and post-side `Writable`. Kept here as they're only meaningful
  * for a `WorkerProcessHandle`.
  */
-function bindPortAsReadable(port: MessagePort): Readable {
+interface WorkerStdioReadableEvents {
+  onChunk(): void;
+  onProtocolError(error: Error): void;
+}
+
+function bindPortAsReadable(port: MessagePort, events: WorkerStdioReadableEvents): Readable {
   const r = new Readable({ read() {} });
-  // EOF guard: `_signalEof()` pushes null on worker exit, but a stdout chunk
-  // already in flight on the MessagePort can land AFTER that, and `push()` after
-  // EOF throws `stream.push() after EOF`. Drop late chunks instead — the worker
-  // has exited and its stdout is fully captured by then. `_readableState.ended`
-  // is the exact flag the throw checks (set synchronously by `push(null)`,
-  // earlier than the `'end'` event / `readableEnded`).
   port.onmessage = (ev: MessageEvent) => {
     const data = ev.data;
-    if (!(data instanceof Uint8Array)) return;
-    if (r._readableState.ended) return;
-    r.push(data);
+    if (data instanceof Uint8Array) {
+      r.push(data);
+      events.onChunk();
+      return;
+    }
+    events.onProtocolError(new Error('Worker stdio received a malformed frame'));
+  };
+  port.onmessageerror = () => {
+    events.onProtocolError(new Error('Worker stdio failed to deserialize a frame'));
   };
   // Browsers don't auto-start the port when only `onmessage` is set
   // (vs `addEventListener('message', …)`); kick it.
   port.start();
   return r;
-}
-
-function deferWorkerExitUntilStdioSettled(fn: () => void): void {
-  // Worker exit is posted on the worker channel, while stdout/stderr use separate
-  // MessagePorts. Cross-port ordering is not guaranteed: a final stdout chunk can
-  // arrive after the exit message. Delay natural exit/EOF just enough for chunks
-  // already in flight to reach the parent; kill() remains immediate.
-  setTimeout(() => setTimeout(fn, 0), 0);
 }
 
 function bindPortAsWritable(port: MessagePort): Writable {

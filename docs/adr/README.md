@@ -29,6 +29,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
 | 0313 | One-shot opaque Worker entry capability ports |
 | 0326 | Federated Worker child tree with separate public IPC and private control |
+| 0331 | SyncRpc v3 owns one live exchange through reply consumption |
+| 0332 | Worker stdio admission proves terminal drain |
 
 ### runtime-js
 
@@ -246,6 +248,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0198 | Byte-transparent shell data plane; string display plane |
 | 0256 | Owned abort settlement and asynchronous shell disposal |
 | 0257 | Exact process exit through shell command results |
+| 0330 | Lifecycle failures remain exceptional through Shell |
 
 ### terminal
 
@@ -317,6 +320,14 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0032 request-state release / current-version clauses | 0331 / note 2026-07-27 | SyncRpc v3 retains a claimed request through versioned reply consumption |
+| 0084 #17 `inFlight` guard / #18 early release clauses | 0331 / note 2026-07-27 | shared `HANDLING` is sole exchange authority through caller consumption |
+| 0011 worker-exit / raw-output handoff clauses | 0332 / note 2026-07-27 | child seal authenticates exit; runtimes receive semantic output writers |
+| 0038 raw stdout/stderr `MessagePort` handoff clauses | 0332 / note 2026-07-27 | runtimes receive semantic byte writers; kernel retains ports and output-cut state |
+| 0039 deferred stdio abstraction-lift clause | 0332 / note 2026-07-27 | `KernelProcessSpec` exposes semantic writers; kernel retains output transport |
+| 0122 stdout/stderr port-matching clause | 0332 / note 2026-07-27 | stdin remains port-backed; stdout/stderr use semantic byte writers |
+| 0157 four-stdio-port / `makeStdioWriter` clauses | 0332 / note 2026-07-27 | stdout/stderr are kernel semantic writers; stdin and IPC remain ports |
+| 0326 unspecified final-output drain authority | 0332 / note 2026-07-27 | one process-wide cut and exact per-stream committed targets prove drain |
 | 0011 recursive private PID allocator clause | 0326 / note 2026-07-26 | recursive children reserve owner-root ProcessManager identities over the trusted SAB attachment |
 | 0012 realm-local unified-registry clause | 0326 / note 2026-07-26 | one federated owner-root process tree; nested managers own only direct physical Workers |
 | 0130 D4 generated direct-command selector | 0327 / note 2026-07-26 | exact script bytes select canonical direct entry versus installed `.bin`; no template-ID dispatch |

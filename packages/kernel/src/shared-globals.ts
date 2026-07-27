@@ -47,9 +47,13 @@ export interface KernelSyncApi {
  * `installNodeProcessShim` wraps it to expose Node-style `process.send` /
  * `process.on('message', …)` / `process.disconnect()`.
  */
+export interface KernelStdioOutputWriter {
+  write(bytes: Uint8Array): void;
+}
+
 export interface KernelProcessStdioPorts {
-  readonly stdout: MessagePort;
-  readonly stderr: MessagePort;
+  readonly stdout: KernelStdioOutputWriter;
+  readonly stderr: KernelStdioOutputWriter;
   readonly stdin: MessagePort;
   readonly ipc: MessagePort;
 }

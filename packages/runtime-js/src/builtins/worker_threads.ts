@@ -26,6 +26,10 @@ import {
   readNodeEntryBootstrapIfPresent,
 } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
+import {
+  readActiveNodeProcessBootstrap,
+  setActiveNodeProcessBootstrap,
+} from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
 
@@ -85,6 +89,8 @@ export class Worker extends EventEmitter {
   private readonly workerData: unknown;
   private readonly env: Record<string, string>;
   private readonly processContext: NodeProcessContextSnapshot | null;
+  private readonly ownerProcess: unknown;
+  private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
   private exited = false;
   private sameRealmContext: WorkerThreadContext | null = null;
   private sameRealmParentPort: WorkerPort | null = null;
@@ -96,6 +102,8 @@ export class Worker extends EventEmitter {
 
   constructor(script: WorkerScript, opts: WorkerOptions = {}) {
     super();
+    this.ownerProcess = (globalThis as { process?: unknown }).process;
+    this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     const processContext = snapshotNodeProcessContext();
     const env =
@@ -180,13 +188,13 @@ export class Worker extends EventEmitter {
       );
       this.workerHandle = handle;
       if (handle.kind === 'worker') {
-        handle.stdout().on('data', (chunk) => this.emit('stdout', chunk));
-        handle.stderr().on('data', (chunk) => this.emit('stderr', chunk));
+        handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
+        handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start
         // is already deferred at the shared entry above.
-        this.emit('online');
+        this.emitToOwner('online');
       }
       observeProcessTerminalOutcome(handle, (outcome) => {
         if (outcome.kind === 'peererror') {
@@ -231,7 +239,7 @@ export class Worker extends EventEmitter {
 
       // Node emits 'online' when the worker starts executing — about to run the
       // script body now.
-      this.emit('online');
+      this.emitToOwner('online');
 
       const previousGlobalOnMessage = readGlobalOnMessage();
       if (shouldLoadWithModuleLoader(script, source)) {
@@ -313,7 +321,7 @@ export class Worker extends EventEmitter {
   }
 
   private emitWorkerMessage(msg: unknown): void {
-    this.emit('message', msg);
+    this.emitToOwner('message', msg);
   }
 
   private flushKernelMessages(handle: Extract<ProcessHandle, { kind: 'worker' }>): void {
@@ -347,13 +355,33 @@ export class Worker extends EventEmitter {
   }
 
   private emitWorkerError(error: unknown): void {
-    this.emit('error', error);
+    this.emitToOwner('error', error);
   }
 
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
-    this.emit('exit', code);
+    this.emitToOwner('exit', code);
+  }
+
+  private emitToOwner(event: string, ...args: unknown[]): boolean {
+    const realm = globalThis as { process?: unknown };
+    const previousProcess = realm.process;
+    const previousBootstrap = readActiveNodeProcessBootstrap();
+    realm.process = this.ownerProcess;
+    setActiveNodeProcessBootstrap(
+      this.ownerBootstrap?.process ?? null,
+      this.ownerBootstrap?.federated ?? false,
+    );
+    try {
+      return this.emit(event, ...args);
+    } finally {
+      setActiveNodeProcessBootstrap(
+        previousBootstrap?.process ?? null,
+        previousBootstrap?.federated ?? false,
+      );
+      realm.process = previousProcess;
+    }
   }
 }
 

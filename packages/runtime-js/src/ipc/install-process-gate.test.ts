@@ -12,7 +12,7 @@
  * gives this file a fresh realm.
  */
 import {
-  type WorkerSpawnSpec,
+  type KernelProcessSpec,
   publishKernelEntryBootstrap,
   publishKernelProcessSpec,
 } from '@riftydev/kernel';
@@ -31,16 +31,21 @@ const ORIGINAL_PROCESS = (globalThis as { process?: unknown }).process;
 const ORIGINAL_BUFFER = (globalThis as { Buffer?: unknown }).Buffer;
 const ORIGINAL_GLOBAL_DESCRIPTOR = Object.getOwnPropertyDescriptor(globalThis, 'global');
 
-function spec(env: Record<string, string> = {}): WorkerSpawnSpec {
+function spec(env: Record<string, string> = {}): KernelProcessSpec {
   const port = (): MessagePort => new MessageChannel().port1;
-  const value = {
+  const value: KernelProcessSpec = {
     pid: 7,
     ppid: 3,
     argv: ['rifty', '/srv.js', '--port', '4000'],
     env,
     cwd: '/workspace/app',
-    stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
-  } as unknown as WorkerSpawnSpec;
+    stdio: {
+      stdout: { write() {} },
+      stderr: { write() {} },
+      stdin: port(),
+      ipc: port(),
+    },
+  };
   publishKernelProcessSpec(value);
   return value;
 }
@@ -192,7 +197,14 @@ describe('pre-entry gate (ADR-0157)', () => {
     const s = spec();
     const proc = installNodeProcessShim({
       ...s,
-      stdio: { ...s.stdio, stdout: stdout.port1 },
+      stdio: {
+        ...s.stdio,
+        stdout: {
+          write(bytes) {
+            stdout.port1.postMessage(bytes);
+          },
+        },
+      },
     });
     applyNodeProcessTerminalBootstrap(proc, {
       stdinIsTTY: false,

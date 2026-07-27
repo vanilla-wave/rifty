@@ -38,6 +38,11 @@ found the same gap for runtime-js programs waiting on `process.stdin`.
   and buffers early stdin until a listener attaches.
 - The kernel pre-entry `install-process` shim exposes `process.stdin` over
   `KernelProcessSpec.stdio.stdin`, matching the existing stdout/stderr ports.
+
+  > **Corrected (2026-07-27, ADR-0332):** stdin remains port-backed;
+  > `KernelProcessSpec.stdout/stderr` are semantic byte writers and raw output
+  > ports stay inside kernel bootstrap.
+
 - Playground registers optional `mouse-demo`, which enables DECSET 1000+1006,
   reads one stdin chunk, disables modes, and prints escaped bytes.
 - Defer `tty.setRawMode`, literal ETX raw mode, and richer terminal process-group

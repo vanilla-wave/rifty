@@ -25,7 +25,7 @@ async function runKernelUrlEntry(
   const stdin = new MessageChannel();
   const ipc = new MessageChannel();
   const channels = [stdout, stderr, stdin, ipc];
-  const spec: WorkerSpawnSpec = {
+  const spec = {
     entry: { kind: 'url', url: 'fixture:node-entry', capabilityPorts },
     argv: ['rifty', '/workspace/direct.cjs'],
     env: {},
@@ -39,7 +39,7 @@ async function runKernelUrlEntry(
     syncRing: new SharedArrayBuffer(8),
     pid: 2,
     ppid: 1,
-  };
+  } as unknown as WorkerSpawnSpec;
   let failure: unknown;
   try {
     await runEntryLifecycle(spec, {

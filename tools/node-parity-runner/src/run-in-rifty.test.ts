@@ -32,6 +32,29 @@ describe('runInRifty', () => {
     await expect(runInRifty(workerEnvCase)).resolves.toBe(workerEnvCase.expected);
   });
 
+  it('ends synthetic physical-parent stdin so an inherited child can settle', async () => {
+    const stdout = await runInRifty({
+      kind: 'child-worker',
+      expectedPhysicalWorkers: 1,
+      cwd: '/project',
+      setup: {
+        files: {
+          'project/empty.js': '',
+        },
+      },
+      code: `
+        const { spawn } = require('node:child_process');
+        const child = spawn('node', ['empty.js'], {
+          cwd: require('node:process').cwd(),
+          stdio: 'inherit',
+        });
+        child.once('close', () => console.log('closed'));
+      `,
+    });
+
+    expect(stdout).toBe('closed\n');
+  });
+
   it('waits for keepalive-backed timers before restoring console capture', async () => {
     const stdout = await runInRifty({
       code: `

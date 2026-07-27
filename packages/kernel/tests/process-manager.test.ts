@@ -15,6 +15,7 @@ import {
   setKernelWorkerUrl,
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
+import { bindWorkerStdioOutput, sealWorkerOutput } from '../src/worker-stdio-drain.ts';
 
 type WorkerListener = (ev: MessageEvent) => void;
 
@@ -51,6 +52,15 @@ class FakeWorker implements WorkerLike {
     if (!set) return;
     for (const cb of [...set]) cb(ev);
   }
+}
+
+function sealWorkerOutputFor(worker: FakeWorker): void {
+  const init = worker.posted[0] as {
+    spec: {
+      outputState: import('../src/worker-stdio-drain.ts').WorkerOutputState;
+    };
+  };
+  sealWorkerOutput(init.spec.outputState);
 }
 
 describe('ProcessManager — cwd inheritance (ADR-0019)', () => {
@@ -202,6 +212,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     // Drive an exit on each worker.
     const exits = handles.map((h) => once(h, 'exit'));
     for (const w of workers) {
+      sealWorkerOutputFor(w);
       w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
     }
     await Promise.all(exits);
@@ -228,6 +239,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     expect(w.listenerCount('messageerror')).toBeGreaterThan(0);
 
     const exit = once(handle, 'exit');
+    sealWorkerOutputFor(w);
     w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
     await exit;
 
@@ -250,12 +262,13 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     handle.on('close', () => {});
 
     const w = factoryWorker as FakeWorker;
-    const exit = once(handle, 'exit');
+    const close = once(handle, 'close');
+    sealWorkerOutputFor(w);
     w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
-    await exit;
+    await close;
 
-    // The exit/close handlers above ran; we now expect the handle to be
-    // listener-free so long-lived hosts don't accumulate references.
+    // The close handler above ran; the handle is now listener-free so
+    // long-lived hosts don't accumulate references.
     expect(handle.listenerCount('messageerror')).toBe(0);
     expect(handle.listenerCount('close')).toBe(0);
   });
@@ -275,10 +288,18 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     });
 
     const w = factoryWorker as FakeWorker;
-    const init = w.posted[0] as { spec: { stdio: { stdout: MessagePort } } };
+    const init = w.posted[0] as {
+      spec: {
+        stdio: { stdout: MessagePort };
+        outputState: import('../src/worker-stdio-drain.ts').WorkerOutputState;
+      };
+    };
     const exit = once(handle, 'exit');
+    bindWorkerStdioOutput(init.spec.stdio.stdout, init.spec.outputState, 'stdout').write(
+      new TextEncoder().encode('late\n'),
+    );
+    sealWorkerOutputFor(w);
     w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
-    init.spec.stdio.stdout.postMessage(new TextEncoder().encode('late\n'));
     await exit;
 
     expect(chunks.join('')).toBe('late\n');
@@ -300,6 +321,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     );
     const w = factoryWorker as FakeWorker;
     const exit = once(parent, 'exit');
+    sealWorkerOutputFor(w);
     w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
     await exit;
     expect(pm.list()).toHaveLength(0);

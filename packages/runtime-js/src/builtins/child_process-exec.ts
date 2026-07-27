@@ -13,6 +13,15 @@ import type { ProcessHandle, ProcessIO } from '@riftydev/kernel';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import {
+  attachNodeProcessBootstrapIdentity,
+  readActiveNodeProcessBootstrap,
+  setActiveNodeProcessBootstrap,
+} from './process-bootstrap-identity.ts';
+import {
+  clearImmediate as runtimeClearImmediate,
+  setImmediate as runtimeSetImmediate,
+} from './timers.ts';
 
 export interface ExecScriptArgs {
   command: string;
@@ -27,6 +36,8 @@ export interface ExecScriptArgs {
    * can surface `'message'` events on it. */
   outboundMessages: EventEmitter;
   stdinPipe: SameRealmStdinPipe;
+  /** Trusted parent realm authority inherited by this logical child. */
+  federated: boolean;
 }
 
 type Listener = (...args: unknown[]) => void;
@@ -137,6 +148,8 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
     const processEvents = new EventEmitter();
     const timeouts = new Set<ReturnType<typeof hostSetTimeout>>();
     const intervals = new Set<ReturnType<typeof hostSetInterval>>();
+    const immediates = new Set<ReturnType<typeof runtimeSetImmediate>>();
+    const ownedChildren = new Set<object>();
     let ipcActive = false;
     let aborted = a.io.signal.aborted;
     let childProcess!: {
@@ -160,18 +173,26 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
     const withChildProcess = <T>(run: () => T): T => {
       const realm = globalThis as { process?: unknown };
       const previous = realm.process;
+      const previousActive = readActiveNodeProcessBootstrap();
       realm.process = childProcess;
+      setActiveNodeProcessBootstrap(childProcess, a.federated);
       try {
         return run();
       } finally {
+        setActiveNodeProcessBootstrap(
+          previousActive?.process ?? null,
+          previousActive?.federated ?? false,
+        );
         realm.process = previous;
       }
     };
     const cleanupTimers = (): void => {
       for (const handle of timeouts) hostClearTimeout(handle);
       for (const handle of intervals) hostClearInterval(handle);
+      for (const handle of immediates) runtimeClearImmediate(handle);
       timeouts.clear();
       intervals.clear();
+      immediates.clear();
     };
     const localSetTimeout = (callback: Listener, delay?: number, ...args: unknown[]) => {
       const handle = hostSetTimeout(() => {
@@ -200,6 +221,26 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
     const localClearInterval = (handle: ReturnType<typeof hostSetInterval>): void => {
       hostClearInterval(handle);
       intervals.delete(handle);
+      lifecycleWake();
+    };
+    const localSetImmediate = (callback: Listener, ...args: unknown[]) => {
+      const handle = runtimeSetImmediate(() => {
+        immediates.delete(handle);
+        try {
+          withChildProcess(() => callback(...args));
+        } finally {
+          lifecycleWake();
+        }
+      });
+      immediates.add(handle);
+      lifecycleWake();
+      return handle;
+    };
+    const localClearImmediate = (
+      handle: ReturnType<typeof runtimeSetImmediate> | undefined,
+    ): void => {
+      runtimeClearImmediate(handle);
+      if (handle !== undefined) immediates.delete(handle);
       lifecycleWake();
     };
     const invokeGuest = (listener: Listener, ...args: unknown[]): void => {
@@ -297,6 +338,101 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
         lifecycleWake();
       };
     }
+    attachNodeProcessBootstrapIdentity(childProcess, {
+      pid: a.ownHandle.pid,
+      ppid: a.ownHandle.ppid,
+    });
+    const trackOwnedChild = <T>(value: T, event: 'close' | 'exit'): T => {
+      if ((typeof value !== 'object' || value === null) && typeof value !== 'function') {
+        return value;
+      }
+      const candidate = value as {
+        once?: (name: string, listener: (...args: unknown[]) => void) => unknown;
+      };
+      if (typeof candidate.once !== 'function') return value;
+      const identity = value as object;
+      ownedChildren.add(identity);
+      candidate.once(event, () => {
+        ownedChildren.delete(identity);
+        lifecycleWake();
+      });
+      lifecycleWake();
+      return value;
+    };
+    let childProcessBuiltin: Record<string, unknown> | null = null;
+    let workerThreadsBuiltin: Record<string, unknown> | null = null;
+    let timersBuiltin: Record<string, unknown> | null = null;
+    const bindChildProcessBuiltin = (builtin: Record<string, unknown>): Record<string, unknown> => {
+      if (childProcessBuiltin !== null) return childProcessBuiltin;
+      const bound = { ...builtin };
+      for (const name of ['spawn', 'exec', 'fork', 'execSync'] as const) {
+        const value = builtin[name];
+        if (typeof value !== 'function') continue;
+        bound[name] = (...args: unknown[]) => {
+          const result = withChildProcess(() => Reflect.apply(value, undefined, args));
+          return name === 'execSync' ? result : trackOwnedChild(result, 'close');
+        };
+      }
+      childProcessBuiltin = bound;
+      return bound;
+    };
+    const bindWorkerThreadsBuiltin = (
+      builtin: Record<string, unknown>,
+    ): Record<string, unknown> => {
+      if (workerThreadsBuiltin !== null) return workerThreadsBuiltin;
+      const bound = Object.create(
+        Object.getPrototypeOf(builtin),
+        Object.getOwnPropertyDescriptors(builtin),
+      ) as Record<string, unknown>;
+      const WorkerConstructor = builtin.Worker;
+      if (typeof WorkerConstructor === 'function') {
+        const processWorker = new Proxy(WorkerConstructor, {
+          construct(target, args, newTarget) {
+            return trackOwnedChild(
+              withChildProcess(() => Reflect.construct(target, args, newTarget)),
+              'exit',
+            );
+          },
+        });
+        Object.defineProperty(bound, 'Worker', {
+          ...Object.getOwnPropertyDescriptor(builtin, 'Worker'),
+          value: processWorker,
+        });
+      }
+      workerThreadsBuiltin = bound;
+      return bound;
+    };
+    const bindTimersBuiltin = (builtin: Record<string, unknown>): Record<string, unknown> => {
+      if (timersBuiltin !== null) return timersBuiltin;
+      timersBuiltin = {
+        ...builtin,
+        setTimeout: localSetTimeout,
+        clearTimeout: localClearTimeout,
+        setInterval: localSetInterval,
+        clearInterval: localClearInterval,
+        setImmediate: localSetImmediate,
+        clearImmediate: localClearImmediate,
+      };
+      return timersBuiltin;
+    };
+    const childGlobal = Object.create(globalThis) as Record<PropertyKey, unknown>;
+    Object.defineProperties(childGlobal, {
+      process: {
+        value: childProcess,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      },
+      globalThis: { value: childGlobal, configurable: true },
+      global: { value: childGlobal, configurable: true },
+      self: { value: childGlobal, configurable: true },
+      setTimeout: { value: localSetTimeout, configurable: true },
+      clearTimeout: { value: localClearTimeout, configurable: true },
+      setInterval: { value: localSetInterval, configurable: true },
+      clearInterval: { value: localClearInterval, configurable: true },
+      setImmediate: { value: localSetImmediate, configurable: true },
+      clearImmediate: { value: localClearImmediate, configurable: true },
+    });
     const fn = new Function(
       '__stdout_write',
       '__stderr_write',
@@ -306,6 +442,11 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       'clearTimeout',
       'setInterval',
       'clearInterval',
+      'setImmediate',
+      'clearImmediate',
+      'globalThis',
+      'global',
+      'self',
       'require',
       `${code}\n//# sourceURL=${scriptPath}`,
     ) as (...args: unknown[]) => unknown;
@@ -319,12 +460,24 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
         localClearTimeout,
         localSetInterval,
         localClearInterval,
+        localSetImmediate,
+        localClearImmediate,
+        childGlobal,
+        childGlobal,
+        childGlobal,
         (specifier: unknown) => {
           if (typeof specifier !== 'string') {
             throw new TypeError('require specifier must be a string');
           }
+          const name = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
+          if (name === 'process') return childProcess;
           const builtin = loadBuiltin(specifier);
-          if (builtin !== null) return builtin;
+          if (builtin !== null) {
+            if (name === 'child_process') return bindChildProcessBuiltin(builtin);
+            if (name === 'worker_threads') return bindWorkerThreadsBuiltin(builtin);
+            if (name === 'timers') return bindTimersBuiltin(builtin);
+            return builtin;
+          }
           throw new NotImplementedError(
             'child_process.same-realm.require',
             `same-realm child cannot require non-builtin ${specifier}`,
@@ -334,15 +487,24 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
     );
     a.stdinPipe.flush();
     await Promise.resolve(result);
+    const drainGuestMicrotasks = (): Promise<void> =>
+      new Promise((resolve) => hostSetTimeout(resolve, 0));
+    await drainGuestMicrotasks();
     while (
       !finished &&
       !aborted &&
-      (timeouts.size > 0 || intervals.size > 0 || a.stdinPipe.isActive() || ipcActive)
+      (timeouts.size > 0 ||
+        intervals.size > 0 ||
+        immediates.size > 0 ||
+        ownedChildren.size > 0 ||
+        a.stdinPipe.isActive() ||
+        ipcActive)
     ) {
       await new Promise<void>((resolve) => {
         wakeLifecycle = resolve;
       });
       wakeLifecycle = () => {};
+      await drainGuestMicrotasks();
     }
     cleanupTimers();
     a.inboundIpc.off('childMessage', onChildMessage);

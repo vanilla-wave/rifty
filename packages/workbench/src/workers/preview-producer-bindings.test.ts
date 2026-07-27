@@ -6,6 +6,7 @@ import {
   createBinExecutor,
 } from '../glue/bin-executor.ts';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
+import type { ForegroundListeningControl } from '../glue/run-foreground-child.ts';
 import {
   type DevServerFailure,
   type SupervisedDevServerHandle,
@@ -128,7 +129,7 @@ function pendingFailure(): Promise<DevServerFailure> {
 
 function controllableBinSpawn() {
   let onMessage: (message: unknown) => void = () => {};
-  let onListening: (control: { ports: number[]; previewScope?: string }) => void = () => {};
+  let onListening: (control: ForegroundListeningControl) => void = () => {};
   let onExit: (code?: unknown, signal?: unknown) => void = () => {};
   const spawn = vi.fn(
     (_request: BinSpawnRequest): BinWorkerHandle => ({
@@ -153,14 +154,14 @@ function controllableBinSpawn() {
   return {
     spawn,
     emitMessage: (message: unknown) => onMessage(message),
-    emitListening: (control: { ports: number[]; previewScope?: string }) => onListening(control),
+    emitListening: (control: ForegroundListeningControl) => onListening(control),
     emitExit: (code: number | null, signal: string | null = null) => onExit(code, signal),
   };
 }
 
 function controllableNodeSpawn() {
   let onMessage: (message: unknown) => void = () => {};
-  let onListening: (control: { ports: number[]; previewScope?: string }) => void = () => {};
+  let onListening: (control: ForegroundListeningControl) => void = () => {};
   let onExit: (code?: unknown, signal?: unknown) => void = () => {};
   const control = new MessageChannel();
   const handle = {
@@ -175,9 +176,7 @@ function controllableNodeSpawn() {
       if (event === 'message') onMessage = listener;
       if (event === 'exit') onExit = listener;
     },
-    onListeningControl: (
-      listener: (control: { ports: number[]; previewScope?: string }) => void,
-    ) => {
+    onListeningControl: (listener: (control: ForegroundListeningControl) => void) => {
       onListening = listener;
     },
     send: () => {},
@@ -187,7 +186,7 @@ function controllableNodeSpawn() {
   return {
     spawn: vi.fn(() => handle),
     emitMessage: (message: unknown) => onMessage(message),
-    emitListening: (control: { ports: number[]; previewScope?: string }) => onListening(control),
+    emitListening: (control: ForegroundListeningControl) => onListening(control),
     emitExit: (code: number | null, signal: string | null = null) => {
       onExit(code, signal);
       control.port1.close();
@@ -269,6 +268,7 @@ describe('owner preview producer admission capture', () => {
     });
     await vi.waitFor(() => expect(child.spawn).toHaveBeenCalledOnce());
     child.emitListening({
+      pid: 41,
       ports: [5173],
       previewScope: 'scope-a',
     });
@@ -425,6 +425,7 @@ describe('owner preview producer admission capture', () => {
 
     const second = await replaceActorRun(actor, first);
     child.emitListening({
+      pid: 41,
       ports: [5173],
       previewScope: 'scope-bin-a',
     });
@@ -460,7 +461,7 @@ describe('owner preview producer admission capture', () => {
     const second = request(['preview', '--host', '127.0.0.1']);
 
     hooks.onStart?.(first, ctx);
-    hooks.onListening?.(first, { ports: [4173], previewScope: 'scope-first' }, ctx);
+    hooks.onListening?.(first, { pid: 41, ports: [4173], previewScope: 'scope-first' }, ctx);
     expect(preview.latest().ports).toEqual([
       expect.objectContaining({
         port: 4173,
@@ -470,7 +471,7 @@ describe('owner preview producer admission capture', () => {
     ]);
 
     hooks.onStart?.(second, ctx);
-    hooks.onListening?.(second, { ports: [4174], previewScope: 'scope-second' }, ctx);
+    hooks.onListening?.(second, { pid: 42, ports: [4174], previewScope: 'scope-second' }, ctx);
     hooks.onExit?.(first, ctx);
     expect(preview.latest().ports).toEqual([
       expect.objectContaining({
@@ -481,6 +482,39 @@ describe('owner preview producer admission capture', () => {
     ]);
 
     hooks.onExit?.(second, ctx);
+    expect(preview.latest().ports).toEqual([]);
+  });
+
+  it("does not let an old descendant's port removal clear its same-scope successor", () => {
+    const preview = previewHarness();
+    const hooks = createInstalledBinPreviewHooks({
+      captureOrigin: createPreviewOriginCapture(vi.fn()),
+      allocateSid: () => 'nodemon-supervisor',
+      previews: preview.previews,
+    });
+    const ctx = producerContext();
+    const request: BinSpawnRequest = {
+      shimPath: '/workspace/node_modules/.bin/nodemon',
+      args: [],
+      env: {},
+      cwd: ctx.cwd,
+      isTTY: false,
+    };
+
+    hooks.onStart?.(request, ctx);
+    hooks.onListening?.(request, { pid: 41, ports: [3000], previewScope: 'nodemon-run' }, ctx);
+    hooks.onListening?.(request, { pid: 42, ports: [3000], previewScope: 'nodemon-run' }, ctx);
+    hooks.onListening?.(request, { pid: 41, ports: [], previewScope: 'nodemon-run' }, ctx);
+
+    expect(preview.latest().ports).toEqual([
+      expect.objectContaining({
+        port: 3000,
+        source: 'node',
+        previewScope: 'nodemon-run',
+      }),
+    ]);
+
+    hooks.onListening?.(request, { pid: 42, ports: [], previewScope: 'nodemon-run' }, ctx);
     expect(preview.latest().ports).toEqual([]);
   });
 
@@ -511,7 +545,7 @@ describe('owner preview producer admission capture', () => {
     await vi.waitFor(() => expect(child.spawn).toHaveBeenCalledOnce());
 
     const second = await replaceActorRun(actor, first);
-    child.emitListening({ ports: [3000] });
+    child.emitListening({ pid: 41, ports: [3000] });
 
     expect(preview.latest().ports[0]).toMatchObject({
       source: 'node',

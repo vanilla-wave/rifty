@@ -42,6 +42,9 @@
 - Preserve an exact trusted dependency tree across Scratch-to-project Save:
   the existing package FIFO copies claim-free bytes, then mints target-root
   trust before the durable catalog pointer commits (ADR-0329).
+- Preview routes now consume PID-scoped private listening control and retain
+  newer live ownership when stale or never-listening child teardown arrives.
+
 - Preserve `ShellCommandLifecycleError` through project-path redaction,
   including inside `AggregateError`, so nodemon Worker peer death stays a PTY
   lifecycle error instead of a fabricated command exit.

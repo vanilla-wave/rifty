@@ -20,6 +20,7 @@
 import {
   type IpcFrame,
   type KernelProcessSpec,
+  type KernelStdioOutputWriter,
   decodeIpcFrame,
   globalProcessManager,
 } from '@riftydev/kernel';
@@ -35,6 +36,11 @@ import {
   readNodeEntryBootstrapIfPresent,
   snapshotNodeEntryTerminalBootstrap,
 } from './node-entry-runtime-config.ts';
+import {
+  attachNodeProcessBootstrapIdentity,
+  readActiveNodeProcessBootstrap,
+  setActiveNodeProcessBootstrap,
+} from './process-bootstrap-identity.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
@@ -219,7 +225,7 @@ function applyTtyShape(
 
 /** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
 function makeStdioWriter(
-  port: MessagePort,
+  port: KernelStdioOutputWriter,
   fd: number,
   isTTY: boolean,
   size: { readonly cols: number; readonly rows: number },
@@ -229,14 +235,9 @@ function makeStdioWriter(
     fd,
     write(chunk: string | Uint8Array) {
       const bytes = encodeChunk(chunk);
-      // Transfer the buffer only when we own it (TextEncoder output). A passed-in
-      // Uint8Array may share its backing buffer with the caller, so copy instead.
-      if (typeof chunk === 'string') {
-        port.postMessage(bytes, [bytes.buffer]);
-      } else {
-        const copy = new Uint8Array(bytes);
-        port.postMessage(copy, [copy.buffer]);
-      }
+      // A passed-in view may share storage with its caller; the semantic writer
+      // owns transport, while this adapter preserves Node's non-detaching write.
+      port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
       return true;
     },
   }) as NodeStdioWriter;
@@ -327,9 +328,18 @@ function makeStdinReader(
   let explicitlyPaused = false;
   let eofReceived = false;
   let endEmitted = false;
+  let keepaliveHeld = false;
+  const syncKeepalive = (): void => {
+    const shouldHold = port !== undefined && flowing && !eofReceived;
+    if (shouldHold === keepaliveHeld) return;
+    keepaliveHeld = shouldHold;
+    if (shouldHold) refEventLoop();
+    else unrefEventLoop();
+  };
   const stdin = new NodeStdinEmitter(() => {
     if (explicitlyPaused) return;
     flowing = true;
+    syncKeepalive();
     queueMicrotask(flush);
   });
 
@@ -364,6 +374,7 @@ function makeStdinReader(
   const end = (): void => {
     if (eofReceived) return;
     eofReceived = true;
+    syncKeepalive();
     flush();
   };
 
@@ -383,12 +394,14 @@ function makeStdinReader(
     resume() {
       explicitlyPaused = false;
       flowing = true;
+      syncKeepalive();
       flush();
       return stdin;
     },
     pause() {
       explicitlyPaused = true;
       flowing = false;
+      syncKeepalive();
       return stdin;
     },
   });
@@ -565,6 +578,7 @@ export class NodeProcess extends EventEmitter {
       writable: false,
     });
     if (spec) {
+      attachNodeProcessBootstrapIdentity(this, spec);
       installProcessExitErrorTrap();
       this.pid = spec.pid;
       this.ppid = spec.ppid;
@@ -1048,9 +1062,17 @@ export function writeProcessStdin(data: string | Uint8Array): void {
  * backlog: runtime-js/worker-entry-process-globals-side-effect).
  */
 export function installProcessGlobals(): void {
-  if ((globalThis as { process?: unknown }).process instanceof NodeProcess) return;
+  // A kernel-installed binding is realm-private authority. A later idempotent
+  // call must not let a guest-replaced public global replace or downgrade it.
+  if (readActiveNodeProcessBootstrap() !== null) return;
+  const active = (globalThis as { process?: unknown }).process;
+  if (active instanceof NodeProcess) {
+    setActiveNodeProcessBootstrap(active);
+    return;
+  }
   patchPromiseForNextTick();
   (globalThis as unknown as { process: NodeProcess }).process = riftyProcess;
+  setActiveNodeProcessBootstrap(riftyProcess);
   // `global === globalThis` via the single helper — Node's descriptor
   // (writable+enumerable+configurable), not a private non-enumerable alias.
   installGlobalAlias();

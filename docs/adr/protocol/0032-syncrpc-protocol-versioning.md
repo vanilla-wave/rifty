@@ -27,6 +27,12 @@ Add a `u32` SyncRpc protocol-version field to the SAB header, stamp it on every 
 
 Validation is loud and irrecoverable at the protocol layer (per ADR-0016); no cross-version compatibility is attempted.
 
+Correction 2026-07-27 (ADR-0331): `SYNC_RPC_PROTOCOL_VERSION` is now 3 because
+the request state machine gained atomic publication/dispatch claims. A claimed
+mismatched request stays `HANDLING` through its versioned error reply instead
+of publishing `IDLE` before that caller consumes it. Atomic two-peer rollout
+and no cross-version compatibility remain unchanged.
+
 ## Consequences
 
 - Mixed-version peers fail fast with `code: 'EPROTOVERSION'` instead of silently corrupting state or throwing a generic JSON parse error.

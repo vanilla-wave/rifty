@@ -28,6 +28,10 @@
 
 ### Fixed
 
+- Physical WASI stdout/stderr now use the kernel's semantic byte writers, so
+  final fd 1/fd 2 chunks share the exact Worker terminal-drain proof without
+  exposing raw ports or admission state to runtime-wasi.
+
 - **ADR-0316 closes PR #76's obsolete transform-warning seam.** The retired
   product preview1 bridge no longer has a stderr-warning path for runtime-wasi
   to own; exact preview1 execution remains covered as an explicit guest.

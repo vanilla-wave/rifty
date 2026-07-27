@@ -44,6 +44,10 @@ import {
 import { syncMirror } from './fs-sync-mirror.ts';
 import { nodeChildSpawnOptions } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
+import {
+  readActiveNodeProcessBootstrap,
+  setActiveNodeProcessBootstrap,
+} from './process-bootstrap-identity.ts';
 
 // ADR-0011 phase 3 / ADR-0039: the runtime-js `'execSync'` handler. Kernel ships
 // no default handlers after ADR-0039 — execSync is Node-API knowledge and lives
@@ -100,6 +104,7 @@ class ChildProcess extends EventEmitter {
   declare disconnect?: () => void;
   private readonly handle: ProcessHandle;
   private readonly ownerProcess: unknown;
+  private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
   #keepaliveHeld = true;
   /** Bus the child's script subscribes to for parent-sent `'childMessage'`
    * events. Exposed to the spawner via `internalIpc()`. */
@@ -119,6 +124,7 @@ class ChildProcess extends EventEmitter {
     super();
     this.handle = handle;
     this.ownerProcess = (globalThis as { process?: unknown }).process;
+    this.ownerBootstrap = readActiveNodeProcessBootstrap();
     this.pid = handle.pid;
     this.stdin = (streams.expose[0] ? streams.stdin : null) as unknown as Writable;
     this.stdout = (streams.expose[1] ? streams.stdout : null) as unknown as Readable;
@@ -181,7 +187,12 @@ class ChildProcess extends EventEmitter {
   private emitToOwner(event: string, ...args: unknown[]): boolean {
     const realm = globalThis as { process?: unknown };
     const previous = realm.process;
+    const previousBootstrap = readActiveNodeProcessBootstrap();
     realm.process = this.ownerProcess;
+    setActiveNodeProcessBootstrap(
+      this.ownerBootstrap?.process ?? null,
+      this.ownerBootstrap?.federated ?? false,
+    );
     try {
       return super.emit(event, ...args);
     } catch (error) {
@@ -194,6 +205,10 @@ class ChildProcess extends EventEmitter {
       }
       throw error;
     } finally {
+      setActiveNodeProcessBootstrap(
+        previousBootstrap?.process ?? null,
+        previousBootstrap?.federated ?? false,
+      );
       realm.process = previous;
     }
   }
@@ -329,10 +344,11 @@ function spawnViaSameRealm(
         stderrPush: (chunk) => stderr.push(chunk),
         outboundMessages: child,
         stdinPipe,
+        federated: parent.federated,
       });
     },
     parent.pid,
-    nodeChildSpawnOptions(execution.cwd),
+    nodeChildSpawnOptions(execution.cwd, parent.federated),
   );
 
   wiring.handle = handle;

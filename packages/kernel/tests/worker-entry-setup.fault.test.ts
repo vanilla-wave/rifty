@@ -12,6 +12,7 @@ import {
   setKernelDrainHook,
   setKernelPreEntryHook,
 } from '../src/worker-entry.ts';
+import { createWorkerOutputState } from '../src/worker-stdio-drain.ts';
 
 const KERNEL_ENTRY_CAPABILITY_PORTS_KEY = '__riftyKernelEntryCapabilityPorts__';
 const ORIGINAL_DEFINE_PROPERTY = Object.defineProperty;
@@ -75,6 +76,7 @@ function makeSpec(invalidRing = false): {
         stdin: ports[2],
         ipc: ports[3],
       },
+      outputState: createWorkerOutputState(),
       syncRing: invalidRing ? new SharedArrayBuffer(64) : sab,
       payloadCapacity: 32,
       pid: 2,
@@ -89,10 +91,7 @@ function expectReaped(
   ports: readonly ReturnType<typeof fakePort>[],
 ): void {
   expect(target.postMessage).toHaveBeenCalledWith({ type: 'exit', code: 1 });
-  expect(ports[3]?.postMessage).toHaveBeenCalledWith({
-    kind: 'control:exiting',
-    code: 1,
-  });
+  expect(ports[3]?.postMessage).not.toHaveBeenCalled();
   expect(target.nativeClose).toHaveBeenCalledTimes(1);
   for (const port of ports) expect(port.close).toHaveBeenCalledTimes(1);
 }

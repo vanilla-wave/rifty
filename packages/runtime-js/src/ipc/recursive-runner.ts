@@ -126,7 +126,7 @@ export function makeRecursiveRunner(): NodeEntryRunner {
         cwd: spec.cwd,
       },
       context?.parentPid ?? 1,
-      nodeChildSpawnOptions(spec.cwd),
+      nodeChildSpawnOptions(spec.cwd, context !== undefined),
     );
     if (nested.kind !== 'worker') {
       throw new Error('recursive-runner: expected a Worker process handle');

@@ -168,8 +168,7 @@ describe('check:arch layer boundaries', () => {
         "import '../../../packages/workbench/src/workers/node-program-lifecycle';\nexport const parity = 1;\n",
       'packages/workbench/src/glue/private-serializer.ts': 'export const serialize = 1;\n',
       'packages/workbench/src/workers/private-policy.ts': 'export const policy = 1;\n',
-      'packages/workbench/src/workers/node-program-lifecycle.ts':
-        'export const lifecycle = 1;\n',
+      'packages/workbench/src/workers/node-program-lifecycle.ts': 'export const lifecycle = 1;\n',
     });
     expect(ruleNames([root])).not.toContain('workbench-package-uses-sealed-entrypoints');
   });

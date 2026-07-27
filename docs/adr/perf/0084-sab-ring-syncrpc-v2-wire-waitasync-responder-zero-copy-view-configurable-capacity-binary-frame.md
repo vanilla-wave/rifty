@@ -40,6 +40,11 @@ guard). New public contract: the view ALIASES the SAB and is valid only until th
 next write to that slot — decode synchronously. Production callers do
 (sync-client, sync-dispatch). Header stays 20 bytes.
 
+Correction 2026-07-27 (ADR-0331): request-side early `STATE→IDLE` was unsafe
+under the robust second-caller fault model. V3 keeps the request `HANDLING`
+through reply publication and releases it only when that caller consumes the
+reply. The zero-copy view and synchronous-decode contract remain unchanged.
+
 ### #17 — waitAsync responder (kernel `sync-dispatch.ts` + `sab-ring.ts`)
 New public `SabRing.armRequest(timeout): WaitAsyncResult` mirrors `waitReplyAsync`
 but on REQ_STATE (REQ_STATE_INDEX is module-private, so the dispatcher can't arm
@@ -54,6 +59,10 @@ fall back to the legacy `setInterval(pollIntervalMs)` busy-poll verbatim.
 
 `getActiveTimerCount()` keeps its literal 0/1 meaning (the single global timer is
 the backstop) — the singleton invariant (ADR-0011 review §2.11) holds.
+
+Correction 2026-07-27 (ADR-0331): V3's shared `HANDLING` claim replaces the
+dispatcher's `inFlight` correctness guard. An arm parked on `HANDLING` wakes
+after caller release; reply writers no longer own a second re-arm path.
 
 ### #19 — configurable payload capacity (kernel `worker-entry.ts`/`spawn-worker.ts`/`sab-ring.ts`)
 `WorkerSpawnSpec` gains a public `payloadCapacity?: number` field (and

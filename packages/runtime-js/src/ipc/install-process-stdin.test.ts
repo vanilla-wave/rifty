@@ -3,6 +3,7 @@ import type { KernelProcessSpec } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyNodeProcessTerminalBootstrap } from '../builtins/process.ts';
+import { activeRefs, resetKeepalive } from '../internal/event-loop-keepalive.ts';
 import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
@@ -22,8 +23,8 @@ function spec(env: Record<string, string> = {}): KernelProcessSpec {
     env,
     cwd: '/workspace',
     stdio: {
-      stdout: stdout.port1,
-      stderr: stderr.port1,
+      stdout: { write: (bytes) => stdout.port1.postMessage(bytes) },
+      stderr: { write: (bytes) => stderr.port1.postMessage(bytes) },
       stdin: stdin.port1,
       ipc: ipc.port1,
     },
@@ -31,6 +32,7 @@ function spec(env: Record<string, string> = {}): KernelProcessSpec {
 }
 
 afterEach(() => {
+  resetKeepalive();
   Object.defineProperty(globalThis, 'process', {
     value: originalProcess,
     writable: true,
@@ -218,6 +220,32 @@ describe('installNodeProcessShim stdin', () => {
 
     await tick();
     expect(events).toEqual(['data:€', 'end']);
+  });
+
+  it('keeps a flowing process.stdin alive until its exact EOF', async () => {
+    const stdin = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, stdin: stdin.port1 },
+    });
+    const events: string[] = [];
+
+    process.stdin.on('data', (chunk) =>
+      events.push(`data:${new TextDecoder().decode(chunk as Uint8Array)}`),
+    );
+    process.stdin.on('end', () => events.push('end'));
+    expect(activeRefs()).toBe(1);
+    process.stdin.pause();
+    expect(activeRefs()).toBe(0);
+    process.stdin.resume();
+    expect(activeRefs()).toBe(1);
+
+    stdin.port2.postMessage(new Uint8Array([0x78]));
+    stdin.port2.postMessage({ kind: 'stdin:eof' });
+
+    await tick();
+    expect(events).toEqual(['data:x', 'end']);
+    expect(activeRefs()).toBe(0);
   });
 
   it('keeps flowing data and end internal after public newListener observers are removed', async () => {

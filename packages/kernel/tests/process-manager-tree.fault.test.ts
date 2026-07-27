@@ -548,15 +548,57 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     manager.commitRemoteProcess(41, owner.pid);
 
     Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
-    expect(() => owner.kill()).toThrow(/process\.peer-death.*upstream authority/u);
+    let failure: unknown;
+    try {
+      owner.kill();
+    } catch (error) {
+      failure = error;
+    }
     await Promise.resolve();
     await Promise.resolve();
 
+    expect(String(failure)).toMatch(/process\.peer-death.*upstream authority/u);
     expect(events).toEqual(['exit:SIGTERM', 'close:SIGTERM']);
     expect(owner.signalCode).toBe('SIGTERM');
     expect(manager.get(owner.pid)).toBeNull();
     expect(manager.list()).toEqual([]);
     expect(owner.kill()).toBe(false);
+  });
+
+  it('aggregates independent upstream teardown failures after local close', async () => {
+    let failUpstream = false;
+    publishKernelSyncApi({
+      call(method) {
+        if (method === 'process.reserve') return 7;
+        if (failUpstream) throw new Error(`${method}: injected upstream failure`);
+        return null;
+      },
+    });
+    const manager = new ProcessManager();
+    setWorkerFactoryForTests(() => new BoundaryWorker());
+    const owner = manager.spawnWorker('node', workerSpec('owner'), 1, { federated: true });
+    let closes = 0;
+    owner.on('close', () => closes++);
+    manager.reserveForwardedProcess(41, 'node', owner.pid, '/workspace', owner.pid);
+    manager.commitRemoteProcess(41, owner.pid);
+    failUpstream = true;
+
+    let failure: unknown;
+    try {
+      owner.kill();
+    } catch (error) {
+      failure = error;
+    }
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors.map((error) => String(error))).toEqual([
+      expect.stringMatching(/process\.peer-death.*injected upstream failure/u),
+      expect.stringMatching(/process\.settle.*injected upstream failure/u),
+    ]);
+    expect(closes).toBe(1);
+    expect(manager.list()).toEqual([]);
   });
 
   it('validates reserve/commit before upstream and aborts a rejected relayed PID', async () => {

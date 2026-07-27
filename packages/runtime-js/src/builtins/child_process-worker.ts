@@ -7,6 +7,10 @@ import {
   buildConfiguredNodeEntryWorkerEntry,
   nodeChildSpawnOptions,
 } from './node-entry-runtime-config.ts';
+import {
+  readActiveNodeProcessBootstrap,
+  readNodeProcessBootstrapIdentity,
+} from './process-bootstrap-identity.ts';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -51,12 +55,15 @@ interface ActiveProcess {
 
 export interface ActiveChildProcessContext {
   readonly pid: number;
+  readonly federated: boolean;
   readonly cwd: string;
   readonly env: Record<string, string>;
   readonly entryPath?: string;
 }
 
 function activeProcess(): ActiveProcess | undefined {
+  const active = readActiveNodeProcessBootstrap()?.process;
+  if (active !== undefined) return active as ActiveProcess;
   const value = (globalThis as { process?: unknown }).process;
   return typeof value === 'object' && value !== null ? (value as ActiveProcess) : undefined;
 }
@@ -88,9 +95,13 @@ function stringEnv(value: unknown): Record<string, string> {
 
 export function activeChildProcessContext(): ActiveChildProcessContext {
   const process = activeProcess();
+  const active = readActiveNodeProcessBootstrap();
+  const identity =
+    active?.identity ?? (process === undefined ? null : readNodeProcessBootstrapIdentity(process));
   const cwd = typeof process?.cwd === 'function' ? process.cwd.call(process) : '/workspace';
   return {
-    pid: typeof process?.pid === 'number' ? process.pid : 1,
+    pid: identity?.pid ?? (typeof process?.pid === 'number' ? process.pid : 1),
+    federated: active?.federated ?? false,
     cwd: typeof cwd === 'string' ? cwd : '/workspace',
     env: stringEnv(process?.env),
     ...(Array.isArray(process?.argv) && typeof process.argv[1] === 'string'
@@ -327,6 +338,6 @@ export function spawnWorkerChild(
     command,
     spec,
     parent.pid,
-    nodeChildSpawnOptions(plan.cwd),
+    nodeChildSpawnOptions(plan.cwd, parent.federated),
   );
 }

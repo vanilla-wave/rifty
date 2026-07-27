@@ -90,6 +90,10 @@ death. An ancestor close fences new reservations, terminates the actual
 subtree, and settles every record once; recording descendants dead without
 physical termination proof is forbidden.
 
+> **Specified (2026-07-27, ADR-0332):** one kernel-owned output cut admits
+> writes process-wide, snapshots exact stdout/stderr targets, and makes abrupt
+> peer death a finite no-drain-claim outcome.
+
 Workbench binds private descendant events to its existing owner token, captured
 PTY admission, and `previewScope`. Kernel owns no preview route or port claim;
 the existing PreviewRegistry remains that authority. Old process/scope events

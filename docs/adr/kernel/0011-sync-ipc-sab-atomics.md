@@ -59,6 +59,10 @@ One process model: each Node-style process runs in its own Worker realm hosted b
 - [x] `child_process.spawn`/`.fork` and `worker_threads.Worker` branch on `isSabIpcSupported() && getKernelWorkerUrl()` → route through `spawnWorker`; else in-realm path with `// fallback per ADR-0011`.
 - [x] Two conformance tests in `tests/conformance/builtins/child_process-worker.test.ts` exercise the worker branch (skip in Node-without-isolation).
 
+> **Corrected (2026-07-27, ADR-0332):** raw stdout/stderr ports and one opaque
+> output-cut state remain inside kernel bootstrap. Runtimes receive semantic byte
+> writers; child-sealed state authenticates exit and exact targets prove drain.
+
 **Phase 3 (landed 2026-05-25):**
 
 - [x] `packages/kernel/src/ipc/sync-rpc.ts` — JSON-over-UTF-8 framing (`SyncRpcRequest`/`SyncRpcReply` + `encodeRequest`/`decodeReply`/`decodeRequest`/`encodeReply`). Binary frames are a follow-up (A-021); phase 3 ships text only.

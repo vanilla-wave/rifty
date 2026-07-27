@@ -20,9 +20,7 @@ describe('Worker process-wide output cut', () => {
       stdout.port1.start();
     });
 
-    bindWorkerStdioOutput(stdout.port2, state, 'stdout').write(
-      new TextEncoder().encode('last'),
-    );
+    bindWorkerStdioOutput(stdout.port2, state, 'stdout').write(new TextEncoder().encode('last'));
     bindWorkerStdioOutput(stderr.port2, state, 'stderr').write(new Uint8Array([0x21]));
 
     expect(sealWorkerOutput(state)).toBe(true);
@@ -53,11 +51,7 @@ describe('Worker process-wide output cut', () => {
   it('fails loud on re-entry and before committed counters wrap', () => {
     const activeState = createWorkerOutputState();
     Atomics.store(new Int32Array(activeState), 1, 1);
-    const activeWriter = bindWorkerStdioOutput(
-      new MessageChannel().port1,
-      activeState,
-      'stdout',
-    );
+    const activeWriter = bindWorkerStdioOutput(new MessageChannel().port1, activeState, 'stdout');
     expect(() => activeWriter.write(new Uint8Array([1]))).toThrow(
       'Worker output writer re-entered',
     );
@@ -86,5 +80,18 @@ describe('Worker process-wide output cut', () => {
     abandonWorkerOutput(deadState);
     expect(isWorkerOutputChildSealed(deadState)).toBe(false);
     expect(sealWorkerOutput(deadState)).toBe(false);
+  });
+
+  it('releases an abrupt teardown while reporting corrupt shared control words', () => {
+    const state = createWorkerOutputState();
+    const words = new Int32Array(state);
+    Atomics.store(words, 0, 41);
+    Atomics.store(words, 1, 7);
+
+    expect(() => abandonWorkerOutput(state)).toThrow(
+      'Worker output state has invalid phase 41 and active value 7',
+    );
+    expect(Atomics.load(words, 0)).toBe(2);
+    expect(Atomics.load(words, 1)).toBe(0);
   });
 });

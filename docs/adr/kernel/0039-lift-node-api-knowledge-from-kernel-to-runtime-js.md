@@ -34,6 +34,10 @@ Move the Node-API surface out of `@riftydev/kernel` into `@riftydev/runtime-js`:
 - **Negative — public surface trim is breaking.** `@riftydev/kernel` no longer exports `installProcessShim`, `ProcessShim`, `setKernelRecursiveSpawn`, `setExecSyncScriptResolver`, `registerDefaultHandlers`, `ScriptResolver`, `RecursiveWorkerRunner`, `DefaultHandlerOptions`, `ExecSyncPayload`. Callers import from `@riftydev/runtime-js/install-process` instead. Only external caller in-repo was `child_process.ts`, updated in the same commit. CHANGELOG records the removals.
 - **Out of scope (P1 follow-ups).** Unifying `WorkerHandle.send` (still a loud-throw stub for fork-mode IPC, ADR-0011 P2 follow-up), the `stdio` port abstraction lift (P1-1), and `process.env.RIFTY_FALLBACK_NO_SAB` indirection (P2-2) all remain. This ADR addresses only the P0 Node-API leak and the P1-2 cycle from it.
 
+> **Corrected (2026-07-27, ADR-0332):** the stdout/stderr abstraction lift is
+> complete. `KernelProcessSpec` exposes semantic byte writers to runtimes while
+> kernel retains raw output ports and its terminal-drain state.
+
 ## References
 
 - 2026-05-26 kernel architecture audit (P0-1, P0-2, P1-2).

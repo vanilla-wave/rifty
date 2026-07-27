@@ -50,6 +50,7 @@ export interface ForegroundChildHandle {
 }
 
 export interface ForegroundListeningControl {
+  readonly pid: number;
   readonly ports: number[];
   readonly previewScope?: string;
 }

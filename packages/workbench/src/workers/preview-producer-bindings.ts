@@ -90,6 +90,7 @@ export function createInstalledBinPreviewHooks(options: {
         return;
       }
       options.previews.addNode(launch.sid, control.ports, previewScope, {
+        pid: control.pid,
         origin: launch.origin,
         cwd: launch.cwd,
         labelBase: launch.labelBase,
@@ -119,8 +120,9 @@ export function createNodePreviewRunHooks(options: {
     sid: options.sid,
     previewScope: options.previewScope,
     ...(options.remoteFsRoot === undefined ? {} : { remoteFsRoot: options.remoteFsRoot }),
-    onListening: (sid, ports, previewScope) =>
+    onListening: (sid, pid, ports, previewScope) =>
       options.previews.addNode(sid, ports, previewScope ?? options.previewScope, {
+        pid,
         origin,
         cwd: options.cwd,
       }),

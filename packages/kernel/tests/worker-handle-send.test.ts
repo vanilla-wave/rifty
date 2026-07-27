@@ -27,6 +27,7 @@ import {
   clearWorkerFactoryForTests,
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
+import { sealWorkerOutput } from '../src/worker-stdio-drain.ts';
 
 type WorkerListener = (ev: MessageEvent) => void;
 
@@ -53,6 +54,15 @@ class FakeWorker implements WorkerLike {
     if (!set) return;
     for (const cb of [...set]) cb(ev);
   }
+}
+
+function sealWorkerOutputFor(worker: FakeWorker): void {
+  const init = worker.posted[0] as {
+    spec: {
+      outputState: import('../src/worker-stdio-drain.ts').WorkerOutputState;
+    };
+  };
+  sealWorkerOutput(init.spec.outputState);
 }
 
 describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
@@ -208,7 +218,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
       });
 
       await vi.waitFor(() =>
-        expect(controls).toEqual([{ ports: [3000], previewScope: 'scope-a' }]),
+        expect(controls).toEqual([{ pid: handle.pid, ports: [3000], previewScope: 'scope-a' }]),
       );
       expect(messages).toEqual([]);
     } finally {
@@ -273,7 +283,29 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects a physically closed Worker peer without fabricating an exit', async () => {
+  it('fails malformed stdio before terminal instead of hanging', async () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    const worker = factoryWorker as FakeWorker;
+
+    handle.ports.stdout.dispatchEvent(
+      new MessageEvent('message', {
+        data: { malformed: true },
+      }),
+    );
+
+    await vi.waitFor(() => expect(handle.exitCode).toBe(1));
+    expect(pm.list()).toEqual([]);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an attested Worker peer close without fabricating an exit', async () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
       entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
@@ -293,7 +325,8 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     handle.on('exit', () => events.push('exit'));
     handle.on('close', () => events.push('close'));
 
-    init.spec.stdio.ipc.close();
+    sealWorkerOutputFor(factoryWorker as FakeWorker);
+    init.spec.stdio.ipc.postMessage({ kind: 'control:peer-closing' });
 
     await vi.waitFor(() => expect(events.at(-1)).toBe('close'));
     expect(events).toEqual([
@@ -305,7 +338,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     expect(pm.list()).toEqual([]);
   });
 
-  it('settles an attested control-port close with its exact exit code', async () => {
+  it('settles an attested exit with its exact Worker exit code', async () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
       entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
@@ -322,10 +355,13 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     handle.on('exit', (code) => events.push(`exit:${String(code)}`));
     handle.on('close', (code) => events.push(`close:${String(code)}`));
 
-    init.spec.stdio.ipc.postMessage({ kind: 'control:exiting', code: 7 });
-    init.spec.stdio.ipc.close();
+    sealWorkerOutputFor(factoryWorker as FakeWorker);
+    (factoryWorker as FakeWorker).fire(
+      'message',
+      new MessageEvent('message', { data: { type: 'exit', code: 7 } }),
+    );
 
-    await vi.waitFor(() => expect(handle.exitCode).toBe(7));
+    await vi.waitFor(() => expect(events.at(-1)).toBe('close:7'));
     expect(events).toEqual(['exit:7', 'close:7']);
     expect(pm.list()).toEqual([]);
   });
@@ -347,6 +383,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
 
     const w = factoryWorker as FakeWorker;
     const exit = once(handle, 'exit');
+    sealWorkerOutputFor(w);
     w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
     await exit;
 

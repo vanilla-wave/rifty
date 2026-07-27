@@ -387,8 +387,12 @@ function installSeededProcessMode(
       env: {},
       cwd,
       stdio: {
-        stdout: stdout.port1,
-        stderr: stderr.port1,
+        stdout: {
+          write: (bytes) => stdout.port1.postMessage(bytes),
+        },
+        stderr: {
+          write: (bytes) => stderr.port1.postMessage(bytes),
+        },
         stdin: stdin.port1,
         ipc: ipc.port1,
       },
@@ -1156,15 +1160,19 @@ export async function runInRiftyInCurrentRealm(
     console.warn = writeStderr;
     console.error = writeStderr;
 
+    // Native no-input uses fd 0 `ignore` (EOF). End physical mode's synthetic
+    // parent stdin too, so inherited children never wait on a harness-only pipe.
+    const stdinChunks =
+      testCase.stdin ?? (isPhysicalWorkerCase(testCase) ? ([] as const) : undefined);
     // Native Node receives stdin as soon as the child is spawned. Start the real
     // MessagePort feed before entry evaluation too, then await BOTH operations.
     // This lets ESM top-level await consume stdin. Feed completion is the hidden
     // receiver-side EOF ACK; the disposable Worker's case deadline owns a guest
     // that never resumes the public stream or otherwise fails to settle.
     const stdinFeed =
-      testCase.stdin === undefined
+      stdinChunks === undefined
         ? Promise.resolve()
-        : (seededProcess?.feedStdin(testCase.stdin) ??
+        : (seededProcess?.feedStdin(stdinChunks) ??
           Promise.reject(new Error('stdin parity case has no seeded process')));
     const entryEvaluation = Promise.resolve().then(async () => {
       if (testCase.kind === 'ts-esm') {

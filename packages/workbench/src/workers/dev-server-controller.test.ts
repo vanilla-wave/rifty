@@ -231,6 +231,7 @@ describe('createDevServerController', () => {
     await Promise.resolve();
     await Promise.resolve();
     registry.addNode('node-1', [3000], 'scope-n', {
+      pid: 2,
       origin: ptyOrigin('terminal-2', 'run-2'),
     });
     ac.abort();

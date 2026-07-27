@@ -18,13 +18,14 @@ afterEach(() => {
 
 function realSeededProcess(): { stdin: unknown } {
   const port = (): MessagePort => new MessageChannel().port1;
+  const writer = (): KernelProcessSpec['stdio']['stdout'] => ({ write() {} });
   const spec: KernelProcessSpec = {
     pid: 2,
     ppid: 1,
     argv: ['node', '/entry.js'],
     env: { RIFTY_NODE_SERVE: '1' },
     cwd: '/workspace',
-    stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
+    stdio: { stdout: writer(), stderr: writer(), stdin: port(), ipc: port() },
   };
   const process = installNodeProcessShim(spec);
   applyNodeProcessTerminalBootstrap(process, {

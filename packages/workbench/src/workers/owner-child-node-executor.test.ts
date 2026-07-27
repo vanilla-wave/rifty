@@ -508,11 +508,11 @@ describe('owner-child-node-executor', () => {
     const p = exec('/w/server.js', [], ctx, { sid: 's1', onListening, onExit });
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     fake.out(new TextEncoder().encode('hi\n'));
-    fake.emit('control:listening', { ports: [3000] });
+    fake.emit('control:listening', { pid: 41, ports: [3000] });
     fake.emit('exit', 0, null);
     expect(await p).toEqual({ code: 0, signal: null });
     expect(stdout.join('')).toBe('hi\n');
-    expect(onListening).toHaveBeenCalledWith('s1', [3000], undefined);
+    expect(onListening).toHaveBeenCalledWith('s1', 41, [3000], undefined);
     expect(onExit).toHaveBeenCalledWith('s1');
   });
 
@@ -533,12 +533,13 @@ describe('owner-child-node-executor', () => {
     });
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     fake.emit('control:listening', {
+      pid: 41,
       ports: [3000],
       previewScope: 'node-run-scope',
     });
     fake.emit('exit', 0, null);
     expect(await p).toEqual({ code: 0, signal: null });
-    expect(onListening).toHaveBeenCalledWith('s1', [3000], 'node-run-scope');
+    expect(onListening).toHaveBeenCalledWith('s1', 41, [3000], 'node-run-scope');
   });
 
   it('Ctrl-C kills the child and mutes trailing output', async () => {

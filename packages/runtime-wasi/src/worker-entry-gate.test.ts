@@ -29,6 +29,9 @@ const PROC_EXIT_0_B64 =
   'AGFzbQEAAAABCAJgAX8AYAAAAiQBFndhc2lfc25hcHNob3RfcHJldmlldzEJcHJvY19leGl0AAADAgEBBwoBBl9zdGFydAABCggBBgBBABAACw==';
 
 function specWith(env: Record<string, string>): KernelProcessSpec {
+  const writer = (target: MessagePort) => ({
+    write: (bytes: Uint8Array) => target.postMessage(bytes),
+  });
   return {
     pid: 2,
     ppid: 1,
@@ -36,8 +39,8 @@ function specWith(env: Record<string, string>): KernelProcessSpec {
     env,
     cwd: '/',
     stdio: {
-      stdout: new MessageChannel().port1,
-      stderr: new MessageChannel().port1,
+      stdout: writer(new MessageChannel().port1),
+      stderr: writer(new MessageChannel().port1),
       stdin: new MessageChannel().port1,
       ipc: new MessageChannel().port1,
     },

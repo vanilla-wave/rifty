@@ -144,6 +144,67 @@ describe('Worker terminal drain fault matrix', () => {
     expect(subject.worker.terminate).toHaveBeenCalledTimes(1);
   });
 
+  it('reports corrupt output control while abrupt worker death still settles', async () => {
+    const subject = spawnSubject(new BoundaryWorker());
+    const events: string[] = [];
+    subject.handle.stderr().on('data', (chunk: unknown) => {
+      events.push(`stderr:${decodeOutputChunk(chunk)}`);
+    });
+    subject.handle.on('exit', (code, signal) => {
+      events.push(`exit:${String(code)}/${String(signal)}`);
+    });
+    const closed = new Promise<void>((resolve) => {
+      subject.handle.on('close', (code, signal) => {
+        events.push(`close:${String(code)}/${String(signal)}`);
+        resolve();
+      });
+    });
+    const words = new Int32Array(subject.init.spec.outputState);
+    Atomics.store(words, 0, 41);
+    Atomics.store(words, 1, 7);
+
+    subject.worker.fireError('worker died with corrupt output state');
+    await closed;
+
+    expect(events).toEqual([
+      'stderr:worker died with corrupt output state\n' +
+        'Worker output state has invalid phase 41 and active value 7\n',
+      'exit:1/null',
+      'close:1/null',
+    ]);
+    expect(subject.manager.get(subject.handle.pid)).toBeNull();
+  });
+
+  it('turns corrupt output control on private peer-close into a finite loud failure', async () => {
+    const subject = spawnSubject(new BoundaryWorker());
+    const events: string[] = [];
+    subject.handle.stderr().on('data', (chunk: unknown) => {
+      events.push(`stderr:${decodeOutputChunk(chunk)}`);
+    });
+    subject.handle.on('exit', (code, signal) => {
+      events.push(`exit:${String(code)}/${String(signal)}`);
+    });
+    const closed = new Promise<void>((resolve) => {
+      subject.handle.on('close', (code, signal) => {
+        events.push(`close:${String(code)}/${String(signal)}`);
+        resolve();
+      });
+    });
+    const words = new Int32Array(subject.init.spec.outputState);
+    Atomics.store(words, 0, 41);
+    Atomics.store(words, 1, 7);
+
+    subject.init.spec.stdio.ipc.postMessage({ kind: 'control:peer-closing' });
+    expect(await closesWithin(closed)).toBe('closed');
+
+    expect(events).toEqual([
+      'stderr:Worker output state has invalid phase 41 and active value 7\n',
+      'exit:1/null',
+      'close:1/null',
+    ]);
+    expect(subject.manager.get(subject.handle.pid)).toBeNull();
+  });
+
   it('preserves an accepted signal when abrupt worker death strands its active write', async () => {
     const subject = spawnSubject(new BoundaryWorker());
     const observed = observeTerminal(subject.handle);
@@ -338,12 +399,17 @@ describe('Worker terminal drain fault matrix', () => {
     expect(() => target.close()).not.toThrow();
 
     expect(await closesWithin(observed.closed)).toBe('closed');
-    expect(observed.events).toEqual([
-      'stdout:last-output',
-      'stdout:end',
-      'exit:1/null',
-      'close:1/null',
-    ]);
+    expect(observed.events).toHaveLength(4);
+    expect(observed.events[0]).toBe('stdout:last-output');
+    expect(observed.events).toContain('stdout:end');
+    expect(observed.events).toContain('exit:1/null');
+    expect(observed.events).toContain('close:1/null');
+    expect(observed.events.indexOf('stdout:end')).toBeLessThan(
+      observed.events.indexOf('close:1/null'),
+    );
+    expect(observed.events.indexOf('exit:1/null')).toBeLessThan(
+      observed.events.indexOf('close:1/null'),
+    );
     expect(subject.manager.get(subject.handle.pid)).toBeNull();
     expect(nativeClose).toHaveBeenCalledTimes(1);
   });

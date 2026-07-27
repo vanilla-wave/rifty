@@ -25,6 +25,10 @@
 
 ### Fixed
 
+- Same-realm `child_process` now preserves the child's trusted `process`
+  identity through async callbacks, child-bound builtins, nested children, and
+  `worker_threads`; owned async work keeps the child live until it settles.
+
 - A kernel-backed `worker_threads.Worker` now surfaces physical peer death as
   `error` followed by `exit(1)` instead of remaining permanently live.
 

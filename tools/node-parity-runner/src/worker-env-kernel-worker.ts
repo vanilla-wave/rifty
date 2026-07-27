@@ -7,11 +7,16 @@ import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
+import { publishKernelProcessSpec } from '../../../packages/kernel/src/shared-globals.ts';
 import {
   type WorkerInitMessage,
   type WorkerSpawnSpec,
   runEntryLifecycle,
 } from '../../../packages/kernel/src/worker-entry.ts';
+import {
+  bindWorkerStdioOutput,
+  sealWorkerOutput,
+} from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { runNodeEntry } from '../../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
   recordRejection,
@@ -75,6 +80,21 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
 }
 
 async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
+  const stdout = bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout');
+  const stderr = bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr');
+  publishKernelProcessSpec({
+    pid: spec.pid,
+    ppid: spec.ppid,
+    argv: spec.argv,
+    env: spec.env,
+    cwd: spec.cwd,
+    stdio: {
+      stdout,
+      stderr,
+      stdin: spec.stdio.stdin,
+      ipc: spec.stdio.ipc,
+    },
+  });
   const outcome = await runEntryLifecycle(spec, {
     preEntryHook: installNodeRuntime,
     drainHook: null,
@@ -85,15 +105,16 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
       await runConfiguredNodeEntry(spec);
     },
     writeStderr(bytes) {
-      spec.stdio.stderr.postMessage(bytes);
+      stderr.write(bytes);
     },
   });
 
   // `worker_threads.Worker` uses serve:true. A clean entry stays alive for its
   // parentPort; only setup failure is reaped by the production kernel contract.
   if (outcome.threw) {
-    spec.stdio.ipc.postMessage({ kind: 'control:exiting', code: outcome.code });
-    hostPort.postMessage({ type: 'exit', code: outcome.code });
+    if (sealWorkerOutput(spec.outputState)) {
+      hostPort.postMessage({ type: 'exit', code: outcome.code });
+    }
   }
 }
 

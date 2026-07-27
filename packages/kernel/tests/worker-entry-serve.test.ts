@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { finalizeWorkerEntry, installWorkerPeerCloseAttestation } from '../src/worker-entry.ts';
 import type { WorkerSpawnSpec, WorkerStdioPorts } from '../src/worker-entry.ts';
+import { createWorkerOutputState } from '../src/worker-stdio-drain.ts';
 
 /**
  * ADR-0144 (the serve-worker gate for ADR-0143 single-store-owner): a `serve` worker whose entry finishes
@@ -40,6 +41,7 @@ function makeSpec(serve: boolean | undefined): {
     env: {},
     cwd: '/',
     stdio: { stdout, stderr, stdin, ipc },
+    outputState: createWorkerOutputState(),
     syncRing: new SharedArrayBuffer(64),
     pid: 2,
     ppid: 1,
@@ -68,17 +70,17 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
   it('attests an abrupt realm close on the exact control port before physical close', () => {
     const events: string[] = [];
     const target = {
+      postMessage: vi.fn(),
       close: vi.fn(() => events.push('close')),
     };
-    const ipc = {
-      postMessage: vi.fn(() => events.push('peer-closing')),
-    };
-    installWorkerPeerCloseAttestation(target, ipc);
+    const { spec } = makeSpec(undefined);
+    spec.stdio.ipc.postMessage = vi.fn(() => events.push('peer-closing'));
+    installWorkerPeerCloseAttestation(target, spec);
 
     target.close();
 
     expect(events).toEqual(['peer-closing', 'close']);
-    expect(ipc.postMessage).toHaveBeenCalledWith({ kind: 'control:peer-closing' });
+    expect(spec.stdio.ipc.postMessage).toHaveBeenCalledWith({ kind: 'control:peer-closing' });
   });
 
   it('keeps a serve worker alive when its entry resolved without throwing', () => {
@@ -107,10 +109,7 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
     });
 
     expect(target.postMessage).toHaveBeenCalledWith({ type: 'exit', code: 0 });
-    expect(spec.stdio.ipc.postMessage).toHaveBeenCalledWith({
-      kind: 'control:exiting',
-      code: 0,
-    });
+    expect(spec.stdio.ipc.postMessage).not.toHaveBeenCalled();
     expect(target.close).toHaveBeenCalledTimes(1);
     expect(ports.stdout).toHaveBeenCalledTimes(1);
     expect(ports.stderr).toHaveBeenCalledTimes(1);
@@ -129,10 +128,7 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
     });
 
     expect(target.postMessage).toHaveBeenCalledWith({ type: 'exit', code: 1 });
-    expect(spec.stdio.ipc.postMessage).toHaveBeenCalledWith({
-      kind: 'control:exiting',
-      code: 1,
-    });
+    expect(spec.stdio.ipc.postMessage).not.toHaveBeenCalled();
     expect(target.close).toHaveBeenCalledTimes(1);
     expect(ports.capability).toHaveBeenCalledTimes(1);
   });
