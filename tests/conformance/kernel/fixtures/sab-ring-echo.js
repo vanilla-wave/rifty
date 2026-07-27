@@ -19,7 +19,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 
 if (!parentPort) throw new Error('sab-ring-echo: must run inside a Worker');
 
-const { sab, payloadCapacity, protocolVersion } = workerData;
+const { sab, payloadCapacity, protocolVersion, successorPublicationGateSab } = workerData;
 const HEADER_BYTES = 20;
 const VERSION_INDEX = 0;
 const REQ_STATE_INDEX = 1;
@@ -34,15 +34,17 @@ const repPayloadOffset = HEADER_BYTES + payloadCapacity;
 const STATE_IDLE = 0;
 const STATE_READY = 1;
 const STATE_HANDLING = 2;
+const successorPublicationGate =
+  successorPublicationGateSab === undefined ? null : new Int32Array(successorPublicationGateSab);
+let probeSuccessorPublication = successorPublicationGate !== null;
 
 parentPort.postMessage({ type: 'ready' });
 
 for (;;) {
   // Block until the parent publishes READY, then claim exactly once.
-  while (
-    Atomics.compareExchange(i32, REQ_STATE_INDEX, STATE_READY, STATE_HANDLING) !== STATE_READY
-  ) {
-    const state = Atomics.load(i32, REQ_STATE_INDEX);
+  for (;;) {
+    const state = Atomics.compareExchange(i32, REQ_STATE_INDEX, STATE_READY, STATE_HANDLING);
+    if (state === STATE_READY) break;
     Atomics.wait(i32, REQ_STATE_INDEX, state);
   }
 
@@ -78,8 +80,9 @@ for (;;) {
   Atomics.store(i32, VERSION_INDEX, protocolVersion ?? reqVersion);
   Atomics.store(i32, REP_STATE_INDEX, 1);
   Atomics.notify(i32, REP_STATE_INDEX);
-  Atomics.wait(i32, REQ_STATE_INDEX, STATE_HANDLING);
-  if (Atomics.load(i32, REQ_STATE_INDEX) !== STATE_IDLE) {
-    throw new Error('sab-ring-echo: caller did not release HANDLING to IDLE');
+  if (probeSuccessorPublication) {
+    probeSuccessorPublication = false;
+    parentPort.postMessage({ type: 'reply-published' });
+    Atomics.wait(successorPublicationGate, 0, STATE_IDLE);
   }
 }
