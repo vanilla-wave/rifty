@@ -300,7 +300,7 @@
 .exp-zone {
   position: absolute;
   top: 6px;
-  height: 672px;
+  bottom: 6px;
   background: rgb(from var(--zc) r g b / 0.05);
   border: 1px solid rgb(from var(--zc) r g b / 0.2);
   border-radius: 12px;
@@ -554,7 +554,7 @@
 .exp-lanes {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
   align-items: start;
   /* bounded viewport to match the graph boards' fixed-height pattern */

@@ -12,11 +12,18 @@
  * Boot a sandbox:
  * ```ts
  * import { checkCapabilities, createSandbox } from '@riftydev/sdk';
- * if (!checkCapabilities().sufficient) showUnsupportedNotice();
- * const sandbox = await createSandbox({
- *   workerUrl: new URL('@riftydev/runtime-js/worker', import.meta.url),
- * });
- * await sandbox.runtime.eval('console.log(1 + 2)');
+ * async function boot(workerUrl: string | URL): Promise<void> {
+ *   const caps = checkCapabilities();
+ *   if (!caps.sufficient || !caps.capabilities.crossOriginIsolated) {
+ *     throw new Error(caps.summary);
+ *   }
+ *   const sandbox = await createSandbox({ workerUrl });
+ *   try {
+ *     await sandbox.runtime.eval('console.log(1 + 2)');
+ *   } finally {
+ *     sandbox.dispose();
+ *   }
+ * }
  * ```
  */
 export { COI_REQUIRED_MESSAGE, createSandbox } from './sandbox.ts';

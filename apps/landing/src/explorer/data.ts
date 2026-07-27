@@ -1,5 +1,5 @@
-// Authoritative live architecture-graph data. Layout originates in the design
-// handoff; runtime copy follows the current public contracts.
+// Authoritative live architecture-graph data. Layout descends from the frozen
+// design handoff; runtime copy follows the current public contracts.
 
 export type Realm = 'page' | 'worker' | 'sw' | 'iframe' | 'ext';
 export type Compat = 'ok' | 'warn' | 'no';
@@ -8,7 +8,10 @@ export type EdgeKind = 'import' | 'data' | 'control' | 'ipc';
 
 export type NodeId =
   | 'playground'
+  | 'workbench'
+  | 'owner'
   | 'sdk'
+  | 'sandboxvfs'
   | 'terminal'
   | 'shell'
   | 'npm'
@@ -37,7 +40,19 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'Playground UI',
     realm: 'page',
     compat: 'ok',
-    role: 'SolidJS + Monaco + xterm IDE-in-a-tab. The demo product; the only place solid-js may appear.',
+    role: 'SolidJS + Monaco + xterm IDE-in-a-tab. UI policy only; runtime authority lives behind Workbench.',
+  },
+  workbench: {
+    label: '@riftydev/workbench',
+    realm: 'page',
+    compat: 'ok',
+    role: 'Framework-free project, session, run, file, document, terminal and preview API.',
+  },
+  owner: {
+    label: 'workspace owner',
+    realm: 'worker',
+    compat: 'ok',
+    role: 'One owner Worker holds project, VFS, package, PTY and preview-producer state and supervises child Workers.',
   },
   sdk: {
     label: '@riftydev/sdk',
@@ -45,21 +60,27 @@ export const NODES: Record<NodeId, NodeDef> = {
     compat: 'ok',
     role: 'Umbrella front door. createSandbox() + a 6-feature capability probe. Framework-free.',
   },
+  sandboxvfs: {
+    label: 'standalone VFS init',
+    realm: 'page',
+    compat: 'ok',
+    role: 'createSandbox() attempts caller-realm VFS init. PAGE callers fall back to memory because sync OPFS is Worker-only; the runtime Worker owns a separate backend.',
+  },
   terminal: {
     label: 'terminal',
     realm: 'page',
     compat: 'ok',
-    role: 'xterm.js wrapper — line editor, history, host-provided ghost-text completions. Dispatches to the shell.',
+    role: 'xterm.js wrapper — line editor, history, host-provided ghost-text completions. Dispatches through Workbench.',
   },
   shell: {
     label: 'shell',
-    realm: 'page',
+    realm: 'worker',
     compat: 'ok',
     role: 'Bash-flavoured shell. Pure-JS coreutils over the VFS; .bin PATH; PTY.',
   },
   npm: {
     label: 'npm-client',
-    realm: 'page',
+    realm: 'worker',
     compat: 'ok',
     role: 'In-browser npm: semver resolve, registry fetch, gunzip + tar, SHA verify, link.',
   },
@@ -73,7 +94,7 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'runtime-wasi',
     realm: 'worker',
     compat: 'ok',
-    role: 'WASI preview1 runner for raw .wasm guests. runWasi stays in-realm; createWasiProcess uses a Worker and the shared VFS.',
+    role: 'Raw WASI preview1 runner. runWasi stays in-realm; createWasiProcess kernel-spawns a Worker with process-shaped stdio/exit and configured preopens.',
   },
   esbuild: {
     label: 'esbuild JS API',
@@ -85,11 +106,11 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'vite dev server',
     realm: 'worker',
     compat: 'ok',
-    role: 'The installed Vite 7 dev server in a Worker. Real module graph + cross-realm HMR bridge.',
+    role: 'Exact Vite 7.3.6 dev + HMR; opt-in Vite 8.0.16 dev/build/preview uses Rolldown with HMR disabled.',
   },
   kernel: {
     label: 'kernel',
-    realm: 'page',
+    realm: 'worker',
     compat: 'ok',
     role: 'Process / scheduling / IPC core. Worker-as-process over SAB + Atomics. Node-API-agnostic.',
   },
@@ -101,15 +122,15 @@ export const NODES: Record<NodeId, NodeDef> = {
   },
   vfs: {
     label: 'virtual FS',
-    realm: 'page',
+    realm: 'worker',
     compat: 'ok',
-    role: 'Memory + OPFS backends with a synchronous mirror. One filesystem, one source of truth.',
+    role: 'Memory + OPFS backends with sync mirrors. Standalone Workers use realm-local state; Workbench children reach the owner VFS through sync IPC.',
   },
   net: {
     label: 'net + port registry',
-    realm: 'page',
+    realm: 'worker',
     compat: 'ok',
-    role: 'node:net/http/ws over a per-realm port registry. HTTP servers/clients, WS bridge.',
+    role: 'node:net/http/ws over realm-local virtual port registries, with cross-realm bind claims and preview/loopback bridges.',
   },
   httpserver: {
     label: 'http server',
@@ -121,7 +142,7 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'service worker',
     realm: 'sw',
     compat: 'ok',
-    role: 'Preview/HMR fetch-routing bridge. Intercepts /preview/<port>/ and routes to the in-tab server.',
+    role: 'Preview fetch-routing bridge. Intercepts /preview/<port>/ and routes to the in-tab server.',
   },
   preview: {
     label: 'preview iframe',
@@ -130,10 +151,10 @@ export const NODES: Record<NodeId, NodeDef> = {
     role: 'The sandboxed preview pane. Loads /preview/<port>/; renders the in-tab server response.',
   },
   registry: {
-    label: 'npmjs registry',
+    label: 'registry proxy',
     realm: 'ext',
     compat: 'ok',
-    role: 'The real npm registry, reached through a same-origin proxy (egress).',
+    role: 'npm egress through a configured CORS/CORP registry proxy; local development uses a same-origin path.',
   },
 };
 
@@ -168,7 +189,7 @@ export const CEIL: CeilDef[] = [
     id: 'c_sqlite',
     label: 'node:sqlite',
     compat: 'warn',
-    role: 'DatabaseSync over sql.js WASM — works, but in-memory only.',
+    role: 'DatabaseSync subset over sql.js WASM — in-memory only.',
   },
   {
     id: 'c_vm',
@@ -180,13 +201,13 @@ export const CEIL: CeilDef[] = [
     id: 'c_drain',
     label: 'event-loop drain',
     compat: 'warn',
-    role: '30s wall-clock force-kill — the one deliberate, disclosed divergence from Node.',
+    role: '30s wall-clock force-kill — a deliberate, disclosed divergence from Node.',
   },
   {
     id: 'c_preview',
     label: 'cross-realm preview',
     compat: 'warn',
-    role: 'Buffered (M12). Streaming over SSE loud-throws rather than faking it.',
+    role: 'Page preview buffers finite bodies; unbounded SSE/NDJSON fails loudly. Service-to-service loopback streams live.',
   },
 ];
 
@@ -197,11 +218,20 @@ export interface LayerDef {
 }
 
 export const LAYERS: LayerDef[] = [
-  { id: 'playground', name: 'Playground · SDK', nodes: ['playground', 'sdk'] },
+  { id: 'playground', name: 'Playground', nodes: ['playground'] },
+  {
+    id: 'workbench',
+    name: 'Workbench · SDK',
+    nodes: ['workbench', 'owner', 'sdk', 'sandboxvfs'],
+  },
   { id: 'tools', name: 'Tools', nodes: ['terminal', 'shell', 'npm'] },
   { id: 'runtimes', name: 'Runtimes', nodes: ['runtimejs', 'runtimewasi', 'esbuild', 'vite'] },
   { id: 'kernel', name: 'Kernel', nodes: ['kernel', 'sab'] },
-  { id: 'primitives', name: 'vfs / io / net', nodes: ['vfs', 'net', 'httpserver'] },
+  {
+    id: 'primitives',
+    name: 'vfs / io / net',
+    nodes: ['sandboxvfs', 'vfs', 'net', 'httpserver'],
+  },
 ];
 
 export interface RealmDef {
@@ -215,17 +245,31 @@ export const REALMS: RealmDef[] = [
   {
     id: 'page',
     name: 'PAGE',
-    sub: 'main thread · owner',
-    nodes: ['playground', 'sdk', 'terminal', 'shell', 'npm', 'kernel', 'vfs', 'net', 'registry'],
+    sub: 'UI · public façades',
+    nodes: ['playground', 'workbench', 'sdk', 'sandboxvfs', 'terminal'],
   },
   {
     id: 'worker',
     name: 'WORKERS',
-    sub: 'Worker-as-process',
-    nodes: ['runtimejs', 'runtimewasi', 'esbuild', 'vite', 'httpserver', 'sab'],
+    sub: 'owner · supervised children',
+    nodes: [
+      'owner',
+      'shell',
+      'npm',
+      'kernel',
+      'vfs',
+      'net',
+      'runtimejs',
+      'runtimewasi',
+      'esbuild',
+      'vite',
+      'httpserver',
+      'sab',
+    ],
   },
   { id: 'sw', name: 'SERVICE WORKER', sub: 'fetch router', nodes: ['sw'] },
   { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'sandboxed', nodes: ['preview'] },
+  { id: 'ext', name: 'EXTERNAL', sub: 'configured egress', nodes: ['registry'] },
 ];
 
 export interface EdgeDef {
@@ -234,30 +278,38 @@ export interface EdgeDef {
   kind: EdgeKind;
 }
 
-// structural dependency graph (persistent edges, drawn at all times)
+// Selected runtime topology (persistent edges, drawn at all times).
 export const EDGES: EdgeDef[] = [
-  { from: 'playground', to: 'sdk', kind: 'import' },
-  { from: 'playground', to: 'terminal', kind: 'import' },
-  { from: 'sdk', to: 'kernel', kind: 'control' },
-  { from: 'terminal', to: 'shell', kind: 'control' },
+  { from: 'playground', to: 'workbench', kind: 'import' },
+  { from: 'terminal', to: 'workbench', kind: 'control' },
+  { from: 'workbench', to: 'owner', kind: 'ipc' },
+  { from: 'sdk', to: 'sandboxvfs', kind: 'data' },
+  { from: 'sdk', to: 'sw', kind: 'control' },
+  { from: 'sdk', to: 'runtimejs', kind: 'control' },
+  { from: 'owner', to: 'shell', kind: 'control' },
+  { from: 'owner', to: 'npm', kind: 'control' },
+  { from: 'owner', to: 'kernel', kind: 'control' },
+  { from: 'owner', to: 'vfs', kind: 'data' },
+  { from: 'owner', to: 'net', kind: 'control' },
+  { from: 'workbench', to: 'net', kind: 'data' },
   { from: 'shell', to: 'npm', kind: 'control' },
   { from: 'shell', to: 'vfs', kind: 'import' },
   { from: 'npm', to: 'vfs', kind: 'data' },
   { from: 'npm', to: 'registry', kind: 'data' },
-  { from: 'runtimejs', to: 'kernel', kind: 'import' },
-  { from: 'runtimejs', to: 'net', kind: 'import' },
-  { from: 'runtimejs', to: 'vfs', kind: 'import' },
+  { from: 'kernel', to: 'runtimejs', kind: 'control' },
+  { from: 'kernel', to: 'runtimewasi', kind: 'control' },
+  { from: 'runtimejs', to: 'owner', kind: 'ipc' },
+  { from: 'runtimejs', to: 'net', kind: 'data' },
+  { from: 'runtimejs', to: 'vfs', kind: 'data' },
   { from: 'runtimejs', to: 'sab', kind: 'ipc' },
-  { from: 'runtimewasi', to: 'kernel', kind: 'import' },
   { from: 'runtimewasi', to: 'vfs', kind: 'data' },
-  { from: 'esbuild', to: 'runtimejs', kind: 'import' },
   { from: 'vite', to: 'esbuild', kind: 'control' },
   { from: 'vite', to: 'net', kind: 'data' },
-  { from: 'kernel', to: 'sab', kind: 'data' },
+  { from: 'net', to: 'preview', kind: 'ipc' },
+  { from: 'sab', to: 'owner', kind: 'ipc' },
   { from: 'net', to: 'httpserver', kind: 'control' },
-  { from: 'net', to: 'registry', kind: 'data' },
   { from: 'preview', to: 'sw', kind: 'data' },
-  { from: 'sw', to: 'net', kind: 'ipc' },
+  { from: 'sw', to: 'workbench', kind: 'ipc' },
 ];
 
 export interface ScnStep {
@@ -280,14 +332,16 @@ export const SCN: Record<ScenarioId, Scenario> = {
     steps: [
       {
         node: 'sdk',
-        t: 'createSandbox() probes capabilities — COI, SAB, OPFS-sync, Atomics, Service Worker',
+        t: 'createSandbox() probes COI, SAB, Atomics.waitAsync, OPFS sync access, Service Worker and Worker',
       },
-      { node: 'vfs', t: 'Bring up the VFS — OPFS storage, non-fatally falling back to memory' },
+      {
+        node: 'sandboxvfs',
+        t: 'Attempt caller-realm VFS init; PAGE falls back to memory because sync OPFS is Worker-only',
+      },
       { node: 'sw', t: 'Register the service worker (skippable; a failure is non-fatal)' },
-      { node: 'kernel', t: 'Spawn the runtime worker over SharedArrayBuffer + Atomics' },
       {
         node: 'runtimejs',
-        t: 'createSandbox() returns a Sandbox; Sandbox.runtime emits ready when the worker boots',
+        t: 'Spawn a dedicated runtime Worker; return Sandbox while Sandbox.runtime reports its lifecycle',
       },
     ],
   },
@@ -295,11 +349,12 @@ export const SCN: Record<ScenarioId, Scenario> = {
     label: 'npm install express',
     cmd: 'npm install express',
     steps: [
-      { node: 'terminal', t: 'Type npm install express in the terminal' },
+      { node: 'terminal', t: 'Submit npm install express through the Workbench terminal' },
+      { node: 'owner', t: 'The workspace owner executes the shell command' },
       { node: 'npm', t: 'Resolve the graph — semver picks the best version per package' },
       {
         node: 'registry',
-        t: 'Fetch packuments + tarballs from npmjs through the same-origin proxy',
+        t: 'Fetch packuments + tarballs through the configured CORS/CORP registry proxy',
       },
       { node: 'npm', t: 'gunzip (DecompressionStream) + JS tar extract + SHA integrity verify' },
       {
@@ -312,12 +367,22 @@ export const SCN: Record<ScenarioId, Scenario> = {
     label: 'Express server + live preview',
     cmd: 'node server.js',
     steps: [
-      { node: 'runtimejs', t: 'node server.js runs — app.listen(3000)' },
-      { node: 'net', t: 'http.createServer registers port 3000 in the port registry' },
+      { node: 'runtimejs', t: 'node server.js runs in a supervised child — app.listen(3000)' },
+      { node: 'net', t: 'http.createServer publishes port 3000 to the virtual port registry' },
       { node: 'preview', t: 'The preview iframe requests /preview/3000/' },
-      { node: 'sw', t: 'The service worker intercepts the fetch and resolves the owning realm' },
-      { node: 'httpserver', t: 'Routed to the in-tab HTTP server → Express writes the HTML' },
-      { node: 'preview', t: 'Body stream transferred with CORP/COEP → the site renders live' },
+      {
+        node: 'sw',
+        t: 'The service worker intercepts the fetch and resolves the current page registration',
+      },
+      {
+        node: 'workbench',
+        t: 'The page-side Workbench preview bridge routes the request to the child HTTP server',
+      },
+      { node: 'httpserver', t: 'Express writes the finite HTML response' },
+      {
+        node: 'preview',
+        t: 'The Worker/page bridge buffers the finite body; the Service Worker returns it to the iframe',
+      },
     ],
   },
   vite: {
@@ -347,26 +412,36 @@ export const SCN: Record<ScenarioId, Scenario> = {
       },
       {
         node: 'kernel',
-        t: 'The kernel spawns its WASI Worker process and returns a ProcessHandle',
+        t: 'The kernel spawns a WASI Worker and returns its ProcessHandle',
       },
-      { node: 'sab', t: 'Synchronous fd reads ride the SAB ring — Atomics.wait on the worker' },
+      {
+        node: 'runtimewasi',
+        t: 'The Worker instantiates the guest with wasi_snapshot_preview1 imports',
+      },
       {
         node: 'vfs',
-        t: 'The raw guest syscalls use the same VFS as JS and terminate with an honest exit code',
+        t: "Guest syscalls use that Worker's realm-local synchronous mirror and supplied preopen mappings",
+      },
+      {
+        node: 'runtimewasi',
+        t: 'stdout, stderr and the honest exit code propagate through ProcessHandle',
       },
     ],
   },
   sync: {
-    label: 'Synchronous fs call (SAB)',
+    label: 'Workbench child sync fs',
     cmd: 'fs.readFileSync("/app.js")',
     steps: [
-      { node: 'runtimejs', t: 'Guest code calls fs.readFileSync — a blocking syscall' },
-      { node: 'sab', t: 'sync-client writes the request; Atomics.wait freezes the worker thread' },
-      { node: 'kernel', t: 'The owner dispatcher wakes sub-millisecond via Atomics.notify' },
-      { node: 'vfs', t: 'Reads the bytes from the synchronous FS mirror' },
+      { node: 'runtimejs', t: 'A supervised child calls fs.readFileSync — a blocking syscall' },
+      { node: 'sab', t: 'The remote sync client writes a SAB request and waits with Atomics.wait' },
+      {
+        node: 'owner',
+        t: 'The owner dispatcher handles the request and replies with Atomics.notify',
+      },
+      { node: 'vfs', t: 'The owner VFS reads and returns the bytes' },
       {
         node: 'runtimejs',
-        t: 'Atomics.wait returns — the worker unblocks and returns synchronously',
+        t: 'Atomics.wait returns; the child unblocks and returns synchronously',
       },
     ],
   },
@@ -377,7 +452,10 @@ export const SCN_NONE: Scenario = { label: 'Whole schema', cmd: '', steps: [] };
 // second axis: WHAT a node is (orthogonal to WHERE it runs)
 export const KIND_OF: Record<NodeId, Kind> = {
   playground: 'surface',
+  workbench: 'package',
+  owner: 'core',
   sdk: 'package',
+  sandboxvfs: 'io',
   terminal: 'surface',
   shell: 'tool',
   npm: 'tool',
@@ -419,7 +497,7 @@ export const KINDS: Record<Kind, KindDef> = {
     icon: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/>',
   },
   core: {
-    label: 'kernel core',
+    label: 'coordination core',
     icon: '<rect x="3.5" y="3.5" width="11" height="11" rx="1.5"/><rect x="9.5" y="9.5" width="11" height="11" rx="1.5"/>',
   },
   io: {
@@ -448,46 +526,52 @@ export const COMPAT_COL: Record<Compat, string> = {
 
 export type Pos = readonly [number, number];
 
-// free-form layout (view 1 — Schema) — world 1120 x 640
+// free-form layout (view 1 — Schema) — world 1180 x 680
 export const DEFPOS: Record<NodeId, Pos> = {
-  playground: [320, 96],
-  sdk: [548, 74],
-  terminal: [150, 208],
-  shell: [348, 208],
-  npm: [548, 208],
-  registry: [980, 110],
-  runtimejs: [256, 332],
-  runtimewasi: [482, 332],
-  esbuild: [672, 332],
-  vite: [846, 332],
-  sw: [998, 240],
-  kernel: [348, 452],
-  sab: [566, 452],
-  preview: [998, 478],
-  vfs: [228, 578],
-  net: [472, 578],
-  httpserver: [692, 578],
+  playground: [140, 100],
+  workbench: [390, 85],
+  sdk: [610, 85],
+  sandboxvfs: [830, 85],
+  terminal: [140, 225],
+  registry: [1080, 210],
+  owner: [390, 210],
+  shell: [610, 210],
+  npm: [830, 210],
+  runtimejs: [150, 350],
+  runtimewasi: [370, 350],
+  esbuild: [590, 350],
+  vite: [810, 350],
+  sw: [1070, 310],
+  kernel: [250, 480],
+  sab: [470, 480],
+  net: [700, 480],
+  httpserver: [900, 480],
+  vfs: [470, 620],
+  preview: [1060, 600],
 };
 
-// realm-grouped layout (view 3 — Hybrid) — world 1120 x 680
+// realm-grouped layout (view 3 — Hybrid) — world 1180 x 720
 export const HPOS: Record<NodeId, Pos> = {
-  playground: [150, 116],
-  sdk: [322, 96],
-  terminal: [86, 218],
-  shell: [242, 218],
-  npm: [112, 304],
-  registry: [302, 304],
-  kernel: [196, 414],
-  vfs: [102, 556],
-  net: [292, 556],
-  runtimejs: [492, 132],
-  runtimewasi: [666, 132],
-  esbuild: [492, 252],
-  vite: [672, 252],
-  sab: [582, 384],
-  httpserver: [582, 512],
-  sw: [857, 300],
-  preview: [1032, 432],
+  playground: [135, 110],
+  workbench: [90, 225],
+  terminal: [180, 300],
+  sdk: [90, 390],
+  sandboxvfs: [180, 480],
+  owner: [395, 105],
+  kernel: [635, 105],
+  vfs: [395, 200],
+  sab: [635, 200],
+  shell: [395, 295],
+  npm: [635, 295],
+  runtimejs: [395, 390],
+  runtimewasi: [635, 390],
+  esbuild: [395, 485],
+  vite: [635, 485],
+  net: [395, 580],
+  httpserver: [635, 580],
+  sw: [810, 335],
+  preview: [955, 430],
+  registry: [1110, 230],
 };
 
 export interface ZoneDef {
@@ -500,8 +584,16 @@ export interface ZoneDef {
 }
 
 export const ZONES: ZoneDef[] = [
-  { id: 'page', name: 'PAGE', sub: 'main thread · owner', x: 0, w: 402, col: '#7AA2FF' },
-  { id: 'worker', name: 'WORKERS', sub: 'Worker-as-process', x: 402, w: 368, col: '#3BD6C6' },
-  { id: 'sw', name: 'SERVICE WORKER', sub: 'fetch router', x: 770, w: 175, col: '#B58BFF' },
-  { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'sandboxed', x: 945, w: 175, col: '#F2B95C' },
+  { id: 'page', name: 'PAGE', sub: 'UI · public façades', x: 0, w: 270, col: '#7AA2FF' },
+  {
+    id: 'worker',
+    name: 'WORKERS',
+    sub: 'owner · supervised children',
+    x: 270,
+    w: 480,
+    col: '#3BD6C6',
+  },
+  { id: 'sw', name: 'SERVICE WORKER', sub: 'fetch router', x: 750, w: 120, col: '#B58BFF' },
+  { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'sandboxed', x: 870, w: 170, col: '#F2B95C' },
+  { id: 'ext', name: 'EXTERNAL', sub: 'configured egress', x: 1040, w: 140, col: '#8A93A6' },
 ];

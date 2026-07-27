@@ -3,45 +3,37 @@ import './demos.css';
 
 interface Demo {
   readonly id: string;
-  readonly kicker: string;
   readonly glyph: string;
   readonly title: string;
   readonly body: string;
-  readonly meta: string;
+  readonly action: string;
+  readonly ariaLabel: string;
 }
 
 const DEMOS: readonly Demo[] = [
   {
     id: 'real-vite',
-    kicker: 'TOOLING',
-    glyph: 'V7',
-    title: 'Vite 7 + npm',
-    body: 'Run a visible npm install, then start the real Vite 7 dev server with module transforms and HMR.',
-    meta: 'npm install · live preview',
+    glyph: 'DEV',
+    title: 'Dev server + HMR',
+    body: 'Install packages and run a live development server with module transforms and HMR.',
+    action: 'Open Vite example ↗',
+    ariaLabel: 'Open Vite preset: Dev server + HMR',
   },
   {
     id: 'express-sqlite',
-    kicker: 'FULL STACK',
-    glyph: 'EX',
-    title: 'Express + SQLite',
-    body: 'Install Express, run an HTTP server in a Worker, and query SQLite compiled to WebAssembly.',
-    meta: 'npm install · live preview',
+    glyph: 'HTTP',
+    title: 'HTTP server + database',
+    body: 'Run a Node-compatible HTTP app with a WebAssembly-backed SQLite database.',
+    action: 'Open Express example ↗',
+    ariaLabel: 'Open Express preset: HTTP server + database',
   },
   {
     id: 'cli-report',
-    kicker: 'NODE CLI',
     glyph: 'CLI',
-    title: 'CLI report',
-    body: 'Install a real npm dependency, read VFS input through node:fs, stream stdout, and exit cleanly.',
-    meta: 'npm install · run to completion',
-  },
-  {
-    id: 'markdown-ssg',
-    kicker: 'FILESYSTEM BUILD',
-    glyph: 'MD',
-    title: 'Markdown SSG',
-    body: 'Run a filesystem-heavy static-site build: Markdown in, generated HTML out, then serve the result.',
-    meta: 'npm install · generated preview',
+    title: 'CLI + project files',
+    body: 'Run a Node-compatible CLI against the virtual filesystem and stream its output.',
+    action: 'Open CLI example ↗',
+    ariaLabel: 'Open CLI preset: CLI + project files',
   },
 ];
 
@@ -50,16 +42,12 @@ function makeCard(demo: Demo): HTMLAnchorElement {
   card.className = 'demo-card';
   card.href = buildPresetHref(demo.id, import.meta.env.VITE_RIFTY_PLAYGROUND_URL);
   card.setAttribute('data-preset-card', demo.id);
+  card.setAttribute('aria-label', demo.ariaLabel);
 
-  const top = document.createElement('div');
-  top.className = 'demo-card-top';
   const glyph = document.createElement('span');
   glyph.className = 'demo-glyph';
   glyph.textContent = demo.glyph;
-  const kicker = document.createElement('span');
-  kicker.className = 'demo-kicker';
-  kicker.textContent = demo.kicker;
-  top.append(glyph, kicker);
+  glyph.setAttribute('aria-hidden', 'true');
 
   const title = document.createElement('h3');
   title.className = 'demo-title';
@@ -69,20 +57,11 @@ function makeCard(demo: Demo): HTMLAnchorElement {
   body.className = 'demo-body';
   body.textContent = demo.body;
 
-  const footer = document.createElement('div');
-  footer.className = 'demo-footer';
-  const divider = document.createElement('span');
-  divider.className = 'demo-divider';
-  divider.setAttribute('aria-hidden', 'true');
-  const meta = document.createElement('span');
-  meta.className = 'demo-meta';
-  meta.textContent = demo.meta;
   const action = document.createElement('span');
   action.className = 'demo-action';
-  action.textContent = 'Open preset ↗';
-  footer.append(divider, meta, action);
+  action.textContent = demo.action;
 
-  card.append(top, title, body, footer);
+  card.append(glyph, title, body, action);
   return card;
 }
 
@@ -106,12 +85,12 @@ export function renderDemos(): HTMLElement {
 
   const title = document.createElement('h2');
   title.className = 'demos-title';
-  title.textContent = 'Start with a working project, not a toy snippet.';
+  title.textContent = 'Three representative workflows.';
 
   const intro = document.createElement('p');
   intro.className = 'demos-intro';
   intro.textContent =
-    'Each link opens the Chromium playground, selects the preset, and starts its real boot flow inside the browser.';
+    'Dev tooling, server apps, and command-line programs. More presets live in the playground.';
   head.append(eyebrow, title, intro);
 
   const grid = document.createElement('div');

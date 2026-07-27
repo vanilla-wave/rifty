@@ -40,9 +40,9 @@ const ADJ = buildAdjacency(EDGES);
 const NODE_IDS = Object.keys(NODES) as NodeId[];
 
 const STEP_MS = 1150;
-const WORLD_W = 1120;
-const SCHEMA_H = 660;
-const HYBRID_H = 690;
+const WORLD_W = 1180;
+const SCHEMA_H = 680;
+const HYBRID_H = 720;
 const DRAG_THRESHOLD = 1;
 
 interface ViewTransform {
@@ -99,12 +99,12 @@ const SCN_CHIPS: { id: ScnState; label: string }[] = [
   { id: 'express', label: 'Express + preview' },
   { id: 'vite', label: 'Vite HMR' },
   { id: 'wasi', label: 'Raw WASI' },
-  { id: 'sync', label: 'Sync fs (SAB)' },
+  { id: 'sync', label: 'Child sync fs (SAB)' },
 ];
 
 const OVERVIEW_CAPTION =
-  'The full runtime graph. Hover a module to see its links, drag to rearrange — ' +
-  'or pick a scenario to follow its narrated steps and the structural modules connecting them.';
+  'Selected runtime topology. Hover a module to see its links, drag to rearrange — ' +
+  'or pick a scenario to follow its narrated steps and the modules connecting them.';
 
 function clonePos(src: Record<NodeId, Pos>): Record<NodeId, Pos> {
   const out = {} as Record<NodeId, Pos>;
@@ -715,8 +715,7 @@ export function mountExplorer(root: HTMLElement): () => void {
     if (!BOARDS[board.impl].zones) return;
     const steps = trace();
     const cur = steps[step];
-    let realm: Realm | null = cur ? NODES[cur.node].realm : null;
-    if (realm === 'ext') realm = 'page';
+    const realm: Realm | null = cur ? NODES[cur.node].realm : null;
     for (const z of ZONES) {
       const zd = board.zoneEls.get(z.id);
       if (!zd) continue;
@@ -751,11 +750,8 @@ export function mountExplorer(root: HTMLElement): () => void {
     const ps = pathState();
     const cur = ps.curNode;
     // During scenario playback the realm lane owning the current node lights up;
-    // in Whole-schema mode curNode is null, so no lane is active. ext (registry)
-    // has no lane of its own — its card lives in the PAGE lane, so map ext→page
-    // (mirrors styleZones for the hybrid view).
-    let curRealm: Realm | null = cur ? NODES[cur].realm : null;
-    if (curRealm === 'ext') curRealm = 'page';
+    // in Whole-schema mode curNode is null, so no lane is active.
+    const curRealm: Realm | null = cur ? NODES[cur].realm : null;
     for (const lane of Array.from(realms.root.querySelectorAll<HTMLElement>('[data-realm]'))) {
       lane.classList.toggle('exp-lane-on', lane.dataset.realm === curRealm);
     }

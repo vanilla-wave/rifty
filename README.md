@@ -68,23 +68,50 @@ The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@ri
 
    Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not work**; Netlify / Cloudflare Pages / Vercel can work when configured with equivalent headers. Copy-paste configs: [`netlify.toml`](./netlify.toml), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts). If you embed rifty in an iframe or app browser, the parent page must also be cross-origin isolated and the iframe must include `allow="cross-origin-isolated"`; otherwise open rifty as a top-level page.
 
-2. **A bundler with module Workers** + `new URL('…', import.meta.url)` worker resolution (Vite `worker: { format: 'es' }`). `runtime-js`/`runtime-wasi` spawn their worker entry by URL (`@riftydev/runtime-js/worker`, `@riftydev/runtime-wasi/worker-entry`).
+2. **A bundler that emits module Worker entries.** With Vite, import each entry
+   with `?worker&url`, pass the returned URL to rifty, and set
+   `worker: { format: 'es' }`. An app that imports
+   `@riftydev/runtime-js/worker` must list `@riftydev/runtime-js` as a direct
+   dependency. Do not pass `new URL('…', import.meta.url)` indirectly to rifty:
+   Vite cannot see the eventual `new Worker(...)`, so a production build will
+   not emit the Worker bundle.
 
-3. **A service worker** for preview/HMR routing — build from `@riftydev/service-worker/sw`, register via `registerServiceWorker(url)`. No prebuilt `sw.js`; it must be bundled (the playground does this in `apps/playground/build/sw-plugin.ts`).
+3. **A service worker** for preview/HMR routing — list
+   `@riftydev/service-worker` as a direct dependency, build its
+   `@riftydev/service-worker/sw` entry, and register it with
+   `registerServiceWorker(url)`. No prebuilt `sw.js`; it must be bundled (the
+   playground does this in `apps/playground/build/sw-plugin.ts`).
 
 4. **Same-origin WASM assets** when used: `node:sqlite` needs `sql.js/dist/sql-wasm.wasm` reachable (inject a `locateFile` via `initSqliteEngine({ locateFile })`, awaited once before any `DatabaseSync`). Registry-backed esbuild owns and attests its own runtime asset.
 
 Given those, the umbrella's **`createSandbox()`** does the boot wiring (capability probe → COI guard → VFS backend with memory fallback → service-worker registration → runtime worker) and hands you a live `RuntimeController`:
 
+```bash
+npm install @riftydev/sdk @riftydev/runtime-js @riftydev/service-worker
+```
+
 ```ts
+import runtimeWorkerUrl from '@riftydev/runtime-js/worker?worker&url';
 import { checkCapabilities, createSandbox } from '@riftydev/sdk';
 
-if (!checkCapabilities().sufficient) return showUnsupportedNotice();
-const sandbox = await createSandbox({
-  workerUrl: new URL('@riftydev/runtime-js/worker', import.meta.url), // your bundler resolves it
-  serviceWorkerUrl: '/sw.js',
-});
-await sandbox.runtime.eval('console.log("hello from a Worker")');
+async function main(): Promise<void> {
+  const caps = checkCapabilities();
+  if (!caps.sufficient || !caps.capabilities.crossOriginIsolated) {
+    throw new Error(caps.summary);
+  }
+
+  const sandbox = await createSandbox({
+    workerUrl: runtimeWorkerUrl,
+    serviceWorkerUrl: '/sw.js',
+  });
+  try {
+    await sandbox.runtime.eval('console.log("hello from a Worker")');
+  } finally {
+    sandbox.dispose();
+  }
+}
+
+void main();
 ```
 
 Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see [`docs/public/compat/`](./docs/public/compat/)).

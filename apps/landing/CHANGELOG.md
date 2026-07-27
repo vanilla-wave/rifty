@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Simplified the landing copy around supported capability classes and reduced the preset gallery
+  to three representative workflows: dev server, HTTP app + database, and CLI + project files.
+  The complete preset catalog remains in the playground.
+- Corrected the public SDK examples to be production-buildable Vite code: the runtime Worker now
+  uses a `?worker&url` asset import, the required direct dependency and ESM Worker configuration
+  are explicit, top-level await is avoided, and the headless example no longer implies that
+  preview Service Worker routing is active. A real Vite production build guards the displayed
+  source and emitted Worker asset.
+- Refreshed the public claim surface for project `v0.2` / M11: added the exact Vite 8.0.16
+  Rolldown preset plus its proven build + preview path, and current Workbench, TypeScript, Git,
+  npm tooling, preview streaming, registry proxy, and WASI boundaries. The explorer now
+  distinguishes standalone SDK boot from the Workbench owner/child topology.
 - Explorer now separates the raw WASI runner from npm esbuild: the proven
   esbuild JS adapter stays visible while its CLI/bin is an explicit loud gap.
 - SEO/share hardening: compact title + description, WebSite JSON-LD, robots/sitemap, complete
@@ -17,13 +29,13 @@
   terminal, truthful structural-scenario wording, keyboard-operable graph nodes, drag no longer
   pins a node, clipboard errors recover, and all mobile navigation exits close the drawer.
 - Review polish: the animated hero terminal reserves its final row viewport instead of shifting the
-  whole hero as lines appear; restored `How it works` → architecture as the secondary CTA; balanced
-  preset-card footer spacing around an explicit divider. `Run something real` now opens the
-  configured playground directly instead of scrolling to the preset cards.
+  whole hero as lines appear; restored `How it works` → architecture as the secondary CTA.
+  `Run something real` now opens the configured playground directly instead of scrolling to the
+  preset cards.
 - Repositioned the landing around Rifty's real wedge: open, MIT, self-hostable browser runtime
   infrastructure. Hero code now uses only the public `Sandbox` API (`runtime.eval`, `fs`, events),
-  and four "Run something real" cards deep-link into proven Vite 7, Express + SQLite, CLI, and
-  Markdown SSG presets. Their playground base is the required `VITE_RIFTY_PLAYGROUND_URL`, so
+  and three representative "Run something real" cards cover dev tooling, Node servers, and
+  CLI/filesystem workflows. Their playground base is the required `VITE_RIFTY_PLAYGROUND_URL`, so
   self-hosters explicitly choose their own origin or mount instead of receiving a false local
   fallback. Added an accessible mobile nav drawer, one-column mobile content, and a mobile-first
   Realms architecture view; browser regressions cover exact API copy, preset links, and zero
@@ -43,14 +55,15 @@
   divider styles.
 - Explorer review fixes: Realms view is now interactive — lane cards hover/click to highlight
   node + neighbours and drive a Realms inspector (hover wins over pin); active realm lane highlights
-  in realm color during scenario playback (ext→page); per-realm lane tint + bounded scroll viewport
+  in realm color during scenario playback; per-realm lane tint + bounded scroll viewport
   with remembered scroll position. `mountExplorer` returns a disposer (removes window listeners,
   clears scenario + remeasure timers) for re-mount safety. Honesty: terminal role says
   "host-provided ghost-text completions" (not "AI"); hero meta says "Chromium-first".
 - Rebuilt `rifty.dev` as a hi-fi Vite + vanilla-TS page with an embedded interactive architecture
   explorer (drag/pan graph, 6 BFS-animated scenarios, Schema/Realms/Hybrid views). Lime accent
-  + diamond mark hardcoded. Honest copy: preview buffered (M12), Chromium-first, CEIL gaps visible.
-  Netlify build moved to the monorepo-root Vite build; headers/redirects shipped via `public/`.
+  + diamond mark hardcoded. Honest copy: finite page previews buffer, unbounded streams fail loud,
+  service-to-service loopback streams live; Chromium-first; CEIL gaps visible. Netlify build moved
+  to the monorepo-root Vite build; headers/redirects shipped via `public/`.
 - Review polish: hero primary CTA now opens the live playground (`play.rifty.dev`); the explorer
   drops wheel + −/+ zoom (it hijacked landing scroll — drag-to-pan and node-drag stay); the
   `service worker` node moved out of the runtimes row (no overlap); the inspector is hidden at rest

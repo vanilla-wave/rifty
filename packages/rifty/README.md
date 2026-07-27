@@ -22,10 +22,13 @@ Cross-Origin-Embedder-Policy: require-corp   # or: credentialless
 `createSandbox()` cannot ship host wiring for you. Consumers still own:
 
 - COOP/COEP headers for cross-origin isolation.
-- A bundler-resolved runtime Worker URL, usually
-  `new URL('@riftydev/runtime-js/worker', import.meta.url)`.
-- A bundled same-origin `sw.js` built from `@riftydev/service-worker/sw` when
-  preview routing is enabled.
+- A bundler-emitted runtime Worker URL. With Vite, import
+  `@riftydev/runtime-js/worker?worker&url`, set
+  `worker: { format: 'es' }`, and pass the returned URL to `createSandbox()`.
+  Because the host imports that entry, list `@riftydev/runtime-js` as a direct
+  dependency.
+- A direct `@riftydev/service-worker` dependency and a bundled same-origin
+  `sw.js` built from its `/sw` entry when preview routing is enabled.
 - Same-origin WASM assets when sqlite/WASI guests are used.
 
 Those bits belong in app/template config, not the SDK facade. Future starter
@@ -41,38 +44,50 @@ for the current boundary.
 ## Install
 
 ```bash
-npm i @riftydev/sdk
+npm i @riftydev/sdk @riftydev/runtime-js @riftydev/service-worker
 ```
+
+`@riftydev/sdk` remains the API front door; the direct runtime and service-worker
+dependencies make the host-owned entry imports explicit and portable across
+package managers.
 
 ## Boot a sandbox
 
 ```ts
+import runtimeWorkerUrl from '@riftydev/runtime-js/worker?worker&url';
 import { checkCapabilities, createSandbox } from '@riftydev/sdk';
 
-const caps = checkCapabilities();
-if (!caps.sufficient) {
-  document.body.textContent = caps.summary; // missing Worker / ServiceWorker / COI
-} else {
+async function main(): Promise<void> {
+  const caps = checkCapabilities();
+  if (!caps.sufficient || !caps.capabilities.crossOriginIsolated) {
+    document.body.textContent = caps.summary;
+    return;
+  }
+
   const sandbox = await createSandbox({
     // resolved by YOUR bundler; createSandbox cannot infer host worker assets
-    workerUrl: new URL('@riftydev/runtime-js/worker', import.meta.url),
+    workerUrl: runtimeWorkerUrl,
     // optional; defaults to '/sw.js'. Must be bundled from
     // '@riftydev/service-worker/sw' and served same-origin for preview routing.
     serviceWorkerUrl: '/sw.js',
   });
 
-  sandbox.runtime.on((e) => {
-    if (e.type === 'stdout') console.log(e.chunk);
-  });
-  await sandbox.runtime.eval('console.log("hello from a Worker")');
-  await sandbox.fs.writeFile('/workspace/hello.txt', 'hello');
-  console.log(await sandbox.fs.readFile('/workspace/hello.txt', 'utf8'));
+  try {
+    sandbox.runtime.on((e) => {
+      if (e.type === 'stdout') console.log(e.chunk);
+    });
+    await sandbox.runtime.eval('console.log("hello from a Worker")');
+    await sandbox.fs.writeFile('/workspace/hello.txt', 'hello');
+    console.log(await sandbox.fs.readFile('/workspace/hello.txt', 'utf8'));
 
-  console.log(sandbox.vfs.backend); // 'opfs' | 'memory'
-  if (sandbox.swError) console.warn('preview unavailable:', sandbox.swError);
-
-  sandbox.dispose();
+    console.log(sandbox.vfs.backend); // 'opfs' | 'memory'
+    if (sandbox.swError) console.warn('preview unavailable:', sandbox.swError);
+  } finally {
+    sandbox.dispose();
+  }
 }
+
+void main();
 ```
 
 `createSandbox` degrades gracefully: OPFS init failure falls back to in-memory

@@ -1,7 +1,7 @@
 # rifty.dev landing
 
 Hi-fi marketing page for `rifty.dev` + an embedded **interactive architecture explorer** (drag/pan
-structural graph, 6 narrated scenarios, 3 views).
+selected runtime topology, 6 narrated scenarios, 3 views).
 
 Vanilla TS + Vite, static output. Separate Netlify origin from the playground (`play.rifty.dev`) so
 its cross-origin-isolation, Service Worker, preview routing, and npm-registry proxy stay isolated
@@ -39,6 +39,6 @@ boot instead of shipping false links.
 - `src/sections/` — one builder per page section (nav, hero, demos, what, arch, quickstart,
   cta-footer).
 - `src/explorer/` — the interactive architecture explorer. `data.ts` holds the live graph and
-  scenario copy; layout originates in the design handoff.
+  scenario copy; layout descends from the frozen design handoff.
 - `src/styles/` — design tokens + base reset.
-- Design source of truth: `docs/landing/handoff/`.
+- Historical visual reference: `docs/landing/handoff/`. Production facts live in `src/`.

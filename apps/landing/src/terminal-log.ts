@@ -1,5 +1,4 @@
-// Hero terminal boot log — looping typewriter reveal. Cosmetic only.
-// Every line names a current public SDK surface; no playground-private exec/preview API.
+// Hero terminal boot log — looping typewriter reveal. Mirrors the adjacent SDK example.
 
 // One log line: prompt prefix + text + a color class (mapped to a CSS var).
 interface BootLine {
@@ -9,11 +8,10 @@ interface BootLine {
 }
 
 const BOOT_SCRIPT: readonly BootLine[] = [
-  { p: '→ ', t: 'runtime.ready', c: 'dim' },
-  { p: 'fs ', t: "writeFile('/hello.js')  ·  ok", c: 'ok' },
+  { p: '→ ', t: 'createSandbox()  ·  resolved', c: 'dim' },
+  { p: 'fs ', t: "writeFile('/hello.txt')  ·  ok", c: 'ok' },
   { p: 'eval ', t: 'console.log("hello")', c: 'cmd' },
   { p: 'stdout ', t: 'hello', c: 'lime' },
-  { p: 'vfs ', t: 'backend  ·  opfs | memory', c: 'dim' },
 ];
 
 // per-line reveal delay (ms) and the hold before the loop restarts.

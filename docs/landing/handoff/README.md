@@ -1,5 +1,10 @@
 # Handoff: rifty — Landing Page + Interactive Architecture Explorer
 
+> [!NOTE]
+> Frozen pre-v0.2 visual baseline. Its copy, module graph, realm assignments, and counts are
+> historical, not current project claims. Production facts live in `apps/landing/src/`, backed by
+> the current compat matrix and runtime code.
+
 ## Overview
 A single marketing/landing page for **rifty** — a browser-based, Node-compatible runtime and WASI runner ("Node, npm, and a dev server inside a browser tab"). The page sells the project and, in its middle section, embeds a **fully interactive architecture explorer**: a draggable/zoomable node graph of the runtime's modules that can animate how a request flows through the system for six real scenarios (boot, `npm install`, an Express server + preview, Vite HMR, an explicit WASI guest, and a synchronous fs call).
 
@@ -242,7 +247,9 @@ This design is **rifty's own dark brand** (lime-on-near-black, Inter + Roboto Mo
 ## Files
 Included in this bundle:
 - **`Rifty.dc.html`** — the merged landing page (Refined layout) with the embedded interactive architecture explorer. **Primary reference.**
-- **`Rifty Architecture.dc.html`** — the architecture explorer, standalone (also runs embedded). Contains the authoritative `NODES`, `EDGES`, `SCN` (scenarios), `DEFPOS`/`HPOS` (positions), realm/kind metadata — **port these data structures verbatim**.
+- **`Rifty Architecture.dc.html`** — the original standalone architecture prototype (also runs
+  embedded). Its `NODES`, `EDGES`, `SCN`, positions, and realm/kind metadata preserve the visual
+  starting point only; current production data lives in `apps/landing/src/explorer/data.ts`.
 - **`support.js`** — the Design-Component runtime needed only to open the `.dc.html` files in a browser. **Not** part of the design; do not ship it.
 - **`Rifty Landing.dc.html`** *(optional reference)* — the earlier multi-variant explorations (5 landing directions: Refined, Hybrid, Bold, In-Tab, No-Server). Not part of this deliverable, but useful to see alternative hero treatments.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EDGES, SCN } from './data';
+import { EDGES, NODES, REALMS, SCN } from './data';
 import type { EdgeDef, NodeId, ScenarioId } from './data';
 import { type Adjacency, bfsPath, buildAdjacency } from './graph';
 
@@ -29,6 +29,13 @@ describe('buildAdjacency', () => {
     }
   });
 
+  it('places every topology node in exactly one runtime realm', () => {
+    const realmNodes = REALMS.flatMap((realm) => realm.nodes);
+    expect(realmNodes.toSorted()).toEqual(Object.keys(NODES).toSorted());
+    expect(new Set(realmNodes).size).toBe(realmNodes.length);
+    expect(REALMS.find((realm) => realm.id === 'ext')?.nodes).toEqual(['registry']);
+  });
+
   it('contains exactly the nodes referenced by edges', () => {
     const built = buildAdjacency(EDGES);
     for (const e of EDGES) {
@@ -53,9 +60,10 @@ describe('bfsPath', () => {
 
   it('every BFS path is edge-adjacent with correct endpoints', () => {
     // direct edge → length-2 path
-    const p = bfsPath(adj, 'playground', 'sdk');
+    const p = bfsPath(adj, 'playground', 'workbench');
     expect(p[0]).toBe('playground');
-    expect(p[p.length - 1]).toBe('sdk');
+    expect(p[p.length - 1]).toBe('workbench');
+    expect(p).toHaveLength(2);
     expect(isEdgeAdjacentPath(EDGES, p)).toBe(true);
   });
 
@@ -89,5 +97,47 @@ describe('bfsPath', () => {
     expect(a).toEqual(b);
     expect(a.length).toBeGreaterThan(0);
     expect(isEdgeAdjacentPath(EDGES, a)).toBe(true);
+  });
+});
+
+describe('scenario contracts', () => {
+  it('routes preview fetches through the page-side Workbench bridge', () => {
+    expect(EDGES).toContainEqual({ from: 'sw', to: 'workbench', kind: 'ipc' });
+    expect(EDGES).not.toContainEqual({ from: 'sw', to: 'owner', kind: 'ipc' });
+    expect(bfsPath(adj, 'workbench', 'net')).toEqual(['workbench', 'net']);
+    expect(bfsPath(adj, 'runtimejs', 'net')).toEqual(['runtimejs', 'net']);
+    expect(SCN.express.steps.map((step) => step.node)).toContain('workbench');
+  });
+
+  it('keeps HMR on the direct net-to-preview bridge', () => {
+    expect(bfsPath(adj, 'net', 'preview')).toEqual(['net', 'preview']);
+    expect(NODES.sw.role).not.toContain('HMR');
+  });
+
+  it('keeps standalone PAGE VFS boot separate from the owner VFS', () => {
+    expect(NODES.sandboxvfs.realm).toBe('page');
+    expect(SCN.boot.steps.map((step) => step.node)).toEqual([
+      'sdk',
+      'sandboxvfs',
+      'sw',
+      'runtimejs',
+    ]);
+  });
+
+  it('keeps SAB-specific sync I/O scoped to a supervised Workbench child', () => {
+    expect(SCN.sync.label).toBe('Workbench child sync fs');
+    expect(SCN.sync.steps.map((step) => step.node)).toEqual([
+      'runtimejs',
+      'sab',
+      'owner',
+      'vfs',
+      'runtimejs',
+    ]);
+  });
+
+  it('does not claim SAB transport or a universal JS VFS for WASI', () => {
+    const copy = SCN.wasi.steps.map((step) => step.t).join(' ');
+    expect(copy).not.toMatch(/\bSAB\b|same VFS as JS/);
+    expect(SCN.wasi.steps.some((step) => step.node === 'sab')).toBe(false);
   });
 });

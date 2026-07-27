@@ -11,22 +11,32 @@ interface Feature {
 const FEATURES: readonly Feature[] = [
   {
     title: 'A Node-compatible runtime',
-    body: 'CJS + ESM loader and tested node: builtin subsets. Real require, real import.',
+    body: 'Run CommonJS and ESM projects against the supported Node API surface. Missing behavior fails loudly.',
     icon: 'feature-runtime',
   },
   {
     title: 'npm install, in-browser',
-    body: 'Resolve, fetch, verify, unpack and link packages; execution stays browser-local.',
+    body: 'Install packages and run project scripts and JavaScript tooling in the browser.',
     icon: 'feature-npm',
   },
   {
     title: 'WASI preview1 runner',
-    body: 'Run .wasm guests next to your JS, on the same virtual FS.',
+    body: 'Run compatible WebAssembly programs against project files with standard input and output.',
     icon: 'feature-wasi',
   },
   {
     title: 'Virtual FS + OPFS',
-    body: 'In-memory and persistent backends with a synchronous mirror.',
+    body: 'Keep project files in memory or persist them in browser storage.',
+    icon: 'feature-vfs',
+  },
+  {
+    title: 'Embeddable Workbench',
+    body: 'Embed project, terminal, run and preview workflows through public APIs.',
+    icon: 'feature-runtime',
+  },
+  {
+    title: 'TypeScript + Git over VFS',
+    body: 'Use TypeScript language features and Git workflows against the same workspace.',
     icon: 'feature-vfs',
   },
 ];
@@ -60,7 +70,7 @@ function makeCell(feature: Feature): HTMLElement {
   return cell;
 }
 
-/** "What you get" — 4-col hairline-gap feature grid. */
+/** "What you get" — compact hairline-gap feature grid. */
 export function renderWhat(): HTMLElement {
   const section = document.createElement('section');
   section.id = 'what';

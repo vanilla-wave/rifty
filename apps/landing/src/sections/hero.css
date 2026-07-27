@@ -87,20 +87,6 @@
   color: rgba(255, 255, 255, 0.74);
 }
 
-.hero-chip {
-  font-family: var(--font-mono);
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 6px;
-  border-radius: var(--r-code);
-}
-
-.hero-chip-ac {
-  color: var(--ac);
-  background: rgb(from var(--ac) r g b / 0.08);
-}
-
 .hero-cta {
   display: flex;
   gap: 12px;

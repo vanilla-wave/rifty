@@ -58,6 +58,9 @@ test('serves configured search, sharing, crawl, and pre-JavaScript contracts', a
   await page.goto('/');
 
   await expect(page).toHaveTitle('Open Node-compatible runtime for the browser | rifty');
+  await expect(page.locator('.nav-version')).toHaveText('v0.2 · M11');
+  await expect(page.locator('.hero-host')).toHaveText('@riftydev/sdk · v0.2');
+  await expect(page.locator('.cta-footer-stamp')).toHaveText('v0.2 · M11 active');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
     'https://site.example.test/',
@@ -141,6 +144,11 @@ test('serves configured search, sharing, crawl, and pre-JavaScript contracts', a
   await expect(
     noScriptPage.getByRole('heading', { name: /Node, npm, and a dev server/ }),
   ).toBeVisible();
+  await expect(
+    noScriptPage.getByText(
+      /Install packages, run Node-compatible apps and CLIs, or execute WASI guests/,
+    ),
+  ).toBeVisible();
   await expect(noScriptPage.getByRole('link', { name: 'View rifty on GitHub' })).toHaveAttribute(
     'href',
     'https://forge.example.test/org/rifty',
@@ -157,29 +165,59 @@ test('positions the open runtime honestly and shows only public Sandbox API', as
       { exact: true },
     ),
   ).toBeVisible();
+  await expect(page.locator('.hero-sub')).toContainText(
+    'Install packages, run Node-compatible apps and CLIs, or execute WASI guests. Execution and files stay in the tab.',
+  );
 
   const publicApi = page.locator('.hero-code');
   await expect(publicApi.locator('.hero-code-line')).toHaveText([
-    '// public SDK: eval + filesystem + events',
     "import { createSandbox } from '@riftydev/sdk'",
-    'const sandbox = await createSandbox({',
-    '  workerUrl,',
-    '  skipServiceWorker: true,',
-    '})',
-    'sandbox.runtime.on((event) => {',
-    "  if (event.type === 'stdout') console.log(event.chunk)",
-    '})',
-    "await sandbox.fs.writeFile('/hello.js', 'console.log(\"hello\")')",
-    'await sandbox.runtime.eval(\'console.log("hello")\')',
+    'export async function boot(workerUrl: string | URL) {',
+    '  const sandbox = await createSandbox({',
+    '    workerUrl,',
+    '    skipServiceWorker: true,',
+    '  })',
+    '  sandbox.runtime.on((event) => {',
+    "    if (event.type === 'stdout') console.log(event.chunk)",
+    '  })',
+    "  await sandbox.fs.writeFile('/hello.txt', 'hello')",
+    '  await sandbox.runtime.eval(\'console.log("hello")\')',
+    '  return sandbox',
+    '}',
   ]);
   expect(await publicApi.innerText()).not.toMatch(/\.spawn\s*\(/);
   expect(await publicApi.evaluate((code) => code.scrollWidth <= code.clientWidth)).toBe(true);
   await expect(
     page.getByText(
-      'Shown API is the public Sandbox façade: runtime.eval/on + fs. Command execution lives at @riftydev/sdk/shell and preview routing at @riftydev/sdk/service-worker — neither is a Sandbox method.',
+      'The host supplies a bundled module-Worker URL. This eval-only example uses the public Sandbox façade: runtime.eval/on + fs. Command execution and preview routing are separate APIs.',
       { exact: true },
     ),
   ).toBeVisible();
+
+  const quickStart = page.locator('.qs-code-body');
+  await expect(quickStart.locator('.qs-code-line')).toHaveText([
+    "import runtimeWorkerUrl from '@riftydev/runtime-js/worker?worker&url'",
+    "import { checkCapabilities, createSandbox } from '@riftydev/sdk'",
+    '',
+    'async function main() {',
+    '  const caps = checkCapabilities()',
+    '  if (!caps.capabilities.worker ||',
+    '      !caps.capabilities.crossOriginIsolated) {',
+    '    throw new Error(caps.summary)',
+    '  }',
+    '',
+    '  const sandbox = await createSandbox({',
+    '    workerUrl: runtimeWorkerUrl,',
+    '    skipServiceWorker: true,',
+    '  })',
+    '  sandbox.runtime.on((event) => {',
+    "    if (event.type === 'stdout') console.log(event.chunk)",
+    '  })',
+    '  await sandbox.runtime.eval(\'console.log("hello from a Worker")\')',
+    '}',
+    'void main()',
+  ]);
+  await expect(page.getByRole('heading', { name: 'Vite host wiring' })).toBeVisible();
 
   const howItWorks = page.getByRole('link', { name: 'How it works', exact: true });
   await expect(howItWorks).toBeVisible();
@@ -200,7 +238,7 @@ test('keeps the animated hero terminal height stable while rows appear', async (
   );
 
   await page.clock.runFor(3_200);
-  await expect(page.locator('.hero-term-row')).toHaveCount(6);
+  await expect(page.locator('.hero-term-row')).toHaveCount(5);
   expect(
     await measured.evaluateAll((elements) =>
       elements.map((element) => element.getBoundingClientRect().height),
@@ -208,15 +246,23 @@ test('keeps the animated hero terminal height stable while rows appear', async (
   ).toEqual(before);
 });
 
-test('offers proven preset outcomes before the architecture deep dive', async ({ page }) => {
+test('summarizes capability classes with three representative presets', async ({ page }) => {
   await page.goto('/');
 
   const cards = page.locator('[data-preset-card]');
-  await expect(cards).toHaveCount(4);
-  await expect(page.getByRole('link', { name: /Vite 7 \+ npm/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Express \+ SQLite/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: /CLI report/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Markdown SSG/ })).toBeVisible();
+  await expect(cards).toHaveCount(3);
+  expect(
+    await cards.evaluateAll((items) => items.map((item) => item.getAttribute('data-preset-card'))),
+  ).toEqual(['real-vite', 'express-sqlite', 'cli-report']);
+  await expect(
+    page.getByText(
+      'Dev tooling, server apps, and command-line programs. More presets live in the playground.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: /Dev server \+ HMR/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /HTTP server \+ database/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /CLI \+ project files/ })).toBeVisible();
   await expect(page.locator('[data-preset-card="real-vite"]')).toHaveAttribute(
     'href',
     'https://play.example.test/?preset=real-vite&autorun=1',
@@ -228,10 +274,6 @@ test('offers proven preset outcomes before the architecture deep dive', async ({
   await expect(page.locator('[data-preset-card="cli-report"]')).toHaveAttribute(
     'href',
     'https://play.example.test/?preset=cli-report&autorun=1',
-  );
-  await expect(page.locator('[data-preset-card="markdown-ssg"]')).toHaveAttribute(
-    'href',
-    'https://play.example.test/?preset=markdown-ssg&autorun=1',
   );
 
   const sectionOrder = await page
@@ -254,42 +296,30 @@ test('keeps primary navigation labels aligned with document order', async ({ pag
   ).toEqual(['#demos', '#what', '#arch', '#start']);
 });
 
-test('keeps the preset footer divider and labels on a balanced rhythm', async ({ page }) => {
+test('keeps the representative presets balanced without extra metadata', async ({ page }) => {
   await page.goto('/');
 
-  const dividers = page.locator('.demo-divider');
-  await expect(dividers).toHaveCount(4);
-  const rhythm = await page.locator('[data-preset-card]').evaluateAll((cards) =>
+  await expect(page.locator('.demo-divider, .demo-meta, .demo-kicker')).toHaveCount(0);
+  const layout = await page.locator('[data-preset-card]').evaluateAll((cards) =>
     cards.map((card) => {
-      const body = card.querySelector<HTMLElement>('.demo-body');
-      const divider = card.querySelector<HTMLElement>('.demo-divider');
-      const meta = card.querySelector<HTMLElement>('.demo-meta');
       const action = card.querySelector<HTMLElement>('.demo-action');
-      if (!body || !divider || !meta || !action) return null;
-      const bodyBox = body.getBoundingClientRect();
-      const dividerBox = divider.getBoundingClientRect();
-      const metaBox = meta.getBoundingClientRect();
-      const actionBox = action.getBoundingClientRect();
+      if (!action) return null;
+      const cardBox = card.getBoundingClientRect();
       return {
-        copyToDivider: dividerBox.top - bodyBox.bottom,
-        dividerToMeta: metaBox.top - dividerBox.bottom,
-        metaToAction: actionBox.top - metaBox.bottom,
-        dividerTop: dividerBox.top,
+        top: cardBox.top,
+        width: cardBox.width,
+        height: cardBox.height,
+        actionTop: action.getBoundingClientRect().top,
       };
     }),
   );
 
-  expect(rhythm.every((item) => item !== null)).toBe(true);
-  const measuredRhythm = rhythm.filter((item) => item !== null);
-  expect(measuredRhythm.every((item) => item.copyToDivider >= 16)).toBe(true);
-  expect(measuredRhythm.every((item) => item.dividerToMeta >= 11 && item.dividerToMeta <= 13)).toBe(
-    true,
-  );
-  expect(measuredRhythm.every((item) => item.metaToAction >= 7 && item.metaToAction <= 9)).toBe(
-    true,
-  );
-  const dividerTops = measuredRhythm.map((item) => item.dividerTop);
-  expect(Math.max(...dividerTops) - Math.min(...dividerTops)).toBeLessThanOrEqual(1);
+  expect(layout.every((item) => item !== null)).toBe(true);
+  const measured = layout.filter((item) => item !== null);
+  for (const key of ['top', 'width', 'height', 'actionTop'] as const) {
+    const values = measured.map((item) => item[key]);
+    expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(1);
+  }
 });
 
 test('renders semantic landmarks and subsection headings', async ({ page }) => {
@@ -298,8 +328,10 @@ test('renders semantic landmarks and subsection headings', async ({ page }) => {
   await expect(page.getByRole('main')).toHaveCount(1);
   await expect(page.getByRole('contentinfo')).toHaveCount(1);
   await expect(page.getByRole('heading', { name: 'A Node-compatible runtime' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Embeddable Workbench' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'TypeScript + Git over VFS' })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Cross-origin isolation required' }),
+    page.getByRole('heading', { name: 'Cross-origin isolation + ESM Workers' }),
   ).toBeVisible();
 });
 
@@ -343,6 +375,7 @@ test('renders raw WASI separately from the npm esbuild CLI gap', async ({ page }
   await expect(visibleBoard.locator('[data-ed-code]')).toContainText('createWasiProcess');
   await expect(visibleBoard.locator('[data-ed-code]')).not.toContainText('esbuild');
   await expect(visibleBoard.locator('[data-pv-body]')).toContainText('raw WASI guest · exit 0');
+  await expect(page.locator('[data-step-caption]')).not.toContainText('SAB');
 
   const esbuild = visibleBoard.locator('[data-node="esbuild"]');
   await expect(esbuild).toHaveAttribute('aria-label', 'esbuild JS API');
@@ -351,6 +384,28 @@ test('renders raw WASI separately from the npm esbuild CLI gap', async ({ page }
   await expect(inspector.locator('.exp-ins-role')).toHaveText(
     "npm esbuild@0.28.0 transform APIs use the registry-attested esbuild-wasm adapter. The esbuild CLI/bin throws NotImplementedError('esbuild.cli').",
   );
+});
+
+test('shows the Workbench owner topology and keeps external registry egress separate', async ({
+  page,
+}) => {
+  await page.goto('/#arch');
+  await expect(page.getByRole('button', { name: '01 Schema', exact: true })).toBeVisible();
+
+  const schema = page.locator('.exp-board:visible');
+  await expect(schema.locator('[data-node="workbench"]')).toHaveAttribute(
+    'aria-label',
+    '@riftydev/workbench',
+  );
+  await expect(schema.locator('[data-node="owner"]')).toHaveAttribute(
+    'aria-label',
+    'workspace owner',
+  );
+
+  await page.getByRole('button', { name: '02 Realms', exact: true }).click();
+  const external = page.locator('.exp-realms:visible [data-realm="ext"]');
+  await expect(external).toContainText('EXTERNAL');
+  await expect(external.locator('[data-lane-node="registry"]')).toBeVisible();
 });
 
 test('keeps secondary explorer labels at WCAG AA text contrast', async ({ page }) => {
@@ -490,7 +545,7 @@ test('renders the favicon and respects reduced-motion preference', async ({ page
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
 
-  await expect(page.locator('.hero-term-row')).toHaveCount(6);
+  await expect(page.locator('.hero-term-row')).toHaveCount(5);
   const animationNames = await page
     .locator('.hero-eyebrow-dot, .hero-live-dot, .hero-term-cursor')
     .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).animationName));
@@ -543,7 +598,7 @@ for (const viewport of [
     const tryDemos = page.getByRole('link', { name: 'Try demos', exact: true });
     await expect(tryDemos).toBeVisible();
     await expect(tryDemos).toHaveAttribute('href', '#demos');
-    await expect(page.locator('[data-preset-card]')).toHaveCount(4);
+    await expect(page.locator('[data-preset-card]')).toHaveCount(3);
 
     const layout = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,

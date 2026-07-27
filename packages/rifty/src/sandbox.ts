@@ -22,8 +22,9 @@ export interface CreateSandboxOptions {
   /**
    * URL of the `@riftydev/runtime-js` worker entry, resolved by YOUR bundler — the
    * one host-specific bit the façade cannot hide (EPIC E owns the template that
-   * produces it). With Vite/webpack:
-   * `new URL('@riftydev/runtime-js/worker', import.meta.url)`.
+   * produces it). With Vite, list `@riftydev/runtime-js` as a direct dependency,
+   * import `@riftydev/runtime-js/worker?worker&url`, and configure
+   * `worker: { format: 'es' }`; pass the imported URL here.
    */
   readonly workerUrl: string | URL;
   /**

@@ -1,12 +1,10 @@
 import { icon } from '../icons';
 import { buildPlaygroundHref } from '../playground-url';
+import { HERO_SNIPPET, type SnippetToken } from '../public-snippets';
 import { startTerminalLog } from '../terminal-log';
 import './hero.css';
 
-// Build a syntax-colored code line from [text, class] pairs.
-type Tok = readonly [text: string, cls: string];
-
-function codeLine(toks: readonly Tok[]): HTMLDivElement {
+function codeLine(toks: readonly SnippetToken[]): HTMLDivElement {
   const div = document.createElement('div');
   div.className = 'hero-code-line';
   for (const [text, cls] of toks) {
@@ -46,16 +44,11 @@ function buildLeft(): HTMLElement {
     'rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium.';
   sub.append(subLead);
   sub.append(document.createElement('br'));
-  sub.append(document.createTextNode('Run tested Express, Vite 7, '));
-  const npmChip = document.createElement('code');
-  npmChip.className = 'hero-chip hero-chip-ac';
-  npmChip.textContent = 'npm tooling';
-  sub.append(npmChip);
-  sub.append(document.createTextNode(' and '));
-  const wasmChip = document.createElement('code');
-  wasmChip.className = 'hero-chip';
-  wasmChip.textContent = '.wasm';
-  sub.append(wasmChip, document.createTextNode(' workflows. Execution and files stay in the tab.'));
+  sub.append(
+    document.createTextNode(
+      'Install packages, run Node-compatible apps and CLIs, or execute WASI guests. Execution and files stay in the tab.',
+    ),
+  );
 
   const cta = document.createElement('div');
   cta.className = 'hero-cta';
@@ -106,7 +99,7 @@ function buildWindow(): HTMLElement {
   }
   const host = document.createElement('span');
   host.className = 'hero-host';
-  host.textContent = '@riftydev/sdk · v0.1';
+  host.textContent = '@riftydev/sdk · v0.2';
   const live = document.createElement('span');
   live.className = 'hero-live';
   const liveDot = document.createElement('span');
@@ -117,82 +110,7 @@ function buildWindow(): HTMLElement {
   // Code block: only methods on the current public Sandbox contract.
   const code = document.createElement('div');
   code.className = 'hero-code';
-  code.append(codeLine([['// public SDK: eval + filesystem + events', 'syn-com']]));
-  code.append(
-    codeLine([
-      ['import', 'syn-kw'],
-      [' { ', 'syn-punc'],
-      ['createSandbox', ''],
-      [' } ', 'syn-punc'],
-      ['from', 'syn-kw'],
-      [' ', ''],
-      ["'@riftydev/sdk'", 'syn-str'],
-    ]),
-  );
-  code.append(
-    codeLine([
-      ['const', 'syn-kw'],
-      [' sandbox ', ''],
-      ['=', 'syn-punc'],
-      [' ', ''],
-      ['await', 'syn-kw'],
-      [' ', ''],
-      ['createSandbox', 'syn-fn'],
-      ['({', 'syn-punc'],
-    ]),
-    codeLine([['  workerUrl,', '']]),
-    codeLine([
-      ['  skipServiceWorker: ', ''],
-      ['true', 'syn-kw'],
-      [',', 'syn-punc'],
-    ]),
-    codeLine([['})', 'syn-punc']]),
-  );
-  code.append(
-    codeLine([
-      ['sandbox', ''],
-      ['.', 'syn-punc'],
-      ['runtime', ''],
-      ['.', 'syn-punc'],
-      ['on', 'syn-fn'],
-      ['((event) => {', 'syn-punc'],
-    ]),
-    codeLine([
-      ['  if', 'syn-kw'],
-      [' (event.type === ', 'syn-punc'],
-      ["'stdout'", 'syn-str'],
-      [') console.log(event.chunk)', 'syn-punc'],
-    ]),
-    codeLine([['})', 'syn-punc']]),
-  );
-  code.append(
-    codeLine([
-      ['await', 'syn-kw'],
-      [' sandbox', ''],
-      ['.', 'syn-punc'],
-      ['fs', ''],
-      ['.', 'syn-punc'],
-      ['writeFile', 'syn-fn'],
-      ['(', 'syn-punc'],
-      ["'/hello.js'", 'syn-str'],
-      [', ', 'syn-punc'],
-      ['\'console.log("hello")\'', 'syn-str'],
-      [')', 'syn-punc'],
-    ]),
-  );
-  code.append(
-    codeLine([
-      ['await', 'syn-kw'],
-      [' sandbox', ''],
-      ['.', 'syn-punc'],
-      ['runtime', ''],
-      ['.', 'syn-punc'],
-      ['eval', 'syn-fn'],
-      ['(', 'syn-punc'],
-      ['\'console.log("hello")\'', 'syn-str'],
-      [')', 'syn-punc'],
-    ]),
-  );
+  for (const line of HERO_SNIPPET) code.append(codeLine(line));
 
   // terminal panel
   const term = document.createElement('div');
@@ -201,7 +119,7 @@ function buildWindow(): HTMLElement {
   termLabel.className = 'hero-term-label';
   const apiSpan = document.createElement('span');
   apiSpan.className = 'hero-term-vite';
-  apiSpan.textContent = '● runtime events';
+  apiSpan.textContent = '● public SDK';
   termLabel.append(apiSpan, document.createTextNode(' API TRACE'));
   const termLog = document.createElement('div');
   termLog.className = 'hero-term-log';
@@ -210,7 +128,7 @@ function buildWindow(): HTMLElement {
   const apiNote = document.createElement('p');
   apiNote.className = 'hero-api-note';
   apiNote.textContent =
-    'Shown API is the public Sandbox façade: runtime.eval/on + fs. Command execution lives at @riftydev/sdk/shell and preview routing at @riftydev/sdk/service-worker — neither is a Sandbox method.';
+    'The host supplies a bundled module-Worker URL. This eval-only example uses the public Sandbox façade: runtime.eval/on + fs. Command execution and preview routing are separate APIs.';
 
   win.append(titlebar, code, term, apiNote);
 
