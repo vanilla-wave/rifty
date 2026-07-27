@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { loadBuiltin, refreshRuntimeJsProcessBuiltin } from './index.ts';
 import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
@@ -26,6 +27,7 @@ afterEach(() => {
   } else {
     Reflect.deleteProperty(globalThis as GlobalWithNodeAlias, 'global');
   }
+  refreshRuntimeJsProcessBuiltin();
 });
 
 describe('installProcessGlobals', () => {
@@ -77,5 +79,21 @@ describe('installProcessGlobals', () => {
       identity: null,
       federated: true,
     });
+  });
+
+  it('resolves process builtins from the trusted bootstrap after the public global is poisoned', () => {
+    const trusted = new NodeProcess();
+    trusted.pid = 41;
+    const guestReplacement = { pid: 76_543, ppid: 76_542 };
+    setActiveNodeProcessBootstrap(trusted, true);
+    Object.defineProperty(globalThis, 'process', {
+      value: guestReplacement,
+      writable: true,
+      configurable: true,
+    });
+    refreshRuntimeJsProcessBuiltin();
+
+    expect(loadBuiltin('process')).toBe(trusted);
+    expect(loadBuiltin('node:process')).toBe(trusted);
   });
 });
