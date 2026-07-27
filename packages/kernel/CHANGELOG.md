@@ -17,6 +17,12 @@
 
 ### Fixed
 
+- Ancestor shutdown now fences new process reservations, signals exact remote
+  descendants child-first, and waits for their close/peer proof before cutting
+  the physical owner's output. Terminal callbacks can flush without reviving
+  the tree; listener failures surface only after every local cleanup attempt,
+  and authenticated owner death still settles finitely.
+
 - **Worker terminal drain is exact and finite (ADR-0332).** One opaque
   process-wide admission state gates stdout/stderr EOF and terminal events on
   committed per-stream targets; canceled global errors remain nonterminal,

@@ -23,19 +23,37 @@ import {
   setKernelWorkerUrl,
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
-import { type WorkerOutputState, bindWorkerStdioOutput } from '../src/worker-stdio-drain.ts';
+import {
+  type WorkerOutputState,
+  bindWorkerStdioOutput,
+  sealWorkerOutput,
+} from '../src/worker-stdio-drain.ts';
 
 class BoundaryWorker implements WorkerLike {
   readonly terminate = vi.fn();
-  readonly addEventListener = vi.fn();
-  readonly removeEventListener = vi.fn();
   readonly posted: unknown[] = [];
+  readonly #listeners = new Map<string, Set<(event: MessageEvent) => void>>();
 
   constructor(private readonly postFailure?: Error) {}
 
   postMessage(message: unknown): void {
     if (this.postFailure) throw this.postFailure;
     this.posted.push(message);
+  }
+
+  addEventListener(type: string, listener: (event: MessageEvent) => void): void {
+    const listeners = this.#listeners.get(type) ?? new Set();
+    listeners.add(listener);
+    this.#listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: (event: MessageEvent) => void): void {
+    this.#listeners.get(type)?.delete(listener);
+  }
+
+  fire(type: string, data: unknown): void {
+    const event = new MessageEvent(type, { data });
+    for (const listener of [...(this.#listeners.get(type) ?? [])]) listener(event);
   }
 }
 
@@ -94,6 +112,23 @@ async function callProcessRpc(caller: SabRing, method: string, payload: unknown)
   return decodeReply(await caller.waitReplyAsync(5_000));
 }
 
+function drainCapturedMicrotasks(tasks: (() => void)[]): unknown {
+  let failure: unknown;
+  while (tasks.length > 0) {
+    const task = tasks.shift();
+    if (task === undefined) continue;
+    try {
+      task();
+    } catch (error) {
+      failure =
+        failure === undefined
+          ? error
+          : new AggregateError([failure, error], 'captured microtasks failed');
+    }
+  }
+  return failure;
+}
+
 describe('ProcessManager owner-root process tree (ADR-0326)', () => {
   beforeEach(() => {
     setKernelWorkerUrl('https://example.invalid/kernel-worker.js');
@@ -138,7 +173,102 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(duplicateKill).toBe(false);
   });
 
-  it('allocates a same-realm descendant in the owner-root PID ledger', () => {
+  it('attempts the full owner-root teardown when a descendant listener throws', () => {
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('nodemon', workerSpec('owner'));
+    const throwingChild = manager.spawn('node', liveUntilKilled, owner.pid);
+    const sibling = manager.spawn('helper', liveUntilKilled, owner.pid);
+    const events: string[] = [];
+    throwingChild.on('exit', () => {
+      events.push('throwing-exit');
+      throw new Error('injected descendant exit failure');
+    });
+    throwingChild.on('close', () => {
+      events.push('throwing-close');
+      throw new Error('injected descendant close failure');
+    });
+    sibling.on('exit', () => events.push('sibling-exit'));
+
+    let failure: unknown;
+    try {
+      owner.kill('SIGTERM');
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors.map((error) => String(error))).toEqual([
+      expect.stringMatching(/injected descendant exit failure/u),
+      expect.stringMatching(/injected descendant close failure/u),
+    ]);
+    expect(events).toEqual(['throwing-exit', 'throwing-close', 'sibling-exit']);
+    expect(throwingChild.signalCode).toBe('SIGTERM');
+    expect(sibling.signalCode).toBe('SIGTERM');
+    expect(owner.signalCode).toBe('SIGTERM');
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+    expect(owner.kill()).toBe(false);
+  });
+
+  it('retires a naturally exiting Worker owner after a descendant listener throws', () => {
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('node', workerSpec('owner'));
+    const child = manager.spawn('helper', liveUntilKilled, owner.pid);
+    const events: string[] = [];
+    child.on('exit', () => {
+      throw new Error('injected natural-exit descendant failure');
+    });
+    owner.on('exit', (code, signal) => events.push(`exit:${String(code)}/${String(signal)}`));
+    owner.on('close', (code, signal) => events.push(`close:${String(code)}/${String(signal)}`));
+    const microtasks: (() => void)[] = [];
+    vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => microtasks.push(task));
+
+    expect(sealWorkerOutput(initOf(worker).spec.outputState)).toBe(true);
+    expect(() => worker.fire('message', { type: 'exit', code: 0 })).not.toThrow();
+    const failure = drainCapturedMicrotasks(microtasks);
+
+    expect(String(failure)).toMatch(/injected natural-exit descendant failure/u);
+    expect(events).toEqual(['exit:0/null', 'close:0/null']);
+    expect(child.signalCode).toBe('SIGTERM');
+    expect(owner.exitCode).toBe(0);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+  });
+
+  it('settles a failed same-realm handler after its stderr listener throws', async () => {
+    const microtasks: (() => void)[] = [];
+    vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => microtasks.push(task));
+    const manager = new ProcessManager();
+    const child = manager.spawn('helper', async () => {
+      throw new Error('injected handler failure');
+    });
+    const events: string[] = [];
+    child.on('stderr', () => {
+      throw new Error('injected stderr listener failure');
+    });
+    child.on('exit', (code, signal) => events.push(`exit:${String(code)}/${String(signal)}`));
+    child.on('close', (code, signal) => events.push(`close:${String(code)}/${String(signal)}`));
+    const handlerTask = microtasks.shift();
+    if (handlerTask === undefined) throw new Error('missing same-realm handler task');
+
+    let failure: unknown;
+    try {
+      await handlerTask();
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(String(failure)).toMatch(/injected stderr listener failure/u);
+    expect(events).toEqual(['exit:1/null', 'close:1/null']);
+    expect(child.exitCode).toBe(1);
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+  });
+
+  it('allocates a same-realm descendant in the owner-root PID ledger', async () => {
     const calls: Array<{ method: string; payload: unknown }> = [];
     const channel = new MessageChannel();
     publishKernelProcessSpec({
@@ -178,10 +308,12 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     ]);
 
     expect(child.kill('SIGTERM')).toBe(true);
-    expect(calls.at(-1)).toEqual({
-      method: 'process.settle',
-      payload: { pid: 41, code: null, signal: 'SIGTERM' },
-    });
+    await vi.waitFor(() =>
+      expect(calls.at(-1)).toEqual({
+        method: 'process.settle',
+        payload: { pid: 41, code: null, signal: 'SIGTERM' },
+      }),
+    );
     channel.port1.close();
     channel.port2.close();
   });
@@ -250,6 +382,64 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
   });
 
+  it('publishes a federated same-realm settle after close-listener microtasks', async () => {
+    const events: string[] = [];
+    publishKernelSyncApi({
+      call(method) {
+        if (method === 'process.reserve') return 41;
+        events.push(method);
+        return null;
+      },
+    });
+    let finishHandler!: () => void;
+    const handlerDone = new Promise<void>((resolve) => {
+      finishHandler = resolve;
+    });
+    const manager = new ProcessManager();
+    const child = manager.spawn('helper', () => handlerDone, 7, {
+      cwd: '/workspace',
+      federated: true,
+    });
+    child.on('close', () => {
+      events.push('close');
+      queueMicrotask(() => events.push('close-microtask'));
+    });
+    events.length = 0;
+
+    finishHandler();
+
+    await vi.waitFor(() => expect(events).toContain('process.settle'));
+    expect(events).toEqual(['close', 'close-microtask', 'process.settle']);
+  });
+
+  it('publishes a federated Worker settle only after close listeners and their microtasks', async () => {
+    const events: string[] = [];
+    publishKernelSyncApi({
+      call(method) {
+        if (method === 'process.reserve') return 41;
+        events.push(method);
+        return null;
+      },
+    });
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const manager = new ProcessManager();
+    const child = manager.spawnWorker('node', workerSpec('federated-close'), 7, {
+      federated: true,
+    });
+    child.on('close', () => {
+      events.push('close');
+      queueMicrotask(() => events.push('close-microtask'));
+    });
+    events.length = 0;
+
+    expect(sealWorkerOutput(initOf(worker).spec.outputState)).toBe(true);
+    worker.fire('message', { type: 'exit', code: 0 });
+
+    await vi.waitFor(() => expect(events).toContain('process.settle'));
+    expect(events).toEqual(['close', 'close-microtask', 'process.settle']);
+  });
+
   it('reads nested ps state from one exact owner-root snapshot RPC', () => {
     publishKernelSyncApi({
       call(method, payload) {
@@ -297,6 +487,92 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     manager.settleRemoteProcess(pid, owner.pid, null, 'SIGTERM');
     expect(manager.snapshot()).not.toContainEqual({ pid, ppid: owner.pid, command: 'node' });
     owner.kill();
+  });
+
+  it('keeps a killed physical owner output-open until its remote descendants settle', async () => {
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('nodemon', { ...workerSpec('nodemon'), serve: true });
+    if (owner.kind !== 'worker') throw new Error('expected Worker owner');
+    const controls = captureControls(worker);
+    const pid = manager.reserveRemoteProcess('node', owner.pid, '/workspace', owner.pid);
+    manager.commitRemoteProcess(pid, owner.pid);
+    const output: string[] = [];
+    owner.stdout().on('data', (chunk: unknown) => {
+      output.push(new TextDecoder().decode(chunk as Uint8Array));
+    });
+    const stdout = bindWorkerStdioOutput(
+      initOf(worker).spec.stdio.stdout,
+      initOf(worker).spec.outputState,
+      'stdout',
+    );
+
+    expect(owner.kill('SIGTERM')).toBe(true);
+    await vi.waitFor(() =>
+      expect(controls).toContainEqual({ kind: 'control:kill-tree', pid, signal: 'SIGTERM' }),
+    );
+    expect(owner.signalCode).toBeNull();
+    expect(worker.terminate).not.toHaveBeenCalled();
+    expect(() => stdout.write(new TextEncoder().encode('descendant closed\n'))).not.toThrow();
+
+    manager.settleRemoteProcess(pid, owner.pid, null, 'SIGTERM');
+
+    await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'));
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(output.join('')).toBe('descendant closed\n');
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+  });
+
+  it('releases a killed physical owner barrier on exact descendant peer death', async () => {
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('nodemon', { ...workerSpec('nodemon'), serve: true });
+    installProcessFederation(manager);
+    const init = initOf(worker);
+    const caller = SabRing.attach(init.spec.syncRing, init.spec.payloadCapacity);
+    const reserved = await callProcessRpc(caller, 'process.reserve', {
+      command: 'node',
+      ppid: owner.pid,
+      cwd: '/workspace',
+    });
+    const pid = Number(reserved.value);
+    expect(await callProcessRpc(caller, 'process.commit', { pid })).toEqual({
+      ok: true,
+      value: null,
+    });
+
+    expect(owner.kill('SIGTERM')).toBe(true);
+    expect(owner.signalCode).toBeNull();
+    expect(
+      await callProcessRpc(caller, 'process.peer-death', {
+        pid,
+        message: 'descendant peer closed',
+      }),
+    ).toEqual({ ok: true, value: null });
+
+    await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'));
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+  });
+
+  it('lets authenticated owner peer-close bypass an unresolved descendant barrier', async () => {
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('nodemon', { ...workerSpec('nodemon'), serve: true });
+    const pid = manager.reserveRemoteProcess('node', owner.pid, '/workspace', owner.pid);
+    manager.commitRemoteProcess(pid, owner.pid);
+
+    expect(owner.kill('SIGTERM')).toBe(true);
+    expect(owner.signalCode).toBeNull();
+    expect(sealWorkerOutput(initOf(worker).spec.outputState)).toBe(true);
+    initOf(worker).spec.stdio.ipc.postMessage({ kind: 'control:peer-closing' });
+
+    await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'));
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
   });
 
   it('routes descendant listening and peer-death removal with the attested PID', async () => {
@@ -386,6 +662,57 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(manager.snapshot()).not.toContainEqual({ pid, ppid: owner.pid, command: 'node' });
     owner.kill();
   });
+
+  it.each(['settle', 'peer-death'] as const)(
+    'releases the owner barrier when a %s listening-removal listener throws',
+    async (terminal) => {
+      const manager = new ProcessManager();
+      const worker = new BoundaryWorker();
+      setWorkerFactoryForTests(() => worker);
+      const owner = manager.spawnWorker('nodemon', workerSpec('nodemon'));
+      if (owner.kind !== 'worker') throw new Error('expected Worker owner');
+      owner.onListeningControl((control) => {
+        if (control.ports.length === 0) {
+          throw new Error(`injected ${terminal} listening-removal failure`);
+        }
+      });
+      installProcessFederation(manager);
+      const init = initOf(worker);
+      const caller = SabRing.attach(init.spec.syncRing, init.spec.payloadCapacity);
+      const reserved = await callProcessRpc(caller, 'process.reserve', {
+        command: 'node',
+        ppid: owner.pid,
+        cwd: '/workspace',
+      });
+      const pid = Number(reserved.value);
+      expect((await callProcessRpc(caller, 'process.commit', { pid })).ok).toBe(true);
+      expect(
+        await callProcessRpc(caller, 'process.listening', {
+          pid,
+          ports: [3000],
+          previewScope: 'nodemon-run',
+        }),
+      ).toEqual({ ok: true, value: null });
+
+      expect(owner.kill('SIGTERM')).toBe(true);
+      expect(owner.signalCode).toBeNull();
+      const reply = await callProcessRpc(
+        caller,
+        `process.${terminal}`,
+        terminal === 'settle'
+          ? { pid, code: 0, signal: null }
+          : { pid, message: 'app Worker peer closed' },
+      );
+
+      expect(reply.ok).toBe(false);
+      expect(reply.error?.message).toMatch(
+        new RegExp(`injected ${terminal} listening-removal failure`, 'u'),
+      );
+      await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'));
+      expect(worker.terminate).toHaveBeenCalledTimes(1);
+      expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+    },
+  );
 
   it.each(['settle', 'peer-death'] as const)(
     'does not let a silent higher PID %s tombstone an older listening PID',
@@ -501,7 +828,98 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     owner.kill();
   });
 
-  it('keeps multi-hop descendants as kill routes outside an intermediate ledger', async () => {
+  it.each(['settle', 'peer-death'] as const)(
+    'releases a forwarded owner barrier after an upstream %s failure',
+    async (terminal) => {
+      let reserveCount = 0;
+      publishKernelSyncApi({
+        call(method, payload) {
+          if (method === 'process.reserve') return ++reserveCount === 1 ? 7 : 41;
+          if (
+            method === `process.${terminal}` &&
+            (payload as { readonly pid?: number }).pid === 41
+          ) {
+            throw new Error(`injected upstream ${terminal} failure`);
+          }
+          return null;
+        },
+      });
+      const manager = new ProcessManager();
+      const worker = new BoundaryWorker();
+      setWorkerFactoryForTests(() => worker);
+      const owner = manager.spawnWorker('node', workerSpec('owner'), 1, { federated: true });
+      installProcessFederation(manager);
+      const init = initOf(worker);
+      const caller = SabRing.attach(init.spec.syncRing, init.spec.payloadCapacity);
+      expect(
+        await callProcessRpc(caller, 'process.reserve', {
+          command: 'node',
+          ppid: owner.pid,
+          cwd: '/workspace',
+        }),
+      ).toEqual({ ok: true, value: 41 });
+      expect(await callProcessRpc(caller, 'process.commit', { pid: 41 })).toEqual({
+        ok: true,
+        value: null,
+      });
+
+      expect(owner.kill('SIGTERM')).toBe(true);
+      expect(owner.signalCode).toBeNull();
+      const reply = await callProcessRpc(
+        caller,
+        `process.${terminal}`,
+        terminal === 'settle'
+          ? { pid: 41, code: null, signal: 'SIGTERM' }
+          : { pid: 41, message: 'forwarded peer closed' },
+      );
+
+      expect(reply.ok).toBe(false);
+      expect(reply.error?.message).toMatch(
+        new RegExp(`injected upstream ${terminal} failure`, 'u'),
+      );
+      await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'));
+      expect(worker.terminate).toHaveBeenCalledTimes(1);
+      expect(manager.kill(41)).toBe(false);
+      expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+    },
+  );
+
+  it('drops a forwarded reservation after an upstream abort failure', async () => {
+    let reserveCount = 0;
+    publishKernelSyncApi({
+      call(method, payload) {
+        if (method === 'process.reserve') return ++reserveCount === 1 ? 7 : 41;
+        if (method === 'process.abort' && (payload as { readonly pid?: number }).pid === 41) {
+          throw new Error('injected upstream abort failure');
+        }
+        return null;
+      },
+    });
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('node', workerSpec('owner'), 1, { federated: true });
+    installProcessFederation(manager);
+    const init = initOf(worker);
+    const caller = SabRing.attach(init.spec.syncRing, init.spec.payloadCapacity);
+    expect(
+      await callProcessRpc(caller, 'process.reserve', {
+        command: 'node',
+        ppid: owner.pid,
+        cwd: '/workspace',
+      }),
+    ).toEqual({ ok: true, value: 41 });
+    expect(manager.hasPendingRemoteProcess(41)).toBe(true);
+
+    const reply = await callProcessRpc(caller, 'process.abort', { pid: 41 });
+
+    expect(reply.ok).toBe(false);
+    expect(reply.error?.message).toMatch(/injected upstream abort failure/u);
+    expect(manager.hasPendingRemoteProcess(41)).toBe(false);
+    owner.kill();
+  });
+
+  it('waits for every postorder multi-hop kill route before cutting its physical owner', async () => {
     const relayed: string[] = [];
     publishKernelSyncApi({
       call(method) {
@@ -525,21 +943,99 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       { pid: owner.pid, ppid: 1, command: 'node' },
     ]);
     expect(manager.get(41)).toBeNull();
-    manager.settleRemoteProcess(41, owner.pid, 0, null);
-    expect(manager.kill(42, 'SIGTERM')).toBe(true);
-    expect(manager.kill(42, 'SIGTERM')).toBe(false);
+    expect(owner.kill('SIGTERM')).toBe(true);
+    expect(owner.kill('SIGTERM')).toBe(false);
     await vi.waitFor(() =>
-      expect(controls).toContainEqual({ kind: 'control:kill-tree', pid: 42, signal: 'SIGTERM' }),
+      expect(controls).toEqual([
+        { kind: 'control:kill-tree', pid: 42, signal: 'SIGTERM' },
+        { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM' },
+      ]),
     );
+    expect(owner.signalCode).toBeNull();
+    expect(worker.terminate).not.toHaveBeenCalled();
 
-    owner.kill();
-    expect(relayed.slice(-2)).toEqual(['process.peer-death', 'process.settle']);
+    manager.settleRemoteProcess(41, owner.pid, null, 'SIGTERM');
+    await Promise.resolve();
+    expect(owner.signalCode).toBeNull();
+    manager.settleRemoteProcess(42, owner.pid, null, 'SIGTERM');
+
+    await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'));
+    await vi.waitFor(() => expect(relayed.at(-1)).toBe('process.settle'));
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels admitted reservations and rejects late commit or reserve after owner kill', async () => {
+    const upstream: Array<{ method: string; payload: unknown }> = [];
+    const reservedPids = [7, 41, 42];
+    publishKernelSyncApi({
+      call(method, payload) {
+        upstream.push({ method, payload });
+        if (method === 'process.reserve') return reservedPids.shift();
+        return null;
+      },
+    });
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('node', workerSpec('owner'), 1, { federated: true });
+    installProcessFederation(manager);
+    const init = initOf(worker);
+    const caller = SabRing.attach(init.spec.syncRing, init.spec.payloadCapacity);
+    const pending = Number(
+      (
+        await callProcessRpc(caller, 'process.reserve', {
+          command: 'node',
+          ppid: owner.pid,
+          cwd: '/workspace',
+        })
+      ).value,
+    );
+    const committed = Number(
+      (
+        await callProcessRpc(caller, 'process.reserve', {
+          command: 'node',
+          ppid: owner.pid,
+          cwd: '/workspace',
+        })
+      ).value,
+    );
+    expect(await callProcessRpc(caller, 'process.commit', { pid: committed })).toEqual({
+      ok: true,
+      value: null,
+    });
+    upstream.length = 0;
+
+    expect(owner.kill('SIGTERM')).toBe(true);
+    expect(upstream).toContainEqual({ method: 'process.abort', payload: { pid: pending } });
+    const beforeLateAdmission = upstream.length;
+    expect((await callProcessRpc(caller, 'process.commit', { pid: pending })).ok).toBe(false);
+    expect(
+      (
+        await callProcessRpc(caller, 'process.reserve', {
+          command: 'node',
+          ppid: owner.pid,
+          cwd: '/workspace',
+        })
+      ).ok,
+    ).toBe(false);
+    expect(upstream).toHaveLength(beforeLateAdmission);
+    expect(owner.signalCode).toBeNull();
+
+    expect(
+      await callProcessRpc(caller, 'process.settle', {
+        pid: committed,
+        code: null,
+        signal: 'SIGTERM',
+      }),
+    ).toEqual({ ok: true, value: null });
+    await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'));
   });
 
   it('fails loud but still retires a terminal owner without upstream authority', async () => {
     publishKernelSyncApi({ call: (method) => (method === 'process.reserve' ? 7 : null) });
     const manager = new ProcessManager();
-    setWorkerFactoryForTests(() => new BoundaryWorker());
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
     const owner = manager.spawnWorker('node', workerSpec('owner'), 1, { federated: true });
     const events: string[] = [];
     owner.on('exit', (_code, signal) => events.push(`exit:${String(signal)}`));
@@ -548,14 +1044,12 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     manager.commitRemoteProcess(41, owner.pid);
 
     Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
-    let failure: unknown;
-    try {
-      owner.kill();
-    } catch (error) {
-      failure = error;
-    }
-    await Promise.resolve();
-    await Promise.resolve();
+    const microtasks: (() => void)[] = [];
+    vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => microtasks.push(task));
+    expect(owner.kill()).toBe(true);
+    expect(sealWorkerOutput(initOf(worker).spec.outputState)).toBe(true);
+    worker.fire('message', { type: 'exit', code: 0 });
+    const failure = drainCapturedMicrotasks(microtasks);
 
     expect(String(failure)).toMatch(/process\.peer-death.*upstream authority/u);
     expect(events).toEqual(['exit:SIGTERM', 'close:SIGTERM']);
@@ -575,7 +1069,8 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       },
     });
     const manager = new ProcessManager();
-    setWorkerFactoryForTests(() => new BoundaryWorker());
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
     const owner = manager.spawnWorker('node', workerSpec('owner'), 1, { federated: true });
     let closes = 0;
     owner.on('close', () => closes++);
@@ -583,14 +1078,12 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     manager.commitRemoteProcess(41, owner.pid);
     failUpstream = true;
 
-    let failure: unknown;
-    try {
-      owner.kill();
-    } catch (error) {
-      failure = error;
-    }
-    await Promise.resolve();
-    await Promise.resolve();
+    const microtasks: (() => void)[] = [];
+    vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => microtasks.push(task));
+    expect(owner.kill()).toBe(true);
+    expect(sealWorkerOutput(initOf(worker).spec.outputState)).toBe(true);
+    worker.fire('message', { type: 'exit', code: 0 });
+    const failure = drainCapturedMicrotasks(microtasks);
 
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors.map((error) => String(error))).toEqual([
@@ -674,12 +1167,21 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
         signal: 'SIGTERM',
       }),
     );
-    thread.kill();
-    expect(manager.snapshot()).not.toContainEqual({
-      pid: childPid,
-      ppid: process.pid,
-      command: 'node',
-    });
+    expect(thread.kill()).toBe(true);
+    expect(
+      await callProcessRpc(caller, 'process.settle', {
+        pid: childPid,
+        code: null,
+        signal: 'SIGTERM',
+      }),
+    ).toEqual({ ok: true, value: null });
+    await vi.waitFor(() =>
+      expect(manager.snapshot()).not.toContainEqual({
+        pid: childPid,
+        ppid: process.pid,
+        command: 'node',
+      }),
+    );
     process.kill();
   });
 
@@ -746,16 +1248,20 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
   });
 
-  it('retires remote descendants when their physical owner Worker dies', () => {
+  it('keeps remote descendants published until a killed physical owner receives settle proof', async () => {
     const manager = new ProcessManager();
     setWorkerFactoryForTests(() => new BoundaryWorker());
     const owner = manager.spawnWorker('nodemon', workerSpec('nodemon'));
     const pid = manager.reserveRemoteProcess('node', owner.pid, '/workspace', owner.pid);
     manager.commitRemoteProcess(pid, owner.pid);
 
-    owner.kill();
+    expect(owner.kill()).toBe(true);
+    expect(manager.snapshot()).toContainEqual({ pid, ppid: owner.pid, command: 'node' });
+    manager.settleRemoteProcess(pid, owner.pid, null, 'SIGTERM');
 
-    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+    await vi.waitFor(() =>
+      expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]),
+    );
   });
 
   it('aborts a failed Worker reservation without publication or PID reuse', () => {

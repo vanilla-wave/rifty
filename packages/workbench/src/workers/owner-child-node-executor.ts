@@ -31,16 +31,13 @@ import {
 
 type OwnerExecSyncRunner = NonNullable<InstallRuntimeJsExecSyncOptions['runWorker']>;
 
-interface OwnerExecSyncPort {
-  onmessage: ((event: MessageEvent) => void) | null;
-  start(): void;
+interface NodeReadable {
+  on(event: 'data', listener: (chunk: unknown) => void): unknown;
 }
 
 interface OwnerExecSyncChild extends ProcessTerminalEventSource {
-  readonly ports: {
-    readonly stdout: OwnerExecSyncPort;
-    readonly stderr: OwnerExecSyncPort;
-  };
+  readonly stdout: NodeReadable;
+  readonly stderr: NodeReadable;
   /** Synchronous kernel teardown; returning certifies the worker is physically gone. */
   terminate(): void;
 }
@@ -55,7 +52,8 @@ const spawnOwnerExecSyncChild: OwnerExecSyncSpawn = (spec, parentPid) => {
     throw new Error('owner execSync runner expected a Worker process handle');
   }
   return {
-    ports: handle.ports,
+    stdout: handle.stdout(),
+    stderr: handle.stderr(),
     on(event, listener) {
       return handle.on(event, listener);
     },
@@ -150,14 +148,12 @@ export function createOwnerExecSyncRunner(
       });
     });
     try {
-      child.ports.stdout.onmessage = (event) => {
-        if (event.data instanceof Uint8Array) stdout.push(event.data);
-      };
-      child.ports.stderr.onmessage = (event) => {
-        if (event.data instanceof Uint8Array) stderr.push(event.data);
-      };
-      child.ports.stdout.start();
-      child.ports.stderr.start();
+      child.stdout.on('data', (chunk) => {
+        if (chunk instanceof Uint8Array) stdout.push(chunk);
+      });
+      child.stderr.on('data', (chunk) => {
+        if (chunk instanceof Uint8Array) stderr.push(chunk);
+      });
       commitOwnerChildAdmission(reservation, physicalExit);
     } catch (error) {
       let failure = error;
@@ -216,9 +212,6 @@ export function buildNodeChildSpawnSpec(
   };
 }
 
-interface NodeReadable {
-  on(event: 'data', listener: (chunk: unknown) => void): unknown;
-}
 export interface NodeChildHandle {
   readonly kind: string;
   stdout(): NodeReadable;

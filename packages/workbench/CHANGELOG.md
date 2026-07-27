@@ -42,6 +42,10 @@
 - Preserve an exact trusted dependency tree across Scratch-to-project Save:
   the existing package FIFO copies claim-free bytes, then mints target-root
   trust before the durable catalog pointer commits (ADR-0329).
+- Recursive owner `execSync` now captures the kernel handle's semantic
+  stdout/stderr streams instead of replacing its raw `MessagePort` handlers,
+  preserving terminal drain accounting and finite Chromium completion.
+
 - Preview routes now consume PID-scoped private listening control and retain
   newer live ownership when stale or never-listening child teardown arrives.
 

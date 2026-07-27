@@ -192,7 +192,8 @@ interface ProcessRecord {
   /** Handle for the parent side. Late-bound in {@link ProcessManager.spawn}. */
   handle: ProcessHandle | null;
   readonly abortController: AbortController;
-  terminate(signal: string): boolean;
+  terminationRequested: boolean;
+  terminate(signal: string, afterDescendants?: Promise<void>): boolean;
   fail(code: number): boolean;
   peerFail(error: Error): boolean;
 }
@@ -214,6 +215,7 @@ interface ProcessRouteOwner {
 
 interface ForwardedProcessRoute extends ProcessRouteOwner {
   readonly ppid: number;
+  readonly settled: AbortController;
   killRequested: boolean;
 }
 
@@ -253,6 +255,13 @@ function throwCollectedErrors(label: string, errors: readonly unknown[]): void {
   if (errors.length === 0) return;
   if (errors.length === 1) throw errors[0];
   throw new AggregateError(errors, `${label}: ${errors.map((error) => String(error)).join('; ')}`);
+}
+
+function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) =>
+    signal.addEventListener('abort', () => resolve(), { once: true }),
+  );
 }
 
 interface ProcessFederationLease {
@@ -457,6 +466,7 @@ export class ProcessManager {
       parentToChild,
       handle: null,
       abortController,
+      terminationRequested: false,
       terminate: () => false,
       fail: () => false,
       peerFail: () => false,
@@ -490,19 +500,52 @@ export class ProcessManager {
     const handle = new Handle();
     const settle = (code: number | null, signal: string | null): boolean => {
       if (!manager.isLive(record)) return false;
+      record.terminationRequested = true;
+      const errors: unknown[] = [];
       const outcomePublished = handle.exitCode !== null || handle.signalCode !== null;
       const exitCode = outcomePublished ? handle.exitCode : code;
       const signalCode = outcomePublished ? handle.signalCode : signal;
-      manager.terminateDescendants(pid, signalCode ?? 'SIGTERM');
-      abortController.abort();
+      try {
+        manager.terminateDescendants(pid, signalCode ?? 'SIGTERM');
+      } catch (error) {
+        errors.push(error);
+      }
+      try {
+        abortController.abort();
+      } catch (error) {
+        errors.push(error);
+      }
       if (!outcomePublished) {
         handle.exitCode = exitCode;
         handle.signalCode = signalCode;
-        handle.emit('exit', exitCode, signalCode);
-        handle.emit('close', exitCode, signalCode);
+        try {
+          handle.emit('exit', exitCode, signalCode);
+        } catch (error) {
+          errors.push(error);
+        }
+        try {
+          handle.emit('close', exitCode, signalCode);
+        } catch (error) {
+          errors.push(error);
+        }
       }
-      manager.finalize(record, handle, [parentToChild, childToParent]);
-      federation?.settle(exitCode, signalCode);
+      try {
+        manager.finalize(record, handle, [parentToChild, childToParent]);
+      } catch (error) {
+        errors.push(error);
+      }
+      if (federation === null) {
+        throwCollectedErrors(`Process PID ${String(pid)} terminal settlement failed`, errors);
+      } else {
+        queueMicrotask(() => {
+          try {
+            federation.settle(exitCode, signalCode);
+          } catch (error) {
+            errors.push(error);
+          }
+          throwCollectedErrors(`Process PID ${String(pid)} terminal settlement failed`, errors);
+        });
+      }
       return true;
     };
     record.terminate = (signal) =>
@@ -511,11 +554,34 @@ export class ProcessManager {
       handle.exitCode === null && handle.signalCode === null && settle(code, null);
     record.peerFail = (error) => {
       if (!manager.isLive(record)) return false;
-      manager.retireOwnerDescendants(record, error);
-      abortController.abort();
-      handle.emit('peererror', error);
-      handle.emit('close', null, null);
-      manager.finalize(record, handle, [parentToChild, childToParent]);
+      record.terminationRequested = true;
+      const errors: unknown[] = [];
+      try {
+        manager.retireOwnerDescendants(record, error);
+      } catch (failure) {
+        errors.push(failure);
+      }
+      try {
+        abortController.abort();
+      } catch (failure) {
+        errors.push(failure);
+      }
+      try {
+        handle.emit('peererror', error);
+      } catch (failure) {
+        errors.push(failure);
+      }
+      try {
+        handle.emit('close', null, null);
+      } catch (failure) {
+        errors.push(failure);
+      }
+      try {
+        manager.finalize(record, handle, [parentToChild, childToParent]);
+      } catch (failure) {
+        errors.push(failure);
+      }
+      throwCollectedErrors(`Process PID ${String(pid)} peer retirement failed`, errors);
       return true;
     };
     childToParent.on('message', (msg) => handle.emit('message', msg));
@@ -548,21 +614,32 @@ export class ProcessManager {
 
     queueMicrotask(async () => {
       let exitCode = 0;
+      const errors: unknown[] = [];
       try {
         await handler(io);
       } catch (err) {
         exitCode = 1;
-        childToParent.emit(
-          'stderr',
-          err instanceof Error ? `${err.stack ?? err.message}\n` : String(err),
-        );
+        try {
+          childToParent.emit(
+            'stderr',
+            err instanceof Error ? `${err.stack ?? err.message}\n` : String(err),
+          );
+        } catch (error) {
+          errors.push(error);
+        }
       }
-      if (!manager.isLive(record)) return;
-      if (handle.exitCode !== null || handle.signalCode !== null) {
-        settle(handle.exitCode, handle.signalCode);
-        return;
+      if (manager.isLive(record)) {
+        try {
+          if (handle.exitCode !== null || handle.signalCode !== null) {
+            settle(handle.exitCode, handle.signalCode);
+          } else {
+            settle(exitCode, null);
+          }
+        } catch (error) {
+          errors.push(error);
+        }
       }
-      settle(exitCode, null);
+      throwCollectedErrors(`Process PID ${String(pid)} handler settlement failed`, errors);
     });
 
     return handle;
@@ -647,6 +724,7 @@ export class ProcessManager {
       parentToChild: new EventEmitter(),
       handle: null,
       abortController,
+      terminationRequested: false,
       terminate: () => false,
       fail: () => false,
       peerFail: () => false,
@@ -877,14 +955,34 @@ export class ProcessManager {
         }
         return manager.killRecordTree(record, signal);
       }
-      _terminate(signal: string): boolean {
-        return this._transition({ kind: 'signal', signal });
+      _terminate(signal: string, afterDescendants?: Promise<void>): boolean {
+        const outcome = { kind: 'signal', signal } satisfies WorkerTerminalOutcome;
+        if (!this._acceptOutcome(outcome)) return false;
+        if (afterDescendants === undefined) {
+          this._startOutputCut();
+        } else {
+          void afterDescendants.then(() => {
+            if (
+              manager.isLive(record) &&
+              this.#terminalOutcome === outcome &&
+              !this.#terminalFinishing
+            ) {
+              this._startOutputCut();
+            }
+          });
+        }
+        return true;
       }
       _fail(code: number): boolean {
         return this._transition({ kind: 'exit', code, cause: 'failure' });
       }
       _settleAfterStdio(code: number): void {
-        this._transition({ kind: 'exit', code, cause: 'natural' });
+        if (
+          !this._transition({ kind: 'exit', code, cause: 'natural' }) &&
+          this.#terminalOutcome !== null
+        ) {
+          this._startOutputCut();
+        }
       }
       _peerFail(error: Error): boolean {
         const outcome = { kind: 'peererror', error } satisfies WorkerTerminalOutcome;
@@ -915,6 +1013,10 @@ export class ProcessManager {
         }
         if (!outputSealedByChild) {
           return this._peerFail(error);
+        }
+        if (this.#terminalOutcome !== null) {
+          this._startOutputCut();
+          return true;
         }
         return this._transition({ kind: 'peererror', error });
       }
@@ -970,6 +1072,7 @@ export class ProcessManager {
           cause: 'failure',
           error,
         };
+        record.terminationRequested = true;
         this.#terminalOutcome = failure;
         this._abandonTerminal();
       }
@@ -981,6 +1084,7 @@ export class ProcessManager {
       _acceptOutcome(outcome: WorkerTerminalOutcome): boolean {
         if (!manager.isLive(record) || this.#terminalFinishing) return false;
         if (this.#terminalOutcome !== null) return false;
+        record.terminationRequested = true;
         this.#terminalOutcome = outcome;
         return true;
       }
@@ -989,9 +1093,10 @@ export class ProcessManager {
         this._queueTerminalDiagnostic(message);
         if (this.#terminalOutcome !== null) {
           if (!outputSealedByChild) this._abandonTerminal();
-          else this._finishTerminalIfDrained();
+          else this._startOutputCut();
           return;
         }
+        record.terminationRequested = true;
         this.#terminalOutcome = {
           kind: 'exit',
           code: 1,
@@ -1110,11 +1215,19 @@ export class ProcessManager {
           return;
         }
         this.#terminalFinishing = true;
+        const errors: unknown[] = [];
+        const attempt = (operation: () => unknown): void => {
+          try {
+            operation();
+          } catch (error) {
+            errors.push(error);
+          }
+        };
         if (outcome.kind === 'exit' && outcome.cause === 'failure') {
-          manager.terminateDescendants(pid, 'SIGTERM');
+          attempt(() => manager.terminateDescendants(pid, 'SIGTERM'));
         }
-        abortController.abort();
-        spawnResult.terminate();
+        attempt(() => abortController.abort());
+        attempt(() => spawnResult.terminate());
         const reason =
           outcome.kind === 'peererror'
             ? outcome.error
@@ -1129,53 +1242,61 @@ export class ProcessManager {
                         : 'exited'
                   }`,
                 );
-        manager.retireOwnerDescendants(record, reason);
-        this._closeOutputPorts();
-        this._signalEof();
-        this._closeControl();
+        attempt(() => manager.retireOwnerDescendants(record, reason));
+        attempt(() => this._closeOutputPorts());
+        attempt(() => this._signalEof());
+        attempt(() => this._closeControl());
         if (outcome.kind === 'peererror') {
-          this.emit('peererror', outcome.error);
-          this._retireAndScheduleTerminalClose(null, null, () =>
-            federation?.peerDeath(outcome.error),
+          attempt(() => this.emit('peererror', outcome.error));
+          this._retireAndScheduleTerminalClose(
+            null,
+            null,
+            () => federation?.peerDeath(outcome.error),
+            errors,
           );
           return;
         }
         if (outcome.kind === 'signal') {
           this.signalCode = outcome.signal;
           this.exitCode = null;
-          this.emit('exit', null, outcome.signal);
-          this._retireAndScheduleTerminalClose(null, outcome.signal, () =>
-            federation?.settle(null, outcome.signal),
+          attempt(() => this.emit('exit', null, outcome.signal));
+          this._retireAndScheduleTerminalClose(
+            null,
+            outcome.signal,
+            () => federation?.settle(null, outcome.signal),
+            errors,
           );
           return;
         }
         this.exitCode = outcome.code;
         this.signalCode = null;
-        this.emit('exit', outcome.code, null);
-        this._retireAndScheduleTerminalClose(outcome.code, null, () =>
-          federation?.settle(outcome.code, null),
+        attempt(() => this.emit('exit', outcome.code, null));
+        this._retireAndScheduleTerminalClose(
+          outcome.code,
+          null,
+          () => federation?.settle(outcome.code, null),
+          errors,
         );
       }
       _retireAndScheduleTerminalClose(
         code: number | null,
         signal: string | null,
         settleFederation: () => void,
+        errors: unknown[] = [],
       ): void {
-        const errors: unknown[] = [];
         try {
           manager.retire(record, [record.parentToChild]);
         } catch (error) {
           errors.push(error);
         }
-        this._scheduleTerminalClose(code, signal);
-        try {
-          settleFederation();
-        } catch (error) {
-          errors.push(error);
-        }
-        throwCollectedErrors(`Worker PID ${String(pid)} terminal settlement failed`, errors);
+        this._scheduleTerminalClose(code, signal, errors, settleFederation);
       }
-      _scheduleTerminalClose(code: number | null, signal: string | null): void {
+      _scheduleTerminalClose(
+        code: number | null,
+        signal: string | null,
+        errors: unknown[],
+        settleFederation: () => void,
+      ): void {
         // A flowing local Readable needs one turn to consume its final chunk
         // and one to emit 'end'. Node permits 'end' on either side of 'exit',
         // but ChildProcess 'close' follows stdio EOF.
@@ -1183,9 +1304,23 @@ export class ProcessManager {
           queueMicrotask(() => {
             try {
               this.emit('close', code, signal);
+            } catch (error) {
+              errors.push(error);
             } finally {
               this.removeAllListeners();
             }
+            // A close listener may synchronously schedule its final Node
+            // callback work. Publish remote settlement only after that
+            // microtask checkpoint so an ancestor cannot cut this realm's
+            // output while the callback is still admitted.
+            queueMicrotask(() => {
+              try {
+                settleFederation();
+              } catch (error) {
+                errors.push(error);
+              }
+              throwCollectedErrors(`Worker PID ${String(pid)} terminal settlement failed`, errors);
+            });
           });
         });
       }
@@ -1193,7 +1328,7 @@ export class ProcessManager {
 
     const handle = new WorkerHandle();
     record.handle = handle;
-    record.terminate = (signal) => handle._terminate(signal);
+    record.terminate = (signal, afterDescendants) => handle._terminate(signal, afterDescendants);
     record.fail = (code) => handle._fail(code);
     record.peerFail = (error) => handle._peerFail(error);
     if (published) this.table.set(pid, record);
@@ -1335,6 +1470,7 @@ export class ProcessManager {
         ppid,
         ownerPid,
         ...(ownerRoute === undefined ? {} : { ownerRoute }),
+        settled: new AbortController(),
         killRequested: false,
       });
       return;
@@ -1355,6 +1491,7 @@ export class ProcessManager {
       parentToChild: new EventEmitter(),
       handle: null,
       abortController: new AbortController(),
+      terminationRequested: false,
       terminate: () => false,
       fail: () => false,
       peerFail: () => false,
@@ -1364,15 +1501,31 @@ export class ProcessManager {
       if (!this.isLive(record) || killRequested) return false;
       const route = this.physicalOwnerHandle(ownerPid, ownerRoute);
       if (route?.kind !== 'worker' || !route.controlKill(pid, signal)) return false;
+      record.terminationRequested = true;
       killRequested = true;
       return true;
     };
     record.fail = () => false;
     record.peerFail = (error) => {
       if (!this.isLive(record)) return false;
-      this.retireOwnerDescendants(record, error);
-      record.abortController.abort(error);
-      this.finalize(record, null, [record.parentToChild]);
+      record.terminationRequested = true;
+      const errors: unknown[] = [];
+      try {
+        this.retireOwnerDescendants(record, error);
+      } catch (failure) {
+        errors.push(failure);
+      }
+      try {
+        record.abortController.abort(error);
+      } catch (failure) {
+        errors.push(failure);
+      }
+      try {
+        this.finalize(record, null, [record.parentToChild]);
+      } catch (failure) {
+        errors.push(failure);
+      }
+      throwCollectedErrors(`Remote process PID ${String(pid)} peer retirement failed`, errors);
       return true;
     };
     this.table.set(pid, record);
@@ -1462,11 +1615,22 @@ export class ProcessManager {
     if (owner?.kind !== 'worker') {
       throw new Error(`process.peer-death: owner PID ${ownerPid} has no live worker route`);
     }
+    const errors: unknown[] = [];
     if (record?.remoteListening) {
-      owner.emit('control:listening', { pid, ports: [] } satisfies ProcessListeningControl);
-      record.remoteListening = false;
+      try {
+        owner.emit('control:listening', { pid, ports: [] } satisfies ProcessListeningControl);
+      } catch (failure) {
+        errors.push(failure);
+      } finally {
+        record.remoteListening = false;
+      }
     }
-    record?.peerFail(error);
+    try {
+      record?.peerFail(error);
+    } catch (failure) {
+      errors.push(failure);
+    }
+    throwCollectedErrors(`Remote process PID ${String(pid)} peer-death failed`, errors);
   }
 
   settleRemoteProcess(
@@ -1478,24 +1642,42 @@ export class ProcessManager {
   ): void {
     const record = this.table.get(pid);
     if (record === undefined) {
-      if (this.sameRoute(this.forwardedRoutes.get(pid), ownerPid, ownerRoute)) {
+      const forwarded = this.forwardedRoutes.get(pid);
+      if (this.sameRoute(forwarded, ownerPid, ownerRoute)) {
+        forwarded?.settled.abort();
         this.forwardedRoutes.delete(pid);
       }
       return;
     }
     if (!this.sameRoute(record, ownerPid, ownerRoute, true)) return;
+    const errors: unknown[] = [];
     if (record.remoteListening) {
       const owner = this.physicalOwnerHandle(ownerPid, ownerRoute);
       if (owner?.kind !== 'worker') {
-        throw new Error(`process.settle: owner PID ${ownerPid} has no live worker route`);
+        errors.push(new Error(`process.settle: owner PID ${ownerPid} has no live worker route`));
+      } else {
+        try {
+          owner.emit('control:listening', { pid, ports: [] } satisfies ProcessListeningControl);
+        } catch (error) {
+          errors.push(error);
+        }
       }
-      owner.emit('control:listening', { pid, ports: [] } satisfies ProcessListeningControl);
       record.remoteListening = false;
     }
     record.exitCode = code;
     record.signalCode = signal;
-    record.abortController.abort();
-    this.finalize(record, null, [record.parentToChild]);
+    record.terminationRequested = true;
+    try {
+      record.abortController.abort();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      this.finalize(record, null, [record.parentToChild]);
+    } catch (error) {
+      errors.push(error);
+    }
+    throwCollectedErrors(`Remote process PID ${String(pid)} settlement failed`, errors);
   }
 
   spawnWorkerThread(
@@ -1510,10 +1692,36 @@ export class ProcessManager {
   }
 
   private killRecordTree(record: ProcessRecord, signal: string): boolean {
-    if (!this.isLive(record)) return false;
-    if (!record.published) return record.terminate(signal);
-    this.terminateDescendants(record.pid, signal);
-    return record.terminate(signal);
+    if (!this.isLive(record) || record.terminationRequested) return false;
+    record.terminationRequested = true;
+    const errors: unknown[] = [];
+    try {
+      this.cancelPhysicalPendingReservations(record);
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      if (record.published) this.terminateDescendants(record.pid, signal);
+      else this.terminatePhysicalRemoteRecords(record, signal);
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      this.terminatePhysicalForwardedRoutes(record, signal);
+    } catch (error) {
+      errors.push(error);
+    }
+    const descendantSettlement =
+      record.handle?.kind === 'worker' ? this.waitForPhysicalRemoteDescendants(record) : undefined;
+    let accepted = false;
+    try {
+      accepted = record.terminate(signal, descendantSettlement);
+    } catch (error) {
+      errors.push(error);
+    }
+    if (!accepted && this.isLive(record)) record.terminationRequested = false;
+    throwCollectedErrors(`Worker PID ${String(record.pid)} termination admission failed`, errors);
+    return accepted;
   }
 
   private terminateDescendants(
@@ -1524,11 +1732,132 @@ export class ProcessManager {
     const directChildren = [...this.table.values(), ...this.hiddenThreads].filter(
       (record) => record.treeParentPid === pid && !visited.has(record),
     );
+    const errors: unknown[] = [];
     for (const child of directChildren) {
       visited.add(child);
-      this.terminateDescendants(child.pid, signal, visited);
-      if (this.isLive(child)) child.terminate(signal);
+      try {
+        this.terminateDescendants(child.pid, signal, visited);
+      } catch (error) {
+        errors.push(error);
+      }
+      if (!this.isLive(child) || child.terminationRequested) continue;
+      try {
+        child.terminate(signal);
+      } catch (error) {
+        errors.push(error);
+      }
     }
+    throwCollectedErrors(`Process PID ${String(pid)} descendant termination failed`, errors);
+  }
+
+  private terminatePhysicalRemoteRecords(owner: ProcessRecord, signal: string): void {
+    const records = [...this.table.values()].filter(
+      (record) =>
+        record.remoteOwnerPid !== undefined &&
+        this.isPhysicalOwner(owner, record.remoteOwnerPid, record.remoteOwnerRoute),
+    );
+    const owned = new Set(records);
+    const depth = (record: ProcessRecord): number => {
+      let current = record;
+      let value = 0;
+      const seen = new Set<ProcessRecord>();
+      while (!seen.has(current)) {
+        seen.add(current);
+        const parent = records.find((candidate) => candidate.pid === current.ppid);
+        if (parent === undefined || !owned.has(parent)) return value;
+        current = parent;
+        value++;
+      }
+      return value;
+    };
+    records.sort((left, right) => depth(right) - depth(left));
+    const errors: unknown[] = [];
+    for (const record of records) {
+      if (!this.isLive(record) || record.terminationRequested) continue;
+      try {
+        record.terminate(signal);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    throwCollectedErrors(
+      `Worker PID ${String(owner.pid)} remote descendant termination failed`,
+      errors,
+    );
+  }
+
+  private cancelPhysicalPendingReservations(owner: ProcessRecord): void {
+    const errors: unknown[] = [];
+    for (const [pid, pending] of [...this.pendingRemote]) {
+      if (!this.isPhysicalOwner(owner, pending.ownerPid, pending.ownerRoute)) continue;
+      try {
+        if (pending.upstreamAuthority) callRequiredUpstream(PROCESS_ABORT_RPC, { pid });
+      } catch (error) {
+        errors.push(error);
+      } finally {
+        this.pendingRemote.delete(pid);
+      }
+    }
+    throwCollectedErrors(
+      `Worker PID ${String(owner.pid)} pending reservation cancellation failed`,
+      errors,
+    );
+  }
+
+  private terminatePhysicalForwardedRoutes(owner: ProcessRecord, signal: string): void {
+    const routes = [...this.forwardedRoutes].filter(([, route]) =>
+      this.isPhysicalOwner(owner, route.ownerPid, route.ownerRoute),
+    );
+    const pids = new Set(routes.map(([pid]) => pid));
+    const depth = (pid: number, route: ForwardedProcessRoute): number => {
+      let parentPid = route.ppid;
+      let value = 0;
+      const seen = new Set<number>([pid]);
+      while (pids.has(parentPid) && !seen.has(parentPid)) {
+        seen.add(parentPid);
+        value++;
+        const parent = this.forwardedRoutes.get(parentPid);
+        if (parent === undefined) break;
+        parentPid = parent.ppid;
+      }
+      return value;
+    };
+    routes.sort(
+      ([leftPid, left], [rightPid, right]) => depth(rightPid, right) - depth(leftPid, left),
+    );
+    const errors: unknown[] = [];
+    for (const [pid, route] of routes) {
+      if (route.killRequested) continue;
+      try {
+        this.kill(pid, signal);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    throwCollectedErrors(
+      `Worker PID ${String(owner.pid)} forwarded descendant termination failed`,
+      errors,
+    );
+  }
+
+  private waitForPhysicalRemoteDescendants(owner: ProcessRecord): Promise<void> | undefined {
+    const barriers = [
+      ...[...this.table.values()]
+        .filter(
+          (record) =>
+            record.terminationRequested &&
+            record.remoteOwnerPid !== undefined &&
+            this.isPhysicalOwner(owner, record.remoteOwnerPid, record.remoteOwnerRoute),
+        )
+        .map(({ abortController }) => waitForAbort(abortController.signal)),
+      ...[...this.forwardedRoutes.values()]
+        .filter(
+          (route) =>
+            route.killRequested && this.isPhysicalOwner(owner, route.ownerPid, route.ownerRoute),
+        )
+        .map(({ settled }) => waitForAbort(settled.signal)),
+    ];
+    return barriers.length === 0 ? undefined : Promise.all(barriers).then(() => {});
   }
 
   private failRecord(record: ProcessRecord, code: number): boolean {
@@ -1551,13 +1880,23 @@ export class ProcessManager {
     const directChildren = [...this.table.values(), ...this.hiddenThreads].filter(
       (record) => record.treeParentPid === pid && !visited.has(record),
     );
+    const errors: unknown[] = [];
     for (const child of directChildren) {
       visited.add(child);
-      this.retirePeerDescendants(child.pid, error, visited);
+      try {
+        this.retirePeerDescendants(child.pid, error, visited);
+      } catch (failure) {
+        errors.push(failure);
+      }
       if (!this.isLive(child)) continue;
-      if (child.remoteOwnerPid !== undefined) child.peerFail(error);
-      else child.terminate('SIGTERM');
+      try {
+        if (child.remoteOwnerPid !== undefined) child.peerFail(error);
+        else child.terminate('SIGTERM');
+      } catch (failure) {
+        errors.push(failure);
+      }
     }
+    throwCollectedErrors(`Process PID ${String(pid)} peer descendant retirement failed`, errors);
   }
 
   private isLive(record: ProcessRecord): boolean {
@@ -1570,10 +1909,12 @@ export class ProcessManager {
     let cursor = candidatePid;
     const seen = new Set<number>();
     while (!seen.has(cursor)) {
+      const record = this.table.get(cursor);
+      const forwarded = this.forwardedRoutes.get(cursor);
+      if (record?.terminationRequested === true || forwarded?.killRequested === true) return false;
       if (cursor === ownerPid) return true;
       seen.add(cursor);
-      const record = this.table.get(cursor);
-      const parentPid = record?.ppid ?? this.forwardedRoutes.get(cursor)?.ppid;
+      const parentPid = record?.ppid ?? forwarded?.ppid;
       if (parentPid === undefined) return false;
       cursor = parentPid;
     }
@@ -1665,6 +2006,7 @@ export class ProcessManager {
       .filter(([, route]) => route.ppid === pid)
       .map(([childPid]) => childPid);
     for (const childPid of descendants) this.deleteForwardedSubtree(childPid);
+    this.forwardedRoutes.get(pid)?.settled.abort();
     this.forwardedRoutes.delete(pid);
   }
 }
@@ -1780,6 +2122,34 @@ export function installProcessFederation(manager: ProcessManager): void {
     manager[VALIDATE_FORWARDED](pid, ownerPid, ownerRoute, state, method);
     return callRequiredUpstream(method, payload);
   };
+  const relayKnownTerminal = (
+    method: string,
+    payload: unknown,
+    pid: number,
+    ownerPid: number,
+    ownerRoute: SyncRpcCallerContext,
+    state: 'reserved' | 'committed',
+    finalizeLocal: () => void,
+  ): unknown => {
+    const upstream = manager[ROUTES_UPSTREAM](pid);
+    if (upstream) manager[VALIDATE_FORWARDED](pid, ownerPid, ownerRoute, state, method);
+    const errors: unknown[] = [];
+    let relayed: unknown;
+    if (upstream) {
+      try {
+        relayed = callRequiredUpstream(method, payload);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    try {
+      finalizeLocal();
+    } catch (error) {
+      errors.push(error);
+    }
+    throwCollectedErrors(`${method} teardown failed`, errors);
+    return relayed;
+  };
   dispatcher.register(PROCESS_RESERVE_RPC, (payload, context) => {
     const record = rpcRecord(payload, ['command', 'ppid', 'cwd'], PROCESS_RESERVE_RPC);
     const ppid = positivePid(record.ppid, 'process.reserve ppid');
@@ -1819,8 +2189,15 @@ export function installProcessFederation(manager: ProcessManager): void {
     const record = rpcRecord(payload, ['pid'], PROCESS_ABORT_RPC);
     const pid = positivePid(record.pid, 'process.abort pid');
     const { pid: ownerPid, route: ownerRoute } = rpcOwner(context, PROCESS_ABORT_RPC);
-    const relayed = relayKnown(PROCESS_ABORT_RPC, payload, pid, ownerPid, ownerRoute, 'reserved');
-    manager.abortRemoteProcess(pid, ownerPid, ownerRoute);
+    const relayed = relayKnownTerminal(
+      PROCESS_ABORT_RPC,
+      payload,
+      pid,
+      ownerPid,
+      ownerRoute,
+      'reserved',
+      () => manager.abortRemoteProcess(pid, ownerPid, ownerRoute),
+    );
     if (relayed !== undefined) return relayed;
     return null;
   });
@@ -1841,8 +2218,15 @@ export function installProcessFederation(manager: ProcessManager): void {
       throw new TypeError('process.settle requires exactly one of code or signal');
     }
     const { pid: ownerPid, route: ownerRoute } = rpcOwner(context, PROCESS_SETTLE_RPC);
-    const relayed = relayKnown(PROCESS_SETTLE_RPC, payload, pid, ownerPid, ownerRoute, 'committed');
-    manager.settleRemoteProcess(pid, ownerPid, code, signal, ownerRoute);
+    const relayed = relayKnownTerminal(
+      PROCESS_SETTLE_RPC,
+      payload,
+      pid,
+      ownerPid,
+      ownerRoute,
+      'committed',
+      () => manager.settleRemoteProcess(pid, ownerPid, code, signal, ownerRoute),
+    );
     if (relayed !== undefined) return relayed;
     return null;
   });
@@ -1891,15 +2275,15 @@ export function installProcessFederation(manager: ProcessManager): void {
     const pid = positivePid(record.pid, 'process.peer-death pid');
     const { pid: ownerPid, route: ownerRoute } = rpcOwner(context, PROCESS_PEER_DEATH_RPC);
     const error = new Error(rpcString(record.message, 'process.peer-death message'));
-    const relayed = relayKnown(
+    const relayed = relayKnownTerminal(
       PROCESS_PEER_DEATH_RPC,
       payload,
       pid,
       ownerPid,
       ownerRoute,
       'committed',
+      () => manager[ROUTE_REMOTE_PEER_DEATH](pid, ownerPid, ownerRoute, error),
     );
-    manager[ROUTE_REMOTE_PEER_DEATH](pid, ownerPid, ownerRoute, error);
     if (relayed !== undefined) return relayed;
     return null;
   });

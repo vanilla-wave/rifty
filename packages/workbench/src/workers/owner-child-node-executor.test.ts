@@ -91,18 +91,20 @@ function makeCtx(over: Record<string, unknown> = {}): CommandContext {
 }
 
 function fakeRecursiveChild() {
-  const stdout = {
-    onmessage: null as ((event: MessageEvent) => void) | null,
-    start: vi.fn(),
+  const dataListeners: Record<'stdout' | 'stderr', ((chunk: unknown) => void)[]> = {
+    stdout: [],
+    stderr: [],
   };
-  const stderr = {
-    onmessage: null as ((event: MessageEvent) => void) | null,
-    start: vi.fn(),
-  };
+  const readable = (stream: 'stdout' | 'stderr') => ({
+    on(event: 'data', listener: (chunk: unknown) => void) {
+      if (event === 'data') dataListeners[stream].push(listener);
+    },
+  });
   const listeners: Partial<Record<'exit' | 'peererror', (...args: unknown[]) => void>> = {};
   return {
     child: {
-      ports: { stdout, stderr },
+      stdout: readable('stdout'),
+      stderr: readable('stderr'),
       on(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void) {
         listeners[event] = listener;
       },
@@ -111,8 +113,12 @@ function fakeRecursiveChild() {
       },
       terminate: vi.fn(),
     },
-    stdout: (data: Uint8Array) => stdout.onmessage?.({ data } as MessageEvent),
-    stderr: (data: Uint8Array) => stderr.onmessage?.({ data } as MessageEvent),
+    stdout: (data: Uint8Array) => {
+      for (const listener of dataListeners.stdout) listener(data);
+    },
+    stderr: (data: Uint8Array) => {
+      for (const listener of dataListeners.stderr) listener(data);
+    },
     exit: (code: number) => listeners.exit?.(code, null),
   };
 }
@@ -273,13 +279,11 @@ describe('owner-child-node-executor', () => {
   });
 
   it('rejects when the owner execSync worker peer dies instead of leaving its caller pending', async () => {
-    const port = () => ({
-      onmessage: null as ((event: MessageEvent) => void) | null,
-      start: vi.fn(),
-    });
+    const readable = () => ({ on: vi.fn() });
     const child = Object.assign(new EventEmitter(), {
       kind: 'worker' as const,
-      ports: { stdout: port(), stderr: port() },
+      stdout: readable,
+      stderr: readable,
       kill: vi.fn(),
     });
     vi.spyOn(globalProcessManager, 'spawnWorker').mockReturnValue(
