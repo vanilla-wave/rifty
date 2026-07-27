@@ -42,6 +42,7 @@ import {
   spawnWorkerChild,
 } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { nodeChildSpawnOptions } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 
 // ADR-0011 phase 3 / ADR-0039: the runtime-js `'execSync'` handler. Kernel ships
@@ -331,7 +332,7 @@ function spawnViaSameRealm(
       });
     },
     parent.pid,
-    { cwd: execution.cwd },
+    nodeChildSpawnOptions(execution.cwd),
   );
 
   wiring.handle = handle;

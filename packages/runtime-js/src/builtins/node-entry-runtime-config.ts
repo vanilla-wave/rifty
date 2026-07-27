@@ -1,4 +1,9 @@
-import { type WorkerEntryDescriptor, readKernelEntryBootstrap } from '@riftydev/kernel';
+import {
+  type SpawnOptions as KernelSpawnOptions,
+  type WorkerEntryDescriptor,
+  readKernelEntryBootstrap,
+  readKernelProcessSpec,
+} from '@riftydev/kernel';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 
 export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v2' as const;
@@ -48,6 +53,11 @@ interface NodeEntryWorkerConfig {
 }
 
 let nodeEntryWorkerConfig: NodeEntryWorkerConfig | null = null;
+
+/** Kernel options shared by logical Node-child spawn paths in this process realm. */
+export function nodeChildSpawnOptions(cwd: string): KernelSpawnOptions {
+  return { cwd, federated: readKernelProcessSpec() !== null };
+}
 
 function snapshotUrl(url: string | URL): string {
   const value = String(url);

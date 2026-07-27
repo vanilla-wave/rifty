@@ -27,7 +27,10 @@
  */
 
 import { globalProcessManager, observeProcessTerminalOutcome } from '@riftydev/kernel';
-import { buildConfiguredNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
+import {
+  buildConfiguredNodeEntryWorkerEntry,
+  nodeChildSpawnOptions,
+} from '../builtins/node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from '../builtins/node-entry-url.ts';
 
 /**
@@ -123,7 +126,7 @@ export function makeRecursiveRunner(): NodeEntryRunner {
         cwd: spec.cwd,
       },
       context?.parentPid ?? 1,
-      { cwd: spec.cwd },
+      nodeChildSpawnOptions(spec.cwd),
     );
     if (nested.kind !== 'worker') {
       throw new Error('recursive-runner: expected a Worker process handle');

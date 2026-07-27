@@ -3,7 +3,10 @@
 import { NotImplementedError, type Readable } from '@riftydev/io';
 import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
-import { buildConfiguredNodeEntryWorkerEntry } from './node-entry-runtime-config.ts';
+import {
+  buildConfiguredNodeEntryWorkerEntry,
+  nodeChildSpawnOptions,
+} from './node-entry-runtime-config.ts';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -320,7 +323,10 @@ export function spawnWorkerChild(
     cwd: plan.cwd,
     serve: true,
   };
-  return globalProcessManager.spawnWorker(command, spec, parent.pid, {
-    cwd: plan.cwd,
-  });
+  return globalProcessManager.spawnWorker(
+    command,
+    spec,
+    parent.pid,
+    nodeChildSpawnOptions(plan.cwd),
+  );
 }
