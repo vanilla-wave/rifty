@@ -49,7 +49,7 @@ Options rejected: (a) hidden `startRealVite` boot keeping `['vite']`-only — re
 - (−) Boot depends on the seeded package.json script — failures surface as visible terminal errors (acceptable: surfaced, not silent).
 - (−) `'vite'`-literal grep no longer finds boot sites — grep `terminalDevLine`.
 - Shipped alongside: `RIFTY_PLAYGROUND_PORT` env (vite + playwright configs) — parallel-worktree dev/e2e.
-- Follow-ups: sqlite OPFS persistence (`docs/backlog/net/sqlite-opfs-persistence.md`) would let the demo survive restarts; no restart-on-edit for node servers (`docs/backlog/playground/node-server-restart-on-edit.md`); no bare `node <file>` terminal command (`docs/backlog/playground/terminal-node-command.md`); window-owner readiness was unauthenticated (closed by ADR-0160); transient port-flip window on cross-template preset switch (`docs/backlog/playground/preset-switch-port-flip-window.md`); opt-in live harness IPC noise (`docs/backlog/runtime-js/in-process-harness-vitest-ipc-noise.md`).
+- Follow-ups: sqlite OPFS persistence (`docs/backlog/net/sqlite-opfs-persistence.md`) would let the demo survive restarts; restart-on-edit for Node servers closed by ADR-0327; no bare `node <file>` terminal command (`docs/backlog/playground/terminal-node-command.md`); window-owner readiness was unauthenticated (closed by ADR-0160); transient port-flip window on cross-template preset switch (`docs/backlog/playground/preset-switch-port-flip-window.md`); opt-in live harness IPC noise (`docs/backlog/runtime-js/in-process-harness-vitest-ipc-noise.md`).
 
 Refs: ADR-0065 (sql.js DatabaseSync), ADR-0078 (ProjectSpec), ADR-0040 (`SW_ROUTING_VERSION`), ADR-0097 (preview frame contexts), ADR-0123 (port-aware owner routing), D-001 (COI/no-CDN), D-004 (registry URL).
 

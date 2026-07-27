@@ -5,7 +5,6 @@ title: `require.cache` must expose and control CJS module records
 created: 2026-07-12
 why: loader-created require functions expose a detached empty object and CJS-local require has no cache property
 user_story: As a Node program that inspects or deletes `require.cache[require.resolve(id)]`, I want the operation to observe and reload the same CJS records as Node, but today it is disconnected from rifty's ModuleRegistry.
-blocked_by: [playground/node-server-restart-on-edit]
 sources: [ADR-0004, Node-v24.16.0-probe]
 code: [packages/runtime-js/src/module-loader/cjs.ts, packages/runtime-js/src/module-loader/loader.ts, packages/runtime-js/src/module-loader/registry.ts]
 ---
@@ -14,11 +13,11 @@ code: [packages/runtime-js/src/module-loader/cjs.ts, packages/runtime-js/src/mod
 
 `createRequire()` currently assigns a fresh empty object to `req.cache`; the
 per-module CJS `require` function does not expose `.cache`. Neither view owns or
-mutates `ModuleRegistry`. `playground/node-server-restart-on-edit` owns record
-creation, fields, parent/children lifecycle, loaded transitions, and failed-load
-unlink under ADR-0325. This item begins after that lifecycle exists and owns
-only one public cache view plus Node-compatible delete/reload behavior. An already cached ESM
-namespace for the same URL remains cached. Rifty's explicit
+mutates `ModuleRegistry`. ADR-0325 puts record creation, fields,
+parent/children lifecycle, loaded transitions, and failed-load unlink on that
+registry. This item owns only one public cache view plus Node-compatible
+delete/reload behavior. An already cached ESM namespace for the same URL
+remains cached. Rifty's explicit
 `loader.invalidate(id)` is a separate, intentionally stronger HMR operation
 that coherently drops the execution record and derived namespace. Do not claim
 that operation as `require.cache` parity.
