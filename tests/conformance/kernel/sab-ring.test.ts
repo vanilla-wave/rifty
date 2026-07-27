@@ -80,6 +80,20 @@ function startContenders(startSab: SharedArrayBuffer): void {
   Atomics.notify(start, 0);
 }
 
+async function readPublishedRequest(ring: SabRing, timeoutMs: number): Promise<Uint8Array> {
+  const deadline = performance.now() + timeoutMs;
+  for (;;) {
+    const request = ring.readRequest();
+    if (request !== null) return request;
+
+    const remainingMs = deadline - performance.now();
+    if (remainingMs <= 0) throw new Error(`SAB request timed out after ${timeoutMs}ms`);
+    const arm = ring.armRequest(remainingMs);
+    const wake = arm.async ? await arm.value : arm.value;
+    if (wake === 'timed-out') throw new Error(`SAB request timed out after ${timeoutMs}ms`);
+  }
+}
+
 // Real-Worker lifecycle (spawn + 4 cross-thread Atomics round-trips + join) is
 // load-sensitive: under a fully-loaded CI runner the worker's startup/exit can
 // stall past vitest's 5000ms default, yielding a flaky bare test-timeout (no
@@ -199,12 +213,9 @@ describe.skipIf(!hasSab)('SabRing — real Worker round-trip (ADR-0011 phase 1)'
       await Promise.all(observed.map(({ ready }) => ready));
       startContenders(startSab);
 
-      const arm = responder.armRequest(2_000);
-      const wake = arm.async ? await arm.value : arm.value;
-      expect(wake).not.toBe('timed-out');
-      const request = responder.readRequest();
-      expect(request?.byteLength).toBe(1);
-      responder.writeReply(new Uint8Array([request?.[0] ?? 0]));
+      const request = await readPublishedRequest(responder, 2_000);
+      expect(request.byteLength).toBe(1);
+      responder.writeReply(new Uint8Array([request[0] ?? 0]));
 
       const results = await Promise.all(observed.map(({ result }) => result));
       expect(results.filter(({ type }) => type === 'done')).toHaveLength(1);
