@@ -2,6 +2,11 @@ import { RegistryClient } from '@riftydev/npm-client';
 import type { FsSync } from '@riftydev/vfs';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import {
+  type InstallStampAuthority,
+  createInstallStampAuthority,
+} from '../glue/install-stamp-authority.ts';
+import { type InstallStamp, installStampPath } from '../glue/install-stamp.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { ProjectBusyError, ProjectDefinitionMismatchError } from '../workbench/errors.ts';
 import { createPlaygroundProjectCatalog } from '../workbench/internal/playground-project-catalog.ts';
@@ -22,6 +27,11 @@ import {
   type OwnerVfsAuthorityComposition,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import {
+  type PackageAcquisitionAdapter,
+  type PackageAcquisitionAuthority,
+  createPackageAcquisitionAuthority,
+} from './package-acquisition-authority.ts';
 import { recoverOwnerPlaygroundArchiveTransaction } from './playground-archive-integration.ts';
 import {
   type PlaygroundProjectAuthority,
@@ -98,8 +108,36 @@ interface CatalogHarness {
   readonly fs: MemoryFsSync;
   readonly authority: OwnerVfsAuthority;
   readonly installStampClaims: OwnerVfsAuthorityComposition['installStampClaims'];
+  readonly stamps: InstallStampAuthority;
+  readonly packages: ProjectSavePackageAuthority;
   readonly owner: PlaygroundProjectAuthority;
   readonly catalog: PlaygroundProjectCatalog;
+}
+
+type ProjectSaveStampResult =
+  | { readonly status: 'untrusted' }
+  | { readonly status: 'trusted'; readonly stamp: InstallStamp };
+
+interface ProjectSavePackageAuthority extends PackageAcquisitionAuthority {
+  projectSave<T>(
+    input: {
+      readonly source: { readonly root: string; readonly slug: string };
+      readonly target: { readonly root: string; readonly slug: string };
+    },
+    operation: (rebind: () => Promise<ProjectSaveStampResult>) => Promise<T>,
+  ): Promise<T>;
+}
+
+function catalogPackageAdapter(): PackageAcquisitionAdapter {
+  return {
+    readTrustedPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
+    planSnapshotRestore: async () => ({ status: 'rejected', reason: 'not requested' }),
+    install: async () => {
+      throw new Error('catalog Save contract must not run package acquisition');
+    },
+    reset: async () => {},
+    switchProject: async () => {},
+  };
 }
 
 async function harness(
@@ -111,8 +149,25 @@ async function harness(
     ownerEpoch: 'playground-catalog-contract-owner',
     initialRoots: ['/', '/.rifty'],
   });
+  const vfs = new SyncMirrorVfs();
+  const stamps = createInstallStampAuthority({
+    vfs,
+    fsSync: composition.authority,
+    claimIo: composition.installStampClaims,
+  });
+  const packages = createPackageAcquisitionAuthority({
+    stamps,
+    stampTransition: { flush: () => composition.authority.flush() },
+    adapter: catalogPackageAdapter(),
+  }) as ProjectSavePackageAuthority;
   let stageSequence = 0;
-  const owner = await createPlaygroundProjectAuthority({
+  const owner = await (
+    createPlaygroundProjectAuthority as unknown as (
+      options: Parameters<typeof createPlaygroundProjectAuthority>[0] & {
+        readonly projectSave: ProjectSavePackageAuthority;
+      },
+    ) => Promise<PlaygroundProjectAuthority>
+  )({
     ...composition,
     persistence,
     now,
@@ -120,14 +175,35 @@ async function harness(
     acquisition: Object.freeze({
       ensure: async () => Object.freeze({ kind: 'install' as const, snapshotFailures: [] }),
     }),
+    projectSave: packages,
   });
   return {
     fs,
     authority: composition.authority,
     installStampClaims: composition.installStampClaims,
+    stamps,
+    packages,
     owner,
     catalog: createPlaygroundProjectCatalog(owner),
   };
+}
+
+async function mintTrusted(
+  h: CatalogHarness,
+  root: string,
+  slug: string,
+  packages: number,
+): Promise<void> {
+  const packageJsonText = decoder.decode(h.authority.readFileBytesSync(`${root}/package.json`));
+  const claim = await h.stamps.demote({ root, slug }, { flush: () => h.authority.flush() });
+  await expect(
+    h.stamps.promote(
+      { root, slug, packageJsonText },
+      { epoch: claim.epoch, packages, flush: () => h.authority.flush() },
+    ),
+  ).resolves.toMatchObject({ status: 'trusted' });
+  const report = await h.authority.flush();
+  expect(report?.total ?? 0).toBe(0);
 }
 
 function treeFiles(fs: FsSync, root: string): Readonly<Record<string, readonly number[]>> {
@@ -1242,6 +1318,58 @@ describe('Playground catalog crash recovery', () => {
       dependencyBytes,
     );
     expect(h.installStampClaims.read(projectRoot)).toBeNull();
+    await expect(h.stamps.check({ root: projectRoot, slug: 'project-a' })).resolves.toEqual({
+      status: 'absent',
+    });
+    expect(h.fs.existsSync('/.rifty/workbench/v1/projects/scratch')).toBe(false);
+    await h.owner.close();
+  });
+
+  it('rebinds only the trusted top Scratch claim after a claim-free Save copy', async () => {
+    const h = await harness();
+    await h.catalog.createScratch({ definition: definition('scratch') });
+    const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
+    const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const nestedRelative = 'node_modules/pkg/examples/nested';
+    const nestedScratchRoot = `${scratchRoot}/${nestedRelative}`;
+    const nestedProjectRoot = `${projectRoot}/${nestedRelative}`;
+    const markerBytes = encoder.encode('ordinary dependency marker');
+
+    h.authority.mkdirSync(`${scratchRoot}/node_modules/pkg`, { recursive: true });
+    h.authority.writeFileSync(`${scratchRoot}/node_modules/pkg/marker.txt`, markerBytes);
+    h.authority.mkdirSync(`${nestedScratchRoot}/node_modules/dep`, { recursive: true });
+    h.authority.writeFileSync(
+      `${nestedScratchRoot}/package.json`,
+      encoder.encode('{"name":"nested","dependencies":{"dep":"1.0.0"}}\n'),
+    );
+    h.authority.writeFileSync(
+      `${nestedScratchRoot}/node_modules/dep/package.json`,
+      encoder.encode('{"name":"dep","version":"1.0.0"}\n'),
+    );
+    await mintTrusted(h, scratchRoot, 'scratch', 1);
+    await mintTrusted(h, nestedScratchRoot, 'nested', 1);
+
+    await h.catalog.saveScratch({
+      id: 'project-a',
+      name: 'Project A',
+      definition: definition('project-a'),
+    });
+
+    await expect(h.stamps.check({ root: projectRoot, slug: 'project-a' })).resolves.toMatchObject({
+      status: 'trusted',
+      stamp: {
+        root: projectRoot,
+        slug: 'project-a',
+        packages: 1,
+      },
+    });
+    await expect(h.stamps.check({ root: nestedProjectRoot, slug: 'nested' })).resolves.toEqual({
+      status: 'absent',
+    });
+    expect(h.installStampClaims.read(nestedProjectRoot)).toBeNull();
+    expect(h.authority.readFileBytesSync(`${projectRoot}/node_modules/pkg/marker.txt`)).toEqual(
+      markerBytes,
+    );
     expect(h.fs.existsSync('/.rifty/workbench/v1/projects/scratch')).toBe(false);
     await h.owner.close();
   });
@@ -1558,7 +1686,7 @@ function catalogMutationCases(): readonly CatalogMutationCase[] {
       mutate: (h: CatalogHarness) => h.catalog.createScratch({ definition: definition('scratch') }),
     },
     {
-      name: 'saveScratch',
+      name: 'saveScratch untrusted',
       prepare: async (h: CatalogHarness) => {
         await h.catalog.createScratch({ definition: definition('scratch') });
         const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
@@ -1578,12 +1706,68 @@ function catalogMutationCases(): readonly CatalogMutationCase[] {
         const setupFlush = await h.authority.flush();
         expect(setupFlush?.total ?? 0).toBe(0);
       },
-      mutate: (h: CatalogHarness) =>
-        h.catalog.saveScratch({
+      mutate: async (h: CatalogHarness) => {
+        const result = await h.catalog.saveScratch({
           id: 'project-a',
           name: 'Project A',
           definition: definition('project-a'),
-        }),
+        });
+        const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+        await expect(h.stamps.check({ root: projectRoot, slug: 'project-a' })).resolves.toEqual({
+          status: 'absent',
+        });
+        if (h.fs instanceof DurableOwnerFs) {
+          expect(
+            h.fs.trace.filter((entry) => entry.primitive.path === installStampPath(projectRoot)),
+          ).toEqual([]);
+        }
+        return result;
+      },
+    },
+    {
+      name: 'saveScratch trusted',
+      prepare: async (h: CatalogHarness) => {
+        await h.catalog.createScratch({ definition: definition('scratch') });
+        const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
+        const dependency = `${scratchRoot}/node_modules/pkg/index.js`;
+        const nestedRoot = `${scratchRoot}/node_modules/pkg/examples/nested`;
+        h.authority.mkdirSync(dependency.slice(0, dependency.lastIndexOf('/')), {
+          recursive: true,
+        });
+        h.authority.writeFileSync(dependency, encoder.encode('ordinary dependency bytes'));
+        h.authority.mkdirSync(`${nestedRoot}/node_modules/nested-dep`, { recursive: true });
+        h.authority.writeFileSync(
+          `${nestedRoot}/package.json`,
+          encoder.encode('{"name":"nested","dependencies":{"nested-dep":"1.0.0"}}\n'),
+        );
+        h.authority.writeFileSync(
+          `${nestedRoot}/node_modules/nested-dep/package.json`,
+          encoder.encode('{"name":"nested-dep","version":"1.0.0"}\n'),
+        );
+        await mintTrusted(h, scratchRoot, 'scratch', 1);
+        await mintTrusted(h, nestedRoot, 'nested', 1);
+      },
+      mutate: async (h: CatalogHarness) => {
+        const result = await h.catalog.saveScratch({
+          id: 'project-a',
+          name: 'Project A',
+          definition: definition('project-a'),
+        });
+        const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+        await expect(
+          h.stamps.check({ root: projectRoot, slug: 'project-a' }),
+        ).resolves.toMatchObject({
+          status: 'trusted',
+          stamp: { root: projectRoot, slug: 'project-a', packages: 1 },
+        });
+        await expect(
+          h.stamps.check({
+            root: `${projectRoot}/node_modules/pkg/examples/nested`,
+            slug: 'nested',
+          }),
+        ).resolves.toEqual({ status: 'absent' });
+        return result;
+      },
     },
     {
       name: 'activate',

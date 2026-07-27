@@ -14,12 +14,17 @@ sources:
   - Vite-v7.3.6
   - docs/backlog/playground/reference/npm-11-extraneous-node-modules-probe.md
   - docs/backlog/playground/reference/vite-save-acquisition-probe.md
+  - docs/backlog/playground/reference/vite-save-contract-red.md
 code:
   - packages/workbench/src/glue/install-stamp-authority.ts
   - packages/workbench/src/glue/package-mutation-executor.ts
   - packages/workbench/src/workers/package-acquisition-authority.ts
   - packages/workbench/src/workers/playground-project-authority.ts
+  - packages/workbench/src/glue/install-stamp-project-save.test.ts
+  - packages/workbench/src/workers/package-acquisition-project-save.test.ts
+  - packages/workbench/src/workers/playground-project-catalog.contract.test.ts
   - tests/e2e/vite-temp-trust-churn.spec.ts
+  - tests/e2e/vite-save-trust-rebind.spec.ts
 ---
 
 ## Context
@@ -54,14 +59,23 @@ browser outcome already required.
 - Parity 1–5: Node v24.16.0 / npm 11.17.0,
   `reference/npm-11-extraneous-node-modules-probe.md`; it records the exact
   commands, versions, hashes, and output for extraneous bytes, tampered bytes,
-  and missing-package reconciliation.
+  missing-package reconciliation, a package request edit, and byte-only
+  lockfile drift.
 - Vite consumer: the checked-in `vite` dependency snapshot pins Vite 7.3.6;
   Chromium executes that installed CLI and proves `.vite-temp` reachability.
 - Parity 6 is Rifty's own project-lifecycle policy, not an npm behavior claim.
   Its reachable user action is Save Scratch as a named project; the
   reproducible `reference/vite-save-acquisition-probe.md` pins current-main
   acquisition/tree loss, and the Save-inclusive Chromium RED plus owner
-  restart/fault suites are its acceptance proof.
+  restart/fault suites are its acceptance proof. Exact RED commands and
+  failure signatures are pinned in `reference/vite-save-contract-red.md`.
+
+## Pickup evidence
+
+- Proposed goal slice: `save-trust-rebind`, insertion band `300–1000`.
+- The authoritative epic Items mapping and Budget row land only with the clean
+  Contract+RED verdict, per this unit's binding recut sequence. Until then the
+  item stays `draft` and this proposal supplies the band the checkpoint judges.
 
 ## User scenario
 
