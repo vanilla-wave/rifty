@@ -40,7 +40,13 @@ const reserveEmptyAdmission: ReserveOwnerChildAdmission = async () => emptyAdmis
 
 afterEach(() => vi.restoreAllMocks());
 
-function fakeHandle() {
+/**
+ * `drainsBeforeExit` models the kernel path where the child still has admitted
+ * output when the signal lands: `kill()` starts the terminal cut and `'exit'`
+ * follows only once those bytes are delivered. The default mirrors the other
+ * case — nothing in flight, so the exit is synchronous.
+ */
+function fakeHandle({ drainsBeforeExit = false } = {}) {
   const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
   const dataCbs: Record<'stdout' | 'stderr', ((c: unknown) => void)[]> = { stdout: [], stderr: [] };
   const h = {
@@ -64,6 +70,7 @@ function fakeHandle() {
     // Real WorkerHandle.kill() emits 'exit' synchronously — mirror that so the
     // executor's pre-abort listener ordering is exercised.
     kill: vi.fn((_signal?: string) => {
+      if (drainsBeforeExit) return true;
       for (const cb of listeners.exit ?? []) cb(null, 'SIGTERM');
       return true;
     }),
@@ -545,8 +552,13 @@ describe('owner-child-node-executor', () => {
     expect(onListening).toHaveBeenCalledWith('s1', 41, [3000], 'node-run-scope');
   });
 
-  it('Ctrl-C kills the child and mutes trailing output', async () => {
-    const fake = fakeHandle();
+  it('Ctrl-C kills the child and still shows what the kernel drained before exit', async () => {
+    // The kernel holds `'exit'` until every byte admitted before the terminal
+    // cut has been delivered (ADR-0332), so output arriving between the kill
+    // and the exit is the child's real final say — a crash stack or shutdown
+    // log, exactly when the developer needs it most. Muting at kill time threw
+    // that away; the run is over at `'exit'`, and that is where output stops.
+    const fake = fakeHandle({ drainsBeforeExit: true });
     const ac = new AbortController();
     const spawn = vi.fn(() => fake.h);
     const exec = createOwnerChildNodeExecutor(
@@ -561,9 +573,32 @@ describe('owner-child-node-executor', () => {
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     ac.abort();
     expect(fake.h.kill).toHaveBeenCalledWith('SIGTERM');
-    fake.out(new TextEncoder().encode('late\n'));
+    fake.out(new TextEncoder().encode('shutting down\n'));
     fake.emit('exit', null, 'SIGTERM');
     expect(await p).toEqual({ code: null, signal: 'SIGTERM' });
+    expect(stdout.join('')).toBe('shutting down\n');
+  });
+
+  it('drops output that arrives after the run has settled', async () => {
+    const fake = fakeHandle();
+    const ac = new AbortController();
+    const spawn = vi.fn(() => fake.h);
+    const exec = createOwnerChildNodeExecutor(
+      'URL',
+      NODE_WORKER_RUNTIME_ENV,
+      reserveEmptyAdmission,
+      spawn,
+    );
+    const stdout: string[] = [];
+    const ctx = makeCtx({ stdout: { write: (s: string) => stdout.push(s) }, signal: ac.signal });
+    const p = exec('/w/server.js', [], ctx, { sid: 's1', onListening: () => {}, onExit: () => {} });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+    ac.abort();
+    fake.emit('exit', null, 'SIGTERM');
+    expect(await p).toEqual({ code: null, signal: 'SIGTERM' });
+
+    fake.out(new TextEncoder().encode('after the run\n'));
+
     expect(stdout.join('')).toBe('');
   });
 
