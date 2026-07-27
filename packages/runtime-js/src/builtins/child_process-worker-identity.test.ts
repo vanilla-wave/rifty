@@ -48,8 +48,8 @@ describe('child_process Worker ancestry', () => {
       env: {},
       cwd: '/workspace',
       stdio: {
-        stdout: channels[0]!.port1,
-        stderr: channels[1]!.port1,
+        stdout: { write: (bytes: Uint8Array) => channels[0]!.port1.postMessage(bytes) },
+        stderr: { write: (bytes: Uint8Array) => channels[1]!.port1.postMessage(bytes) },
         stdin: channels[2]!.port1,
         ipc: channels[3]!.port1,
       },
@@ -83,7 +83,19 @@ describe('child_process Worker ancestry', () => {
     }
   });
 
-  it('uses the same-realm child identity when that child synchronously spawns a grandchild', async () => {
+  it.each([
+    {
+      label: 'synchronously',
+      source: "require('child_process').spawn('node', ['/grandchild.mjs']);",
+    },
+    {
+      label: 'from a Promise microtask',
+      source:
+        "Promise.resolve().then(() => require('child_process').spawn('node', ['/grandchild.mjs']));",
+    },
+  ])('uses the same-realm child identity when it spawns a grandchild $label', async ({
+    source,
+  }) => {
     const channels = Array.from({ length: 4 }, () => new MessageChannel());
     const outer = new NodeProcess({
       pid: 41,
@@ -92,16 +104,13 @@ describe('child_process Worker ancestry', () => {
       env: {},
       cwd: '/workspace',
       stdio: {
-        stdout: channels[0]!.port1,
-        stderr: channels[1]!.port1,
+        stdout: { write: (bytes: Uint8Array) => channels[0]!.port1.postMessage(bytes) },
+        stderr: { write: (bytes: Uint8Array) => channels[1]!.port1.postMessage(bytes) },
         stdin: channels[2]!.port1,
         ipc: channels[3]!.port1,
       },
     });
-    writeFileSync(
-      '/child.mjs',
-      "require('child_process').spawn('node', ['/grandchild.mjs']);",
-    );
+    writeFileSync('/child.mjs', source);
     writeFileSync('/grandchild.mjs', '');
     const previousActive = readActiveNodeProcessBootstrap();
     setActiveNodeProcessBootstrap(outer, false);
@@ -112,6 +121,45 @@ describe('child_process Worker ancestry', () => {
 
       expect(spawnSpy).toHaveBeenCalledTimes(2);
       expect(spawnSpy.mock.calls[1]?.[2]).toBe(child.pid);
+    } finally {
+      setActiveNodeProcessBootstrap(
+        previousActive?.process ?? null,
+        previousActive?.federated ?? false,
+      );
+      for (const channel of channels) {
+        channel.port1.close();
+        channel.port2.close();
+      }
+    }
+  });
+
+  it('restores the trusted owner identity before an exit callback spawns a sibling', async () => {
+    const channels = Array.from({ length: 4 }, () => new MessageChannel());
+    const outer = new NodeProcess({
+      pid: 41,
+      ppid: 7,
+      argv: ['rifty', '/workspace/outer.mjs'],
+      env: {},
+      cwd: '/workspace',
+      stdio: {
+        stdout: { write: (bytes: Uint8Array) => channels[0]!.port1.postMessage(bytes) },
+        stderr: { write: (bytes: Uint8Array) => channels[1]!.port1.postMessage(bytes) },
+        stdin: channels[2]!.port1,
+        ipc: channels[3]!.port1,
+      },
+    });
+    writeFileSync('/child.mjs', 'process.exit(0);');
+    writeFileSync('/sibling.mjs', '');
+    const previousActive = readActiveNodeProcessBootstrap();
+    setActiveNodeProcessBootstrap(outer, false);
+    const spawnSpy = vi.spyOn(globalProcessManager, 'spawn');
+    try {
+      const child = spawn('node', ['/child.mjs']);
+      child.once('exit', () => spawn('node', ['/sibling.mjs']));
+      await new Promise<void>((resolve) => child.once('close', () => resolve()));
+
+      expect(spawnSpy).toHaveBeenCalledTimes(2);
+      expect(spawnSpy.mock.calls[1]?.[2]).toBe(outer.pid);
     } finally {
       setActiveNodeProcessBootstrap(
         previousActive?.process ?? null,
