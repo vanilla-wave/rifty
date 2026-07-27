@@ -154,7 +154,10 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     });
     const manager = new ProcessManager();
 
-    const child = manager.spawn('ps', liveUntilKilled, 7, { cwd: '/workspace' });
+    const child = manager.spawn('ps', liveUntilKilled, 7, {
+      cwd: '/workspace',
+      federated: true,
+    });
 
     expect(child.pid).toBe(41);
     expect(calls).toEqual([
@@ -170,6 +173,38 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       method: 'process.settle',
       payload: { pid: 41, code: null, signal: 'SIGTERM' },
     });
+    channel.port1.close();
+    channel.port2.close();
+  });
+
+  it('does not federate an unrelated manager spawn from realm identity alone', () => {
+    const calls: string[] = [];
+    const channel = new MessageChannel();
+    publishKernelProcessSpec({
+      pid: 7,
+      ppid: 1,
+      argv: ['rifty'],
+      env: {},
+      cwd: '/workspace',
+      stdio: {
+        stdout: channel.port1,
+        stderr: channel.port1,
+        stdin: channel.port1,
+        ipc: channel.port1,
+      },
+    });
+    publishKernelSyncApi({
+      call(method) {
+        calls.push(method);
+        return method === 'process.reserve' ? 41 : null;
+      },
+    });
+
+    const child = new ProcessManager().spawn('owner-tool', liveUntilKilled);
+
+    expect(child.pid).toBe(2);
+    expect(calls).toEqual([]);
+    child.kill();
     channel.port1.close();
     channel.port2.close();
   });
