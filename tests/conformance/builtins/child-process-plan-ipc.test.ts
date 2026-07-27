@@ -158,11 +158,11 @@ describe('child_process finite ps/kill gap siblings', () => {
     },
   );
 
-  it('preserves the existing unknown-executable exit-127 sibling', async () => {
+  it('preserves the existing unknown-executable ENOENT-127 sibling', async () => {
     const result = await readExec('definitely-not-a-command');
 
     expect(result.error?.code).toBe(127);
-    expect(result.stderr).toBe('');
+    expect(result.stderr).toBe('spawn definitely-not-a-command ENOENT\n');
     expect(result.error?.message).not.toMatch(/NotImplementedError/i);
   });
 });

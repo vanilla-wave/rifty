@@ -226,6 +226,12 @@ const HAS_LOCAL_AUTHORITY = Symbol('ProcessManager.hasLocalAuthority');
 const VALIDATE_RESERVE_PARENT = Symbol('ProcessManager.validateReserveParent');
 const VALIDATE_FORWARDED = Symbol('ProcessManager.validateForwarded');
 
+function callRequiredUpstream(method: string, payload: unknown): unknown {
+  const upstream = readKernelSyncApi();
+  if (upstream === null) throw new Error(`${method}: upstream authority is unavailable`);
+  return upstream.call(method, payload);
+}
+
 interface ProcessFederationLease {
   readonly pid: number;
   commit(): void;
@@ -560,19 +566,10 @@ export class ProcessManager {
     emitters: EventEmitter[],
   ): void {
     if (!this.isLive(record)) return;
+    if (record.physicalRoute !== undefined) this.retirePhysicalRoutes(record);
     if (record.published) this.table.delete(record.pid);
     else this.hiddenThreads.delete(record);
     if (record.physicalRoute !== undefined) this.physicalRoutes.delete(record.physicalRoute);
-    for (const [pid, pending] of this.pendingRemote) {
-      if (this.isPhysicalOwner(record, pending.ownerPid, pending.ownerRoute)) {
-        this.pendingRemote.delete(pid);
-      }
-    }
-    for (const [pid, route] of this.forwardedRoutes) {
-      if (this.isPhysicalOwner(record, route.ownerPid, route.ownerRoute)) {
-        this.forwardedRoutes.delete(pid);
-      }
-    }
     for (const e of emitters) e.removeAllListeners();
     handle?.removeAllListeners();
   }
@@ -1303,6 +1300,33 @@ export class ProcessManager {
     return candidatePid === ownerPid && candidateRoute === ownerRoute;
   }
 
+  private retirePhysicalRoutes(owner: ProcessRecord): void {
+    const error = new Error(`Worker owner PID ${String(owner.pid)} closed`);
+    const owns = (route: ProcessRouteOwner) =>
+      this.isPhysicalOwner(owner, route.ownerPid, route.ownerRoute);
+    for (const [pid, pending] of [...this.pendingRemote]) {
+      if (!owns(pending)) continue;
+      if (pending.upstreamAuthority) callRequiredUpstream(PROCESS_ABORT_RPC, { pid });
+      this.pendingRemote.delete(pid);
+    }
+    const forwarded = [...this.forwardedRoutes].filter(([, route]) => owns(route));
+    const forwardedPids = new Set(forwarded.map(([pid]) => pid));
+    for (const [pid, route] of forwarded) {
+      if (forwardedPids.has(route.ppid)) continue;
+      callRequiredUpstream(PROCESS_PEER_DEATH_RPC, { pid, message: error.message });
+      this.deleteForwardedSubtree(pid);
+    }
+    const remote = [...this.table.values()].filter(
+      (record) =>
+        record.remoteOwnerPid !== undefined &&
+        this.isPhysicalOwner(owner, record.remoteOwnerPid, record.remoteOwnerRoute),
+    );
+    const remotePids = new Set(remote.map(({ pid }) => pid));
+    for (const record of remote) {
+      if (!remotePids.has(record.ppid)) record.peerFail(error);
+    }
+  }
+
   private deleteForwardedSubtree(pid: number): void {
     const descendants = [...this.forwardedRoutes]
       .filter(([, route]) => route.ppid === pid)
@@ -1407,7 +1431,7 @@ function rpcString(value: unknown, owner: string): string {
 
 export function installProcessFederation(manager: ProcessManager): void {
   const dispatcher = getKernelDispatcher();
-  const relay = (method: string, payload: unknown): unknown => {
+  const relayOptional = (method: string, payload: unknown): unknown => {
     const upstream = readKernelSyncApi();
     return upstream?.call(method, payload);
   };
@@ -1421,7 +1445,7 @@ export function installProcessFederation(manager: ProcessManager): void {
   ): unknown => {
     if (!manager[ROUTES_UPSTREAM](pid)) return undefined;
     manager[VALIDATE_FORWARDED](pid, ownerPid, ownerRoute, state, method);
-    return relay(method, payload);
+    return callRequiredUpstream(method, payload);
   };
   dispatcher.register(PROCESS_RESERVE_RPC, (payload, context) => {
     const record = rpcRecord(payload, ['command', 'ppid', 'cwd'], PROCESS_RESERVE_RPC);
@@ -1431,7 +1455,7 @@ export function installProcessFederation(manager: ProcessManager): void {
     const { pid: ownerPid, route: ownerRoute } = rpcOwner(context, PROCESS_RESERVE_RPC);
     manager[VALIDATE_RESERVE_PARENT](ppid, ownerPid);
     const relayed = manager[ROUTES_UPSTREAM](ppid)
-      ? relay(PROCESS_RESERVE_RPC, payload)
+      ? callRequiredUpstream(PROCESS_RESERVE_RPC, payload)
       : undefined;
     if (relayed === undefined) {
       return manager.reserveRemoteProcess(command, ppid, cwd, ownerPid, ownerRoute);
@@ -1441,7 +1465,7 @@ export function installProcessFederation(manager: ProcessManager): void {
       manager.reserveForwardedProcess(pid, command, ppid, cwd, ownerPid, ownerRoute);
     } catch (error) {
       try {
-        relay(PROCESS_ABORT_RPC, { pid });
+        callRequiredUpstream(PROCESS_ABORT_RPC, { pid });
       } catch (abortError) {
         throw new AggregateError([error, abortError], 'process.reserve rollback failed');
       }
@@ -1549,7 +1573,7 @@ export function installProcessFederation(manager: ProcessManager): void {
     rpcRecord(payload, [], PROCESS_SNAPSHOT_RPC);
     const relayed = manager[HAS_LOCAL_AUTHORITY]()
       ? undefined
-      : relay(PROCESS_SNAPSHOT_RPC, payload);
+      : relayOptional(PROCESS_SNAPSHOT_RPC, payload);
     return relayed === undefined ? manager.snapshot() : relayed;
   });
 }

@@ -205,8 +205,10 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
   });
 
   it('keeps multi-hop descendants as kill routes outside an intermediate ledger', async () => {
+    const relayed: string[] = [];
     publishKernelSyncApi({
       call(method) {
+        relayed.push(method);
         return method === 'process.reserve' ? 7 : null;
       },
     });
@@ -233,8 +235,20 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       expect(controls).toContainEqual({ kind: 'control:kill-tree', pid: 42, signal: 'SIGTERM' }),
     );
 
-    manager.settleRemoteProcess(42, owner.pid, null, 'SIGTERM');
     owner.kill();
+    expect(relayed.slice(-2)).toEqual(['process.peer-death', 'process.settle']);
+  });
+
+  it('fails loud before forgetting a forwarded route without upstream authority', () => {
+    publishKernelSyncApi({ call: (method) => (method === 'process.reserve' ? 7 : null) });
+    const manager = new ProcessManager();
+    setWorkerFactoryForTests(() => new BoundaryWorker());
+    const owner = manager.spawnWorker('node', workerSpec('owner'), 1, { federated: true });
+    manager.reserveForwardedProcess(41, 'node', owner.pid, '/workspace', owner.pid);
+    manager.commitRemoteProcess(41, owner.pid);
+
+    Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
+    expect(() => owner.kill()).toThrow(/process\.peer-death.*upstream authority/u);
   });
 
   it('validates reserve/commit before upstream and aborts a rejected relayed PID', async () => {
@@ -298,6 +312,11 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     await callProcessRpc(caller, 'process.commit', { pid: childPid });
 
     expect(manager.kill(childPid)).toBe(true);
+    expect(manager.snapshot()).toContainEqual({
+      pid: childPid,
+      ppid: process.pid,
+      command: 'node',
+    });
     await vi.waitFor(() =>
       expect(threadControls).toContainEqual({
         kind: 'control:kill-tree',
@@ -305,12 +324,12 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
         signal: 'SIGTERM',
       }),
     );
-    await callProcessRpc(caller, 'process.settle', {
-      pid: childPid,
-      code: null,
-      signal: 'SIGTERM',
-    });
     thread.kill();
+    expect(manager.snapshot()).not.toContainEqual({
+      pid: childPid,
+      ppid: process.pid,
+      command: 'node',
+    });
     process.kill();
   });
 
