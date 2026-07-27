@@ -321,10 +321,14 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
       { cwd: '/worker-zombie' },
     );
     const w = factoryWorker as FakeWorker;
-    const exit = once(parent, 'exit');
+    const close = once(parent, 'close');
     sealWorkerOutputFor(w);
     w.fire('message', attestedExitEvent(w, 0));
-    await exit;
+    await close;
+    // Settlement continues past 'close' (federation publish); a spawn naming
+    // the parent WHILE it settles is fenced by design — this case is the later
+    // one, where the pid is simply gone.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(pm.list()).toHaveLength(0);
 
     // Spawn a same-realm child that names the dead worker as parent.
