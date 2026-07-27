@@ -17,6 +17,9 @@
 
 ### Fixed
 
+- A Worker whose federated commit is rejected now rolls back its unpublished
+  physical realm and routes synchronously, so owner teardown cannot leak it.
+
 - Ancestor shutdown now fences new process reservations, signals exact remote
   descendants child-first, and waits for their close/peer proof before cutting
   the physical owner's output. Terminal callbacks can flush without reviving

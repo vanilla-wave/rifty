@@ -60,8 +60,8 @@ let runtimeJsBuiltinsRegistered = false;
 export function refreshRuntimeJsProcessBuiltin(): void {
   registerBuiltin('process', () => {
     const active = readActiveNodeProcessBootstrap()?.process;
-    const live =
-      active instanceof NodeProcess ? active : (globalThis as { process?: unknown }).process;
+    if (active !== undefined) return active;
+    const live = (globalThis as { process?: unknown }).process;
     return live instanceof NodeProcess ? live : riftyProcess;
   });
 }

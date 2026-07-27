@@ -25,6 +25,10 @@
 
 ### Fixed
 
+- Trusted process identity now survives duplicated production Worker bundles,
+  so recursive children keep the owner PID authority and publish preview state
+  (ADR-0334).
+
 - Same-realm `child_process` now preserves the child's trusted `process`
   identity through async callbacks, child-bound builtins, nested children, and
   `worker_threads`; owned async work keeps the child live until it settles.

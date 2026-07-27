@@ -1337,8 +1337,31 @@ export class ProcessManager {
     try {
       federation?.commit();
     } catch (error) {
-      record.terminate('SIGTERM');
-      federation?.abort();
+      const errors: unknown[] = [error];
+      const attempt = (operation: () => unknown): void => {
+        try {
+          operation();
+        } catch (failure) {
+          errors.push(failure);
+        }
+      };
+      record.terminationRequested = true;
+      attempt(() => abortController.abort(error));
+      // The Worker exists physically but was never published upstream. Tear it
+      // down synchronously: no owner settlement barrier can discover or await it.
+      attempt(() => spawnResult.terminate());
+      attempt(() =>
+        manager.retireOwnerDescendants(
+          record,
+          error instanceof Error ? error : new Error(String(error)),
+        ),
+      );
+      attempt(() => {
+        for (const port of Object.values(ports)) port.close();
+      });
+      attempt(() => manager.finalize(record, handle, [record.parentToChild]));
+      attempt(() => federation?.abort());
+      throwCollectedErrors(`Worker PID ${String(pid)} launch rollback failed`, errors);
       throw error;
     }
 

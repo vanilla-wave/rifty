@@ -318,6 +318,52 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     channel.port2.close();
   });
 
+  it('rolls back a physical Worker synchronously when its federation commit is rejected', () => {
+    const commitFailure = new Error('process.commit: PID 41 has no matching reservation');
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    const worker = new BoundaryWorker();
+    let outputState: WorkerOutputState | null = null;
+    publishKernelSyncApi({
+      call(method, payload) {
+        calls.push({ method, payload });
+        if (method === 'process.reserve') return 41;
+        if (method === 'process.commit') {
+          outputState = initOf(worker).spec.outputState;
+          Atomics.store(new Int32Array(outputState), 1, 1);
+          throw commitFailure;
+        }
+        return null;
+      },
+    });
+    const dispatcher = getKernelDispatcher();
+    const detach = vi.spyOn(dispatcher, 'detach');
+    const manager = new ProcessManager();
+    setWorkerFactoryForTests(() => worker);
+
+    expect(() =>
+      manager.spawnWorker('node', workerSpec(), 7, {
+        cwd: '/workspace',
+        federated: true,
+      }),
+    ).toThrow(commitFailure);
+
+    if (outputState === null) throw new Error('commit did not observe the Worker output state');
+    Atomics.store(new Int32Array(outputState), 1, 0);
+    Atomics.notify(new Int32Array(outputState), 1);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(detach).toHaveBeenCalledTimes(1);
+    expect(manager.list()).toEqual([]);
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+    expect(calls).toEqual([
+      {
+        method: 'process.reserve',
+        payload: { command: 'node', ppid: 7, cwd: '/workspace' },
+      },
+      { method: 'process.commit', payload: { pid: 41 } },
+      { method: 'process.abort', payload: { pid: 41 } },
+    ]);
+  });
+
   it('does not federate an unrelated manager spawn from realm identity alone', () => {
     const calls: string[] = [];
     const channel = new MessageChannel();

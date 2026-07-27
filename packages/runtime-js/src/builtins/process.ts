@@ -39,6 +39,7 @@ import {
 import {
   attachNodeProcessBootstrapIdentity,
   readActiveNodeProcessBootstrap,
+  readNodeProcessBootstrapIdentity,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
@@ -48,6 +49,12 @@ const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
 );
 const NODE_PROCESS_LISTENING_CONTROL = Symbol.for('rifty.runtime-js.process-listening-control.v1');
 const NODE_PROCESS_WORKER_IPC = Symbol.for('rifty.runtime-js.process-worker-ipc.v1');
+const NODE_PROCESS_DESCENDANT_AUTHORITY = Symbol.for(
+  'rifty.runtime-js.process-descendant-authority.v1',
+);
+const NODE_PROCESS_BOOTSTRAP_IDENTITY = Symbol.for(
+  'rifty.runtime-js.process-bootstrap-identity.v1',
+);
 const RIFTY_PROCESS_EXIT = 'RIFTY_PROCESS_EXIT';
 let processExitErrorTrapInstalled = false;
 const nextTickQueue: Array<{ fn: (...args: unknown[]) => void; args: unknown[] }> = [];
@@ -64,6 +71,11 @@ let promisePatched = false;
  * Default `/workspace` matches the runtime VFS bootstrap convention.
  */
 let currentCwd = '/workspace';
+
+export interface NodeProcessDescendantAuthority {
+  kill(pid: number, signal: string): boolean;
+  snapshot(): readonly { readonly pid: number }[];
+}
 
 function installProcessExitErrorTrap(): void {
   if (processExitErrorTrapInstalled) return;
@@ -539,6 +551,7 @@ export class NodeProcess extends EventEmitter {
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
+  #descendantAuthority: NodeProcessDescendantAuthority | null = null;
   // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
   // in order on the first listener; mirrors makeStdinReader's pending buffer.
   readonly #ipcBacklog: unknown[] = [];
@@ -573,6 +586,19 @@ export class NodeProcess extends EventEmitter {
           return () => this.#workerMessageListeners.delete(listener);
         },
       }),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+    Object.defineProperty(this, NODE_PROCESS_DESCENDANT_AUTHORITY, {
+      value: (authority: unknown): void => this.#bindDescendantAuthority(authority),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+    Object.defineProperty(this, NODE_PROCESS_BOOTSTRAP_IDENTITY, {
+      value: (): { readonly pid: number; readonly ppid: number } | null =>
+        readNodeProcessBootstrapIdentity(this),
       enumerable: false,
       configurable: false,
       writable: false,
@@ -897,13 +923,31 @@ export class NodeProcess extends EventEmitter {
   }
 
   #killDescendant(pid: number, signal: string): void {
+    const authority = this.#descendantAuthority ?? globalProcessManager;
     // Absence proves a federated descendant is already physically retired.
-    if (
-      !globalProcessManager.kill(pid, signal) &&
-      globalProcessManager.snapshot().some((row) => row.pid === pid)
-    ) {
+    if (!authority.kill(pid, signal) && authority.snapshot().some((row) => row.pid === pid)) {
       throw new Error(`process control could not kill descendant PID ${pid}`);
     }
+  }
+
+  #bindDescendantAuthority(authority: unknown): void {
+    if (this.#descendantAuthority !== null) {
+      throw new Error('process descendant process authority is already bound');
+    }
+    if (typeof authority !== 'object' || authority === null) {
+      throw new TypeError('process descendant authority must be an object');
+    }
+    const kill = Reflect.get(authority, 'kill');
+    const snapshot = Reflect.get(authority, 'snapshot');
+    if (typeof kill !== 'function' || typeof snapshot !== 'function') {
+      throw new TypeError('process descendant authority requires kill() and snapshot()');
+    }
+    this.#descendantAuthority = Object.freeze({
+      kill: (pid: number, signal: string): boolean =>
+        Reflect.apply(kill, authority, [pid, signal]) as boolean,
+      snapshot: (): readonly { readonly pid: number }[] =>
+        Reflect.apply(snapshot, authority, []) as readonly { readonly pid: number }[],
+    });
   }
 
   #resizeTty(cols: number, rows: number): void {
@@ -1024,6 +1068,62 @@ export function postNodeProcessListeningControl(
     throw new TypeError('process listening control target is not a runtime-owned NodeProcess');
   }
   (receiver as (value: unknown, scope: unknown) => void)(ports, previewScope);
+}
+
+/** Bind the private descendant manager before guest code (ADR-0334). */
+export function bindNodeProcessDescendantAuthority(
+  process: unknown,
+  authority: NodeProcessDescendantAuthority,
+): void {
+  if ((typeof process !== 'object' && typeof process !== 'function') || process === null) {
+    throw new TypeError('process descendant authority target must be an object');
+  }
+  const receiver = Reflect.get(process, NODE_PROCESS_DESCENDANT_AUTHORITY);
+  if (typeof receiver !== 'function') {
+    throw new TypeError('process descendant authority target is not a runtime-owned NodeProcess');
+  }
+  (receiver as (value: unknown) => void)(authority);
+}
+
+/**
+ * Adopt the kernel bundle's spec-seeded process into this node-entry bundle.
+ * One-shot before guest code (ADR-0334).
+ */
+export function adoptNodeProcessBootstrap(
+  process: unknown,
+  authority: NodeProcessDescendantAuthority,
+): void {
+  const active = readActiveNodeProcessBootstrap();
+  if (active !== null) {
+    if (active.process !== process || active.identity === null || !active.federated) {
+      throw new Error('node process bootstrap is already adopted by another process');
+    }
+    bindNodeProcessDescendantAuthority(process, authority);
+    return;
+  }
+  if ((typeof process !== 'object' && typeof process !== 'function') || process === null) {
+    throw new TypeError('node process bootstrap target must be an object');
+  }
+  const identityReceiver = Reflect.get(process, NODE_PROCESS_BOOTSTRAP_IDENTITY);
+  if (typeof identityReceiver !== 'function') {
+    throw new TypeError('node process bootstrap target is not a runtime-owned NodeProcess');
+  }
+  const identity = (identityReceiver as () => unknown)();
+  if (
+    typeof identity !== 'object' ||
+    identity === null ||
+    !Number.isSafeInteger(Reflect.get(identity, 'pid')) ||
+    (Reflect.get(identity, 'pid') as number) <= 0 ||
+    !Number.isSafeInteger(Reflect.get(identity, 'ppid')) ||
+    (Reflect.get(identity, 'ppid') as number) < 0
+  ) {
+    throw new TypeError('node process bootstrap target has no trusted process identity');
+  }
+  const pid = Reflect.get(identity, 'pid') as number;
+  const ppid = Reflect.get(identity, 'ppid') as number;
+  bindNodeProcessDescendantAuthority(process, authority);
+  attachNodeProcessBootstrapIdentity(process, { pid, ppid });
+  setActiveNodeProcessBootstrap(process, true);
 }
 
 export interface NodeProcessWorkerIpc {

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
 import {
   applyNodeProcessTerminalBootstrap,
+  bindNodeProcessDescendantAuthority,
   postNodeProcessListeningControl,
 } from '../builtins/process.ts';
 import { installNodeProcessShim } from './install-process.ts';
@@ -287,5 +288,31 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     });
 
     await expect(tick()).resolves.toBeUndefined();
+  });
+
+  it('routes teardown kill through the node-entry bundle process authority', async () => {
+    const ipc = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const authority = {
+      kill: vi.fn(() => true),
+      snapshot: vi.fn(() => [{ pid: 41 }]),
+    };
+    bindNodeProcessDescendantAuthority(process, authority);
+
+    ipc.port2.postMessage({
+      kind: 'control:kill-tree',
+      pid: 41,
+      signal: 'SIGTERM',
+    });
+    await tick();
+
+    expect(authority.kill).toHaveBeenCalledWith(41, 'SIGTERM');
+    expect(authority.snapshot).not.toHaveBeenCalled();
+    expect(() => bindNodeProcessDescendantAuthority(process, authority)).toThrow(
+      /descendant process authority is already bound/i,
+    );
   });
 });

@@ -29,13 +29,18 @@
 import {
   type KernelProcessSpec,
   type WorkerSpawnSpec,
+  globalProcessManager,
   readKernelProcessSpec,
   setKernelPreEntryHook,
 } from '@riftydev/kernel';
 import { Buffer } from '../builtins/buffer.ts';
 import { readNodeEntryBootstrapIfPresent } from '../builtins/node-entry-runtime-config.ts';
 import { setActiveNodeProcessBootstrap } from '../builtins/process-bootstrap-identity.ts';
-import { NodeProcess, patchPromiseForNextTick } from '../builtins/process.ts';
+import {
+  NodeProcess,
+  bindNodeProcessDescendantAuthority,
+  patchPromiseForNextTick,
+} from '../builtins/process.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
 import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
 
@@ -97,6 +102,10 @@ export function installNodeRuntime(spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 
   }
   const process = installNodeProcessShim(processSpec, { installGlobalAlias: isNode });
   setActiveNodeProcessBootstrap(process, true);
+  // A node-entry URL may be a second production bundle. It adopts this process
+  // and binds its own manager before guest code; every other entry stays here
+  // (ADR-0334).
+  if (!isNodeEntry) bindNodeProcessDescendantAuthority(process, globalProcessManager);
   if (isNode) {
     patchPromiseForNextTick();
     (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;

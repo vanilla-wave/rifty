@@ -42,6 +42,9 @@
 - Preserve an exact trusted dependency tree across Scratch-to-project Save:
   the existing package FIFO copies claim-free bytes, then mints target-root
   trust before the durable catalog pointer commits (ADR-0329).
+- Node-entry bundles now adopt the kernel-installed process once before guest
+  import, preserving recursive PID authority in production builds (ADR-0334).
+
 - Recursive owner `execSync` now captures the kernel handle's semantic
   stdout/stderr streams instead of replacing its raw `MessagePort` handlers,
   preserving terminal drain accounting and finite Chromium completion.

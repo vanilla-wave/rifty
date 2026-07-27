@@ -30,14 +30,17 @@
  * write, over RPC.
  */
 
-import { getKernelDispatcher, readKernelSyncApi } from '@riftydev/kernel';
+import { getKernelDispatcher, globalProcessManager, readKernelSyncApi } from '@riftydev/kernel';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { awaitDrain, installConsole } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
-import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
+import {
+  adoptNodeProcessBootstrap,
+  postNodeProcessListeningControl,
+} from '@riftydev/runtime-js/builtins/process';
 import { syncMirror } from '@riftydev/vfs';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -51,6 +54,7 @@ import {
 import { installBundleLocalBuffer, installBundleLocalCwd } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
+adoptNodeProcessBootstrap(proc, globalProcessManager);
 const nodeEntryBootstrap = readNodeEntryBootstrap();
 const launch = nodeEntryBootstrap.launch;
 const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(
