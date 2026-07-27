@@ -381,8 +381,12 @@ function installSeededProcessMode(
     stdin = ownChannel();
     ipc = ownChannel();
     seeded = new NodeProcess({
-      pid: 2,
-      ppid: 1,
+      // The harness realm IS the manager's root process (`{pid: 1, ppid: 0}`),
+      // so it must claim that identity: seeding pid 2 collided with the first
+      // pid the same manager hands to a spawned child, and a child's death
+      // then settled a PID the guest was still using.
+      pid: 1,
+      ppid: 0,
       argv: ['node', '/work/main.js'],
       env: {},
       cwd,
