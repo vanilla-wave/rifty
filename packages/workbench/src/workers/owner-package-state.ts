@@ -62,6 +62,7 @@ import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
   type AcquisitionProvenance,
+  type PackageAcquisitionAuthority,
   type PackageAcquisitionProject,
   type PackageFifoReservation,
   createPackageAcquisitionAuthority,
@@ -120,6 +121,8 @@ export interface OwnerPackageState {
   activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
   /** Settle package commands and durability work admitted before this call. */
   quiesce(): Promise<void>;
+  /** Hold the package FIFO across claim-free project Save and trust publication. */
+  projectSave: PackageAcquisitionAuthority['projectSave'];
   /** Freeze the exact installed-tree shadow facts across synchronous child spawn. */
   reserveChildAdmission(root: string): Promise<OwnerChildPackageReservation>;
   /** Registers the terminal-facing config and starts its optional prefetch. */
@@ -764,6 +767,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     mutations,
     activateAndEnsure,
     quiesce: () => packages.quiesce(),
+    projectSave: (input, operation) => packages.projectSave(input, operation),
     reserveChildAdmission,
     configure,
     restore,

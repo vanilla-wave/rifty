@@ -99,11 +99,12 @@ test('trusted Scratch Save and A→B→A reopen stay exact with acquisition offl
   await switchToProject(page, projectA);
   await expectViteDevServerReady(page, 5174, 120_000);
 
+  await openShellTerminal(page);
   const marker = await readActiveProjectText(
     page,
     'node_modules/.vite-save-red/marker.txt',
     30_000,
   );
-  expect(marker).toEqual({ exists: true, text: `${markerText}\n` });
+  expect(marker).toEqual({ exists: true, text: markerText });
   expect(acquisitionRequests).toEqual([]);
 });

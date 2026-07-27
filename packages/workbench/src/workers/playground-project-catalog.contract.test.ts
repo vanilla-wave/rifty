@@ -1184,6 +1184,7 @@ describe('Playground catalog crash recovery', () => {
           return Object.freeze({ kind: 'install' as const, snapshotFailures: [] });
         },
       }),
+      projectSave: packages,
     });
 
     const opened = await owner.openProject(definition('scratch'));

@@ -343,6 +343,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
             }),
           ),
       },
+      projectSave: packageState,
       beforeOpenProject: (projectRoot) =>
         recoverOwnerPlaygroundArchiveTransaction({
           projectRoot,
