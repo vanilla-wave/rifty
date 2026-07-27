@@ -24,7 +24,6 @@ import {
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
-  readKernelProcessSpec,
   readRootProcessSnapshot,
 } from '@riftydev/kernel';
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
@@ -332,7 +331,7 @@ function spawnViaSameRealm(
       });
     },
     parent.pid,
-    { cwd: execution.cwd, federated: readKernelProcessSpec() !== null },
+    { cwd: execution.cwd },
   );
 
   wiring.handle = handle;

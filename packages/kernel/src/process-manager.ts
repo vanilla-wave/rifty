@@ -207,6 +207,12 @@ export interface SpawnOptions {
   federated?: boolean;
 }
 
+function usesProcessFederation(options: SpawnOptions): boolean {
+  return (
+    options.threadIdentity === undefined && (options.federated ?? readKernelProcessSpec() !== null)
+  );
+}
+
 /** Root cwd for processes that have no parent. */
 export const DEFAULT_CWD = '/workspace';
 
@@ -411,7 +417,7 @@ export class ProcessManager {
     const parentRecord = this.table.get(ppid);
     const initialCwd = options.cwd ?? parentRecord?.cwd ?? DEFAULT_CWD;
     const federation = reserveProcessFederation(
-      options.federated === true,
+      usesProcessFederation(options),
       command,
       ppid,
       initialCwd,
@@ -575,7 +581,7 @@ export class ProcessManager {
     const initialCwd = options.cwd ?? spec.cwd ?? parentRecord?.cwd ?? DEFAULT_CWD;
 
     const federation = reserveProcessFederation(
-      options.federated === true,
+      usesProcessFederation(options),
       command,
       ppid,
       initialCwd,

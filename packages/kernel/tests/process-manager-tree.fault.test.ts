@@ -8,7 +8,12 @@ import {
   installProcessFederation,
   readRootProcessSnapshot,
 } from '../src/process-manager.ts';
-import { KERNEL_SYNC_CALL_KEY, publishKernelSyncApi } from '../src/shared-globals.ts';
+import {
+  KERNEL_PROCESS_SPEC_KEY,
+  KERNEL_SYNC_CALL_KEY,
+  publishKernelProcessSpec,
+  publishKernelSyncApi,
+} from '../src/shared-globals.ts';
 import {
   type WorkerLike,
   clearKernelDispatcher,
@@ -86,6 +91,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
   });
 
   afterEach(() => {
+    Reflect.deleteProperty(globalThis, KERNEL_PROCESS_SPEC_KEY);
     Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
     clearWorkerFactoryForTests();
     clearKernelWorkerUrl();
@@ -125,6 +131,20 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
   it('allocates a same-realm descendant in the owner-root PID ledger', () => {
     const calls: Array<{ method: string; payload: unknown }> = [];
+    const channel = new MessageChannel();
+    publishKernelProcessSpec({
+      pid: 7,
+      ppid: 1,
+      argv: ['rifty'],
+      env: {},
+      cwd: '/workspace',
+      stdio: {
+        stdout: channel.port1,
+        stderr: channel.port1,
+        stdin: channel.port1,
+        ipc: channel.port1,
+      },
+    });
     publishKernelSyncApi({
       call(method, payload) {
         calls.push({ method, payload });
@@ -134,10 +154,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     });
     const manager = new ProcessManager();
 
-    const child = manager.spawn('ps', liveUntilKilled, 7, {
-      cwd: '/workspace',
-      federated: true,
-    });
+    const child = manager.spawn('ps', liveUntilKilled, 7, { cwd: '/workspace' });
 
     expect(child.pid).toBe(41);
     expect(calls).toEqual([
@@ -153,6 +170,8 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       method: 'process.settle',
       payload: { pid: 41, code: null, signal: 'SIGTERM' },
     });
+    channel.port1.close();
+    channel.port2.close();
   });
 
   it('settles a federated same-realm descendant that publishes its own exit code', async () => {

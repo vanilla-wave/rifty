@@ -20,8 +20,9 @@
 - Worker-process consumers now share one first-terminal observer for truthful
   `exit` or physical `peererror` settlement.
 
-- Federated same-realm exits now always settle their owner-root PID; terminating
-  one hidden worker thread no longer kills process siblings; orderly Worker
+- Child realms now derive process federation from their kernel identity;
+  same-realm exits always settle their owner-root PID, terminating one hidden
+  worker thread no longer kills process siblings, and orderly Worker
   self-exit/control-close paths drain final stdio before teardown.
 
 - **SyncRpc protocol violations are forensic and loud, never silent.** Two CI

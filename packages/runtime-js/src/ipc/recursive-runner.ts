@@ -26,11 +26,7 @@
  * Node-API knowledge. Imports flow top-down (`runtime-js` → `@riftydev/kernel`).
  */
 
-import {
-  globalProcessManager,
-  observeProcessTerminalOutcome,
-  readKernelProcessSpec,
-} from '@riftydev/kernel';
+import { globalProcessManager, observeProcessTerminalOutcome } from '@riftydev/kernel';
 import { buildConfiguredNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from '../builtins/node-entry-url.ts';
 
@@ -127,7 +123,7 @@ export function makeRecursiveRunner(): NodeEntryRunner {
         cwd: spec.cwd,
       },
       context?.parentPid ?? 1,
-      { cwd: spec.cwd, federated: readKernelProcessSpec() !== null },
+      { cwd: spec.cwd },
     );
     if (nested.kind !== 'worker') {
       throw new Error('recursive-runner: expected a Worker process handle');

@@ -1,12 +1,7 @@
 /** Validated Worker launch and stdio plan shared by child_process adapters. */
 
 import { NotImplementedError, type Readable } from '@riftydev/io';
-import {
-  type ProcessHandle,
-  type SpawnWorkerSpec,
-  globalProcessManager,
-  readKernelProcessSpec,
-} from '@riftydev/kernel';
+import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { buildConfiguredNodeEntryWorkerEntry } from './node-entry-runtime-config.ts';
 
@@ -327,6 +322,5 @@ export function spawnWorkerChild(
   };
   return globalProcessManager.spawnWorker(command, spec, parent.pid, {
     cwd: plan.cwd,
-    federated: readKernelProcessSpec() !== null,
   });
 }
