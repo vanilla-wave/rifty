@@ -1,15 +1,16 @@
 import {
   KERNEL_PROCESS_SPEC_KEY,
-  type ProcessHandle,
-  type SpawnOptions,
   globalProcessManager,
   publishKernelProcessSpec,
   setKernelWorkerUrl,
 } from '@riftydev/kernel';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EventEmitter } from './events.ts';
 import './index.ts';
-import { spawnWorkerChild } from './child_process-worker.ts';
+import {
+  closeKernelWorkerPeer,
+  installKernelWorkerBoundary,
+} from '../internal/kernel-worker-boundary.test-helper.ts';
+import { activeChildProcessContext } from './child_process-worker.ts';
 import { spawn } from './child_process.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
@@ -31,15 +32,6 @@ afterEach(() => {
 
 describe('child_process Worker ancestry', () => {
   it('keeps the bootstrap parent pid when guest process fields and public spec are poisoned', () => {
-    let parentPid: number | undefined;
-    let spawnOptions: SpawnOptions | undefined;
-    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(
-      (_command, _spec, candidate, options) => {
-        parentPid = candidate;
-        spawnOptions = options;
-        return {} as ProcessHandle;
-      },
-    );
     configureNodeEntryWorker('https://rifty.test/node-entry.js', {
       RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
     });
@@ -69,15 +61,13 @@ describe('child_process Worker ancestry', () => {
       cwd: () => '/poison',
     });
     try {
-      withProcessGlobal(
+      const context = withProcessGlobal(
         guestReplacement,
-        () => {
-          spawnWorkerChild('node', ['/workspace/child.mjs'], { fork: false });
-        },
+        () => activeChildProcessContext(),
         parent,
       );
-      expect(parentPid).toBe(41);
-      expect(spawnOptions?.federated).toBe(true);
+      expect(context.pid).toBe(41);
+      expect(context.federated).toBe(true);
     } finally {
       for (const channel of channels) {
         channel.port1.close();
@@ -180,11 +170,9 @@ process.stdout.write(JSON.stringify({
   it('uses the same-realm child identity when it constructs a kernel worker thread', async () => {
     const fixture = seededProcess(41, 7);
     let identity: { readonly pid: number; readonly ppid: number } | undefined;
-    vi.spyOn(globalProcessManager, 'spawnWorkerThread').mockImplementation((_spec, candidate) => {
-      identity = candidate;
-      const handle = fakeWorkerHandle();
-      queueMicrotask(() => handle.emit('exit', 0, null));
-      return handle;
+    const restoreWorker = installKernelWorkerBoundary((init) => {
+      identity = { pid: init.spec.pid, ppid: init.spec.ppid };
+      closeKernelWorkerPeer(init);
     });
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
     configureNodeEntryWorker('https://rifty.test/node-entry.js', {
@@ -210,6 +198,7 @@ worker.on('error', () => {});
 
       expect(identity).toEqual({ pid: child.pid, ppid: fixture.process.pid });
     } finally {
+      restoreWorker();
       setActiveNodeProcessBootstrap(
         previousActive?.process ?? null,
         previousActive?.federated ?? false,
@@ -457,21 +446,4 @@ function seededProcess(
       }
     },
   };
-}
-
-function fakeWorkerHandle(): ProcessHandle & EventEmitter {
-  const handle = new EventEmitter();
-  return Object.assign(handle, {
-    kind: 'worker' as const,
-    pid: 99,
-    ppid: 1,
-    command: 'worker_threads',
-    exitCode: null,
-    signalCode: null,
-    cwd: '/workspace',
-    stdout: () => new EventEmitter(),
-    stderr: () => new EventEmitter(),
-    send: () => true,
-    kill: () => true,
-  }) as unknown as ProcessHandle & EventEmitter;
 }

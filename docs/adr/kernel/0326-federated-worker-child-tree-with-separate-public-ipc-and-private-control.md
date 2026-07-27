@@ -94,12 +94,13 @@ physical termination proof is forbidden.
 > writes process-wide, snapshots exact stdout/stderr targets, and makes abrupt
 > peer death a finite no-drain-claim outcome.
 
-> **Specified (2026-07-27):** ancestor termination fences new reservations
-> before child-first control. A physical owner's output cut waits for every
-> successfully signalled exact remote/forwarded route to settle after its local
-> close-callback checkpoint or prove peer death. Authenticated owner death
-> bypasses an unresolved barrier. Teardown attempts every local cleanup before
-> surfacing listener/upstream failures; no route or output ledger is duplicated.
+> **Specified (2026-07-27, ADR-0333):** ancestor termination fences new
+> reservations before child-first control. A physical owner's output cut waits
+> for every successfully signalled exact remote/forwarded route to settle
+> after its local close-callback checkpoint or prove peer death. Authenticated
+> owner death bypasses an unresolved barrier. Teardown attempts every local
+> cleanup before surfacing listener/upstream failures; no route or output
+> ledger is duplicated.
 
 Workbench binds private descendant events to its existing owner token, captured
 PTY admission, and `previewScope`. Kernel owns no preview route or port claim;

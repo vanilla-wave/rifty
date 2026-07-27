@@ -1,5 +1,4 @@
-import { EventEmitter } from 'node:events';
-import { type KernelProcessSpec, globalProcessManager } from '@riftydev/kernel';
+import { type KernelProcessSpec, setKernelWorkerUrl } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -8,6 +7,10 @@ import {
   setNodeEntryWorkerUrl,
 } from '../builtins/node-entry-url.ts';
 import { NodeProcess } from '../builtins/process.ts';
+import {
+  closeKernelWorkerPeer,
+  installKernelWorkerBoundary,
+} from '../internal/kernel-worker-boundary.test-helper.ts';
 import * as recursiveRunner from './recursive-runner.ts';
 
 type RecursiveRunnerContract = typeof recursiveRunner & {
@@ -107,43 +110,24 @@ describe('makeRecursiveRunner', () => {
   });
 
   it('rejects when the recursive worker peer dies instead of leaving its sync caller pending', async () => {
-    const stdout = new EventEmitter();
-    const stderr = new EventEmitter();
-    const child = Object.assign(new EventEmitter(), {
-      kind: 'worker' as const,
-      stdout: () => stdout,
-      stderr: () => stderr,
-    });
-    vi.spyOn(globalProcessManager, 'spawnWorker').mockReturnValue(
-      child as unknown as ReturnType<typeof globalProcessManager.spawnWorker>,
-    );
+    const restoreWorker = installKernelWorkerBoundary(closeKernelWorkerPeer);
+    setKernelWorkerUrl('https://host.test/kernel-worker.js');
     configureNodeEntryWorker('https://host.test/node.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel-worker.js',
       RIFTY_NODE_ENTRY_WORKER_URL: 'https://host.test/node.js',
     });
-    const run = makeRecursiveRunner();
-    const result = run({
-      entryPath: '/child.js',
-      argv: ['rifty', '/child.js'],
-      env: {},
-      cwd: '/project',
-    });
-    const peerFailure = new Error('recursive worker peer died');
-    let observed:
-      | { readonly status: 'pending' }
-      | { readonly status: 'resolved' }
-      | { readonly status: 'rejected'; readonly reason: unknown } = { status: 'pending' };
-    void result.then(
-      () => {
-        observed = { status: 'resolved' };
-      },
-      (reason: unknown) => {
-        observed = { status: 'rejected', reason };
-      },
-    );
-
-    child.emit('peererror', peerFailure);
-    await Promise.resolve();
-
-    expect(observed).toEqual({ status: 'rejected', reason: peerFailure });
+    try {
+      const run = makeRecursiveRunner();
+      await expect(
+        run({
+          entryPath: '/child.js',
+          argv: ['rifty', '/child.js'],
+          env: {},
+          cwd: '/project',
+        }),
+      ).rejects.toThrow(/peer.*closed unexpectedly/i);
+    } finally {
+      restoreWorker();
+    }
   });
 });

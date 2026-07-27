@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import type { SpawnWorkerSpec } from '@riftydev/kernel';
 import { SHADOW_ASSET_PORT_CAPABILITY } from '@riftydev/npm-client/internal';
 import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { CommandContext } from '@riftydev/shell';
@@ -282,18 +282,17 @@ describe('owner-child-node-executor', () => {
     const readable = () => ({ on: vi.fn() });
     const child = Object.assign(new EventEmitter(), {
       kind: 'worker' as const,
-      stdout: readable,
-      stderr: readable,
-      kill: vi.fn(),
+      stdout: readable(),
+      stderr: readable(),
+      terminate: vi.fn(),
     });
-    vi.spyOn(globalProcessManager, 'spawnWorker').mockReturnValue(
-      child as unknown as ReturnType<typeof globalProcessManager.spawnWorker>,
-    );
+    const spawn = vi.fn(() => child);
     const run = createOwnerExecSyncRunner(
       'URL',
       NODE_WORKER_RUNTIME_ENV,
       () => REMOTE_FS_ROOT,
       reserveEmptyAdmission,
+      spawn,
     );
     const result = run({
       entryPath: '/packages/nested/child.mjs',
@@ -301,7 +300,7 @@ describe('owner-child-node-executor', () => {
       env: {},
       cwd: '/',
     });
-    await vi.waitFor(() => expect(globalProcessManager.spawnWorker).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     const peerFailure = new Error('owner execSync worker peer died');
     let observed:
       | { readonly status: 'pending' }

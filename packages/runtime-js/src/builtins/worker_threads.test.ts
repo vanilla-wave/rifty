@@ -20,6 +20,10 @@ import {
 } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  closeKernelWorkerPeer,
+  installKernelWorkerBoundary,
+} from '../internal/kernel-worker-boundary.test-helper.ts';
 import { EventEmitter } from './events.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
@@ -225,8 +229,7 @@ globalThis.onmessage = ({ data }) => {
   });
 
   it('closes the public Worker lifecycle when its kernel peer dies', async () => {
-    const fakeHandle = makeFakeWorkerHandle([]);
-    vi.spyOn(globalProcessManager, 'spawnWorker').mockReturnValue(fakeHandle);
+    const restoreWorker = installKernelWorkerBoundary(closeKernelWorkerPeer);
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
     configureNodeEntryWorker('https://rifty.test/node-entry.js', {
@@ -234,22 +237,22 @@ globalThis.onmessage = ({ data }) => {
     });
     const parent = new NodeProcess();
 
-    await withProcessGlobal(parent, async () => {
-      const events: unknown[] = [];
-      const worker = new Worker('/workspace/w-peer-death.mjs');
-      worker.on('error', (error) => events.push(['error', error]));
-      worker.on('exit', (code) => events.push(['exit', code]));
-      await Promise.resolve();
-      const peerError = new Error('worker peer died');
+    try {
+      await withProcessGlobal(parent, async () => {
+        const events: unknown[] = [];
+        const worker = new Worker('/workspace/w-peer-death.mjs');
+        worker.on('error', (error) => events.push(['error', error]));
+        worker.on('exit', (code) => events.push(['exit', code]));
+        await onceEvent(worker, 'exit');
 
-      fakeHandle.emit('peererror', peerError);
-      fakeHandle.emit('exit', 0, null);
-
-      expect(events).toEqual([
-        ['error', peerError],
-        ['exit', 1],
-      ]);
-    });
+        expect(events).toEqual([
+          ['error', expect.objectContaining({ message: expect.stringMatching(/peer.*closed/i) })],
+          ['exit', 1],
+        ]);
+      });
+    } finally {
+      restoreWorker();
+    }
   });
 
   it("delivers one kernel construction fault once through emnapi's Node bridge", async () => {
@@ -329,11 +332,10 @@ globalThis.onmessage = ({ data }) => {
   });
 
   it('keeps bootstrap ancestry when guest pid fields and the public spec are poisoned', async () => {
-    const fakeHandle = makeFakeWorkerHandle([]);
     let identity: { readonly pid: number; readonly ppid: number } | undefined;
-    vi.spyOn(globalProcessManager, 'spawnWorkerThread').mockImplementation((_spec, candidate) => {
-      identity = candidate;
-      return fakeHandle;
+    const restoreWorker = installKernelWorkerBoundary((init) => {
+      identity = { pid: init.spec.pid, ppid: init.spec.ppid };
+      closeKernelWorkerPeer(init);
     });
 
     (globalThis as Coi).crossOriginIsolated = true;
@@ -371,14 +373,15 @@ globalThis.onmessage = ({ data }) => {
         guestReplacement,
         async () => {
           const worker = new Worker('/workspace/w-trusted-parent.mjs');
-          await new Promise((resolve) => setTimeout(resolve, 0));
+          worker.on('error', () => {});
+          await onceEvent(worker, 'exit');
 
           expect(identity).toEqual({ pid: 41, ppid: 7 });
-          await worker.terminate();
         },
         parent,
       );
     } finally {
+      restoreWorker();
       for (const channel of channels) {
         channel.port1.close();
         channel.port2.close();

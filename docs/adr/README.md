@@ -31,6 +31,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0326 | Federated Worker child tree with separate public IPC and private control |
 | 0331 | SyncRpc v3 owns one live exchange through reply consumption |
 | 0332 | Worker stdio admission proves terminal drain |
+| 0333 | Descendant settlement barrier preserves recursive teardown ordering |
 
 ### runtime-js
 
@@ -328,6 +329,7 @@ superseded.
 | 0122 stdout/stderr port-matching clause | 0332 / note 2026-07-27 | stdin remains port-backed; stdout/stderr use semantic byte writers |
 | 0157 four-stdio-port / `makeStdioWriter` clauses | 0332 / note 2026-07-27 | stdout/stderr are kernel semantic writers; stdin and IPC remain ports |
 | 0326 unspecified final-output drain authority | 0332 / note 2026-07-27 | one process-wide cut and exact per-stream committed targets prove drain |
+| 0326 unspecified descendant-settlement/output-cut order | 0333 / note 2026-07-27 | fence admission, signal exact routes child-first, then await close-checkpoint settlement or peer death before the ancestor output cut |
 | 0011 recursive private PID allocator clause | 0326 / note 2026-07-26 | recursive children reserve owner-root ProcessManager identities over the trusted SAB attachment |
 | 0012 realm-local unified-registry clause | 0326 / note 2026-07-26 | one federated owner-root process tree; nested managers own only direct physical Workers |
 | 0130 D4 generated direct-command selector | 0327 / note 2026-07-26 | exact script bytes select canonical direct entry versus installed `.bin`; no template-ID dispatch |
