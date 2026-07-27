@@ -292,6 +292,13 @@ function boundaryWorker(): BoundaryWorker {
       listeners.set(event, current);
       return rawHandle;
     },
+    off(event: string, listener: (...args: unknown[]) => void) {
+      listeners.set(
+        event,
+        (listeners.get(event) ?? []).filter((candidate) => candidate !== listener),
+      );
+      return rawHandle;
+    },
     onListeningControl(listener: (...args: unknown[]) => void) {
       const current = listeners.get('control:listening') ?? [];
       current.push(listener);
