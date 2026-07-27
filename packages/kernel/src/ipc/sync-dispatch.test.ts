@@ -16,7 +16,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SabRing, createSabRing } from './sab-ring.ts';
 import { SyncRpcDispatcher } from './sync-dispatch.ts';
-import { encodeRequest } from './sync-rpc.ts';
+import { decodeReply, encodeRequest } from './sync-rpc.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -196,6 +196,25 @@ describe('SyncRpcDispatcher — busy-poll fallback when waitAsync is absent (ADR
 });
 
 describe('SyncRpcDispatcher — a dropped reply is LOUD, never silent', () => {
+  it('returns an in-band error when a handler result exceeds the reply slot', () => {
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    dispatcher.register('oversized', () => 'x'.repeat(1_024));
+    const { sab, ring } = createSabRing({ payloadCapacity: 256 });
+    const caller = SabRing.attach(sab, 256);
+    caller.writeRequest(encodeRequest({ method: 'oversized', payload: null }));
+
+    dispatcher.pumpOnce(ring);
+
+    expect(decodeReply(caller.waitReply(0))).toMatchObject({
+      ok: false,
+      error: {
+        name: 'RingPayloadTooLargeError',
+        code: 'ERINGPAYLOAD',
+        message: expect.stringMatching(/exceeds capacity/),
+      },
+    });
+  });
+
   it('when even the error reply cannot land, console.error names the method + ring state', () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
