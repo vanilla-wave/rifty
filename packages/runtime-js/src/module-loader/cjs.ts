@@ -1887,7 +1887,15 @@ function initialiseCjsRecord(
   record.filename = record.id;
   record.path = dirname(record.id);
   record.paths = moduleLookupPaths(record.id);
-  record.parent = parent;
+  // Node reaches `module.parent` through a deprecated accessor on
+  // `Module.prototype`, so it is readable (nodemon walks it) but never an own
+  // enumerable key.
+  objectDefinePropertyPrimordial(record, 'parent', {
+    value: parent,
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  });
   record.children = [];
   record.loaded = false;
   record.exports = {};
@@ -2007,7 +2015,13 @@ export function executeCjs(
 
 function failCjsRecord(registry: ModuleRegistry, record: ModuleRecord, error: unknown): never {
   record.state = 'errored';
-  record.error = error;
+  // Same rule as the other loader-private fields: recorded, never enumerated.
+  Object.defineProperty(record, 'error', {
+    value: error,
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  });
   detachFailedCjsChild(record.parent ?? undefined, record as CjsModule);
   if (registry.get(record.id) === record) registry.invalidate(record.id);
   throw error;

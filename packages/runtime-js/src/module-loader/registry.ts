@@ -56,13 +56,23 @@ export class ModuleRegistry {
   getOrCreate(id: string, kind: ModuleKind): ModuleRecord {
     let rec = this.records.get(id);
     if (!rec) {
-      rec = {
-        id,
-        kind,
-        state: 'loading',
-        exports: Object.create(null),
-        slots: Object.create(null),
-      };
+      // The record IS the object CJS code receives as `module` (ADR-0325), so
+      // the loader's own bookkeeping must not enumerate: Node's module has no
+      // `kind`/`state`/`slots`/`error`, and packages copy or serialize
+      // `module` by its keys. Writable and configurable — only invisible.
+      rec = { id, exports: Object.create(null) } as ModuleRecord;
+      for (const [key, value] of [
+        ['kind', kind],
+        ['state', 'loading'],
+        ['slots', Object.create(null)],
+      ] as const) {
+        Object.defineProperty(rec, key, {
+          value,
+          writable: true,
+          enumerable: false,
+          configurable: true,
+        });
+      }
       this.records.set(id, rec);
     }
     return rec;
