@@ -408,7 +408,7 @@ export function createOwnerChildDevServer(
             }
             if (listening && !stopRequested && !failingChild && exit) {
               const exitError = new Error(
-                `dev-server child exited after listening (code ${String(outcome.code)}, signal ${String(outcome.signal)})`,
+                `dev-server child exited after listening (code ${String(exit.code)}, signal ${String(exit.signal)})`,
               );
               reportFailure({
                 kind: 'exit',
@@ -432,7 +432,7 @@ export function createOwnerChildDevServer(
                   : bootFault
                 : (cleanupError ??
                   new Error(
-                    `dev-server child exited before listening (code ${String(outcome.code)}, signal ${String(outcome.signal)})`,
+                    `dev-server child exited before listening (code ${String(exit!.code)}, signal ${String(exit!.signal)})`,
                   ));
               reject(new DevServerRunError(error, exit!));
             });
