@@ -14,7 +14,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SabRing, createSabRing } from './sab-ring.ts';
+import { REP_STATE_OFFSET, SabRing, createSabRing } from './sab-ring.ts';
 import { SyncRpcDispatcher } from './sync-dispatch.ts';
 import { decodeReply, encodeRequest } from './sync-rpc.ts';
 
@@ -196,6 +196,20 @@ describe('SyncRpcDispatcher — busy-poll fallback when waitAsync is absent (ADR
 });
 
 describe('SyncRpcDispatcher — a dropped reply is LOUD, never silent', () => {
+  it('a backstop pump ignores its published reply until the caller consumes it', () => {
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    dispatcher.register('echo', (p) => p);
+    const { sab, ring } = createSabRing({ payloadCapacity: 256 });
+    const caller = SabRing.attach(sab, 256);
+    caller.writeRequest(encodeRequest({ method: 'echo', payload: 1 }));
+
+    dispatcher.pumpOnce(ring);
+
+    expect(() => dispatcher.pumpOnce(ring)).not.toThrow();
+    expect(decodeReply(caller.waitReply(0))).toMatchObject({ ok: true, value: 1 });
+    dispatcher.detachAll();
+  });
+
   it('returns an in-band error when a handler result exceeds the reply slot', () => {
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
     dispatcher.register('oversized', () => 'x'.repeat(1_024));
@@ -224,7 +238,7 @@ describe('SyncRpcDispatcher — a dropped reply is LOUD, never silent', () => {
     caller.writeRequest(encodeRequest({ method: 'echo', payload: 1 }));
     // Forge a protocol violation: occupy the reply slot so BOTH the value reply
     // and the fallback error reply fail their "previous reply unread" guard.
-    ring.writeReply(new Uint8Array([9]));
+    Atomics.store(new Int32Array(sab), REP_STATE_OFFSET >> 2, 1);
     dispatcher.pumpOnce(ring);
     expect(errSpy).toHaveBeenCalledTimes(1);
     const line = String(errSpy.mock.calls[0]?.[0]);

@@ -34,6 +34,8 @@ describe('SyncRpcClient — call context on ring errors', () => {
     const responder = SabRing.attach(sab, 256);
     const client = new SyncRpcClient(ring);
     // Forge the wedge: a reply sits unread (as after an abandoned exchange).
+    ring.writeRequest(new Uint8Array([0]));
+    responder.readRequest();
     responder.writeReply(new Uint8Array([1]));
     expect(() => client.call('fs.statOrNull', { path: '/x' })).toThrow(
       /sync-rpc call 'fs\.statOrNull' failed: .*previous reply is unread/,
@@ -59,6 +61,8 @@ describe('SyncRpcClient — call context on ring errors', () => {
     const { sab, ring } = createSabRing({ payloadCapacity: 256 });
     const responder = SabRing.attach(sab, 256);
     const client = new SyncRpcClient(ring);
+    ring.writeRequest(new Uint8Array([0]));
+    responder.readRequest();
     responder.writeReply(new Uint8Array([1]));
     let caught: unknown;
     try {

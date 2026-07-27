@@ -152,7 +152,10 @@ describe('SabRing — zero-copy view (ADR-0084 #18)', () => {
     const decodedFirst = Array.from(first ?? []); // synchronous "decode" = copy out
     expect(decodedFirst).toEqual([1, 2, 3]);
 
-    // Next request reuses the REQ slot — the live view mutates, the copy doesn't.
+    responder.writeReply(new Uint8Array(0));
+    caller.waitReply(0);
+
+    // The next completed exchange reuses the REQ slot — the copy stays stable.
     caller.writeRequest(new Uint8Array([7, 8, 9]));
     const second = responder.readRequest();
     expect(Array.from(second ?? [])).toEqual([7, 8, 9]);
@@ -207,6 +210,80 @@ describe('SabRing — protocol violations', () => {
     );
   });
 
+  it('rejects a second attached caller after the responder claims the first request', async () => {
+    const { sab, ring: firstCaller } = createSabRing({ payloadCapacity: 16 });
+    const secondCaller = SabRing.attach(sab, 16);
+    const responder = SabRing.attach(sab, 16);
+
+    firstCaller.writeRequest(new Uint8Array([1, 2, 3]));
+    expect(responder.readRequest()).toEqual(new Uint8Array([1, 2, 3]));
+
+    expect(() => secondCaller.writeRequest(new Uint8Array([4, 5, 6]))).toThrow(
+      /previous request is being handled/,
+    );
+
+    responder.writeReply(new Uint8Array([7, 8, 9]));
+    await expect(firstCaller.waitReplyAsync(100)).resolves.toEqual(new Uint8Array([7, 8, 9]));
+  });
+
+  it('rejects a second dispatcher from consuming one claimed request', () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const firstResponder = SabRing.attach(sab, 16);
+    const secondResponder = SabRing.attach(sab, 16);
+
+    caller.writeRequest(new Uint8Array([1, 2, 3]));
+    expect(firstResponder.readRequest()).toEqual(new Uint8Array([1, 2, 3]));
+    expect(() => secondResponder.readRequest()).toThrow(/previous request is being handled/);
+
+    firstResponder.writeReply(new Uint8Array([4, 5, 6]));
+    expect(firstResponder.readRequest()).toBeNull();
+    expect(() => secondResponder.readRequest()).toThrow(/previous request is being handled/);
+    expect(caller.waitReply(0)).toEqual(new Uint8Array([4, 5, 6]));
+    expect(secondResponder.readRequest()).toBeNull();
+  });
+
+  it("rejects a second caller from consuming the first caller's reply", () => {
+    const { sab, ring: firstCaller } = createSabRing({ payloadCapacity: 16 });
+    const secondCaller = SabRing.attach(sab, 16);
+    const responder = SabRing.attach(sab, 16);
+
+    firstCaller.writeRequest(new Uint8Array([1, 2, 3]));
+    responder.readRequest();
+    responder.writeReply(new Uint8Array([4, 5, 6]));
+
+    expect(() => secondCaller.waitReply(0)).toThrow(/caller does not own the live request/);
+    expect(firstCaller.waitReply(0)).toEqual(new Uint8Array([4, 5, 6]));
+  });
+
+  it("rejects a second dispatcher from writing the first dispatcher's reply", () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const firstResponder = SabRing.attach(sab, 16);
+    const secondResponder = SabRing.attach(sab, 16);
+
+    caller.writeRequest(new Uint8Array([1, 2, 3]));
+    firstResponder.readRequest();
+
+    expect(() => secondResponder.writeReply(new Uint8Array([4, 5, 6]))).toThrow(
+      /dispatcher does not own the live request/,
+    );
+    firstResponder.writeReply(new Uint8Array([7, 8, 9]));
+    expect(caller.waitReply(0)).toEqual(new Uint8Array([7, 8, 9]));
+  });
+
+  it('rejects a duplicate reply consumer instead of returning an empty frame', async () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+
+    caller.writeRequest(new Uint8Array([1, 2, 3]));
+    const firstRead = caller.waitReplyAsync(100);
+    const duplicateRead = caller.waitReplyAsync(100);
+    responder.readRequest();
+    responder.writeReply(new Uint8Array([4, 5, 6]));
+
+    await expect(firstRead).resolves.toEqual(new Uint8Array([4, 5, 6]));
+    await expect(duplicateRead).rejects.toThrow(/caller does not own the live request/);
+  });
+
   it('writeRequest while a reply is still unread throws', async () => {
     const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
     const responder = SabRing.attach(sab, 16);
@@ -220,10 +297,13 @@ describe('SabRing — protocol violations', () => {
   });
 
   it('writeReply while a previous reply is still unread throws', () => {
-    const { sab } = createSabRing({ payloadCapacity: 16 });
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
     const responder = SabRing.attach(sab, 16);
+    caller.writeRequest(new Uint8Array([0]));
+    responder.readRequest();
     responder.writeReply(new Uint8Array([1]));
     expect(() => responder.writeReply(new Uint8Array([2]))).toThrow(/previous reply is unread/);
+    caller.waitReply(0);
   });
 });
 
@@ -235,7 +315,7 @@ describe('SabRing — violation forensics (CI-flake postmortem needs the header 
     responder.readRequest();
     responder.writeReply(new Uint8Array([2, 3]));
     expect(() => caller.writeRequest(new Uint8Array([4]))).toThrow(
-      /previous reply is unread \(header: version=\d+ req=idle rep=ready reqLen=0 repLen=2\)/,
+      /previous reply is unread \(header: version=\d+ req=handling rep=ready reqLen=0 repLen=2\)/,
     );
     await caller.waitReplyAsync(100);
   });
@@ -249,12 +329,15 @@ describe('SabRing — violation forensics (CI-flake postmortem needs the header 
   });
 
   it('writeReply-over-unread-reply names the full header state', () => {
-    const { sab } = createSabRing({ payloadCapacity: 16 });
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
     const responder = SabRing.attach(sab, 16);
+    caller.writeRequest(new Uint8Array([0]));
+    responder.readRequest();
     responder.writeReply(new Uint8Array([1]));
     expect(() => responder.writeReply(new Uint8Array([2]))).toThrow(
-      /previous reply is unread \(header: version=\d+ req=idle rep=ready reqLen=0 repLen=1\)/,
+      /previous reply is unread \(header: version=\d+ req=handling rep=ready reqLen=0 repLen=1\)/,
     );
+    caller.waitReply(0);
   });
 
   it('corrupt reply length names the full header state', async () => {

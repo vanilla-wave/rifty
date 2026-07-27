@@ -52,11 +52,14 @@ describe('SyncRpc protocol version (ADR-0032)', () => {
   });
 
   it('writeReply stamps the protocol version into the VERSION slot', () => {
-    const { sab } = createSabRing({ payloadCapacity: 64 });
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 64 });
     const responder = SabRing.attach(sab, 64);
+    caller.writeRequest(new Uint8Array([0]));
+    responder.readRequest();
     responder.writeReply(new Uint8Array([7]));
     const view = new Int32Array(sab, 0, SAB_RING_HEADER_BYTES >> 2);
     expect(Atomics.load(view, VERSION_INDEX)).toBe(SYNC_RPC_PROTOCOL_VERSION);
+    caller.waitReply(0);
   });
 });
 
@@ -103,22 +106,18 @@ describe('SyncRpc protocol version — consumer-side rejection (ADR-0032)', () =
 describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
   it('dispatcher writes a versioned error reply when a request arrives with a wrong version', async () => {
     const { sab, ring } = createSabRing({ payloadCapacity: 256 });
-    const callerView = SabRing.attach(sab, 256);
+    const forgedVersion = SYNC_RPC_PROTOCOL_VERSION + 5;
+    const caller = SabRing.attach(sab, 256, { expectedVersion: forgedVersion });
 
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
     dispatcher.register('echo', (p) => p);
     dispatcher.attach(ring);
 
-    const forgedVersion = SYNC_RPC_PROTOCOL_VERSION + 5;
     // Caller writes a request with a bogus version — the dispatcher must
     // (a) reject the payload (do not decode), and (b) write a reply at the
     // version the caller used so the caller can still decode the failure.
-    callerView.writeRequestWithVersion(new TextEncoder().encode('garbage-no-json'), forgedVersion);
-
-    // Attach a peer view with the same (forged) expected version so we can
-    // read the reply the dispatcher writes back.
-    const peer = SabRing.attach(sab, 256, { expectedVersion: forgedVersion });
-    const replyBytes = await peer.waitReplyAsync(2000);
+    caller.writeRequestWithVersion(new TextEncoder().encode('garbage-no-json'), forgedVersion);
+    const replyBytes = await caller.waitReplyAsync(2000);
     dispatcher.detachAll();
     // v2 (ADR-0084 #23): the error reply is a JSON frame — decode through the
     // real decoder which strips the 1-byte discriminator. (The error contract
@@ -162,9 +161,11 @@ describe('SyncRpc v2 binary frame (ADR-0084 #23)', () => {
     // 0x01 body into JSON.parse.
     const { sab } = createSabRing({ payloadCapacity: 64 });
     const responder = SabRing.attach(sab, 64);
+    const v1Reader = SabRing.attach(sab, 64, { expectedVersion: 1 });
+    v1Reader.writeRequest(new Uint8Array([0]));
+    expect(() => responder.readRequest()).toThrow(SyncRpcProtocolMismatchError);
     // Responder stamps v2 (its expectedVersion) and writes a binary frame.
     responder.writeReply(encodeBinaryReply(Uint8Array.from([0xff, 0xfe, 0x00])));
-    const v1Reader = SabRing.attach(sab, 64, { expectedVersion: 1 });
     await expect(v1Reader.waitReplyAsync(1000)).rejects.toBeInstanceOf(
       SyncRpcProtocolMismatchError,
     );

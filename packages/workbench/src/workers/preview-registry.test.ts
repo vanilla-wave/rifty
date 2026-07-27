@@ -28,6 +28,7 @@ function assertPreviewOriginContract(reg: PreviewRegistry): void {
   // @ts-expect-error Failed state must retain the producer origin before teardown.
   reg.devBootFailed('boot failed');
   reg.addNode('node-child', [3000], 'scope-node', {
+    pid: 2,
     origin: {
       kind: 'pty',
       // @ts-expect-error A raw PTY pair is not preview correlation authority.
@@ -52,7 +53,7 @@ describe('preview-registry', () => {
   it('emits a snapshot on add and remove', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('s1', [3000], 'scope-node-1', { origin: HOST_PREVIEW_ORIGIN });
+    reg.addNode('s1', [3000], 'scope-node-1', { pid: 2, origin: HOST_PREVIEW_ORIGIN });
     expect(previewFrames(sent).at(-1)).toEqual({
       type: 'pty:preview',
       ports: [
@@ -134,7 +135,7 @@ describe('preview-registry', () => {
   it('publish() re-emits the current set (handshake)', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('s1', [3000], 'scope-node', { origin: HOST_PREVIEW_ORIGIN });
+    reg.addNode('s1', [3000], 'scope-node', { pid: 2, origin: HOST_PREVIEW_ORIGIN });
     sent.length = 0;
     reg.publish();
     expect(sent).toHaveLength(1);
@@ -145,8 +146,11 @@ describe('preview-registry', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
     reg.setDevServer(5174, 'scope-dev', { origin: HOST_PREVIEW_ORIGIN });
-    reg.addNode('s1', [3000], 'scope-node-1', { origin: HOST_PREVIEW_ORIGIN });
-    reg.addNode('s2', [8080, 8081], 'scope-node-2', { origin: HOST_PREVIEW_ORIGIN });
+    reg.addNode('s1', [3000], 'scope-node-1', { pid: 2, origin: HOST_PREVIEW_ORIGIN });
+    reg.addNode('s2', [8080, 8081], 'scope-node-2', {
+      pid: 3,
+      origin: HOST_PREVIEW_ORIGIN,
+    });
     expect(
       previewFrames(sent)
         .at(-1)!
@@ -162,7 +166,10 @@ describe('preview-registry', () => {
     // must NOT be double-listed: the SW routes one /preview/5174/, so two entries
     // would make the page wire two clobbering bridges whose teardown deletes the
     // shared route. The dev slot wins; the distinct node port stays.
-    reg.addNode('s1', [5174, 4001], 'scope-node', { origin: HOST_PREVIEW_ORIGIN });
+    reg.addNode('s1', [5174, 4001], 'scope-node', {
+      pid: 2,
+      origin: HOST_PREVIEW_ORIGIN,
+    });
     const ports = previewFrames(sent).at(-1)!.ports;
     expect(ports.map((p) => p.port)).toEqual([5174, 4001]);
     expect(ports.find((p) => p.port === 5174)?.source).toBe('dev-server');
@@ -172,6 +179,7 @@ describe('preview-registry', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
     reg.addNode('bin-1', [8080], 'scope-bin', {
+      pid: 2,
       origin: HOST_PREVIEW_ORIGIN,
       labelBase: 'webpack-dev-server',
     });
@@ -191,6 +199,7 @@ describe('preview-registry', () => {
       ptyOrigin('terminal-preview', 'run-preview'),
     );
     reg.addNode('node-child-1', [3000], 'scope-node', {
+      pid: 2,
       origin: ptyOrigin('terminal-node', 'run-node'),
     });
 
@@ -226,6 +235,7 @@ describe('preview-registry derived dev-server lifecycle', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
     reg.addNode('bin-1', [8080], 'scope-1', {
+      pid: 2,
       origin: ptyOrigin('term-1', 'run-1'),
       labelBase: 'webpack',
     });
@@ -248,25 +258,62 @@ describe('preview-registry derived dev-server lifecycle', () => {
   it('a server that closes its port (ports → []) reads as stopped, without an exit', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('node-1', [3000], 'scope-1', { origin: ptyOrigin('term-1', 'run-1') });
-    reg.addNode('node-1', [], 'scope-1', { origin: ptyOrigin('term-1', 'run-1') });
+    reg.addNode('node-1', [3000], 'scope-1', {
+      pid: 2,
+      origin: ptyOrigin('term-1', 'run-1'),
+    });
+    reg.addNode('node-1', [], 'scope-1', {
+      pid: 2,
+      origin: ptyOrigin('term-1', 'run-1'),
+    });
     expect(devFrames(sent).at(-1)?.status).toBe('stopped');
+  });
+
+  it('does not let an older descendant replace or resurrect its same-sid successor', () => {
+    const { send, sent } = frames();
+    const reg = createPreviewRegistry({ send });
+    const origin = ptyOrigin('term-1', 'run-1');
+
+    reg.addNode('nodemon', [3000], 'scope-1', { pid: 41, origin });
+    reg.addNode('nodemon', [4000], 'scope-2', { pid: 42, origin });
+    reg.addNode('nodemon', [3001], 'stale-scope', { pid: 41, origin });
+    expect(devFrames(sent).at(-1)).toMatchObject({
+      status: 'running',
+      port: 4000,
+      previewScope: 'scope-2',
+    });
+
+    reg.addNode('nodemon', [], 'scope-2', { pid: 42, origin });
+    reg.addNode('nodemon', [3002], 'stale-scope', { pid: 41, origin });
+    expect(devFrames(sent).at(-1)).toMatchObject({ status: 'stopped' });
   });
 
   it('no duplicate running frames while the primary is unchanged', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('node-1', [3000], 'scope-1', { origin: ptyOrigin('term-1', 'run-1') });
+    reg.addNode('node-1', [3000], 'scope-1', {
+      pid: 2,
+      origin: ptyOrigin('term-1', 'run-1'),
+    });
     const before = devFrames(sent).length;
-    reg.addNode('node-2', [4000], 'scope-2', { origin: ptyOrigin('term-2', 'run-2') });
+    reg.addNode('node-2', [4000], 'scope-2', {
+      pid: 3,
+      origin: ptyOrigin('term-2', 'run-2'),
+    });
     expect(devFrames(sent)).toHaveLength(before);
   });
 
   it('primary handover: first server closes → running frame for the next port', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('node-1', [3000], 'scope-1', { origin: ptyOrigin('term-1', 'run-1') });
-    reg.addNode('node-2', [4000], 'scope-2', { origin: ptyOrigin('term-2', 'run-2') });
+    reg.addNode('node-1', [3000], 'scope-1', {
+      pid: 2,
+      origin: ptyOrigin('term-1', 'run-1'),
+    });
+    reg.addNode('node-2', [4000], 'scope-2', {
+      pid: 3,
+      origin: ptyOrigin('term-2', 'run-2'),
+    });
     reg.removeBySid('node-1');
     expect(devFrames(sent).at(-1)).toMatchObject({ status: 'running', port: 4000, sid: 'term-2' });
   });
@@ -321,7 +368,10 @@ describe('preview-registry derived dev-server lifecycle', () => {
   it('devBootFailed with ANOTHER server live keeps the derived running status (error still carried)', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('node-1', [3000], 'scope-1', { origin: ptyOrigin('term-1', 'run-1') });
+    reg.addNode('node-1', [3000], 'scope-1', {
+      pid: 2,
+      origin: ptyOrigin('term-1', 'run-1'),
+    });
     const failedOrigin = ptyOrigin('term-2', 'run-2');
     reg.devStarting(failedOrigin);
     reg.devBootFailed('boom', failedOrigin);
@@ -338,7 +388,10 @@ describe('preview-registry derived dev-server lifecycle', () => {
   it('a listening port wins over a concurrent starting phase (running > starting)', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('node-1', [3000], 'scope-1', { origin: ptyOrigin('term-1', 'run-1') });
+    reg.addNode('node-1', [3000], 'scope-1', {
+      pid: 2,
+      origin: ptyOrigin('term-1', 'run-1'),
+    });
     reg.devStarting(ptyOrigin('term-2', 'run-2'));
     expect(devFrames(sent).at(-1)?.status).toBe('running');
   });
@@ -346,7 +399,10 @@ describe('preview-registry derived dev-server lifecycle', () => {
   it('publishDev() re-emits the current derived frame (handshake)', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
-    reg.addNode('node-1', [3000], 'scope-1', { origin: ptyOrigin('term-1', 'run-1') });
+    reg.addNode('node-1', [3000], 'scope-1', {
+      pid: 2,
+      origin: ptyOrigin('term-1', 'run-1'),
+    });
     sent.length = 0;
     reg.publishDev();
     expect(devFrames(sent).at(-1)).toMatchObject({ status: 'running', port: 3000 });
@@ -358,6 +414,7 @@ describe('preview-registry derived dev-server lifecycle', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
     reg.addNode('bin-1', [8080], 'scope-1', {
+      pid: 2,
       origin: ptyOrigin('term-1', 'run-1'),
       cwd: '/scratch',
     });
@@ -378,7 +435,7 @@ describe('preview-registry teardown', () => {
     const origin = ptyOrigin('term-1', 'run-1');
     reg.setDevServer(5174, 'scope-dev', { origin });
     reg.setPreview('preview-owner', [4173], 'scope-preview', origin);
-    reg.addNode('node-1', [3000], 'scope-node', { origin });
+    reg.addNode('node-1', [3000], 'scope-node', { pid: 2, origin });
     reg.devStarting(origin);
     sent.length = 0;
 
@@ -392,7 +449,7 @@ describe('preview-registry teardown', () => {
     reg.clearDevServer();
     reg.setPreview('preview-late', [4174], 'scope-late-preview', origin);
     reg.clearPreview('preview-late');
-    reg.addNode('node-late', [4000], 'scope-late-node', { origin });
+    reg.addNode('node-late', [4000], 'scope-late-node', { pid: 3, origin });
     reg.removeBySid('node-late');
     reg.devStarting(origin);
     reg.devStopped();
