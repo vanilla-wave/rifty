@@ -17,6 +17,9 @@ import { setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
 import workerEnvCase from '../cases/worker_threads/env-semantics.case.ts';
 import { runInRifty } from './run-in-rifty.ts';
 
+// Leave room for runInRifty's 30s diagnostic deadline under loaded CI Workers.
+const REAL_WORKER_TEST_TIMEOUT_MS = 35_000;
+
 function restoreGlobalDescriptor(name: string, descriptor: PropertyDescriptor | undefined): void {
   if (descriptor) Object.defineProperty(globalThis, name, descriptor);
   else Reflect.deleteProperty(globalThis, name);
@@ -28,9 +31,13 @@ function restoreKernelWorkerUrl(url: string | URL | null): void {
 }
 
 describe('runInRifty', () => {
-  it('accepts the atomic node-entry v2 bootstrap in physical Worker mode', async () => {
-    await expect(runInRifty(workerEnvCase)).resolves.toBe(workerEnvCase.expected);
-  });
+  it(
+    'accepts the atomic node-entry v2 bootstrap in physical Worker mode',
+    async () => {
+      await expect(runInRifty(workerEnvCase)).resolves.toBe(workerEnvCase.expected);
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
 
   it('ends synthetic physical-parent stdin so an inherited child can settle', async () => {
     const stdout = await runInRifty({
