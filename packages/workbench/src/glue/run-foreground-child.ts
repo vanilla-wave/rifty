@@ -265,7 +265,10 @@ export function runForegroundChild(
     };
     const onAbort = (): void => {
       aborted = true;
-      outputClosed = true;
+      // Output stays open until `'exit'`: the kernel delivers every byte the
+      // child had already written before the terminal cut, and that final
+      // crash stack or shutdown line belongs on the terminal. `'exit'` is the
+      // point the run is over, and it closes output there.
       stopInput();
       try {
         stopResize();
