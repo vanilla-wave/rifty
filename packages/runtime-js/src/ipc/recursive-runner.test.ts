@@ -1,4 +1,11 @@
-import { type KernelProcessSpec, setKernelWorkerUrl } from '@riftydev/kernel';
+import {
+  KERNEL_PROCESS_SPEC_KEY,
+  KERNEL_SYNC_CALL_KEY,
+  type KernelProcessSpec,
+  publishKernelProcessSpec,
+  publishKernelSyncApi,
+  setKernelWorkerUrl,
+} from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -36,8 +43,31 @@ function seededProcess(env: Readonly<Record<string, string>>): NodeProcess {
   } satisfies KernelProcessSpec);
 }
 
+function publishProcessIdentity(pid: number): () => void {
+  const channel = new MessageChannel();
+  publishKernelProcessSpec({
+    pid,
+    ppid: 1,
+    argv: ['rifty', '/parent.js'],
+    env: {},
+    cwd: '/project',
+    stdio: {
+      stdout: { write() {} },
+      stderr: { write() {} },
+      stdin: channel.port1,
+      ipc: channel.port1,
+    },
+  });
+  return () => {
+    channel.port1.close();
+    channel.port2.close();
+  };
+}
+
 describe('makeRecursiveRunner', () => {
   afterEach(() => {
+    Reflect.deleteProperty(globalThis, KERNEL_PROCESS_SPEC_KEY);
+    Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
     resetNodeEntryWorkerUrl();
     vi.restoreAllMocks();
   });
@@ -128,6 +158,96 @@ describe('makeRecursiveRunner', () => {
       ).rejects.toThrow(/peer.*closed unexpectedly/i);
     } finally {
       restoreWorker();
+    }
+  });
+
+  it('keeps a root-dispatched recursive child local when this realm has no upstream', async () => {
+    const restoreWorker = installKernelWorkerBoundary(closeKernelWorkerPeer);
+    setKernelWorkerUrl('https://host.test/kernel-worker.js');
+    configureNodeEntryWorker('https://host.test/node.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel-worker.js',
+      RIFTY_NODE_ENTRY_WORKER_URL: 'https://host.test/node.js',
+    });
+    try {
+      const run = makeRecursiveRunner();
+      await expect(
+        run(
+          {
+            entryPath: '/child.js',
+            argv: ['rifty', '/child.js'],
+            env: {},
+            cwd: '/project',
+          },
+          { parentPid: 1 },
+        ),
+      ).rejects.toThrow(/peer.*closed unexpectedly/i);
+    } finally {
+      restoreWorker();
+    }
+  });
+
+  it('fails loud when a nested serving realm loses its upstream authority', () => {
+    const closeIdentity = publishProcessIdentity(7);
+    configureNodeEntryWorker('https://host.test/node.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel-worker.js',
+      RIFTY_NODE_ENTRY_WORKER_URL: 'https://host.test/node.js',
+    });
+    try {
+      const run = makeRecursiveRunner();
+      expect(() =>
+        run(
+          {
+            entryPath: '/child.js',
+            argv: ['rifty', '/child.js'],
+            env: {},
+            cwd: '/project',
+          },
+          { parentPid: 7 },
+        ),
+      ).toThrow(/process federation requested without an upstream kernel authority/i);
+    } finally {
+      closeIdentity();
+    }
+  });
+
+  it('federates a recursive child when the serving realm has an upstream', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    const closeIdentity = publishProcessIdentity(7);
+    publishKernelSyncApi({
+      call(method, payload) {
+        calls.push({ method, payload });
+        return method === 'process.reserve' ? 41 : null;
+      },
+    });
+    const restoreWorker = installKernelWorkerBoundary(closeKernelWorkerPeer);
+    setKernelWorkerUrl('https://host.test/kernel-worker.js');
+    configureNodeEntryWorker('https://host.test/node.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel-worker.js',
+      RIFTY_NODE_ENTRY_WORKER_URL: 'https://host.test/node.js',
+    });
+    try {
+      const run = makeRecursiveRunner();
+      await expect(
+        run(
+          {
+            entryPath: '/child.js',
+            argv: ['rifty', '/child.js'],
+            env: {},
+            cwd: '/project',
+          },
+          { parentPid: 7 },
+        ),
+      ).rejects.toThrow(/peer.*closed unexpectedly/i);
+      await vi.waitFor(() =>
+        expect(calls.map(({ method }) => method)).toEqual([
+          'process.reserve',
+          'process.commit',
+          'process.peer-death',
+        ]),
+      );
+    } finally {
+      restoreWorker();
+      closeIdentity();
     }
   });
 });

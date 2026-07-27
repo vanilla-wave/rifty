@@ -35,6 +35,9 @@
 - Recursive `execSync` workers reject physical peer death instead of leaving
   the parent SAB call blocked forever.
 
+- Root-dispatched `execSync` children stay on the local process authority;
+  nested serving realms still federate through their published upstream.
+
 - Worker-backed `child_process` no longer falls back beside the parent for a missing cwd entry.
 
 - **TS transform provenance matches ADR-0316.** `transformSource` remains a
