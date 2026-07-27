@@ -21,12 +21,11 @@
  * `spawn-worker.ts` lazy singleton); the one global backstop timer iterates
  * all attached rings, so timer count is O(1) regardless of live children.
  * Recursive-safe: the `'execSync'` handler may itself spawn a worker whose
- * ring attaches to the same dispatcher — the in-flight per-ring guard
- * prevents re-dispatching the already-in-progress request, and re-arm waits
- * until the reply is written.
+ * ring attaches to the same dispatcher. SabRing's shared handling claim is
+ * the sole exchange authority and makes a repeat pump harmless.
  */
 
-import type { SabRing } from './sab-ring.ts';
+import { RingCorruptRequestError, type SabRing } from './sab-ring.ts';
 import {
   SyncRpcProtocolMismatchError,
   type SyncRpcReply,
@@ -119,18 +118,9 @@ export class SyncRpcDispatcher {
   private readonly armGeneration = new WeakMap<SabRing, number>();
   /**
    * Rings with a live (parked or sync-pending) waitAsync arm (ADR-0084 #17).
-   * Prevents a double-arm: a sync handler's reply-writer calls {@link rearm}
-   * from inside `pumpOnce`, then `onArmSettled`'s tail would arm again — the
-   * guard makes the second a no-op, so each ring holds at most one arm.
+   * The guard ensures each ring holds at most one arm.
    */
   private readonly pendingArm = new WeakSet<SabRing>();
-  /**
-   * Per-ring guard: when a handler is awaiting an async result we must not
-   * read another request from the same ring (and we can't anyway — the
-   * client won't send one until it sees the reply). The flag covers the
-   * window between handler dispatch and reply write.
-   */
-  private readonly inFlight = new WeakSet<SabRing>();
 
   constructor(opts: SyncRpcDispatcherOptions = {}) {
     this.eventDriven = hasWaitAsync();
@@ -193,7 +183,6 @@ export class SyncRpcDispatcher {
   detach(ring: SabRing): void {
     if (!this.attachments.delete(ring)) return;
     this.callerContexts.delete(ring);
-    this.inFlight.delete(ring);
     // Bump the generation so the still-parked waitAsync promise no-ops on settle,
     // and drop the arm guard so a later re-attach can arm fresh.
     this.armGeneration.set(ring, (this.armGeneration.get(ring) ?? 0) + 1);
@@ -204,7 +193,6 @@ export class SyncRpcDispatcher {
   /** Detach every ring. Useful for shutdown / test cleanup. */
   detachAll(): void {
     for (const ring of [...this.attachments]) {
-      this.inFlight.delete(ring);
       this.callerContexts.delete(ring);
       this.armGeneration.set(ring, (this.armGeneration.get(ring) ?? 0) + 1);
       this.pendingArm.delete(ring);
@@ -232,9 +220,8 @@ export class SyncRpcDispatcher {
    * Arm an `Atomics.waitAsync` on `ring`'s REQ_STATE (ADR-0084 #17). The
    * caller's `writeRequest` notify resolves it sub-ms; on resolve we pump and
    * re-arm. The synchronous `'not-equal'` branch covers a request that landed
-   * before arming (no lost wake). Re-arm after an async handler is deferred to
-   * {@link rearm} (called once the reply is written) so we never spin on an
-   * in-flight ring.
+   * before arming (no lost wake). A claimed request arms against HANDLING and
+   * parks until the caller consumes its reply.
    */
   private arm(ring: SabRing): void {
     if (!this.attachments.has(ring)) return;
@@ -253,30 +240,18 @@ export class SyncRpcDispatcher {
 
   /**
    * Common post-arm handler: drop if the ring was detached / re-attached
-   * since arming (cancel-on-detach), else pump and re-arm. When the pump
-   * leaves an async handler in flight, {@link rearm} re-arms after the reply
-   * lands; otherwise re-arm here so the next request is observed.
+   * since arming (cancel-on-detach), else pump and re-arm. SabRing chooses the
+   * current shared phase as the wait value, so a claimed request parks instead
+   * of re-dispatching or spinning.
    */
   private onArmSettled(ring: SabRing, generation: number): void {
     // A stale settle (detach/re-attach bumped the generation) must NOT clear the
     // guard of the new arm — drop it untouched. Cancel-on-detach: also drop.
     if ((this.armGeneration.get(ring) ?? 0) !== generation) return;
     if (!this.attachments.has(ring)) return;
-    // This arm has settled; clear the guard so the next arm (here or via the
-    // sync handler's reply-writer rearm) is allowed exactly once.
+    // This arm has settled; clear the guard so the next arm is allowed.
     this.pendingArm.delete(ring);
     this.pumpOnce(ring);
-    if (!this.inFlight.has(ring)) this.arm(ring);
-  }
-
-  /**
-   * Re-arm a ring after its reply is written (ADR-0084 #17). Called from the
-   * reply-writers once {@link inFlight} clears, so an async (`execSync`)
-   * handler that returns to the event loop while still working does not cause
-   * a premature re-arm / spin.
-   */
-  private rearm(ring: SabRing): void {
-    if (!this.eventDriven) return;
     this.arm(ring);
   }
 
@@ -292,23 +267,25 @@ export class SyncRpcDispatcher {
    * instead of waiting on the timer.
    */
   pumpOnce(ring: SabRing): void {
-    if (this.inFlight.has(ring)) return;
     let bytes: Uint8Array | null;
     try {
       bytes = ring.readRequest();
     } catch (err) {
       // ADR-0032: a version-mismatched request must NOT be decoded. Echo
       // the caller's version back in the reply so the caller can still
-      // parse the error frame. State is already cleared inside readRequest.
+      // parse the error frame. The ring keeps its handling claim through
+      // this versioned reply until that caller consumes it.
       if (err instanceof SyncRpcProtocolMismatchError) {
-        this.inFlight.add(ring);
         this.writeVersionedError(ring, err.got, err);
+        return;
+      }
+      if (err instanceof RingCorruptRequestError) {
+        this.writeError(ring, err, '<readRequest>');
         return;
       }
       throw err;
     }
     if (bytes === null) return;
-    this.inFlight.add(ring);
     let req: SyncRpcRequest;
     try {
       req = decodeRequest(bytes);
@@ -354,8 +331,6 @@ export class SyncRpcDispatcher {
           ? encodeBinaryReply(value)
           : encodeReply({ ok: true, value } satisfies SyncRpcReply);
       ring.writeReply(frame);
-      this.inFlight.delete(ring);
-      this.rearm(ring);
     } catch (err) {
       // writeReply rejects when a previous reply is unread or the payload
       // exceeds capacity — both programmer errors here; surface as an error
@@ -378,9 +353,6 @@ export class SyncRpcDispatcher {
       console.error(
         `SyncRpcDispatcher: reply for '${method}' DROPPED — ${String(dropErr)} (handler outcome: ${String(err)})`,
       );
-    } finally {
-      this.inFlight.delete(ring);
-      this.rearm(ring);
     }
   }
 
@@ -395,9 +367,6 @@ export class SyncRpcDispatcher {
       console.error(
         `SyncRpcDispatcher: versioned error reply DROPPED — ${String(dropErr)} (original: ${String(err)})`,
       );
-    } finally {
-      this.inFlight.delete(ring);
-      this.rearm(ring);
     }
   }
 }
