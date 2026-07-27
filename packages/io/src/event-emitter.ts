@@ -221,9 +221,28 @@ interface EventEmitterConstructor {
   captureRejectionSymbol: symbol;
 }
 
+/**
+ * Node's `EventEmitter.init` semantics for the callable form: a receiver that
+ * only inherits listener state gets a fresh own store, while a receiver that
+ * already owns one keeps it (re-initialising would drop live listeners).
+ */
+function initialiseOwnListenerState(target: EventEmitter): void {
+  if (target === null || typeof target !== 'object') return;
+  const state = target as unknown as {
+    _listenersMap?: Map<string | symbol, Listener[]>;
+    _warned?: Set<string | symbol>;
+  };
+  if (!Object.hasOwn(state, '_listenersMap')) state._listenersMap = new Map();
+  if (!Object.hasOwn(state, '_warned')) state._warned = new Set();
+}
+
 const CallableEventEmitter = function EventEmitter(this: EventEmitter): void {
   // Listener state stays lazy so this also supports prototype mixins whose
   // constructors never call EventEmitter, matching Node's EventEmitter.init.
+  // What init does NOT tolerate is a receiver that merely INHERITS a store:
+  // `Foo.prototype = new EventEmitter()` would otherwise share one listener
+  // map across every instance. Claim an own, empty one instead.
+  initialiseOwnListenerState(this);
 };
 
 CallableEventEmitter.prototype = EventEmitterPrototype.prototype;
