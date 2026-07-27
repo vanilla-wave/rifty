@@ -24,6 +24,8 @@
 - Exact Vite 8.0.16 definitions serialize the visible npm-standard proven
   Rolldown WASI runtime override before project identity; an explicit caller
   value wins and every other Vite version remains unchanged (ADR-0336).
+- Derive default and runtime direct-Node commands from one canonical formatter.
+
 - Regenerated install-artifact identity now binds the schema-2 builtin shadow
   catalog, invalidating stale worker install stamps after the policy authority
   change (ADR-0328).

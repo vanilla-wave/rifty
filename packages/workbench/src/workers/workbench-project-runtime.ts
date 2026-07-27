@@ -12,7 +12,7 @@ import { type VfsMutationGuard, isAbsolute, normalizePath } from '@riftydev/vfs'
 import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
-import { projectRuntimeShellWord } from '../workbench/internal/node-command.ts';
+import { nodeProjectRootShellCommand } from '../workbench/internal/node-command.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
@@ -170,9 +170,7 @@ export function createWorkbenchProjectRuntime(
     options.packageState.reserveChildAdmission(namespace.toOwnerPath(path));
   const directNodeServerCommand =
     options.packageConfig.cfg.runtime === 'node-server'
-      ? `node ${projectRuntimeShellWord(
-          namespace.toProjectPath(options.packageConfig.cfg.entryPath).slice(1),
-        )}`
+      ? nodeProjectRootShellCommand(namespace.toProjectPath(options.packageConfig.cfg.entryPath))
       : null;
 
   const ownerNodeExecutor = createOwnerChildNodeExecutor(

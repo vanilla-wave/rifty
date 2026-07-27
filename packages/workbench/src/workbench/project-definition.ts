@@ -1,5 +1,5 @@
 import { serializePackageJson } from '@riftydev/npm-client';
-import { projectRuntimeShellWord } from './internal/node-command.ts';
+import { nodeProjectRootShellCommand } from './internal/node-command.ts';
 import { defineOwnEnumerableProperty } from './internal/own-property.ts';
 import {
   DEFAULT_VITE8_CONFIG_JS,
@@ -319,7 +319,7 @@ function normalizeNodeManifest(
       defineOwnEnumerableProperty(scripts, name, command);
     }
     if (!Object.hasOwn(scripts, 'dev')) {
-      scripts.dev = `node ${projectRuntimeShellWord(serverEntryPath.slice(1))}`;
+      scripts.dev = nodeProjectRootShellCommand(serverEntryPath);
     }
     manifest.scripts = scripts;
   }
