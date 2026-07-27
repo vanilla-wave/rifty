@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Vite install trust survives extraneous writes and project Save
 created: 2026-07-16
 why: Vite's extraneous node_modules writes no longer revoke trust, but Scratch→named Save still strips the root-bound claim and reacquires an otherwise exact installed tree
@@ -69,13 +69,6 @@ browser outcome already required.
   acquisition/tree loss, and the Save-inclusive Chromium RED plus owner
   restart/fault suites are its acceptance proof. Exact RED commands and
   failure signatures are pinned in `reference/vite-save-contract-red.md`.
-
-## Pickup evidence
-
-- Proposed goal slice: `save-trust-rebind`, insertion band `300–1000`.
-- The authoritative epic Items mapping and Budget row land only with the clean
-  Contract+RED verdict, per this unit's binding recut sequence. Until then the
-  item stays `draft` and this proposal supplies the band the checkpoint judges.
 
 ## User scenario
 
@@ -181,6 +174,8 @@ rows:
   remain claim-free and require ordinary destination acquisition.
 
 ## Decisions
+
+ready-verdict: 2026-07-28 — Contract+RED @ fc4b21062b5aa78070532cc21997f43aa25ee643; B1 Chromium exact-byte/zero-acquisition LIVE RED, B2 executable provenance/recovery/FIFO REDs, B3 pinned npm package-edit/lock-drift parity, and B4 `save-trust-rebind` 300–1000 pickup authority are settled.
 
 - ADR-0307 owns the predicate re-scope and the probe evidence; ADR-0261
   remains active for everything else.

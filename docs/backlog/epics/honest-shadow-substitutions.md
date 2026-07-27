@@ -68,27 +68,30 @@ through the same adapter, Sass lifecycle parity, and trust surviving extraneous
 Dependency order (slice names = §Budget rows; each source slice gets its own
 Contract+RED → Final+GREEN):
 
-1. `playground/vite-temp-install-claim-churn` — **oracle-slice**: stamp trust
-   predicate re-scoped per ADR-0307; earliest user payoff (running `vite` no
-   longer demotes install trust). Draft after the Save reacquisition fork;
-   closes delete-on-done when its acceptance branches are fully proven.
-2. `playground/workbench-package-extraction` — **workbench-extraction**:
+1. `playground/vite-temp-install-claim-churn` — **oracle-slice**: landed the
+   ADR-0307 predicate re-scope.
+2. `playground/vite-temp-install-claim-churn` — **save-trust-rebind**: closes
+   the retained Save-inclusive browser branch through ADR-0329, without
+   reacquisition or a second package-state mechanism. Ready after the fresh
+   recut verdict; delete-on-done only after every original Acceptance branch
+   is proven.
+3. `playground/workbench-package-extraction` — **workbench-extraction**:
    mechanical subtraction from the #160 quarry (renames, sealed entrypoints,
    installer per-edge replay + direct-slot reservation); hard cut line, nothing
    touching trust/epoch/shadow. May proceed in parallel with the decision PR.
-3. `npm-client/shadow-recipe-v2-data-authority` —
+4. `npm-client/shadow-recipe-v2-data-authority` —
    **recipe-v2-data-authority**: strict clone-safe schema 2, data-owned
    admission features, and one owner-decoded frozen internal catalog.
-4. `npm-client/shadow-recipe-v2-authority` —
+5. `npm-client/shadow-recipe-v2-authority` —
    **recipe-v2-authority**: consumes the data-authority prerequisite, then owns
    exact acquisition execution, materialized bins, and strict replay authority
    discovered by the Sass contract; draft until its registry/npm/bin evidence
    gates close, and required before the package-specific seam.
-5. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
+6. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
    generic-file no-change gate. Draft until its full differential artifact and
    fault matrix are committed; required for epic closure, not optional.
-6. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
+7. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption
    narrowing, owner READMEs, dead code imported by extraction).
 
@@ -115,6 +118,7 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | slice | band |
 |---|---|
 | oracle-slice | 300–1000 |
+| save-trust-rebind | 300–1000 |
 | workbench-extraction | 2000–4000 |
 | recipe-v2-data-authority | 1200–2500 |
 | recipe-v2-authority | 1800–3000 |
