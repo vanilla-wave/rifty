@@ -1,5 +1,5 @@
 import { inherits } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from './event-emitter.ts';
 
 describe('EventEmitter callable construction', () => {
@@ -49,5 +49,35 @@ describe('EventEmitter callable construction', () => {
     expect(modern).toBeInstanceOf(ModernBus);
     expect(Object.getPrototypeOf(LegacyBus.prototype)).toBe(EventEmitter.prototype);
     expect((LegacyBus as typeof LegacyBus & { super_?: unknown }).super_).toBe(EventEmitter);
+  });
+});
+
+describe('EventEmitter.call on a receiver whose prototype already emits', () => {
+  it('gives the receiver its own listener state instead of the inherited one', () => {
+    // Node's `EventEmitter.init` resets `_events` when the receiver only
+    // INHERITS it, so the legacy `Foo.prototype = new EventEmitter()` idiom
+    // gives each instance a private store. Sharing the prototype's store
+    // instead would let one instance's listeners fire for another's events —
+    // and `removeAllListeners` on one would silently disarm the rest.
+    const shared = new EventEmitter();
+    const inherited = vi.fn();
+    shared.on('ping', inherited);
+    function Legacy(this: EventEmitter) {
+      EventEmitter.call(this);
+    }
+    Legacy.prototype = shared;
+
+    const instance = new (Legacy as unknown as new () => EventEmitter)();
+
+    expect(instance.listenerCount('ping')).toBe(0);
+    instance.emit('ping');
+    expect(inherited).not.toHaveBeenCalled();
+
+    const own = vi.fn();
+    instance.on('ping', own);
+    expect(shared.listenerCount('ping')).toBe(1);
+    shared.emit('ping');
+    expect(own).not.toHaveBeenCalled();
+    expect(inherited).toHaveBeenCalledTimes(1);
   });
 });
