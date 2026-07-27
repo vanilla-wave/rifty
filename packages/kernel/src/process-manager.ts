@@ -417,6 +417,14 @@ export function decodeIpcFrame(value: unknown): IpcFrame {
 export class ProcessManager {
   private nextPid = 2; // PID 1 is reserved for the main worker.
   private readonly table: Map<number, ProcessRecord> = new Map();
+  /**
+   * PIDs whose terminal callbacks are still running. Authority is already gone
+   * (the record left `table`), but `'exit'`/`'close'` listeners have not run
+   * yet — and a listener that spawns would attach a child to a subtree the
+   * kill already swept, so nothing would ever reap it. Cleared once the
+   * process finishes settling.
+   */
+  private readonly settlingPids = new Set<number>();
   private readonly hiddenThreads = new Set<ProcessRecord>();
   private readonly pendingRemote = new Map<
     number,
@@ -439,6 +447,7 @@ export class ProcessManager {
     // Inherit parent's cwd snapshot (ADR-0019). A `ppid` that names an
     // already-exited process falls through to `DEFAULT_CWD` because the
     // sweep on exit removes the record from `table`.
+    this.assertAdmitsChild(ppid);
     const parentRecord = this.table.get(ppid);
     const initialCwd = options.cwd ?? parentRecord?.cwd ?? DEFAULT_CWD;
     const federation = reserveProcessFederation(
@@ -535,6 +544,7 @@ export class ProcessManager {
         errors.push(error);
       }
       if (federation === null) {
+        manager.endSettlement(pid);
         throwCollectedErrors(`Process PID ${String(pid)} terminal settlement failed`, errors);
       } else {
         queueMicrotask(() => {
@@ -543,6 +553,7 @@ export class ProcessManager {
           } catch (error) {
             errors.push(error);
           }
+          manager.endSettlement(pid);
           throwCollectedErrors(`Process PID ${String(pid)} terminal settlement failed`, errors);
         });
       }
@@ -670,12 +681,30 @@ export class ProcessManager {
         errors.push(error);
       }
     }
-    if (record.published) this.table.delete(record.pid);
-    else this.hiddenThreads.delete(record);
+    if (record.published) {
+      this.table.delete(record.pid);
+      this.settlingPids.add(record.pid);
+    } else this.hiddenThreads.delete(record);
     if (record.physicalRoute !== undefined) this.physicalRoutes.delete(record.physicalRoute);
     for (const e of emitters) e.removeAllListeners();
     throwCollectedErrors(`Worker owner PID ${String(record.pid)} route retirement failed`, errors);
     return true;
+  }
+
+  /** Terminal callbacks are done: the PID stops fencing new children. */
+  private endSettlement(pid: number): void {
+    this.settlingPids.delete(pid);
+  }
+
+  /**
+   * Admission fence for a new child. A parent that is terminating — or that
+   * is running its terminal callbacks — cannot gain descendants.
+   */
+  private assertAdmitsChild(ppid: number): void {
+    const parent = this.table.get(ppid);
+    if (parent?.terminationRequested === true || this.settlingPids.has(ppid)) {
+      throw new Error(`spawn: PID ${String(ppid)} is terminating and cannot admit a new child`);
+    }
   }
 
   /** Spawn into its own Worker realm (ADR-0011). See `spawnKernelWorker`. */
@@ -685,6 +714,7 @@ export class ProcessManager {
     ppid = 1,
     options: SpawnOptions = {},
   ): ProcessHandle {
+    if (options.threadIdentity === undefined) this.assertAdmitsChild(ppid);
     const parentRecord = this.table.get(ppid);
     const initialCwd = options.cwd ?? spec.cwd ?? parentRecord?.cwd ?? DEFAULT_CWD;
 
@@ -1319,6 +1349,7 @@ export class ProcessManager {
               } catch (error) {
                 errors.push(error);
               }
+              manager.endSettlement(pid);
               throwCollectedErrors(`Worker PID ${String(pid)} terminal settlement failed`, errors);
             });
           });
