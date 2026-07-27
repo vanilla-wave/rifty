@@ -4,8 +4,9 @@
 
 ### Fixed
 
-- `ShellCommandLifecycleError` now preserves host process-control failure
-  instead of inventing a command exit after Worker peer death (ADR-0326).
+- `ShellCommandLifecycleError`, including inside `AggregateError`, now
+  preserves host process-control failure instead of inventing a command exit
+  after Worker peer death (ADR-0326).
 
 - `git status` and `git status --porcelain` preserve row multiplicity when a
   staged deletion is followed by an untracked same-path recreation, matching
