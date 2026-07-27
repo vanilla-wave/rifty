@@ -229,6 +229,13 @@ export interface SpawnOptions {
 /** Root cwd for processes that have no parent. */
 export const DEFAULT_CWD = '/workspace';
 
+/**
+ * How long an ordered kill waits for its federated descendants' settlement
+ * proof before cutting the owner anyway. Generous next to the message
+ * round-trips the proof needs, short enough that Ctrl-C stays a kill.
+ */
+export const DESCENDANT_SETTLEMENT_DEADLINE_MS = 1_000;
+
 /** Encoder for forwarded worker-error text pushed onto a child's stderr stream. */
 const STDERR_ENCODER = new TextEncoder();
 const PROCESS_RESERVE_RPC = 'process.reserve';
@@ -1911,7 +1918,39 @@ export class ProcessManager {
         )
         .map(({ settled }) => waitForAbort(settled.signal)),
     ];
-    return barriers.length === 0 ? undefined : Promise.all(barriers).then(() => {});
+    if (barriers.length === 0) return undefined;
+    // The proof has to come back THROUGH the dying owner's realm, so a realm
+    // that stopped reading its port can never produce it. Node never asks a
+    // process for permission to die: the ordered path gets a deadline, then
+    // the physical cut proceeds and the abandoned descendants settle through
+    // the owner's death instead.
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = (timedOut: boolean): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (timedOut) this.reportAbandonedDescendantProof(owner);
+        resolve();
+      };
+      const timer = setTimeout(() => finish(true), DESCENDANT_SETTLEMENT_DEADLINE_MS);
+      (timer as unknown as { unref?: () => void }).unref?.();
+      void Promise.all(barriers).then(
+        () => finish(false),
+        () => finish(false),
+      );
+    });
+  }
+
+  /** Never cut silently: the terminal output says the ordered path was lost. */
+  private reportAbandonedDescendantProof(owner: ProcessRecord): void {
+    const handle = owner.handle;
+    if (handle === null || handle.kind !== 'worker') return;
+    (handle as unknown as { _queueTerminalDiagnostic(message: string): void })
+      ._queueTerminalDiagnostic(
+        `Worker PID ${String(owner.pid)} did not report descendant settlement within ` +
+          `${String(DESCENDANT_SETTLEMENT_DEADLINE_MS)}ms; terminating it physically\n`,
+      );
   }
 
   private failRecord(record: ProcessRecord, code: number): boolean {
