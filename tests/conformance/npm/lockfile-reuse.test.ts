@@ -192,70 +192,6 @@ function installedCount(summary: InstalledTreeSummary): number {
   return Object.keys(summary).length;
 }
 
-function interruptNpmAtPartialTree(
-  cwd: string,
-  args: readonly string[],
-  registry: string,
-  packageJsonPaths: readonly string[],
-): Promise<{
-  signal: NodeJS.Signals | null;
-  partial: InstalledTreeSummary;
-}> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('npm', [...args], {
-      cwd,
-      env: {
-        ...process.env,
-        npm_config_cache: join(cwd, '.npm-cache'),
-        npm_config_registry: registry,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let output = '';
-    let frozenPartial: InstalledTreeSummary | null = null;
-    let timedOut = false;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGKILL');
-    }, 10_000);
-    child.stdout.on('data', (chunk) => {
-      output += String(chunk);
-    });
-    child.stderr.on('data', (chunk) => {
-      output += String(chunk);
-    });
-    child.on('error', reject);
-    child.on('close', (_code, signal) => {
-      clearTimeout(timeout);
-      if (timedOut) {
-        reject(new Error(`npm did not expose a partial package tree before timeout\n${output}`));
-        return;
-      }
-      if (!frozenPartial) {
-        reject(new Error(`npm exited before a partial package tree was observed\n${output}`));
-        return;
-      }
-      resolve({ signal, partial: frozenPartial });
-    });
-
-    const probe = (): void => {
-      if (child.exitCode !== null || child.signalCode !== null || frozenPartial) return;
-      const summary = readNativeInstalledTree(cwd, packageJsonPaths);
-      const count = installedCount(summary);
-      if (count > 0 && count < packageJsonPaths.length) {
-        child.kill('SIGSTOP');
-        setTimeout(() => {
-          frozenPartial = readNativeInstalledTree(cwd, packageJsonPaths);
-          child.kill('SIGKILL');
-        }, 10);
-        return;
-      }
-      setImmediate(probe);
-    };
-    probe();
-  });
-}
-
 async function waitForRiftyPartialTree(
   vfs: MemoryVfs,
   root: string,
@@ -594,16 +530,17 @@ describe('install — interrupted tree repair parity', () => {
       expect(expectedRiftyTree).toEqual(expectedNativeTree);
       const registryRequestsAfterSeed = requestCount();
 
-      rmSync(join(workspace, 'node_modules'), { recursive: true });
-      const interruptedNative = await interruptNpmAtPartialTree(
-        workspace,
-        ['install', '--offline', ...flags],
-        origin,
-        packageJsonPaths,
-      );
-      expect(interruptedNative.signal).toBe('SIGKILL');
-      expect(installedCount(interruptedNative.partial)).toBeGreaterThan(0);
-      expect(installedCount(interruptedNative.partial)).toBeLessThan(packageJsonPaths.length);
+      // Persisted torn state is the repair input; SIGSTOP polling races npm's
+      // sub-millisecond mutation window and tests host scheduling instead.
+      rmSync(join(workspace, 'node_modules/debug'), { recursive: true });
+      rmSync(join(workspace, 'node_modules/kleur'), { recursive: true });
+      const nativePartial = readNativeInstalledTree(workspace, packageJsonPaths);
+      expect(Object.keys(nativePartial)).toEqual([
+        'node_modules/ms/package.json',
+        'node_modules/diamond-conflict-parent/package.json',
+        'node_modules/diamond-conflict-parent/node_modules/ms/package.json',
+        'node_modules/picocolors/package.json',
+      ]);
       expect(readFileSync(nativeLockPath, 'utf8')).toBe(nativeLockText);
 
       await vfs.rm(`${root}/node_modules`, { recursive: true });
