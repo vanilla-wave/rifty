@@ -4,6 +4,7 @@ import { SabRing, createSabRing } from '../src/ipc/sab-ring.ts';
 import { decodeReply, encodeRequest } from '../src/ipc/sync-rpc.ts';
 import {
   type ProcessIO,
+  type ProcessListeningControl,
   ProcessManager,
   installProcessFederation,
   readRootProcessSnapshot,
@@ -22,6 +23,7 @@ import {
   setKernelWorkerUrl,
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
+import { type WorkerOutputState, bindWorkerStdioOutput } from '../src/worker-stdio-drain.ts';
 
 class BoundaryWorker implements WorkerLike {
   readonly terminate = vi.fn();
@@ -41,7 +43,12 @@ interface BoundaryInit {
   readonly spec: {
     readonly syncRing: SharedArrayBuffer;
     readonly payloadCapacity: number;
-    readonly stdio: { readonly ipc: MessagePort; readonly stdout: MessagePort };
+    readonly outputState: WorkerOutputState;
+    readonly stdio: {
+      readonly ipc: MessagePort;
+      readonly stdout: MessagePort;
+      readonly stderr: MessagePort;
+    };
   };
 }
 
@@ -62,6 +69,8 @@ function liveUntilKilled(io: ProcessIO): Promise<void> {
     io.signal.addEventListener('abort', () => resolve(), { once: true }),
   );
 }
+
+const discardOutput = { write(_bytes: Uint8Array): void {} };
 
 function workerSpec(name = 'node'): Parameters<ProcessManager['spawnWorker']>[1] {
   return {
@@ -139,8 +148,8 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       env: {},
       cwd: '/workspace',
       stdio: {
-        stdout: channel.port1,
-        stderr: channel.port1,
+        stdout: discardOutput,
+        stderr: discardOutput,
         stdin: channel.port1,
         ipc: channel.port1,
       },
@@ -187,8 +196,8 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       env: {},
       cwd: '/workspace',
       stdio: {
-        stdout: channel.port1,
-        stderr: channel.port1,
+        stdout: discardOutput,
+        stderr: discardOutput,
         stdin: channel.port1,
         ipc: channel.port1,
       },
@@ -290,6 +299,208 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     owner.kill();
   });
 
+  it('routes descendant listening and peer-death removal with the attested PID', async () => {
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('nodemon', workerSpec('nodemon'));
+    if (owner.kind !== 'worker') throw new Error('expected Worker owner');
+    const controls: ProcessListeningControl[] = [];
+    owner.onListeningControl((control) => controls.push(control));
+    installProcessFederation(manager);
+    const init = initOf(worker);
+    const caller = SabRing.attach(init.spec.syncRing, init.spec.payloadCapacity);
+    const reserved = await callProcessRpc(caller, 'process.reserve', {
+      command: 'node',
+      ppid: owner.pid,
+      cwd: '/workspace',
+    });
+    const pid = Number(reserved.value);
+    expect((await callProcessRpc(caller, 'process.commit', { pid })).ok).toBe(true);
+
+    const listening = await callProcessRpc(caller, 'process.listening', {
+      pid,
+      ports: [3000],
+      previewScope: 'nodemon-run',
+    });
+    expect(listening).toEqual({ ok: true, value: null });
+    expect(controls).toEqual([{ pid, ports: [3000], previewScope: 'nodemon-run' }]);
+
+    const peerDeath = await callProcessRpc(caller, 'process.peer-death', {
+      pid,
+      message: 'app Worker peer closed',
+    });
+    expect(peerDeath).toEqual({ ok: true, value: null });
+    expect(controls).toEqual([
+      { pid, ports: [3000], previewScope: 'nodemon-run' },
+      { pid, ports: [] },
+    ]);
+    owner.kill();
+  });
+
+  it('removes descendant listening before a normal remote settle retires its PID', async () => {
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('nodemon', workerSpec('nodemon'));
+    if (owner.kind !== 'worker') throw new Error('expected Worker owner');
+    const controls: ProcessListeningControl[] = [];
+    let publishedDuringRemoval = false;
+    owner.onListeningControl((control) => {
+      controls.push(control);
+      if (control.ports.length === 0) {
+        publishedDuringRemoval = manager.snapshot().some(({ pid }) => pid === control.pid);
+      }
+    });
+    installProcessFederation(manager);
+    const init = initOf(worker);
+    const caller = SabRing.attach(init.spec.syncRing, init.spec.payloadCapacity);
+    const reserved = await callProcessRpc(caller, 'process.reserve', {
+      command: 'node',
+      ppid: owner.pid,
+      cwd: '/workspace',
+    });
+    const pid = Number(reserved.value);
+    expect((await callProcessRpc(caller, 'process.commit', { pid })).ok).toBe(true);
+    expect(
+      await callProcessRpc(caller, 'process.listening', {
+        pid,
+        ports: [3000],
+        previewScope: 'nodemon-run',
+      }),
+    ).toEqual({ ok: true, value: null });
+
+    expect(
+      await callProcessRpc(caller, 'process.settle', {
+        pid,
+        code: 0,
+        signal: null,
+      }),
+    ).toEqual({ ok: true, value: null });
+
+    expect(controls).toEqual([
+      { pid, ports: [3000], previewScope: 'nodemon-run' },
+      { pid, ports: [] },
+    ]);
+    expect(publishedDuringRemoval).toBe(true);
+    expect(manager.snapshot()).not.toContainEqual({ pid, ppid: owner.pid, command: 'node' });
+    owner.kill();
+  });
+
+  it.each(['settle', 'peer-death'] as const)(
+    'does not let a silent higher PID %s tombstone an older listening PID',
+    async (terminal) => {
+      const manager = new ProcessManager();
+      const worker = new BoundaryWorker();
+      setWorkerFactoryForTests(() => worker);
+      const owner = manager.spawnWorker('nodemon', workerSpec('nodemon'));
+      if (owner.kind !== 'worker') throw new Error('expected Worker owner');
+      const controls: ProcessListeningControl[] = [];
+      owner.onListeningControl((control) => controls.push(control));
+      installProcessFederation(manager);
+      const init = initOf(worker);
+      const caller = SabRing.attach(init.spec.syncRing, init.spec.payloadCapacity);
+      const reserve = async (): Promise<number> => {
+        const reserved = await callProcessRpc(caller, 'process.reserve', {
+          command: 'node',
+          ppid: owner.pid,
+          cwd: '/workspace',
+        });
+        const pid = Number(reserved.value);
+        expect(await callProcessRpc(caller, 'process.commit', { pid })).toEqual({
+          ok: true,
+          value: null,
+        });
+        return pid;
+      };
+      const advertisedPid = await reserve();
+      expect(
+        await callProcessRpc(caller, 'process.listening', {
+          pid: advertisedPid,
+          ports: [3000],
+          previewScope: 'older-run',
+        }),
+      ).toEqual({ ok: true, value: null });
+      const silentPid = await reserve();
+
+      const terminalReply =
+        terminal === 'settle'
+          ? await callProcessRpc(caller, 'process.settle', {
+              pid: silentPid,
+              code: 0,
+              signal: null,
+            })
+          : await callProcessRpc(caller, 'process.peer-death', {
+              pid: silentPid,
+              message: 'silent descendant peer closed',
+            });
+
+      expect(terminalReply).toEqual({ ok: true, value: null });
+      expect(controls).toEqual([{ pid: advertisedPid, ports: [3000], previewScope: 'older-run' }]);
+      owner.kill();
+    },
+  );
+
+  it('relays multi-hop listening removal before retiring the forwarded route', async () => {
+    const relayed: Array<{ method: string; payload: unknown }> = [];
+    let reserveCount = 0;
+    publishKernelSyncApi({
+      call(method, payload) {
+        relayed.push({ method, payload });
+        return method === 'process.reserve' ? (++reserveCount === 1 ? 7 : 41) : null;
+      },
+    });
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('node', workerSpec('owner'), 1, { federated: true });
+    installProcessFederation(manager);
+    relayed.length = 0;
+    const init = initOf(worker);
+    const caller = SabRing.attach(init.spec.syncRing, init.spec.payloadCapacity);
+
+    expect(
+      await callProcessRpc(caller, 'process.reserve', {
+        command: 'node',
+        ppid: owner.pid,
+        cwd: '/workspace',
+      }),
+    ).toEqual({ ok: true, value: 41 });
+    expect(await callProcessRpc(caller, 'process.commit', { pid: 41 })).toEqual({
+      ok: true,
+      value: null,
+    });
+    expect(
+      await callProcessRpc(caller, 'process.listening', {
+        pid: 41,
+        ports: [3000],
+        previewScope: 'nested-run',
+      }),
+    ).toEqual({ ok: true, value: null });
+    expect(
+      await callProcessRpc(caller, 'process.settle', {
+        pid: 41,
+        code: 0,
+        signal: null,
+      }),
+    ).toEqual({ ok: true, value: null });
+
+    expect(relayed).toEqual([
+      {
+        method: 'process.reserve',
+        payload: { command: 'node', ppid: owner.pid, cwd: '/workspace' },
+      },
+      { method: 'process.commit', payload: { pid: 41 } },
+      {
+        method: 'process.listening',
+        payload: { pid: 41, ports: [3000], previewScope: 'nested-run' },
+      },
+      { method: 'process.settle', payload: { pid: 41, code: 0, signal: null } },
+    ]);
+    expect(manager.kill(41)).toBe(false);
+    owner.kill();
+  });
+
   it('keeps multi-hop descendants as kill routes outside an intermediate ledger', async () => {
     const relayed: string[] = [];
     publishKernelSyncApi({
@@ -325,16 +536,27 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(relayed.slice(-2)).toEqual(['process.peer-death', 'process.settle']);
   });
 
-  it('fails loud before forgetting a forwarded route without upstream authority', () => {
+  it('fails loud but still retires a terminal owner without upstream authority', async () => {
     publishKernelSyncApi({ call: (method) => (method === 'process.reserve' ? 7 : null) });
     const manager = new ProcessManager();
     setWorkerFactoryForTests(() => new BoundaryWorker());
     const owner = manager.spawnWorker('node', workerSpec('owner'), 1, { federated: true });
+    const events: string[] = [];
+    owner.on('exit', (_code, signal) => events.push(`exit:${String(signal)}`));
+    owner.on('close', (_code, signal) => events.push(`close:${String(signal)}`));
     manager.reserveForwardedProcess(41, 'node', owner.pid, '/workspace', owner.pid);
     manager.commitRemoteProcess(41, owner.pid);
 
     Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
     expect(() => owner.kill()).toThrow(/process\.peer-death.*upstream authority/u);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events).toEqual(['exit:SIGTERM', 'close:SIGTERM']);
+    expect(owner.signalCode).toBe('SIGTERM');
+    expect(manager.get(owner.pid)).toBeNull();
+    expect(manager.list()).toEqual([]);
+    expect(owner.kill()).toBe(false);
   });
 
   it('validates reserve/commit before upstream and aborts a rejected relayed PID', async () => {
@@ -454,15 +676,6 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
   it.each([
     {
-      terminal: 'attested control-port close',
-      trigger(port: MessagePort) {
-        port.dispatchEvent(
-          new MessageEvent('message', { data: { kind: 'control:exiting', code: 7 } }),
-        );
-        port.dispatchEvent(new Event('close'));
-      },
-    },
-    {
       terminal: 'control:self-exit',
       trigger(port: MessagePort) {
         port.dispatchEvent(
@@ -470,7 +683,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
         );
       },
     },
-  ])('drains final stdout before $terminal settles the Worker', async ({ trigger }) => {
+  ])('drains admitted stdout before $terminal settles the Worker', async ({ trigger }) => {
     const worker = new BoundaryWorker();
     setWorkerFactoryForTests(() => worker);
     const manager = new ProcessManager();
@@ -481,9 +694,11 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
       chunks.push(new TextDecoder().decode(chunk as Uint8Array));
     });
 
+    const stdio = initOf(worker).spec.stdio;
+    bindWorkerStdioOutput(stdio.stdout, initOf(worker).spec.outputState, 'stdout').write(
+      new TextEncoder().encode('late\n'),
+    );
     trigger(child.ports.ipc);
-    initOf(worker).spec.stdio.stdout.postMessage(new TextEncoder().encode('late\n'));
-
     await vi.waitFor(() => expect(child.exitCode).toBe(7));
     expect(chunks.join('')).toBe('late\n');
     expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
