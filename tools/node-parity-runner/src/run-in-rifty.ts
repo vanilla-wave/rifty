@@ -309,6 +309,14 @@ function isPhysicalWorkerCase(testCase: ParityCase): boolean {
   return testCase.kind === 'worker-env' || testCase.kind === 'child-worker';
 }
 
+function expectedPhysicalWorkerCount(testCase: ParityCase): number {
+  const count = testCase.expectedPhysicalWorkers;
+  if (!Number.isSafeInteger(count) || (count as number) <= 0) {
+    throw new TypeError('physical Worker parity requires a positive expectedPhysicalWorkers');
+  }
+  return count as number;
+}
+
 function isSeededProcessCase(testCase: ParityCase): boolean {
   return (
     testCase.stdin !== undefined || isPhysicalWorkerCase(testCase) || testCase.kind === 'tty-resize'
@@ -598,7 +606,7 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
   let nativeWorkerConstructions = 0;
   let validatedInitMessages = 0;
   const expectedLaunchKind = testCase.kind === 'child-worker' ? 'program' : 'worker-thread';
-  const expectedWorkers = testCase.kind === 'child-worker' ? 1 : 2;
+  const expectedWorkers = expectedPhysicalWorkerCount(testCase);
 
   function validateInitMessage(message: unknown): void {
     const init = message as Partial<WorkerInitMessage> | null;

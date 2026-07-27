@@ -27,6 +27,8 @@ const ipcChild = `
 `;
 
 const c: ParityCase = {
+  kind: 'child-worker',
+  expectedPhysicalWorkers: 2,
   cwd: '/project',
   setup: {
     files: {

@@ -78,6 +78,7 @@ const c: ParityCase = {
     'inherited {"parent":"parent","explicit":null,"replaced":"parent","hostOwn":false,"hostValue":null}\n' +
     'replaced {"parent":null,"explicit":"explicit","replaced":null,"hostOwn":true,"hostValue":"guest-visible"}\n',
   kind: 'worker-env',
+  expectedPhysicalWorkers: 2,
 };
 
 export default c;

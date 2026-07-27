@@ -30,6 +30,8 @@ export interface ParityCase {
   readonly code: string;
   /** If set, both runtimes must produce stdout matching this (in addition to matching each other). */
   readonly expected?: string | RegExp;
+  /** Exact native Worker constructions required by a physical Worker case. */
+  readonly expectedPhysicalWorkers?: number;
   /**
    * Module kind. Defaults to 'cjs'.
    *

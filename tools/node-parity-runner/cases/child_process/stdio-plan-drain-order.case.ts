@@ -20,6 +20,8 @@ const stdioChild = `
 `;
 
 const c: ParityCase = {
+  kind: 'child-worker',
+  expectedPhysicalWorkers: 5,
   cwd: '/project',
   setup: {
     files: {
