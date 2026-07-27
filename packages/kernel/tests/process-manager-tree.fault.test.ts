@@ -3,6 +3,7 @@ import { getKernelDispatcher } from '../src/ipc/kernel-dispatcher.ts';
 import { SabRing, createSabRing } from '../src/ipc/sab-ring.ts';
 import { decodeReply, encodeRequest } from '../src/ipc/sync-rpc.ts';
 import {
+  DESCENDANT_SETTLEMENT_DEADLINE_MS,
   type ProcessIO,
   type ProcessListeningControl,
   ProcessManager,
@@ -568,6 +569,37 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'));
     expect(worker.terminate).toHaveBeenCalledTimes(1);
     expect(output.join('')).toBe('descendant closed\n');
+    expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
+  });
+
+  it('cuts an unresponsive physical owner once the descendant proof misses its deadline', async () => {
+    // The settlement proof travels INTO the owner realm as `control:kill-tree`,
+    // so a guest that stopped reading its port (synchronous loop, long build)
+    // can never produce it. Waiting forever would make `kill()` claim a death
+    // that never happens and wedge the dev loop with the CPU pegged; the
+    // ordered path gets a deadline, then the physical cut proceeds loudly.
+    const manager = new ProcessManager();
+    const worker = new BoundaryWorker();
+    setWorkerFactoryForTests(() => worker);
+    const owner = manager.spawnWorker('nodemon', { ...workerSpec('nodemon'), serve: true });
+    if (owner.kind !== 'worker') throw new Error('expected Worker owner');
+    const stderr: string[] = [];
+    owner.stderr().on('data', (chunk: unknown) => {
+      stderr.push(new TextDecoder().decode(chunk as Uint8Array));
+    });
+    const pid = manager.reserveRemoteProcess('node', owner.pid, '/workspace', owner.pid);
+    manager.commitRemoteProcess(pid, owner.pid);
+
+    expect(owner.kill('SIGTERM')).toBe(true);
+    expect(worker.terminate).not.toHaveBeenCalled();
+
+    // No `settleRemoteProcess` ever arrives — the realm is not reading.
+    await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'), {
+      timeout: DESCENDANT_SETTLEMENT_DEADLINE_MS * 3,
+    });
+
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(stderr.join('')).toContain('descendant');
     expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
   });
 
