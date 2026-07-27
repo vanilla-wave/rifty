@@ -1,4 +1,9 @@
-import type { KernelEntryCapabilityPorts, WorkerEntryDescriptor } from '@riftydev/kernel';
+import {
+  type KernelEntryCapabilityPorts,
+  type ProcessTerminalEventSource,
+  type WorkerEntryDescriptor,
+  observeProcessTerminalOutcome,
+} from '@riftydev/kernel';
 
 export interface OwnerChildCapabilitySession {
   readonly capabilityPorts: KernelEntryCapabilityPorts;
@@ -28,18 +33,8 @@ export function attachOwnerChildCapabilities(
 
 /** Physical exit evidence, registered immediately after spawn returns. */
 export function observeOwnerChildExit(handle: object): Promise<void> {
-  const observable = handle as {
-    on(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void): unknown;
-  };
   return new Promise<void>((resolve) => {
-    let settled = false;
-    const settle = (): void => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-    observable.on('exit', settle);
-    observable.on('peererror', settle);
+    observeProcessTerminalOutcome(handle as ProcessTerminalEventSource, () => resolve());
   });
 }
 

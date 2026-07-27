@@ -17,6 +17,13 @@
 
 ### Fixed
 
+- Worker-process consumers now share one first-terminal observer for truthful
+  `exit` or physical `peererror` settlement.
+
+- Federated same-realm exits now always settle their owner-root PID; terminating
+  one hidden worker thread no longer kills process siblings; orderly Worker
+  self-exit/control-close paths drain final stdio before teardown.
+
 - **SyncRpc protocol violations are forensic and loud, never silent.** Two CI
   flake signatures (`SabRing: cannot writeRequest while a previous reply is
   unread`, `decodeReply: unknown frame discriminator 0x-1`) carried zero

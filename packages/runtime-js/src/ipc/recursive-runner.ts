@@ -26,7 +26,11 @@
  * Node-API knowledge. Imports flow top-down (`runtime-js` → `@riftydev/kernel`).
  */
 
-import { globalProcessManager, readKernelProcessSpec } from '@riftydev/kernel';
+import {
+  globalProcessManager,
+  observeProcessTerminalOutcome,
+  readKernelProcessSpec,
+} from '@riftydev/kernel';
 import { buildConfiguredNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from '../builtins/node-entry-url.ts';
 
@@ -145,12 +149,16 @@ export function makeRecursiveRunner(): NodeEntryRunner {
     // before it posts the exit message; that stderr chunk is delivered on a
     // queueMicrotask flush, so defer reading errChunks one microtask past the
     // exit so a same-tick exit does not race the diagnostic out.
-    return new Promise((resolve) => {
-      nested.on('exit', (code) => {
+    return new Promise((resolve, reject) => {
+      observeProcessTerminalOutcome(nested, (outcome) => {
+        if (outcome.kind === 'peererror') {
+          reject(outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error)));
+          return;
+        }
         queueMicrotask(() => {
           resolve({
             stdout: concatChunks(chunks),
-            exitCode: typeof code === 'number' ? code : 1,
+            exitCode: typeof outcome.code === 'number' ? outcome.code : 1,
             stderr: concatChunks(errChunks),
           });
         });

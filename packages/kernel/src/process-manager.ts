@@ -438,6 +438,7 @@ export class ProcessManager {
       fail: () => false,
       peerFail: () => false,
     };
+    const manager = this;
 
     class Handle extends EventEmitter implements SameRealmProcessHandle {
       readonly kind = 'same-realm' as const;
@@ -464,30 +465,27 @@ export class ProcessManager {
     }
 
     const handle = new Handle();
-    record.terminate = (signal) => {
+    const settle = (code: number | null, signal: string | null): boolean => {
       if (!manager.isLive(record)) return false;
-      if (handle.exitCode !== null || handle.signalCode !== null) return false;
+      const outcomePublished = handle.exitCode !== null || handle.signalCode !== null;
+      const exitCode = outcomePublished ? handle.exitCode : code;
+      const signalCode = outcomePublished ? handle.signalCode : signal;
+      manager.terminateDescendants(pid, signalCode ?? 'SIGTERM');
       abortController.abort();
-      handle.signalCode = signal;
-      handle.exitCode = null;
-      handle.emit('exit', null, signal);
-      handle.emit('close', null, signal);
+      if (!outcomePublished) {
+        handle.exitCode = exitCode;
+        handle.signalCode = signalCode;
+        handle.emit('exit', exitCode, signalCode);
+        handle.emit('close', exitCode, signalCode);
+      }
       manager.finalize(record, handle, [parentToChild, childToParent]);
-      federation?.settle(null, signal);
+      federation?.settle(exitCode, signalCode);
       return true;
     };
-    record.fail = (code) => {
-      if (!manager.isLive(record)) return false;
-      if (handle.exitCode !== null || handle.signalCode !== null) return false;
-      manager.terminateDescendants(pid, 'SIGTERM');
-      abortController.abort();
-      handle.exitCode = code;
-      handle.emit('exit', code, null);
-      handle.emit('close', code, null);
-      manager.finalize(record, handle, [parentToChild, childToParent]);
-      federation?.settle(code, null);
-      return true;
-    };
+    record.terminate = (signal) =>
+      handle.exitCode === null && handle.signalCode === null && settle(null, signal);
+    record.fail = (code) =>
+      handle.exitCode === null && handle.signalCode === null && settle(code, null);
     record.peerFail = (error) => {
       if (!manager.isLive(record)) return false;
       manager.retireOwnerDescendants(record, error);
@@ -525,9 +523,6 @@ export class ProcessManager {
       signal: abortController.signal,
     };
 
-    // Captured by `Handle.kill` and the exit microtask for table sweeping.
-    const manager = this;
-
     queueMicrotask(async () => {
       let exitCode = 0;
       try {
@@ -541,15 +536,10 @@ export class ProcessManager {
       }
       if (!manager.isLive(record)) return;
       if (handle.exitCode !== null || handle.signalCode !== null) {
-        manager.finalize(record, handle, [parentToChild, childToParent]);
+        settle(handle.exitCode, handle.signalCode);
         return;
       }
-      manager.terminateDescendants(pid, 'SIGTERM');
-      handle.exitCode = exitCode;
-      handle.emit('exit', exitCode, null);
-      handle.emit('close', exitCode, null);
-      manager.finalize(record, handle, [parentToChild, childToParent]);
-      federation?.settle(exitCode, null);
+      settle(exitCode, null);
     });
 
     return handle;
@@ -713,7 +703,7 @@ export class ProcessManager {
           } else if (frame.kind === 'control:self-signal' && frame.signal === 'SIGUSR2') {
             manager.killRecordTree(record, frame.signal);
           } else if (frame.kind === 'control:self-exit') {
-            manager.failRecord(record, frame.code);
+            this._settleAfterStdio(frame.code);
           } else {
             manager.failRecord(record, 1);
           }
@@ -722,7 +712,7 @@ export class ProcessManager {
           if (this.#controlClosed || !manager.isLive(record)) return;
           const exitCode = this.#peerExitCode;
           if (exitCode !== null) {
-            manager.failRecord(record, exitCode);
+            this._settleAfterStdio(exitCode);
             return;
           }
           manager.peerFailRecord(
@@ -866,6 +856,24 @@ export class ProcessManager {
         federation?.settle(code, null);
         return true;
       }
+      _settleAfterStdio(code: number): void {
+        if (!manager.isLive(record)) return;
+        if (this.exitCode !== null || this.signalCode !== null) return;
+        deferWorkerExitUntilStdioSettled(() => {
+          if (!manager.isLive(record)) return;
+          if (this.exitCode !== null || this.signalCode !== null) return;
+          manager.retireOwnerDescendants(record, new Error(`Worker owner PID ${pid} exited`));
+          abortController.abort();
+          spawnResult.terminate();
+          this.exitCode = code;
+          this._signalEof();
+          this._closeControl();
+          this.emit('exit', code, null);
+          this.emit('close', code, null);
+          manager.finalize(record, this, [record.parentToChild]);
+          federation?.settle(code, null);
+        });
+      }
     }
 
     const handle = new WorkerHandle();
@@ -901,20 +909,7 @@ export class ProcessManager {
     // handle. The IPC port is otherwise inert (no auto-start).
     handle._startIpc();
 
-    spawnResult.onExit((code) => {
-      if (handle.exitCode !== null || handle.signalCode !== null) return;
-      deferWorkerExitUntilStdioSettled(() => {
-        if (handle.exitCode !== null || handle.signalCode !== null) return;
-        manager.retireOwnerDescendants(record, new Error(`Worker owner PID ${pid} exited`));
-        handle.exitCode = code;
-        handle._signalEof();
-        handle._closeControl();
-        handle.emit('exit', code, null);
-        handle.emit('close', code, null);
-        manager.finalize(record, handle, [record.parentToChild]);
-        federation?.settle(code, null);
-      });
-    });
+    spawnResult.onExit((code) => handle._settleAfterStdio(code));
 
     // Surface `messageerror` events on the handle so callers don't have
     // to reach into `SpawnWorkerResult` (review §1.10).
@@ -1199,6 +1194,7 @@ export class ProcessManager {
 
   private killRecordTree(record: ProcessRecord, signal: string): boolean {
     if (!this.isLive(record)) return false;
+    if (!record.published) return record.terminate(signal);
     this.terminateDescendants(record.pid, signal);
     return record.terminate(signal);
   }

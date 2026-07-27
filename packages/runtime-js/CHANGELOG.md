@@ -25,6 +25,12 @@
 
 ### Fixed
 
+- A kernel-backed `worker_threads.Worker` now surfaces physical peer death as
+  `error` followed by `exit(1)` instead of remaining permanently live.
+
+- Recursive `execSync` workers reject physical peer death instead of leaving
+  the parent SAB call blocked forever.
+
 - Worker-backed `child_process` no longer falls back beside the parent for a missing cwd entry.
 
 - **TS transform provenance matches ADR-0316.** `transformSource` remains a

@@ -236,6 +236,7 @@ globalThis.onmessage = ({ data }) => {
       const peerError = new Error('worker peer died');
 
       fakeHandle.emit('peererror', peerError);
+      fakeHandle.emit('exit', 0, null);
 
       expect(events).toEqual([
         ['error', peerError],

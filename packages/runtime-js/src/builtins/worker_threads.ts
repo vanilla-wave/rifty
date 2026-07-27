@@ -14,6 +14,7 @@ import {
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
+  observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
@@ -187,13 +188,21 @@ export class Worker extends EventEmitter {
         // is already deferred at the shared entry above.
         this.emit('online');
       }
-      handle.on('exit', (code) => {
+      observeProcessTerminalOutcome(handle, (outcome) => {
+        if (outcome.kind === 'peererror') {
+          try {
+            this.emitWorkerError(outcome.error);
+          } finally {
+            this.finish(1);
+          }
+          return;
+        }
         // TODO(backlog: runtime-js/worker-threads-kernel-error-event): a
         // worker-runtime uncaught throw exits 1 here with the stack on stderr,
         // but Node also emits 'error' (the real Error) first. Needs a child-side
         // uncaught handler posting an IPC error frame; faking an Error from the
         // exit code would lie. Same-realm path already emits 'error'.
-        this.finish(typeof code === 'number' ? code : 1);
+        this.finish(typeof outcome.code === 'number' ? outcome.code : 1);
       });
     } catch (err) {
       this.emitWorkerError(err);

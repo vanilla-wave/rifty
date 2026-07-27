@@ -46,6 +46,9 @@
   including inside `AggregateError`, so nodemon Worker peer death stays a PTY
   lifecycle error instead of a fabricated command exit.
 
+- Physical child/owner peer death now settles recursive execution, TypeScript
+  requests, owner lifetime, and direct-server preview teardown without hangs.
+
 - Preserve the live `package.json` during deferred first install, and fold its
   exact generated lockfile into the untouched Starter root under the
   package/SCM FIFO. Staged or explicit user dependency changes stay visible.

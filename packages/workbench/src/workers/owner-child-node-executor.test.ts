@@ -52,6 +52,9 @@ function fakeHandle() {
       listeners[ev] = list;
       list.push(cb);
     },
+    off: (ev: string, cb: (...args: unknown[]) => void) => {
+      listeners[ev] = (listeners[ev] ?? []).filter((listener) => listener !== cb);
+    },
     onListeningControl: (cb: (...args: unknown[]) => void) => {
       const list = listeners['control:listening'] ?? [];
       listeners['control:listening'] = list;
@@ -96,21 +99,21 @@ function fakeRecursiveChild() {
     onmessage: null as ((event: MessageEvent) => void) | null,
     start: vi.fn(),
   };
-  let exit: ((code: number) => void) | null = null;
+  const listeners: Partial<Record<'exit' | 'peererror', (...args: unknown[]) => void>> = {};
   return {
     child: {
       ports: { stdout, stderr },
-      onExit(listener: (code: number) => void) {
-        exit = listener;
-        return () => {
-          if (exit === listener) exit = null;
-        };
+      on(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void) {
+        listeners[event] = listener;
+      },
+      off(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void) {
+        if (listeners[event] === listener) delete listeners[event];
       },
       terminate: vi.fn(),
     },
     stdout: (data: Uint8Array) => stdout.onmessage?.({ data } as MessageEvent),
     stderr: (data: Uint8Array) => stderr.onmessage?.({ data } as MessageEvent),
-    exit: (code: number) => exit?.(code),
+    exit: (code: number) => listeners.exit?.(code, null),
   };
 }
 
@@ -310,9 +313,9 @@ describe('owner-child-node-executor', () => {
     );
 
     child.emit('peererror', peerFailure);
-    await Promise.resolve();
-
-    expect(observed).toEqual({ status: 'rejected', reason: peerFailure });
+    await vi.waitFor(() => expect(observed).toEqual({ status: 'rejected', reason: peerFailure }), {
+      timeout: 100,
+    });
   });
 
   it('fails before owner execSync spawn when the active project is gone', async () => {

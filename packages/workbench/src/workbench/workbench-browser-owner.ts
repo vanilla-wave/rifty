@@ -4,6 +4,7 @@ import {
   type WorkerProcessHandle,
   globalProcessManager,
   isSabIpcSupported,
+  observeProcessTerminalOutcome,
   setKernelWorkerUrl,
 } from '@riftydev/kernel';
 import { wirePreviewBridge } from '../glue/preview-port-wiring.ts';
@@ -549,11 +550,19 @@ export function startBrowserWorkspaceOwner(
   worker.on('messageerror', (event: unknown) => {
     failInvariant(new Error(`Workbench owner IPC messageerror: ${String(event)}`));
   });
-  worker.on('exit', (rawCode?: unknown, rawSignal?: unknown) => {
+  observeProcessTerminalOutcome(worker, (outcome) => {
     if (exited) return;
     exited = true;
-    const code = typeof rawCode === 'number' ? rawCode : null;
-    const signal = typeof rawSignal === 'string' ? rawSignal : null;
+    if (outcome.kind === 'peererror') {
+      const failure = protocolFailure ?? errorFrom(outcome.error);
+      readyState.reject(failure);
+      rejectPending(failure);
+      activeProject?.disconnect(failure);
+      closedState.reject(failure);
+      return;
+    }
+    const code = typeof outcome.code === 'number' ? outcome.code : null;
+    const signal = typeof outcome.signal === 'string' ? outcome.signal : null;
     const normal = closeRequested && code === 0 && signal === null && protocolFailure === null;
     const exitError =
       protocolFailure ??

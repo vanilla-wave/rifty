@@ -5,8 +5,10 @@
  */
 import {
   type KernelEntryCapabilityPorts,
+  type ProcessTerminalEventSource,
   type SpawnWorkerSpec,
   globalProcessManager,
+  observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { InstallRuntimeJsExecSyncOptions } from '@riftydev/runtime-js/ipc/exec-sync-handler';
@@ -34,12 +36,11 @@ interface OwnerExecSyncPort {
   start(): void;
 }
 
-interface OwnerExecSyncChild {
+interface OwnerExecSyncChild extends ProcessTerminalEventSource {
   readonly ports: {
     readonly stdout: OwnerExecSyncPort;
     readonly stderr: OwnerExecSyncPort;
   };
-  onExit(listener: (code: number) => void): () => void;
   /** Synchronous kernel teardown; returning certifies the worker is physically gone. */
   terminate(): void;
 }
@@ -55,10 +56,11 @@ const spawnOwnerExecSyncChild: OwnerExecSyncSpawn = (spec, parentPid) => {
   }
   return {
     ports: handle.ports,
-    onExit(listener) {
-      const onExit = (code: unknown): void => listener(typeof code === 'number' ? code : 1);
-      handle.on('exit', onExit);
-      return () => handle.off('exit', onExit);
+    on(event, listener) {
+      return handle.on(event, listener);
+    },
+    off(event, listener) {
+      return handle.off(event, listener);
     },
     terminate() {
       handle.kill('SIGTERM');
@@ -115,29 +117,35 @@ export function createOwnerExecSyncRunner(
     const physicalExit = new Promise<void>((resolve) => {
       resolvePhysicalExit = resolve;
     });
-    let exitCode = 0;
     let resolveResult!: (value: {
       readonly stdout: Uint8Array;
       readonly stderr: Uint8Array;
       readonly exitCode: number;
     }) => void;
+    let rejectResult!: (error: Error) => void;
     const stdout: Uint8Array[] = [];
     const stderr: Uint8Array[] = [];
     const result = new Promise<{
       readonly stdout: Uint8Array;
       readonly stderr: Uint8Array;
       readonly exitCode: number;
-    }>((resolve) => {
+    }>((resolve, reject) => {
       resolveResult = resolve;
+      rejectResult = reject;
     });
-    child.onExit((code) => {
-      exitCode = code;
+    observeProcessTerminalOutcome(child, (outcome) => {
       resolvePhysicalExit();
+      if (outcome.kind === 'peererror') {
+        rejectResult(
+          outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error)),
+        );
+        return;
+      }
       queueMicrotask(() => {
         resolveResult({
           stdout: concatChunks(stdout),
           stderr: concatChunks(stderr),
-          exitCode,
+          exitCode: typeof outcome.code === 'number' ? outcome.code : 1,
         });
       });
     });
