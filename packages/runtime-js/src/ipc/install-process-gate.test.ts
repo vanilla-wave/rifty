@@ -11,7 +11,11 @@
  * patches the realm — asserts it stayed native. `isolate: true` (vitest default)
  * gives this file a fresh realm.
  */
-import { type WorkerSpawnSpec, publishKernelEntryBootstrap } from '@riftydev/kernel';
+import {
+  type WorkerSpawnSpec,
+  publishKernelEntryBootstrap,
+  publishKernelProcessSpec,
+} from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Buffer as RiftyBuffer } from '../builtins/buffer.ts';
 import { buildNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
@@ -29,7 +33,7 @@ const ORIGINAL_GLOBAL_DESCRIPTOR = Object.getOwnPropertyDescriptor(globalThis, '
 
 function spec(env: Record<string, string> = {}): WorkerSpawnSpec {
   const port = (): MessagePort => new MessageChannel().port1;
-  return {
+  const value = {
     pid: 7,
     ppid: 3,
     argv: ['rifty', '/srv.js', '--port', '4000'],
@@ -37,6 +41,8 @@ function spec(env: Record<string, string> = {}): WorkerSpawnSpec {
     cwd: '/workspace/app',
     stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
   } as unknown as WorkerSpawnSpec;
+  publishKernelProcessSpec(value);
+  return value;
 }
 
 afterEach(() => {
@@ -168,6 +174,7 @@ describe('pre-entry gate (ADR-0157)', () => {
       argv: ['rifty', '/src/server.js', '--port', '3000'],
       cwd: '/',
     };
+    publishKernelProcessSpec(publicSpec);
 
     installNodeRuntime(publicSpec);
 

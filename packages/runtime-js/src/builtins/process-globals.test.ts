@@ -1,11 +1,26 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { installProcessGlobals } from './process.ts';
+import {
+  readActiveNodeProcessBootstrap,
+  setActiveNodeProcessBootstrap,
+} from './process-bootstrap-identity.ts';
+import { NodeProcess, installProcessGlobals } from './process.ts';
 
 type GlobalWithNodeAlias = typeof globalThis & { global?: typeof globalThis };
 
 const originalGlobalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'global');
+const originalProcessDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
+const originalActiveProcess = readActiveNodeProcessBootstrap();
 
 afterEach(() => {
+  setActiveNodeProcessBootstrap(
+    originalActiveProcess?.process ?? null,
+    originalActiveProcess?.federated ?? false,
+  );
+  if (originalProcessDescriptor) {
+    Object.defineProperty(globalThis, 'process', originalProcessDescriptor);
+  } else {
+    Reflect.deleteProperty(globalThis, 'process');
+  }
   if (originalGlobalDescriptor) {
     Object.defineProperty(globalThis, 'global', originalGlobalDescriptor);
   } else {
@@ -43,5 +58,24 @@ describe('installProcessGlobals', () => {
     } finally {
       (globalThis as { process?: unknown }).process = savedProcess;
     }
+  });
+
+  it('does not downgrade or replace an existing trusted bootstrap binding', () => {
+    const trusted = new NodeProcess();
+    const guestReplacement = Object.create(trusted) as NodeProcess;
+    setActiveNodeProcessBootstrap(trusted, true);
+    Object.defineProperty(globalThis, 'process', {
+      value: guestReplacement,
+      writable: true,
+      configurable: true,
+    });
+
+    installProcessGlobals();
+
+    expect(readActiveNodeProcessBootstrap()).toEqual({
+      process: trusted,
+      identity: null,
+      federated: true,
+    });
   });
 });
