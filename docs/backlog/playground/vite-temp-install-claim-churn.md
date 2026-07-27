@@ -32,8 +32,8 @@ epic invariant 5 even though `.vite-temp` itself no longer revokes trust.
 ADR-0261 currently requires Save to exclude claims and lets only ordinary
 destination acquisition mint trust. The frozen outcome instead requires Save
 to preserve the exact installed bytes with zero acquisition. Before this item
-can return to `ready`, a superseding ADR must place re-keying under the existing
-package-tree/install-stamp authority, pin crash and rollback order, and add a
+can return to `ready`, a superseding ADR must resolve how Save can establish
+destination trust without acquisition, pin crash and rollback order, and add a
 Save-inclusive Chromium RED. The pre-demotion `## Acceptance` and
 `## Parity cases` are retained verbatim below.
 
