@@ -262,23 +262,24 @@ class ChildProcess extends EventEmitter {
  * computed cwd read and write the wrong files while reporting success.
  */
 function failedSpawn(cwd: string, code: 'ENOENT' | 'ENOTDIR', errno: number): ChildProcess {
-  const child = new EventEmitter() as unknown as ChildProcess & {
-    pid: number | undefined;
-    stdio: unknown[];
-  };
   const ended = (): Readable => {
     const stream = new Readable({ read() {} });
     stream.push(null);
     return stream;
   };
-  child.pid = undefined;
-  child.stdin = null as unknown as Writable;
-  child.stdout = ended();
-  child.stderr = ended();
-  child.stdio = [child.stdin, child.stdout, child.stderr];
-  child.killed = false;
-  child.connected = false;
-  child.kill = () => false;
+  const stdout = ended();
+  const stderr = ended();
+  const child = Object.assign(new EventEmitter(), {
+    // Node leaves `pid` undefined when the process never existed.
+    pid: undefined,
+    stdin: null,
+    stdout,
+    stderr,
+    stdio: [null, stdout, stderr],
+    killed: false,
+    connected: false,
+    kill: () => false,
+  }) as unknown as ChildProcess;
   const error = Object.assign(new Error(`spawn ${code}`), {
     code,
     errno,
