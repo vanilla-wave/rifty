@@ -254,6 +254,52 @@ class ChildProcess extends EventEmitter {
  * `process.exit(N)`) the helper mutates the handle's `exitCode` before returning
  * — `ProcessManager` only sets `exitCode` if still `null` at handler completion.
  */
+/**
+ * A spawn whose `cwd` cannot be entered never produces a process: Node reports
+ * it asynchronously on the returned object (no pid, `'error'` then `'close'`
+ * with the negative errno) rather than throwing. Running the entry from a
+ * normalized-but-absent directory instead would let a tool with a mistyped or
+ * computed cwd read and write the wrong files while reporting success.
+ */
+function failedSpawn(cwd: string, code: 'ENOENT' | 'ENOTDIR', errno: number): ChildProcess {
+  const child = new EventEmitter() as unknown as ChildProcess & {
+    pid: number | undefined;
+    stdio: unknown[];
+  };
+  const ended = (): Readable => {
+    const stream = new Readable({ read() {} });
+    stream.push(null);
+    return stream;
+  };
+  child.pid = undefined;
+  child.stdin = null as unknown as Writable;
+  child.stdout = ended();
+  child.stderr = ended();
+  child.stdio = [child.stdin, child.stdout, child.stderr];
+  child.killed = false;
+  child.connected = false;
+  child.kill = () => false;
+  const error = Object.assign(new Error(`spawn ${code}`), {
+    code,
+    errno,
+    syscall: 'spawn',
+    path: cwd,
+  });
+  queueMicrotask(() => {
+    child.emit('error', error);
+    child.emit('close', errno, null);
+  });
+  return child;
+}
+
+/** `null` when the child may run; the Node failure otherwise. */
+function rejectedChildCwd(cwd: string): ChildProcess | null {
+  const stat = syncMirror().statSyncOrNull(cwd);
+  if (stat === null) return failedSpawn(cwd, 'ENOENT', -2);
+  if (!stat.isDirectory) return failedSpawn(cwd, 'ENOTDIR', -20);
+  return null;
+}
+
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
   if (opts.serialization === 'advanced') {
     throw new NotImplementedError(
@@ -267,6 +313,13 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     opts.__fork === true,
     opts.silent === true,
   );
+  if (opts.cwd !== undefined) {
+    // Only an explicitly requested directory is checked: an inherited cwd is
+    // where the parent already runs, and Node does not re-validate it either.
+    const requested = buildChildExecutionPlan(activeChildProcessContext().cwd, opts.cwd).cwd;
+    const rejected = rejectedChildCwd(requested);
+    if (rejected !== null) return rejected;
+  }
   const workerRoute =
     command === 'node' &&
     args[0] !== undefined &&
