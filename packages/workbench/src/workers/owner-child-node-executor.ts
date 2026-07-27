@@ -157,12 +157,13 @@ export function createOwnerExecSyncRunner(
       commitOwnerChildAdmission(reservation, physicalExit);
     } catch (error) {
       let failure = error;
-      let termination: Promise<unknown>;
+      // SIGTERM starts the kernel's ordered teardown; the worker is gone only
+      // when its exit lands. Treating the `terminate()` call as the proof
+      // released the package slot while the child was still running.
+      let termination: Promise<unknown> = physicalExit;
       try {
         child.terminate();
-        termination = Promise.resolve();
       } catch (terminationError) {
-        termination = physicalExit;
         failure = new AggregateError(
           [error, terminationError],
           'execSync child setup and termination failed',
