@@ -305,9 +305,13 @@ function timeoutMs(value: number, label: string): number {
   return value;
 }
 
+function isPhysicalWorkerCase(testCase: ParityCase): boolean {
+  return testCase.kind === 'worker-env' || testCase.kind === 'child-worker';
+}
+
 function isSeededProcessCase(testCase: ParityCase): boolean {
   return (
-    testCase.stdin !== undefined || testCase.kind === 'worker-env' || testCase.kind === 'tty-resize'
+    testCase.stdin !== undefined || isPhysicalWorkerCase(testCase) || testCase.kind === 'tty-resize'
   );
 }
 
@@ -581,7 +585,7 @@ async function installSqliteMode(): Promise<void> {
  * the runner's disposable outer Worker so every process-global binding is
  * discarded after the case.
  */
-async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
+async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => void> {
   const { getKernelWorkerUrl, setKernelWorkerUrl } = await import(
     '../../../packages/kernel/src/index.ts'
   );
@@ -593,23 +597,25 @@ async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
   type WorkerInitMessage = import('../../../packages/kernel/src/worker-entry.ts').WorkerInitMessage;
   let nativeWorkerConstructions = 0;
   let validatedInitMessages = 0;
+  const expectedLaunchKind = testCase.kind === 'child-worker' ? 'program' : 'worker-thread';
+  const expectedWorkers = testCase.kind === 'child-worker' ? 1 : 2;
 
   function validateInitMessage(message: unknown): void {
     const init = message as Partial<WorkerInitMessage> | null;
     const entry = init?.spec?.entry;
     if (init?.type !== 'init' || entry?.kind !== 'url') {
-      throw new TypeError('worker-env parity requires a URL kernel init message');
+      throw new TypeError('physical-worker parity requires a URL kernel init message');
     }
     const envelope = entry.bootstrap;
     if (envelope?.protocol !== NODE_ENTRY_BOOTSTRAP_PROTOCOL) {
-      throw new TypeError('worker-env parity requires the typed node-entry bootstrap protocol');
+      throw new TypeError('physical-worker parity requires typed node-entry bootstrap');
     }
     const payload = envelope.payload as Partial<NodeEntryBootstrapPayload> | null;
     if (
-      payload?.launch?.kind !== 'worker-thread' ||
+      payload?.launch?.kind !== expectedLaunchKind ||
       payload.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only'
     ) {
-      throw new TypeError('worker-env parity init is missing its out-of-band host marker');
+      throw new TypeError('physical-worker parity init has wrong launch or host marker');
     }
     validatedInitMessages++;
   }
@@ -675,9 +681,12 @@ async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
 
   try {
     cleanups.defer(() => {
-      if (nativeWorkerConstructions !== 2 || validatedInitMessages !== 2) {
+      if (
+        nativeWorkerConstructions !== expectedWorkers ||
+        validatedInitMessages !== expectedWorkers
+      ) {
         throw new Error(
-          `worker-env parity expected 2 physical typed-bootstrap Workers; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}`,
+          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}`,
         );
       }
     });
@@ -1076,9 +1085,9 @@ export async function runInRiftyInCurrentRealm(
 
     // ADR-0267: only a physical kernel child can prove that typed host
     // bootstrap metadata stays outside exact inherited/replacement guest env.
-    if (testCase.kind === 'worker-env') {
-      const teardownWorkerEnv = await installWorkerEnvMode(testCase);
-      cleanups.defer(teardownWorkerEnv);
+    if (isPhysicalWorkerCase(testCase)) {
+      const teardownPhysicalWorker = await installPhysicalWorkerMode(testCase);
+      cleanups.defer(teardownPhysicalWorker);
     }
 
     // Preload QuickJS before any user code runs: a case can opt the `vm.*` sandbox
@@ -1162,7 +1171,7 @@ export async function runInRiftyInCurrentRealm(
 
     // Mirror the real Worker lifecycle: global timers installed by bootstrap
     // hold the keepalive refcount until every scheduled callback has fired.
-    await awaitDrain({ capMs: testCase.kind === 'worker-env' ? 10_000 : 1_000 });
+    await awaitDrain({ capMs: isPhysicalWorkerCase(testCase) ? 10_000 : 1_000 });
     await seededProcess?.drainStdio();
     if (testCase.kind === 'http') {
       // The http case drives its own server inside `listen`'s callback (a

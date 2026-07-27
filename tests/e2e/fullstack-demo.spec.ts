@@ -239,6 +239,15 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
       startsAfterStop,
     );
     await expect(page.locator(`.rf-preview__switcher option[value="${PORT}"]`)).toHaveCount(0);
+    const closeMarker = `PROCESS_TABLE_AFTER_CLOSE_${Date.now()}`;
+    await runTerminalLineSettled(page, `echo ${closeMarker} && ps -A -o ppid,pid`);
+    const closeTable = (await terminalBuffer(page)).split(closeMarker).at(-1) ?? '';
+    const closedPids = new Set([appPid, supervisorPid]);
+    expect(
+      [...closeTable.matchAll(/^\s*(\d+)\s+(\d+)\s*$/gmu)].some(
+        (row) => closedPids.has(Number(row[1])) || closedPids.has(Number(row[2])),
+      ),
+    ).toBe(false);
 
     const startsBeforeLaunchFaults = occurrences(
       await terminalBuffer(page, 0),

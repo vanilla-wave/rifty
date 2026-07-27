@@ -348,7 +348,7 @@ process.env.INHERITED_ONLY = 'must-not-survive-replacement';
 writeFileSync('/fork-parent.bin', new Uint8Array([0, 1, 127, 128, 254, 255]));
 
 const plain = spawn('node', ['./plain-spawn.mjs', 'plain-argv'], {
-  cwd: '/scratch',
+  cwd: process.cwd(),
   env: { PLAIN_ONLY: 'plain-replacement' },
 });
 let plainOut = '';
@@ -381,7 +381,7 @@ const plainOutcome = await new Promise((resolve, reject) => {
 });
 
 const inheritedChild = fork('./fork-inherited.mjs', ['inherited-argv'], {
-  cwd: '/scratch',
+  cwd: process.cwd(),
   stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
 });
 const inheritedOutcome = await new Promise((resolve, reject) => {
@@ -394,7 +394,7 @@ const inheritedOutcome = await new Promise((resolve, reject) => {
 });
 
 const child = fork('./fork-child.mjs', ['child-argv', 'β'], {
-  cwd: '/scratch',
+  cwd: process.cwd(),
   env: { CHILD_ONLY: 'child-replacement' },
   stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
 });
@@ -506,7 +506,7 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
         events: ['stdout', 'exit:0/null', 'close:0/null'],
         stdout: `${JSON.stringify({
           argv: ['plain-argv'],
-          cwd: '/scratch',
+          cwd: '/',
           env: {
             plain: 'plain-replacement',
             inherited: null,
@@ -525,7 +525,7 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
       inheritedOutcome: {
         message: {
           argv: ['inherited-argv'],
-          cwd: '/scratch',
+          cwd: '/',
           inherited: 'must-not-survive-replacement',
           parentRealmLeaked: false,
         },
@@ -536,7 +536,7 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
         message: {
           echo: { direction: 'parent-to-child', text: 'π\u0000終' },
           argv: ['child-argv', 'β'],
-          cwd: '/scratch',
+          cwd: '/',
           env: {
             child: 'child-replacement',
             inherited: null,
@@ -547,7 +547,7 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
             message: {
               echo: { direction: 'child-to-grandchild', text: 'π\u0000終' },
               argv: ['grand-argv', 'λ'],
-              cwd: '/scratch',
+              cwd: '/',
               env: {
                 grand: 'grand-replacement',
                 child: null,

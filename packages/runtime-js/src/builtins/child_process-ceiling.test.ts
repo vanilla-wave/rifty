@@ -9,7 +9,8 @@
  *   - the ripgrep tool -> the ripgrep BINARY
  * In a browser/WASI realm there is no shell and no process spawn, so any
  * command other than `node <script>` falls through `spawnViaSameRealm` ->
- * `execScript` and surfaces exit 127. It MUST NOT fake-succeed.
+ * `execScript` and surfaces `spawn <cmd> ENOENT\n` on stderr with exit 127.
+ * It MUST NOT fake-succeed.
  *
  * This is a CONFORMANCE (rifty browser-ceiling) contract, NOT a Node-parity
  * case: real Node WOULD spawn `git`, so a parity diff is the wrong tool here.
@@ -50,23 +51,23 @@ async function collect(
 }
 
 describe('spawn ceiling (F09 / Q-2026-05-30-063) — impossible tools are walled off', () => {
-  it("spawn('git') surfaces exit 127 and never fake-succeeds", async () => {
+  it("spawn('git') surfaces ENOENT-127 and never fake-succeeds", async () => {
     const child = spawn('git', ['status']);
     const { code, stderr } = await collect(child);
     // The substrate of opencode's git tool (Git.run -> ChildProcess.make('git')).
     expect(code).toBe(127);
-    expect(stderr).toBe('');
+    expect(stderr).toContain('spawn git ENOENT');
     // It must NOT fake-succeed: 0 would be a silent lie about a tool that
     // cannot run in a browser realm.
     expect(code).not.toBe(0);
   });
 
-  it("spawn('bash') surfaces exit 127 and never fake-succeeds", async () => {
+  it("spawn('bash') surfaces ENOENT-127 and never fake-succeeds", async () => {
     const child = spawn('bash', ['-c', 'echo hi']);
     const { code, stderr } = await collect(child);
     // The substrate of opencode's bash tool — there is no shell.
     expect(code).toBe(127);
-    expect(stderr).toBe('');
+    expect(stderr).toContain('spawn bash ENOENT');
     expect(code).not.toBe(0);
   });
 

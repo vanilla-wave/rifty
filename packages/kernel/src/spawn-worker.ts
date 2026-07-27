@@ -15,7 +15,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
-import type { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
+import type { SyncRpcCallerContext, SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
 import { snapshotKernelEntryCapabilityPorts } from './shared-globals.ts';
 import type {
   WorkerEntryDescriptor,
@@ -104,6 +104,7 @@ export interface SpawnWorkerResult {
   /** Singleton parent-side dispatcher. Empty by default (ADR-0039) — higher
    * layers register methods via `.register(...)` at boot. */
   readonly dispatcher: SyncRpcDispatcher;
+  readonly callerContext: SyncRpcCallerContext;
   /** The SAB ring the dispatcher is attached to (parent-side view). */
   readonly ring: SabRing;
   /** Subscribe to the worker's exit message. Returns an `unsubscribe`. */
@@ -188,6 +189,7 @@ export function spawnKernelWorker(
   let ring: SabRing | null = null;
   let worker: WorkerLike | null = null;
   let dispatcher: SyncRpcDispatcher | null = null;
+  let callerContext: SyncRpcCallerContext | null = null;
   let ports: WorkerStdioPorts | null = null;
   let fullSpec: WorkerSpawnSpec | null = null;
   let capabilityPorts: readonly MessagePort[] = [];
@@ -367,7 +369,7 @@ export function spawnKernelWorker(
 
     worker = makeKernelWorker(url);
     dispatcher = getKernelDispatcher();
-    dispatcher.attach(ring, { callerPid: pid });
+    callerContext = dispatcher.attach(ring, { callerPid: pid });
 
     const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
     worker.postMessage(init, [
@@ -390,6 +392,7 @@ export function spawnKernelWorker(
     ring === null ||
     worker === null ||
     dispatcher === null ||
+    callerContext === null ||
     ports === null ||
     fullSpec === null
   ) {
@@ -402,6 +405,7 @@ export function spawnKernelWorker(
     ports,
     spec: fullSpec,
     dispatcher,
+    callerContext,
     ring,
     onExit(cb) {
       exitListeners.push(cb);

@@ -178,12 +178,15 @@ export class SyncRpcDispatcher {
    * worker exit so neither the timer nor a parked promise keeps the realm
    * alive past the ring.
    */
-  attach(ring: SabRing, context: SyncRpcCallerContext = {}): void {
-    if (this.attachments.has(ring)) return;
+  attach(ring: SabRing, context: SyncRpcCallerContext = {}): SyncRpcCallerContext {
+    const current = this.callerContexts.get(ring);
+    if (current !== undefined) return current;
+    const trustedContext = Object.freeze({ ...context });
     this.attachments.add(ring);
-    this.callerContexts.set(ring, Object.freeze({ ...context }));
+    this.callerContexts.set(ring, trustedContext);
     this.ensureTimer();
     if (this.eventDriven) this.arm(ring);
+    return trustedContext;
   }
 
   /** Stop watching `ring`. Safe to call when not attached (no-op). */

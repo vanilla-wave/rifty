@@ -82,6 +82,7 @@ export interface ParityCase {
    *   and executes the production typed entry bootstrap + Node process install.
    *   This keeps host bootstrap metadata outside the child's guest `process.env`;
    *   the default same-realm fallback cannot prove that boundary.
+   * - `'child-worker'` — physical Worker-backed `child_process` mode.
    * - `'tty-resize'` — real terminal-resize mode. Node runs under an OS PTY and
    *   changes its grid with `stty`; rifty receives the same change over its
    *   process-control MessagePort. The case prints one explicit result marker
@@ -95,6 +96,7 @@ export interface ParityCase {
     | 'sqlite'
     | 'exec-sync'
     | 'worker-env'
+    | 'child-worker'
     | 'tty-resize';
 }
 

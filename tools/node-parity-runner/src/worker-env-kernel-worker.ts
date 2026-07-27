@@ -41,7 +41,10 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
 
   // `worker_threads.Worker` uses serve:true. A clean entry stays alive for its
   // parentPort; only setup failure is reaped by the production kernel contract.
-  if (outcome.threw) hostPort.postMessage({ type: 'exit', code: outcome.code });
+  if (outcome.threw) {
+    spec.stdio.ipc.postMessage({ kind: 'control:exiting', code: outcome.code });
+    hostPort.postMessage({ type: 'exit', code: outcome.code });
+  }
 }
 
 hostPort.once('message', (message: unknown) => {

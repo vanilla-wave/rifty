@@ -7,9 +7,7 @@ import {
   globalProcessManager,
   readKernelProcessSpec,
 } from '@riftydev/kernel';
-import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
-import { syncMirror } from './fs-sync-mirror.ts';
 import { buildConfiguredNodeEntryWorkerEntry } from './node-entry-runtime-config.ts';
 
 type Listener = (...args: unknown[]) => void;
@@ -312,18 +310,7 @@ export function spawnWorkerChild(
   const parent = activeChildProcessContext();
   const plan = buildChildExecutionPlan(parent.cwd, options.cwd, args[0]);
   if (plan.entryPath === undefined) throw new Error('child_process.spawn: missing Node entry path');
-  let entryPath = plan.entryPath;
-  const requestedEntry = args[0];
-  if (
-    requestedEntry !== undefined &&
-    !isAbsolute(requestedEntry) &&
-    !syncMirror().existsSync(entryPath) &&
-    parent.entryPath !== undefined &&
-    isAbsolute(parent.entryPath)
-  ) {
-    const mountedEntry = normalizePath(joinPath(dirname(parent.entryPath), requestedEntry));
-    if (syncMirror().existsSync(mountedEntry)) entryPath = mountedEntry;
-  }
+  const entryPath = plan.entryPath;
   const entry = buildConfiguredNodeEntryWorkerEntry({
     kind: 'program',
     bin: false,

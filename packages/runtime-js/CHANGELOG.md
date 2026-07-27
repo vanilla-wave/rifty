@@ -25,6 +25,8 @@
 
 ### Fixed
 
+- Worker-backed `child_process` no longer falls back beside the parent for a missing cwd entry.
+
 - **TS transform provenance matches ADR-0316.** `transformSource` remains a
   provider-neutral async injection seam: Node parity supplies exact host
   `esbuild@0.28.0`, while Workbench product esbuild is proved separately through
