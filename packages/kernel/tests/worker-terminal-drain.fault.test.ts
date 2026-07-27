@@ -13,7 +13,11 @@ import {
   finalizeWorkerEntry,
   installWorkerPeerCloseAttestation,
 } from '../src/worker-entry.ts';
-import { bindWorkerStdioOutput, sealWorkerOutput } from '../src/worker-stdio-drain.ts';
+import {
+  bindWorkerStdioOutput,
+  cutWorkerOutput,
+  sealWorkerOutput,
+} from '../src/worker-stdio-drain.ts';
 
 type WorkerListener = (event: MessageEvent) => void;
 
@@ -307,24 +311,88 @@ describe('Worker terminal drain fault matrix', () => {
   it('settles the parent when posting the sealed peer-close attestation fails', async () => {
     const subject = spawnSubject(new BoundaryWorker());
     const observed = observeTerminal(subject.handle);
+    subject.handle.stdout().on('data', (chunk: unknown) => {
+      observed.events.push(`stdout:${decodeOutputChunk(chunk)}`);
+    });
+    subject.handle.stdout().on('end', () => {
+      observed.events.push('stdout:end');
+    });
+    bindWorkerStdioOutput(
+      subject.init.spec.stdio.stdout,
+      subject.init.spec.outputState,
+      'stdout',
+    ).write(new TextEncoder().encode('last-output'));
     Object.defineProperty(subject.init.spec.stdio.ipc, 'postMessage', {
       configurable: true,
       value() {
         throw new Error('injected peer-close attestation failure');
       },
     });
+    const nativeClose = vi.fn();
     const target = {
       postMessage: (message: unknown) => subject.worker.fire('message', message),
-      close: vi.fn(),
+      close: nativeClose,
     };
     installWorkerPeerCloseAttestation(target, subject.init.spec);
 
     expect(() => target.close()).not.toThrow();
 
     expect(await closesWithin(observed.closed)).toBe('closed');
-    expect(observed.events).toEqual(['exit:1/null', 'close:1/null']);
+    expect(observed.events).toEqual([
+      'stdout:last-output',
+      'stdout:end',
+      'exit:1/null',
+      'close:1/null',
+    ]);
     expect(subject.manager.get(subject.handle.pid)).toBeNull();
-    expect(target.close).toHaveBeenCalledTimes(1);
+    expect(nativeClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send a child terminal fallback after the parent already cut output', async () => {
+    const subject = spawnSubject(new BoundaryWorker());
+    const observed = observeTerminal(subject.handle);
+    expect(cutWorkerOutput(subject.init.spec.outputState)).toEqual({
+      stdout: 0,
+      stderr: 0,
+    });
+    const postMessage = vi.fn();
+    const nativeClose = vi.fn();
+    const ipcPostMessage = vi.spyOn(subject.init.spec.stdio.ipc, 'postMessage');
+    const target = { postMessage, close: nativeClose };
+    installWorkerPeerCloseAttestation(target, subject.init.spec);
+
+    target.close();
+
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(ipcPostMessage).not.toHaveBeenCalled();
+    expect(nativeClose).toHaveBeenCalledTimes(1);
+    expect(subject.handle.kill('SIGTERM')).toBe(true);
+    await observed.closed;
+  });
+
+  it('closes the realm and throws when both sealed terminal transports fail', async () => {
+    const subject = spawnSubject(new BoundaryWorker());
+    const observed = observeTerminal(subject.handle);
+    Object.defineProperty(subject.init.spec.stdio.ipc, 'postMessage', {
+      configurable: true,
+      value() {
+        throw new Error('injected peer-close attestation failure');
+      },
+    });
+    const nativeClose = vi.fn();
+    const target = {
+      postMessage() {
+        throw new Error('injected global terminal failure');
+      },
+      close: nativeClose,
+    };
+    installWorkerPeerCloseAttestation(target, subject.init.spec);
+
+    expect(() => target.close()).toThrow('injected global terminal failure');
+    expect(nativeClose).toHaveBeenCalledTimes(1);
+
+    subject.worker.fireError('physical worker death after both transports failed');
+    expect(await closesWithin(observed.closed)).toBe('closed');
   });
 
   it('uses one child seal even when closing one raw output port fails', async () => {
