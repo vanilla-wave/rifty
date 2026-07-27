@@ -16,6 +16,7 @@ import {
 import {
   bindWorkerStdioOutput,
   sealWorkerOutput,
+  workerOutputAttestation,
 } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { runNodeEntry } from '../../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
@@ -113,7 +114,11 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
   // parentPort; only setup failure is reaped by the production kernel contract.
   if (outcome.threw) {
     if (sealWorkerOutput(spec.outputState)) {
-      hostPort.postMessage({ type: 'exit', code: outcome.code });
+      hostPort.postMessage({
+        type: 'exit',
+        code: outcome.code,
+        attestation: workerOutputAttestation(spec.outputState),
+      });
     }
   }
 }

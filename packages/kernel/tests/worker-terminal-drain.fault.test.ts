@@ -18,6 +18,7 @@ import {
   cutWorkerOutput,
   sealWorkerOutput,
 } from '../src/worker-stdio-drain.ts';
+import { attestedExit } from './attested-exit.ts';
 
 type WorkerListener = (event: MessageEvent) => void;
 
@@ -494,8 +495,8 @@ describe('Worker terminal drain fault matrix', () => {
     const observed = observeTerminal(subject.handle);
 
     sealWorkerOutput(subject.init.spec.outputState);
-    subject.worker.fire('message', { type: 'exit', code: 0 });
-    subject.worker.fire('message', { type: 'exit', code: 0 });
+    subject.worker.fire('message', attestedExit(subject.worker, 0) as unknown as MessageEvent);
+    subject.worker.fire('message', attestedExit(subject.worker, 0) as unknown as MessageEvent);
 
     await observed.closed;
 
@@ -514,8 +515,8 @@ describe('Worker terminal drain fault matrix', () => {
     ).write(new TextEncoder().encode('queued-before-exit'));
 
     sealWorkerOutput(subject.init.spec.outputState);
-    subject.worker.fire('message', { type: 'exit', code: 7 });
-    subject.worker.fire('message', { type: 'exit', code: 0 });
+    subject.worker.fire('message', attestedExit(subject.worker, 7) as unknown as MessageEvent);
+    subject.worker.fire('message', attestedExit(subject.worker, 0) as unknown as MessageEvent);
 
     await observed.closed;
 

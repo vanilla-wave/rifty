@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { finalizeWorkerEntry, installWorkerPeerCloseAttestation } from '../src/worker-entry.ts';
 import type { WorkerSpawnSpec, WorkerStdioPorts } from '../src/worker-entry.ts';
-import { createWorkerOutputState } from '../src/worker-stdio-drain.ts';
+import { createWorkerOutputState, workerOutputAttestation } from '../src/worker-stdio-drain.ts';
 
 /**
  * ADR-0144 (the serve-worker gate for ADR-0143 single-store-owner): a `serve` worker whose entry finishes
@@ -108,7 +108,11 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
       code: 0,
     });
 
-    expect(target.postMessage).toHaveBeenCalledWith({ type: 'exit', code: 0 });
+    expect(target.postMessage).toHaveBeenCalledWith({
+      type: 'exit',
+      code: 0,
+      attestation: workerOutputAttestation(spec.outputState),
+    });
     expect(spec.stdio.ipc.postMessage).not.toHaveBeenCalled();
     expect(target.close).toHaveBeenCalledTimes(1);
     expect(ports.stdout).toHaveBeenCalledTimes(1);
@@ -127,7 +131,11 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
       code: 1,
     });
 
-    expect(target.postMessage).toHaveBeenCalledWith({ type: 'exit', code: 1 });
+    expect(target.postMessage).toHaveBeenCalledWith({
+      type: 'exit',
+      code: 1,
+      attestation: workerOutputAttestation(spec.outputState),
+    });
     expect(spec.stdio.ipc.postMessage).not.toHaveBeenCalled();
     expect(target.close).toHaveBeenCalledTimes(1);
     expect(ports.capability).toHaveBeenCalledTimes(1);
@@ -142,7 +150,11 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
       code: 0,
     });
 
-    expect(target.postMessage).toHaveBeenCalledWith({ type: 'exit', code: 0 });
+    expect(target.postMessage).toHaveBeenCalledWith({
+      type: 'exit',
+      code: 0,
+      attestation: workerOutputAttestation(spec.outputState),
+    });
     expect(target.close).toHaveBeenCalledTimes(1);
   });
 

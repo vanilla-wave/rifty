@@ -16,6 +16,7 @@ import {
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
 import { bindWorkerStdioOutput, sealWorkerOutput } from '../src/worker-stdio-drain.ts';
+import { attestedExitEvent } from './attested-exit.ts';
 
 type WorkerListener = (ev: MessageEvent) => void;
 
@@ -213,7 +214,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     const exits = handles.map((h) => once(h, 'exit'));
     for (const w of workers) {
       sealWorkerOutputFor(w);
-      w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+      w.fire('message', attestedExitEvent(w, 0));
     }
     await Promise.all(exits);
 
@@ -240,7 +241,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
 
     const exit = once(handle, 'exit');
     sealWorkerOutputFor(w);
-    w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    w.fire('message', attestedExitEvent(w, 0));
     await exit;
 
     // After exit, the kernel must drop its listeners so the Worker GC-able.
@@ -264,7 +265,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     const w = factoryWorker as FakeWorker;
     const close = once(handle, 'close');
     sealWorkerOutputFor(w);
-    w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    w.fire('message', attestedExitEvent(w, 0));
     await close;
 
     // The close handler above ran; the handle is now listener-free so
@@ -299,7 +300,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
       new TextEncoder().encode('late\n'),
     );
     sealWorkerOutputFor(w);
-    w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    w.fire('message', attestedExitEvent(w, 0));
     await exit;
 
     expect(chunks.join('')).toBe('late\n');
@@ -322,7 +323,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     const w = factoryWorker as FakeWorker;
     const exit = once(parent, 'exit');
     sealWorkerOutputFor(w);
-    w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    w.fire('message', attestedExitEvent(w, 0));
     await exit;
     expect(pm.list()).toHaveLength(0);
 

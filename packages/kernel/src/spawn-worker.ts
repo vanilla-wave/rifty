@@ -24,7 +24,11 @@ import type {
   WorkerStdioPorts,
 } from './worker-entry.ts';
 import { type WorkerLike, makeKernelWorker } from './worker-like.ts';
-import { createWorkerOutputState, isWorkerOutputChildSealed } from './worker-stdio-drain.ts';
+import {
+  createWorkerOutputState,
+  isWorkerOutputChildSealed,
+  workerOutputAttestation,
+} from './worker-stdio-drain.ts';
 
 // Re-export so existing tests keep their single-import deep path.
 export { clearKernelDispatcher, getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
@@ -268,6 +272,15 @@ export function spawnKernelWorker(
     }
   }
 
+  function expectedExitAttestation(): string | null {
+    if (fullSpec === null) return null;
+    try {
+      return workerOutputAttestation(fullSpec.outputState);
+    } catch {
+      return null;
+    }
+  }
+
   // Named handlers so `tearDownWorker` can `removeEventListener` them;
   // anonymous closures would leak per spawn forever.
   const onMessage = (ev: MessageEvent): void => {
@@ -280,11 +293,18 @@ export function spawnKernelWorker(
     const value = ev.data;
     const candidate =
       typeof value === 'object' && value !== null
-        ? (value as { readonly type?: unknown; readonly code?: unknown })
+        ? (value as {
+            readonly type?: unknown;
+            readonly code?: unknown;
+            readonly attestation?: unknown;
+          })
         : null;
+    // Guests share this channel by design, so an unattested frame is ordinary
+    // guest traffic — never the process outcome, never a diagnostic. Only a
+    // frame carrying the kernel-minted attestation is judged as an exit claim.
+    if (candidate === null || candidate.attestation !== expectedExitAttestation()) return;
     if (
-      candidate === null ||
-      Object.keys(value).length !== 2 ||
+      Object.keys(value).length !== 3 ||
       candidate.type !== 'exit' ||
       !Number.isSafeInteger(candidate.code) ||
       (candidate.code as number) < 0

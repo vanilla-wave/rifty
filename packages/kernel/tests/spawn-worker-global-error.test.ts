@@ -19,6 +19,7 @@ import {
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
 import { sealWorkerOutput } from '../src/worker-stdio-drain.ts';
+import { attestedExitEvent } from './attested-exit.ts';
 
 type Listener = (ev: MessageEvent) => void;
 
@@ -170,7 +171,7 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
         };
       };
       sealWorkerOutput(init.spec.outputState);
-      worker()?.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+      worker()?.fire('message', attestedExitEvent(worker() as FakeWorker, 0));
       await flushWorkerExit();
 
       expect(stderr.text()).toBe('');

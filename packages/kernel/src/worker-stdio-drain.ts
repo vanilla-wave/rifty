@@ -21,7 +21,14 @@ const PHASE_INDEX = 0;
 const ACTIVE_INDEX = 1;
 const STDOUT_COMMITTED_INDEX = 2;
 const STDERR_COMMITTED_INDEX = 3;
-const WORD_COUNT = 4;
+// Exit-frame attestation. The worker-global `postMessage` channel is shared
+// with guest code, so the seal phase — a state word read when the parent
+// DELIVERS a frame — cannot say who posted it. These two words carry a secret
+// the trusted finalizer stamps onto its exit frame; guests never receive the
+// state, so they cannot reproduce it (ADR-0332 correction).
+const ATTESTATION_HI_INDEX = 4;
+const ATTESTATION_LO_INDEX = 5;
+const WORD_COUNT = 6;
 const MAX_CHUNKS = 0x7fffffff;
 
 function stateView(state: WorkerOutputState): Int32Array {
@@ -33,7 +40,29 @@ function stateView(state: WorkerOutputState): Int32Array {
 }
 
 export function createWorkerOutputState(): WorkerOutputState {
-  return new SharedArrayBuffer(WORD_COUNT * Int32Array.BYTES_PER_ELEMENT) as WorkerOutputState;
+  const state = new SharedArrayBuffer(
+    WORD_COUNT * Int32Array.BYTES_PER_ELEMENT,
+  ) as WorkerOutputState;
+  const words = new Int32Array(state);
+  crypto.getRandomValues(new Uint32Array(state, ATTESTATION_HI_INDEX * 4, 2));
+  // A zero pair would let an unattested frame match; re-roll the impossible.
+  if (words[ATTESTATION_HI_INDEX] === 0 && words[ATTESTATION_LO_INDEX] === 0) {
+    words[ATTESTATION_HI_INDEX] = 1;
+  }
+  return state;
+}
+
+/**
+ * The secret the trusted finalizer stamps on its exit frame. Derived from the
+ * kernel-owned state, so possessing it IS the proof the frame came from the
+ * worker runtime rather than from guest code sharing the global channel.
+ */
+export function workerOutputAttestation(state: WorkerOutputState): string {
+  const words = stateView(state);
+  const hi = words[ATTESTATION_HI_INDEX] ?? 0;
+  const lo = words[ATTESTATION_LO_INDEX] ?? 0;
+  if (hi === 0 && lo === 0) throw new Error('Worker output state carries no exit attestation');
+  return `${(hi >>> 0).toString(16)}.${(lo >>> 0).toString(16)}`;
 }
 
 function outputPhase(words: Int32Array): number {

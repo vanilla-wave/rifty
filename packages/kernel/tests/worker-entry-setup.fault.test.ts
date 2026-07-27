@@ -12,7 +12,11 @@ import {
   setKernelDrainHook,
   setKernelPreEntryHook,
 } from '../src/worker-entry.ts';
-import { createWorkerOutputState } from '../src/worker-stdio-drain.ts';
+import {
+  type WorkerOutputState,
+  createWorkerOutputState,
+  workerOutputAttestation,
+} from '../src/worker-stdio-drain.ts';
 
 const KERNEL_ENTRY_CAPABILITY_PORTS_KEY = '__riftyKernelEntryCapabilityPorts__';
 const ORIGINAL_DEFINE_PROPERTY = Object.defineProperty;
@@ -89,8 +93,13 @@ function makeSpec(invalidRing = false): {
 function expectReaped(
   target: DispatchableWorkerTarget,
   ports: readonly ReturnType<typeof fakePort>[],
+  outputState: WorkerOutputState,
 ): void {
-  expect(target.postMessage).toHaveBeenCalledWith({ type: 'exit', code: 1 });
+  expect(target.postMessage).toHaveBeenCalledWith({
+    type: 'exit',
+    code: 1,
+    attestation: workerOutputAttestation(outputState),
+  });
   expect(ports[3]?.postMessage).not.toHaveBeenCalled();
   expect(target.nativeClose).toHaveBeenCalledTimes(1);
   for (const port of ports) expect(port.close).toHaveBeenCalledTimes(1);
@@ -127,7 +136,7 @@ describe('worker-entry setup transaction', () => {
 
     await target.init(spec);
 
-    expectReaped(target, ports);
+    expectReaped(target, ports, spec.outputState);
   });
 
   it.each([
@@ -149,7 +158,7 @@ describe('worker-entry setup transaction', () => {
 
       await target.init(spec);
 
-      expectReaped(target, ports);
+      expectReaped(target, ports, spec.outputState);
       const stderr = ports[1]?.postMessage.mock.calls[0]?.[0] as Uint8Array;
       expect(new TextDecoder().decode(stderr)).toContain(fault.message);
     },

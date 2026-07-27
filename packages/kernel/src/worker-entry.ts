@@ -51,6 +51,7 @@ import {
   type WorkerOutputState,
   bindWorkerStdioOutput,
   sealWorkerOutput,
+  workerOutputAttestation,
 } from './worker-stdio-drain.ts';
 
 const scheduleWorkerMicrotask = globalThis.queueMicrotask.bind(globalThis);
@@ -137,6 +138,12 @@ export interface WorkerInitMessage {
 export interface WorkerExitMessage {
   readonly type: 'exit';
   readonly code: number;
+  /**
+   * Proof the frame came from the worker runtime and not from guest code on
+   * the shared worker-global channel — {@link workerOutputAttestation} of the
+   * kernel-owned output state, which guests never receive.
+   */
+  readonly attestation: string;
 }
 
 /**
@@ -407,7 +414,11 @@ export function finalizeWorkerEntry(
   outcome: WorkerEntryOutcome,
 ): void {
   if (spec.serve === true && !outcome.threw) return;
-  const exitMessage: WorkerExitMessage = { type: 'exit', code: outcome.code };
+  const exitMessage: WorkerExitMessage = {
+    type: 'exit',
+    code: outcome.code,
+    attestation: workerOutputAttestation(spec.outputState),
+  };
   let firstError: unknown;
   const childSealed = sealWorkerOutput(spec.outputState);
   try {
@@ -448,7 +459,11 @@ export function installWorkerPeerCloseAttestation(
         try {
           spec.stdio.ipc.postMessage({ kind: 'control:peer-closing' });
         } catch {
-          target.postMessage({ type: 'exit', code: 1 } satisfies WorkerExitMessage);
+          target.postMessage({
+            type: 'exit',
+            code: 1,
+            attestation: workerOutputAttestation(spec.outputState),
+          } satisfies WorkerExitMessage);
         }
       }
     } finally {

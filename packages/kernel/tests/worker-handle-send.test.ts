@@ -28,6 +28,7 @@ import {
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
 import { sealWorkerOutput } from '../src/worker-stdio-drain.ts';
+import { attestedExitEvent } from './attested-exit.ts';
 
 type WorkerListener = (ev: MessageEvent) => void;
 
@@ -275,7 +276,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
         data: new Error('supervisor peer died with an active descendant'),
       }),
     );
-    worker.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    worker.fire('message', attestedExitEvent(worker, 0));
 
     await vi.waitFor(() => expect(handle.exitCode).toBe(1));
     expect(events).toEqual(['exit:1', 'close:1']);
@@ -358,7 +359,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     sealWorkerOutputFor(factoryWorker as FakeWorker);
     (factoryWorker as FakeWorker).fire(
       'message',
-      new MessageEvent('message', { data: { type: 'exit', code: 7 } }),
+      attestedExitEvent(factoryWorker as FakeWorker, 7),
     );
 
     await vi.waitFor(() => expect(events.at(-1)).toBe('close:7'));
@@ -384,7 +385,7 @@ describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
     const w = factoryWorker as FakeWorker;
     const exit = once(handle, 'exit');
     sealWorkerOutputFor(w);
-    w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    w.fire('message', attestedExitEvent(w, 0));
     await exit;
 
     expect(disconnectEvents).toBe(1);

@@ -28,6 +28,7 @@ import {
   bindWorkerStdioOutput,
   sealWorkerOutput,
 } from '../src/worker-stdio-drain.ts';
+import { attestedExit } from './attested-exit.ts';
 
 class BoundaryWorker implements WorkerLike {
   readonly terminate = vi.fn();
@@ -228,7 +229,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => microtasks.push(task));
 
     expect(sealWorkerOutput(initOf(worker).spec.outputState)).toBe(true);
-    expect(() => worker.fire('message', { type: 'exit', code: 0 })).not.toThrow();
+    expect(() => worker.fire('message', attestedExit(worker, 0) as unknown as MessageEvent)).not.toThrow();
     const failure = drainCapturedMicrotasks(microtasks);
 
     expect(String(failure)).toMatch(/injected natural-exit descendant failure/u);
@@ -480,7 +481,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     events.length = 0;
 
     expect(sealWorkerOutput(initOf(worker).spec.outputState)).toBe(true);
-    worker.fire('message', { type: 'exit', code: 0 });
+    worker.fire('message', attestedExit(worker, 0) as unknown as MessageEvent);
 
     await vi.waitFor(() => expect(events).toContain('process.settle'));
     expect(events).toEqual(['close', 'close-microtask', 'process.settle']);
@@ -1094,7 +1095,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => microtasks.push(task));
     expect(owner.kill()).toBe(true);
     expect(sealWorkerOutput(initOf(worker).spec.outputState)).toBe(true);
-    worker.fire('message', { type: 'exit', code: 0 });
+    worker.fire('message', attestedExit(worker, 0) as unknown as MessageEvent);
     const failure = drainCapturedMicrotasks(microtasks);
 
     expect(String(failure)).toMatch(/process\.peer-death.*upstream authority/u);
@@ -1128,7 +1129,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => microtasks.push(task));
     expect(owner.kill()).toBe(true);
     expect(sealWorkerOutput(initOf(worker).spec.outputState)).toBe(true);
-    worker.fire('message', { type: 'exit', code: 0 });
+    worker.fire('message', attestedExit(worker, 0) as unknown as MessageEvent);
     const failure = drainCapturedMicrotasks(microtasks);
 
     expect(failure).toBeInstanceOf(AggregateError);
