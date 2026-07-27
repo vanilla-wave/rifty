@@ -1,5 +1,5 @@
 ---
-area: workbench
+area: playground
 status: draft
 title: One post-spawn rollback chokepoint for every owner child launcher
 created: 2026-07-28
