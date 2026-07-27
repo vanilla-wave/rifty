@@ -1,8 +1,9 @@
-import type { SpawnWorkerSpec } from '@riftydev/kernel';
+import { EventEmitter } from 'node:events';
+import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import { SHADOW_ASSET_PORT_CAPABILITY } from '@riftydev/npm-client/internal';
 import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { CommandContext } from '@riftydev/shell';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   OwnerChildAdmissionReservation,
   ReserveOwnerChildAdmission,
@@ -36,6 +37,8 @@ function emptyAdmission(): OwnerChildAdmissionReservation {
 }
 
 const reserveEmptyAdmission: ReserveOwnerChildAdmission = async () => emptyAdmission();
+
+afterEach(() => vi.restoreAllMocks());
 
 function fakeHandle() {
   const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
@@ -264,6 +267,52 @@ describe('owner-child-node-executor', () => {
     expect(spawnedEntry.capabilityPorts?.[SHADOW_ASSET_PORT_CAPABILITY]).toBe(capability.port2);
     capability.port1.close();
     capability.port2.close();
+  });
+
+  it('rejects when the owner execSync worker peer dies instead of leaving its caller pending', async () => {
+    const port = () => ({
+      onmessage: null as ((event: MessageEvent) => void) | null,
+      start: vi.fn(),
+    });
+    const child = Object.assign(new EventEmitter(), {
+      kind: 'worker' as const,
+      ports: { stdout: port(), stderr: port() },
+      kill: vi.fn(),
+    });
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockReturnValue(
+      child as unknown as ReturnType<typeof globalProcessManager.spawnWorker>,
+    );
+    const run = createOwnerExecSyncRunner(
+      'URL',
+      NODE_WORKER_RUNTIME_ENV,
+      () => REMOTE_FS_ROOT,
+      reserveEmptyAdmission,
+    );
+    const result = run({
+      entryPath: '/packages/nested/child.mjs',
+      argv: ['rifty', '/packages/nested/child.mjs'],
+      env: {},
+      cwd: '/',
+    });
+    await vi.waitFor(() => expect(globalProcessManager.spawnWorker).toHaveBeenCalledOnce());
+    const peerFailure = new Error('owner execSync worker peer died');
+    let observed:
+      | { readonly status: 'pending' }
+      | { readonly status: 'resolved' }
+      | { readonly status: 'rejected'; readonly reason: unknown } = { status: 'pending' };
+    void result.then(
+      () => {
+        observed = { status: 'resolved' };
+      },
+      (reason: unknown) => {
+        observed = { status: 'rejected', reason };
+      },
+    );
+
+    child.emit('peererror', peerFailure);
+    await Promise.resolve();
+
+    expect(observed).toEqual({ status: 'rejected', reason: peerFailure });
   });
 
   it('fails before owner execSync spawn when the active project is gone', async () => {
