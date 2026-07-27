@@ -136,6 +136,9 @@ describe('evaluateMass', () => {
     const result = evaluateMass(
       [
         { added: 900, path: 'packages/x/src/a.ts' },
+        { added: 5000, path: 'packages/x/src/a.test.ts' },
+        { added: 5000, path: 'apps/x/tests/a.ts' },
+        { added: 5000, path: 'services/x/fixtures/a.ts' },
         { added: 5000, path: 'docs/public/compat/esbuild.md' },
         { added: null, path: 'apps/playground/logo.png' },
       ],
