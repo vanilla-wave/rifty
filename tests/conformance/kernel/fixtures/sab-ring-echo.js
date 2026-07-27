@@ -31,14 +31,22 @@ const i32 = new Int32Array(sab, 0, HEADER_BYTES >> 2);
 const bytes = new Uint8Array(sab);
 const reqPayloadOffset = HEADER_BYTES;
 const repPayloadOffset = HEADER_BYTES + payloadCapacity;
+const STATE_IDLE = 0;
+const STATE_READY = 1;
+const STATE_HANDLING = 2;
 
 parentPort.postMessage({ type: 'ready' });
 
 for (;;) {
-  // Block until the parent stores REQ_STATE = 1 and notifies.
-  Atomics.wait(i32, REQ_STATE_INDEX, 0);
+  // Block until the parent publishes READY, then claim exactly once.
+  while (
+    Atomics.compareExchange(i32, REQ_STATE_INDEX, STATE_READY, STATE_HANDLING) !== STATE_READY
+  ) {
+    const state = Atomics.load(i32, REQ_STATE_INDEX);
+    Atomics.wait(i32, REQ_STATE_INDEX, state);
+  }
 
-  // ADR-0032: snapshot version then clear state. The fixture echoes the
+  // ADR-0032: snapshot version under the handling claim. The fixture echoes the
   // version back in its reply (production code stamps from its own
   // `expectedVersion`; we use the caller's so we don't need to know it).
   const reqVersion = Atomics.load(i32, VERSION_INDEX);
@@ -46,16 +54,20 @@ for (;;) {
   const req = new Uint8Array(len);
   req.set(bytes.subarray(reqPayloadOffset, reqPayloadOffset + len));
 
-  // Reset request slot so the parent can post the next request.
+  // Length is consumed now; HANDLING remains until the caller consumes reply.
   Atomics.store(i32, REQ_LEN_INDEX, 0);
-  Atomics.store(i32, REQ_STATE_INDEX, 0);
 
-  // Empty payload = shutdown sentinel. Send an empty reply and exit.
+  // Empty payload = shutdown sentinel. Send an empty reply, wait for the
+  // caller's exact HANDLING→IDLE release, then exit.
   if (len === 0) {
     Atomics.store(i32, REP_LEN_INDEX, 0);
     Atomics.store(i32, VERSION_INDEX, protocolVersion ?? reqVersion);
     Atomics.store(i32, REP_STATE_INDEX, 1);
     Atomics.notify(i32, REP_STATE_INDEX);
+    Atomics.wait(i32, REQ_STATE_INDEX, STATE_HANDLING);
+    if (Atomics.load(i32, REQ_STATE_INDEX) !== STATE_IDLE) {
+      throw new Error('sab-ring-echo: caller did not release HANDLING to IDLE');
+    }
     parentPort.postMessage({ type: 'done' });
     break;
   }
@@ -66,4 +78,8 @@ for (;;) {
   Atomics.store(i32, VERSION_INDEX, protocolVersion ?? reqVersion);
   Atomics.store(i32, REP_STATE_INDEX, 1);
   Atomics.notify(i32, REP_STATE_INDEX);
+  Atomics.wait(i32, REQ_STATE_INDEX, STATE_HANDLING);
+  if (Atomics.load(i32, REQ_STATE_INDEX) !== STATE_IDLE) {
+    throw new Error('sab-ring-echo: caller did not release HANDLING to IDLE');
+  }
 }

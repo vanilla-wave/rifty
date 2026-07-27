@@ -15,7 +15,16 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SAB_RING_HEADER_BYTES, SabRing, VERSION_INDEX, createSabRing } from './sab-ring.ts';
+import {
+  REP_LEN_OFFSET,
+  REP_STATE_OFFSET,
+  REQ_LEN_OFFSET,
+  REQ_STATE_OFFSET,
+  SAB_RING_HEADER_BYTES,
+  SabRing,
+  VERSION_INDEX,
+  createSabRing,
+} from './sab-ring.ts';
 import { SyncRpcDispatcher } from './sync-dispatch.ts';
 import {
   FRAME_BINARY,
@@ -94,6 +103,29 @@ describe('SyncRpc protocol version — consumer-side rejection (ADR-0032)', () =
     await expect(caller.waitReplyAsync(1000)).rejects.toBeInstanceOf(SyncRpcProtocolMismatchError);
   });
 
+  it('a legacy v2 responder that clears REQ_STATE before reply fails loudly at the v3 gate', async () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 64 });
+    caller.writeRequest(new Uint8Array([1]));
+    const i32 = new Int32Array(sab);
+    const bytes = new Uint8Array(sab);
+
+    // Manual v2 responder lifecycle: consume READY by clearing it to IDLE,
+    // then echo the caller's version in the reply. The single VERSION slot
+    // therefore cannot expose EPROTOVERSION to the v3 caller; the exact
+    // HANDLING release gate must still reject the mixed peer loudly.
+    Atomics.store(i32, REQ_LEN_OFFSET >> 2, 0);
+    Atomics.store(i32, REQ_STATE_OFFSET >> 2, 0);
+    bytes[SAB_RING_HEADER_BYTES + 64] = 7;
+    Atomics.store(i32, REP_LEN_OFFSET >> 2, 1);
+    Atomics.store(i32, VERSION_INDEX, SYNC_RPC_PROTOCOL_VERSION);
+    Atomics.store(i32, REP_STATE_OFFSET >> 2, 1);
+    Atomics.notify(i32, REP_STATE_OFFSET >> 2);
+
+    await expect(caller.waitReplyAsync(100)).rejects.toThrow(
+      /cannot consume reply unless request is handling; found idle/,
+    );
+  });
+
   it('SyncRpcProtocolMismatchError carries expected, got, and code=EPROTOVERSION', () => {
     const err = new SyncRpcProtocolMismatchError(1, 2);
     expect(err.code).toBe('EPROTOVERSION');
@@ -106,8 +138,8 @@ describe('SyncRpc protocol version — consumer-side rejection (ADR-0032)', () =
 describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
   it('dispatcher writes a versioned error reply when a request arrives with a wrong version', async () => {
     const { sab, ring } = createSabRing({ payloadCapacity: 256 });
-    const forgedVersion = SYNC_RPC_PROTOCOL_VERSION + 5;
-    const caller = SabRing.attach(sab, 256, { expectedVersion: forgedVersion });
+    const legacyVersion = 2;
+    const caller = SabRing.attach(sab, 256, { expectedVersion: legacyVersion });
 
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
     dispatcher.register('echo', (p) => p);
@@ -116,10 +148,10 @@ describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
     // Caller writes a request with a bogus version — the dispatcher must
     // (a) reject the payload (do not decode), and (b) write a reply at the
     // version the caller used so the caller can still decode the failure.
-    caller.writeRequestWithVersion(new TextEncoder().encode('garbage-no-json'), forgedVersion);
+    caller.writeRequestWithVersion(new TextEncoder().encode('garbage-no-json'), legacyVersion);
     const replyBytes = await caller.waitReplyAsync(2000);
     dispatcher.detachAll();
-    // v2 (ADR-0084 #23): the error reply is a JSON frame — decode through the
+    // ADR-0084 #23: the error reply is a JSON frame — decode through the
     // real decoder which strips the 1-byte discriminator. (The error contract
     // itself is unchanged; only the frame gained a leading byte.)
     const reply = decodeReply(replyBytes);
@@ -129,8 +161,8 @@ describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
 });
 
 describe('SyncRpc v2 binary frame (ADR-0084 #23)', () => {
-  it('SYNC_RPC_PROTOCOL_VERSION is bumped to 2 (binary-frame discriminator)', () => {
-    expect(SYNC_RPC_PROTOCOL_VERSION).toBe(2);
+  it('SYNC_RPC_PROTOCOL_VERSION is 3 for the claimed request lifecycle', () => {
+    expect(SYNC_RPC_PROTOCOL_VERSION).toBe(3);
   });
 
   it('encodeBinaryReply → decodeReply round-trips arbitrary bytes byte-exact (incl 0xff/0xfe/0x00)', () => {
@@ -164,7 +196,7 @@ describe('SyncRpc v2 binary frame (ADR-0084 #23)', () => {
     const v1Reader = SabRing.attach(sab, 64, { expectedVersion: 1 });
     v1Reader.writeRequest(new Uint8Array([0]));
     expect(() => responder.readRequest()).toThrow(SyncRpcProtocolMismatchError);
-    // Responder stamps v2 (its expectedVersion) and writes a binary frame.
+    // Responder stamps its current version and writes a binary frame.
     responder.writeReply(encodeBinaryReply(Uint8Array.from([0xff, 0xfe, 0x00])));
     await expect(v1Reader.waitReplyAsync(1000)).rejects.toBeInstanceOf(
       SyncRpcProtocolMismatchError,

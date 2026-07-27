@@ -13,6 +13,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  REQ_STATE_OFFSET,
   RingPayloadTooLargeError,
   RingTimeoutError,
   SAB_RING_HEADER_BYTES,
@@ -76,13 +77,16 @@ describe('SabRing — request/reply round-trip', () => {
 describe('SabRing — timeout', () => {
   it('waitReplyAsync(50) rejects with RingTimeoutError when no reply ever arrives', async () => {
     const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
-    SabRing.attach(sab, 16); // responder is silent
+    const secondCaller = SabRing.attach(sab, 16);
 
     caller.writeRequest(new Uint8Array([1]));
     await expect(caller.waitReplyAsync(50)).rejects.toBeInstanceOf(RingTimeoutError);
     await expect(caller.waitReplyAsync(50).catch((e) => e)).resolves.toMatchObject({
       code: 'ERINGTIMEOUT',
     });
+    expect(() => secondCaller.writeRequest(new Uint8Array([2]))).toThrow(
+      /previous request is unread/,
+    );
   });
 });
 
@@ -242,6 +246,19 @@ describe('SabRing — protocol violations', () => {
     expect(secondResponder.readRequest()).toBeNull();
   });
 
+  it('lets the owning dispatcher re-pump one claimed request without consuming it twice', () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+
+    caller.writeRequest(new Uint8Array([1, 2, 3]));
+    expect(responder.readRequest()).toEqual(new Uint8Array([1, 2, 3]));
+    expect(responder.readRequest()).toBeNull();
+
+    responder.writeReply(new Uint8Array([4, 5, 6]));
+    expect(responder.readRequest()).toBeNull();
+    expect(caller.waitReply(0)).toEqual(new Uint8Array([4, 5, 6]));
+  });
+
   it("rejects a second caller from consuming the first caller's reply", () => {
     const { sab, ring: firstCaller } = createSabRing({ payloadCapacity: 16 });
     const secondCaller = SabRing.attach(sab, 16);
@@ -351,6 +368,20 @@ describe('SabRing — violation forensics (CI-flake postmortem needs the header 
     i32[4] = 999; // REP_LEN slot (offset 16 >> 2)
     await expect(caller.waitReplyAsync(100)).rejects.toThrow(
       /corrupt reply length 999 \(capacity 16\) \(header: version=\d+/,
+    );
+  });
+
+  it('rejects a reply whose request claim was released out of band', async () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+    caller.writeRequest(new Uint8Array([1]));
+    responder.readRequest();
+    responder.writeReply(new Uint8Array([2]));
+
+    Atomics.store(new Int32Array(sab), REQ_STATE_OFFSET >> 2, 0);
+
+    await expect(caller.waitReplyAsync(100)).rejects.toThrow(
+      /cannot consume reply unless request is handling/,
     );
   });
 

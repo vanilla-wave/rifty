@@ -28,6 +28,57 @@ const hasSab =
   typeof (Atomics as unknown as { waitAsync?: unknown }).waitAsync === 'function';
 
 const fixtureUrl = new URL('./fixtures/sab-ring-echo.js', import.meta.url);
+const contenderFixtureUrl = new URL('./fixtures/sab-ring-contender.js', import.meta.url);
+
+interface ContenderMessage {
+  readonly type: 'ready' | 'lost' | 'done';
+  readonly role?: 'caller' | 'responder';
+  readonly marker?: number;
+  readonly state?: number;
+  readonly reply?: number;
+  readonly request?: number;
+}
+
+function observeContender(worker: Worker): {
+  readonly ready: Promise<void>;
+  readonly result: Promise<ContenderMessage>;
+  readonly exit: Promise<void>;
+} {
+  let resolveReady: (() => void) | undefined;
+  let resolveResult: ((message: ContenderMessage) => void) | undefined;
+  let rejectReady: ((error: Error) => void) | undefined;
+  let rejectResult: ((error: Error) => void) | undefined;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  const result = new Promise<ContenderMessage>((resolve, reject) => {
+    resolveResult = resolve;
+    rejectResult = reject;
+  });
+  const exit = new Promise<void>((resolve, reject) => {
+    worker.once('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`SAB contender exited with code ${code}`));
+    });
+    worker.once('error', reject);
+  });
+  worker.on('message', (message: ContenderMessage) => {
+    if (message.type === 'ready') resolveReady?.();
+    else resolveResult?.(message);
+  });
+  worker.once('error', (error) => {
+    rejectReady?.(error);
+    rejectResult?.(error);
+  });
+  return { ready, result, exit };
+}
+
+function startContenders(startSab: SharedArrayBuffer): void {
+  const start = new Int32Array(startSab);
+  Atomics.store(start, 0, 1);
+  Atomics.notify(start, 0);
+}
 
 // Real-Worker lifecycle (spawn + 4 cross-thread Atomics round-trips + join) is
 // load-sensitive: under a fully-loaded CI runner the worker's startup/exit can
@@ -102,4 +153,82 @@ describe.skipIf(!hasSab)('SabRing — real Worker round-trip (ADR-0011 phase 1)'
       expect(Array.from(reply)).toEqual([14, 16, 18]);
     });
   });
+
+  it(
+    'two real callers race IDLE→WRITING; one coherent request wins',
+    async () => {
+      const payloadCapacity = 64;
+      const { sab, ring: responder } = createSabRing({ payloadCapacity });
+      const startSab = new SharedArrayBuffer(4);
+      const attemptsSab = new SharedArrayBuffer(4);
+      const workers = [11, 22].map(
+        (marker) =>
+          new Worker(fileURLToPath(contenderFixtureUrl), {
+            workerData: {
+              role: 'caller',
+              sab,
+              payloadCapacity,
+              protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
+              startSab,
+              attemptsSab,
+              marker,
+            },
+          }),
+      );
+      const observed = workers.map(observeContender);
+      await Promise.all(observed.map(({ ready }) => ready));
+      startContenders(startSab);
+
+      const arm = responder.armRequest(2_000);
+      const wake = arm.async ? await arm.value : arm.value;
+      expect(wake).not.toBe('timed-out');
+      const request = responder.readRequest();
+      expect(request?.byteLength).toBe(1);
+      responder.writeReply(new Uint8Array([request?.[0] ?? 0]));
+
+      const results = await Promise.all(observed.map(({ result }) => result));
+      expect(results.filter(({ type }) => type === 'done')).toHaveLength(1);
+      expect(results.filter(({ type }) => type === 'lost')).toHaveLength(1);
+      const winner = results.find(({ type }) => type === 'done');
+      expect(winner?.reply).toBe(winner?.marker);
+      await Promise.all(observed.map(({ exit }) => exit));
+    },
+    REAL_WORKER_TIMEOUT_MS,
+  );
+
+  it(
+    'two real responders race READY→HANDLING; one dispatcher wins',
+    async () => {
+      const payloadCapacity = 64;
+      const { sab, ring: caller } = createSabRing({ payloadCapacity });
+      const startSab = new SharedArrayBuffer(4);
+      const attemptsSab = new SharedArrayBuffer(4);
+      const workers = [1, 2].map(
+        (marker) =>
+          new Worker(fileURLToPath(contenderFixtureUrl), {
+            workerData: {
+              role: 'responder',
+              sab,
+              payloadCapacity,
+              protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
+              startSab,
+              attemptsSab,
+              marker,
+            },
+          }),
+      );
+      const observed = workers.map(observeContender);
+      await Promise.all(observed.map(({ ready }) => ready));
+      caller.writeRequest(new Uint8Array([7]));
+      startContenders(startSab);
+
+      expect(Array.from(await caller.waitReplyAsync(2_000))).toEqual([17]);
+      const results = await Promise.all(observed.map(({ result }) => result));
+      expect(results.filter(({ type }) => type === 'done')).toHaveLength(1);
+      expect(results.filter(({ type }) => type === 'lost')).toHaveLength(1);
+      expect(results.find(({ type }) => type === 'done')?.request).toBe(7);
+      await Promise.all(observed.map(({ exit }) => exit));
+    },
+    REAL_WORKER_TIMEOUT_MS,
+  );
 });
