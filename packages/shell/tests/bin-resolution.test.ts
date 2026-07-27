@@ -227,6 +227,22 @@ describe('Shell — node_modules/.bin resolution', () => {
     await expect(sh.run('tool')).rejects.toThrow(/peer closed unexpectedly/i);
   });
 
+  it('an aggregated host lifecycle failure rejects because no process exit is known', async () => {
+    seedBin('/proj', 'tool');
+    const lifecycle = new ShellCommandLifecycleError('Worker peer closed unexpectedly');
+    const cleanup = new Error('preview cleanup failed');
+    const sh = new Shell({
+      cwd: '/proj',
+      execBin: async () => {
+        throw new AggregateError([lifecycle, cleanup], 'child lifecycle and cleanup failed');
+      },
+    });
+
+    await expect(sh.run('tool')).rejects.toMatchObject({
+      errors: [lifecycle, cleanup],
+    });
+  });
+
   it('background (&) jobs can run a resolved bin (execBin threads to the clone)', async () => {
     seedBin('/proj', 'daemon');
     const { execBin, calls } = makeExecBin({ exitCode: 0 });

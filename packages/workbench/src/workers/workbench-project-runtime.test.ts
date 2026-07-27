@@ -218,6 +218,7 @@ interface BoundaryWorker {
   readonly killedWith: () => string | null;
   emitMessage(message: unknown): void;
   emitListening(control: { ports: number[]; previewScope?: string }): void;
+  emitPeerError(error: Error): void;
   emitExit(code: number | null, signal?: string | null): void;
 }
 
@@ -324,6 +325,11 @@ function boundaryWorker(): BoundaryWorker {
     },
     emitListening(control) {
       for (const listener of listeners.get('control:listening') ?? []) listener(control);
+    },
+    emitPeerError(error) {
+      control.port1.close();
+      control.port2.close();
+      for (const listener of listeners.get('peererror') ?? []) listener(error);
     },
     emitExit(code, signal = null) {
       control.port1.close();
@@ -459,6 +465,46 @@ afterEach(() => {
 });
 
 describe('Workbench finite Node owner lifecycle Contract+RED', () => {
+  it('reports nodemon Worker peer death as a PTY lifecycle error, not a fabricated command exit', async () => {
+    const worker = boundaryWorker();
+    const h = await harness(undefined, nodemonNodeServerPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-nodemon-peer-death' });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-nodemon-peer-death',
+        rid: 'run-nodemon-peer-death',
+        line: 'npm run dev',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+
+    worker.emitPeerError(new Error(`Worker peer closed unexpectedly for ${ROOT}/src/server.mjs`));
+    await running;
+
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-nodemon-peer-death',
+        code: 1,
+        error: 'Worker peer closed unexpectedly for /src/server.mjs',
+      }),
+    );
+    const output = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' && frame.rid === 'run-nodemon-peer-death',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(output).not.toContain('npm: Worker peer closed unexpectedly');
+    await h.runtime.close();
+  });
+
   it('selects the installed-bin path only for the exact nodemon dev script bytes', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, nodemonNodeServerPackageConfig);
