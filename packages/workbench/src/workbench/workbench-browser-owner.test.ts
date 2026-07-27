@@ -259,6 +259,30 @@ describe('browser Workbench owner transport', () => {
     });
   });
 
+  it('MessagePort peer-death fault: rejects owner readiness and lifetime with the cause', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    let readyReason: unknown = 'pending';
+    let closedReason: unknown = 'pending';
+    void raw.ready.catch((reason: unknown) => {
+      readyReason = reason;
+    });
+    void raw.closed.catch((reason: unknown) => {
+      closedReason = reason;
+    });
+    const peerFailure = new Error('Workbench owner peer died');
+
+    try {
+      worker.emit('peererror', peerFailure);
+      await settleMicrotasks();
+      expect([readyReason, closedReason]).toEqual([peerFailure, peerFailure]);
+    } finally {
+      raw.close();
+      worker.emit('exit', null, 'SIGTERM');
+      await settleMicrotasks();
+    }
+  });
+
   it('admits a companion only after both readiness frames and maintains one exact catalog proxy', async () => {
     const worker = new FakeOwnerWorker();
     const raw = startBrowserWorkspaceOwner(companionInput, dependencies(worker));

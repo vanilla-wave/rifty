@@ -183,4 +183,41 @@ describe('session-bound TS-LSP owner relay', () => {
       },
     ]);
   });
+
+  it('MessagePort peer-death fault: fails admitted requests with the physical cause', async () => {
+    const child = new FakeChild();
+    const outgoing: unknown[] = [];
+    const relay = createTsLspOwnerRelay({
+      projectRoot: PROJECT_ROOT,
+      workerUrl: 'ts-lsp-worker.js',
+      nodeWorkerRuntimeEnv: {},
+      packages: { quiesce: async () => {} },
+      spawnWorker: () => child,
+      send(message) {
+        outgoing.push(structuredClone(message));
+        return undefined;
+      },
+      log: () => {},
+    });
+    await relay.handle({
+      type: 'rifty:ts-lsp',
+      request: { id: 5, type: 'ts:init', projectRoot: PROJECT_ROOT },
+    });
+    const peerFailure = new Error('TS worker peer died');
+
+    child.emit('peererror', peerFailure);
+    const afterPeer = structuredClone(outgoing);
+    await relay.close();
+    expect(afterPeer).toEqual([
+      {
+        type: 'rifty:ts-lsp',
+        response: {
+          id: 5,
+          ok: false,
+          kind: 'error',
+          error: { name: 'Error', message: peerFailure.message },
+        },
+      },
+    ]);
+  });
 });
