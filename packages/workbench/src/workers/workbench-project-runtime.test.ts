@@ -89,6 +89,22 @@ const nodeServerPackageConfig: OwnerPackageConfig = {
   slug: 'project-a',
   fromScratch: true,
 };
+const matchingLifecycleNodeServerPackageConfig: OwnerPackageConfig = {
+  ...nodeServerPackageConfig,
+  cfg: {
+    ...nodeServerPackageConfig.cfg,
+    packageJson: `${JSON.stringify({
+      name: 'workbench-node-server',
+      version: '1.0.0',
+      type: 'module',
+      scripts: {
+        predev: 'node src/server.mjs',
+        dev: 'node src/server.mjs',
+        postdev: 'node src/server.mjs',
+      },
+    })}\n`,
+  },
+};
 const NODEMON_DEV = 'nodemon --legacy-watch --no-stdin --no-update-notifier src/server.mjs';
 const nodemonNodeServerPackageConfig: OwnerPackageConfig = {
   cfg: {
@@ -217,7 +233,7 @@ interface BoundaryWorker {
   readonly spec: () => Parameters<typeof globalProcessManager.spawnWorker>[1] | null;
   readonly killedWith: () => string | null;
   emitMessage(message: unknown): void;
-  emitListening(control: { ports: number[]; previewScope?: string }): void;
+  emitListening(control: { pid: number; ports: number[]; previewScope?: string }): void;
   emitPeerError(error: Error): void;
   emitExit(code: number | null, signal?: string | null): void;
 }
@@ -768,6 +784,55 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
+  it('intercepts only the dev lifecycle step when predev and postdev have identical bytes', async () => {
+    const worker = boundaryWorker();
+    const h = await harness(undefined, matchingLifecycleNodeServerPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-lifecycle-steps' });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-lifecycle-steps',
+        rid: 'run-lifecycle-steps',
+        line: 'npm run dev',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.command()).not.toBeNull());
+
+    expect(worker.command()).toBe('node');
+    worker.emitExit(0);
+    await vi.waitFor(() => expect(worker.command()).toBe('dev-server'));
+    const entry = worker.spec()?.entry;
+    if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
+      throw new Error('expected entry-scoped dev-server child bootstrap');
+    }
+    const payload = entry.bootstrap.payload as { readonly previewScope?: unknown };
+    if (typeof payload.previewScope !== 'string') {
+      throw new Error('expected owner-minted dev-server preview scope');
+    }
+    worker.emitMessage({
+      type: 'rifty:dev-ready',
+      port: 4317,
+      previewScope: payload.previewScope,
+    });
+    worker.emitExit(0);
+    await vi.waitFor(() => expect(worker.command()).toBe('node'));
+    worker.emitExit(0);
+    await running;
+
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-lifecycle-steps',
+        code: 0,
+      }),
+    );
+    await h.runtime.close();
+  });
+
   it('runs node-cli through a supervised node child with exact empty argv and physical exit', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, nodeCliPackageConfig);
@@ -969,6 +1034,7 @@ describe('Workbench project runtime', () => {
     expect(payload.launch.previewScope).not.toBe('scope-forged');
 
     worker.emitListening({
+      pid: 201,
       ports: [5173],
       previewScope: 'scope-a',
     });
@@ -997,6 +1063,7 @@ describe('Workbench project runtime', () => {
     ]);
 
     worker.emitListening({
+      pid: 201,
       ports: [5999],
       previewScope: 'late-scope',
     });

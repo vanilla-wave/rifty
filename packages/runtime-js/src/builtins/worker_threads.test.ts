@@ -10,10 +10,12 @@ import { Writable } from '@riftydev/io';
  * `tests/conformance/builtins/worker_threads.test.ts`.
  */
 import {
+  KERNEL_PROCESS_SPEC_KEY,
   type ProcessHandle,
   type SpawnWorkerSpec,
   globalProcessManager,
   publishKernelEntryBootstrap,
+  publishKernelProcessSpec,
   setKernelWorkerUrl,
 } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
@@ -26,6 +28,10 @@ import {
   buildNodeEntryWorkerEntry,
 } from './node-entry-runtime-config.ts';
 import * as nodeEntryUrl from './node-entry-url.ts';
+import {
+  readActiveNodeProcessBootstrap,
+  setActiveNodeProcessBootstrap,
+} from './process-bootstrap-identity.ts';
 import { NodeProcess, setProcessCwd } from './process.ts';
 import workerThreadsModule, {
   Worker,
@@ -55,6 +61,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   (globalThis as Coi).crossOriginIsolated = false;
   publishKernelEntryBootstrap(null);
+  Reflect.deleteProperty(globalThis, KERNEL_PROCESS_SPEC_KEY);
   resetNodeEntryWorkerUrl();
   setProcessCwd('/workspace');
   resetSyncMirror();
@@ -319,6 +326,64 @@ globalThis.onmessage = ({ data }) => {
       );
       await worker.terminate();
     });
+  });
+
+  it('keeps bootstrap ancestry when guest pid fields and the public spec are poisoned', async () => {
+    const fakeHandle = makeFakeWorkerHandle([]);
+    let identity: { readonly pid: number; readonly ppid: number } | undefined;
+    vi.spyOn(globalProcessManager, 'spawnWorkerThread').mockImplementation((_spec, candidate) => {
+      identity = candidate;
+      return fakeHandle;
+    });
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const channels = Array.from({ length: 4 }, () => new MessageChannel());
+    const trustedSpec = {
+      pid: 41,
+      ppid: 7,
+      argv: ['rifty', '/workspace/parent.mjs'],
+      env: {},
+      cwd: '/workspace',
+      stdio: {
+        stdout: channels[0]!.port1,
+        stderr: channels[1]!.port1,
+        stdin: channels[2]!.port1,
+        ipc: channels[3]!.port1,
+      },
+    };
+    const parent = new NodeProcess(trustedSpec);
+    parent.pid = 98_765;
+    parent.ppid = 98_764;
+    publishKernelProcessSpec({ ...trustedSpec, pid: 87_654, ppid: 87_653 });
+    const guestReplacement = Object.assign(Object.create(parent) as Record<string, unknown>, {
+      pid: 76_543,
+      ppid: 76_542,
+      argv: ['poison', '/poison/parent.mjs'],
+      env: { POISON: '1' },
+      cwd: () => '/poison',
+    });
+    try {
+      await withProcessGlobal(
+        guestReplacement,
+        async () => {
+          const worker = new Worker('/workspace/w-trusted-parent.mjs');
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          expect(identity).toEqual({ pid: 41, ppid: 7 });
+          await worker.terminate();
+        },
+        parent,
+      );
+    } finally {
+      for (const channel of channels) {
+        channel.port1.close();
+        channel.port2.close();
+      }
+    }
   });
 
   it('inherits the parent remote-FS root while the worker process spec stays public', async () => {
@@ -746,8 +811,14 @@ function seededWorkerProcess(env: Readonly<Record<string, string>>): NodeProcess
   });
 }
 
-async function withProcessGlobal<T>(process: NodeProcess, run: () => Promise<T>): Promise<T> {
+async function withProcessGlobal<T>(
+  process: unknown,
+  run: () => Promise<T>,
+  trustedProcess: NodeProcess = process as NodeProcess,
+): Promise<T> {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
+  const previousActive = readActiveNodeProcessBootstrap();
+  setActiveNodeProcessBootstrap(trustedProcess, true);
   Object.defineProperty(globalThis, 'process', {
     value: process,
     configurable: true,
@@ -756,6 +827,10 @@ async function withProcessGlobal<T>(process: NodeProcess, run: () => Promise<T>)
   try {
     return await run();
   } finally {
+    setActiveNodeProcessBootstrap(
+      previousActive?.process ?? null,
+      previousActive?.federated ?? false,
+    );
     if (descriptor === undefined) {
       Reflect.deleteProperty(globalThis, 'process');
     } else {
