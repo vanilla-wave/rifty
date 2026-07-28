@@ -1,7 +1,13 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { type InstallOptions, type Packument, RegistryClient, install } from '@riftydev/npm-client';
+import {
+  type InstallOptions,
+  type InstallResult,
+  type Packument,
+  RegistryClient,
+  install,
+} from '@riftydev/npm-client';
 import {
   type PackageTreeShadowAssetBoundary,
   SHADOW_ASSET_PORT_CAPABILITY,
@@ -12,6 +18,7 @@ import {
   createShadowAssetPortClient,
   shadowAssetPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
+import { Shell } from '@riftydev/shell';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, expect, it } from 'vitest';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
@@ -179,4 +186,198 @@ it('freezes exact runtime plans and reuses one ready asset across projects', asy
   }
 
   await manager.close();
+});
+
+// Fault class: concurrent-same-key. The owner FIFO must physically exclude the
+// second real installer, not merely correlate its eventual result.
+it('physically excludes same-project installs while the first lockfile commit is parked', async () => {
+  const root = '/projects/fifo';
+  const config = packageConfig(root, 'fifo-app');
+  const pair = createMemoryFs();
+  const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+    ownerEpoch: 'owner-shadow-physical-exclusion-contract',
+    initialRoots: ['/'],
+  });
+  setSyncMirror(owner, { async: pair.vfs });
+  owner.mkdirSync(root, { recursive: true });
+  owner.writeFileSync(`${root}/package.json`, new TextEncoder().encode(config.cfg.packageJson));
+
+  const manager = createOriginExclusiveShadowAssetManager({
+    storage: createMemoryShadowAssetStorage(),
+    source: { acquire: async () => assetBytes.slice() },
+  });
+  const projectVfs = new SyncMirrorVfs();
+  let markFirstAtLock!: () => void;
+  const firstAtLock = new Promise<void>((resolve) => {
+    markFirstAtLock = resolve;
+  });
+  let openFirstLockGate!: () => void;
+  const firstLockGate = new Promise<void>((resolve) => {
+    openFirstLockGate = resolve;
+  });
+  let gateOpen = false;
+  const releaseFirst = (): void => {
+    if (gateOpen) return;
+    gateOpen = true;
+    openFirstLockGate();
+  };
+  const writeAttempts: Array<{ readonly install: number; readonly path: string }> = [];
+  const results: Array<{ readonly install: number; readonly result: InstallResult }> = [];
+  let coreEntries = 0;
+  let active = 0;
+  let maxActive = 0;
+
+  const state = createOwnerPackageState({
+    primeInitialPrefetch: false,
+    vfs: projectVfs,
+    fsSync: owner,
+    installStampClaims,
+    flush: async () => ({ failures: [], total: 0 }),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry: new RejectingRegistry(),
+    shadowAssets: manager,
+    install: async (arg1) => {
+      if (typeof arg1 === 'string') throw new Error('owner install must use InstallOptions');
+      const options: InstallOptions = arg1;
+      const installOrdinal = ++coreEntries;
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      let parked = false;
+      const observedVfs = new Proxy(options.vfs, {
+        get(target, property) {
+          if (property === 'writeFile') {
+            return async (...args: Parameters<InstallOptions['vfs']['writeFile']>) => {
+              const [path] = args;
+              writeAttempts.push({ install: installOrdinal, path });
+              if (installOrdinal === 1 && path === `${root}/package-lock.json` && !parked) {
+                parked = true;
+                markFirstAtLock();
+                await firstLockGate;
+              }
+              return target.writeFile(...args);
+            };
+          }
+          const value: unknown = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      try {
+        const result = await install({ ...options, vfs: observedVfs });
+        results.push({ install: installOrdinal, result });
+        return result;
+      } finally {
+        active -= 1;
+      }
+    },
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+
+  await state.transition(config);
+  const shell = new Shell({ cwd: root });
+  shell.registerCommand(
+    'npm',
+    state.createNpmCommand(async () => 0),
+  );
+  const first = shell.run('npm install');
+  let second: ReturnType<typeof shell.run> | undefined;
+  try {
+    await firstAtLock;
+    expect(coreEntries).toBe(1);
+    expect(active).toBe(1);
+    expect(maxActive).toBe(1);
+    expect(owner.existsSync(`${root}/package-lock.json`)).toBe(false);
+    const revisionAtPark = owner.treeRevision;
+    const attemptsAtPark = [...writeAttempts];
+
+    second = shell.run('npm install');
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(coreEntries).toBe(1);
+    expect(owner.treeRevision).toBe(revisionAtPark);
+    expect(writeAttempts).toEqual(attemptsAtPark);
+
+    const materializedAtPark = await Promise.all(
+      [
+        'node_modules/esbuild/bin/esbuild',
+        'node_modules/esbuild/lib/main.cjs',
+        'node_modules/esbuild/package.json',
+        'node_modules/.bin/esbuild',
+      ].map((path) => projectVfs.readFile(`${root}/${path}`)),
+    );
+    releaseFirst();
+    expect((await first).exitCode).toBe(0);
+    expect((await second).exitCode).toBe(0);
+    await state.quiesce();
+
+    expect(coreEntries).toBe(2);
+    expect(maxActive).toBe(1);
+    expect(active).toBe(0);
+    expect(results.map(({ install: ordinal }) => ordinal)).toEqual([1, 2]);
+    const [firstResult, secondResult] = results.map(({ result }) => result);
+    expect(secondResult?.lockfile).toEqual(firstResult?.lockfile);
+
+    const lockfile = JSON.parse(
+      await projectVfs.readFileText(`${root}/package-lock.json`),
+    ) as InstallResult['lockfile'];
+    expect(lockfile).toEqual(firstResult?.lockfile);
+    expect(lockfile.rifty?.shadowSubstitutions as unknown).toMatchObject({
+      protocol: 'rifty.shadow-substitutions/v2',
+      applied: [
+        {
+          catalog: {
+            id: 'rifty.shadow-substitutions.builtin.v2',
+            digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+          },
+          substitutionId: 'rifty.shadow-substitution.esbuild.v2',
+          recipeDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
+          trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
+          acquisition: { kind: 'synthetic' },
+          materialization: {
+            installPath: 'node_modules/esbuild',
+            name: 'esbuild',
+            version: '0.28.0',
+            bin: { esbuild: 'bin/esbuild' },
+            files: [{ path: 'bin/esbuild' }, { path: 'lib/main.cjs' }, { path: 'package.json' }],
+          },
+          binding: {
+            adapterId: 'rifty.runtime-adapter.esbuild.v1',
+            assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
+          },
+        },
+      ],
+    });
+    expect(lockfile.packages['node_modules/esbuild']).toMatchObject({
+      version: '0.28.0',
+      bin: { esbuild: 'bin/esbuild' },
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+    });
+
+    const materializedAfterBoth = await Promise.all(
+      [
+        'node_modules/esbuild/bin/esbuild',
+        'node_modules/esbuild/lib/main.cjs',
+        'node_modules/esbuild/package.json',
+        'node_modules/.bin/esbuild',
+      ].map((path) => projectVfs.readFile(`${root}/${path}`)),
+    );
+    expect(materializedAfterBoth).toEqual(materializedAtPark);
+    expect(new TextDecoder().decode(materializedAfterBoth[3])).toBe(
+      "#!/usr/bin/env node\nimport('../esbuild/bin/esbuild');\n",
+    );
+    const applied = lockfile.rifty?.shadowSubstitutions.applied[0];
+    if (!applied) throw new Error('esbuild v2 shadow trace missing');
+    for (const file of applied.materialization.files) {
+      const bytes = await projectVfs.readFile(
+        `${root}/${applied.materialization.installPath}/${file.path}`,
+      );
+      expect(bytes.byteLength).toBe(file.bytes);
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(file.sha256);
+    }
+  } finally {
+    releaseFirst();
+    await Promise.allSettled([first, ...(second === undefined ? [] : [second])]);
+    await manager.close();
+  }
 });
