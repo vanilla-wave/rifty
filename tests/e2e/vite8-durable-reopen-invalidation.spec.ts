@@ -173,6 +173,62 @@ async function projectTreeDigest(
   }, projectId);
 }
 
+async function projectSnapshotProof(
+  page: Page,
+  projectId: string,
+): Promise<{
+  readonly packageJsonSha256: string;
+  readonly lockfileSha256: string;
+  readonly nodeModules: readonly {
+    readonly path: string;
+    readonly bytes: number;
+    readonly sha256: string;
+  }[];
+}> {
+  return page.evaluate(async (id) => {
+    type DirectoryWithEntries = FileSystemDirectoryHandle & {
+      entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+    };
+    let tree = await navigator.storage.getDirectory();
+    for (const segment of ['.rifty', 'workbench', 'v1', 'projects', id, 'tree']) {
+      tree = await tree.getDirectoryHandle(segment);
+    }
+    const hex = (bytes: ArrayBuffer): string =>
+      [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const digest = async (bytes: ArrayBuffer): Promise<string> =>
+      hex(await crypto.subtle.digest('SHA-256', bytes));
+    const read = async (directory: FileSystemDirectoryHandle, name: string): Promise<File> =>
+      (await directory.getFileHandle(name)).getFile();
+    const packageJson = await read(tree, 'package.json');
+    const lockfile = await read(tree, 'package-lock.json');
+    const nodeModules = await tree.getDirectoryHandle('node_modules');
+    const rows: { path: string; bytes: number; sha256: string }[] = [];
+    const walk = async (directory: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
+      for await (const [name, handle] of (directory as DirectoryWithEntries).entries()) {
+        const path = prefix.length === 0 ? name : `${prefix}/${name}`;
+        if (handle.kind === 'directory') {
+          await walk(handle as FileSystemDirectoryHandle, path);
+          continue;
+        }
+        if (path === '.rifty-install-stamp.json') continue;
+        const file = await (handle as FileSystemFileHandle).getFile();
+        rows.push({
+          path,
+          bytes: file.size,
+          sha256: await digest(await file.arrayBuffer()),
+        });
+      }
+    };
+    await walk(nodeModules, '');
+    rows.sort((left, right) => left.path.localeCompare(right.path));
+    return {
+      packageJsonSha256: await digest(await packageJson.arrayBuffer()),
+      lockfileSha256: await digest(await lockfile.arrayBuffer()),
+      nodeModules: rows,
+    };
+  }, projectId);
+}
+
 async function readProjectFileFromOpfs(
   page: Page,
   projectId: string,
@@ -538,6 +594,11 @@ test.describe('Vite 8 durable cross-build invalidation', () => {
       const oldTree = await projectTreeDigest(page, projectAId);
       expect(oldTree.paths).toContain('/durable-pre-policy-edit.txt');
       expect(oldTree.paths).toContain('/node_modules/postcss/package.json');
+      expect(await projectSnapshotProof(page, projectAId)).toEqual({
+        packageJsonSha256: harness.snapshots.historical.packageJsonSha256,
+        lockfileSha256: harness.snapshots.historical.lockfileSha256,
+        nodeModules: harness.snapshots.historical.nodeModules,
+      });
 
       await pickStarter(page, 'project-files');
       await expectViteDevServerReady(page, 5174, OWNER_TIMEOUT);
@@ -627,6 +688,11 @@ test.describe('Vite 8 durable cross-build invalidation', () => {
       const resetTree = await projectTreeDigest(page, projectAId);
       expect(resetTree.digest).not.toBe(oldTree.digest);
       expect(resetTree.paths).not.toContain('/durable-pre-policy-edit.txt');
+      expect(await projectSnapshotProof(page, projectAId)).toEqual({
+        packageJsonSha256: harness.snapshots.current.packageJsonSha256,
+        lockfileSha256: harness.snapshots.current.lockfileSha256,
+        nodeModules: harness.snapshots.current.nodeModules,
+      });
       expect(
         await readProjectFileFromOpfs(page, projectAId, 'durable-pre-policy-edit.txt'),
       ).toEqual({
@@ -678,6 +744,11 @@ test.describe('Vite 8 durable cross-build invalidation', () => {
       expect(currentDefinition.definitionIdentitySha256).not.toBe(
         oldDefinition.definitionIdentitySha256,
       );
+      expect(await projectSnapshotProof(page, projectAId)).toEqual({
+        packageJsonSha256: harness.snapshots.current.packageJsonSha256,
+        lockfileSha256: harness.snapshots.current.lockfileSha256,
+        nodeModules: harness.snapshots.current.nodeModules,
+      });
       await runTerminalLineSettled(
         page,
         "printf \"await import('rolldown'); console.log('rolldown-wasi-ok')\\n\" > rolldown-wasi-oracle.mjs",
@@ -701,6 +772,11 @@ test.describe('Vite 8 durable cross-build invalidation', () => {
       await switchProject(page, projectAId);
       await expectViteDevServerReady(page, 5174, OWNER_TIMEOUT);
       expect(acquisitionRequests).toEqual([]);
+      expect(await projectSnapshotProof(page, projectAId)).toEqual({
+        packageJsonSha256: harness.snapshots.current.packageJsonSha256,
+        lockfileSha256: harness.snapshots.current.lockfileSha256,
+        nodeModules: harness.snapshots.current.nodeModules,
+      });
       await proveVite8BuildAndPreview(page);
       expect(acquisitionRequests).toEqual([]);
       await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(
