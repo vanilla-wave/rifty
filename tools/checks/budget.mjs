@@ -10,11 +10,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as ts from 'typescript';
 import { declaredGoals, historyHeadRevision, parseGoalBaseline } from './goal-contract.mjs';
-import { PRODUCTION_SOURCE_RE as SOURCE_RE, pickupCommit } from './run-pickup.mjs';
+import { classifyAutonomousRunPath, pickupCommit } from './run-pickup.mjs';
 
 const MECHANISM_RE = /\b(epoch|generation|fifo|ledger|lease|seenRequest\w*|opId)\b/i;
-const TEST_SOURCE_RE =
-  /(?:^|\/)(?:__tests__|tests?|fixtures)(?:\/|$)|\.(?:test|spec|test-fixture|contract-fixtures)\.[^.]+$/u;
 const BUDGET_SECTION_RE = /^## Budget[ \t]*(?:\r?\n|$)[\s\S]*?(?=^##[ \t]+|$(?![\s\S]))/mu;
 const BUDGET_ROW_RE =
   /^\|\s*`?([\w./-]+)`?\s*\|\s*(\d[\d_]*)\s*[–-]\s*(\d[\d_]*)\s*\|[^\r\n]*(?:\r?\n)?$/u;
@@ -140,6 +138,7 @@ export function evaluateMass(numstat, band, generated) {
   for (const row of numstat) {
     if (row.added === null) continue;
     if (generated.some((regexp) => regexp.test(row.path))) continue;
+    if (classifyAutonomousRunPath(row.path) === 'test-support') continue;
     insertions += row.added;
   }
   const level = insertions >= 2 * band.hi ? 'fail' : insertions > band.hi ? 'warn' : 'ok';
@@ -159,7 +158,7 @@ export function evaluateMass(numstat, band, generated) {
 export function scanMechanisms(addedFiles) {
   const hits = [];
   for (const file of addedFiles) {
-    if (!SOURCE_RE.test(file.path) || TEST_SOURCE_RE.test(file.path)) continue;
+    if (classifyAutonomousRunPath(file.path) !== 'production') continue;
     const source = ts.createSourceFile(
       file.path,
       file.content ?? '',

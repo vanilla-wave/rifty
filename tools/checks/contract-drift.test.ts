@@ -66,6 +66,19 @@ describe('evaluate', () => {
     );
   });
 
+  it.each([
+    'packages/x/src/a.test.ts',
+    'packages/x/tests/a.ts',
+    'packages/npm-client/src/_test-fixtures/tar-builder.ts',
+    'packages/workbench/src/workers/test-fixtures/durable-owner-fs.ts',
+    'apps/playground/src/glue/test-monaco-editor.ts',
+    'packages/runtime-wasi/src/syscalls/fd-test-fixture.ts',
+  ])('does not treat test support as implementation source: %s', (path) => {
+    expect(evaluate([{ status: 'A', path }, contract], read(item('ready'), item('ready')))).toEqual(
+      [],
+    );
+  });
+
   it('guards in-progress epics and skips README/TEMPLATE', () => {
     const epic = { status: 'M', path: 'docs/backlog/epics/e.md' };
     expect(evaluate([src, epic], read(item('in-progress'), item('in-progress')))).toHaveLength(1);
@@ -202,6 +215,138 @@ describe('synthetic merge ref (CI)', () => {
         env: { ...process.env, GITHUB_EVENT_PATH: eventPath },
       });
       expect(sighted).toContain('contract-drift: OK');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps RED tests before JIT authority for contract-drift and budget', async () => {
+    const { execFileSync, spawnSync } = await import('node:child_process');
+    const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const root = mkdtempSync(join(tmpdir(), 'rifty-pickup-gates-'));
+    const g = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=R', '-c', 'user.email=r@e.t', ...args], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+    const initialEpic = `---
+kind: epic
+status: ready
+title: Goal
+created: 2026-07-28
+value: Goal
+---
+
+## Outcome
+
+Goal.
+
+## User scenario
+
+Run it.
+
+## Items
+
+Known work.
+
+## Budget
+
+- new coordination mechanisms: 0
+
+| slice | band |
+|---|---|
+| seed | 1–10 |
+`;
+    try {
+      mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
+      mkdirSync(join(root, 'docs/backlog/playground'), { recursive: true });
+      mkdirSync(join(root, 'packages/x/src'), { recursive: true });
+      const epicPath = join(root, 'docs/backlog/epics/goal.md');
+      writeFileSync(epicPath, initialEpic);
+      g('init', '-b', 'main');
+      g('add', '.');
+      g('commit', '-m', 'base');
+      const baseline = g('rev-parse', 'HEAD').trim();
+      g('update-ref', 'refs/remotes/origin/main', baseline);
+      g('checkout', '-b', 'pr');
+
+      writeFileSync(
+        join(root, 'packages/x/src/save.contract.test.ts'),
+        "import { it } from 'vitest';\nit('RED', () => {});\n",
+      );
+      g('add', '.');
+      g('commit', '-m', 'contract red');
+
+      writeFileSync(
+        join(root, 'docs/backlog/playground/save.md'),
+        `---
+area: playground
+status: ready
+title: Save
+created: 2026-07-28
+why: Required by goal
+epic: goal
+---
+`,
+      );
+      writeFileSync(
+        epicPath,
+        initialEpic
+          .replace('Known work.', '- `playground/save` — **save**: just-in-time unit.')
+          .replace('| seed | 1–10 |', '| seed | 1–10 |\n| save | 1–10 |'),
+      );
+      g('add', '.');
+      g('commit', '-m', 'ready authority');
+
+      writeFileSync(join(root, 'packages/x/src/save.ts'), 'export const saved = true;\n');
+      g('add', '.');
+      g('commit', '-m', 'implementation');
+      const prSha = g('rev-parse', 'HEAD').trim();
+      const eventPath = join(root, 'event.json');
+      writeFileSync(
+        eventPath,
+        JSON.stringify({
+          pull_request: {
+            head: { sha: prSha },
+            body: [`Goal-Baseline: goal@${baseline}`, 'Budget-Slice: goal/save'].join('\n'),
+          },
+        }),
+      );
+
+      const contractScript = fileURLToPath(new URL('./contract-drift.mjs', import.meta.url));
+      const budgetScript = fileURLToPath(new URL('./budget.mjs', import.meta.url));
+      const env = {
+        ...process.env,
+        GITHUB_EVENT_PATH: eventPath,
+        RIFTY_GOAL_BASELINE: undefined,
+        RIFTY_BUDGET_SLICE: undefined,
+      };
+      const drift = spawnSync(process.execPath, [contractScript], {
+        cwd: root,
+        encoding: 'utf8',
+        env,
+      });
+      const budget = spawnSync(process.execPath, [budgetScript], {
+        cwd: root,
+        encoding: 'utf8',
+        env,
+      });
+      expect({
+        contractStatus: drift.status,
+        contractStdout: drift.stdout,
+        contractStderr: drift.stderr,
+        budgetStatus: budget.status,
+        budgetStdout: budget.stdout,
+        budgetStderr: budget.stderr,
+      }).toMatchObject({
+        contractStatus: 0,
+        contractStdout: expect.stringContaining('contract-drift: OK'),
+        budgetStatus: 0,
+        budgetStdout: expect.stringContaining('budget: OK (goal/save:'),
+      });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
