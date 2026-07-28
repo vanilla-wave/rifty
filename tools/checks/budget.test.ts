@@ -146,6 +146,12 @@ describe('evaluateMass', () => {
     'packages/runtime-wasi/src/syscalls/fd-test-fixture.ts',
     'tools/checks/run-pickup.test.ts',
     'tests/e2e/vite-save-trust-rebind.spec.ts',
+    'packages/x/src/a.test.d.ts',
+    'packages/x/src/a.spec.d.ts',
+    'packages/x/src/a.test-fixture.d.ts',
+    'packages/x/src/a.contract-fixtures.d.ts',
+    'tools/checks/a.test.ts.snap',
+    'docs/process/a.test.coverage.md',
   ];
 
   it('is ok within band; generated and binary rows excluded', () => {
@@ -181,6 +187,8 @@ describe('evaluateMass', () => {
     'tools/checks/run-pickup.mjs',
     'tools/test-utils/helper.ts',
     'tests-manual/e2e/save.ts',
+    'docs/backlog/process-meta/test-coverage-debt.md',
+    'docs/process/a-test-fixture.md',
   ])('counts ordinary hand-written other path %s', (path) => {
     expect(evaluateMass([{ added: 5000, path }], band, [])).toMatchObject({
       insertions: 5000,

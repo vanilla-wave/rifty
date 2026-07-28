@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickupCommit } from './run-pickup.mjs';
+import { classifyAutonomousRunPath, pickupCommit } from './run-pickup.mjs';
 
 const roots = ['apps', 'packages', 'services'];
 const extensions = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'];
@@ -13,6 +13,9 @@ const dottedTestPaths = roots.flatMap((root) =>
     ),
   ),
 );
+const multiPartDottedTestPaths = ['test', 'spec', 'test-fixture', 'contract-fixtures'].map(
+  (suffix) => `packages/x/src/a.${suffix}.d.ts`,
+);
 const directoryTestPaths = roots.flatMap((root) =>
   extensions.flatMap((extension) =>
     ['test', 'tests', '__tests__', 'fixtures', '_test-fixtures', 'test-fixtures'].map(
@@ -21,8 +24,10 @@ const directoryTestPaths = roots.flatMap((root) =>
   ),
 );
 const basenameTestPaths = [
-  'apps/x/src/test-helper.ts',
-  'packages/x/src/a-test-fixture.ts',
+  ...extensions.flatMap((extension) => [
+    `apps/x/src/test-helper.${extension}`,
+    `packages/x/src/a-test-fixture.${extension}`,
+  ]),
   'apps/playground/src/glue/test-monaco-editor.ts',
   'packages/ts-language-service/src/test-workspace-typescript.ts',
   'packages/runtime-wasi/src/syscalls/fd-test-fixture.ts',
@@ -30,7 +35,12 @@ const basenameTestPaths = [
   'packages/npm-client/src/_test-fixtures/tar-builder.ts',
   'packages/workbench/src/workers/test-fixtures/durable-owner-fs.ts',
 ];
-const testSourcePaths = [...dottedTestPaths, ...directoryTestPaths, ...basenameTestPaths];
+const testSourcePaths = [
+  ...dottedTestPaths,
+  ...multiPartDottedTestPaths,
+  ...directoryTestPaths,
+  ...basenameTestPaths,
+];
 
 function pickupAcrossAuthority(candidatePath: string, finalPath = 'packages/final/src/impl.ts') {
   const git = (...args: string[]) => {
@@ -163,4 +173,21 @@ describe('pickupCommit', () => {
     };
     expect(pickupCommit('main', git)).toBe('main');
   });
+});
+
+describe('classifyAutonomousRunPath', () => {
+  it.each([
+    'packages/x/src/a.test.d.ts',
+    'tools/checks/a.test.ts.snap',
+    'docs/process/a.test.coverage.md',
+  ])('keeps a multi-part dotted test tail as test support: %s', (path) => {
+    expect(classifyAutonomousRunPath(path)).toBe('test-support');
+  });
+
+  it.each(['docs/backlog/process-meta/test-coverage-debt.md', 'docs/process/a-test-fixture.md'])(
+    'keeps a non-JavaScript basename near-miss as other: %s',
+    (path) => {
+      expect(classifyAutonomousRunPath(path)).toBe('other');
+    },
+  );
 });
