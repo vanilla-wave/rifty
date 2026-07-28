@@ -14,6 +14,7 @@ import ts from 'typescript';
 export const GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/npm-client/src/installer.ts',
   'packages/npm-client/src/linker.ts',
+  'packages/npm-client/src/internal/shadow/admission.ts',
   'packages/npm-client/src/internal/shadow/planner.ts',
   'packages/npm-client/src/internal/shadow/manager.ts',
   'packages/npm-client/src/internal/shadow/port.ts',

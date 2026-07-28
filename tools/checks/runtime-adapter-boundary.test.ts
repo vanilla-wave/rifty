@@ -9,6 +9,7 @@ describe('runtime adapter generic-module boundary', () => {
     expect(GENERIC_RUNTIME_ADAPTER_MODULES).toEqual([
       'packages/npm-client/src/installer.ts',
       'packages/npm-client/src/linker.ts',
+      'packages/npm-client/src/internal/shadow/admission.ts',
       'packages/npm-client/src/internal/shadow/planner.ts',
       'packages/npm-client/src/internal/shadow/manager.ts',
       'packages/npm-client/src/internal/shadow/port.ts',
