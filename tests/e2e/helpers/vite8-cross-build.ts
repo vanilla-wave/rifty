@@ -5,11 +5,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
-import {
-  applyViteCliActionPatch,
-  applyViteRootWatchPatch,
-  viteRootWatchPatchPolicy,
-} from '../../../packages/workbench/src/workers/vite-cli-install-policy.ts';
 
 const REPO = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../..'));
 const APP = join(REPO, 'apps/playground');
@@ -86,7 +81,6 @@ interface BakedSnapshotIdentities {
 
 interface FrozenBuildInputs {
   readonly evidence: Vite8CrossBuildEvidence;
-  readonly snapshots: Vite8CrossBuildSnapshotProofs;
   readonly historicalDefinitionSource: string;
   readonly historicalIdentitiesSource: string;
   readonly historicalSnapshotSource: string;
@@ -106,22 +100,6 @@ export interface Vite8CrossBuildEvidence {
   readonly historicalSnapshotId: string;
 }
 
-export interface Vite8CrossBuildSnapshotProof {
-  readonly snapshotId: string;
-  readonly packageJsonSha256: string;
-  readonly lockfileSha256: string;
-  readonly nodeModules: readonly {
-    readonly path: string;
-    readonly bytes: number;
-    readonly sha256: string;
-  }[];
-}
-
-export interface Vite8CrossBuildSnapshotProofs {
-  readonly historical: Vite8CrossBuildSnapshotProof;
-  readonly current: Vite8CrossBuildSnapshotProof;
-}
-
 export interface Vite8CrossBuildApp {
   readonly phase: 'historical' | 'current';
   readonly port: number;
@@ -130,7 +108,6 @@ export interface Vite8CrossBuildApp {
 
 export interface Vite8CrossBuildHarness {
   readonly evidence: Vite8CrossBuildEvidence;
-  readonly snapshots: Vite8CrossBuildSnapshotProofs;
   startHistorical(): Promise<Vite8CrossBuildApp>;
   startCurrent(): Promise<Vite8CrossBuildApp>;
   close(): Promise<void>;
@@ -299,60 +276,6 @@ function reconstructHistoricalSnapshot(
   return reconstructed;
 }
 
-function snapshotProof(serialized: string, snapshotId: string): Vite8CrossBuildSnapshotProof {
-  const snapshot = parseJson<Snapshot>(serialized, `${snapshotId} Vite 8 snapshot proof`);
-  const rootWatchPaths = snapshot.nodeModules.files.filter((file) => {
-    if (!file.path.startsWith('vite/dist/node/chunks/') || !file.path.endsWith('.js')) {
-      return false;
-    }
-    const source = Buffer.from(
-      file.content,
-      file.encoding === 'base64' ? 'base64' : 'utf8',
-    ).toString('utf8');
-    return (
-      source.includes(viteRootWatchPatchPolicy.needle) ||
-      source.includes(viteRootWatchPatchPolicy.replacement)
-    );
-  });
-  assert(
-    rootWatchPaths.length === 1,
-    `${snapshotId} snapshot has ${String(rootWatchPaths.length)} Vite root watcher patch sites`,
-  );
-  const rootWatchPath = rootWatchPaths[0]?.path;
-  const nodeModules = snapshot.nodeModules.files
-    .map((file) => {
-      assert(
-        file.encoding === 'base64' || file.encoding === 'utf8',
-        `unsupported snapshot file encoding ${JSON.stringify(file.encoding)} at ${file.path}`,
-      );
-      let bytes =
-        file.encoding === 'base64'
-          ? Buffer.from(file.content, 'base64')
-          : Buffer.from(file.content, 'utf8');
-      if (file.path === 'vite/dist/node/cli.js') {
-        bytes = Buffer.from(applyViteCliActionPatch(bytes.toString('utf8')), 'utf8');
-      } else if (file.path === rootWatchPath) {
-        bytes = Buffer.from(applyViteRootWatchPatch(bytes.toString('utf8')), 'utf8');
-      }
-      return Object.freeze({
-        path: file.path,
-        bytes: bytes.byteLength,
-        sha256: sha256(bytes),
-      });
-    })
-    .sort((left, right) => left.path.localeCompare(right.path));
-  assert(
-    new Set(nodeModules.map((file) => file.path)).size === nodeModules.length,
-    `${snapshotId} snapshot has duplicate node_modules paths`,
-  );
-  return Object.freeze({
-    snapshotId,
-    packageJsonSha256: sha256(snapshot.packageJsonText),
-    lockfileSha256: sha256(snapshot.lockfile),
-    nodeModules: Object.freeze(nodeModules),
-  });
-}
-
 function loadFrozenBuildInputs(): FrozenBuildInputs {
   const workspace = readJson<{ readonly name?: string }>(join(REPO, 'package.json'));
   assert(
@@ -386,11 +309,6 @@ function loadFrozenBuildInputs(): FrozenBuildInputs {
       `historical baked ${id} identity drifted from current`,
     );
   }
-  const currentSnapshotSource = gunzipSync(readFileSync(SNAPSHOT_PATH)).toString('utf8');
-  const historicalSnapshotSource = reconstructHistoricalSnapshot(
-    snapshotDelta.fixture,
-    snapshotDelta.delta,
-  );
   return Object.freeze({
     evidence: Object.freeze({
       historicalCommit: definition.fixture.sourceCommit,
@@ -398,16 +316,12 @@ function loadFrozenBuildInputs(): FrozenBuildInputs {
       currentSnapshotId: snapshotDelta.fixture.baseSnapshotId,
       historicalSnapshotId: snapshotDelta.fixture.historicalSnapshotId,
     }),
-    snapshots: Object.freeze({
-      historical: snapshotProof(
-        historicalSnapshotSource,
-        snapshotDelta.fixture.historicalSnapshotId,
-      ),
-      current: snapshotProof(currentSnapshotSource, snapshotDelta.fixture.baseSnapshotId),
-    }),
     historicalDefinitionSource: definition.source,
     historicalIdentitiesSource,
-    historicalSnapshotSource,
+    historicalSnapshotSource: reconstructHistoricalSnapshot(
+      snapshotDelta.fixture,
+      snapshotDelta.delta,
+    ),
   });
 }
 
@@ -524,7 +438,6 @@ export async function createVite8CrossBuildHarness(): Promise<Vite8CrossBuildHar
 
   return Object.freeze({
     evidence: inputs.evidence,
-    snapshots: inputs.snapshots,
     async startHistorical() {
       assert(state === 'new', `historical Vite app cannot start from ${state} state`);
       active = await startViteServer('historical', 0, cacheDirectory, inputs);

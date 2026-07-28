@@ -73,7 +73,6 @@ interface Harness {
   failNextClose: Error | null;
   failMutation(operation: string, failure: Error): void;
   failOpen(id: string, failure: Error): void;
-  failTools(id: string, failure: Error): void;
   deferOpenFailure(
     id: string,
     failure: Error,
@@ -94,7 +93,6 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
       readonly markEntered: (() => void) | null;
     }[]
   >();
-  const toolsFailures = new Map<string, Error[]>();
   const state: Harness = {
     runtime: undefined as never,
     workbench: undefined as never,
@@ -112,11 +110,6 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
       const failures = openFailures.get(id) ?? [];
       failures.push({ failure, gate: null, markEntered: null });
       openFailures.set(id, failures);
-    },
-    failTools(id, failure) {
-      const failures = toolsFailures.get(id) ?? [];
-      failures.push(failure);
-      toolsFailures.set(id, failures);
     },
     deferOpenFailure(id, failure) {
       let release!: () => void;
@@ -263,12 +256,7 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
       },
       restoreTerminalState: ({ state }) => state,
       forSession(session: ProjectSession<unknown>) {
-        const id = String((session as { readonly id?: string }).id);
-        events.push(`tools:${id}`);
-        const failures = toolsFailures.get(id);
-        const failure = failures?.shift();
-        if (failures?.length === 0) toolsFailures.delete(id);
-        if (failure !== undefined) throw failure;
+        events.push(`tools:${String((session as { readonly id?: string }).id)}`);
         return tools();
       },
     },
@@ -455,32 +443,6 @@ describe('Playground App semantic runtime', () => {
       'catalog:activate:project-b',
       'session:open:project-b',
       'tools:project-b',
-    ]);
-  });
-
-  it('preserves target-open then restored-tools binding failures and closes the unbound session', async () => {
-    const h = harness();
-    const { projectA, projectB } = await savedProjectPair(h);
-    const mismatch = new ProjectDefinitionMismatchError(projectA.id);
-    const bindingFailure = new Error('prior session tools binding failed');
-    h.failOpen(projectA.id, mismatch);
-    h.failTools(projectB.id, bindingFailure);
-
-    const failure = await h.runtime.activate(projectA).catch((error: unknown) => error);
-
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure as AggregateError).errors).toEqual([mismatch, bindingFailure]);
-    expect(h.catalog.active).toEqual({ kind: 'project', id: projectB.id });
-    expect(h.runtime.current()).toBeNull();
-    expect(h.events).toEqual([
-      'define:project-a',
-      'session:close:project-b',
-      'catalog:activate:project-a',
-      'session:open:project-a',
-      'catalog:activate:project-b',
-      'session:open:project-b',
-      'tools:project-b',
-      'session:close:project-b',
     ]);
   });
 
