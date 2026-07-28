@@ -20,6 +20,13 @@ const TERMINAL_TAB = '.rf-terminal-tab__select[role="tab"]';
 // Full-suite concurrency can delay project transitions beyond UI animation budgets.
 const PROJECT_TRANSITION_TIMEOUT = 90_000;
 
+interface MismatchToastState {
+  readonly chip: string | null;
+  readonly liveCount: number;
+  readonly alphaActive: string | null;
+  readonly betaActive: string | null;
+}
+
 /**
  * Open a FRESH shell terminal and make it the active slot — robust to the running
  * tab count (the dev-server boot owns one session; a switch recreates sessions, so
@@ -45,7 +52,7 @@ async function openProjects(page: Page): Promise<void> {
 }
 
 /** Save the active scratch as a named project via the launcher Projects tab. */
-async function saveScratchAs(page: Page, name: string): Promise<void> {
+async function saveScratchAs(page: Page, name: string): Promise<string> {
   await openProjects(page);
   const save = page.locator('[data-action="save-scratch"]');
   await expect(save).toBeEnabled({ timeout: PROJECT_TRANSITION_TIMEOUT });
@@ -69,8 +76,13 @@ async function saveScratchAs(page: Page, name: string): Promise<void> {
   await expect(dialog).toHaveCount(0, { timeout: PROJECT_TRANSITION_TIMEOUT });
   const card = page.locator('.rf-pcard[data-project]', { hasText: name }).first();
   await expect(card).toBeVisible({ timeout: PROJECT_TRANSITION_TIMEOUT });
+  const projectId = await card.getAttribute('data-project');
+  if (projectId === null || projectId.length === 0) {
+    throw new Error(`Saved project ${name} has no owner project id`);
+  }
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  return projectId;
 }
 
 /** Switch to a named project by clicking its durable project card. */
@@ -92,6 +104,78 @@ async function expectProjectChipName(page: Page, name: string): Promise<void> {
   await expect(chipName).toHaveText(name, { timeout: 15_000 });
   await expect(chipName).not.toHaveText('Untitled scratch');
   await expect(chipName).toHaveCSS('font-family', /JetBrains Mono/);
+}
+
+async function mismatchPersistedDefinitionIdentity(
+  page: Page,
+  projectId: string,
+  replacement: string,
+): Promise<void> {
+  await page.evaluate(
+    async ({ projectId, replacement }) => {
+      let directory = await navigator.storage.getDirectory();
+      for (const segment of ['.rifty', 'workbench', 'v1', 'projects', projectId]) {
+        directory = await directory.getDirectoryHandle(segment);
+      }
+      const handle = await directory.getFileHandle('definition.json');
+      const metadata = JSON.parse(await (await handle.getFile()).text()) as Record<string, unknown>;
+      if (
+        metadata.version !== 1 ||
+        metadata.projectKey !== projectId ||
+        typeof metadata.definitionIdentity !== 'string'
+      ) {
+        throw new Error(`Unexpected persisted definition metadata for ${projectId}`);
+      }
+      const writable = await handle.createWritable();
+      await writable.write(JSON.stringify({ ...metadata, definitionIdentity: replacement }));
+      await writable.close();
+    },
+    { projectId, replacement },
+  );
+}
+
+async function armFirstMismatchToastState(
+  page: Page,
+  alphaId: string,
+  betaId: string,
+): Promise<void> {
+  await page.evaluate(
+    ({ alphaId, betaId }) => {
+      const state = window as unknown as Record<string, unknown>;
+      state.__riftyFirstMismatchToastState = null;
+      const project = (id: string): Element | undefined =>
+        [...document.querySelectorAll('.rf-pcard[data-project]')].find(
+          (card) => card.getAttribute('data-project') === id,
+        );
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('.rf-toast[data-tone="error"]') === null) return;
+        state.__riftyFirstMismatchToastState = {
+          chip:
+            document.querySelector('[data-action="open-launcher"] .rf-chip__name')?.textContent ??
+            null,
+          liveCount: document.querySelectorAll('.rf-livepill[data-state="running"]').length,
+          alphaActive: project(alphaId)?.getAttribute('data-active') ?? null,
+          betaActive: project(betaId)?.getAttribute('data-active') ?? null,
+        } satisfies MismatchToastState;
+        observer.disconnect();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    },
+    { alphaId, betaId },
+  );
+}
+
+async function firstMismatchToastState(page: Page): Promise<MismatchToastState> {
+  const read = (): Promise<MismatchToastState | null> =>
+    page.evaluate(
+      () =>
+        ((window as unknown as Record<string, unknown>)
+          .__riftyFirstMismatchToastState as MismatchToastState | null) ?? null,
+    );
+  await expect.poll(read, { timeout: PROJECT_TRANSITION_TIMEOUT }).not.toBeNull();
+  const state = await read();
+  if (state === null) throw new Error('First mismatch toast state was not captured');
+  return state;
 }
 
 test.describe('ADR-0165 §4 — switch coherence: surfaces follow the active project', () => {
@@ -122,6 +206,59 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the active pro
 
     // The switched-in scratch's dev server reboots too.
     await expectViteDevServerReady(page);
+  });
+});
+
+test.describe('Project activation/open compensation', () => {
+  test('definition mismatch restores the prior saved project before the error is shown', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner and durable OPFS require Chromium');
+    test.setTimeout(240_000);
+    page.on('pageerror', (err) => console.log('[pageerror]', err.message));
+
+    const tag = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const alphaName = `Activation-A-${tag}`;
+    const betaName = `Activation-B-${tag}`;
+
+    await bootProjectFiles(page);
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
+      timeout: 15_000,
+    });
+    const alphaId = await saveScratchAs(page, alphaName);
+    await pickStarter(page, 'node-worker');
+    const betaId = await saveScratchAs(page, betaName);
+
+    await mismatchPersistedDefinitionIdentity(page, alphaId, `mismatch-${tag}`);
+    await page.reload();
+    await expect(page.locator('.rf-app[data-project-index="ready"]')).toBeVisible({
+      timeout: PROJECT_TRANSITION_TIMEOUT,
+    });
+    await expectProjectChipName(page, betaName);
+
+    await openProjects(page);
+    const alphaCard = page.locator('.rf-pcard[data-project]', { hasText: alphaName }).first();
+    const betaCard = page.locator('.rf-pcard[data-project]', { hasText: betaName }).first();
+    await expect(alphaCard).toHaveAttribute('role', 'button', {
+      timeout: PROJECT_TRANSITION_TIMEOUT,
+    });
+    await expect(betaCard).toHaveAttribute('data-active', 'true');
+
+    await armFirstMismatchToastState(page, alphaId, betaId);
+    await alphaCard.click();
+    const mismatch = page.locator('.rf-toast[data-tone="error"]');
+    await expect(mismatch).toContainText('ProjectDefinitionMismatchError', {
+      timeout: PROJECT_TRANSITION_TIMEOUT,
+    });
+    await expect(mismatch).toContainText('has a different definition');
+
+    expect(await firstMismatchToastState(page)).toEqual({
+      chip: betaName,
+      liveCount: 1,
+      alphaActive: 'false',
+      betaActive: 'true',
+    });
   });
 });
 
