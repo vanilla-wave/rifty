@@ -66,7 +66,29 @@ through `packageLinkTargets()` and the real mixed install: one post-acquisition
 preflight produces the array consumed by targets, prepared linking, and
 prepared lock construction. It covers exact targets, valid binful poisoned
 getters, and zero post-acquisition VFS or lock effects on rejection. Test
-counts remain unrecorded until each successor's committed run.
+counts are recorded from each successor's committed run.
+
+The first installer checkpoint at
+`b9bd5b4e977c48182c00bdb51d2c6331675641a9` recorded 5 tests, 5 RED and
+0 GREEN. Review blocked the manually composed carrier proof from claiming
+real-install reference identity and required traversal in the new malformed
+table. The lawful re-cut keeps one direct prepared composition, adds the
+inherited traversal floor beside the non-canonical REDs, and arms its
+all-method ledger only after both acquisitions complete.
+
+The re-cut focused suite records 6 tests: 5 RED and the inherited traversal
+floor GREEN. The green row already rejects before target/VFS/lock publication;
+the two non-canonical rows remain RED because the installer-local target helper
+publishes normalized paths before linker preflight.
+
+The prepared array is package-private and never crosses an observable callback,
+so public `install()` cannot expose its call count or reference identity.
+Final source/type review owns that exact local binding; a mock, source-grep
+test, or production test hook would be removable machinery. Behavioral tests
+own exact prepared targets, one raw read across all three consumers, and every
+reachable real-install error/effect. The full raw malformed matrix remains at
+linker ingress because absolute, wrong-root, wrong-owner, and safe-relative
+wrong-suffix paths are physically excluded from supported installer placement.
 
 ## Sibling gates
 

@@ -96,10 +96,7 @@ interface FakeRegistryEntry {
 }
 
 class FakeRegistry extends RegistryClient {
-  constructor(
-    private readonly db: ReadonlyMap<string, ReadonlyMap<string, FakeRegistryEntry>>,
-    private readonly onTarball: () => void,
-  ) {
+  constructor(private readonly db: ReadonlyMap<string, ReadonlyMap<string, FakeRegistryEntry>>) {
     super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
   }
 
@@ -116,7 +113,6 @@ class FakeRegistry extends RegistryClient {
   }
 
   override async getTarball(tarballUrl: string): Promise<Uint8Array> {
-    this.onTarball();
     const match = /^fake:\/\/([^/]+)\/(.+)$/.exec(tarballUrl);
     if (!match) throw new Error(`fake registry: bad tarball URL ${tarballUrl}`);
     const name = decodeURIComponent(match[1] ?? '');
@@ -231,6 +227,11 @@ describe('resolved-package installer path ingress', () => {
 
   it.each([
     {
+      label: 'traversal',
+      name: '@scope/../../../outside/node_modules/bad-cli',
+      rawPath: 'node_modules/@scope/../../../outside/node_modules/bad-cli',
+    },
+    {
       label: 'dot segment',
       name: '@scope/./bad-cli',
       rawPath: 'node_modules/@scope/./bad-cli',
@@ -252,6 +253,7 @@ describe('resolved-package installer path ingress', () => {
       const vfs = new MemoryVfs();
       await vfs.mkdir('/project', { recursive: true });
       let armed = false;
+      let acquisitions = 0;
       const vfsCalls: string[] = [];
       const targetPublications: string[][] = [];
       const observedVfs = recordingVfs(vfs, vfsCalls, () => armed);
@@ -265,10 +267,12 @@ describe('resolved-package installer path ingress', () => {
           {
             vfs: observedVfs,
             cwd: '/project',
-            registry: new FakeRegistry(db, () => {
-              armed = true;
-            }),
+            registry: new FakeRegistry(db),
             tarballCache: memoryTarballCache(),
+            onPackage(): void {
+              acquisitions += 1;
+              if (acquisitions === 2) armed = true;
+            },
             assertPortablePaths(paths): void {
               targetPublications.push([...paths]);
             },
@@ -285,6 +289,7 @@ describe('resolved-package installer path ingress', () => {
       });
       expect.soft(targetPublications).toEqual([]);
       expect.soft(vfsCalls).toEqual([]);
+      expect.soft(acquisitions).toBe(2);
       expect.soft(await vfs.exists('/project/node_modules')).toBe(false);
       expect(await vfs.exists('/project/package-lock.json')).toBe(false);
     },
