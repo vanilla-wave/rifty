@@ -6,12 +6,13 @@ created: 2026-07-26
 why: the Sass RED proved recipe v1 admits unproven ranges, copies unproven registry dependencies, and can expose the acquired package bin instead of the substituted package bin; those are missing generic policy authorities, not Sass exceptions
 user_story: As a browser-IDE user installing a builtin-substituted package, I want its accepted request, fetched dependency closure, visible bins, and replay provenance to be exactly the reviewed recipe, but today recipe v1 can widen each of those boundaries
 epic: honest-shadow-substitutions
-sources: [ADR-0310, ADR-0328, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md]
+sources: [ADR-0278, ADR-0310, ADR-0328, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/npm-11-peer-placement-probe.md]
 code:
   - packages/npm-client/src/installer.ts
   - packages/npm-client/src/internal/shadow/planner.ts
   - packages/npm-client/src/linker.ts
-  - packages/npm-client/src/package-bin.ts
+  - packages/workbench/src/workers/package-acquisition-authority.ts
+  - packages/workbench/src/workers/owner-package-shadow-assets.contract.test.ts
 ---
 
 ## Context
@@ -30,19 +31,25 @@ materialization, and replay without shipping the Sass recipe.
   bundled `napi-wasm` membership are pinned by a machine-checked fixture
   independent of catalog source or installer fakes; future registry-backed
   builtins inherit the same external-golden differential.
-- Real npm must pin peer placement/traversal. The committed npm 11 collision
-  probe pins same-command `.bin` ownership independent of manifest order and
-  across incremental reconciliation. Browser acceptance remains the real
-  esbuild/Vite contract, never a local fake of the package being substituted.
+- The committed npm 11 peer probe pins direct and nested peer placement,
+  recursive peer-dependency traversal, pre-write `ERESOLVE`, and byte-identical
+  offline replay. The committed collision probe pins same-command `.bin`
+  ownership independent of manifest order and across incremental
+  reconciliation. Browser acceptance remains the real esbuild/Vite contract,
+  never a local fake of the package being substituted.
 
-## Readiness blockers
+## Readiness evidence
 
-- Add the real-npm peer placement/traversal differential this contract
-  references; current peer tests use the fake registry and do not settle
-  traversal.
-- Add `concurrent-same-key` coverage or a proven physical exclusion for
-  alias/bin/lock writes before this production-tier storage slice becomes
-  ready.
+- `npm-11-peer-placement-probe-output.json` retains the complete normalized npm
+  tree, both lockfiles, error transcript, and zero-read offline replay for the
+  four direct/nested missing/conflicting-peer branches; two identical runs
+  produced the committed SHA-256.
+- ADR-0278's origin Web Lock and sole Workbench owner package FIFO physically
+  exclude alias/bin/lock writers through complete adapter settlement. This
+  slice adds a real install-core same-project proof. Raw public
+  `npm-client.install()` concurrency is not claimed safe; its independently
+  reproduced torn-success gap is captured by
+  `npm-client/public-concurrent-same-cwd-installs`.
 
 ## Acceptance
 
@@ -71,6 +78,10 @@ materialization, and replay without shipping the Sass recipe.
   keep every drift gate green; any behavior-data change regenerates its derived
   artifacts in this PR. Add concise npm-client, shadow-registry, Workbench, and
   playground CHANGELOG entries.
+- Two supported Workbench installs targeting one project remain physically
+  serialized through the existing owner FIFO until materialized files, bins,
+  and the lock commit settle; the second install cannot enter the real
+  npm-client core while the first is parked before its lock write.
 
 ## Parity cases
 
@@ -89,6 +100,9 @@ materialization, and replay without shipping the Sass recipe.
    npm 11 collision probe: the lexicographically first user-visible package
    name owns a shared command, while an acquired registry twin never
    participates.
+7. The committed four-case npm peer graph and the same rifty graph agree on
+   direct/nested placement, recursive leaf traversal, pre-write `ERESOLVE`, and
+   offline tree/lock replay.
 
 ## Fault matrix
 
@@ -102,6 +116,7 @@ materialization, and replay without shipping the Sass recipe.
 | quota-perm-fail | quota/permission rejection during alias or bin writes publishes no success report or lock; retry reconciles exact bytes | root/nested registry alias and shared-bin write faults |
 | sibling-drift | esbuild and LightningCSS share the same policy/linker path | both recipe contract suites plus source boundary gate |
 | observable-order / sibling-drift | shared commands choose the lexical-min user-visible package independently of manifest order and reconcile incremental installs; acquired twins are absent | opposite-order + incremental collision fixtures against npm 11 probe |
+| concurrent-same-key | two Workbench installs target one project while the first is parked before lock publication | existing owner FIFO admits the second only after the first's alias/bin/lock writes settle; exact final recipe, launcher, and lock agree |
 
 ## Out of scope
 
@@ -111,6 +126,9 @@ materialization, and replay without shipping the Sass recipe.
   recognition in generic consumers.
 - Reinterpreting recipe-v1 lockfiles or falling back to acquired/native bins.
 - A public recipe/plugin API or remotely supplied executable policy.
+- Concurrent-safe raw public `npm-client.install()` calls; the supported
+  Workbench product boundary physically excludes them and the generic SDK gap
+  is captured separately.
 
 ## Decisions
 
