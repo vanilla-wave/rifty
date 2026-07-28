@@ -209,6 +209,35 @@ describe('install — lifecycle cancellation (ADR-0314)', () => {
 });
 
 describe('install — package ingress preflight (ADR-0261)', () => {
+  it('rejects a resolved traversal install path before linking any bytes', async () => {
+    const name = '@scope/../../../outside/node_modules/bad-cli';
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(name, new Map([['1.0.0', await makeEntry(name, '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    await expect(
+      install(
+        'root',
+        '1.0.0',
+        { [name]: '1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry: new FakeRegistry(db),
+          assertPortablePaths: () => {},
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: 'EINVALIDPACKAGETAR',
+      path: `node_modules/${name}`,
+    });
+
+    expect(await vfs.exists('/proj/node_modules')).toBe(false);
+    expect(await vfs.exists('/outside/node_modules/bad-cli')).toBe(false);
+    expect(await vfs.exists('/proj/package-lock.json')).toBe(false);
+  });
+
   it('rejects a tar entry that escapes its package before linking any bytes', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set(

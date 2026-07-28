@@ -12,7 +12,12 @@ pnpm vitest run \
   packages/npm-client/src/linker-bin-authority.contract.test.ts
 ```
 
-Current result: 18 tests, 16 RED and 2 GREEN.
+Initial checkpoint
+`83ea4bf28e880eaf6c581de69731548860c318a5`: 18 tests, 16 RED and 2 GREEN.
+Contract+RED review blocked the missing detached-claim, current-target,
+install-path ingress, and single-composer proofs.
+
+Current re-cut result: 28 tests, 24 RED and 4 GREEN.
 
 - opposite current input orders in root and nested scopes write plausible
   launchers instead of rejecting
@@ -21,26 +26,39 @@ Current result: 18 tests, 16 RED and 2 GREEN.
   files instead of settling all package files first;
 - the package-private file phase, normalized-claim bin phase, and current/prior
   preflight seams do not exist;
+- the finite topology and detached-claim sentinels reject a duplicate or unused
+  phased writer; root/string and nested/object cases require one normalization
+  and one target read / launcher write through public, install-tree, and phased
+  entrypoints;
 - prior-owner transition, removal, and recorded-prior-collision cases
-  therefore have no generic loud boundary;
-- invalid install paths and escaping targets reject only after mutation;
+  therefore have no generic loud boundary; a stable prior owner cannot yet
+  return and link only the current target;
+- absolute and traversal install paths retaining the expected package suffix
+  reach VFS mutation through public and install-tree entrypoints, while the
+  missing preflight and package-file phases cannot reject them;
+- escaping bin targets reject only after project-tree mutation;
 - root/nested target-read abort and launcher `ENOSPC` / `EACCES` retry tables
   remain RED until they can enter the missing shared bin phase.
 
-The two GREEN cases retain honest behavior: the same command in independent
-root and nested scopes produces two exact launchers, and a missing target stays
-loud without writing its launcher.
+The four GREEN cases retain honest behavior: the same command in independent
+root and nested scopes produces two exact launchers; existing public and
+install-tree paths each make exactly one target read and launcher write per
+non-colliding claim; and a missing target stays loud without writing its
+launcher.
 
 ## Sibling gates
 
 ```sh
 pnpm vitest run packages/npm-client/src/linker.test.ts
+pnpm vitest run packages/npm-client/src/installer.test.ts
 pnpm check:runtime-adapter-boundary
 pnpm backlog:check
 ```
 
 The inherited linker suite remains the regression floor. The runtime boundary
 gate keeps package-specific shadow names and branches out of the generic
-linker. The serial shadow commit successor must separately prove that real
+linker. The installer suite keeps its independent ADR-0261 ingress safety
+green, including a resolved scoped-name traversal rejected before project-tree
+mutation. The serial shadow commit successor must separately prove that real
 recipe claims use these phases; this generic unit does not infer integration
 from a source grep.

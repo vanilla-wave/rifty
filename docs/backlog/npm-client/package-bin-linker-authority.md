@@ -52,7 +52,9 @@ scheduler, lock owner, or public API ships.
   retains its current public shape.
 - The sole bin pass consumes preflight's normalized claims without reshaping,
   verifies each target, checks abort between reachable operations, and writes
-  the exact launcher. Invalid install paths, escaping or missing targets, and
+  the exact launcher. Every raw-package linker ingress rejects invalid install
+  paths before VFS mutation; the detached bin phase accepts preflight claims
+  only. Escaping or missing targets and
   `ENOSPC` / `EACCES` stay loud; exact retry uses the same writer.
 - The public compat matrix records same-command package-bin settlement as ❌
   with the exact named ceiling. Existing non-colliding package linking stays
@@ -93,6 +95,13 @@ scheduler, lock owner, or public API ships.
 
 ## Decisions
 
+- Contract+RED @
+  `83ea4bf28e880eaf6c581de69731548860c318a5` blocked: prove shaped-claim
+  identity and one shared bin pass across every linker entrypoint, execute
+  stable-owner target changes through the returned current claims, cover
+  absolute/traversal install paths plus the installer safety sibling before
+  mutation, and retain only this selected JIT Items/Budget mapping; one lawful
+  re-cut remains.
 - `split-predecessor:
   9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`; predecessor checkpoints:
   `4c5b583620eebb962b1ea11f355cb5f64c4aa4b8` and
