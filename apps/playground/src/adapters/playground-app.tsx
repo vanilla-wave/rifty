@@ -666,7 +666,10 @@ export function App(props: AppProps) {
         context = await operation(app);
       } catch (error) {
         const restored = runtime?.current() ?? null;
-        return rebindAfterPlaygroundTransitionFailure(error, restored, bindProject);
+        return rebindAfterPlaygroundTransitionFailure(error, restored, async (context) => {
+          const project = await bindProject(context);
+          await project.typescriptBootReady;
+        });
       }
       if (context !== null) await bindProject(context);
       return context;

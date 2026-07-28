@@ -13,6 +13,7 @@ import type {
   PlaygroundSessionToolsView,
   PlaygroundWorkbench,
 } from '@riftydev/workbench/playground';
+import { rethrowAfterCleanup } from './cleanup-after-failure.ts';
 
 export interface PlaygroundAppProjectContext {
   readonly plan: PlaygroundProjectPlan;
@@ -233,7 +234,24 @@ export function createPlaygroundAppRuntime(
     },
 
     activate(plan) {
-      return defineTransition(plan, () => catalog.activate(planRef(plan)));
+      return enqueue(async () => {
+        const definition = workbench.playground.define(plan);
+        const prior = await closeActive();
+        try {
+          await catalog.activate(planRef(plan));
+        } catch (error) {
+          return restoreAfterMutationFailure(prior, error);
+        }
+        try {
+          return await openDefinition(plan, definition);
+        } catch (error) {
+          if (prior === null) throw error;
+          return rethrowAfterCleanup('Playground project activation', error, async () => {
+            await catalog.activate(planRef(prior.plan));
+            await openDefinition(prior.plan, prior.definition);
+          });
+        }
+      });
     },
 
     reset(plan) {
