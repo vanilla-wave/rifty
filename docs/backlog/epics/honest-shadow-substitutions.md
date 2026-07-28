@@ -103,9 +103,13 @@ Contract+RED → Final+GREEN):
    consumes the linker-owned prepared path once across target preparation,
    prepared linking, and prepared lock construction.
 10. `npm-client/package-bin-claim-normalization-authority` —
-    **package-bin-claim-normalization-authority**: pure narrow current/prior
-    types and one exact normalization/settlement preflight, with no VFS or
-    compat ownership.
+    **package-bin-claim-normalization-authority**: terminal blocked predecessor;
+    its two Contract+RED checkpoints forced separate source-normalization and
+    claim-settlement successors. No third checkpoint or source pickup.
+11. `npm-client/package-bin-source-normalization-authority` —
+    **package-bin-source-normalization-authority**: one strict package source
+    becomes exact detached claims once, with no cross-source settlement, VFS,
+    or compat ownership.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -141,3 +145,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | package-bin-claim-linker-authority | 300–700 |
 | package-bin-claim-preflight-authority | 100–300 |
 | package-bin-claim-normalization-authority | 100–200 |
+| package-bin-source-normalization-authority | 50–120 |

@@ -6,6 +6,7 @@ created: 2026-07-28
 why: the terminal claim-preflight checkpoint proved pure current/prior normalization can be specified independently from linker entrypoint mutation ordering
 user_story: As a browser-IDE user installing package CLIs, I want one exact claim authority to reject ownership it cannot settle like npm, but today a broadened internal carrier could admit raw or already-shaped data
 epic: honest-shadow-substitutions
+blocked_by: [npm-client/package-bin-source-normalization-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -13,16 +14,18 @@ code:
 
 ## Context
 
-This is the first split successor to terminal
+This was the first split successor to terminal
 `npm-client/package-bin-claim-preflight-authority` at
-`cbeb4bfe04f270898aa003c04ef8e6edd3daf280`. It owns only pure
-package-private types and one real current/prior preflight. Public,
-cancellable, and prepared linker integration belongs to the serial
-`npm-client/package-bin-claim-link-ingress-authority`.
+`cbeb4bfe04f270898aa003c04ef8e6edd3daf280`. Its second Contract+RED
+checkpoint proved source normalization and cross-source current/prior
+settlement are independently reviewable. This item is now a terminal blocked
+split predecessor and receives no third checkpoint.
 
-The existing linker remains the sole package-bin module. This unit adds no
-module, public API, comparator, scheduler, lock, VFS owner, or package-specific
-branch.
+`npm-client/package-bin-source-normalization-authority` now owns one strict
+source-to-claims boundary. Then
+`npm-client/package-bin-claim-settlement-authority` owns only cross-source
+scope settlement. Public, cancellable, and prepared linker integration remains
+in `npm-client/package-bin-claim-link-ingress-authority`.
 
 ## Reference contract
 
@@ -105,5 +108,19 @@ branch.
 - `contract-red-first:
   880813bf62a85050be44c48694e6560164b5f158`; Standards passed, Spec blocked
   missing string-form rejects, multi-command exactness, and equal-command prior
-  scope isolation. This in-place re-cut is the second and final Contract+RED
-  checkpoint for this unit.
+  scope isolation.
+- `terminal-checkpoint:
+  acf363bc6f34b7b070e787fad6619d99c3839723` — second Contract+RED BLOCKED;
+  this unit receives no third checkpoint.
+- `checkpoint-lineage: [880813bf62a85050be44c48694e6560164b5f158,
+  acf363bc6f34b7b070e787fad6619d99c3839723]`.
+- `split-successors: [npm-client/package-bin-source-normalization-authority,
+  npm-client/package-bin-claim-settlement-authority]`.
+- Contract+RED @ `acf363bc6f34b7b070e787fad6619d99c3839723`
+  blocked exactly: current-only negative type witnesses could admit broadened
+  prior sources; equal-owner root/nested prior claims could admit a global
+  command index.
+- The first successor preserves one strict source list as ordered detached
+  claims without settling duplicates. The second composes it for exact
+  current/prior inputs and keys settlement by scope plus command. Link ingress
+  later proves optional-prior composition against the real prepared entrypoint.

@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal claim-preflight checkpoint proved pure normalization and mutation-free public/cancellable/prepared integration are separate review units
 user_story: As a browser-IDE user installing package CLIs, I want every linker path to reject ambiguous or escaping claims before changing the tree and keep support claims honest
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-claim-normalization-authority]
+blocked_by: [npm-client/package-bin-claim-settlement-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -18,8 +18,9 @@ code:
 This is the serial second split successor to terminal
 `npm-client/package-bin-claim-preflight-authority` at
 `cbeb4bfe04f270898aa003c04ef8e6edd3daf280`. It starts only after
-`npm-client/package-bin-claim-normalization-authority` lands and integrates
-that one pure preflight before mutating linker work.
+`npm-client/package-bin-source-normalization-authority` and
+`npm-client/package-bin-claim-settlement-authority` land, then composes those
+two pure seams before mutating linker work.
 
 The existing linker remains the sole module. This unit adds no public API,
 module, comparator, coordinator, scheduler, lock, or package-specific branch.
@@ -32,8 +33,9 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 - Public and cancellable linker paths carry current prepared packages only.
   The package-private prepared path may also receive optional narrow prior
   facts for the later installer integration.
-- The normalization predecessor owns claim semantics. This unit owns only its
-  truthful placement at existing linker ingresses.
+- The source-normalization and claim-settlement predecessors own pure claim
+  semantics. This unit owns only their truthful composition at existing linker
+  ingresses.
 
 ## Acceptance
 
@@ -75,9 +77,10 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 
 ## Out of scope
 
-- Source/claim types, normalization, read counts, collision/transition/removal
-  decisions, scope separation, and escaping-target semantics;
-  `npm-client/package-bin-claim-normalization-authority` owns them.
+- Source/claim types, normalization, read counts, and escaping-target semantics;
+  `npm-client/package-bin-source-normalization-authority` owns them.
+- Collision/transition/removal decisions and scope separation;
+  `npm-client/package-bin-claim-settlement-authority` owns them.
 - All-files-before-bins ordering, target existence, launcher writing, abort,
   `ENOSPC`, `EACCES`, and retry;
   `npm-client/package-bin-phased-linker-authority` owns them.
@@ -92,9 +95,9 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
   cbeb4bfe04f270898aa003c04ef8e6edd3daf280`; predecessor checkpoints:
   `6fdc19c5b98b9773fa5406126e6ac35c4329b9af` and
   `cbeb4bfe04f270898aa003c04ef8e6edd3daf280`.
-- This draft is linked from the terminal predecessor and normalization
-  contract. It receives no epic Items/Budget selection before normalization
-  lands.
+- This draft is linked from the terminal predecessors and serial pure
+  successors. It receives no epic Items/Budget selection before claim
+  settlement lands.
 - The prepared optional-prior type proof closes the second predecessor blocker
   only when both raw packages and shaped output claims remain rejected.
 - File/bin phase ordering and writer faults stay entirely in the serial phased

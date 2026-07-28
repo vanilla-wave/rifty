@@ -79,9 +79,10 @@ package-specific branch.
 
 ## Out of scope
 
-- Current/prior normalization, narrow source admission, collision/transition
-  settlement, and escaping-target semantics;
-  `npm-client/package-bin-claim-normalization-authority` owns them.
+- Source normalization, narrow admission, and escaping-target semantics;
+  `npm-client/package-bin-source-normalization-authority` owns them.
+- Current/prior collision and transition settlement;
+  `npm-client/package-bin-claim-settlement-authority` owns them.
 - Public/cancellable/prepared zero-mutation integration, optional prior ingress,
   public compat, and the non-colliding floor;
   `npm-client/package-bin-claim-link-ingress-authority` owns them.

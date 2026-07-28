@@ -249,3 +249,45 @@ string/object rejecting witnesses, an exact two-command claim set, and equal
 current/prior commands in independent root/nested scopes. The result is 24
 tests: 23 RED and 1 GREEN, with the same two intentional `TS2578` REDs. It adds
 no VFS, entrypoint, compat, or production-source scope.
+
+## Normalization second blocker and terminal split
+
+The second isolated normalization Contract+RED review at
+`acf363bc6f34b7b070e787fad6619d99c3839723` blocked again. Exact blocker
+summaries:
+
+- first @ `880813bf62a85050be44c48694e6560164b5f158`: string-form rejects,
+  multi-command exactness, and equal-command prior scope isolation;
+- second @ `acf363bc6f34b7b070e787fad6619d99c3839723`: current-only negative
+  type witnesses could admit broadened prior sources; equal-owner root/nested
+  prior claims could admit a global command index.
+
+Per review convergence,
+`npm-client/package-bin-claim-normalization-authority` is a terminal blocked
+split predecessor and receives no third checkpoint. Its lineage is
+`[880813bf62a85050be44c48694e6560164b5f158,
+acf363bc6f34b7b070e787fad6619d99c3839723]`.
+
+The successor allocation is:
+
+- `npm-client/package-bin-source-normalization-authority`: one strict source
+  list becomes ordered detached claims without settling duplicates;
+  prepared/narrow positive and raw/claim negative types; string/object,
+  multi-command, once-read, and escaping-target proof;
+- `npm-client/package-bin-claim-settlement-authority`: exact current/prior
+  source lists compose that normalizer and settle by scope plus command;
+  current/prior ambiguity, stable target, both-argument type witnesses, and
+  distinct-owner equal-command scope proof.
+
+The real optional-prior source type remains in the later link-ingress unit,
+which composes both pure seams before VFS mutation. Only source normalization is
+the current epic Items selection. Historical Budget rows remain append-only
+and the new unit appends `50–120`; claim settlement receives no selected row
+yet.
+
+The fresh source-normalization carrier runs 7 tests: 6 RED and 1 GREEN.
+Package-local typecheck has exactly two intentional `TS2578` REDs while the
+strict package-private export is absent. The carrier returns every
+prepared/narrow string/object claim in order, including duplicates; exact
+escaping-target failures are counted once. It contains no current/prior,
+ceiling, VFS, entrypoint, compat, or production-source work.
