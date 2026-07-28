@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Durable Vite 8 tree replacement proof
 created: 2026-07-28
 why: ADR-0336 changed Vite 8's exact manifest and snapshot identity, but the browser suite does not yet prove that Reset deletes a pre-policy trusted tree and same-card reopen reuses only the current tree offline
@@ -98,6 +98,8 @@ claimed.
 - A second install cache, catalog transaction, migration ledger, or fallback.
 
 ## Decisions
+
+ready-verdict: 2026-07-28 — ADR-0278/0329/0336, the terminal split, and the merged activation-compensation prerequisite settle scope, overlap, Reset authority, and dependency order; the reachable 7177b9da→23948c3d same-origin Chromium artifact, frozen definition/snapshot delta, and WASI closure oracle settle identity, OPFS reachability, exact old/current provenance, Reset, and zero-acquisition reopen evidence; the prior complete-tree Contract+RED carrier plus current activation and owner suites settle the Parity/Fault targets and storage/network boundaries; existing App FIFO, catalog/definition/package authorities, v4 install claims, and the e2e harness supply the required carrier without a new production mechanism.
 
 - `split-predecessor:
   c043302541f639464d310fe1e9ab74a4c084f136`; predecessor checkpoints:
