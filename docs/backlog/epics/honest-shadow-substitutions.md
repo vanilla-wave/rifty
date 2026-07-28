@@ -98,6 +98,14 @@ Contract+RED → Final+GREEN):
    **shadow-materialized-bin-authority**: split successor for collision-free
    recipe bins, acquired-twin suppression, one linker, and commit-scoped
    substitution publication; generic collisions stay loud compat ❌.
+9. `npm-client/package-bin-linker-authority` —
+   **package-bin-linker-authority**: second-blocker split for generic
+   current/prior collision preflight and one package-private phased linker;
+   no shadow integration or npm reify approximation.
+10. `npm-client/shadow-materialized-bin-commit-authority` —
+   **shadow-materialized-bin-commit-authority**: serial second-blocker split
+   for exact recipe/acquired-twin integration and package-files → aliases → one
+   bin pass → shims → lock → report commit order.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -129,3 +137,5 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | sass-scale-proof | 1000–3000 |
 | measured-cleanup | 1000–3000 |
 | shadow-materialized-bin-authority | 500–1200 |
+| package-bin-linker-authority | 300–700 |
+| shadow-materialized-bin-commit-authority | 400–900 |

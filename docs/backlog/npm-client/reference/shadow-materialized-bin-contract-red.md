@@ -8,18 +8,24 @@ source gate only.
 
 ## Executable RED
 
+From a worktree at the recorded terminal SHA:
+
 ```sh
 pnpm vitest run \
   packages/npm-client/src/installer-bin-authority.contract.test.ts
 ```
 
-The first checkpoint at
+The terminal predecessor's first checkpoint at
 `4c5b583620eebb962b1ea11f355cb5f64c4aa4b8` blocked on missing
 recorded-prior-collision, acquired-twin collision-exclusion, internals-shim
-failure, lock-write failure, and Items/Budget evidence. The one lawful re-cut
-adds those proofs.
+failure, lock-write failure, and Items/Budget evidence. The lawful re-cut at
+`9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97` added those proofs and then
+blocked because it still coupled generic current/prior package-bin authority
+to shadow-specific materialization commit authority. The predecessor is
+terminal: no third Contract+RED checkpoint is allowed.
 
-Current result: 24 tests, 22 RED and 2 GREEN.
+Terminal result at
+`9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`: 24 tests, 22 RED and 2 GREEN.
 
 - fresh esbuild reports before the lock write;
 - opposite current manifest orders, public-linker root/nested duplicates, and
@@ -38,6 +44,20 @@ Current result: 24 tests, 22 RED and 2 GREEN.
 The two GREEN cases retain honest existing behavior: equal command text in
 independent root/nested scopes is not a collision, and a missing package-bin
 target stays loud with no lock before an exact retry.
+
+## Successor allocation
+
+- `npm-client/package-bin-linker-authority` owns package-generic current/prior
+  collision preflight, root/nested scope identity, the one package-private
+  phased linker surface, target validation, and the sole bin writer. Its fresh
+  Contract+RED uses ordinary packages only.
+- `npm-client/shadow-materialized-bin-commit-authority` owns exact recipe bin
+  claims, acquired-twin suppression, package-files → registry-aliases → one bin
+  pass → internals-shims → lock → report order, and the full reachable
+  alias/bin/shim/lock fault table.
+- The terminal 24-case file is evidence for the split, not a shared future
+  checkpoint. Each successor receives a fresh isolated Contract+RED review and
+  keeps both predecessor SHAs in lineage.
 
 ## Sibling and source gates
 

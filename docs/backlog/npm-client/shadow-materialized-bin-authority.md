@@ -6,6 +6,7 @@ created: 2026-07-28
 why: the blocked recipe-v2 predecessor proved package bins link before registry aliases, acquired-twin bins can leak, and substitution success can publish before bin or lock settlement
 user_story: As a browser-IDE user invoking a substituted package CLI, I want the exact materialized package to own a collision-free launcher only after its files and lock commit, but today an acquired twin can own it and a failed install can still claim success
 epic: honest-shadow-substitutions
+blocked_by: [npm-client/shadow-materialized-bin-commit-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/shadow-materialized-bin-contract-red.md]
 code:
   - packages/npm-client/src/installer.ts
@@ -21,10 +22,14 @@ blocked checkpoint through
 `87098d2dbaeb5665188b98cbc1a5cdd6ba876cf9`; it is a new unit, not a third
 review of the predecessor.
 
-The existing linker remains the sole package-bin module. This unit owns exact
-collision-free materialized claims, acquired-twin suppression, phase order,
-and commit-scoped substitution reporting. Exact acquisition projection and v2
-replay stay in the serial successor
+This item is now a terminal blocked split predecessor. Its two Contract+RED
+checkpoints proved that generic current/prior package-bin authority and
+shadow-specific commit authority are independently reviewable units. It gets
+no third checkpoint. The existing linker remains the sole package-bin module;
+`npm-client/package-bin-linker-authority` owns its generic preflight and phase
+surface, then `npm-client/shadow-materialized-bin-commit-authority` owns exact
+recipe/acquired-twin integration and commit-scoped reporting. Exact acquisition
+projection and v2 replay stay in the serial successor
 `npm-client/shadow-recipe-v2-acquisition-replay-authority`.
 
 ## Reference contract
@@ -98,6 +103,15 @@ replay stay in the serial successor
 
 ## Decisions
 
+- `terminal-checkpoint:
+  9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97` — second Contract+RED BLOCKED;
+  this unit receives no third checkpoint.
+- `split-successors: [npm-client/package-bin-linker-authority,
+  npm-client/shadow-materialized-bin-commit-authority]`.
+- Contract+RED @ `9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97` blocked:
+  generic current/prior package-bin settlement plus its phased linker surface
+  must land independently of recipe claims, acquired-twin suppression, alias /
+  shim / lock order, and commit-scoped reporting.
 - Contract+RED @ `4c5b583620eebb962b1ea11f355cb5f64c4aa4b8` blocked: add
   recorded-prior-collision, acquired-twin collision exclusion, internals-shim
   failure, and lock-write failure REDs plus the append-only Items/Budget

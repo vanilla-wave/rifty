@@ -30,5 +30,6 @@ and reproduces the golden byte-for-byte.
 
 Dedup searched backlog titles, `code:`, epic Items, and child links. No durable
 match found beyond the now-disproven `shadow-recipe-v2-authority` predecessor
-and its provisional active-goal `shadow-materialized-bin-authority` split;
-neither owns npm reify lifecycle as an independent contract.
+and its terminal active-goal materialized-bin predecessors. The
+`package-bin-linker-authority` successor keeps ambiguity loud but does not own
+npm reify lifecycle as an independent contract.
