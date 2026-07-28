@@ -339,3 +339,11 @@ single-source export is absent. A prepared three-command non-monotonic object,
 a narrow nested scoped string, and exact later-invalid string/object targets
 prove one-source behavior without list, settlement, VFS, entrypoint, compat, or
 production-source scope.
+
+Its first isolated review at
+`b0c2e20613ec002db35a4dc5b220024f5117131a` blocked two gaps: command
+reordering was misclassified as `lossy-aggregate` instead of
+`observable-order`, and the real conditional export did not reject a source
+list or second source argument. The in-place final re-cut corrects the fault
+row and adds both negative witnesses. Package-local typecheck now has exactly
+four intentional `TS2578` REDs while the strict single-source export is absent.

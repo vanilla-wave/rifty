@@ -26,7 +26,8 @@ interface PackageBinSourceClaimApi {
 const contractApi = linker as unknown as Partial<PackageBinSourceClaimApi>;
 
 type MissingNormalizer = (
-  source: PackageBinSource | ResolvedPackage | PackageBinClaim,
+  source: PackageBinSource | ResolvedPackage | PackageBinClaim | readonly PackageBinSource[],
+  additional?: PackageBinSource,
 ) => readonly PackageBinClaim[];
 type ConditionalExport<TKey extends PropertyKey> = TKey extends keyof typeof linker
   ? Extract<(typeof linker)[TKey], (...args: never[]) => unknown>
@@ -46,6 +47,10 @@ function proveBinSourceTypes(
   normalize(raw);
   // @ts-expect-error Contract: shaped output claims are not bin sources.
   normalize(claim);
+  // @ts-expect-error Contract: source-list aggregation belongs to its successor.
+  normalize([narrow]);
+  // @ts-expect-error Contract: one call accepts exactly one source.
+  normalize(narrow, prepared);
   void preparedClaims;
   void narrowClaims;
 }
@@ -130,7 +135,7 @@ describe('package-bin source claim authority', () => {
     expect(npmClientRoot).not.toHaveProperty('normalizePackageBinSource');
   });
 
-  it('[fault: lossy-aggregate] preserves non-monotonic object command order', () => {
+  it('[fault: observable-order] preserves non-monotonic object command order', () => {
     const normalize = requireNormalizer();
     const preparedPackage = observedPackage(
       pkg('multi-cli', 'node_modules/multi-cli', {

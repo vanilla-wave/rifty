@@ -36,7 +36,8 @@ settlement, history, and VFS. The serial
 
 - One package-private source type positively admits a prepared package and a
   narrow fact. Negative type witnesses reject raw `ResolvedPackage` and shaped
-  `PackageBinClaim`; the real single-source function has no broader input.
+  `PackageBinClaim`; the real single-source function also rejects a source list
+  and any second source argument.
 - A prepared root object with three deliberately non-monotonic commands returns
   every exact detached claim in insertion order. A narrow nested scoped-package
   string uses the package basename as command and preserves exact scope, owner,
@@ -49,8 +50,8 @@ settlement, history, and VFS. The serial
 
 ## Parity cases
 
-1. Prepared/narrow positives compile; raw package and shaped claim negatives
-   remain rejected.
+1. Prepared/narrow positives compile; raw package, shaped claim, source-list,
+   and second-source negatives remain rejected.
 2. A three-command non-monotonic object returns exact insertion-ordered claims
    after one read.
 3. A nested scoped string returns its exact default command and target after
@@ -65,7 +66,7 @@ settlement, history, and VFS. The serial
 |---|---|---|
 | corrupt-input | only strict sources enter; escaping string/object targets reject exactly | positive/negative types plus later-invalid target table |
 | sibling-drift | prepared/narrow and string/object shapes share one exact once-read boundary | multi-command/scoped-string claims plus counters |
-| lossy-aggregate | object command order and exact fields survive normalization | three-command non-monotonic claim sequence |
+| observable-order | object command order and exact fields survive normalization | three-command non-monotonic claim sequence |
 
 ## Out of scope
 
@@ -92,3 +93,8 @@ settlement, history, and VFS. The serial
   deduplicate claims, index scopes, or choose a winner.
 - Three non-monotonic commands reject both ascending and descending comparator
   false-greens without prescribing a comparator of its own.
+- `contract-red-first:
+  b0c2e20613ec002db35a4dc5b220024f5117131a`; Standards blocked the
+  `lossy-aggregate` misclassification and Spec blocked missing array/second-arg
+  negative witnesses. This in-place re-cut is the second and final Contract+RED
+  checkpoint for this unit.
