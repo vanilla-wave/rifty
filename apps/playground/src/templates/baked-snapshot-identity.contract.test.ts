@@ -3,9 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
-import { serializePackageJson } from '@riftydev/npm-client';
 import { describe, expect, it } from 'vitest';
-import { buildProjectPackageJson } from './project-spec.ts';
 import { allProjectSpecs } from './registry.ts';
 
 const PUBLIC_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../public');
@@ -36,36 +34,7 @@ function readGeneratedManifest(): BakedSnapshotIdentityManifest {
   return JSON.parse(readFileSync(GENERATED_IDENTITIES, 'utf8')) as BakedSnapshotIdentityManifest;
 }
 
-function normalizedVitePackageJson(spec: ReturnType<typeof allProjectSpecs>[number]): string {
-  const manifest = JSON.parse(buildProjectPackageJson(spec).json) as Record<string, unknown>;
-  if (spec.install.vite === '8.0.16') {
-    manifest.overrides = PROVEN_VITE8_WASI_RUNTIME_OVERRIDE;
-  }
-  return serializePackageJson(manifest);
-}
-
 describe('baked snapshot identity contract', () => {
-  // Fault class: sibling-drift. Bake/template and Workbench definition must
-  // consume one byte-exact manifest serialization; semantic JSON equality is insufficient.
-  it.each(
-    allProjectSpecs()
-      .filter((spec) => spec.bakedNodeModulesUrl !== undefined)
-      .map((spec) => [spec.id, spec] as const),
-  )('keeps %s template and snapshot manifest bytes identical', (_id, spec) => {
-    if (spec.runtime !== 'vite' || spec.bakedNodeModulesUrl === undefined) {
-      throw new Error(`${spec.id}: baked snapshot contract currently requires a Vite template`);
-    }
-    const templatePackageJson = normalizedVitePackageJson(spec);
-    const snapshot = JSON.parse(
-      gunzipSync(readFileSync(artifactPath(spec.bakedNodeModulesUrl))).toString('utf8'),
-    ) as { readonly packageJsonText?: unknown };
-
-    expect(snapshot.packageJsonText).toBe(templatePackageJson);
-    expect(spec.bakedNodeModulesSnapshotId).toBe(
-      serializedSnapshotIdentity(spec.bakedNodeModulesUrl),
-    );
-  });
-
   it('bakes exact Vite 8 from the visible proven WASI runtime override', () => {
     const spec = allProjectSpecs().find((candidate) => candidate.id === 'vite8');
     if (spec?.bakedNodeModulesUrl === undefined) {

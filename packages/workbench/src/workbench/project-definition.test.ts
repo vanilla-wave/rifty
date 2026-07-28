@@ -283,9 +283,56 @@ describe('ProjectDefinition', () => {
       }),
     );
     expect(devDependencyOwned.devDependencies).toEqual({ vite: '9.0.0' });
-    expect(dependencyOwned.overrides).toBeUndefined();
-    expect(devDependencyOwned.overrides).toBeUndefined();
   });
+
+  it.each([
+    [
+      'viteVersion option',
+      {
+        files: { '/package.json': '{"overrides":{"kleur":"npm:kleur@4.1.5"}}' },
+        viteVersion: '8.0.15',
+      },
+    ],
+    [
+      'manifest dependency',
+      {
+        files: {
+          '/package.json':
+            '{"dependencies":{"vite":"7.3.1"},"overrides":{"kleur":"npm:kleur@4.1.5"}}',
+        },
+      },
+    ],
+    [
+      'manifest devDependency',
+      {
+        files: {
+          '/package.json':
+            '{"devDependencies":{"vite":"9.0.0"},"overrides":{"kleur":"npm:kleur@4.1.5"}}',
+        },
+      },
+    ],
+    [
+      'dependencies option',
+      {
+        files: { '/package.json': '{"overrides":{"kleur":"npm:kleur@4.1.5"}}' },
+        dependencies: { vite: '7.3.1' },
+      },
+    ],
+    [
+      'devDependencies option',
+      {
+        files: { '/package.json': '{"overrides":{"kleur":"npm:kleur@4.1.5"}}' },
+        devDependencies: { vite: '9.0.0' },
+      },
+    ],
+  ] satisfies ReadonlyArray<readonly [string, Omit<DefinitionOptions, 'id'>]>)(
+    'leaves non-exact-Vite-8 overrides unchanged for %s',
+    (_label, supplied) => {
+      expect(
+        packageManifest(projects.vite({ id: 'non-vite8-runtime-policy', ...supplied })).overrides,
+      ).toEqual({ kleur: 'npm:kleur@4.1.5' });
+    },
+  );
 
   it.each([
     ['implicit default', { files: {} }],

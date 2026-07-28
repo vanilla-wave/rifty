@@ -129,6 +129,9 @@ interface ContractPaths {
 
 const VITE_BIN = '/scratch/node_modules/.bin/vite';
 const PUBLIC_VITE_BIN = '/node_modules/.bin/vite';
+const PROVEN_VITE8_WASI_RUNTIME_OVERRIDE = {
+  '@napi-rs/wasm-runtime': 'npm:@napi-rs/wasm-runtime@1.1.6',
+} as const;
 const DIRECT_SOURCE = 'export const answer: number = 42;\n';
 const DIRECT_TRANSFORM_OPTIONS = Object.freeze({
   loader: 'ts',
@@ -183,6 +186,17 @@ function pathsFor(token: string, fixtureRoot: '/scratch' | ''): ContractPaths {
     optimizeResult: `${dir}/optimize-module.json`,
     infoResult: `${dir}/info-no-start.json`,
   };
+}
+
+async function installedPackageVersion(page: Page, packageName: string): Promise<string> {
+  const manifest = await readOwnerFile(page, `/scratch/node_modules/${packageName}/package.json`);
+  expect(manifest.ok, manifest.error).toBe(true);
+  if (!manifest.ok) throw new Error(`${packageName} manifest missing`);
+  const parsed = JSON.parse(manifest.text) as { readonly version?: unknown };
+  if (typeof parsed.version !== 'string') {
+    throw new Error(`${packageName} manifest version missing`);
+  }
+  return parsed.version;
 }
 
 async function bundleProbe(): Promise<string> {
@@ -1290,6 +1304,53 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
   }
 });
 
+test('real Rifty install honors the npm-standard Vite 8 WASI runtime alias', async ({ page }) => {
+  test.setTimeout(180_000);
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-vite8-runtime-alias-oracle',
+    persistence: 'ephemeral',
+    plan: {
+      kind: 'vite',
+      id: 'scratch',
+      starterId: 'vite8-runtime-alias-oracle',
+      templateId: 'browser-unit:vite8-runtime-alias-oracle',
+      files: {
+        '/package.json': JSON.stringify({
+          private: true,
+          type: 'module',
+          overrides: PROVEN_VITE8_WASI_RUNTIME_OVERRIDE,
+        }),
+        '/index.html': '<div id="app"></div>',
+        '/vite.config.js': DEFAULT_VITE8_CONFIG_JS,
+      },
+      viteVersion: '8.0.16',
+      firstMaterialization: { kind: 'install' },
+      port: 5174,
+    },
+  });
+
+  try {
+    const install = await execLine(page, 'npm install');
+    expect(install.exit, install.out).toBe(0);
+    await expect.poll(() => installedPackageVersion(page, '@napi-rs/wasm-runtime')).toBe('1.1.6');
+    expect(await installedPackageVersion(page, '@rolldown/binding-wasm32-wasi')).toBe('1.0.3');
+    expect(await installedPackageVersion(page, '@emnapi/core')).toBe('1.10.0');
+    expect(await installedPackageVersion(page, '@emnapi/runtime')).toBe('1.10.0');
+
+    await writeOwnerFile(
+      page,
+      '/scratch/rolldown-wasi-oracle.mjs',
+      "await import('rolldown');\nconsole.log('rolldown-wasi-ok');\n",
+    );
+    const imported = await execLine(page, 'NAPI_RS_FORCE_WASI=1 node rolldown-wasi-oracle.mjs');
+    expect(imported.exit, imported.out).toBe(0);
+    expect(imported.out).toContain('rolldown-wasi-ok');
+  } finally {
+    await closeOwner(page);
+  }
+});
+
 test('Vite 8.0.16 build/preview stay green with no esbuild fetch or activation', async ({
   context,
   page,
@@ -1320,6 +1381,10 @@ test('Vite 8.0.16 build/preview stay green with no esbuild fetch or activation',
   try {
     const install = await execLine(page, 'npm install');
     expect(install.exit, install.out).toBe(0);
+    expect(await installedPackageVersion(page, '@napi-rs/wasm-runtime')).toBe('1.1.6');
+    expect(await installedPackageVersion(page, '@rolldown/binding-wasm32-wasi')).toBe('1.0.3');
+    expect(await installedPackageVersion(page, '@emnapi/core')).toBe('1.10.0');
+    expect(await installedPackageVersion(page, '@emnapi/runtime')).toBe('1.10.0');
 
     const version = await execLine(page, 'vite --version');
     expect(version.exit, version.out).toBe(0);

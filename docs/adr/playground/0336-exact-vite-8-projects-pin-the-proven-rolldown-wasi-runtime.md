@@ -19,6 +19,8 @@ or package selection would break npm parity rather than repair the project.
 A standard npm alias override to runtime 1.1.6 makes both real npm and Rifty
 select the proven binding/core/runtime tuple; the same forced-WASI import then
 succeeds. A hidden resolver substitution would make package provenance false.
+The commands, versions, lock hashes, and observed outputs are recorded in
+[`vite8-wasi-runtime-closure-probe.md`](../../backlog/playground/reference/vite8-wasi-runtime-closure-probe.md).
 The existing Rifty snapshot lock is not npm-stable, while npm lockfile v3
 optional edges are outside Rifty's current lock reader, so neither lockfile is
 an honest shared carrier for this repair.
