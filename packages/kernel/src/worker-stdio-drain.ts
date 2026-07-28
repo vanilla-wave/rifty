@@ -44,11 +44,14 @@ export function createWorkerOutputState(): WorkerOutputState {
     WORD_COUNT * Int32Array.BYTES_PER_ELEMENT,
   ) as WorkerOutputState;
   const words = new Int32Array(state);
-  crypto.getRandomValues(new Uint32Array(state, ATTESTATION_HI_INDEX * 4, 2));
+  // Browsers refuse `getRandomValues` on a view backed by shared memory, so
+  // draw into private memory and copy the words across.
+  const secret = new Uint32Array(2);
+  crypto.getRandomValues(secret);
   // A zero pair would let an unattested frame match; re-roll the impossible.
-  if (words[ATTESTATION_HI_INDEX] === 0 && words[ATTESTATION_LO_INDEX] === 0) {
-    words[ATTESTATION_HI_INDEX] = 1;
-  }
+  if (secret[0] === 0 && secret[1] === 0) secret[0] = 1;
+  words[ATTESTATION_HI_INDEX] = secret[0] as number;
+  words[ATTESTATION_LO_INDEX] = secret[1] as number;
   return state;
 }
 
