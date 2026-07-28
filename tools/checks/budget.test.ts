@@ -144,6 +144,8 @@ describe('evaluateMass', () => {
     'packages/workbench/src/workers/test-fixtures/durable-owner-fs.ts',
     'apps/playground/src/glue/test-monaco-editor.ts',
     'packages/runtime-wasi/src/syscalls/fd-test-fixture.ts',
+    'tools/checks/run-pickup.test.ts',
+    'tests/e2e/vite-save-trust-rebind.spec.ts',
   ];
 
   it('is ok within band; generated and binary rows excluded', () => {
@@ -171,6 +173,18 @@ describe('evaluateMass', () => {
     expect(evaluateMass([{ added: 5000, path }], band, [])).toMatchObject({
       insertions: 0,
       level: 'ok',
+    });
+  });
+
+  it.each([
+    'docs/process/testing.md',
+    'tools/checks/run-pickup.mjs',
+    'tools/test-utils/helper.ts',
+    'tests-manual/e2e/save.ts',
+  ])('counts ordinary hand-written other path %s', (path) => {
+    expect(evaluateMass([{ added: 5000, path }], band, [])).toMatchObject({
+      insertions: 5000,
+      level: 'fail',
     });
   });
 });

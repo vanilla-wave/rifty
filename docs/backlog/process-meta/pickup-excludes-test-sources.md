@@ -28,7 +28,7 @@ tests, so `check:contract-drift` rejects that ready authority and
 mechanism scanning. It misses the repository's `_test-fixtures/`,
 `test-fixtures/`, `test-*`, and `*-test-fixture` support forms. Pickup,
 budget mass, mechanism scanning, and contract drift need one complete
-path-only classification before any production-source decision. The adjacent
+tri-state path classification before any consumer projection. The adjacent
 `process-meta/contract-drift-comment-relink-false-positive` item is not a
 duplicate: it needs hunk-level comment classification; this item is the
 strict path-level test/fixture case.
@@ -42,12 +42,15 @@ ready-authority commit as pickup and validate the source delta after it.
 
 ## Acceptance
 
-- One shared path classifier keeps `apps|packages|services`
-  `.ts|tsx|js|jsx|mjs|cjs` production files in scope while excluding these
-  settled test-support forms: dotted
+- One shared classifier returns `production` for ordinary
+  `apps|packages|services` `.ts|tsx|js|jsx|mjs|cjs` files, `test-support` for
+  these forms anywhere, and `other` otherwise: dotted
   `.test|spec|test-fixture|contract-fixtures` suffixes; directory segments
   `test|tests|__tests__|fixtures|_test-fixtures|test-fixtures`; basenames
   `test-*` and `*-test-fixture`.
+- Pickup, contract drift, and mechanism scanning select only `production`.
+  Budget mass excludes only `test-support`, so ordinary hand-written docs,
+  configs, and tool source remain counted.
 - `pickupCommit` ignores Contract+RED test/fixture commits and returns the
   parent of the first real production-source commit.
 - Hand-written budget mass excludes the same tests and fixtures, matching
@@ -63,7 +66,7 @@ ready-authority commit as pickup and validate the source delta after it.
 Repository policy in `docs/backlog/README.md` is the oracle:
 
 1. Every `apps|packages|services` × `.ts|tsx|js|jsx|mjs|cjs` ordinary source
-   path is production source.
+   path is `production`.
 2. `*.test.*`, `*.spec.*`, `*.test-fixture.*`, and
    `*.contract-fixtures.*` are test sources.
 3. Files below `test/`, `tests/`, `__tests__/`, `fixtures/`,
@@ -72,9 +75,13 @@ Repository policy in `docs/backlog/README.md` is the oracle:
    support. This includes the current
    `test-monaco-editor.ts`, `test-workspace-typescript.ts`,
    `fd-test-fixture.ts`, and `path-test-fixture.ts` witnesses.
-5. Docs, `tools/`, binaries, and generated non-source paths do not start
-   pickup.
-6. A test-only commit followed by ready authority and production source picks
+5. Ordinary docs, `tools/`, binaries, and generated non-source paths are
+   `other`: they do not start pickup but remain budget mass unless an existing
+   generated/binary rule excludes them.
+6. Test-support forms outside the production envelope, including
+   `tools/checks/*.test.ts` and root `tests/**`, remain `test-support` and do
+   not contribute budget mass.
+7. A test-only commit followed by ready authority and production source picks
    the authority commit; replacing the final source with another test keeps
    merge-base pickup.
 
@@ -83,7 +90,7 @@ Repository policy in `docs/backlog/README.md` is the oracle:
 | Boundary / axis | Required outcome | Fault target |
 |---|---|---|
 | Git path/history → production claim / `provenance-lie` | every ordinary root × extension path starts pickup; every settled test-support form does not; test-only history keeps merge-base | table-driven `pickupCommit` matrices, test-only-final branch, temp-git RED → ready/JIT → source sequence |
-| Classifier consumers / `sibling-drift` | pickup, contract drift, budget mass, and mechanism scanning use one exported chokepoint | consumer tables plus actual `contract-drift.mjs` and `budget.mjs` temp-git run |
+| Classifier consumers / `sibling-drift` | one exported tri-state chokepoint feeds the production-only pickup/drift/mechanism projection and test-support-only budget exclusion | consumer tables plus actual `contract-drift.mjs` and `budget.mjs` temp-git run |
 | Internal convention / `frozen-assumption` | exact forms come from committed repository witnesses, not a self-invented wildcard | named witness paths plus positive ordinary-source counterexamples |
 
 Network, storage, cache, worker, concurrency, quota, and torn-write axes are
@@ -96,16 +103,17 @@ no coordination mechanism or mutable owner.
 - Comment-only TODO relink classification remains
   `process-meta/contract-drift-comment-relink-false-positive`.
 - Generated-file budget globs and production directory layout are unchanged.
-- Test-support names outside the exact settled forms above remain production
-  source until separately evidenced; content and imports never affect the
-  classifier.
-- No source file may evade pickup merely because its contents look like a
-  test; classification is path-only.
+- Test-support names outside the exact settled forms above remain
+  `production` inside the envelope and `other` outside it until separately
+  evidenced; content and imports never affect the classifier.
+- No file inside the production envelope may evade pickup merely because its
+  contents look like a test; classification is path-only.
 
 ## Decisions
 
-- Reuse one exported production-source predicate in pickup, contract drift,
-  budget mass, and mechanism scanning; do not add another allowlist.
+- Reuse one exported `production | test-support | other` classifier.
+  Pickup, contract drift, and mechanism scanning compare with `production`;
+  budget mass excludes only `test-support`. Do not add another allowlist.
 - Exclusion is exact to the enumerated forms. `_test-fixtures/tar-builder.ts`
   and `test-fixtures/durable-owner-fs.ts` settle the two directory spellings;
   the four named basename witnesses settle the prefix/hyphen forms.
