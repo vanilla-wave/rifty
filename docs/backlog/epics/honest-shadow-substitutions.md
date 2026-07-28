@@ -102,6 +102,10 @@ Contract+RED → Final+GREEN):
    **resolved-package-installer-prepared-path-consumption**: real installer
    consumes the linker-owned prepared path once across target preparation,
    prepared linking, and prepared lock construction.
+10. `npm-client/package-bin-claim-linker-authority` —
+    **package-bin-claim-linker-authority**: one prepared claim preflight, all
+    package files, then one detached launcher pass; npm-history ambiguity stays
+    a named ceiling before mutation.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -134,3 +138,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | measured-cleanup | 1000–3000 |
 | resolved-package-linker-path-authority | 100–300 |
 | resolved-package-installer-prepared-path-consumption | 100–300 |
+| package-bin-claim-linker-authority | 300–700 |

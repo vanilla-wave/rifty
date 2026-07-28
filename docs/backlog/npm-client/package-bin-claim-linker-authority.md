@@ -33,30 +33,34 @@ API, comparator, scheduler, lock, or package-specific branch.
 - ADR-0335 assigns that lifecycle to npm reify. Current or authoritative-prior
   ambiguity remains exactly
   `NotImplementedError('npm-client.bin-collision-reify')` + compat ❌.
-- The install-path successors supply exact
-  `(package, relativePath, nodeModulesDir)` entries. No phase here accepts raw
-  `ResolvedPackage.installPath`.
+- The install-path successors supply exact current
+  `(package, relativePath, nodeModulesDir)` entries. Bin preflight narrows
+  current and authoritative-prior input to package-private
+  `(package.name/bin, nodeModulesDir)` sources, so prior lock evidence need not
+  invent package files. No phase here accepts raw `ResolvedPackage.installPath`.
 
 ## Acceptance
 
-- Normalize every supported string/object bin once from prepared packages into
-  `(nodeModulesDir, command, visible owner, target)` claims. Equal command text
-  in different scopes remains independent; two current owners in one scope
-  reject before VFS mutation in either input order.
+- Normalize every supported string/object bin once from prepared bin sources
+  into `(nodeModulesDir, command, visible owner, target)` claims. Equal command
+  text in different scopes remains independent; two current owners in one
+  scope reject before VFS mutation in either input order.
 - A recorded prior collision, owner transition, or removal requiring npm reify
   history rejects with the named ceiling. An unchanged sole owner remains
   admissible when its target changes; the returned claim always names the
   current target.
-- One composer runs install-path preparation, bin preflight, all package-file
-  settlement, then exactly one detached bin pass. Public `link()` and
-  `linkInstallTree()` use it; file/bin phases consume prepared packages or
-  shaped claims and never reread raw path/bin data.
+- Raw `link()` and `linkInstallTree()` each prepare install paths once before
+  entering one prepared composer; real `install()` reuses its already-prepared
+  carrier. The composer runs bin preflight, all package-file settlement, then
+  exactly one detached bin pass. File/bin phases consume prepared file
+  packages, narrow bin sources, or shaped claims and never reread raw path/bin
+  data.
 - The bin pass validates each target, checks abort between reachable
   operations, and writes the exact launcher. Escaping/missing targets and
   `ENOSPC` / `EACCES` remain loud; exact retry uses the same writer.
-- New preflight/file phase ingress repeats the predecessor's safe-relative
-  wrong-suffix integration proof through the prepared boundary. It cannot
-  weaken or duplicate raw path validation.
+- The inherited public/installer suite retains the predecessor's safe-relative
+  wrong-suffix proof before the prepared boundary. New phases accept no raw
+  packages and cannot weaken or duplicate path validation.
 - The public compat matrix records same-command package-bin settlement as ❌
   with the exact named ceiling. Existing non-colliding linking stays green.
 
@@ -66,8 +70,9 @@ API, comparator, scheduler, lock, or package-specific branch.
    launchers; independent scopes both link.
 2. Prior collision, transition, and removal reject; stable owners link only
    current string/object targets.
-3. Public and installer entrypoints use one prepare/preflight/files/bins
-   topology and one normalization/bin writer.
+3. Raw public entrypoints prepare once; public and already-prepared installer
+   paths then share one bin-preflight/files/bins composer and one
+   normalization/bin writer.
 4. Missing target, root/nested abort, `ENOSPC`, and `EACCES` stay loud and
    retry lands the exact launcher.
 
@@ -79,7 +84,7 @@ API, comparator, scheduler, lock, or package-specific branch.
 | corrupt-input | prepared path boundary and escaping/missing target reject without launcher | predecessor integration plus target table |
 | torn-state | abort stops later bin work; retry reconciles through one writer | root/nested phase ledger |
 | quota-perm-fail | bin `ENOSPC` / `EACCES` stays loud and retryable | launcher write table |
-| sibling-drift | public/install entrypoints call one composer; phases accept only prepared packages/claims | finite topology and poisoned-raw sentinels |
+| sibling-drift | raw entrypoints prepare once; public/prepared paths call one composer; phases accept only prepared file packages, narrow bin sources, or claims | finite topology and poisoned-raw sentinels |
 
 ## Out of scope
 
@@ -100,5 +105,11 @@ API, comparator, scheduler, lock, or package-specific branch.
 - Both serial install-path successors must land first. This unit restores only
   the terminal checkpoint's claim/phase REDs atop their shared prepared
   carrier.
+- PR #215 settled the internal topology: raw linker entrypoints prepare once,
+  while real install already owns and reuses that carrier. The shared composer
+  therefore begins at bin preflight; no second raw-path pass is added.
+- Authoritative prior carries only package name/bin plus scope. A narrow
+  package-private bin source prevents fake `files` while letting current
+  prepared packages enter the same normalizer structurally.
 - ADR-0335 and the npm oracle settle the fork: ambiguity throws; no comparator
   or plausible winner ships.

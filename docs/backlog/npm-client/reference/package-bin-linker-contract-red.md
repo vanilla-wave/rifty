@@ -75,3 +75,48 @@ green, including a resolved scoped-name traversal rejected before project-tree
 mutation. The serial shadow commit successor must separately prove that real
 recipe claims use these phases; this generic unit does not infer integration
 from a source grep.
+
+## Prepared-path successor baseline
+
+Recorded on post-#215 main
+`5d419b46fe4258ddac55d4a87bccbdff622e13af`, Node 24.16.0 and npm
+11.17.0. PR #215 settled a two-level topology: raw linker entrypoints prepare
+paths once, while real install reuses the same prepared carrier across targets,
+linking, and lock construction. The successor contract therefore places one
+bin-preflight/files/bins composer after that boundary. Authoritative prior is a
+narrow `(package.name/bin, nodeModulesDir)` source; it never fabricates package
+files.
+
+The packed npm oracle reproduced byte-for-byte:
+
+```sh
+node docs/backlog/npm-client/reference/npm-11-bin-collision-probe.mjs \
+  | cmp - docs/backlog/npm-client/reference/npm-11-bin-collision-probe-output.json
+```
+
+The complete inherited path/linker/installer floor remained 115/115 green:
+
+```sh
+pnpm vitest run \
+  packages/npm-client/src/linker-resolved-package-path-authority.contract.test.ts \
+  packages/npm-client/src/installer-prepared-path-consumption.contract.test.ts \
+  packages/npm-client/src/linker.test.ts \
+  packages/npm-client/src/installer.test.ts
+```
+
+The fresh successor carrier runs 20 allocated tests: 16 RED and 4 GREEN.
+
+- RED: four current-collision orders, files-before-bins, the finite prepared
+  topology, direct phased use, root/nested abort, `ENOSPC` / `EACCES`, three
+  authoritative-prior transitions, stable-owner current-target replay, and
+  escaping-target zero-effect rejection.
+- GREEN: independent root/nested scopes, non-colliding public and cancellable
+  raw entrypoints, and missing-target repair/retry.
+
+```sh
+pnpm vitest run \
+  packages/npm-client/src/linker-bin-authority.contract.test.ts
+```
+
+No product, compat, changelog, installer-test, or raw-path-contract change is
+present in this checkpoint.
