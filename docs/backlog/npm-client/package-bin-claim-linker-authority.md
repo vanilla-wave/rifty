@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal package-bin linker RED proved path admission and command ownership are separate units, while current linking still mutates files before discovering ambiguous command claims
 user_story: As a browser-IDE user installing packages with CLIs, I want one linker to reject command ownership it cannot settle like npm before changing the tree, then write each exact launcher after all package files settle
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/resolved-package-installer-path-ingress]
+blocked_by: [npm-client/resolved-package-installer-prepared-path-consumption]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -18,10 +18,10 @@ code:
 This is the second split successor to terminal
 `npm-client/package-bin-linker-authority` at
 `8e1456665a3d7a77425b5afa8f0c802ac59162b5`. It starts after
-`npm-client/resolved-package-linker-path-authority` and
-`npm-client/resolved-package-installer-path-ingress` land and accepts only
-their shared prepared packages. Shadow recipe claims, acquired twins, aliases,
-internals shims, lock publication, and reporting remain absent.
+`npm-client/resolved-package-linker-path-authority` and the re-refined
+`npm-client/resolved-package-installer-prepared-path-consumption` land and
+accepts only their shared prepared packages. Shadow recipe claims, acquired
+twins, aliases, internals shims, lock publication, and reporting remain absent.
 
 The existing linker remains the sole package-file and package-bin module. This
 unit extracts its minimum package-private phases; it adds no module, public

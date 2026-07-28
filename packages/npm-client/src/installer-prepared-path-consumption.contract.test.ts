@@ -161,19 +161,39 @@ function recordingVfs(vfs: MemoryVfs, calls: string[], armed: () => boolean): Vf
   });
 }
 
-describe('resolved-package installer path ingress', () => {
+describe('resolved-package installer prepared-path consumption', () => {
   it('keeps prepared packageLinkTargets package-private', () => {
     expect(contractApi.packageLinkTargets).toBeTypeOf('function');
     expect(npmClientRoot).not.toHaveProperty('packageLinkTargets');
   });
 
   it('derives exact ordered targets from omitted, root, nested, and nested-scoped carriers', () => {
-    const packages = [
-      pkg('omitted-cli', undefined),
-      pkg('root-cli', 'node_modules/root-cli'),
-      pkg('nested-cli', 'node_modules/host/node_modules/nested-cli'),
-      pkg('@tools/scoped-cli', 'node_modules/@scope/host/node_modules/@tools/scoped-cli'),
-    ];
+    const definitions = [
+      { name: 'omitted-cli', installPath: undefined },
+      { name: 'root-cli', installPath: 'node_modules/root-cli' },
+      { name: 'nested-cli', installPath: 'node_modules/host/node_modules/nested-cli' },
+      {
+        name: '@tools/scoped-cli',
+        installPath: 'node_modules/@scope/host/node_modules/@tools/scoped-cli',
+      },
+    ] as const;
+    const packages: ResolvedPackage[] = [];
+    const reads: Array<() => number> = [];
+    for (const { name, installPath } of definitions) {
+      const candidate = pkg(name, installPath);
+      let count = 0;
+      Object.defineProperty(candidate, 'installPath', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          count += 1;
+          if (count > 1) throw new Error(`poisoned second installPath read for ${name}`);
+          return installPath;
+        },
+      });
+      packages.push(candidate);
+      reads.push(() => count);
+    }
     const prepared = preflightPackageInstallPaths(packages);
 
     expect(requirePackageLinkTargets()('/project/.', prepared)).toEqual([
@@ -186,7 +206,10 @@ describe('resolved-package installer path ingress', () => {
       '/project/node_modules/@scope/host/node_modules/@tools/scoped-cli',
       '/project/node_modules/@scope/host/node_modules/@tools/scoped-cli/package.json',
     ]);
-    expect(prepared.map((entry) => entry.package)).toEqual(packages);
+    expect(reads.map((read) => read())).toEqual([1, 1, 1, 1]);
+    for (const [index, entry] of prepared.entries()) {
+      expect(entry.package).toBe(packages[index]);
+    }
   });
 
   it('[fault: sibling-drift] one carrier drives targets, binful link, and install lock after one raw read', async () => {
@@ -240,6 +263,11 @@ describe('resolved-package installer path ingress', () => {
       label: 'double separator',
       name: '@scope//bad-cli',
       rawPath: 'node_modules/@scope//bad-cli',
+    },
+    {
+      label: 'trailing separator',
+      name: '@scope/bad-cli/',
+      rawPath: 'node_modules/@scope/bad-cli/',
     },
   ])(
     '[fault: corrupt-input, observable-order] real mixed install rejects a $label before target, VFS, or lock publication',

@@ -8,7 +8,9 @@ No production source differs from `origin/main`.
 
 ```sh
 pnpm vitest run \
-  packages/npm-client/src/linker-resolved-package-path-authority.contract.test.ts
+  packages/npm-client/src/installer-prepared-path-consumption.contract.test.ts \
+  packages/npm-client/src/linker-resolved-package-path-authority.contract.test.ts \
+  packages/npm-client/src/installer.test.ts
 ```
 
 The first checkpoint at
@@ -89,6 +91,24 @@ own exact prepared targets, one raw read across all three consumers, and every
 reachable real-install error/effect. The full raw malformed matrix remains at
 linker ingress because absolute, wrong-root, wrong-owner, and safe-relative
 wrong-suffix paths are physically excluded from supported installer placement.
+
+The terminal installer-ingress checkpoint at
+`30abc22f61d3b5753cb7c65bb6bd75d8e88064ea` blocked its stale executable
+command and a deep-equality assertion that could not prove the contract's
+package-reference identity claim. The same verdict requested both the PR and
+Budget declarations pre-PASS; the binding protocol requires the Budget
+declaration/mapping before review and pickup, but opens the draft PR only at
+first PASS.
+
+The lawful re-refinement is
+`resolved-package-installer-prepared-path-consumption`. It removes the
+non-observable identity claim, not any frozen behavior: prepared targets still
+must avoid raw-path rereads; real malformed installs still reject before
+target, VFS, or lock publication; Final source/type review still verifies one
+local prepared binding across all three consumers. The predecessor receives no
+third checkpoint. Its combined executable run records 107 tests: 6 RED in the
+successor and 101 GREEN across the inherited traversal, linker, and installer
+floors.
 
 ## Sibling gates
 

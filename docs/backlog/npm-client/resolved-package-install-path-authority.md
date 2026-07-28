@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal package-bin linker RED proved a safe-relative wrong package suffix can reach file or lock mutation because ResolvedPackage.installPath has no single raw ingress authority
 user_story: As a browser-IDE user installing a package, I want every resolved package path contained in its exact node_modules scope before files or lock facts change, but today a malformed relative path can write elsewhere in the project
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/resolved-package-installer-path-ingress]
+blocked_by: [npm-client/resolved-package-installer-prepared-path-consumption]
 sources: [ADR-0042, ADR-0261, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md, docs/backlog/npm-client/reference/resolved-package-install-path-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -25,8 +25,9 @@ split predecessor and receives no third checkpoint.
 `npm-client/resolved-package-linker-path-authority` owns raw
 `ResolvedPackage.installPath` admission, the minimum prepared carrier, and
 the four `linker.ts` consumers. Then
-`npm-client/resolved-package-installer-path-ingress` consumes that same
-carrier in installer target preparation and the real install path.
+`npm-client/resolved-package-installer-prepared-path-consumption` completes the
+terminalized installer ingress by consuming that same carrier in target
+preparation and the real install path.
 Package-bin normalization, collision state, phased file/bin linking, launcher
 faults, and compat stay in the later serial
 `npm-client/package-bin-claim-linker-authority` successor.
