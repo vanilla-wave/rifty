@@ -1,11 +1,11 @@
 ---
 area: playground
-status: ready
+status: draft
 title: Durable Vite 8 tree replacement proof
 created: 2026-07-28
 why: ADR-0336 changed Vite 8's exact manifest and snapshot identity, but the browser suite does not yet prove that Reset deletes a pre-policy trusted tree and same-card reopen reuses only the current tree offline
 user_story: As a user reopening a saved Vite 8 project after the runtime-policy upgrade, I want explicit Reset to replace every stale dependency byte and then reuse the exact current project offline, but today that cross-build path has no committed acceptance proof
-sources: [ADR-0278, ADR-0329, ADR-0336, docs/backlog/playground/reference/vite8-durable-reopen-contract-red.md, docs/backlog/playground/reference/vite8-durable-reopen-cross-build-probe.md, docs/backlog/playground/reference/vite8-wasi-runtime-closure-probe.md]
+sources: [ADR-0278, ADR-0329, ADR-0336, docs/backlog/playground/reference/vite8-durable-reopen-contract-red.md, docs/backlog/playground/reference/vite8-durable-reopen-cross-build-probe.md, docs/backlog/playground/reference/vite8-durable-tree-replacement-refine-probe.md, docs/backlog/playground/reference/vite8-wasi-runtime-closure-probe.md]
 code: [tests/e2e/vite8-durable-reopen-invalidation.spec.ts, tests/e2e/helpers/vite8-cross-build.ts]
 ---
 
@@ -24,6 +24,24 @@ old snapshot from the current committed snapshot and rejects either-base drift.
 The expanded RED already reached the sole activation half-switch failure after
 proving the exact old tree; it is retained by the terminal transcript rather
 than merged as a failing default test.
+
+## Readiness blocker
+
+Merged activation compensation restores live B after stale-A rejection.
+Resetting inactive A therefore performs only the exact definition re-seed and
+zero acquisition; the snapshot, v4 claim, lock, and 367-path dependency tree
+appear on the later explicit online open. The predecessor carrier observed one
+snapshot request and a complete tree during Reset only because its activation
+half-switch had incorrectly left A catalog-active.
+
+That behavior conflicts with unchanged Acceptance 5 and 7 plus the
+`sibling-drift` fault row below: they require current dependency provenance and
+a complete path/byte table during the distinct Reset phase. Manual refinement
+must choose between the ADR-consistent phase boundary (Reset is seed-only with
+no claim or acquisition; explicit open acquires and proves the complete current
+tree) and eager inactive-Reset acquisition (new product behavior that
+contradicts current open authority and exceeds this proof-only unit). The
+pre-demotion `## Acceptance` and `## Parity cases` are retained verbatim below.
 
 ## User scenario
 
