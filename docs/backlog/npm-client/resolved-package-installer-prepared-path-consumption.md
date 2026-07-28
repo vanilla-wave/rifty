@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Resolved-package installer prepared-path consumption
 created: 2026-07-28
 why: the terminal installer-ingress RED proved its public behavior must be separated from an unobservable package-reference identity claim while the installer still rereads raw paths before target publication
@@ -91,6 +91,8 @@ their existing authorities.
   path API, new module, coordinator, scheduler, or lock.
 
 ## Decisions
+
+ready-verdict: 2026-07-28 — Contract+RED @ 5647f070964a5d83db550b4f18679ad20cb1099b
 
 - `split-predecessor:
   30abc22f61d3b5753cb7c65bb6bd75d8e88064ea`; predecessor checkpoints:
