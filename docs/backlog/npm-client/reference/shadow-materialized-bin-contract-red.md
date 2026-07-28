@@ -13,18 +13,27 @@ pnpm vitest run \
   packages/npm-client/src/installer-bin-authority.contract.test.ts
 ```
 
-Current result: 18 tests, 16 RED and 2 GREEN.
+The first checkpoint at
+`4c5b583620eebb962b1ea11f355cb5f64c4aa4b8` blocked on missing
+recorded-prior-collision, acquired-twin collision-exclusion, internals-shim
+failure, lock-write failure, and Items/Budget evidence. The one lawful re-cut
+adds those proofs.
+
+Current result: 24 tests, 22 RED and 2 GREEN.
 
 - fresh esbuild reports before the lock write;
 - opposite current manifest orders, public-linker root/nested duplicates, and
-  a prior-owner transition write a plausible winner instead of throwing
+  a recorded prior collision or prior-owner transition write a plausible winner
+  instead of throwing
   `NotImplementedError('npm-client.bin-collision-reify')` before tree/report/lock;
 - a LightningCSS acquisition bin leaks into the install result, disk launcher,
-  and acquisition lock entry;
+  and acquisition lock entry; a sibling case distinguishes its excluded claim
+  from an ordinary same-command claim;
 - root/nested alias abort continues later writes and publishes redirect plus
-  materialization success; alias `ENOSPC`/`EACCES` publishes the redirect;
+  materialization success; alias and internals-shim `ENOSPC`/`EACCES` publish
+  staged substitution lines;
 - real esbuild bin-read abort and `.bin` `ENOSPC`/`EACCES` publish success
-  before failing.
+  before failing; lock `ENOSPC`/`EACCES` does the same.
 
 The two GREEN cases retain honest existing behavior: equal command text in
 independent root/nested scopes is not a collision, and a missing package-bin

@@ -94,6 +94,10 @@ Contract+RED → Final+GREEN):
 7. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption
    narrowing, owner READMEs, dead code imported by extraction).
+8. `npm-client/shadow-materialized-bin-authority` —
+   **shadow-materialized-bin-authority**: split successor for collision-free
+   recipe bins, acquired-twin suppression, one linker, and commit-scoped
+   substitution publication; generic collisions stay loud compat ❌.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -124,3 +128,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | recipe-v2-authority | 1800–3000 |
 | sass-scale-proof | 1000–3000 |
 | measured-cleanup | 1000–3000 |
+| shadow-materialized-bin-authority | 500–1200 |

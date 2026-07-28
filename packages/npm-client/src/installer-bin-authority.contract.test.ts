@@ -407,6 +407,63 @@ describe('install package-bin authority', () => {
     );
   });
 
+  it('[fault: frozen-assumption] rejects a recorded prior collision even when the desired tree has one claimant', async () => {
+    const providerA = await registryEntry('provider-a', '1.0.0', {
+      bin: { shared: 'bin/a.js' },
+      files: { 'bin/a.js': 'throw new Error("provider-a");\n' },
+    });
+    const providerZ = await registryEntry('provider-z', '1.0.0', {
+      bin: { providerZ: 'bin/z.js' },
+      files: { 'bin/z.js': 'throw new Error("provider-z");\n' },
+    });
+    const vfs = await project();
+    const fixtureRegistry = registry(providerA, providerZ);
+    await install(
+      'fixture',
+      '1.0.0',
+      { 'provider-a': '1.0.0', 'provider-z': '1.0.0' },
+      { vfs, cwd: '/project', registry: fixtureRegistry },
+    );
+
+    const lockPath = '/project/package-lock.json';
+    const lockfile = JSON.parse(await vfs.readFileText(lockPath)) as {
+      packages: Record<string, { bin?: Record<string, string> }>;
+    };
+    const priorProviderZ = lockfile.packages['node_modules/provider-z'];
+    if (!priorProviderZ) throw new Error('test setup: provider-z lock entry missing');
+    priorProviderZ.bin = { shared: 'bin/z.js' };
+    await vfs.writeFile(lockPath, JSON.stringify(lockfile));
+    const priorLock = await vfs.readFileText(lockPath);
+    const reports: string[] = [];
+    const treeWrites: string[] = [];
+    const writeFile = vfs.writeFile.bind(vfs);
+    vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+      if (path.startsWith('/project/node_modules/') || path === lockPath) treeWrites.push(path);
+      await writeFile(path, data);
+    });
+
+    await expectBinCollision(
+      install(
+        'fixture',
+        '1.0.0',
+        { 'provider-a': '1.0.0' },
+        {
+          vfs,
+          cwd: '/project',
+          registry: fixtureRegistry,
+          onSubstitution: (line) => reports.push(line),
+        },
+      ),
+    );
+
+    expect.soft(reports).toEqual([]);
+    expect.soft(treeWrites).toEqual([]);
+    expect.soft(await vfs.readFileText(lockPath)).toBe(priorLock);
+    expect(await vfs.readFileText('/project/node_modules/.bin/shared')).toBe(
+      launcher('provider-a', 'bin/a.js'),
+    );
+  });
+
   it('[fault: provenance-lie] excludes an acquired LightningCSS twin bin from disk and lock', async () => {
     const lightningTwin = await registryEntry('lightningcss-wasm', '1.32.0', {
       dependencies: { 'napi-wasm': '^1.0.1' },
@@ -442,6 +499,52 @@ describe('install package-bin authority', () => {
       .soft(result.packages.find(({ name }) => name === 'lightningcss-wasm')?.bin)
       .toBeUndefined();
     expect.soft(result.lockfile.packages['node_modules/lightningcss-wasm']?.bin).toBeUndefined();
+  });
+
+  it('[fault: sibling-drift] excludes an acquired twin before collision preflight', async () => {
+    const lightningTwin = await registryEntry('lightningcss-wasm', '1.32.0', {
+      dependencies: { 'napi-wasm': '^1.0.1' },
+      optionalDependencies: {},
+      peerDependencies: {},
+      bundleDependencies: ['napi-wasm'],
+      bin: { shared: 'bin/twin.js' },
+      files: {
+        'bin/twin.js': 'throw new Error("acquired twin");\n',
+        'node_modules/napi-wasm/package.json': JSON.stringify({
+          name: 'napi-wasm',
+          version: '1.1.3',
+        }),
+      },
+    });
+    const napiWasm = await registryEntry('napi-wasm', '1.1.3');
+    const provider = await registryEntry('provider-z', '1.0.0', {
+      bin: { shared: 'bin/provider.js' },
+      files: { 'bin/provider.js': 'throw new Error("provider-z");\n' },
+    });
+    const vfs = await project();
+
+    const result = await install(
+      'fixture',
+      '1.0.0',
+      { lightningcss: '^1.32.0', 'provider-z': '1.0.0' },
+      {
+        vfs,
+        cwd: '/project',
+        registry: registry(lightningTwin, napiWasm, provider),
+        onSubstitution: () => {},
+      },
+    );
+
+    expect(await vfs.readFileText('/project/node_modules/.bin/shared')).toBe(
+      launcher('provider-z', 'bin/provider.js'),
+    );
+    expect
+      .soft(result.packages.find(({ name }) => name === 'lightningcss-wasm')?.bin)
+      .toBeUndefined();
+    expect.soft(result.lockfile.packages['node_modules/lightningcss-wasm']?.bin).toBeUndefined();
+    expect(result.lockfile.packages['node_modules/provider-z']?.bin).toEqual({
+      shared: 'bin/provider.js',
+    });
   });
 
   it.each(['root', 'nested'] as const)(
@@ -544,6 +647,49 @@ describe('install package-bin authority', () => {
       await expectExactRegistryAlias(vfs, fixture.aliasRoot);
       expect(await vfs.exists('/project/package-lock.json')).toBe(true);
       expect(reports).toEqual(expectedLightningReports(scope));
+    },
+  );
+
+  it.each(['ENOSPC', 'EACCES'] as const)(
+    '[fault: quota-perm-fail] keeps a %s internals-shim write unpublished and exact on retry',
+    async (code) => {
+      const fixture = await registryAliasFixture('nested');
+      const vfs = await project();
+      const shimRoot = '/project/node_modules/lightningcss';
+      const faultPath = `${shimRoot}/${lightningRecipe.materialization.files[0]?.path}`;
+      const failure = Object.assign(new Error(`${code}: internals-shim write denied`), { code });
+      const reports: string[] = [];
+      const writeFile = vfs.writeFile.bind(vfs);
+      let rejectShim = true;
+      vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+        if (rejectShim && path === faultPath) {
+          rejectShim = false;
+          throw failure;
+        }
+        await writeFile(path, data);
+      });
+
+      await expect(
+        install('fixture', '1.0.0', fixture.dependencies, {
+          vfs,
+          cwd: '/project',
+          registry: fixture.registry,
+          onSubstitution: (line) => reports.push(line),
+        }),
+      ).rejects.toBe(failure);
+      expect.soft(reports).toEqual([]);
+      expect.soft(await vfs.exists(faultPath)).toBe(false);
+      expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
+
+      await install('fixture', '1.0.0', fixture.dependencies, {
+        vfs,
+        cwd: '/project',
+        registry: fixture.registry,
+        onSubstitution: (line) => reports.push(line),
+      });
+      await expectExactRegistryAlias(vfs, shimRoot);
+      expect(await vfs.exists('/project/package-lock.json')).toBe(true);
+      expect(reports).toEqual(expectedLightningReports('nested'));
     },
   );
 
@@ -688,6 +834,47 @@ describe('install package-bin authority', () => {
       expect(reports).toEqual([
         'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)',
       ]);
+    },
+  );
+
+  it.each(['ENOSPC', 'EACCES'] as const)(
+    '[fault: quota-perm-fail] keeps a %s lock write unpublished and exact on retry',
+    async (code) => {
+      const fixture = await registryAliasFixture('nested');
+      const vfs = await project();
+      const failure = Object.assign(new Error(`${code}: lock write denied`), { code });
+      const reports: string[] = [];
+      const writeFile = vfs.writeFile.bind(vfs);
+      let rejectLock = true;
+      vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+        if (rejectLock && path === '/project/package-lock.json') {
+          rejectLock = false;
+          throw failure;
+        }
+        await writeFile(path, data);
+      });
+
+      await expect(
+        install('fixture', '1.0.0', fixture.dependencies, {
+          vfs,
+          cwd: '/project',
+          registry: fixture.registry,
+          onSubstitution: (line) => reports.push(line),
+        }),
+      ).rejects.toBe(failure);
+      expect.soft(reports).toEqual([]);
+      expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
+
+      await install('fixture', '1.0.0', fixture.dependencies, {
+        vfs,
+        cwd: '/project',
+        registry: fixture.registry,
+        onSubstitution: (line) => reports.push(line),
+      });
+      await expectExactRegistryAlias(vfs, fixture.aliasRoot);
+      await expectExactRegistryAlias(vfs, '/project/node_modules/lightningcss');
+      expect(await vfs.exists('/project/package-lock.json')).toBe(true);
+      expect(reports).toEqual(expectedLightningReports('nested'));
     },
   );
 });

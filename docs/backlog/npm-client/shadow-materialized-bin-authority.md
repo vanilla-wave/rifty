@@ -98,6 +98,10 @@ replay stay in the serial successor
 
 ## Decisions
 
+- Contract+RED @ `4c5b583620eebb962b1ea11f355cb5f64c4aa4b8` blocked: add
+  recorded-prior-collision, acquired-twin collision exclusion, internals-shim
+  failure, and lock-write failure REDs plus the append-only Items/Budget
+  declaration; one lawful re-cut remains.
 - `split-predecessor:
   87098d2dbaeb5665188b98cbc1a5cdd6ba876cf9`; checkpoint lineage:
   `8f3251e89020772f15ff5a13022e7f7310f703d2`,
