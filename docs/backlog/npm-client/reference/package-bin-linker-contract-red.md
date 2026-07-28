@@ -140,7 +140,48 @@ both string/object prior sources throw on a second read. The hand-maintained
 public table now carries an honest RED note: current tree-order settlement is
 untrusted and the named ceiling is required before mutation.
 
-The re-cut carrier runs 20 tests: 15 RED and 5 GREEN. Package-local typecheck
-adds three expected `TS2578` REDs while the phase exports are absent; after
-implementation they go green only if raw `ResolvedPackage` is rejected by bin
-preflight, the file phase, and the detached bin phase.
+The second combined carrier at
+`30416e72eea35cd992ef87f62b951d6c70eb45fb` runs 20 tests: 15 RED and 5
+GREEN. Package-local typecheck adds three intentional `TS2578` REDs while the
+three phase exports are absent.
+
+## Second successor review blocker and terminal split
+
+The second isolated Contract+RED review at
+`30416e72eea35cd992ef87f62b951d6c70eb45fb` blocked again. Exact review
+blocker summaries:
+
+- first @ `e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed`: forbidden source
+  inspection, incomplete abort/narrow/prior/compat;
+- second @ `30416e72eea35cd992ef87f62b951d6c70eb45fb`: prepared ordering
+  false-green, missing positive narrow type proof, unguarded compat row,
+  final-state-only zero-mutation proof.
+
+Per review convergence, `npm-client/package-bin-claim-linker-authority` is a
+terminal blocked split predecessor and receives no third checkpoint. Its
+lineage is
+`[e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed,
+30416e72eea35cd992ef87f62b951d6c70eb45fb]`.
+
+The new carrier allocation is:
+
+- `npm-client/package-bin-claim-preflight-authority`: normalize current/prior
+  once; prove narrow positive and negative types; keep root/nested scopes
+  independent; reject current/prior ambiguity and escaping targets before any
+  mutating VFS call; guard the exact structured compat ❌ row;
+- `npm-client/package-bin-phased-linker-authority`: prove all files before one
+  detached bin pass across public, cancellable, and prepared paths; prove the
+  sole launcher writer behaviorally; keep target existence, first-of-two
+  abort/later-work, `ENOSPC`, `EACCES`, and exact retry loud.
+
+Only the claim-preflight unit is the current epic Items/Budget selection. The
+phased unit remains a linked draft behind it. Each successor re-cuts its own
+Contract+RED carrier; the combined test carrier remains terminal checkpoint
+evidence.
+
+The fresh claim-preflight carrier runs 16 tests: 11 RED and 5 GREEN.
+Package-local typecheck adds exactly two intentional `TS2578` REDs while the
+narrow preflight export is absent; after implementation they go green only if
+raw `ResolvedPackage` and shaped output claims are both rejected at source
+ingress. Positive prepared-current and narrow current/prior calls compile
+against the actual conditional export.

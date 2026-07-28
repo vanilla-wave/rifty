@@ -6,6 +6,7 @@ created: 2026-07-28
 why: the terminal package-bin linker RED proved path admission and command ownership are separate units, while current linking still mutates files before discovering ambiguous command claims
 user_story: As a browser-IDE user installing packages with CLIs, I want one linker to reject command ownership it cannot settle like npm before changing the tree, then write each exact launcher after all package files settle
 epic: honest-shadow-substitutions
+blocked_by: [npm-client/package-bin-claim-preflight-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -14,17 +15,25 @@ code:
 
 ## Context
 
-This is the second split successor to terminal
+This was the second split successor to terminal
 `npm-client/package-bin-linker-authority` at
-`8e1456665a3d7a77425b5afa8f0c802ac59162b5`. It starts after
+`8e1456665a3d7a77425b5afa8f0c802ac59162b5`. Its second Contract+RED
+checkpoint separated claim preflight from detached file/bin settlement. This
+item is now a terminal blocked split predecessor and receives no third
+checkpoint.
+
+It started after
 `npm-client/resolved-package-linker-path-authority` and the re-refined
-`npm-client/resolved-package-installer-prepared-path-consumption` land and
-accepts only their shared prepared packages. Shadow recipe claims, acquired
+`npm-client/resolved-package-installer-prepared-path-consumption` had landed and
+accepted only their shared prepared packages. Shadow recipe claims, acquired
 twins, aliases, internals shims, lock publication, and reporting remain absent.
 
-The existing linker remains the sole package-file and package-bin module. This
-unit extracts its minimum package-private phases; it adds no module, public
-API, comparator, scheduler, lock, or package-specific branch.
+`npm-client/package-bin-claim-preflight-authority` now owns normalization,
+narrow current/prior ingress, the pre-mutation ambiguity ceiling, escaping
+target admission, and exact compat ❌. Then
+`npm-client/package-bin-phased-linker-authority` owns detached file/bin
+settlement and its VFS fault surface. Both retain the existing linker as the
+sole module; neither adds a public API, mechanism, or package-specific branch.
 
 ## Reference contract
 
@@ -99,6 +108,23 @@ API, comparator, scheduler, lock, or package-specific branch.
 
 ## Decisions
 
+- `terminal-checkpoint:
+  30416e72eea35cd992ef87f62b951d6c70eb45fb` — second Contract+RED BLOCKED;
+  this unit receives no third checkpoint.
+- `checkpoint-lineage: [e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed,
+  30416e72eea35cd992ef87f62b951d6c70eb45fb]`.
+- `split-successors: [npm-client/package-bin-claim-preflight-authority,
+  npm-client/package-bin-phased-linker-authority]`.
+- Contract+RED @ `e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed`
+  blocked exactly: forbidden source inspection, incomplete
+  abort/narrow/prior/compat.
+- Contract+RED @ `30416e72eea35cd992ef87f62b951d6c70eb45fb`
+  blocked exactly: prepared ordering false-green, missing positive narrow type
+  proof, unguarded compat row, final-state-only zero-mutation proof.
+- The first successor owns only claim shaping and the zero-mutation ceiling.
+  The serial second successor owns file/bin ordering and VFS faults. Each gets a
+  fresh Contract+RED → Final+GREEN lineage; this terminal carrier is not
+  re-reviewed.
 - `split-predecessor:
   8e1456665a3d7a77425b5afa8f0c802ac59162b5`; predecessor checkpoints:
   `83ea4bf28e880eaf6c581de69731548860c318a5` and
@@ -113,11 +139,5 @@ API, comparator, scheduler, lock, or package-specific branch.
 - Authoritative prior carries only package name/bin plus scope. A narrow
   package-private bin source prevents fake `files` while letting current
   prepared packages enter the same normalizer structurally.
-- First Contract+RED review at
-  `e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed` blocked a forbidden
-  source-inspection topology test plus incomplete later-claim abort,
-  narrow-ingress, prior-read, and compat evidence. The in-place re-cut uses
-  operation ledgers, a type RED, counted prior access, and a structured public
-  table row instead.
 - ADR-0335 and the npm oracle settle the fork: ambiguity throws; no comparator
   or plausible winner ships.
