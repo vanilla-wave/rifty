@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal materialized-bin RED proved acquired registry bins can leak and substitution success publishes before aliases, launchers, shims, or the lock have settled
 user_story: As a browser-IDE user invoking a substituted package CLI, I want the exact materialized package to own its launcher only after one coherent install commit, but today a failed install can still report success
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-linker-authority]
+blocked_by: [npm-client/package-bin-claim-linker-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/shadow-materialized-bin-contract-red.md]
 code:
   - packages/npm-client/src/installer.ts
@@ -19,8 +19,8 @@ code:
 This is the second split successor to terminal predecessor
 `npm-client/shadow-materialized-bin-authority` at
 `9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`. It starts after
-`npm-client/package-bin-linker-authority` lands and consumes that sole
-package-bin authority.
+`npm-client/package-bin-claim-linker-authority` lands and consumes that sole
+package-bin authority plus its prepared install-path predecessor.
 
 This unit owns exact recipe claims, acquired-twin suppression, installer phase
 order, and commit-scoped substitution reporting. Exact registry acquisition,

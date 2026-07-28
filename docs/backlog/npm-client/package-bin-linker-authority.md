@@ -6,6 +6,7 @@ created: 2026-07-28
 why: the terminal materialized-bin RED proved the shared linker can mutate package files before discovering a same-scope command collision and has no generic way to reject ambiguous prior ownership
 user_story: As a browser-IDE user installing packages with CLIs, I want one package-bin linker to reject ownership it cannot settle like npm before changing the project tree, but today manifest order can silently choose a launcher
 epic: honest-shadow-substitutions
+blocked_by: [npm-client/package-bin-claim-linker-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md, docs/backlog/npm-client/reference/shadow-materialized-bin-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -14,16 +15,19 @@ code:
 
 ## Context
 
-This is the first split successor to terminal predecessor
+This was the first split successor to terminal predecessor
 `npm-client/shadow-materialized-bin-authority` at
-`9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`. It owns only package-generic bin
-claim authority. Shadow recipes, acquired twins, aliases, shims, lock
-publication, and substitution reporting remain absent from this unit.
+`9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`. Its second Contract+RED
+checkpoint found that raw resolved-package path authority and package-bin
+claim/phased-linker authority are independently reviewable. This item is now a
+terminal blocked split predecessor and receives no third checkpoint.
 
-The existing linker stays the sole package-file and package-bin module. The
-small package-private phased surface required by the installer composes under
-the existing public `link()`; no second writer, comparator, plan object,
-scheduler, lock owner, or public API ships.
+`npm-client/resolved-package-install-path-authority` owns the raw path grammar
+and prepared package carrier first. Then
+`npm-client/package-bin-claim-linker-authority` owns the collision preflight,
+file/bin phases, and sole launcher writer. Shadow recipes, acquired twins,
+aliases, shims, lock publication, and reporting remain in their serial
+successor.
 
 ## Reference contract
 
@@ -95,13 +99,25 @@ scheduler, lock owner, or public API ships.
 
 ## Decisions
 
+- `terminal-checkpoint:
+  8e1456665a3d7a77425b5afa8f0c802ac59162b5` — second Contract+RED BLOCKED;
+  this unit receives no third checkpoint.
+- `checkpoint-lineage: [83ea4bf28e880eaf6c581de69731548860c318a5,
+  8e1456665a3d7a77425b5afa8f0c802ac59162b5]`.
+- `split-successors: [npm-client/resolved-package-install-path-authority,
+  npm-client/package-bin-claim-linker-authority]`.
+- Contract+RED @ `8e1456665a3d7a77425b5afa8f0c802ac59162b5`
+  blocked: safe-relative wrong-suffix `packages/bad-cli` lacked mutation-free
+  RED coverage with and without bin metadata across raw linker and
+  installer/lockfile siblings. Resolved-package path grammar lands
+  independently; the later claim-linker successor consumes its prepared
+  carrier in the new preflight/file/bin phases.
 - Contract+RED @
   `83ea4bf28e880eaf6c581de69731548860c318a5` blocked: prove shaped-claim
   identity and one shared bin pass across every linker entrypoint, execute
   stable-owner target changes through the returned current claims, cover
   absolute/traversal install paths plus the installer safety sibling before
-  mutation, and retain only this selected JIT Items/Budget mapping; one lawful
-  re-cut remains.
+  mutation, and retain only this selected JIT Items/Budget mapping.
 - `split-predecessor:
   9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`; predecessor checkpoints:
   `4c5b583620eebb962b1ea11f355cb5f64c4aa4b8` and

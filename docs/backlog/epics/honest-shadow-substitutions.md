@@ -94,10 +94,10 @@ Contract+RED → Final+GREEN):
 7. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption
    narrowing, owner READMEs, dead code imported by extraction).
-8. `npm-client/package-bin-linker-authority` —
-   **package-bin-linker-authority**: second-blocker split for generic
-   current/prior collision preflight and one package-private phased linker;
-   no shadow integration or npm reify approximation.
+8. `npm-client/resolved-package-install-path-authority` —
+   **resolved-package-install-path-authority**: terminal-linker split for one
+   exact raw `ResolvedPackage.installPath` grammar and zero-effect rejection
+   through public linker, lockfile, and installer ingress.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -128,4 +128,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | recipe-v2-authority | 1800–3000 |
 | sass-scale-proof | 1000–3000 |
 | measured-cleanup | 1000–3000 |
-| package-bin-linker-authority | 300–700 |
+| resolved-package-install-path-authority | 100–300 |

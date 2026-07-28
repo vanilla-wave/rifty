@@ -1,4 +1,4 @@
-# Package-bin linker Contract+RED
+# Terminal package-bin linker Contract+RED
 
 Recorded 2026-07-28 on the fresh split successor to terminal predecessor
 `npm-client/shadow-materialized-bin-authority@9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`.
@@ -17,7 +17,8 @@ Initial checkpoint
 Contract+RED review blocked the missing detached-claim, current-target,
 install-path ingress, and single-composer proofs.
 
-Current re-cut result: 28 tests, 24 RED and 4 GREEN.
+Final re-cut result at
+`8e1456665a3d7a77425b5afa8f0c802ac59162b5`: 28 tests, 24 RED and 4 GREEN.
 
 - opposite current input orders in root and nested scopes write plausible
   launchers instead of rejecting
@@ -45,6 +46,18 @@ root and nested scopes produces two exact launchers; existing public and
 install-tree paths each make exactly one target read and launcher write per
 non-colliding claim; and a missing target stays loud without writing its
 launcher.
+
+The second isolated Contract+RED review blocked one remaining
+`corrupt-input` gap: safe-relative `packages/bad-cli` did not prove rejection
+with and without bin metadata across every raw linker and installer/lockfile
+sibling. Per review convergence this unit is terminal and receives no third
+checkpoint. Its RED allocation is:
+
+- `npm-client/resolved-package-install-path-authority`: exact raw path grammar,
+  prepared carrier, existing public linker/lockfile/installer ingresses;
+- `npm-client/package-bin-claim-linker-authority`: current/prior claim
+  settlement, new file/bin phases, detached launcher writer, and consumption of
+  only prepared packages.
 
 ## Sibling gates
 
