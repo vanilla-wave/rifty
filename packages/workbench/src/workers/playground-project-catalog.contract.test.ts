@@ -1,7 +1,8 @@
 import { RegistryClient } from '@riftydev/npm-client';
+import { Shell } from '@riftydev/shell';
 import type { FsSync } from '@riftydev/vfs';
-import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
+import { afterEach, describe, expect, expectTypeOf, it } from 'vitest';
 import {
   type InstallStampAuthority,
   createInstallStampAuthority,
@@ -11,6 +12,7 @@ import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { ProjectBusyError, ProjectDefinitionMismatchError } from '../workbench/errors.ts';
 import { createPlaygroundProjectCatalog } from '../workbench/internal/playground-project-catalog.ts';
 import { definePlaygroundProject } from '../workbench/internal/playground-project-definition.ts';
+import { projectRuntimeShellLine } from '../workbench/internal/project-runtime-acquisition.ts';
 import type {
   NodeCliPlaygroundPlan,
   NodeServerPlaygroundPlan,
@@ -43,6 +45,7 @@ import {
   type ExactFsTree,
   createDurableOwnerFsFromTree,
 } from './test-fixtures/durable-owner-fs.ts';
+import { workbenchFirstMaterializationPackageConfig } from './workbench-package-config.ts';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -237,6 +240,138 @@ function expectFrozenSnapshot(snapshot: PlaygroundCatalogSnapshot): void {
 async function close(opened: OpenedProject): Promise<void> {
   await opened.close();
 }
+
+async function expectUntrustedSaveOfflineOpen(
+  tree: ExactFsTree,
+  endpoint: 'scratch' | 'project',
+): Promise<void> {
+  const fs = createDurableOwnerFsFromTree(tree);
+  const vfs = new SyncMirrorVfs();
+  const composition = createOwnerVfsAuthorityComposition(fs, {
+    ownerEpoch: 'playground-untrusted-save-offline-owner',
+    initialRoots: ['/', '/.rifty'],
+  });
+  setSyncMirror(composition.authority, { async: vfs });
+  const registryRequests: string[] = [];
+  const packages = createOwnerPackageState({
+    vfs,
+    fsSync: composition.authority,
+    installStampClaims: composition.installStampClaims,
+    flush: () => composition.authority.flush(),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry: new RegistryClient({
+      baseUrl: 'https://registry.invalid/',
+      maxRetries: 0,
+      fetch: async (url) => {
+        registryRequests.push(url);
+        throw new Error('acquisition network unavailable');
+      },
+    }),
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+  let stageSequence = 0;
+  const owner = await createPlaygroundProjectAuthority({
+    ...composition,
+    persistence: 'required',
+    now: () => EDITED_AT,
+    createStageId: () => `untrusted-save-offline-stage-${String(++stageSequence)}`,
+    acquisition: {
+      ensure: (request) =>
+        packages.activateAndEnsure(
+          workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
+            packageJsonBytes: composition.authority.readFileBytesSync(
+              `${request.projectRoot}/package.json`,
+            ),
+          }),
+        ),
+    },
+    projectSave: packages,
+    beforeOpenProject: (projectRoot) =>
+      recoverOwnerPlaygroundArchiveTransaction({
+        projectRoot,
+        owner: composition,
+        packages,
+      }),
+  });
+  const projectRoot =
+    endpoint === 'scratch'
+      ? '/.rifty/workbench/v1/projects/scratch/tree'
+      : '/.rifty/workbench/v1/projects/project-a/tree';
+  const projectDefinition =
+    endpoint === 'scratch' ? definition('scratch') : definition('project-a');
+  const slug = endpoint === 'scratch' ? 'scratch' : 'project-a';
+  let opened: OpenedProject | null = null;
+  try {
+    expect(owner.catalogSnapshot().active).toEqual(
+      endpoint === 'scratch' ? { kind: 'scratch' } : { kind: 'project', id: 'project-a' },
+    );
+    if (endpoint === 'scratch') {
+      expect(fs.existsSync('/.rifty/workbench/v1/projects/project-a')).toBe(false);
+    } else {
+      expect(fs.existsSync('/.rifty/workbench/v1/projects/scratch')).toBe(false);
+      expect(composition.installStampClaims.read(projectRoot)).toBeNull();
+    }
+    const stamps = createInstallStampAuthority({
+      vfs,
+      fsSync: composition.authority,
+      claimIo: composition.installStampClaims,
+    });
+    await expect(stamps.check({ root: projectRoot, slug })).resolves.toEqual({
+      status: 'absent',
+    });
+    expect(registryRequests).toEqual([]);
+
+    opened = await owner.openProject(projectDefinition);
+    expect(opened.acquisition).toEqual({
+      kind: 'install',
+      snapshotFailures: [],
+    });
+    expect(registryRequests).toEqual([]);
+
+    const shell = new Shell({ cwd: projectRoot });
+    let reachedLive = false;
+    shell.registerCommand(
+      'npm',
+      packages.createNpmCommand(async () => {
+        throw new Error('untrusted Save offline proof must not dispatch npm run');
+      }),
+    );
+    shell.registerCommand('vite', async () => {
+      reachedLive = true;
+      return 0;
+    });
+    const result = await shell.run(
+      projectRuntimeShellLine('vite --port 5173', opened.acquisition, '/'),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('npm: install failed: acquisition network unavailable\n');
+    expect(reachedLive).toBe(false);
+    expect(registryRequests).toEqual(['https://registry.invalid/vite']);
+    expect(owner.catalogSnapshot().active).toEqual(
+      endpoint === 'scratch' ? { kind: 'scratch' } : { kind: 'project', id: 'project-a' },
+    );
+    const freshStamps = createInstallStampAuthority({
+      vfs,
+      fsSync: composition.authority,
+      claimIo: composition.installStampClaims,
+    });
+    await expect(freshStamps.check({ root: projectRoot, slug })).resolves.not.toMatchObject({
+      status: 'trusted',
+    });
+  } finally {
+    await opened?.close();
+    await owner.close();
+    await packages.quiesce();
+  }
+}
+
+afterEach(() => {
+  resetSyncMirror();
+});
 
 describe('PlaygroundProjectCatalog public contract', () => {
   it('derives Starter provenance only from a companion definition and exposes no owner plumbing', async () => {
@@ -1442,6 +1577,14 @@ describe('Playground catalog crash recovery', () => {
       let sawInteriorPartialPersistence = false;
       let recoveredPreStates = 0;
       let recoveredPostStates = 0;
+      let recoveredPreTree: ExactFsTree | undefined;
+      let recoveredPostTree: ExactFsTree | undefined;
+      const absorbRecovery = (recovery: CatalogRecoveryEvidence): void => {
+        recoveredPreStates += recovery.pre;
+        recoveredPostStates += recovery.post;
+        recoveredPreTree ??= recovery.preRecoveredTree;
+        recoveredPostTree ??= recovery.postRecoveredTree;
+      };
       for (let failAt = 1; failAt <= 200; failAt += 1) {
         const fs = baselineFs.restartFromDurableState();
         const h = await harness(fs);
@@ -1465,11 +1608,13 @@ describe('Playground catalog crash recovery', () => {
           expect(fs.persistPrimitiveCount).toBeLessThan(failAt);
           expectCatalogState(h, fs, expectedPost);
           expect(observed).toEqual([expectedPre.catalog, expectedPost.catalog]);
-          await expectEveryCatalogCrashBoundary(
-            testCase,
-            fs.durabilityBoundaries,
-            expectedPre,
-            expectedPost,
+          absorbRecovery(
+            await expectEveryCatalogCrashBoundary(
+              testCase,
+              fs.durabilityBoundaries,
+              expectedPre,
+              expectedPost,
+            ),
           );
           await expectHardRestartState(fs, expectedPost);
           unsubscribe();
@@ -1497,14 +1642,14 @@ describe('Playground catalog crash recovery', () => {
           recoveredCommittedFaults += 1;
           expectCatalogState(h, fs, expectedPost);
           expect(observed).toEqual([expectedPre.catalog, expectedPost.catalog]);
-          const recoveryCounts = await expectEveryCatalogCrashBoundary(
-            testCase,
-            fs.durabilityBoundaries,
-            expectedPre,
-            expectedPost,
+          absorbRecovery(
+            await expectEveryCatalogCrashBoundary(
+              testCase,
+              fs.durabilityBoundaries,
+              expectedPre,
+              expectedPost,
+            ),
           );
-          recoveredPreStates += recoveryCounts.pre;
-          recoveredPostStates += recoveryCounts.post;
           await expectHardRestartState(fs, expectedPost);
           unsubscribe();
           continue;
@@ -1539,14 +1684,14 @@ describe('Playground catalog crash recovery', () => {
         const faultBoundaries = fs.durabilityBoundaries;
         const finalFaultTree = fs.durableSnapshot();
 
-        const recoveryCounts = await expectEveryCatalogCrashBoundary(
-          testCase,
-          faultBoundaries,
-          expectedPre,
-          expectedPost,
+        absorbRecovery(
+          await expectEveryCatalogCrashBoundary(
+            testCase,
+            faultBoundaries,
+            expectedPre,
+            expectedPost,
+          ),
         );
-        recoveredPreStates += recoveryCounts.pre;
-        recoveredPostStates += recoveryCounts.post;
 
         await testCase.mutate(h);
         expectCatalogState(h, fs, expectedPost);
@@ -1568,9 +1713,11 @@ describe('Playground catalog crash recovery', () => {
 
         if (recoveredState === 'pre') {
           recoveredPreStates += 1;
+          recoveredPreTree ??= recoveredFs.durableSnapshot();
           await testCase.mutate(recovered);
         } else if (recoveredState === 'post') {
           recoveredPostStates += 1;
+          recoveredPostTree ??= recoveredFs.durableSnapshot();
         }
         expectCatalogState(recovered, recoveredFs, expectedPost);
         await expectHardRestartState(recoveredFs, expectedPost);
@@ -1582,6 +1729,13 @@ describe('Playground catalog crash recovery', () => {
       expect(sawInteriorPartialPersistence).toBe(true);
       expect(recoveredPreStates).toBeGreaterThan(0);
       expect(recoveredPostStates).toBeGreaterThan(0);
+      if (testCase.name.startsWith('saveScratch untrusted × ')) {
+        if (recoveredPreTree === undefined || recoveredPostTree === undefined) {
+          throw new Error('untrusted Save recovery did not expose both pointer outcomes');
+        }
+        await expectUntrustedSaveOfflineOpen(recoveredPreTree, 'scratch');
+        await expectUntrustedSaveOfflineOpen(recoveredPostTree, 'project');
+      }
     },
   );
 });
@@ -1935,15 +2089,24 @@ async function expectHardRestartState(
   expectCatalogState(restarted, restartedFs, expected);
 }
 
+interface CatalogRecoveryEvidence {
+  readonly pre: number;
+  readonly post: number;
+  readonly preRecoveredTree?: ExactFsTree;
+  readonly postRecoveredTree?: ExactFsTree;
+}
+
 async function expectEveryCatalogCrashBoundary(
   testCase: CatalogMutationCase,
   boundaries: readonly { readonly durableState: ExactFsTree }[],
   expectedPre: ExactCatalogState,
   expectedPost: ExactCatalogState,
-): Promise<{ readonly pre: number; readonly post: number }> {
+): Promise<CatalogRecoveryEvidence> {
   expect(boundaries.length).toBeGreaterThan(0);
   let pre = 0;
   let post = 0;
+  let preRecoveredTree: ExactFsTree | undefined;
+  let postRecoveredTree: ExactFsTree | undefined;
   for (const boundary of boundaries) {
     const recoveredFs = createDurableOwnerFsFromTree(boundary.durableState);
     const recovered = await harness(recoveredFs);
@@ -1953,12 +2116,19 @@ async function expectEveryCatalogCrashBoundary(
     expect(recoveredFs.liveSnapshot()).toEqual(recoveredFs.durableSnapshot());
     if (state === 'pre') {
       pre += 1;
+      preRecoveredTree ??= recoveredFs.durableSnapshot();
       await testCase.mutate(recovered);
     } else if (state === 'post') {
       post += 1;
+      postRecoveredTree ??= recoveredFs.durableSnapshot();
     }
     expectCatalogState(recovered, recoveredFs, expectedPost);
     await expectHardRestartState(recoveredFs, expectedPost);
   }
-  return Object.freeze({ pre, post });
+  return Object.freeze({
+    pre,
+    post,
+    ...(preRecoveredTree === undefined ? {} : { preRecoveredTree }),
+    ...(postRecoveredTree === undefined ? {} : { postRecoveredTree }),
+  });
 }
