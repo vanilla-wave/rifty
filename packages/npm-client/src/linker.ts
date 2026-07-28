@@ -32,12 +32,50 @@ export interface ResolvedPackage {
   installPath?: string;
 }
 
+export interface PreparedInstallPackage<TPackage extends ResolvedPackage = ResolvedPackage> {
+  readonly package: TPackage;
+  readonly relativePath: string;
+  readonly nodeModulesDir: string;
+}
+
+export function preflightPackageInstallPaths<TPackage extends ResolvedPackage>(
+  packages: readonly TPackage[],
+): readonly PreparedInstallPackage<TPackage>[] {
+  const prepared: PreparedInstallPackage<TPackage>[] = [];
+  for (const pkg of packages) {
+    const rawPath = pkg.installPath;
+    const relativePath = rawPath ?? `node_modules/${pkg.name}`;
+    const suffix = `node_modules/${pkg.name}`;
+    if (
+      !relativePath.startsWith('node_modules/') ||
+      normalizePath(relativePath) !== relativePath ||
+      (relativePath !== suffix && !relativePath.endsWith(`/${suffix}`))
+    ) {
+      throw invalidPackageInstallPath(relativePath, pkg.name);
+    }
+    prepared.push({
+      package: pkg,
+      relativePath,
+      nodeModulesDir: relativePath.slice(0, relativePath.length - pkg.name.length - 1),
+    });
+  }
+  return prepared;
+}
+
+function invalidPackageInstallPath(path: string, packageName: string): Error {
+  return Object.assign(new Error(`Invalid package installPath for ${packageName}: ${path}`), {
+    code: 'EINVALIDPACKAGETAR' as const,
+    path,
+  });
+}
+
 export async function link(
   vfs: Vfs,
   root: string,
   packages: readonly ResolvedPackage[],
 ): Promise<void> {
-  await linkTree(vfs, root, packages, () => {});
+  const prepared = preflightPackageInstallPaths(packages);
+  await linkPreparedInstallTree(vfs, root, prepared, () => {});
 }
 
 /**
@@ -51,27 +89,29 @@ export async function linkInstallTree(
   checkpoint: () => void,
 ): Promise<void> {
   try {
-    await linkTree(vfs, root, packages, checkpoint);
+    checkpoint();
+    const prepared = preflightPackageInstallPaths(packages);
+    await linkPreparedInstallTree(vfs, root, prepared, checkpoint);
   } catch (error) {
     checkpoint();
     throw error;
   }
 }
 
-async function linkTree(
+export async function linkPreparedInstallTree(
   vfs: Vfs,
   root: string,
-  packages: readonly ResolvedPackage[],
+  packages: readonly PreparedInstallPackage[],
   checkpoint: () => void,
 ): Promise<void> {
   checkpoint();
   const nodeModules = joinPath(root, 'node_modules');
   await vfs.mkdir(nodeModules, { recursive: true });
   checkpoint();
-  for (const pkg of packages) {
+  for (const prepared of packages) {
     checkpoint();
-    const relPath = pkg.installPath ?? `node_modules/${pkg.name}`;
-    const target = joinPath(root, relPath);
+    const pkg = prepared.package;
+    const target = joinPath(root, prepared.relativePath);
     const entries = Object.entries(pkg.files);
     // #7 (perf-audit 2026-06-05): dedup distinct parent dirs into a Set (O(M*D)
     // per-file mkdir -> O(K) distinct mkdirs), then fan out the writes. Pre-create
@@ -102,7 +142,7 @@ async function linkTree(
     );
     checkpoint();
     if (failures.length > 0) throw failures[0];
-    await linkBins(vfs, root, target, pkg, checkpoint);
+    await linkBins(vfs, root, target, prepared, checkpoint);
     checkpoint();
   }
 }
@@ -113,15 +153,15 @@ async function linkBins(
   vfs: Vfs,
   root: string,
   packageRoot: string,
-  pkg: ResolvedPackage,
+  prepared: PreparedInstallPackage,
   checkpoint: () => void,
 ): Promise<void> {
-  const installPath = pkg.installPath ?? `node_modules/${pkg.name}`;
+  const pkg = prepared.package;
   const bins = normalizeBin(pkg.name, pkg.bin);
   const entries = Object.entries(bins);
   if (entries.length === 0) return;
 
-  const binDir = joinPath(root, packageNodeModulesDir(installPath, pkg.name), '.bin');
+  const binDir = joinPath(root, prepared.nodeModulesDir, '.bin');
   await vfs.mkdir(binDir, { recursive: true });
   checkpoint();
   for (const [command, target] of entries) {
@@ -139,14 +179,6 @@ async function linkBins(
     await vfs.writeFile(joinPath(binDir, command), shimEncoder.encode(shim));
     checkpoint();
   }
-}
-
-function packageNodeModulesDir(installPath: string, packageName: string): string {
-  const suffix = `node_modules/${packageName}`;
-  if (!installPath.endsWith(suffix)) {
-    throw new Error(`Invalid package installPath for ${packageName}: ${installPath}`);
-  }
-  return installPath.slice(0, installPath.length - packageName.length - 1);
 }
 
 function normalizeBin(name: string, bin: ResolvedPackage['bin']): Record<string, string> {
@@ -203,6 +235,12 @@ export interface LockfileEntry {
   riftyShadowRecipe?: string;
 }
 
+type LockfilePackage = ResolvedPackage & {
+  resolved?: string;
+  integrity?: string;
+  peerDependencies?: Record<string, string>;
+};
+
 /**
  * Build a v3 lockfile from the resolved package set. Each non-root entry
  * carries `resolved` (tarball URL) and `integrity` so subsequent installs
@@ -219,11 +257,19 @@ export function buildLockfile(
     peerDependencies?: Record<string, string>;
   })[],
 ): Lockfile {
+  return buildPreparedLockfile(rootName, rootVersion, preflightPackageInstallPaths(packages));
+}
+
+function buildPreparedLockfile(
+  rootName: string,
+  rootVersion: string,
+  packages: readonly PreparedInstallPackage<LockfilePackage>[],
+): Lockfile {
   // Root entry lists only FLAT (hoisted) deps, matching npm's lockfile
   // shape. A nested copy is reachable only via its parent's entry.
   const flatTopLevel: Record<string, string> = {};
-  for (const p of packages) {
-    if (!p.installPath || p.installPath === `node_modules/${p.name}`) {
+  for (const { package: p, relativePath } of packages) {
+    if (relativePath === `node_modules/${p.name}`) {
       flatTopLevel[p.name] = p.version;
     }
   }
@@ -236,7 +282,7 @@ export function buildLockfile(
       '': { version: rootVersion, dependencies: flatTopLevel },
     },
   };
-  for (const p of packages) {
+  for (const { package: p, relativePath } of packages) {
     const entry: LockfileEntry = {
       version: p.version,
       dependencies: p.dependencies,
@@ -249,8 +295,7 @@ export function buildLockfile(
     }
     // Key by installPath so npm's resolver (and the lockfile fast-path)
     // can distinguish a nested copy from its flat counterpart.
-    const key = p.installPath ?? `node_modules/${p.name}`;
-    lf.packages[key] = entry;
+    lf.packages[relativePath] = entry;
   }
   return lf;
 }
@@ -262,11 +307,21 @@ export function buildInstallLockfile(
   packages: Parameters<typeof buildLockfile>[2],
   planValue: ShadowAssetPlan,
 ): Lockfile {
+  const prepared = preflightPackageInstallPaths(packages);
+  return buildPreparedInstallLockfile(rootName, rootVersion, prepared, planValue);
+}
+
+export function buildPreparedInstallLockfile(
+  rootName: string,
+  rootVersion: string,
+  packages: readonly PreparedInstallPackage<LockfilePackage>[],
+  planValue: ShadowAssetPlan,
+): Lockfile {
   const plan = planValue;
   if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
     throw new TypeError('trusted installer shadow plan invariant failed');
   }
-  const lockfile = buildLockfile(rootName, rootVersion, packages);
+  const lockfile = buildPreparedLockfile(rootName, rootVersion, packages);
   if (plan.substitutions.length === 0) return lockfile;
   for (const substitution of plan.substitutions) {
     let entry = lockfile.packages[substitution.materialization.installPath];
