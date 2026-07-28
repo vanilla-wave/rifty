@@ -239,3 +239,13 @@ The fresh normalization carrier runs 13 tests: 12 RED and 1 GREEN.
 Package-local typecheck adds exactly two intentional `TS2578` REDs while the
 real normalization export is absent; after implementation they go green only
 if raw `ResolvedPackage` and shaped `PackageBinClaim` both remain rejected.
+
+Its first isolated review at
+`880813bf62a85050be44c48694e6560164b5f158` passed Standards and blocked three
+Spec false-greens: rejecting paths covered only object-form bins, object
+success never proved more than one command, and authoritative prior scope
+independence used different commands. The in-place final re-cut adds
+string/object rejecting witnesses, an exact two-command claim set, and equal
+current/prior commands in independent root/nested scopes. The result is 24
+tests: 23 RED and 1 GREEN, with the same two intentional `TS2578` REDs. It adds
+no VFS, entrypoint, compat, or production-source scope.

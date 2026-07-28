@@ -102,3 +102,8 @@ branch.
   the real preflight, never an erased test carrier.
 - ADR-0335 and the npm oracle settle the behavior fork: ambiguity throws; no
   comparator or plausible winner ships.
+- `contract-red-first:
+  880813bf62a85050be44c48694e6560164b5f158`; Standards passed, Spec blocked
+  missing string-form rejects, multi-command exactness, and equal-command prior
+  scope isolation. This in-place re-cut is the second and final Contract+RED
+  checkpoint for this unit.

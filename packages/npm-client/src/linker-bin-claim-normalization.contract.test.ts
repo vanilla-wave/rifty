@@ -169,17 +169,91 @@ describe('package-bin claim normalization authority', () => {
   });
 
   it.each([
-    ['root', 'forward', 'node_modules', ['a-a', 'a_a']],
-    ['root', 'reverse', 'node_modules', ['a_a', 'a-a']],
-    ['nested', 'forward', 'node_modules/host/node_modules', ['a-a', 'a_a']],
-    ['nested', 'reverse', 'node_modules/host/node_modules', ['a_a', 'a-a']],
+    [
+      'root',
+      'object',
+      'forward',
+      'node_modules',
+      [
+        ['a-a', { shared: './bin/a.js' }],
+        ['a_a', { shared: './bin/z.js' }],
+      ],
+    ],
+    [
+      'root',
+      'object',
+      'reverse',
+      'node_modules',
+      [
+        ['a_a', { shared: './bin/z.js' }],
+        ['a-a', { shared: './bin/a.js' }],
+      ],
+    ],
+    [
+      'nested',
+      'object',
+      'forward',
+      'node_modules/host/node_modules',
+      [
+        ['a-a', { shared: './bin/a.js' }],
+        ['a_a', { shared: './bin/z.js' }],
+      ],
+    ],
+    [
+      'nested',
+      'object',
+      'reverse',
+      'node_modules/host/node_modules',
+      [
+        ['a_a', { shared: './bin/z.js' }],
+        ['a-a', { shared: './bin/a.js' }],
+      ],
+    ],
+    [
+      'root',
+      'string',
+      'forward',
+      'node_modules',
+      [
+        ['@a/shared', './bin/a.js'],
+        ['@z/shared', './bin/z.js'],
+      ],
+    ],
+    [
+      'root',
+      'string',
+      'reverse',
+      'node_modules',
+      [
+        ['@z/shared', './bin/z.js'],
+        ['@a/shared', './bin/a.js'],
+      ],
+    ],
+    [
+      'nested',
+      'string',
+      'forward',
+      'node_modules/host/node_modules',
+      [
+        ['@a/shared', './bin/a.js'],
+        ['@z/shared', './bin/z.js'],
+      ],
+    ],
+    [
+      'nested',
+      'string',
+      'reverse',
+      'node_modules/host/node_modules',
+      [
+        ['@z/shared', './bin/z.js'],
+        ['@a/shared', './bin/a.js'],
+      ],
+    ],
   ] as const)(
-    '[fault: frozen-assumption] rejects ambiguous %s claims after one read (%s)',
-    (_scope, _order, nodeModulesDir, names) => {
+    '[fault: frozen-assumption] rejects ambiguous %s %s claims after one read (%s)',
+    (_scope, _shape, _order, nodeModulesDir, bins) => {
       const preflight = requirePreflight();
-      const current = names.map((name) =>
-        observedSource(name, nodeModulesDir, { shared: './bin/cli.js' }),
-      );
+      const current = bins.map(([name, bin]) => observedSource(name, nodeModulesDir, bin));
 
       expectSyncCollision(() => preflight(current.map(({ value }) => value)));
       for (const source of current) expect(source.reads()).toBe(1);
@@ -209,6 +283,30 @@ describe('package-bin claim normalization authority', () => {
     ]);
     expect(root.reads()).toBe(1);
     expect(nested.reads()).toBe(1);
+  });
+
+  it('[fault: sibling-drift] returns every object-form command exactly', () => {
+    const preflight = requirePreflight();
+    const source = observedSource('multi-cli', 'node_modules', {
+      alpha: './bin/alpha.js',
+      omega: 'bin/omega.js',
+    });
+
+    expect(structuredClone(preflight([source.value]))).toEqual([
+      {
+        nodeModulesDir: 'node_modules',
+        command: 'alpha',
+        owner: 'multi-cli',
+        target: 'bin/alpha.js',
+      },
+      {
+        nodeModulesDir: 'node_modules',
+        command: 'omega',
+        owner: 'multi-cli',
+        target: 'bin/omega.js',
+      },
+    ]);
+    expect(source.reads()).toBe(1);
   });
 
   it('[fault: sibling-drift] accepts prepared current packages without raw rereads', () => {
@@ -245,37 +343,57 @@ describe('package-bin claim normalization authority', () => {
     expect(nested.binReads()).toBe(1);
   });
 
-  it('[fault: observable-order] rejects a prior owner transition after one read', () => {
-    const preflight = requirePreflight();
-    const current = observedSource('current-cli', 'node_modules', {
-      shared: 'bin/current.js',
-    });
-    const prior = observedSource('prior-cli', 'node_modules', { shared: 'bin/prior.js' });
+  it.each([
+    [
+      'object',
+      ['current-cli', { shared: 'bin/current.js' }],
+      ['prior-cli', { shared: 'bin/prior.js' }],
+    ],
+    ['string', ['@current/shared', 'bin/current.js'], ['@prior/shared', 'bin/prior.js']],
+  ] as const)(
+    '[fault: observable-order] rejects a prior %s owner transition after one read',
+    (_shape, [currentName, currentBin], [priorName, priorBin]) => {
+      const preflight = requirePreflight();
+      const current = observedSource(currentName, 'node_modules', currentBin);
+      const prior = observedSource(priorName, 'node_modules', priorBin);
 
-    expectSyncCollision(() => preflight([current.value], [prior.value]));
-    expect(current.reads()).toBe(1);
-    expect(prior.reads()).toBe(1);
-  });
+      expectSyncCollision(() => preflight([current.value], [prior.value]));
+      expect(current.reads()).toBe(1);
+      expect(prior.reads()).toBe(1);
+    },
+  );
 
-  it('[fault: frozen-assumption] rejects a recorded prior collision without rereads', () => {
-    const preflight = requirePreflight();
-    const current = observedSource('provider-a', 'node_modules', { shared: 'bin/a.js' });
-    const priorA = observedSource('provider-a', 'node_modules', { shared: 'bin/a.js' });
-    const priorZ = observedSource('provider-z', 'node_modules', { shared: 'bin/z.js' });
+  it.each([
+    ['object', ['provider-a', { shared: 'bin/a.js' }], ['provider-z', { shared: 'bin/z.js' }]],
+    ['string', ['@a/shared', 'bin/a.js'], ['@z/shared', 'bin/z.js']],
+  ] as const)(
+    '[fault: frozen-assumption] rejects a recorded prior %s collision without rereads',
+    (_shape, [priorAName, priorABin], [priorZName, priorZBin]) => {
+      const preflight = requirePreflight();
+      const current = observedSource(priorAName, 'node_modules', priorABin);
+      const priorA = observedSource(priorAName, 'node_modules', priorABin);
+      const priorZ = observedSource(priorZName, 'node_modules', priorZBin);
 
-    expectSyncCollision(() => preflight([current.value], [priorA.value, priorZ.value]));
-    expect(current.reads()).toBeLessThanOrEqual(1);
-    expect(priorA.reads()).toBe(1);
-    expect(priorZ.reads()).toBe(1);
-  });
+      expectSyncCollision(() => preflight([current.value], [priorA.value, priorZ.value]));
+      expect(current.reads()).toBeLessThanOrEqual(1);
+      expect(priorA.reads()).toBe(1);
+      expect(priorZ.reads()).toBe(1);
+    },
+  );
 
-  it('[fault: observable-order] rejects removal of a recorded sole claimant after one read', () => {
-    const preflight = requirePreflight();
-    const prior = observedSource('prior-cli', 'node_modules', { shared: 'bin/prior.js' });
+  it.each([
+    ['object', 'prior-cli', { shared: 'bin/prior.js' }],
+    ['string', '@prior/shared', 'bin/prior.js'],
+  ] as const)(
+    '[fault: observable-order] rejects removal of a recorded sole %s claimant after one read',
+    (_shape, name, bin) => {
+      const preflight = requirePreflight();
+      const prior = observedSource(name, 'node_modules', bin);
 
-    expectSyncCollision(() => preflight([], [prior.value]));
-    expect(prior.reads()).toBe(1);
-  });
+      expectSyncCollision(() => preflight([], [prior.value]));
+      expect(prior.reads()).toBe(1);
+    },
+  );
 
   it('[fault: sibling-drift] returns only current string/object targets for stable owners', () => {
     const preflight = requirePreflight();
@@ -312,11 +430,55 @@ describe('package-bin claim normalization authority', () => {
     expect(nestedPrior.reads()).toBe(1);
   });
 
-  it.each(['../escape.js', '/absolute.js'] as const)(
-    '[fault: corrupt-input] rejects escaping target %s without rereading it',
-    (target) => {
+  it('[fault: observable-order] keeps equal current/prior commands independent by scope', () => {
+    const preflight = requirePreflight();
+    const rootCurrent = observedSource('shared-cli', 'node_modules', './bin/current-root.js');
+    const nestedCurrent = observedSource(
+      'shared-cli',
+      'node_modules/host/node_modules',
+      './bin/current-nested.js',
+    );
+    const rootPrior = observedSource('shared-cli', 'node_modules', './bin/prior-root.js');
+    const nestedPrior = observedSource(
+      'shared-cli',
+      'node_modules/host/node_modules',
+      './bin/prior-nested.js',
+    );
+
+    expect(
+      structuredClone(
+        preflight([rootCurrent.value, nestedCurrent.value], [rootPrior.value, nestedPrior.value]),
+      ),
+    ).toEqual([
+      {
+        nodeModulesDir: 'node_modules',
+        command: 'shared-cli',
+        owner: 'shared-cli',
+        target: 'bin/current-root.js',
+      },
+      {
+        nodeModulesDir: 'node_modules/host/node_modules',
+        command: 'shared-cli',
+        owner: 'shared-cli',
+        target: 'bin/current-nested.js',
+      },
+    ]);
+    expect(rootCurrent.reads()).toBe(1);
+    expect(nestedCurrent.reads()).toBe(1);
+    expect(rootPrior.reads()).toBe(1);
+    expect(nestedPrior.reads()).toBe(1);
+  });
+
+  it.each([
+    ['object', '../escape.js', { bad: '../escape.js' }],
+    ['object', '/absolute.js', { bad: '/absolute.js' }],
+    ['string', '../escape.js', '../escape.js'],
+    ['string', '/absolute.js', '/absolute.js'],
+  ] as const)(
+    '[fault: corrupt-input] rejects escaping %s target %s without rereading it',
+    (_shape, _target, bin) => {
       const preflight = requirePreflight();
-      const invalid = observedSource('bad-target', 'node_modules', { bad: target });
+      const invalid = observedSource('bad-target', 'node_modules', bin);
 
       expect(() => preflight([invalid.value])).toThrow(/Invalid package bin target/);
       expect(invalid.reads()).toBe(1);
