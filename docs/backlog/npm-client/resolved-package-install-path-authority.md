@@ -91,6 +91,12 @@ module, scheduler, lock, or public API.
 
 ## Decisions
 
+- Contract+RED @
+  `8f375ce5c5149b3ce8ff6fb9696063482c098dc0` blocked: add the
+  segment-exact `node_modules` scope adversary, explicit omitted/flat/nested
+  shapes, an all-method VFS ledger, non-empty shadow-overlay priority, and
+  poisoned one-read proofs across every ingress; replace the incomplete AST
+  whitelist with those behavioral proofs.
 - `split-predecessor:
   8e1456665a3d7a77425b5afa8f0c802ac59162b5`; predecessor checkpoints:
   `83ea4bf28e880eaf6c581de69731548860c318a5` and

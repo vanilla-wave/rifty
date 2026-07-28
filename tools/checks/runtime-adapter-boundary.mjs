@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ADR-0328 generic shadow-consumer boundary.
+ * ADR-0335 generic shadow-consumer boundary.
  *
  * These modules carry generic install/link/plan/admission/launch mechanics.
  * Consumer recognition belongs in named concrete integration-edge modules,

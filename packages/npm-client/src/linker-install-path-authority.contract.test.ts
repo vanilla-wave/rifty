@@ -1,11 +1,14 @@
-import { readFileSync } from 'node:fs';
-import { MemoryVfs } from '@riftydev/vfs';
-import ts from 'typescript';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryVfs, type Vfs } from '@riftydev/vfs';
+import { describe, expect, it } from 'vitest';
 import * as npmClientRoot from './index.ts';
-import type { ShadowAssetPlan } from './internal/shadow/planner.ts';
+import * as installer from './installer.ts';
+import {
+  type ShadowAssetPlan,
+  attestBuiltinShadowSubstitution,
+  planTrustedAppliedShadowSubstitutions,
+} from './internal/shadow/planner.ts';
 import * as linker from './linker.ts';
-import type { ResolvedPackage } from './linker.ts';
+import type { Lockfile, ResolvedPackage } from './linker.ts';
 
 const encoder = new TextEncoder();
 
@@ -21,23 +24,40 @@ interface InstallPathContractApi {
   ): readonly PreparedInstallPackage[];
 }
 
+interface InstallerPathContractApi {
+  packageLinkTargets(root: string, packages: readonly ResolvedPackage[]): readonly string[];
+}
+
 const contractApi = linker as unknown as Partial<InstallPathContractApi>;
+const installerContractApi = installer as unknown as Partial<InstallerPathContractApi>;
 const emptyShadowPlan = Object.freeze({
   requiredSetDigest: '0'.repeat(64),
   substitutions: Object.freeze([]),
   assets: Object.freeze([]),
   bindings: Object.freeze([]),
 }) satisfies ShadowAssetPlan;
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+const nonEmptyShadowPlan = planTrustedAppliedShadowSubstitutions([
+  attestBuiltinShadowSubstitution({
+    trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
+    installPath: 'node_modules/esbuild',
+    acquisition: { kind: 'synthetic' },
+  }),
+]);
 
 function requirePreflight(): InstallPathContractApi['preflightPackageInstallPaths'] {
   const candidate = contractApi.preflightPackageInstallPaths;
   expect(candidate, 'package-private resolved-package install-path seam').toBeTypeOf('function');
   if (typeof candidate !== 'function') {
     throw new Error('Contract RED: linker is missing preflightPackageInstallPaths');
+  }
+  return candidate;
+}
+
+function requirePackageLinkTargets(): InstallerPathContractApi['packageLinkTargets'] {
+  const candidate = installerContractApi.packageLinkTargets;
+  expect(candidate, 'package-private installer target seam').toBeTypeOf('function');
+  if (typeof candidate !== 'function') {
+    throw new Error('Contract RED: installer is missing packageLinkTargets export');
   }
   return candidate;
 }
@@ -65,100 +85,87 @@ async function project(): Promise<MemoryVfs> {
   return vfs;
 }
 
-type IndexedFunction = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
-
-function topLevelFunctions(source: ts.SourceFile): ReadonlyMap<string, IndexedFunction> {
-  const functions = new Map<string, IndexedFunction>();
-  for (const statement of source.statements) {
-    if (ts.isFunctionDeclaration(statement) && statement.name) {
-      functions.set(statement.name.text, statement);
-      continue;
-    }
-    if (!ts.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      if (
-        ts.isIdentifier(declaration.name) &&
-        declaration.initializer &&
-        (ts.isFunctionExpression(declaration.initializer) ||
-          ts.isArrowFunction(declaration.initializer))
-      ) {
-        functions.set(declaration.name.text, declaration.initializer);
-      }
-    }
-  }
-  return functions;
+function recordingVfs(vfs: MemoryVfs, calls: string[]): Vfs {
+  return new Proxy(vfs, {
+    get(target, property) {
+      const value: unknown = Reflect.get(target, property, target);
+      if (typeof value !== 'function') return value;
+      return (...args: readonly unknown[]) => {
+        calls.push(String(property));
+        return Reflect.apply(value, target, args);
+      };
+    },
+  });
 }
 
-function identifierCallNames(node: ts.Node): readonly string[] {
-  const calls: string[] = [];
-  const visit = (candidate: ts.Node): void => {
-    if (ts.isCallExpression(candidate) && ts.isIdentifier(candidate.expression)) {
-      calls.push(candidate.expression.text);
-    }
-    ts.forEachChild(candidate, visit);
-  };
-  visit(node);
-  return calls;
-}
+const validPaths = [
+  {
+    name: 'omitted-cli',
+    installPath: undefined,
+    relativePath: 'node_modules/omitted-cli',
+    nodeModulesDir: 'node_modules',
+  },
+  {
+    name: 'flat-cli',
+    installPath: 'node_modules/flat-cli',
+    relativePath: 'node_modules/flat-cli',
+    nodeModulesDir: 'node_modules',
+  },
+  {
+    name: 'nested-cli',
+    installPath: 'node_modules/host/node_modules/nested-cli',
+    relativePath: 'node_modules/host/node_modules/nested-cli',
+    nodeModulesDir: 'node_modules/host/node_modules',
+  },
+  {
+    name: '@tools/nested-cli',
+    installPath: 'node_modules/@scope/host/node_modules/@tools/nested-cli',
+    relativePath: 'node_modules/@scope/host/node_modules/@tools/nested-cli',
+    nodeModulesDir: 'node_modules/@scope/host/node_modules',
+  },
+] as const;
 
-function propertyAccessNames(node: ts.Node): readonly string[] {
-  const names: string[] = [];
-  const visit = (candidate: ts.Node): void => {
-    if (ts.isPropertyAccessExpression(candidate)) names.push(candidate.name.text);
-    ts.forEachChild(candidate, visit);
-  };
-  visit(node);
-  return names;
-}
-
-function callersOf(
-  functions: ReadonlyMap<string, IndexedFunction>,
-  callee: string,
-): readonly string[] {
-  return [...functions]
-    .filter(([, declaration]) => identifierCallNames(declaration).includes(callee))
-    .map(([name]) => name);
-}
-
-describe('resolved-package install-path authority', () => {
-  it('prepares exact omitted, root, nested, and scoped identities with one raw read', () => {
-    const preflight = requirePreflight();
-    const omitted = pkg('flat-cli', undefined, false);
-    const root = pkg('@scope/root-cli', 'node_modules/@scope/root-cli', false);
-    const nested = pkg(
-      '@tools/nested-cli',
-      'node_modules/@scope/host/node_modules/@tools/nested-cli',
-      false,
-    );
-    let nestedReads = 0;
-    Object.defineProperty(nested, 'installPath', {
+function validReadOncePackages(): {
+  packages: ResolvedPackage[];
+  reads: readonly (() => number)[];
+} {
+  const packages: ResolvedPackage[] = [];
+  const reads: Array<() => number> = [];
+  for (const value of validPaths) {
+    const candidate = pkg(value.name, value.installPath, false);
+    let count = 0;
+    Object.defineProperty(candidate, 'installPath', {
       configurable: true,
       enumerable: true,
       get: () => {
-        nestedReads += 1;
-        return 'node_modules/@scope/host/node_modules/@tools/nested-cli';
+        count += 1;
+        if (count > 1) throw new Error(`poisoned second installPath read for ${value.name}`);
+        return value.installPath;
       },
     });
+    packages.push(candidate);
+    reads.push(() => count);
+  }
+  return { packages, reads };
+}
 
-    const prepared = preflight([omitted, root, nested]);
+describe('resolved-package install-path authority', () => {
+  it('prepares exact omitted, flat, nested, and nested-scoped identities with one raw read', () => {
+    const { packages, reads } = validReadOncePackages();
+    const prepared = requirePreflight()(packages);
 
     expect(
-      prepared.map(({ relativePath, nodeModulesDir }) => [relativePath, nodeModulesDir]),
-    ).toEqual([
-      ['node_modules/flat-cli', 'node_modules'],
-      ['node_modules/@scope/root-cli', 'node_modules'],
-      [
-        'node_modules/@scope/host/node_modules/@tools/nested-cli',
-        'node_modules/@scope/host/node_modules',
-      ],
-    ]);
-    expect(prepared[0]?.package).toBe(omitted);
-    expect(prepared[1]?.package).toBe(root);
-    expect(prepared[2]?.package).toBe(nested);
-    for (const entry of prepared) {
+      prepared.map(({ relativePath, nodeModulesDir }) => ({ relativePath, nodeModulesDir })),
+    ).toEqual(
+      validPaths.map(({ relativePath, nodeModulesDir }) => ({ relativePath, nodeModulesDir })),
+    );
+    for (const [index, entry] of prepared.entries()) {
+      expect(entry.package).toBe(packages[index]);
       expect(Object.keys(entry).sort()).toEqual(['nodeModulesDir', 'package', 'relativePath']);
     }
-    expect(nestedReads).toBe(1);
+    expect(reads.map((read) => read())).toEqual([1, 1, 1, 1]);
+    expect(npmClientRoot).not.toHaveProperty('preflightPackageInstallPaths');
+    expect(npmClientRoot).not.toHaveProperty('packageLinkTargets');
   });
 
   const invalidPaths = [
@@ -186,6 +193,11 @@ describe('resolved-package install-path authority', () => {
       label: 'safe-relative wrong owner suffix (binful)',
       installPath: 'node_modules/other-cli',
       withBin: true,
+    },
+    {
+      label: 'textual but not segment-exact node_modules suffix (binless)',
+      installPath: 'node_modules/xnode_modules/bad-cli',
+      withBin: false,
     },
     {
       label: 'dot-segment non-canonical path (binless)',
@@ -229,15 +241,15 @@ describe('resolved-package install-path authority', () => {
         async ({ installPath, withBin }) => {
           const invalid = pkg('bad-cli', installPath, withBin);
           const vfs = await project();
-          const mkdir = vi.spyOn(vfs, 'mkdir');
-          const writeFile = vi.spyOn(vfs, 'writeFile');
+          const vfsCalls: string[] = [];
+          const observedVfs = recordingVfs(vfs, vfsCalls);
           let caught: unknown;
 
           try {
             if (entrypoint === 'public link') {
-              await linker.link(vfs, '/project', [invalid]);
+              await linker.link(observedVfs, '/project', [invalid]);
             } else if (entrypoint === 'install tree') {
-              await linker.linkInstallTree(vfs, '/project', [invalid], () => {});
+              await linker.linkInstallTree(observedVfs, '/project', [invalid], () => {});
             } else if (entrypoint === 'lockfile') {
               linker.buildLockfile('root', '1.0.0', [invalid]);
             } else {
@@ -252,8 +264,7 @@ describe('resolved-package install-path authority', () => {
             code: 'EINVALIDPACKAGETAR',
             path: installPath,
           });
-          expect.soft(mkdir).not.toHaveBeenCalled();
-          expect(writeFile).not.toHaveBeenCalled();
+          expect.soft(vfsCalls).toEqual([]);
           expect.soft(await vfs.exists('/project/node_modules')).toBe(false);
           expect(await vfs.exists('/project/packages/bad-cli')).toBe(false);
         },
@@ -262,81 +273,168 @@ describe('resolved-package install-path authority', () => {
   );
 
   it.each(['public link', 'install tree'] as const)(
-    '[fault: observable-order] %s prepares the complete package set before the first VFS call',
+    '[fault: observable-order] %s prepares the complete package set before every VFS method',
     async (entrypoint) => {
       const vfs = await project();
-      const mkdir = vi.spyOn(vfs, 'mkdir');
-      const writeFile = vi.spyOn(vfs, 'writeFile');
+      const vfsCalls: string[] = [];
+      const observedVfs = recordingVfs(vfs, vfsCalls);
       const packages = [
         pkg('valid-cli', 'node_modules/valid-cli', true),
         pkg('bad-cli', 'packages/bad-cli', false),
       ];
 
       if (entrypoint === 'public link') {
-        await expect(linker.link(vfs, '/project', packages)).rejects.toMatchObject({
+        await expect(linker.link(observedVfs, '/project', packages)).rejects.toMatchObject({
           code: 'EINVALIDPACKAGETAR',
           path: 'packages/bad-cli',
         });
       } else {
         await expect(
-          linker.linkInstallTree(vfs, '/project', packages, () => {}),
+          linker.linkInstallTree(observedVfs, '/project', packages, () => {}),
         ).rejects.toMatchObject({
           code: 'EINVALIDPACKAGETAR',
           path: 'packages/bad-cli',
         });
       }
 
-      expect.soft(mkdir).not.toHaveBeenCalled();
-      expect(writeFile).not.toHaveBeenCalled();
+      expect.soft(vfsCalls).toEqual([]);
       expect(await vfs.exists('/project/node_modules')).toBe(false);
     },
   );
 
-  it('[fault: sibling-drift] keeps one raw path owner across linker, lockfile, and installer ingress', () => {
-    const linkerText = readFileSync(new URL('./linker.ts', import.meta.url), 'utf8');
-    const installerText = readFileSync(new URL('./installer.ts', import.meta.url), 'utf8');
-    const linkerSource = ts.createSourceFile(
-      'linker.ts',
-      linkerText,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
-    );
-    const installerSource = ts.createSourceFile(
-      'installer.ts',
-      installerText,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
-    );
-    const linkerFunctions = topLevelFunctions(linkerSource);
-    const installerFunctions = topLevelFunctions(installerSource);
-    const packageLinkTargets = installerFunctions.get('packageLinkTargets');
-    expect.soft(linkerFunctions.has('preflightPackageInstallPaths')).toBe(true);
-    expect.soft(packageLinkTargets).toBeDefined();
-    if (!packageLinkTargets) throw new Error('installer packageLinkTargets seam missing');
+  it('[fault: observable-order] validates every package before a non-empty shadow overlay error', () => {
+    const conflicting = pkg('esbuild', 'node_modules/esbuild', false);
+    conflicting.version = '0.27.0';
+    const invalid = pkg('bad-cli', 'packages/bad-cli', false);
+    let caught: unknown;
 
-    expect
-      .soft([...callersOf(linkerFunctions, 'preflightPackageInstallPaths')].sort())
-      .toEqual(['buildLockfile', 'linkTree'].sort());
-    expect.soft(callersOf(linkerFunctions, 'buildLockfile')).toContain('buildInstallLockfile');
-    expect.soft(identifierCallNames(packageLinkTargets)).toContain('preflightPackageInstallPaths');
-    expect.soft(propertyAccessNames(packageLinkTargets)).not.toContain('installPath');
-    const pathBoundaryNames = new Set([
-      'preflightPackageInstallPaths',
-      'linkTree',
-      'linkBins',
-      'buildLockfile',
-      'packageNodeModulesDir',
-    ]);
-    const rawPathOwners = [...linkerFunctions]
-      .filter(
-        ([name, declaration]) =>
-          pathBoundaryNames.has(name) && propertyAccessNames(declaration).includes('installPath'),
-      )
-      .map(([name]) => name);
-    expect.soft(rawPathOwners).toEqual(['preflightPackageInstallPaths']);
-    expect.soft(linkerFunctions.has('packageNodeModulesDir')).toBe(false);
-    expect(npmClientRoot).not.toHaveProperty('preflightPackageInstallPaths');
+    try {
+      linker.buildInstallLockfile('root', '1.0.0', [conflicting, invalid], nonEmptyShadowPlan);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect.soft(caught).toBeInstanceOf(Error);
+    expect(caught).toMatchObject({
+      code: 'EINVALIDPACKAGETAR',
+      path: 'packages/bad-cli',
+    });
   });
+
+  it.each([
+    'public link',
+    'install tree',
+    'lockfile',
+    'install lockfile',
+    'installer targets',
+  ] as const)(
+    '[fault: sibling-drift] %s rejects through one poisoned raw-path read',
+    async (entrypoint) => {
+      const invalid = pkg('bad-cli', 'node_modules/xnode_modules/bad-cli', false);
+      let reads = 0;
+      Object.defineProperty(invalid, 'installPath', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          reads += 1;
+          if (reads > 1) throw new Error('poisoned second installPath read');
+          return 'node_modules/xnode_modules/bad-cli';
+        },
+      });
+      const vfs = await project();
+      const vfsCalls: string[] = [];
+      const observedVfs = recordingVfs(vfs, vfsCalls);
+      let caught: unknown;
+
+      try {
+        if (entrypoint === 'public link') {
+          await linker.link(observedVfs, '/project', [invalid]);
+        } else if (entrypoint === 'install tree') {
+          await linker.linkInstallTree(observedVfs, '/project', [invalid], () => {});
+        } else if (entrypoint === 'lockfile') {
+          linker.buildLockfile('root', '1.0.0', [invalid]);
+        } else if (entrypoint === 'install lockfile') {
+          linker.buildInstallLockfile('root', '1.0.0', [invalid], nonEmptyShadowPlan);
+        } else {
+          requirePackageLinkTargets()('/project', [invalid]);
+        }
+      } catch (error) {
+        caught = error;
+      }
+
+      expect.soft(caught).toBeInstanceOf(Error);
+      expect.soft(caught).toMatchObject({
+        code: 'EINVALIDPACKAGETAR',
+        path: 'node_modules/xnode_modules/bad-cli',
+      });
+      expect.soft(reads).toBe(1);
+      expect(vfsCalls).toEqual([]);
+    },
+  );
+
+  it.each([
+    'public link',
+    'install tree',
+    'lockfile',
+    'install lockfile',
+    'installer targets',
+  ] as const)(
+    '[fault: sibling-drift] %s preserves every valid path after one raw read',
+    async (entrypoint) => {
+      const { packages, reads } = validReadOncePackages();
+      const vfs = await project();
+      let lockfile: Lockfile | undefined;
+      let targets: readonly string[] | undefined;
+
+      if (entrypoint === 'public link') {
+        await linker.link(vfs, '/project', packages);
+      } else if (entrypoint === 'install tree') {
+        await linker.linkInstallTree(vfs, '/project', packages, () => {});
+      } else if (entrypoint === 'lockfile') {
+        lockfile = linker.buildLockfile('root', '1.0.0', packages);
+      } else if (entrypoint === 'install lockfile') {
+        lockfile = linker.buildInstallLockfile('root', '1.0.0', packages, emptyShadowPlan);
+      } else {
+        targets = requirePackageLinkTargets()('/project', packages);
+      }
+
+      expect.soft(reads.map((read) => read())).toEqual([1, 1, 1, 1]);
+      if (entrypoint === 'public link' || entrypoint === 'install tree') {
+        for (const value of validPaths) {
+          expect
+            .soft(await vfs.readFileText(`/project/${value.relativePath}/package.json`))
+            .toBe(JSON.stringify({ name: value.name, version: '1.0.0' }));
+        }
+      } else if (lockfile) {
+        expect.soft(lockfile).toEqual({
+          name: 'root',
+          version: '1.0.0',
+          lockfileVersion: 3,
+          requires: true,
+          packages: {
+            '': {
+              version: '1.0.0',
+              dependencies: {
+                'omitted-cli': '1.0.0',
+                'flat-cli': '1.0.0',
+              },
+            },
+            ...Object.fromEntries(
+              validPaths.map(({ relativePath }) => [
+                relativePath,
+                { version: '1.0.0', dependencies: {} },
+              ]),
+            ),
+          },
+        });
+      } else {
+        expect(targets).toEqual(
+          validPaths.flatMap(({ relativePath }) => [
+            `/project/${relativePath}`,
+            `/project/${relativePath}/package.json`,
+          ]),
+        );
+      }
+    },
+  );
 });

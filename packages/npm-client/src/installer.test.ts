@@ -1,5 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
-import { MemoryVfs } from '@riftydev/vfs';
+import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   TAR_TRAILER,
@@ -12,6 +12,7 @@ import {
 import { install } from './installer.ts';
 import type { Packument, VersionManifest } from './registry.ts';
 import { RegistryClient } from './registry.ts';
+import type { TarballCache } from './tarball-cache.ts';
 
 interface FakeRegistryEntry {
   manifest: VersionManifest;
@@ -26,13 +27,16 @@ interface FakeRegistryEntry {
 class FakeRegistry extends RegistryClient {
   private readonly db: Map<string, Map<string, FakeRegistryEntry>>;
   private readonly distTags: Map<string, Record<string, string>>;
+  private readonly onTarball: () => void;
   constructor(
     db: Map<string, Map<string, FakeRegistryEntry>>,
     distTags: Map<string, Record<string, string>> = new Map(),
+    onTarball: () => void = () => {},
   ) {
     super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
     this.db = db;
     this.distTags = distTags;
+    this.onTarball = onTarball;
   }
   override async getPackument(name: string): Promise<Packument> {
     const versions = this.db.get(name);
@@ -44,6 +48,7 @@ class FakeRegistry extends RegistryClient {
     return { name, 'dist-tags': { latest, ...this.distTags.get(name) }, versions: versionsMap };
   }
   override async getTarball(tarballUrl: string): Promise<Uint8Array> {
+    this.onTarball();
     // tarballUrl format we use below: `fake://<name>/<version>`
     const match = /^fake:\/\/([^/]+)\/(.+)$/.exec(tarballUrl);
     if (!match) throw new Error(`fake registry: bad tarball url ${tarballUrl}`);
@@ -53,6 +58,19 @@ class FakeRegistry extends RegistryClient {
     if (!entry) throw new Error(`fake registry: no tarball for ${tarballUrl}`);
     return entry.tarball;
   }
+}
+
+function recordingVfs(vfs: MemoryVfs, calls: string[], armed: () => boolean): Vfs {
+  return new Proxy(vfs, {
+    get(target, property) {
+      const value: unknown = Reflect.get(target, property, target);
+      if (typeof value !== 'function') return value;
+      return (...args: readonly unknown[]) => {
+        if (armed()) calls.push(String(property));
+        return Reflect.apply(value, target, args);
+      };
+    },
+  });
 }
 
 async function makeEntry(
@@ -209,22 +227,39 @@ describe('install — lifecycle cancellation (ADR-0314)', () => {
 });
 
 describe('install — package ingress preflight (ADR-0261)', () => {
-  it('rejects a resolved traversal install path before linking any bytes', async () => {
+  it('rejects a mixed resolved traversal path before any post-acquisition VFS call', async () => {
     const name = '@scope/../../../outside/node_modules/bad-cli';
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('good', new Map([['1.0.0', await makeEntry('good', '1.0.0')]]));
     db.set(name, new Map([['1.0.0', await makeEntry(name, '1.0.0')]]));
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
+    let armed = false;
+    const vfsCalls: string[] = [];
+    const observedVfs = recordingVfs(vfs, vfsCalls, () => armed);
+    const cacheEntries = new Map<string, Uint8Array>();
+    const tarballCache: TarballCache = {
+      async get(packageName, version, integrity) {
+        return cacheEntries.get(`${packageName}\0${version}\0${integrity}`)?.slice() ?? null;
+      },
+      async put(packageName, version, integrity, bytes) {
+        cacheEntries.set(`${packageName}\0${version}\0${integrity}`, bytes.slice());
+        return `memory:${packageName}@${version}`;
+      },
+    };
 
     await expect(
       install(
         'root',
         '1.0.0',
-        { [name]: '1.0.0' },
+        { good: '1.0.0', [name]: '1.0.0' },
         {
-          vfs,
+          vfs: observedVfs,
           cwd: '/proj',
-          registry: new FakeRegistry(db),
+          registry: new FakeRegistry(db, new Map(), () => {
+            armed = true;
+          }),
+          tarballCache,
           assertPortablePaths: () => {},
         },
       ),
@@ -233,6 +268,7 @@ describe('install — package ingress preflight (ADR-0261)', () => {
       path: `node_modules/${name}`,
     });
 
+    expect(vfsCalls).toEqual([]);
     expect(await vfs.exists('/proj/node_modules')).toBe(false);
     expect(await vfs.exists('/outside/node_modules/bad-cli')).toBe(false);
     expect(await vfs.exists('/proj/package-lock.json')).toBe(false);
