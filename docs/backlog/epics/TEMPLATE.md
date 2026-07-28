@@ -6,7 +6,7 @@ created: <YYYY-MM-DD>
 value: <one line — the user outcome this epic delivers>
 user_story: As <persona>, I want <end-to-end outcome>, but today <blocker>
 tier: <works|robust|production — required for an autonomous goal>
-# goal_baseline: <ready-epic SHA; add alone, land before any source PR>
+# goal_baseline: <ready-epic SHA; add alone, in a commit before the branch's first source commit>
 ---
 
 ## Outcome
@@ -37,9 +37,8 @@ tier: <works|robust|production — required for an autonomous goal>
 <!-- Required for autonomous pickup. Append JIT rows; never weaken existing data. -->
 
 - scope implemented outside `ready` items: 0
-- in-place ready-contract edits alongside source changes: 0
+- ready-contract edits after pickup: 0
 - new coordination mechanisms: 0
-- review checkpoints per slice: exactly 2
 
 | slice | band |
 |---|---|

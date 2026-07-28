@@ -97,5 +97,4 @@ settlement, history, and VFS. The serial
 - `contract-red-first:
   b0c2e20613ec002db35a4dc5b220024f5117131a`; Standards blocked the
   `lossy-aggregate` misclassification and Spec blocked missing array/second-arg
-  negative witnesses. This in-place re-cut is the second and final Contract+RED
-  checkpoint for this unit.
+  negative witnesses. This in-place re-cut carries the unit's checkpoint lineage.

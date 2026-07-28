@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **PR = one delivered behavior; process state never opens a PR.** New
+  `AGENTS.md` §PR — unit of delivery: contract flips, demotions, re-cuts,
+  splits, intake drafts and lineage commit into the delivering unit's branch,
+  and a finding never opens a second PR. The successor-PR mandate and the
+  two-checkpoint cap that forced it are deleted (`fault-classes.md` Checkpoints
+  / Lineage / Contract escalation, `decision-workflow.md` §Autonomous goals 5,
+  `rifty-review` §Checkpoint run, `backlog/README.md` §Budget, `epics/TEMPLATE.md`
+  and 14 live item copies). Contract+RED-before-implementation and
+  Final+GREEN-on-one-SHA are unchanged — only the cap on re-cuts is gone;
+  escalation now re-refines the contract in place. Baseline: one autonomous run
+  spent 17 PRs on ~5,000 net lines, 7 of 13 merged PRs carrying zero production
+  source. Still PR-scoped and unresolved: PR-open timing, epic bootstrap, and
+  mid-build demotion — `docs/backlog/process-meta/autonomous-epic-runs.md`.
 - **Docs-only PRs skip 14 unit/browser jobs.** A first-party merge-base
   classifier now treats only `docs/**` and conventional documentation files as
   non-code; everything unknown fails open to the full gate. Unit/parity,

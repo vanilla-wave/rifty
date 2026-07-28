@@ -20,7 +20,7 @@ This was the first split successor to terminal predecessor
 `9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`. Its second Contract+RED
 checkpoint found that raw resolved-package path authority and package-bin
 claim/phased-linker authority are independently reviewable. This item is now a
-terminal blocked split predecessor and receives no third checkpoint.
+terminal blocked split predecessor.
 
 `npm-client/resolved-package-install-path-authority` owns the raw path grammar
 and prepared package carrier first. Then
@@ -100,8 +100,7 @@ successor.
 ## Decisions
 
 - `terminal-checkpoint:
-  8e1456665a3d7a77425b5afa8f0c802ac59162b5` — second Contract+RED BLOCKED;
-  this unit receives no third checkpoint.
+  8e1456665a3d7a77425b5afa8f0c802ac59162b5` — second Contract+RED BLOCKED.
 - `checkpoint-lineage: [83ea4bf28e880eaf6c581de69731548860c318a5,
   8e1456665a3d7a77425b5afa8f0c802ac59162b5]`.
 - `split-successors: [npm-client/resolved-package-install-path-authority,

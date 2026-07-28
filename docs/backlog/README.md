@@ -61,8 +61,10 @@ starts a run.
 1. Land the ready epic (with its ADRs — the bootstrap PR is contract-only:
    `docs/**.md`, zero source).
 2. In a later commit — the SAME contract-only PR is fine — add only
-   `goal_baseline: <the ready-epic commit's SHA>`. One bootstrap PR with two
-   commits (epic, then marker) is the normal shape; two PRs work too.
+   `goal_baseline: <the ready-epic commit's SHA>`. ONE bootstrap PR, two commits
+   (epic, then marker) — never a chain. It stays a separate PR only because
+   `check:budget` reads the epic from merge-base (`budget.mjs:88`); see
+   `process-meta/autonomous-epic-runs.md` §Residual.
 3. Every source PR repeats exactly one same-epic pair:
 
 ```text
@@ -88,9 +90,8 @@ proof, fresh `goal_complete: true`, and DoD green on one SHA; then delete it.
 Each autonomous source PR selects one epic `## Budget` row. Tripwires:
 
 - scope implemented outside ready items: `0`;
-- ready-contract edits beside source: `0`;
+- ready-contract edits after pickup: `0`;
 - new coordination mechanisms: `0`, unless the named substrate item owns one;
-- review checkpoints per slice: exactly `2`;
 - hand-written insertion band = inserted lines in the slice source PR (tests/
   generated globs excluded — `check:budget`): above high warns; at `2×` high re-cut;
 - expected-RED batch far above the slice band → the unit is too big: split it
@@ -111,7 +112,7 @@ from the band.
 | `check:goal-contract` | bootstrap/marker history, frozen fields, linked-child deletion |
 | `check:budget` | paired declaration, append-only Budget, pickup row/item, band |
 | `check:contract-drift` | post-pickup ready contracts and process referees |
-| Final review | routing/run membership, checkpoint order/count, semantic scope/residuals, full mechanism sweep, acceptance |
+| Final review | routing/run membership, checkpoint order, semantic scope/residuals, full mechanism sweep, acceptance |
 
 Machine gates prove only the listed local facts; review owns contextual
 classification. `pr:check`/CI run the machine gates.

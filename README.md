@@ -148,7 +148,7 @@ UI framework (SolidJS) is confined to `apps/playground/**` (D-002).
 
 ## Contributing
 
-Rules live in [`CLAUDE.md`](./CLAUDE.md): TDD (tests/parity-case first), no `any`, no silent stubs (throw `NotImplementedError`), one change per PR. Decisions are recorded as [ADRs](./docs/adr/).
+Rules live in [`CLAUDE.md`](./CLAUDE.md): TDD (tests/parity-case first), no `any`, no silent stubs (throw `NotImplementedError`), one delivered behavior per PR. Decisions are recorded as [ADRs](./docs/adr/).
 
 ## License
 

@@ -28,7 +28,8 @@ Use `docs/process/fault-classes.md` §§Boundary failure models/Class-kill and
 
 ## 4. Mint
 
-Create `docs/backlog/<area>/<slug>.md` from `docs/backlog/README.md`: `draft`,
+Create `docs/backlog/<area>/<slug>.md` from `docs/backlog/README.md` — committed
+to the discovering unit's branch, never its own PR (`AGENTS.md` §PR): `draft`,
 observed `## Context`, honest sources, optional real-path `user_story`, and a code
 marker when anchored. Done when `pnpm backlog:check` passes.
 
