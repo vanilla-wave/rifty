@@ -77,6 +77,7 @@ import {
   type PlaygroundAppRuntime,
   createPlaygroundAppRuntime,
 } from './playground-app-runtime.ts';
+import { rebindAfterPlaygroundTransitionFailure } from './playground-app-transition-recovery.ts';
 import { createPlaygroundAppWorkbenchOwnership } from './playground-app-workbench-ownership.ts';
 import { createDelayedCatalogDelete } from './playground-delete-policy.ts';
 import { PlaygroundHealthBanner, createPlaygroundHealthUi } from './playground-health-ui.tsx';
@@ -665,8 +666,7 @@ export function App(props: AppProps) {
         context = await operation(app);
       } catch (error) {
         const restored = runtime?.current() ?? null;
-        if (restored !== null) await bindProject(restored);
-        throw error;
+        return rebindAfterPlaygroundTransitionFailure(error, restored, bindProject);
       }
       if (context !== null) await bindProject(context);
       return context;
