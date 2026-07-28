@@ -1,0 +1,147 @@
+{
+  "node": "v24.16.0",
+  "npm": "11.17.0",
+  "cases": {
+    "direct-missing": {
+      "fresh": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "\nadded 3 packages in <duration>\n",
+        "stderr": "",
+        "registryRequests": [
+          "/contract-leaf",
+          "/contract-leaf/-/contract-leaf-1.0.0.tgz",
+          "/contract-peer",
+          "/contract-peer/-/contract-peer-2.0.0.tgz",
+          "/contract-source",
+          "/contract-source/-/contract-source-1.0.0.tgz"
+        ],
+        "files": {
+          "node_modules/.package-lock.json": "{\n  \"name\": \"peer-direct-missing\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    }\n  }\n}\n",
+          "node_modules/contract-leaf/package.json": "{\"name\":\"contract-leaf\",\"version\":\"1.0.0\"}\n",
+          "node_modules/contract-peer/package.json": "{\"name\":\"contract-peer\",\"version\":\"2.0.0\",\"dependencies\":{\"contract-leaf\":\"1.0.0\"}}\n",
+          "node_modules/contract-source/package.json": "{\"name\":\"contract-source\",\"version\":\"1.0.0\",\"peerDependencies\":{\"contract-peer\":\"^2.0.0\"}}\n",
+          "package-lock.json": "{\n  \"name\": \"peer-direct-missing\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": {\n      \"name\": \"peer-direct-missing\",\n      \"version\": \"1.0.0\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    }\n  }\n}\n"
+        }
+      },
+      "offlineReplay": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "\nadded 3 packages in <duration>\n",
+        "stderr": "",
+        "registryRequests": [],
+        "files": {
+          "node_modules/.package-lock.json": "{\n  \"name\": \"peer-direct-missing\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    }\n  }\n}\n",
+          "node_modules/contract-leaf/package.json": "{\"name\":\"contract-leaf\",\"version\":\"1.0.0\"}\n",
+          "node_modules/contract-peer/package.json": "{\"name\":\"contract-peer\",\"version\":\"2.0.0\",\"dependencies\":{\"contract-leaf\":\"1.0.0\"}}\n",
+          "node_modules/contract-source/package.json": "{\"name\":\"contract-source\",\"version\":\"1.0.0\",\"peerDependencies\":{\"contract-peer\":\"^2.0.0\"}}\n",
+          "package-lock.json": "{\n  \"name\": \"peer-direct-missing\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": {\n      \"name\": \"peer-direct-missing\",\n      \"version\": \"1.0.0\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    }\n  }\n}\n"
+        }
+      }
+    },
+    "nested-missing": {
+      "fresh": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "\nadded 4 packages in <duration>\n",
+        "stderr": "",
+        "registryRequests": [
+          "/contract-host",
+          "/contract-host/-/contract-host-1.0.0.tgz",
+          "/contract-leaf",
+          "/contract-leaf/-/contract-leaf-1.0.0.tgz",
+          "/contract-peer",
+          "/contract-peer/-/contract-peer-2.0.0.tgz",
+          "/contract-source",
+          "/contract-source/-/contract-source-1.0.0.tgz"
+        ],
+        "files": {
+          "node_modules/.package-lock.json": "{\n  \"name\": \"peer-nested-missing\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"node_modules/contract-host\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-host/-/contract-host-1.0.0.tgz\",\n      \"integrity\": \"sha512-sYj+kAdLt/qjbQBCKUU9GE1ZJ2sYkzmkLwiabkXf77/s0a6LRZU9VNLbsqvQt3kXec6N9SzfSuC4591gGVaBcA==\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    }\n  }\n}\n",
+          "node_modules/contract-host/package.json": "{\"name\":\"contract-host\",\"version\":\"1.0.0\",\"dependencies\":{\"contract-source\":\"1.0.0\"}}\n",
+          "node_modules/contract-leaf/package.json": "{\"name\":\"contract-leaf\",\"version\":\"1.0.0\"}\n",
+          "node_modules/contract-peer/package.json": "{\"name\":\"contract-peer\",\"version\":\"2.0.0\",\"dependencies\":{\"contract-leaf\":\"1.0.0\"}}\n",
+          "node_modules/contract-source/package.json": "{\"name\":\"contract-source\",\"version\":\"1.0.0\",\"peerDependencies\":{\"contract-peer\":\"^2.0.0\"}}\n",
+          "package-lock.json": "{\n  \"name\": \"peer-nested-missing\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": {\n      \"name\": \"peer-nested-missing\",\n      \"version\": \"1.0.0\",\n      \"dependencies\": {\n        \"contract-host\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-host/-/contract-host-1.0.0.tgz\",\n      \"integrity\": \"sha512-sYj+kAdLt/qjbQBCKUU9GE1ZJ2sYkzmkLwiabkXf77/s0a6LRZU9VNLbsqvQt3kXec6N9SzfSuC4591gGVaBcA==\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    }\n  }\n}\n"
+        }
+      },
+      "offlineReplay": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "\nadded 4 packages in <duration>\n",
+        "stderr": "",
+        "registryRequests": [],
+        "files": {
+          "node_modules/.package-lock.json": "{\n  \"name\": \"peer-nested-missing\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"node_modules/contract-host\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-host/-/contract-host-1.0.0.tgz\",\n      \"integrity\": \"sha512-sYj+kAdLt/qjbQBCKUU9GE1ZJ2sYkzmkLwiabkXf77/s0a6LRZU9VNLbsqvQt3kXec6N9SzfSuC4591gGVaBcA==\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    }\n  }\n}\n",
+          "node_modules/contract-host/package.json": "{\"name\":\"contract-host\",\"version\":\"1.0.0\",\"dependencies\":{\"contract-source\":\"1.0.0\"}}\n",
+          "node_modules/contract-leaf/package.json": "{\"name\":\"contract-leaf\",\"version\":\"1.0.0\"}\n",
+          "node_modules/contract-peer/package.json": "{\"name\":\"contract-peer\",\"version\":\"2.0.0\",\"dependencies\":{\"contract-leaf\":\"1.0.0\"}}\n",
+          "node_modules/contract-source/package.json": "{\"name\":\"contract-source\",\"version\":\"1.0.0\",\"peerDependencies\":{\"contract-peer\":\"^2.0.0\"}}\n",
+          "package-lock.json": "{\n  \"name\": \"peer-nested-missing\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": {\n      \"name\": \"peer-nested-missing\",\n      \"version\": \"1.0.0\",\n      \"dependencies\": {\n        \"contract-host\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-host/-/contract-host-1.0.0.tgz\",\n      \"integrity\": \"sha512-sYj+kAdLt/qjbQBCKUU9GE1ZJ2sYkzmkLwiabkXf77/s0a6LRZU9VNLbsqvQt3kXec6N9SzfSuC4591gGVaBcA==\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    }\n  }\n}\n"
+        }
+      }
+    },
+    "direct-conflict": {
+      "fresh": {
+        "exit": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "npm error code ERESOLVE\nnpm error ERESOLVE unable to resolve dependency tree\nnpm error\nnpm error While resolving: peer-direct-conflict@1.0.0\nnpm error Found: contract-peer@1.0.0\nnpm error node_modules/contract-peer\nnpm error   contract-peer@\"1.0.0\" from the root project\nnpm error\nnpm error Could not resolve dependency:\nnpm error peer contract-peer@\"^2.0.0\" from contract-source@1.0.0\nnpm error node_modules/contract-source\nnpm error   contract-source@\"1.0.0\" from the root project\nnpm error\nnpm error Fix the upstream dependency conflict, or retry this command with --force or --legacy-peer-deps to accept an incorrect (and potentially broken) dependency resolution.\nnpm error\nnpm error\nnpm error For a full report see:\nnpm error <root>/.npm-cache/_logs/<timestamp>-eresolve-report.txt\n",
+        "registryRequests": [
+          "/contract-peer",
+          "/contract-peer",
+          "/contract-source"
+        ],
+        "files": {}
+      },
+      "absentAfterFailure": {
+        "nodeModules": true,
+        "packageLock": true
+      }
+    },
+    "nested-conflict": {
+      "fresh": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "\nadded 5 packages in <duration>\n",
+        "stderr": "",
+        "registryRequests": [
+          "/contract-host",
+          "/contract-host/-/contract-host-1.0.0.tgz",
+          "/contract-leaf",
+          "/contract-leaf/-/contract-leaf-1.0.0.tgz",
+          "/contract-peer",
+          "/contract-peer",
+          "/contract-peer/-/contract-peer-1.0.0.tgz",
+          "/contract-peer/-/contract-peer-2.0.0.tgz",
+          "/contract-source",
+          "/contract-source/-/contract-source-1.0.0.tgz"
+        ],
+        "files": {
+          "node_modules/.package-lock.json": "{\n  \"name\": \"peer-nested-conflict\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"node_modules/contract-host\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-host/-/contract-host-1.0.0.tgz\",\n      \"integrity\": \"sha512-sYj+kAdLt/qjbQBCKUU9GE1ZJ2sYkzmkLwiabkXf77/s0a6LRZU9VNLbsqvQt3kXec6N9SzfSuC4591gGVaBcA==\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host/node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host/node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-1.0.0.tgz\",\n      \"integrity\": \"sha512-bFAcBZGtmEe2HqFLcXlWnAIxoVs3jymU5yPuGFsyZQjxGKM3j+/apcY+QlLBw+FP84c5dWeKGCtaQKZBb3EQPw==\"\n    }\n  }\n}\n",
+          "node_modules/contract-host/node_modules/contract-peer/package.json": "{\"name\":\"contract-peer\",\"version\":\"2.0.0\",\"dependencies\":{\"contract-leaf\":\"1.0.0\"}}\n",
+          "node_modules/contract-host/node_modules/contract-source/package.json": "{\"name\":\"contract-source\",\"version\":\"1.0.0\",\"peerDependencies\":{\"contract-peer\":\"^2.0.0\"}}\n",
+          "node_modules/contract-host/package.json": "{\"name\":\"contract-host\",\"version\":\"1.0.0\",\"dependencies\":{\"contract-source\":\"1.0.0\"}}\n",
+          "node_modules/contract-leaf/package.json": "{\"name\":\"contract-leaf\",\"version\":\"1.0.0\"}\n",
+          "node_modules/contract-peer/package.json": "{\"name\":\"contract-peer\",\"version\":\"1.0.0\"}\n",
+          "package-lock.json": "{\n  \"name\": \"peer-nested-conflict\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": {\n      \"name\": \"peer-nested-conflict\",\n      \"version\": \"1.0.0\",\n      \"dependencies\": {\n        \"contract-host\": \"1.0.0\",\n        \"contract-peer\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-host/-/contract-host-1.0.0.tgz\",\n      \"integrity\": \"sha512-sYj+kAdLt/qjbQBCKUU9GE1ZJ2sYkzmkLwiabkXf77/s0a6LRZU9VNLbsqvQt3kXec6N9SzfSuC4591gGVaBcA==\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host/node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host/node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-1.0.0.tgz\",\n      \"integrity\": \"sha512-bFAcBZGtmEe2HqFLcXlWnAIxoVs3jymU5yPuGFsyZQjxGKM3j+/apcY+QlLBw+FP84c5dWeKGCtaQKZBb3EQPw==\"\n    }\n  }\n}\n"
+        }
+      },
+      "offlineReplay": {
+        "exit": 0,
+        "signal": null,
+        "stdout": "\nadded 5 packages in <duration>\n",
+        "stderr": "",
+        "registryRequests": [],
+        "files": {
+          "node_modules/.package-lock.json": "{\n  \"name\": \"peer-nested-conflict\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"node_modules/contract-host\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-host/-/contract-host-1.0.0.tgz\",\n      \"integrity\": \"sha512-sYj+kAdLt/qjbQBCKUU9GE1ZJ2sYkzmkLwiabkXf77/s0a6LRZU9VNLbsqvQt3kXec6N9SzfSuC4591gGVaBcA==\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host/node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host/node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-1.0.0.tgz\",\n      \"integrity\": \"sha512-bFAcBZGtmEe2HqFLcXlWnAIxoVs3jymU5yPuGFsyZQjxGKM3j+/apcY+QlLBw+FP84c5dWeKGCtaQKZBb3EQPw==\"\n    }\n  }\n}\n",
+          "node_modules/contract-host/node_modules/contract-peer/package.json": "{\"name\":\"contract-peer\",\"version\":\"2.0.0\",\"dependencies\":{\"contract-leaf\":\"1.0.0\"}}\n",
+          "node_modules/contract-host/node_modules/contract-source/package.json": "{\"name\":\"contract-source\",\"version\":\"1.0.0\",\"peerDependencies\":{\"contract-peer\":\"^2.0.0\"}}\n",
+          "node_modules/contract-host/package.json": "{\"name\":\"contract-host\",\"version\":\"1.0.0\",\"dependencies\":{\"contract-source\":\"1.0.0\"}}\n",
+          "node_modules/contract-leaf/package.json": "{\"name\":\"contract-leaf\",\"version\":\"1.0.0\"}\n",
+          "node_modules/contract-peer/package.json": "{\"name\":\"contract-peer\",\"version\":\"1.0.0\"}\n",
+          "package-lock.json": "{\n  \"name\": \"peer-nested-conflict\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": {\n      \"name\": \"peer-nested-conflict\",\n      \"version\": \"1.0.0\",\n      \"dependencies\": {\n        \"contract-host\": \"1.0.0\",\n        \"contract-peer\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-host/-/contract-host-1.0.0.tgz\",\n      \"integrity\": \"sha512-sYj+kAdLt/qjbQBCKUU9GE1ZJ2sYkzmkLwiabkXf77/s0a6LRZU9VNLbsqvQt3kXec6N9SzfSuC4591gGVaBcA==\",\n      \"dependencies\": {\n        \"contract-source\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host/node_modules/contract-peer\": {\n      \"version\": \"2.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-2.0.0.tgz\",\n      \"integrity\": \"sha512-sGcXuC97XO7wpGqIF6goaTM1HW/v53BN6lYR6t6ntzoMoWqTPPY+6+S1J9zRJ4xcGXLYm7tCyPY4HjM5Nm/txg==\",\n      \"peer\": true,\n      \"dependencies\": {\n        \"contract-leaf\": \"1.0.0\"\n      }\n    },\n    \"node_modules/contract-host/node_modules/contract-source\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-source/-/contract-source-1.0.0.tgz\",\n      \"integrity\": \"sha512-RXhQEpC8zHcAz7vWyszlNARrgIGUEUER3Ua7twOOqqcYAduoHS783eZeWrWbbNhq5tqrnumiObOqgwOGRvwb3Q==\",\n      \"peerDependencies\": {\n        \"contract-peer\": \"^2.0.0\"\n      }\n    },\n    \"node_modules/contract-leaf\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-leaf/-/contract-leaf-1.0.0.tgz\",\n      \"integrity\": \"sha512-QbyWhecLRptVRApWvGaxKNdnJvTKKqYrdtEC9TmTc6ZbEd6Wx70mEGxsC90EVPRU4eyLRwJW3Ln+oV/X2LoIRA==\",\n      \"peer\": true\n    },\n    \"node_modules/contract-peer\": {\n      \"version\": \"1.0.0\",\n      \"resolved\": \"<registry>/contract-peer/-/contract-peer-1.0.0.tgz\",\n      \"integrity\": \"sha512-bFAcBZGtmEe2HqFLcXlWnAIxoVs3jymU5yPuGFsyZQjxGKM3j+/apcY+QlLBw+FP84c5dWeKGCtaQKZBb3EQPw==\"\n    }\n  }\n}\n"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "runtime": {
+    "node": "v24.16.0",
+    "npm": "11.17.0",
+    "arborist": "9.8.0",
+    "binLinks": "6.0.2",
+    "stringLocaleCompare": "1.1.0"
+  },
+  "sourceSha256": {
+    "rebuild": "1db859afb29e7e93531ba1f3933558468c7192569d581820ad1721001a0396cd",
+    "reify": "356e1b8f7663f32dfbd4355bf33f896eb9e6475b76e0287d245f0127475ee85b",
+    "linkGently": "8e6e03105afe13f84f4efebdbe7e301f1e94c0f9b907989a4f473a4f4458997c",
+    "localeCompare": "cd6025c8f45932da9c61fac350542414cfbf2bad9f01f9ca78aa84f038e4a390"
+  },
+  "fresh": [
+    {
+      "name": "bare-hyphen-first",
+      "dependencyOrder": "a-a -> a_a",
+      "bin": "../a_a/cli.js"
+    },
+    {
+      "name": "bare-underscore-first",
+      "dependencyOrder": "a_a -> a-a",
+      "bin": "../a_a/cli.js"
+    },
+    {
+      "name": "scoped-hyphen-first",
+      "dependencyOrder": "@scope/a-a -> @scope/a_a",
+      "bin": "../@scope/a_a/cli.js"
+    },
+    {
+      "name": "scoped-underscore-first",
+      "dependencyOrder": "@scope/a_a -> @scope/a-a",
+      "bin": "../@scope/a_a/cli.js"
+    },
+    {
+      "name": "bare-first",
+      "dependencyOrder": "a-a -> @zz/provider",
+      "bin": "../@zz/provider/cli.js"
+    },
+    {
+      "name": "scope-first",
+      "dependencyOrder": "@zz/provider -> a-a",
+      "bin": "../@zz/provider/cli.js"
+    }
+  ],
+  "incremental": [
+    {
+      "name": "hyphen-then-underscore",
+      "initial": "../a-a/cli.js",
+      "afterAdd": "../a_a/cli.js",
+      "afterNoop": "../a_a/cli.js",
+      "afterRebuild": "../a_a/cli.js"
+    },
+    {
+      "name": "underscore-then-hyphen",
+      "initial": "../a_a/cli.js",
+      "afterAdd": "../a-a/cli.js",
+      "afterNoop": "../a-a/cli.js",
+      "afterRebuild": "../a_a/cli.js"
+    }
+  ],
+  "links": [
+    {
+      "name": "directory-link-underscore-then-hyphen",
+      "initial": "../a_a/cli.js",
+      "afterAdd": "../a_a/cli.js"
+    }
+  ],
+  "removal": [
+    {
+      "name": "remove-winner",
+      "removed": "a_a",
+      "initial": "../a_a/cli.js",
+      "afterRemove": null,
+      "afterNoop": "../a-a/cli.js",
+      "afterRebuild": "../a-a/cli.js"
+    },
+    {
+      "name": "remove-loser",
+      "removed": "a-a",
+      "initial": "../a_a/cli.js",
+      "afterRemove": null,
+      "afterNoop": "../a_a/cli.js",
+      "afterRebuild": "../a_a/cli.js"
+    }
+  ],
+  "nestedScopeIsolation": {
+    "root": "../a_a/cli.js",
+    "nestedConsumer": "../a_a/cli.js"
+  }
+}

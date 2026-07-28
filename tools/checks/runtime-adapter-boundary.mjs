@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 /**
- * ADR-0308 executable-adapter boundary.
+ * ADR-0335 generic shadow-consumer boundary.
  *
- * These modules carry generic plan/admission/launch mechanics. Consumer
- * recognition belongs in named concrete integration-edge modules, never in
- * this list. Imports may delegate to such an edge; runtime branches and
- * literals here may not name esbuild or Vite.
+ * These modules carry generic install/link/plan/admission/launch mechanics.
+ * Consumer recognition belongs in named concrete integration-edge modules,
+ * never in this list. Imports may delegate to such an edge; runtime branches
+ * and literals here may not name a concrete package, recipe, or Vite entry.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 export const GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
+  'packages/npm-client/src/installer.ts',
+  'packages/npm-client/src/linker.ts',
+  'packages/npm-client/src/internal/shadow/admission.ts',
   'packages/npm-client/src/internal/shadow/planner.ts',
   'packages/npm-client/src/internal/shadow/manager.ts',
   'packages/npm-client/src/internal/shadow/port.ts',
@@ -28,8 +31,9 @@ export const GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/workbench/src/workers/node-entry-runtime-preparation.ts',
 ]);
 
-const CONSUMER_NAME = /(?:^|[^a-z])(?:esbuild|vite)(?:[^a-z]|$)/iu;
-const CONSUMER_IDENTIFIER = /(?:esbuild|vite)/iu;
+const CONSUMER_NAME =
+  /(?:^|[^a-z])(?:esbuild|lightningcss(?:-wasm)?|napi-wasm|sass(?:-embedded)?|vite)(?:[^a-z]|$)/iu;
+const CONSUMER_IDENTIFIER = /(?:esbuild|lightning_?css|napi_?wasm|sass|vite)/iu;
 
 function lineOf(sourceFile, node) {
   return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;

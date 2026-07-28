@@ -1,40 +1,48 @@
-# ADR 0328: Shadow recipe v2 owns exact admission acquisition and user-visible bins
+# ADR 0335: Shadow recipe v2 owns materialized bin claims; npm reify owns collision settlement
 
 Status: Accepted
 Date: 2026-07
 
-> TL;DR: one clone-safe recipe v2 owns admission, exact acquisition dependency
-> projection, materialization, user-visible bins, provenance, and an OPTIONAL
-> runtime binding; generic consumers execute policy data and never recognize
-> Sass, esbuild, LightningCSS, Vite, or an entry kind.
+> TL;DR: recipe v2 owns exact materialized bin claims, while npm reify history
+> owns same-command settlement; rifty supports collision-free scopes and
+> loud-throws `npm-client.bin-collision-reify` until it reproduces that complete
+> lifecycle.
 
 ## Context
 
-ADR-0308 replaced the #160 quarry's Vite/esbuild-first path with one builtin
-package-generic registry. Its core direction worked: direct esbuild and Vite
-share one adapter, registry aliases carry lockfile provenance, and install-only
-recipes create no runtime asset capability.
+ADR-0328 replaced ADR-0308 with one strict, clone-safe recipe authority. Its
+admission, acquisition, materialization, provenance, optional-binding, and
+generic-consumer decisions remain load-bearing.
 
-The second substitution exposed three facts that v1 did not own:
+ADR-0328 also decided:
 
-- `matchesRange()` admitted `^1.100.0`, `*`, and other ranges although Sass was
-  proven only for the literal `sass-embedded@1.100.0` request;
-- registry acquisition copied every optional dependency from the source
-  manifest, so `sass` reached native `@parcel/watcher` despite the decided
-  watch-mode exclusion;
-- the linker wrote the acquired package's bin before alias materialization, so
-  the real pure-Sass CLI leaked through `.bin/sass` instead of the promised
-  `NotImplementedError('sass-embedded.cli')`.
+> When user-visible packages in one `node_modules` scope claim the same command,
+> the lexicographically first package name wins independently of manifest order;
+> each install reconciles an existing launcher to that winner.
 
-These are one missing authority, not three Sass exceptions. ADR-0308's claim
-that Sass would change no generic file is therefore false. This ADR supersedes
-ADR-0308 and grafts its remaining decisions.
+That model came from a non-discriminating local-`file:` probe. A committed
+ordinary packed-tarball differential on Node v24.16.0 / npm 11.17.0 disproves
+both clauses:
+
+- fresh install and `npm rebuild` process Arborist's rebuild queue ordered by
+  `(node.depth, @isaacs/string-locale-compare('en')(node.path))`; `bin-links`
+  gives the first caller each destination;
+- an ordinary incremental install rebuilds ADD/CHANGE nodes, so a newly changed
+  contender can overwrite the current launcher; a no-op preserves it;
+- removing either colliding package removes the shared launcher without
+  rebuilding the unchanged survivor;
+- unchanged direct `file:` directory Links are rebuilt and therefore cannot
+  stand in for registry-package behavior.
+
+Same-command ownership is an operation-history contract, not a comparator over
+the final package-name set. This ADR supersedes ADR-0328, grafts its remaining
+decisions, and replaces only that false settlement model.
 
 ## Decision
 
 - **One strict recipe v2.** The catalog and every recipe use schema 2 and new
   identities. A recipe owns trigger/version, admission, acquisition,
-  materialization, user-visible bins, provenance, and an optional runtime
+  materialization, user-visible bin claims, provenance, and an optional runtime
   binding. Catalog data is clone-safe and carries no functions.
 - **Admission is data.** Each recipe selects `semver-admits` or `exact-only`
   and names the stable unsupported feature. `exact-only` accepts only a
@@ -52,15 +60,28 @@ ADR-0308 and grafts its remaining decisions.
   external walk; omitted optionals never resolve or fetch. Omission and bundle
   membership retain the exact range, so changed metadata cannot silently widen
   policy.
-- **Materialization owns bins.** A recipe records its exact bin map. Acquired
-  registry bins never enter linking or their lock entry. After alias files are
-  materialized, the shared package-bin linker creates `.bin` launchers from
-  the materialized package and validates every target. Synthetic recipes use
-  the same bin authority. When user-visible packages in one `node_modules`
-  scope claim the same command, the lexicographically first package name wins
-  independently of manifest order; each install reconciles an existing
-  launcher to that winner. Acquired registry twins are suppressed before this
-  policy runs. No second bin implementation is allowed.
+- **Materialization owns bin claims.** A recipe records the exact user-visible
+  bin map. Acquired registry-twin bins are removed from package linking and
+  lock facts before claims are collected. After package files and registry
+  aliases settle, the sole shared package-bin linker validates materialized
+  targets and writes launchers for synthetic and registry recipes. Recipe data
+  determines who may claim a command; it does not invent collision settlement.
+- **npm reify history owns collision settlement.** For ordinary packed registry
+  packages, same-command ownership is operation-sensitive. Fresh install and
+  `npm rebuild` use the depth/English-locale full-path rebuild order.
+  Incremental ADD/CHANGE may overwrite the launcher; no-op preserves it;
+  removing either contender removes it without rebuilding an unchanged
+  survivor. Local `file:` directory Links are a distinct lifecycle. Rifty may
+  claim collisions only after reproducing this complete matrix.
+- **Collision-free compatibility boundary.** Until that lifecycle ships, each
+  command in each `node_modules` scope must have one unambiguous current
+  claimant and authoritative prior state must require no collision transition.
+  A current duplicate, recorded prior collision, or owner transition requiring
+  ADD/CHANGE/no-op/remove/rebuild semantics throws
+  `NotImplementedError('npm-client.bin-collision-reify')` before project-tree,
+  substitution-report, or lock mutation. Acquired registry twins are excluded
+  before this gate. No lexical, code-unit, manifest-order, or final-tree
+  recomputation fallback is permitted.
 - **Strict ingress.** The codec rejects v1, unknown fields, accessors, sparse
   data, invalid or overlapping dependency maps, escaping/missing bin targets,
   and disagreement between materialization data and synthesized
@@ -95,6 +116,7 @@ ADR-0308 and grafts its remaining decisions.
   `shadow-trace-drift`; it is never reinterpreted as v2. A v1 identity is
   attributed to its trigger package, with the lexicographically smallest
   `canonicalShadowJson(appliedFact)` winning when multiple legacy facts exist.
+  That legacy-trace attribution tie-breaker is unrelated to `.bin` ownership.
   Pre-shadow lockfiles remain ordinary empty plans.
 - **Concrete recipes.**
   - esbuild keeps semver admission, synthetic materialization, the existing
@@ -114,15 +136,23 @@ ADR-0308 and grafts its remaining decisions.
 
 ## Consequences
 
+- (+) Recipe bins can ship faithfully through one linker without pretending a
+  static collision winner exists.
+- (+) Acquired twins cannot leak a launcher or lock claim before the
+  materialized package becomes visible.
 - (+) Adding future recipes changes policy/capsule/oracle/generated data and
   tests unless they need a genuinely new recipe field.
 - (+) Sass exact-version, zero-native-acquisition, CLI, and replay promises are
   enforced before observable side effects.
 - (+) Direct esbuild and Vite keep one generic adapter path; install-only
   recipes still perform zero manager/store operations.
+- (−) Same-command installs remain explicit compat ❌ until rifty owns npm's
+  operation-sensitive reify lifecycle.
 - (−) Existing v1 shadow lockfiles and baked snapshots change identity and
   require regeneration/reinstall; failure is loud, never approximate replay.
-- (−) Registry metadata is now part of the attested recipe contract; a changed
+- (−) Registry metadata is part of the attested recipe contract; a changed
   exact-version manifest requires an explicit policy/catalog update.
+- Follow-up: `npm-client/npm-11-bin-reify-authority` owns the complete collision
+  lifecycle outside the active shadow-substitution goal.
 - Follow-up: `npm-client/sass-embedded-substitution` proves v2 through real
   Node differential tests and Vite 7.3.6 SCSS dev/HMR/build.
