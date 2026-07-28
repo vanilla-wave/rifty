@@ -489,7 +489,7 @@ describe('shadow recipe v2 execution authority', () => {
     },
   );
 
-  it('traverses retained projection, suppresses acquired bins, and publishes recipe bins', async () => {
+  it('verifies the exact registry map, consumes the bundled member, and publishes recipe bins', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const vfs = new MemoryVfs();
     await vfs.mkdir('/project', { recursive: true });

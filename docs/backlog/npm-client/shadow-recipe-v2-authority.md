@@ -113,6 +113,7 @@ materialization, and replay without shipping the Sass recipe.
 | corrupt-input | strict decode rejects malformed schema, projection, bin, and digest data | codec/catalog contract table |
 | provenance-lie | registry metadata or lock acquisition/materialization drift rejects before reuse | installer contract faults |
 | observable-order | unsupported admission rejects before registry/VFS work; dependency drift rejects before tarball work | synthetic policy and registry counters |
+| unbounded-read | registry headers and bodies remain progress-bounded, runaway bodies stay capped, and retries cancel discarded responses | inherited `RegistryClient` fault suite (8/8) |
 | poisoned-cache / provenance-lie | matching v2 lock replays byte-identically with zero reads; v1 or drifted evidence loud-fails | installer replay contracts |
 | torn-state | abort during reachable registry alias writes stops later writes and the success claim, publishes no lock, and retry reconciles exact bytes; shared-bin cancellation remains inherited | installer materialization fault plus linker fault suite |
 | quota-perm-fail | quota/permission rejection during alias or bin writes publishes no success report or lock; retry reconciles exact bytes | root/nested registry alias and shared-bin write faults |
@@ -145,7 +146,8 @@ materialization, and replay without shipping the Sass recipe.
 
 - ADR-0328 owns the complete recipe authority. The completed data-authority
   slice owns schema 2, codec/ingress, admission, and the schema-1 replay guard;
-  this item owns projection execution, materialized-bin execution, and v2
+  this item owns exact current LightningCSS-map verification, embedded bundled
+  member consumption, materialized-bin execution, and v2
   acquisition/materialization provenance.
 - The recipe model remains clone-safe data. Generic consumers execute policy
   fields and never recognize Sass, esbuild, LightningCSS, Vite, or entry kind.

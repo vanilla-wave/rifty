@@ -18,6 +18,11 @@ accepted scoped keys. The binding split preserves those clauses in the required
 draft child `npm-client/shadow-recipe-v2-dependency-projection-execution`.
 The transcript below is the now-executable LightningCSS
 metadata/bundle/materialized-bin/replay unit; counts remain unchanged.
+Fresh first checkpoint `092d931a` blocked two omitted proof rows and one stale
+post-split claim: the transcript did not record the existing direct CJS/ESM
+browser differential or inherited registry unbounded-read suite, and one test
+title still claimed broad retained projection. This re-cut records both GREEN
+suites and narrows the stale wording without changing assertions or production.
 
 ```sh
 pnpm --filter @riftydev/npm-client exec vitest run \
@@ -27,10 +32,14 @@ pnpm --filter @riftydev/npm-client exec vitest run \
   src/internal/shadow/installer.contract.test.ts
 pnpm --filter @riftydev/npm-client exec vitest run \
   src/installer-bin-authority.contract.test.ts
+pnpm --filter @riftydev/npm-client exec vitest run \
+  src/registry.fault.test.ts
 pnpm --filter @riftydev/workbench exec vitest run \
   src/workers/owner-package-shadow-assets.contract.test.ts
 pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
   --grep "Vite 7 config graph"
+pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
+  --grep "direct CJS require and ESM import"
 pnpm check:runtime-adapter-boundary
 ```
 
@@ -66,6 +75,12 @@ independently observe protocol v1, missing `materialization.bin`, and
 installer is parked at `/package-lock.json`, the second cannot enter the core
 or write.
 
+The inherited `RegistryClient` fault run is 8/8 GREEN: header, packument-body,
+tarball-body, and runaway-body bounds stay loud; slow progress succeeds; retry
+and final non-OK paths cancel discarded response bodies.
+
 The real Chromium Vite 7.3.6 case completes dev/build/preview/optimize and then
 independently reports the same three lock gaps from the project’s actual
-`package-lock.json`.
+`package-lock.json`. The separate direct CJS/ESM Chromium differential is 1/1
+GREEN against real Node esbuild 0.28.0 and observes the loud unsupported CLI
+without Vite.
