@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Failed saved-project activation now restores the prior catalog ref and live
+  session before reporting the target open error, preserving both causes when
+  restoration also fails.
+
 - From-scratch preset autorun now leaves `package.json` openable and its first
   generated `package-lock.json` clean against the Starter baseline.
 
