@@ -350,3 +350,8 @@ four intentional `TS2578` REDs while the strict single-source export is absent.
 The second isolated review at
 `3b9bdb57b2c8cdb544133c129e4ba68f1893de67` passed Standards and Spec with no
 findings; this is the ready Contract+RED authority for implementation.
+
+The no-pickup contract baseline keeps the executable RED in checkpoint history
+instead of leaving main red. The source slice must restore exact blob
+`808d8e7aacb4fd0feea80575cd1957f37fb42066` before its first production-source
+commit; the ready verdict and carrier bytes may not change.
