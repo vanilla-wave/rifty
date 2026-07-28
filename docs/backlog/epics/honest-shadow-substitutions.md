@@ -102,6 +102,18 @@ Contract+RED → Final+GREEN):
    **resolved-package-installer-prepared-path-consumption**: real installer
    consumes the linker-owned prepared path once across target preparation,
    prepared linking, and prepared lock construction.
+10. `npm-client/package-bin-claim-normalization-authority` —
+    **package-bin-claim-normalization-authority**: terminal blocked predecessor;
+    its two Contract+RED checkpoints forced separate source-normalization and
+    claim-settlement successors. No third checkpoint or source pickup.
+11. `npm-client/package-bin-source-normalization-authority` —
+    **package-bin-source-normalization-authority**: terminal blocked
+    predecessor; its two Contract+RED checkpoints forced separate per-source
+    claim and ordered-aggregation successors. No third checkpoint or source
+    pickup.
+12. `npm-client/package-bin-source-claim-authority` —
+    **package-bin-source-claim-authority**: one strict source becomes exact
+    detached claims once, with no list aggregation, settlement, VFS, or compat.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -134,3 +146,8 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | measured-cleanup | 1000–3000 |
 | resolved-package-linker-path-authority | 100–300 |
 | resolved-package-installer-prepared-path-consumption | 100–300 |
+| package-bin-claim-linker-authority | 300–700 |
+| package-bin-claim-preflight-authority | 100–300 |
+| package-bin-claim-normalization-authority | 100–200 |
+| package-bin-source-normalization-authority | 50–120 |
+| package-bin-source-claim-authority | 30–80 |
