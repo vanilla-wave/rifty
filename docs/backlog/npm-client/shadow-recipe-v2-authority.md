@@ -4,9 +4,9 @@ status: draft
 title: Shadow recipe v2 authority — exact admission, acquisition projection, and materialized bins
 created: 2026-07-26
 why: the Sass RED proved recipe v1 admits unproven ranges, copies unproven registry dependencies, and can expose the acquired package bin instead of the substituted package bin; those are missing generic policy authorities, not Sass exceptions
-user_story: As a browser-IDE user installing a builtin-substituted package, I want its accepted request, fetched dependency closure, visible bins, and replay provenance to be exactly the reviewed recipe, but today recipe v1 can widen each of those boundaries
+user_story: As a browser-IDE user installing a builtin-substituted package, I want its accepted request, acquired source projection, visible bins, and replay provenance to be exactly the reviewed recipe, but today recipe v1 can widen each of those boundaries
 epic: honest-shadow-substitutions
-sources: [ADR-0278, ADR-0310, ADR-0328, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/npm-11-peer-placement-probe.md]
+sources: [ADR-0278, ADR-0310, ADR-0328, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md]
 code:
   - packages/npm-client/src/installer.ts
   - packages/npm-client/src/internal/shadow/planner.ts
@@ -30,20 +30,20 @@ materialization, and replay without shipping the Sass recipe.
 - `lightningcss-wasm@1.32.0` registry identity, integrity, dependency maps, and
   bundled `napi-wasm` membership are pinned by a machine-checked fixture
   independent of catalog source or installer fakes; future registry-backed
-  builtins inherit the same external-golden differential.
-- The committed npm 11 peer probe pins direct and nested peer placement,
-  recursive peer-dependency traversal, pre-write `ERESOLVE`, and byte-identical
-  offline replay. The committed collision probe pins same-command `.bin`
-  ownership independent of manifest order and across incremental
-  reconciliation. Browser acceptance remains the real esbuild/Vite contract,
-  never a local fake of the package being substituted.
+  builtins inherit the same external-golden differential. Exact peer-map
+  equality is part of that acquisition projection; consuming the verified map
+  for npm peer traversal and placement is not.
+- The committed collision probe pins same-command `.bin` ownership independent
+  of manifest order and across incremental reconciliation. Browser acceptance
+  remains the real esbuild/Vite contract, never a local fake of the package
+  being substituted.
 
 ## Readiness evidence
 
-- `npm-11-peer-placement-probe-output.json` retains the complete normalized npm
-  tree, both lockfiles, error transcript, and zero-read offline replay for the
-  four direct/nested missing/conflicting-peer branches; two identical runs
-  produced the committed SHA-256.
+- The npm 11 collision probe covers opposite manifest orders and incremental
+  reconciliation in one `node_modules` scope. Both paths choose the
+  lexical-min user-visible package; the registry acquisition twin is excluded
+  before that policy.
 - ADR-0278's origin Web Lock and sole Workbench owner package FIFO physically
   exclude alias/bin/lock writers through complete adapter settlement. This
   slice adds a real install-core same-project proof. Raw public
@@ -57,9 +57,11 @@ materialization, and replay without shipping the Sass recipe.
   `semver-admits`/`exact-only` result and named feature through every execution
   path; this item does not add a second codec or admission owner.
 - Registry acquisition verifies the complete required, retained optional,
-  omitted optional, and peer dependency projection before tarball work. Only
-  retained maps enter resolution and lockfile state; scoped package names are
-  valid in every projection map.
+  omitted optional, peer, and bundled projection before tarball work. Only
+  non-bundled required and retained-optional maps enter ordinary dependency
+  resolution in this unit; the verified peer map remains exact metadata for
+  `npm-client/npm-11-peer-placement-authority`. Scoped package names are valid
+  in every projection map.
 - Recipe materialization owns the exact user-visible bin map. Acquired bins
   never leak into linking or their lock entry; one shared package-bin linker
   validates and links the materialized targets for registry and synthetic
@@ -100,9 +102,6 @@ materialization, and replay without shipping the Sass recipe.
    npm 11 collision probe: the lexicographically first user-visible package
    name owns a shared command, while an acquired registry twin never
    participates.
-7. The committed four-case npm peer graph and the same rifty graph agree on
-   direct/nested placement, recursive leaf traversal, pre-write `ERESOLVE`, and
-   offline tree/lock replay.
 
 ## Fault matrix
 
@@ -126,6 +125,9 @@ materialization, and replay without shipping the Sass recipe.
   recognition in generic consumers.
 - Reinterpreting recipe-v1 lockfiles or falling back to acquired/native bins.
 - A public recipe/plugin API or remotely supplied executable policy.
+- Traversing, resolving, placing, or replaying peer dependency trees. Exact
+  peer projection metadata is verified here; npm execution authority is the
+  required goal child `npm-client/npm-11-peer-placement-authority`.
 - Concurrent-safe raw public `npm-client.install()` calls; the supported
   Workbench product boundary physically excludes them and the generic SDK gap
   is captured separately.
@@ -140,6 +142,9 @@ materialization, and replay without shipping the Sass recipe.
   fields and never recognize Sass, esbuild, LightningCSS, Vite, or entry kind.
 - The package-bin linker is the sole bin implementation. Runtime binding stays
   optional; kernel and runtime-asset boundaries do not change.
+- Peer projection verification stays in this acquisition unit. The second
+  Contract+RED blocker split peer traversal, placement, conflicts, peer lock
+  facts, and replay into `npm-client/npm-11-peer-placement-authority`.
 - The committed owner-decoded builtin catalog drives the real install core in
   contract tests. The public root export remains builtin-only; remote/custom
   recipes cannot reach executable policy.

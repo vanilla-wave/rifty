@@ -3,7 +3,11 @@
 Recorded 2026-07-28 against source-only contract commit
 `db1871b987c990925d9632080b9b81723ea0e298`. No production source differs from
 that commit. Checkpoint `8f3251e8` was blocked because replay and sibling
-expectations were masked; this is its in-line re-cut.
+expectations were masked. Re-cut `d5ffb3d2` was blocked because projection
+faults were still unreachable and peer evidence was lossy. The binding
+two-blocker rule split npm peer execution into
+`npm-client/npm-11-peer-placement-authority`; the transcript below is the
+narrowed projection/materialization unit.
 
 ```sh
 pnpm --filter @riftydev/npm-client exec vitest run \
@@ -18,7 +22,7 @@ pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
   --grep "Vite 7 config graph"
 ```
 
-The npm-client runs have 38 RED and 44 GREEN tests:
+The npm-client runs have 31 RED and 44 GREEN tests:
 
 - six named generic authority cases independently require successful required,
   retained optional, omitted optional, peer, bundled, and scoped projections;
@@ -28,9 +32,6 @@ The npm-client runs have 38 RED and 44 GREEN tests:
   previous data-authority and legacy sibling expectations now fail with them;
 - a pre-seeded v2 LightningCSS+esbuild replay enters lock ingress and rejects
   protocol v2 before any registry read;
-- three fresh placements and three independently pre-seeded replays disagree
-  with the SHA-checked npm 11 oracle; direct conflict also fetches/writes instead
-  of pre-write `ERESOLVE`;
 - acquired bin disk and lock leaks are both observed; materialized bins are
   absent or keep non-canonical lock spelling;
 - shared commands remain manifest-order dependent, incremental launchers remain

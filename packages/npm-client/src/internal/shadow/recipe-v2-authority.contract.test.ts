@@ -1,12 +1,10 @@
-import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import {
   type BuiltinShadowSubstitutionRecipe,
   type ShadowRegistryDependencyProjection,
   builtinShadowSubstitutionCatalog,
 } from '@riftydev/shadow-registry/internal';
 import { MemoryVfs } from '@riftydev/vfs';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   TAR_TRAILER,
   buildHeader,
@@ -188,6 +186,19 @@ async function lightningEntry(fields = expectedLightningFields()): Promise<Regis
 
 async function lightningRegistry(fields = expectedLightningFields()): Promise<LedgerRegistry> {
   return new LedgerRegistry([await lightningEntry(fields)]);
+}
+
+async function lightningDriftRegistry(fields: ProjectionFields): Promise<LedgerRegistry> {
+  return new LedgerRegistry([
+    await lightningEntry(fields),
+    await entry('napi-wasm', '1.1.3'),
+    await entry('napi-wasm', '9.9.9'),
+    await entry('@drift/required', '1.0.0'),
+    await entry('@drift/retained', '1.0.0'),
+    await entry('@drift/omitted', '1.0.0'),
+    await entry('@drift/peer', '1.0.0'),
+    await entry('@drift/bundled', '1.0.0'),
+  ]);
 }
 
 async function installFixture(
@@ -567,176 +578,6 @@ const genericProjectionCases = [
   },
 ] as const;
 
-async function peerEntries(): Promise<readonly RegistryEntry[]> {
-  return [
-    await entry('contract-source', '1.0.0', {
-      peerDependencies: { 'contract-peer': '^2.0.0' },
-    }),
-    await entry('contract-peer', '1.0.0'),
-    await entry('contract-peer', '2.0.0', {
-      dependencies: { 'contract-leaf': '1.0.0' },
-    }),
-    await entry('contract-leaf', '1.0.0'),
-    await entry('contract-host', '1.0.0', {
-      dependencies: { 'contract-source': '1.0.0' },
-    }),
-  ];
-}
-
-async function peerRegistry(): Promise<LedgerRegistry> {
-  return new LedgerRegistry(await peerEntries());
-}
-
-const peerSuccessCases = [
-  {
-    label: 'direct missing peer',
-    oracleCase: 'direct-missing',
-    dependencies: { 'contract-source': '1.0.0' },
-  },
-  {
-    label: 'nested missing peer',
-    oracleCase: 'nested-missing',
-    dependencies: { 'contract-host': '1.0.0' },
-  },
-  {
-    label: 'nested conflicting root peer',
-    oracleCase: 'nested-conflict',
-    dependencies: { 'contract-host': '1.0.0', 'contract-peer': '1.0.0' },
-  },
-] as const;
-
-interface OracleLockEntry {
-  readonly version?: string;
-  readonly peer?: boolean;
-}
-
-interface PeerOracle {
-  readonly cases: Readonly<
-    Record<
-      string,
-      Readonly<{
-        fresh: Readonly<{
-          exit: number;
-          files: Readonly<Record<string, string>>;
-        }>;
-        offlineReplay?: Readonly<{
-          registryRequests: readonly string[];
-          files: Readonly<Record<string, string>>;
-        }>;
-      }>
-    >
-  >;
-}
-
-const peerOracleUrl = new URL(
-  '../../../../../docs/backlog/npm-client/reference/npm-11-peer-placement-probe-output.json',
-  import.meta.url,
-);
-const PEER_ORACLE_SHA256 = 'edefe928491431545846ad63c3517863da1305d8acb7d3479df9c9d4ecb538c1';
-let peerOracle: PeerOracle;
-
-function oraclePackages(caseName: string): Readonly<Record<string, OracleLockEntry>> {
-  const encoded = peerOracle.cases[caseName]?.fresh.files['package-lock.json'];
-  if (!encoded) throw new Error(`committed npm oracle is missing ${caseName} package-lock.json`);
-  const decoded = JSON.parse(encoded) as {
-    packages?: Readonly<Record<string, OracleLockEntry>>;
-  };
-  if (!decoded.packages) throw new Error(`committed npm oracle ${caseName} lock has no packages`);
-  return decoded.packages;
-}
-
-function packageNameAtInstallPath(installPath: string): string {
-  const marker = 'node_modules/';
-  const offset = installPath.lastIndexOf(marker);
-  if (offset < 0) throw new Error(`oracle install path has no package name: ${installPath}`);
-  return installPath.slice(offset + marker.length);
-}
-
-function peerEntryByIdentity(
-  entries: readonly RegistryEntry[],
-  name: string,
-  version: string,
-): RegistryEntry {
-  const candidate = entries.find(
-    (entry) => entry.manifest.name === name && entry.manifest.version === version,
-  );
-  if (!candidate) throw new Error(`peer fixture has no ${name}@${version}`);
-  return candidate;
-}
-
-function desiredPeerReplayLock(
-  caseName: string,
-  entries: readonly RegistryEntry[],
-): DesiredLockfile {
-  const oracle = oraclePackages(caseName);
-  const packages: Record<string, Record<string, unknown>> = {};
-  const rootDependencies: Record<string, string> = {};
-  for (const [installPath, pinned] of Object.entries(oracle)) {
-    if (installPath === '') continue;
-    if (!pinned.version) throw new Error(`oracle ${caseName} ${installPath} has no version`);
-    const name = packageNameAtInstallPath(installPath);
-    const candidate = peerEntryByIdentity(entries, name, pinned.version);
-    const dependencies = { ...(candidate.manifest.dependencies ?? {}) };
-    packages[installPath] = {
-      version: pinned.version,
-      dependencies,
-      resolved: candidate.manifest.dist.tarball,
-      integrity: integrityOf(candidate),
-      ...(candidate.manifest.peerDependencies
-        ? { peerDependencies: { ...candidate.manifest.peerDependencies } }
-        : {}),
-      ...(pinned.peer ? { peer: true } : {}),
-    };
-    if (!installPath.includes('/node_modules/')) rootDependencies[name] = pinned.version;
-  }
-  return {
-    name: 'fixture',
-    version: '1.0.0',
-    lockfileVersion: 3,
-    requires: true,
-    packages: {
-      '': { version: '1.0.0', dependencies: rootDependencies },
-      ...packages,
-    },
-  };
-}
-
-function expectedPeerReplayTree(
-  caseName: string,
-  entries: readonly RegistryEntry[],
-): Record<string, TreeEntry> {
-  const expected: Record<string, TreeEntry> = {};
-  for (const [installPath, pinned] of Object.entries(oraclePackages(caseName))) {
-    if (installPath === '' || !pinned.version) continue;
-    const name = packageNameAtInstallPath(installPath);
-    const candidate = peerEntryByIdentity(entries, name, pinned.version);
-    for (const [path, content] of Object.entries(candidate.files)) {
-      addExpectedFile(expected, `${installPath.slice('node_modules/'.length)}/${path}`, content);
-    }
-  }
-  return expected;
-}
-
-beforeAll(async () => {
-  const bytes = await readFile(peerOracleUrl);
-  const actualSha256 = createHash('sha256').update(bytes).digest('hex');
-  if (actualSha256 !== PEER_ORACLE_SHA256) {
-    throw new Error(`committed npm peer oracle SHA drifted: ${actualSha256}`);
-  }
-  peerOracle = JSON.parse(bytes.toString('utf8')) as PeerOracle;
-  for (const caseName of ['direct-missing', 'nested-missing', 'nested-conflict']) {
-    const candidate = peerOracle.cases[caseName];
-    if (
-      candidate?.fresh.exit !== 0 ||
-      candidate.offlineReplay?.registryRequests.length !== 0 ||
-      candidate.fresh.files['package-lock.json'] !==
-        candidate.offlineReplay.files['package-lock.json']
-    ) {
-      throw new Error(`committed npm peer oracle ${caseName} lost its replay proof`);
-    }
-  }
-});
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -755,31 +596,53 @@ describe('shadow recipe v2 execution authority', () => {
 
   it.each(projectionDrifts)(
     '[fault: observable-order/provenance-lie] rejects builtin $label drift before tarball or VFS work',
-    async ({ mutate }) => {
+    async ({ label, mutate }) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
       const fields = expectedLightningFields();
       mutate(fields);
-      const registry = await lightningRegistry(fields);
+      const registry = await lightningDriftRegistry(fields);
       const vfs = new MemoryVfs();
       await vfs.mkdir('/project', { recursive: true });
       const writers = [
-        vi.spyOn(vfs, 'mkdir'),
-        vi.spyOn(vfs, 'writeFile'),
-        vi.spyOn(vfs, 'rm'),
-        vi.spyOn(vfs, 'utimes'),
+        { name: 'mkdir', spy: vi.spyOn(vfs, 'mkdir') },
+        { name: 'writeFile', spy: vi.spyOn(vfs, 'writeFile') },
+        { name: 'rm', spy: vi.spyOn(vfs, 'rm') },
+        { name: 'utimes', spy: vi.spyOn(vfs, 'utimes') },
       ];
 
-      await expect(installFixture(vfs, registry, { lightningcss: '1.32.0' })).rejects.toMatchObject(
-        {
-          name: 'NotImplementedError',
-          feature: lightningProjection.unsupportedFeature,
-        },
+      const outcome = await installFixture(vfs, registry, {
+        lightningcss: '1.32.0',
+      }).then(
+        (value) => ({ status: 'resolved' as const, value }),
+        (error: unknown) => ({ status: 'rejected' as const, error }),
       );
 
-      expect(registry.packumentReads).toContain(lightningAcquisition.name);
-      expect(registry.tarballReads).not.toContain(lightningSourceUrl);
-      for (const writer of writers) expect(writer).not.toHaveBeenCalled();
-      await expect(vfs.exists('/project/node_modules')).resolves.toBe(false);
-      await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+      expect.soft(outcome.status, `${label}: outcome`).toBe('rejected');
+      const actualError = outcome.status === 'rejected' ? outcome.error : undefined;
+      expect
+        .soft(
+          {
+            name: actualError instanceof Error ? actualError.name : undefined,
+            feature:
+              actualError !== null && typeof actualError === 'object' && 'feature' in actualError
+                ? actualError.feature
+                : undefined,
+          },
+          `${label}: rejection`,
+        )
+        .toEqual({
+          name: 'NotImplementedError',
+          feature: lightningProjection.unsupportedFeature,
+        });
+      expect
+        .soft(registry.packumentReads, `${label}: source manifest read`)
+        .toContain(lightningAcquisition.name);
+      expect.soft(registry.tarballReads, `${label}: pre-tarball rejection`).toEqual([]);
+      for (const writer of writers) {
+        expect.soft(writer.spy.mock.calls.length, `${label}: ${writer.name} calls`).toBe(0);
+      }
+      expect.soft(await vfs.exists('/project/node_modules'), `${label}: install tree`).toBe(false);
+      expect.soft(await vfs.exists('/project/package-lock.json'), `${label}: lockfile`).toBe(false);
     },
   );
 
@@ -864,80 +727,5 @@ describe('shadow recipe v2 execution authority', () => {
     expect(result.lockfile).toEqual(lockfile);
     expect(JSON.parse(await vfs.readFileText('/project/package-lock.json'))).toEqual(lockfile);
     expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
-  });
-});
-
-describe('npm 11 peer placement oracle', () => {
-  it.each(peerSuccessCases)(
-    '$label traverses and places the SHA-pinned npm graph',
-    async (testCase) => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const vfs = new MemoryVfs();
-      await vfs.mkdir('/project', { recursive: true });
-      const registry = await peerRegistry();
-      const first = await installFixture(vfs, registry, testCase.dependencies);
-      const oracle = oraclePackages(testCase.oracleCase);
-
-      expect
-        .soft(Object.keys(first.lockfile.packages).sort(), `${testCase.label} lock paths`)
-        .toEqual(Object.keys(oracle).sort());
-      for (const [path, pinned] of Object.entries(oracle)) {
-        if (path === '') continue;
-        expect.soft(first.lockfile.packages[path], path).toMatchObject({
-          version: pinned.version,
-          ...(pinned.peer ? { peer: true } : {}),
-        });
-        expect.soft(await vfs.exists(`/project/${path}/package.json`), path).toBe(true);
-      }
-    },
-  );
-
-  it.each(peerSuccessCases)(
-    '$label replays its pre-seeded exact tree and lock without registry reads',
-    async (testCase) => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const entries = await peerEntries();
-      const lockfile = desiredPeerReplayLock(testCase.oracleCase, entries);
-      const vfs = new MemoryVfs();
-      await writeReplaySeed(vfs, testCase.dependencies, lockfile);
-      const lockBefore = await vfs.readFile('/project/package-lock.json');
-      const registry = new LedgerRegistry([]);
-      registry.denyReads();
-      const cache = new PreseededTarballCache(entries);
-
-      const result = await installFixture(vfs, registry, testCase.dependencies, cache);
-
-      expect(registry.packumentReads).toEqual([]);
-      expect(registry.tarballReads).toEqual([]);
-      expect(cache.puts).toEqual([]);
-      expect(await snapshotTree(vfs, '/project/node_modules')).toEqual(
-        expectedPeerReplayTree(testCase.oracleCase, entries),
-      );
-      expect(result.lockfile).toEqual(lockfile);
-      expect(JSON.parse(await vfs.readFileText('/project/package-lock.json'))).toEqual(lockfile);
-      expect(await vfs.readFile('/project/package-lock.json')).toEqual(lockBefore);
-    },
-  );
-
-  it('rejects a direct conflicting root peer with ERESOLVE before writes', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const vfs = new MemoryVfs();
-    await vfs.mkdir('/project', { recursive: true });
-    const registry = await peerRegistry();
-
-    const outcome = await installFixture(vfs, registry, {
-      'contract-source': '1.0.0',
-      'contract-peer': '1.0.0',
-    }).then(
-      (value) => ({ value }),
-      (error: unknown) => ({ error }),
-    );
-
-    expect
-      .soft('error' in outcome ? outcome.error : outcome.value, 'direct peer conflict')
-      .toMatchObject({ code: 'ERESOLVE' });
-    expect.soft(registry.tarballReads, 'direct conflict tarballs').toEqual([]);
-    expect.soft(await vfs.exists('/project/node_modules'), 'direct conflict tree').toBe(false);
-    expect.soft(await vfs.exists('/project/package-lock.json'), 'direct conflict lock').toBe(false);
   });
 });
