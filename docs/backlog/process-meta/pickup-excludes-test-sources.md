@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: draft
+status: ready
 title: Pickup excludes executable test and fixture sources
 created: 2026-07-28
 why: Contract+RED tests currently move pickup before their judge-authored ready authority, so contract-drift and budget reject the documented autonomous slice sequence
@@ -110,6 +110,8 @@ no coordination mechanism or mutable owner.
   contents look like a test; classification is path-only.
 
 ## Decisions
+
+ready-verdict: 2026-07-28 — Exact repository witnesses and roots×extensions/near-miss matrices settle the tri-state path contract; production-only pickup/drift/mechanism projections and test-support-only budget exclusion—including tools/root tests while ordinary other mass remains counted—settle every consumer; test-only history plus the temp-Git PR #209 run through contract-drift and budget settle acceptance, fault rows, and executable REDs; overlap, physical exclusions, and the no-mechanism inventory are clean.
 
 - Reuse one exported `production | test-support | other` classifier.
   Pickup, contract drift, and mechanism scanning compare with `production`;
