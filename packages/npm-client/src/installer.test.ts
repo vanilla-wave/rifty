@@ -224,6 +224,44 @@ describe('install — lifecycle cancellation (ADR-0314)', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('keeps the caller reason when a linker VFS rejection races the abort', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('kleur', new Map([['4.1.5', await makeEntry('kleur', '4.1.5')]]));
+    const backing = new MemoryVfs();
+    await backing.mkdir('/proj', { recursive: true });
+    const controller = new AbortController();
+    const reason = new Error('project closed during node_modules creation');
+    const vfs: Vfs = new Proxy(backing, {
+      get(target, property) {
+        const value: unknown = Reflect.get(target, property, target);
+        if (property !== 'mkdir' || typeof value !== 'function') {
+          return typeof value === 'function' ? value.bind(target) : value;
+        }
+        return (...args: readonly unknown[]) => {
+          if (args[0] === '/proj/node_modules') {
+            controller.abort(reason);
+            throw new Error('node_modules creation failed');
+          }
+          return Reflect.apply(value, target, args);
+        };
+      },
+    });
+
+    await expect(
+      install(
+        'root',
+        '1.0.0',
+        { kleur: '4.1.5' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry: new FakeRegistry(db),
+          signal: controller.signal,
+        },
+      ),
+    ).rejects.toBe(reason);
+  });
 });
 
 describe('install — package ingress preflight (ADR-0261)', () => {
