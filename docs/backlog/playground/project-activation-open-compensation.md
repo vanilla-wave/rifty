@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Project activation/open compensation
 created: 2026-07-28
 why: activating a saved project commits its catalog pointer before opening the project, so a definition mismatch can close the prior live project and leave the App pointing at the failed target
@@ -86,6 +86,8 @@ This is an own-product App lifecycle contract; no Node API behavior is claimed.
 - Crash/reload recovery while compensation is in flight.
 
 ## Decisions
+
+ready-verdict: 2026-07-28 — ADR-0278 and the terminal predecessor split settle activation-only scope, mutation ownership, and overlap; the versioned same-origin Chromium probe plus reachable Contract+RED lineage settle the half-switch repro, causal runtime/App binding failures, cleanup, and queued-close order; current App-runtime and catalog-authority source settle create/save/reset/delete committed-result semantics; the existing App FIFO and catalog/session authorities make inline compensation sufficient with no new coordination mechanism.
 
 - `split-predecessor:
   c043302541f639464d310fe1e9ab74a4c084f136`; predecessor checkpoints:
