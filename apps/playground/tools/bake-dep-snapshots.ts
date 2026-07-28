@@ -21,6 +21,10 @@ import {
   serializeDepSnapshot,
 } from '../../../packages/workbench/src/glue/dep-snapshot.ts';
 import { readEffectiveDeps } from '../../../packages/workbench/src/glue/install-stamp.ts';
+import {
+  inspectProjectDefinition,
+  projects,
+} from '../../../packages/workbench/src/workbench/project-definition.ts';
 import { buildProjectPackageJson } from '../src/templates/project-spec.ts';
 import { allProjectSpecs } from '../src/templates/registry.ts';
 import { assertRollupWasmNodeLockstep } from '../src/templates/rollup-lockstep.ts';
@@ -35,6 +39,21 @@ const identityManifestPath = join(
 // D-004: env-overridable; npmjs is the canonical default for this build tool
 // (the in-browser proxy route is meaningless in Node).
 const registryBaseUrl = process.env.REGISTRY_BASE_URL ?? 'https://registry.npmjs.org';
+const decoder = new TextDecoder('utf-8', { fatal: true });
+
+function finalProjectPackageJson(spec: ReturnType<typeof allProjectSpecs>[number]): string {
+  const packageJson = buildProjectPackageJson(spec).json;
+  if (spec.runtime !== 'vite') return packageJson;
+  const definition = inspectProjectDefinition(
+    projects.vite({
+      id: `snapshot-bake:${spec.id}`,
+      files: { '/package.json': packageJson },
+    }),
+  );
+  const bytes = definition.files['/package.json'];
+  if (bytes === undefined) throw new Error(`bake(${spec.id}): Workbench omitted package.json`);
+  return decoder.decode(bytes);
+}
 
 const baked = allProjectSpecs().filter((spec) => spec.bakedNodeModulesUrl);
 if (baked.length === 0) {
@@ -50,7 +69,7 @@ for (const spec of baked) {
 
   const { vfs, fsSync } = createMemoryFs();
   await vfs.mkdir(ROOT, { recursive: true });
-  await vfs.writeFile(`${ROOT}/package.json`, buildProjectPackageJson(spec).json);
+  await vfs.writeFile(`${ROOT}/package.json`, finalProjectPackageJson(spec));
 
   const registry = new RegistryClient({
     baseUrl: registryBaseUrl,

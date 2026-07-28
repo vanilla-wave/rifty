@@ -7,6 +7,10 @@ import identityFile from '../../../packages/workbench/src/generated/install-arti
 import { serializeDepSnapshot } from '../../../packages/workbench/src/glue/dep-snapshot.ts';
 import { effectiveDepsFromPackageJsonText } from '../../../packages/workbench/src/glue/install-stamp.ts';
 import {
+  inspectProjectDefinition,
+  projects,
+} from '../../../packages/workbench/src/workbench/project-definition.ts';
+import {
   applyViteCliActionPatch,
   applyViteRootWatchPatch,
   viteRootWatchPatchPolicy,
@@ -19,12 +23,29 @@ const identity = identityFile.identity;
 if (!/^sha256:[a-f0-9]{64}$/.test(identity)) {
   throw new Error('generated install artifact identity is malformed');
 }
+const packageDecoder = new TextDecoder('utf-8', { fatal: true });
+
+function finalProjectPackageJson(spec: ReturnType<typeof allProjectSpecs>[number]): string {
+  const packageJson = buildProjectPackageJson(spec).json;
+  if (spec.runtime !== 'vite') return packageJson;
+  const definition = inspectProjectDefinition(
+    projects.vite({
+      id: `snapshot-check:${spec.id}`,
+      files: { '/package.json': packageJson },
+    }),
+  );
+  const bytes = definition.files['/package.json'];
+  if (bytes === undefined) {
+    throw new Error(`${spec.id}: Workbench omitted normalized package.json`);
+  }
+  return packageDecoder.decode(bytes);
+}
 
 async function main(): Promise<void> {
   for (const spec of allProjectSpecs()) {
     if (!spec.bakedNodeModulesUrl) continue;
     const path = join(publicDir, ...spec.bakedNodeModulesUrl.replace(/^\/+/, '').split('/'));
-    const packageJsonText = buildProjectPackageJson(spec).json;
+    const packageJsonText = finalProjectPackageJson(spec);
     const deps = effectiveDepsFromPackageJsonText(packageJsonText);
     if (!deps) throw new Error(`${spec.id}: current packageJsonText has no effective deps`);
     let bytes: Uint8Array;

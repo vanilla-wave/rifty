@@ -5,6 +5,8 @@ import {
   DEFAULT_VITE8_CONFIG_JS,
   DEFAULT_VITE8_CONFIG_PATH,
   DEFAULT_VITE8_VERSION,
+  VITE8_WASI_RUNTIME_OVERRIDE,
+  VITE8_WASI_RUNTIME_OVERRIDE_NAME,
   VITE_CONFIG_FILENAMES,
 } from './internal/vite-project-policy.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
@@ -254,11 +256,31 @@ function normalizeManifest(
   } else if (dependencyVite === undefined && devDependencyVite === undefined) {
     devDependencies = { ...(devDependencies ?? {}), vite: DEFAULT_VITE8_VERSION };
   }
+  const finalViteVersion =
+    viteVersion ?? dependencyVite ?? devDependencyVite ?? DEFAULT_VITE8_VERSION;
 
   if (dependencies === undefined) Reflect.deleteProperty(manifest, 'dependencies');
   else manifest.dependencies = dependencies;
   if (devDependencies === undefined) Reflect.deleteProperty(manifest, 'devDependencies');
   else manifest.devDependencies = devDependencies;
+  if (finalViteVersion === DEFAULT_VITE8_VERSION) {
+    const suppliedOverrides = manifest.overrides;
+    if (suppliedOverrides !== undefined && !isRecord(suppliedOverrides)) {
+      throw new TypeError('package.json overrides must be an object');
+    }
+    const overrides: Record<string, unknown> = {};
+    for (const [name, value] of Object.entries(suppliedOverrides ?? {})) {
+      defineOwnEnumerableProperty(overrides, name, value);
+    }
+    if (!Object.prototype.hasOwnProperty.call(overrides, VITE8_WASI_RUNTIME_OVERRIDE_NAME)) {
+      defineOwnEnumerableProperty(
+        overrides,
+        VITE8_WASI_RUNTIME_OVERRIDE_NAME,
+        VITE8_WASI_RUNTIME_OVERRIDE,
+      );
+    }
+    manifest.overrides = overrides;
+  }
   // TODO(backlog: playground/workbench-implicit-vite-module-scope)
   files['/package.json'] = encoder.encode(serializePackageJson(manifest));
   return (

@@ -16,6 +16,9 @@
 
 ### Changed (Workbench extraction)
 
+- Vite snapshot bake now consumes the exact Workbench-normalized manifest.
+  Exact Vite 8 carries its visible proven Rolldown WASI runtime alias in both
+  cold installs and the regenerated instant artifact (ADR-0336).
 - TypeScript, Vite 7, and Vite 8 dependency snapshots are re-baked against the
   schema-2 shadow catalog/install identity; stale schema-1 snapshots cannot be
   restored (ADR-0328).

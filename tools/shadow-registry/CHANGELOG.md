@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Snapshot drift validation derives Vite package bytes through Workbench's
+  final manifest normalizer, matching the bake authority byte-for-byte
+  (ADR-0336).
 - Builtin substitution recipes now use strict clone-safe schema 2: recipe data
   owns admission features, exact registry dependency projections, and
   user-visible bin maps; one deeply freezing codec admits the generated
