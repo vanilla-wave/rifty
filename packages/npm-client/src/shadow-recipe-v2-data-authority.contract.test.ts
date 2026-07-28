@@ -268,6 +268,7 @@ async function bundleFor(
   });
 }
 
+// TODO(backlog: npm-client/shadow-cache-ledger-independent-completion-order)
 function supportedFreshEvents(recipe: RecipeCase, shape: Shape): string[] {
   if (recipe.name === 'esbuild') {
     return shape === 'transitive'
