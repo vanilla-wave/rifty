@@ -51,9 +51,11 @@ clause; the complete npm reify lifecycle is an explicit outside-goal draft.
 ## Readiness evidence
 
 - The npm 11 collision probe covers opposite manifest orders and incremental
-  reconciliation in one `node_modules` scope. Both paths choose the
-  lexical-min user-visible package; the registry acquisition twin is excluded
-  before that policy.
+  reconciliation in one `node_modules` scope. Its winners depend on reify
+  operation history, so no lexical, manifest-order, or last-writer comparator
+  is valid. Current or authoritative-prior ambiguity stays
+  `NotImplementedError('npm-client.bin-collision-reify')`; the registry
+  acquisition twin is excluded before recipe claims reach that ceiling.
 - ADR-0278's origin Web Lock and sole Workbench owner package FIFO physically
   exclude alias/bin/lock writers through complete adapter settlement. This
   slice adds a real install-core same-project proof. Raw public
@@ -73,11 +75,12 @@ clause; the complete npm reify lifecycle is an explicit outside-goal draft.
   with the recipe's named unsupported feature.
 - Recipe materialization owns the exact user-visible bin map. Acquired bins
   never leak into linking or their lock entry; one shared package-bin linker
-  validates and links the materialized targets for registry and synthetic
-  recipes. For a shared command in one `node_modules` scope, the
-  lexicographically first user-visible package name wins, independent of
-  manifest order; every install reconciles an existing launcher to that
-  winner. The acquired registry twin is suppressed before this policy runs.
+  validates and links collision-free materialized targets for registry and
+  synthetic recipes. A shared current command, recorded prior collision, or
+  owner transition/removal requiring npm reify history rejects with
+  `NotImplementedError('npm-client.bin-collision-reify')`; no static winner is
+  inferred or written. The acquired registry twin is suppressed before claims
+  reach this policy.
 - Matching v2 replay regenerates byte-identical materialization and bins with
   zero registry reads. The data slice's schema-1 identity rejection remains;
   drifted acquisition/materialization provenance loud-fails `EBROKENLOCK` and
@@ -109,10 +112,10 @@ clause; the complete npm reify lifecycle is an explicit outside-goal draft.
    dependency metadata and the committed esbuild recipe exercises a
    materialized bin through the real install core; no injected/custom recipe
    SPI or fake package is added.
-6. Opposite manifest order and incremental-install fixtures match the committed
-   npm 11 collision probe: the lexicographically first user-visible package
-   name owns a shared command, while an acquired registry twin never
-   participates.
+6. Opposite manifest order and incremental-install fixtures match the
+   committed npm 11 probe by exposing operation-history-sensitive ownership;
+   ambiguous current/prior claims reach the named ceiling, while an acquired
+   registry twin never participates.
 
 ## Fault matrix
 
@@ -126,7 +129,7 @@ clause; the complete npm reify lifecycle is an explicit outside-goal draft.
 | torn-state | abort during reachable registry alias writes stops later writes and the success claim, publishes no lock, and retry reconciles exact bytes; shared-bin cancellation remains inherited | installer materialization fault plus linker fault suite |
 | quota-perm-fail | quota/permission rejection during alias or bin writes publishes no success report or lock; retry reconciles exact bytes | root/nested registry alias and shared-bin write faults |
 | sibling-drift | esbuild and LightningCSS share the same policy/linker path | both recipe contract suites plus source boundary gate |
-| observable-order / sibling-drift | shared commands choose the lexical-min user-visible package independently of manifest order and reconcile incremental installs; acquired twins are absent | opposite-order + incremental collision fixtures against npm 11 probe |
+| observable-order / sibling-drift | no static winner approximates operation-history-sensitive npm reify; ambiguous current/prior claims reject and acquired twins are absent | opposite-order + incremental probe plus named-ceiling fixtures |
 | concurrent-same-key | two Workbench installs target one project while the first is parked before lock publication | existing owner FIFO admits the second only after the first's alias/bin/lock writes settle; exact final recipe, launcher, and lock agree |
 
 ## Out of scope

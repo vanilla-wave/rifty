@@ -6,6 +6,7 @@ created: 2026-07-28
 why: the terminal package-bin linker RED proved a safe-relative wrong package suffix can reach file or lock mutation because ResolvedPackage.installPath has no single raw ingress authority
 user_story: As a browser-IDE user installing a package, I want every resolved package path contained in its exact node_modules scope before files or lock facts change, but today a malformed relative path can write elsewhere in the project
 epic: honest-shadow-substitutions
+blocked_by: [npm-client/resolved-package-installer-path-ingress]
 sources: [ADR-0042, ADR-0261, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md, docs/backlog/npm-client/reference/resolved-package-install-path-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -14,13 +15,20 @@ code:
 
 ## Context
 
-This is the first split successor to terminal
+This was the first split successor to terminal
 `npm-client/package-bin-linker-authority` at
-`8e1456665a3d7a77425b5afa8f0c802ac59162b5`. It owns only raw
-`ResolvedPackage.installPath` admission and the minimum prepared carrier used
-by existing linker, lockfile, and installer ingress. Package-bin
-normalization, collision state, phased file/bin linking, launcher faults, and
-compat stay in the serial
+`8e1456665a3d7a77425b5afa8f0c802ac59162b5`. Its second Contract+RED
+checkpoint proved that linker/lockfile path authority and real-installer
+ingress are independently reviewable. This item is now a terminal blocked
+split predecessor and receives no third checkpoint.
+
+`npm-client/resolved-package-linker-path-authority` owns raw
+`ResolvedPackage.installPath` admission, the minimum prepared carrier, and
+the four `linker.ts` consumers. Then
+`npm-client/resolved-package-installer-path-ingress` consumes that same
+carrier in installer target preparation and the real install path.
+Package-bin normalization, collision state, phased file/bin linking, launcher
+faults, and compat stay in the later serial
 `npm-client/package-bin-claim-linker-authority` successor.
 
 ADR-0042 already fixes placement as root `node_modules/<name>` or a nested
@@ -91,6 +99,19 @@ module, scheduler, lock, or public API.
 
 ## Decisions
 
+- `terminal-checkpoint:
+  42e53d1b2c94b89fab1650794b1cff3477e8f54e` — second Contract+RED BLOCKED;
+  this unit receives no third checkpoint.
+- `checkpoint-lineage: [8f375ce5c5149b3ce8ff6fb9696063482c098dc0,
+  42e53d1b2c94b89fab1650794b1cff3477e8f54e]`.
+- `split-successors: [npm-client/resolved-package-linker-path-authority,
+  npm-client/resolved-package-installer-path-ingress]`.
+- Contract+RED @
+  `42e53d1b2c94b89fab1650794b1cff3477e8f54e` blocked: the combined RED did
+  not force all six linker/lockfile/installer siblings through one prepared
+  carrier or exercise valid root/nested binful poisoned paths through their
+  exact launcher/target observations. Linker authority lands first; the real
+  installer consumes it in the serial successor.
 - Contract+RED @
   `8f375ce5c5149b3ce8ff6fb9696063482c098dc0` blocked: add the
   segment-exact `node_modules` scope adversary, explicit omitted/flat/nested

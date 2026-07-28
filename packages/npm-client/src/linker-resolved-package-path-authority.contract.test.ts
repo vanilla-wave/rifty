@@ -1,7 +1,6 @@
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import * as npmClientRoot from './index.ts';
-import * as installer from './installer.ts';
 import {
   type ShadowAssetPlan,
   attestBuiltinShadowSubstitution,
@@ -22,14 +21,21 @@ interface InstallPathContractApi {
   preflightPackageInstallPaths(
     packages: readonly ResolvedPackage[],
   ): readonly PreparedInstallPackage[];
-}
-
-interface InstallerPathContractApi {
-  packageLinkTargets(root: string, packages: readonly ResolvedPackage[]): readonly string[];
+  linkPreparedInstallTree(
+    vfs: Vfs,
+    root: string,
+    packages: readonly PreparedInstallPackage[],
+    checkpoint: () => void,
+  ): Promise<void>;
+  buildPreparedInstallLockfile(
+    rootName: string,
+    rootVersion: string,
+    packages: readonly PreparedInstallPackage[],
+    plan: ShadowAssetPlan,
+  ): Lockfile;
 }
 
 const contractApi = linker as unknown as Partial<InstallPathContractApi>;
-const installerContractApi = installer as unknown as Partial<InstallerPathContractApi>;
 const emptyShadowPlan = Object.freeze({
   requiredSetDigest: '0'.repeat(64),
   substitutions: Object.freeze([]),
@@ -53,23 +59,33 @@ function requirePreflight(): InstallPathContractApi['preflightPackageInstallPath
   return candidate;
 }
 
-function requirePackageLinkTargets(): InstallerPathContractApi['packageLinkTargets'] {
-  const candidate = installerContractApi.packageLinkTargets;
-  expect(candidate, 'package-private installer target seam').toBeTypeOf('function');
+function requirePreparedLink(): InstallPathContractApi['linkPreparedInstallTree'] {
+  const candidate = contractApi.linkPreparedInstallTree;
+  expect(candidate, 'package-private prepared linker seam').toBeTypeOf('function');
   if (typeof candidate !== 'function') {
-    throw new Error('Contract RED: installer is missing packageLinkTargets export');
+    throw new Error('Contract RED: linker is missing linkPreparedInstallTree');
+  }
+  return candidate;
+}
+
+function requirePreparedInstallLockfile(): InstallPathContractApi['buildPreparedInstallLockfile'] {
+  const candidate = contractApi.buildPreparedInstallLockfile;
+  expect(candidate, 'package-private prepared install-lock seam').toBeTypeOf('function');
+  if (typeof candidate !== 'function') {
+    throw new Error('Contract RED: linker is missing buildPreparedInstallLockfile');
   }
   return candidate;
 }
 
 function pkg(name: string, installPath: string | undefined, withBin: boolean): ResolvedPackage {
   const binTarget = 'bin/cli.js';
+  const command = name.replace('@', '').replace('/', '-');
   return {
     name,
     version: '1.0.0',
     installPath,
     dependencies: {},
-    ...(withBin ? { bin: { cli: binTarget } } : {}),
+    ...(withBin ? { bin: { [command]: binTarget } } : {}),
     files: {
       'package.json': encoder.encode(JSON.stringify({ name, version: '1.0.0' })),
       ...(withBin
@@ -149,7 +165,85 @@ function validReadOncePackages(): {
   return { packages, reads };
 }
 
-describe('resolved-package install-path authority', () => {
+const binfulPaths = [
+  {
+    name: 'root-cli',
+    installPath: 'node_modules/root-cli',
+    relativePath: 'node_modules/root-cli',
+    nodeModulesDir: 'node_modules',
+  },
+  {
+    name: 'nested-cli',
+    installPath: 'node_modules/host/node_modules/nested-cli',
+    relativePath: 'node_modules/host/node_modules/nested-cli',
+    nodeModulesDir: 'node_modules/host/node_modules',
+  },
+] as const;
+
+function binfulReadOncePackages(): {
+  packages: ResolvedPackage[];
+  reads: readonly (() => number)[];
+} {
+  const packages: ResolvedPackage[] = [];
+  const reads: Array<() => number> = [];
+  for (const value of binfulPaths) {
+    const candidate = pkg(value.name, value.installPath, true);
+    let count = 0;
+    Object.defineProperty(candidate, 'installPath', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        count += 1;
+        if (count > 1) throw new Error(`poisoned second installPath read for ${value.name}`);
+        return value.installPath;
+      },
+    });
+    packages.push(candidate);
+    reads.push(() => count);
+  }
+  return { packages, reads };
+}
+
+async function expectBinfulLinkBytes(vfs: MemoryVfs): Promise<void> {
+  for (const value of binfulPaths) {
+    expect
+      .soft(await vfs.readFileText(`/project/${value.relativePath}/package.json`))
+      .toBe(JSON.stringify({ name: value.name, version: '1.0.0' }));
+    const command = value.name.replace('@', '').replace('/', '-');
+    expect
+      .soft(await vfs.readFileText(`/project/${value.nodeModulesDir}/.bin/${command}`))
+      .toBe(`#!/usr/bin/env node\nimport('../${value.name}/bin/cli.js');\n`);
+  }
+}
+
+function expectedBinfulLockfile(): Lockfile {
+  return {
+    name: 'root',
+    version: '1.0.0',
+    lockfileVersion: 3,
+    requires: true,
+    packages: {
+      '': {
+        version: '1.0.0',
+        dependencies: {
+          'root-cli': '1.0.0',
+        },
+      },
+      'node_modules/root-cli': {
+        version: '1.0.0',
+        dependencies: {},
+        bin: { 'root-cli': 'bin/cli.js' },
+      },
+      'node_modules/host/node_modules/nested-cli': {
+        version: '1.0.0',
+        dependencies: {},
+        bin: { 'nested-cli': 'bin/cli.js' },
+      },
+    },
+  };
+}
+
+describe('resolved-package linker path authority', () => {
   it('prepares exact omitted, flat, nested, and nested-scoped identities with one raw read', () => {
     const { packages, reads } = validReadOncePackages();
     const prepared = requirePreflight()(packages);
@@ -165,7 +259,15 @@ describe('resolved-package install-path authority', () => {
     }
     expect(reads.map((read) => read())).toEqual([1, 1, 1, 1]);
     expect(npmClientRoot).not.toHaveProperty('preflightPackageInstallPaths');
-    expect(npmClientRoot).not.toHaveProperty('packageLinkTargets');
+    expect(npmClientRoot).not.toHaveProperty('linkPreparedInstallTree');
+    expect(npmClientRoot).not.toHaveProperty('buildPreparedInstallLockfile');
+  });
+
+  it('keeps prepared-only link and install-lock cores package-private', () => {
+    expect(contractApi.linkPreparedInstallTree).toBeTypeOf('function');
+    expect(contractApi.buildPreparedInstallLockfile).toBeTypeOf('function');
+    expect(npmClientRoot).not.toHaveProperty('linkPreparedInstallTree');
+    expect(npmClientRoot).not.toHaveProperty('buildPreparedInstallLockfile');
   });
 
   const invalidPaths = [
@@ -321,16 +423,10 @@ describe('resolved-package install-path authority', () => {
     });
   });
 
-  it.each([
-    'public link',
-    'install tree',
-    'lockfile',
-    'install lockfile',
-    'installer targets',
-  ] as const)(
-    '[fault: sibling-drift] %s rejects through one poisoned raw-path read',
+  it.each(['public link', 'install tree', 'lockfile', 'install lockfile'] as const)(
+    '[fault: sibling-drift] %s rejects after one poisoned raw-path read',
     async (entrypoint) => {
-      const invalid = pkg('bad-cli', 'node_modules/xnode_modules/bad-cli', false);
+      const invalid = pkg('bad-cli', 'node_modules/xnode_modules/bad-cli', true);
       let reads = 0;
       Object.defineProperty(invalid, 'installPath', {
         configurable: true,
@@ -353,10 +449,8 @@ describe('resolved-package install-path authority', () => {
           await linker.linkInstallTree(observedVfs, '/project', [invalid], () => {});
         } else if (entrypoint === 'lockfile') {
           linker.buildLockfile('root', '1.0.0', [invalid]);
-        } else if (entrypoint === 'install lockfile') {
-          linker.buildInstallLockfile('root', '1.0.0', [invalid], nonEmptyShadowPlan);
         } else {
-          requirePackageLinkTargets()('/project', [invalid]);
+          linker.buildInstallLockfile('root', '1.0.0', [invalid], nonEmptyShadowPlan);
         }
       } catch (error) {
         caught = error;
@@ -372,19 +466,12 @@ describe('resolved-package install-path authority', () => {
     },
   );
 
-  it.each([
-    'public link',
-    'install tree',
-    'lockfile',
-    'install lockfile',
-    'installer targets',
-  ] as const)(
-    '[fault: sibling-drift] %s preserves every valid path after one raw read',
+  it.each(['public link', 'install tree', 'lockfile', 'install lockfile'] as const)(
+    '[fault: sibling-drift] %s carries binful root and nested packages after one raw read',
     async (entrypoint) => {
-      const { packages, reads } = validReadOncePackages();
+      const { packages, reads } = binfulReadOncePackages();
       const vfs = await project();
       let lockfile: Lockfile | undefined;
-      let targets: readonly string[] | undefined;
 
       if (entrypoint === 'public link') {
         await linker.link(vfs, '/project', packages);
@@ -394,47 +481,27 @@ describe('resolved-package install-path authority', () => {
         lockfile = linker.buildLockfile('root', '1.0.0', packages);
       } else if (entrypoint === 'install lockfile') {
         lockfile = linker.buildInstallLockfile('root', '1.0.0', packages, emptyShadowPlan);
-      } else {
-        targets = requirePackageLinkTargets()('/project', packages);
       }
 
-      expect.soft(reads.map((read) => read())).toEqual([1, 1, 1, 1]);
+      expect.soft(reads.map((read) => read())).toEqual([1, 1]);
       if (entrypoint === 'public link' || entrypoint === 'install tree') {
-        for (const value of validPaths) {
-          expect
-            .soft(await vfs.readFileText(`/project/${value.relativePath}/package.json`))
-            .toBe(JSON.stringify({ name: value.name, version: '1.0.0' }));
-        }
+        await expectBinfulLinkBytes(vfs);
       } else if (lockfile) {
-        expect.soft(lockfile).toEqual({
-          name: 'root',
-          version: '1.0.0',
-          lockfileVersion: 3,
-          requires: true,
-          packages: {
-            '': {
-              version: '1.0.0',
-              dependencies: {
-                'omitted-cli': '1.0.0',
-                'flat-cli': '1.0.0',
-              },
-            },
-            ...Object.fromEntries(
-              validPaths.map(({ relativePath }) => [
-                relativePath,
-                { version: '1.0.0', dependencies: {} },
-              ]),
-            ),
-          },
-        });
-      } else {
-        expect(targets).toEqual(
-          validPaths.flatMap(({ relativePath }) => [
-            `/project/${relativePath}`,
-            `/project/${relativePath}/package.json`,
-          ]),
-        );
+        expect.soft(lockfile).toEqual(expectedBinfulLockfile());
       }
     },
   );
+
+  it('[fault: sibling-drift] one prepared array drives file, bin, and install-lock cores', async () => {
+    const { packages, reads } = binfulReadOncePackages();
+    const prepared = requirePreflight()(packages);
+    const vfs = await project();
+
+    await requirePreparedLink()(vfs, '/project', prepared, () => {});
+    const lockfile = requirePreparedInstallLockfile()('root', '1.0.0', prepared, emptyShadowPlan);
+
+    expect.soft(reads.map((read) => read())).toEqual([1, 1]);
+    await expectBinfulLinkBytes(vfs);
+    expect(lockfile).toEqual(expectedBinfulLockfile());
+  });
 });

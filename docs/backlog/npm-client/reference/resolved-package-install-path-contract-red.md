@@ -28,6 +28,43 @@ validation; and poisoned second-read sentinels through linker, both lockfile
 constructors, and installer target preparation. Valid sibling rows preserve
 exact file bytes, lockfile bytes, and absolute target lists.
 
+The terminal second checkpoint at
+`42e53d1b2c94b89fab1650794b1cff3477e8f54e` blocked three exact residuals:
+
+1. The independent ingress table did not force `link()`, `linkInstallTree()`,
+   both lockfile constructors, `packageLinkTargets()`, and real install through
+   one prepared carrier.
+2. Valid poisoned packages were binless, so a root/nested CLI could reread raw
+   `installPath` during bin linking without failing exact launcher or target
+   observations.
+3. The linked terminal recipe-v2 contract still claimed lexical-min /
+   every-install collision settlement after ADR-0335 superseded that static
+   model.
+
+The third residual is corrected in the frozen predecessor contract. The first
+two split serially: `resolved-package-linker-path-authority` owns direct
+preflight plus the four `linker.ts` consumers; then
+`resolved-package-installer-path-ingress` consumes the same carrier in
+installer targets and real install. The predecessor gets no third review.
+
+## Successor RED plan
+
+The initial linker successor RED retains the exact path grammar and
+all-method/overlay order proofs, then forces omitted/root/nested/scoped and
+valid root/nested binful poisoned packages through direct preflight, both
+linker entrances, and both lockfile constructors. One already-prepared array
+must also drive package-private link and install-lock cores. The suite observes
+exact prepared identities, file/launcher bytes, lock keys, one raw read, and
+zero effects for malformed mixed input. Its focused run records 30 tests,
+30 RED and 0 GREEN before production pickup.
+
+After that unit lands, the installer successor RED will route the same carrier
+through `packageLinkTargets()` and the real mixed install: one post-acquisition
+preflight produces the array consumed by targets, prepared linking, and
+prepared lock construction. It covers exact targets, valid binful poisoned
+getters, and zero post-acquisition VFS or lock effects on rejection. Test
+counts remain unrecorded until each successor's committed run.
+
 ## Sibling gates
 
 ```sh

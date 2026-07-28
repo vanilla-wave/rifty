@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal package-bin linker RED proved path admission and command ownership are separate units, while current linking still mutates files before discovering ambiguous command claims
 user_story: As a browser-IDE user installing packages with CLIs, I want one linker to reject command ownership it cannot settle like npm before changing the tree, then write each exact launcher after all package files settle
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/resolved-package-install-path-authority]
+blocked_by: [npm-client/resolved-package-installer-path-ingress]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -18,9 +18,10 @@ code:
 This is the second split successor to terminal
 `npm-client/package-bin-linker-authority` at
 `8e1456665a3d7a77425b5afa8f0c802ac59162b5`. It starts after
-`npm-client/resolved-package-install-path-authority` lands and accepts only
-that predecessor's prepared packages. Shadow recipe claims, acquired twins,
-aliases, internals shims, lock publication, and reporting remain absent.
+`npm-client/resolved-package-linker-path-authority` and
+`npm-client/resolved-package-installer-path-ingress` land and accepts only
+their shared prepared packages. Shadow recipe claims, acquired twins, aliases,
+internals shims, lock publication, and reporting remain absent.
 
 The existing linker remains the sole package-file and package-bin module. This
 unit extracts its minimum package-private phases; it adds no module, public
@@ -33,7 +34,7 @@ API, comparator, scheduler, lock, or package-specific branch.
 - ADR-0335 assigns that lifecycle to npm reify. Current or authoritative-prior
   ambiguity remains exactly
   `NotImplementedError('npm-client.bin-collision-reify')` + compat ❌.
-- The install-path predecessor supplies exact
+- The install-path successors supply exact
   `(package, relativePath, nodeModulesDir)` entries. No phase here accepts raw
   `ResolvedPackage.installPath`.
 
@@ -83,7 +84,8 @@ API, comparator, scheduler, lock, or package-specific branch.
 
 ## Out of scope
 
-- Raw install-path grammar; the predecessor owns it.
+- Raw install-path grammar and installer ingress; the two predecessors own
+  them.
 - Recipe materialization, acquired-twin suppression, aliases, shims, lock,
   reports, and their order;
   `npm-client/shadow-materialized-bin-commit-authority` owns them.
@@ -96,7 +98,8 @@ API, comparator, scheduler, lock, or package-specific branch.
   8e1456665a3d7a77425b5afa8f0c802ac59162b5`; predecessor checkpoints:
   `83ea4bf28e880eaf6c581de69731548860c318a5` and
   `8e1456665a3d7a77425b5afa8f0c802ac59162b5`.
-- The install-path successor must land first. This unit restores only the
-  terminal checkpoint's claim/phase REDs atop its prepared carrier.
+- Both serial install-path successors must land first. This unit restores only
+  the terminal checkpoint's claim/phase REDs atop their shared prepared
+  carrier.
 - ADR-0335 and the npm oracle settle the fork: ambiguity throws; no comparator
   or plausible winner ships.
