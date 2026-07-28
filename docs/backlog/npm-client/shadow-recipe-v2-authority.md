@@ -6,7 +6,8 @@ created: 2026-07-26
 why: the Sass RED proved recipe v1 admits unproven ranges, copies unproven registry dependencies, and can expose the acquired package bin instead of the substituted package bin; those are missing generic policy authorities, not Sass exceptions
 user_story: As a browser-IDE user installing a builtin-substituted package, I want its accepted request, acquired source projection, visible bins, and replay provenance to be exactly the reviewed recipe, but today recipe v1 can widen each of those boundaries
 epic: honest-shadow-substitutions
-sources: [ADR-0278, ADR-0310, ADR-0328, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md]
+blocked_by: [npm-client/shadow-recipe-v2-acquisition-replay-authority]
+sources: [ADR-0278, ADR-0310, ADR-0335, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md]
 code:
   - packages/npm-client/src/installer.ts
   - packages/npm-client/src/internal/shadow/planner.ts
@@ -21,10 +22,17 @@ code:
 Recipe v1 admits semver ranges, copies registry optionals, and links acquired
 bins before alias materialization. Those policies were implicit and cannot
 faithfully express an exact-only package with omitted native optionals and a
-loud replacement CLI. ADR-0328 supersedes ADR-0308 with one generic authority.
+loud replacement CLI. ADR-0335 supersedes ADR-0328 and retains its generic
+authority while correcting same-command collision settlement.
 The completed data-authority slice owns schema 2, strict codec/ingress, and
 admission feature identity; this item starts at execution, projection,
 materialization, and replay without shipping the Sass recipe.
+
+This item and PR #212 are a terminal blocked split predecessor. No production
+pickup occurred and no third Contract+RED is allowed. Its still-valid clauses
+remain frozen here while two successor units own materialized-bin commit and
+acquisition/replay authority. ADR-0335 supersedes the disproven collision
+clause; the complete npm reify lifecycle is an explicit outside-goal draft.
 
 ## Reference contract
 
@@ -144,7 +152,22 @@ materialization, and replay without shipping the Sass recipe.
 
 ## Decisions
 
-- ADR-0328 owns the complete recipe authority. The completed data-authority
+- `terminal-checkpoint:
+  87098d2dbaeb5665188b98cbc1a5cdd6ba876cf9` — second Contract+RED BLOCKED;
+  this unit receives no third checkpoint.
+- `checkpoint-lineage: [8f3251e89020772f15ff5a13022e7f7310f703d2,
+  d5ffb3d2de8a27b26a13f541d2e5d16260d4b8d8,
+  5c450fb9a5cab66a45b24eb8b19a1729c622e5a9,
+  b7725a3e88278f4f24efb1d8c8d90e80de08de43,
+  092d931a533ea45fa060367bd9373f78a7f2c684,
+  87098d2dbaeb5665188b98cbc1a5cdd6ba876cf9]`.
+- `split-successors: [npm-client/shadow-materialized-bin-authority,
+  npm-client/shadow-recipe-v2-acquisition-replay-authority]`.
+- ADR-0335 supersedes ADR-0328 after the packed-tarball oracle disproved its
+  lexical-min/every-install collision model. Collision-free recipe bins remain
+  required here; complete npm reify collision settlement is the outside-goal
+  draft `npm-client/npm-11-bin-reify-authority`.
+- ADR-0335 owns the complete recipe authority. The completed data-authority
   slice owns schema 2, codec/ingress, admission, and the schema-1 replay guard;
   this item owns exact current LightningCSS-map verification, embedded bundled
   member consumption, materialized-bin execution, and v2

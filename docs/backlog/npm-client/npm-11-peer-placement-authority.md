@@ -7,7 +7,7 @@ why: the recipe-v2 Contract+RED exposed that verified peer metadata still feeds 
 user_story: As a browser-IDE user installing a package with peer dependencies, I want the same dependency tree or loud conflict that npm 11 produces, but today rifty can report success with an incomplete or incompatible tree
 epic: honest-shadow-substitutions
 blocked_by: [npm-client/shadow-recipe-v2-dependency-projection-execution]
-sources: [ADR-0328, docs/backlog/npm-client/reference/npm-11-peer-placement-probe.md]
+sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-peer-placement-probe.md]
 code:
   - packages/npm-client/src/installer.ts
   - packages/npm-client/src/linker.ts

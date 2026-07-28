@@ -6,8 +6,8 @@ created: 2026-07-28
 why: the narrowed recipe-v2 Contract+RED proved exact LightningCSS metadata and bundled extraction but its positive oracle cannot prove non-bundled traversal, optional omission, non-empty peer handoff, or accepted scoped keys
 user_story: As a browser-IDE user installing a registry-backed substitution, I want every reviewed dependency map to drive the same ordinary installer behavior as its registry source, without silently acquiring an omitted dependency or dropping scoped and peer metadata
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-recipe-v2-authority]
-sources: [ADR-0328]
+blocked_by: [npm-client/shadow-recipe-v2-acquisition-replay-authority]
+sources: [ADR-0335]
 code:
   - packages/npm-client/src/installer.ts
   - packages/npm-client/src/internal/shadow/planner.ts
