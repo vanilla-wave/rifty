@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Resolved-package linker path authority
 created: 2026-07-28
 why: the terminal install-path RED proved linker and lockfile consumers can share one raw-path authority without also picking up the real installer ingress
@@ -95,6 +95,8 @@ and launcher fault work remain in
   public prepared-package export, new module, coordinator, scheduler, or lock.
 
 ## Decisions
+
+ready-verdict: 2026-07-28 — Contract+RED @ 5dff147bb2130d8b2f3d1705741bc739e1391b75
 
 - Contract+RED @ `0a89b13f0becb47c4ed520a7d14e780759a669eb`
   blocked: repair the renamed executable RED command and sweep every named
