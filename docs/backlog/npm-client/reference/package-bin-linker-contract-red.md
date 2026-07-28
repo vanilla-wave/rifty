@@ -301,3 +301,41 @@ earlier source. The in-place final re-cut adds the exact mixed readonly call,
 anti-sorted source/command/owner order, exact message equality, and a valid
 prefix plus later-invalid multi-command object with once-read counters. It
 adds no settlement, VFS, entrypoint, compat, or production-source scope.
+
+## Source normalization second blocker and terminal split
+
+The second isolated source-normalization Contract+RED review at
+`2ef0ecf61adb35fade0977cd0d0355be2a975ea5` blocked again. Exact blocker
+summaries:
+
+- first @ `3c4adade0ae34b076e536147f5d551e82b737055`: mixed readonly
+  admission, anti-sorted order, exact error identity, and later-invalid
+  reached-source reads;
+- second @ `2ef0ecf61adb35fade0977cd0d0355be2a975ea5`: both two-element order
+  witnesses still matched one descending tuple comparator.
+
+Per review convergence,
+`npm-client/package-bin-source-normalization-authority` is a terminal blocked
+split predecessor and receives no third checkpoint. Its lineage is
+`[3c4adade0ae34b076e536147f5d551e82b737055,
+2ef0ecf61adb35fade0977cd0d0355be2a975ea5]`.
+
+The successor allocation is:
+
+- `npm-client/package-bin-source-claim-authority`: one strict source becomes
+  exact claims; three-command non-monotonic order, prepared/narrow types,
+  string/object once-read, and later-invalid target proof;
+- `npm-client/package-bin-claim-aggregation-authority`: readonly mixed lists
+  compose the single-source seam; three-source non-monotonic order, duplicates,
+  and later-source errors remain exact.
+
+Claim settlement starts only after aggregation. Only source claim is the
+current epic Items selection. Historical Budget rows remain append-only and
+the new unit appends `30–80`; aggregation receives no selected row yet.
+
+The fresh source-claim carrier runs 7 tests: 6 RED and 1 GREEN. Package-local
+typecheck has exactly two intentional `TS2578` REDs while the strict
+single-source export is absent. A prepared three-command non-monotonic object,
+a narrow nested scoped string, and exact later-invalid string/object targets
+prove one-source behavior without list, settlement, VFS, entrypoint, compat, or
+production-source scope.

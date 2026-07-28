@@ -80,7 +80,9 @@ package-specific branch.
 ## Out of scope
 
 - Source normalization, narrow admission, and escaping-target semantics;
-  `npm-client/package-bin-source-normalization-authority` owns them.
+  `npm-client/package-bin-source-claim-authority` owns them.
+- Source-list order, duplicates, and later-source errors;
+  `npm-client/package-bin-claim-aggregation-authority` owns them.
 - Current/prior collision and transition settlement;
   `npm-client/package-bin-claim-settlement-authority` owns them.
 - Public/cancellable/prepared zero-mutation integration, optional prior ingress,

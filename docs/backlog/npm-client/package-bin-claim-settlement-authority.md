@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal normalization checkpoint proved normalized claim settlement needs its own exact per-scope current/prior boundary
 user_story: As a browser-IDE user installing package CLIs, I want ambiguous command history rejected per node_modules scope, but today the linker can choose a tree-order winner
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-source-normalization-authority]
+blocked_by: [npm-client/package-bin-claim-aggregation-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -17,8 +17,9 @@ code:
 This is the serial second split successor to terminal
 `npm-client/package-bin-claim-normalization-authority` at
 `acf363bc6f34b7b070e787fad6619d99c3839723`. It starts after
-`npm-client/package-bin-source-normalization-authority` lands and composes that
-one exact normalizer for current and prior sources.
+`npm-client/package-bin-source-claim-authority` and
+`npm-client/package-bin-claim-aggregation-authority` land, then composes that
+one exact aggregation seam for current and prior sources.
 
 The existing linker remains the sole package-bin module. This unit adds one
 pure preflight, no second source parser, public API, VFS owner, comparator,
@@ -30,16 +31,16 @@ scheduler, lock, or package-specific branch.
   same-command ownership is reify-history-sensitive, not a static comparator.
 - ADR-0335 requires current or authoritative-prior ambiguity to throw exactly
   `NotImplementedError('npm-client.bin-collision-reify')`.
-- Both source lists use the predecessor's normalizer. Settlement identity is
-  the exact pair `(nodeModulesDir, command)`, never command alone or a joined
-  string key.
+- Both source lists use the aggregation predecessor. Settlement identity is the
+  exact pair `(nodeModulesDir, command)`, never command alone or a joined string
+  key.
 
 ## Acceptance
 
 - The real preflight positively admits prepared/narrow current and prior
   sources and negatively rejects raw `ResolvedPackage` and shaped
   `PackageBinClaim` in both argument positions.
-- Normalize current and optional-prior source lists through the one predecessor
+- Aggregate current and optional-prior source lists through the one predecessor
   boundary; return only current claims without reordering or rewriting them.
 - Opposite-order same-scope current duplicates and recorded prior collisions
   throw the exact named ceiling.
@@ -70,7 +71,9 @@ scheduler, lock, or package-specific branch.
 ## Out of scope
 
 - Package source types, string/object normalization, bin reads, and escaping
-  targets; `npm-client/package-bin-source-normalization-authority` owns them.
+  targets; `npm-client/package-bin-source-claim-authority` owns them.
+- Readonly list admission, source order, duplicates, and later-source errors;
+  `npm-client/package-bin-claim-aggregation-authority` owns them.
 - Source composition through public/cancellable/prepared linker paths,
   optional-prior type admission, zero-mutation VFS proof, and compat;
   `npm-client/package-bin-claim-link-ingress-authority` owns them.
@@ -87,8 +90,8 @@ scheduler, lock, or package-specific branch.
   `acf363bc6f34b7b070e787fad6619d99c3839723`.
 - This draft receives no epic Items/Budget selection before source
   normalization lands.
-- One composed source normalizer removes parser ownership from this unit. A nested
-  `Map<nodeModulesDir, Map<command, claim>>` is sufficient; no delimiter,
-  comparator, sort, scheduler, or state owner is permitted.
+- One composed aggregation seam removes parser/order ownership from this unit.
+  A nested `Map<nodeModulesDir, Map<command, claim>>` is sufficient; no
+  delimiter, comparator, sort, scheduler, or state owner is permitted.
 - Distinct root/nested owners claiming the same command are the executable
   guard against a global command index.

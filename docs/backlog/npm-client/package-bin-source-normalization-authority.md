@@ -6,6 +6,7 @@ created: 2026-07-28
 why: the terminal combined normalization checkpoint proved one strict package source can become exact detached claims without owning cross-source settlement
 user_story: As a browser-IDE user installing package CLIs, I want every supported package bin shape normalized once into exact scoped claims, but today the linker has no reusable package-private claim boundary
 epic: honest-shadow-substitutions
+blocked_by: [npm-client/package-bin-source-claim-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -13,16 +14,17 @@ code:
 
 ## Context
 
-This is the first split successor to terminal
+This was the first split successor to terminal
 `npm-client/package-bin-claim-normalization-authority` at
-`acf363bc6f34b7b070e787fad6619d99c3839723`. It owns only one
-package-private source type, one detached claim type, and one source-list
-normalizer in the existing linker module.
+`acf363bc6f34b7b070e787fad6619d99c3839723`. Its second Contract+RED
+checkpoint proved per-source claim creation and ordered list aggregation are
+independently reviewable. This item is now a terminal blocked split predecessor
+and receives no third checkpoint.
 
-The normalizer preserves source and command order, including duplicate claims.
-It cannot compare history or choose a winner. The serial
-`npm-client/package-bin-claim-settlement-authority` owns current/prior
-settlement.
+`npm-client/package-bin-source-claim-authority` now owns one strict source.
+Then `npm-client/package-bin-claim-aggregation-authority` owns only ordered list
+composition. Current/prior settlement remains in the serial
+`npm-client/package-bin-claim-settlement-authority`.
 
 ## Reference contract
 
@@ -103,5 +105,17 @@ settlement.
 - `contract-red-first:
   3c4adade0ae34b076e536147f5d551e82b737055`; Standards passed, Spec blocked
   exact mixed-readonly type admission, anti-sorted order, exact error identity,
-  and late-invalid reached-source reads. This in-place re-cut is the second and
-  final Contract+RED checkpoint for this unit.
+  and late-invalid reached-source reads.
+- `terminal-checkpoint:
+  2ef0ecf61adb35fade0977cd0d0355be2a975ea5` — second Contract+RED BLOCKED;
+  this unit receives no third checkpoint.
+- `checkpoint-lineage: [3c4adade0ae34b076e536147f5d551e82b737055,
+  2ef0ecf61adb35fade0977cd0d0355be2a975ea5]`.
+- `split-successors: [npm-client/package-bin-source-claim-authority,
+  npm-client/package-bin-claim-aggregation-authority]`.
+- Contract+RED @ `2ef0ecf61adb35fade0977cd0d0355be2a975ea5`
+  blocked exactly: both two-element order witnesses still admitted one
+  descending tuple comparator.
+- The first successor owns only one source and uses a three-command
+  non-monotonic object witness. The second successor composes source claims and
+  separately owns three-source ordering, duplicates, and later-source errors.

@@ -18,9 +18,10 @@ code:
 This is the serial second split successor to terminal
 `npm-client/package-bin-claim-preflight-authority` at
 `cbeb4bfe04f270898aa003c04ef8e6edd3daf280`. It starts only after
-`npm-client/package-bin-source-normalization-authority` and
+`npm-client/package-bin-source-claim-authority`,
+`npm-client/package-bin-claim-aggregation-authority`, and
 `npm-client/package-bin-claim-settlement-authority` land, then composes those
-two pure seams before mutating linker work.
+pure seams before mutating linker work.
 
 The existing linker remains the sole module. This unit adds no public API,
 module, comparator, coordinator, scheduler, lock, or package-specific branch.
@@ -33,9 +34,9 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 - Public and cancellable linker paths carry current prepared packages only.
   The package-private prepared path may also receive optional narrow prior
   facts for the later installer integration.
-- The source-normalization and claim-settlement predecessors own pure claim
-  semantics. This unit owns only their truthful composition at existing linker
-  ingresses.
+- The source-claim, aggregation, and claim-settlement predecessors own pure
+  claim semantics. This unit owns only their truthful composition at existing
+  linker ingresses.
 
 ## Acceptance
 
@@ -78,7 +79,9 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 ## Out of scope
 
 - Source/claim types, normalization, read counts, and escaping-target semantics;
-  `npm-client/package-bin-source-normalization-authority` owns them.
+  `npm-client/package-bin-source-claim-authority` owns them.
+- Source-list order, duplicates, and later-source errors;
+  `npm-client/package-bin-claim-aggregation-authority` owns them.
 - Collision/transition/removal decisions and scope separation;
   `npm-client/package-bin-claim-settlement-authority` owns them.
 - All-files-before-bins ordering, target existence, launcher writing, abort,
