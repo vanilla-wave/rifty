@@ -20,7 +20,6 @@ const HEAVY_SPECS = [
   '**/project-management.spec.ts',
   '**/project-switch.spec.ts',
   '**/fullstack-demo.spec.ts',
-  '**/vite8-instant-switch.spec.ts',
 ];
 
 export default defineConfig({
