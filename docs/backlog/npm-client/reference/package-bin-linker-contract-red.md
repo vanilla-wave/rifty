@@ -291,3 +291,13 @@ strict package-private export is absent. The carrier returns every
 prepared/narrow string/object claim in order, including duplicates; exact
 escaping-target failures are counted once. It contains no current/prior,
 ceiling, VFS, entrypoint, compat, or production-source work.
+
+Its first isolated review at
+`3c4adade0ae34b076e536147f5d551e82b737055` passed Standards and blocked four
+Spec false-greens: separate singleton types did not prove one mixed readonly
+list, all order fixtures were comparator-sorted, target errors used substring
+matching, and rejection never reached a later invalid object command after an
+earlier source. The in-place final re-cut adds the exact mixed readonly call,
+anti-sorted source/command/owner order, exact message equality, and a valid
+prefix plus later-invalid multi-command object with once-read counters. It
+adds no settlement, VFS, entrypoint, compat, or production-source scope.

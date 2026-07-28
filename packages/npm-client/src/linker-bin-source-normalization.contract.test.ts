@@ -40,12 +40,15 @@ function proveBinSourceTypes(
   raw: ResolvedPackage,
   claim: PackageBinClaim,
 ): void {
+  const mixed: readonly PackageBinSource[] = [prepared, narrow];
+  const mixedClaims: readonly PackageBinClaim[] = normalize(mixed);
   const preparedClaims: readonly PackageBinClaim[] = normalize([prepared]);
   const narrowClaims: readonly PackageBinClaim[] = normalize([narrow]);
   // @ts-expect-error Contract: raw resolved packages are not bin sources.
   normalize([raw]);
   // @ts-expect-error Contract: shaped output claims are not bin sources.
   normalize([claim]);
+  void mixedClaims;
   void preparedClaims;
   void narrowClaims;
 }
@@ -136,24 +139,24 @@ describe('package-bin source normalization authority', () => {
     const normalize = requireNormalizer();
     const preparedPackage = observedPackage(
       pkg('multi-cli', 'node_modules/multi-cli', {
-        alpha: './bin/alpha.js',
         omega: 'bin/omega.js',
+        alpha: './bin/alpha.js',
       }),
       {
-        alpha: './bin/alpha.js',
         omega: 'bin/omega.js',
+        alpha: './bin/alpha.js',
       },
     );
     const [prepared] = preflightPackageInstallPaths([preparedPackage.value]);
     if (!prepared) throw new Error('Contract fixture: prepared package missing');
     const nested = observedSource('@scope/tool', 'node_modules/host/node_modules', './bin/tool.js');
 
-    expect(structuredClone(normalize([prepared, nested.value]))).toEqual([
+    expect(structuredClone(normalize([nested.value, prepared]))).toEqual([
       {
-        nodeModulesDir: 'node_modules',
-        command: 'alpha',
-        owner: 'multi-cli',
-        target: 'bin/alpha.js',
+        nodeModulesDir: 'node_modules/host/node_modules',
+        command: 'tool',
+        owner: '@scope/tool',
+        target: 'bin/tool.js',
       },
       {
         nodeModulesDir: 'node_modules',
@@ -162,10 +165,10 @@ describe('package-bin source normalization authority', () => {
         target: 'bin/omega.js',
       },
       {
-        nodeModulesDir: 'node_modules/host/node_modules',
-        command: 'tool',
-        owner: '@scope/tool',
-        target: 'bin/tool.js',
+        nodeModulesDir: 'node_modules',
+        command: 'alpha',
+        owner: 'multi-cli',
+        target: 'bin/alpha.js',
       },
     ]);
     expect(preparedPackage.binReads()).toBe(1);
@@ -174,25 +177,25 @@ describe('package-bin source normalization authority', () => {
 
   it('[fault: lossy-aggregate] preserves duplicate claims in source order', () => {
     const normalize = requireNormalizer();
-    const first = observedSource('first-cli', 'node_modules', {
-      shared: './bin/first.js',
+    const first = observedSource('z-cli', 'node_modules', {
+      shared: './bin/z.js',
     });
-    const second = observedSource('second-cli', 'node_modules', {
-      shared: './bin/second.js',
+    const second = observedSource('a-cli', 'node_modules', {
+      shared: './bin/a.js',
     });
 
     expect(structuredClone(normalize([first.value, second.value]))).toEqual([
       {
         nodeModulesDir: 'node_modules',
         command: 'shared',
-        owner: 'first-cli',
-        target: 'bin/first.js',
+        owner: 'z-cli',
+        target: 'bin/z.js',
       },
       {
         nodeModulesDir: 'node_modules',
         command: 'shared',
-        owner: 'second-cli',
-        target: 'bin/second.js',
+        owner: 'a-cli',
+        target: 'bin/a.js',
       },
     ]);
     expect(first.reads()).toBe(1);
@@ -200,17 +203,28 @@ describe('package-bin source normalization authority', () => {
   });
 
   it.each([
-    ['object', '../escape.js', { bad: '../escape.js' }],
-    ['object', '/absolute.js', { bad: '/absolute.js' }],
+    ['object', '../escape.js', { valid: './bin/valid.js', bad: '../escape.js' }],
+    ['object', '/absolute.js', { valid: './bin/valid.js', bad: '/absolute.js' }],
     ['string', '../escape.js', '../escape.js'],
     ['string', '/absolute.js', '/absolute.js'],
   ] as const)(
     '[fault: corrupt-input] rejects escaping %s target %s after one bin read',
     (_shape, target, bin) => {
       const normalize = requireNormalizer();
+      const prefix = observedSource('prefix-cli', 'node_modules', {
+        prefix: './bin/prefix.js',
+      });
       const invalid = observedSource('bad-target', 'node_modules', bin);
+      let caught: unknown;
 
-      expect(() => normalize([invalid.value])).toThrow(`Invalid package bin target: ${target}`);
+      try {
+        normalize([prefix.value, invalid.value]);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).message).toBe(`Invalid package bin target: ${target}`);
+      expect(prefix.reads()).toBe(1);
       expect(invalid.reads()).toBe(1);
     },
   );

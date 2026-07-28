@@ -100,3 +100,8 @@ settlement.
 - The predecessor's broadened-prior blocker is split between this exact source
   boundary and the later real optional-prior linker ingress. The global-index
   blocker belongs wholly to claim settlement.
+- `contract-red-first:
+  3c4adade0ae34b076e536147f5d551e82b737055`; Standards passed, Spec blocked
+  exact mixed-readonly type admission, anti-sorted order, exact error identity,
+  and late-invalid reached-source reads. This in-place re-cut is the second and
+  final Contract+RED checkpoint for this unit.
