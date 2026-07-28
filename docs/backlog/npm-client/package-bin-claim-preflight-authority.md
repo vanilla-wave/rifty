@@ -34,24 +34,34 @@ module, public API, comparator, scheduler, lock, or package-specific branch.
 - Current packages already carry exact prepared `(package, nodeModulesDir)`
   facts. Authoritative prior contributes only `(package.name/bin,
   nodeModulesDir)` and never fabricates package files or install paths.
+- Public and cancellable linker paths carry current claims only. The
+  package-private prepared path accepts OPTIONAL narrow prior facts for the
+  later real-installer successor; no public API changes.
 
 ## Acceptance
 
 - One package-private bin-source type admits both prepared current packages and
   narrow authoritative-prior facts. Positive type witnesses compile for both;
   negative witnesses reject raw `ResolvedPackage` and shaped claims at the
-  source ingress.
-- Normalize each supported string/object bin exactly once. Counted current and
-  prior access proves no raw `installPath` read, no second `bin` read, and an
-  exact detached `(nodeModulesDir, command, owner, target)` current claim.
+  source ingress. The prepared path's OPTIONAL prior parameter also compiles
+  only for narrow sources.
+- Normalize each supported string/object bin exactly once on success. Counted
+  rejecting branches never reread a reached source. Current and prior access
+  proves no raw `installPath` reread and an exact detached
+  `(nodeModulesDir, command, owner, target)` current claim.
 - Equal command text in different root/nested scopes remains independent.
   Opposite-order same-scope current duplicates, recorded prior collisions,
   owner transitions, and removals throw the named ceiling. A stable sole owner
   remains admissible when its target changes and returns only the current
   target.
 - Current/prior ambiguity and escaping targets reject before any mutating VFS
-  call. The proof records the operation ledger, not only final tree state, so a
-  write followed by cleanup cannot pass.
+  call. Current duplicates and escaping targets run through public,
+  cancellable, and prepared paths; a supplied prior transition runs through the
+  prepared path. Every proof records the operation ledger, not only final tree
+  state, so a write followed by cleanup cannot pass.
+- Throw-on-second-read witnesses cover every current duplicate, prior
+  collision, transition, removal, and escaping-target branch, not only
+  successful normalization.
 - The structured public compat row records same-command package-bin settlement
   as ❌ and names exactly `npm-client.bin-collision-reify`; its executable
   assertion is unconditional.
@@ -60,20 +70,23 @@ module, public API, comparator, scheduler, lock, or package-specific branch.
 ## Parity cases
 
 1. Opposite current orders in root and nested scopes reject with zero mutating
-   VFS calls; independent scopes return both exact claims.
+   VFS calls through public, cancellable, and prepared paths; independent
+   scopes return both exact claims.
 2. Prior collision, transition, and removal reject; stable string/object owners
-   return only their current normalized targets.
+   return only their current normalized targets. Prepared prior transition
+   rejects before mutation.
 3. Prepared-current and narrow-prior positive type witnesses compile while raw
    package and claim negative witnesses remain rejected.
-4. Escaping target preflight and the exact structured compat ❌ row stay loud.
+4. Escaping targets reject before mutation through all three linker paths; the
+   exact structured compat ❌ row stays loud.
 
 ## Fault matrix
 
 | Fault class | Required outcome | Proof |
 |---|---|---|
-| frozen-assumption / observable-order | current/prior ambiguity rejects before the first mutating VFS call; no static npm winner | packed npm probe plus opposite-order/prior operation ledger |
-| corrupt-input | only prepared/narrow sources enter; escaping target rejects before mutation | positive/negative type witnesses plus target ledger |
-| sibling-drift | current and prior use one normalization boundary exactly once | string/object read-count table |
+| frozen-assumption / observable-order | current/prior ambiguity rejects before the first mutating VFS call; no static npm winner | packed npm probe plus public/cancellable/prepared opposite-order and prepared-prior ledgers |
+| corrupt-input | only prepared/narrow sources enter; escaping target rejects before mutation | positive/negative type witnesses plus three-entrypoint target ledger |
+| sibling-drift | current and prior use one normalization boundary exactly once on success and rejection | all-branch string/object read-count table |
 | provenance-lie | compat remains ❌ with the exact named ceiling | unconditional structured-row assertion |
 
 ## Out of scope
@@ -98,5 +111,11 @@ module, public API, comparator, scheduler, lock, or package-specific branch.
 - The second predecessor review allocated narrow type proof, normalization,
   zero-mutation ambiguity/target admission, and compat honesty here. It
   allocated every mutating VFS behavior to the serial phased successor.
+- First successor Contract+RED @
+  `6fdc19c5b98b9773fa5406126e6ac35c4329b9af` blocked: restore the
+  append-only predecessor Budget row; run current duplicate and escaping
+  ledgers across public/cancellable/prepared paths; integrate optional prior at
+  the prepared boundary; count every rejecting current/prior source read. The
+  in-place re-cut changes no observable behavior or split boundary.
 - ADR-0335 and the npm oracle settle the behavior fork: ambiguity throws; no
   comparator or plausible winner ships.

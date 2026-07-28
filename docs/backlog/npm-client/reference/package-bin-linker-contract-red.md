@@ -179,9 +179,22 @@ phased unit remains a linked draft behind it. Each successor re-cuts its own
 Contract+RED carrier; the combined test carrier remains terminal checkpoint
 evidence.
 
-The fresh claim-preflight carrier runs 16 tests: 11 RED and 5 GREEN.
+The first fresh claim-preflight carrier runs 16 tests: 11 RED and 5 GREEN.
 Package-local typecheck adds exactly two intentional `TS2578` REDs while the
 narrow preflight export is absent; after implementation they go green only if
 raw `ResolvedPackage` and shaped output claims are both rejected at source
 ingress. Positive prepared-current and narrow current/prior calls compile
 against the actual conditional export.
+
+Its first isolated review at
+`6fdc19c5b98b9773fa5406126e6ac35c4329b9af` blocked an append-only Budget
+violation plus three false-green gaps: current collision and escaping-target
+ledgers covered only public `link()`, authoritative prior had no
+prepared-entry integration, and rejecting branches did not count source reads.
+The in-place re-cut restores the predecessor Budget row, exercises public,
+cancellable, and prepared current/target paths, adds the OPTIONAL narrow-prior
+prepared carrier required by the later installer successor, and makes every
+rejecting current/prior bin source throw on a second read. It runs 17 tests:
+12 RED and 5 GREEN; package typecheck carries the same two intentional
+`TS2578` REDs plus one `TS2554` RED until the prepared path types its optional
+prior carrier.

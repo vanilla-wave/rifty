@@ -138,4 +138,5 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | measured-cleanup | 1000–3000 |
 | resolved-package-linker-path-authority | 100–300 |
 | resolved-package-installer-prepared-path-consumption | 100–300 |
+| package-bin-claim-linker-authority | 300–700 |
 | package-bin-claim-preflight-authority | 100–300 |

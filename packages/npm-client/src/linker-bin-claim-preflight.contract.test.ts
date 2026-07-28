@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { NotImplementedError } from '@riftydev/io';
-import { MemoryVfs } from '@riftydev/vfs';
+import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as npmClientRoot from './index.ts';
 import * as linker from './linker.ts';
@@ -33,6 +33,16 @@ interface PackageBinPreflightApi {
 }
 
 const contractApi = linker as unknown as Partial<PackageBinPreflightApi>;
+const linkEntryPoints = ['public link', 'install tree', 'prepared tree'] as const;
+type LinkEntryPoint = (typeof linkEntryPoints)[number];
+type PreparedTreeWithPrior = (
+  vfs: Vfs,
+  root: string,
+  packages: readonly PreparedInstallPackage[],
+  checkpoint: () => void,
+  prior?: readonly PreparedPackageBinSource[],
+) => Promise<void>;
+const linkPreparedWithPrior = linker.linkPreparedInstallTree as PreparedTreeWithPrior;
 
 type MissingPreflight = (
   current: readonly (PreparedPackageBinSource | ResolvedPackage | PackageBinClaim)[],
@@ -60,7 +70,19 @@ function proveBinPreflightCarrierTypes(
   void narrowClaims;
 }
 
+function provePreparedPriorRejectsRaw(
+  vfs: Vfs,
+  prepared: PreparedInstallPackage,
+  narrow: PreparedPackageBinSource,
+  raw: ResolvedPackage,
+): void {
+  linker.linkPreparedInstallTree(vfs, '/project', [prepared], () => {}, [narrow]);
+  // @ts-expect-error Contract: prepared prior accepts only narrow bin sources.
+  linker.linkPreparedInstallTree(vfs, '/project', [prepared], () => {}, [raw]);
+}
+
 void proveBinPreflightCarrierTypes;
+void provePreparedPriorRejectsRaw;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -207,6 +229,26 @@ async function project(): Promise<MemoryVfs> {
   return vfs;
 }
 
+async function linkThrough(
+  entrypoint: LinkEntryPoint,
+  vfs: MemoryVfs,
+  packages: readonly ResolvedPackage[],
+  prior?: readonly PreparedPackageBinSource[],
+): Promise<void> {
+  if (entrypoint === 'public link') {
+    if (prior) throw new Error('public link has no authoritative-prior carrier');
+    await linker.link(vfs, '/project', packages);
+    return;
+  }
+  if (entrypoint === 'install tree') {
+    if (prior) throw new Error('install tree has no authoritative-prior carrier');
+    await linker.linkInstallTree(vfs, '/project', packages, () => {});
+    return;
+  }
+  const prepared = preflightPackageInstallPaths(packages);
+  await linkPreparedWithPrior(vfs, '/project', prepared, () => {}, prior);
+}
+
 function expectCollision(error: unknown): void {
   expect.soft(error).toBeInstanceOf(NotImplementedError);
   expect
@@ -242,54 +284,41 @@ function parseCompatRows(
 
 describe('package-bin claim preflight authority', () => {
   it.each([
-    [
-      'root',
-      'forward',
-      [
-        pkg('a-a', 'node_modules/a-a', 'shared', 'bin/a.js'),
-        pkg('a_a', 'node_modules/a_a', 'shared', 'bin/a.js'),
-      ],
-    ],
-    [
-      'root',
-      'reverse',
-      [
-        pkg('a_a', 'node_modules/a_a', 'shared', 'bin/a.js'),
-        pkg('a-a', 'node_modules/a-a', 'shared', 'bin/a.js'),
-      ],
-    ],
-    [
-      'nested',
-      'forward',
-      [
-        pkg('a-a', 'node_modules/host/node_modules/a-a', 'shared', 'bin/a.js'),
-        pkg('a_a', 'node_modules/host/node_modules/a_a', 'shared', 'bin/a.js'),
-      ],
-    ],
-    [
-      'nested',
-      'reverse',
-      [
-        pkg('a_a', 'node_modules/host/node_modules/a_a', 'shared', 'bin/a.js'),
-        pkg('a-a', 'node_modules/host/node_modules/a-a', 'shared', 'bin/a.js'),
-      ],
-    ],
+    ['root', 'forward', 'node_modules', ['a-a', 'a_a']],
+    ['root', 'reverse', 'node_modules', ['a_a', 'a-a']],
+    ['nested', 'forward', 'node_modules/host/node_modules', ['a-a', 'a_a']],
+    ['nested', 'reverse', 'node_modules/host/node_modules', ['a_a', 'a-a']],
   ] as const)(
-    '[fault: frozen-assumption] rejects ambiguous current claims before any %s mutation (%s)',
-    async (_scope, _order, packages) => {
-      const vfs = await project();
-      const mutations = observeMutations(vfs);
-      let caught: unknown;
+    '[fault: frozen-assumption] rejects ambiguous %s claims across every linker path (%s)',
+    async (_scope, _order, nodeModulesDir, names) => {
+      for (const entrypoint of linkEntryPoints) {
+        const observed = names.map((name) =>
+          observedPackage(pkg(name, `${nodeModulesDir}/${name}`, 'shared', 'bin/cli.js'), {
+            shared: 'bin/cli.js',
+          }),
+        );
+        const vfs = await project();
+        const mutations = observeMutations(vfs);
+        let caught: unknown;
 
-      try {
-        await linker.link(vfs, '/project', packages);
-      } catch (error) {
-        caught = error;
+        try {
+          await linkThrough(
+            entrypoint,
+            vfs,
+            observed.map(({ value }) => value),
+          );
+        } catch (error) {
+          caught = error;
+        }
+
+        expectCollision(caught);
+        expect.soft(mutations.operations, entrypoint).toEqual([]);
+        for (const source of observed) {
+          expect.soft(source.pathReads(), `${entrypoint} path reads`).toBe(1);
+          expect.soft(source.binReads(), `${entrypoint} bin reads`).toBe(1);
+        }
+        mutations.restore();
       }
-
-      expectCollision(caught);
-      expect(mutations.operations).toEqual([]);
-      mutations.restore();
     },
   );
 
@@ -400,32 +429,68 @@ describe('package-bin claim preflight authority', () => {
 
   it('[fault: observable-order] rejects a prior owner transition', () => {
     const preflight = requirePreflight();
-    const current = preflightPackageInstallPaths([
+    const currentSource = observedPackage(
       pkg('current-cli', 'node_modules/current-cli', 'shared', 'bin/current.js'),
-    ]);
-    const prior = [priorSource('prior-cli', 'node_modules', { shared: 'bin/prior.js' })];
+      { shared: 'bin/current.js' },
+    );
+    const priorSource = observedSource('prior-cli', 'node_modules', {
+      shared: 'bin/prior.js',
+    });
+    const current = preflightPackageInstallPaths([currentSource.value]);
 
-    expectSyncCollision(() => preflight(current, prior));
+    expectSyncCollision(() => preflight(current, [priorSource.value]));
+    expect(currentSource.pathReads()).toBe(1);
+    expect(currentSource.binReads()).toBe(1);
+    expect(priorSource.reads()).toBe(1);
+  });
+
+  it('[fault: observable-order] rejects a prepared-path prior transition before mutation', async () => {
+    const current = observedPackage(
+      pkg('current-cli', 'node_modules/current-cli', 'shared', 'bin/current.js'),
+      { shared: 'bin/current.js' },
+    );
+    const prior = observedSource('prior-cli', 'node_modules', { shared: 'bin/prior.js' });
+    const vfs = await project();
+    const mutations = observeMutations(vfs);
+    let caught: unknown;
+
+    try {
+      await linkThrough('prepared tree', vfs, [current.value], [prior.value]);
+    } catch (error) {
+      caught = error;
+    }
+
+    expectCollision(caught);
+    expect.soft(mutations.operations).toEqual([]);
+    expect.soft(current.pathReads()).toBe(1);
+    expect.soft(current.binReads()).toBe(1);
+    expect.soft(prior.reads()).toBe(1);
+    mutations.restore();
   });
 
   it('[fault: frozen-assumption] rejects a recorded prior collision', () => {
     const preflight = requirePreflight();
-    const current = preflightPackageInstallPaths([
+    const currentSource = observedPackage(
       pkg('provider-a', 'node_modules/provider-a', 'shared', 'bin/a.js'),
-    ]);
-    const prior = [
-      priorSource('provider-a', 'node_modules', { shared: 'bin/a.js' }),
-      priorSource('provider-z', 'node_modules', { shared: 'bin/z.js' }),
-    ];
+      { shared: 'bin/a.js' },
+    );
+    const priorA = observedSource('provider-a', 'node_modules', { shared: 'bin/a.js' });
+    const priorZ = observedSource('provider-z', 'node_modules', { shared: 'bin/z.js' });
+    const current = preflightPackageInstallPaths([currentSource.value]);
 
-    expectSyncCollision(() => preflight(current, prior));
+    expectSyncCollision(() => preflight(current, [priorA.value, priorZ.value]));
+    expect(currentSource.pathReads()).toBe(1);
+    expect(currentSource.binReads()).toBeLessThanOrEqual(1);
+    expect(priorA.reads()).toBe(1);
+    expect(priorZ.reads()).toBe(1);
   });
 
   it('[fault: observable-order] rejects removal of a recorded sole claimant', () => {
     const preflight = requirePreflight();
-    const prior = [priorSource('prior-cli', 'node_modules', { shared: 'bin/prior.js' })];
+    const prior = observedSource('prior-cli', 'node_modules', { shared: 'bin/prior.js' });
 
-    expectSyncCollision(() => preflight([], prior));
+    expectSyncCollision(() => preflight([], [prior.value]));
+    expect(prior.reads()).toBe(1);
   });
 
   it('[fault: sibling-drift] accepts narrow current/prior sources once and returns current targets', () => {
@@ -463,18 +528,24 @@ describe('package-bin claim preflight authority', () => {
     expect(nestedPrior.reads()).toBe(1);
   });
 
-  it('[fault: corrupt-input] rejects an escaping target before any VFS mutation', async () => {
-    const vfs = await project();
-    const mutations = observeMutations(vfs);
-
-    await expect(
-      linker.link(vfs, '/project', [
+  it('[fault: corrupt-input] rejects an escaping target across every linker path', async () => {
+    for (const entrypoint of linkEntryPoints) {
+      const source = observedPackage(
         pkg('bad-target', 'node_modules/bad-target', 'bad', '../escape.js'),
-      ]),
-    ).rejects.toThrow(/Invalid package bin target/);
+        { bad: '../escape.js' },
+      );
+      const vfs = await project();
+      const mutations = observeMutations(vfs);
 
-    expect(mutations.operations).toEqual([]);
-    mutations.restore();
+      await expect(linkThrough(entrypoint, vfs, [source.value])).rejects.toThrow(
+        /Invalid package bin target/,
+      );
+
+      expect.soft(mutations.operations, entrypoint).toEqual([]);
+      expect.soft(source.pathReads(), `${entrypoint} path reads`).toBe(1);
+      expect.soft(source.binReads(), `${entrypoint} bin reads`).toBe(1);
+      mutations.restore();
+    }
   });
 
   it('[fault: provenance-lie] keeps same-command settlement at the exact compat ceiling', async () => {
