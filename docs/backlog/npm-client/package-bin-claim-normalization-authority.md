@@ -82,6 +82,10 @@ branch.
   `npm-client/package-bin-phased-linker-authority` owns them.
 - Recipe materialization, acquired-twin suppression, aliases, shims, lock, and
   reporting; `npm-client/shadow-materialized-bin-commit-authority` owns them.
+- npm's broader array/scoped/key/target normalization differential and malformed
+  metadata outcomes; `npm-client/npm-package-bin-normalization-authority` owns
+  that outside-goal work. This unit claims only today's supported string/object
+  shapes.
 - npm 11 ADD/CHANGE/no-op/remove/rebuild or direct-Link settlement;
   `npm-client/npm-11-bin-reify-authority` owns it outside this goal.
 

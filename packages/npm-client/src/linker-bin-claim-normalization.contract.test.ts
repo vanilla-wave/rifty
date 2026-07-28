@@ -312,11 +312,14 @@ describe('package-bin claim normalization authority', () => {
     expect(nestedPrior.reads()).toBe(1);
   });
 
-  it('[fault: corrupt-input] rejects an escaping target without rereading it', () => {
-    const preflight = requirePreflight();
-    const invalid = observedSource('bad-target', 'node_modules', { bad: '../escape.js' });
+  it.each(['../escape.js', '/absolute.js'] as const)(
+    '[fault: corrupt-input] rejects escaping target %s without rereading it',
+    (target) => {
+      const preflight = requirePreflight();
+      const invalid = observedSource('bad-target', 'node_modules', { bad: target });
 
-    expect(() => preflight([invalid.value])).toThrow(/Invalid package bin target/);
-    expect(invalid.reads()).toBe(1);
-  });
+      expect(() => preflight([invalid.value])).toThrow(/Invalid package bin target/);
+      expect(invalid.reads()).toBe(1);
+    },
+  );
 });

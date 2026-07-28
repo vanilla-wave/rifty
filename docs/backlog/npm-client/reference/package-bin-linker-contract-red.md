@@ -235,7 +235,7 @@ Only normalization is the current epic Items selection. Historical Budget rows
 remain append-only and normalization appends its own `100–200` row; link ingress
 receives no selected row yet.
 
-The fresh normalization carrier runs 12 tests: 11 RED and 1 GREEN.
+The fresh normalization carrier runs 13 tests: 12 RED and 1 GREEN.
 Package-local typecheck adds exactly two intentional `TS2578` REDs while the
 real normalization export is absent; after implementation they go green only
 if raw `ResolvedPackage` and shaped `PackageBinClaim` both remain rejected.
