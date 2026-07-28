@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 import { builtinShadowSubstitutionCatalog } from '@riftydev/shadow-registry/internal';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ import {
   padToBlock,
 } from './_test-fixtures/tar-builder.ts';
 import { install } from './installer.ts';
+import { type ResolvedPackage, link } from './linker.ts';
 import type { Packument, VersionManifest } from './registry.ts';
 import { RegistryClient } from './registry.ts';
 
@@ -179,6 +181,16 @@ async function expectExactRegistryAlias(vfs: MemoryVfs, aliasRoot: string): Prom
   }
 }
 
+function expectedLightningReports(scope: RegistryAliasScope): string[] {
+  return [
+    'npm: lightningcss@^1.32.0 → lightningcss-wasm@1.32.0 (substituted from shadow registry, ADR-0051)',
+    `npm: lightningcss@^1.32.0 materialized from shadow registry (${lightningRecipe.id})`,
+    ...(scope === 'nested'
+      ? ['npm: lightningcss@1.32.1 internals patched from shadow registry']
+      : []),
+  ];
+}
+
 async function project(): Promise<MemoryVfs> {
   const vfs = new MemoryVfs();
   await vfs.mkdir('/project', { recursive: true });
@@ -189,110 +201,210 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const encoder = new TextEncoder();
+
+function linkedPackage(
+  name: string,
+  installPath: string,
+  command: string,
+  target: string,
+): ResolvedPackage {
+  return {
+    name,
+    version: '1.0.0',
+    installPath,
+    dependencies: {},
+    bin: { [command]: target },
+    files: {
+      'package.json': encoder.encode(JSON.stringify({ name, version: '1.0.0' })),
+      [target]: encoder.encode(`throw new Error(${JSON.stringify(name)});\n`),
+    },
+  };
+}
+
+async function expectBinCollision(run: Promise<unknown>): Promise<void> {
+  let caught: unknown;
+  try {
+    await run;
+  } catch (error) {
+    caught = error;
+  }
+  expect.soft(caught).toBeInstanceOf(NotImplementedError);
+  expect
+    .soft((caught as NotImplementedError | undefined)?.feature)
+    .toBe('npm-client.bin-collision-reify');
+}
+
 describe('install package-bin authority', () => {
-  it('[fault: observable-order] gives builtin esbuild its lexical command independent of manifest order', async () => {
+  it('[fault: observable-order] publishes collision-free esbuild only after lock commit and replays its exact launcher', async () => {
+    const vfs = await project();
+    const freshEvents: string[] = [];
+    const writeFile = vfs.writeFile.bind(vfs);
+    vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+      await writeFile(path, data);
+      if (path === '/project/package-lock.json') freshEvents.push('lock');
+    });
+
+    const fresh = await install(
+      'fixture',
+      '1.0.0',
+      { esbuild: '^0.28.0' },
+      {
+        vfs,
+        cwd: '/project',
+        registry: registry(),
+        onSubstitution: (line) => freshEvents.push(`report:${line}`),
+      },
+    );
+
+    expect(freshEvents).toEqual([
+      'lock',
+      'report:npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)',
+    ]);
+    expect(await vfs.readFileText('/project/node_modules/.bin/esbuild')).toBe(
+      launcher('esbuild', 'bin/esbuild'),
+    );
+    expect(fresh.lockfile.packages['node_modules/esbuild']?.bin).toEqual({
+      esbuild: 'bin/esbuild',
+    });
+
+    vi.restoreAllMocks();
+    const replayReports: string[] = [];
+    const replay = await install(
+      'fixture',
+      '1.0.0',
+      { esbuild: '^0.28.0' },
+      {
+        vfs,
+        cwd: '/project',
+        registry: registry(),
+        onSubstitution: (line) => replayReports.push(line),
+      },
+    );
+    expect(replayReports).toEqual([
+      'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)',
+    ]);
+    expect(await vfs.readFileText('/project/node_modules/.bin/esbuild')).toBe(
+      launcher('esbuild', 'bin/esbuild'),
+    );
+    expect(replay.lockfile).toEqual(fresh.lockfile);
+  });
+
+  it.each([
+    ['shadow-first', { esbuild: '^0.28.0', 'provider-z': '1.0.0' }],
+    ['ordinary-first', { 'provider-z': '1.0.0', esbuild: '^0.28.0' }],
+  ])(
+    '[fault: frozen-assumption] rejects a current same-scope collision before tree/report/lock (%s)',
+    async (_name, dependencies) => {
+      const rival = await registryEntry('provider-z', '1.0.0', {
+        bin: { esbuild: 'bin/provider.js' },
+        files: { 'bin/provider.js': 'throw new Error("provider-z");\n' },
+      });
+      const vfs = await project();
+      const reports: string[] = [];
+
+      await expectBinCollision(
+        install('fixture', '1.0.0', dependencies, {
+          vfs,
+          cwd: '/project',
+          registry: registry(rival),
+          onSubstitution: (line) => reports.push(line),
+        }),
+      );
+
+      expect.soft(reports).toEqual([]);
+      expect.soft(await vfs.exists('/project/node_modules')).toBe(false);
+      expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
+    },
+  );
+
+  it.each([
+    [
+      'root',
+      [
+        linkedPackage('a-a', 'node_modules/a-a', 'shared', 'bin/a.js'),
+        linkedPackage('a_a', 'node_modules/a_a', 'shared', 'bin/a.js'),
+      ],
+    ],
+    [
+      'nested',
+      [
+        linkedPackage('a-a', 'node_modules/host/node_modules/a-a', 'shared', 'bin/a.js'),
+        linkedPackage('a_a', 'node_modules/host/node_modules/a_a', 'shared', 'bin/a.js'),
+      ],
+    ],
+  ] as const)(
+    '[fault: frozen-assumption] keeps the public linker collision ceiling scoped at %s',
+    async (_scope, packages) => {
+      const vfs = await project();
+      await expectBinCollision(link(vfs, '/project', packages));
+      expect(await vfs.exists('/project/node_modules')).toBe(false);
+    },
+  );
+
+  it('[fault: observable-order] allows identical command text in independent root and nested scopes', async () => {
+    const vfs = await project();
+    await link(vfs, '/project', [
+      linkedPackage('root-cli', 'node_modules/root-cli', 'shared', 'bin/root.js'),
+      linkedPackage(
+        'nested-cli',
+        'node_modules/host/node_modules/nested-cli',
+        'shared',
+        'bin/nested.js',
+      ),
+    ]);
+
+    expect(await vfs.readFileText('/project/node_modules/.bin/shared')).toBe(
+      launcher('root-cli', 'bin/root.js'),
+    );
+    expect(await vfs.readFileText('/project/node_modules/host/node_modules/.bin/shared')).toBe(
+      launcher('nested-cli', 'bin/nested.js'),
+    );
+  });
+
+  it('[fault: observable-order] rejects a prior owner transition before shadow report or tree mutation', async () => {
     const rival = await registryEntry('provider-z', '1.0.0', {
       bin: { esbuild: 'bin/provider.js' },
       files: { 'bin/provider.js': 'throw new Error("provider-z");\n' },
     });
-    const outputs: string[] = [];
-
-    for (const dependencies of [
-      { esbuild: '^0.28.0', 'provider-z': '1.0.0' },
-      { 'provider-z': '1.0.0', esbuild: '^0.28.0' },
-    ]) {
-      const vfs = await project();
-      await install('fixture', '1.0.0', dependencies, {
-        vfs,
-        cwd: '/project',
-        registry: registry(rival),
-        onSubstitution: () => {},
-      });
-      outputs.push(await vfs.readFileText('/project/node_modules/.bin/esbuild'));
-    }
-
-    expect(outputs).toEqual([
-      launcher('esbuild', 'bin/esbuild'),
-      launcher('esbuild', 'bin/esbuild'),
-    ]);
-  });
-
-  it('[fault: observable-order] reconciles an incremental z-to-a launcher to lexical ownership', async () => {
-    const providerA = await registryEntry('provider-a', '1.0.0', {
-      bin: { shared: 'bin/a.js' },
-      files: { 'bin/a.js': 'throw new Error("provider-a");\n' },
-    });
-    const providerZ = await registryEntry('provider-z', '1.0.0', {
-      bin: { shared: 'bin/z.js' },
-      files: { 'bin/z.js': 'throw new Error("provider-z");\n' },
-    });
     const vfs = await project();
-    const fixtureRegistry = registry(providerA, providerZ);
-
+    const fixtureRegistry = registry(rival);
     await install(
       'fixture',
       '1.0.0',
       { 'provider-z': '1.0.0' },
-      { vfs, cwd: '/project', registry: fixtureRegistry },
-    );
-    expect(await vfs.readFileText('/project/node_modules/.bin/shared')).toBe(
-      launcher('provider-z', 'bin/z.js'),
-    );
-
-    await install(
-      'fixture',
-      '1.0.0',
-      { 'provider-a': '1.0.0', 'provider-z': '1.0.0' },
-      { vfs, cwd: '/project', registry: fixtureRegistry },
-    );
-    expect(await vfs.readFileText('/project/node_modules/.bin/shared')).toBe(
-      launcher('provider-a', 'bin/a.js'),
-    );
-  });
-
-  it('[fault: observable-order] keeps root and nested command ownership in separate scopes', async () => {
-    const rootA = await registryEntry('provider-a', '1.0.0', {
-      bin: { shared: 'bin/root-a.js' },
-      files: { 'bin/root-a.js': 'throw new Error("root-a");\n' },
-    });
-    const rootZ = await registryEntry('provider-z', '1.0.0', {
-      bin: { shared: 'bin/root-z.js' },
-      files: { 'bin/root-z.js': 'throw new Error("root-z");\n' },
-    });
-    const nestedA = await registryEntry('provider-a', '2.0.0', {
-      bin: { shared: 'bin/nested-a.js' },
-      files: { 'bin/nested-a.js': 'throw new Error("nested-a");\n' },
-    });
-    const nestedZ = await registryEntry('provider-z', '2.0.0', {
-      bin: { shared: 'bin/nested-z.js' },
-      files: { 'bin/nested-z.js': 'throw new Error("nested-z");\n' },
-    });
-    const host = await registryEntry('nested-host', '1.0.0', {
-      dependencies: { 'provider-a': '2.0.0', 'provider-z': '2.0.0' },
-    });
-    const vfs = await project();
-
-    await install(
-      'fixture',
-      '1.0.0',
-      {
-        'provider-z': '1.0.0',
-        'provider-a': '1.0.0',
-        'nested-host': '1.0.0',
-      },
       {
         vfs,
         cwd: '/project',
-        registry: registry(rootA, rootZ, nestedA, nestedZ, host),
+        registry: fixtureRegistry,
       },
     );
-
-    expect(await vfs.readFileText('/project/node_modules/.bin/shared')).toBe(
-      launcher('provider-a', 'bin/root-a.js'),
+    const oldLock = await vfs.readFileText('/project/package-lock.json');
+    expect(await vfs.readFileText('/project/node_modules/.bin/esbuild')).toBe(
+      launcher('provider-z', 'bin/provider.js'),
     );
-    expect(
-      await vfs.readFileText('/project/node_modules/nested-host/node_modules/.bin/shared'),
-    ).toBe(launcher('provider-a', 'bin/nested-a.js'));
+
+    const reports: string[] = [];
+    await expectBinCollision(
+      install(
+        'fixture',
+        '1.0.0',
+        { esbuild: '^0.28.0' },
+        {
+          vfs,
+          cwd: '/project',
+          registry: fixtureRegistry,
+          onSubstitution: (line) => reports.push(line),
+        },
+      ),
+    );
+
+    expect.soft(reports).toEqual([]);
+    expect.soft(await vfs.readFileText('/project/package-lock.json')).toBe(oldLock);
+    expect.soft(await vfs.exists('/project/node_modules/esbuild')).toBe(false);
+    expect(await vfs.readFileText('/project/node_modules/.bin/esbuild')).toBe(
+      launcher('provider-z', 'bin/provider.js'),
+    );
   });
 
   it('[fault: provenance-lie] excludes an acquired LightningCSS twin bin from disk and lock', async () => {
@@ -326,6 +438,9 @@ describe('install package-bin authority', () => {
     );
 
     expect.soft(await vfs.exists('/project/node_modules/.bin/lightningcss')).toBe(false);
+    expect
+      .soft(result.packages.find(({ name }) => name === 'lightningcss-wasm')?.bin)
+      .toBeUndefined();
     expect.soft(result.lockfile.packages['node_modules/lightningcss-wasm']?.bin).toBeUndefined();
   });
 
@@ -353,12 +468,13 @@ describe('install package-bin authority', () => {
       });
       const controller = new AbortController();
       const reason = new Error(`cancel ${scope} registry-alias materialization`);
+      const reports: string[] = [];
       const installing = install('fixture', '1.0.0', fixture.dependencies, {
         vfs,
         cwd: '/project',
         registry: fixture.registry,
         signal: controller.signal,
-        onSubstitution: () => {},
+        onSubstitution: (line) => reports.push(line),
       });
 
       await writeStarted.promise;
@@ -372,6 +488,7 @@ describe('install package-bin authority', () => {
       for (const path of laterAliasPaths) {
         expect.soft(await vfs.exists(path), path).toBe(false);
       }
+      expect.soft(reports).toEqual([]);
       expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
 
       write.mockRestore();
@@ -379,10 +496,11 @@ describe('install package-bin authority', () => {
         vfs,
         cwd: '/project',
         registry: fixture.registry,
-        onSubstitution: () => {},
+        onSubstitution: (line) => reports.push(line),
       });
       await expectExactRegistryAlias(vfs, fixture.aliasRoot);
       expect(await vfs.exists('/project/package-lock.json')).toBe(true);
+      expect(reports).toEqual(expectedLightningReports(scope));
     },
   );
 
@@ -397,6 +515,7 @@ describe('install package-bin authority', () => {
       const vfs = await project();
       const faultPath = `${fixture.aliasRoot}/${lightningRecipe.materialization.files[0]?.path}`;
       const failure = Object.assign(new Error(`${code}: registry-alias write denied`), { code });
+      const reports: string[] = [];
       const writeFile = vfs.writeFile.bind(vfs);
       const write = vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
         if (path === faultPath) throw failure;
@@ -408,10 +527,11 @@ describe('install package-bin authority', () => {
           vfs,
           cwd: '/project',
           registry: fixture.registry,
-          onSubstitution: () => {},
+          onSubstitution: (line) => reports.push(line),
         }),
       ).rejects.toBe(failure);
       expect.soft(await vfs.exists(faultPath)).toBe(false);
+      expect.soft(reports).toEqual([]);
       expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
 
       write.mockRestore();
@@ -419,10 +539,11 @@ describe('install package-bin authority', () => {
         vfs,
         cwd: '/project',
         registry: fixture.registry,
-        onSubstitution: () => {},
+        onSubstitution: (line) => reports.push(line),
       });
       await expectExactRegistryAlias(vfs, fixture.aliasRoot);
       expect(await vfs.exists('/project/package-lock.json')).toBe(true);
+      expect(reports).toEqual(expectedLightningReports(scope));
     },
   );
 
@@ -461,17 +582,14 @@ describe('install package-bin authority', () => {
     expect(await vfs.exists('/project/package-lock.json')).toBe(true);
   });
 
-  it('[fault: torn-state] keeps an aborted bin read loud and repairs the exact launcher on retry', async () => {
-    const provider = await registryEntry('provider-a', '1.0.0', {
-      bin: { shared: 'bin/a.js' },
-      files: { 'bin/a.js': 'throw new Error("provider-a");\n' },
-    });
+  it('[fault: torn-state] keeps an aborted real esbuild bin read unreported and exact on retry', async () => {
     const vfs = await project();
     const readStarted = deferred<void>();
     const releaseRead = deferred<void>();
+    const reports: string[] = [];
     const readFile = vfs.readFile.bind(vfs);
     vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
-      if (path === '/project/node_modules/provider-a/bin/a.js') {
+      if (path === '/project/node_modules/esbuild/bin/esbuild') {
         readStarted.resolve();
         await releaseRead.promise;
       }
@@ -482,12 +600,13 @@ describe('install package-bin authority', () => {
     const installing = install(
       'fixture',
       '1.0.0',
-      { 'provider-a': '1.0.0' },
+      { esbuild: '^0.28.0' },
       {
         vfs,
         cwd: '/project',
-        registry: registry(provider),
+        registry: registry(),
         signal: controller.signal,
+        onSubstitution: (line) => reports.push(line),
       },
     );
 
@@ -495,34 +614,40 @@ describe('install package-bin authority', () => {
     controller.abort(reason);
     releaseRead.resolve();
     await expect(installing).rejects.toBe(reason);
-    expect(await vfs.exists('/project/node_modules/.bin/shared')).toBe(false);
-    expect(await vfs.exists('/project/package-lock.json')).toBe(false);
+    expect.soft(reports).toEqual([]);
+    expect.soft(await vfs.exists('/project/node_modules/.bin/esbuild')).toBe(false);
+    expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
 
     vi.restoreAllMocks();
     await install(
       'fixture',
       '1.0.0',
-      { 'provider-a': '1.0.0' },
-      { vfs, cwd: '/project', registry: registry(provider) },
+      { esbuild: '^0.28.0' },
+      {
+        vfs,
+        cwd: '/project',
+        registry: registry(),
+        onSubstitution: (line) => reports.push(line),
+      },
     );
-    expect(await vfs.readFileText('/project/node_modules/.bin/shared')).toBe(
-      launcher('provider-a', 'bin/a.js'),
+    expect(await vfs.readFileText('/project/node_modules/.bin/esbuild')).toBe(
+      launcher('esbuild', 'bin/esbuild'),
     );
+    expect(reports).toEqual([
+      'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)',
+    ]);
   });
 
   it.each(['ENOSPC', 'EACCES'] as const)(
-    '[fault: quota-perm-fail] keeps a %s bin write loud, unpublished, and retryable',
+    '[fault: quota-perm-fail] keeps a real esbuild %s bin write unreported and retryable',
     async (code) => {
-      const provider = await registryEntry('provider-a', '1.0.0', {
-        bin: { shared: 'bin/a.js' },
-        files: { 'bin/a.js': 'throw new Error("provider-a");\n' },
-      });
       const vfs = await project();
       const failure = Object.assign(new Error(`${code}: package-bin write denied`), { code });
+      const reports: string[] = [];
       const writeFile = vfs.writeFile.bind(vfs);
       let rejectLauncher = true;
       vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
-        if (rejectLauncher && path === '/project/node_modules/.bin/shared') {
+        if (rejectLauncher && path === '/project/node_modules/.bin/esbuild') {
           rejectLauncher = false;
           throw failure;
         }
@@ -533,22 +658,36 @@ describe('install package-bin authority', () => {
         install(
           'fixture',
           '1.0.0',
-          { 'provider-a': '1.0.0' },
-          { vfs, cwd: '/project', registry: registry(provider) },
+          { esbuild: '^0.28.0' },
+          {
+            vfs,
+            cwd: '/project',
+            registry: registry(),
+            onSubstitution: (line) => reports.push(line),
+          },
         ),
       ).rejects.toBe(failure);
-      expect(await vfs.exists('/project/package-lock.json')).toBe(false);
+      expect.soft(reports).toEqual([]);
+      expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
 
       await install(
         'fixture',
         '1.0.0',
-        { 'provider-a': '1.0.0' },
-        { vfs, cwd: '/project', registry: registry(provider) },
+        { esbuild: '^0.28.0' },
+        {
+          vfs,
+          cwd: '/project',
+          registry: registry(),
+          onSubstitution: (line) => reports.push(line),
+        },
       );
-      expect(await vfs.readFileText('/project/node_modules/.bin/shared')).toBe(
-        launcher('provider-a', 'bin/a.js'),
+      expect(await vfs.readFileText('/project/node_modules/.bin/esbuild')).toBe(
+        launcher('esbuild', 'bin/esbuild'),
       );
       expect(await vfs.exists('/project/package-lock.json')).toBe(true);
+      expect(reports).toEqual([
+        'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)',
+      ]);
     },
   );
 });

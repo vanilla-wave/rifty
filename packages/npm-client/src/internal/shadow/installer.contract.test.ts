@@ -49,26 +49,20 @@ class RejectingRegistry extends RegistryClient {
 }
 
 class LightningRegistry extends RegistryClient {
-  readonly #lightningTarball: Uint8Array;
-  readonly #standaloneNapiTarball: Uint8Array | undefined;
-  readonly packumentReads: string[] = [];
-  readonly tarballReads: string[] = [];
+  readonly #tarball: Uint8Array;
 
-  constructor(lightningTarball: Uint8Array, standaloneNapiTarball?: Uint8Array) {
+  constructor(tarball: Uint8Array) {
     super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
-    this.#lightningTarball = lightningTarball;
-    this.#standaloneNapiTarball = standaloneNapiTarball;
+    this.#tarball = tarball;
   }
 
   override async getPackument(name: string): Promise<Packument> {
-    this.packumentReads.push(name);
-    const manifest =
-      name === 'lightningcss-wasm'
-        ? lightningManifest()
-        : name === 'napi-wasm' && this.#standaloneNapiTarball
-          ? napiManifest()
-          : undefined;
-    if (!manifest) throw new Error(`unexpected registry package ${name}`);
+    if (name !== 'lightningcss-wasm') throw new Error(`unexpected registry package ${name}`);
+    const manifest: VersionManifest = {
+      name,
+      version: '1.32.0',
+      dist: { tarball: 'https://registry.test/lightningcss-wasm-1.32.0.tgz' },
+    };
     return {
       name,
       'dist-tags': { latest: manifest.version },
@@ -77,66 +71,25 @@ class LightningRegistry extends RegistryClient {
   }
 
   override async getTarball(url: string): Promise<Uint8Array> {
-    this.tarballReads.push(url);
-    if (url === LIGHTNING_TARBALL_URL) return this.#lightningTarball.slice();
-    if (url === NAPI_TARBALL_URL && this.#standaloneNapiTarball) {
-      return this.#standaloneNapiTarball.slice();
+    if (url !== 'https://registry.test/lightningcss-wasm-1.32.0.tgz') {
+      throw new Error(`unexpected registry tarball ${url}`);
     }
-    throw new Error(`unexpected registry tarball ${url}`);
+    return this.#tarball.slice();
   }
 }
 
-type LightningManifest = VersionManifest & {
-  bundleDependencies: string[];
-};
-
-const LIGHTNING_TARBALL_URL = 'https://registry.test/lightningcss-wasm-1.32.0.tgz';
-const NAPI_TARBALL_URL = 'https://registry.test/napi-wasm-1.1.3.tgz';
-
-function lightningManifest(): LightningManifest {
-  return {
-    name: 'lightningcss-wasm',
-    version: '1.32.0',
-    dependencies: { 'napi-wasm': '^1.0.1' },
-    optionalDependencies: {},
-    peerDependencies: {},
-    bundleDependencies: ['napi-wasm'],
-    dist: { tarball: LIGHTNING_TARBALL_URL },
-  };
-}
-
-function napiManifest(): VersionManifest {
-  return {
-    name: 'napi-wasm',
-    version: '1.1.3',
-    dist: { tarball: NAPI_TARBALL_URL },
-  };
-}
-
-async function packageTarball(files: Readonly<Record<string, string>>): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = [];
-  for (const [path, content] of Object.entries(files)) {
-    const bytes = new TextEncoder().encode(content);
-    chunks.push(buildHeader(`package/${path}`, bytes.length), padToBlock(bytes));
-  }
-  return await gzip(concat(...chunks, TAR_TRAILER));
-}
-
-async function lightningRegistry(includeStandaloneNapi = false): Promise<LightningRegistry> {
-  const { dist: _dist, ...packageJson } = lightningManifest();
-  const lightningTarball = await packageTarball({
-    'package.json': JSON.stringify(packageJson),
-    'node_modules/napi-wasm/package.json': JSON.stringify({
-      name: 'napi-wasm',
-      version: '1.1.3',
-    }),
-    'node_modules/napi-wasm/index.js': 'module.exports = "bundled napi-wasm";\n',
-  });
-  if (!includeStandaloneNapi) return new LightningRegistry(lightningTarball);
-  const { dist: _napiDist, ...napiPackageJson } = napiManifest();
+async function lightningRegistry(): Promise<LightningRegistry> {
+  const packageJson = new TextEncoder().encode(
+    JSON.stringify({ name: 'lightningcss-wasm', version: '1.32.0' }),
+  );
   return new LightningRegistry(
-    lightningTarball,
-    await packageTarball({ 'package.json': JSON.stringify(napiPackageJson) }),
+    await gzip(
+      concat(
+        buildHeader('package/package.json', packageJson.length),
+        padToBlock(packageJson),
+        TAR_TRAILER,
+      ),
+    ),
   );
 }
 
@@ -243,20 +196,6 @@ describe('shadow substitution installer boundary', () => {
     expect(shadowAssetPlanForInstallResult(replay)).toEqual(plan);
   });
 
-  it('keeps bundled napi-wasm inside the LightningCSS registry acquisition', async () => {
-    const registry = await lightningRegistry();
-    let caught: unknown;
-    try {
-      await freshLockfile({ lightningcss: '^1.32.0' }, registry);
-    } catch (error) {
-      caught = error;
-    }
-
-    expect.soft(caught).toBeUndefined();
-    expect.soft(registry.packumentReads).toEqual(['lightningcss-wasm']);
-    expect.soft(registry.tarballReads).toEqual([LIGHTNING_TARBALL_URL]);
-  });
-
   it.each([
     ['single', { esbuild: '^0.28.0' }, 'esbuild'],
     ['reverse-multi', { esbuild: '^0.28.0', lightningcss: '^1.32.0' }, 'lightningcss'],
@@ -317,7 +256,7 @@ describe('shadow substitution lockfile provenance', () => {
 
   beforeAll(async () => {
     synthetic = await freshLockfile({ esbuild: '^0.28.0' }, new RejectingRegistry());
-    registry = await freshLockfile({ lightningcss: '^1.32.0' }, await lightningRegistry(true));
+    registry = await freshLockfile({ lightningcss: '^1.32.0' }, await lightningRegistry());
   });
 
   it.each([

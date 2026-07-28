@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the blocked recipe-v2 predecessor proved package bins link before registry aliases, acquired-twin bins can leak, and substitution success can publish before bin or lock settlement
 user_story: As a browser-IDE user invoking a substituted package CLI, I want the exact materialized package to own a collision-free launcher only after its files and lock commit, but today an acquired twin can own it and a failed install can still claim success
 epic: honest-shadow-substitutions
-sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md]
+sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/shadow-materialized-bin-contract-red.md]
 code:
   - packages/npm-client/src/installer.ts
   - packages/npm-client/src/linker.ts
