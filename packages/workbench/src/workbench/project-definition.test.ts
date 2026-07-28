@@ -22,8 +22,13 @@ interface PackageManifest {
   readonly [field: string]: unknown;
   readonly dependencies?: Readonly<Record<string, string>>;
   readonly devDependencies?: Readonly<Record<string, string>>;
+  readonly overrides?: Readonly<Record<string, unknown>>;
   readonly scripts?: Readonly<Record<string, string>>;
 }
+
+const PROVEN_VITE8_WASI_RUNTIME_OVERRIDE = {
+  '@napi-rs/wasm-runtime': 'npm:@napi-rs/wasm-runtime@1.1.6',
+} as const;
 
 const VITE_VERSION_CONFLICTS = [
   [
@@ -186,6 +191,7 @@ describe('ProjectDefinition', () => {
       private: false,
       scripts: { test: 'node test.mjs' },
       custom: { retained: true },
+      overrides: PROVEN_VITE8_WASI_RUNTIME_OVERRIDE,
       dependencies: { keep: '1.0.0', override: 'new', added: '3.0.0' },
       devDependencies: {
         devKeep: '2.0.0',
@@ -279,6 +285,110 @@ describe('ProjectDefinition', () => {
     expect(devDependencyOwned.devDependencies).toEqual({ vite: '9.0.0' });
   });
 
+  it.each([
+    [
+      'viteVersion option',
+      {
+        files: { '/package.json': '{"overrides":{"kleur":"npm:kleur@4.1.5"}}' },
+        viteVersion: '8.0.15',
+      },
+    ],
+    [
+      'manifest dependency',
+      {
+        files: {
+          '/package.json':
+            '{"dependencies":{"vite":"7.3.1"},"overrides":{"kleur":"npm:kleur@4.1.5"}}',
+        },
+      },
+    ],
+    [
+      'manifest devDependency',
+      {
+        files: {
+          '/package.json':
+            '{"devDependencies":{"vite":"9.0.0"},"overrides":{"kleur":"npm:kleur@4.1.5"}}',
+        },
+      },
+    ],
+    [
+      'dependencies option',
+      {
+        files: { '/package.json': '{"overrides":{"kleur":"npm:kleur@4.1.5"}}' },
+        dependencies: { vite: '7.3.1' },
+      },
+    ],
+    [
+      'devDependencies option',
+      {
+        files: { '/package.json': '{"overrides":{"kleur":"npm:kleur@4.1.5"}}' },
+        devDependencies: { vite: '9.0.0' },
+      },
+    ],
+  ] satisfies ReadonlyArray<readonly [string, Omit<DefinitionOptions, 'id'>]>)(
+    'leaves non-exact-Vite-8 overrides unchanged for %s',
+    (_label, supplied) => {
+      expect(
+        packageManifest(projects.vite({ id: 'non-vite8-runtime-policy', ...supplied })).overrides,
+      ).toEqual({ kleur: 'npm:kleur@4.1.5' });
+    },
+  );
+
+  it.each([
+    ['implicit default', { files: {} }],
+    ['viteVersion option', { files: {}, viteVersion: '8.0.16' }],
+    ['manifest dependency', { files: { '/package.json': '{"dependencies":{"vite":"8.0.16"}}' } }],
+    [
+      'manifest devDependency',
+      { files: { '/package.json': '{"devDependencies":{"vite":"8.0.16"}}' } },
+    ],
+    ['dependencies option', { files: {}, dependencies: { vite: '8.0.16' } }],
+    ['devDependencies option', { files: {}, devDependencies: { vite: '8.0.16' } }],
+  ] satisfies ReadonlyArray<readonly [string, Omit<DefinitionOptions, 'id'>]>)(
+    'pins the proven Rolldown WASI runtime for exact Vite 8 from %s',
+    (_label, supplied) => {
+      expect(
+        packageManifest(projects.vite({ id: 'vite8-runtime-policy', ...supplied })).overrides,
+      ).toEqual(PROVEN_VITE8_WASI_RUNTIME_OVERRIDE);
+    },
+  );
+
+  it('merges unrelated overrides while caller ownership of the runtime override wins', () => {
+    const defaultOwned = projects.vite({
+      id: 'vite8-override-owner',
+      files: {
+        '/package.json': JSON.stringify({
+          dependencies: { vite: '8.0.16' },
+          overrides: { kleur: 'npm:kleur@4.1.5' },
+        }),
+      },
+    });
+    const callerOwned = projects.vite({
+      id: 'vite8-override-owner',
+      files: {
+        '/package.json': JSON.stringify({
+          dependencies: { vite: '8.0.16' },
+          overrides: {
+            kleur: 'npm:kleur@4.1.5',
+            '@napi-rs/wasm-runtime': 'npm:@napi-rs/wasm-runtime@1.2.0',
+          },
+        }),
+      },
+    });
+
+    expect(packageManifest(defaultOwned).overrides).toEqual({
+      kleur: 'npm:kleur@4.1.5',
+      ...PROVEN_VITE8_WASI_RUNTIME_OVERRIDE,
+    });
+    expect(packageManifest(callerOwned).overrides).toEqual({
+      kleur: 'npm:kleur@4.1.5',
+      '@napi-rs/wasm-runtime': 'npm:@napi-rs/wasm-runtime@1.2.0',
+    });
+    expect(inspectProjectDefinition(callerOwned).identity).not.toBe(
+      inspectProjectDefinition(defaultOwned).identity,
+    );
+  });
+
   // Fault class: sibling-drift. The implicit package version and its visible
   // runtime policy are one default and must be normalized at one boundary.
   it('adds the visible Vite 8 policy with the implicit default before identity', () => {
@@ -350,6 +460,7 @@ describe('ProjectDefinition', () => {
       name: 'explicit',
       dependencies: { kleur: '4.1.5' },
       devDependencies: { typescript: '5.9.3', vite: '8.0.16' },
+      overrides: PROVEN_VITE8_WASI_RUNTIME_OVERRIDE,
     });
   });
 

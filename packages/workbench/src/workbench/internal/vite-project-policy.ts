@@ -9,6 +9,8 @@ export const VITE_CONFIG_FILENAMES = [
 ] as const;
 
 export const DEFAULT_VITE8_VERSION = '8.0.16';
+export const VITE8_WASI_RUNTIME_OVERRIDE_NAME = '@napi-rs/wasm-runtime';
+export const VITE8_WASI_RUNTIME_OVERRIDE = 'npm:@napi-rs/wasm-runtime@1.1.6';
 export const DEFAULT_VITE8_CONFIG_PATH = '/vite.config.js';
 export const DEFAULT_VITE8_CONFIG_JS = `export default {
   server: { hmr: false },
