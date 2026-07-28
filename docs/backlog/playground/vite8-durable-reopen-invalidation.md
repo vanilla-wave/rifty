@@ -7,7 +7,7 @@ why: ADR-0336 changes the exact Vite 8 manifest and snapshot identity, but the b
 user_story: As a user reopening a saved Vite 8 project after the runtime-policy upgrade, I want the project to use the current visible manifest and proven WASI runtime, but a stale trusted package tree must never survive under the old identity.
 blocked_by: [playground/vite8-durable-tree-replacement-proof]
 sources: [ADR-0278, ADR-0329, ADR-0336, docs/backlog/playground/reference/vite8-durable-reopen-contract-red.md, docs/backlog/playground/reference/vite8-durable-reopen-cross-build-probe.md, docs/backlog/playground/reference/vite8-wasi-runtime-closure-contract-red.md]
-code: [apps/playground/src/adapters/playground-app-runtime.ts, packages/workbench/src/workers/playground-project-authority.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/workbench/internal/playground-project-definition.ts, tests/e2e/vite8-durable-reopen-invalidation.spec.ts, tools/probes/vite8-durable-reopen-cross-build.mts]
+code: [apps/playground/src/adapters/playground-app-runtime.ts, packages/workbench/src/workers/playground-project-authority.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/workbench/internal/playground-project-definition.ts, tests/e2e/vite8-durable-reopen-invalidation.spec.ts]
 ---
 
 ## Context

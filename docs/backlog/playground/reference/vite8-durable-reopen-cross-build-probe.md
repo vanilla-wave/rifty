@@ -18,8 +18,11 @@ live in a temporary directory, and the probe fails if repository status changes.
 The Vite 7 setup leg uses the real snapshot/registry boundary; nothing being
 tested is mocked.
 
-The command requires the old Git object, installed workspace dependencies,
-Chromium, and network access for a cold Vite 7 setup:
+The disposable probe source is retained in reachable commit
+`72410f0308f2613176e111003d322535dced24ce` and removed from the terminal split
+per `decision-workflow.md` §Refine altitude. To reproduce, check out that commit
+in a disposable worktree with the old Git object, installed workspace
+dependencies, Chromium, and network access for a cold Vite 7 setup, then run:
 
 ```sh
 pnpm exec tsx tools/probes/vite8-durable-reopen-cross-build.mts
