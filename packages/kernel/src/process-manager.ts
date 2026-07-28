@@ -1946,11 +1946,12 @@ export class ProcessManager {
   private reportAbandonedDescendantProof(owner: ProcessRecord): void {
     const handle = owner.handle;
     if (handle === null || handle.kind !== 'worker') return;
-    (handle as unknown as { _queueTerminalDiagnostic(message: string): void })
-      ._queueTerminalDiagnostic(
-        `Worker PID ${String(owner.pid)} did not report descendant settlement within ` +
-          `${String(DESCENDANT_SETTLEMENT_DEADLINE_MS)}ms; terminating it physically\n`,
-      );
+    (
+      handle as unknown as { _queueTerminalDiagnostic(message: string): void }
+    )._queueTerminalDiagnostic(
+      `Worker PID ${String(owner.pid)} did not report descendant settlement within ` +
+        `${String(DESCENDANT_SETTLEMENT_DEADLINE_MS)}ms; terminating it physically\n`,
+    );
   }
 
   private failRecord(record: ProcessRecord, code: number): boolean {
