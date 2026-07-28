@@ -26,6 +26,18 @@ PR #136 is an implementation quarry only. Port individual RED tests and useful
 mechanisms onto current `main`; do not refactor or cherry-pick its 391-file
 megacommit.
 
+## Observed residual
+
+2026-07-28 CI runs `30197435619`, `30288432279`, and `30320706514`
+intermittently failed the real instant-Vite active-session close with
+`AggregateError: Workbench close failed`; intervening runs passed with
+byte-identical test and close-path sources. The trace reached preview HTTP 200,
+then proved at least two immediate failures across admitted session close,
+physical owner close, and Web Lock release, but Playwright discarded nested
+`AggregateError.errors`. One exact and 31 instrumented independent local runs
+passed. Keep the existing teardown contract; first expose the nested boundary
+and obtain a deterministic RED. No speculative runtime fix or new mechanism.
+
 ## Public contract
 
 The package root exports only:
