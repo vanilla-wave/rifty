@@ -6,7 +6,6 @@ created: 2026-07-28
 why: the terminal install-path RED proved the real installer is a separate raw package-path ingress that must consume the linker carrier instead of duplicating its validation
 user_story: As a browser-IDE user installing a package, I want installer target preparation to reuse the exact linker-approved scope before project files or the lock change, but today it can trust the raw path separately
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/resolved-package-linker-path-authority]
 sources: [ADR-0042, ADR-0261, docs/backlog/npm-client/reference/resolved-package-install-path-contract-red.md]
 code:
   - packages/npm-client/src/installer.ts
