@@ -2,7 +2,7 @@
 
 Recorded 2026-07-28 on Node v24.16.0 / npm 11.17.0 against a
 self-contained loopback registry. Probe source SHA-256:
-`ec0cc9354ef4d7c01a75125b1a4e3bea0ad9f0b3d99598ad1d4fb8bb0b0da28a`.
+`5b6724ec792c2dff0d60740443b6fa843f94705f6392cad9df58e187c8f942fe`.
 Canonical output SHA-256:
 `edefe928491431545846ad63c3517863da1305d8acb7d3479df9c9d4ecb538c1`.
 

@@ -1,14 +1,6 @@
-import { createHash } from 'node:crypto';
 import { execFile, spawnSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -16,8 +8,7 @@ import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 
 const execFileAsync = promisify(execFile);
-const outputPath =
-  process.argv[2] ?? join(tmpdir(), 'rifty-peer-placement-probe-output.json');
+const outputPath = process.argv[2] ?? join(tmpdir(), 'rifty-peer-placement-probe-output.json');
 
 const packages = {
   'contract-source': {
@@ -111,7 +102,9 @@ const server = createServer((request, response) => {
         ...manifest,
         dist: {
           tarball: `${origin}/${name}/-/${name}-${version}.tgz`,
-          integrity: `sha512-${createHash('sha512').update(tarballs.get(`/${name}/-/${name}-${version}.tgz`)).digest('base64')}`,
+          integrity: `sha512-${createHash('sha512')
+            .update(tarballs.get(`/${name}/-/${name}-${version}.tgz`))
+            .digest('base64')}`,
         },
       },
     ]),
@@ -274,8 +267,5 @@ for (const item of cases) {
   }
 }
 await new Promise((resolve) => server.close(resolve));
-writeFileSync(
-  outputPath,
-  `${JSON.stringify(evidence, null, 2)}\n`,
-);
+writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`);
 console.log(outputPath);

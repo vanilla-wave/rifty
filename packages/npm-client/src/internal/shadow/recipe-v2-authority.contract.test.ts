@@ -1,6 +1,5 @@
 import {
   type BuiltinShadowSubstitutionRecipe,
-  type ShadowRegistryDependencyProjection,
   builtinShadowSubstitutionCatalog,
 } from '@riftydev/shadow-registry/internal';
 import { MemoryVfs } from '@riftydev/vfs';
@@ -433,167 +432,11 @@ const projectionDrifts = [
   },
 ] as const;
 
-interface ExecutedDependencyProjection {
-  readonly dependencies: Readonly<Record<string, string>>;
-  readonly optionalDependencies: Readonly<Record<string, string>>;
-  readonly peerDependencies: Readonly<Record<string, string>>;
-  readonly bundledDependencies: readonly string[];
-}
-
-interface AcquisitionAuthorityModule {
-  executeRegistryDependencyProjection(
-    manifest: RegistryManifest,
-    projection: ShadowRegistryDependencyProjection,
-  ): ExecutedDependencyProjection;
-}
-
-const acquisitionModulePath = './acquisition.ts';
-
-async function loadAcquisitionAuthority(): Promise<AcquisitionAuthorityModule> {
-  const loaded: unknown = await import(/* @vite-ignore */ acquisitionModulePath);
-  if (
-    loaded === null ||
-    typeof loaded !== 'object' ||
-    !('executeRegistryDependencyProjection' in loaded) ||
-    typeof loaded.executeRegistryDependencyProjection !== 'function'
-  ) {
-    throw new TypeError(
-      'internal shadow acquisition module must export executeRegistryDependencyProjection',
-    );
-  }
-  return loaded as AcquisitionAuthorityModule;
-}
-
-function projection(
-  fields: Partial<Omit<ShadowRegistryDependencyProjection, 'unsupportedFeature'>>,
-): ShadowRegistryDependencyProjection {
-  return {
-    dependencies: {},
-    optionalDependencies: {},
-    omittedOptionalDependencies: {},
-    peerDependencies: {},
-    bundledDependencies: [],
-    ...fields,
-    unsupportedFeature: 'contract.acquisition',
-  };
-}
-
-function projectionManifest(
-  fields: Partial<Omit<RegistryManifest, 'dist' | 'name' | 'version'>>,
-): RegistryManifest {
-  return {
-    name: 'contract-acquisition',
-    version: '1.0.0',
-    ...fields,
-    dist: { tarball: 'https://registry.test/contract-acquisition-1.0.0.tgz' },
-  };
-}
-
-const genericProjectionCases = [
-  {
-    label: 'required dependency map',
-    manifest: projectionManifest({ dependencies: { required: '1.0.0' } }),
-    authority: projection({ dependencies: { required: '1.0.0' } }),
-    expected: {
-      dependencies: { required: '1.0.0' },
-      optionalDependencies: {},
-      peerDependencies: {},
-      bundledDependencies: [],
-    },
-  },
-  {
-    label: 'retained optional dependency map',
-    manifest: projectionManifest({ optionalDependencies: { retained: '^2.0.0' } }),
-    authority: projection({ optionalDependencies: { retained: '^2.0.0' } }),
-    expected: {
-      dependencies: {},
-      optionalDependencies: { retained: '^2.0.0' },
-      peerDependencies: {},
-      bundledDependencies: [],
-    },
-  },
-  {
-    label: 'omitted optional dependency map',
-    manifest: projectionManifest({ optionalDependencies: { native: '3.0.0' } }),
-    authority: projection({ omittedOptionalDependencies: { native: '3.0.0' } }),
-    expected: {
-      dependencies: {},
-      optionalDependencies: {},
-      peerDependencies: {},
-      bundledDependencies: [],
-    },
-  },
-  {
-    label: 'peer dependency map',
-    manifest: projectionManifest({ peerDependencies: { peer: '^4.0.0' } }),
-    authority: projection({ peerDependencies: { peer: '^4.0.0' } }),
-    expected: {
-      dependencies: {},
-      optionalDependencies: {},
-      peerDependencies: { peer: '^4.0.0' },
-      bundledDependencies: [],
-    },
-  },
-  {
-    label: 'bundled dependency map through bundledDependencies spelling',
-    manifest: projectionManifest({
-      dependencies: { bundled: '5.0.0' },
-      bundledDependencies: ['bundled'],
-    }),
-    authority: projection({
-      dependencies: { bundled: '5.0.0' },
-      bundledDependencies: ['bundled'],
-    }),
-    expected: {
-      dependencies: { bundled: '5.0.0' },
-      optionalDependencies: {},
-      peerDependencies: {},
-      bundledDependencies: ['bundled'],
-    },
-  },
-  {
-    label: 'scoped keys in every projection collection',
-    manifest: projectionManifest({
-      dependencies: { '@scope/required': '1.0.0', '@scope/bundled': '5.0.0' },
-      optionalDependencies: {
-        '@scope/retained': '2.0.0',
-        '@scope/omitted': '3.0.0',
-      },
-      peerDependencies: { '@scope/peer': '^4.0.0' },
-      bundleDependencies: ['@scope/bundled'],
-    }),
-    authority: projection({
-      dependencies: { '@scope/required': '1.0.0', '@scope/bundled': '5.0.0' },
-      optionalDependencies: { '@scope/retained': '2.0.0' },
-      omittedOptionalDependencies: { '@scope/omitted': '3.0.0' },
-      peerDependencies: { '@scope/peer': '^4.0.0' },
-      bundledDependencies: ['@scope/bundled'],
-    }),
-    expected: {
-      dependencies: { '@scope/required': '1.0.0', '@scope/bundled': '5.0.0' },
-      optionalDependencies: { '@scope/retained': '2.0.0' },
-      peerDependencies: { '@scope/peer': '^4.0.0' },
-      bundledDependencies: ['@scope/bundled'],
-    },
-  },
-] as const;
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('shadow recipe v2 execution authority', () => {
-  it.each(genericProjectionCases)(
-    'executes the generic $label without a public recipe SPI',
-    async ({ manifest, authority, expected }) => {
-      const acquisition = await loadAcquisitionAuthority();
-
-      expect(acquisition.executeRegistryDependencyProjection(manifest, authority)).toEqual(
-        expected,
-      );
-    },
-  );
-
   it.each(projectionDrifts)(
     '[fault: observable-order/provenance-lie] rejects builtin $label drift before tarball or VFS work',
     async ({ label, mutate }) => {

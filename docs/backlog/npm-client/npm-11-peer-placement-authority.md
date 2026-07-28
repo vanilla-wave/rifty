@@ -34,7 +34,7 @@ a shadow-only exception.
 
 Node v24.16.0 / npm 11.17.0 runs the committed self-contained loopback-registry
 probe at source SHA-256
-`ec0cc9354ef4d7c01a75125b1a4e3bea0ad9f0b3d99598ad1d4fb8bb0b0da28a`.
+`5b6724ec792c2dff0d60740443b6fa843f94705f6392cad9df58e187c8f942fe`.
 Its complete normalized output SHA-256 is
 `edefe928491431545846ad63c3517863da1305d8acb7d3479df9c9d4ecb538c1`.
 The artifact retains registry requests, exit/signal/stdout/stderr, every

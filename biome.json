@@ -23,6 +23,7 @@
       "tools/integration-fixtures/**",
       ".arch-fixtures/**",
       ".claude/**",
+      "docs/backlog/npm-client/reference/npm-11-peer-placement-probe-output.json",
       "packages/workbench/src/workers/generated/**",
       "tools/shadow-registry/generated/**",
       "packages/ts-language-service/vendor/**"

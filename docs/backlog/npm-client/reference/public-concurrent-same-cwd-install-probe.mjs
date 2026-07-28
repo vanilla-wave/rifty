@@ -1,6 +1,3 @@
-import { MemoryVfs } from '../../../../packages/vfs/src/index.ts';
-import { install } from '../../../../packages/npm-client/src/installer.ts';
-import { RegistryClient } from '../../../../packages/npm-client/src/registry.ts';
 import {
   TAR_TRAILER,
   buildHeader,
@@ -8,6 +5,9 @@ import {
   gzip,
   padToBlock,
 } from '../../../../packages/npm-client/src/_test-fixtures/tar-builder.ts';
+import { install } from '../../../../packages/npm-client/src/installer.ts';
+import { RegistryClient } from '../../../../packages/npm-client/src/registry.ts';
+import { MemoryVfs } from '../../../../packages/vfs/src/index.ts';
 
 const encoder = new TextEncoder();
 

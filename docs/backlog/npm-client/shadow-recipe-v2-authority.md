@@ -13,6 +13,7 @@ code:
   - packages/npm-client/src/linker.ts
   - packages/workbench/src/workers/package-acquisition-authority.ts
   - packages/workbench/src/workers/owner-package-shadow-assets.contract.test.ts
+  - tools/checks/runtime-adapter-boundary.mjs
 ---
 
 ## Context
@@ -145,6 +146,10 @@ materialization, and replay without shipping the Sass recipe.
 - Peer projection verification stays in this acquisition unit. The second
   Contract+RED blocker split peer traversal, placement, conflicts, peer lock
   facts, and replay into `npm-client/npm-11-peer-placement-authority`.
+- Narrowed checkpoint `5c450fb9` rejected a prescribed acquisition module, a
+  stale installer sibling, and an incomplete generic-source gate. The re-cut
+  removes that carrier, makes the sibling's bundled traversal observable, and
+  scans the finite installer/linker/planner consumer surface.
 - The committed owner-decoded builtin catalog drives the real install core in
   contract tests. The public root export remains builtin-only; remote/custom
   recipes cannot reach executable policy.

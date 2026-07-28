@@ -7,27 +7,32 @@ expectations were masked. Re-cut `d5ffb3d2` was blocked because projection
 faults were still unreachable and peer evidence was lossy. The binding
 two-blocker rule split npm peer execution into
 `npm-client/npm-11-peer-placement-authority`; the transcript below is the
-narrowed projection/materialization unit.
+narrowed projection/materialization unit. Its first checkpoint `5c450fb9`
+blocked a prescribed acquisition-module carrier, one stale installer sibling,
+an incomplete generic-source gate, and repo lint. This is the in-line re-cut.
 
 ```sh
 pnpm --filter @riftydev/npm-client exec vitest run \
   src/internal/shadow/recipe-v2-authority.contract.test.ts \
   src/shadow-recipe-v2-data-authority.contract.test.ts \
-  src/installer-shadow-shims.test.ts
+  src/installer-shadow-shims.test.ts \
+  src/internal/shadow/installer.contract.test.ts
 pnpm --filter @riftydev/npm-client exec vitest run \
   src/installer-bin-authority.contract.test.ts
 pnpm --filter @riftydev/workbench exec vitest run \
   src/workers/owner-package-shadow-assets.contract.test.ts
 pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
   --grep "Vite 7 config graph"
+pnpm check:runtime-adapter-boundary
 ```
 
-The npm-client runs have 31 RED and 44 GREEN tests:
+The npm-client runs have 26 RED and 61 GREEN tests:
 
-- six named generic authority cases independently require successful required,
-  retained optional, omitted optional, peer, bundled, and scoped projections;
 - seven complete-projection drifts reach registry traversal instead of the
   named pre-tarball `NotImplementedError`;
+- the exact installer provenance sibling attempts an external `napi-wasm`
+  packument read instead of consuming only the embedded bundled member; its
+  seventeen other provenance assertions remain reachable and GREEN;
 - exact LightningCSS fixtures request bundled `napi-wasm` externally; the
   previous data-authority and legacy sibling expectations now fail with them;
 - a pre-seeded v2 LightningCSS+esbuild replay enters lock ingress and rejects
@@ -39,6 +44,12 @@ The npm-client runs have 31 RED and 44 GREEN tests:
 - root and nested parked alias aborts continue later writes; root/nested alias
   `ENOSPC`/`EACCES` plus ordinary bin fault guards already fail loudly, publish
   no lock, and reconcile on retry.
+
+The generic-source gate is GREEN across the finite installer, linker, planner,
+manager, and Workbench consumer surface. It rejects concrete esbuild,
+LightningCSS/acquisition-member, Sass, and Vite names or control-flow
+identifiers, so the real-core RED cannot be closed by a package-specific
+branch. It prescribes no new module or helper export.
 
 The Workbench run has one GREEN and one RED test. Its soft assertions
 independently observe protocol v1, missing `materialization.bin`, and
