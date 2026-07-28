@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Package-bin source claim authority
 created: 2026-07-28
 why: the terminal source-list checkpoint proved one package source can become exact claims independently from ordered aggregation
@@ -83,6 +83,7 @@ settlement, history, and VFS. The serial
 
 ## Decisions
 
+- ready-verdict: 2026-07-28 — Contract+RED @ 3b9bdb57b2c8cdb544133c129e4ba68f1893de67
 - `split-predecessor:
   2ef0ecf61adb35fade0977cd0d0355be2a975ea5`; predecessor checkpoints:
   `3c4adade0ae34b076e536147f5d551e82b737055` and

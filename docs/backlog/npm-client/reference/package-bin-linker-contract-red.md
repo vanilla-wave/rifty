@@ -347,3 +347,6 @@ reordering was misclassified as `lossy-aggregate` instead of
 list or second source argument. The in-place final re-cut corrects the fault
 row and adds both negative witnesses. Package-local typecheck now has exactly
 four intentional `TS2578` REDs while the strict single-source export is absent.
+The second isolated review at
+`3b9bdb57b2c8cdb544133c129e4ba68f1893de67` passed Standards and Spec with no
+findings; this is the ready Contract+RED authority for implementation.
