@@ -14,6 +14,8 @@ import type {
   InstallStampClaim,
   InstallStampPromotionResult,
   InstallStampTransitionOptions,
+  ProjectSaveIdentity,
+  ProjectSaveRebindResult,
 } from '../glue/install-stamp-authority.ts';
 import type { PackageResetPreparation } from '../glue/package-mutation-executor.ts';
 import type {
@@ -312,6 +314,14 @@ export interface PackageAcquisitionAuthority {
   knownProjects?(): readonly PackageAcquisitionProject[];
   /** Wait for commands admitted before this call. Promotion and publication stay inside FIFO. */
   quiesce(): Promise<void>;
+  /** Hold the existing package FIFO across claim-free Save and target trust publication. */
+  projectSave<T>(
+    input: {
+      readonly source: ProjectSaveIdentity;
+      readonly target: ProjectSaveIdentity;
+    },
+    operation: (rebind: () => Promise<ProjectSaveRebindResult>) => Promise<T>,
+  ): Promise<T>;
   /** Hold trusted package-tree ancestry across readiness capture and physical child spawn. */
   reserveChildAdmission(root: string): Promise<PackageFifoReservation<PackageTreeAdmission>>;
   dispatch(command: EnsurePackagesCommand): Promise<AcquisitionProvenance>;
@@ -641,6 +651,68 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     const through = this.#lastAdmission;
     if (through === 0) return;
     await this.#waitForAdmission(through);
+  }
+
+  async projectSave<T>(
+    input: {
+      readonly source: ProjectSaveIdentity;
+      readonly target: ProjectSaveIdentity;
+    },
+    operation: (rebind: () => Promise<ProjectSaveRebindResult>) => Promise<T>,
+  ): Promise<T> {
+    const source = Object.freeze({
+      ...input.source,
+      root: normalizeSchedulingRoot(input.source.root),
+    });
+    const target = Object.freeze({
+      ...input.target,
+      root: normalizeSchedulingRoot(input.target.root),
+    });
+    const results: T[] = [];
+    let completed = false;
+    try {
+      await this.dispatch({
+        type: 'guarded-mutation',
+        resolveTransitions: () => [],
+        mutate: async () => {
+          let rebindAvailable = true;
+          let rebindAttempted = false;
+          let rebindCompleted = false;
+          try {
+            results.push(
+              await operation(async () => {
+                if (!rebindAvailable) {
+                  throw new Error('project Save rebind is outside its FIFO operation');
+                }
+                if (rebindAttempted) throw new Error('project Save rebind was already attempted');
+                rebindAttempted = true;
+                const result = await this.#stamps.rebindProjectSave(
+                  { source, target },
+                  this.#stampTransition,
+                );
+                rebindCompleted = true;
+                return result;
+              }),
+            );
+            if (!rebindCompleted) throw new Error('project Save completed without trust rebind');
+            completed = true;
+          } finally {
+            rebindAvailable = false;
+          }
+        },
+      });
+    } finally {
+      this.#invalidatePackageTrees(target.root);
+      this.#knownProjects.delete(target.root);
+      if (completed) {
+        this.#invalidatePackageTrees(source.root);
+        this.#knownProjects.delete(source.root);
+      }
+    }
+    if (!completed || results.length !== 1) {
+      throw new Error('project Save completed without one result');
+    }
+    return results[0] as T;
   }
 
   reserveChildAdmission(root: string): Promise<PackageFifoReservation<PackageTreeAdmission>> {

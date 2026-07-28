@@ -30,6 +30,10 @@
 
 ### Fixed
 
+- Preserve an exact trusted dependency tree across Scratch-to-project Save:
+  the existing package FIFO copies claim-free bytes, then mints target-root
+  trust before the durable catalog pointer commits (ADR-0329).
+
 - Preserve the live `package.json` during deferred first install, and fold its
   exact generated lockfile into the untouched Starter root under the
   package/SCM FIFO. Staged or explicit user dependency changes stay visible.

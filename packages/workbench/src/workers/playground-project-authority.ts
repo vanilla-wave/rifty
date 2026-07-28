@@ -25,6 +25,7 @@ import type {
 import type { ProjectTerminalSnapshot } from '../workbench/project-terminal-state.ts';
 import type { ProjectDefinition } from '../workbench/public.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
+import type { PackageAcquisitionAuthority } from './package-acquisition-authority.ts';
 
 const WORKBENCH_ROOT = '/.rifty/workbench/v1';
 const PROJECTS_ROOT = `${WORKBENCH_ROOT}/projects`;
@@ -220,6 +221,8 @@ export interface PlaygroundProjectAuthorityOptions {
   readonly now: () => string;
   readonly createStageId: () => string;
   readonly acquisition: ProjectAcquisitionPort<ProjectAcquisitionPlan>;
+  /** Existing package FIFO and install-stamp authority own Save trust publication. */
+  readonly projectSave: Pick<PackageAcquisitionAuthority, 'projectSave'>;
   /** Recover project-local durable transactions before any derived open read. */
   readonly beforeOpenProject?: (projectRoot: string) => Promise<void>;
 }
@@ -2202,6 +2205,7 @@ export async function createPlaygroundProjectAuthority(
   const runCatalogMutation = async (
     next: StoredCatalog,
     plans: readonly CatalogMutationPlan[],
+    beforeCatalogCommit?: () => Promise<void>,
   ): Promise<PlaygroundCatalogSnapshot> => {
     if (pendingCatalogCleanup !== null) {
       await recoverStagedCatalogTransaction(
@@ -2228,6 +2232,7 @@ export async function createPlaygroundProjectAuthority(
       await durableWriteJson(authority, TRANSACTION_FILE, transaction);
       await prepareStagedCatalogMutation(authority, installStampClaims, transaction, plans);
       await applyStagedCatalogMutation(authority, installStampClaims, transaction);
+      await beforeCatalogCommit?.();
       await durableWriteJson(authority, CATALOG_FILE, next);
       committed = true;
       await durableWriteJson(
@@ -2465,9 +2470,26 @@ export async function createPlaygroundProjectAuthority(
           scratch: null,
           projects: Object.freeze([...stored.projects, nextProject]),
         });
-        return runCatalogMutation(next, [
-          { role: 'convert-scratch', id, definitionIdentity: definition.identity },
-        ]);
+        return options.projectSave.projectSave(
+          {
+            source: {
+              root: `${projectContainer('scratch')}/tree`,
+              slug: projectStorageSegment('scratch'),
+            },
+            target: {
+              root: `${projectContainer(id)}/tree`,
+              slug: projectStorageSegment(id),
+            },
+          },
+          (rebind) =>
+            runCatalogMutation(
+              next,
+              [{ role: 'convert-scratch', id, definitionIdentity: definition.identity }],
+              async () => {
+                await rebind();
+              },
+            ),
+        );
       });
     },
 

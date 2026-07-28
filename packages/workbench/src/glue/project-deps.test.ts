@@ -935,6 +935,9 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       },
       prepareTreeMutation: async () => {},
       promote: async () => ({ status: 'stale' }),
+      rebindProjectSave: async () => {
+        throw new Error('unexpected project Save');
+      },
       revoke: async () => {},
     };
     const result = await ensureProjectDependencies({

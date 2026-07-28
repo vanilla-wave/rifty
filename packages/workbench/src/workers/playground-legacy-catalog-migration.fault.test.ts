@@ -1,6 +1,7 @@
-import type { FsSync } from '@riftydev/vfs';
+import { type FsSync, MemoryVfs } from '@riftydev/vfs';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { ProjectDefinitionMismatchError } from '../workbench/errors.ts';
 import { capturePlaygroundLegacyWorkspacePrefix } from '../workbench/internal/playground-boot-config.ts';
 import { createPlaygroundProjectCatalog } from '../workbench/internal/playground-project-catalog.ts';
@@ -16,6 +17,10 @@ import type {
 } from '../workbench/playground.ts';
 import type { ProjectDefinition } from '../workbench/public.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
+import {
+  type PackageAcquisitionAdapter,
+  createPackageAcquisitionAuthority,
+} from './package-acquisition-authority.ts';
 import {
   type PlaygroundProjectAuthority,
   createPlaygroundProjectAuthority,
@@ -74,6 +79,15 @@ interface MigrationHarness {
 }
 
 type OpenedMigrationProject = Awaited<ReturnType<MigrationHarness['owner']['openProject']>>;
+
+const migrationPackageAdapter: PackageAcquisitionAdapter = Object.freeze({
+  planSnapshotRestore: async () => ({ status: 'rejected' as const, reason: 'not requested' }),
+  install: async () => {
+    throw new Error('legacy migration must not run package acquisition');
+  },
+  reset: async () => {},
+  switchProject: async () => {},
+});
 
 const DURABILITY_FAULTS = [
   {
@@ -300,6 +314,15 @@ async function openAuthority(
     ownerEpoch: `legacy-migration-${String(++ownerSequence)}`,
     initialRoots: ['/', '/.rifty'],
   });
+  const packages = createPackageAcquisitionAuthority({
+    stamps: createInstallStampAuthority({
+      vfs: new MemoryVfs(),
+      fsSync: composition.authority,
+      claimIo: composition.installStampClaims,
+    }),
+    stampTransition: { flush: () => composition.authority.flush() },
+    adapter: migrationPackageAdapter,
+  });
   let stageSequence = 0;
   const owner = await createPlaygroundProjectAuthority({
     ...composition,
@@ -312,6 +335,7 @@ async function openAuthority(
     acquisition: Object.freeze({
       ensure: async () => Object.freeze({ kind: 'install' as const, snapshotFailures: [] }),
     }),
+    projectSave: packages,
   });
   return { fs, owner, catalog: createPlaygroundProjectCatalog(owner) };
 }

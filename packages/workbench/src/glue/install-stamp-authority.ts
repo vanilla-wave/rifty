@@ -72,6 +72,15 @@ export interface InstallStampTransitionOptions {
   readonly flush?: () => Promise<PersistFailureReport | undefined>;
 }
 
+export interface ProjectSaveIdentity {
+  readonly root: string;
+  readonly slug: string;
+}
+
+export type ProjectSaveRebindResult =
+  | { readonly status: 'untrusted' }
+  | { readonly status: 'trusted'; readonly stamp: InstallStamp };
+
 export interface InstallStampPromoteOptions extends InstallStampTransitionOptions {
   readonly epoch: string;
   readonly packages: number;
@@ -92,6 +101,13 @@ export interface InstallStampAuthority {
     identity: InstallStampIdentity,
     options: InstallStampPromoteOptions,
   ): Promise<InstallStampPromotionResult>;
+  rebindProjectSave(
+    input: {
+      readonly source: ProjectSaveIdentity;
+      readonly target: ProjectSaveIdentity;
+    },
+    options?: InstallStampTransitionOptions,
+  ): Promise<ProjectSaveRebindResult>;
   revoke(input: { readonly root: string }, options?: InstallStampTransitionOptions): Promise<void>;
 }
 
@@ -343,6 +359,13 @@ async function readLockfileBytesIo(io: StampIo, root: string): Promise<Uint8Arra
   }
 }
 
+async function readExactFileBytes(io: StampIo, path: string): Promise<Uint8Array | null> {
+  if (io.fsSync) {
+    return io.fsSync.existsSync(path) ? io.fsSync.readFileBytesSync(path) : null;
+  }
+  return (await io.vfs.exists(path)) ? io.vfs.readFile(path) : null;
+}
+
 function readLockfileBytesSync(
   fsSync: Pick<InstallStampAuthoritySyncFs, 'existsSync' | 'readFileBytesSync'>,
   root: string,
@@ -545,8 +568,8 @@ export function createInstallStampAuthority(options: {
       const trustedPrior = prior && stampTrusted(prior) ? prior : null;
       const currentText = await readText(io, joinPath(input.root, 'package.json'));
       const packageJsonText = currentText ?? prior?.packageJsonText;
-      const dependencyTreeExists =
-        prior !== null || (await pathExists(io, installTreeDir(input.root)));
+      const installTreeExists = await pathExists(io, installTreeDir(input.root));
+      const dependencyTreeExists = prior !== null || installTreeExists;
       const flush = options.flush;
       const restoreAndThrow = async (message: string, cause?: unknown): Promise<never> => {
         if (trustedPrior) {
@@ -590,7 +613,7 @@ export function createInstallStampAuthority(options: {
             io,
             input.root,
             pendingStamp({ ...input, packageJsonText }, epoch),
-            true,
+            !installTreeExists,
           );
           wrotePending = true;
         } catch (error) {
@@ -832,5 +855,150 @@ export function createInstallStampAuthority(options: {
     });
   };
 
-  return { check, checkSync, demote, prepareTreeMutation, promote, revoke };
+  const rebindProjectSave = async (
+    rawInput: {
+      readonly source: ProjectSaveIdentity;
+      readonly target: ProjectSaveIdentity;
+    },
+    options: InstallStampTransitionOptions = {},
+  ): Promise<ProjectSaveRebindResult> => {
+    const source = {
+      ...rawInput.source,
+      root: canonicalAuthorityRoot(rawInput.source.root),
+    };
+    const target = {
+      ...rawInput.target,
+      root: canonicalAuthorityRoot(rawInput.target.root),
+    };
+    const refusal = (reason: string, cause?: unknown): Error => {
+      const detail =
+        cause === undefined ? '' : `: ${cause instanceof Error ? cause.message : String(cause)}`;
+      return new Error(`install-stamp project Save rebind refused: ${reason}${detail}`, {
+        ...(cause === undefined ? {} : { cause }),
+      });
+    };
+
+    if (source.root === target.root) {
+      throw refusal(`source and target roots must be distinct: ${source.root}`);
+    }
+
+    const sourceCheck = await check(source);
+    if (sourceCheck.status !== 'trusted') return { status: 'untrusted' };
+    const sourceStamp = sourceCheck.stamp;
+    try {
+      const currentSourceLock = await readExactFileBytes(io, lockfilePath(source.root));
+      if (!lockfileMatchesStamp(sourceStamp, currentSourceLock)) return { status: 'untrusted' };
+    } catch {
+      return { status: 'untrusted' };
+    }
+
+    let targetClaimExists: boolean;
+    try {
+      targetClaimExists = await pathExists(io, installStampPath(target.root));
+    } catch (error) {
+      throw refusal(`cannot inspect target claim at ${target.root}`, error);
+    }
+    if (targetClaimExists) {
+      throw refusal(`target claim already exists at ${target.root}`);
+    }
+
+    let targetPackageBytes: Uint8Array | null;
+    try {
+      targetPackageBytes = await readExactFileBytes(io, joinPath(target.root, 'package.json'));
+    } catch (error) {
+      throw refusal(`cannot read target package.json at ${target.root}`, error);
+    }
+    if (
+      targetPackageBytes === null ||
+      dec.decode(targetPackageBytes) !== sourceStamp.packageJsonText
+    ) {
+      throw refusal(`target package.json differs from trusted source at ${target.root}`);
+    }
+
+    let targetTreeExists: boolean;
+    try {
+      targetTreeExists = await pathExists(io, installTreeDir(target.root));
+    } catch (error) {
+      throw refusal(`cannot inspect target node_modules at ${target.root}`, error);
+    }
+    if (!targetTreeExists) {
+      throw refusal(`target node_modules is missing at ${target.root}`);
+    }
+
+    let targetLockfileBytes: Uint8Array | null;
+    try {
+      targetLockfileBytes = await readExactFileBytes(io, lockfilePath(target.root));
+    } catch (error) {
+      throw refusal(`cannot read target lockfile at ${target.root}`, error);
+    }
+    if (!lockfileMatchesStamp(sourceStamp, targetLockfileBytes)) {
+      throw refusal(`target lockfile differs from trusted source at ${target.root}`);
+    }
+
+    let targetClaim: InstallStampClaim;
+    try {
+      targetClaim = await demote(target, options);
+    } catch (error) {
+      throw refusal(`target persistence demotion failed at ${target.root}`, error);
+    }
+
+    let promotion: InstallStampPromotionResult;
+    try {
+      promotion = await promote(
+        {
+          root: target.root,
+          slug: target.slug,
+          packageJsonText: sourceStamp.packageJsonText,
+        },
+        {
+          epoch: targetClaim.epoch,
+          packages: sourceStamp.packages,
+          ...options,
+        },
+      );
+    } catch (error) {
+      throw refusal(`target persistence promotion failed at ${target.root}`, error);
+    }
+    if (promotion.status === 'trusted') {
+      if (options.flush) {
+        let report: PersistFailureReport | undefined;
+        try {
+          report = await options.flush();
+        } catch (error) {
+          throw refusal(`target trusted-claim persistence check failed at ${target.root}`, error);
+        }
+        if (report !== undefined && report.total > 0) {
+          const sample = report.failures[0]?.message;
+          throw refusal(
+            `target trusted-claim persistence failed at ${target.root}: ${String(
+              report.total,
+            )} unhealed failure(s)${sample === undefined ? '' : `: ${sample}`}`,
+          );
+        }
+      }
+      const published = await check({ root: target.root, slug: target.slug });
+      if (published.status !== 'trusted') {
+        throw refusal(`target trusted claim is not readable at ${target.root}`);
+      }
+      return { status: 'trusted', stamp: published.stamp };
+    }
+    if (promotion.status === 'stale') {
+      throw refusal(`target promotion became stale at ${target.root}`);
+    }
+    throw refusal(
+      `target persistence promotion refused at ${target.root}: ${promotion.reason}${
+        promotion.error === undefined ? '' : `: ${promotion.error}`
+      }`,
+    );
+  };
+
+  return {
+    check,
+    checkSync,
+    demote,
+    prepareTreeMutation,
+    promote,
+    rebindProjectSave,
+    revoke,
+  };
 }
