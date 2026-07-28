@@ -1,6 +1,7 @@
 import {
   DirtyProjectDocumentError,
   type ProjectDefinition,
+  ProjectDefinitionMismatchError,
   ProjectDocumentSaveInProgressError,
   type ProjectSession,
   type ProjectTerminalSnapshot,
@@ -70,6 +71,12 @@ interface Harness {
   catalog: PlaygroundCatalogSnapshot;
   failNextMutation: Error | null;
   failNextClose: Error | null;
+  failMutation(operation: string, failure: Error): void;
+  failOpen(id: string, failure: Error): void;
+  deferOpenFailure(
+    id: string,
+    failure: Error,
+  ): { readonly entered: Promise<void>; release(): void };
 }
 
 function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
@@ -77,6 +84,15 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
   const openOptions: unknown[] = [];
   const definitions = new WeakMap<object, PlaygroundProjectPlan>();
   const listeners = new Set<(snapshot: PlaygroundCatalogSnapshot) => void>();
+  const mutationFailures = new Map<string, Error[]>();
+  const openFailures = new Map<
+    string,
+    {
+      readonly failure: Error;
+      readonly gate: Promise<void> | null;
+      readonly markEntered: (() => void) | null;
+    }[]
+  >();
   const state: Harness = {
     runtime: undefined as never,
     workbench: undefined as never,
@@ -85,18 +101,46 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
     catalog: EMPTY_CATALOG,
     failNextMutation: null,
     failNextClose: null,
+    failMutation(operation, failure) {
+      const failures = mutationFailures.get(operation) ?? [];
+      failures.push(failure);
+      mutationFailures.set(operation, failures);
+    },
+    failOpen(id, failure) {
+      const failures = openFailures.get(id) ?? [];
+      failures.push({ failure, gate: null, markEntered: null });
+      openFailures.set(id, failures);
+    },
+    deferOpenFailure(id, failure) {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let markEntered!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        markEntered = resolve;
+      });
+      const failures = openFailures.get(id) ?? [];
+      failures.push({ failure, gate, markEntered });
+      openFailures.set(id, failures);
+      return { entered, release };
+    },
   };
   const publish = (snapshot: PlaygroundCatalogSnapshot): PlaygroundCatalogSnapshot => {
     state.catalog = snapshot;
     for (const listener of listeners) listener(snapshot);
     return snapshot;
   };
-  const mutate = <T>(operation: () => T): Promise<T> => {
+  const mutate = <T>(name: string, operation: () => T): Promise<T> => {
     if (state.failNextMutation !== null) {
       const failure = state.failNextMutation;
       state.failNextMutation = null;
       return Promise.reject(failure);
     }
+    const failures = mutationFailures.get(name);
+    const failure = failures?.shift();
+    if (failures?.length === 0) mutationFailures.delete(name);
+    if (failure !== undefined) return Promise.reject(failure);
     return Promise.resolve(operation());
   };
   const defineProject = ((projectPlan: PlaygroundProjectPlan) => {
@@ -120,7 +164,7 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
           return () => listeners.delete(listener);
         },
         createScratch: ({ definition }: { readonly definition: ProjectDefinition<unknown> }) =>
-          mutate(() => {
+          mutate('create:scratch', () => {
             events.push('catalog:create:scratch');
             const projectPlan = definitions.get(definition as object);
             if (projectPlan === undefined) throw new Error('unknown definition');
@@ -145,7 +189,7 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
           readonly name: string;
           readonly definition: ProjectDefinition<unknown>;
         }) =>
-          mutate(() => {
+          mutate(`save:${id}`, () => {
             events.push(`catalog:save:${id}`);
             const projectPlan = definitions.get(definition as object);
             if (projectPlan === undefined) throw new Error('unknown definition');
@@ -163,12 +207,12 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
         activate: (
           target: { readonly kind: 'scratch' } | { readonly kind: 'project'; id: string },
         ) =>
-          mutate(() => {
+          mutate(`activate:${target.kind === 'scratch' ? 'scratch' : target.id}`, () => {
             events.push(`catalog:activate:${target.kind === 'scratch' ? 'scratch' : target.id}`);
             return publish(Object.freeze({ ...state.catalog, active: Object.freeze(target) }));
           }),
         rename: (id: string, name: string) =>
-          mutate(() => {
+          mutate(`rename:${id}`, () => {
             events.push(`catalog:rename:${id}`);
             return publish(
               Object.freeze({
@@ -189,12 +233,12 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
             | { readonly kind: 'project'; readonly id: string };
           readonly definition: ProjectDefinition<unknown>;
         }) =>
-          mutate(() => {
+          mutate(`reset:${target.kind === 'scratch' ? 'scratch' : target.id}`, () => {
             events.push(`catalog:reset:${target.kind === 'scratch' ? 'scratch' : target.id}`);
             return publish(state.catalog);
           }),
         delete: (id: string) =>
-          mutate(() => {
+          mutate(`delete:${id}`, () => {
             events.push(`catalog:delete:${id}`);
             return publish(
               Object.freeze({
@@ -227,6 +271,14 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
       if (!matchesActive) throw new Error(`cannot open inactive project ${projectPlan.id}`);
       openOptions.push(options);
       events.push(`session:open:${projectPlan.id}`);
+      const failures = openFailures.get(projectPlan.id);
+      const failure = failures?.shift();
+      if (failures?.length === 0) openFailures.delete(projectPlan.id);
+      if (failure !== undefined) {
+        failure.markEntered?.();
+        if (failure.gate !== null) await failure.gate;
+        throw failure.failure;
+      }
       const session = {
         id: projectPlan.id,
         files: {},
@@ -255,6 +307,19 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
     terminalState === undefined ? {} : { terminalState },
   );
   return state;
+}
+
+async function savedProjectPair(
+  h: Harness,
+): Promise<{ readonly projectA: PlaygroundProjectPlan; readonly projectB: PlaygroundProjectPlan }> {
+  const projectA = plan('project-a', 'starter-a');
+  const projectB = plan('project-b', 'starter-b');
+  await h.runtime.createScratch(plan('scratch', 'starter-a'));
+  await h.runtime.saveScratch(projectA, 'Project A');
+  await h.runtime.createScratch(plan('scratch', 'starter-b'));
+  await h.runtime.saveScratch(projectB, 'Project B');
+  h.events.splice(0);
+  return { projectA, projectB };
 }
 
 describe('Playground App semantic runtime', () => {
@@ -313,6 +378,107 @@ describe('Playground App semantic runtime', () => {
       'session:close:scratch',
       'session:open:scratch',
       'tools:scratch',
+    ]);
+  });
+
+  it('restores the prior catalog ref and live session before target-open mismatch rejects', async () => {
+    const h = harness();
+    const { projectA, projectB } = await savedProjectPair(h);
+    const mismatch = new ProjectDefinitionMismatchError(projectA.id);
+    h.failOpen(projectA.id, mismatch);
+
+    await expect(h.runtime.activate(projectA)).rejects.toBe(mismatch);
+
+    expect(h.catalog.active).toEqual({ kind: 'project', id: projectB.id });
+    expect(h.runtime.current()?.plan).toEqual(projectB);
+    expect(h.events).toEqual([
+      'define:project-a',
+      'session:close:project-b',
+      'catalog:activate:project-a',
+      'session:open:project-a',
+      'catalog:activate:project-b',
+      'session:open:project-b',
+      'tools:project-b',
+    ]);
+  });
+
+  it('preserves target-open failure first when prior catalog reactivation fails', async () => {
+    const h = harness();
+    const { projectA, projectB } = await savedProjectPair(h);
+    const mismatch = new ProjectDefinitionMismatchError(projectA.id);
+    const restoreFailure = new Error('prior catalog reactivation failed');
+    h.failOpen(projectA.id, mismatch);
+    h.failMutation(`activate:${projectB.id}`, restoreFailure);
+
+    const failure = await h.runtime.activate(projectA).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([mismatch, restoreFailure]);
+    expect(h.catalog.active).toEqual({ kind: 'project', id: projectA.id });
+    expect(h.runtime.current()).toBeNull();
+  });
+
+  it('preserves target-open failure first when prior reopen fails and admits a later retry', async () => {
+    const h = harness();
+    const { projectA, projectB } = await savedProjectPair(h);
+    const mismatch = new ProjectDefinitionMismatchError(projectA.id);
+    const restoreFailure = new Error('prior session reopen failed');
+    h.failOpen(projectA.id, mismatch);
+    h.failOpen(projectB.id, restoreFailure);
+
+    const failure = await h.runtime.activate(projectA).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([mismatch, restoreFailure]);
+    expect(h.catalog.active).toEqual({ kind: 'project', id: projectB.id });
+    expect(h.runtime.current()).toBeNull();
+
+    h.events.splice(0);
+    const retried = await h.runtime.activate(projectB);
+
+    expect(retried.plan).toEqual(projectB);
+    expect(h.runtime.current()).toBe(retried);
+    expect(h.events).toEqual([
+      'define:project-b',
+      'catalog:activate:project-b',
+      'session:open:project-b',
+      'tools:project-b',
+    ]);
+  });
+
+  it('queues close behind target-open compensation and drains the restored session', async () => {
+    const h = harness();
+    const { projectA } = await savedProjectPair(h);
+    const mismatch = new ProjectDefinitionMismatchError(projectA.id);
+    const targetOpen = h.deferOpenFailure(projectA.id, mismatch);
+
+    const activation = h.runtime.activate(projectA);
+    await targetOpen.entered;
+    const closing = h.runtime.close();
+    await Promise.resolve();
+
+    expect(h.events).toEqual([
+      'define:project-a',
+      'session:close:project-b',
+      'catalog:activate:project-a',
+      'session:open:project-a',
+    ]);
+
+    targetOpen.release();
+    await expect(activation).rejects.toBe(mismatch);
+    await expect(closing).resolves.toBeUndefined();
+
+    expect(h.runtime.current()).toBeNull();
+    expect(h.events).toEqual([
+      'define:project-a',
+      'session:close:project-b',
+      'catalog:activate:project-a',
+      'session:open:project-a',
+      'catalog:activate:project-b',
+      'session:open:project-b',
+      'tools:project-b',
+      'session:close:project-b',
+      'workbench:close',
     ]);
   });
 

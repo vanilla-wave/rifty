@@ -19,6 +19,7 @@ const HEAVY_SPECS = [
   '**/ts-language-service.spec.ts',
   '**/project-management.spec.ts',
   '**/project-switch.spec.ts',
+  '**/vite8-durable-reopen-invalidation.spec.ts',
   '**/fullstack-demo.spec.ts',
 ];
 
