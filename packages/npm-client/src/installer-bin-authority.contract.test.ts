@@ -1,3 +1,4 @@
+import { builtinShadowSubstitutionCatalog } from '@riftydev/shadow-registry/internal';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -112,6 +113,70 @@ function deferred<T>() {
     resolve = next;
   });
   return { promise, resolve };
+}
+
+const lightningRecipe = (() => {
+  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+    (candidate) => candidate.trigger.name === 'lightningcss',
+  );
+  if (!recipe || recipe.acquisition.kind !== 'registry') {
+    throw new Error('builtin LightningCSS registry recipe is missing');
+  }
+  return recipe;
+})();
+
+type RegistryAliasScope = 'root' | 'nested';
+
+interface RegistryAliasFixture {
+  readonly aliasRoot: string;
+  readonly dependencies: Record<string, string>;
+  readonly registry: FixtureRegistry;
+}
+
+async function registryAliasFixture(scope: RegistryAliasScope): Promise<RegistryAliasFixture> {
+  const lightningTwin = await registryEntry('lightningcss-wasm', '1.32.0', {
+    dependencies: { 'napi-wasm': '^1.0.1' },
+    optionalDependencies: {},
+    peerDependencies: {},
+    bundleDependencies: ['napi-wasm'],
+    files: {
+      'node_modules/napi-wasm/package.json': JSON.stringify({
+        name: 'napi-wasm',
+        version: '1.1.3',
+      }),
+      'node_modules/napi-wasm/index.js': 'module.exports = "bundled napi-wasm";\n',
+    },
+  });
+  // Current production traverses the bundled member externally. Keeping this
+  // fixture reachable lets the fault hit registry-alias writes; recipe v2 must
+  // instead consume the identical embedded member without this registry read.
+  const standaloneNapi = await registryEntry('napi-wasm', '1.1.3');
+  if (scope === 'root') {
+    return {
+      aliasRoot: '/project/node_modules/lightningcss',
+      dependencies: { lightningcss: '^1.32.0' },
+      registry: registry(lightningTwin, standaloneNapi),
+    };
+  }
+
+  const occupiedAcquisitionName = await registryEntry('lightningcss-wasm', '1.32.1');
+  const nestedHost = await registryEntry('nested-host', '1.0.0', {
+    dependencies: { lightningcss: '^1.32.0' },
+  });
+  return {
+    aliasRoot: '/project/node_modules/nested-host/node_modules/lightningcss',
+    dependencies: {
+      'lightningcss-wasm': '1.32.1',
+      'nested-host': '1.0.0',
+    },
+    registry: registry(lightningTwin, standaloneNapi, occupiedAcquisitionName, nestedHost),
+  };
+}
+
+async function expectExactRegistryAlias(vfs: MemoryVfs, aliasRoot: string): Promise<void> {
+  for (const file of lightningRecipe.materialization.files) {
+    expect(await vfs.readFileText(`${aliasRoot}/${file.path}`)).toBe(file.content);
+  }
 }
 
 async function project(): Promise<MemoryVfs> {
@@ -260,9 +325,106 @@ describe('install package-bin authority', () => {
       },
     );
 
-    expect(await vfs.exists('/project/node_modules/.bin/lightningcss')).toBe(false);
-    expect(result.lockfile.packages['node_modules/lightningcss-wasm']?.bin).toBeUndefined();
+    expect.soft(await vfs.exists('/project/node_modules/.bin/lightningcss')).toBe(false);
+    expect.soft(result.lockfile.packages['node_modules/lightningcss-wasm']?.bin).toBeUndefined();
   });
+
+  it.each(['root', 'nested'] as const)(
+    '[fault: torn-state] stops registry-alias writes after a parked %s abort and reconciles exact bytes on retry',
+    async (scope) => {
+      const fixture = await registryAliasFixture(scope);
+      const vfs = await project();
+      const firstAliasPath = `${fixture.aliasRoot}/${lightningRecipe.materialization.files[0]?.path}`;
+      const laterAliasPaths = lightningRecipe.materialization.files
+        .slice(1)
+        .map((file) => `${fixture.aliasRoot}/${file.path}`);
+      const aliasPaths = new Set([firstAliasPath, ...laterAliasPaths]);
+      const aliasWrites: string[] = [];
+      const writeStarted = deferred<void>();
+      const releaseWrite = deferred<void>();
+      const writeFile = vfs.writeFile.bind(vfs);
+      const write = vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+        if (aliasPaths.has(path)) aliasWrites.push(path);
+        if (path === firstAliasPath) {
+          writeStarted.resolve();
+          await releaseWrite.promise;
+        }
+        await writeFile(path, data);
+      });
+      const controller = new AbortController();
+      const reason = new Error(`cancel ${scope} registry-alias materialization`);
+      const installing = install('fixture', '1.0.0', fixture.dependencies, {
+        vfs,
+        cwd: '/project',
+        registry: fixture.registry,
+        signal: controller.signal,
+        onSubstitution: () => {},
+      });
+
+      await writeStarted.promise;
+      controller.abort(reason);
+      releaseWrite.resolve();
+      await expect(installing).rejects.toBe(reason);
+      expect.soft(aliasWrites).toEqual([firstAliasPath]);
+      expect
+        .soft(await vfs.readFileText(firstAliasPath))
+        .toBe(lightningRecipe.materialization.files[0]?.content);
+      for (const path of laterAliasPaths) {
+        expect.soft(await vfs.exists(path), path).toBe(false);
+      }
+      expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
+
+      write.mockRestore();
+      await install('fixture', '1.0.0', fixture.dependencies, {
+        vfs,
+        cwd: '/project',
+        registry: fixture.registry,
+        onSubstitution: () => {},
+      });
+      await expectExactRegistryAlias(vfs, fixture.aliasRoot);
+      expect(await vfs.exists('/project/package-lock.json')).toBe(true);
+    },
+  );
+
+  it.each(
+    (['root', 'nested'] as const).flatMap((scope) =>
+      (['ENOSPC', 'EACCES'] as const).map((code) => ({ code, scope })),
+    ),
+  )(
+    '[fault: quota-perm-fail] keeps a $code $scope registry-alias write loud, unpublished, and exact on retry',
+    async ({ code, scope }) => {
+      const fixture = await registryAliasFixture(scope);
+      const vfs = await project();
+      const faultPath = `${fixture.aliasRoot}/${lightningRecipe.materialization.files[0]?.path}`;
+      const failure = Object.assign(new Error(`${code}: registry-alias write denied`), { code });
+      const writeFile = vfs.writeFile.bind(vfs);
+      const write = vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+        if (path === faultPath) throw failure;
+        await writeFile(path, data);
+      });
+
+      await expect(
+        install('fixture', '1.0.0', fixture.dependencies, {
+          vfs,
+          cwd: '/project',
+          registry: fixture.registry,
+          onSubstitution: () => {},
+        }),
+      ).rejects.toBe(failure);
+      expect.soft(await vfs.exists(faultPath)).toBe(false);
+      expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
+
+      write.mockRestore();
+      await install('fixture', '1.0.0', fixture.dependencies, {
+        vfs,
+        cwd: '/project',
+        registry: fixture.registry,
+        onSubstitution: () => {},
+      });
+      await expectExactRegistryAlias(vfs, fixture.aliasRoot);
+      expect(await vfs.exists('/project/package-lock.json')).toBe(true);
+    },
+  );
 
   it('[fault: corrupt-input] rejects a missing bin target before lock publication and repairs on retry', async () => {
     const broken = await registryEntry('broken-cli', '1.0.0', {

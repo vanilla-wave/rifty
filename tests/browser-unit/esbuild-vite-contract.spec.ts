@@ -73,6 +73,26 @@ interface PublicationEvidence {
   readonly legacyBridgeAbsent: boolean;
 }
 
+interface ProjectShadowLockEvidence {
+  readonly packages?: Readonly<Record<string, unknown>>;
+  readonly rifty?: {
+    readonly shadowSubstitutions?: {
+      readonly protocol?: string;
+      readonly applied?: readonly {
+        readonly catalog?: unknown;
+        readonly substitutionId?: string;
+        readonly recipeDigest?: string;
+        readonly materialization?: {
+          readonly installPath?: string;
+          readonly name?: string;
+          readonly version?: string;
+          readonly bin?: unknown;
+        };
+      }[];
+    };
+  };
+}
+
 interface InfoEnvelope {
   readonly health: {
     readonly token: string;
@@ -963,6 +983,44 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
     const version = await execLine(page, 'vite --version');
     expect(version).toMatchObject({ exit: 0 });
     expect(version.out).toContain('vite/7.3.6');
+
+    const projectLockFile = await readOwnerFile(page, '/scratch/package-lock.json');
+    expect(projectLockFile.ok, projectLockFile.error).toBe(true);
+    const projectLock = JSON.parse(projectLockFile.text) as ProjectShadowLockEvidence;
+    const shadowTrace = projectLock.rifty?.shadowSubstitutions;
+    const esbuildRecipe = shadowTrace?.applied?.find(
+      ({ materialization }) => materialization?.name === 'esbuild',
+    );
+    expect
+      .soft(shadowTrace?.protocol, 'real Chromium project lock protocol')
+      .toBe('rifty.shadow-substitutions/v2');
+    expect
+      .soft(esbuildRecipe?.substitutionId, 'real Chromium esbuild recipe identity')
+      .toBe('rifty.shadow-substitution.esbuild.v2');
+    expect.soft(esbuildRecipe?.catalog, 'real Chromium esbuild catalog identity').toEqual({
+      id: 'rifty.shadow-substitutions.builtin.v2',
+      digest: 'a037016265e1c348254b3f067403278f5baee8b1f39e2bcd16f535fd0b9c3b52',
+    });
+    expect
+      .soft(esbuildRecipe?.recipeDigest, 'real Chromium esbuild recipe digest')
+      .toBe('e6af53d0b43aa2a4cf83d46818de1b7313f7ad5345cfe0db298b981d3f89368a');
+    expect
+      .soft(esbuildRecipe?.materialization, 'real Chromium esbuild materialization identity')
+      .toMatchObject({
+        installPath: 'node_modules/esbuild',
+        name: 'esbuild',
+        version: '0.28.0',
+      });
+    expect
+      .soft(esbuildRecipe?.materialization?.bin, 'real Chromium esbuild recipe bin')
+      .toEqual({ esbuild: 'bin/esbuild' });
+    expect
+      .soft(projectLock.packages?.['node_modules/esbuild'], 'real Chromium esbuild lock entry')
+      .toMatchObject({
+        version: '0.28.0',
+        bin: { esbuild: 'bin/esbuild' },
+        riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+      });
 
     const contract = await runContractHarness(page);
     expect(

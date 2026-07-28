@@ -26,8 +26,13 @@ import { matchesRange } from './semver.ts';
 import { applyInternalsShims } from './shadow-shims.ts';
 import { computeIntegrity } from './tarball-cache.ts';
 
+type FakeRegistryManifest = VersionManifest & {
+  bundleDependencies?: string[];
+  bundledDependencies?: string[];
+};
+
 interface FakeRegistryEntry {
-  manifest: VersionManifest;
+  manifest: FakeRegistryManifest;
   tarball: Uint8Array;
 }
 
@@ -76,6 +81,32 @@ async function makeEntry(
     },
     tarball: await gzip(concat(...chunks, TAR_TRAILER)),
   };
+}
+
+async function makeProjectedEntry(
+  name: string,
+  version: string,
+  fields: Partial<Omit<FakeRegistryManifest, 'dist' | 'name' | 'version'>>,
+  files: Readonly<Record<string, string>>,
+): Promise<FakeRegistryEntry> {
+  const manifest: FakeRegistryManifest = {
+    name,
+    version,
+    ...fields,
+    dist: { tarball: `fake://${encodeURIComponent(name)}|${version}` },
+  };
+  const { dist: _dist, ...packageManifest } = manifest;
+  const chunks: Uint8Array[] = [];
+  for (const [entry, body] of Object.entries({
+    'package.json': JSON.stringify(packageManifest),
+    ...files,
+  })) {
+    const bytes = new TextEncoder().encode(body);
+    chunks.push(buildHeader(`package/${entry}`, bytes.length), padToBlock(bytes));
+  }
+  const tarball = await gzip(concat(...chunks, TAR_TRAILER));
+  manifest.dist.integrity = await computeIntegrity(tarball);
+  return { manifest, tarball };
 }
 
 function db(
@@ -560,20 +591,30 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     await vfs.mkdir('/proj', { recursive: true });
     const recipeId = 'rifty.shadow-substitution.lightningcss.v2';
     const materializeLine = `npm: lightningcss@^1.32.0 materialized from shadow registry (${recipeId})`;
+    const bundledNapiManifest = JSON.stringify({ name: 'napi-wasm', version: '1.1.3' });
     const registry = new FakeRegistry(
       db([
         'lightningcss-wasm',
-        await makeEntry(
+        await makeProjectedEntry(
           'lightningcss-wasm',
           '1.32.0',
-          {},
+          {
+            dependencies: { 'napi-wasm': '^1.0.1' },
+            optionalDependencies: {},
+            peerDependencies: {},
+            bundleDependencies: ['napi-wasm'],
+          },
           {
             'index.js': 'module.exports = { transform() {} };',
+            'node_modules/napi-wasm/package.json': bundledNapiManifest,
+            'node_modules/napi-wasm/index.js': 'module.exports = "bundled napi-wasm";\n',
           },
         ),
       ]),
     );
 
+    const freshPackument = vi.spyOn(registry, 'getPackument');
+    const freshTarball = vi.spyOn(registry, 'getTarball');
     const freshTrace: string[] = [];
     const first = await install(
       'root',
@@ -587,7 +628,21 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     });
     expect(first.lockfile.packages['node_modules/lightningcss-wasm']).toMatchObject({
       version: '1.32.0',
+      dependencies: { 'napi-wasm': '^1.0.1' },
+      bundleDependencies: ['napi-wasm'],
     });
+    expect(
+      first.lockfile.packages['node_modules/lightningcss-wasm/node_modules/napi-wasm'],
+    ).toMatchObject({ version: '1.1.3', inBundle: true });
+    expect(first.lockfile.packages['node_modules/napi-wasm']).toBeUndefined();
+    expect(freshPackument.mock.calls.map(([name]) => name)).toEqual(['lightningcss-wasm']);
+    expect(freshTarball).toHaveBeenCalledTimes(1);
+    expect(
+      await readText(
+        vfs,
+        '/proj/node_modules/lightningcss-wasm/node_modules/napi-wasm/package.json',
+      ),
+    ).toBe(bundledNapiManifest);
     expect(
       first.lockfile.rifty?.shadowSubstitutions.applied.map(
         (substitution) => substitution.substitutionId,
@@ -604,7 +659,8 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
       substitutions: [{ substitutionId: recipeId }],
     });
 
-    const packument = vi.spyOn(registry, 'getPackument');
+    freshPackument.mockClear();
+    freshTarball.mockClear();
     const replayTrace: string[] = [];
     const replay = await install(
       'root',
@@ -612,7 +668,8 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
       { lightningcss: '^1.32.0' },
       { vfs, cwd: '/proj', registry, onSubstitution: (line) => replayTrace.push(line) },
     );
-    expect(packument).not.toHaveBeenCalled();
+    expect(freshPackument).not.toHaveBeenCalled();
+    expect(freshTarball).not.toHaveBeenCalled();
     expect(replayTrace).toEqual(freshTrace);
     expect(replay.lockfile.rifty?.shadowSubstitutions).toEqual(
       first.lockfile.rifty?.shadowSubstitutions,

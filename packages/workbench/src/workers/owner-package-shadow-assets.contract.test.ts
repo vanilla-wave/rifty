@@ -322,37 +322,46 @@ it('physically excludes same-project installs while the first lockfile commit is
       await projectVfs.readFileText(`${root}/package-lock.json`),
     ) as InstallResult['lockfile'];
     expect(lockfile).toEqual(firstResult?.lockfile);
-    expect(lockfile.rifty?.shadowSubstitutions as unknown).toMatchObject({
-      protocol: 'rifty.shadow-substitutions/v2',
-      applied: [
-        {
-          catalog: {
-            id: 'rifty.shadow-substitutions.builtin.v2',
-            digest: expect.stringMatching(/^[0-9a-f]{64}$/),
-          },
-          substitutionId: 'rifty.shadow-substitution.esbuild.v2',
-          recipeDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
-          trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
-          acquisition: { kind: 'synthetic' },
-          materialization: {
-            installPath: 'node_modules/esbuild',
-            name: 'esbuild',
-            version: '0.28.0',
-            bin: { esbuild: 'bin/esbuild' },
-            files: [{ path: 'bin/esbuild' }, { path: 'lib/main.cjs' }, { path: 'package.json' }],
-          },
-          binding: {
-            adapterId: 'rifty.runtime-adapter.esbuild.v1',
-            assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
-          },
-        },
-      ],
+    const shadowTrace = lockfile.rifty?.shadowSubstitutions as unknown as {
+      readonly protocol?: string;
+      readonly applied?: readonly {
+        readonly materialization?: { readonly bin?: unknown };
+      }[];
+    };
+    expect
+      .soft(shadowTrace?.protocol, 'owner FIFO committed shadow protocol')
+      .toBe('rifty.shadow-substitutions/v2');
+    const appliedTrace = shadowTrace?.applied?.[0];
+    expect.soft(appliedTrace, 'owner FIFO committed esbuild recipe').toMatchObject({
+      catalog: {
+        id: 'rifty.shadow-substitutions.builtin.v2',
+        digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
+      substitutionId: 'rifty.shadow-substitution.esbuild.v2',
+      recipeDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
+      trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
+      acquisition: { kind: 'synthetic' },
+      materialization: {
+        installPath: 'node_modules/esbuild',
+        name: 'esbuild',
+        version: '0.28.0',
+        files: [{ path: 'bin/esbuild' }, { path: 'lib/main.cjs' }, { path: 'package.json' }],
+      },
+      binding: {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
+      },
     });
-    expect(lockfile.packages['node_modules/esbuild']).toMatchObject({
-      version: '0.28.0',
-      bin: { esbuild: 'bin/esbuild' },
-      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
-    });
+    expect
+      .soft(appliedTrace?.materialization?.bin, 'owner FIFO committed recipe bin')
+      .toEqual({ esbuild: 'bin/esbuild' });
+    expect
+      .soft(lockfile.packages['node_modules/esbuild'], 'owner FIFO committed alias lock entry')
+      .toMatchObject({
+        version: '0.28.0',
+        bin: { esbuild: 'bin/esbuild' },
+        riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+      });
 
     const materializedAfterBoth = await Promise.all(
       [
