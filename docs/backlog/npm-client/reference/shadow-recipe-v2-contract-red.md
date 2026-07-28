@@ -9,7 +9,15 @@ two-blocker rule split npm peer execution into
 `npm-client/npm-11-peer-placement-authority`; the transcript below is the
 narrowed projection/materialization unit. Its first checkpoint `5c450fb9`
 blocked a prescribed acquisition-module carrier, one stale installer sibling,
-an incomplete generic-source gate, and repo lint. This is the in-line re-cut.
+an incomplete generic-source gate, and repo lint. Its second checkpoint
+`b7725a3e` closed that re-cut but blocked the contract's remaining broad
+projection claims: the only positive registry oracle has required bundled
+`napi-wasm` plus empty optional/peer maps. Mutation-only RED cannot prove
+matching non-bundled traversal, optional omission, non-empty peer handoff, or
+accepted scoped keys. The binding split preserves those clauses in the required
+draft child `npm-client/shadow-recipe-v2-dependency-projection-execution`.
+The transcript below is the now-executable LightningCSS
+metadata/bundle/materialized-bin/replay unit; counts remain unchanged.
 
 ```sh
 pnpm --filter @riftydev/npm-client exec vitest run \
@@ -28,8 +36,9 @@ pnpm check:runtime-adapter-boundary
 
 The npm-client runs have 26 RED and 61 GREEN tests:
 
-- seven complete-projection drifts reach registry traversal instead of the
-  named pre-tarball `NotImplementedError`;
+- seven exact LightningCSS projection drifts reach registry traversal instead
+  of the named pre-tarball `NotImplementedError`; these are rejection evidence,
+  not a positive claim that non-bundled/optional/peer/scoped branches execute;
 - the exact installer provenance sibling attempts an external `napi-wasm`
   packument read instead of consuming only the embedded bundled member; its
   seventeen other provenance assertions remain reachable and GREEN;
@@ -45,8 +54,8 @@ The npm-client runs have 26 RED and 61 GREEN tests:
   `ENOSPC`/`EACCES` plus ordinary bin fault guards already fail loudly, publish
   no lock, and reconcile on retry.
 
-The generic-source gate is GREEN across the finite installer, linker, planner,
-manager, and Workbench consumer surface. It rejects concrete esbuild,
+The generic-source gate is GREEN across the finite admission, installer,
+linker, planner, manager, and Workbench consumer surface. It rejects concrete esbuild,
 LightningCSS/acquisition-member, Sass, and Vite names or control-flow
 identifiers, so the real-core RED cannot be closed by a package-specific
 branch. It prescribes no new module or helper export.

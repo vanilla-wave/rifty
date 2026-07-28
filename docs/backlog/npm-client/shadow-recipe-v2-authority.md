@@ -31,9 +31,10 @@ materialization, and replay without shipping the Sass recipe.
 - `lightningcss-wasm@1.32.0` registry identity, integrity, dependency maps, and
   bundled `napi-wasm` membership are pinned by a machine-checked fixture
   independent of catalog source or installer fakes; future registry-backed
-  builtins inherit the same external-golden differential. Exact peer-map
-  equality is part of that acquisition projection; consuming the verified map
-  for npm peer traversal and placement is not.
+  builtins inherit the same external-golden differential. This unit verifies
+  the current exact required bundled `napi-wasm` map plus empty optional and
+  peer maps; broader dependency-projection execution is not inferred from
+  mutation-only evidence.
 - The committed collision probe pins same-command `.bin` ownership independent
   of manifest order and across incremental reconciliation. Browser acceptance
   remains the real esbuild/Vite contract, never a local fake of the package
@@ -57,12 +58,11 @@ materialization, and replay without shipping the Sass recipe.
 - Consume the completed clone-safe schema-2 data authority and preserve its
   `semver-admits`/`exact-only` result and named feature through every execution
   path; this item does not add a second codec or admission owner.
-- Registry acquisition verifies the complete required, retained optional,
-  omitted optional, peer, and bundled projection before tarball work. Only
-  non-bundled required and retained-optional maps enter ordinary dependency
-  resolution in this unit; the verified peer map remains exact metadata for
-  `npm-client/npm-11-peer-placement-authority`. Scoped package names are valid
-  in every projection map.
+- Registry acquisition verifies the current exact LightningCSS projection
+  before tarball work: required `napi-wasm@^1.0.1`, bundled `napi-wasm`, and
+  empty optional and peer maps. The bundled member stays embedded and never
+  enters ordinary registry traversal; drift in any complete map loud-fails
+  with the recipe's named unsupported feature.
 - Recipe materialization owns the exact user-visible bin map. Acquired bins
   never leak into linking or their lock entry; one shared package-bin linker
   validates and links the materialized targets for registry and synthetic
@@ -95,10 +95,12 @@ materialization, and replay without shipping the Sass recipe.
 3. Fresh and replayed esbuild materialize the same files and `.bin/esbuild`;
    invoking the unsupported CLI names `NotImplementedError('esbuild.cli')`.
 4. LightningCSS accepts its current semver requests, verifies exact registry
-   metadata, omits no undeclared dependency, and replays without registry I/O.
-5. The committed LightningCSS recipe exercises non-empty dependency policy and
-   the committed esbuild recipe exercises a materialized bin through the real
-   install core; no injected/custom recipe SPI or fake package is added.
+   metadata, consumes only its embedded bundled `napi-wasm`, and replays
+   without registry I/O.
+5. The committed LightningCSS recipe exercises exact required bundled
+   dependency metadata and the committed esbuild recipe exercises a
+   materialized bin through the real install core; no injected/custom recipe
+   SPI or fake package is added.
 6. Opposite manifest order and incremental-install fixtures match the committed
    npm 11 collision probe: the lexicographically first user-visible package
    name owns a shared command, while an acquired registry twin never
@@ -126,9 +128,15 @@ materialization, and replay without shipping the Sass recipe.
   recognition in generic consumers.
 - Reinterpreting recipe-v1 lockfiles or falling back to acquired/native bins.
 - A public recipe/plugin API or remotely supplied executable policy.
+- Matching non-bundled required and retained-optional traversal, omitted
+  optional suppression, non-empty peer metadata handoff, and accepted scoped
+  keys in every projection map. The required goal child
+  `npm-client/shadow-recipe-v2-dependency-projection-execution` owns that
+  executable positive authority.
 - Traversing, resolving, placing, or replaying peer dependency trees. Exact
-  peer projection metadata is verified here; npm execution authority is the
-  required goal child `npm-client/npm-11-peer-placement-authority`.
+  non-empty peer metadata handoff belongs to the dependency-projection child;
+  npm execution authority is the required goal child
+  `npm-client/npm-11-peer-placement-authority`.
 - Concurrent-safe raw public `npm-client.install()` calls; the supported
   Workbench product boundary physically excludes them and the generic SDK gap
   is captured separately.
@@ -143,13 +151,20 @@ materialization, and replay without shipping the Sass recipe.
   fields and never recognize Sass, esbuild, LightningCSS, Vite, or entry kind.
 - The package-bin linker is the sole bin implementation. Runtime binding stays
   optional; kernel and runtime-asset boundaries do not change.
-- Peer projection verification stays in this acquisition unit. The second
-  Contract+RED blocker split peer traversal, placement, conflicts, peer lock
-  facts, and replay into `npm-client/npm-11-peer-placement-authority`.
+- The current empty peer projection stays in this acquisition unit. The
+  earlier second Contract+RED blocker split peer traversal, placement,
+  conflicts, peer lock facts, and replay into
+  `npm-client/npm-11-peer-placement-authority`.
 - Narrowed checkpoint `5c450fb9` rejected a prescribed acquisition module, a
   stale installer sibling, and an incomplete generic-source gate. The re-cut
   removes that carrier, makes the sibling's bundled traversal observable, and
-  scans the finite installer/linker/planner consumer surface.
+  scans the finite admission/installer/linker/planner consumer surface.
+- Narrowed checkpoint `b7725a3e` rejected the remaining broad projection
+  claims: the positive LightningCSS oracle has one required bundled dependency
+  and empty optional/peer maps, so mutation-only RED cannot prove non-bundled
+  traversal, omission, non-empty peer handoff, or accepted scoped keys. The
+  binding second-checkpoint split preserves those clauses in
+  `npm-client/shadow-recipe-v2-dependency-projection-execution`.
 - The committed owner-decoded builtin catalog drives the real install core in
   contract tests. The public root export remains builtin-only; remote/custom
   recipes cannot reach executable policy.

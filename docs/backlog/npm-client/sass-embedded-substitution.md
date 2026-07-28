@@ -5,7 +5,7 @@ title: sass-embedded@1.100.0 via synthesized facade — second substitution, sea
 created: 2026-07-23
 why: real Vite SCSS projects pin sass-embedded, whose dart platform binary cannot run in the browser; ADR-0310's spike proved the exact pure-JS sass twin matches every surface Vite and direct consumers touch, so Sass ships as the registry's second substitution and proves the seam is package-generic
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-recipe-v2-authority]
+blocked_by: [npm-client/shadow-recipe-v2-dependency-projection-execution]
 sources: [ADR-0310, ADR-0328, docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md]
 ---
 
@@ -24,7 +24,7 @@ package-specific files so review can see whether the seam is real.
   package identities, and timeout/deadlock procedure behind all nine parity
   rows. ADR-0310's summary and the selector-only probe are not the artifact.
 - Close every row in the Fault matrix below with a reachable proof target after
-  the recipe-v2 authority contract becomes ready.
+  the recipe-v2 dependency-projection execution contract becomes ready.
 
 ## Acceptance
 

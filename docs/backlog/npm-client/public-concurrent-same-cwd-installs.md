@@ -17,7 +17,7 @@ code:
 `@riftydev/npm-client` exports `install()` and `@riftydev/sdk/npm-client`
 re-exports it without an authority or exclusion precondition. The executable
 probe at source SHA-256
-`5f2e01d0338ed770603664747b8526972483833e9d676a5b6f8c2639c6aa9c99`
+`79fadaa1e34527f74d729a528416e75de820d921b47fd79f7803ceb20f65b995`
 parks provider-z before its lock write, lets provider-a finish, then resumes
 provider-z:
 
