@@ -28,7 +28,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 
 if (!parentPort) throw new Error('sync-rpc-echo: must run inside a Worker');
 
-const { sab, payloadCapacity, method, payload, timeoutMs, protocolVersion } = workerData;
+const { sab, payloadCapacity, method, payload, requests, timeoutMs, protocolVersion } = workerData;
 
 const HEADER_BYTES = 20;
 const VERSION_INDEX = 0;
@@ -47,64 +47,67 @@ const decoder = new TextDecoder('utf-8', { fatal: true });
 
 const FRAME_JSON = 0x00;
 const FRAME_BINARY = 0x01;
+const STATE_IDLE = 0;
+const STATE_READY = 1;
+const STATE_HANDLING = 2;
+const STATE_WRITING = 3;
+const calls = requests ?? [{ method, payload }];
+const replies = [];
 
-// Build the request bytes — 1-byte JSON discriminator + { method, payload } JSON.
-const jsonBytes = encoder.encode(JSON.stringify({ method, payload }));
-const reqBytes = new Uint8Array(jsonBytes.byteLength + 1);
-reqBytes[0] = FRAME_JSON;
-reqBytes.set(jsonBytes, 1);
-if (reqBytes.byteLength > payloadCapacity) {
-  throw new Error(
-    `sync-rpc-echo: request (${reqBytes.byteLength}B) exceeds capacity (${payloadCapacity}B)`,
-  );
-}
-
-// Phase 1: writeRequest equivalent. VERSION stamped before STATE flips (ADR-0032).
-bytes.set(reqBytes, reqPayloadOffset);
-Atomics.store(i32, REQ_LEN_INDEX, reqBytes.byteLength);
-Atomics.store(i32, VERSION_INDEX, protocolVersion);
-Atomics.store(i32, REQ_STATE_INDEX, 1);
-Atomics.notify(i32, REQ_STATE_INDEX);
-
-// Phase 2: block on reply (production caller-side path uses Atomics.wait).
-const waitResult = Atomics.wait(i32, REP_STATE_INDEX, 0, timeoutMs ?? Number.POSITIVE_INFINITY);
-if (waitResult === 'timed-out') {
-  parentPort.postMessage({ type: 'error', message: `timed out after ${timeoutMs}ms` });
-  process.exit(1);
-}
-
-// Phase 3: consumeReply equivalent. Validate VERSION before payload (ADR-0032).
-const repVersion = Atomics.load(i32, VERSION_INDEX);
-const repLen = Atomics.load(i32, REP_LEN_INDEX);
-const replyBytes = new Uint8Array(repLen);
-replyBytes.set(bytes.subarray(repPayloadOffset, repPayloadOffset + repLen));
-Atomics.store(i32, REP_LEN_INDEX, 0);
-Atomics.store(i32, REP_STATE_INDEX, 0);
-
-if (repVersion !== protocolVersion) {
-  parentPort.postMessage({
-    type: 'error',
-    message: `protocol version mismatch: expected ${protocolVersion}, got ${repVersion}`,
-  });
-  process.exit(1);
-}
-
-// Branch on the v2 frame discriminator (ADR-0084 #23): 0x01 BINARY → raw bytes
-// value; 0x00 JSON → parse the body. The 'echo' handler returns JSON; the
-// binary branch is here so the fixture mirrors the production decoder exactly.
-let reply;
-try {
-  if (replyBytes[0] === FRAME_BINARY) {
-    reply = { ok: true, value: replyBytes.slice(1) };
-  } else {
-    reply = JSON.parse(decoder.decode(replyBytes.subarray(1)));
+for (const call of calls) {
+  // Build the request bytes — 1-byte JSON discriminator + request JSON.
+  const jsonBytes = encoder.encode(JSON.stringify(call));
+  const reqBytes = new Uint8Array(jsonBytes.byteLength + 1);
+  reqBytes[0] = FRAME_JSON;
+  reqBytes.set(jsonBytes, 1);
+  if (reqBytes.byteLength > payloadCapacity) {
+    throw new Error(
+      `sync-rpc-echo: request (${reqBytes.byteLength}B) exceeds capacity (${payloadCapacity}B)`,
+    );
   }
-} catch (err) {
-  parentPort.postMessage({
-    type: 'error',
-    message: `failed to decode reply: ${err.message}`,
-  });
-  process.exit(1);
+
+  // Phase 1: exact IDLE→WRITING claim, then publish READY.
+  const claim = Atomics.compareExchange(i32, REQ_STATE_INDEX, STATE_IDLE, STATE_WRITING);
+  if (claim !== STATE_IDLE) {
+    throw new Error(`sync-rpc-echo: request claim found state ${claim}`);
+  }
+  bytes.set(reqBytes, reqPayloadOffset);
+  Atomics.store(i32, REQ_LEN_INDEX, reqBytes.byteLength);
+  Atomics.store(i32, VERSION_INDEX, protocolVersion);
+  Atomics.store(i32, REQ_STATE_INDEX, STATE_READY);
+  Atomics.notify(i32, REQ_STATE_INDEX);
+
+  // Phase 2: block on reply (production caller-side path uses Atomics.wait).
+  const waitResult = Atomics.wait(i32, REP_STATE_INDEX, STATE_IDLE, timeoutMs);
+  if (waitResult === 'timed-out') {
+    throw new Error(`sync-rpc-echo: timed out after ${timeoutMs}ms`);
+  }
+
+  // Phase 3: consume reply and release the exact HANDLING claim.
+  const repVersion = Atomics.load(i32, VERSION_INDEX);
+  const repLen = Atomics.load(i32, REP_LEN_INDEX);
+  const replyBytes = new Uint8Array(repLen);
+  replyBytes.set(bytes.subarray(repPayloadOffset, repPayloadOffset + repLen));
+  Atomics.store(i32, REP_LEN_INDEX, 0);
+  Atomics.store(i32, REP_STATE_INDEX, STATE_IDLE);
+  const handled = Atomics.compareExchange(i32, REQ_STATE_INDEX, STATE_HANDLING, STATE_IDLE);
+  if (handled !== STATE_HANDLING) {
+    throw new Error(`sync-rpc-echo: reply release found request state ${handled}`);
+  }
+  Atomics.notify(i32, REQ_STATE_INDEX);
+
+  if (repVersion !== protocolVersion) {
+    throw new Error(
+      `sync-rpc-echo: protocol version mismatch: expected ${protocolVersion}, got ${repVersion}`,
+    );
+  }
+
+  // Branch on the v2 body discriminator. v3 changes only ring lifecycle.
+  if (replyBytes[0] === FRAME_BINARY) {
+    replies.push({ ok: true, value: replyBytes.slice(1) });
+  } else {
+    replies.push(JSON.parse(decoder.decode(replyBytes.subarray(1))));
+  }
 }
 
-parentPort.postMessage({ type: 'reply', reply });
+parentPort.postMessage({ type: 'reply', reply: replies[0], replies });

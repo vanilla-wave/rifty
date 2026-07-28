@@ -177,26 +177,3 @@ describe('execSync — v2 binary frame returns byte-exact stdout (ADR-0084 #23)'
     expect(new TextDecoder().decode(reply.value as Uint8Array)).toBe('loader-ok');
   });
 });
-
-describe('ChildProcess.stdin', () => {
-  it('write() throws NotImplementedError instead of silently no-op-ing', () => {
-    writeFileSync('/silent.js', '');
-    const child = spawn('node', ['/silent.js']);
-    expect(() => child.stdin.write('x')).toThrowError(
-      expect.objectContaining({
-        name: 'NotImplementedError',
-        feature: 'child.stdin.write',
-      }) as unknown as Error,
-    );
-  });
-  it('end() throws NotImplementedError', () => {
-    writeFileSync('/silent2.js', '');
-    const child = spawn('node', ['/silent2.js']);
-    expect(() => child.stdin.end()).toThrowError(
-      expect.objectContaining({
-        name: 'NotImplementedError',
-        feature: 'child.stdin.end',
-      }) as unknown as Error,
-    );
-  });
-});

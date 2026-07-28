@@ -1,13 +1,26 @@
-export { DEFAULT_CWD, ProcessManager, globalProcessManager } from './process-manager.ts';
+export {
+  DEFAULT_CWD,
+  ProcessManager,
+  decodeIpcFrame,
+  formatProcessSnapshot,
+  globalProcessManager,
+  readRootProcessSnapshot,
+} from './process-manager.ts';
 export type {
   IpcFrame,
   ProcessHandle,
   ProcessHandleKind,
   ProcessIO,
+  ProcessSnapshot,
   SameRealmProcessHandle,
   SpawnOptions,
   WorkerProcessHandle,
 } from './process-manager.ts';
+export {
+  observeProcessTerminalOutcome,
+  type ProcessTerminalEventSource,
+  type ProcessTerminalOutcome,
+} from './process-terminal-outcome.ts';
 
 // ADR-0011 phase 1 — SAB sync-IPC primitives.
 export {
@@ -74,6 +87,7 @@ export {
 } from './ipc/sync-rpc.ts';
 export {
   SyncRpcDispatcher,
+  type SyncRpcCallerContext,
   type SyncRpcDispatcherOptions,
   type SyncRpcHandler,
 } from './ipc/sync-dispatch.ts';
@@ -91,6 +105,7 @@ export {
   type KernelEntryCapabilityPorts,
   type KernelProcessSpec,
   type KernelProcessStdioPorts,
+  type KernelStdioOutputWriter,
   type KernelSyncApi,
   type KernelSyncCall,
   consumeKernelEntryCapabilityPorts,

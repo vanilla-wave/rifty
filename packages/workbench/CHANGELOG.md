@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Installed nodemon owns curated Node-server development (ADR-0327).** Exact
+  script bytes select direct-entry or installed-bin execution; recursive apps
+  reuse PTY/preview ownership and the owner-root finite `ps` surface.
+
 - Initial sealed Workbench root, Playground companion, and five explicit worker
   deployment entries (ADR-0263, ADR-0282).
 
@@ -20,6 +24,8 @@
 - Exact Vite 8.0.16 definitions serialize the visible npm-standard proven
   Rolldown WASI runtime override before project identity; an explicit caller
   value wins and every other Vite version remains unchanged (ADR-0336).
+- Derive default and runtime direct-Node commands from one canonical formatter.
+
 - Regenerated install-artifact identity now binds the schema-2 builtin shadow
   catalog, invalidating stale worker install stamps after the policy authority
   change (ADR-0328).
@@ -36,6 +42,22 @@
 - Preserve an exact trusted dependency tree across Scratch-to-project Save:
   the existing package FIFO copies claim-free bytes, then mints target-root
   trust before the durable catalog pointer commits (ADR-0329).
+- Node-entry bundles now adopt the kernel-installed process once before guest
+  import, preserving recursive PID authority in production builds (ADR-0334).
+
+- Recursive owner `execSync` now captures the kernel handle's semantic
+  stdout/stderr streams instead of replacing its raw `MessagePort` handlers,
+  preserving terminal drain accounting and finite Chromium completion.
+
+- Preview routes now consume PID-scoped private listening control and retain
+  newer live ownership when stale or never-listening child teardown arrives.
+
+- Preserve `ShellCommandLifecycleError` through project-path redaction,
+  including inside `AggregateError`, so nodemon Worker peer death stays a PTY
+  lifecycle error instead of a fabricated command exit.
+
+- Physical child/owner peer death now settles recursive execution, TypeScript
+  requests, owner lifetime, and direct-server preview teardown without hangs.
 
 - Preserve the live `package.json` during deferred first install, and fold its
   exact generated lockfile into the untouched Starter root under the

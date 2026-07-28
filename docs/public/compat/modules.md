@@ -30,6 +30,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | ESM top-level `await` | ✅ | |
 | ESM live bindings (named import + re-export) | ✅ | Via member access into source-module namespace |
 | CJS cycles (half-populated exports visible) | ✅ | |
+| CJS `module` metadata and lifecycle | ✅ | One registry record owns `id`, `filename`, `path`, search `paths`, first `parent`, `children`, cache identity, cycle publication, `loaded`, and failed-load unlink (ADR-0325; Node 24 parity). The separate public `require.cache` mutation surface remains the gap below. |
 | ESM cycles (mutating exports visible) | ✅ | |
 | CJS → ESM outer + namespace identity | ✅ | `default` and `module.exports` are the exact CJS outer; one namespace per loaded record; rifty coherent invalidation replaces record + namespace together. Parity: `modules/cjs-esm-namespace`, `modules/cjs-cycle-import-of-inflight` |
 | CJS → ESM named exports + reflection | ❌ | Values snapshot, but names come from runtime enumerable own keys rather than Node's static analysis, and descriptors are not Module Namespace exotic descriptors; tracked in `backlog/runtime-js/cjs-esm-static-named-exports` |

@@ -114,6 +114,9 @@ export interface NodeCliProjectSpec extends NodeProjectSpecBase {
 
 export type ProjectSpec = ViteProjectSpec | NodeServerProjectSpec | NodeCliProjectSpec;
 
+const NODEMON_VERSION = '3.1.14';
+const NODEMON_DEV_COMMAND = 'nodemon --legacy-watch --no-stdin --no-update-notifier src/main.js';
+
 /**
  * The `<script>` src is RELATIVE and DERIVED from the entry path, so seeded
  * HTML always agrees with the declared entry without escaping the routed
@@ -134,22 +137,20 @@ function buildIndexHtml(title: string, entryRelativePath: string): string {
 }
 
 /**
- * The package.json `dev`/`start` script body for a spec — `'vite'` for the vite
- * runtime, `node <entry>` for a node server. Single source for the script the
- * page-realm `npm run` matcher recognises and the seeded package.json declares.
+ * Exact package.json `dev` body: installed nodemon for the three pinned server
+ * templates, otherwise the runtime's direct command.
  */
 export function devScriptCommand(spec: ProjectSpec): string {
   if (spec.runtime === 'vite') return 'vite';
+  if (spec.runtime === 'node-server' && spec.install.nodemon === NODEMON_VERSION) {
+    return NODEMON_DEV_COMMAND;
+  }
   return `node ${spec.entry.relativePath.replace(/^\/+/, '')}`;
 }
 
 /**
- * Is `name` one of the spec's lifecycle-owning dev-line script aliases (the keys
- * `projectScripts` seeds — `dev`/`vite` or `dev`/`start`)? Node-server dev
- * aliases still use the lifecycle-owned preview path. Vite aliases run through
- * the real shell/bin path, so the script body is the source of truth. Other
- * package scripts (e.g. `build`/`lint`) route through the shell/.bin path rather
- * than silently booting dev.
+ * Is `name` one of the seeded auto-boot aliases? Runtime execution still
+ * selects from the exact resolved script body, not this name.
  */
 export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
   return Object.hasOwn(projectScripts(spec), name);
@@ -171,14 +172,14 @@ export function terminalDevLine(spec: ProjectSpec, root: string): string {
 }
 
 /**
- * package.json `scripts` for a spec. Every alias (`dev`/`vite`/`start`) runs the
- * dev-server command, so `npm run <any>` here boots the dev server — the single
- * source the owner shell uses to recognize node-server lifecycle scripts. Vite
- * scripts stay on the generic installed-bin path.
+ * package.json `scripts` for a spec. Node projects keep `start` on the direct
+ * entry while `dev` may deliberately select an installed supervisor.
  */
 export function projectScripts(spec: ProjectSpec): Record<string, string> {
-  const body = devScriptCommand(spec);
-  return spec.runtime === 'vite' ? { dev: body, vite: body } : { dev: body, start: body };
+  const dev = devScriptCommand(spec);
+  if (spec.runtime === 'vite') return { dev, vite: dev };
+  const start = `node ${spec.entry.relativePath.replace(/^\/+/, '')}`;
+  return { dev, start };
 }
 
 const GIT_INIT_CONFIG = `[core]

@@ -20,8 +20,8 @@ function spec(
     env,
     cwd: '/workspace',
     stdio: {
-      stdout: stdout.port1,
-      stderr: stderr.port1,
+      stdout: { write: (bytes) => stdout.port1.postMessage(bytes) },
+      stderr: { write: (bytes) => stderr.port1.postMessage(bytes) },
       stdin: stdin.port1,
       ipc,
     },

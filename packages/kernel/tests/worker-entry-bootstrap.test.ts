@@ -22,6 +22,7 @@ import {
   type WorkerSpawnSpec,
   runEntryLifecycle,
 } from '../src/worker-entry.ts';
+import { createWorkerOutputState } from '../src/worker-stdio-drain.ts';
 
 const sourceEntryCannotCarryBootstrap: WorkerEntryDescriptor = {
   kind: 'source',
@@ -48,6 +49,7 @@ function makeSpec(entry: WorkerEntryDescriptor): WorkerSpawnSpec {
     env: {},
     cwd: '/',
     stdio: {} as WorkerSpawnSpec['stdio'],
+    outputState: createWorkerOutputState(),
     syncRing: new SharedArrayBuffer(64),
     pid: 2,
     ppid: 1,

@@ -1,6 +1,5 @@
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import type { BinExecutorDeps, BinSpawnRequest } from '../glue/bin-executor.ts';
-import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
 import type { OwnerPtyRunAdmission } from '../glue/pty-protocol.ts';
 import { type DevServerController, runDevServerShellCommand } from './dev-server-controller.ts';
 import type { NodeRunHooks } from './owner-child-node-executor.ts';
@@ -65,7 +64,7 @@ export function createInstalledBinPreviewHooks(options: {
   /** Owner-wide allocator; per-shell counters collide across sibling terminals. */
   readonly allocateSid: () => string;
   readonly previews: PreviewRegistry;
-}): Pick<BinExecutorDeps, 'onStart' | 'onMessage' | 'onExit'> {
+}): Pick<BinExecutorDeps, 'onStart' | 'onListening' | 'onExit'> {
   const launches = new WeakMap<BinSpawnRequest, InstalledBinLaunch>();
   return {
     onStart(req, ctx) {
@@ -82,16 +81,16 @@ export function createInstalledBinPreviewHooks(options: {
         ...(req.previewScope ? { previewScope: req.previewScope } : {}),
       });
     },
-    onMessage(req, message) {
-      if (!isNodeChildMessage(message)) return;
+    onListening(req, control) {
       const launch = launches.get(req);
       if (launch === undefined) return;
-      const previewScope = message.previewScope ?? launch.previewScope;
+      const previewScope = control.previewScope ?? launch.previewScope;
       if (launch.source === 'preview') {
-        options.previews.setPreview(launch.sid, message.ports, previewScope, launch.origin);
+        options.previews.setPreview(launch.sid, control.ports, previewScope, launch.origin);
         return;
       }
-      options.previews.addNode(launch.sid, message.ports, previewScope, {
+      options.previews.addNode(launch.sid, control.ports, previewScope, {
+        pid: control.pid,
         origin: launch.origin,
         cwd: launch.cwd,
         labelBase: launch.labelBase,
@@ -121,8 +120,9 @@ export function createNodePreviewRunHooks(options: {
     sid: options.sid,
     previewScope: options.previewScope,
     ...(options.remoteFsRoot === undefined ? {} : { remoteFsRoot: options.remoteFsRoot }),
-    onListening: (sid, ports, previewScope) =>
+    onListening: (sid, pid, ports, previewScope) =>
       options.previews.addNode(sid, ports, previewScope ?? options.previewScope, {
+        pid,
         origin,
         cwd: options.cwd,
       }),

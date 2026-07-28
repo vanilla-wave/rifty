@@ -16,7 +16,11 @@
  */
 
 import type { BinExecutor, CommandContext } from '@riftydev/shell';
-import { type ForegroundWritable, runForegroundChild } from './run-foreground-child.ts';
+import {
+  type ForegroundListeningControl,
+  type ForegroundWritable,
+  runForegroundChild,
+} from './run-foreground-child.ts';
 
 /** Read-side of a worker stdio stream (subset of `@riftydev/io` `Readable`). */
 export interface BinReadable {
@@ -35,6 +39,7 @@ export interface BinWorkerHandle {
   stdin(): ForegroundWritable;
   on(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
+  onListeningControl?: (listener: (control: ForegroundListeningControl) => void) => unknown;
   send?(message: unknown): unknown;
   resize(cols: number, rows: number): unknown;
   kill(signal?: string): unknown;
@@ -67,6 +72,12 @@ export interface BinExecutorDeps {
   readonly onSpawn?: (req: BinSpawnRequest, handle: BinWorkerHandle, ctx: CommandContext) => void;
   /** Optional child→owner IPC hook (e.g. listened ports from server-capable bins). */
   readonly onMessage?: (req: BinSpawnRequest, message: unknown, ctx: CommandContext) => void;
+  /** Private child→owner listening control; never exposed through guest IPC. */
+  readonly onListening?: (
+    req: BinSpawnRequest,
+    control: ForegroundListeningControl,
+    ctx: CommandContext,
+  ) => void;
   /** Optional exit hook (runs before the executor promise resolves). */
   readonly onExit?: (req: BinSpawnRequest, ctx: CommandContext) => void;
 }
@@ -99,6 +110,9 @@ export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
     deps.onSpawn?.(req, handle, ctx);
     return runForegroundChild(handle, ctx, {
       onMessage: deps.onMessage ? (message) => deps.onMessage?.(req, message, ctx) : undefined,
+      onListening: deps.onListening
+        ? (control) => deps.onListening?.(req, control, ctx)
+        : undefined,
       onExit: deps.onExit ? () => deps.onExit?.(req, ctx) : undefined,
     });
   };

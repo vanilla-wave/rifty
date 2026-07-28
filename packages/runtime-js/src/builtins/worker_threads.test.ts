@@ -10,14 +10,20 @@ import { Writable } from '@riftydev/io';
  * `tests/conformance/builtins/worker_threads.test.ts`.
  */
 import {
+  KERNEL_PROCESS_SPEC_KEY,
   type ProcessHandle,
   type SpawnWorkerSpec,
   globalProcessManager,
   publishKernelEntryBootstrap,
+  publishKernelProcessSpec,
   setKernelWorkerUrl,
 } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  closeKernelWorkerPeer,
+  installKernelWorkerBoundary,
+} from '../internal/kernel-worker-boundary.test-helper.ts';
 import { EventEmitter } from './events.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
@@ -26,6 +32,10 @@ import {
   buildNodeEntryWorkerEntry,
 } from './node-entry-runtime-config.ts';
 import * as nodeEntryUrl from './node-entry-url.ts';
+import {
+  readActiveNodeProcessBootstrap,
+  setActiveNodeProcessBootstrap,
+} from './process-bootstrap-identity.ts';
 import { NodeProcess, setProcessCwd } from './process.ts';
 import workerThreadsModule, {
   Worker,
@@ -37,9 +47,6 @@ import '../module-loader/loader.ts';
 let warnSpy: ReturnType<typeof vi.spyOn>;
 type Coi = { crossOriginIsolated?: boolean };
 type WorkerProcessHandle = Extract<ProcessHandle, { kind: 'worker' }>;
-type ProcessWithWorkerIpc = NodeJS.Process & {
-  send?: (message: unknown) => unknown;
-};
 type NodeEntryUrlContract = typeof nodeEntryUrl & {
   configureNodeEntryWorker(url: string | URL, runtimeEnv: Readonly<Record<string, string>>): void;
 };
@@ -58,6 +65,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   (globalThis as Coi).crossOriginIsolated = false;
   publishKernelEntryBootstrap(null);
+  Reflect.deleteProperty(globalThis, KERNEL_PROCESS_SPEC_KEY);
   resetNodeEntryWorkerUrl();
   setProcessCwd('/workspace');
   resetSyncMirror();
@@ -220,6 +228,33 @@ globalThis.onmessage = ({ data }) => {
     });
   });
 
+  it('closes the public Worker lifecycle when its kernel peer dies', async () => {
+    const restoreWorker = installKernelWorkerBoundary(closeKernelWorkerPeer);
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const parent = new NodeProcess();
+
+    try {
+      await withProcessGlobal(parent, async () => {
+        const events: unknown[] = [];
+        const worker = new Worker('/workspace/w-peer-death.mjs');
+        worker.on('error', (error) => events.push(['error', error]));
+        worker.on('exit', (code) => events.push(['exit', code]));
+        await onceEvent(worker, 'exit');
+
+        expect(events).toEqual([
+          ['error', expect.objectContaining({ message: expect.stringMatching(/peer.*closed/i) })],
+          ['exit', 1],
+        ]);
+      });
+    } finally {
+      restoreWorker();
+    }
+  });
+
   it("delivers one kernel construction fault once through emnapi's Node bridge", async () => {
     const constructionError = new Error('kernel spawn failed once');
     vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
@@ -294,6 +329,64 @@ globalThis.onmessage = ({ data }) => {
       );
       await worker.terminate();
     });
+  });
+
+  it('keeps bootstrap ancestry when guest pid fields and the public spec are poisoned', async () => {
+    let identity: { readonly pid: number; readonly ppid: number } | undefined;
+    const restoreWorker = installKernelWorkerBoundary((init) => {
+      identity = { pid: init.spec.pid, ppid: init.spec.ppid };
+      closeKernelWorkerPeer(init);
+    });
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const channels = Array.from({ length: 4 }, () => new MessageChannel());
+    const trustedSpec = {
+      pid: 41,
+      ppid: 7,
+      argv: ['rifty', '/workspace/parent.mjs'],
+      env: {},
+      cwd: '/workspace',
+      stdio: {
+        stdout: { write: (bytes: Uint8Array) => channels[0]!.port1.postMessage(bytes) },
+        stderr: { write: (bytes: Uint8Array) => channels[1]!.port1.postMessage(bytes) },
+        stdin: channels[2]!.port1,
+        ipc: channels[3]!.port1,
+      },
+    };
+    const parent = new NodeProcess(trustedSpec);
+    parent.pid = 98_765;
+    parent.ppid = 98_764;
+    publishKernelProcessSpec({ ...trustedSpec, pid: 87_654, ppid: 87_653 });
+    const guestReplacement = Object.assign(Object.create(parent) as Record<string, unknown>, {
+      pid: 76_543,
+      ppid: 76_542,
+      argv: ['poison', '/poison/parent.mjs'],
+      env: { POISON: '1' },
+      cwd: () => '/poison',
+    });
+    try {
+      await withProcessGlobal(
+        guestReplacement,
+        async () => {
+          const worker = new Worker('/workspace/w-trusted-parent.mjs');
+          worker.on('error', () => {});
+          await onceEvent(worker, 'exit');
+
+          expect(identity).toEqual({ pid: 41, ppid: 7 });
+        },
+        parent,
+      );
+    } finally {
+      restoreWorker();
+      for (const channel of channels) {
+        channel.port1.close();
+        channel.port2.close();
+      }
+    }
   });
 
   it('inherits the parent remote-FS root while the worker process spec stays public', async () => {
@@ -507,16 +600,7 @@ globalThis.onmessage = ({ data }) => {
     expect(globalProcessManager.spawnWorker).not.toHaveBeenCalled();
   });
 
-  it('exposes parentPort and workerData inside a kernel-backed worker child', () => {
-    const proc = globalThis.process as ProcessWithWorkerIpc;
-    const originalSend = proc.send;
-    const originalOn = proc.on;
-    const sent: unknown[] = [];
-    let capturedMessageHandler: ((message: unknown) => void) | undefined;
-
-    proc.env.RIFTY_WORKER_THREADS = 'guest-poison';
-    proc.env.RIFTY_WORKER_THREAD_ID = '999';
-    proc.env.RIFTY_WORKER_DATA_JSON = '{"mode":"guest-poison"}';
+  it('exposes parentPort without exposing process IPC inside a kernel worker child', async () => {
     publishKernelEntryBootstrap({
       protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
       payload: {
@@ -529,19 +613,33 @@ globalThis.onmessage = ({ data }) => {
         },
       },
     });
-    proc.send = (message: unknown) => {
-      sent.push(message);
-      return true;
-    };
-    proc.on = ((event: string | symbol, handler: (...args: unknown[]) => void) => {
-      if (event === 'message') {
-        capturedMessageHandler = handler as (message: unknown) => void;
-        return proc;
-      }
-      return originalOn.call(proc, event, handler as never);
-    }) as NodeJS.Process['on'];
+    const ipc = new MessageChannel();
+    const port = (): MessagePort => new MessageChannel().port1;
+    const writer = (target: MessagePort) => ({
+      write: (bytes: Uint8Array) => target.postMessage(bytes),
+    });
+    const proc = new NodeProcess({
+      pid: 3,
+      ppid: 2,
+      argv: ['rifty', '/workspace/worker.mjs'],
+      env: {
+        RIFTY_WORKER_THREADS: 'guest-poison',
+        RIFTY_WORKER_THREAD_ID: '999',
+        RIFTY_WORKER_DATA_JSON: '{"mode":"guest-poison"}',
+      },
+      cwd: '/workspace',
+      stdio: {
+        stdout: writer(port()),
+        stderr: writer(port()),
+        stdin: port(),
+        ipc: ipc.port1,
+      },
+    });
+    const sent: unknown[] = [];
+    ipc.port2.onmessage = (event) => sent.push(event.data);
+    ipc.port2.start();
 
-    try {
+    await withProcessGlobal(proc, async () => {
       _resetFallbackWarnState();
       const wt = workerThreadsModule as {
         isMainThread: boolean;
@@ -557,20 +655,21 @@ globalThis.onmessage = ({ data }) => {
       expect(wt.isMainThread).toBe(false);
       expect(wt.threadId).toBe(77);
       expect(wt.workerData).toEqual({ mode: 'rolldown' });
+      expect(typeof proc.send).toBe('undefined');
+      expect(typeof proc.disconnect).toBe('undefined');
+      expect(typeof proc.connected).toBe('undefined');
+      expect(typeof proc.channel).toBe('undefined');
       wt.parentPort.postMessage({ from: 'child' });
-      capturedMessageHandler?.({ from: 'parent' });
+      ipc.port2.postMessage({ kind: 'ipc:message', payload: { from: 'parent' } });
 
-      expect(sent).toEqual([{ from: 'child' }]);
-      expect(received).toEqual([{ from: 'parent' }]);
-    } finally {
-      proc.env.RIFTY_WORKER_THREADS = undefined;
-      proc.env.RIFTY_WORKER_THREAD_ID = undefined;
-      proc.env.RIFTY_WORKER_DATA_JSON = undefined;
-      publishKernelEntryBootstrap(null);
-      proc.send = originalSend;
-      proc.on = originalOn;
+      await vi.waitFor(() =>
+        expect(sent).toEqual([{ kind: 'ipc:message', payload: { from: 'child' } }]),
+      );
+      await vi.waitFor(() => expect(received).toEqual([{ from: 'parent' }]));
       _resetFallbackWarnState();
-    }
+    });
+    ipc.port1.close();
+    ipc.port2.close();
   });
 });
 
@@ -713,18 +812,27 @@ function makeFakeWorkerHandle(sent: unknown[]): WorkerProcessHandle {
 
 function seededWorkerProcess(env: Readonly<Record<string, string>>): NodeProcess {
   const port = (): MessagePort => new MessageChannel().port1;
+  const writer = (target: MessagePort) => ({
+    write: (bytes: Uint8Array) => target.postMessage(bytes),
+  });
   return new NodeProcess({
     pid: 3,
     ppid: 2,
     argv: ['rifty', '/workspace/worker.mjs'],
     env,
     cwd: '/workspace',
-    stdio: { stdout: port(), stderr: port(), stdin: port(), ipc: port() },
+    stdio: { stdout: writer(port()), stderr: writer(port()), stdin: port(), ipc: port() },
   });
 }
 
-async function withProcessGlobal<T>(process: NodeProcess, run: () => Promise<T>): Promise<T> {
+async function withProcessGlobal<T>(
+  process: unknown,
+  run: () => Promise<T>,
+  trustedProcess: NodeProcess = process as NodeProcess,
+): Promise<T> {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
+  const previousActive = readActiveNodeProcessBootstrap();
+  setActiveNodeProcessBootstrap(trustedProcess, true);
   Object.defineProperty(globalThis, 'process', {
     value: process,
     configurable: true,
@@ -733,6 +841,10 @@ async function withProcessGlobal<T>(process: NodeProcess, run: () => Promise<T>)
   try {
     return await run();
   } finally {
+    setActiveNodeProcessBootstrap(
+      previousActive?.process ?? null,
+      previousActive?.federated ?? false,
+    );
     if (descriptor === undefined) {
       Reflect.deleteProperty(globalThis, 'process');
     } else {

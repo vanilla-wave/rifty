@@ -58,6 +58,11 @@ guest the same kernel treatment as a `node`-backed worker child.
   `(chunk) => process.stdout.write(chunk)` callbacks on the `Wasi` instance —
   no new framing/primitives. Encoding (`TextEncoder` → `Uint8Array`) lives in
   the existing kernel-side `process.stdout.write` shim.
+
+  > **Corrected (2026-07-27, ADR-0332):** raw output ports and admission state
+  > stop at kernel bootstrap. Runtime-wasi fd 1/fd 2 receive the shared semantic
+  > byte writers, so their committed chunks use the same terminal-drain proof.
+
 - **VFS sharing.** The spawned worker is a fresh realm. For M8 toolchain calls
   it uses the standard `setSyncMirror` / `MemoryFsSync` route that
   `runtime-js`'s worker-entry uses (ADR-0014 + ADR-0037); the existing WASI

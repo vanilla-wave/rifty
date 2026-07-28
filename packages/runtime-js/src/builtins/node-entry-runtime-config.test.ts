@@ -40,6 +40,10 @@ describe('node-entry host bootstrap config', () => {
     resetNodeEntryWorkerUrl();
   });
 
+  it('uses the one atomic node-entry v2 wire contract', () => {
+    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v2');
+  });
+
   it('snapshots host runtime values out of band from the guest environment', () => {
     const hostRuntime = {
       RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js',
@@ -137,6 +141,67 @@ describe('node-entry host bootstrap config', () => {
         bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT } } },
       });
     }
+  });
+
+  it('inherits the private preview scope into recursively configured programs', () => {
+    publishKernelEntryBootstrap({
+      protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+      payload: {
+        hostRuntime: HOST_RUNTIME,
+        launch: {
+          kind: 'program',
+          bin: true,
+          remoteFs: true,
+          remoteFsRoot: REMOTE_FS_ROOT,
+          nodeServe: true,
+          previewScope: 'owner-preview',
+        },
+      },
+    });
+    configureNodeEntryWorker('https://host.test/node.js', HOST_RUNTIME);
+
+    expect(
+      buildConfiguredNodeEntryWorkerEntry({
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        nodeServe: true,
+      }),
+    ).toMatchObject({
+      bootstrap: {
+        payload: {
+          launch: {
+            previewScope: 'owner-preview',
+            remoteFsRoot: REMOTE_FS_ROOT,
+          },
+        },
+      },
+    });
+  });
+
+  it('rejects recursive remote FS before spawn when the parent has no owner-root proof', () => {
+    publishKernelEntryBootstrap({
+      protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+      payload: {
+        hostRuntime: HOST_RUNTIME,
+        launch: {
+          kind: 'program',
+          bin: false,
+          remoteFs: true,
+          nodeServe: true,
+        },
+      },
+    });
+    configureNodeEntryWorker('https://host.test/node.js', HOST_RUNTIME);
+
+    expect(() =>
+      buildConfiguredNodeEntryWorkerEntry({
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        nodeServe: false,
+      }),
+    ).toThrow(/remote[- ]?FS.*root|remoteFsRoot/i);
   });
 
   it.each(['relative/root', '/not/normalized/../root', '/', ''])(

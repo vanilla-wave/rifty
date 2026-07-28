@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Worker-backed `child_process` plan and Node IPC (ADR-0326).** Recursive
+  `spawn`/`fork` runs a fresh owner-FS Worker with validated stdio/default-JSON
+  IPC and nodemon's finite `ps`/`SIGUSR2` forms; other forms stay loud gaps.
+- **One CJS module record owns Node metadata and lifecycle (ADR-0325):**
+  parent/children, cycles, cache identity, `loaded`, and failed-load unlink.
+
 - Owner `fs.*` sync-RPC handlers now publish every write, mkdir, remove,
   metadata update, rename, and copy through the optional shared VFS mutation
   guard; async guards defer the reply while unguarded calls stay synchronous
@@ -18,6 +24,25 @@
   object (ADR-0226).
 
 ### Fixed
+
+- Trusted process identity now survives duplicated production Worker bundles,
+  so recursive children keep the owner PID authority and publish preview state
+  (ADR-0334).
+
+- Same-realm `child_process` now preserves the child's trusted `process`
+  identity through async callbacks, child-bound builtins, nested children, and
+  `worker_threads`; owned async work keeps the child live until it settles.
+
+- A kernel-backed `worker_threads.Worker` now surfaces physical peer death as
+  `error` followed by `exit(1)` instead of remaining permanently live.
+
+- Recursive `execSync` workers reject physical peer death instead of leaving
+  the parent SAB call blocked forever.
+
+- Root-dispatched `execSync` children stay on the local process authority;
+  nested serving realms still federate through their published upstream.
+
+- Worker-backed `child_process` no longer falls back beside the parent for a missing cwd entry.
 
 - **TS transform provenance matches ADR-0316.** `transformSource` remains a
   provider-neutral async injection seam: Node parity supplies exact host

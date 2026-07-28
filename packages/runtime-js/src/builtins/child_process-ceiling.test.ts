@@ -9,8 +9,8 @@
  *   - the ripgrep tool -> the ripgrep BINARY
  * In a browser/WASI realm there is no shell and no process spawn, so any
  * command other than `node <script>` falls through `spawnViaSameRealm` ->
- * `execScript` and surfaces `spawn <cmd> ENOENT\n` on stderr with exit 127
- * (`child_process-exec.ts:54-58`). It MUST NOT fake-succeed.
+ * `execScript` and surfaces `spawn <cmd> ENOENT\n` on stderr with exit 127.
+ * It MUST NOT fake-succeed.
  *
  * This is a CONFORMANCE (rifty browser-ceiling) contract, NOT a Node-parity
  * case: real Node WOULD spawn `git`, so a parity diff is the wrong tool here.
@@ -71,17 +71,22 @@ describe('spawn ceiling (F09 / Q-2026-05-30-063) — impossible tools are walled
     expect(code).not.toBe(0);
   });
 
-  it('child.stdin.write throws NotImplementedError on the in-realm fallback', () => {
-    // Locks the documented no-shell stdin behavior (child_process.ts:76-89):
-    // the in-realm fallback has no worker stdin port, so a write is a loud
-    // throw rather than a silent no-op.
-    writeFileSync('/ceiling-stdin.js', '');
-    const child = spawn('node', ['/ceiling-stdin.js']);
-    expect(() => child.stdin.write('x')).toThrowError(
-      expect.objectContaining({
-        name: 'NotImplementedError',
-        feature: 'child.stdin.write',
-      }) as unknown as Error,
+  it('keeps node-script stdin a real pipe on the in-realm fallback', async () => {
+    writeFileSync(
+      '/ceiling-stdin.js',
+      "process.stdin.on('data', (chunk) => process.stdout.write(chunk));",
     );
+    const child = spawn('node', ['/ceiling-stdin.js']);
+    let stdout = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk as Uint8Array);
+    });
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+
+    child.stdin.write('x');
+    child.stdin.end();
+
+    await closed;
+    expect(stdout).toBe('x');
   });
 });

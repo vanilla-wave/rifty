@@ -14,9 +14,9 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SabRing, createSabRing } from './sab-ring.ts';
+import { REP_STATE_OFFSET, REQ_LEN_OFFSET, SabRing, createSabRing } from './sab-ring.ts';
 import { SyncRpcDispatcher } from './sync-dispatch.ts';
-import { encodeRequest } from './sync-rpc.ts';
+import { decodeReply, encodeRequest } from './sync-rpc.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -73,10 +73,10 @@ describe.skipIf(!hasWaitAsync)('SyncRpcDispatcher — event-driven responder (AD
     dispatcher.detachAll();
   });
 
-  it('an async handler defers re-arm until the reply is written, then services the next request', async () => {
+  it('an async handler parks the arm on HANDLING, then services the next request', async () => {
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
-    // Async handler: the reply lands on a later microtask/macrotask. Re-arm must
-    // wait for inFlight to clear, else the next request would be lost or spin.
+    // Async handler: the reply lands later, while the shared handling claim
+    // makes backstop pumps harmless and parks the one arm without spinning.
     dispatcher.register('slow', async (p) => {
       await new Promise((r) => setTimeout(r, 10));
       return p;
@@ -98,10 +98,8 @@ describe.skipIf(!hasWaitAsync)('SyncRpcDispatcher — event-driven responder (AD
   });
 
   it('a sync handler fires exactly once per request across many round-trips', async () => {
-    // Re-arm correctness: a sync handler's reply-writer re-arms from inside
-    // pumpOnce, and onArmSettled re-arms too. The handler must fire exactly once
-    // per request — no missed or duplicated dispatch. (The pendingArm guard also
-    // stops the two re-arm paths from leaking a second parked promise per cycle.)
+    // Re-arm correctness: the handler must fire exactly once per request, with
+    // no missed dispatch and no second parked promise per cycle.
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
     const handler = vi.fn((p: unknown) => p);
     dispatcher.register('echo', handler);
@@ -196,6 +194,62 @@ describe('SyncRpcDispatcher — busy-poll fallback when waitAsync is absent (ADR
 });
 
 describe('SyncRpcDispatcher — a dropped reply is LOUD, never silent', () => {
+  it('a backstop pump ignores its published reply until the caller consumes it', () => {
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    dispatcher.register('echo', (p) => p);
+    const { sab, ring } = createSabRing({ payloadCapacity: 256 });
+    const caller = SabRing.attach(sab, 256);
+    caller.writeRequest(encodeRequest({ method: 'echo', payload: 1 }));
+
+    dispatcher.pumpOnce(ring);
+
+    expect(() => dispatcher.pumpOnce(ring)).not.toThrow();
+    expect(decodeReply(caller.waitReply(0))).toMatchObject({ ok: true, value: 1 });
+    dispatcher.detachAll();
+  });
+
+  it('returns an in-band error when a handler result exceeds the reply slot', () => {
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    dispatcher.register('oversized', () => 'x'.repeat(1_024));
+    const { sab, ring } = createSabRing({ payloadCapacity: 256 });
+    const caller = SabRing.attach(sab, 256);
+    caller.writeRequest(encodeRequest({ method: 'oversized', payload: null }));
+
+    dispatcher.pumpOnce(ring);
+
+    expect(decodeReply(caller.waitReply(0))).toMatchObject({
+      ok: false,
+      error: {
+        name: 'RingPayloadTooLargeError',
+        code: 'ERINGPAYLOAD',
+        message: expect.stringMatching(/exceeds capacity/),
+      },
+    });
+  });
+
+  it('returns an in-band error for a corrupt claimed request length', () => {
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    dispatcher.register('echo', (payload) => payload);
+    const { sab, ring } = createSabRing({ payloadCapacity: 256 });
+    const caller = SabRing.attach(sab, 256);
+    caller.writeRequest(encodeRequest({ method: 'echo', payload: 1 }));
+    Atomics.store(new Int32Array(sab), REQ_LEN_OFFSET >> 2, 257);
+
+    expect(() => dispatcher.pumpOnce(ring)).not.toThrow();
+    expect(decodeReply(caller.waitReply(0))).toMatchObject({
+      ok: false,
+      error: {
+        name: 'RingCorruptRequestError',
+        code: 'ERINGCORRUPTREQUEST',
+        message: expect.stringMatching(/corrupt request length 257/),
+      },
+    });
+
+    caller.writeRequest(encodeRequest({ method: 'echo', payload: 2 }));
+    dispatcher.pumpOnce(ring);
+    expect(decodeReply(caller.waitReply(0))).toMatchObject({ ok: true, value: 2 });
+  });
+
   it('when even the error reply cannot land, console.error names the method + ring state', () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
@@ -205,7 +259,7 @@ describe('SyncRpcDispatcher — a dropped reply is LOUD, never silent', () => {
     caller.writeRequest(encodeRequest({ method: 'echo', payload: 1 }));
     // Forge a protocol violation: occupy the reply slot so BOTH the value reply
     // and the fallback error reply fail their "previous reply unread" guard.
-    ring.writeReply(new Uint8Array([9]));
+    Atomics.store(new Int32Array(sab), REP_STATE_OFFSET >> 2, 1);
     dispatcher.pumpOnce(ring);
     expect(errSpy).toHaveBeenCalledTimes(1);
     const line = String(errSpy.mock.calls[0]?.[0]);

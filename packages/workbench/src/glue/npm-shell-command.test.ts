@@ -469,7 +469,7 @@ describe('npm-shell-command — happy path', () => {
 
     expect(exitCode).toBe(0);
     expect(calls).toEqual([{ name: 'vite', command: 'vite', cwd: '/proj' }]);
-    expect(rec.stdout.join('')).toContain('script:vite');
+    expect(rec.stdout.join('')).toBe('> vite\nscript:vite\n');
   });
 
   it('forwards npm run arguments after the script name', async () => {

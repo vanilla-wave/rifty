@@ -47,6 +47,14 @@ import {
   publishKernelProcessSpec,
   publishKernelSyncApi,
 } from './shared-globals.ts';
+import {
+  type WorkerOutputState,
+  bindWorkerStdioOutput,
+  sealWorkerOutput,
+  workerOutputAttestation,
+} from './worker-stdio-drain.ts';
+
+const scheduleWorkerMicrotask = globalThis.queueMicrotask.bind(globalThis);
 
 // Legacy re-exports: historical consumers (runtime-js, tests) imported these
 // from here. Canonical home is now `shared-globals.ts`; new code SHOULD prefer
@@ -94,6 +102,8 @@ export interface WorkerSpawnSpec {
   readonly env: Readonly<Record<string, string>>;
   readonly cwd: string;
   readonly stdio: WorkerStdioPorts;
+  /** Opaque kernel-owned capability for the stdout/stderr terminal cut. */
+  readonly outputState: WorkerOutputState;
   readonly syncRing: SharedArrayBuffer;
   /**
    * Per-direction SAB ring payload capacity (ADR-0084 #19). The parent picks
@@ -128,6 +138,12 @@ export interface WorkerInitMessage {
 export interface WorkerExitMessage {
   readonly type: 'exit';
   readonly code: number;
+  /**
+   * Proof the frame came from the worker runtime and not from guest code on
+   * the shared worker-global channel — {@link workerOutputAttestation} of the
+   * kernel-owned output state, which guests never receive.
+   */
+  readonly attestation: string;
 }
 
 /**
@@ -222,7 +238,12 @@ function publishProcessSpec(spec: WorkerSpawnSpec): void {
     argv: spec.argv,
     env: spec.env,
     cwd: spec.cwd,
-    stdio: spec.stdio,
+    stdio: {
+      stdout: bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout'),
+      stderr: bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr'),
+      stdin: spec.stdio.stdin,
+      ipc: spec.stdio.ipc,
+    },
   };
   publishKernelProcessSpec(out);
 }
@@ -258,11 +279,7 @@ async function runEntry(entry: WorkerEntryDescriptor): Promise<void> {
   await fn();
 }
 
-function closePorts(ports: WorkerStdioPorts): void {
-  // Closing stdout/stderr lets the parent's consumer observe EOF. stdin is
-  // closed here for symmetry. `ipc` (ADR-0045) is closed last so any
-  // disconnect frame the runtime-js installer posted during teardown has
-  // already left the realm.
+function closeWorkerPorts(ports: WorkerStdioPorts): void {
   try {
     ports.stdout.close();
   } catch {
@@ -397,14 +414,24 @@ export function finalizeWorkerEntry(
   outcome: WorkerEntryOutcome,
 ): void {
   if (spec.serve === true && !outcome.threw) return;
-  const exitMessage: WorkerExitMessage = { type: 'exit', code: outcome.code };
+  const exitMessage: WorkerExitMessage = {
+    type: 'exit',
+    code: outcome.code,
+    attestation: workerOutputAttestation(spec.outputState),
+  };
   let firstError: unknown;
+  const childSealed = sealWorkerOutput(spec.outputState);
   try {
-    target.postMessage(exitMessage);
+    if (childSealed) target.postMessage(exitMessage);
   } catch (error) {
-    firstError = error;
+    firstError ??= error;
+    try {
+      spec.stdio.ipc.postMessage({ kind: 'control:peer-closing' });
+    } catch {
+      /* original attestation failure remains the actionable error */
+    }
   }
-  closePorts(spec.stdio);
+  closeWorkerPorts(spec.stdio);
   closeCapabilityPorts(spec.entry);
   try {
     target.close();
@@ -412,6 +439,41 @@ export function finalizeWorkerEntry(
     firstError ??= error;
   }
   if (firstError !== undefined) throw firstError;
+}
+
+/** Bind the realm's native close to one generation-scoped peer-death proof. */
+export function installWorkerPeerCloseAttestation(
+  target: { postMessage(message: unknown): void; close(): void },
+  spec: WorkerSpawnSpec,
+): () => void {
+  const nativeClose = target.close.bind(target);
+  let closing = false;
+  target.close = (): void => {
+    if (closing) {
+      nativeClose();
+      return;
+    }
+    closing = true;
+    try {
+      if (sealWorkerOutput(spec.outputState)) {
+        try {
+          spec.stdio.ipc.postMessage({ kind: 'control:peer-closing' });
+        } catch {
+          target.postMessage({
+            type: 'exit',
+            code: 1,
+            attestation: workerOutputAttestation(spec.outputState),
+          } satisfies WorkerExitMessage);
+        }
+      }
+    } finally {
+      nativeClose();
+    }
+  };
+  return () => {
+    closing = true;
+    nativeClose();
+  };
 }
 
 /**
@@ -435,6 +497,13 @@ export function installWorkerEntry(
     target.removeEventListener('message', onMessage as unknown as EventListener);
 
     const spec = msg.spec;
+    const closeAfterExit = installWorkerPeerCloseAttestation(target, spec);
+    target.addEventListener('error', (event) => {
+      scheduleWorkerMicrotask(() => {
+        if (!event.defaultPrevented) sealWorkerOutput(spec.outputState);
+      });
+    });
+    const stderr = bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr');
     // Run pre-entry hook + entry, drain a run-to-completion child's loop, and
     // compute the outcome — the realm-independent core (unit-tested via
     // runEntryLifecycle). ADR-0152: serve workers are kept
@@ -453,14 +522,21 @@ export function installWorkerEntry(
       drainHook,
       runEntry,
       writeStderr: (bytes) => {
-        spec.stdio.stderr.postMessage(bytes);
+        stderr.write(bytes);
       },
     });
 
     // ADR-0144: a `serve` worker that finished setup cleanly stays alive; every
     // other case posts exit + closes the realm. (Lets the parent observe exit
     // before the realm dies.)
-    finalizeWorkerEntry(target, spec, outcome);
+    finalizeWorkerEntry(
+      {
+        postMessage: (message) => target.postMessage(message),
+        close: closeAfterExit,
+      },
+      spec,
+      outcome,
+    );
   };
 
   target.addEventListener('message', onMessage as unknown as EventListener);

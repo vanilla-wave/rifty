@@ -3,7 +3,14 @@
  * params, JSON body parsing, and iframe preview traffic.
  */
 import { expect, test } from '@playwright/test';
-import { capturePageProblems, expectTerminalContains, selectPreset } from './helpers/playground.ts';
+import {
+  capturePageProblems,
+  expectTerminalContains,
+  openShellTerminal,
+  runTerminalLineSettled,
+  selectPreset,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 const PORT = 3332;
 
@@ -21,13 +28,10 @@ test.describe('Koa API template through the SW preview bridge', () => {
 
     await selectPreset(page, 'koa-api');
 
-    await expectTerminalContains(
-      page,
-      '[real-vite/worker] starting server /src/main.js on port 3332',
-      150_000,
-    );
     await expectTerminalContains(page, 'npm: + koa@', 120_000);
     await expectTerminalContains(page, 'npm: + @koa/router@', 120_000);
+    await expectTerminalContains(page, 'npm: + nodemon@3.1.14', 120_000);
+    await expectTerminalContains(page, '[nodemon] starting `node src/main.js`', 45_000);
 
     const fetchState = async () =>
       page.evaluate(async (port: number) => {
@@ -140,6 +144,16 @@ test.describe('Koa API template through the SW preview bridge', () => {
     });
 
     await expectTerminalContains(page, '[koa] INSERT note #', 10_000);
+
+    const restartMarker = `koa-nodemon-${Date.now()}`;
+    await openShellTerminal(page);
+    await runTerminalLineSettled(page, `echo "console.log('${restartMarker}')" >> src/main.js`);
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('[nodemon] restarting due to changes');
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(restartMarker);
+    await expect.poll(async () => (await fetchState()).notes, { timeout: 45_000 }).toBe(2);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
     problems.assertNoViteImportErrors();
   });
 });

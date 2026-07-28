@@ -18,6 +18,10 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function settledOr<T, TPending>(promise: Promise<T>, pending: TPending): Promise<T | TPending> {
+  return Promise.race([promise, Promise.resolve(pending)]);
+}
+
 type CorrelatedAdvertisement = PreviewAdvertisement & {
   readonly ptySid: string;
   readonly ptyRid: string;
@@ -227,6 +231,7 @@ describe('preview readiness', () => {
     ['url', { url: '/preview/5173/replaced/' }],
     ['source', { source: 'node' as const }],
     ['session', { sid: 'replacement-run' }],
+    ['preview scope', { previewScope: 'replacement-scope' }],
   ] as const)('restarts proof when the advertised %s identity changes', async (_label, change) => {
     const h = harness();
     const ready = h.readiness.waitFor({
@@ -254,6 +259,61 @@ describe('preview readiness', () => {
       port: replacement.port,
       url: replacement.url,
     });
+  });
+
+  it('invalidates a routed probe on peer disappearance and ignores its late success', async () => {
+    const h = harness();
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: () => true,
+    });
+
+    h.publish([advertisement({ previewScope: 'scope-dead' })]);
+    h.swProofs[0]?.resolve();
+    await Promise.resolve();
+    expect(h.httpProofs).toHaveLength(1);
+
+    h.publish([]);
+    expect(h.teardowns[0]).toHaveBeenCalledTimes(1);
+    h.httpProofs[0]?.resolve({ ok: true, status: 200 });
+    await Promise.resolve();
+    expect(await settledOr(ready, 'pending')).toBe('pending');
+
+    h.publish([
+      advertisement({
+        port: 5174,
+        url: '/preview/5174/',
+        previewScope: 'scope-live',
+      }),
+    ]);
+    h.swProofs[1]?.resolve();
+    await Promise.resolve();
+    h.httpProofs[1]?.resolve({ ok: true, status: 200 });
+    await expect(ready).resolves.toEqual({ port: 5174, url: '/preview/5174/' });
+  });
+
+  it('recovers a late Broadcast snapshot only after fresh SW and routed-response proof', async () => {
+    const h = harness();
+    const ready = h.readiness.waitFor({
+      ownerToken: 'owner-a',
+      ptySid: TARGET_PTY_SID,
+      ptyRid: TARGET_PTY_RID,
+      matches: (entry) => entry.source === 'dev-server',
+    });
+
+    expect(h.events).toEqual(['request']);
+    h.publish([]);
+    expect(h.swProofs).toHaveLength(0);
+    h.publish([advertisement({ previewScope: 'late-live-scope' })]);
+    expect(await settledOr(ready, 'pending')).toBe('pending');
+
+    h.swProofs[0]?.resolve();
+    await Promise.resolve();
+    expect(await settledOr(ready, 'pending')).toBe('pending');
+    h.httpProofs[0]?.resolve({ ok: true, status: 200 });
+    await expect(ready).resolves.toEqual({ port: 5173, url: '/preview/5173/' });
   });
 
   it('rejects a failed controlling-service-worker proof and revokes the route', async () => {

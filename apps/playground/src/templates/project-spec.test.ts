@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { EXPRESS_SQLITE_TEMPLATE } from './express-sqlite.ts';
 import { HIDDEN_EMPTY_TEMPLATE } from './hidden-empty.ts';
+import { HONO_API_TEMPLATE } from './hono-api.ts';
+import { KOA_API_TEMPLATE } from './koa-api.ts';
+import { MARKDOWN_SSG_TEMPLATE } from './markdown-ssg.ts';
 import {
   type NodeCliProjectSpec,
   type NodeServerProjectSpec,
@@ -10,6 +14,7 @@ import {
   resolveBootstrapConfig,
   terminalDevLine,
 } from './project-spec.ts';
+import { SOCKET_LAB_TEMPLATE } from './socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './typescript.ts';
 import { VITE_TEMPLATE } from './vite.ts';
 import { VITE8_TEMPLATE } from './vite8.ts';
@@ -218,6 +223,39 @@ describe('resolveBootstrapConfig (node-server runtime)', () => {
     expect(pkg.scripts).toEqual({ dev: 'node src/main.js', start: 'node src/main.js' });
     expect(pkg.dependencies).toEqual(NODE_FIXTURE.install);
     expect(pkg.type).toBe('module');
+  });
+
+  it.each([
+    ['Express + SQLite', EXPRESS_SQLITE_TEMPLATE],
+    ['Hono API', HONO_API_TEMPLATE],
+    ['Koa API', KOA_API_TEMPLATE],
+  ])('%s pins real nodemon and its exact dev command', (_name, spec) => {
+    const pkg = JSON.parse(buildProjectPackageJson(spec).json) as {
+      readonly scripts: Readonly<Record<string, string>>;
+      readonly dependencies: Readonly<Record<string, string>>;
+    };
+
+    expect(pkg.dependencies.nodemon).toBe('3.1.14');
+    expect(pkg.scripts).toEqual({
+      dev: 'nodemon --legacy-watch --no-stdin --no-update-notifier src/main.js',
+      start: 'node src/main.js',
+    });
+  });
+
+  it.each([
+    ['Markdown SSG', MARKDOWN_SSG_TEMPLATE],
+    ['Socket Lab', SOCKET_LAB_TEMPLATE],
+  ])('%s remains on the canonical direct-node dev path', (_name, spec) => {
+    const pkg = JSON.parse(buildProjectPackageJson(spec).json) as {
+      readonly scripts: Readonly<Record<string, string>>;
+      readonly dependencies: Readonly<Record<string, string>>;
+    };
+
+    expect(pkg.dependencies.nodemon).toBeUndefined();
+    expect(pkg.scripts).toEqual({
+      dev: 'node src/main.js',
+      start: 'node src/main.js',
+    });
   });
 
   it('carries the runtime discriminant + sqlite flag for the worker branch', () => {

@@ -311,14 +311,15 @@ A small Koa server running as a node-server template.
 - \`/api/notes/:id\` — router params.
 - \`/api/notes\` — JSON POST flow through Koa's Node request stream.
 
-The data is in memory. Re-run the dev script to restart the server.
+The data is in memory, so every nodemon restart — any save to \`src/main.js\` —
+starts from the seeded notes again.
 `;
 
 export const KOA_API_TEMPLATE: NodeServerProjectSpec = {
   id: 'koa-api',
   displayName: 'Koa API',
   runtime: 'node-server',
-  install: { koa: '^2.15.0', '@koa/router': '^12.0.0' },
+  install: { koa: '^2.15.0', '@koa/router': '^12.0.0', nodemon: '3.1.14' },
   entry: { relativePath: '/src/main.js', content: KOA_API_SERVER_SOURCE },
   defaultPort: 3332,
   estimatedBootSeconds: 15,

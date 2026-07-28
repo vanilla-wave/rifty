@@ -30,6 +30,8 @@ export interface ParityCase {
   readonly code: string;
   /** If set, both runtimes must produce stdout matching this (in addition to matching each other). */
   readonly expected?: string | RegExp;
+  /** Exact native Worker constructions required by a physical Worker case. */
+  readonly expectedPhysicalWorkers?: number;
   /**
    * Module kind. Defaults to 'cjs'.
    *
@@ -82,6 +84,7 @@ export interface ParityCase {
    *   and executes the production typed entry bootstrap + Node process install.
    *   This keeps host bootstrap metadata outside the child's guest `process.env`;
    *   the default same-realm fallback cannot prove that boundary.
+   * - `'child-worker'` — physical Worker-backed `child_process` mode.
    * - `'tty-resize'` — real terminal-resize mode. Node runs under an OS PTY and
    *   changes its grid with `stty`; rifty receives the same change over its
    *   process-control MessagePort. The case prints one explicit result marker
@@ -95,6 +98,7 @@ export interface ParityCase {
     | 'sqlite'
     | 'exec-sync'
     | 'worker-env'
+    | 'child-worker'
     | 'tty-resize';
 }
 

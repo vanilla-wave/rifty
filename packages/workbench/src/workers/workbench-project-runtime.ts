@@ -1,4 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
+import { readRootProcessSnapshot } from '@riftydev/kernel';
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import {
   type BinExecutor,
@@ -11,6 +12,7 @@ import { type VfsMutationGuard, isAbsolute, normalizePath } from '@riftydev/vfs'
 import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
+import { nodeProjectRootShellCommand } from '../workbench/internal/node-command.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
@@ -23,6 +25,7 @@ import type {
   OwnerPackageMutationKind,
   OwnerPackageState,
 } from './owner-package-state.ts';
+import { createOwnerProcessListCommand } from './owner-process-list-command.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
   createInstalledBinPreviewHooks,
@@ -36,7 +39,7 @@ import {
   createProjectTerminalNamespace,
 } from './project-terminal-namespace.ts';
 import { type PtyServer, createPtyServer } from './pty-server.ts';
-import { createPreviewScope } from './vite-cli-prep.ts';
+import { binNameOf, createPreviewScope } from './vite-cli-prep.ts';
 
 export interface WorkbenchProjectRuntimeOptions {
   /** Materializer-owned root. Page claims and project ids are resolved before this seam. */
@@ -165,6 +168,10 @@ export function createWorkbenchProjectRuntime(
   let closePromise: Promise<void> | undefined;
   const reserveChildAdmission = (path: string) =>
     options.packageState.reserveChildAdmission(namespace.toOwnerPath(path));
+  const directNodeServerCommand =
+    options.packageConfig.cfg.runtime === 'node-server'
+      ? nodeProjectRootShellCommand(namespace.toProjectPath(options.packageConfig.cfg.entryPath))
+      : null;
 
   const ownerNodeExecutor = createOwnerChildNodeExecutor(
     options.nodeEntryWorkerUrl,
@@ -227,7 +234,20 @@ export function createWorkbenchProjectRuntime(
         allocateSid: () => `workbench-bin-${++binSequence}`,
         previews,
       }),
-      (request) => ({ ...request, remoteFsRoot: projectRoot }),
+      (request) => ({
+        ...request,
+        remoteFsRoot: projectRoot,
+        ...(options.packageConfig.cfg.runtime === 'node-server' &&
+        binNameOf(request.shimPath) === 'nodemon'
+          ? {
+              previewScope: createPreviewScope(),
+              env: {
+                ...request.env,
+                PORT: String(options.packageConfig.cfg.port),
+              },
+            }
+          : {}),
+      }),
     );
     const executeInstalledBin: BinExecutor = async (binPath, args, ctx) => {
       await options.packageState.reassertTemplateNodeModules(options.packageConfig);
@@ -243,7 +263,7 @@ export function createWorkbenchProjectRuntime(
     });
     const npm = options.packageState.createNpmCommand(
       async (name, command, ctx) => {
-        if (name === 'dev' && devServer !== null) {
+        if (name === 'dev' && command === directNodeServerCommand && devServer !== null) {
           await options.packageState.reassertTemplateNodeModules(options.packageConfig);
           return runPtyDevServerShellCommand({
             captureOrigin,
@@ -258,7 +278,9 @@ export function createWorkbenchProjectRuntime(
           });
         }
         const nested = makeShell({ cwd: ctx.cwd, env: ctx.env }, ptySid);
-        return runNestedShellCommand(nested, command, ctx);
+        const exit = await runNestedShellCommand(nested, command, ctx);
+        if (devServer !== null) previews.publish();
+        return exit;
       },
       {
         mapInvocationContext: namespace.toOwnerContext,
@@ -272,6 +294,7 @@ export function createWorkbenchProjectRuntime(
         return namespace.rethrowOwnerError(error);
       }
     });
+    shell.registerCommand('ps', createOwnerProcessListCommand(readRootProcessSnapshot));
     const spawnNodeEntry = (
       entryPath: string,
       scriptArgs: readonly string[],

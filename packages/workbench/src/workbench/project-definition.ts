@@ -1,5 +1,5 @@
 import { serializePackageJson } from '@riftydev/npm-client';
-import { nodeProjectShellCommand } from './internal/node-command.ts';
+import { nodeProjectRootShellCommand } from './internal/node-command.ts';
 import { defineOwnEnumerableProperty } from './internal/own-property.ts';
 import {
   DEFAULT_VITE8_CONFIG_JS,
@@ -318,7 +318,9 @@ function normalizeNodeManifest(
       }
       defineOwnEnumerableProperty(scripts, name, command);
     }
-    scripts.dev = nodeProjectShellCommand(serverEntryPath, []);
+    if (!Object.hasOwn(scripts, 'dev')) {
+      scripts.dev = nodeProjectRootShellCommand(serverEntryPath);
+    }
     manifest.scripts = scripts;
   }
   files['/package.json'] = encoder.encode(serializePackageJson(manifest));

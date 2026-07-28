@@ -4,6 +4,11 @@
 
 ### Added
 
+- **One federated Worker process tree (ADR-0326).** The owner-root
+  `ProcessManager` owns recursive PID/PPID state over the trusted SAB chain;
+  fork JSON IPC, worker-thread messages, and private lifecycle control stay
+  separate while subtree and peer-death teardown settle once.
+
 - **One-shot opaque URL-entry capabilities (ADR-0313).** A spawned URL entry
   can carry a validated frozen map of named `MessagePort`s in its existing init
   transaction. The worker publishes them before pre-entry, privileged
@@ -11,6 +16,33 @@
   closes adopted endpoints. Source entries and process identity stay unchanged.
 
 ### Fixed
+
+- A Worker whose federated commit is rejected now rolls back its unpublished
+  physical realm and routes synchronously, so owner teardown cannot leak it.
+
+- Ancestor shutdown now fences new process reservations, signals exact remote
+  descendants child-first, and waits for their close/peer proof before cutting
+  the physical owner's output. Terminal callbacks can flush without reviving
+  the tree; listener failures surface only after every local cleanup attempt,
+  and authenticated owner death still settles finitely.
+
+- **Worker terminal drain is exact and finite (ADR-0332).** One opaque
+  process-wide admission state gates stdout/stderr EOF and terminal events on
+  committed per-stream targets; canceled global errors remain nonterminal,
+  sealed attestation transports cross-fallback, and abrupt death claims no
+  drain. Parent diagnostics follow exact child stderr; final bytes and local
+  EOF precede `close`, matching Node. `KernelProcessSpec.stdout/stderr` now
+  expose semantic byte writers; raw ports and output admission remain private.
+
+- Route retirement attempts every upstream teardown and still removes local
+  process authority before surfacing one error or their aggregate.
+
+- Worker-process consumers now share one first-terminal observer for truthful
+  `exit` or physical `peererror` settlement.
+
+- Federated same-realm exits always settle their owner-root PID; terminating
+  one hidden worker thread no longer kills process siblings, and orderly
+  Worker self-exit/control-close paths drain final stdio before teardown.
 
 - **SyncRpc protocol violations are forensic and loud, never silent.** Two CI
   flake signatures (`SabRing: cannot writeRequest while a previous reply is
@@ -29,12 +61,6 @@
   endpoint and rolls back all resources acquired so far before rethrowing the
   same error. Worker-side SAB attach and shared-global publication now share
   entry finalization, so setup failure closes the transferred ports and realm.
-- **Worker stdout/stderr no longer loses final chunks on natural exit.**
-  Worker-backed process exit arrives on the Worker message channel while stdio
-  bytes arrive on separate MessagePorts, so a final CLI line could land after
-  `{type:'exit'}` and be dropped by EOF/foreground mute. Natural worker exit now
-  defers EOF/`exit` briefly to drain in-flight stdio; `kill()` stays immediate.
-- **Worker uncaught-error diagnostic no longer vanishes** (backlog/kernel/worker-global-error-to-stderr). `spawnWorker`'s `error` handler mapped a worker's uncaught GLOBAL error (one that escaped worker-entry's top-level try/catch — thrown in a queueMicrotask/timer, or an unhandled EventEmitter `'error'` re-throw like EADDRINUSE) to exit 1 but dropped its message → loud exit, silent terminal. Now the message (+`filename:lineno`) is forwarded onto the child's stderr stream via a new `SpawnWorkerResult.onUncaughtError` seam (process-manager pushes it into `handle.stderr()`), and the exit is deferred one microtask so the async stderr `'data'` flushes BEFORE a foreground consumer's synchronous exit-gate mutes output. The generic top-level-throw path (stack already on stderr) is unchanged.
 - **Dispatcher backstop is uncounted infra (ADR-0158, keepalive gap-e).** `SyncRpcDispatcher` now captures the HOST `setInterval`/`clearInterval` at module load and arms its backstop timer on them, instead of the realm's global `setInterval` (which a worker realm replaces with runtime-js's keepalive-counted wrapper). The infra timer therefore never enters the event-loop keepalive count, by construction (ADR-0152 §5 precedent) — removing the prior depth-1 count-then-`.unref()` coupling and any risk of pinning a nested child's (depth-2) drain. Guard: `sync-dispatch.test.ts` asserts the backstop arms the host timer, not the wrapped global.
 
 - **A kernel worker crash is no longer swallowed.** `spawnKernelWorker`'s

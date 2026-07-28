@@ -2,9 +2,9 @@ import { expect, test } from '@playwright/test';
 import { gotoHarness, sealedWorkbenchFixtureUrl } from './fixtures.ts';
 
 const RESULT_MARKER =
-  'RESULT|disconnect=1|input=65,8364,66|eof=1|pre-resume=0|events=stdout:132x43>stderr:132x43>SIGWINCH';
+  'RESULT|public-ipc=0|input=65,8364,66|eof=1|pre-resume=0|events=stdout:132x43>stderr:132x43>SIGWINCH';
 
-test('sealed terminal preserves paused split UTF-8, EOF, and resize after disconnect', async ({
+test('sealed terminal preserves paused split UTF-8, EOF, and resize without public IPC', async ({
   page,
 }) => {
   await gotoHarness(page);
@@ -51,7 +51,6 @@ let input = '';
 let eof = false;
 let resumed = false;
 let dataBeforeResume = false;
-let disconnected = false;
 let finished = false;
 
 const codePoints = () => Array.from(input, (char) => char.codePointAt(0)).join(',');
@@ -65,7 +64,7 @@ function finish() {
   finished = true;
   clearTimeout(watchdog);
   process.stdout.write(
-    'RESULT|disconnect=' + Number(disconnected) +
+    'RESULT|public-ipc=0' +
       '|input=' + codePoints() +
       '|eof=' + Number(eof) +
       '|pre-resume=' + Number(dataBeforeResume) +
@@ -85,9 +84,6 @@ process.on('SIGWINCH', () => {
   events.push('SIGWINCH');
   finish();
 });
-process.once('disconnect', () => {
-  disconnected = true;
-});
 
 process.stdin.setEncoding('utf8');
 process.stdin.pause();
@@ -101,11 +97,15 @@ process.stdin.once('end', () => {
   finish();
 });
 
-if (typeof process.disconnect !== 'function') {
-  throw new Error('process.disconnect is unavailable');
+if (
+  typeof process.send !== 'undefined' ||
+  typeof process.disconnect !== 'undefined' ||
+  typeof process.connected !== 'undefined' ||
+  typeof process.channel !== 'undefined'
+) {
+  throw new Error('plain node entry exposed public IPC');
 }
-process.disconnect();
-process.stdout.write('STATE|paused=1|disconnect=' + Number(disconnected) + '\\n');
+process.stdout.write('STATE|paused=1|public-ipc=0\\n');
 setTimeout(() => {
   resumed = true;
   process.stdin.resume();
@@ -140,7 +140,7 @@ setTimeout(() => {
         };
 
         await run.ready;
-        await waitForOutput('STATE|paused=1|disconnect=1', 'paused/disconnected marker');
+        await waitForOutput('STATE|paused=1|public-ipc=0', 'paused/no-public-IPC marker');
         const acknowledgements: string[] = [];
         for (const [label, bytes] of [
           ['stdin-1', [0x41, 0xe2]],

@@ -9,6 +9,7 @@ import {
   type KernelEntryCapabilityPorts,
   type SpawnWorkerSpec,
   globalProcessManager,
+  observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import type { ProcessExit } from '@riftydev/shell';
 import {
@@ -91,8 +92,9 @@ export interface DevServerChildHandle {
   readonly kind: string;
   stdout(): DevReadable;
   stderr(): DevReadable;
-  on(event: 'exit', listener: (code: number | null, signal: string | null) => void): unknown;
+  on(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void): unknown;
   on(event: 'message', listener: (message: unknown) => void): unknown;
+  off(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void): unknown;
   resize(cols: number, rows: number): unknown;
   kill(signal?: string): unknown;
 }
@@ -355,17 +357,24 @@ export function createOwnerChildDevServer(
             }
           });
 
-          handle.on('exit', (code, signal) => {
+          observeProcessTerminalOutcome(handle, (outcome) => {
             childExited = true;
             outputClosed = true;
             let exit: ProcessExit | undefined;
-            let invalidExit: Error | undefined;
-            try {
-              exit = processExitFromChildEvent(code, signal);
-              finishPhysicalExit(exit);
-            } catch (error) {
-              invalidExit = asError(error);
-              failPhysicalExit(invalidExit);
+            let terminalError: Error | undefined;
+            let peerError: Error | undefined;
+            if (outcome.kind === 'peererror') {
+              peerError = asError(outcome.error);
+              terminalError = peerError;
+              failPhysicalExit(peerError);
+            } else {
+              try {
+                exit = processExitFromChildEvent(outcome.code, outcome.signal);
+                finishPhysicalExit(exit);
+              } catch (error) {
+                terminalError = asError(error);
+                failPhysicalExit(terminalError);
+              }
             }
             let cleanupError: Error | undefined;
             try {
@@ -373,13 +382,25 @@ export function createOwnerChildDevServer(
             } catch (error) {
               cleanupError = asError(error);
             }
-            if (invalidExit) {
+            if (peerError) {
               const lifecycleError = cleanupError
                 ? new AggregateError(
-                    [invalidExit, cleanupError],
+                    [peerError, cleanupError],
+                    'dev-server child peer died and resize cleanup failed',
+                  )
+                : peerError;
+              if (listening && !stopRequested)
+                reportFailure({ kind: 'error', error: lifecycleError });
+              finish(() => reject(lifecycleError));
+              return;
+            }
+            if (terminalError) {
+              const lifecycleError = cleanupError
+                ? new AggregateError(
+                    [terminalError, cleanupError],
                     'dev-server child emitted an invalid exit and resize cleanup failed',
                   )
-                : invalidExit;
+                : terminalError;
               if (listening && !stopRequested)
                 reportFailure({ kind: 'error', error: lifecycleError });
               finish(() => reject(lifecycleError));
@@ -387,7 +408,7 @@ export function createOwnerChildDevServer(
             }
             if (listening && !stopRequested && !failingChild && exit) {
               const exitError = new Error(
-                `dev-server child exited after listening (code ${String(code)}, signal ${String(signal)})`,
+                `dev-server child exited after listening (code ${String(exit.code)}, signal ${String(exit.signal)})`,
               );
               reportFailure({
                 kind: 'exit',
@@ -411,7 +432,7 @@ export function createOwnerChildDevServer(
                   : bootFault
                 : (cleanupError ??
                   new Error(
-                    `dev-server child exited before listening (code ${String(code)}, signal ${String(signal)})`,
+                    `dev-server child exited before listening (code ${String(exit!.code)}, signal ${String(exit!.signal)})`,
                   ));
               reject(new DevServerRunError(error, exit!));
             });

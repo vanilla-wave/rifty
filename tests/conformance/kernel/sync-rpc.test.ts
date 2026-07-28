@@ -30,11 +30,12 @@ const fixtureUrl = new URL('./fixtures/sync-rpc-echo.js', import.meta.url);
 interface WorkerReply {
   readonly type: 'reply' | 'error';
   readonly reply?: { readonly ok: boolean; readonly value?: unknown };
+  readonly replies?: ReadonlyArray<{ readonly ok: boolean; readonly value?: unknown }>;
   readonly message?: string;
 }
 
 describe.skipIf(!hasSab)('SyncRpc — real Worker round-trip (ADR-0011 phase 3)', () => {
-  it('client writes JSON request; dispatcher echoes; client decodes value', async () => {
+  it('client completes two claimed JSON exchanges on one ring', async () => {
     const payloadCapacity = 1024;
     const { sab, ring } = createSabRing({ payloadCapacity });
 
@@ -46,8 +47,10 @@ describe.skipIf(!hasSab)('SyncRpc — real Worker round-trip (ADR-0011 phase 3)'
       workerData: {
         sab,
         payloadCapacity,
-        method: 'echo',
-        payload: { hello: 'world', n: 42 },
+        requests: [
+          { method: 'echo', payload: { hello: 'world', n: 42 } },
+          { method: 'echo', payload: { hello: 'again', n: 43 } },
+        ],
         timeoutMs: 2000,
         protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
       },
@@ -64,6 +67,10 @@ describe.skipIf(!hasSab)('SyncRpc — real Worker round-trip (ADR-0011 phase 3)'
     expect(msg.type).toBe('reply');
     expect(msg.reply?.ok).toBe(true);
     expect(msg.reply?.value).toEqual({ hello: 'world', n: 42 });
+    expect(msg.replies).toEqual([
+      { ok: true, value: { hello: 'world', n: 42 } },
+      { ok: true, value: { hello: 'again', n: 43 } },
+    ]);
   });
 
   it('dispatcher reports unknown method as ok=false with ERPCNOHANDLER', async () => {

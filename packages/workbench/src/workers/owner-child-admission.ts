@@ -1,4 +1,9 @@
-import type { KernelEntryCapabilityPorts, WorkerEntryDescriptor } from '@riftydev/kernel';
+import {
+  type KernelEntryCapabilityPorts,
+  type ProcessTerminalEventSource,
+  type WorkerEntryDescriptor,
+  observeProcessTerminalOutcome,
+} from '@riftydev/kernel';
 
 export interface OwnerChildCapabilitySession {
   readonly capabilityPorts: KernelEntryCapabilityPorts;
@@ -14,10 +19,6 @@ export interface OwnerChildAdmissionReservation {
 
 export type ReserveOwnerChildAdmission = (root: string) => Promise<OwnerChildAdmissionReservation>;
 
-interface ExitObservable {
-  on(event: 'exit', listener: (...args: unknown[]) => void): unknown;
-}
-
 /** Attach owner-minted endpoints only to the one URL entry being spawned. */
 export function attachOwnerChildCapabilities(
   entry: WorkerEntryDescriptor,
@@ -31,9 +32,9 @@ export function attachOwnerChildCapabilities(
 }
 
 /** Physical exit evidence, registered immediately after spawn returns. */
-export function observeOwnerChildExit(handle: ExitObservable): Promise<void> {
+export function observeOwnerChildExit(handle: object): Promise<void> {
   return new Promise<void>((resolve) => {
-    handle.on('exit', () => resolve());
+    observeProcessTerminalOutcome(handle as ProcessTerminalEventSource, () => resolve());
   });
 }
 

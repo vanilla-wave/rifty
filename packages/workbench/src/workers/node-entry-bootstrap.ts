@@ -30,13 +30,17 @@
  * write, over RPC.
  */
 
-import { getKernelDispatcher, readKernelSyncApi } from '@riftydev/kernel';
+import { getKernelDispatcher, globalProcessManager, readKernelSyncApi } from '@riftydev/kernel';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { awaitDrain, installConsole } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
+import {
+  adoptNodeProcessBootstrap,
+  postNodeProcessListeningControl,
+} from '@riftydev/runtime-js/builtins/process';
 import { syncMirror } from '@riftydev/vfs';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -47,9 +51,10 @@ import {
   installNodeWorkerRuntimeConfig,
   readNodeWorkerRuntimeConfig,
 } from './node-worker-runtime-config.ts';
-import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
+import { installBundleLocalBuffer, installBundleLocalCwd } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
+adoptNodeProcessBootstrap(proc, globalProcessManager);
 const nodeEntryBootstrap = readNodeEntryBootstrap();
 const launch = nodeEntryBootstrap.launch;
 const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(
@@ -70,6 +75,9 @@ if (typeof entryPath !== 'string' || entryPath === '') {
 // dual-copy `Buffer.isBuffer` mismatch in a production build — the kernel pre-entry
 // hook installed the kernel-worker-entry bundle's copy. See installBundleLocalBuffer.
 installBundleLocalBuffer();
+// The same split affects the fs/path cwd cell: seed this bundle from the
+// already-installed process before nodemon probes relative entry paths.
+installBundleLocalCwd(proc.cwd());
 
 // A spawned Node CLI's console.log belongs on its stdout (kernel stdio port →
 // owner pty → terminal). Without this, console output vanishes into the worker
@@ -143,19 +151,17 @@ if (nodeServe) {
       }),
     listPorts: () => listPorts(),
     onPortsChange: (cb) => onRegistryChange(cb),
-    awaitDrain: () => awaitDrain(),
+    // A serve-capable foreground process may be a real long-lived supervisor
+    // (nodemon) whose referenced watcher/timer handles are its Node lifetime.
+    // The owner signal/peer boundary remains the physical stop authority.
+    awaitDrain: () => awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
         async (request) => dispatchToPort(port, request),
         previewScope === undefined ? {} : { scope: previewScope },
       ),
-    postListening: (ports) =>
-      proc.send?.({
-        type: 'rifty:node-listening',
-        ports,
-        ...(previewScope === undefined ? {} : { previewScope }),
-      }),
+    postListening: (ports) => postNodeProcessListeningControl(proc, ports, previewScope),
     readExitCode: () => proc.exitCode,
     exit: (code) => proc.exit(code),
   });

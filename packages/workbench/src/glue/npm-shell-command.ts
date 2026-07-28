@@ -548,6 +548,7 @@ async function runPackageScript(
   ].filter((entry): entry is [string, string] => typeof entry[1] === 'string');
   let result: ShellCommandResult = 0;
   for (const [name, scriptCommand] of scriptSteps) {
+    ctx.stdout.write(`> ${scriptCommand}\n`);
     result = await deps.runScript(name, scriptCommand, ctx);
     if (shellCommandExitCode(result) !== 0) return result;
   }

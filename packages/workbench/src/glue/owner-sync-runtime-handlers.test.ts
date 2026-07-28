@@ -536,12 +536,14 @@ describe('owner sync runtime child relay views', () => {
     await expectResolved('/a.mjs');
     expect(runWorker).toHaveBeenLastCalledWith(
       expect.objectContaining({ entryPath: '/a.mjs', cwd: '/' }),
+      undefined,
     );
     await expectMissing('/b.mjs');
     activeProjectRoot = projectB;
     await expectResolved('/b.mjs');
     expect(runWorker).toHaveBeenLastCalledWith(
       expect.objectContaining({ entryPath: '/b.mjs', cwd: '/' }),
+      undefined,
     );
     await expectMissing('/a.mjs');
 

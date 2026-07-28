@@ -18,13 +18,18 @@ import {
   setKernelWorkerUrl,
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
+import { sealWorkerOutput } from '../src/worker-stdio-drain.ts';
+import { attestedExitEvent } from './attested-exit.ts';
 
 type Listener = (ev: MessageEvent) => void;
 
 class FakeWorker implements WorkerLike {
   private readonly listeners = new Map<string, Set<Listener>>();
+  readonly posted: unknown[] = [];
   terminated = false;
-  postMessage(): void {}
+  postMessage(message: unknown): void {
+    this.posted.push(message);
+  }
   terminate(): void {
     this.terminated = true;
   }
@@ -158,7 +163,15 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
 
       // A run-to-completion worker posts a plain exit message — no 'error'
       // event. The new forwarding must NOT inject any stderr here.
-      worker()?.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+      const made = worker();
+      if (made === undefined) throw new Error('expected fake Worker');
+      const init = made.posted[0] as {
+        spec: {
+          outputState: import('../src/worker-stdio-drain.ts').WorkerOutputState;
+        };
+      };
+      sealWorkerOutput(init.spec.outputState);
+      worker()?.fire('message', attestedExitEvent(worker() as FakeWorker, 0));
       await flushWorkerExit();
 
       expect(stderr.text()).toBe('');

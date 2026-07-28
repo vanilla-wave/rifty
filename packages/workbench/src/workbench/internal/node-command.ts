@@ -26,6 +26,11 @@ export function projectRuntimeShellWord(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+/** Exact `node <entry>` spelling for a command run from the project root. */
+export function nodeProjectRootShellCommand(entryPath: unknown): string {
+  return `node ${projectRuntimeShellWord(projectEntry(entryPath).slice(1))}`;
+}
+
 /** Relative spelling between two paths in the public project namespace. */
 export function projectRelativePath(targetValue: unknown, cwdValue: unknown): string {
   if (typeof targetValue !== 'string' || typeof cwdValue !== 'string') {

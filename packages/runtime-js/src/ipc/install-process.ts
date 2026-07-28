@@ -29,11 +29,18 @@
 import {
   type KernelProcessSpec,
   type WorkerSpawnSpec,
+  globalProcessManager,
+  readKernelProcessSpec,
   setKernelPreEntryHook,
 } from '@riftydev/kernel';
 import { Buffer } from '../builtins/buffer.ts';
 import { readNodeEntryBootstrapIfPresent } from '../builtins/node-entry-runtime-config.ts';
-import { NodeProcess, patchPromiseForNextTick } from '../builtins/process.ts';
+import { setActiveNodeProcessBootstrap } from '../builtins/process-bootstrap-identity.ts';
+import {
+  NodeProcess,
+  bindNodeProcessDescendantAuthority,
+  patchPromiseForNextTick,
+} from '../builtins/process.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
 import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
 
@@ -67,6 +74,7 @@ export function installNodeProcessShim(
     configurable: true,
     enumerable: false,
   });
+  setActiveNodeProcessBootstrap(shim);
   // `global === globalThis` via the single helper (Node's `global` descriptor:
   // writable+enumerable+configurable — NOT a private non-enumerable alias).
   if (withGlobalAlias) installGlobalAlias();
@@ -85,22 +93,19 @@ export function installNodeProcessShim(
  * children lacked them.
  * Timers + keepalive stay universal at `kernel-worker-entry.ts` module top-level.
  */
-export function installNodeRuntime(spec: WorkerSpawnSpec): void {
+export function installNodeRuntime(spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>): void {
   const isNodeEntry = readNodeEntryBootstrapIfPresent() !== null;
   const isNode = isNodeEntry || spec.env.__RIFTY_WASI_WASM_URL === undefined;
-  installNodeProcessShim(
-    {
-      pid: spec.pid,
-      ppid: spec.ppid,
-      argv: spec.argv,
-      env: spec.env,
-      cwd: spec.cwd,
-      stdio: spec.stdio,
-    },
-    {
-      installGlobalAlias: isNode,
-    },
-  );
+  const processSpec = readKernelProcessSpec();
+  if (processSpec === null || processSpec.pid !== spec.pid || processSpec.ppid !== spec.ppid) {
+    throw new Error('installNodeRuntime requires the matching kernel-published process spec');
+  }
+  const process = installNodeProcessShim(processSpec, { installGlobalAlias: isNode });
+  setActiveNodeProcessBootstrap(process, true);
+  // A node-entry URL may be a second production bundle. It adopts this process
+  // and binds its own manager before guest code; every other entry stays here
+  // (ADR-0334).
+  if (!isNodeEntry) bindNodeProcessDescendantAuthority(process, globalProcessManager);
   if (isNode) {
     patchPromiseForNextTick();
     (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;

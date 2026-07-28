@@ -54,7 +54,8 @@ export function createNodeServerProjectRuntime(
         root === '.' ? 'npm run dev' : `npm --prefix ${projectRuntimeShellWord(root)} run dev`;
       return projectRuntimeShellLine(runtimeLine, dependencies.acquisition, cwd);
     },
-    matches: (entry) => entry.source === 'dev-server' && entry.port === port,
+    matches: (entry) =>
+      (entry.source === 'dev-server' || entry.source === 'node') && entry.port === port,
   });
 }
 

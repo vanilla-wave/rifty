@@ -161,7 +161,7 @@ describe('createBinExecutor', () => {
     expect(await p).toEqual({ code: 3, signal: null });
   });
 
-  it('forwards child messages and exit through request-aware hooks', async () => {
+  it('forwards guest IPC messages and exit through request-aware hooks', async () => {
     const fake = makeFakeSpawn();
     const onMessage = vi.fn();
     const onExit = vi.fn();
@@ -169,13 +169,13 @@ describe('createBinExecutor', () => {
     const { ctx } = makeCtx();
 
     const p = exec('/proj/node_modules/.bin/vite', [], ctx);
-    fake.emitMessage({ type: 'rifty:node-listening', ports: [5174] });
+    fake.emitMessage({ hello: 'guest' });
     fake.emitExit(0);
 
     expect(await p).toEqual({ code: 0, signal: null });
     expect(onMessage).toHaveBeenCalledWith(
       expect.objectContaining({ shimPath: '/proj/node_modules/.bin/vite' }),
-      { type: 'rifty:node-listening', ports: [5174] },
+      { hello: 'guest' },
       ctx,
     );
     expect(onExit).toHaveBeenCalledWith(
@@ -219,7 +219,10 @@ describe('createBinExecutor', () => {
     await expect(p).resolves.toEqual({ code: null, signal: 'SIGTERM' });
   });
 
-  it('mutes worker output buffered after an abort', async () => {
+  it('shows worker output the kernel drained between the abort and the exit', async () => {
+    // Same contract as the node executor: the kernel holds `'exit'` until the
+    // bytes admitted before the terminal cut are delivered, so they are the
+    // child's real last words (shutdown log, crash stack) — not stale noise.
     const fake = makeFakeSpawn();
     const exec = createBinExecutor({ spawn: fake.spawn });
     const controller = new AbortController();
@@ -228,11 +231,27 @@ describe('createBinExecutor', () => {
     const p = exec('/proj/node_modules/.bin/dev', [], ctx);
     fake.emitStdout(enc.encode('before\n'));
     controller.abort();
-    fake.emitStdout(enc.encode('after-kill\n')); // post-SIGTERM buffer — must not surface
+    fake.emitStdout(enc.encode('after-kill\n'));
     fake.emitExit(null, 'SIGTERM');
     await expect(p).resolves.toEqual({ code: null, signal: 'SIGTERM' });
 
-    expect(out()).toBe('before\n');
+    expect(out()).toBe('before\nafter-kill\n');
+  });
+
+  it('mutes worker output that arrives after the run settled', async () => {
+    const fake = makeFakeSpawn();
+    const exec = createBinExecutor({ spawn: fake.spawn });
+    const controller = new AbortController();
+    const { ctx, out } = makeCtx({ signal: controller.signal });
+
+    const p = exec('/proj/node_modules/.bin/dev', [], ctx);
+    controller.abort();
+    fake.emitExit(null, 'SIGTERM');
+    await expect(p).resolves.toEqual({ code: null, signal: 'SIGTERM' });
+
+    fake.emitStdout(enc.encode('after the run\n'));
+
+    expect(out()).toBe('');
   });
 
   it('rejects when spawn throws, so the host boundary error surfaces to the shell', async () => {

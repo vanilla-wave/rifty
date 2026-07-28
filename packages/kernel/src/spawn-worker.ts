@@ -15,7 +15,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
-import type { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
+import type { SyncRpcCallerContext, SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
 import { snapshotKernelEntryCapabilityPorts } from './shared-globals.ts';
 import type {
   WorkerEntryDescriptor,
@@ -24,6 +24,11 @@ import type {
   WorkerStdioPorts,
 } from './worker-entry.ts';
 import { type WorkerLike, makeKernelWorker } from './worker-like.ts';
+import {
+  createWorkerOutputState,
+  isWorkerOutputChildSealed,
+  workerOutputAttestation,
+} from './worker-stdio-drain.ts';
 
 // Re-export so existing tests keep their single-import deep path.
 export { clearKernelDispatcher, getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
@@ -104,6 +109,7 @@ export interface SpawnWorkerResult {
   /** Singleton parent-side dispatcher. Empty by default (ADR-0039) — higher
    * layers register methods via `.register(...)` at boot. */
   readonly dispatcher: SyncRpcDispatcher;
+  readonly callerContext: SyncRpcCallerContext;
   /** The SAB ring the dispatcher is attached to (parent-side view). */
   readonly ring: SabRing;
   /** Subscribe to the worker's exit message. Returns an `unsubscribe`. */
@@ -121,7 +127,7 @@ export interface SpawnWorkerResult {
    * it onto the child's stderr stream so the diagnostic is not lost behind the
    * opaque exit 1 (backlog/kernel/worker-global-error-to-stderr).
    */
-  onUncaughtError(cb: (message: string) => void): () => void;
+  onUncaughtError(cb: (message: string, outputSealedByChild: boolean) => void): () => void;
   /** Forcibly terminate the worker. Idempotent. */
   terminate(): void;
 }
@@ -188,13 +194,16 @@ export function spawnKernelWorker(
   let ring: SabRing | null = null;
   let worker: WorkerLike | null = null;
   let dispatcher: SyncRpcDispatcher | null = null;
+  let callerContext: SyncRpcCallerContext | null = null;
   let ports: WorkerStdioPorts | null = null;
   let fullSpec: WorkerSpawnSpec | null = null;
   let capabilityPorts: readonly MessagePort[] = [];
   const acquiredFixedPorts: MessagePort[] = [];
   const exitListeners: ((code: number) => void)[] = [];
   const messageErrorListeners: ((ev: MessageEvent) => void)[] = [];
-  const uncaughtErrorListeners: ((message: string) => void)[] = [];
+  const uncaughtErrorListeners: ((message: string, outputSealedByChild: boolean) => void)[] = [];
+  let sealedExitCode: number | null = null;
+  let uncaughtErrorObserved = false;
 
   const dispatchExit = (code: number): void => {
     // Snapshot so a handler that unsubscribes itself doesn't skip a peer.
@@ -205,8 +214,10 @@ export function spawnKernelWorker(
     for (const cb of [...messageErrorListeners]) cb(ev);
   };
 
-  const dispatchUncaughtError = (message: string): void => {
-    for (const cb of [...uncaughtErrorListeners]) cb(message);
+  const dispatchUncaughtError = (message: string, outputSealedByChild: boolean): void => {
+    for (const cb of [...uncaughtErrorListeners]) {
+      cb(message, outputSealedByChild);
+    }
   };
 
   /**
@@ -246,15 +257,72 @@ export function spawnKernelWorker(
     uncaughtErrorListeners.length = 0;
   }
 
+  function inspectOutputSeal(): { readonly sealed: boolean; readonly diagnostic: string } {
+    if (fullSpec === null) return { sealed: false, diagnostic: '' };
+    try {
+      return {
+        sealed: isWorkerOutputChildSealed(fullSpec.outputState),
+        diagnostic: '',
+      };
+    } catch (error) {
+      return {
+        sealed: false,
+        diagnostic: `${error instanceof Error ? error.message : String(error)}\n`,
+      };
+    }
+  }
+
+  function expectedExitAttestation(): string | null {
+    if (fullSpec === null) return null;
+    try {
+      return workerOutputAttestation(fullSpec.outputState);
+    } catch {
+      return null;
+    }
+  }
+
   // Named handlers so `tearDownWorker` can `removeEventListener` them;
   // anonymous closures would leak per spawn forever.
   const onMessage = (ev: MessageEvent): void => {
-    const msg = ev.data as { type?: string; code?: number } | undefined;
-    if (msg?.type === 'exit' && typeof msg.code === 'number') {
-      const code = msg.code;
-      tearDownWorker();
+    const outputSeal = inspectOutputSeal();
+    if (outputSeal.diagnostic.length > 0) {
+      dispatchUncaughtError(outputSeal.diagnostic, false);
+      return;
+    }
+    if (!outputSeal.sealed) return;
+    const value = ev.data;
+    const candidate =
+      typeof value === 'object' && value !== null
+        ? (value as {
+            readonly type?: unknown;
+            readonly code?: unknown;
+            readonly attestation?: unknown;
+          })
+        : null;
+    // Guests share this channel by design, so an unattested frame is ordinary
+    // guest traffic — never the process outcome, never a diagnostic. Only a
+    // frame carrying the kernel-minted attestation is judged as an exit claim.
+    if (candidate === null || candidate.attestation !== expectedExitAttestation()) return;
+    if (
+      Object.keys(value).length !== 3 ||
+      candidate.type !== 'exit' ||
+      !Number.isSafeInteger(candidate.code) ||
+      (candidate.code as number) < 0
+    ) {
+      dispatchUncaughtError('Worker emitted a malformed sealed exit frame\n', true);
+      return;
+    }
+    const code = candidate.code as number;
+    if (sealedExitCode === null) {
+      sealedExitCode = code;
       dispatchExit(code);
-      clearSubscribers();
+      return;
+    }
+    if (sealedExitCode !== code) {
+      dispatchUncaughtError(
+        `Worker sealed exit code changed from ${String(sealedExitCode)} to ${String(code)}\n`,
+        true,
+      );
     }
   };
 
@@ -269,7 +337,8 @@ export function spawnKernelWorker(
   // before the exit-1 dispatch — keeping the diagnostic from vanishing behind
   // the opaque exit 1 (backlog/kernel/worker-global-error-to-stderr).
   const onError = (ev: MessageEvent): void => {
-    if (terminated) return;
+    if (terminated || uncaughtErrorObserved) return;
+    uncaughtErrorObserved = true;
     const e = ev as unknown as { message?: unknown; filename?: unknown; lineno?: unknown };
     const message =
       typeof e.message === 'string' && e.message.length > 0
@@ -279,18 +348,8 @@ export function spawnKernelWorker(
       typeof e.filename === 'string' && e.filename.length > 0
         ? ` (${e.filename}:${typeof e.lineno === 'number' ? e.lineno : 0})`
         : '';
-    tearDownWorker();
-    dispatchUncaughtError(`${message}${loc}\n`);
-    // Defer the exit one microtask so the forwarded stderr `'data'` (the
-    // `@riftydev/io` Readable flushes on a queueMicrotask) is delivered BEFORE
-    // the exit fires. A foreground consumer (owner-child-node-executor /
-    // bin-executor) mutes output synchronously in its `'exit'` handler, so a
-    // same-tick exit would drop the diagnostic. The push above enqueues its
-    // flush microtask first, so this one runs after it (FIFO).
-    queueMicrotask(() => {
-      dispatchExit(1);
-      clearSubscribers();
-    });
+    const outputSeal = inspectOutputSeal();
+    dispatchUncaughtError(`${message}${loc}\n${outputSeal.diagnostic}`, outputSeal.sealed);
   };
 
   // `messageerror` fires when the browser fails to structured-clone an
@@ -358,6 +417,7 @@ export function spawnKernelWorker(
       env: spec.env,
       cwd: spec.cwd,
       stdio: childPorts,
+      outputState: createWorkerOutputState(),
       syncRing: createdRing.sab,
       payloadCapacity,
       pid,
@@ -367,7 +427,7 @@ export function spawnKernelWorker(
 
     worker = makeKernelWorker(url);
     dispatcher = getKernelDispatcher();
-    dispatcher.attach(ring);
+    callerContext = dispatcher.attach(ring, { callerPid: pid });
 
     const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
     worker.postMessage(init, [
@@ -390,6 +450,7 @@ export function spawnKernelWorker(
     ring === null ||
     worker === null ||
     dispatcher === null ||
+    callerContext === null ||
     ports === null ||
     fullSpec === null
   ) {
@@ -402,6 +463,7 @@ export function spawnKernelWorker(
     ports,
     spec: fullSpec,
     dispatcher,
+    callerContext,
     ring,
     onExit(cb) {
       exitListeners.push(cb);

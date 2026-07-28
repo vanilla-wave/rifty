@@ -4,6 +4,9 @@
 
 ### Changed
 
+- `EventEmitter` is one callable listener-state owner for `new`, subclassing,
+  `.call(target)`, and `util.inherits` (ADR-0324).
+
 - **`synthesizePreviewUrl` stamps `Host: localhost:<port>`** instead of the synthetic
   `preview.local` (ADR-0189 D3, backlog net/preview-websocket-bridge): guest servers see
   the Host a REAL local dev run would; `Host`-derived consumers keep the original

@@ -5,7 +5,12 @@
  * then verifies the generated output is what the SW preview bridge serves.
  */
 import { expect, test } from '@playwright/test';
-import { capturePageProblems, expectTerminalContains, selectPreset } from './helpers/playground.ts';
+import {
+  capturePageProblems,
+  expectTerminalContains,
+  selectPreset,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 const PORT = 3333;
 
@@ -29,6 +34,7 @@ test.describe('Markdown SSG template through the SW preview bridge', () => {
     await expectTerminalContains(page, 'npm: + marked@', 120_000);
     await expectTerminalContains(page, '[ssg] built intro.html from /content/intro.md', 60_000);
     await expectTerminalContains(page, 'markdown ssg listening on port 3333', 60_000);
+    expect(await terminalBuffer(page)).not.toContain('[nodemon]');
 
     const home = await page.evaluate(async (port: number) => {
       const r = await fetch(`/preview/${port}/`, { cache: 'no-store' });

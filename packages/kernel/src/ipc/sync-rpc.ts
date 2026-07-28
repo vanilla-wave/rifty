@@ -31,8 +31,11 @@
  * JSON/BINARY frame discriminator. The two peers (client + dispatcher) live in
  * `@riftydev/kernel` and recompile atomically — a recompile-everything-at-once
  * moment by design (same model as ADR-0016).
+ *
+ * v3: REQ_STATE is a claimed exchange lifecycle
+ * IDLE→WRITING→READY→HANDLING→IDLE. Both peers must recompile atomically.
  */
-export const SYNC_RPC_PROTOCOL_VERSION = 2 as const;
+export const SYNC_RPC_PROTOCOL_VERSION = 3 as const;
 
 /** Frame discriminator: JSON-over-UTF-8 body (ADR-0084 #23). */
 export const FRAME_JSON = 0x00 as const;

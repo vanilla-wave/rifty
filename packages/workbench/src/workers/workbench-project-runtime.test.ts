@@ -89,6 +89,46 @@ const nodeServerPackageConfig: OwnerPackageConfig = {
   slug: 'project-a',
   fromScratch: true,
 };
+const matchingLifecycleNodeServerPackageConfig: OwnerPackageConfig = {
+  ...nodeServerPackageConfig,
+  cfg: {
+    ...nodeServerPackageConfig.cfg,
+    packageJson: `${JSON.stringify({
+      name: 'workbench-node-server',
+      version: '1.0.0',
+      type: 'module',
+      scripts: {
+        predev: 'node src/server.mjs',
+        dev: 'node src/server.mjs',
+        postdev: 'node src/server.mjs',
+      },
+    })}\n`,
+  },
+};
+const NODEMON_DEV = 'nodemon --legacy-watch --no-stdin --no-update-notifier src/server.mjs';
+const nodemonNodeServerPackageConfig: OwnerPackageConfig = {
+  cfg: {
+    ...nodeServerPackageConfig.cfg,
+    installDeps: { nodemon: '3.1.14' },
+    packageJson: `${JSON.stringify({
+      name: 'workbench-node-server',
+      version: '1.0.0',
+      type: 'module',
+      scripts: { dev: NODEMON_DEV, start: 'node src/server.mjs' },
+      dependencies: { nodemon: '3.1.14' },
+    })}\n`,
+  },
+  templateId: 'workbench-node-server',
+  slug: 'project-a',
+  fromScratch: true,
+};
+const missingNodemonNodeServerPackageConfig: OwnerPackageConfig = {
+  ...nodemonNodeServerPackageConfig,
+  cfg: {
+    ...nodemonNodeServerPackageConfig.cfg,
+    installDeps: {},
+  },
+};
 
 const NODE_CLI_PACKAGE_JSON = `${JSON.stringify({
   name: 'workbench-node-cli',
@@ -130,17 +170,25 @@ function preparedTreeInstall(config: OwnerPackageConfig): InstallFn {
     if (options === undefined) throw new Error('test install options missing');
 
     await options.vfs.mkdir(`${options.cwd}/node_modules`, { recursive: true });
+    const nodemonVersion = config.cfg.installDeps.nodemon;
     if (config.cfg.runtime === 'vite') {
       await options.vfs.mkdir(`${options.cwd}/node_modules/.bin`, { recursive: true });
       await options.vfs.writeFile(`${options.cwd}/node_modules/.bin/vite`, '#!/usr/bin/env node\n');
     }
+    if (nodemonVersion !== undefined) {
+      await options.vfs.mkdir(`${options.cwd}/node_modules/.bin`, { recursive: true });
+      await options.vfs.writeFile(
+        `${options.cwd}/node_modules/.bin/nodemon`,
+        '#!/usr/bin/env node\n',
+      );
+    }
     const viteVersion = config.cfg.installDeps.vite;
-    const lockfilePackages: InstallResult['lockfile']['packages'] =
-      viteVersion === undefined
+    const lockfilePackages: InstallResult['lockfile']['packages'] = {
+      ...(viteVersion === undefined ? {} : { 'node_modules/vite': { version: viteVersion } }),
+      ...(nodemonVersion === undefined
         ? {}
-        : {
-            'node_modules/vite': { version: viteVersion },
-          };
+        : { 'node_modules/nodemon': { version: nodemonVersion } }),
+    };
     const lockfile = {
       name: config.cfg.packageName,
       version: config.cfg.packageVersion,
@@ -153,18 +201,26 @@ function preparedTreeInstall(config: OwnerPackageConfig): InstallFn {
       `${JSON.stringify(lockfile)}\n`,
     );
     const result: InstallResult = {
-      packages:
-        viteVersion === undefined
+      packages: [
+        ...(viteVersion === undefined
           ? []
-          : [{ name: 'vite', version: viteVersion, dependencies: {}, files: {} }],
+          : [{ name: 'vite', version: viteVersion, dependencies: {}, files: {} }]),
+        ...(nodemonVersion === undefined
+          ? []
+          : [{ name: 'nodemon', version: nodemonVersion, dependencies: {}, files: {} }]),
+      ],
       lockfile,
       conflicts: [],
       provenance: {
         resolution: 'metadata',
-        packages:
-          viteVersion === undefined
+        packages: [
+          ...(viteVersion === undefined
             ? []
-            : [{ name: 'vite', version: viteVersion, transport: 'registry' }],
+            : [{ name: 'vite', version: viteVersion, transport: 'registry' as const }]),
+          ...(nodemonVersion === undefined
+            ? []
+            : [{ name: 'nodemon', version: nodemonVersion, transport: 'registry' as const }]),
+        ],
       },
     };
     return await createNoShadowInstallResultFixture(result);
@@ -177,6 +233,8 @@ interface BoundaryWorker {
   readonly spec: () => Parameters<typeof globalProcessManager.spawnWorker>[1] | null;
   readonly killedWith: () => string | null;
   emitMessage(message: unknown): void;
+  emitListening(control: { pid: number; ports: number[]; previewScope?: string }): void;
+  emitPeerError(error: Error): void;
   emitExit(code: number | null, signal?: string | null): void;
 }
 
@@ -250,6 +308,19 @@ function boundaryWorker(): BoundaryWorker {
       listeners.set(event, current);
       return rawHandle;
     },
+    off(event: string, listener: (...args: unknown[]) => void) {
+      listeners.set(
+        event,
+        (listeners.get(event) ?? []).filter((candidate) => candidate !== listener),
+      );
+      return rawHandle;
+    },
+    onListeningControl(listener: (...args: unknown[]) => void) {
+      const current = listeners.get('control:listening') ?? [];
+      current.push(listener);
+      listeners.set('control:listening', current);
+      return () => {};
+    },
     send: () => true,
     resize: () => true,
     kill(signal = 'SIGTERM') {
@@ -274,6 +345,14 @@ function boundaryWorker(): BoundaryWorker {
     killedWith: () => killedWith,
     emitMessage(message) {
       for (const listener of listeners.get('message') ?? []) listener(message);
+    },
+    emitListening(control) {
+      for (const listener of listeners.get('control:listening') ?? []) listener(control);
+    },
+    emitPeerError(error) {
+      control.port1.close();
+      control.port2.close();
+      for (const listener of listeners.get('peererror') ?? []) listener(error);
     },
     emitExit(code, signal = null) {
       control.port1.close();
@@ -409,6 +488,171 @@ afterEach(() => {
 });
 
 describe('Workbench finite Node owner lifecycle Contract+RED', () => {
+  it('reports nodemon Worker peer death as a PTY lifecycle error, not a fabricated command exit', async () => {
+    const worker = boundaryWorker();
+    const h = await harness(undefined, nodemonNodeServerPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-nodemon-peer-death' });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-nodemon-peer-death',
+        rid: 'run-nodemon-peer-death',
+        line: 'npm run dev',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+
+    worker.emitPeerError(new Error(`Worker peer closed unexpectedly for ${ROOT}/src/server.mjs`));
+    await running;
+
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-nodemon-peer-death',
+        code: 1,
+        error: 'Worker peer closed unexpectedly for /src/server.mjs',
+      }),
+    );
+    const output = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' && frame.rid === 'run-nodemon-peer-death',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(output).not.toContain('npm: Worker peer closed unexpectedly');
+    await h.runtime.close();
+  });
+
+  it('selects the installed-bin path only for the exact nodemon dev script bytes', async () => {
+    const worker = boundaryWorker();
+    const h = await harness(undefined, nodemonNodeServerPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-nodemon' });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-nodemon',
+        rid: 'run-nodemon',
+        line: 'npm run dev',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+    const command = worker.command();
+    const spec = worker.spec();
+
+    const close = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:close',
+        sid: 'terminal-nodemon',
+        opId: 'close-nodemon-session',
+      }),
+    );
+    await vi.waitFor(() => expect(worker.killedWith()).toBe('SIGTERM'));
+    expect(
+      h.frames.some(
+        (frame) => frame.type === 'pty:close-ack' && frame.opId === 'close-nodemon-session',
+      ),
+    ).toBe(false);
+    worker.emitExit(null, 'SIGTERM');
+    await Promise.all([running, close]);
+
+    expect(command).toBe('/node_modules/.bin/nodemon');
+    expect(spec).toMatchObject({
+      env: {
+        PORT: '4317',
+      },
+      argv: [
+        'rifty',
+        '/node_modules/.bin/nodemon',
+        '--legacy-watch',
+        '--no-stdin',
+        '--no-update-notifier',
+        'src/server.mjs',
+      ],
+      entry: {
+        kind: 'url',
+        url: NODE_ENTRY_WORKER_URL,
+        bootstrap: {
+          protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+          payload: {
+            launch: {
+              previewScope: expect.any(String),
+            },
+          },
+        },
+      },
+    });
+    expect(spec?.entry).not.toMatchObject({
+      url: DEV_SERVER_WORKER_URL,
+    });
+    expect(h.frames).toContainEqual({
+      type: 'pty:close-ack',
+      sid: 'terminal-nodemon',
+      opId: 'close-nodemon-session',
+      ok: true,
+    });
+    expect(h.frames.filter((frame) => frame.type === 'pty:preview').at(-1)).toEqual({
+      type: 'pty:preview',
+      ports: [],
+    });
+    await h.runtime.close();
+  });
+
+  it('surfaces an unresolved nodemon launcher without a direct-node or dev-server fallback', async () => {
+    const worker = boundaryWorker();
+    const h = await harness(undefined, missingNodemonNodeServerPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-missing-nodemon' });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-missing-nodemon',
+        rid: 'run-missing-nodemon',
+        line: 'npm run dev',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    if (
+      (await settledOr(
+        running.then(() => 'settled'),
+        'pending',
+      )) === 'pending'
+    ) {
+      await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+      worker.emitExit(127);
+      await running;
+    }
+
+    const output = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' && frame.rid === 'run-missing-nodemon',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(worker.spec()).toBeNull();
+    expect(output).toMatch(/nodemon.*(not found|missing|resolve)/iu);
+    expect(output).not.toContain('[nodemon] starting');
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-missing-nodemon',
+        code: 127,
+      }),
+    );
+    await h.runtime.close();
+  });
+
   it('runs node-server npm dev in its dedicated entry-scoped child with PTY provenance', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, nodeServerPackageConfig);
@@ -537,6 +781,55 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         PORT: '9999',
       },
     });
+    await h.runtime.close();
+  });
+
+  it('intercepts only the dev lifecycle step when predev and postdev have identical bytes', async () => {
+    const worker = boundaryWorker();
+    const h = await harness(undefined, matchingLifecycleNodeServerPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-lifecycle-steps' });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-lifecycle-steps',
+        rid: 'run-lifecycle-steps',
+        line: 'npm run dev',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.command()).not.toBeNull());
+
+    expect(worker.command()).toBe('node');
+    worker.emitExit(0);
+    await vi.waitFor(() => expect(worker.command()).toBe('dev-server'));
+    const entry = worker.spec()?.entry;
+    if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
+      throw new Error('expected entry-scoped dev-server child bootstrap');
+    }
+    const payload = entry.bootstrap.payload as { readonly previewScope?: unknown };
+    if (typeof payload.previewScope !== 'string') {
+      throw new Error('expected owner-minted dev-server preview scope');
+    }
+    worker.emitMessage({
+      type: 'rifty:dev-ready',
+      port: 4317,
+      previewScope: payload.previewScope,
+    });
+    worker.emitExit(0);
+    await vi.waitFor(() => expect(worker.command()).toBe('node'));
+    worker.emitExit(0);
+    await running;
+
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-lifecycle-steps',
+        code: 0,
+      }),
+    );
     await h.runtime.close();
   });
 
@@ -740,8 +1033,8 @@ describe('Workbench project runtime', () => {
     if (payload.launch.kind !== 'program') throw new Error('expected program launch');
     expect(payload.launch.previewScope).not.toBe('scope-forged');
 
-    worker.emitMessage({
-      type: 'rifty:node-listening',
+    worker.emitListening({
+      pid: 201,
       ports: [5173],
       previewScope: 'scope-a',
     });
@@ -769,8 +1062,8 @@ describe('Workbench project runtime', () => {
       { type: 'pty:dev-server', status: 'stopped' },
     ]);
 
-    worker.emitMessage({
-      type: 'rifty:node-listening',
+    worker.emitListening({
+      pid: 201,
       ports: [5999],
       previewScope: 'late-scope',
     });
@@ -846,7 +1139,7 @@ describe('Workbench project runtime', () => {
       )
       .map((frame) => new TextDecoder().decode(frame.data))
       .join('');
-    expect(output).toBe('/\n');
+    expect(output).toBe('> pwd\n/\n');
     expect(output).not.toContain(ROOT);
     expect(h.frames).toContainEqual(
       expect.objectContaining({

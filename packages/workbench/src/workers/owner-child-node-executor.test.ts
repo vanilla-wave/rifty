@@ -1,8 +1,9 @@
+import { EventEmitter } from 'node:events';
 import type { SpawnWorkerSpec } from '@riftydev/kernel';
 import { SHADOW_ASSET_PORT_CAPABILITY } from '@riftydev/npm-client/internal';
 import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { CommandContext } from '@riftydev/shell';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   OwnerChildAdmissionReservation,
   ReserveOwnerChildAdmission,
@@ -37,7 +38,15 @@ function emptyAdmission(): OwnerChildAdmissionReservation {
 
 const reserveEmptyAdmission: ReserveOwnerChildAdmission = async () => emptyAdmission();
 
-function fakeHandle() {
+afterEach(() => vi.restoreAllMocks());
+
+/**
+ * `drainsBeforeExit` models the kernel path where the child still has admitted
+ * output when the signal lands: `kill()` starts the terminal cut and `'exit'`
+ * follows only once those bytes are delivered. The default mirrors the other
+ * case — nothing in flight, so the exit is synchronous.
+ */
+function fakeHandle({ drainsBeforeExit = false } = {}) {
   const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
   const dataCbs: Record<'stdout' | 'stderr', ((c: unknown) => void)[]> = { stdout: [], stderr: [] };
   const h = {
@@ -49,10 +58,19 @@ function fakeHandle() {
       listeners[ev] = list;
       list.push(cb);
     },
+    off: (ev: string, cb: (...args: unknown[]) => void) => {
+      listeners[ev] = (listeners[ev] ?? []).filter((listener) => listener !== cb);
+    },
+    onListeningControl: (cb: (...args: unknown[]) => void) => {
+      const list = listeners['control:listening'] ?? [];
+      listeners['control:listening'] = list;
+      list.push(cb);
+    },
     send: vi.fn(),
     // Real WorkerHandle.kill() emits 'exit' synchronously — mirror that so the
     // executor's pre-abort listener ordering is exercised.
     kill: vi.fn((_signal?: string) => {
+      if (drainsBeforeExit) return true;
       for (const cb of listeners.exit ?? []) cb(null, 'SIGTERM');
       return true;
     }),
@@ -80,29 +98,35 @@ function makeCtx(over: Record<string, unknown> = {}): CommandContext {
 }
 
 function fakeRecursiveChild() {
-  const stdout = {
-    onmessage: null as ((event: MessageEvent) => void) | null,
-    start: vi.fn(),
+  const dataListeners: Record<'stdout' | 'stderr', ((chunk: unknown) => void)[]> = {
+    stdout: [],
+    stderr: [],
   };
-  const stderr = {
-    onmessage: null as ((event: MessageEvent) => void) | null,
-    start: vi.fn(),
-  };
-  let exit: ((code: number) => void) | null = null;
+  const readable = (stream: 'stdout' | 'stderr') => ({
+    on(event: 'data', listener: (chunk: unknown) => void) {
+      if (event === 'data') dataListeners[stream].push(listener);
+    },
+  });
+  const listeners: Partial<Record<'exit' | 'peererror', (...args: unknown[]) => void>> = {};
   return {
     child: {
-      ports: { stdout, stderr },
-      onExit(listener: (code: number) => void) {
-        exit = listener;
-        return () => {
-          if (exit === listener) exit = null;
-        };
+      stdout: readable('stdout'),
+      stderr: readable('stderr'),
+      on(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void) {
+        listeners[event] = listener;
+      },
+      off(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void) {
+        if (listeners[event] === listener) delete listeners[event];
       },
       terminate: vi.fn(),
     },
-    stdout: (data: Uint8Array) => stdout.onmessage?.({ data } as MessageEvent),
-    stderr: (data: Uint8Array) => stderr.onmessage?.({ data } as MessageEvent),
-    exit: (code: number) => exit?.(code),
+    stdout: (data: Uint8Array) => {
+      for (const listener of dataListeners.stdout) listener(data);
+    },
+    stderr: (data: Uint8Array) => {
+      for (const listener of dataListeners.stderr) listener(data);
+    },
+    exit: (code: number) => listeners.exit?.(code, null),
   };
 }
 
@@ -208,12 +232,15 @@ describe('owner-child-node-executor', () => {
       spawn,
     );
 
-    const result = run({
-      entryPath: '/packages/nested/child.mjs',
-      argv: ['rifty', '/packages/nested/child.mjs', '--exact'],
-      env: { USER_VALUE: 'kept' },
-      cwd: '/',
-    });
+    const result = run(
+      {
+        entryPath: '/packages/nested/child.mjs',
+        argv: ['rifty', '/packages/nested/child.mjs', '--exact'],
+        env: { USER_VALUE: 'kept' },
+        cwd: '/',
+      },
+      { parentPid: 42 },
+    );
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     fake.stdout(new Uint8Array([0x00, 0xff]));
     fake.stdout(new Uint8Array([0x7f]));
@@ -246,7 +273,7 @@ describe('owner-child-node-executor', () => {
         env: { USER_VALUE: 'kept' },
         cwd: '/',
       }),
-      expect.objectContaining({ ppid: 1 }),
+      42,
     );
     expect(reserve).toHaveBeenCalledWith(`${REMOTE_FS_ROOT}/packages/nested/child.mjs`);
     expect(JSON.stringify(spawn.mock.calls[0]?.[0].env)).not.toContain(REMOTE_FS_ROOT);
@@ -256,6 +283,49 @@ describe('owner-child-node-executor', () => {
     expect(spawnedEntry.capabilityPorts?.[SHADOW_ASSET_PORT_CAPABILITY]).toBe(capability.port2);
     capability.port1.close();
     capability.port2.close();
+  });
+
+  it('rejects when the owner execSync worker peer dies instead of leaving its caller pending', async () => {
+    const readable = () => ({ on: vi.fn() });
+    const child = Object.assign(new EventEmitter(), {
+      kind: 'worker' as const,
+      stdout: readable(),
+      stderr: readable(),
+      terminate: vi.fn(),
+    });
+    const spawn = vi.fn(() => child);
+    const run = createOwnerExecSyncRunner(
+      'URL',
+      NODE_WORKER_RUNTIME_ENV,
+      () => REMOTE_FS_ROOT,
+      reserveEmptyAdmission,
+      spawn,
+    );
+    const result = run({
+      entryPath: '/packages/nested/child.mjs',
+      argv: ['rifty', '/packages/nested/child.mjs'],
+      env: {},
+      cwd: '/',
+    });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+    const peerFailure = new Error('owner execSync worker peer died');
+    let observed:
+      | { readonly status: 'pending' }
+      | { readonly status: 'resolved' }
+      | { readonly status: 'rejected'; readonly reason: unknown } = { status: 'pending' };
+    void result.then(
+      () => {
+        observed = { status: 'resolved' };
+      },
+      (reason: unknown) => {
+        observed = { status: 'rejected', reason };
+      },
+    );
+
+    child.emit('peererror', peerFailure);
+    await vi.waitFor(() => expect(observed).toEqual({ status: 'rejected', reason: peerFailure }), {
+      timeout: 100,
+    });
   });
 
   it('fails before owner execSync spawn when the active project is gone', async () => {
@@ -448,11 +518,11 @@ describe('owner-child-node-executor', () => {
     const p = exec('/w/server.js', [], ctx, { sid: 's1', onListening, onExit });
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     fake.out(new TextEncoder().encode('hi\n'));
-    fake.emit('message', { type: 'rifty:node-listening', ports: [3000] });
+    fake.emit('control:listening', { pid: 41, ports: [3000] });
     fake.emit('exit', 0, null);
     expect(await p).toEqual({ code: 0, signal: null });
     expect(stdout.join('')).toBe('hi\n');
-    expect(onListening).toHaveBeenCalledWith('s1', [3000], undefined);
+    expect(onListening).toHaveBeenCalledWith('s1', 41, [3000], undefined);
     expect(onExit).toHaveBeenCalledWith('s1');
   });
 
@@ -472,18 +542,23 @@ describe('owner-child-node-executor', () => {
       onExit: () => {},
     });
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
-    fake.emit('message', {
-      type: 'rifty:node-listening',
+    fake.emit('control:listening', {
+      pid: 41,
       ports: [3000],
       previewScope: 'node-run-scope',
     });
     fake.emit('exit', 0, null);
     expect(await p).toEqual({ code: 0, signal: null });
-    expect(onListening).toHaveBeenCalledWith('s1', [3000], 'node-run-scope');
+    expect(onListening).toHaveBeenCalledWith('s1', 41, [3000], 'node-run-scope');
   });
 
-  it('Ctrl-C kills the child and mutes trailing output', async () => {
-    const fake = fakeHandle();
+  it('Ctrl-C kills the child and still shows what the kernel drained before exit', async () => {
+    // The kernel holds `'exit'` until every byte admitted before the terminal
+    // cut has been delivered (ADR-0332), so output arriving between the kill
+    // and the exit is the child's real final say — a crash stack or shutdown
+    // log, exactly when the developer needs it most. Muting at kill time threw
+    // that away; the run is over at `'exit'`, and that is where output stops.
+    const fake = fakeHandle({ drainsBeforeExit: true });
     const ac = new AbortController();
     const spawn = vi.fn(() => fake.h);
     const exec = createOwnerChildNodeExecutor(
@@ -498,9 +573,32 @@ describe('owner-child-node-executor', () => {
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     ac.abort();
     expect(fake.h.kill).toHaveBeenCalledWith('SIGTERM');
-    fake.out(new TextEncoder().encode('late\n'));
+    fake.out(new TextEncoder().encode('shutting down\n'));
     fake.emit('exit', null, 'SIGTERM');
     expect(await p).toEqual({ code: null, signal: 'SIGTERM' });
+    expect(stdout.join('')).toBe('shutting down\n');
+  });
+
+  it('drops output that arrives after the run has settled', async () => {
+    const fake = fakeHandle();
+    const ac = new AbortController();
+    const spawn = vi.fn(() => fake.h);
+    const exec = createOwnerChildNodeExecutor(
+      'URL',
+      NODE_WORKER_RUNTIME_ENV,
+      reserveEmptyAdmission,
+      spawn,
+    );
+    const stdout: string[] = [];
+    const ctx = makeCtx({ stdout: { write: (s: string) => stdout.push(s) }, signal: ac.signal });
+    const p = exec('/w/server.js', [], ctx, { sid: 's1', onListening: () => {}, onExit: () => {} });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+    ac.abort();
+    fake.emit('exit', null, 'SIGTERM');
+    expect(await p).toEqual({ code: null, signal: 'SIGTERM' });
+
+    fake.out(new TextEncoder().encode('after the run\n'));
+
     expect(stdout.join('')).toBe('');
   });
 

@@ -113,12 +113,13 @@ const dependencyPolicyRules = [
     comment:
       'ADR-0282: foreign production modules reach Workbench only through its seven package entrypoints',
     from: {
-      // These artifact owners prove package-private recipes; no other foreign
-      // module may deep-import Workbench.
+      // These artifact/parity owners prove package-private recipes; no other
+      // foreign module may deep-import Workbench.
       pathNot: [
         '(?:^|/)workbench/src/',
         '(?:^|/)apps/playground/tools/bake-dep-snapshots\\.ts$',
         '(?:^|/)tools/shadow-registry/tools/(?:check-dep-snapshot-artifacts|generate-install-artifact-identity)\\.ts$',
+        '(?:^|/)tools/node-parity-runner/src/worker-env-kernel-worker\\.ts$',
       ],
     },
     to: {

@@ -14,6 +14,7 @@
  */
 
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
+import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 
 export interface ProcStdio {
   stdout?: { write?: unknown };
@@ -57,6 +58,15 @@ export interface KernelIpc {
  */
 export function installBundleLocalBuffer(): void {
   (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
+}
+
+/**
+ * Align this child bundle's fs/path cwd cell with the process installed by the
+ * kernel-worker-entry bundle. Production Worker entries duplicate module state;
+ * dev serves one shared ESM instance and hides the split.
+ */
+export function installBundleLocalCwd(cwd: string): void {
+  setProcessCwd(cwd);
 }
 
 export function installRuntimeGlobals(): KernelIpc {

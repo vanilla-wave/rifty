@@ -1,3 +1,4 @@
+import { ShellCommandLifecycleError } from '@riftydev/shell';
 import {
   type FsSync,
   VfsError,
@@ -336,8 +337,11 @@ describe('project terminal namespace', () => {
       code: 'EIO',
       path: `${ROOT}/generic.txt`,
     });
+    const ownerLifecycleError = new ShellCommandLifecycleError(
+      `Worker peer closed at ${ROOT}/src/server.mjs`,
+    );
     const ownerAggregateError = new AggregateError(
-      [ownerVfsError, ownerGenericError],
+      [ownerVfsError, ownerGenericError, ownerLifecycleError],
       `multiple failures below ${ROOT}`,
     );
 
@@ -348,6 +352,7 @@ describe('project terminal namespace', () => {
     expect(vfsError).toMatchObject({ code: 'ENOENT', path: '/vfs.txt' });
     expect(genericError).toMatchObject({ code: 'EIO', path: '/generic.txt' });
     expect(aggregateError).toBeInstanceOf(AggregateError);
+    expect((aggregateError as AggregateError).errors[2]).toBeInstanceOf(ShellCommandLifecycleError);
     expectPublicDiagnostic(vfsError);
     expectPublicDiagnostic(genericError);
     expectPublicDiagnostic(aggregateError);

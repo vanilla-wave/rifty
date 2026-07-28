@@ -5,7 +5,8 @@
  * ```
  *   ┌────────────┬───────────┬───────────────────────────────────────────┐
  *   │  0 ..   4  │ VERSION   │ Int32; SyncRpc protocol version (ADR-0032)│
- *   │  4 ..   8  │ REQ_STATE │ Int32; 0 = idle, 1 = request-pending      │
+ *   │  4 ..   8  │ REQ_STATE │ Int32; 0=idle, 1=pending, 2=handling,     │
+ *   │             │           │        3=writing                         │
  *   │  8 ..  12  │ REP_STATE │ Int32; 0 = no-reply, 1 = reply-ready      │
  *   │ 12 ..  16  │ REQ_LEN   │ Int32; request payload length in bytes    │
  *   │ 16 ..  20  │ REP_LEN   │ Int32; reply payload length in bytes      │
@@ -53,6 +54,10 @@ export const DEFAULT_PAYLOAD_CAPACITY = 1024 * 1024; // 1 MiB
 
 const STATE_IDLE = 0;
 const STATE_READY = 1;
+const STATE_HANDLING = 2;
+const STATE_WRITING = 3;
+type CallerPhase = 'idle' | 'live';
+type ResponderPhase = 'idle' | 'handling' | 'reply-published';
 export const VERSION_INDEX = VERSION_OFFSET >> 2;
 const REQ_STATE_INDEX = REQ_STATE_OFFSET >> 2;
 const REP_STATE_INDEX = REP_STATE_OFFSET >> 2;
@@ -92,6 +97,15 @@ export class RingPayloadTooLargeError extends Error {
   ) {
     super(`SAB ring payload (${bytes} bytes) exceeds capacity (${capacity} bytes)`);
     this.name = 'RingPayloadTooLargeError';
+  }
+}
+
+/** A claimed request has an invalid header and must receive an in-band error. */
+export class RingCorruptRequestError extends Error {
+  readonly code = 'ERINGCORRUPTREQUEST' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'RingCorruptRequestError';
   }
 }
 
@@ -147,6 +161,10 @@ export class SabRing {
   readonly header: SabRingHeader;
   /** Protocol version this peer expects on every incoming frame (ADR-0032). */
   readonly expectedVersion: number;
+  /** Realm-local witness for the caller half of the shared exchange claim. */
+  private callerPhase: CallerPhase = 'idle';
+  /** Realm-local witness for the responder half of the shared exchange claim. */
+  private responderPhase: ResponderPhase = 'idle';
 
   private constructor(sab: SharedArrayBuffer, payloadCapacity: number, expectedVersion: number) {
     const expected = SAB_RING_HEADER_BYTES + payloadCapacity * 2;
@@ -184,14 +202,12 @@ export class SabRing {
    * making the primal violation undiagnosable; the snapshot names it.
    */
   private headerState(): string {
-    const state = (v: number): string =>
-      v === STATE_IDLE ? 'idle' : v === STATE_READY ? 'ready' : String(v);
     const version = Atomics.load(this.i32, VERSION_INDEX);
     const req = Atomics.load(this.i32, REQ_STATE_INDEX);
     const rep = Atomics.load(this.i32, REP_STATE_INDEX);
     const reqLen = Atomics.load(this.i32, REQ_LEN_INDEX);
     const repLen = Atomics.load(this.i32, REP_LEN_INDEX);
-    return `header: version=${version} req=${state(req)} rep=${state(rep)} reqLen=${reqLen} repLen=${repLen}`;
+    return `header: version=${version} req=${stateName(req)} rep=${stateName(rep)} reqLen=${reqLen} repLen=${repLen}`;
   }
 
   /** Attaches a {@link SabRing} to an existing {@link SharedArrayBuffer}.
@@ -225,9 +241,26 @@ export class SabRing {
         `SabRing: cannot writeRequest while a previous reply is unread (${this.headerState()})`,
       );
     }
-    if (Atomics.load(this.i32, REQ_STATE_INDEX) !== STATE_IDLE) {
+    if (this.callerPhase === 'live' && Atomics.load(this.i32, REQ_STATE_INDEX) === STATE_IDLE) {
       throw new Error(
-        `SabRing: cannot writeRequest while a previous request is unread (${this.headerState()})`,
+        `SabRing: cannot writeRequest while this caller still owns a live request (${this.headerState()})`,
+      );
+    }
+    const requestState = Atomics.compareExchange(
+      this.i32,
+      REQ_STATE_INDEX,
+      STATE_IDLE,
+      STATE_WRITING,
+    );
+    if (requestState !== STATE_IDLE) {
+      throw new Error(
+        `SabRing: cannot writeRequest while a previous request is ${
+          requestState === STATE_HANDLING
+            ? 'being handled'
+            : requestState === STATE_WRITING
+              ? 'being written'
+              : 'unread'
+        } (${this.headerState()})`,
       );
     }
     this.bytes.set(payload, this.reqPayloadOffset);
@@ -235,6 +268,7 @@ export class SabRing {
     // VERSION stamped before STATE flip so the responder sees a consistent header.
     Atomics.store(this.i32, VERSION_INDEX, version);
     Atomics.store(this.i32, REQ_STATE_INDEX, STATE_READY);
+    this.callerPhase = 'live';
     Atomics.notify(this.i32, REQ_STATE_INDEX);
   }
 
@@ -242,6 +276,7 @@ export class SabRing {
    * only). Throws {@link RingTimeoutError} on timeout,
    * {@link SyncRpcProtocolMismatchError} on version mismatch (ADR-0032). */
   waitReply(timeoutMs?: number): Uint8Array {
+    this.assertCallerOwnsLiveRequest();
     const timeout = timeoutMs ?? Number.POSITIVE_INFINITY;
     const result = Atomics.wait(this.i32, REP_STATE_INDEX, STATE_IDLE, timeout);
     if (result === 'timed-out') throw new RingTimeoutError(timeout, this.headerState());
@@ -251,6 +286,7 @@ export class SabRing {
   /** Async sibling of {@link waitReply} — awaitable from any realm via
    * `Atomics.waitAsync`. Not part of the production caller API. */
   async waitReplyAsync(timeoutMs?: number): Promise<Uint8Array> {
+    this.assertCallerOwnsLiveRequest();
     const timeout = timeoutMs ?? Number.POSITIVE_INFINITY;
     const pending = atomicsWaitAsync(this.i32, REP_STATE_INDEX, STATE_IDLE, timeout);
     const result = pending.async ? await pending.value : pending.value;
@@ -258,24 +294,52 @@ export class SabRing {
     return this.consumeReply();
   }
 
-  /** Responder-side arm on REQ_STATE (ADR-0084 #17). Mirror of
-   * {@link waitReplyAsync} but on the request slot: resolves when the caller
-   * flips REQ_STATE to STATE_READY and fires {@link Atomics.notify}. Returns
-   * the raw `{async, value}` so the dispatcher can branch on the synchronous
-   * `'not-equal'` fast path (a request already landed before arming) itself —
-   * `i32`/REQ_STATE are module-private, so it can't probe them inline. */
+  /** Responder-side arm on REQ_STATE (ADR-0084 #17). Waits on the current
+   * stable phase: IDLE until publication, WRITING until READY, or HANDLING
+   * until caller release. Returns the raw `{async, value}` so the dispatcher
+   * can branch on the synchronous `'not-equal'` fast path itself. */
   armRequest(timeoutMs: number): WaitAsyncResult {
-    return atomicsWaitAsync(this.i32, REQ_STATE_INDEX, STATE_IDLE, timeoutMs);
+    const requestState = Atomics.load(this.i32, REQ_STATE_INDEX);
+    return atomicsWaitAsync(
+      this.i32,
+      REQ_STATE_INDEX,
+      requestState === STATE_HANDLING
+        ? STATE_HANDLING
+        : requestState === STATE_WRITING
+          ? STATE_WRITING
+          : STATE_IDLE,
+      timeoutMs,
+    );
   }
 
   private consumeReply(): Uint8Array {
+    this.assertCallerOwnsLiveRequest();
     // Pre-clear snapshot — the forensic state a corrupt-length throw reports.
     const stateBefore = this.headerState();
+    const replyState = Atomics.load(this.i32, REP_STATE_INDEX);
+    if (replyState !== STATE_READY) {
+      throw new Error(
+        `SabRing: cannot consume reply unless reply is ready (${this.headerState()})`,
+      );
+    }
     // Snapshot VERSION first, then clear state; the throw must not wedge the ring (ADR-0032).
     const version = Atomics.load(this.i32, VERSION_INDEX);
     const len = Atomics.load(this.i32, REP_LEN_INDEX);
     Atomics.store(this.i32, REP_LEN_INDEX, 0);
     Atomics.store(this.i32, REP_STATE_INDEX, STATE_IDLE);
+    const requestState = Atomics.compareExchange(
+      this.i32,
+      REQ_STATE_INDEX,
+      STATE_HANDLING,
+      STATE_IDLE,
+    );
+    this.callerPhase = 'idle';
+    if (requestState !== STATE_HANDLING) {
+      throw new Error(
+        `SabRing: cannot consume reply unless request is handling; found ${stateName(requestState)} (${stateBefore})`,
+      );
+    }
+    Atomics.notify(this.i32, REQ_STATE_INDEX);
     if (version !== this.expectedVersion) {
       throw new SyncRpcProtocolMismatchError(this.expectedVersion, version);
     }
@@ -292,24 +356,64 @@ export class SabRing {
 
   /** Responder-side: non-blocking. Returns a zero-copy live VIEW of the
    * request payload bytes (ADR-0084 #18 — valid only until the next slot
-   * write; decode synchronously) when pending, or `null`. Clears REQ_STATE
-   * on success. Throws {@link SyncRpcProtocolMismatchError} on version
-   * mismatch — recoverable: state is cleared, the responder should reply via
-   * {@link writeReplyWithVersion} echoing the caller's version (ADR-0032). */
+   * write; decode synchronously) when pending, or `null`. Atomically claims
+   * REQ_STATE until the caller consumes the reply; another dispatcher cannot
+   * consume the same request and another caller cannot overwrite it while the
+   * exchange is live. Throws {@link SyncRpcProtocolMismatchError} on version
+   * mismatch — the responder should reply via {@link writeReplyWithVersion}
+   * echoing the caller's version (ADR-0032). */
   readRequest(): Uint8Array | null {
-    if (Atomics.load(this.i32, REQ_STATE_INDEX) !== STATE_READY) return null;
+    const requestState = Atomics.compareExchange(
+      this.i32,
+      REQ_STATE_INDEX,
+      STATE_READY,
+      STATE_HANDLING,
+    );
+    if (requestState === STATE_IDLE) {
+      if (this.responderPhase === 'handling') {
+        throw new Error(
+          `SabRing: responder lost its handling claim before writing a reply (${this.headerState()})`,
+        );
+      }
+      this.responderPhase = 'idle';
+      return null;
+    }
+    if (requestState === STATE_WRITING) {
+      if (this.responderPhase === 'handling') {
+        throw new Error(
+          `SabRing: responder handling claim changed to writing (${this.headerState()})`,
+        );
+      }
+      this.responderPhase = 'idle';
+      return null;
+    }
+    if (requestState === STATE_HANDLING) {
+      if (this.responderPhase !== 'idle') return null;
+      throw new Error(
+        `SabRing: cannot readRequest while a previous request is being handled (${this.headerState()})`,
+      );
+    }
+    if (requestState !== STATE_READY) {
+      throw new Error(`SabRing: corrupt request state ${requestState} (${this.headerState()})`);
+    }
+    if (this.responderPhase === 'handling') {
+      throw new Error(
+        `SabRing: responder acquired a second handling claim (${this.headerState()})`,
+      );
+    }
+    this.responderPhase = 'handling';
     // Pre-clear snapshot — the forensic state a corrupt-length throw reports.
     const stateBefore = this.headerState();
-    // Snapshot VERSION first, then clear state; the throw must not wedge the ring (ADR-0032).
+    // Snapshot VERSION first. The handling claim stays live through reply write,
+    // so a second caller cannot enter the gap between request read and reply.
     const version = Atomics.load(this.i32, VERSION_INDEX);
     const len = Atomics.load(this.i32, REQ_LEN_INDEX);
     Atomics.store(this.i32, REQ_LEN_INDEX, 0);
-    Atomics.store(this.i32, REQ_STATE_INDEX, STATE_IDLE);
     if (version !== this.expectedVersion) {
       throw new SyncRpcProtocolMismatchError(this.expectedVersion, version);
     }
     if (len < 0 || len > this.payloadCapacity) {
-      throw new Error(
+      throw new RingCorruptRequestError(
         `SabRing: corrupt request length ${len} (capacity ${this.payloadCapacity}) (${stateBefore})`,
       );
     }
@@ -335,10 +439,31 @@ export class SabRing {
         `SabRing: cannot writeReply while a previous reply is unread (${this.headerState()})`,
       );
     }
+    if (this.responderPhase !== 'handling') {
+      throw new Error(`SabRing: dispatcher does not own the live request (${this.headerState()})`);
+    }
     this.bytes.set(payload, this.repPayloadOffset);
     Atomics.store(this.i32, REP_LEN_INDEX, payload.byteLength);
     Atomics.store(this.i32, VERSION_INDEX, version);
     Atomics.store(this.i32, REP_STATE_INDEX, STATE_READY);
+    this.responderPhase = 'reply-published';
     Atomics.notify(this.i32, REP_STATE_INDEX);
   }
+
+  private assertCallerOwnsLiveRequest(): void {
+    if (this.callerPhase === 'live') return;
+    throw new Error(`SabRing: caller does not own the live request (${this.headerState()})`);
+  }
+}
+
+function stateName(value: number): string {
+  return value === STATE_IDLE
+    ? 'idle'
+    : value === STATE_READY
+      ? 'ready'
+      : value === STATE_HANDLING
+        ? 'handling'
+        : value === STATE_WRITING
+          ? 'writing'
+          : String(value);
 }

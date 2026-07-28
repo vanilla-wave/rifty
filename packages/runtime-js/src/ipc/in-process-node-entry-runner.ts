@@ -18,6 +18,10 @@
 
 import { syncMirror } from '../builtins/fs-sync-mirror.ts';
 import { runNodeEntry } from '../builtins/node-entry.ts';
+import {
+  readActiveNodeProcessBootstrap,
+  setActiveNodeProcessBootstrap,
+} from '../builtins/process-bootstrap-identity.ts';
 import { riftyProcess } from '../builtins/process.ts';
 import { type NodeEntryRunner, concatChunks } from './recursive-runner.ts';
 
@@ -56,6 +60,7 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
     };
     const g = globalThis as { process?: unknown };
     const prevGlobalProcess = g.process;
+    const prevActiveProcess = readActiveNodeProcessBootstrap();
     const prevStdout = riftyProcess.stdout;
     const prevExitCode = riftyProcess.exitCode;
     (riftyProcess as { stdout: unknown }).stdout = capture;
@@ -64,6 +69,7 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
     // (its stdout/exitCode now route to our capture), the same realm shape the
     // kernel pre-entry hook gives a Worker child — scoped to this run.
     g.process = riftyProcess;
+    setActiveNodeProcessBootstrap(riftyProcess);
     let exitCode = 0;
     try {
       await runNodeEntry({
@@ -77,6 +83,10 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
       exitCode = exitCodeFromThrow(err);
     } finally {
       g.process = prevGlobalProcess;
+      setActiveNodeProcessBootstrap(
+        prevActiveProcess?.process ?? null,
+        prevActiveProcess?.federated ?? false,
+      );
       (riftyProcess as { stdout: unknown }).stdout = prevStdout;
       riftyProcess.exitCode = prevExitCode;
     }

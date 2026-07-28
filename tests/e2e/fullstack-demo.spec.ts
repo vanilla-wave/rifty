@@ -11,13 +11,24 @@
  * generous polls, network required.
  */
 import { expect, test } from '@playwright/test';
-import { expectTerminalContains, pickStarter } from './helpers/playground.ts';
+import {
+  expectTerminalContains,
+  openShellTerminal,
+  pickStarter,
+  runTerminalLine,
+  runTerminalLineSettled,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 const PORT = 3210;
 
+function occurrences(text: string, needle: string): number {
+  return text.split(needle).length - 1;
+}
+
 test.describe('Fullstack demo — Express + node:sqlite through the SW preview bridge', () => {
   test('preset boots the server; API and client both round-trip', async ({ page }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(420_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
     page.on('console', (msg) => {
       if (msg.type() === 'error') console.log('[console.error]', msg.text());
@@ -37,6 +48,13 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     // the OWNER realm (which serves the preview), streaming each package to the
     // terminal before the node server boots co-resident in the owner (ADR-0148).
     await expectTerminalContains(page, 'npm: + express@', 120_000);
+    await expectTerminalContains(page, 'npm: + nodemon@3.1.14', 120_000);
+    await expectTerminalContains(
+      page,
+      '> nodemon --legacy-watch --no-stdin --no-update-notifier src/main.js',
+      45_000,
+    );
+    await expectTerminalContains(page, '[nodemon] starting `node src/main.js`', 45_000);
 
     // Express + engine boot behind a live npm install — poll the API route.
     // The predicate demands PARSEABLE JSON: a transient 200 from a non-SW
@@ -134,5 +152,148 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
 
     // The write made it into the terminal as a db log line.
     await expectTerminalContains(page, '[db] INSERT todos #', 10_000);
+
+    const restartMarker = `express-nodemon-${Date.now()}`;
+    await openShellTerminal(page);
+    await runTerminalLineSettled(page, `echo "console.log('${restartMarker}')" >> src/main.js`);
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('[nodemon] restarting due to changes');
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(restartMarker);
+    await expect
+      .poll(async () => (await fetchTodos()).count, {
+        timeout: 45_000,
+        intervals: [250, 500, 1_000],
+      })
+      .toBe(3);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    const rapidMarker = `express-rapid-${Date.now()}`;
+    const restartsBeforeRapid = (await terminalBuffer(page, 0)).split(
+      '[nodemon] restarting due to changes',
+    ).length;
+    await runTerminalLineSettled(
+      page,
+      `echo "console.log('rapid-intermediate')" >> src/main.js && echo "console.log('${rapidMarker} pid=' + process.pid + ' ppid=' + process.ppid)" >> src/main.js`,
+    );
+    await expect
+      .poll(
+        async () =>
+          (await terminalBuffer(page, 0)).split('[nodemon] restarting due to changes').length,
+        { timeout: 45_000 },
+      )
+      .toBeGreaterThan(restartsBeforeRapid);
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(rapidMarker);
+    await expect.poll(async () => (await fetchTodos()).count, { timeout: 45_000 }).toBe(3);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    const appIdentity = new RegExp(`${rapidMarker} pid=(\\d+) ppid=(\\d+)`, 'u').exec(
+      await terminalBuffer(page, 0),
+    );
+    expect(appIdentity, 'edited app must expose its real PID/PPID').not.toBeNull();
+    const appPid = Number(appIdentity?.[1]);
+    const supervisorPid = Number(appIdentity?.[2]);
+    await runTerminalLineSettled(page, 'ps -A -o ppid,pid');
+    const processRows = [...(await terminalBuffer(page)).matchAll(/^\s*(\d+)\s+(\d+)\s*$/gmu)].map(
+      (match) => ({ ppid: Number(match[1]), pid: Number(match[2]) }),
+    );
+    expect(processRows).toContainEqual({ ppid: supervisorPid, pid: appPid });
+    expect(processRows.filter((row) => row.ppid === supervisorPid)).toEqual([
+      { ppid: supervisorPid, pid: appPid },
+    ]);
+    await expect(page.locator(`iframe[title="Preview port ${PORT}"]`)).toHaveCount(1);
+    await expect(page.locator(`.rf-preview__switcher option[value="${PORT}"]`)).toHaveCount(1);
+
+    await runTerminalLineSettled(page, `echo 'const = ;' >> src/main.js`);
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('Failed to parse ESM source');
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 45_000 })
+      .toContain('[nodemon] app crashed - waiting for file changes before starting');
+
+    const recoveryMarker = `express-recovered-${Date.now()}`;
+    await runTerminalLineSettled(
+      page,
+      `head -n -1 src/main.js > src/main.fixed && echo "console.log('${recoveryMarker}')" >> src/main.fixed && mv src/main.fixed src/main.js`,
+    );
+    await expect.poll(() => terminalBuffer(page, 0), { timeout: 45_000 }).toContain(recoveryMarker);
+    await expect.poll(async () => (await fetchTodos()).count, { timeout: 45_000 }).toBe(3);
+    expect(await terminalBuffer(page, 0)).not.toContain('EADDRINUSE');
+
+    const queuedMarker = `express-queued-after-close-${Date.now()}`;
+    await runTerminalLine(page, `echo "console.log('${queuedMarker}')" >> src/main.js`);
+    await page.getByRole('tab', { name: 'Express + SQLite scratch', exact: true }).click();
+    await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
+    await page.keyboard.press('Control+c');
+    await expect
+      .poll(async () => (await fetchTodos()).ok, {
+        timeout: 45_000,
+        intervals: [250, 500, 1_000],
+      })
+      .toBe(false);
+    const startsAfterStop = (await terminalBuffer(page, 0)).split('[nodemon] starting').length;
+    await page.waitForTimeout(2_000);
+    expect((await fetchTodos()).ok).toBe(false);
+    expect((await terminalBuffer(page, 0)).split('[nodemon] starting')).toHaveLength(
+      startsAfterStop,
+    );
+    await expect(page.locator(`.rf-preview__switcher option[value="${PORT}"]`)).toHaveCount(0);
+    const closeStart = `PROCESS_TABLE_START_${Date.now()}`;
+    const closeDone = `PROCESS_TABLE_DONE_${Date.now()}`;
+    await runTerminalLineSettled(
+      page,
+      `echo ${closeStart} && ps -A -o ppid,pid && echo ${closeDone}`,
+    );
+    const closeBuffer = await terminalBuffer(page);
+    const closeTable = closeBuffer.slice(
+      closeBuffer.lastIndexOf(closeStart) + closeStart.length,
+      closeBuffer.lastIndexOf(closeDone),
+    );
+    expect(closeBuffer.lastIndexOf(closeDone)).toBeGreaterThan(closeBuffer.lastIndexOf(closeStart));
+    expect(closeTable).toMatch(/^\s*PPID\s+PID\s*$/mu);
+    expect(closeTable).toMatch(/^\s*0\s+1\s*$/mu);
+    const closedPids = new Set([appPid, supervisorPid]);
+    expect(
+      [...closeTable.matchAll(/^\s*(\d+)\s+(\d+)\s*$/gmu)].some(
+        (row) => closedPids.has(Number(row[1])) || closedPids.has(Number(row[2])),
+      ),
+    ).toBe(false);
+
+    const startsBeforeLaunchFaults = occurrences(
+      await terminalBuffer(page, 0),
+      '[nodemon] starting',
+    );
+    const missingMarker = `MISSING_NODEMON_${Date.now()}`;
+    await runTerminalLineSettled(
+      page,
+      'mv node_modules/.bin/nodemon node_modules/.bin/nodemon.saved',
+    );
+    await runTerminalLineSettled(
+      page,
+      `npm run dev && echo ${missingMarker}_UNEXPECTED || echo ${missingMarker}_SETTLED`,
+      45_000,
+    );
+    let launchFaultBuffer = await terminalBuffer(page, 0);
+    expect(occurrences(launchFaultBuffer, `${missingMarker}_SETTLED`)).toBe(2);
+    expect(occurrences(launchFaultBuffer, `${missingMarker}_UNEXPECTED`)).toBe(1);
+    expect(occurrences(launchFaultBuffer, '[nodemon] starting')).toBe(startsBeforeLaunchFaults);
+    expect((await fetchTodos()).ok).toBe(false);
+
+    const corruptMarker = `CORRUPT_NODEMON_${Date.now()}`;
+    await runTerminalLineSettled(
+      page,
+      `echo 'this is not a valid node launcher' > node_modules/.bin/nodemon`,
+    );
+    await runTerminalLineSettled(
+      page,
+      `npm run dev && echo ${corruptMarker}_UNEXPECTED || echo ${corruptMarker}_SETTLED`,
+      45_000,
+    );
+    launchFaultBuffer = await terminalBuffer(page, 0);
+    expect(occurrences(launchFaultBuffer, `${corruptMarker}_SETTLED`)).toBe(2);
+    expect(occurrences(launchFaultBuffer, `${corruptMarker}_UNEXPECTED`)).toBe(1);
+    expect(occurrences(launchFaultBuffer, '[nodemon] starting')).toBe(startsBeforeLaunchFaults);
+    expect((await fetchTodos()).ok).toBe(false);
   });
 });

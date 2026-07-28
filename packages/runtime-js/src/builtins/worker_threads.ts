@@ -14,6 +14,7 @@ import {
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
+  observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
@@ -25,8 +26,12 @@ import {
   readNodeEntryBootstrapIfPresent,
 } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
+import {
+  readActiveNodeProcessBootstrap,
+  setActiveNodeProcessBootstrap,
+} from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
-import { getProcessCwd } from './process.ts';
+import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
@@ -84,6 +89,8 @@ export class Worker extends EventEmitter {
   private readonly workerData: unknown;
   private readonly env: Record<string, string>;
   private readonly processContext: NodeProcessContextSnapshot | null;
+  private readonly ownerProcess: unknown;
+  private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
   private exited = false;
   private sameRealmContext: WorkerThreadContext | null = null;
   private sameRealmParentPort: WorkerPort | null = null;
@@ -95,6 +102,8 @@ export class Worker extends EventEmitter {
 
   constructor(script: WorkerScript, opts: WorkerOptions = {}) {
     super();
+    this.ownerProcess = (globalThis as { process?: unknown }).process;
+    this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     const processContext = snapshotNodeProcessContext();
     const env =
@@ -172,24 +181,36 @@ export class Worker extends EventEmitter {
         // TODO(backlog: runtime-js/worker-threads-kernel-run-to-completion-exit).
         serve: true,
       };
-      const handle = globalProcessManager.spawnWorker('node', spec);
+      const handle = globalProcessManager.spawnWorkerThread(
+        spec,
+        { pid: this.processContext.pid, ppid: this.processContext.ppid },
+        { cwd: this.processContext.cwd },
+      );
       this.workerHandle = handle;
       if (handle.kind === 'worker') {
-        handle.stdout().on('data', (chunk) => this.emit('stdout', chunk));
-        handle.stderr().on('data', (chunk) => this.emit('stderr', chunk));
+        handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
+        handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start
         // is already deferred at the shared entry above.
-        this.emit('online');
+        this.emitToOwner('online');
       }
-      handle.on('exit', (code) => {
+      observeProcessTerminalOutcome(handle, (outcome) => {
+        if (outcome.kind === 'peererror') {
+          try {
+            this.emitWorkerError(outcome.error);
+          } finally {
+            this.finish(1);
+          }
+          return;
+        }
         // TODO(backlog: runtime-js/worker-threads-kernel-error-event): a
         // worker-runtime uncaught throw exits 1 here with the stack on stderr,
         // but Node also emits 'error' (the real Error) first. Needs a child-side
         // uncaught handler posting an IPC error frame; faking an Error from the
         // exit code would lie. Same-realm path already emits 'error'.
-        this.finish(typeof code === 'number' ? code : 1);
+        this.finish(typeof outcome.code === 'number' ? outcome.code : 1);
       });
     } catch (err) {
       this.emitWorkerError(err);
@@ -218,7 +239,7 @@ export class Worker extends EventEmitter {
 
       // Node emits 'online' when the worker starts executing — about to run the
       // script body now.
-      this.emit('online');
+      this.emitToOwner('online');
 
       const previousGlobalOnMessage = readGlobalOnMessage();
       if (shouldLoadWithModuleLoader(script, source)) {
@@ -300,7 +321,7 @@ export class Worker extends EventEmitter {
   }
 
   private emitWorkerMessage(msg: unknown): void {
-    this.emit('message', msg);
+    this.emitToOwner('message', msg);
   }
 
   private flushKernelMessages(handle: Extract<ProcessHandle, { kind: 'worker' }>): void {
@@ -334,13 +355,33 @@ export class Worker extends EventEmitter {
   }
 
   private emitWorkerError(error: unknown): void {
-    this.emit('error', error);
+    this.emitToOwner('error', error);
   }
 
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
-    this.emit('exit', code);
+    this.emitToOwner('exit', code);
+  }
+
+  private emitToOwner(event: string, ...args: unknown[]): boolean {
+    const realm = globalThis as { process?: unknown };
+    const previousProcess = realm.process;
+    const previousBootstrap = readActiveNodeProcessBootstrap();
+    realm.process = this.ownerProcess;
+    setActiveNodeProcessBootstrap(
+      this.ownerBootstrap?.process ?? null,
+      this.ownerBootstrap?.federated ?? false,
+    );
+    try {
+      return this.emit(event, ...args);
+    } finally {
+      setActiveNodeProcessBootstrap(
+        previousBootstrap?.process ?? null,
+        previousBootstrap?.federated ?? false,
+      );
+      realm.process = previousProcess;
+    }
   }
 }
 
@@ -549,35 +590,30 @@ function withSameRealmWorkerContextSync<T>(context: WorkerThreadContext, fn: () 
   }
 }
 
-interface ProcessWithWorkerIpc {
-  on?(event: 'message', handler: (message: unknown) => void): unknown;
-  send?(message: unknown): unknown;
-}
-
 function readProcessWorkerContext(): WorkerThreadContext | null {
   if (cachedProcessWorkerContext !== undefined) return cachedProcessWorkerContext;
-  const proc = globalThis.process as unknown as ProcessWithWorkerIpc | undefined;
+  const proc = globalThis.process as unknown;
   const bootstrap = readNodeEntryBootstrapIfPresent();
   if (proc === undefined || bootstrap?.launch.kind !== 'worker-thread') {
     cachedProcessWorkerContext = null;
     return null;
   }
   const launch = bootstrap.launch;
+  const ipc = nodeProcessWorkerIpc(proc);
   const parentPort = createWorkerPort((msg) => {
-    if (typeof proc.send !== 'function') {
+    if (!ipc.send(msg)) {
       throw new NotImplementedError(
         'worker_threads.parentPort.postMessage',
-        'kernel process IPC is not available',
+        'kernel worker_threads IPC is closed',
       );
     }
-    proc.send(msg);
   });
   const context: WorkerThreadContext = {
     parentPort,
     workerData: decodeWorkerData(launch.workerDataJson),
     threadId: launch.threadId,
   };
-  proc.on?.('message', (msg) => {
+  ipc.onMessage((msg) => {
     withSameRealmWorkerContextSync(context, () => deliverToPort(parentPort, msg));
   });
   cachedProcessWorkerContext = context;

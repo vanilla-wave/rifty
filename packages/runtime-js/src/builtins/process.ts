@@ -17,8 +17,17 @@
  * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
  * real package breaks.
  */
-import type { IpcFrame, KernelProcessSpec } from '@riftydev/kernel';
+import {
+  type IpcFrame,
+  type KernelProcessSpec,
+  type KernelStdioOutputWriter,
+  decodeIpcFrame,
+  globalProcessManager,
+} from '@riftydev/kernel';
 import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
+import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -27,11 +36,27 @@ import {
   readNodeEntryBootstrapIfPresent,
   snapshotNodeEntryTerminalBootstrap,
 } from './node-entry-runtime-config.ts';
+import {
+  attachNodeProcessBootstrapIdentity,
+  readActiveNodeProcessBootstrap,
+  readNodeProcessBootstrapIdentity,
+  setActiveNodeProcessBootstrap,
+} from './process-bootstrap-identity.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
   'rifty.runtime-js.process-terminal-bootstrap.v1',
 );
+const NODE_PROCESS_LISTENING_CONTROL = Symbol.for('rifty.runtime-js.process-listening-control.v1');
+const NODE_PROCESS_WORKER_IPC = Symbol.for('rifty.runtime-js.process-worker-ipc.v1');
+const NODE_PROCESS_DESCENDANT_AUTHORITY = Symbol.for(
+  'rifty.runtime-js.process-descendant-authority.v1',
+);
+const NODE_PROCESS_BOOTSTRAP_IDENTITY = Symbol.for(
+  'rifty.runtime-js.process-bootstrap-identity.v1',
+);
+const RIFTY_PROCESS_EXIT = 'RIFTY_PROCESS_EXIT';
+let processExitErrorTrapInstalled = false;
 const nextTickQueue: Array<{ fn: (...args: unknown[]) => void; args: unknown[] }> = [];
 // Head cursor instead of shift()-per-item: O(n) drain, not O(n^2) (#27, perf-audit
 // 2026-06-05). Reset to 0 only after a full drain (see drainNextTicks).
@@ -46,6 +71,31 @@ let promisePatched = false;
  * Default `/workspace` matches the runtime VFS bootstrap convention.
  */
 let currentCwd = '/workspace';
+
+export interface NodeProcessDescendantAuthority {
+  kill(pid: number, signal: string): boolean;
+  snapshot(): readonly { readonly pid: number }[];
+}
+
+function installProcessExitErrorTrap(): void {
+  if (processExitErrorTrapInstalled) return;
+  const target = globalThis as unknown as {
+    addEventListener?: (type: string, listener: (event: unknown) => void) => void;
+  };
+  if (typeof target.addEventListener !== 'function') return;
+  processExitErrorTrapInstalled = true;
+  target.addEventListener('error', (event) => {
+    if (typeof event !== 'object' || event === null) return;
+    const error = (event as { error?: unknown }).error;
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      (error as { code?: unknown }).code === RIFTY_PROCESS_EXIT
+    ) {
+      (event as { preventDefault?: () => void }).preventDefault?.();
+    }
+  });
+}
 
 function drainNextTicks(): void {
   // Re-read `.length` each iteration so items enqueued mid-drain (nextTick from
@@ -187,7 +237,7 @@ function applyTtyShape(
 
 /** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
 function makeStdioWriter(
-  port: MessagePort,
+  port: KernelStdioOutputWriter,
   fd: number,
   isTTY: boolean,
   size: { readonly cols: number; readonly rows: number },
@@ -197,14 +247,9 @@ function makeStdioWriter(
     fd,
     write(chunk: string | Uint8Array) {
       const bytes = encodeChunk(chunk);
-      // Transfer the buffer only when we own it (TextEncoder output). A passed-in
-      // Uint8Array may share its backing buffer with the caller, so copy instead.
-      if (typeof chunk === 'string') {
-        port.postMessage(bytes, [bytes.buffer]);
-      } else {
-        const copy = new Uint8Array(bytes);
-        port.postMessage(copy, [copy.buffer]);
-      }
+      // A passed-in view may share storage with its caller; the semantic writer
+      // owns transport, while this adapter preserves Node's non-detaching write.
+      port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
       return true;
     },
   }) as NodeStdioWriter;
@@ -295,9 +340,18 @@ function makeStdinReader(
   let explicitlyPaused = false;
   let eofReceived = false;
   let endEmitted = false;
+  let keepaliveHeld = false;
+  const syncKeepalive = (): void => {
+    const shouldHold = port !== undefined && flowing && !eofReceived;
+    if (shouldHold === keepaliveHeld) return;
+    keepaliveHeld = shouldHold;
+    if (shouldHold) refEventLoop();
+    else unrefEventLoop();
+  };
   const stdin = new NodeStdinEmitter(() => {
     if (explicitlyPaused) return;
     flowing = true;
+    syncKeepalive();
     queueMicrotask(flush);
   });
 
@@ -332,6 +386,7 @@ function makeStdinReader(
   const end = (): void => {
     if (eofReceived) return;
     eofReceived = true;
+    syncKeepalive();
     flush();
   };
 
@@ -351,12 +406,14 @@ function makeStdinReader(
     resume() {
       explicitlyPaused = false;
       flowing = true;
+      syncKeepalive();
       flush();
       return stdin;
     },
     pause() {
       explicitlyPaused = true;
       flowing = false;
+      syncKeepalive();
       return stdin;
     },
   });
@@ -479,14 +536,22 @@ export class NodeProcess extends EventEmitter {
   nextTick = nextTick;
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
-  send?: (message: unknown) => boolean;
+  send?: (message: unknown, ...unsupported: unknown[]) => boolean;
   disconnect?: () => void;
+  connected?: boolean;
+  channel?: ReturnType<typeof nodeIpcChannel> | null;
 
   readonly #stdinPush: (data: string | Uint8Array) => void;
   #ipcPort: MessagePort | null = null;
   #ipcDisconnected = false;
   #controlClosed = false;
+  #publicIpc = false;
+  #jsonIpc = false;
+  #ipcKeepaliveHeld = false;
+  readonly #workerMessageListeners = new Set<(message: unknown) => void>();
+  readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
+  #descendantAuthority: NodeProcessDescendantAuthority | null = null;
   // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
   // in order on the first listener; mirrors makeStdinReader's pending buffer.
   readonly #ipcBacklog: unknown[] = [];
@@ -499,7 +564,48 @@ export class NodeProcess extends EventEmitter {
       configurable: false,
       writable: false,
     });
+    Object.defineProperty(this, NODE_PROCESS_LISTENING_CONTROL, {
+      value: (ports: unknown, previewScope: unknown): void =>
+        this.#postListeningControl(ports, previewScope),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+    Object.defineProperty(this, NODE_PROCESS_WORKER_IPC, {
+      value: (): NodeProcessWorkerIpc => ({
+        send: (message) => this.#sendWorkerMessage(message),
+        onMessage: (listener) => {
+          this.#workerMessageListeners.add(listener);
+          if (this.#workerIpcBacklog.length > 0) {
+            setTimeout(() => {
+              for (const message of this.#workerIpcBacklog.splice(0)) {
+                for (const current of [...this.#workerMessageListeners]) current(message);
+              }
+            }, 0);
+          }
+          return () => this.#workerMessageListeners.delete(listener);
+        },
+      }),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+    Object.defineProperty(this, NODE_PROCESS_DESCENDANT_AUTHORITY, {
+      value: (authority: unknown): void => this.#bindDescendantAuthority(authority),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+    Object.defineProperty(this, NODE_PROCESS_BOOTSTRAP_IDENTITY, {
+      value: (): { readonly pid: number; readonly ppid: number } | null =>
+        readNodeProcessBootstrapIdentity(this),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
     if (spec) {
+      attachNodeProcessBootstrapIdentity(this, spec);
+      installProcessExitErrorTrap();
       this.pid = spec.pid;
       this.ppid = spec.ppid;
       this.argv = [...spec.argv];
@@ -514,7 +620,18 @@ export class NodeProcess extends EventEmitter {
       const reader = makeStdinReader(spec.stdio.stdin, terminal.stdinIsTTY);
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
-      this.#wireIpc(spec.stdio.ipc);
+      const launch = readNodeEntryBootstrapIfPresent()?.launch;
+      if (launch?.kind === 'program' && (launch.ipc ?? 'none') === 'none') {
+        this.#wireControl(spec.stdio.ipc);
+      } else if (launch?.kind === 'worker-thread') {
+        this.#wireWorkerIpc(spec.stdio.ipc);
+      } else {
+        this.#publicIpc = true;
+        this.#jsonIpc = launch?.kind === 'program';
+        this.connected = true;
+        this.channel = nodeIpcChannel('process');
+        this.#wireIpc(spec.stdio.ipc);
+      }
     } else {
       this.pid = 1;
       this.ppid = 0;
@@ -540,6 +657,30 @@ export class NodeProcess extends EventEmitter {
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
     }
+  }
+
+  override addListener(event: string | symbol, listener: StdinListener): this {
+    const result = super.addListener(event, listener);
+    if (event === 'message') this.#syncIpcKeepalive();
+    return result;
+  }
+
+  override prependListener(event: string | symbol, listener: StdinListener): this {
+    const result = super.prependListener(event, listener);
+    if (event === 'message') this.#syncIpcKeepalive();
+    return result;
+  }
+
+  override removeListener(event: string | symbol, listener: StdinListener): this {
+    const result = super.removeListener(event, listener);
+    if (event === 'message') this.#syncIpcKeepalive();
+    return result;
+  }
+
+  override removeAllListeners(event?: string | symbol): this {
+    const result = super.removeAllListeners(event);
+    if (event === undefined || event === 'message') this.#syncIpcKeepalive();
+    return result;
   }
 
   cwd(): string {
@@ -590,10 +731,21 @@ export class NodeProcess extends EventEmitter {
   exit(code: unknown = 0): never {
     const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
     this.#exitCode = c;
+    if (this.#ipcPort !== null) this.#requestSelfExit(toUint8ExitCode(c));
     throw Object.assign(new Error(`process.exit(${c})`), {
-      code: 'RIFTY_PROCESS_EXIT',
+      code: RIFTY_PROCESS_EXIT,
       exitCode: toUint8ExitCode(c), // OS-style uint8 wrap (process.exit(257) → 1)
     });
+  }
+
+  kill(pid: number, signal = 'SIGTERM'): boolean {
+    if (pid !== this.pid || signal !== 'SIGUSR2') {
+      throw new NotImplementedError(
+        'process.kill',
+        'only process.kill(process.pid, "SIGUSR2") is implemented',
+      );
+    }
+    return this.#requestSelfSignal(signal);
   }
 
   /** Host bridge: deliver terminal/process stdin into this realm's process. */
@@ -606,19 +758,26 @@ export class NodeProcess extends EventEmitter {
     // Browsers auto-start a port only with `addEventListener('message')`; using
     // `onmessage = …` requires an explicit `start()` (called below).
     port.onmessage = (ev: MessageEvent): void => {
-      const frame = ev.data as IpcFrame | undefined;
-      if (!frame || typeof frame !== 'object' || typeof frame.kind !== 'string') return;
+      const frame = this.#receiveControlFrame(ev.data);
+      if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#ipcDisconnected) return;
+        const payload = this.#jsonIpc ? serializeNodeIpcMessage(frame.payload) : frame.payload;
         if (this.listenerCount('message') === 0) {
-          this.#ipcBacklog.push(frame.payload);
+          this.#ipcBacklog.push(payload);
         } else {
-          this.emit('message', frame.payload);
+          this.emit('message', payload);
         }
       } else if (frame.kind === 'ipc:tty-resize') {
         this.#resizeTty(frame.cols, frame.rows);
       } else if (frame.kind === 'ipc:disconnect') {
         this.#disconnectIpc();
+      } else if (frame.kind === 'control:signal') {
+        this.#receiveSignal(frame.signal);
+      } else if (frame.kind === 'control:kill-tree') {
+        this.#killDescendant(frame.pid, frame.signal);
+      } else {
+        this.#rejectControlFrame();
       }
     };
     port.start();
@@ -640,10 +799,12 @@ export class NodeProcess extends EventEmitter {
       }, 0);
     });
 
-    this.send = (message: unknown): boolean => {
+    this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
+      if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
+      const payload = this.#jsonIpc ? serializeNodeIpcMessage(message) : message;
       try {
-        const frame: IpcFrame = { kind: 'ipc:message', payload: message };
+        const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
         return true;
       } catch {
@@ -662,6 +823,131 @@ export class NodeProcess extends EventEmitter {
       }
       this.#disconnectIpc();
     };
+  }
+
+  /** Control-only lane for a plain spawn: no public process.send/disconnect. */
+  #wireControl(port: MessagePort): void {
+    this.#ipcPort = port;
+    port.onmessage = (event: MessageEvent): void => {
+      const frame = this.#receiveControlFrame(event.data);
+      if (frame === null) return;
+      if (frame.kind === 'ipc:tty-resize') {
+        this.#resizeTty(frame.cols, frame.rows);
+      } else if (frame.kind === 'control:signal') {
+        this.#receiveSignal(frame.signal);
+      } else if (frame.kind === 'control:kill-tree') {
+        this.#killDescendant(frame.pid, frame.signal);
+      } else {
+        this.#rejectControlFrame();
+      }
+    };
+    port.start();
+  }
+
+  /** Structured-clone worker_threads lane with no public process IPC surface. */
+  #wireWorkerIpc(port: MessagePort): void {
+    this.#ipcPort = port;
+    port.onmessage = (event: MessageEvent): void => {
+      const frame = this.#receiveControlFrame(event.data);
+      if (frame === null) return;
+      if (frame.kind === 'ipc:message') {
+        if (this.#workerMessageListeners.size === 0) this.#workerIpcBacklog.push(frame.payload);
+        else {
+          for (const listener of [...this.#workerMessageListeners]) listener(frame.payload);
+        }
+      } else if (frame.kind === 'ipc:tty-resize') {
+        this.#resizeTty(frame.cols, frame.rows);
+      } else if (frame.kind === 'control:signal') {
+        this.#receiveSignal(frame.signal);
+      } else if (frame.kind === 'control:kill-tree') {
+        this.#killDescendant(frame.pid, frame.signal);
+      } else {
+        this.#rejectControlFrame();
+      }
+    };
+    port.start();
+  }
+
+  #sendWorkerMessage(message: unknown): boolean {
+    if (this.#controlClosed || this.#ipcPort === null) return false;
+    try {
+      this.#ipcPort.postMessage({ kind: 'ipc:message', payload: message } satisfies IpcFrame);
+      return true;
+    } catch {
+      this.#closeControl();
+      return false;
+    }
+  }
+
+  #receiveSignal(signal: string): void {
+    if (signal !== 'SIGUSR2') {
+      throw new NotImplementedError('process.signal', `signal ${signal} is not implemented`);
+    }
+    if (this.listenerCount(signal) === 0) {
+      this.#requestSelfSignal(signal);
+      return;
+    }
+    this.emit(signal);
+  }
+
+  #requestSelfSignal(signal: string): boolean {
+    if (this.#controlClosed || this.#ipcPort === null) return false;
+    try {
+      this.#ipcPort.postMessage({ kind: 'control:self-signal', signal } satisfies IpcFrame);
+      return true;
+    } catch {
+      this.#closeControl();
+      return false;
+    }
+  }
+
+  #requestSelfExit(code: number): void {
+    try {
+      this.#ipcPort?.postMessage({ kind: 'control:self-exit', code } satisfies IpcFrame);
+    } catch {
+      this.#closeControl();
+    }
+  }
+
+  #receiveControlFrame(value: unknown): IpcFrame | null {
+    try {
+      return decodeIpcFrame(value);
+    } catch {
+      this.#rejectControlFrame();
+      return null;
+    }
+  }
+
+  #rejectControlFrame(): void {
+    this.#requestSelfExit(1);
+  }
+
+  #killDescendant(pid: number, signal: string): void {
+    const authority = this.#descendantAuthority ?? globalProcessManager;
+    // Absence proves a federated descendant is already physically retired.
+    if (!authority.kill(pid, signal) && authority.snapshot().some((row) => row.pid === pid)) {
+      throw new Error(`process control could not kill descendant PID ${pid}`);
+    }
+  }
+
+  #bindDescendantAuthority(authority: unknown): void {
+    if (this.#descendantAuthority !== null) {
+      throw new Error('process descendant process authority is already bound');
+    }
+    if (typeof authority !== 'object' || authority === null) {
+      throw new TypeError('process descendant authority must be an object');
+    }
+    const kill = Reflect.get(authority, 'kill');
+    const snapshot = Reflect.get(authority, 'snapshot');
+    if (typeof kill !== 'function' || typeof snapshot !== 'function') {
+      throw new TypeError('process descendant authority requires kill() and snapshot()');
+    }
+    this.#descendantAuthority = Object.freeze({
+      kill: (pid: number, signal: string): boolean =>
+        Reflect.apply(kill, authority, [pid, signal]) as boolean,
+      snapshot: (): readonly { readonly pid: number }[] =>
+        Reflect.apply(snapshot, authority, []) as readonly { readonly pid: number }[],
+    });
   }
 
   #resizeTty(cols: number, rows: number): void {
@@ -688,11 +974,55 @@ export class NodeProcess extends EventEmitter {
     applyTtyShape(this.stderr, snapshot.stderrIsTTY, size);
   }
 
+  #postListeningControl(ports: unknown, previewScope: unknown): void {
+    if (
+      !Array.isArray(ports) ||
+      ports.some(
+        (port) => !Number.isSafeInteger(port) || (port as number) <= 0 || (port as number) > 65_535,
+      ) ||
+      new Set(ports).size !== ports.length
+    ) {
+      throw new TypeError('process listening control ports must be unique valid TCP ports');
+    }
+    if (
+      previewScope !== undefined &&
+      (typeof previewScope !== 'string' || previewScope.length === 0)
+    ) {
+      throw new TypeError('process listening control previewScope must be a non-empty string');
+    }
+    if (this.#controlClosed || this.#ipcPort === null) {
+      throw new Error('process listening control channel is closed');
+    }
+    try {
+      this.#ipcPort.postMessage({
+        kind: 'control:listening',
+        ports: [...(ports as number[])],
+        ...(previewScope === undefined ? {} : { previewScope }),
+      } satisfies IpcFrame);
+    } catch (error) {
+      this.#closeControl();
+      throw error;
+    }
+  }
+
   #disconnectIpc(): void {
     if (this.#ipcDisconnected) return;
     this.#ipcDisconnected = true;
     this.#ipcBacklog.length = 0;
-    this.emit('disconnect');
+    this.#syncIpcKeepalive();
+    if (this.#publicIpc) {
+      this.connected = false;
+      this.channel = null;
+      this.emit('disconnect');
+    }
+  }
+
+  #syncIpcKeepalive(): void {
+    const shouldHold = this.#jsonIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    if (shouldHold === this.#ipcKeepaliveHeld) return;
+    this.#ipcKeepaliveHeld = shouldHold;
+    if (shouldHold) refEventLoop();
+    else unrefEventLoop();
   }
 
   #closeControl(): void {
@@ -703,6 +1033,8 @@ export class NodeProcess extends EventEmitter {
     } catch {
       /* peer may have closed */
     }
+    this.#workerMessageListeners.clear();
+    this.#workerIpcBacklog.length = 0;
     this.#disconnectIpc();
   }
 }
@@ -720,6 +1052,95 @@ export function applyNodeProcessTerminalBootstrap(
     throw new TypeError('process terminal bootstrap target is not a runtime-owned NodeProcess');
   }
   (receiver as (value: unknown) => void)(terminal);
+}
+
+/** Runtime-host adapter: publish private listening state without guest IPC. */
+export function postNodeProcessListeningControl(
+  process: unknown,
+  ports: readonly number[],
+  previewScope?: string,
+): void {
+  if ((typeof process !== 'object' && typeof process !== 'function') || process === null) {
+    throw new TypeError('process listening control target must be an object');
+  }
+  const receiver = Reflect.get(process, NODE_PROCESS_LISTENING_CONTROL);
+  if (typeof receiver !== 'function') {
+    throw new TypeError('process listening control target is not a runtime-owned NodeProcess');
+  }
+  (receiver as (value: unknown, scope: unknown) => void)(ports, previewScope);
+}
+
+/** Bind the private descendant manager before guest code (ADR-0334). */
+export function bindNodeProcessDescendantAuthority(
+  process: unknown,
+  authority: NodeProcessDescendantAuthority,
+): void {
+  if ((typeof process !== 'object' && typeof process !== 'function') || process === null) {
+    throw new TypeError('process descendant authority target must be an object');
+  }
+  const receiver = Reflect.get(process, NODE_PROCESS_DESCENDANT_AUTHORITY);
+  if (typeof receiver !== 'function') {
+    throw new TypeError('process descendant authority target is not a runtime-owned NodeProcess');
+  }
+  (receiver as (value: unknown) => void)(authority);
+}
+
+/**
+ * Adopt the kernel bundle's spec-seeded process into this node-entry bundle.
+ * One-shot before guest code (ADR-0334).
+ */
+export function adoptNodeProcessBootstrap(
+  process: unknown,
+  authority: NodeProcessDescendantAuthority,
+): void {
+  const active = readActiveNodeProcessBootstrap();
+  if (active !== null) {
+    if (active.process !== process || active.identity === null || !active.federated) {
+      throw new Error('node process bootstrap is already adopted by another process');
+    }
+    bindNodeProcessDescendantAuthority(process, authority);
+    return;
+  }
+  if ((typeof process !== 'object' && typeof process !== 'function') || process === null) {
+    throw new TypeError('node process bootstrap target must be an object');
+  }
+  const identityReceiver = Reflect.get(process, NODE_PROCESS_BOOTSTRAP_IDENTITY);
+  if (typeof identityReceiver !== 'function') {
+    throw new TypeError('node process bootstrap target is not a runtime-owned NodeProcess');
+  }
+  const identity = (identityReceiver as () => unknown)();
+  if (
+    typeof identity !== 'object' ||
+    identity === null ||
+    !Number.isSafeInteger(Reflect.get(identity, 'pid')) ||
+    (Reflect.get(identity, 'pid') as number) <= 0 ||
+    !Number.isSafeInteger(Reflect.get(identity, 'ppid')) ||
+    (Reflect.get(identity, 'ppid') as number) < 0
+  ) {
+    throw new TypeError('node process bootstrap target has no trusted process identity');
+  }
+  const pid = Reflect.get(identity, 'pid') as number;
+  const ppid = Reflect.get(identity, 'ppid') as number;
+  bindNodeProcessDescendantAuthority(process, authority);
+  attachNodeProcessBootstrapIdentity(process, { pid, ppid });
+  setActiveNodeProcessBootstrap(process, true);
+}
+
+export interface NodeProcessWorkerIpc {
+  send(message: unknown): boolean;
+  onMessage(listener: (message: unknown) => void): () => void;
+}
+
+/** Runtime-only worker_threads structured-clone lane; not guest process IPC. */
+export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
+  if ((typeof process !== 'object' && typeof process !== 'function') || process === null) {
+    throw new TypeError('worker IPC target must be an object');
+  }
+  const receiver = Reflect.get(process, NODE_PROCESS_WORKER_IPC);
+  if (typeof receiver !== 'function') {
+    throw new TypeError('worker IPC target is not a runtime-owned NodeProcess');
+  }
+  return (receiver as () => NodeProcessWorkerIpc)();
 }
 
 (NodeProcess.prototype as unknown as { hrtime: { bigint: () => bigint } }).hrtime.bigint = () =>
@@ -741,9 +1162,17 @@ export function writeProcessStdin(data: string | Uint8Array): void {
  * backlog: runtime-js/worker-entry-process-globals-side-effect).
  */
 export function installProcessGlobals(): void {
-  if ((globalThis as { process?: unknown }).process instanceof NodeProcess) return;
+  // A kernel-installed binding is realm-private authority. A later idempotent
+  // call must not let a guest-replaced public global replace or downgrade it.
+  if (readActiveNodeProcessBootstrap() !== null) return;
+  const active = (globalThis as { process?: unknown }).process;
+  if (active instanceof NodeProcess) {
+    setActiveNodeProcessBootstrap(active);
+    return;
+  }
   patchPromiseForNextTick();
   (globalThis as unknown as { process: NodeProcess }).process = riftyProcess;
+  setActiveNodeProcessBootstrap(riftyProcess);
   // `global === globalThis` via the single helper — Node's descriptor
   // (writable+enumerable+configurable), not a private non-enumerable alias.
   installGlobalAlias();

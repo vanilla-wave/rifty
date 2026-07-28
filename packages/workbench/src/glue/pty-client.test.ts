@@ -145,6 +145,32 @@ describe('pty-client', () => {
     });
   });
 
+  it('rejects an owner-side lifecycle failure instead of fabricating a process exit', async () => {
+    const { client, sent } = harness();
+    const result = client.execResult('s1', 'node server.js', {
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+      onChunk: () => {},
+    });
+    const exec = sent.find(
+      (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:exec' }> =>
+        frame.type === 'pty:exec',
+    );
+    client.onFrame({
+      type: 'pty:exit',
+      sid: 's1',
+      rid: exec?.rid ?? 'missing',
+      code: 1,
+      exit: { code: 1, signal: null },
+      cwd: '/',
+      env: {},
+      error: 'Worker peer closed unexpectedly',
+    });
+
+    await expect(result).rejects.toThrow(/peer closed unexpectedly/i);
+  });
+
   it('rejects an invalid exact exit frame and releases the session claim', async () => {
     const { client, sent } = harness();
     const result = client.execResult('s1', 'node broken.js', {

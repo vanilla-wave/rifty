@@ -26,6 +26,7 @@ import { asyncVfs, syncMirror } from '@riftydev/vfs';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { transform as transformWithHostEsbuild } from 'esbuild';
 import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
+import type { NodeEntryBootstrapPayload } from '../../../packages/runtime-js/src/builtins/node-entry-url.ts';
 // vm-engine relative source imports (same `tools/`-harness precedent as
 // `formatArgs` below): `setVmEngineOverride` lets the runner reset the engine
 // selection between cases, and `ensureVmEngineReady` preloads the QuickJS WASM
@@ -304,9 +305,21 @@ function timeoutMs(value: number, label: string): number {
   return value;
 }
 
+function isPhysicalWorkerCase(testCase: ParityCase): boolean {
+  return testCase.kind === 'worker-env' || testCase.kind === 'child-worker';
+}
+
+function expectedPhysicalWorkerCount(testCase: ParityCase): number {
+  const count = testCase.expectedPhysicalWorkers;
+  if (!Number.isSafeInteger(count) || (count as number) <= 0) {
+    throw new TypeError('physical Worker parity requires a positive expectedPhysicalWorkers');
+  }
+  return count as number;
+}
+
 function isSeededProcessCase(testCase: ParityCase): boolean {
   return (
-    testCase.stdin !== undefined || testCase.kind === 'worker-env' || testCase.kind === 'tty-resize'
+    testCase.stdin !== undefined || isPhysicalWorkerCase(testCase) || testCase.kind === 'tty-resize'
   );
 }
 
@@ -368,14 +381,22 @@ function installSeededProcessMode(
     stdin = ownChannel();
     ipc = ownChannel();
     seeded = new NodeProcess({
-      pid: 2,
-      ppid: 1,
+      // The harness realm IS the manager's root process (`{pid: 1, ppid: 0}`),
+      // so it must claim that identity: seeding pid 2 collided with the first
+      // pid the same manager hands to a spawned child, and a child's death
+      // then settled a PID the guest was still using.
+      pid: 1,
+      ppid: 0,
       argv: ['node', '/work/main.js'],
       env: {},
       cwd,
       stdio: {
-        stdout: stdout.port1,
-        stderr: stderr.port1,
+        stdout: {
+          write: (bytes) => stdout.port1.postMessage(bytes),
+        },
+        stderr: {
+          write: (bytes) => stderr.port1.postMessage(bytes),
+        },
         stdin: stdin.port1,
         ipc: ipc.port1,
       },
@@ -580,36 +601,37 @@ async function installSqliteMode(): Promise<void> {
  * the runner's disposable outer Worker so every process-global binding is
  * discarded after the case.
  */
-async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
+async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => void> {
   const { getKernelWorkerUrl, setKernelWorkerUrl } = await import(
     '../../../packages/kernel/src/index.ts'
   );
   const { clearKernelWorkerUrl, clearWorkerFactoryForTests, setWorkerFactoryForTests } =
     await import('../../../packages/kernel/src/spawn-worker.ts');
-  const { configureNodeEntryWorker, resetNodeEntryWorkerUrl } = await import(
-    '../../../packages/runtime-js/src/builtins/node-entry-url.ts'
-  );
+  const { NODE_ENTRY_BOOTSTRAP_PROTOCOL, configureNodeEntryWorker, resetNodeEntryWorkerUrl } =
+    await import('../../../packages/runtime-js/src/builtins/node-entry-url.ts');
   type WorkerLike = import('../../../packages/kernel/src/spawn-worker.ts').WorkerLike;
   type WorkerInitMessage = import('../../../packages/kernel/src/worker-entry.ts').WorkerInitMessage;
-
   let nativeWorkerConstructions = 0;
   let validatedInitMessages = 0;
+  const expectedLaunchKind = testCase.kind === 'child-worker' ? 'program' : 'worker-thread';
+  const expectedWorkers = expectedPhysicalWorkerCount(testCase);
 
   function validateInitMessage(message: unknown): void {
     const init = message as Partial<WorkerInitMessage> | null;
     const entry = init?.spec?.entry;
     if (init?.type !== 'init' || entry?.kind !== 'url') {
-      throw new TypeError('worker-env parity requires a URL kernel init message');
+      throw new TypeError('physical-worker parity requires a URL kernel init message');
     }
     const envelope = entry.bootstrap;
-    if (envelope?.protocol !== 'rifty.node-entry/v1') {
-      throw new TypeError('worker-env parity requires the typed node-entry bootstrap protocol');
+    if (envelope?.protocol !== NODE_ENTRY_BOOTSTRAP_PROTOCOL) {
+      throw new TypeError('physical-worker parity requires typed node-entry bootstrap');
     }
-    const payload = envelope.payload as
-      | { readonly hostRuntime?: Readonly<Record<string, unknown>> }
-      | undefined;
-    if (payload?.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only') {
-      throw new TypeError('worker-env parity init is missing its out-of-band host marker');
+    const payload = envelope.payload as Partial<NodeEntryBootstrapPayload> | null;
+    if (
+      payload?.launch?.kind !== expectedLaunchKind ||
+      payload.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only'
+    ) {
+      throw new TypeError('physical-worker parity init has wrong launch or host marker');
     }
     validatedInitMessages++;
   }
@@ -675,9 +697,12 @@ async function installWorkerEnvMode(testCase: ParityCase): Promise<() => void> {
 
   try {
     cleanups.defer(() => {
-      if (nativeWorkerConstructions !== 2 || validatedInitMessages !== 2) {
+      if (
+        nativeWorkerConstructions !== expectedWorkers ||
+        validatedInitMessages !== expectedWorkers
+      ) {
         throw new Error(
-          `worker-env parity expected 2 physical typed-bootstrap Workers; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}`,
+          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}`,
         );
       }
     });
@@ -1076,9 +1101,9 @@ export async function runInRiftyInCurrentRealm(
 
     // ADR-0267: only a physical kernel child can prove that typed host
     // bootstrap metadata stays outside exact inherited/replacement guest env.
-    if (testCase.kind === 'worker-env') {
-      const teardownWorkerEnv = await installWorkerEnvMode(testCase);
-      cleanups.defer(teardownWorkerEnv);
+    if (isPhysicalWorkerCase(testCase)) {
+      const teardownPhysicalWorker = await installPhysicalWorkerMode(testCase);
+      cleanups.defer(teardownPhysicalWorker);
     }
 
     // Preload QuickJS before any user code runs: a case can opt the `vm.*` sandbox
@@ -1139,15 +1164,19 @@ export async function runInRiftyInCurrentRealm(
     console.warn = writeStderr;
     console.error = writeStderr;
 
+    // Native no-input uses fd 0 `ignore` (EOF). End physical mode's synthetic
+    // parent stdin too, so inherited children never wait on a harness-only pipe.
+    const stdinChunks =
+      testCase.stdin ?? (isPhysicalWorkerCase(testCase) ? ([] as const) : undefined);
     // Native Node receives stdin as soon as the child is spawned. Start the real
     // MessagePort feed before entry evaluation too, then await BOTH operations.
     // This lets ESM top-level await consume stdin. Feed completion is the hidden
     // receiver-side EOF ACK; the disposable Worker's case deadline owns a guest
     // that never resumes the public stream or otherwise fails to settle.
     const stdinFeed =
-      testCase.stdin === undefined
+      stdinChunks === undefined
         ? Promise.resolve()
-        : (seededProcess?.feedStdin(testCase.stdin) ??
+        : (seededProcess?.feedStdin(stdinChunks) ??
           Promise.reject(new Error('stdin parity case has no seeded process')));
     const entryEvaluation = Promise.resolve().then(async () => {
       if (testCase.kind === 'ts-esm') {
@@ -1162,7 +1191,7 @@ export async function runInRiftyInCurrentRealm(
 
     // Mirror the real Worker lifecycle: global timers installed by bootstrap
     // hold the keepalive refcount until every scheduled callback has fired.
-    await awaitDrain({ capMs: testCase.kind === 'worker-env' ? 10_000 : 1_000 });
+    await awaitDrain({ capMs: isPhysicalWorkerCase(testCase) ? 10_000 : 1_000 });
     await seededProcess?.drainStdio();
     if (testCase.kind === 'http') {
       // The http case drives its own server inside `listen`'s callback (a

@@ -1,4 +1,4 @@
-import type { CommandContext } from '@riftydev/shell';
+import { type CommandContext, ShellCommandLifecycleError } from '@riftydev/shell';
 import {
   type FsSync,
   VfsError,
@@ -23,6 +23,11 @@ function namespaceError(projectRoot: string, error: unknown): unknown {
       publicMessage(projectRoot, error.message),
       { cause: error },
     );
+  }
+  if (error instanceof ShellCommandLifecycleError) {
+    return new ShellCommandLifecycleError(publicMessage(projectRoot, error.message), {
+      cause: error,
+    });
   }
   if (error instanceof VfsError) {
     const path = toProjectPath(projectRoot, error.path);

@@ -1,7 +1,9 @@
 import { EventEmitter } from 'node:events';
 import type { TerminalResizeSource, TerminalSize } from '@riftydev/shell';
 import { describe, expect, it, vi } from 'vitest';
+import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
+import { createDevServerController } from './dev-server-controller.ts';
 import type { ReserveOwnerChildAdmission } from './owner-child-admission.ts';
 import {
   type DevServerChildHandle,
@@ -9,6 +11,7 @@ import {
   buildDevServerChildSpawnSpec,
   createOwnerChildDevServer as createOwnerChildDevServerWithAdmission,
 } from './owner-child-dev-server.ts';
+import { HOST_PREVIEW_ORIGIN, createPreviewRegistry } from './preview-registry.ts';
 
 const nodeServerConfig: NodeServerPackageConfig = {
   runtime: 'node-server',
@@ -246,6 +249,11 @@ class FakeHandle extends EventEmitter implements DevServerChildHandle {
     this.exited = true;
     this.emit('exit', code, signal);
   }
+  /** Simulate physical Worker/MessagePort death, which has no Node exit tuple. */
+  emitPeerError(error: Error) {
+    this.exited = true;
+    this.emit('peererror', error);
+  }
 }
 
 class MutableTerminalResizeSource implements TerminalResizeSource {
@@ -477,6 +485,62 @@ describe('createOwnerChildDevServer', () => {
       expect(fake.killed).toBe('SIGTERM');
     } finally {
       await handle.stop();
+    }
+  });
+
+  it('MessagePort peer-death fault: removes the direct-server preview route', async () => {
+    const fake = new FakeHandle();
+    const child = createOwnerChildDevServer('blob:dev-url', NODE_WORKER_RUNTIME_ENV, () => fake);
+    const frames: OwnerToPageFrame[] = [];
+    const registry = createPreviewRegistry({ send: (frame) => frames.push(frame) });
+    const controller = createDevServerController({
+      lifecycle: registry,
+      boot: (ctx) =>
+        child.boot({
+          signal: ctx.signal,
+          log: () => {},
+          params,
+          onSnapshotDirty: () => {},
+        }),
+    });
+    const abort = new AbortController();
+    const run = controller.run(
+      {
+        cwd: '/workspace',
+        env: {},
+        stdout: { write: () => {} },
+        stderr: { write: () => {} },
+        signal: abort.signal,
+      },
+      HOST_PREVIEW_ORIGIN,
+    );
+    const outcome = run.then(
+      () => ({ status: 'resolved' as const }),
+      (reason: unknown) => ({ status: 'rejected' as const, reason }),
+    );
+    await waitForChildAdmission();
+    fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
+    await vi.waitFor(() => expect(controller.status).toBe('running'));
+    expect(frames.filter((frame) => frame.type === 'pty:preview').at(-1)).toMatchObject({
+      ports: [{ port: 5174 }],
+    });
+    const peerFailure = new Error('direct server peer died');
+
+    try {
+      fake.emitPeerError(peerFailure);
+      await vi.waitFor(() => expect(controller.status).toBe('stopped'), { timeout: 100 });
+      expect(frames.filter((frame) => frame.type === 'pty:preview').at(-1)).toEqual({
+        type: 'pty:preview',
+        ports: [],
+      });
+      expect(frames.filter((frame) => frame.type === 'pty:dev-server').at(-1)).toMatchObject({
+        status: 'stopped',
+        error: expect.any(String),
+      });
+      await expect(outcome).resolves.toMatchObject({ status: 'rejected' });
+    } finally {
+      abort.abort();
+      await outcome;
     }
   });
 

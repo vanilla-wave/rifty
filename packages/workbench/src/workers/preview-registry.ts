@@ -17,6 +17,8 @@ export type PreviewProducerOrigin =
 export const HOST_PREVIEW_ORIGIN: PreviewProducerOrigin = Object.freeze({ kind: 'host' });
 
 export interface AddNodeOpts {
+  /** Kernel-attested process identity for fencing stale descendant control. */
+  readonly pid: number;
   /** Explicit host source or actor-minted PTY identity captured at child launch. */
   readonly origin: PreviewProducerOrigin;
   /** cwd of the command that started the server (reload-restore recording). */
@@ -63,6 +65,11 @@ interface TrackedEntry {
   readonly cwd?: string;
 }
 
+interface TrackedNode {
+  readonly pid: number;
+  readonly entries: TrackedEntry[];
+}
+
 interface DerivedDev {
   readonly status: DevServerStatus;
   readonly sid?: string;
@@ -92,7 +99,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   // production preview follows; node/bin entries append.
   let dev: TrackedEntry | null = null;
   const preview = new Map<string, TrackedEntry[]>();
-  const node = new Map<string, TrackedEntry[]>();
+  const node = new Map<string, TrackedNode>();
   let starting: { readonly sid?: string } | null = null;
   let lastDev: DerivedDev = { status: 'stopped' };
   let closed = false;
@@ -106,7 +113,11 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
     const seen = new Set<number>();
     const out: TrackedEntry[] = [];
     const activePreview = [...preview.values()].at(-1) ?? [];
-    for (const tracked of [...(dev ? [dev] : []), ...activePreview, ...[...node.values()].flat()]) {
+    for (const tracked of [
+      ...(dev ? [dev] : []),
+      ...activePreview,
+      ...[...node.values()].flatMap(({ entries }) => entries),
+    ]) {
       if (seen.has(tracked.entry.port)) continue;
       seen.add(tracked.entry.port);
       out.push(tracked);
@@ -161,7 +172,8 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   };
 
   const emit = (): void => {
-    deps.send({ type: 'pty:preview', ports: snapshot().map((t) => t.entry) });
+    const ports = snapshot().map((t) => t.entry);
+    deps.send({ type: 'pty:preview', ports });
     emitDev();
   };
 
@@ -215,10 +227,20 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
     },
     addNode(sid, ports, previewScope, opts) {
       if (closed) return;
+      const current = node.get(sid);
+      if (current !== undefined && opts.pid < current.pid) return;
+      if (ports.length === 0) {
+        const wasVisible = current !== undefined && current.entries.length > 0;
+        // Owner PIDs are monotonic; retain the empty record as this sid's
+        // high-water mark so an older descendant cannot resurrect its route.
+        node.set(sid, { pid: opts.pid, entries: [] });
+        if (wasVisible) emit();
+        return;
+      }
       const labelBase = opts.labelBase ?? 'node';
-      node.set(
-        sid,
-        ports.map((port) => ({
+      node.set(sid, {
+        pid: opts.pid,
+        entries: ports.map((port) => ({
           entry: {
             port,
             url: `/preview/${port}/`,
@@ -230,7 +252,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
           },
           ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
         })),
-      );
+      });
       emit();
     },
     removeBySid(sid) {

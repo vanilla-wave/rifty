@@ -1,8 +1,13 @@
 import type { ModuleKind } from './resolver.ts';
 
-/** CJS `module` object shared by execution, extension hooks, and cycles. */
-export interface CjsModule {
-  exports: Record<string, unknown>;
+/** Exact registry record exposed as the CJS `module` object during execution. */
+export interface CjsModule extends ModuleRecord {
+  readonly filename: string;
+  readonly path: string;
+  readonly paths: string[];
+  readonly parent: CjsModule | null | undefined;
+  readonly children: CjsModule[];
+  readonly loaded: boolean;
   _compile(source: string, filename: string): void;
 }
 
@@ -20,8 +25,14 @@ export interface ModuleRecord {
   exports: Record<string, unknown>;
   /** Mutable slot table for ESM live bindings — `exports` getters read from here. */
   slots: Record<string, unknown>;
-  /** For CJS modules, the exact `module` object passed to hooks and the factory. */
-  cjsModule?: CjsModule;
+  /** Node-visible CJS fields exist on this same record once CJS loading starts. */
+  filename?: string;
+  path?: string;
+  paths?: string[];
+  parent?: CjsModule | null;
+  children?: CjsModule[];
+  loaded?: boolean;
+  _compile?(source: string, filename: string): void;
   /** Lazy ESM view of the final CJS exports. Same lifetime as this record. */
   cjsNamespace?: Record<string, unknown>;
 }
@@ -45,13 +56,23 @@ export class ModuleRegistry {
   getOrCreate(id: string, kind: ModuleKind): ModuleRecord {
     let rec = this.records.get(id);
     if (!rec) {
-      rec = {
-        id,
-        kind,
-        state: 'loading',
-        exports: Object.create(null),
-        slots: Object.create(null),
-      };
+      // The record IS the object CJS code receives as `module` (ADR-0325), so
+      // the loader's own bookkeeping must not enumerate: Node's module has no
+      // `kind`/`state`/`slots`/`error`, and packages copy or serialize
+      // `module` by its keys. Writable and configurable — only invisible.
+      rec = { id, exports: Object.create(null) } as ModuleRecord;
+      for (const [key, value] of [
+        ['kind', kind],
+        ['state', 'loading'],
+        ['slots', Object.create(null)],
+      ] as const) {
+        Object.defineProperty(rec, key, {
+          value,
+          writable: true,
+          enumerable: false,
+          configurable: true,
+        });
+      }
       this.records.set(id, rec);
     }
     return rec;

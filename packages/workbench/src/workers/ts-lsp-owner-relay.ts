@@ -1,4 +1,8 @@
-import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import {
+  type SpawnWorkerSpec,
+  globalProcessManager,
+  observeProcessTerminalOutcome,
+} from '@riftydev/kernel';
 import type { TsRequestMessage, TsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { ClosedHandleError } from '../workbench/errors.ts';
 import {
@@ -16,7 +20,8 @@ export interface TsLspChildHandle {
   readonly kind: string;
   send(message: unknown): boolean;
   on(event: 'message', listener: (message: unknown) => void): unknown;
-  on(event: 'exit', listener: (code?: unknown, signal?: unknown) => void): unknown;
+  on(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void): unknown;
+  off(event: 'exit' | 'peererror', listener: (...args: unknown[]) => void): unknown;
   stdout(): ChildReadable;
   stderr(): ChildReadable;
   kill(signal?: string): boolean;
@@ -186,18 +191,24 @@ export function createTsLspOwnerRelay(options: TsLspOwnerRelayOptions): TsLspOwn
         corruptChild(child, error);
       }
     });
-    handle.on('exit', (code, signal) => {
+    observeProcessTerminalOutcome(handle, (outcome) => {
       if (child.exitedFlag) return;
       child.exitedFlag = true;
       child.resolveExit();
       if (active === child) active = null;
+      if (outcome.kind === 'peererror') {
+        const failure = errorFrom(outcome.error);
+        options.log(`[workbench/ts-lsp] child peer died: ${failure.message}\n`);
+        if (pending.size > 0) failPending(failure);
+        return;
+      }
       options.log(
-        `[workbench/ts-lsp] child exited (code ${String(code)}, signal ${String(signal)})\n`,
+        `[workbench/ts-lsp] child exited (code ${String(outcome.code)}, signal ${String(outcome.signal)})\n`,
       );
       if (pending.size > 0) {
         failPending(
           new Error(
-            `TypeScript language-service child exited (code ${String(code)}, signal ${String(signal)})`,
+            `TypeScript language-service child exited (code ${String(outcome.code)}, signal ${String(outcome.signal)})`,
           ),
         );
       }

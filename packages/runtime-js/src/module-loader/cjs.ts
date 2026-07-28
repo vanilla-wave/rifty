@@ -1,5 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
-import { dirname } from '@riftydev/vfs';
+import { basename, dirname, joinPath } from '@riftydev/vfs';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
@@ -10,7 +10,6 @@ import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 
 const jsonStringifyPrimordial = JSON.stringify;
-const objectCreatePrimordial = Object.create;
 const objectDefinePropertyPrimordial = Object.defineProperty;
 const reflectApplyPrimordial = Reflect.apply;
 const stringEndsWithPrimordial = String.prototype.endsWith;
@@ -63,7 +62,7 @@ export interface CjsLoaderDeps {
   /** Loader-owned `.js` identity; replacements own unregistered suffixes. */
   readonly defaultJsExtension: CjsExtensionHook;
   /** Create a require bound to `fromFile`, including the shared extensions table. */
-  makeRequire(fromFile: string): CjsRequire;
+  makeRequire(fromFile: string, parent?: CjsModule): CjsRequire;
   /**
    * Load any module (CJS or ESM or JSON) by resolved id. Returns the module's
    * exports namespace. The CJS loader uses this to recursively load deps.
@@ -71,7 +70,7 @@ export interface CjsLoaderDeps {
    * CJS can only loadSync if the dep is itself CJS/JSON; importing ESM from
    * CJS requires `import()` (per Node).
    */
-  loadSync(id: string): Record<string, unknown>;
+  loadSync(resolved: ResolvedModule, parent?: CjsModule): Record<string, unknown>;
   loadAsync(id: string): Promise<Record<string, unknown>>;
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
 }
@@ -1799,7 +1798,7 @@ function compileCjsSource(
   filename: string,
   deps: CjsLoaderDeps,
 ): void {
-  const require = deps.makeRequire(filename);
+  const require = deps.makeRequire(filename, moduleObject);
   const dynamicImport = async (specifier: unknown): Promise<Record<string, unknown>> => {
     keepaliveRef();
     try {
@@ -1868,16 +1867,56 @@ function compileCjsSource(
   );
 }
 
-function createCjsModule(deps: CjsLoaderDeps): CjsModule {
-  const moduleObject = { exports: objectCreatePrimordial(null) } as CjsModule;
-  objectDefinePropertyPrimordial(moduleObject, '_compile', {
+function moduleLookupPaths(filename: string): string[] {
+  const paths: string[] = [];
+  let current = dirname(filename);
+  for (;;) {
+    const candidate =
+      basename(current) === 'node_modules' ? current : joinPath(current, 'node_modules');
+    if (paths.at(-1) !== candidate) paths.push(candidate);
+    if (current === '/') return paths;
+    current = dirname(current);
+  }
+}
+
+function initialiseCjsRecord(
+  record: ModuleRecord,
+  deps: CjsLoaderDeps,
+  parent: CjsModule | undefined,
+): CjsModule {
+  record.filename = record.id;
+  record.path = dirname(record.id);
+  record.paths = moduleLookupPaths(record.id);
+  // Node reaches `module.parent` through a deprecated accessor on
+  // `Module.prototype`, so it is readable (nodemon walks it) but never an own
+  // enumerable key.
+  objectDefinePropertyPrimordial(record, 'parent', {
+    value: parent,
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  });
+  record.children = [];
+  record.loaded = false;
+  record.exports = {};
+  objectDefinePropertyPrimordial(record, '_compile', {
     configurable: true,
     writable: true,
     value(source: string, filename: string): void {
-      compileCjsSource(moduleObject, source, filename, deps);
+      compileCjsSource(record as CjsModule, source, filename, deps);
     },
   });
-  return moduleObject;
+  return record as CjsModule;
+}
+
+function attachCjsChild(parent: CjsModule | undefined, child: CjsModule): void {
+  if (parent !== undefined && !parent.children.includes(child)) parent.children.push(child);
+}
+
+function detachFailedCjsChild(parent: CjsModule | undefined, child: CjsModule): void {
+  if (parent === undefined) return;
+  const index = parent.children.indexOf(child);
+  if (index !== -1) parent.children.splice(index, 1);
 }
 
 function findRegisteredExtension(filename: string, extensions: CjsExtensions): string | undefined {
@@ -1919,14 +1958,19 @@ function assertCjsExtensionHook(hook: unknown, key: string): asserts hook is Cjs
   }
 }
 
-export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
+export function executeCjs(
+  resolved: ResolvedModule,
+  deps: CjsLoaderDeps,
+  parent?: CjsModule,
+): Record<string, unknown> {
   const { registry } = deps;
   let existing = registry.get(resolved.id);
-  if (existing && existing.state === 'loaded') return existing.exports;
-  // Cycle: re-entry mid-execution — hand back the half-populated exports so
-  // the cyclic dep sees what's been set so far.
-  if (existing && existing.state === 'loading') {
-    return existing.cjsModule?.exports ?? existing.exports;
+  if (existing && (existing.state === 'loaded' || existing.state === 'loading')) {
+    const cached = existing as CjsModule;
+    // Cached loads and cycles link each requesting parent once without
+    // replacing the child's first parent.
+    attachCjsChild(parent, cached);
+    return cached.exports;
   }
   // Node removes a failed CJS evaluation from require.cache. Import jobs may
   // still retain their own rejected outcome, but a later require gets a fresh
@@ -1937,9 +1981,9 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
   }
 
   const record = existing ?? registry.getOrCreate(resolved.id, resolved.kind);
-  const moduleObject = createCjsModule(deps);
-  record.cjsModule = moduleObject;
-  record.exports = moduleObject.exports;
+  const moduleObject = initialiseCjsRecord(record, deps, parent);
+  record.state = 'loading';
+  attachCjsChild(parent, moduleObject);
 
   try {
     const selection = selectCjsExtension(resolved.id, deps);
@@ -1951,6 +1995,7 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
       // A replaced `.js` owns Node's otherwise-unregistered suffix fallback.
       moduleObject.exports = resolved.source as unknown as Record<string, unknown>;
       record.exports = moduleObject.exports;
+      record.loaded = true;
       record.state = 'loaded';
       return record.exports;
     }
@@ -1963,13 +2008,21 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
 
   // Exports may have been reassigned (`module.exports = ...`); re-point.
   record.exports = moduleObject.exports;
+  record.loaded = true;
   record.state = 'loaded';
   return moduleObject.exports;
 }
 
 function failCjsRecord(registry: ModuleRegistry, record: ModuleRecord, error: unknown): never {
   record.state = 'errored';
-  record.error = error;
+  // Same rule as the other loader-private fields: recorded, never enumerated.
+  Object.defineProperty(record, 'error', {
+    value: error,
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  });
+  detachFailedCjsChild(record.parent ?? undefined, record as CjsModule);
   if (registry.get(record.id) === record) registry.invalidate(record.id);
   throw error;
 }

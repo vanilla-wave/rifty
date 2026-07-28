@@ -23,12 +23,18 @@
  *    via `runNodeEntry`, no kernel Worker / `kind:'url'` bootstrap.
  *
  * Lives in `@riftydev/runtime-js` (post-ADR-0039) so the kernel stays free of
- * Node-API knowledge. Imports flow top-down (`runtime-js` → `@riftydev/kernel`),
- * so the runner statically imports `spawnKernelWorker`.
+ * Node-API knowledge. Imports flow top-down (`runtime-js` → `@riftydev/kernel`).
  */
 
-import { spawnKernelWorker } from '@riftydev/kernel';
-import { buildConfiguredNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
+import {
+  globalProcessManager,
+  observeProcessTerminalOutcome,
+  readKernelProcessSpec,
+} from '@riftydev/kernel';
+import {
+  buildConfiguredNodeEntryWorkerEntry,
+  nodeChildSpawnOptions,
+} from '../builtins/node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from '../builtins/node-entry-url.ts';
 
 /**
@@ -57,8 +63,16 @@ export interface RecursiveRunResult {
   readonly stderr?: Uint8Array;
 }
 
+export interface NodeEntryRunContext {
+  /** Trusted dispatcher attachment identity; never guest payload. */
+  readonly parentPid: number;
+}
+
 /** A runner: turn a {@link NodeEntryRunSpec} into the child's stdout + exit. */
-export type NodeEntryRunner = (spec: NodeEntryRunSpec) => Promise<RecursiveRunResult>;
+export type NodeEntryRunner = (
+  spec: NodeEntryRunSpec,
+  context?: NodeEntryRunContext,
+) => Promise<RecursiveRunResult>;
 
 /** Node's child env snapshot. Host bootstrap and launch controls travel out of band. */
 export function buildRecursiveWorkerEnv(
@@ -80,20 +94,17 @@ export function buildRecursiveWorkerEnv(
  * dispatcher in THIS (spawning) realm — so the realm must have
  * `installRuntimeJsFsHandlers(...)` registered (the owner does, ADR-0150).
  *
- * PIDs start at `0xC0000000`, a dedicated counter that avoids colliding with the
- * main `ProcessManager`'s PID space — recursive children are an internal
- * `execSync`-blocking detail, not tracked in the public process table.
+ * PID/PPID allocation stays on the federated ProcessManager ledger. Nested
+ * realms reserve through their upstream sync-RPC chain; no private PID range.
  */
 export function makeRecursiveRunner(): NodeEntryRunner {
-  let nextNestedPid = 0xc0000000;
-  return (spec) => {
+  return (spec, context) => {
     const url = getNodeEntryWorkerUrl();
     if (url === null) {
       // Loud, never a silent empty-mirror child: a `kind:'url'` node-entry child
       // needs the bootstrap worker URL. Reachable only from a realm that serves
       // `fs.*` (the owner) — if the host hasn't wired the node-entry URL there,
       // fail at the spawn site rather than spawn an ENOENT child.
-      // TODO(backlog: playground/node-server-restart-on-edit)
       throw new Error(
         'recursive-runner: node-entry worker URL not configured — call ' +
           'setNodeEntryWorkerUrl(...) at host boot so execSync can route ' +
@@ -107,8 +118,8 @@ export function makeRecursiveRunner(): NodeEntryRunner {
       remoteFs: true,
       nodeServe: false,
     });
-    const nestedPid = nextNestedPid++;
-    const nested = spawnKernelWorker(
+    const nested = globalProcessManager.spawnWorker(
+      'node',
       {
         entry,
         // The URL-entry payload says bin:false + remoteFs:true + nodeServe:false:
@@ -118,35 +129,39 @@ export function makeRecursiveRunner(): NodeEntryRunner {
         env,
         cwd: spec.cwd,
       },
-      { pid: nestedPid, ppid: 1 },
+      context?.parentPid ?? 1,
+      nodeChildSpawnOptions(spec.cwd, context !== undefined && readKernelProcessSpec() !== null),
     );
+    if (nested.kind !== 'worker') {
+      throw new Error('recursive-runner: expected a Worker process handle');
+    }
     const chunks: Uint8Array[] = [];
-    nested.ports.stdout.onmessage = (ev) => {
-      const data = ev.data;
+    nested.stdout().on('data', (data) => {
       if (data instanceof Uint8Array) chunks.push(data);
-    };
-    nested.ports.stdout.start();
+    });
     // Capture stderr too: Node's `execSync` defaults `stdio[2]` to `'pipe'` and
     // surfaces the child's stderr ONLY on failure via the thrown error. The
     // handler attaches it to ECHILDFAILED and drops it on success — so a child
     // that throws (e.g. a module-not-found) gets its real diagnostic surfaced,
     // not an opaque exit code.
     const errChunks: Uint8Array[] = [];
-    nested.ports.stderr.onmessage = (ev) => {
-      const data = ev.data;
+    nested.stderr().on('data', (data) => {
       if (data instanceof Uint8Array) errChunks.push(data);
-    };
-    nested.ports.stderr.start();
+    });
     // The kernel writes an uncaught child throw's stack to the child stderr just
     // before it posts the exit message; that stderr chunk is delivered on a
     // queueMicrotask flush, so defer reading errChunks one microtask past the
     // exit so a same-tick exit does not race the diagnostic out.
-    return new Promise((resolve) => {
-      nested.onExit((code) => {
+    return new Promise((resolve, reject) => {
+      observeProcessTerminalOutcome(nested, (outcome) => {
+        if (outcome.kind === 'peererror') {
+          reject(outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error)));
+          return;
+        }
         queueMicrotask(() => {
           resolve({
             stdout: concatChunks(chunks),
-            exitCode: code,
+            exitCode: typeof outcome.code === 'number' ? outcome.code : 1,
             stderr: concatChunks(errChunks),
           });
         });
