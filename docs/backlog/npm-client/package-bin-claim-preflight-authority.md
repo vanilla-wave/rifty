@@ -6,6 +6,7 @@ created: 2026-07-28
 why: the terminal combined linker checkpoint could not prove narrow current/prior claim admission and the npm-history ceiling before the first mutating VFS operation
 user_story: As a browser-IDE user installing packages with CLIs, I want ambiguous command ownership rejected before the project tree changes, but today package files can land before the linker discovers the collision
 epic: honest-shadow-substitutions
+blocked_by: [npm-client/package-bin-claim-normalization-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -14,15 +15,20 @@ code:
 
 ## Context
 
-This is the first split successor to terminal
+This was the first split successor to terminal
 `npm-client/package-bin-claim-linker-authority` at
-`30416e72eea35cd992ef87f62b951d6c70eb45fb`. It consumes the landed prepared
-install-path carrier and stops at detached package-bin claims. Package-file and
-launcher VFS work belongs to the serial
-`npm-client/package-bin-phased-linker-authority`.
+`30416e72eea35cd992ef87f62b951d6c70eb45fb`. Its second Contract+RED
+checkpoint found that pure claim normalization and mutating linker ingress are
+independently reviewable. This item is now a terminal blocked split predecessor
+and receives no third checkpoint.
 
-The existing linker remains the sole package-bin module. This unit adds no
-module, public API, comparator, scheduler, lock, or package-specific branch.
+`npm-client/package-bin-claim-normalization-authority` now owns the pure
+package-private types and one real preflight. Then
+`npm-client/package-bin-claim-link-ingress-authority` owns public,
+cancellable, and prepared zero-mutation integration plus compat honesty.
+Package-file and launcher VFS work remains in the serial
+`npm-client/package-bin-phased-linker-authority`. All retain the existing
+linker as the sole module and add no public API or coordination mechanism.
 
 ## Reference contract
 
@@ -102,20 +108,30 @@ module, public API, comparator, scheduler, lock, or package-specific branch.
 
 ## Decisions
 
+- `terminal-checkpoint:
+  cbeb4bfe04f270898aa003c04ef8e6edd3daf280` — second Contract+RED BLOCKED;
+  this unit receives no third checkpoint.
+- `checkpoint-lineage: [6fdc19c5b98b9773fa5406126e6ac35c4329b9af,
+  cbeb4bfe04f270898aa003c04ef8e6edd3daf280]`.
+- `split-successors: [npm-client/package-bin-claim-normalization-authority,
+  npm-client/package-bin-claim-link-ingress-authority]`.
+- Contract+RED @ `6fdc19c5b98b9773fa5406126e6ac35c4329b9af`
+  blocked: append-only Budget + entrypoint/prior/read-count gaps.
+- Contract+RED @ `cbeb4bfe04f270898aa003c04ef8e6edd3daf280`
+  blocked exactly: optional prepared prior negative type proved raw but not
+  shaped `PackageBinClaim`, permitting a broadened union.
+- The first successor owns pure normalization only. The serial link-ingress
+  successor owns every VFS entrypoint and compat proof; phased linking remains
+  behind it. Each successor names this terminal lineage and re-cuts its own
+  Contract+RED carrier.
 - `split-predecessor:
   30416e72eea35cd992ef87f62b951d6c70eb45fb`; predecessor checkpoints:
   `e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed` and
   `30416e72eea35cd992ef87f62b951d6c70eb45fb`.
-- This is the only current JIT Items/Budget selection. The phased successor
-  remains a linked draft until this unit lands.
+- This was the only current JIT Items/Budget selection. Its Budget row remains
+  append-only; only the normalization successor is selected next.
 - The second predecessor review allocated narrow type proof, normalization,
   zero-mutation ambiguity/target admission, and compat honesty here. It
   allocated every mutating VFS behavior to the serial phased successor.
-- First successor Contract+RED @
-  `6fdc19c5b98b9773fa5406126e6ac35c4329b9af` blocked: restore the
-  append-only predecessor Budget row; run current duplicate and escaping
-  ledgers across public/cancellable/prepared paths; integrate optional prior at
-  the prepared boundary; count every rejecting current/prior source read. The
-  in-place re-cut changes no observable behavior or split boundary.
 - ADR-0335 and the npm oracle settle the behavior fork: ambiguity throws; no
   comparator or plausible winner ships.

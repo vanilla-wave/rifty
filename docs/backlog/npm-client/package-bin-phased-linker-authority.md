@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal combined linker checkpoint could not prove all package files settle before one detached launcher pass across every linker entrypoint and VFS fault
 user_story: As a browser-IDE user installing package CLIs, I want launchers written only after all package files settle and exact retries to repair interrupted work, but today linking interleaves package files and bins
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-claim-preflight-authority]
+blocked_by: [npm-client/package-bin-claim-link-ingress-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
@@ -17,8 +17,9 @@ code:
 This is the serial second split successor to terminal
 `npm-client/package-bin-claim-linker-authority` at
 `30416e72eea35cd992ef87f62b951d6c70eb45fb`. It starts only after
-`npm-client/package-bin-claim-preflight-authority` lands and consumes that
-unit's prepared packages and detached claims.
+`npm-client/package-bin-claim-link-ingress-authority` lands and consumes the
+serial normalization/link-ingress boundary's prepared packages and detached
+claims.
 
 The existing linker remains the sole package-file and launcher writer. This
 unit adds no module, public API, comparator, coordinator, scheduler, lock, or
@@ -28,8 +29,9 @@ package-specific branch.
 
 - ADR-0335 assigns materialized and ordinary package launchers to one shared
   package-bin linker after collision-free claims are admitted.
-- The predecessor supplies exact prepared package paths and normalized claims.
-  This unit does not reinterpret raw install paths or package `bin` metadata.
+- The serial normalization/link-ingress predecessors supply exact prepared
+  package paths and admitted normalized claims. This unit does not reinterpret
+  raw install paths or package `bin` metadata.
 - Missing targets and VFS failures stay loud; retry reconciles through the same
   writer without claiming npm collision settlement.
 
@@ -78,8 +80,11 @@ package-specific branch.
 ## Out of scope
 
 - Current/prior normalization, narrow source admission, collision/transition
-  settlement, escaping-target preflight, and public compat;
-  `npm-client/package-bin-claim-preflight-authority` owns them.
+  settlement, and escaping-target semantics;
+  `npm-client/package-bin-claim-normalization-authority` owns them.
+- Public/cancellable/prepared zero-mutation integration, optional prior ingress,
+  public compat, and the non-colliding floor;
+  `npm-client/package-bin-claim-link-ingress-authority` owns them.
 - Recipe materialization, acquired-twin suppression, aliases, shims, lock,
   reports, and their order;
   `npm-client/shadow-materialized-bin-commit-authority` owns them.
@@ -92,11 +97,11 @@ package-specific branch.
   30416e72eea35cd992ef87f62b951d6c70eb45fb`; predecessor checkpoints:
   `e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed` and
   `30416e72eea35cd992ef87f62b951d6c70eb45fb`.
-- This draft is linked from the terminal predecessor and current claim
-  contract; it receives no epic Items/Budget selection before the claim unit
+- This draft is linked from the terminal predecessors and link-ingress
+  contract; it receives no epic Items/Budget selection before link ingress
   lands.
-- The first successor owns the zero-mutation claim boundary. This unit begins
-  only when exact detached claims exist and owns every reachable mutating VFS
-  fault in the generic linker.
+- The claim successors own normalization and zero-mutation ingress. This unit
+  begins only when exact detached claims enter every linker path and owns every
+  reachable mutating VFS fault in the generic linker.
 - Exact helper names and call graph are not contract. Equivalent behavioral
   ledgers prove one writer and one ordering authority.

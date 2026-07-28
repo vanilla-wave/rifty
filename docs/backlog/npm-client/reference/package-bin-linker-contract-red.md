@@ -198,3 +198,44 @@ rejecting current/prior bin source throw on a second read. It runs 17 tests:
 12 RED and 5 GREEN; package typecheck carries the same two intentional
 `TS2578` REDs plus one `TS2554` RED until the prepared path types its optional
 prior carrier.
+
+## Claim-preflight second blocker and terminal split
+
+The second isolated claim-preflight Contract+RED review at
+`cbeb4bfe04f270898aa003c04ef8e6edd3daf280` blocked again. Exact review
+blocker summaries:
+
+- first @ `6fdc19c5b98b9773fa5406126e6ac35c4329b9af`: append-only Budget +
+  entrypoint/prior/read-count gaps;
+- second @ `cbeb4bfe04f270898aa003c04ef8e6edd3daf280`: optional prepared prior
+  negative type proved raw but not shaped `PackageBinClaim`, permitting a
+  broadened union.
+
+Per review convergence, `npm-client/package-bin-claim-preflight-authority` is a
+terminal blocked split predecessor and receives no third checkpoint. Its
+lineage is
+`[6fdc19c5b98b9773fa5406126e6ac35c4329b9af,
+cbeb4bfe04f270898aa003c04ef8e6edd3daf280]`.
+
+The anticipated successor carrier allocation is:
+
+- `npm-client/package-bin-claim-normalization-authority`: pure
+  package-private source/claim types and one real preflight; positive
+  prepared/narrow sources; negative raw/claim sources; success and reached-error
+  read counts; current/prior collision, transition, removal, stable target,
+  independent scopes, escaping target, and exact named ceiling;
+- `npm-client/package-bin-claim-link-ingress-authority`: public, cancellable,
+  and prepared zero-mutation integration; optional prepared-prior positive plus
+  raw/claim negative type witnesses; exact structured compat ❌ and the
+  non-colliding floor.
+
+The phased-linker successor now waits on link ingress and retains all
+files-before-bins, target, abort/later-work, launcher-fault, and retry proof.
+Only normalization is the current epic Items selection. Historical Budget rows
+remain append-only and normalization appends its own `100–200` row; link ingress
+receives no selected row yet.
+
+The fresh normalization carrier runs 12 tests: 11 RED and 1 GREEN.
+Package-local typecheck adds exactly two intentional `TS2578` REDs while the
+real normalization export is absent; after implementation they go green only
+if raw `ResolvedPackage` and shaped `PackageBinClaim` both remain rejected.

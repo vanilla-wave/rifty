@@ -102,10 +102,10 @@ Contract+RED → Final+GREEN):
    **resolved-package-installer-prepared-path-consumption**: real installer
    consumes the linker-owned prepared path once across target preparation,
    prepared linking, and prepared lock construction.
-10. `npm-client/package-bin-claim-preflight-authority` —
-    **package-bin-claim-preflight-authority**: narrow current/prior
-    normalization and the npm-history ceiling before any mutating VFS call,
-    with exact structured compat ❌.
+10. `npm-client/package-bin-claim-normalization-authority` —
+    **package-bin-claim-normalization-authority**: pure narrow current/prior
+    types and one exact normalization/settlement preflight, with no VFS or
+    compat ownership.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -140,3 +140,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | resolved-package-installer-prepared-path-consumption | 100–300 |
 | package-bin-claim-linker-authority | 300–700 |
 | package-bin-claim-preflight-authority | 100–300 |
+| package-bin-claim-normalization-authority | 100–200 |
