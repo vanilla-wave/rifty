@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
+import { serializePackageJson } from '@riftydev/npm-client';
 import { describe, expect, it } from 'vitest';
 import { buildProjectPackageJson } from './project-spec.ts';
 import { allProjectSpecs } from './registry.ts';
@@ -18,6 +19,10 @@ interface BakedSnapshotIdentityManifest {
   readonly snapshots: Readonly<Record<string, string>>;
 }
 
+const PROVEN_VITE8_WASI_RUNTIME_OVERRIDE = {
+  '@napi-rs/wasm-runtime': 'npm:@napi-rs/wasm-runtime@1.1.6',
+} as const;
+
 function artifactPath(url: string): string {
   return join(PUBLIC_ROOT, ...url.replace(/^\/+/, '').split('/'));
 }
@@ -31,6 +36,14 @@ function readGeneratedManifest(): BakedSnapshotIdentityManifest {
   return JSON.parse(readFileSync(GENERATED_IDENTITIES, 'utf8')) as BakedSnapshotIdentityManifest;
 }
 
+function normalizedVitePackageJson(spec: ReturnType<typeof allProjectSpecs>[number]): string {
+  const manifest = JSON.parse(buildProjectPackageJson(spec).json) as Record<string, unknown>;
+  if (spec.install.vite === '8.0.16') {
+    manifest.overrides = PROVEN_VITE8_WASI_RUNTIME_OVERRIDE;
+  }
+  return serializePackageJson(manifest);
+}
+
 describe('baked snapshot identity contract', () => {
   // Fault class: sibling-drift. Bake/template and Workbench definition must
   // consume one byte-exact manifest serialization; semantic JSON equality is insufficient.
@@ -42,7 +55,7 @@ describe('baked snapshot identity contract', () => {
     if (spec.runtime !== 'vite' || spec.bakedNodeModulesUrl === undefined) {
       throw new Error(`${spec.id}: baked snapshot contract currently requires a Vite template`);
     }
-    const templatePackageJson = buildProjectPackageJson(spec).json;
+    const templatePackageJson = normalizedVitePackageJson(spec);
     const snapshot = JSON.parse(
       gunzipSync(readFileSync(artifactPath(spec.bakedNodeModulesUrl))).toString('utf8'),
     ) as { readonly packageJsonText?: unknown };
@@ -51,6 +64,24 @@ describe('baked snapshot identity contract', () => {
     expect(spec.bakedNodeModulesSnapshotId).toBe(
       serializedSnapshotIdentity(spec.bakedNodeModulesUrl),
     );
+  });
+
+  it('bakes exact Vite 8 from the visible proven WASI runtime override', () => {
+    const spec = allProjectSpecs().find((candidate) => candidate.id === 'vite8');
+    if (spec?.bakedNodeModulesUrl === undefined) {
+      throw new Error('vite8 baked snapshot descriptor missing');
+    }
+    const snapshot = JSON.parse(
+      gunzipSync(readFileSync(artifactPath(spec.bakedNodeModulesUrl))).toString('utf8'),
+    ) as { readonly packageJsonText?: unknown };
+    if (typeof snapshot.packageJsonText !== 'string') {
+      throw new Error('vite8 snapshot package.json missing');
+    }
+
+    expect(JSON.parse(snapshot.packageJsonText)).toMatchObject({
+      dependencies: { vite: '8.0.16' },
+      overrides: PROVEN_VITE8_WASI_RUNTIME_OVERRIDE,
+    });
   });
 
   it.each(allProjectSpecs().map((spec) => [spec.id, spec] as const))(
