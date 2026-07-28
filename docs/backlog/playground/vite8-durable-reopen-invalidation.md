@@ -1,15 +1,28 @@
 ---
 area: playground
-status: ready
+status: draft
 title: Durable Vite 8 reopen invalidates the pre-policy package tree
 created: 2026-07-28
 why: ADR-0336 changes the exact Vite 8 manifest and snapshot identity, but the blocked predecessor never proved that reopening the same saved project rejects pre-policy install trust and tree bytes.
 user_story: As a user reopening a saved Vite 8 project after the runtime-policy upgrade, I want the project to use the current visible manifest and proven WASI runtime, but a stale trusted package tree must never survive under the old identity.
-sources: [ADR-0278, ADR-0329, ADR-0336, docs/backlog/playground/reference/vite8-durable-reopen-cross-build-probe.md, docs/backlog/playground/reference/vite8-wasi-runtime-closure-contract-red.md]
+blocked_by: [playground/vite8-durable-tree-replacement-proof]
+sources: [ADR-0278, ADR-0329, ADR-0336, docs/backlog/playground/reference/vite8-durable-reopen-contract-red.md, docs/backlog/playground/reference/vite8-durable-reopen-cross-build-probe.md, docs/backlog/playground/reference/vite8-wasi-runtime-closure-contract-red.md]
 code: [apps/playground/src/adapters/playground-app-runtime.ts, packages/workbench/src/workers/playground-project-authority.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/workbench/internal/playground-project-definition.ts, tests/e2e/vite8-durable-reopen-invalidation.spec.ts, tools/probes/vite8-durable-reopen-cross-build.mts]
 ---
 
 ## Context
+
+This unit is now a terminal blocked split predecessor. Its two Contract+RED
+checkpoints proved that activation/open compensation and the cross-build
+durable-byte carrier are independently reviewable. It receives no third
+checkpoint.
+
+`playground/project-activation-open-compensation` first owns the narrow App
+runtime/UI repair plus its create/save/reset/delete sibling sweep. Then
+`playground/vite8-durable-tree-replacement-proof` owns only the real old→current
+browser fixture, exact tree replacement, Reset, and offline same-card proof.
+The Acceptance and Parity text below is preserved as the allocation authority;
+neither successor may weaken it.
 
 Terminal predecessor
 `docs/backlog/playground/reference/vite8-wasi-runtime-closure-contract-red.md`
@@ -143,7 +156,33 @@ claimed.
 
 ## Decisions
 
-ready-verdict: 2026-07-28 — ADR-0278/0329/0336 and the terminal split settle scope and overlap; the reproducible 7177b9da→23948c3d same-origin Chromium artifact plus the closure oracle settle every Parity/Fault row’s identity, provenance, Reset, and offline-reopen evidence; source and green carrier suites settle OPFS/MessagePort reachability and compensation/error/close boundaries; the explicit in-flight-A versus settled-B publication contract resolves the observable fork; existing App FIFO, catalog/definition/install authorities, and causal cleanup deliver Acceptance without a new or unnecessary mechanism
+- `terminal-checkpoint:
+  c043302541f639464d310fe1e9ab74a4c084f136` — second Contract+RED BLOCKED;
+  this unit receives no third checkpoint.
+- `checkpoint-lineage: [fbe9249181a4d6ed3c0126d4177f38dfe35b1f78,
+  c043302541f639464d310fe1e9ab74a4c084f136]`.
+- `split-successors: [playground/project-activation-open-compensation,
+  playground/vite8-durable-tree-replacement-proof]`.
+- Contract+RED @ `c043302541f639464d310fe1e9ab74a4c084f136`
+  blocked: the activation-only compensation boundary lacked create/save
+  post-mutation-open sibling guards and an explicit confirmation that
+  reset/delete remain with their existing recovery owners.
+- Contract+RED @ `fbe9249181a4d6ed3c0126d4177f38dfe35b1f78`
+  blocked: the durable oracle did not compare the complete old/current tree,
+  and restored-context App binding failure lacked causal aggregation/cleanup
+  RED coverage.
+- `split-predecessor:
+  140c0b3d3b98a1c684a51720a6acc8b4386fcb4d`; predecessor checkpoints:
+  `2a1995766969e63deb1d5e777ac82be9203d88c9` and
+  `140c0b3d3b98a1c684a51720a6acc8b4386fcb4d`.
+- Historical ready verdict before the terminal split: 2026-07-28 —
+  ADR-0278/0329/0336 and the predecessor split settled scope and overlap; the
+  reproducible 7177b9da→23948c3d same-origin Chromium artifact plus the closure
+  oracle settled identity, provenance, Reset, and offline-reopen evidence;
+  source and carrier suites settled OPFS/MessagePort reachability and
+  compensation/error/close boundaries; existing App FIFO,
+  catalog/definition/install authorities, and causal cleanup required no new
+  mechanism.
 
 - Identity mismatch remains the loud stale-project signal; no old identity is
   relabelled as current.
