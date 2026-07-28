@@ -98,6 +98,10 @@ Contract+RED → Final+GREEN):
    **resolved-package-linker-path-authority**: terminal install-path split for
    one exact raw `ResolvedPackage.installPath` grammar and zero-effect
    rejection through direct preflight plus the four `linker.ts` consumers.
+9. `npm-client/resolved-package-installer-prepared-path-consumption` —
+   **resolved-package-installer-prepared-path-consumption**: real installer
+   consumes the linker-owned prepared path once across target preparation,
+   prepared linking, and prepared lock construction.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -129,3 +133,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | sass-scale-proof | 1000–3000 |
 | measured-cleanup | 1000–3000 |
 | resolved-package-linker-path-authority | 100–300 |
+| resolved-package-installer-prepared-path-consumption | 100–300 |

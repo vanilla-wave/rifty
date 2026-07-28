@@ -77,9 +77,11 @@ import {
 } from './internal/shadow/planner.ts';
 import {
   type Lockfile,
+  type PreparedInstallPackage,
   type ResolvedPackage,
-  buildInstallLockfile,
-  linkInstallTree,
+  buildPreparedInstallLockfile,
+  linkPreparedInstallTree,
+  preflightPackageInstallPaths,
 } from './linker.ts';
 import type { OverrideMap } from './overrides.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
@@ -583,9 +585,17 @@ export async function install(
     }),
   );
   warnUnsatisfiedPeers(packages);
-  opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, packages));
+  const preparedPackages = preflightPackageInstallPaths(packages);
+  opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, preparedPackages));
   throwIfAborted(opts.signal);
-  await linkInstallTree(opts.vfs, opts.cwd, packages, () => throwIfAborted(opts.signal));
+  try {
+    await linkPreparedInstallTree(opts.vfs, opts.cwd, preparedPackages, () =>
+      throwIfAborted(opts.signal),
+    );
+  } catch (error) {
+    throwIfAborted(opts.signal);
+    throw error;
+  }
   throwIfAborted(opts.signal);
   await materializeRegistryShadowSubstitutions(opts.vfs, opts.cwd, shadowPlan, substitutions.line);
   throwIfAborted(opts.signal);
@@ -598,7 +608,12 @@ export async function install(
     substitutions.line,
   );
   throwIfAborted(opts.signal);
-  const lockfile = buildInstallLockfile(rootName, normalizedRootVersion, packages, shadowPlan);
+  const lockfile = buildPreparedInstallLockfile(
+    rootName,
+    normalizedRootVersion,
+    preparedPackages,
+    shadowPlan,
+  );
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
   throwIfAborted(opts.signal);
@@ -621,15 +636,17 @@ export async function install(
 }
 
 /** Compute and contain the complete tarball target set before link mutates. */
-function packageLinkTargets(root: string, packages: readonly ResolvedPackage[]): readonly string[] {
+export function packageLinkTargets(
+  root: string,
+  packages: readonly PreparedInstallPackage[],
+): readonly string[] {
   const canonicalRoot = normalizePath(root);
   const targets = new Set<string>();
-  for (const pkg of packages) {
-    const installPath = pkg.installPath ?? `node_modules/${pkg.name}`;
-    assertSafePackageRelativePath(installPath, `install path for ${pkg.name}`);
-    const packageRoot = joinPath(canonicalRoot, installPath);
+  for (const prepared of packages) {
+    const pkg = prepared.package;
+    const packageRoot = joinPath(canonicalRoot, prepared.relativePath);
     if (!isStrictDescendant(canonicalRoot, packageRoot)) {
-      throw invalidPackageLinkPath(installPath, `install path for ${pkg.name}`);
+      throw invalidPackageLinkPath(prepared.relativePath, `install path for ${pkg.name}`);
     }
     targets.add(packageRoot);
     for (const entryPath of Object.keys(pkg.files)) {

@@ -8,7 +8,9 @@ No production source differs from `origin/main`.
 
 ```sh
 pnpm vitest run \
-  packages/npm-client/src/linker-resolved-package-path-authority.contract.test.ts
+  packages/npm-client/src/installer-prepared-path-consumption.contract.test.ts \
+  packages/npm-client/src/linker-resolved-package-path-authority.contract.test.ts \
+  packages/npm-client/src/installer.test.ts
 ```
 
 The first checkpoint at
@@ -66,7 +68,47 @@ through `packageLinkTargets()` and the real mixed install: one post-acquisition
 preflight produces the array consumed by targets, prepared linking, and
 prepared lock construction. It covers exact targets, valid binful poisoned
 getters, and zero post-acquisition VFS or lock effects on rejection. Test
-counts remain unrecorded until each successor's committed run.
+counts are recorded from each successor's committed run.
+
+The first installer checkpoint at
+`b9bd5b4e977c48182c00bdb51d2c6331675641a9` recorded 5 tests, 5 RED and
+0 GREEN. Review blocked the manually composed carrier proof from claiming
+real-install reference identity and required traversal in the new malformed
+table. The lawful re-cut keeps one direct prepared composition, adds the
+inherited traversal floor beside the non-canonical REDs, and arms its
+all-method ledger only after both acquisitions complete.
+
+The re-cut focused suite records 6 tests: 5 RED and the inherited traversal
+floor GREEN. The green row already rejects before target/VFS/lock publication;
+the two non-canonical rows remain RED because the installer-local target helper
+publishes normalized paths before linker preflight.
+
+The prepared array is package-private and never crosses an observable callback,
+so public `install()` cannot expose its call count or reference identity.
+Final source/type review owns that exact local binding; a mock, source-grep
+test, or production test hook would be removable machinery. Behavioral tests
+own exact prepared targets, one raw read across all three consumers, and every
+reachable real-install error/effect. The full raw malformed matrix remains at
+linker ingress because absolute, wrong-root, wrong-owner, and safe-relative
+wrong-suffix paths are physically excluded from supported installer placement.
+
+The terminal installer-ingress checkpoint at
+`30abc22f61d3b5753cb7c65bb6bd75d8e88064ea` blocked its stale executable
+command and a deep-equality assertion that could not prove the contract's
+package-reference identity claim. The same verdict requested both the PR and
+Budget declarations pre-PASS; the binding protocol requires the Budget
+declaration/mapping before review and pickup, but opens the draft PR only at
+first PASS.
+
+The lawful re-refinement is
+`resolved-package-installer-prepared-path-consumption`. It removes the
+non-observable identity claim, not any frozen behavior: prepared targets still
+must avoid raw-path rereads; real malformed installs still reject before
+target, VFS, or lock publication; Final source/type review still verifies one
+local prepared binding across all three consumers. The predecessor receives no
+third checkpoint. Its combined executable run records 107 tests: 6 RED in the
+successor and 101 GREEN across the inherited traversal, linker, and installer
+floors.
 
 ## Sibling gates
 

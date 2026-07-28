@@ -69,8 +69,8 @@
 ### Fixed
 
 - Resolved package install paths now pass one byte-canonical `node_modules`
-  preflight before linker or lockfile effects; file, bin, and lock consumers
-  share the exact prepared package identity.
+  preflight before target publication, linker, or lockfile effects; target,
+  file, bin, and lock consumers share the exact prepared package identity.
 
 - Strict-decode the complete shadow-plan mutation matrix at planner, manager,
   port-server, and port-client ingress; manager/port failures now retain their
