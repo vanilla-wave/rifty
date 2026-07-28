@@ -5,7 +5,6 @@ title: Durable Vite 8 tree replacement proof
 created: 2026-07-28
 why: ADR-0336 changed Vite 8's exact manifest and snapshot identity, but the browser suite does not yet prove that Reset deletes a pre-policy trusted tree and same-card reopen reuses only the current tree offline
 user_story: As a user reopening a saved Vite 8 project after the runtime-policy upgrade, I want explicit Reset to replace every stale dependency byte and then reuse the exact current project offline, but today that cross-build path has no committed acceptance proof
-blocked_by: [playground/project-activation-open-compensation]
 sources: [ADR-0278, ADR-0329, ADR-0336, docs/backlog/playground/reference/vite8-durable-reopen-contract-red.md, docs/backlog/playground/reference/vite8-durable-reopen-cross-build-probe.md, docs/backlog/playground/reference/vite8-wasi-runtime-closure-probe.md]
 code: [tests/e2e/vite8-durable-reopen-invalidation.spec.ts, tests/e2e/helpers/vite8-cross-build.ts]
 ---
