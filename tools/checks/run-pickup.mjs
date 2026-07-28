@@ -1,14 +1,18 @@
-const PRODUCTION_SOURCE_RE = /^(?:apps|packages|services)\/.+\.(?:ts|tsx|js|jsx|mjs|cjs)$/u;
-const TEST_SUPPORT_RE =
-  /(?:^|\/)(?:__tests__|tests?|fixtures|_test-fixtures|test-fixtures)(?:\/|$)|(?:^|\/)(?:test-[^/]+|[^/]+-test-fixture|[^/]+\.(?:test|spec|test-fixture|contract-fixtures))\.[^./]+$/u;
+const PRODUCTION_ROOT_RE = /^(?:apps|packages|services)\//u;
+const SOURCE_EXTENSION_RE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/u;
+const TEST_SUPPORT_PATH_RE =
+  /(?:^|\/)(?:__tests__|tests?|fixtures|_test-fixtures|test-fixtures)(?:\/|$)|(?:^|\/)[^/]+\.(?:test|spec|test-fixture|contract-fixtures)\.[^/]+$/u;
+const TEST_SUPPORT_SOURCE_BASENAME_RE = /(?:^|\/)(?:test-[^/]+|[^/]+-test-fixture)\.[^/]+$/u;
 
 /**
  * Autonomous-run path boundary shared by pickup, drift, and budget checks.
  * @returns {'production'|'test-support'|'other'}
  */
 export function classifyAutonomousRunPath(path) {
-  if (TEST_SUPPORT_RE.test(path)) return 'test-support';
-  if (PRODUCTION_SOURCE_RE.test(path)) return 'production';
+  if (TEST_SUPPORT_PATH_RE.test(path)) return 'test-support';
+  const sourceExtension = SOURCE_EXTENSION_RE.test(path);
+  if (sourceExtension && TEST_SUPPORT_SOURCE_BASENAME_RE.test(path)) return 'test-support';
+  if (sourceExtension && PRODUCTION_ROOT_RE.test(path)) return 'production';
   return 'other';
 }
 

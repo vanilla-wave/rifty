@@ -57,6 +57,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Autonomous-run gates keep executable Contract+RED before ready authority.**
+  One tri-state path classifier now drives source pickup, contract drift,
+  budget mass, and mechanism scanning. Test/fixture paths—including multi-dot
+  test tails—never claim production pickup or consume the hand-written budget,
+  while ordinary docs such as `test-coverage-debt.md` remain counted.
+
 - **Goal-marker CI audits the pull-request lineage.** GitHub checks out a
   synthetic merge commit whose first parent is `main`; `check:goal-contract`
   now walks the exact event `pull_request.head.sha` while retaining the merged
