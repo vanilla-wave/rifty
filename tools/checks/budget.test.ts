@@ -131,6 +131,20 @@ describe('newPath / globToRegExp', () => {
 describe('evaluateMass', () => {
   const band = { lo: 300, hi: 1000 };
   const generated = [globToRegExp('docs/public/compat/**')];
+  const testSupportPaths = [
+    'packages/x/src/a.test.ts',
+    'packages/x/src/a.spec.tsx',
+    'packages/x/src/a.test-fixture.js',
+    'packages/x/src/a.contract-fixtures.jsx',
+    'apps/x/test/a.mjs',
+    'apps/x/tests/a.cjs',
+    'services/x/__tests__/a.ts',
+    'services/x/fixtures/a.tsx',
+    'packages/npm-client/src/_test-fixtures/tar-builder.ts',
+    'packages/workbench/src/workers/test-fixtures/durable-owner-fs.ts',
+    'apps/playground/src/glue/test-monaco-editor.ts',
+    'packages/runtime-wasi/src/syscalls/fd-test-fixture.ts',
+  ];
 
   it('is ok within band; generated and binary rows excluded', () => {
     const result = evaluateMass(
@@ -152,6 +166,13 @@ describe('evaluateMass', () => {
     expect(evaluateMass([{ added: 1500, path: 'a.ts' }], band, []).level).toBe('warn');
     expect(evaluateMass([{ added: 2000, path: 'a.ts' }], band, []).level).toBe('fail');
   });
+
+  it.each(testSupportPaths)('excludes test support %s', (path) => {
+    expect(evaluateMass([{ added: 5000, path }], band, [])).toMatchObject({
+      insertions: 0,
+      level: 'ok',
+    });
+  });
 });
 
 describe('scanMechanisms', () => {
@@ -166,6 +187,17 @@ describe('scanMechanisms', () => {
       { path: 'packages/x/src/clean.ts', content: 'export const a = 1;' },
     ]);
     expect(hits).toEqual(['packages/x/src/fifo-owner.ts (epoch)']);
+  });
+
+  it.each([
+    'packages/x/src/a.test.ts',
+    'packages/x/tests/a.ts',
+    'packages/npm-client/src/_test-fixtures/tar-builder.ts',
+    'packages/workbench/src/workers/test-fixtures/durable-owner-fs.ts',
+    'apps/playground/src/glue/test-monaco-editor.ts',
+    'packages/runtime-wasi/src/syscalls/fd-test-fixture.ts',
+  ])('ignores mechanism names in test support %s', (path) => {
+    expect(scanMechanisms([{ path, content: 'export const epoch = 1;' }])).toEqual([]);
   });
 });
 
