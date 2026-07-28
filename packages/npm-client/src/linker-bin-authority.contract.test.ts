@@ -1,7 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { NotImplementedError } from '@riftydev/io';
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
-import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as npmClientRoot from './index.ts';
 import * as linker from './linker.ts';
@@ -45,6 +43,29 @@ interface PackageBinPhaseApi {
 }
 
 const contractApi = linker as unknown as Partial<PackageBinPhaseApi>;
+
+type AcceptAnythingPhase = (...args: unknown[]) => unknown;
+type PhaseExport<TKey extends PropertyKey> = TKey extends keyof typeof linker
+  ? Extract<(typeof linker)[TKey], (...args: never[]) => unknown>
+  : AcceptAnythingPhase;
+
+function proveRawPhaseIngressIsRejected(
+  preflight: PhaseExport<'preflightPackageBins'>,
+  linkFiles: PhaseExport<'linkInstallPackageFiles'>,
+  linkBins: PhaseExport<'linkInstallPackageBins'>,
+  vfs: Vfs,
+  raw: ResolvedPackage,
+  checkpoint: () => void,
+): void {
+  // @ts-expect-error Contract: bin preflight accepts only narrow prepared sources.
+  preflight([raw]);
+  // @ts-expect-error Contract: the file phase accepts only prepared install packages.
+  linkFiles(vfs, '/project', [raw], checkpoint);
+  // @ts-expect-error Contract: the bin phase accepts only detached shaped claims.
+  linkBins(vfs, '/project', [raw], checkpoint);
+}
+
+void proveRawPhaseIngressIsRejected;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -90,6 +111,33 @@ function priorSource(
   bin: string | Record<string, string>,
 ): PreparedPackageBinSource {
   return { package: { name, bin }, nodeModulesDir };
+}
+
+interface ObservedPriorSource {
+  readonly value: PreparedPackageBinSource;
+  readonly reads: () => number;
+}
+
+function observedPriorSource(
+  name: string,
+  nodeModulesDir: string,
+  bin: string | Record<string, string>,
+): ObservedPriorSource {
+  const packageValue: { name: string; bin?: string | Record<string, string> } = { name };
+  let reads = 0;
+  Object.defineProperty(packageValue, 'bin', {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      reads += 1;
+      if (reads > 1) throw new Error('authoritative prior bin normalized more than once');
+      return bin;
+    },
+  });
+  return {
+    value: { package: packageValue, nodeModulesDir },
+    reads: () => reads,
+  };
 }
 
 interface ObservedPackage {
@@ -198,125 +246,6 @@ function expectSyncCollision(run: () => void): void {
   expectCollision(caught);
 }
 
-type IndexedFunction = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
-
-function topLevelFunctions(source: ts.SourceFile): ReadonlyMap<string, IndexedFunction> {
-  const functions = new Map<string, IndexedFunction>();
-  for (const statement of source.statements) {
-    if (ts.isFunctionDeclaration(statement) && statement.name) {
-      functions.set(statement.name.text, statement);
-      continue;
-    }
-    if (!ts.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      if (
-        ts.isIdentifier(declaration.name) &&
-        declaration.initializer &&
-        (ts.isFunctionExpression(declaration.initializer) ||
-          ts.isArrowFunction(declaration.initializer))
-      ) {
-        functions.set(declaration.name.text, declaration.initializer);
-      }
-    }
-  }
-  return functions;
-}
-
-interface IdentifierCall {
-  readonly name: string;
-  readonly guarded: boolean;
-}
-
-function isFunctionBoundary(node: ts.Node): boolean {
-  return (
-    ts.isFunctionDeclaration(node) ||
-    ts.isFunctionExpression(node) ||
-    ts.isArrowFunction(node) ||
-    ts.isMethodDeclaration(node)
-  );
-}
-
-function makesChildExecutionConditional(node: ts.Node): boolean {
-  return (
-    ts.isIfStatement(node) ||
-    ts.isConditionalExpression(node) ||
-    ts.isSwitchStatement(node) ||
-    ts.isCaseClause(node) ||
-    ts.isDefaultClause(node) ||
-    ts.isForStatement(node) ||
-    ts.isForInStatement(node) ||
-    ts.isForOfStatement(node) ||
-    ts.isWhileStatement(node) ||
-    ts.isDoStatement(node) ||
-    (ts.isBinaryExpression(node) &&
-      [
-        ts.SyntaxKind.AmpersandAmpersandToken,
-        ts.SyntaxKind.BarBarToken,
-        ts.SyntaxKind.QuestionQuestionToken,
-      ].includes(node.operatorToken.kind))
-  );
-}
-
-function identifierCalls(node: IndexedFunction): readonly IdentifierCall[] {
-  const calls: IdentifierCall[] = [];
-  const visit = (candidate: ts.Node, guarded: boolean): void => {
-    if (candidate !== node && isFunctionBoundary(candidate)) return;
-    if (ts.isCallExpression(candidate) && ts.isIdentifier(candidate.expression)) {
-      calls.push({ name: candidate.expression.text, guarded });
-    }
-    const childGuarded = guarded || makesChildExecutionConditional(candidate);
-    ts.forEachChild(candidate, (child) => visit(child, childGuarded));
-  };
-  visit(node, false);
-  return calls;
-}
-
-function memberCallNames(node: IndexedFunction): readonly string[] {
-  const calls: string[] = [];
-  const visit = (candidate: ts.Node): void => {
-    if (candidate !== node && isFunctionBoundary(candidate)) return;
-    if (ts.isCallExpression(candidate) && ts.isPropertyAccessExpression(candidate.expression)) {
-      calls.push(candidate.expression.name.text);
-    }
-    ts.forEachChild(candidate, visit);
-  };
-  visit(node);
-  return calls;
-}
-
-function allIdentifierCallNames(node: ts.Node): readonly string[] {
-  const calls: string[] = [];
-  const visit = (candidate: ts.Node): void => {
-    if (ts.isCallExpression(candidate) && ts.isIdentifier(candidate.expression)) {
-      calls.push(candidate.expression.text);
-    }
-    ts.forEachChild(candidate, visit);
-  };
-  visit(node);
-  return calls;
-}
-
-function allMemberCallNames(node: ts.Node): readonly string[] {
-  const calls: string[] = [];
-  const visit = (candidate: ts.Node): void => {
-    if (ts.isCallExpression(candidate) && ts.isPropertyAccessExpression(candidate.expression)) {
-      calls.push(candidate.expression.name.text);
-    }
-    ts.forEachChild(candidate, visit);
-  };
-  visit(node);
-  return calls;
-}
-
-function callersOf(
-  functions: ReadonlyMap<string, IndexedFunction>,
-  callee: string,
-): readonly string[] {
-  return [...functions]
-    .filter(([, declaration]) => allIdentifierCallNames(declaration).includes(callee))
-    .map(([name]) => name);
-}
-
 describe('package-bin linker authority', () => {
   it.each([
     [
@@ -405,68 +334,7 @@ describe('package-bin linker authority', () => {
     expect(firstBin).toBeGreaterThan(lastFile);
   });
 
-  it('[fault: sibling-drift] keeps raw preparation and prepared linking on one finite topology', () => {
-    const sourceText = readFileSync(new URL('./linker.ts', import.meta.url), 'utf8');
-    const source = ts.createSourceFile(
-      'linker.ts',
-      sourceText,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
-    );
-    const functions = topLevelFunctions(source);
-    const publicLink = functions.get('link');
-    const installTree = functions.get('linkInstallTree');
-    const preparedTree = functions.get('linkPreparedInstallTree');
-    expect.soft(publicLink).toBeDefined();
-    expect.soft(installTree).toBeDefined();
-    expect.soft(preparedTree).toBeDefined();
-    if (!publicLink || !installTree || !preparedTree) {
-      throw new Error('linker entrypoint declaration missing');
-    }
-
-    const internalCalls = (declaration: IndexedFunction): readonly string[] =>
-      identifierCalls(declaration)
-        .filter((call) => !call.guarded && functions.has(call.name))
-        .map((call) => call.name);
-    const rawPhases = ['preflightPackageInstallPaths', 'linkPreparedInstallTree'];
-    expect.soft(internalCalls(publicLink)).toEqual(rawPhases);
-    expect.soft(internalCalls(installTree)).toEqual(rawPhases);
-
-    const phases = [
-      'preflightPackageBins',
-      'linkInstallPackageFiles',
-      'linkInstallPackageBins',
-    ] as const;
-    expect.soft(internalCalls(preparedTree)).toEqual(phases);
-    expect(identifierCalls(preparedTree).filter((call) => call.guarded)).toEqual([]);
-    expect(memberCallNames(preparedTree)).not.toContain(
-      expect.stringMatching(/^(mkdir|readFile|writeFile)$/),
-    );
-    for (const phase of phases) {
-      expect.soft(callersOf(functions, phase)).toEqual(['linkPreparedInstallTree']);
-      expect(npmClientRoot).not.toHaveProperty(phase);
-    }
-    expect(callersOf(functions, 'normalizeBin')).toEqual(['preflightPackageBins']);
-    expect(callersOf(functions, 'normalizeBinTarget')).toEqual(['preflightPackageBins']);
-
-    const shimOwners = [...functions]
-      .filter(([, candidate]) => candidate.getText(source).includes('#!/usr/bin/env node'))
-      .map(([name]) => name);
-    const writeOwners = [...functions].flatMap(([name, candidate]) =>
-      allMemberCallNames(candidate)
-        .filter((call) => call === 'writeFile')
-        .map(() => name),
-    );
-    expect(sourceText.match(/#!\/usr\/bin\/env node/g)).toHaveLength(1);
-    expect(shimOwners).toEqual(['linkInstallPackageBins']);
-    expect(writeOwners.sort()).toEqual(
-      ['linkInstallPackageFiles', 'linkInstallPackageBins'].sort(),
-    );
-    expect(functions.has('linkBins')).toBe(false);
-  });
-
-  it.each(['public link', 'install tree', 'phased'] as const)(
+  it.each(['public link', 'install tree', 'prepared tree', 'phased'] as const)(
     '[fault: sibling-drift] runs one prepared package-bin pass through the %s entrypoint',
     async (entrypoint) => {
       const root = observedPackage(
@@ -500,35 +368,46 @@ describe('package-bin linker authority', () => {
         await linker.linkInstallTree(vfs, '/project', packages, () => {});
       } else {
         const prepared = preflightPackageInstallPaths(packages);
-        const preflight = requireContractFunction('preflightPackageBins');
-        const linkFiles = requireContractFunction('linkInstallPackageFiles');
-        const linkBins = requireContractFunction('linkInstallPackageBins');
-        const preparedClaims = preflight(prepared);
-        expect(preparedClaims).not.toBe(prepared);
-        expect(preparedClaims).not.toContain(root.value);
-        expect(preparedClaims).not.toContain(nested.value);
-        const claims = structuredClone(preparedClaims);
-        expect(claims).toEqual([
-          {
-            nodeModulesDir: 'node_modules',
-            command: 'phase-root',
-            owner: 'phase-root',
-            target: 'bin/root.js',
-          },
-          {
-            nodeModulesDir: 'node_modules/host/node_modules',
-            command: 'nested-phase',
-            owner: 'phase-nested',
-            target: 'bin/nested.js',
-          },
-        ]);
+        if (entrypoint === 'prepared tree') {
+          await linker.linkPreparedInstallTree(vfs, '/project', prepared, () => {});
+        } else {
+          for (const phase of [
+            'preflightPackageBins',
+            'linkInstallPackageFiles',
+            'linkInstallPackageBins',
+          ]) {
+            expect(npmClientRoot).not.toHaveProperty(phase);
+          }
+          const preflight = requireContractFunction('preflightPackageBins');
+          const linkFiles = requireContractFunction('linkInstallPackageFiles');
+          const linkBins = requireContractFunction('linkInstallPackageBins');
+          const preparedClaims = preflight(prepared);
+          expect(preparedClaims).not.toBe(prepared);
+          expect(preparedClaims).not.toContain(root.value);
+          expect(preparedClaims).not.toContain(nested.value);
+          const claims = structuredClone(preparedClaims);
+          expect(claims).toEqual([
+            {
+              nodeModulesDir: 'node_modules',
+              command: 'phase-root',
+              owner: 'phase-root',
+              target: 'bin/root.js',
+            },
+            {
+              nodeModulesDir: 'node_modules/host/node_modules',
+              command: 'nested-phase',
+              owner: 'phase-nested',
+              target: 'bin/nested.js',
+            },
+          ]);
 
-        await linkFiles(vfs, '/project', prepared, () => {});
-        expect(await vfs.exists(launcherPaths[0] ?? '')).toBe(false);
-        expect(await vfs.exists(launcherPaths[1] ?? '')).toBe(false);
-        root.poisonBin();
-        nested.poisonBin();
-        await linkBins(vfs, '/project', claims, () => {});
+          await linkFiles(vfs, '/project', prepared, () => {});
+          expect(await vfs.exists(launcherPaths[0] ?? '')).toBe(false);
+          expect(await vfs.exists(launcherPaths[1] ?? '')).toBe(false);
+          root.poisonBin();
+          nested.poisonBin();
+          await linkBins(vfs, '/project', claims, () => {});
+        }
       }
 
       expect(root.pathReads()).toBe(1);
@@ -556,27 +435,32 @@ describe('package-bin linker authority', () => {
       const linkFiles = requireContractFunction('linkInstallPackageFiles');
       const linkBins = requireContractFunction('linkInstallPackageBins');
       const vfs = await project();
-      const installPath =
-        scope === 'root' ? 'node_modules/abort-cli' : 'node_modules/host/node_modules/abort-cli';
-      const packageRoot = `/project/${installPath}`;
-      const launcherPath =
-        scope === 'root'
-          ? '/project/node_modules/.bin/abort'
-          : '/project/node_modules/host/node_modules/.bin/abort';
+      const nodeModulesDir = scope === 'root' ? 'node_modules' : 'node_modules/host/node_modules';
       const prepared = preflightPackageInstallPaths([
-        pkg('abort-cli', installPath, 'abort', 'bin/abort.js'),
+        pkg('abort-cli', `${nodeModulesDir}/abort-cli`, 'abort', 'bin/abort.js'),
+        pkg('later-cli', `${nodeModulesDir}/later-cli`, 'later', 'bin/later.js'),
       ]);
       const claims = preflightPackageBins(prepared);
+      expect(claims).toHaveLength(2);
+      const parkedClaim = claims[0];
+      const laterClaim = claims[1];
+      if (!parkedClaim || !laterClaim) throw new Error('two ordered bin claims required');
+      const targetPath = (claim: PackageBinClaim): string =>
+        `/project/${claim.nodeModulesDir}/${claim.owner}/${claim.target}`;
+      const launcherPath = (claim: PackageBinClaim): string =>
+        `/project/${claim.nodeModulesDir}/.bin/${claim.command}`;
       await linkFiles(vfs, '/project', prepared, () => {});
 
       const readStarted = deferred<void>();
       const releaseRead = deferred<void>();
+      let laterTargetRead = false;
       const readFile = vfs.readFile.bind(vfs);
       const read = vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
-        if (path === `${packageRoot}/bin/abort.js`) {
+        if (path === targetPath(parkedClaim)) {
           readStarted.resolve();
           await releaseRead.promise;
         }
+        if (path === targetPath(laterClaim)) laterTargetRead = true;
         return await readFile(path);
       });
       const controller = new AbortController();
@@ -590,13 +474,17 @@ describe('package-bin linker authority', () => {
       controller.abort(reason);
       releaseRead.resolve();
       await expect(linking).rejects.toBe(reason);
-      expect(await vfs.exists(launcherPath)).toBe(false);
+      expect(laterTargetRead).toBe(false);
+      expect(await vfs.exists(launcherPath(parkedClaim))).toBe(false);
+      expect(await vfs.exists(launcherPath(laterClaim))).toBe(false);
 
       read.mockRestore();
       await linkBins(vfs, '/project', claims, () => {});
-      expect(await vfs.readFileText(launcherPath)).toBe(
-        "#!/usr/bin/env node\nimport('../abort-cli/bin/abort.js');\n",
-      );
+      for (const claim of claims) {
+        expect(await vfs.readFileText(launcherPath(claim))).toBe(
+          `#!/usr/bin/env node\nimport('../${claim.owner}/${claim.target}');\n`,
+        );
+      }
     },
   );
 
@@ -681,13 +569,14 @@ describe('package-bin linker authority', () => {
       { 'nested-command': './bin/current-nested.js' },
     );
     const current = preflightPackageInstallPaths([root.value, nested.value]);
-    const prior = [
-      priorSource('root-cli', 'node_modules', 'bin/prior-root.js'),
-      priorSource('nested-cli', 'node_modules/host/node_modules', {
-        'nested-command': 'bin/prior-nested.js',
-      }),
-    ];
+    const rootPrior = observedPriorSource('root-cli', 'node_modules', 'bin/prior-root.js');
+    const nestedPrior = observedPriorSource('nested-cli', 'node_modules/host/node_modules', {
+      'nested-command': 'bin/prior-nested.js',
+    });
+    const prior = [rootPrior.value, nestedPrior.value];
     const claims = structuredClone(preflight(current, prior));
+    expect(rootPrior.reads()).toBe(1);
+    expect(nestedPrior.reads()).toBe(1);
     expect(claims).toEqual([
       {
         nodeModulesDir: 'node_modules',

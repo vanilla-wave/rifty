@@ -50,11 +50,11 @@ API, comparator, scheduler, lock, or package-specific branch.
   admissible when its target changes; the returned claim always names the
   current target.
 - Raw `link()` and `linkInstallTree()` each prepare install paths once before
-  entering one prepared composer; real `install()` reuses its already-prepared
-  carrier. The composer runs bin preflight, all package-file settlement, then
-  exactly one detached bin pass. File/bin phases consume prepared file
-  packages, narrow bin sources, or shaped claims and never reread raw path/bin
-  data.
+  entering the shared prepared linking path; real `install()` reuses its
+  already-prepared carrier. That path runs bin preflight, all package-file
+  settlement, then exactly one detached bin pass. File/bin phases consume
+  prepared file packages, narrow bin sources, or shaped claims and never
+  reread raw path/bin data.
 - The bin pass validates each target, checks abort between reachable
   operations, and writes the exact launcher. Escaping/missing targets and
   `ENOSPC` / `EACCES` remain loud; exact retry uses the same writer.
@@ -71,7 +71,7 @@ API, comparator, scheduler, lock, or package-specific branch.
 2. Prior collision, transition, and removal reject; stable owners link only
    current string/object targets.
 3. Raw public entrypoints prepare once; public and already-prepared installer
-   paths then share one bin-preflight/files/bins composer and one
+   paths then share the same bin-preflight/files/bins behavior and
    normalization/bin writer.
 4. Missing target, root/nested abort, `ENOSPC`, and `EACCES` stay loud and
    retry lands the exact launcher.
@@ -84,7 +84,8 @@ API, comparator, scheduler, lock, or package-specific branch.
 | corrupt-input | prepared path boundary and escaping/missing target reject without launcher | predecessor integration plus target table |
 | torn-state | abort stops later bin work; retry reconciles through one writer | root/nested phase ledger |
 | quota-perm-fail | bin `ENOSPC` / `EACCES` stays loud and retryable | launcher write table |
-| sibling-drift | raw entrypoints prepare once; public/prepared paths call one composer; phases accept only prepared file packages, narrow bin sources, or claims | finite topology and poisoned-raw sentinels |
+| sibling-drift | raw/public/prepared/direct-phase ledgers diverge or a phase accepts/rereads raw packages | equivalent operation ledgers plus type/read-count sentinels |
+| provenance-lie | same-command settlement is claimed supported or names another ceiling | structured public compat row |
 
 ## Out of scope
 
@@ -106,10 +107,17 @@ API, comparator, scheduler, lock, or package-specific branch.
   the terminal checkpoint's claim/phase REDs atop their shared prepared
   carrier.
 - PR #215 settled the internal topology: raw linker entrypoints prepare once,
-  while real install already owns and reuses that carrier. The shared composer
-  therefore begins at bin preflight; no second raw-path pass is added.
+  while real install already owns and reuses that carrier. The shared prepared
+  path therefore begins at bin preflight; no second raw-path pass is added.
+  Exact helper names/call graph are not contract.
 - Authoritative prior carries only package name/bin plus scope. A narrow
   package-private bin source prevents fake `files` while letting current
   prepared packages enter the same normalizer structurally.
+- First Contract+RED review at
+  `e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed` blocked a forbidden
+  source-inspection topology test plus incomplete later-claim abort,
+  narrow-ingress, prior-read, and compat evidence. The in-place re-cut uses
+  operation ledgers, a type RED, counted prior access, and a structured public
+  table row instead.
 - ADR-0335 and the npm oracle settle the fork: ambiguity throws; no comparator
   or plausible winner ships.

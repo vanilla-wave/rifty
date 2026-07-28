@@ -14,6 +14,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Package lifecycle scripts | ❌ | Root `preinstall`/`install`/`postinstall`/`prepare` and registry tarball `preinstall`/`install`/`postinstall` throw `NotImplementedError('npm-client.lifecycle.<name>')`; registry tarball `prepare` metadata is ignored like npm's prepared package install path |
 | Non-registry dependency specs | ❌ | `file:`/local paths, `workspace:`, git/GitHub shorthand, URL tarball, and npm-alias specs are explicit npm-client ceilings, not silently skipped |
 | `.bin` launcher execution | ✅ | Bare `prettier`/`eslint` resolve through `node_modules/.bin` and run in a supervised Node worker |
+| Same-command package-bin settlement | ❌ | Current builds still choose an untrusted tree-order winner; this Contract+RED requires `NotImplementedError('npm-client.bin-collision-reify')` before project-tree mutation and claims no npm reify winner |
 | `npm run <script>` for non-dev scripts | ✅ | `format`, `format:check`, `lint`, typed lint, `pre<script>`/`post<script>` hooks, and forwarded args such as `npm run lint -- --fix` route through the same shell/.bin path |
 | Prettier baseline CLI | ✅ | `prettier --version`, `--write`, and `--check` over `.js`/`.ts` files |
 | Prettier ESM config loading | ✅ | `prettier.config.mjs` is loaded through real dynamic import and affects output |

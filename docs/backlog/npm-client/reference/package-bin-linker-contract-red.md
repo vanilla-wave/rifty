@@ -83,9 +83,9 @@ Recorded on post-#215 main
 11.17.0. PR #215 settled a two-level topology: raw linker entrypoints prepare
 paths once, while real install reuses the same prepared carrier across targets,
 linking, and lock construction. The successor contract therefore places one
-bin-preflight/files/bins composer after that boundary. Authoritative prior is a
-narrow `(package.name/bin, nodeModulesDir)` source; it never fabricates package
-files.
+shared bin-preflight/files/bins behavior after that boundary. Authoritative
+prior is a narrow `(package.name/bin, nodeModulesDir)` source; it never
+fabricates package files.
 
 The packed npm oracle reproduced byte-for-byte:
 
@@ -104,7 +104,7 @@ pnpm vitest run \
   packages/npm-client/src/installer.test.ts
 ```
 
-The fresh successor carrier runs 20 allocated tests: 16 RED and 4 GREEN.
+The first fresh successor carrier ran 20 allocated tests: 16 RED and 4 GREEN.
 
 - RED: four current-collision orders, files-before-bins, the finite prepared
   topology, direct phased use, root/nested abort, `ENOSPC` / `EACCES`, three
@@ -118,5 +118,29 @@ pnpm vitest run \
   packages/npm-client/src/linker-bin-authority.contract.test.ts
 ```
 
-No product, compat, changelog, installer-test, or raw-path-contract change is
+No product, compat, changelog, installer-test, or raw-path-contract change was
 present in this checkpoint.
+
+## First successor review blocker and re-cut
+
+Contract+RED review at
+`e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed` blocked:
+
+- a forbidden AST/source-inspection topology test;
+- single-claim abort rows that could not detect later work;
+- erased phase types that could admit raw packages;
+- uncounted authoritative-prior bin reads;
+- no executable guard for the required public compat ❌ row.
+
+The in-place re-cut removes all product-source parsing. Equivalent operation
+ledgers now cover public, cancellable, already-prepared, and direct phased
+paths; a compile-time RED rejects raw packages at all three phase ingresses;
+root/nested abort parks the first of two claims and forbids the second read;
+both string/object prior sources throw on a second read. The hand-maintained
+public table now carries an honest RED note: current tree-order settlement is
+untrusted and the named ceiling is required before mutation.
+
+The re-cut carrier runs 20 tests: 15 RED and 5 GREEN. Package-local typecheck
+adds three expected `TS2578` REDs while the phase exports are absent; after
+implementation they go green only if raw `ResolvedPackage` is rejected by bin
+preflight, the file phase, and the detached bin phase.
