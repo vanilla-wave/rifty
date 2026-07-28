@@ -131,11 +131,36 @@ describe('newPath / globToRegExp', () => {
 describe('evaluateMass', () => {
   const band = { lo: 300, hi: 1000 };
   const generated = [globToRegExp('docs/public/compat/**')];
+  const testSupportPaths = [
+    'packages/x/src/a.test.ts',
+    'packages/x/src/a.spec.tsx',
+    'packages/x/src/a.test-fixture.js',
+    'packages/x/src/a.contract-fixtures.jsx',
+    'apps/x/test/a.mjs',
+    'apps/x/tests/a.cjs',
+    'services/x/__tests__/a.ts',
+    'services/x/fixtures/a.tsx',
+    'packages/npm-client/src/_test-fixtures/tar-builder.ts',
+    'packages/workbench/src/workers/test-fixtures/durable-owner-fs.ts',
+    'apps/playground/src/glue/test-monaco-editor.ts',
+    'packages/runtime-wasi/src/syscalls/fd-test-fixture.ts',
+    'tools/checks/run-pickup.test.ts',
+    'tests/e2e/vite-save-trust-rebind.spec.ts',
+    'packages/x/src/a.test.d.ts',
+    'packages/x/src/a.spec.d.ts',
+    'packages/x/src/a.test-fixture.d.ts',
+    'packages/x/src/a.contract-fixtures.d.ts',
+    'tools/checks/a.test.ts.snap',
+    'docs/process/a.test.coverage.md',
+  ];
 
   it('is ok within band; generated and binary rows excluded', () => {
     const result = evaluateMass(
       [
         { added: 900, path: 'packages/x/src/a.ts' },
+        { added: 5000, path: 'packages/x/src/a.test.ts' },
+        { added: 5000, path: 'apps/x/tests/a.ts' },
+        { added: 5000, path: 'services/x/fixtures/a.ts' },
         { added: 5000, path: 'docs/public/compat/esbuild.md' },
         { added: null, path: 'apps/playground/logo.png' },
       ],
@@ -148,6 +173,27 @@ describe('evaluateMass', () => {
   it('warns over band and fails at 2× band', () => {
     expect(evaluateMass([{ added: 1500, path: 'a.ts' }], band, []).level).toBe('warn');
     expect(evaluateMass([{ added: 2000, path: 'a.ts' }], band, []).level).toBe('fail');
+  });
+
+  it.each(testSupportPaths)('excludes test support %s', (path) => {
+    expect(evaluateMass([{ added: 5000, path }], band, [])).toMatchObject({
+      insertions: 0,
+      level: 'ok',
+    });
+  });
+
+  it.each([
+    'docs/process/testing.md',
+    'tools/checks/run-pickup.mjs',
+    'tools/test-utils/helper.ts',
+    'tests-manual/e2e/save.ts',
+    'docs/backlog/process-meta/test-coverage-debt.md',
+    'docs/process/a-test-fixture.md',
+  ])('counts ordinary hand-written other path %s', (path) => {
+    expect(evaluateMass([{ added: 5000, path }], band, [])).toMatchObject({
+      insertions: 5000,
+      level: 'fail',
+    });
   });
 });
 
@@ -163,6 +209,17 @@ describe('scanMechanisms', () => {
       { path: 'packages/x/src/clean.ts', content: 'export const a = 1;' },
     ]);
     expect(hits).toEqual(['packages/x/src/fifo-owner.ts (epoch)']);
+  });
+
+  it.each([
+    'packages/x/src/a.test.ts',
+    'packages/x/tests/a.ts',
+    'packages/npm-client/src/_test-fixtures/tar-builder.ts',
+    'packages/workbench/src/workers/test-fixtures/durable-owner-fs.ts',
+    'apps/playground/src/glue/test-monaco-editor.ts',
+    'packages/runtime-wasi/src/syscalls/fd-test-fixture.ts',
+  ])('ignores mechanism names in test support %s', (path) => {
+    expect(scanMechanisms([{ path, content: 'export const epoch = 1;' }])).toEqual([]);
   });
 });
 

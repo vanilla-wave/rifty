@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { historyHeadRevision } from './goal-contract.mjs';
-import { PRODUCTION_SOURCE_RE as SOURCE_RE, pickupCommit } from './run-pickup.mjs';
+import { classifyAutonomousRunPath, pickupCommit } from './run-pickup.mjs';
 
 const CONTRACT_RE = /^docs\/backlog\/.+\.md$/;
 const SKIP_RE = /\/(?:README|TEMPLATE)\.md$/;
@@ -47,7 +47,7 @@ export function closeItemDependencies(itemText, deletedItems) {
  * @returns {string[]} violations (empty = pass)
  */
 export function evaluate(entries, read, refereeEntries = entries) {
-  if (!entries.some((entry) => SOURCE_RE.test(entry.path))) return [];
+  if (!entries.some((entry) => classifyAutonomousRunPath(entry.path) === 'production')) return [];
   const refereeChanges = refereeEntries.filter((entry) => REFEREE_RE.test(entry.path));
   if (refereeChanges.length > 0) {
     return refereeChanges.map(
