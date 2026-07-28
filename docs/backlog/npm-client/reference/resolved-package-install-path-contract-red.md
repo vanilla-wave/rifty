@@ -8,7 +8,7 @@ No production source differs from `origin/main`.
 
 ```sh
 pnpm vitest run \
-  packages/npm-client/src/linker-install-path-authority.contract.test.ts
+  packages/npm-client/src/linker-resolved-package-path-authority.contract.test.ts
 ```
 
 The first checkpoint at
@@ -49,14 +49,17 @@ installer targets and real install. The predecessor gets no third review.
 
 ## Successor RED plan
 
-The initial linker successor RED retains the exact path grammar and
+The initial linker successor checkpoint at
+`0a89b13f0becb47c4ed520a7d14e780759a669eb` blocked its stale executable
+command and incomplete four-consumer malformed-path sweep. The lawful re-cut
+retains the exact path grammar and
 all-method/overlay order proofs, then forces omitted/root/nested/scoped and
 valid root/nested binful poisoned packages through direct preflight, both
 linker entrances, and both lockfile constructors. One already-prepared array
 must also drive package-private link and install-lock cores. The suite observes
 exact prepared identities, file/launcher bytes, lock keys, one raw read, and
-zero effects for malformed mixed input. Its focused run records 30 tests,
-30 RED and 0 GREEN before production pickup.
+zero effects for every named malformed path. Its focused run records 54 tests,
+54 RED and 0 GREEN before production pickup.
 
 After that unit lands, the installer successor RED will route the same carrier
 through `packageLinkTargets()` and the real mixed install: one post-acquisition

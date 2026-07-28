@@ -331,14 +331,10 @@ describe('resolved-package linker path authority', () => {
     },
   );
 
-  const wrongRootPaths = invalidPaths.filter(
-    ({ installPath }) => installPath === 'packages/bad-cli',
-  );
-
   describe.each(['public link', 'install tree', 'lockfile', 'install lockfile'] as const)(
-    '%s wrong-root sibling',
+    '%s malformed-path sibling',
     (entrypoint) => {
-      it.each(wrongRootPaths)(
+      it.each(invalidPaths)(
         '[fault: corrupt-input] rejects $label before VFS or lock mutation',
         async ({ installPath, withBin }) => {
           const invalid = pkg('bad-cli', installPath, withBin);

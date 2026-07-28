@@ -96,6 +96,10 @@ and launcher fault work remain in
 
 ## Decisions
 
+- Contract+RED @ `0a89b13f0becb47c4ed520a7d14e780759a669eb`
+  blocked: repair the renamed executable RED command and sweep every named
+  malformed path through all four raw linker/lockfile consumers before effects;
+  one lawful re-cut remains.
 - `split-predecessor:
   42e53d1b2c94b89fab1650794b1cff3477e8f54e`; predecessor checkpoints:
   `8f375ce5c5149b3ce8ff6fb9696063482c098dc0` and
