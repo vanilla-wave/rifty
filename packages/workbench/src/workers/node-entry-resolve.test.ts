@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildNodeEvalSource,
-  classifyNodeInvocation,
-  resolveNodeEntry,
-} from './node-entry-resolve.ts';
+import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
 
 describe('classifyNodeInvocation', () => {
   it('-v / --version → version (not a /workspace/--version path)', () => {
@@ -11,45 +7,95 @@ describe('classifyNodeInvocation', () => {
     expect(classifyNodeInvocation(['--version'])).toEqual({ kind: 'version' });
   });
 
-  it('-e SRC → eval with the source from the NEXT arg (never absolutized)', () => {
+  it('-e/--eval carry exact source, execArgv, terminator, and entryless script args', () => {
     expect(classifyNodeInvocation(['-e', 'console.log(1)'])).toEqual({
       kind: 'eval',
       source: 'console.log(1)',
       print: false,
+      execArgv: ['-e', 'console.log(1)'],
       scriptArgs: [],
+    });
+    expect(classifyNodeInvocation(['--eval', 'x', '--', 'alpha', 'two words'])).toEqual({
+      kind: 'eval',
+      source: 'x',
+      print: false,
+      execArgv: ['--eval', 'x'],
+      scriptArgs: ['alpha', 'two words'],
     });
   });
 
-  it('--eval=SRC inline form', () => {
+  it('--eval=SRC keeps the original single-token execArgv spelling', () => {
     expect(classifyNodeInvocation(['--eval=1+1'])).toEqual({
       kind: 'eval',
       source: '1+1',
       print: false,
+      execArgv: ['--eval=1+1'],
       scriptArgs: [],
     });
   });
 
-  it('-p / --print EXPR → eval with print', () => {
+  it('-p/--print consume the next source and retain exact execArgv', () => {
     expect(classifyNodeInvocation(['-p', '1+1'])).toEqual({
       kind: 'eval',
       source: '1+1',
       print: true,
+      execArgv: ['-p', '1+1'],
       scriptArgs: [],
     });
-    expect(classifyNodeInvocation(['--print=process.platform'])).toEqual({
+    expect(classifyNodeInvocation(['--print', 'process.platform', 'alpha'])).toEqual({
       kind: 'eval',
       source: 'process.platform',
       print: true,
+      execArgv: ['--print', 'process.platform'],
+      scriptArgs: ['alpha'],
+    });
+  });
+
+  it('--print=RHS ignores RHS and takes source from the next argument', () => {
+    expect(classifyNodeInvocation(['--print=ignored', 'process.platform', 'alpha'])).toEqual({
+      kind: 'eval',
+      source: 'process.platform',
+      print: true,
+      execArgv: ['--print=ignored', 'process.platform'],
+      scriptArgs: ['alpha'],
+    });
+    expect(classifyNodeInvocation(['--print=ignored'])).toEqual({
+      kind: 'eval',
+      source: '',
+      print: true,
+      execArgv: ['--print=ignored'],
       scriptArgs: [],
     });
   });
 
-  it('eval carries trailing script args', () => {
-    expect(classifyNodeInvocation(['-e', 'x', 'a', 'b'])).toEqual({
+  it('-pe is accepted but the reversed -ep spelling is not', () => {
+    expect(classifyNodeInvocation(['-pe', '1+1', 'alpha'])).toEqual({
       kind: 'eval',
-      source: 'x',
-      print: false,
-      scriptArgs: ['a', 'b'],
+      source: '1+1',
+      print: true,
+      execArgv: ['-pe', '1+1'],
+      scriptArgs: ['alpha'],
+    });
+    expect(classifyNodeInvocation(['-ep', '1+1'])).toEqual({
+      kind: 'badOption',
+      flag: '-ep',
+    });
+  });
+
+  it('bare -p/--print evaluate an empty script and preserve the lone option', () => {
+    expect(classifyNodeInvocation(['-p'])).toEqual({
+      kind: 'eval',
+      source: '',
+      print: true,
+      execArgv: ['-p'],
+      scriptArgs: [],
+    });
+    expect(classifyNodeInvocation(['--print'])).toEqual({
+      kind: 'eval',
+      source: '',
+      print: true,
+      execArgv: ['--print'],
+      scriptArgs: [],
     });
   });
 
@@ -67,11 +113,34 @@ describe('classifyNodeInvocation', () => {
       kind: 'badOption',
       flag: '--env-file=.env',
     });
+    for (const flag of ['-r', '--require', '--import']) {
+      expect(classifyNodeInvocation([flag, 'preload.cjs'])).toEqual({
+        kind: 'badOption',
+        flag,
+      });
+    }
   });
 
-  it('-e / -p with no value → badOption (loud, never silent)', () => {
-    expect(classifyNodeInvocation(['-e'])).toEqual({ kind: 'badOption', flag: '-e' });
-    expect(classifyNodeInvocation(['-p'])).toEqual({ kind: 'badOption', flag: '-p' });
+  it('missing/empty eval and attached short-option source stay loud', () => {
+    expect(classifyNodeInvocation(['-e'])).toEqual({
+      kind: 'usageError',
+      message: 'node: -e requires an argument\n',
+    });
+    expect(classifyNodeInvocation(['--eval'])).toEqual({
+      kind: 'usageError',
+      message: 'node: --eval requires an argument\n',
+    });
+    expect(classifyNodeInvocation(['--eval='])).toEqual({
+      kind: 'usageError',
+      message: 'node: --eval= requires an argument\n',
+    });
+    expect(classifyNodeInvocation(['-pe'])).toEqual({
+      kind: 'usageError',
+      message: 'node: --eval requires an argument\n',
+    });
+    for (const flag of ['-e=1', '-p=1', '-eSRC', '-pSRC']) {
+      expect(classifyNodeInvocation([flag])).toEqual({ kind: 'badOption', flag });
+    }
   });
 
   it('a non-flag path → entry (today behavior preserved)', () => {
@@ -85,19 +154,6 @@ describe('classifyNodeInvocation', () => {
   it('no args → missing (bare REPL stays the documented ceiling)', () => {
     expect(classifyNodeInvocation([])).toEqual({ kind: 'missing' });
     expect(classifyNodeInvocation([''])).toEqual({ kind: 'missing' });
-  });
-});
-
-describe('buildNodeEvalSource', () => {
-  it('eval source is verbatim (CJS, no implicit print)', () => {
-    expect(buildNodeEvalSource('console.log(2+2)', false)).toBe('console.log(2+2)');
-  });
-
-  it('print wraps the expr in util.inspect + newline', () => {
-    const src = buildNodeEvalSource('1+1', true);
-    expect(src).toContain("require('node:util')");
-    expect(src).toContain('inspect((1+1))');
-    expect(src).toContain("+ '\\n'");
   });
 });
 

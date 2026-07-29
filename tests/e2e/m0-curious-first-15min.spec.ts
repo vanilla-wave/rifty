@@ -48,6 +48,17 @@ test.describe('M0 - curious first 15 minutes', () => {
     await runTerminalLineSettled(page, 'node first-poke.cjs', 60_000);
     await expectTerminalContains(page, 'filemarker 42', 60_000);
 
+    // CommonJS eval uses Node's entryless [eval] identity; print returns the
+    // completion value instead of a generated workspace-file approximation.
+    await runTerminalLineSettled(
+      page,
+      'node -e \'console.log("evalmarker", __filename, process.argv.length)\' alpha',
+      60_000,
+    );
+    await expectTerminalContains(page, 'evalmarker [eval] 2', 60_000);
+    await runTerminalLineSettled(page, 'node -p \'"printmarker:" + (40 + 2)\'', 60_000);
+    await expectTerminalContains(page, 'printmarker:42', 60_000);
+
     // `help` lists the commands (was command-not-found exit 127).
     await runTerminalLineSettled(page, 'help');
     await expectTerminalContains(page, 'run programs');
@@ -69,10 +80,6 @@ test.describe('M0 - curious first 15 minutes', () => {
     test.setTimeout(120_000);
     await bootProjectFiles(page);
     await openShellTerminal(page);
-
-    // Eval identity is not implemented: do not revive the legacy temporary-file lie.
-    await runTerminalLineSettled(page, 'node -e "1"');
-    await expectTerminalContains(page, 'Not implemented: workbench.node.eval-context');
 
     // Unknown node flag → `bad option`, never a MODULE_NOT_FOUND for a file path.
     await runTerminalLineSettled(page, 'node --frobnicate');

@@ -13,6 +13,7 @@
  * Console is replaced for the duration of the case, then restored.
  */
 import { Worker } from 'node:worker_threads';
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import {
   NodeProcess,
   applyNodeProcessTerminalBootstrap,
@@ -40,7 +41,14 @@ import {
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
-import { type ParityCase, caseCwd } from './types.ts';
+import {
+  canonicalNodeCliEvalOutcome,
+  createNodeCliEvalCapture,
+  nodeCliEvalInvocations,
+  nodeCliEvalPreviewScope,
+  runNodeCliEvalMatrix,
+} from './node-cli-eval.ts';
+import { type NodeCliEvalInvocation, type ParityCase, caseCwd } from './types.ts';
 
 /**
  * Normalised shape returned by the injected `__riftyHttpRequest` driver. Both
@@ -306,7 +314,11 @@ function timeoutMs(value: number, label: string): number {
 }
 
 function isPhysicalWorkerCase(testCase: ParityCase): boolean {
-  return testCase.kind === 'worker-env' || testCase.kind === 'child-worker';
+  return (
+    testCase.kind === 'worker-env' ||
+    testCase.kind === 'child-worker' ||
+    testCase.kind === 'node-cli-eval'
+  );
 }
 
 function expectedPhysicalWorkerCount(testCase: ParityCase): number {
@@ -621,7 +633,12 @@ async function installSqliteMode(): Promise<void> {
  * the runner's disposable outer Worker so every process-global binding is
  * discarded after the case.
  */
-async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => void> {
+interface PhysicalWorkerMode {
+  assertExpected(): void;
+  teardown(): void;
+}
+
+async function installPhysicalWorkerMode(testCase: ParityCase): Promise<PhysicalWorkerMode> {
   const { getKernelWorkerUrl, setKernelWorkerUrl } = await import(
     '../../../packages/kernel/src/index.ts'
   );
@@ -633,7 +650,20 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
   type WorkerInitMessage = import('../../../packages/kernel/src/worker-entry.ts').WorkerInitMessage;
   let nativeWorkerConstructions = 0;
   let validatedInitMessages = 0;
-  const expectedLaunchKind = testCase.kind === 'child-worker' ? 'program' : 'worker-thread';
+  const validatedEvalLabels = new Set<string>();
+  const evalInvocations =
+    testCase.kind === 'node-cli-eval'
+      ? (() => {
+          const plan = nodeCliEvalInvocations(testCase);
+          return [...plan.sequential, ...plan.concurrent];
+        })()
+      : [];
+  const expectedLaunchKind =
+    testCase.kind === 'child-worker'
+      ? 'program'
+      : testCase.kind === 'node-cli-eval'
+        ? 'eval'
+        : 'worker-thread';
   const expectedWorkers = expectedPhysicalWorkerCount(testCase);
 
   function validateInitMessage(message: unknown): void {
@@ -647,11 +677,44 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
       throw new TypeError('physical-worker parity requires typed node-entry bootstrap');
     }
     const payload = envelope.payload as Partial<NodeEntryBootstrapPayload> | null;
+    const launch = payload?.launch as unknown as Record<string, unknown> | undefined;
     if (
-      payload?.launch?.kind !== expectedLaunchKind ||
-      payload.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only'
+      launch?.kind !== expectedLaunchKind ||
+      payload?.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only'
     ) {
       throw new TypeError('physical-worker parity init has wrong launch or host marker');
+    }
+    if (testCase.kind === 'node-cli-eval') {
+      const expected = evalInvocations.find(
+        ({ label }) => nodeCliEvalPreviewScope(label) === launch.previewScope,
+      );
+      const spec = init.spec;
+      const cwd = expected?.cwd ?? caseCwd(testCase);
+      const terminal = launch.terminal as Record<string, unknown> | undefined;
+      if (
+        expected === undefined ||
+        validatedEvalLabels.has(expected.label) ||
+        launch.source !== expected.source ||
+        launch.print !== expected.print ||
+        launch.remoteFs !== true ||
+        launch.previewScope !== nodeCliEvalPreviewScope(expected.label) ||
+        JSON.stringify(launch.execArgv) !== JSON.stringify(expected.execArgv) ||
+        terminal?.stdinIsTTY !== false ||
+        terminal.stdoutIsTTY !== false ||
+        terminal.stderrIsTTY !== false ||
+        terminal.cols !== 80 ||
+        terminal.rows !== 24 ||
+        spec?.cwd !== cwd ||
+        spec.serve !== true ||
+        JSON.stringify(spec.argv) !==
+          JSON.stringify([NODE_PROCESS_IDENTITY.execPath, ...expected.scriptArgs]) ||
+        JSON.stringify(spec.env) !== '{}'
+      ) {
+        throw new TypeError(
+          `node-cli-eval physical launch does not match invocation ${expected?.label ?? '<missing>'}`,
+        );
+      }
+      validatedEvalLabels.add(expected.label);
     }
     validatedInitMessages++;
   }
@@ -716,16 +779,6 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
   let failure: unknown | typeof NO_FAILURE = NO_FAILURE;
 
   try {
-    cleanups.defer(() => {
-      if (
-        nativeWorkerConstructions !== expectedWorkers ||
-        validatedInitMessages !== expectedWorkers
-      ) {
-        throw new Error(
-          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}`,
-        );
-      }
-    });
     cleanups.defer(clearWorkerFactoryForTests);
     cleanups.defer(resetNodeEntryWorkerUrl);
     cleanups.defer(() => {
@@ -755,6 +808,9 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
     setKernelWorkerUrl('parity://kernel-worker');
     configureNodeEntryWorker('parity://node-entry', {
       RIFTY_PARITY_HOST_BOOTSTRAP: 'host-only',
+      RIFTY_KERNEL_WORKER_URL: 'parity://kernel-worker',
+      RIFTY_NODE_ENTRY_WORKER_URL: 'parity://node-entry',
+      RIFTY_SQLITE_WASM_URL: 'parity://sqlite-wasm',
     });
     setWorkerFactoryForTests(() => new NativeKernelWorkerAdapter());
   } catch (error) {
@@ -764,7 +820,92 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
     if (failure !== NO_FAILURE) disposePreservingFailure(cleanups, failure);
   }
 
-  return () => cleanups.dispose();
+  return {
+    assertExpected() {
+      if (
+        nativeWorkerConstructions !== expectedWorkers ||
+        validatedInitMessages !== expectedWorkers
+      ) {
+        throw new Error(
+          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}`,
+        );
+      }
+    },
+    teardown() {
+      cleanups.dispose();
+    },
+  };
+}
+
+async function runRiftyNodeCliEvalInvocation(
+  invocation: NodeCliEvalInvocation,
+  defaultCwd: string,
+): Promise<ReturnType<typeof canonicalNodeCliEvalOutcome>> {
+  const { globalProcessManager } = await import('../../../packages/kernel/src/index.ts');
+  const { buildConfiguredNodeEntryWorkerEntry, nodeChildSpawnOptions } = await import(
+    '../../../packages/runtime-js/src/builtins/node-entry-runtime-config.ts'
+  );
+  type ConfiguredLaunch = Parameters<typeof buildConfiguredNodeEntryWorkerEntry>[0];
+  const cwd = invocation.cwd ?? defaultCwd;
+  const candidate = {
+    kind: 'eval',
+    source: invocation.source,
+    print: invocation.print,
+    execArgv: [...invocation.execArgv],
+    remoteFs: true,
+    previewScope: nodeCliEvalPreviewScope(invocation.label),
+    terminal: {
+      stdinIsTTY: false,
+      stdoutIsTTY: false,
+      stderrIsTTY: false,
+      cols: 80,
+      rows: 24,
+    },
+  };
+  // The carrier lands before the product union in RED. The product's exact-own
+  // validator remains authoritative: v2 rejects here; v3 snapshots this shape.
+  const entry = buildConfiguredNodeEntryWorkerEntry(candidate as unknown as ConfiguredLaunch);
+  const handle = globalProcessManager.spawnWorker(
+    'node',
+    {
+      entry,
+      argv: [NODE_PROCESS_IDENTITY.execPath, ...invocation.scriptArgs],
+      env: {},
+      cwd,
+      serve: true,
+    },
+    1,
+    nodeChildSpawnOptions(cwd, false),
+  );
+  if (handle.kind !== 'worker') {
+    throw new Error('node-cli-eval parity expected a physical Worker handle');
+  }
+  const capture = createNodeCliEvalCapture();
+  handle.stdout().on('data', (chunk) => capture.push('stdout', chunk));
+  handle.stderr().on('data', (chunk) => capture.push('stderr', chunk));
+  handle.stdin().end();
+  const raw = await new Promise<ReturnType<ReturnType<typeof createNodeCliEvalCapture>['finish']>>(
+    (resolve, reject) => {
+      let peerFailure: Error | undefined;
+      handle.on('peererror', (error) => {
+        peerFailure = error instanceof Error ? error : new Error(String(error));
+      });
+      handle.on('close', (code, signal) => {
+        if (peerFailure !== undefined) reject(peerFailure);
+        else {
+          resolve(
+            capture.finish(
+              typeof code === 'number' ? code : null,
+              typeof signal === 'string' ? signal : null,
+            ),
+          );
+        }
+      });
+    },
+  );
+  return canonicalNodeCliEvalOutcome(invocation, raw, {
+    [NODE_PROCESS_IDENTITY.execPath]: '<node>',
+  });
 }
 
 /**
@@ -1119,11 +1260,26 @@ export async function runInRiftyInCurrentRealm(
       cleanups.defer(teardownExecSync);
     }
 
+    if (testCase.kind === 'node-cli-eval') {
+      const { getKernelDispatcher } = await import('../../../packages/kernel/src/index.ts');
+      const { installRuntimeJsFsHandlers } = await import('@riftydev/runtime-js');
+      installRuntimeJsFsHandlers(getKernelDispatcher(), () => fsMirror);
+    }
+
     // ADR-0267: only a physical kernel child can prove that typed host
     // bootstrap metadata stays outside exact inherited/replacement guest env.
+    let physicalWorkerMode: PhysicalWorkerMode | undefined;
     if (isPhysicalWorkerCase(testCase)) {
-      const teardownPhysicalWorker = await installPhysicalWorkerMode(testCase);
-      cleanups.defer(teardownPhysicalWorker);
+      physicalWorkerMode = await installPhysicalWorkerMode(testCase);
+      cleanups.defer(() => physicalWorkerMode?.teardown());
+    }
+
+    if (testCase.kind === 'node-cli-eval') {
+      const output = await runNodeCliEvalMatrix(testCase, (invocation) =>
+        runRiftyNodeCliEvalInvocation(invocation, cwd),
+      );
+      physicalWorkerMode?.assertExpected();
+      return output;
     }
 
     // Preload QuickJS before any user code runs: a case can opt the `vm.*` sandbox
@@ -1224,6 +1380,7 @@ export async function runInRiftyInCurrentRealm(
         await new Promise((r) => setTimeout(r, 5));
       }
     }
+    physicalWorkerMode?.assertExpected();
     return seededProcess?.stdoutText() ?? captured.join('');
   } catch (error) {
     failure = error;

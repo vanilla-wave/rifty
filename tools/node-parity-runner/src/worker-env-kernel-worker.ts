@@ -7,7 +7,12 @@ import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
-import { publishKernelProcessSpec } from '../../../packages/kernel/src/shared-globals.ts';
+import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from '../../../packages/kernel/src/ipc/sab-ring.ts';
+import { SyncRpcClient } from '../../../packages/kernel/src/ipc/sync-client.ts';
+import {
+  publishKernelProcessSpec,
+  publishKernelSyncApi,
+} from '../../../packages/kernel/src/shared-globals.ts';
 import {
   type WorkerInitMessage,
   type WorkerSpawnSpec,
@@ -47,6 +52,12 @@ hostProcess.on('unhandledRejection', (reason) => recordRejection(reason));
 async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   const bootstrap = readNodeEntryBootstrap();
   const launch = bootstrap.launch;
+  if ((launch as { readonly kind: unknown }).kind === 'eval') {
+    // Execute the actual Workbench node-entry module. It owns eval-vs-program
+    // dispatch, loader eval, print/drain ordering, process adoption, and exit.
+    await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');
+    return;
+  }
   const entryPath = spec.argv[1];
   if (entryPath === undefined) throw new Error('worker-env parity child has no argv[1]');
   const runEntry = () =>
@@ -83,6 +94,11 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
 async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
   const stdout = bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout');
   const stderr = bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr');
+  const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
+  const syncClient = new SyncRpcClient(ring);
+  publishKernelSyncApi({
+    call: (method, payload) => syncClient.call(method, payload),
+  });
   publishKernelProcessSpec({
     pid: spec.pid,
     ppid: spec.ppid,

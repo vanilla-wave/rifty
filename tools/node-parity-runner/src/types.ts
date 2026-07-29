@@ -33,6 +33,15 @@ export interface ParityCase {
   /** Exact native Worker constructions required by a physical Worker case. */
   readonly expectedPhysicalWorkers?: number;
   /**
+   * Exact native-Node argv and the corresponding typed eval launch. Present
+   * only for `kind: 'node-cli-eval'`; the Node side spawns that argv directly,
+   * while rifty sends source only in the node-entry bootstrap.
+   */
+  readonly nodeCliEval?: {
+    readonly sequential: readonly NodeCliEvalInvocation[];
+    readonly concurrent?: readonly NodeCliEvalInvocation[];
+  };
+  /**
    * Module kind. Defaults to 'cjs'.
    *
    * - `'cjs'` / `'esm'` — module-shape parity (`node:path`, `node:buffer`, …).
@@ -89,6 +98,10 @@ export interface ParityCase {
    *   changes its grid with `stty`; rifty receives the same change over its
    *   process-control MessagePort. The case prints one explicit result marker
    *   so PTY transcript noise cannot become the oracle.
+   * - `'node-cli-eval'` — physical node-entry eval mode. Native Node receives
+   *   exact CLI argv; rifty receives one `rifty.node-entry/v3` eval launch in a
+   *   real kernel Worker. Results include stdout, scoped stderr, ordered stream
+   *   frames, and exit status.
    */
   readonly kind?:
     | 'cjs'
@@ -99,7 +112,27 @@ export interface ParityCase {
     | 'exec-sync'
     | 'worker-env'
     | 'child-worker'
-    | 'tty-resize';
+    | 'tty-resize'
+    | 'node-cli-eval';
+}
+
+export interface NodeCliEvalInvocation {
+  readonly label: string;
+  /** Exact argv after process.execPath for the native Node oracle. */
+  readonly nodeArgv: readonly string[];
+  /** Loader-owned eval source; never placed in rifty argv/env/VFS. */
+  readonly source: string;
+  readonly print: boolean;
+  /** Exact original Node eval option tokens exposed as process.execArgv. */
+  readonly execArgv: readonly string[];
+  /** Exact arguments after the eval source; process argv has no entry path. */
+  readonly scriptArgs: readonly string[];
+  /** Absolute logical cwd, defaulting to the case cwd. */
+  readonly cwd?: string;
+  /** Keep only Node's in-scope eval prelude/error/first user frame. */
+  readonly evalErrorStderr?: boolean;
+  /** Keep the rejected-Promise prefix/user frame, not Node-internal frames. */
+  readonly rejectedPromiseStdout?: boolean;
 }
 
 /**

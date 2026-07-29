@@ -3,8 +3,9 @@
  * cowsay → yargs reads `process.versions.electron` → TypeError if versions=undefined.
  * (ADR-0150: supervised child worker running a foreground CLI)
  */
-import type { KernelProcessSpec } from '@riftydev/kernel';
+import { type KernelProcessSpec, publishKernelEntryBootstrap } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
+import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '../builtins/node-entry-runtime-config.ts';
 import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
@@ -30,6 +31,7 @@ function spec(): KernelProcessSpec {
 }
 
 afterEach(() => {
+  publishKernelEntryBootstrap(null);
   Object.defineProperty(globalThis, 'process', {
     value: originalProcess,
     writable: true,
@@ -55,6 +57,49 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     expect(proc.argv0).toBe('rifty');
     expect(proc.execPath).toBe('/usr/local/bin/rifty');
     expect(proc.title).toBe('rifty');
+  });
+
+  it('gives each process its own mutable execArgv array', () => {
+    const first = installNodeProcessShim(spec()) as ReturnType<typeof installNodeProcessShim> & {
+      execArgv: string[];
+    };
+    const second = installNodeProcessShim(spec()) as ReturnType<typeof installNodeProcessShim> & {
+      execArgv: string[];
+    };
+
+    expect(first.execArgv).toEqual([]);
+    expect(second.execArgv).toEqual([]);
+
+    first.execArgv.push('--trace-warnings');
+
+    expect(first.execArgv).toEqual(['--trace-warnings']);
+    expect(second.execArgv).toEqual([]);
+  });
+
+  it('copies the exact eval execArgv from the node-entry launch', () => {
+    const source = "require('./package.json').name";
+    const originalExecArgv = ['--print', source];
+    publishKernelEntryBootstrap({
+      protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+      payload: {
+        hostRuntime: { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+        launch: {
+          kind: 'eval',
+          source,
+          print: true,
+          execArgv: originalExecArgv,
+          remoteFs: true,
+        },
+      },
+    });
+
+    const proc = installNodeProcessShim(spec()) as ReturnType<typeof installNodeProcessShim> & {
+      execArgv: string[];
+    };
+    proc.execArgv.push('--trace-warnings');
+
+    expect(proc.execArgv).toEqual(['--print', source, '--trace-warnings']);
+    expect(originalExecArgv).toEqual(['--print', source]);
   });
 
   it('exposes the exact isolated Node v24.0.0 release identity (ADR-0345)', () => {

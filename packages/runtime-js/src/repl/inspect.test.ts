@@ -22,10 +22,10 @@ describe('inspect', () => {
     expect(inspect({ a: 1, b: 'two' })).toBe("{ a: 1, b: 'two' }");
   });
 
-  it('handles circular refs', () => {
-    const o: Record<string, unknown> = {};
+  it('labels circular refs with Node reference ids', () => {
+    const o: Record<string, unknown> = { name: 'root' };
     o.self = o;
-    expect(inspect(o)).toContain('[Circular]');
+    expect(inspect(o)).toBe("<ref *1> { name: 'root', self: [Circular *1] }");
   });
 
   it('formatArgs passes strings through verbatim', () => {

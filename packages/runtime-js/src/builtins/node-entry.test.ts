@@ -8,14 +8,46 @@
  * execution) without a Worker realm; the Worker transport is COI/e2e-only.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createRequire } from './module.ts';
+import * as nodeEntryBuiltin from './node-entry.ts';
 import { parseBinLauncherTarget, runNodeEntry } from './node-entry.ts';
 
 const g = globalThis as Record<string, unknown>;
+const CJS_BINDINGS = ['require', 'module', 'exports', '__filename', '__dirname'] as const;
+const EVAL_PROBE = '__riftyNodeEvalProbe';
 
-afterEach(() => resetSyncMirror());
+type ReflectedRunNodeEval = (opts: {
+  readonly vfs: MemoryFsSync;
+  readonly cwd: string;
+  readonly source: string;
+}) => unknown;
+
+function reflectedRunNodeEval(): ReflectedRunNodeEval {
+  const candidate = Reflect.get(nodeEntryBuiltin, 'runNodeEval');
+  expect(candidate, 'node-entry must export runNodeEval').toBeTypeOf('function');
+  return candidate as ReflectedRunNodeEval;
+}
+
+function snapshotCjsBindings(): Map<string, PropertyDescriptor | undefined> {
+  return new Map(
+    CJS_BINDINGS.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
+}
+
+function restoreCjsBindings(snapshot: ReadonlyMap<string, PropertyDescriptor | undefined>): void {
+  for (const [key, descriptor] of snapshot) {
+    if (descriptor === undefined) Reflect.deleteProperty(globalThis, key);
+    else Object.defineProperty(globalThis, key, descriptor);
+  }
+}
+
+afterEach(() => {
+  Reflect.deleteProperty(globalThis, EVAL_PROBE);
+  resetSyncMirror();
+});
 
 describe('parseBinLauncherTarget', () => {
   it('extracts the dynamic-import target from a linker launcher shim', () => {
@@ -25,6 +57,92 @@ describe('parseBinLauncherTarget', () => {
 
   it('returns null when the source is not a recognizable launcher', () => {
     expect(parseBinLauncherTarget('console.log(1);\n')).toBeNull();
+  });
+});
+
+describe('runNodeEval', () => {
+  it('runs one detached cwd-anchored unwrapped [eval] script and returns a completion token', () => {
+    const vfs = new MemoryFsSync();
+    setSyncMirror(vfs);
+    vfs.loadFixture({
+      '/work/dep.cjs': `
+module.exports = {
+  answer: 42,
+  parentId: module.parent?.id,
+  parentFilename: module.parent?.filename,
+};
+`,
+    });
+    const bindings = snapshotCjsBindings();
+
+    try {
+      const completion = reflectedRunNodeEval()({
+        vfs,
+        cwd: '/work',
+        source: `{
+          const dep = require('./dep.cjs');
+          globalThis.${EVAL_PROBE} = {
+            thisIsGlobal: this === globalThis,
+            argumentsType: typeof arguments,
+            filename: __filename,
+            dirname: __dirname,
+            moduleId: module.id,
+            moduleFilename: module.filename,
+            modulePath: module.path,
+            moduleParent: module.parent,
+            moduleLoaded: module.loaded,
+            requireMain: require.main,
+            inCache: Object.prototype.hasOwnProperty.call(require.cache, module.filename),
+            dep,
+          };
+          ({ marker: 'completion' });
+        }`,
+      });
+
+      expect(completion).not.toBeNull();
+      expect(completion).not.toBeUndefined();
+      expect(Reflect.get(globalThis, EVAL_PROBE)).toEqual({
+        thisIsGlobal: true,
+        argumentsType: 'undefined',
+        filename: '[eval]',
+        dirname: '.',
+        moduleId: '[eval]',
+        moduleFilename: '/work/[eval]',
+        modulePath: '.',
+        moduleParent: undefined,
+        moduleLoaded: false,
+        requireMain: undefined,
+        inCache: false,
+        dep: {
+          answer: 42,
+          parentId: '[eval]',
+          parentFilename: '/work/[eval]',
+        },
+      });
+    } finally {
+      restoreCjsBindings(bindings);
+      Reflect.deleteProperty(globalThis, EVAL_PROBE);
+    }
+  });
+
+  it('rejects TypeScript-only eval source through the named loud gap', () => {
+    const vfs = new MemoryFsSync();
+    const bindings = snapshotCjsBindings();
+    let thrown: unknown;
+    try {
+      reflectedRunNodeEval()({
+        vfs,
+        cwd: '/work',
+        source: 'const n: number = 1; n',
+      });
+    } catch (error) {
+      thrown = error;
+    } finally {
+      restoreCjsBindings(bindings);
+    }
+
+    expect(thrown).toBeInstanceOf(NotImplementedError);
+    expect((thrown as NotImplementedError).feature).toBe('runtime-js.node-eval-typescript-context');
   });
 });
 

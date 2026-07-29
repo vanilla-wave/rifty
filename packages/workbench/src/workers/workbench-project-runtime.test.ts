@@ -5,6 +5,7 @@ import {
   RegistryClient,
   install as installPackages,
 } from '@riftydev/npm-client';
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import {
   NODE_ENTRY_BOOTSTRAP_PROTOCOL,
   type NodeEntryBootstrapPayload,
@@ -22,7 +23,10 @@ import {
   type OwnerPackageState,
   createOwnerPackageState,
 } from './owner-package-state.ts';
-import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
+import {
+  type OwnerVfsAuthority,
+  createOwnerVfsAuthorityComposition,
+} from './owner-vfs-authority.ts';
 import {
   type WorkbenchProjectRuntime,
   createWorkbenchProjectRuntime,
@@ -232,6 +236,10 @@ interface BoundaryWorker {
   readonly command: () => Parameters<typeof globalProcessManager.spawnWorker>[0] | null;
   readonly spec: () => Parameters<typeof globalProcessManager.spawnWorker>[1] | null;
   readonly killedWith: () => string | null;
+  capture(
+    command: Parameters<typeof globalProcessManager.spawnWorker>[0],
+    spec: Parameters<typeof globalProcessManager.spawnWorker>[1],
+  ): void;
   emitMessage(message: unknown): void;
   emitListening(control: { pid: number; ports: number[]; previewScope?: string }): void;
   emitPeerError(error: Error): void;
@@ -253,7 +261,9 @@ function settledOr<T, TPending>(promise: Promise<T>, pending: TPending): Promise
   ]);
 }
 
-function boundaryWorker(): BoundaryWorker {
+function boundaryWorker(
+  options: { readonly installSpy?: boolean; readonly pid?: number } = {},
+): BoundaryWorker {
   let capturedCommand: Parameters<typeof globalProcessManager.spawnWorker>[0] | null = null;
   let capturedSpec: Parameters<typeof globalProcessManager.spawnWorker>[1] | null = null;
   let killedWith: string | null = null;
@@ -292,7 +302,7 @@ function boundaryWorker(): BoundaryWorker {
   const control = new MessageChannel();
   const rawHandle = {
     kind: 'worker' as const,
-    pid: 101,
+    pid: options.pid ?? 101,
     ppid: 1,
     command: 'vite',
     cwd: ROOT,
@@ -333,16 +343,25 @@ function boundaryWorker(): BoundaryWorker {
     setCwd: () => undefined,
   };
   const handle = rawHandle as unknown as ReturnType<typeof globalProcessManager.spawnWorker>;
-  vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
+  const capture = (
+    command: Parameters<typeof globalProcessManager.spawnWorker>[0],
+    spec: Parameters<typeof globalProcessManager.spawnWorker>[1],
+  ): void => {
     capturedCommand = command;
     capturedSpec = spec;
-    return handle;
-  });
+  };
+  if (options.installSpy !== false) {
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
+      capture(command, spec);
+      return handle;
+    });
+  }
   return {
     handle,
     command: () => capturedCommand,
     spec: () => capturedSpec,
     killedWith: () => killedWith,
+    capture,
     emitMessage(message) {
       for (const listener of listeners.get('message') ?? []) listener(message);
     },
@@ -360,6 +379,23 @@ function boundaryWorker(): BoundaryWorker {
       for (const listener of listeners.get('exit') ?? []) listener(code, signal);
     },
   };
+}
+
+function snapshotProjectTree(
+  authority: OwnerVfsAuthority,
+): Readonly<Record<string, readonly number[]>> {
+  const files: Record<string, readonly number[]> = {};
+  const walk = (directory: string): void => {
+    for (const entry of authority.readdirSync(directory)) {
+      const path = `${directory}/${entry.name}`;
+      if (entry.isDirectory) walk(path);
+      else files[path.slice(ROOT.length)] = [...authority.readFileBytesSync(path)];
+    }
+  };
+  walk(ROOT);
+  return Object.fromEntries(
+    Object.entries(files).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+  );
 }
 
 async function harness(
@@ -902,16 +938,255 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
+  it('admits CommonJS eval as one exact v3 physical child without a VFS carrier', async () => {
+    const source = 'JSON.stringify({marker:"node-eval"})';
+    const worker = boundaryWorker({ installSpy: false });
+    const reservationEvidence: {
+      events: string[];
+      paths: string[];
+      ready?: unknown;
+    } = { events: [], paths: [] };
+    const h = await harness(
+      undefined,
+      nodeCliPackageConfig,
+      async () => {},
+      undefined,
+      reservationEvidence,
+    );
+    const before = snapshotProjectTree(h.authority);
+    let during: Readonly<Record<string, readonly number[]>> | undefined;
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
+      during = snapshotProjectTree(h.authority);
+      worker.capture(command, spec);
+      return worker.handle;
+    });
+    h.runtime.handlePtyFrame({
+      type: 'pty:open',
+      sid: 'terminal-node-eval',
+      env: { USER_FLAG: 'preserved' },
+    });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-eval',
+        rid: 'run-node-eval',
+        line: `node -pe '${source}' alpha 'two words'`,
+        cols: 97,
+        rows: 37,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+
+    expect(worker.command()).toBe('node');
+    expect(worker.spec()).toMatchObject({
+      cwd: '/',
+      argv: [NODE_PROCESS_IDENTITY.execPath, 'alpha', 'two words'],
+      env: { USER_FLAG: 'preserved' },
+      serve: true,
+      entry: {
+        kind: 'url',
+        url: NODE_ENTRY_WORKER_URL,
+        bootstrap: {
+          protocol: 'rifty.node-entry/v3',
+          payload: {
+            hostRuntime: NODE_WORKER_RUNTIME_ENV,
+            launch: {
+              kind: 'eval',
+              source,
+              print: true,
+              execArgv: ['-pe', source],
+              remoteFs: true,
+              remoteFsRoot: ROOT,
+              previewScope: expect.any(String),
+              terminal: {
+                stdinIsTTY: false,
+                stdoutIsTTY: true,
+                stderrIsTTY: true,
+                cols: 97,
+                rows: 37,
+              },
+            },
+          },
+        },
+      },
+    });
+    const entry = worker.spec()?.entry;
+    if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
+      throw new Error('expected eval node-entry URL bootstrap');
+    }
+    const payload = entry.bootstrap.payload as {
+      readonly launch?: Readonly<Record<string, unknown>>;
+    };
+    expect(Object.keys(payload.launch ?? {}).sort()).toEqual(
+      [
+        'execArgv',
+        'kind',
+        'previewScope',
+        'print',
+        'remoteFs',
+        'remoteFsRoot',
+        'source',
+        'terminal',
+      ].sort(),
+    );
+    expect(JSON.stringify({ argv: worker.spec()?.argv, env: worker.spec()?.env })).not.toContain(
+      source,
+    );
+    expect(during).toEqual(before);
+    expect(reservationEvidence.paths).toEqual([ROOT]);
+    expect(reservationEvidence.events).toEqual(['commit']);
+
+    worker.emitExit(0);
+    await running;
+    await vi.waitFor(() => expect(reservationEvidence.events).toEqual(['commit', 'dispose']));
+    expect(snapshotProjectTree(h.authority)).toEqual(before);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-node-eval',
+        code: 0,
+        exit: { code: 0, signal: null },
+      }),
+    );
+    await h.runtime.close();
+  });
+
+  it('keeps two simultaneous eval children isolated by cwd, argv, source, and preview scope', async () => {
+    const workers = [
+      boundaryWorker({ installSpy: false, pid: 201 }),
+      boundaryWorker({ installSpy: false, pid: 202 }),
+    ];
+    const reservationEvidence: {
+      events: string[];
+      paths: string[];
+      ready?: unknown;
+    } = { events: [], paths: [] };
+    const h = await harness(
+      undefined,
+      nodeCliPackageConfig,
+      async () => {},
+      undefined,
+      reservationEvidence,
+    );
+    h.authority.mkdirSync(`${ROOT}/a`, { recursive: true });
+    h.authority.mkdirSync(`${ROOT}/b`, { recursive: true });
+    let spawnIndex = 0;
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
+      const worker = workers[spawnIndex++];
+      if (worker === undefined) throw new Error('unexpected third eval child');
+      worker.capture(command, spec);
+      return worker.handle;
+    });
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'eval-a', cwd: `${ROOT}/a` });
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'eval-b', cwd: `${ROOT}/b` });
+
+    const runningA = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'eval-a',
+        rid: 'run-eval-a',
+        line: 'node -e \'console.log("a")\' argv-a',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    const runningB = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'eval-b',
+        rid: 'run-eval-b',
+        line: 'node -p \'"b"\' argv-b',
+        cols: 81,
+        rows: 25,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(spawnIndex).toBe(2));
+
+    expect(workers[0]?.spec()).toMatchObject({
+      cwd: '/a',
+      argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-a'],
+      entry: {
+        bootstrap: {
+          protocol: 'rifty.node-entry/v3',
+          payload: {
+            launch: {
+              kind: 'eval',
+              source: 'console.log("a")',
+              print: false,
+              execArgv: ['-e', 'console.log("a")'],
+              remoteFsRoot: ROOT,
+              previewScope: expect.any(String),
+            },
+          },
+        },
+      },
+    });
+    expect(workers[1]?.spec()).toMatchObject({
+      cwd: '/b',
+      argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-b'],
+      entry: {
+        bootstrap: {
+          protocol: 'rifty.node-entry/v3',
+          payload: {
+            launch: {
+              kind: 'eval',
+              source: '"b"',
+              print: true,
+              execArgv: ['-p', '"b"'],
+              remoteFsRoot: ROOT,
+              previewScope: expect.any(String),
+            },
+          },
+        },
+      },
+    });
+    const launchOf = (worker: BoundaryWorker): Readonly<Record<string, unknown>> => {
+      const entry = worker.spec()?.entry;
+      if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
+        throw new Error('expected eval node-entry URL bootstrap');
+      }
+      const payload = entry.bootstrap.payload as {
+        readonly launch?: Readonly<Record<string, unknown>>;
+      };
+      if (payload.launch === undefined) throw new Error('expected eval launch');
+      return payload.launch;
+    };
+    expect(launchOf(workers[0]!).previewScope).not.toBe(launchOf(workers[1]!).previewScope);
+    expect(reservationEvidence.paths).toEqual([`${ROOT}/a`, `${ROOT}/b`]);
+    expect(reservationEvidence.events).toEqual(['commit', 'commit']);
+
+    workers[1]?.emitExit(7);
+    workers[0]?.emitExit(0);
+    await Promise.all([runningA, runningB]);
+    await vi.waitFor(() =>
+      expect(reservationEvidence.events.filter((event) => event === 'dispose')).toHaveLength(2),
+    );
+    expect(
+      h.frames.filter((frame) => frame.type === 'pty:exit' && frame.rid === 'run-eval-a'),
+    ).toEqual([expect.objectContaining({ code: 0, exit: { code: 0, signal: null } })]);
+    expect(
+      h.frames.filter((frame) => frame.type === 'pty:exit' && frame.rid === 'run-eval-b'),
+    ).toEqual([expect.objectContaining({ code: 7, exit: { code: 7, signal: null } })]);
+    await h.runtime.close();
+  });
+
   it.each([
-    "node -e '1'",
-    "node --eval '1'",
-    'node --eval=1',
-    "node -p '1'",
-    "node --print '1'",
-    'node --print=1',
-  ])('keeps unsupported eval context loud without a temp write or child: %s', async (line) => {
+    ['node -e', 'node: -e requires an argument\n'],
+    ['node --eval', 'node: --eval requires an argument\n'],
+    ['node --eval=', 'node: --eval= requires an argument\n'],
+    ['node -pe', 'node: --eval requires an argument\n'],
+    ['node -ep 1', 'node: bad option: -ep\n'],
+    ['node -e=1', 'node: bad option: -e=1\n'],
+    ['node -p=1', 'node: bad option: -p=1\n'],
+    ['node -eSRC', 'node: bad option: -eSRC\n'],
+    ['node -pSRC', 'node: bad option: -pSRC\n'],
+  ])('returns Node-shaped exit 9 without allocating a child: %s', async (line, expectedStderr) => {
     const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
-      throw new Error('unexpected Node eval child spawn');
+      throw new Error('unexpected invalid Node eval child spawn');
     });
     const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval' });
@@ -933,13 +1208,44 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       )
       .map((frame) => new TextDecoder().decode(frame.data))
       .join('');
-    expect(stderr).toContain('Not implemented: workbench.node.eval-context');
+    expect(stderr).toBe(expectedStderr);
     expect(spawn).not.toHaveBeenCalled();
-    expect(
-      h.authority.readdirSync(ROOT).some((entry) => entry.name.startsWith('.rifty-eval-')),
-    ).toBe(false);
     expect(h.frames).toContainEqual(
-      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-eval', code: 1 }),
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-eval', code: 9 }),
+    );
+    await h.runtime.close();
+  });
+
+  it('keeps ESM eval as its named loud context gap without allocating a CJS child', async () => {
+    const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
+      throw new Error('unexpected ESM eval child spawn');
+    });
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-esm-eval' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-node-esm-eval',
+      rid: 'run-node-esm-eval',
+      line: "node --input-type=module -e '1'",
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const stderr = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' &&
+          frame.rid === 'run-node-esm-eval' &&
+          frame.stream === 'stderr',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(stderr).toContain('Not implemented: workbench.node.eval-module-context');
+    expect(spawn).not.toHaveBeenCalled();
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-esm-eval', code: 1 }),
     );
     await h.runtime.close();
   });

@@ -50,6 +50,7 @@ async function runOne(file: string): Promise<CaseRun> {
       testCase.kind === 'worker-env' ||
       testCase.kind === 'child-worker' ||
       testCase.kind === 'tty-resize' ||
+      testCase.kind === 'node-cli-eval' ||
       testCase.stdin !== undefined;
     const [nodeOut, riftyOut] = installsProcess
       ? [await runInNode(testCase), await runInRifty(testCase)]
