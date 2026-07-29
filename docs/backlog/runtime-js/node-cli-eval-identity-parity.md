@@ -5,7 +5,7 @@ title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
 user_story: As a CLI author probing its invocation context under `node -e` or `node -p`, I want the same argv and module identity as Node 24, but today the terminal rejects the command.
-sources: [M11, ADR-0155, ADR-0157, ADR-0337, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md]
+sources: [M11, ADR-0155, ADR-0157, ADR-0337, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md, docs/backlog/runtime-js/reference/node-cli-eval-physical-carrier-probe.md]
 code: [packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/cjs.ts, tools/node-parity-runner/cases/process/node-eval-context.case.ts, tests/e2e/cli-report.spec.ts]
 ---
 
@@ -48,11 +48,12 @@ identity rather than a generated workspace file, and return the real exit code.
 
 1. Workbench parses Node 24's supported CommonJS eval spellings:
    `-e <source>`, `--eval <source>`, `--eval=<source>`, `-p [source]`,
-   `--print [source]`, `--print=<ignored> [source]`, and `-pe [source]`.
-   Missing print source evaluates `undefined`; missing `-e`, empty `--eval=`,
-   attached short-option source, and unsupported options retain Node-shaped
-   loud failures. An immediate `--` after source is consumed; remaining tokens
-   are script arguments.
+   `--print [source]`, `--print=<ignored> [source]`, and `-pe <source>`.
+   Missing source for plain `-p`/`--print` evaluates `undefined`; bare `-pe`
+   is an eval usage error. Missing `-e`, empty `--eval=`, `-ep`, other attached
+   short-option source, and unsupported options retain Node-shaped exit-9
+   failures. An immediate `--` after source is consumed; remaining tokens are
+   script arguments.
 2. Those forms build one exact `rifty.node-entry/v3` eval launch in the
    existing admitted foreground Node Worker. The launch carries source, print
    mode, and original `process.execArgv`; the process spec carries
@@ -71,16 +72,20 @@ identity rather than a generated workspace file, and return the real exit code.
    bigint, fulfilled/pending/rejected Promise, circular reference, and
    post-timer mutation cases match Node v24.16.0.
 5. Differential cases run the same source, cwd, spelling, and script arguments
-   in Node v24.16.0 and the physical supervised Workbench child, comparing
-   normalized stdout, stderr user prelude/frame, and exit status. Sequential
-   and simultaneous children prove cwd/argv/module/output/preview isolation.
-   A VFS observer proves that no eval path exists before, during, or after.
+   in Node v24.16.0 and through the Workbench terminal's physical supervised
+   child, comparing normalized stdout, stderr user prelude/frame, ordered
+   stream frames, and exit status. Sequential and simultaneous children prove
+   cwd/argv/module/output/preview isolation. A VFS observer proves that no eval
+   path exists before, during, or after.
 6. The CI-active acceptance carriers are
    `tools/node-parity-runner/cases/process/node-eval-context.case.ts`,
-   Workbench physical-child/contract/fault tests, and real Chromium
-   `tests/e2e/cli-report.spec.ts` running both forms from the Node CLI Starter.
-   Only all-GREEN differential and Chromium proof may flip CommonJS CLI eval to
-   compat ✅; source grep, a fake child, or an opt-in lane cannot close it.
+   Workbench launch/validator/fault tests, and CI-active Chromium
+   `tests/e2e/cli-report.spec.ts`. That browser test runs the host Node oracle
+   and the Node CLI Starter terminal for the same invocation, using the
+   physical carrier proven by
+   `node-cli-eval-physical-carrier-probe.md`. Only all-GREEN differential and
+   Chromium proof may flip CommonJS CLI eval to compat ✅; source grep, a fake
+   child, or an opt-in lane cannot close it.
 
 ## Reference contract
 
@@ -91,6 +96,8 @@ identity rather than a generated workspace file, and return the real exit code.
   completion + `beforeExit` print with `exit` fallback.
 - Rifty carrier: ADR-0337 node-entry v3 eval launch, runtime-js loader-owned
   eval seam, existing supervised-child lifecycle.
+- Physical differential reachability:
+  `docs/backlog/runtime-js/reference/node-cli-eval-physical-carrier-probe.md`.
 
 ## Parity cases
 
@@ -137,6 +144,7 @@ identity rather than a generated workspace file, and return the real exit code.
 | `poisoned-cache` × synthetic record | Register/reuse `[eval]` or rebase its resolver after `chdir()` | Cache, parent, launch-cwd resolution, and sequential-child differentials fail. |
 | `concurrent-same-key` × same entry identity | Two `[eval]` children share cwd/module/output/preview state | Simultaneous distinct-fixture physical children expose any cross-talk. |
 | `provenance-lie` × source transport | Materialize source as a workspace/data/temp module | Before/during/after VFS observer and stack/cache identity fail; compat remains ❌. |
+| `corrupt-input` × v3 bootstrap | Wrong protocol, missing/wrong-type/extra eval field, non-string `execArgv`, or program-only field | Builder rejects before Worker allocation; child decoder rejects before source/VFS effects; no v2 or program fallback. |
 
 ## Out of scope
 
@@ -153,6 +161,10 @@ identity rather than a generated workspace file, and return the real exit code.
   options/colors/depth parity remain separate. This item implements only the
   accepted spellings and result shapes enumerated above; other flags fail
   loudly.
+- Node 24's TypeScript-stripping eval context is separate. Source/options that
+  require it throw
+  `NotImplementedError('runtime-js.node-eval-typescript-context')` and remain
+  explicit compat ❌; they never run as partial JavaScript or a file module.
 - Node-internal stack frames and the `Node.js vX` trailer are not synthesized;
   the exact `[eval]` user frame is in scope.
 

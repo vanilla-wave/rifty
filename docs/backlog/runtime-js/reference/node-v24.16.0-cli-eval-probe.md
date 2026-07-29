@@ -12,10 +12,14 @@ node --eval="console.log(JSON.stringify({argv:process.argv,execArgv:process.exec
 node -p "JSON.stringify({argv:process.argv,execArgv:process.execArgv})" alpha
 node --print=ignored "JSON.stringify({argv:process.argv,execArgv:process.execArgv})" alpha
 node -pe "JSON.stringify({argv:process.argv,execArgv:process.execArgv})" alpha
+node -pe
 node -p
 node --print
 node -e
 node --eval=
+node -ep "1"
+node -e=1
+node -p=1
 ```
 
 Normalized stdout/status:
@@ -27,18 +31,22 @@ v24.16.0
 {"argv":["<node>","alpha"],"execArgv":["-p","<source>"]}                  # 0
 {"argv":["<node>","alpha"],"execArgv":["--print=ignored","<source>"]}     # 0
 {"argv":["<node>","alpha"],"execArgv":["-pe","<source>"]}                 # 0
+node: --eval requires an argument                                        # 9
 undefined                                                               # 0
 undefined                                                               # 0
 node: -e requires an argument                                            # 9
 node: --eval= requires an argument                                       # 9
+node: bad option: -ep                                                    # 9
+node: bad option: -e=1                                                   # 9
+node: bad option: -p=1                                                   # 9
 ```
 
 `--print=<rhs>` is a boolean option spelling: the RHS is ignored and the next
-argument is source. Missing `-p`/`--print` source evaluates `undefined`;
-missing `-e` and empty `--eval=` are usage errors. `--` immediately after
-source is consumed; later arguments, including option-looking ones, are script
-arguments. `-pe` is accepted; `-ep`, attached short-option source, `-p=`, and
-`-e=` are bad options.
+argument is source. Missing plain `-p`/`--print` source evaluates `undefined`;
+bare `-pe`, missing `-e`, and empty `--eval=` are usage errors. `--`
+immediately after source is consumed; later arguments, including
+option-looking ones, are script arguments. `-pe <source>` is accepted; `-ep`,
+attached short-option source, `-p=`, and `-e=` are bad options.
 
 Run the identity and resolver probe from a cwd containing `marker.cjs`:
 
@@ -94,7 +102,7 @@ const {
   writeFileSync,
 } = require('node:fs');
 const { tmpdir } = require('node:os');
-const { join } = require('node:path');
+const { dirname, join } = require('node:path');
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'rifty-node-eval-oracle-')));
 const source = String.raw`
@@ -189,6 +197,14 @@ function project(name, result) {
     parentId: '[eval]',
     parentFilename: join(root, name, '[eval]'),
   });
+  const expectedModulePaths = [];
+  let current = join(root, name);
+  for (;;) {
+    expectedModulePaths.push(join(current, 'node_modules'));
+    if (current === '/') break;
+    current = dirname(current);
+  }
+  assert.deepEqual(value.module.paths, expectedModulePaths);
   return normalize({
     name,
     argv: value.argv,
@@ -197,6 +213,7 @@ function project(name, result) {
     firstModulePath: value.module.paths[0],
     resolved: value.resolved,
     child: value.child,
+    modulePathsExact: true,
   });
 }
 
@@ -244,7 +261,8 @@ Captured output:
         "marker": "a",
         "parentId": "[eval]",
         "parentFilename": "<fixture>/a/[eval]"
-      }
+      },
+      "modulePathsExact": true
     },
     {
       "name": "b",
@@ -263,7 +281,8 @@ Captured output:
         "marker": "b",
         "parentId": "[eval]",
         "parentFilename": "<fixture>/b/[eval]"
-      }
+      },
+      "modulePathsExact": true
     }
   ],
   "concurrentMatchesSequential": true
@@ -272,7 +291,254 @@ Captured output:
 
 The assertions also pin empty stderr/status 0, global-script identity,
 undefined main/parent surfaces, false `loaded`/cache membership, and each
-fixture's exact cwd-anchored first module path.
+fixture's complete cwd-ancestor `module.paths` order.
+
+The remaining negative, resolution, formatting, and lifecycle rows are
+executable as one compact probe:
+
+```sh
+probe_dir="$(mktemp -d)"
+awk '/^```cjs print-probe$/{copy=1;next}/^```$/{if(copy) exit}copy' \
+  docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md \
+  > "$probe_dir/print-probe.cjs"
+node "$probe_dir/print-probe.cjs"
+```
+
+```cjs print-probe
+const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
+const {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
+
+const root = mkdtempSync(join(tmpdir(), 'rifty-node-eval-print-'));
+
+function run(args) {
+  const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
+  return {
+    ...result,
+    stderr: result.stderr.replaceAll(process.execPath, 'node'),
+  };
+}
+
+function runMerged(args) {
+  const path = join(root, 'merged.log');
+  const fd = openSync(path, 'w+');
+  const result = spawnSync(process.execPath, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', fd, fd],
+  });
+  closeSync(fd);
+  return { status: result.status, output: readFileSync(path, 'utf8') };
+}
+
+try {
+  const negative = [
+    [['-pe'], 'node: --eval requires an argument\n'],
+    [['-ep', '1'], 'node: bad option: -ep\n'],
+    [['-e=1'], 'node: bad option: -e=1\n'],
+    [['-p=1'], 'node: bad option: -p=1\n'],
+  ].map(([args, expectedStderr]) => {
+    const result = run(args);
+    assert.equal(result.status, 9);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, expectedStderr);
+    return { args, status: result.status, stderr: result.stderr.trim() };
+  });
+
+  const chdir = run([
+    '-p',
+    "const r=require.resolve('./package.json'); process.chdir('/'); require.resolve('./package.json')===r",
+  ]);
+  assert.deepEqual(
+    { status: chdir.status, stdout: chdir.stdout, stderr: chdir.stderr },
+    { status: 0, stdout: 'true\n', stderr: '' },
+  );
+
+  const terminatorSource =
+    'console.log(JSON.stringify({argv:process.argv,execArgv:process.execArgv}))';
+  const terminator = run(['-e', terminatorSource, '--', 'alpha', 'two words']);
+  assert.equal(terminator.status, 0);
+  assert.equal(terminator.stderr, '');
+  assert.deepEqual(JSON.parse(terminator.stdout), {
+    argv: [process.execPath, 'alpha', 'two words'],
+    execArgv: ['-e', terminatorSource],
+  });
+
+  const print = [
+    ["'hello'", 'hello\n'],
+    ['undefined', 'undefined\n'],
+    ['[1,"two"]', "[ 1, 'two' ]\n"],
+    ['3n', '3n\n'],
+    ['Promise.resolve(42)', 'Promise { 42 }\n'],
+    ['new Promise(()=>{})', 'Promise { <pending> }\n'],
+    ["const x={name:'root'}; x.self=x; x", "<ref *1> { name: 'root', self: [Circular *1] }\n"],
+  ].map(([source, expectedStdout]) => {
+    const result = run(['-p', source]);
+    assert.deepEqual(
+      { status: result.status, stdout: result.stdout, stderr: result.stderr },
+      { status: 0, stdout: expectedStdout, stderr: '' },
+    );
+    return { source, stdout: result.stdout.trimEnd() };
+  });
+
+  const exitCode = run(['-p', "process.exitCode=7; 'value'"]);
+  assert.deepEqual(
+    { status: exitCode.status, stdout: exitCode.stdout, stderr: exitCode.stderr },
+    { status: 7, stdout: 'value\n', stderr: '' },
+  );
+
+  const handled = run([
+    '-p',
+    "const p=Promise.reject(new Error('boom')); p.catch(()=>{}); p",
+  ]);
+  assert.equal(handled.status, 0);
+  assert.equal(handled.stderr, '');
+  assert.match(handled.stdout, /^Promise \{\n  <rejected> Error: boom\n/u);
+
+  const unhandled = runMerged(['-p', "Promise.reject(new Error('boom'))"]);
+  assert.equal(unhandled.status, 1);
+  const resultAt = unhandled.output.indexOf('Promise {');
+  const failureMarker = unhandled.output.indexOf('\n[eval]:1\n');
+  const failureAt = failureMarker < 0 ? -1 : failureMarker + 1;
+  assert.ok(resultAt >= 0 && failureAt > resultAt);
+  assert.match(
+    unhandled.output.slice(failureAt),
+    /^\[eval\]:1\nPromise\.reject\(new Error\('boom'\)\)\n {15}\^\n\nError: boom\n {4}at \[eval\]:1:16/u,
+  );
+
+  const topLevel = run(['-p', 'var riftyEvalProbe=7; globalThis.riftyEvalProbe']);
+  assert.deepEqual(
+    { status: topLevel.status, stdout: topLevel.stdout, stderr: topLevel.stderr },
+    { status: 0, stdout: '7\n', stderr: '' },
+  );
+  const illegalReturn = run(['-e', 'return 1']);
+  assert.equal(illegalReturn.status, 1);
+  assert.match(
+    illegalReturn.stderr,
+    /^\[eval\]:1\nreturn 1\n\^\^\^\^\^\^\nReturn statement is not allowed here\n\nSyntaxError: Illegal return statement/u,
+  );
+
+  console.log(JSON.stringify({
+    negative,
+    postChdirResolution: true,
+    optionTerminatorConsumed: true,
+    print,
+    processExitCode: { status: exitCode.status, stdout: exitCode.stdout.trim() },
+    rejectedPromise: {
+      handledStatus: handled.status,
+      stdoutPrefix: handled.stdout.split('\n').slice(0, 2),
+      unhandledStatus: unhandled.status,
+      resultBeforeFailure: true,
+      failurePrelude: unhandled.output.slice(failureAt).split('\n').slice(0, 6),
+    },
+    unwrappedScript: { globalVar: 7, illegalReturnStatus: illegalReturn.status },
+  }, null, 2));
+} finally {
+  rmSync(root, { recursive: true, force: true });
+}
+```
+
+Captured output:
+
+```json
+{
+  "negative": [
+    {
+      "args": [
+        "-pe"
+      ],
+      "status": 9,
+      "stderr": "node: --eval requires an argument"
+    },
+    {
+      "args": [
+        "-ep",
+        "1"
+      ],
+      "status": 9,
+      "stderr": "node: bad option: -ep"
+    },
+    {
+      "args": [
+        "-e=1"
+      ],
+      "status": 9,
+      "stderr": "node: bad option: -e=1"
+    },
+    {
+      "args": [
+        "-p=1"
+      ],
+      "status": 9,
+      "stderr": "node: bad option: -p=1"
+    }
+  ],
+  "postChdirResolution": true,
+  "optionTerminatorConsumed": true,
+  "print": [
+    {
+      "source": "'hello'",
+      "stdout": "hello"
+    },
+    {
+      "source": "undefined",
+      "stdout": "undefined"
+    },
+    {
+      "source": "[1,\"two\"]",
+      "stdout": "[ 1, 'two' ]"
+    },
+    {
+      "source": "3n",
+      "stdout": "3n"
+    },
+    {
+      "source": "Promise.resolve(42)",
+      "stdout": "Promise { 42 }"
+    },
+    {
+      "source": "new Promise(()=>{})",
+      "stdout": "Promise { <pending> }"
+    },
+    {
+      "source": "const x={name:'root'}; x.self=x; x",
+      "stdout": "<ref *1> { name: 'root', self: [Circular *1] }"
+    }
+  ],
+  "processExitCode": {
+    "status": 7,
+    "stdout": "value"
+  },
+  "rejectedPromise": {
+    "handledStatus": 0,
+    "stdoutPrefix": [
+      "Promise {",
+      "  <rejected> Error: boom"
+    ],
+    "unhandledStatus": 1,
+    "resultBeforeFailure": true,
+    "failurePrelude": [
+      "[eval]:1",
+      "Promise.reject(new Error('boom'))",
+      "               ^",
+      "",
+      "Error: boom",
+      "    at [eval]:1:16"
+    ]
+  },
+  "unwrappedScript": {
+    "globalVar": 7,
+    "illegalReturnStatus": 1
+  }
+}
+```
 
 Print and lifecycle probes:
 
