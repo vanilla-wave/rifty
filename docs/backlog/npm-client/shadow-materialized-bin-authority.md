@@ -24,8 +24,8 @@ review of the predecessor.
 
 This item is now a terminal blocked split predecessor. Its two Contract+RED
 checkpoints proved that generic current/prior package-bin authority and
-shadow-specific commit authority are independently reviewable units. It gets
-no third checkpoint. The existing linker remains the sole package-bin module;
+shadow-specific commit authority are independently reviewable units. The
+existing linker remains the sole package-bin module;
 `npm-client/package-bin-linker-authority` owns its generic preflight and phase
 surface, then `npm-client/shadow-materialized-bin-commit-authority` owns exact
 recipe/acquired-twin integration and commit-scoped reporting. Exact acquisition
@@ -104,8 +104,7 @@ projection and v2 replay stay in the serial successor
 ## Decisions
 
 - `terminal-checkpoint:
-  9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97` — second Contract+RED BLOCKED;
-  this unit receives no third checkpoint.
+  9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97` — second Contract+RED BLOCKED.
 - `split-successors: [npm-client/package-bin-linker-authority,
   npm-client/shadow-materialized-bin-commit-authority]`.
 - Contract+RED @ `9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97` blocked:

@@ -19,7 +19,7 @@ This was the first split successor to terminal
 `cbeb4bfe04f270898aa003c04ef8e6edd3daf280`. Its second Contract+RED
 checkpoint proved source normalization and cross-source current/prior
 settlement are independently reviewable. This item is now a terminal blocked
-split predecessor and receives no third checkpoint.
+split predecessor.
 
 `npm-client/package-bin-source-normalization-authority` now owns one strict
 source-to-claims boundary. Then
@@ -110,8 +110,7 @@ in `npm-client/package-bin-claim-link-ingress-authority`.
   missing string-form rejects, multi-command exactness, and equal-command prior
   scope isolation.
 - `terminal-checkpoint:
-  acf363bc6f34b7b070e787fad6619d99c3839723` — second Contract+RED BLOCKED;
-  this unit receives no third checkpoint.
+  acf363bc6f34b7b070e787fad6619d99c3839723` — second Contract+RED BLOCKED.
 - `checkpoint-lineage: [880813bf62a85050be44c48694e6560164b5f158,
   acf363bc6f34b7b070e787fad6619d99c3839723]`.
 - `split-successors: [npm-client/package-bin-source-normalization-authority,

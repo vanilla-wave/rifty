@@ -14,8 +14,7 @@ code: [apps/playground/src/adapters/playground-app-runtime.ts, packages/workbenc
 
 This unit is now a terminal blocked split predecessor. Its two Contract+RED
 checkpoints proved that activation/open compensation and the cross-build
-durable-byte carrier are independently reviewable. It receives no third
-checkpoint.
+durable-byte carrier are independently reviewable.
 
 `playground/project-activation-open-compensation` first owns the narrow App
 runtime/UI repair plus its create/save/reset/delete sibling sweep. Then
@@ -157,8 +156,7 @@ claimed.
 ## Decisions
 
 - `terminal-checkpoint:
-  c043302541f639464d310fe1e9ab74a4c084f136` — second Contract+RED BLOCKED;
-  this unit receives no third checkpoint.
+  c043302541f639464d310fe1e9ab74a4c084f136` — second Contract+RED BLOCKED.
 - `checkpoint-lineage: [fbe9249181a4d6ed3c0126d4177f38dfe35b1f78,
   c043302541f639464d310fe1e9ab74a4c084f136]`.
 - `split-successors: [playground/project-activation-open-compensation,

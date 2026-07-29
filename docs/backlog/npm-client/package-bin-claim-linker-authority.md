@@ -19,8 +19,7 @@ This was the second split successor to terminal
 `npm-client/package-bin-linker-authority` at
 `8e1456665a3d7a77425b5afa8f0c802ac59162b5`. Its second Contract+RED
 checkpoint separated claim preflight from detached file/bin settlement. This
-item is now a terminal blocked split predecessor and receives no third
-checkpoint.
+item is now a terminal blocked split predecessor.
 
 It started after
 `npm-client/resolved-package-linker-path-authority` and the re-refined
@@ -109,8 +108,7 @@ sole module; neither adds a public API, mechanism, or package-specific branch.
 ## Decisions
 
 - `terminal-checkpoint:
-  30416e72eea35cd992ef87f62b951d6c70eb45fb` — second Contract+RED BLOCKED;
-  this unit receives no third checkpoint.
+  30416e72eea35cd992ef87f62b951d6c70eb45fb` — second Contract+RED BLOCKED.
 - `checkpoint-lineage: [e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed,
   30416e72eea35cd992ef87f62b951d6c70eb45fb]`.
 - `split-successors: [npm-client/package-bin-claim-preflight-authority,

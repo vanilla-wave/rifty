@@ -13,7 +13,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - **No "implement later" / silent backlog.** Every gap is explicit (NotImplementedError, backlog item, compat ❌) — never hidden behind a passing path.
 - **No mocking what we build.** Real Memory VFS, real Workers/SW, real npm tarballs, real parity vs Node. Mock only unavoidable external boundaries (network egress, clock, absent browser APIs); never the unit under test or a sibling rifty package. Hard to instantiate = API smell — fix it.
 - **Parity = gold standard.** Never assume Node/Anthropic/StackBlitz behavior — verify via parity-runner. Found gap/bug → failing parity (or regression) test first, then fix; no fix merges without it; never edit a test to make code pass.
-- **Review convergence.** Parity/stateful changes pass two checkpoints (Contract+RED → Final+GREEN); protocol + blocker requirements: `docs/process/fault-classes.md` §Review convergence.
+- **Review convergence.** Parity/stateful changes pass Contract+RED before implementation, then Final+GREEN; blockers iterate in place. Protocol + blocker requirements: `docs/process/fault-classes.md` §Review convergence.
 
 ## Architecture — hard rules
 - Import boundaries enforced by `pnpm check:arch` (rules `tools/checks/arch-rules.cjs`): layer top-down (vfs/io/net → kernel → runtime-* → shell/terminal/npm-client → playground), no reverse imports, no cycles, no foreign `src/internal/*`, solid-js only in playground (D-002).
@@ -46,6 +46,12 @@ Full checklist + subagent budget: `docs/process/decision-workflow.md`. Core:
 Explicit whole-ready-epic hand-off or a `Goal-Baseline` task/PR → run loop:
 `docs/process/decision-workflow.md` §Autonomous goals; data contract:
 `docs/backlog/README.md` §Autonomous goal.
+
+## PR — unit of delivery
+One PR = one reviewable delivered behavior. Never a workspace, hypothesis probe, or vehicle for process state.
+- Everything the unit discovers commits into its branch: contract flips, demotions, re-cuts, splits, intake drafts, lineage. A finding never opens a second PR.
+- Too small to review alone → rides with the next delivery, never its own PR.
+- A rule demanding a separate PR holds only if it names the gate forcing it (today: `decision-workflow.md` §Backlog readiness 5, `backlog/README.md` §Autonomous goal 1). Unnamed → apply this one and quote both clauses in the PR.
 
 ## DoD (per PR)
 - [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked; report slice/goal status separately

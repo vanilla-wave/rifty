@@ -19,8 +19,7 @@ This was the first split successor to terminal
 `npm-client/package-bin-claim-linker-authority` at
 `30416e72eea35cd992ef87f62b951d6c70eb45fb`. Its second Contract+RED
 checkpoint found that pure claim normalization and mutating linker ingress are
-independently reviewable. This item is now a terminal blocked split predecessor
-and receives no third checkpoint.
+independently reviewable. This item is now a terminal blocked split predecessor.
 
 `npm-client/package-bin-claim-normalization-authority` now owns the pure
 package-private types and one real preflight. Then
@@ -109,8 +108,7 @@ linker as the sole module and add no public API or coordination mechanism.
 ## Decisions
 
 - `terminal-checkpoint:
-  cbeb4bfe04f270898aa003c04ef8e6edd3daf280` — second Contract+RED BLOCKED;
-  this unit receives no third checkpoint.
+  cbeb4bfe04f270898aa003c04ef8e6edd3daf280` — second Contract+RED BLOCKED.
 - `checkpoint-lineage: [6fdc19c5b98b9773fa5406126e6ac35c4329b9af,
   cbeb4bfe04f270898aa003c04ef8e6edd3daf280]`.
 - `split-successors: [npm-client/package-bin-claim-normalization-authority,

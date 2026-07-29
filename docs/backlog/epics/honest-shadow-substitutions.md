@@ -85,8 +85,7 @@ Contract+RED → Final+GREEN):
 5. `npm-client/shadow-recipe-v2-authority` —
    **recipe-v2-authority**: blocked pre-pickup predecessor; its six recorded
    Contract+RED blockers forced explicit materialized-bin,
-   acquisition/replay, and broad projection successors. No third checkpoint or
-   source pickup.
+   acquisition/replay, and broad projection successors. No source pickup.
 6. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
    generic-file no-change gate. Draft until its full differential artifact and
@@ -105,12 +104,11 @@ Contract+RED → Final+GREEN):
 10. `npm-client/package-bin-claim-normalization-authority` —
     **package-bin-claim-normalization-authority**: terminal blocked predecessor;
     its two Contract+RED checkpoints forced separate source-normalization and
-    claim-settlement successors. No third checkpoint or source pickup.
+    claim-settlement successors. No source pickup.
 11. `npm-client/package-bin-source-normalization-authority` —
     **package-bin-source-normalization-authority**: terminal blocked
     predecessor; its two Contract+RED checkpoints forced separate per-source
-    claim and ordered-aggregation successors. No third checkpoint or source
-    pickup.
+    claim and ordered-aggregation successors. No source pickup.
 12. `npm-client/package-bin-source-claim-authority` —
     **package-bin-source-claim-authority**: one strict source becomes exact
     detached claims once, with no list aggregation, settlement, VFS, or compat.
@@ -127,10 +125,9 @@ withdrawn until a second Pattern-2 package lands
 Run tripwires (`docs/backlog/README.md` §Budget):
 
 - scope implemented outside `ready` items: 0
-- in-place ready-contract edits alongside source changes: 0
+- ready-contract edits after pickup: 0
   (`pnpm check:contract-drift`)
 - new coordination mechanisms: 0
-- review checkpoints per slice: exactly 2
 - generated globs: `docs/public/compat/**`, `**/generated/**`,
   `apps/playground/public/snapshots/**`, `pnpm-lock.yaml`
 - slices:

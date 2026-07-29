@@ -29,7 +29,7 @@ admission feature identity; this item starts at execution, projection,
 materialization, and replay without shipping the Sass recipe.
 
 This item and PR #212 are a terminal blocked split predecessor. No production
-pickup occurred and no third Contract+RED is allowed. Its still-valid clauses
+pickup occurred. Its still-valid clauses
 remain frozen here while two successor units own materialized-bin commit and
 acquisition/replay authority. ADR-0335 supersedes the disproven collision
 clause; the complete npm reify lifecycle is an explicit outside-goal draft.
@@ -156,8 +156,7 @@ clause; the complete npm reify lifecycle is an explicit outside-goal draft.
 ## Decisions
 
 - `terminal-checkpoint:
-  87098d2dbaeb5665188b98cbc1a5cdd6ba876cf9` — second Contract+RED BLOCKED;
-  this unit receives no third checkpoint.
+  87098d2dbaeb5665188b98cbc1a5cdd6ba876cf9` — second Contract+RED BLOCKED.
 - `checkpoint-lineage: [8f3251e89020772f15ff5a13022e7f7310f703d2,
   d5ffb3d2de8a27b26a13f541d2e5d16260d4b8d8,
   5c450fb9a5cab66a45b24eb8b19a1729c622e5a9,

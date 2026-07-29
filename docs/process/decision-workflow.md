@@ -49,10 +49,13 @@ Shape and validation: `docs/backlog/README.md`. Never implement a draft.
    records `ready-verdict: <date> — Contract+RED @ <sha>` instead. One fresh
    context per contract, never two.
 5. An unsettled fork discovered in an already-`ready` item (mid-build or review) →
-   demote to `draft` in a separate PR recording the fork AND the pre-demotion
-   Acceptance/Parity verbatim; the re-flip judge diffs against them — any weakening
-   is a user-observable fork → manual `rifty-refine`. Never absorb silently. (An
-   active goal epic itself cannot be demoted — `check:goal-contract`.)
+   demote to `draft` recording the fork AND the pre-demotion Acceptance/Parity
+   verbatim; the re-flip judge diffs against them — any weakening is a
+   user-observable fork → manual `rifty-refine`. Never absorb silently. (An
+   active goal epic itself cannot be demoted — `check:goal-contract`.) Pre-pickup
+   this commits in the discovering PR; post-pickup it needs its own, because
+   `check:contract-drift` rejects an in-place `ready`→`draft` edit after pickup
+   (`process-meta/autonomous-epic-runs.md` §Residual).
 
 ### Refine altitude
 
@@ -91,9 +94,8 @@ process/docs/skill work:
 4. Classify discoveries against the frozen goal/tier/Fidelity: required →
    reverse-linked goal residual; outside → `rifty-to-backlog`.
 5. Budget trip or Final+GREEN unit residual → re-cut the unit: shrink/split its
-   boundary IN PLACE — same branch/PR lineage, attempt + checkpoint count carries;
-   a successor PR (unit split only) names its predecessor. Never a fresh start,
-   never narrow the goal, detach required work, auto-fix, or start review three.
+   boundary IN PLACE — same branch, attempt + checkpoint count carries. Never a
+   fresh start, never narrow the goal, detach required work, or auto-fix.
 6. Unit clean with goal residuals → close only that unit and continue.
 7. Close per `docs/backlog/README.md` §Autonomous goal — incl. end-to-end proof
    of the baseline `## Invariants`; then delete the epic.

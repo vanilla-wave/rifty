@@ -18,8 +18,7 @@ This was the first split successor to terminal
 `npm-client/package-bin-claim-normalization-authority` at
 `acf363bc6f34b7b070e787fad6619d99c3839723`. Its second Contract+RED
 checkpoint proved per-source claim creation and ordered list aggregation are
-independently reviewable. This item is now a terminal blocked split predecessor
-and receives no third checkpoint.
+independently reviewable. This item is now a terminal blocked split predecessor.
 
 `npm-client/package-bin-source-claim-authority` now owns one strict source.
 Then `npm-client/package-bin-claim-aggregation-authority` owns only ordered list
@@ -107,8 +106,7 @@ composition. Current/prior settlement remains in the serial
   exact mixed-readonly type admission, anti-sorted order, exact error identity,
   and late-invalid reached-source reads.
 - `terminal-checkpoint:
-  2ef0ecf61adb35fade0977cd0d0355be2a975ea5` — second Contract+RED BLOCKED;
-  this unit receives no third checkpoint.
+  2ef0ecf61adb35fade0977cd0d0355be2a975ea5` — second Contract+RED BLOCKED.
 - `checkpoint-lineage: [3c4adade0ae34b076e536147f5d551e82b737055,
   2ef0ecf61adb35fade0977cd0d0355be2a975ea5]`.
 - `split-successors: [npm-client/package-bin-source-claim-authority,
