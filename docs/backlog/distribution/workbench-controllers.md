@@ -38,6 +38,13 @@ physical owner close, and Web Lock release, but Playwright discarded nested
 passed. Keep the existing teardown contract; first expose the nested boundary
 and obtain a deterministic RED. No speculative runtime fix or new mechanism.
 
+2026-07-29 run `30492624169` reproduced it on a zero-source docs branch
+(`nodemon-session-close-race.spec.ts:134` → `closeSealedWorkbenchFixture`,
+`sealed-playground-workbench.ts:385`), so the trigger is load/timing, not the
+close-path source. Now observed from two distinct callers — the sealed fixture
+teardown as well as the instant-Vite active close — which places the nested
+boundary in the shared fixture close, not in one spec.
+
 ## Public contract
 
 The package root exports only:
