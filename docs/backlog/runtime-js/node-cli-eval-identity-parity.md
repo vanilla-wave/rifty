@@ -5,8 +5,8 @@ title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
 user_story: As a CLI author probing its invocation context under `node -e` or `node -p`, I want the same argv and module identity as Node 24, but today the terminal rejects the command.
-sources: [M11, Node-v24.16.0-probe, ADR-0155, ADR-0157]
-code: [packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/cjs.ts]
+sources: [M11, ADR-0155, ADR-0157, ADR-0337, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md]
+code: [packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/cjs.ts, tools/node-parity-runner/cases/process/node-eval-context.case.ts, tests/e2e/cli-report.spec.ts]
 ---
 
 ## Context
@@ -22,20 +22,19 @@ preserved loader execution but gave eval a file entry, added that path to
 bytes; `workbench-project-runtime.test.ts:939` pins that no such file appears.
 Reviving it is out of scope, not an alternative.
 
-## Readiness blocker
+## Refinement evidence
 
-The pinned Node v24.16.0 oracle contradicts two assumptions in this ready
-contract. `--eval=<source>` is an inline-source spelling, but
-`--print=<source>` is not: Node treats `--print` as a boolean flag and obtains
-source from the next argument. Node's `-p` writer also passes a top-level string
-through without quotes (`node -p "'hello'"` prints `hello`), so it is not an
-unconditional `util.inspect` call. The current runtime inspector additionally
-cannot produce the already-required fulfilled-Promise and circular-reference
-forms.
-
-The contract must be recompiled from a reproducible Node v24.16.0 probe before
-implementation. The pre-demotion `## Acceptance` and `## Parity cases` are
-retained verbatim below.
+The item was demoted at `0fa204fd3` after the exact Node oracle contradicted two
+frozen assumptions. `--print=<source>` is not an inline-source form: Node treats
+the RHS as ignored option data and obtains source from the next argument.
+Node's `-p` also uses console single-argument formatting, so a string is
+unquoted. The reproducible command/output/version artifact now settles both
+forks and the deferred print mechanism; ADR-0337 settles the required atomic v3
+launch carrier. The original Acceptance and Parity sections remain verbatim at
+the end for the readiness diff. The corrected contract preserves every
+original observable: spellings are tested with Node's real meanings, and
+string, undefined, object/array, bigint, Promise, circular, error, exit, cache,
+and isolation coverage all remain.
 
 ## User scenario
 
@@ -46,6 +45,145 @@ modules from the project, print the same value as Node v24.16.0, expose eval
 identity rather than a generated workspace file, and return the real exit code.
 
 ## Acceptance
+
+1. Workbench parses Node 24's supported CommonJS eval spellings:
+   `-e <source>`, `--eval <source>`, `--eval=<source>`, `-p [source]`,
+   `--print [source]`, `--print=<ignored> [source]`, and `-pe [source]`.
+   Missing print source evaluates `undefined`; missing `-e`, empty `--eval=`,
+   attached short-option source, and unsupported options retain Node-shaped
+   loud failures. An immediate `--` after source is consumed; remaining tokens
+   are script arguments.
+2. Those forms build one exact `rifty.node-entry/v3` eval launch in the
+   existing admitted foreground Node Worker. The launch carries source, print
+   mode, and original `process.execArgv`; the process spec carries
+   `[process.execPath, ...scriptArgs]`. It reuses process adoption, remote VFS,
+   CJS resolution, PTY/private control, output cut/drain, signals, preview
+   ownership, and exit settlement. Source never travels through argv, env,
+   workspace bytes, a URL module, or a second evaluator.
+3. Runtime-js executes one loader-owned unwrapped CommonJS eval script with the
+   synthetic identity and cwd resolver below. The detached module is never
+   registered in `require.cache`; required children still link to it as their
+   parent. No public `ModuleLoader` API or second process lifecycle is added.
+4. `-e` prints only user output. `-p` captures the script completion value and
+   prints it exactly once through Node-compatible console single-argument
+   formatting at natural exit after asynchronous work drains. Explicit
+   `process.exit` suppresses result output. String, undefined, object/array,
+   bigint, fulfilled/pending/rejected Promise, circular reference, and
+   post-timer mutation cases match Node v24.16.0.
+5. Differential cases run the same source, cwd, spelling, and script arguments
+   in Node v24.16.0 and the physical supervised Workbench child, comparing
+   normalized stdout, stderr user prelude/frame, and exit status. Sequential
+   and simultaneous children prove cwd/argv/module/output/preview isolation.
+   A VFS observer proves that no eval path exists before, during, or after.
+6. The CI-active acceptance carriers are
+   `tools/node-parity-runner/cases/process/node-eval-context.case.ts`,
+   Workbench physical-child/contract/fault tests, and real Chromium
+   `tests/e2e/cli-report.spec.ts` running both forms from the Node CLI Starter.
+   Only all-GREEN differential and Chromium proof may flip CommonJS CLI eval to
+   compat ✅; source grep, a fake child, or an opt-in lane cannot close it.
+
+## Reference contract
+
+- Oracle: Node v24.16.0, CommonJS eval mode.
+- Reproducible oracle:
+  `docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md`.
+- Node mechanism: detached `[eval]` module + unwrapped current-context script
+  completion + `beforeExit` print with `exit` fallback.
+- Rifty carrier: ADR-0337 node-entry v3 eval launch, runtime-js loader-owned
+  eval seam, existing supervised-child lifecycle.
+
+## Parity cases
+
+1. Grammar/identity: every accepted spelling preserves the exact original
+   `process.execArgv`. With script args `alpha`, `two words`,
+   `process.argv === [process.execPath, 'alpha', 'two words']`; no entry path is
+   present and `process.argv0` retains rifty's existing Node-process identity.
+   `--print=ignored <source>` proves the RHS is not source; missing print source
+   produces `undefined`.
+2. Script/module identity: `this === globalThis`, `typeof arguments ===
+   'undefined'`, `__filename === '[eval]'`, `__dirname === '.'`,
+   `module.filename === resolve(launchCwd, '[eval]')`, `module.id === '[eval]'`,
+   `module.path === '.'`, `module.parent === undefined`, and `module.loaded ===
+   false` while source runs. `require.main` and `process.mainModule` are
+   undefined; top-level `var` is global and top-level `return` is a syntax
+   error.
+3. Loader/cache: relative require, `require.resolve`, and package lookup remain
+   anchored to launch cwd even after `process.chdir()`. `module.paths` matches
+   Node's cwd ancestor order. The eval record is absent from `require.cache`
+   before/during/after; a required child's `parent` is that same detached
+   record.
+4. Result order/format: raw string, `undefined`, object/array, bigint,
+   `Promise { 42 }`, `Promise { <pending> }`, rejected Promise prefix, and
+   `<ref *1> ... [Circular *1]` match normalized Node output. A timer that logs
+   and mutates the completion object is observed before its final result
+   print. A timer-settled Promise prints fulfilled.
+5. Lifecycle/errors: normal completion and `process.exitCode=N` drain then
+   exit; immediate `process.exit(N)` exits N without result output. Throw,
+   syntax failure, and unhandled rejection exit 1. Error stdout/stderr ordering,
+   source prelude/caret, and first user frame use `[eval]:<line>:<column>`; no
+   generated or project-absolute temporary filename leaks.
+6. Isolation: two sequential and two simultaneous physical eval children use
+   distinct cwd fixtures and preview scopes. Each returns only its own
+   argv/module/resolver marker/stdout/stderr/exit, cannot enter a sibling's
+   cache, and settles exactly once.
+
+## Fault matrix
+
+| Axis × operation | Injected fault | Honest outcome |
+|---|---|---|
+| `frozen-assumption` × CLI spelling/format | Treat `--print=` RHS as source or quote a top-level string | Node differential fails the exact `execArgv`, source, or stdout row. |
+| `sibling-drift` × launch surfaces | Workbench, parity adapter, or recursive builder invents another eval carrier | Exact v3 launch/physical-child contract rejects; all consumers use the one typed variant. |
+| `observable-order` × result/exit | Print before timer drain, twice, or after explicit exit | Ordered stdout and exit tests fail; one natural-exit owner prints or forced exit suppresses. |
+| `poisoned-cache` × synthetic record | Register/reuse `[eval]` or rebase its resolver after `chdir()` | Cache, parent, launch-cwd resolution, and sequential-child differentials fail. |
+| `concurrent-same-key` × same entry identity | Two `[eval]` children share cwd/module/output/preview state | Simultaneous distinct-fixture physical children expose any cross-talk. |
+| `provenance-lie` × source transport | Materialize source as a workspace/data/temp module | Before/during/after VFS observer and stack/cache identity fail; compat remains ❌. |
+
+## Out of scope
+
+- ESM eval via `--input-type=module` is a separate runtime context. Until it has
+  its own parity contract, `node --input-type=module -e/-p` throws
+  `NotImplementedError('workbench.node.eval-module-context')` and remains compat
+  ❌; it never falls back to CommonJS.
+- Preload/import flags `--require`/`-r` and `--import` are not added here. They
+  retain explicit unsupported-option behavior and compat ❌; this item does not
+  silently ignore them.
+- The bare `node` REPL remains the ADR-0155 loud gap; eval support must not
+  masquerade as an interactive REPL.
+- Full Node CLI option parsing, TypeScript eval, and broad `util.inspect`
+  options/colors/depth parity remain separate. This item implements only the
+  accepted spellings and result shapes enumerated above; other flags fail
+  loudly.
+- Node-internal stack frames and the `Node.js vX` trailer are not synthesized;
+  the exact `[eval]` user frame is in scope.
+
+## Decisions
+
+- ADR-0337 owns the irreversible atomic node-entry v3 shape and the one
+  loader-owned unwrapped-script mechanism. There is no v2 compatibility reader.
+- Supported CLI grammar is a pure Workbench classifier that retains original
+  eval option tokens for `execArgv`; unsupported Node options remain loud.
+- Eval's module record reuses the CJS record/resolver authority but stays
+  detached from ModuleRegistry. The public loader surface does not widen.
+- Print reuses console one-argument formatting and the existing process drain/
+  exit owner. It does not stringify, await the returned Promise, or create a
+  second event-loop ledger.
+- `runtime-js/require-cache-module-record-surface` remains compat ❌; this item
+  proves only that eval's detached record is absent. Broad inspector options,
+  process identity outside eval, ESM eval, preload/import, and REPL items remain
+  separate and are not implied green.
+
+## Reversibility
+
+IRREVERSIBLE node-entry protocol/context choice recorded by ADR-0337. Parser,
+loader, inspector, and acceptance carriers remain replaceable behind that exact
+behavior.
+
+## Pre-demotion contract (verbatim)
+
+The following sections are copied unchanged from the ready contract demoted at
+`0fa204fd3`.
+
+### Acceptance
 
 - Workbench dispatches `-e`/`--eval` and `-p`/`--print` to one eval-specific
   launch kind in the existing supervised Node child. The launch reuses the
@@ -64,13 +202,7 @@ identity rather than a generated workspace file, and return the real exit code.
   `node -e/-p` compat row become ✅. A source grep or a fake child cannot close
   the item.
 
-## Reference contract
-
-- Oracle: Node v24.16.0, CommonJS eval mode.
-- Mechanism: Node's eval-script CJS module context over the normal loader and
-  process lifecycle; rifty reuses its existing CJS loader and supervised child.
-
-## Parity cases
+### Parity cases
 
 1. `-e`, `--eval`, `--eval=<source>`, `-p`, `--print`, and
    `--print=<source>` preserve source and every argument after it. `--` is
@@ -95,30 +227,3 @@ identity rather than a generated workspace file, and return the real exit code.
 6. Two sequential and two concurrent eval children keep cwd, argv, module,
    stdout/stderr, exit, and preview scopes isolated; one child cannot become
    another's `require.main` or cache entry.
-
-## Out of scope
-
-- ESM eval via `--input-type=module` is a separate runtime context. Until it has
-  its own parity contract, `node --input-type=module -e/-p` throws
-  `NotImplementedError('workbench.node.eval-module-context')` and remains compat
-  ❌; it never falls back to CommonJS.
-- Preload/import flags `--require`/`-r` and `--import` are not added here. They
-  retain explicit unsupported-option behavior and compat ❌; this item does not
-  silently ignore them.
-- The bare `node` REPL remains the ADR-0155 loud gap; eval support must not
-  masquerade as an interactive REPL.
-- Node-internal stack frames and the `Node.js vX` trailer are not synthesized;
-  the exact `[eval]` user frame is in scope.
-
-## Decisions
-
-- Reuse the existing supervised Node child and runtime-js CJS loader with an
-  internal eval-entry variant. No temporary workspace module, `data:` module,
-  one-off `new Function`, new package API, or separate process lifecycle.
-- One eval launch kind in the supervised child. A second evaluator — per-surface
-  or a revived temp-file entry — is forbidden sibling drift.
-- `-p` prints through the runtime's Node-compatible `util.inspect`, not JSON or
-  browser console formatting.
-- This is a reversible internal extension of ADR-0155/0157: public terminal
-  spelling and process identity are already fixed; no new dependency or
-  cross-package public API is introduced.
