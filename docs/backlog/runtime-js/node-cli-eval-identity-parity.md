@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -21,6 +21,21 @@ preserved loader execution but gave eval a file entry, added that path to
 `process.argv`, registered the wrong module identity, and could leave workspace
 bytes; `workbench-project-runtime.test.ts:939` pins that no such file appears.
 Reviving it is out of scope, not an alternative.
+
+## Readiness blocker
+
+The pinned Node v24.16.0 oracle contradicts two assumptions in this ready
+contract. `--eval=<source>` is an inline-source spelling, but
+`--print=<source>` is not: Node treats `--print` as a boolean flag and obtains
+source from the next argument. Node's `-p` writer also passes a top-level string
+through without quotes (`node -p "'hello'"` prints `hello`), so it is not an
+unconditional `util.inspect` call. The current runtime inspector additionally
+cannot produce the already-required fulfilled-Promise and circular-reference
+forms.
+
+The contract must be recompiled from a reproducible Node v24.16.0 probe before
+implementation. The pre-demotion `## Acceptance` and `## Parity cases` are
+retained verbatim below.
 
 ## User scenario
 
