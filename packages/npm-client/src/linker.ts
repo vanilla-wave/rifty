@@ -8,6 +8,7 @@
  * there. Placement is decided in `installer.ts` (`walkAndPin`), not here.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 import {
   type ShadowAssetPlan,
@@ -72,6 +73,45 @@ export function normalizePackageBinSources(
     for (const claim of normalizePackageBinSource(source)) claims.push(claim);
   }
   return claims;
+}
+
+export function preflightPackageBins(
+  currentSources: readonly PackageBinSource[],
+  priorSources: readonly PackageBinSource[] = [],
+): readonly PackageBinClaim[] {
+  const current = normalizePackageBinSources(currentSources);
+  const prior = normalizePackageBinSources(priorSources);
+  const currentByScope = indexPackageBinClaims(current);
+  const priorByScope = indexPackageBinClaims(prior);
+
+  for (const [nodeModulesDir, priorCommands] of priorByScope) {
+    const currentCommands = currentByScope.get(nodeModulesDir);
+    for (const [command, priorClaim] of priorCommands) {
+      const currentClaim = currentCommands?.get(command);
+      if (!currentClaim || currentClaim.owner !== priorClaim.owner) {
+        throw new NotImplementedError('npm-client.bin-collision-reify');
+      }
+    }
+  }
+  return current;
+}
+
+function indexPackageBinClaims(
+  claims: readonly PackageBinClaim[],
+): Map<string, Map<string, PackageBinClaim>> {
+  const byScope = new Map<string, Map<string, PackageBinClaim>>();
+  for (const claim of claims) {
+    let byCommand = byScope.get(claim.nodeModulesDir);
+    if (!byCommand) {
+      byCommand = new Map();
+      byScope.set(claim.nodeModulesDir, byCommand);
+    }
+    if (byCommand.has(claim.command)) {
+      throw new NotImplementedError('npm-client.bin-collision-reify');
+    }
+    byCommand.set(claim.command, claim);
+  }
+  return byScope;
 }
 
 export function preflightPackageInstallPaths<TPackage extends ResolvedPackage>(

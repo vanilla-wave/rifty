@@ -11,6 +11,9 @@
 
 ### Added
 
+- Added package-private current/prior package-bin claim settlement with exact
+  per-scope collision ceilings and no public export or VFS mutation.
+
 - Added package-private ordered package-bin claim aggregation without
   settlement, VFS mutation, or a public export.
 
