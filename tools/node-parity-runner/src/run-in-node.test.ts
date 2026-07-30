@@ -67,15 +67,20 @@ describe('runInNode', () => {
             label: 'partial-stdout-around-stderr',
             nodeArgv: [
               '-e',
-              "process.stdout.write('native-stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('native-stderr-line\\n'),20);setTimeout(()=>process.stdout.write(new Uint8Array([172,...Buffer.from('native-stdout-tail\\n')])),40)",
+              "let phase=0;process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{for(const token of chunk){if(phase===0&&token==='1'){phase=1;process.stderr.write('native-stderr-line\\n')}else if(phase===1&&token==='2'){phase=2;process.stdout.write(new Uint8Array([172,...Buffer.from('native-stdout-tail\\n')]));process.stdin.pause();process.stdin.destroy?.()}else{throw new Error('stdio handshake protocol')}}});process.stdout.write('native-stdout-head|');process.stdout.write(new Uint8Array([226,130]))",
+            ],
+            stdioHandshake: [
+              { stream: 'stdout', marker: 'native-stdout-head|' },
+              { stream: 'stderr', marker: 'native-stderr-line\n' },
             ],
           },
           {
             label: 'stderr-before-stdout-eof',
             nodeArgv: [
               '-e',
-              "process.stderr.write('native-stderr-eof|');setTimeout(()=>process.stdout.write('native-stdout-eof'),20)",
+              "let released=false;process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{for(const token of chunk){if(!released&&token==='1'){released=true;process.stdout.write('native-stdout-eof');process.stdin.pause();process.stdin.destroy?.()}else{throw new Error('stdio handshake protocol')}}});process.stderr.write('native-stderr-eof|')",
             ],
+            stdioHandshake: [{ stream: 'stderr', marker: 'native-stderr-eof|' }],
           },
         ],
       },

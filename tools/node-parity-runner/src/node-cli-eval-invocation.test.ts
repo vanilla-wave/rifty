@@ -154,6 +154,51 @@ describe('node CLI eval invocation model', () => {
     },
   );
 
+  it.each(['-p', '--print', '--print=ignored', '--print=not-the-source', '--print='] as const)(
+    '%s keeps an empty post-terminator token in entryless eval argv',
+    (option) => {
+      const label = `empty-entry-after-${option}`;
+      const nodeArgv = [option, '--', '', 'alpha'];
+      const { sequential } = nodeCliEvalInvocations(evalCase([{ label, nodeArgv }]));
+
+      expect(sequential).toEqual([
+        {
+          label,
+          nodeArgv,
+          source: '',
+          print: true,
+          execArgv: [option],
+          scriptArgs: ['', 'alpha'],
+        },
+      ]);
+    },
+  );
+
+  it('validates and snapshots the causal stdio handshake before either runner starts', () => {
+    const stdioHandshake = [
+      { stream: 'stdout' as const, marker: 'first|' },
+      { stream: 'stderr' as const, marker: 'second\n' },
+    ];
+    const { sequential } = nodeCliEvalInvocations(
+      evalCase([{ label: 'handshake', nodeArgv: ['-e', '42'], stdioHandshake }]),
+    );
+
+    expect(sequential[0]?.stdioHandshake).toEqual(stdioHandshake);
+    expect(sequential[0]?.stdioHandshake).not.toBe(stdioHandshake);
+    expect(Object.isFrozen(sequential[0]?.stdioHandshake)).toBe(true);
+    expect(() =>
+      nodeCliEvalInvocations(
+        evalCase([
+          {
+            label: 'bad-handshake',
+            nodeArgv: ['-e', '42'],
+            stdioHandshake: [{ stream: 'stdout', marker: '', extra: true }],
+          } as unknown as NodeCliEvalInvocation,
+        ]),
+      ),
+    ).toThrow('must contain only an exact stream and non-empty marker');
+  });
+
   it.each(['source', 'print', 'execArgv', 'scriptArgs'] as const)(
     'rejects the independently declared legacy %s half before either runner starts',
     (field) => {

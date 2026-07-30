@@ -12,6 +12,7 @@ import {
   assertNodeCliEvalOracleVersion,
   canonicalNodeCliEvalOutcome,
   createNodeCliEvalCapture,
+  createNodeCliEvalStdioHandshake,
   runNodeCliEvalMatrix,
 } from './node-cli-eval.ts';
 import { type ParityCase, type ResolvedNodeCliEvalInvocation, caseCwd } from './types.ts';
@@ -212,10 +213,17 @@ async function runNodeCliEvalInvocation(
       const capture = createNodeCliEvalCapture();
       const child = spawn(HOST_PROCESS.execPath, [...invocation.nodeArgv], {
         cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: [invocation.stdioHandshake === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       });
+      const stdout = child.stdout;
+      const stderr = child.stderr;
+      if (stdout === null || stderr === null) {
+        child.kill('SIGKILL');
+        throw new Error(`Node CLI eval invocation ${invocation.label} has no output pipes`);
+      }
       let settled = false;
       let timeoutError: Error | undefined;
+      let handshakeError: Error | undefined;
       let killCloseTimer: ReturnType<typeof setTimeout> | undefined;
       const finish = (
         outcome:
@@ -229,12 +237,43 @@ async function runNodeCliEvalInvocation(
         if (outcome.ok) resolve(capture.finish(outcome.code, outcome.signal));
         else reject(outcome.error);
       };
-      child.stdout.on('data', (chunk) => capture.push('stdout', chunk));
-      child.stderr.on('data', (chunk) => capture.push('stderr', chunk));
+      const handshake = createNodeCliEvalStdioHandshake(invocation.stdioHandshake, (token) => {
+        if (child.stdin === null || child.stdin.destroyed) {
+          throw new Error(`Node CLI eval invocation ${invocation.label} has no writable stdin`);
+        }
+        child.stdin.write(token);
+      });
+      const captureChunk = (stream: 'stdout' | 'stderr', chunk: unknown): void => {
+        capture.push(stream, chunk);
+        try {
+          handshake.observe(stream, chunk);
+        } catch (error) {
+          handshakeError = error instanceof Error ? error : new Error(String(error));
+          child.kill('SIGKILL');
+        }
+      };
+      stdout.on('data', (chunk) => captureChunk('stdout', chunk));
+      stderr.on('data', (chunk) => captureChunk('stderr', chunk));
       child.once('error', (error) => finish({ ok: false, error }));
       child.once('close', (code, signal) => {
-        if (timeoutError !== undefined) finish({ ok: false, error: timeoutError });
-        else finish({ ok: true, code, signal });
+        if (timeoutError !== undefined) {
+          finish({ ok: false, error: timeoutError });
+          return;
+        }
+        if (handshakeError !== undefined) {
+          finish({ ok: false, error: handshakeError });
+          return;
+        }
+        try {
+          handshake.finish();
+        } catch (error) {
+          finish({
+            ok: false,
+            error: error instanceof Error ? error : new Error(String(error)),
+          });
+          return;
+        }
+        finish({ ok: true, code, signal });
       });
       const caseTimer = HOST_SET_TIMEOUT(() => {
         timeoutError = new Error(

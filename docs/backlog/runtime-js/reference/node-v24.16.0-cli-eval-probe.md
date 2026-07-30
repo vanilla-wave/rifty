@@ -199,6 +199,33 @@ parsing and preserves both that token and the later `--` in `process.argv`.
 `node -p -- x` instead selects `x` as a program entry and is outside the eval
 carrier.
 
+The optional-print program boundary is reproducible against the repository's
+existing CommonJS config entry:
+
+```sh
+probe='--import=data:text/javascript,console.log(JSON.stringify(%7BexecArgv%3Aprocess.execArgv%2Cargv%3Aprocess.argv.slice(1)%7D))'
+for option in -p --print --print=ignored --print=not-the-source --print=; do
+  NODE_OPTIONS="$probe" node "$option" -- .dependency-cruiser.cjs alpha "two words" -x
+done
+NODE_OPTIONS="$probe" node --print=not-the-source -- '' alpha -x
+```
+
+Normalized output:
+
+```text
+{"execArgv":["-p"],"argv":["<cwd>/.dependency-cruiser.cjs","alpha","two words","-x"]}
+{"execArgv":["--print"],"argv":["<cwd>/.dependency-cruiser.cjs","alpha","two words","-x"]}
+{"execArgv":["--print=ignored"],"argv":["<cwd>/.dependency-cruiser.cjs","alpha","two words","-x"]}
+{"execArgv":["--print=not-the-source"],"argv":["<cwd>/.dependency-cruiser.cjs","alpha","two words","-x"]}
+{"execArgv":["--print="],"argv":["<cwd>/.dependency-cruiser.cjs","alpha","two words","-x"]}
+{"execArgv":["--print=not-the-source"],"argv":["","alpha","-x"]}
+undefined
+```
+
+The nonempty post-terminator token is a program entry and retains the exact
+print option in `execArgv`; an empty first token keeps entryless eval and is
+not skipped in search of a later program.
+
 Run the identity and resolver probe from a cwd containing `marker.cjs`:
 
 ```sh
@@ -230,6 +257,17 @@ Normalized result:
 therefore omitted by JSON. Relative and package resolution stay anchored to the
 launch cwd after `process.chdir()`. A required child points back to the
 detached eval module, but `[eval]` never appears in `require.cache`.
+
+Eval also exposes five own global CommonJS data bindings with exact values and
+flags:
+
+```sh
+node -e 'const values={require,module,exports:module.exports,__filename:"[eval]",__dirname:"."};const descriptors=Object.fromEntries(Object.keys(values).map(name=>{const d=Object.getOwnPropertyDescriptor(globalThis,name);return [name,{valueIdentity:d?.value===values[name],writable:d?.writable,enumerable:d?.enumerable,configurable:d?.configurable}]}));console.log(JSON.stringify({descriptors,exportsModuleIdentity:exports===module.exports}))'
+```
+
+Every `require`, `module`, `exports`, `__filename`, and `__dirname` row reports
+`valueIdentity`, `writable`, `enumerable`, and `configurable` as `true`;
+`exportsModuleIdentity` is also `true`.
 
 This retained probe makes the sequential/concurrent isolation claim
 reproducible. Extract and run it from the repository root:

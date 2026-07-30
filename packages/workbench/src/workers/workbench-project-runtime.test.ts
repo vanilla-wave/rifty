@@ -70,6 +70,13 @@ const NODE_WORKER_RUNTIME_CONFIG = Object.freeze({
   sqliteWasmUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_SQLITE_WASM_URL,
 });
 const TERMINATOR_ADMISSION_SOURCE = 'JSON.stringify({marker:"terminator"})';
+const OPTIONAL_PRINT_SPELLINGS = [
+  '-p',
+  '--print',
+  '--print=ignored',
+  '--print=not-the-source',
+  '--print=',
+] as const;
 const TERMINATED_SEPARATED_EVAL_SPELLINGS = [
   {
     option: '-e',
@@ -89,11 +96,12 @@ const TERMINATED_SEPARATED_EVAL_SPELLINGS = [
     sourceRequired: true,
     missing: 'node: --eval requires an argument\n',
   },
-  { option: '-p', print: true, sourceRequired: false, missing: '' },
-  { option: '--print', print: true, sourceRequired: false, missing: '' },
-  { option: '--print=ignored', print: true, sourceRequired: false, missing: '' },
-  { option: '--print=not-the-source', print: true, sourceRequired: false, missing: '' },
-  { option: '--print=', print: true, sourceRequired: false, missing: '' },
+  ...OPTIONAL_PRINT_SPELLINGS.map((option) => ({
+    option,
+    print: true as const,
+    sourceRequired: false as const,
+    missing: '' as const,
+  })),
 ] as const;
 const TERMINATED_EVAL_SOURCE_STATES = ['missing', 'empty', 'nonempty'] as const;
 
@@ -1429,6 +1437,95 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         await Promise.allSettled([running]);
         await h.runtime.close();
       }
+    },
+  );
+
+  it.each(OPTIONAL_PRINT_SPELLINGS)(
+    'keeps an empty post-terminator token in eval argv through one real child: %s',
+    async (option) => {
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-empty-entry' });
+      const running = Promise.resolve(
+        h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-eval-empty-entry',
+          rid: 'run-node-eval-empty-entry',
+          line: `node ${option} -- '' alpha -x`,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      let worker: KernelWorkerBoundary | undefined;
+
+      try {
+        await vi.waitFor(() => expect(workers).toHaveLength(1));
+        worker = workers[0];
+        if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+        expect(worker.spec()).toMatchObject({
+          argv: [NODE_PROCESS_IDENTITY.execPath, '', 'alpha', '-x'],
+          entry: {
+            bootstrap: {
+              protocol: 'rifty.node-entry/v3',
+              payload: {
+                launch: {
+                  kind: 'eval',
+                  source: '',
+                  print: true,
+                  execArgv: [option],
+                },
+              },
+            },
+          },
+        });
+      } finally {
+        worker?.finish(0);
+        await Promise.allSettled([running]);
+        await h.runtime.close();
+      }
+    },
+  );
+
+  it.each(OPTIONAL_PRINT_SPELLINGS)(
+    'keeps the post-terminator program transition a named no-child gap: %s',
+    async (option) => {
+      const processesBefore = globalProcessManager.snapshot();
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-print-program' });
+
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-print-program',
+        rid: 'run-node-print-program',
+        line: `node ${option} -- entry.cjs alpha -x`,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+
+      const stderr = h.frames
+        .filter(
+          (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+            frame.type === 'pty:chunk' &&
+            frame.rid === 'run-node-print-program' &&
+            frame.stream === 'stderr',
+        )
+        .map((frame) => new TextDecoder().decode(frame.data))
+        .join('');
+      expect(stderr).toContain('Not implemented: workbench.node.print-program-context');
+      expect(workers).toHaveLength(0);
+      expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+      expect(h.frames).toContainEqual(
+        expect.objectContaining({
+          type: 'pty:exit',
+          rid: 'run-node-print-program',
+          code: 1,
+          exit: { code: 1, signal: null },
+        }),
+      );
+      await h.runtime.close();
     },
   );
 

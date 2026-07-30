@@ -6,7 +6,7 @@
  * option classification, launch construction, and supervised-child execution.
  */
 import { type ChildProcess, type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { type Page, expect, test } from '@playwright/test';
@@ -16,6 +16,7 @@ import {
   assertNodeCliEvalNoCarrierPath,
   assertNodeCliEvalOracleVersion,
   createNodeCliEvalCapture,
+  createNodeCliEvalStdioHandshake,
   nodeCliEvalSourceTerminatorMatrix,
 } from '../../tools/node-parity-runner/src/node-cli-eval.ts';
 import type { NodeCliEvalInvocation } from '../../tools/node-parity-runner/src/types.ts';
@@ -34,7 +35,7 @@ import {
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 const FIXTURE_FILES = {
   'fixtures/a/marker.cjs':
-    "module.exports={marker:'a',parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
+    "if(require.main===module)console.log(JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)}));module.exports={marker:'a',parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
   'fixtures/a/node_modules/eval-package/index.js': "module.exports='package-a'\n",
   'fixtures/b/marker.cjs':
     "module.exports={marker:'b',parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
@@ -92,8 +93,12 @@ const orderedInvocation: PhysicalNodeInvocation = {
   cwd: '/fixtures/a',
   nodeArgv: [
     '-e',
-    "process.stdout.write('EVAL_ORDER:stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('EVAL_ORDER:stderr-middle\\n'),20);setTimeout(()=>{process.stdout.write(new Uint8Array([172]));process.stdout.write('EVAL_ORDER:stdout-tail\\n')},40)",
+    "let phase=0;process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{for(const token of chunk){if(phase===0&&token==='1'){phase=1;process.stderr.write('EVAL_ORDER:stderr-middle\\n')}else if(phase===1&&token==='2'){phase=2;process.stdout.write(new Uint8Array([172]));process.stdout.write('EVAL_ORDER:stdout-tail\\n');process.stdin.pause();process.stdin.destroy?.()}else{throw new Error('stdio handshake protocol')}}});process.stdout.write('EVAL_ORDER:stdout-head|');process.stdout.write(new Uint8Array([226,130]))",
     'alpha',
+  ],
+  stdioHandshake: [
+    { stream: 'stdout', marker: 'EVAL_ORDER:stdout-head|' },
+    { stream: 'stderr', marker: 'EVAL_ORDER:stderr-middle\n' },
   ],
 };
 const eofOrderedInvocation: PhysicalNodeInvocation = {
@@ -101,8 +106,9 @@ const eofOrderedInvocation: PhysicalNodeInvocation = {
   cwd: '/fixtures/a',
   nodeArgv: [
     '-e',
-    "process.stderr.write('EVAL_EOF:stderr-first|');setTimeout(()=>process.stdout.write('EVAL_EOF:stdout-last'),20)",
+    "let released=false;process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{for(const token of chunk){if(!released&&token==='1'){released=true;process.stdout.write('EVAL_EOF:stdout-last');process.stdin.pause();process.stdin.destroy?.()}else{throw new Error('stdio handshake protocol')}}});process.stderr.write('EVAL_EOF:stderr-first|')",
   ],
+  stdioHandshake: [{ stream: 'stderr', marker: 'EVAL_EOF:stderr-first|' }],
 };
 const failureInvocation: PhysicalNodeInvocation = {
   label: 'throw',
@@ -215,14 +221,39 @@ function startHostInvocation(
   const child = spawn(process.execPath, [...invocation.nodeArgv], {
     cwd: fixture.cwd(invocation.cwd),
     env: hostNodeOracleEnv(),
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [invocation.stdioHandshake === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
   });
-  child.stdout.on('data', (chunk: unknown) => capture.push('stdout', chunk));
-  child.stderr.on('data', (chunk: unknown) => capture.push('stderr', chunk));
+  let handshakeError: Error | undefined;
+  const handshake = createNodeCliEvalStdioHandshake(invocation.stdioHandshake, (token) => {
+    if (child.stdin === null || child.stdin.destroyed) {
+      throw new Error(`${invocation.label} has no writable stdin`);
+    }
+    child.stdin.write(token);
+  });
+  const captureChunk = (stream: 'stdout' | 'stderr', chunk: unknown): void => {
+    capture.push(stream, chunk);
+    try {
+      handshake.observe(stream, chunk);
+    } catch (error) {
+      handshakeError = error instanceof Error ? error : new Error(String(error));
+      child.kill('SIGKILL');
+    }
+  };
+  child.stdout.on('data', (chunk: unknown) => captureChunk('stdout', chunk));
+  child.stderr.on('data', (chunk: unknown) => captureChunk('stderr', chunk));
   const outcome = new Promise<NodeCliEvalRawOutcome>((resolve, reject) => {
     child.once('error', reject);
     child.once('close', (code, signal) => {
-      resolve(capture.finish(code, signal));
+      if (handshakeError !== undefined) {
+        reject(handshakeError);
+        return;
+      }
+      try {
+        handshake.finish();
+        resolve(capture.finish(code, signal));
+      } catch (error) {
+        reject(error);
+      }
     });
   });
   return { child, outcome };
@@ -240,7 +271,38 @@ async function runWorkbenchInvocation(
   invocation: PhysicalNodeInvocation,
 ): Promise<WorkbenchOutcome> {
   const line = workbenchLine(invocation);
-  await runTerminalLineSettled(page, line, 60_000);
+  if (invocation.stdioHandshake === undefined) {
+    await runTerminalLineSettled(page, line, 60_000);
+  } else {
+    await runTerminalLine(page, line);
+    const input = page
+      .locator(
+        '.rf-terminal-slot[data-active="true"] textarea.xterm-helper-textarea, .rf-terminal-slot[data-active="true"] textarea',
+      )
+      .first();
+    for (let index = 0; index < invocation.stdioHandshake.length; index += 1) {
+      const step = invocation.stdioHandshake[index];
+      if (step === undefined) throw new Error('stdio handshake step missing');
+      await expect
+        .poll(() => terminalBuffer(page), { timeout: 60_000 })
+        .toContain(step.marker.trimEnd());
+      await input.focus();
+      await page.keyboard.insertText(String(index + 1));
+    }
+    await expect
+      .poll(
+        async () => {
+          try {
+            await terminalHistoryExitCode(page, line);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(true);
+  }
   const output = settledCommandOutput(await terminalBuffer(page), line);
   const exitCode = await terminalHistoryExitCode(page, line);
   return { line, output, exitCode };
@@ -564,6 +626,54 @@ test.describe('CLI report template through the worker lifecycle', () => {
         normalized(nativeInline.stdout),
       );
       expect(browserInline.exitCode, inlineTerminatorInvocation.label).toBe(nativeInline.code);
+    } finally {
+      fixture.close();
+    }
+  });
+
+  test('optional print distinguishes empty eval argv from its named program-transition gap', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'physical supervised children require Chromium');
+    test.setTimeout(180_000);
+    const problems = capturePageProblems(page);
+    const fixture = createHostFixture();
+    const emptyInvocation = {
+      label: 'print-empty-after-terminator',
+      cwd: '/fixtures/a',
+      nodeArgv: ['--print=not-the-source', '--', '', 'alpha', '-x'],
+    } as const satisfies PhysicalNodeInvocation;
+    const programInvocation = {
+      label: 'print-program-after-terminator',
+      cwd: '/fixtures/a',
+      nodeArgv: ['--print=not-the-source', '--', 'marker.cjs', 'alpha', '-x'],
+    } as const satisfies PhysicalNodeInvocation;
+
+    try {
+      const nativeEmpty = await runHostInvocation(fixture, emptyInvocation);
+      expect(nativeEmpty).toMatchObject({
+        stdout: 'undefined\n',
+        stderr: '',
+        code: 0,
+        signal: null,
+      });
+      const nativeProgram = await runHostInvocation(fixture, programInvocation);
+      expect(nativeProgram).toMatchObject({ stderr: '', code: 0, signal: null });
+      expect(JSON.parse(nativeProgram.stdout)).toEqual({
+        execArgv: ['--print=not-the-source'],
+        argv: [realpathSync(join(fixture.cwd('/fixtures/a'), 'marker.cjs')), 'alpha', '-x'],
+      });
+
+      await bootCliReport(page);
+      const browserEmpty = await runWorkbenchInvocation(page, emptyInvocation);
+      expect(browserEmpty).toMatchObject({ output: 'undefined', exitCode: 0 });
+      const browserProgram = await runWorkbenchInvocation(page, programInvocation);
+      expect(browserProgram.output).toContain(
+        'Not implemented: workbench.node.print-program-context',
+      );
+      expect(browserProgram.exitCode).toBe(1);
+      problems.assertNoViteImportErrors();
     } finally {
       fixture.close();
     }

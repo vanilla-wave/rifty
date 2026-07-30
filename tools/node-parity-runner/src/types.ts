@@ -122,6 +122,14 @@ export interface NodeCliEvalInvocation {
   readonly nodeArgv: readonly string[];
   /** Absolute logical cwd, defaulting to the case cwd. */
   readonly cwd?: string;
+  /**
+   * Test-only causal output gates. After observing each exact marker on its
+   * physical stream, both runners write the 1-based step token to stdin.
+   */
+  readonly stdioHandshake?: readonly {
+    readonly stream: 'stdout' | 'stderr';
+    readonly marker: string;
+  }[];
   /** Keep only Node's in-scope eval prelude/error/first user frame. */
   readonly evalErrorStderr?: boolean;
   /** Keep the rejected-Promise prefix/user frame, not Node-internal frames. */

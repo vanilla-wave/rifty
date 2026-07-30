@@ -4,6 +4,7 @@ import {
   assertNodeCliEvalOracleVersion,
   canonicalNodeCliEvalOutcome,
   createNodeCliEvalCapture,
+  createNodeCliEvalStdioHandshake,
   nodeCliEvalInvocations,
 } from './node-cli-eval.ts';
 
@@ -57,6 +58,40 @@ describe('node CLI eval parity carrier', () => {
     capture.push('stdout', 'line\n');
 
     expect(capture.finish(0, null).frames).toEqual([{ stream: 'stdout', text: 'one-line\n' }]);
+  });
+
+  it('releases causal stream markers only after each exact observable predecessor', () => {
+    const tokens: string[] = [];
+    const handshake = createNodeCliEvalStdioHandshake(
+      [
+        { stream: 'stdout', marker: 'stdout-ready|' },
+        { stream: 'stderr', marker: 'stderr-ready\n' },
+      ],
+      (token) => tokens.push(token),
+    );
+
+    handshake.observe('stdout', 'stdout-');
+    handshake.observe('stderr', 'ignored-before-gate\n');
+    expect(tokens).toEqual([]);
+    handshake.observe('stdout', 'ready|');
+    expect(tokens).toEqual(['1']);
+    handshake.observe('stdout', 'ignored-between-gates');
+    handshake.observe('stderr', 'stderr-ready\n');
+    expect(tokens).toEqual(['1', '2']);
+    expect(() => handshake.finish()).not.toThrow();
+  });
+
+  it('rejects a causal stream carrier that exits before every marker is observable', () => {
+    const handshake = createNodeCliEvalStdioHandshake(
+      [
+        { stream: 'stderr', marker: 'first' },
+        { stream: 'stdout', marker: 'second' },
+      ],
+      () => {},
+    );
+    handshake.observe('stderr', 'first');
+
+    expect(() => handshake.finish()).toThrow('stopped at step 1 of 2');
   });
 
   it('keeps only the contracted eval error prelude and first user frame', () => {

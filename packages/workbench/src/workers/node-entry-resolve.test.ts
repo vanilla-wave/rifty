@@ -194,6 +194,26 @@ describe('classifyNodeInvocation', () => {
     },
   );
 
+  it.each(['-p', '--print', '--print=ignored', '--print=not-the-source', '--print='] as const)(
+    '%s distinguishes an empty post-terminator token from the program transition',
+    (option) => {
+      expect(
+        classifyNodeInvocation([option, '--', '', 'alpha', '-x']),
+        'empty first token keeps entryless eval',
+      ).toEqual({
+        kind: 'eval',
+        source: '',
+        print: true,
+        execArgv: [option],
+        scriptArgs: ['', 'alpha', '-x'],
+      });
+      expect(
+        classifyNodeInvocation([option, '--', 'entry.cjs', 'alpha', '-x']),
+        'non-empty first token selects the named program gap',
+      ).toEqual({ kind: 'printProgram' });
+    },
+  );
+
   it.each(['--print=ignored', '--print=not-the-source', '--print='] as const)(
     '%s ignores its RHS, preserves the exact spelling, and takes source from the next argument',
     (option) => {

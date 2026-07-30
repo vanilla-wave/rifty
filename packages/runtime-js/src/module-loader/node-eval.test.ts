@@ -41,6 +41,15 @@ interface EvalIdentityProbe {
   readonly moduleLoaded: boolean;
   readonly requireMain: unknown;
   readonly moduleRecord: object;
+  readonly bindings: {
+    readonly descriptors: Record<(typeof CJS_BINDINGS)[number], PropertyDescriptor>;
+    readonly requireBinding: unknown;
+    readonly moduleBinding: unknown;
+    readonly exportsBinding: unknown;
+    readonly filenameBinding: unknown;
+    readonly dirnameBinding: unknown;
+    readonly moduleExports: unknown;
+  };
   readonly cache: Record<string, unknown>;
   readonly during: boolean;
   readonly dep: {
@@ -82,6 +91,11 @@ function restoreCjsBindings(snapshot: ReadonlyMap<string, PropertyDescriptor | u
   }
 }
 
+function expectNoEvalRegistryRecord(registry: ModuleRegistry): void {
+  expect(registry.has('[eval]')).toBe(false);
+  expect(registry.has('/work/[eval]')).toBe(false);
+}
+
 afterEach(() => {
   for (const key of [EVAL_PROBE, EVAL_RUNS, DEP_LOADS]) {
     Reflect.deleteProperty(globalThis, key);
@@ -107,7 +121,7 @@ module.exports = {
 
     try {
       const runner = reflectedCreateNodeEvalScriptRunner()({ vfs, cwd: '/work' });
-      expect(runner.registry.has('/work/[eval]')).toBe(false);
+      expectNoEvalRegistryRecord(runner.registry);
       const completion = runner.run(`{
         const dep = require('./dep.cjs');
         globalThis.${EVAL_PROBE} = {
@@ -122,6 +136,20 @@ module.exports = {
           moduleLoaded: module.loaded,
           requireMain: require.main,
           moduleRecord: module,
+          bindings: {
+            descriptors: Object.fromEntries(
+              ${JSON.stringify(CJS_BINDINGS)}.map((key) => [
+                key,
+                Object.getOwnPropertyDescriptor(globalThis, key),
+              ]),
+            ),
+            requireBinding: require,
+            moduleBinding: module,
+            exportsBinding: exports,
+            filenameBinding: __filename,
+            dirnameBinding: __dirname,
+            moduleExports: module.exports,
+          },
           cache: require.cache,
           during: Object.values(require.cache).includes(module),
           dep,
@@ -168,8 +196,32 @@ module.exports = {
         },
       });
       expect(probe.dep.parent).toBe(probe.moduleRecord);
+      const bindingValues = {
+        require: probe.bindings.requireBinding,
+        module: probe.bindings.moduleBinding,
+        exports: probe.bindings.moduleExports,
+        __filename: probe.bindings.filenameBinding,
+        __dirname: probe.bindings.dirnameBinding,
+      };
+      for (const key of CJS_BINDINGS) {
+        const descriptor = probe.bindings.descriptors[key];
+        expect(Object.keys(descriptor).sort(), key).toEqual(
+          ['configurable', 'enumerable', 'value', 'writable'].sort(),
+        );
+        expect(descriptor.value, key).toBe(bindingValues[key]);
+        expect(
+          {
+            writable: descriptor.writable,
+            enumerable: descriptor.enumerable,
+            configurable: descriptor.configurable,
+          },
+          key,
+        ).toEqual({ writable: true, enumerable: true, configurable: true });
+      }
+      expect(probe.bindings.moduleBinding).toBe(probe.moduleRecord);
+      expect(probe.bindings.exportsBinding).toBe(probe.bindings.moduleExports);
       expect(Object.values(probe.cache)).not.toContain(probe.moduleRecord);
-      expect(runner.registry.has('/work/[eval]')).toBe(false);
+      expectNoEvalRegistryRecord(runner.registry);
     } finally {
       restoreCjsBindings(bindings);
     }
@@ -196,7 +248,7 @@ module.exports = { load: globalThis.${DEP_LOADS}, parent: module.parent };
 
     try {
       const runner = reflectedCreateNodeEvalScriptRunner()({ vfs, cwd: '/work' });
-      expect(runner.registry.has('/work/[eval]')).toBe(false);
+      expectNoEvalRegistryRecord(runner.registry);
       runner.run(source);
       const first = (Reflect.get(globalThis, EVAL_RUNS) as EvalRecordProbe[])[0];
       if (first === undefined) throw new Error('first eval probe missing');
@@ -204,7 +256,7 @@ module.exports = { load: globalThis.${DEP_LOADS}, parent: module.parent };
       expect(first.during).toBe(false);
       expect(first.child.parent).toBe(first.module);
       expect(Object.values(first.cache)).not.toContain(first.module);
-      expect(runner.registry.has('/work/[eval]')).toBe(false);
+      expectNoEvalRegistryRecord(runner.registry);
 
       runner.run(source);
       const runs = Reflect.get(globalThis, EVAL_RUNS) as EvalRecordProbe[];
@@ -218,7 +270,7 @@ module.exports = { load: globalThis.${DEP_LOADS}, parent: module.parent };
       expect(second.child.parent).toBe(first.module);
       expect(second.child.parent).not.toBe(second.module);
       expect(Reflect.get(globalThis, DEP_LOADS)).toBe(1);
-      expect(runner.registry.has('/work/[eval]')).toBe(false);
+      expectNoEvalRegistryRecord(runner.registry);
       for (const cache of [first.cache, second.cache]) {
         expect(Object.values(cache)).not.toContain(first.module);
         expect(Object.values(cache)).not.toContain(second.module);
@@ -241,7 +293,7 @@ module.exports = { load: globalThis.${DEP_LOADS}, parent: module.parent };
       const completion = runner.run(`Promise.resolve().then(() => require('./dep.cjs').answer)`);
 
       await expect(completion).resolves.toBe(42);
-      expect(runner.registry.has('/work/[eval]')).toBe(false);
+      expectNoEvalRegistryRecord(runner.registry);
     } finally {
       restoreCjsBindings(bindings);
     }
@@ -295,6 +347,11 @@ module.exports = { load: globalThis.${DEP_LOADS}, parent: module.parent };
   it.each([
     ['ordinary invalid JavaScript', 'const value = ;'],
     ['a top-level return', 'return 1;'],
+    ['an incomplete destructured parameter', 'function f( {'],
+    ['an invalid repeated dot', 'let a..b'],
+    ['an ESM import in CommonJS eval', 'import value from "pkg"'],
+    ['an ESM export in CommonJS eval', 'export const value = 1'],
+    ['a decorator', '@dec class Value {}'],
   ])('preserves %s as a real SyntaxError', (_description, source) => {
     const vfs = new MemoryFsSync();
     const bindings = snapshotCjsBindings();
@@ -313,14 +370,20 @@ module.exports = { load: globalThis.${DEP_LOADS}, parent: module.parent };
     expect(thrown).not.toBeInstanceOf(NotImplementedError);
   });
 
-  it('rejects TypeScript-only eval source through the named loud gap', () => {
+  it.each([
+    'const n: number = 1; n',
+    'value as number',
+    'import type { Value } from "pkg"',
+    'function f<T>(value?: T): T { return value! }',
+    'function f(this) {}; f',
+  ])('rejects TypeScript-only eval source through the named loud gap: %s', (source) => {
     const vfs = new MemoryFsSync();
     const bindings = snapshotCjsBindings();
     const createRunner = reflectedCreateNodeEvalScriptRunner();
     let thrown: unknown;
     try {
       const runner = createRunner({ vfs, cwd: '/work' });
-      runner.run('const n: number = 1; n');
+      runner.run(source);
     } catch (error) {
       thrown = error;
     } finally {

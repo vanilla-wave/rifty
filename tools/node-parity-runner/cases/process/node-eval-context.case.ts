@@ -62,10 +62,18 @@ const promiseRealmSnapshot = () => {
   };
 };
 const promiseBefore = promiseRealmSnapshot();
+const cjsBindingValues = {
+  require,
+  module,
+  exports: module.exports,
+  __filename: '[eval]',
+  __dirname: '.',
+};
 const cjsBindingDescriptors = Object.fromEntries(
   ['require', 'module', 'exports', '__filename', '__dirname'].map((name) => {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
     return [name, {
+      valueIdentity: descriptor?.value === cjsBindingValues[name],
       writable: descriptor?.writable,
       enumerable: descriptor?.enumerable,
       configurable: descriptor?.configurable,
@@ -110,6 +118,7 @@ console.log(JSON.stringify({
   thisGlobal: this === globalThis,
   argumentsType: typeof arguments,
   cjsBindingDescriptors,
+  exportsModuleIdentity: exports === module.exports,
   cached: Object.values(require.cache).includes(module),
   ownerBytes,
   noEvalCarrier: JSON.stringify(visibleEntries) === JSON.stringify(['marker.cjs','node_modules','owner-only.txt']),
@@ -183,6 +192,10 @@ completion
 
 const terminatorSource =
   'const value=JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)});console.log(value);value';
+const orderedStdioSource =
+  "let phase=0;process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{for(const token of chunk){if(phase===0&&token==='1'){phase=1;process.stderr.write('stderr-middle\\n')}else if(phase===1&&token==='2'){phase=2;process.stdout.write(new Uint8Array([172]));process.stdout.write('stdout-tail\\n');process.stdin.pause();process.stdin.destroy?.()}else{throw new Error('stdio handshake protocol')}}});process.stdout.write('stdout-head|');process.stdout.write(new Uint8Array([226,130]))";
+const eofOrderedStdioSource =
+  "let released=false;process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{for(const token of chunk){if(!released&&token==='1'){released=true;process.stdout.write('stdout-eof-last');process.stdin.pause();process.stdin.destroy?.()}else{throw new Error('stdio handshake protocol')}}});process.stderr.write('stderr-eof-first|')";
 const terminatorInvocations = [
   ...nodeCliEvalSourceTerminatorMatrix(terminatorSource, ['alpha', 'two words', '-x'])
     .filter(({ expected }) => expected.kind === 'accepted')
@@ -206,18 +219,23 @@ const sequential: NodeCliEvalInvocation[] = [
 
 const concurrent: NodeCliEvalInvocation[] = [
   ...terminatorInvocations,
-  separated(
-    'short-e-partial-stdout-around-stderr',
-    '-e',
-    "process.stdout.write('stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('stderr-middle\\n'),20);setTimeout(()=>{process.stdout.write(new Uint8Array([172]));process.stdout.write('stdout-tail\\n')},40)",
-    ['alpha', 'two words', '-x'],
-    true,
-  ),
-  separated(
-    'short-e-stderr-before-stdout-eof',
-    '-e',
-    "process.stderr.write('stderr-eof-first|');setTimeout(()=>process.stdout.write('stdout-eof-last'),20)",
-  ),
+  {
+    ...separated(
+      'short-e-partial-stdout-around-stderr',
+      '-e',
+      orderedStdioSource,
+      ['alpha', 'two words', '-x'],
+      true,
+    ),
+    stdioHandshake: [
+      { stream: 'stdout', marker: 'stdout-head|' },
+      { stream: 'stderr', marker: 'stderr-middle\n' },
+    ],
+  },
+  {
+    ...separated('short-e-stderr-before-stdout-eof', '-e', eofOrderedStdioSource),
+    stdioHandshake: [{ stream: 'stderr', marker: 'stderr-eof-first|' }],
+  },
   inlineEval(
     'inline-long-eval-global-script',
     'var evalGlobal=41;console.log(JSON.stringify({thisGlobal:this===globalThis,argumentsType:typeof arguments,global:globalThis.evalGlobal+1,execArgv:process.execArgv}))',

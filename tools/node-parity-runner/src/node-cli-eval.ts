@@ -213,6 +213,37 @@ function strings(value: readonly string[], owner: string): readonly string[] {
   return Object.freeze([...value]);
 }
 
+function stdioHandshake(
+  value: NodeCliEvalInvocation['stdioHandshake'],
+  owner: string,
+): NodeCliEvalInvocation['stdioHandshake'] {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 9) {
+    throw new TypeError(`${owner} must contain between one and nine steps`);
+  }
+  return Object.freeze(
+    value.map((step, index) => {
+      if (typeof step !== 'object' || step === null || Array.isArray(step)) {
+        throw new TypeError(`${owner}[${String(index)}] must be an object`);
+      }
+      const keys = Reflect.ownKeys(step);
+      if (
+        keys.length !== 2 ||
+        !keys.includes('stream') ||
+        !keys.includes('marker') ||
+        (step.stream !== 'stdout' && step.stream !== 'stderr') ||
+        typeof step.marker !== 'string' ||
+        step.marker.length === 0
+      ) {
+        throw new TypeError(
+          `${owner}[${String(index)}] must contain only an exact stream and non-empty marker`,
+        );
+      }
+      return Object.freeze({ stream: step.stream, marker: step.marker });
+    }),
+  );
+}
+
 const DERIVED_INVOCATION_FIELDS = ['source', 'print', 'execArgv', 'scriptArgs'] as const;
 
 function scriptArgs(nodeArgv: readonly string[], start: number): readonly string[] {
@@ -241,7 +272,7 @@ function evalSemantics(
   }
   if (option === '-p' || option === '--print') {
     const source = nodeArgv[1];
-    if (source === '--' && nodeArgv.length > 2) {
+    if (source === '--' && nodeArgv[2] !== undefined && nodeArgv[2] !== '') {
       throw new TypeError(`${owner} ${option} terminator selects a program entry, not eval`);
     }
     if (source === undefined || source === '' || source === '--') {
@@ -249,7 +280,9 @@ function evalSemantics(
         source: '',
         print: true,
         execArgv: Object.freeze([option]),
-        scriptArgs: Object.freeze(source === undefined || source === '--' ? [] : nodeArgv.slice(1)),
+        scriptArgs: Object.freeze(
+          source === undefined ? [] : source === '--' ? nodeArgv.slice(2) : nodeArgv.slice(1),
+        ),
       });
     }
     return Object.freeze({
@@ -273,7 +306,7 @@ function evalSemantics(
   }
   if (option.startsWith('--print=')) {
     const source = nodeArgv[1];
-    if (source === '--' && nodeArgv.length > 2) {
+    if (source === '--' && nodeArgv[2] !== undefined && nodeArgv[2] !== '') {
       throw new TypeError(`${owner} ${option} terminator selects a program entry, not eval`);
     }
     if (source === undefined || source === '' || source === '--') {
@@ -281,7 +314,9 @@ function evalSemantics(
         source: '',
         print: true,
         execArgv: Object.freeze([option]),
-        scriptArgs: Object.freeze(source === undefined || source === '--' ? [] : nodeArgv.slice(1)),
+        scriptArgs: Object.freeze(
+          source === undefined ? [] : source === '--' ? nodeArgv.slice(2) : nodeArgv.slice(1),
+        ),
       });
     }
     return Object.freeze({
@@ -327,10 +362,12 @@ export function resolveNodeCliEvalInvocation(
     throw new TypeError(`${owner}.rejectedPromiseStdout must be a boolean`);
   }
   const nodeArgv = strings(value.nodeArgv, `${owner}.nodeArgv`);
+  const handshake = stdioHandshake(value.stdioHandshake, `${owner}.stdioHandshake`);
   return Object.freeze({
     label: value.label,
     nodeArgv,
     ...(value.cwd === undefined ? {} : { cwd: value.cwd }),
+    ...(handshake === undefined ? {} : { stdioHandshake: handshake }),
     ...(value.evalErrorStderr === undefined ? {} : { evalErrorStderr: value.evalErrorStderr }),
     ...(value.rejectedPromiseStdout === undefined
       ? {}
@@ -369,6 +406,41 @@ function asBytes(chunk: unknown): Uint8Array {
   if (typeof chunk === 'string') return Buffer.from(chunk);
   if (chunk instanceof Uint8Array) return chunk;
   throw new TypeError('node-cli-eval stream emitted a non-byte chunk');
+}
+
+/** Causally release each next child write only after its predecessor is observable. */
+export function createNodeCliEvalStdioHandshake(
+  steps: NodeCliEvalInvocation['stdioHandshake'],
+  writeToken: (token: string) => void,
+): {
+  observe(stream: 'stdout' | 'stderr', chunk: unknown): void;
+  finish(): void;
+} {
+  if (steps === undefined) {
+    return { observe() {}, finish() {} };
+  }
+  const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
+  let index = 0;
+  let pending = '';
+
+  return {
+    observe(stream, chunk) {
+      const expected = steps[index];
+      if (expected === undefined || stream !== expected.stream) return;
+      pending += decoders[stream].decode(asBytes(chunk), { stream: true });
+      if (!pending.includes(expected.marker)) return;
+      pending = '';
+      index += 1;
+      writeToken(String(index));
+    },
+    finish() {
+      if (index !== steps.length) {
+        throw new Error(
+          `node-cli-eval stdio handshake stopped at step ${String(index)} of ${String(steps.length)}`,
+        );
+      }
+    },
+  };
 }
 
 /** Line framing retains stream switches once the streaming decoder yields text. */

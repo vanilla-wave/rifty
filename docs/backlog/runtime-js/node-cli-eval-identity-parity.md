@@ -488,6 +488,33 @@ observable. Each preview invocation carries its exact emitted ready marker.
 The differential identity result includes the exact descriptors. The
 pre-demotion Acceptance and Parity remain verbatim below.
 
+## Twenty-eighth readiness re-cut
+
+The fresh judge at `9d939b3da` found three remaining proof/scope holes without
+changing the pre-demotion Acceptance or Parity:
+
+- wider 20/40 ms native pipe writes were still scheduler-dependent; a parent
+  stalled for 100 ms observed the two stdout writes coalesced across the
+  intervening stderr write in 30/30 Node v24.16.0 runs;
+- the differential reported only the five CommonJS binding descriptor flags,
+  not their values or `exports === module.exports`;
+- the pinned grammar artifact exposed optional print + `-- <nonempty entry>` as
+  program mode, but the contract neither supported that distinct launch nor
+  named it as a loud gap. It also failed to distinguish `-- ''`, which remains
+  entryless eval and preserves the empty argv token.
+
+The item remains demoted while this exact re-cut is re-judged. A test-only
+marker/ack handshake writes each next stream only after both native and Rifty
+parents observe its predecessor on the named physical stream; no clock or pipe
+callback boundary supplies order. The identity differential and package RED
+now pin every descriptor value/flag plus the exports alias. All five optional
+print spellings preserve `-- '' [args]` in eval argv, while
+`-- <nonempty entry>` is the explicit no-child
+`NotImplementedError('workbench.node.print-program-context')`; faithful support
+would require a separately contracted node-entry protocol revision carrying
+program `execArgv`. The pre-demotion Acceptance and Parity remain verbatim
+below.
+
 ## Refinement evidence
 
 The item was demoted at `0fa204fd3` after the exact Node oracle contradicted two
@@ -516,10 +543,13 @@ identity rather than a generated workspace file, and return the real exit code.
    `-e <source>`, `--eval <source>`, `--eval=<source>`, `-p [source]`,
    `--print [source]`, `--print=<ignored> [source]`, and `-pe <source>`.
    Missing source for plain `-p`/`--print` evaluates `undefined`; bare `-pe`
-   is an eval usage error. Missing `-e`, empty `--eval=`, `-ep`, other attached
-   short-option source, and unsupported options retain Node-shaped exit-9
-   failures. An immediate `--` after source is consumed; remaining tokens are
-   script arguments.
+   is an eval usage error. For every optional print spelling, `-- '' [args]`
+   remains entryless eval and preserves the empty token, while
+   `-- <nonempty entry>` selects the separately named program-context gap.
+   Missing `-e`, empty `--eval=`, `-ep`, other attached short-option source,
+   and unsupported options retain Node-shaped exit-9 failures. An immediate
+   `--` after a present source is consumed; remaining tokens are script
+   arguments.
 2. Those forms build one exact `rifty.node-entry/v3` eval launch in the
    existing admitted foreground Node Worker. The launch carries source, print
    mode, and original `process.execArgv`; the process spec carries
@@ -577,9 +607,11 @@ identity rather than a generated workspace file, and return the real exit code.
    'undefined'`, `__filename === '[eval]'`, `__dirname === '.'`,
    `module.filename === resolve(launchCwd, '[eval]')`, `module.id === '[eval]'`,
    `module.path === '.'`, `module.parent === undefined`, and `module.loaded ===
-   false` while source runs. `require.main` and `process.mainModule` are
-   undefined; top-level `var` is global and top-level `return` is a syntax
-   error.
+   false` while source runs. The own `require`, `module`, `exports`,
+   `__filename`, and `__dirname` data descriptors have Node's exact values and
+   writable/enumerable/configurable flags; `exports === module.exports`.
+   `require.main` and `process.mainModule` are undefined; top-level `var` is
+   global and top-level `return` is a syntax error.
 3. Loader/cache: relative require, `require.resolve`, and package lookup remain
    anchored to launch cwd even after `process.chdir()`. `module.paths` matches
    Node's cwd ancestor order. The eval record is absent from `require.cache`
@@ -604,10 +636,10 @@ identity rather than a generated workspace file, and return the real exit code.
 
 | Axis × operation | Injected fault | Honest outcome |
 |---|---|---|
-| `frozen-assumption` × CLI spelling/format | Treat `--print=` RHS as source or quote a top-level string | Node differential fails the exact `execArgv`, source, or stdout row. |
+| `frozen-assumption` × CLI spelling/format | Treat `--print=` RHS as source, quote a top-level string, or collapse `-- ''` into the program transition | Node differential/classifier matrix fails the exact mode, `execArgv`, argv, source, or stdout row. |
 | `sibling-drift` × launch surfaces | Workbench, parity adapter, or recursive builder invents another eval carrier | Exact v3 launch/physical-child contract rejects; all consumers use the one typed variant. |
 | `observable-order` × result/exit | Print before timer drain, twice, or after explicit exit | Ordered stdout and exit tests fail; one natural-exit owner prints or forced exit suppresses. |
-| `observable-order` × physical stdout/stderr delivery | Independent output ports deliver a later admitted write first | ADR-0338 receiver buffers the suffix and reconstructs authenticated child write order before any consumer or terminal event. |
+| `observable-order` × physical stdout/stderr delivery | Independent output ports deliver a later admitted write first | ADR-0338 receiver buffers the suffix and reconstructs authenticated child write order before any consumer or terminal event; the native differential's marker/ack steps causally expose each predecessor without timers. |
 | `poisoned-cache` × synthetic record | Register/reuse `[eval]` or rebase its resolver after `chdir()` | Cache, parent, launch-cwd resolution, and sequential-child differentials fail. |
 | `concurrent-same-key` × same entry identity | Two `[eval]` children share cwd/module/output/preview state | Simultaneous distinct-fixture physical children expose any cross-talk. |
 | `provenance-lie` × source transport | Materialize source as a workspace/data/temp module | Before/during/after VFS observer and stack/cache identity fail; compat remains ❌. |
@@ -624,6 +656,12 @@ identity rather than a generated workspace file, and return the real exit code.
   silently ignore them.
 - The bare `node` REPL remains the ADR-0155 loud gap; eval support must not
   masquerade as an interactive REPL.
+- Optional print followed by `-- <nonempty entry>` selects program mode in
+  Node. Preserving its print option in program `process.execArgv` requires a
+  separately contracted node-entry protocol revision; this item throws
+  `NotImplementedError('workbench.node.print-program-context')` before child
+  allocation and records that exact compat ❌. `-- '' [args]` remains supported
+  entryless eval.
 - Full Node CLI option parsing, TypeScript eval, and broad `util.inspect`
   options/colors/depth parity remain separate. This item implements only the
   accepted spellings and result shapes enumerated above; other flags fail
@@ -648,6 +686,9 @@ ready-verdict: 2026-07-30 — Node v24.16.0 artifacts and same-invocation parity
   byte messages; one authenticated private-control witness supplies order.
 - Supported CLI grammar is a pure Workbench classifier that retains original
   eval option tokens for `execArgv`; unsupported Node options remain loud.
+- The optional-print program transition is not misreported as a bad option or
+  launched with empty program `execArgv`; its named loud gap keeps node-entry v3
+  unchanged.
 - Eval's module record reuses the CJS record/resolver authority but stays
   detached from ModuleRegistry. The public loader surface does not widen.
 - Print reuses console one-argument formatting and the existing process drain/

@@ -57,6 +57,7 @@ import {
 import {
   canonicalNodeCliEvalOutcome,
   createNodeCliEvalCapture,
+  createNodeCliEvalStdioHandshake,
   nodeCliEvalInvocations,
   nodeCliEvalPreviewScope,
   runNodeCliEvalMatrix,
@@ -1261,9 +1262,23 @@ async function runRiftyNodeCliEvalInvocation(
     throw new Error('node-cli-eval parity expected a physical Worker handle');
   }
   const capture = createNodeCliEvalCapture();
-  handle.stdout().on('data', (chunk) => capture.push('stdout', chunk));
-  handle.stderr().on('data', (chunk) => capture.push('stderr', chunk));
-  handle.stdin().end();
+  const stdin = handle.stdin();
+  let handshakeError: Error | undefined;
+  const handshake = createNodeCliEvalStdioHandshake(invocation.stdioHandshake, (token) => {
+    stdin.write(token);
+  });
+  const captureChunk = (stream: 'stdout' | 'stderr', chunk: unknown): void => {
+    capture.push(stream, chunk);
+    try {
+      handshake.observe(stream, chunk);
+    } catch (error) {
+      handshakeError = asError(error);
+      handle.kill('SIGTERM');
+    }
+  };
+  handle.stdout().on('data', (chunk) => captureChunk('stdout', chunk));
+  handle.stderr().on('data', (chunk) => captureChunk('stderr', chunk));
+  if (invocation.stdioHandshake === undefined) stdin.end();
   const rawOutcome = new Promise<ReturnType<ReturnType<typeof createNodeCliEvalCapture>['finish']>>(
     (resolve, reject) => {
       let peerFailure: Error | undefined;
@@ -1272,13 +1287,19 @@ async function runRiftyNodeCliEvalInvocation(
       });
       handle.on('close', (code, signal) => {
         if (peerFailure !== undefined) reject(peerFailure);
+        else if (handshakeError !== undefined) reject(handshakeError);
         else {
-          resolve(
-            capture.finish(
-              typeof code === 'number' ? code : null,
-              typeof signal === 'string' ? signal : null,
-            ),
-          );
+          try {
+            handshake.finish();
+            resolve(
+              capture.finish(
+                typeof code === 'number' ? code : null,
+                typeof signal === 'string' ? signal : null,
+              ),
+            );
+          } catch (error) {
+            reject(asError(error));
+          }
         }
       });
     },
