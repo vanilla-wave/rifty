@@ -415,3 +415,9 @@ Spec: exact one-argument assignment alone could admit an optional second source
 list, leaking prior/settlement surface. The final in-place carrier adds that
 negative witness. It is 90 lines total; the RED ledger and production-source
 absence are unchanged.
+
+The next isolated review at
+`4931ee371626fad3f550a037d2d2a2f071f737d7` passed Standards and blocked
+Spec: a singular-source overload could still satisfy every witness. The
+in-place carrier rejects both singular and absent source-list calls, completing
+the exact-one-list boundary. It is 94 lines total; the same RED ledger remains.

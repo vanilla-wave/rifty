@@ -16,6 +16,10 @@ declare const claim: linker.PackageBinClaim;
 const exact: Normalizer = normalize;
 const claims: readonly linker.PackageBinClaim[] = exact([prepared, narrow, narrow] as const);
 exact([] as const);
+// @ts-expect-error Contract: exactly one source list is required.
+normalize();
+// @ts-expect-error Contract: a source must be wrapped in the source list.
+normalize(narrow);
 // @ts-expect-error Contract: one source list; no prior or settlement argument.
 normalize([narrow], [narrow]);
 // @ts-expect-error Contract: raw resolved-package lists are not bin sources.
