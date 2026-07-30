@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -21,6 +21,20 @@ preserved loader execution but gave eval a file entry, added that path to
 `process.argv`, registered the wrong module identity, and could leave workspace
 bytes; `workbench-project-runtime.test.ts:939` pins that no such file appears.
 Reviving it is out of scope, not an alternative.
+
+## Second readiness blocker
+
+Contract+RED at `fb857235e` rejected snapshot-only VFS provenance, an
+ambient-version oracle, and eval sync-API drift into physical program siblings.
+The re-cut at `8c419caca` closed those three faults but exposed five uncovered
+boundaries: exact source-bearing `process.execArgv`, post-return cache absence,
+the package-internal loader seam, carrier-vs-guest VFS mutation provenance, and
+preview-scope consumption.
+
+The observable Acceptance and Parity cases below remain unchanged. Re-refinement
+must replace the lossy or misclassified REDs with physical evidence, keep the
+loader seam off public package exports, and prove preview consumption through
+the existing lifecycle before the item can return to `ready`.
 
 ## Refinement evidence
 
