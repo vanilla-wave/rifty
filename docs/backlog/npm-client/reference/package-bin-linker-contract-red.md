@@ -575,3 +575,7 @@ lockfile plus both installed manifests and replay results. The carrier is 194
 inserted lines, still below the mandatory `2×` high-band boundary; its frozen
 blob is `b0492dc1e1e9ac0712f3b824c4f98c162a9fd605`. The RED ledger remains 2
 RED and 24 GREEN; package typecheck and backlog schema pass.
+
+The isolated Contract+RED review at
+`873710b408989228033079686dc6f23763ce9ca0` passed Standards and Spec with no
+findings. This checkpoint is the ready authority for implementation.

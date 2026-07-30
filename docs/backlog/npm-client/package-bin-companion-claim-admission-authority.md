@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Package-bin companion claim admission authority
 created: 2026-07-30
 why: PR #233 proved Rifty's injected Rollup parser companion is incorrectly treated as a user-visible same-command claimant
@@ -89,6 +89,8 @@ npm view @rollup/wasm-node@4.62.2 bin --json
 - A public flag, custom companion interface, second walk, or new scheduler.
 
 ## Decisions
+
+ready-verdict: 2026-07-30 — Contract+RED @ 873710b408989228033079686dc6f23763ce9ca0
 
 - Split from the blocked PR #233 link-ingress attempt after remote run
   `30562763189` reproduced the same Vite install failure in browser-unit,
