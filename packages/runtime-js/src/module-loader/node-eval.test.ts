@@ -205,6 +205,46 @@ module.exports = { load: globalThis.${DEP_LOADS} };
     }
   });
 
+  it('keeps eval CommonJS bindings live through an asynchronous completion', async () => {
+    const vfs = new MemoryFsSync();
+    setSyncMirror(vfs);
+    vfs.loadFixture({
+      '/work/dep.cjs': 'module.exports = { answer: 42 };',
+    });
+    const bindings = snapshotCjsBindings();
+
+    try {
+      const runner = reflectedCreateNodeEvalScriptRunner()({ vfs, cwd: '/work' });
+      const completion = runner.run(`Promise.resolve().then(() => require('./dep.cjs').answer)`);
+
+      await expect(completion).resolves.toBe(42);
+      expect(runner.registry.has('/work/[eval]')).toBe(false);
+    } finally {
+      restoreCjsBindings(bindings);
+    }
+  });
+
+  it.each([
+    ['ordinary invalid JavaScript', 'const value = ;'],
+    ['a top-level return', 'return 1;'],
+  ])('preserves %s as a real SyntaxError', (_description, source) => {
+    const vfs = new MemoryFsSync();
+    const bindings = snapshotCjsBindings();
+    let thrown: unknown;
+
+    try {
+      const runner = reflectedCreateNodeEvalScriptRunner()({ vfs, cwd: '/work' });
+      runner.run(source);
+    } catch (error) {
+      thrown = error;
+    } finally {
+      restoreCjsBindings(bindings);
+    }
+
+    expect(thrown).toBeInstanceOf(SyntaxError);
+    expect(thrown).not.toBeInstanceOf(NotImplementedError);
+  });
+
   it('rejects TypeScript-only eval source through the named loud gap', () => {
     const vfs = new MemoryFsSync();
     const bindings = snapshotCjsBindings();
