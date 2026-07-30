@@ -30,6 +30,7 @@ import {
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { installNodeRuntime } from '../../../packages/runtime-js/src/ipc/install-process.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
+import { NODE_CLI_EVAL_VFS_CARRIER_COMPLETE } from './node-cli-eval-vfs-observer.ts';
 import type { NodeCliEvalVfsFault } from './run-in-rifty.ts';
 
 interface WorkerEnvHarnessData {
@@ -80,6 +81,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
       const remoteFs = new SyncRpcFsSync(syncCall);
       remoteFs.writeFileSync('/.rifty-eval-transient.cjs', new TextEncoder().encode(source));
       remoteFs.rmSync('/.rifty-eval-transient.cjs', { force: true });
+      syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, null);
     }
     // Execute the actual Workbench node-entry module. It owns eval-vs-program
     // dispatch, loader eval, print/drain ordering, process adoption, and exit.

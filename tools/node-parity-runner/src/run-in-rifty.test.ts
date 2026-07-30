@@ -86,6 +86,35 @@ describe('runInRifty', () => {
     ).rejects.toThrow('RunInRiftyOptions.nodeCliEvalBootstrapFault requires kind node-cli-eval');
   });
 
+  it('rejects a global VFS carrier phase spanning multiple eval children', async () => {
+    const invocation = (label: string) => ({
+      label,
+      nodeArgv: ['-e', ''],
+    });
+
+    await expect(
+      runInRifty(
+        {
+          kind: 'node-cli-eval',
+          code: '',
+          expectedPhysicalWorkers: 2,
+          nodeCliEval: {
+            sequential: [invocation('first'), invocation('second')],
+            concurrent: [],
+          },
+        },
+        {
+          nodeCliEvalVfsProbe: {
+            expectedGuestMutations: [],
+            fault: 'transient-source-file',
+          },
+        },
+      ),
+    ).rejects.toThrow(
+      'RunInRiftyOptions.nodeCliEvalVfsProbe.fault requires exactly one node-cli-eval invocation',
+    );
+  });
+
   it(
     'does not let a physical transient carrier satisfy same-path declared guest effects',
     async () => {
@@ -93,13 +122,29 @@ describe('runInRifty', () => {
       const source = "'carrier-source';";
       const missingGuestWrite = {
         kind: 'write' as const,
+        provenance: 'guest' as const,
         path: carrierPath,
-        content: nodeCliEvalVfsFileContent(carrierPath, 'guest-authored'),
+        content: nodeCliEvalVfsFileContent(carrierPath, source),
       };
       const unexpectedCarrierWrite = {
         kind: 'write' as const,
+        provenance: 'carrier' as const,
         path: carrierPath,
         content: nodeCliEvalVfsFileContent(carrierPath, source),
+      };
+      const missingGuestRm = {
+        kind: 'rm' as const,
+        provenance: 'guest' as const,
+        path: carrierPath,
+        recursive: false,
+        force: true,
+      };
+      const unexpectedCarrierRm = {
+        kind: 'rm' as const,
+        provenance: 'carrier' as const,
+        path: carrierPath,
+        recursive: false,
+        force: true,
       };
 
       await expect(
@@ -113,10 +158,6 @@ describe('runInRifty', () => {
                 {
                   label: 'transient-vfs-carrier-fault',
                   nodeArgv: ['-e', source],
-                  source,
-                  print: false,
-                  execArgv: ['-e', source],
-                  scriptArgs: [],
                 },
               ],
               concurrent: [],
@@ -124,23 +165,15 @@ describe('runInRifty', () => {
           },
           {
             nodeCliEvalVfsProbe: {
-              expectedGuestMutations: [
-                missingGuestWrite,
-                {
-                  kind: 'rm',
-                  path: carrierPath,
-                  recursive: false,
-                  force: true,
-                },
-              ],
+              expectedGuestMutations: [missingGuestWrite, missingGuestRm],
               fault: 'transient-source-file',
             },
           },
         ),
       ).rejects.toThrow(
         `node-cli-eval VFS audit mismatch: ${JSON.stringify({
-          missing: [missingGuestWrite],
-          unexpected: [unexpectedCarrierWrite],
+          missing: [missingGuestWrite, missingGuestRm],
+          unexpected: [unexpectedCarrierWrite, unexpectedCarrierRm],
         })}`,
       );
     },
@@ -156,11 +189,7 @@ describe('runInRifty', () => {
         "require('node:http').createServer((_request, response) => { response.statusCode = 202; response.end('second-eval-preview'); }).listen(43_152);";
       const invocation = (label: string, source: string) => ({
         label,
-        source,
         nodeArgv: ['-e', source],
-        print: false,
-        execArgv: ['-e', source],
-        scriptArgs: [],
       });
 
       const stdout = await runInRifty(
@@ -214,10 +243,6 @@ describe('runInRifty', () => {
               {
                 label: `corrupt-${fault}`,
                 nodeArgv: ['-e', source],
-                source,
-                print: false,
-                execArgv: ['-e', source],
-                scriptArgs: [],
               },
             ],
             concurrent: [],

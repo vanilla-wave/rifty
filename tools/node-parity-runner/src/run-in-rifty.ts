@@ -46,6 +46,7 @@ import {
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
 import {
+  NODE_CLI_EVAL_VFS_CARRIER_COMPLETE,
   type NodeCliEvalVfsMutation,
   NodeCliEvalVfsObserver,
 } from './node-cli-eval-vfs-observer.ts';
@@ -56,7 +57,7 @@ import {
   nodeCliEvalPreviewScope,
   runNodeCliEvalMatrix,
 } from './node-cli-eval.ts';
-import { type NodeCliEvalInvocation, type ParityCase, caseCwd } from './types.ts';
+import { type ParityCase, type ResolvedNodeCliEvalInvocation, caseCwd } from './types.ts';
 
 /**
  * Normalised shape returned by the injected `__riftyHttpRequest` driver. Both
@@ -1018,7 +1019,7 @@ function corruptNodeCliEvalEntry(
 }
 
 async function runRiftyNodeCliEvalInvocation(
-  invocation: NodeCliEvalInvocation,
+  invocation: ResolvedNodeCliEvalInvocation,
   defaultCwd: string,
   previewExpectation?: NodeCliEvalPreviewExpectation,
   bootstrapFault?: NodeCliEvalBootstrapFault,
@@ -1491,8 +1492,30 @@ export async function runInRiftyInCurrentRealm(
     if (testCase.kind === 'node-cli-eval') {
       const { getKernelDispatcher } = await import('../../../packages/kernel/src/index.ts');
       const { installRuntimeJsFsHandlers } = await import('@riftydev/runtime-js');
+      const dispatcher = getKernelDispatcher();
       evalFsObserver?.startObservation();
-      installRuntimeJsFsHandlers(getKernelDispatcher(), () => fsMirror);
+      if (options.nodeCliEvalVfsProbe?.fault !== undefined) {
+        const plan = nodeCliEvalInvocations(testCase);
+        if (plan.sequential.length + plan.concurrent.length !== 1) {
+          throw new TypeError(
+            'RunInRiftyOptions.nodeCliEvalVfsProbe.fault requires exactly one node-cli-eval invocation',
+          );
+        }
+        evalFsObserver?.beginCarrierObservation();
+        dispatcher.register(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, (payload, context): null => {
+          if (
+            payload !== null ||
+            !Number.isSafeInteger(context?.callerPid) ||
+            (context?.callerPid ?? 0) <= 0
+          ) {
+            throw new TypeError('node-cli-eval VFS carrier boundary is invalid');
+          }
+          evalFsObserver?.endCarrierObservation();
+          return null;
+        });
+        cleanups.defer(() => dispatcher.unregister(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE));
+      }
+      installRuntimeJsFsHandlers(dispatcher, () => fsMirror);
     }
 
     // ADR-0267: only a physical kernel child can prove that typed host
