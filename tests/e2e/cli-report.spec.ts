@@ -16,7 +16,7 @@ import {
   assertNodeCliEvalNoCarrierPath,
   assertNodeCliEvalOracleVersion,
   createNodeCliEvalCapture,
-  resolveNodeCliEvalInvocation,
+  nodeCliEvalSourceTerminatorMatrix,
 } from '../../tools/node-parity-runner/src/node-cli-eval.ts';
 import type { NodeCliEvalInvocation } from '../../tools/node-parity-runner/src/types.ts';
 import {
@@ -72,43 +72,16 @@ const identityInvocation: PhysicalNodeInvocation = {
 
 const terminatorSource =
   'const value=JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)});console.log(value);value';
-const terminatorInvocations = [
-  {
-    label: 'terminator-short-e',
-    cwd: '/fixtures/a',
-    nodeArgv: ['-e', terminatorSource, '--', 'alpha', 'two words', '-x'],
-  },
-  {
-    label: 'terminator-long-eval',
-    cwd: '/fixtures/a',
-    nodeArgv: ['--eval', terminatorSource, '--', 'alpha', 'two words', '-x'],
-  },
-  {
-    label: 'terminator-inline-long-eval',
-    cwd: '/fixtures/a',
-    nodeArgv: [`--eval=${terminatorSource}`, '--', 'alpha', 'two words', '-x'],
-  },
-  {
-    label: 'terminator-short-print',
-    cwd: '/fixtures/a',
-    nodeArgv: ['-p', terminatorSource, '--', 'alpha', 'two words', '-x'],
-  },
-  {
-    label: 'terminator-long-print',
-    cwd: '/fixtures/a',
-    nodeArgv: ['--print', terminatorSource, '--', 'alpha', 'two words', '-x'],
-  },
-  {
-    label: 'terminator-print-equals-ignored',
-    cwd: '/fixtures/a',
-    nodeArgv: ['--print=ignored', terminatorSource, '--', 'alpha', 'two words', '-x'],
-  },
-  {
-    label: 'terminator-combined-print-eval',
-    cwd: '/fixtures/a',
-    nodeArgv: ['-pe', terminatorSource, '--', 'alpha', 'two words', '-x'],
-  },
-] as const satisfies readonly PhysicalNodeInvocation[];
+const terminatorScriptArgs = ['alpha', 'two words', '-x'] as const;
+const sourceTerminatorCases = nodeCliEvalSourceTerminatorMatrix(
+  terminatorSource,
+  terminatorScriptArgs,
+);
+const inlineTerminatorInvocation = {
+  label: 'terminator-inline-long-eval',
+  cwd: '/fixtures/a',
+  nodeArgv: [`--eval=${terminatorSource}`, '--', ...terminatorScriptArgs],
+} as const satisfies PhysicalNodeInvocation;
 
 const orderedInvocation: PhysicalNodeInvocation = {
   label: 'ordered-streams',
@@ -169,12 +142,15 @@ function shellWord(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+function hostNodeOracleEnv(): NodeJS.ProcessEnv {
+  return {
+    ...Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== 'FORCE_COLOR')),
+    NO_COLOR: '1',
+  };
+}
+
 function workbenchLine(invocation: PhysicalNodeInvocation): string {
-  const { nodeArgv } = resolveNodeCliEvalInvocation(
-    invocation,
-    `browser node-cli-eval ${invocation.label}`,
-  );
-  return `cd ${shellWord(invocation.cwd)} && node ${nodeArgv.map(shellWord).join(' ')}`;
+  return `cd ${shellWord(invocation.cwd)} && node ${invocation.nodeArgv.map(shellWord).join(' ')}`;
 }
 
 function settledCommandOutput(buffer: string, line: string): string {
@@ -223,12 +199,9 @@ function startHostInvocation(
 ): RunningHostInvocation {
   assertNodeCliEvalOracleVersion(process.version);
   const capture = createNodeCliEvalCapture();
-  const { nodeArgv } = resolveNodeCliEvalInvocation(
-    invocation,
-    `native browser oracle ${invocation.label}`,
-  );
-  const child = spawn(process.execPath, [...nodeArgv], {
+  const child = spawn(process.execPath, [...invocation.nodeArgv], {
     cwd: fixture.cwd(invocation.cwd),
+    env: hostNodeOracleEnv(),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.on('data', (chunk: unknown) => capture.push('stdout', chunk));
@@ -262,6 +235,53 @@ async function runWorkbenchInvocation(
 
 function normalized(text: string): string {
   return text.replace(ANSI_SGR, '').replaceAll('\r\n', '\n').trimEnd();
+}
+
+type SourceTerminatorCase = (typeof sourceTerminatorCases)[number];
+
+function lineFrames(stream: NodeCliEvalFrame['stream'], text: string): readonly NodeCliEvalFrame[] {
+  if (text.length === 0) return [];
+  return text
+    .slice(0, -1)
+    .split('\n')
+    .map((line) => ({ stream, text: `${line}\n` }));
+}
+
+function sourceTerminatorOracle(testCase: SourceTerminatorCase): NodeCliEvalRawOutcome {
+  if (testCase.expected.kind === 'usage-error') {
+    const stderr = `${process.execPath}: ${testCase.expected.stderrOption} requires an argument\n`;
+    return {
+      stdout: '',
+      stderr,
+      frames: lineFrames('stderr', stderr),
+      code: 9,
+      signal: null,
+    };
+  }
+
+  let stdout = '';
+  if (testCase.sourceState === 'nonempty') {
+    const identity = `${JSON.stringify({
+      execArgv: testCase.expected.execArgv,
+      argv: testCase.expected.scriptArgs,
+    })}\n`;
+    stdout = testCase.expected.print ? `${identity}${identity}` : identity;
+  } else if (testCase.expected.print) {
+    stdout = 'undefined\n';
+  }
+  return {
+    stdout,
+    stderr: '',
+    frames: lineFrames('stdout', stdout),
+    code: 0,
+    signal: null,
+  };
+}
+
+function physicalTerminalOracle(outcome: NodeCliEvalRawOutcome): string {
+  return normalized(
+    outcome.frames.map(({ text }) => text.replace(`${process.execPath}:`, 'node:')).join(''),
+  );
 }
 
 function evalErrorProjection(text: string): string {
@@ -335,12 +355,9 @@ function startHostPreview(
 ): RunningHostPreview {
   assertNodeCliEvalOracleVersion(process.version);
   const capture = createNodeCliEvalCapture();
-  const { nodeArgv } = resolveNodeCliEvalInvocation(
-    invocation,
-    `native browser preview ${invocation.label}`,
-  );
-  const child = spawn(process.execPath, [...nodeArgv], {
+  const child = spawn(process.execPath, [...invocation.nodeArgv], {
     cwd: fixture.cwd(invocation.cwd),
+    env: hostNodeOracleEnv(),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   let stdout = '';
@@ -487,7 +504,7 @@ test.describe('CLI report template through the worker lifecycle', () => {
     }
   });
 
-  test('every accepted eval spelling consumes an immediate terminator in the physical Workbench', async ({
+  test('every separated eval spelling crosses source state with an immediate terminator in the physical Workbench', async ({
     page,
     browserName,
   }) => {
@@ -498,21 +515,45 @@ test.describe('CLI report template through the worker lifecycle', () => {
     try {
       await bootCliReport(page);
 
-      for (const invocation of terminatorInvocations) {
+      expect(sourceTerminatorCases).toHaveLength(18);
+      expect(new Set(sourceTerminatorCases.map(({ label }) => label)).size).toBe(18);
+      const physicalRows: {
+        readonly label: string;
+        readonly expected: NodeCliEvalRawOutcome;
+        readonly browser: WorkbenchOutcome;
+      }[] = [];
+      for (const testCase of sourceTerminatorCases) {
+        const invocation = {
+          label: testCase.label,
+          cwd: '/fixtures/a',
+          nodeArgv: testCase.nodeArgv,
+        } as const satisfies PhysicalNodeInvocation;
+        const expected = sourceTerminatorOracle(testCase);
         const native = await runHostInvocation(fixture, invocation);
-        expect(
-          { code: native.code, signal: native.signal, stderr: native.stderr },
-          invocation.label,
-        ).toEqual({
-          code: 0,
-          signal: null,
-          stderr: '',
+        expect(native, invocation.label).toEqual(expected);
+        physicalRows.push({
+          label: invocation.label,
+          expected,
+          browser: await runWorkbenchInvocation(page, invocation),
         });
-        const browser = await runWorkbenchInvocation(page, invocation);
-        expect(browser.output, invocation.label).toBe(normalized(native.stdout));
-        expect(browser.exitCode, invocation.label).toBe(native.code);
       }
+
+      const nativeInline = await runHostInvocation(fixture, inlineTerminatorInvocation);
+      expect(
+        { code: nativeInline.code, signal: nativeInline.signal, stderr: nativeInline.stderr },
+        inlineTerminatorInvocation.label,
+      ).toEqual({ code: 0, signal: null, stderr: '' });
+      const browserInline = await runWorkbenchInvocation(page, inlineTerminatorInvocation);
       problems.assertNoViteImportErrors();
+
+      for (const { label, expected, browser } of physicalRows) {
+        expect(browser.output, label).toBe(physicalTerminalOracle(expected));
+        expect(browser.exitCode, label).toBe(expected.code);
+      }
+      expect(browserInline.output, inlineTerminatorInvocation.label).toBe(
+        normalized(nativeInline.stdout),
+      );
+      expect(browserInline.exitCode, inlineTerminatorInvocation.label).toBe(nativeInline.code);
     } finally {
       fixture.close();
     }
