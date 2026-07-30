@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -51,9 +51,8 @@ re-cut replaces every lossy or misclassified RED:
   `env-semantics`, `stdio-plan-drain-order`, `public-ipc-json`, and
   `missing-cwd-entry` siblings remain unchanged and GREEN.
 
-The item remains `draft` until a fresh readiness judge independently verifies
-that this evidence closes the re-refinement without weakening the preserved
-contract.
+A fresh readiness judge independently verified that this evidence closes the
+re-refinement without weakening the preserved contract; the item is `ready`.
 
 ## Refinement evidence
 
