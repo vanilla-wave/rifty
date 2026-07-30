@@ -11,9 +11,7 @@
 
 ### Added
 
-- Package-private package-bin source normalization now turns one prepared or
-  narrow source into exact detached claims without list aggregation,
-  collision settlement, or a public export.
+- Added package-private, once-read package-bin source normalization without aggregation, settlement, or a public export.
 
 - **Cancellable package acquisition (ADR-0314).** `InstallOptions.signal` plus
   direct `RegistryRequestOptions.signal` propagate through registry, Eddy,

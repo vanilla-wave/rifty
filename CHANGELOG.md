@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   combined columns/rows request into two kernel resizes; the oracle now settles
   each axis in order and keeps byte-exact raw events. Rifty's combined
   one-frame process-control contract remains independently pinned.
+- **TTY parity composes exact one-axis native resizes.** The oracle signal-settles GNU `stty` column/row mutations; rifty's combined frame stays separately pinned.
 
 - **PR = one delivered behavior; process state never opens a PR.** New
   `AGENTS.md` §PR — unit of delivery: contract flips, demotions, re-cuts,
