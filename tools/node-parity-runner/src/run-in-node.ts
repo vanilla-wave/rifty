@@ -91,7 +91,6 @@ const TTY_RESIZE_NODE_PREAMBLE = `
       stdio: ['inherit', 'ignore', 'inherit'],
     });
   };
-  __setTtySize(80, 24);
   globalThis.__riftyTtyResize = __setTtySize;
 }
 `;
@@ -128,25 +127,17 @@ export function nodeRunnerFor(testCase: ParityCase, entry: string): [string, str
     if (testCase.stdin) {
       throw new Error("ParityCase kind 'tty-resize' does not support injected stdin");
     }
-    if (HOST_PROCESS.platform === 'linux') {
-      return [
-        'script',
-        [
-          '-q',
-          '-e',
-          '-c',
-          `exec ${quotePosixShellArg(HOST_PROCESS.execPath)} ${quotePosixShellArg(entry)}`,
-          '/dev/null',
-        ],
-      ];
+    // Set the fixture grid before Node exists. Doing this inside the oracle can
+    // leak the setup SIGWINCH into the later live-resize record.
+    const command = `stty cols 80 rows 24 && exec ${quotePosixShellArg(HOST_PROCESS.execPath)} ${quotePosixShellArg(entry)}`;
+    if (HOST_PROCESS.platform === 'linux' || HOST_PROCESS.platform === 'netbsd') {
+      return ['script', ['-q', '-e', '-c', command, '/dev/null']];
     }
-    if (
-      HOST_PROCESS.platform === 'darwin' ||
-      HOST_PROCESS.platform === 'freebsd' ||
-      HOST_PROCESS.platform === 'openbsd' ||
-      HOST_PROCESS.platform === 'netbsd'
-    ) {
-      return ['script', ['-q', '/dev/null', HOST_PROCESS.execPath, entry]];
+    if (HOST_PROCESS.platform === 'darwin' || HOST_PROCESS.platform === 'freebsd') {
+      return ['script', ['-q', '/dev/null', '/bin/sh', '-c', command]];
+    }
+    if (HOST_PROCESS.platform === 'openbsd') {
+      return ['script', ['-c', command, '/dev/null']];
     }
     throw new Error(
       `ParityCase kind 'tty-resize' needs POSIX script(1)+stty(1); unsupported platform ${HOST_PROCESS.platform}`,
