@@ -433,3 +433,56 @@ scope remain unchanged.
 The isolated Contract+RED review at
 `c00a91638a55699aeffa74f65959973ab8c22a20` passed Standards and Spec with no
 findings. This checkpoint is the ready authority for implementation.
+
+## Claim settlement successor baseline
+
+Recorded on post-#231 main
+`207e0ee9f108d6457e2448c956b84c2758e62671`, Node 24.16.0 and pnpm
+11.5.2. The fresh settlement carrier composes the landed aggregation seam for
+exact current and optional-prior source lists. It covers exact positive and
+negative types in both argument positions, opposite current collision orders
+in root/nested scopes, prior collision/owner transition/removal, stable-owner
+target change, current-only addition, and equal commands with distinct matching
+owners in independent scopes.
+
+```sh
+pnpm vitest run --project unit \
+  packages/npm-client/src/linker-bin-claim-settlement.contract.test.ts
+pnpm --filter @riftydev/npm-client typecheck
+```
+
+No production source, package root, VFS path, linker entrypoint, compat, or
+changelog diff is present at this checkpoint. Runtime result: 8 RED and 1
+GREEN; package typecheck adds exactly four intentional `TS2578` REDs while
+`preflightPackageBins` is absent.
+
+The first isolated Contract+RED review at
+`423cbaaa5ad461fbbf59581e1afc24e2427514d2` passed Standards and blocked
+Spec: the successful current order matched one descending comparator,
+owner-transition rejects also changed target, and full-owner removal did not
+prove a missing prior command while that owner survived. The in-place re-cut
+adds a non-monotonic four-claim current order with shuffled prior sources,
+same-target/different-owner current and prior witnesses, and partial command
+removal. Runtime now reports 9 RED and 1 GREEN; package typecheck retains the
+same four intentional `TS2578` REDs.
+
+The second isolated Contract+RED review at
+`df25cdacf9d2c4bab5711aaf351f032768a2b46d` passed Standards and confirmed
+the first three blockers closed, then blocked Spec: compaction had removed the
+only successful omitted-prior runtime call and string-form source. Per Contract
+escalation, the in-place re-refinement folds one nested scoped-string,
+omitted-prior success into the vertical output test without widening the unit.
+The runtime and type RED ledgers remain unchanged.
+
+The next isolated review at
+`2d0608ce9f7f28a603fcc36107b5468609c877b7` confirmed every earlier blocker
+closed, then blocked Spec on two remaining identity false-greens: all current
+collisions shared a target, and the prior collision had only one input order.
+The in-place carrier now pairs opposite-order different-target root collisions
+with same-target nested collisions and adds the reversed prior collision. It
+remains below the `2×` carrier boundary. Runtime now reports 10 RED and 1
+GREEN; package typecheck retains the same four intentional `TS2578` REDs.
+
+The isolated Contract+RED review at
+`5eb83f1a66818bc7f0684a98889f9517022f5dc7` passed Standards and Spec with no
+findings. This checkpoint is the ready authority for implementation.
