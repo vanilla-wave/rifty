@@ -87,10 +87,12 @@ scheduler, lock, or package-specific branch.
   acf363bc6f34b7b070e787fad6619d99c3839723`; predecessor checkpoints:
   `880813bf62a85050be44c48694e6560164b5f158` and
   `acf363bc6f34b7b070e787fad6619d99c3839723`.
-- This draft receives no epic Items/Budget selection before source
-  normalization lands.
+- Source claim normalization and aggregation have landed; this Contract+RED
+  appends the sole epic Items/Budget selection before production pickup.
 - One composed aggregation seam removes parser/order ownership from this unit.
   A nested `Map<nodeModulesDir, Map<command, claim>>` is sufficient; no
   delimiter, comparator, sort, scheduler, or state owner is permitted.
 - Distinct root/nested owners claiming the same command are the executable
   guard against a global command index.
+- Keep the terminal checkpoint's package-private `preflightPackageBins` name;
+  linker ingress later composes this exact seam.

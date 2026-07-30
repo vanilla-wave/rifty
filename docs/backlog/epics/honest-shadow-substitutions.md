@@ -115,6 +115,10 @@ Contract+RED → Final+GREEN):
 13. `npm-client/package-bin-claim-aggregation-authority` —
     **package-bin-claim-aggregation-authority**: one readonly mixed source list
     becomes exact ordered claims without settlement, VFS, or public API.
+14. `npm-client/package-bin-claim-settlement-authority` —
+    **package-bin-claim-settlement-authority**: compose landed aggregation for
+    exact current/optional-prior sources; settle by scope plus command, returning
+    current claims unchanged or the exact npm-reify ceiling, without VFS/public API.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -152,3 +156,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | package-bin-source-normalization-authority | 50–120 |
 | package-bin-source-claim-authority | 30–80 |
 | package-bin-claim-aggregation-authority | 20–60 |
+| package-bin-claim-settlement-authority | 30–80 |

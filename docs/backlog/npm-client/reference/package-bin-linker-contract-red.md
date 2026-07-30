@@ -433,3 +433,25 @@ scope remain unchanged.
 The isolated Contract+RED review at
 `c00a91638a55699aeffa74f65959973ab8c22a20` passed Standards and Spec with no
 findings. This checkpoint is the ready authority for implementation.
+
+## Claim settlement successor baseline
+
+Recorded on post-#231 main
+`207e0ee9f108d6457e2448c956b84c2758e62671`, Node 24.16.0 and pnpm
+11.5.2. The fresh settlement carrier composes the landed aggregation seam for
+exact current and optional-prior source lists. It covers exact positive and
+negative types in both argument positions, opposite current collision orders
+in root/nested scopes, prior collision/owner transition/removal, stable-owner
+target change, current-only addition, and equal commands with distinct matching
+owners in independent scopes.
+
+```sh
+pnpm vitest run --project unit \
+  packages/npm-client/src/linker-bin-claim-settlement.contract.test.ts
+pnpm --filter @riftydev/npm-client typecheck
+```
+
+No production source, package root, VFS path, linker entrypoint, compat, or
+changelog diff is present at this checkpoint. Runtime result: 8 RED and 1
+GREEN; package typecheck adds exactly four intentional `TS2578` REDs while
+`preflightPackageBins` is absent.
