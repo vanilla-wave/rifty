@@ -70,6 +70,26 @@ describe('node CLI eval invocation model', () => {
     ]);
   });
 
+  it.each(['-p', '--print', '--print=ignored'] as const)(
+    '%s projects a separated empty token as argv, not source-bearing execArgv',
+    (option) => {
+      const { sequential } = nodeCliEvalInvocations(
+        evalCase([{ label: `empty-${option}`, nodeArgv: [option, ''] }]),
+      );
+
+      expect(sequential).toEqual([
+        {
+          label: `empty-${option}`,
+          nodeArgv: [option, ''],
+          source: '',
+          print: true,
+          execArgv: [option],
+          scriptArgs: [''],
+        },
+      ]);
+    },
+  );
+
   it.each(['source', 'print', 'execArgv', 'scriptArgs'] as const)(
     'rejects the independently declared legacy %s half before either runner starts',
     (field) => {

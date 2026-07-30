@@ -51,6 +51,48 @@ describe('classifyNodeInvocation', () => {
     });
   });
 
+  it.each([
+    { option: '-e', print: false, missing: 'node: -e requires an argument\n' },
+    { option: '--eval', print: false, missing: 'node: --eval requires an argument\n' },
+    { option: '-pe', print: true, missing: 'node: --eval requires an argument\n' },
+  ] as const)('$option distinguishes a separated empty source from absence', (testCase) => {
+    expect([
+      classifyNodeInvocation([testCase.option]),
+      classifyNodeInvocation([testCase.option, '']),
+    ]).toEqual([
+      { kind: 'usageError', message: testCase.missing },
+      {
+        kind: 'eval',
+        source: '',
+        print: testCase.print,
+        execArgv: [testCase.option, ''],
+        scriptArgs: [],
+      },
+    ]);
+  });
+
+  it.each(['-p', '--print', '--print=ignored'] as const)(
+    '%s keeps a separated empty token in argv, unlike absent source',
+    (option) => {
+      expect([classifyNodeInvocation([option]), classifyNodeInvocation([option, ''])]).toEqual([
+        {
+          kind: 'eval',
+          source: '',
+          print: true,
+          execArgv: [option],
+          scriptArgs: [],
+        },
+        {
+          kind: 'eval',
+          source: '',
+          print: true,
+          execArgv: [option],
+          scriptArgs: [''],
+        },
+      ]);
+    },
+  );
+
   it('--print=RHS ignores RHS and takes source from the next argument', () => {
     expect(classifyNodeInvocation(['--print=ignored', 'process.platform', 'alpha'])).toEqual({
       kind: 'eval',

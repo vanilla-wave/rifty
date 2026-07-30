@@ -61,6 +61,73 @@ option-looking ones, are script arguments. `-pe <source>` is accepted; `-ep`,
 and every attached short-option source spelling in the matrix above are bad
 options.
 
+Separated empty tokens are not missing arguments. Run:
+
+```sh
+node -e ''
+node --eval ''
+node -pe ''
+node -p ''
+node --print ''
+node --print=ignored ''
+```
+
+Exact normalized status/stdout/stderr:
+
+| argv | status | stdout | stderr |
+|---|---:|---|---|
+| `-e` | 9 | empty | `<node>: -e requires an argument\n` |
+| `-e ''` | 0 | empty | empty |
+| `--eval` | 9 | empty | `<node>: --eval requires an argument\n` |
+| `--eval ''` | 0 | empty | empty |
+| `-pe` | 9 | empty | `<node>: --eval requires an argument\n` |
+| `-pe ''` | 0 | `undefined\n` | empty |
+| `-p` | 0 | `undefined\n` | empty |
+| `-p ''` | 0 | `undefined\n` | empty |
+| `--print` | 0 | `undefined\n` | empty |
+| `--print ''` | 0 | `undefined\n` | empty |
+| `--print=ignored` | 0 | `undefined\n` | empty |
+| `--print=ignored ''` | 0 | `undefined\n` | empty |
+
+The mandatory-source eval forms consume the empty token into `process.execArgv`.
+The optional-source print forms leave it in `process.argv`, distinct from the
+otherwise output-equivalent bare print invocation. This preload probe exposes
+that identity without changing the eval source:
+
+```sh
+probe='--import=data:text/javascript,console.log(JSON.stringify(%7BexecArgv%3Aprocess.execArgv%2Cargv%3Aprocess.argv.slice(1)%7D))'
+NODE_OPTIONS="$probe" node -e ''
+NODE_OPTIONS="$probe" node --eval ''
+NODE_OPTIONS="$probe" node -pe ''
+NODE_OPTIONS="$probe" node -p
+NODE_OPTIONS="$probe" node -p ''
+NODE_OPTIONS="$probe" node --print
+NODE_OPTIONS="$probe" node --print ''
+NODE_OPTIONS="$probe" node --print=ignored
+NODE_OPTIONS="$probe" node --print=ignored ''
+```
+
+Exact normalized stdout:
+
+```text
+{"execArgv":["-e",""],"argv":[]}
+{"execArgv":["--eval",""],"argv":[]}
+{"execArgv":["-pe",""],"argv":[]}
+undefined
+{"execArgv":["-p"],"argv":[]}
+undefined
+{"execArgv":["-p"],"argv":[""]}
+undefined
+{"execArgv":["--print"],"argv":[]}
+undefined
+{"execArgv":["--print"],"argv":[""]}
+undefined
+{"execArgv":["--print=ignored"],"argv":[]}
+undefined
+{"execArgv":["--print=ignored"],"argv":[""]}
+undefined
+```
+
 Run the identity and resolver probe from a cwd containing `marker.cjs`:
 
 ```sh

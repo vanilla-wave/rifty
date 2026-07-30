@@ -72,12 +72,12 @@ function evalSemantics(
   }
   if (option === '-p' || option === '--print') {
     const source = nodeArgv[1];
-    if (source === undefined) {
+    if (source === undefined || source === '') {
       return Object.freeze({
         source: '',
         print: true,
         execArgv: Object.freeze([option]),
-        scriptArgs: Object.freeze([]),
+        scriptArgs: Object.freeze(source === undefined ? [] : nodeArgv.slice(1)),
       });
     }
     return Object.freeze({
@@ -101,12 +101,12 @@ function evalSemantics(
   }
   if (option.startsWith('--print=')) {
     const source = nodeArgv[1];
-    if (source === undefined) {
+    if (source === undefined || source === '') {
       return Object.freeze({
         source: '',
         print: true,
         execArgv: Object.freeze([option]),
-        scriptArgs: Object.freeze([]),
+        scriptArgs: Object.freeze(source === undefined ? [] : nodeArgv.slice(1)),
       });
     }
     return Object.freeze({
