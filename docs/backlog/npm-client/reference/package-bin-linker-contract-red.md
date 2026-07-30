@@ -552,7 +552,7 @@ could hide an admitted auto claim; the scoped witness also required a forbidden
 same-command last-writer winner. Per Contract escalation, the in-place
 re-refinement at `54699555839c773ad40f68ca08239c29b5e114a5` adds both replay
 operation ledgers and gives the scoped companion a non-colliding sentinel
-command. The final 182-line carrier blob is
+command. The re-refined 182-line carrier blob is
 `49066182be7a0585bc0584ae4b42c6ea74806a4a`.
 
 The focused file still runs 26 tests: 2 RED and 24 GREEN. Fresh and immediate
@@ -565,3 +565,13 @@ launcher collision-free. Faithful packument and tarball
 lock recovery, required/optional ordinary demand, both visit orders, companion
 manifest dependencies, exact raw result/lock metadata, and exact path-keyed
 scope independence. Package typecheck and backlog schema pass.
+
+The third isolated review at
+`858b7b17447f66534aa7c22553f6b8e00f9243e6` passed Standards and blocked
+Spec: replay did not compare persisted lock/manifest bytes or assert both
+packages' replay result bins. The in-place re-refinement at
+`6ece532b4fb6d5c03ed5e37dc2d7c109f68821fa` restores that proof for the
+lockfile plus both installed manifests and replay results. The carrier is 194
+inserted lines, still below the mandatory `2×` high-band boundary; its frozen
+blob is `b0492dc1e1e9ac0712f3b824c4f98c162a9fd605`. The RED ledger remains 2
+RED and 24 GREEN; package typecheck and backlog schema pass.
