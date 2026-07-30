@@ -1461,6 +1461,17 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       execArgv: ['--input-type=commonjs', '--eval=2'],
       scriptArgs: ['beta'],
     },
+    ...[
+      { option: '-e', print: false },
+      { option: '--eval', print: false },
+      { option: '-pe', print: true },
+    ].map(({ option, print }) => ({
+      line: `node --input-type=commonjs ${option} ''`,
+      source: '',
+      print,
+      execArgv: ['--input-type=commonjs', option, ''],
+      scriptArgs: [],
+    })),
     ...OPTIONAL_PRINT_SPELLINGS.map((option) => ({
       line: `node --input-type=commonjs ${option} -- '' gamma`,
       source: '',
@@ -1514,6 +1525,51 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       }
     },
   );
+
+  it('admits implicit TypeScript eval as exactly one v3 child before the loader-owned gap', async () => {
+    const workers = installRealKernelWorkerBoundary();
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-implicit-ts-eval' });
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-implicit-ts-eval',
+        rid: 'run-node-implicit-ts-eval',
+        line: "node -e 'const n: number = 1'",
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    let worker: KernelWorkerBoundary | undefined;
+
+    try {
+      await vi.waitFor(() => expect(workers).toHaveLength(1));
+      worker = workers[0];
+      if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+      expect(worker.spec()).toMatchObject({
+        argv: [NODE_PROCESS_IDENTITY.execPath],
+        entry: {
+          bootstrap: {
+            protocol: 'rifty.node-entry/v3',
+            payload: {
+              launch: {
+                kind: 'eval',
+                source: 'const n: number = 1',
+                print: false,
+                execArgv: ['-e', 'const n: number = 1'],
+              },
+            },
+          },
+        },
+      });
+      expect(workers).toHaveLength(1);
+    } finally {
+      worker?.finish(1);
+      await Promise.allSettled([running]);
+      await h.runtime.close();
+    }
+  });
 
   it.each(OPTIONAL_PRINT_SPELLINGS)(
     'keeps an empty post-terminator token in eval argv through one real child: %s',
@@ -1923,6 +1979,17 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     'node --require=preload.cjs -p 1',
     'node --import preload.mjs -p 1',
     'node --import=preload.mjs -p 1',
+    "node -r '' -p 1",
+    "node --require '' -p 1",
+    "node --import '' -p 1",
+    'node -r preload.cjs entry.cjs',
+    'node --require preload.cjs entry.cjs',
+    'node --require=preload.cjs entry.cjs',
+    'node --import preload.mjs entry.cjs',
+    'node --import=preload.mjs entry.cjs',
+    "node -r '' entry.cjs",
+    "node --require '' entry.cjs",
+    "node --import '' entry.cjs",
   ])('keeps a valid Node preload form in its named no-child context gap: %s', async (line) => {
     const processesBefore = globalProcessManager.snapshot();
     const workers = installRealKernelWorkerBoundary();
@@ -1965,8 +2032,12 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
   it.each(
     NODE_EVAL_INPUT_TYPES.flatMap((inputType) => [
       [`node ${inputType} -e`, 'node: -e requires an argument\n'],
+      [`node ${inputType} --eval`, 'node: --eval requires an argument\n'],
       [`node ${inputType} --eval=`, 'node: --eval= requires an argument\n'],
       [`node ${inputType} -pe`, 'node: --eval requires an argument\n'],
+      [`node ${inputType} -e --`, 'node: -e requires an argument\n'],
+      [`node ${inputType} --eval --`, 'node: --eval requires an argument\n'],
+      [`node ${inputType} -pe --`, 'node: --eval requires an argument\n'],
     ]),
   )(
     'keeps eval usage precedence ahead of an accepted input type: %s',
@@ -2014,6 +2085,8 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     "node --input-type=module -e '1'",
     "node --input-type=module --eval '1'",
     "node --input-type=module --eval='1'",
+    "node --input-type=module -e ''",
+    "node --input-type=module --eval ''",
   ])('keeps ESM eval as its named no-child context gap: %s', async (line) => {
     const processesBefore = globalProcessManager.snapshot();
     const workers = installRealKernelWorkerBoundary();
@@ -2065,6 +2138,8 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     ...OPTIONAL_PRINT_SPELLINGS.map(
       (option) => `node --input-type=module-typescript ${option} -- ''`,
     ),
+    "node --input-type=module -pe ''",
+    "node --input-type=module-typescript -pe ''",
   ])('returns Node-shaped ESM print rejection without allocating a child: %s', async (line) => {
     const processesBefore = globalProcessManager.snapshot();
     const workers = installRealKernelWorkerBoundary();
@@ -2104,10 +2179,15 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
   it.each([
     "node --input-type=commonjs-typescript -e 'const n: number = 1'",
     "node --input-type=commonjs-typescript -p 'const n: number = 1; n'",
+    "node --input-type=commonjs-typescript -e ''",
+    "node --input-type=commonjs-typescript --eval ''",
+    "node --input-type=commonjs-typescript -pe ''",
     ...OPTIONAL_PRINT_SPELLINGS.map(
       (option) => `node --input-type=commonjs-typescript ${option} -- ''`,
     ),
     "node --input-type=module-typescript -e 'const n: number = 1'",
+    "node --input-type=module-typescript -e ''",
+    "node --input-type=module-typescript --eval ''",
   ])('keeps explicit TypeScript eval as its named no-child context gap: %s', async (line) => {
     const processesBefore = globalProcessManager.snapshot();
     const workers = installRealKernelWorkerBoundary();

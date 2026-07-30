@@ -26,9 +26,14 @@ This item owns both source-triggered TypeScript and the two explicit TypeScript
 input types. At the overlap, `module-typescript` eval routes to this TypeScript
 gap before the generic ESM gap; its print forms instead preserve the more
 specific ESM print rejection shown by the oracle. For either explicit input
-type, `-p -- <nonempty entry>` selects the separately named program gap;
-`module-typescript -p -- ''` retains the ESM print rejection, while
-`commonjs-typescript -p -- ''` remains this TypeScript gap.
+type, missing `-e`/`--eval`/`-pe` and an immediate `--` in their source
+position remain usage errors. A separated empty `-e`/`--eval` source selects
+the TypeScript context and reaches this named gap rather than usage; separated
+empty `-pe` reaches the same gap for CommonJS TypeScript and the ESM print
+rejection for module TypeScript. `-p -- <nonempty entry>` selects the
+separately named program gap; `module-typescript -p -- ''` retains the ESM
+print rejection, while `commonjs-typescript -p -- ''` remains this TypeScript
+gap.
 
 Today source that needs TypeScript without an explicit input type reaches one
 admitted physical eval child, then throws

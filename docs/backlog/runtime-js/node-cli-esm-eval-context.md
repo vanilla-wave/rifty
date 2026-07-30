@@ -22,9 +22,12 @@ before child allocation for the ESM eval forms. It never falls back to CommonJS
 or transports source through a temporary file. Print forms already stop before
 allocation with status 1 and Node's
 `ERR_EVAL_ESM_CANNOT_PRINT` code/message instead of masquerading as supported
-ESM eval. The optional-print boundary remains exact: `-p -- <nonempty entry>`
-selects the separately named program gap, while `-p -- ''` retains the ESM
-print rejection.
+ESM eval. Missing `-e`/`--eval`/`-pe` and an immediate `--` in their source
+position remain usage errors. A separated empty `-e`/`--eval` source selects
+this ESM context and reaches its named gap rather than usage; separated empty
+`-pe` retains the ESM print rejection. The optional-print boundary remains
+exact: `-p -- <nonempty entry>` selects the separately named program gap, while
+`-p -- ''` retains the ESM print rejection.
 
 No overlapping backlog item was found on 2026-07-30. A faithful contract must
 pin Node's ESM eval identity, argv, loader lifecycle, the preserved print

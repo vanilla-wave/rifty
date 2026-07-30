@@ -879,6 +879,14 @@ function syntaxError(result, message) {
   return { status: result.status, name: 'SyntaxError', message };
 }
 
+function loadOrResolveError(result, code, message) {
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.ok(result.stderr.includes(code));
+  assert.ok(result.stderr.includes(message));
+  return { status: result.status, code, message };
+}
+
 const esmEval = run([
   '--input-type=module',
   '-e',
@@ -922,12 +930,33 @@ const importPreload = run([
   '-p',
   'globalThis.riftyPreloaded',
 ]);
-const missingPreloads = {
-  requireShort: usage(run(['-r']), '-r requires an argument'),
-  requireLong: usage(run(['--require']), '--require requires an argument'),
-  requireEmpty: usage(run(['--require=']), '--require= requires an argument'),
-  import: usage(run(['--import']), '--import requires an argument'),
-  importEmpty: usage(run(['--import=']), '--import= requires an argument'),
+const incompletePreloads = {
+  omitted: {
+    requireShort: usage(run(['-r']), '-r requires an argument'),
+    requireLong: usage(run(['--require']), '--require requires an argument'),
+    import: usage(run(['--import']), '--import requires an argument'),
+  },
+  inlineEmpty: {
+    require: usage(run(['--require=']), '--require= requires an argument'),
+    import: usage(run(['--import=']), '--import= requires an argument'),
+  },
+};
+const separatedEmptyPreloads = {
+  requireShort: loadOrResolveError(
+    run(['-r', '']),
+    'ERR_INVALID_ARG_VALUE',
+    "The argument 'id' must be a non-empty string. Received ''",
+  ),
+  requireLong: loadOrResolveError(
+    run(['--require', '']),
+    'ERR_INVALID_ARG_VALUE',
+    "The argument 'id' must be a non-empty string. Received ''",
+  ),
+  import: loadOrResolveError(
+    run(['--import', '']),
+    'ERR_MODULE_NOT_FOUND',
+    'Cannot find package',
+  ),
 };
 const explicitCommonjsIdentity = run([
   '--input-type=commonjs',
@@ -943,10 +972,70 @@ const explicitCommonjsTypeScript = run([
 
 const grammarRoot = mkdtempSync(join(tmpdir(), 'rifty-node-input-type-'));
 const grammarEntry = join(grammarRoot, 'entry.cjs');
+const preloadEntry = join(grammarRoot, 'preload-entry.cjs');
+const requirePreload = join(grammarRoot, 'preload.cjs');
+const importSpecifier =
+  'data:text/javascript,globalThis.riftyEsmPreload%3D%22esm-program%22';
 writeFileSync(
   grammarEntry,
   'console.log(JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)}))\n',
 );
+writeFileSync(
+  preloadEntry,
+  "console.log(JSON.stringify({entry:process.argv[1],execArgv:process.execArgv,cjs:globalThis.riftyCjsPreload??null,esm:globalThis.riftyEsmPreload??null}))\n",
+);
+writeFileSync(
+  requirePreload,
+  'globalThis.riftyCjsPreload="cjs-program"\n',
+);
+
+function programPreload(args, property, value, execArgv) {
+  const result = run([...args, preloadEntry]);
+  const observed = JSON.parse(ok(result, result.stdout).stdout);
+  assert.equal(observed.entry, preloadEntry);
+  assert.deepEqual(observed.execArgv, args);
+  assert.equal(observed[property], value);
+  return {
+    status: result.status,
+    execArgv,
+    observed: `${property}:${value}`,
+    entry: basename(observed.entry),
+  };
+}
+
+const programPreloads = {
+  requireShort: programPreload(
+    ['-r', requirePreload],
+    'cjs',
+    'cjs-program',
+    ['-r', '<specifier>'],
+  ),
+  requireLong: programPreload(
+    ['--require', requirePreload],
+    'cjs',
+    'cjs-program',
+    ['--require', '<specifier>'],
+  ),
+  requireInline: programPreload(
+    [`--require=${requirePreload}`],
+    'cjs',
+    'cjs-program',
+    ['--require=<specifier>'],
+  ),
+  import: programPreload(
+    ['--import', importSpecifier],
+    'esm',
+    'esm-program',
+    ['--import', '<specifier>'],
+  ),
+  importInline: programPreload(
+    [`--import=${importSpecifier}`],
+    'esm',
+    'esm-program',
+    ['--import=<specifier>'],
+  ),
+};
+
 const optionalPrintSpellings = [
   '-p',
   '--print',
@@ -954,6 +1043,30 @@ const optionalPrintSpellings = [
   '--print=not-the-source',
   '--print=',
 ];
+const mandatoryEvalSpellings = [
+  { option: '-e', usageMessage: '-e requires an argument', print: false },
+  {
+    option: '--eval',
+    usageMessage: '--eval requires an argument',
+    print: false,
+  },
+  {
+    option: '-pe',
+    usageMessage: '--eval requires an argument',
+    print: true,
+  },
+];
+
+function outcome(result) {
+  if (result.code !== undefined) {
+    return `${result.status}:${result.code}`;
+  }
+  if (result.message !== undefined) {
+    return `${result.status}:${result.message}`;
+  }
+  return `${result.status}:stdout=${JSON.stringify(result.stdout)}`;
+}
+
 const inputTypeGrammar = [
   'commonjs',
   'module',
@@ -961,6 +1074,28 @@ const inputTypeGrammar = [
   'module-typescript',
 ].map((inputType) => {
   const prefix = `--input-type=${inputType}`;
+  const esm = inputType === 'module' || inputType === 'module-typescript';
+  const mandatoryEval = mandatoryEvalSpellings.map(
+    ({ option, usageMessage, print }) => {
+      const separatedEmpty = run([prefix, option, '']);
+      return {
+        option,
+        missing: outcome(usage(run([prefix, option]), usageMessage)),
+        immediateTerminator: outcome(
+          usage(run([prefix, option, '--']), usageMessage),
+        ),
+        separatedEmpty: outcome(
+          print && esm
+            ? errorCode(
+                separatedEmpty,
+                'ERR_EVAL_ESM_CANNOT_PRINT',
+                '--print cannot be used with ESM input',
+              )
+            : ok(separatedEmpty, print ? 'undefined\n' : ''),
+        ),
+      };
+    },
+  );
   const optionalPrint = optionalPrintSpellings.map((option) => {
     const emptyPrint = run([prefix, option, '--', '']);
     const programPrint = run([prefix, option, '--', grammarEntry, 'alpha']);
@@ -970,7 +1105,7 @@ const inputTypeGrammar = [
     return {
       option,
       empty:
-        inputType === 'module' || inputType === 'module-typescript'
+        esm
           ? errorCode(
               emptyPrint,
               'ERR_EVAL_ESM_CANNOT_PRINT',
@@ -982,11 +1117,12 @@ const inputTypeGrammar = [
   });
   return {
     inputType,
-    missingEval: usage(run([prefix, '-e']), '-e requires an argument'),
-    emptyInlineEval: usage(run([prefix, '--eval=']), '--eval= requires an argument'),
-    missingCombinedPrintEval: usage(run([prefix, '-pe']), '--eval requires an argument'),
+    mandatoryEval,
+    emptyInlineEval: outcome(
+      usage(run([prefix, '--eval=']), '--eval= requires an argument'),
+    ),
     optionalPrintSpellings: optionalPrint.map(({ option }) => option),
-    emptyPrintTerminator: optionalPrint[0].empty,
+    emptyPrintTerminator: outcome(optionalPrint[0].empty),
     programExecArgvPreserved: true,
     programArgv: [basename(grammarEntry), 'alpha'],
   };
@@ -1032,7 +1168,9 @@ console.log(JSON.stringify({
     require: ok(requireLong, 'true\n'),
     requireShort: ok(requireShort, 'true\n'),
     import: ok(importPreload, 'esm-preload\n'),
-    missing: missingPreloads,
+    incomplete: incompletePreloads,
+    separatedEmpty: separatedEmptyPreloads,
+    program: programPreloads,
   },
   inputTypeGrammar,
 }, null, 2));
@@ -1102,44 +1240,119 @@ Captured output:
       "status": 0,
       "stdout": "esm-preload\n"
     },
-    "missing": {
+    "incomplete": {
+      "omitted": {
+        "requireShort": {
+          "status": 9,
+          "message": "-r requires an argument"
+        },
+        "requireLong": {
+          "status": 9,
+          "message": "--require requires an argument"
+        },
+        "import": {
+          "status": 9,
+          "message": "--import requires an argument"
+        }
+      },
+      "inlineEmpty": {
+        "require": {
+          "status": 9,
+          "message": "--require= requires an argument"
+        },
+        "import": {
+          "status": 9,
+          "message": "--import= requires an argument"
+        }
+      }
+    },
+    "separatedEmpty": {
       "requireShort": {
-        "status": 9,
-        "message": "-r requires an argument"
+        "status": 1,
+        "code": "ERR_INVALID_ARG_VALUE",
+        "message": "The argument 'id' must be a non-empty string. Received ''"
       },
       "requireLong": {
-        "status": 9,
-        "message": "--require requires an argument"
-      },
-      "requireEmpty": {
-        "status": 9,
-        "message": "--require= requires an argument"
+        "status": 1,
+        "code": "ERR_INVALID_ARG_VALUE",
+        "message": "The argument 'id' must be a non-empty string. Received ''"
       },
       "import": {
-        "status": 9,
-        "message": "--import requires an argument"
+        "status": 1,
+        "code": "ERR_MODULE_NOT_FOUND",
+        "message": "Cannot find package"
+      }
+    },
+    "program": {
+      "requireShort": {
+        "status": 0,
+        "execArgv": [
+          "-r",
+          "<specifier>"
+        ],
+        "observed": "cjs:cjs-program",
+        "entry": "preload-entry.cjs"
       },
-      "importEmpty": {
-        "status": 9,
-        "message": "--import= requires an argument"
+      "requireLong": {
+        "status": 0,
+        "execArgv": [
+          "--require",
+          "<specifier>"
+        ],
+        "observed": "cjs:cjs-program",
+        "entry": "preload-entry.cjs"
+      },
+      "requireInline": {
+        "status": 0,
+        "execArgv": [
+          "--require=<specifier>"
+        ],
+        "observed": "cjs:cjs-program",
+        "entry": "preload-entry.cjs"
+      },
+      "import": {
+        "status": 0,
+        "execArgv": [
+          "--import",
+          "<specifier>"
+        ],
+        "observed": "esm:esm-program",
+        "entry": "preload-entry.cjs"
+      },
+      "importInline": {
+        "status": 0,
+        "execArgv": [
+          "--import=<specifier>"
+        ],
+        "observed": "esm:esm-program",
+        "entry": "preload-entry.cjs"
       }
     }
   },
   "inputTypeGrammar": [
     {
       "inputType": "commonjs",
-      "missingEval": {
-        "status": 9,
-        "message": "-e requires an argument"
-      },
-      "emptyInlineEval": {
-        "status": 9,
-        "message": "--eval= requires an argument"
-      },
-      "missingCombinedPrintEval": {
-        "status": 9,
-        "message": "--eval requires an argument"
-      },
+      "mandatoryEval": [
+        {
+          "option": "-e",
+          "missing": "9:-e requires an argument",
+          "immediateTerminator": "9:-e requires an argument",
+          "separatedEmpty": "0:stdout=\"\""
+        },
+        {
+          "option": "--eval",
+          "missing": "9:--eval requires an argument",
+          "immediateTerminator": "9:--eval requires an argument",
+          "separatedEmpty": "0:stdout=\"\""
+        },
+        {
+          "option": "-pe",
+          "missing": "9:--eval requires an argument",
+          "immediateTerminator": "9:--eval requires an argument",
+          "separatedEmpty": "0:stdout=\"undefined\\n\""
+        }
+      ],
+      "emptyInlineEval": "9:--eval= requires an argument",
       "optionalPrintSpellings": [
         "-p",
         "--print",
@@ -1147,10 +1360,7 @@ Captured output:
         "--print=not-the-source",
         "--print="
       ],
-      "emptyPrintTerminator": {
-        "status": 0,
-        "stdout": "undefined\n"
-      },
+      "emptyPrintTerminator": "0:stdout=\"undefined\\n\"",
       "programExecArgvPreserved": true,
       "programArgv": [
         "entry.cjs",
@@ -1159,18 +1369,27 @@ Captured output:
     },
     {
       "inputType": "module",
-      "missingEval": {
-        "status": 9,
-        "message": "-e requires an argument"
-      },
-      "emptyInlineEval": {
-        "status": 9,
-        "message": "--eval= requires an argument"
-      },
-      "missingCombinedPrintEval": {
-        "status": 9,
-        "message": "--eval requires an argument"
-      },
+      "mandatoryEval": [
+        {
+          "option": "-e",
+          "missing": "9:-e requires an argument",
+          "immediateTerminator": "9:-e requires an argument",
+          "separatedEmpty": "0:stdout=\"\""
+        },
+        {
+          "option": "--eval",
+          "missing": "9:--eval requires an argument",
+          "immediateTerminator": "9:--eval requires an argument",
+          "separatedEmpty": "0:stdout=\"\""
+        },
+        {
+          "option": "-pe",
+          "missing": "9:--eval requires an argument",
+          "immediateTerminator": "9:--eval requires an argument",
+          "separatedEmpty": "1:ERR_EVAL_ESM_CANNOT_PRINT"
+        }
+      ],
+      "emptyInlineEval": "9:--eval= requires an argument",
       "optionalPrintSpellings": [
         "-p",
         "--print",
@@ -1178,11 +1397,7 @@ Captured output:
         "--print=not-the-source",
         "--print="
       ],
-      "emptyPrintTerminator": {
-        "status": 1,
-        "code": "ERR_EVAL_ESM_CANNOT_PRINT",
-        "message": "--print cannot be used with ESM input"
-      },
+      "emptyPrintTerminator": "1:ERR_EVAL_ESM_CANNOT_PRINT",
       "programExecArgvPreserved": true,
       "programArgv": [
         "entry.cjs",
@@ -1191,18 +1406,27 @@ Captured output:
     },
     {
       "inputType": "commonjs-typescript",
-      "missingEval": {
-        "status": 9,
-        "message": "-e requires an argument"
-      },
-      "emptyInlineEval": {
-        "status": 9,
-        "message": "--eval= requires an argument"
-      },
-      "missingCombinedPrintEval": {
-        "status": 9,
-        "message": "--eval requires an argument"
-      },
+      "mandatoryEval": [
+        {
+          "option": "-e",
+          "missing": "9:-e requires an argument",
+          "immediateTerminator": "9:-e requires an argument",
+          "separatedEmpty": "0:stdout=\"\""
+        },
+        {
+          "option": "--eval",
+          "missing": "9:--eval requires an argument",
+          "immediateTerminator": "9:--eval requires an argument",
+          "separatedEmpty": "0:stdout=\"\""
+        },
+        {
+          "option": "-pe",
+          "missing": "9:--eval requires an argument",
+          "immediateTerminator": "9:--eval requires an argument",
+          "separatedEmpty": "0:stdout=\"undefined\\n\""
+        }
+      ],
+      "emptyInlineEval": "9:--eval= requires an argument",
       "optionalPrintSpellings": [
         "-p",
         "--print",
@@ -1210,10 +1434,7 @@ Captured output:
         "--print=not-the-source",
         "--print="
       ],
-      "emptyPrintTerminator": {
-        "status": 0,
-        "stdout": "undefined\n"
-      },
+      "emptyPrintTerminator": "0:stdout=\"undefined\\n\"",
       "programExecArgvPreserved": true,
       "programArgv": [
         "entry.cjs",
@@ -1222,18 +1443,27 @@ Captured output:
     },
     {
       "inputType": "module-typescript",
-      "missingEval": {
-        "status": 9,
-        "message": "-e requires an argument"
-      },
-      "emptyInlineEval": {
-        "status": 9,
-        "message": "--eval= requires an argument"
-      },
-      "missingCombinedPrintEval": {
-        "status": 9,
-        "message": "--eval requires an argument"
-      },
+      "mandatoryEval": [
+        {
+          "option": "-e",
+          "missing": "9:-e requires an argument",
+          "immediateTerminator": "9:-e requires an argument",
+          "separatedEmpty": "0:stdout=\"\""
+        },
+        {
+          "option": "--eval",
+          "missing": "9:--eval requires an argument",
+          "immediateTerminator": "9:--eval requires an argument",
+          "separatedEmpty": "0:stdout=\"\""
+        },
+        {
+          "option": "-pe",
+          "missing": "9:--eval requires an argument",
+          "immediateTerminator": "9:--eval requires an argument",
+          "separatedEmpty": "1:ERR_EVAL_ESM_CANNOT_PRINT"
+        }
+      ],
+      "emptyInlineEval": "9:--eval= requires an argument",
       "optionalPrintSpellings": [
         "-p",
         "--print",
@@ -1241,11 +1471,7 @@ Captured output:
         "--print=not-the-source",
         "--print="
       ],
-      "emptyPrintTerminator": {
-        "status": 1,
-        "code": "ERR_EVAL_ESM_CANNOT_PRINT",
-        "message": "--print cannot be used with ESM input"
-      },
+      "emptyPrintTerminator": "1:ERR_EVAL_ESM_CANNOT_PRINT",
       "programExecArgvPreserved": true,
       "programArgv": [
         "entry.cjs",
@@ -1255,6 +1481,21 @@ Captured output:
   ]
 }
 ```
+
+For every accepted input type, omitted mandatory `-e`/`--eval`/`-pe` source
+and an immediate `--` are usage errors. A separated empty token is a present
+source: `-e`/`--eval` select that input type and succeed in Node, while `-pe`
+selects its print context (`undefined` for CommonJS, or
+`ERR_EVAL_ESM_CANNOT_PRINT` for ESM). Empty inline `--eval=` remains a usage
+error.
+
+Preload grammar has a different empty boundary. Omitted
+`-r`/`--require`/`--import` and empty inline `--require=`/`--import=` are usage
+errors. Separated empty values are consumed as specifiers: CommonJS require
+enters loading and reports `ERR_INVALID_ARG_VALUE`; ESM import enters
+resolution and reports `ERR_MODULE_NOT_FOUND`. All five valid preload
+spellings also run before a program entry and retain their exact tokens in
+`process.execArgv`.
 
 Bare `node` is interactive only on a TTY; piped stdin selects a different
 stdin-script mode. This Darwin-host command allocates a PTY, disables history,

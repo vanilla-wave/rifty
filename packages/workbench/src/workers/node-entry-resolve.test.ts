@@ -33,6 +33,94 @@ const OPTIONAL_PRINT_SPELLINGS = [
   '--print=not-the-source',
   '--print=',
 ] as const;
+const ACCEPTED_INPUT_TYPES = [
+  '--input-type=commonjs',
+  '--input-type=module',
+  '--input-type=commonjs-typescript',
+  '--input-type=module-typescript',
+] as const;
+const MANDATORY_EVAL_SOURCE_SPELLINGS = [
+  { option: '-e', print: false, missing: 'node: -e requires an argument\n' },
+  { option: '--eval', print: false, missing: 'node: --eval requires an argument\n' },
+  { option: '-pe', print: true, missing: 'node: --eval requires an argument\n' },
+] as const;
+const INPUT_TYPE_MANDATORY_SOURCE_CASES = ACCEPTED_INPUT_TYPES.flatMap((inputType) =>
+  MANDATORY_EVAL_SOURCE_SPELLINGS.map((spelling) => ({ inputType, ...spelling })),
+);
+const INPUT_TYPE_EMPTY_MANDATORY_SOURCE_CASES = [
+  {
+    inputType: '--input-type=commonjs',
+    option: '-e',
+    print: false,
+    expectedKind: 'eval',
+  },
+  {
+    inputType: '--input-type=commonjs',
+    option: '--eval',
+    print: false,
+    expectedKind: 'eval',
+  },
+  {
+    inputType: '--input-type=commonjs',
+    option: '-pe',
+    print: true,
+    expectedKind: 'eval',
+  },
+  {
+    inputType: '--input-type=module',
+    option: '-e',
+    print: false,
+    expectedKind: 'evalModule',
+  },
+  {
+    inputType: '--input-type=module',
+    option: '--eval',
+    print: false,
+    expectedKind: 'evalModule',
+  },
+  {
+    inputType: '--input-type=module',
+    option: '-pe',
+    print: true,
+    expectedKind: 'evalModulePrintError',
+  },
+  {
+    inputType: '--input-type=commonjs-typescript',
+    option: '-e',
+    print: false,
+    expectedKind: 'evalTypeScript',
+  },
+  {
+    inputType: '--input-type=commonjs-typescript',
+    option: '--eval',
+    print: false,
+    expectedKind: 'evalTypeScript',
+  },
+  {
+    inputType: '--input-type=commonjs-typescript',
+    option: '-pe',
+    print: true,
+    expectedKind: 'evalTypeScript',
+  },
+  {
+    inputType: '--input-type=module-typescript',
+    option: '-e',
+    print: false,
+    expectedKind: 'evalTypeScript',
+  },
+  {
+    inputType: '--input-type=module-typescript',
+    option: '--eval',
+    print: false,
+    expectedKind: 'evalTypeScript',
+  },
+  {
+    inputType: '--input-type=module-typescript',
+    option: '-pe',
+    print: true,
+    expectedKind: 'evalModulePrintError',
+  },
+] as const;
 
 const TERMINATED_EVAL_SOURCE_STATES = [
   { state: 'missing', source: undefined },
@@ -300,20 +388,51 @@ describe('classifyNodeInvocation', () => {
     }
   });
 
-  it('preserves Node usage errors for incomplete preload options', () => {
-    for (const [args, option] of [
-      [['-r'], '-r'],
-      [['--require'], '--require'],
-      [['--require='], '--require='],
-      [['--import'], '--import'],
-      [['--import='], '--import='],
-    ] as const) {
+  it.each(['-r', '--require', '--import'] as const)(
+    '%s consumes a separated empty preload value and selects the named context gap',
+    (option) => {
+      expect(classifyNodeInvocation([option, '', '-p', '1'])).toEqual({
+        kind: 'preloadContext',
+      });
+    },
+  );
+
+  it.each([
+    ['-r', 'preload.cjs', 'entry.cjs'],
+    ['--require', 'preload.cjs', 'entry.cjs'],
+    ['--require=preload.cjs', 'entry.cjs'],
+    ['--import', 'preload.mjs', 'entry.cjs'],
+    ['--import=preload.mjs', 'entry.cjs'],
+    ['-r', '', 'entry.cjs'],
+    ['--require', '', 'entry.cjs'],
+    ['--import', '', 'entry.cjs'],
+  ])('routes a valid preload before a program entry to the named context gap: %j', (...args) => {
+    expect(classifyNodeInvocation(args)).toEqual({ kind: 'preloadContext' });
+  });
+
+  it.each([
+    { args: ['-r'], option: '-r' },
+    { args: ['--require'], option: '--require' },
+    { args: ['--import'], option: '--import' },
+  ] as const)(
+    '$option preserves Node usage when its preload value is omitted',
+    ({ args, option }) => {
       expect(classifyNodeInvocation(args)).toEqual({
         kind: 'usageError',
         message: `node: ${option} requires an argument\n`,
       });
-    }
-  });
+    },
+  );
+
+  it.each(['--require=', '--import='] as const)(
+    '%s preserves Node usage for an empty long-equals preload value',
+    (option) => {
+      expect(classifyNodeInvocation([option, '-p', '1'])).toEqual({
+        kind: 'usageError',
+        message: `node: ${option} requires an argument\n`,
+      });
+    },
+  );
 
   it('preserves explicit CommonJS input type in eval identity and argv', () => {
     expect(classifyNodeInvocation(['--input-type=commonjs', '-e', '1', '--', 'alpha'])).toEqual({
@@ -346,27 +465,52 @@ describe('classifyNodeInvocation', () => {
     });
   });
 
-  it('keeps missing eval-source usage ahead of every accepted input type', () => {
-    for (const inputType of [
-      '--input-type=commonjs',
-      '--input-type=module',
-      '--input-type=commonjs-typescript',
-      '--input-type=module-typescript',
-    ]) {
-      expect(classifyNodeInvocation([inputType, '-e'])).toEqual({
+  it.each(INPUT_TYPE_MANDATORY_SOURCE_CASES)(
+    '$inputType $option preserves missing-source usage before context selection',
+    ({ inputType, option, missing }) => {
+      expect(classifyNodeInvocation([inputType, option])).toEqual({
         kind: 'usageError',
-        message: 'node: -e requires an argument\n',
+        message: missing,
       });
+    },
+  );
+
+  it.each(ACCEPTED_INPUT_TYPES)(
+    '%s preserves empty attached --eval= usage before context selection',
+    (inputType) => {
       expect(classifyNodeInvocation([inputType, '--eval='])).toEqual({
         kind: 'usageError',
         message: 'node: --eval= requires an argument\n',
       });
-      expect(classifyNodeInvocation([inputType, '-pe'])).toEqual({
+    },
+  );
+
+  it.each(INPUT_TYPE_MANDATORY_SOURCE_CASES)(
+    '$inputType $option treats an immediate terminator as a missing mandatory source',
+    ({ inputType, option, missing }) => {
+      expect(classifyNodeInvocation([inputType, option, '--'])).toEqual({
         kind: 'usageError',
-        message: 'node: --eval requires an argument\n',
+        message: missing,
       });
-    }
-  });
+    },
+  );
+
+  it.each(INPUT_TYPE_EMPTY_MANDATORY_SOURCE_CASES)(
+    '$inputType $option consumes a separated empty mandatory source and selects $expectedKind',
+    ({ inputType, option, print, expectedKind }) => {
+      expect(classifyNodeInvocation([inputType, option, ''])).toEqual(
+        expectedKind === 'eval'
+          ? {
+              kind: 'eval',
+              source: '',
+              print,
+              execArgv: [inputType, option, ''],
+              scriptArgs: [],
+            }
+          : { kind: expectedKind },
+      );
+    },
+  );
 
   it('splits ESM eval gaps from Node-invalid ESM print forms', () => {
     for (const option of ['-e', '--eval', '--eval=1']) {

@@ -603,6 +603,34 @@ TypeScript input types remain no-child gaps. Valid preload forms now stop at
 `NotImplementedError('workbench.node.preload-context')` before allocation;
 only incomplete options retain Node's usage error.
 
+## Thirty-second readiness re-cut
+
+The fresh judge at `f93d75d62` found four remaining grammar/artifact holes
+without changing Acceptance, Parity, or the eval mechanism:
+
+- the four accepted input types were not crossed with missing separated
+  `--eval`, immediate `--` after every mandatory eval spelling, and separated
+  empty mandatory sources;
+- preload prose collapsed separated empty specifiers into the usage-error
+  cases, although Node consumes them and enters CommonJS loading or ESM
+  resolution;
+- valid preload spellings had executable eval coverage but no program-entry
+  sibling proving the same pre-entry behavior;
+- source-detected implicit TypeScript's corrected allocation provenance had
+  only a loader unit carrier, not a real-kernel Workbench admission proof.
+
+The item remains `draft` while this correction is re-judged. The v24.16.0
+artifact now crosses `commonjs`, `module`, `commonjs-typescript`, and
+`module-typescript` with missing and immediate-terminator
+`-e`/`--eval`/`-pe`, plus their separated empty sources. Missing forms remain
+usage errors; a separated empty source selects its CommonJS, ESM, or TypeScript
+context. The same artifact distinguishes omitted/inline-empty preload usage
+from separated-empty load/resolve failures and proves all five valid preload
+spellings before a real program entry. Classifier and Workbench-owner REDs
+mirror those sibling boundaries and retain the named no-child preload gap; the
+real-kernel owner RED proves source-detected implicit TypeScript constructs
+exactly one v3 eval child before the runtime-loader gap.
+
 ## Refinement evidence
 
 The item was demoted at `0fa204fd3` after the exact Node oracle contradicted two
@@ -637,10 +665,14 @@ identity rather than a generated workspace file, and return the real exit code.
    is an eval usage error. For every optional print spelling, `-- '' [args]`
    remains entryless eval and preserves the empty token, while
    `-- <nonempty entry>` selects the separately named program-context gap.
-   Missing `-e`, empty `--eval=`, `-ep`, other attached short-option source,
-   and unsupported options retain Node-shaped exit-9 failures. An immediate
-   `--` after a present source is consumed; remaining tokens are script
-   arguments.
+   Across all four accepted input types, missing `-e`/`--eval`/`-pe` and an
+   immediate `--` in their source position retain Node-shaped exit-9 failures.
+   A separated empty source is present and selects the declared input context,
+   not usage; explicit residual contexts then stop at their named gap or ESM
+   print rejection. Empty inline `--eval=`, `-ep`, other attached short-option
+   source, and unsupported options also retain Node-shaped exit-9 failures. An
+   immediate `--` after a present source is consumed; remaining tokens are
+   script arguments.
 2. Those forms build one exact `rifty.node-entry/v3` eval launch in the
    existing admitted foreground Node Worker. The launch carries source, print
    mode, and original `process.execArgv`; the process spec carries
@@ -760,8 +792,11 @@ identity rather than a generated workspace file, and return the real exit code.
   status 1. See `runtime-js/node-cli-esm-eval-context`.
 - Preload/import flags `--require`/`-r` and `--import` are not added here. They
   throw `NotImplementedError('workbench.node.preload-context')` before child
-  allocation and remain compat ❌; this item does not misreport them as invalid
-  options or silently ignore them. See
+  allocation for valid eval and program-entry forms and remain compat ❌.
+  Separated empty values are valid option arguments and reach that named gap;
+  only omitted values and empty inline `--require=`/`--import=` retain Node's
+  usage errors. This item does not misreport a supported form as an invalid
+  option or silently ignore it. See
   `runtime-js/node-cli-preload-import-flags`.
 - The bare `node` REPL remains the ADR-0155 loud gap; eval support must not
   masquerade as an interactive REPL. See `runtime-js/node-cli-bare-repl`.
