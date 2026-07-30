@@ -486,3 +486,32 @@ GREEN; package typecheck retains the same four intentional `TS2578` REDs.
 The isolated Contract+RED review at
 `5eb83f1a66818bc7f0684a98889f9517022f5dc7` passed Standards and Spec with no
 findings. This checkpoint is the ready authority for implementation.
+
+## Link-ingress post-pickup demotion
+
+PR #233 first attempted link ingress from main
+`7d1ff6c8659b082687e814783761960808e7fa02`. Its carrier checkpoints were
+`dc9347f5b02b9f4b5c8ecbfd9abfc9bc2fa6c80e`,
+`7642a9b2008df4d2e881dac2d2256fab79292e73`, and
+`c26000c1f7c31c1861595695466e9439ea69a261`; Contract+RED passed at
+`33ecc7ff5e9abb5169effd54467dd1ebe4f3dfae`. The final 138-line carrier blob
+was SHA-256
+`4c0a03ebe550a621096d64d1e5d16d3d447d326a032369133c59d71bfcfd09af`.
+
+Pickup `75eb32052b294f341388630cf193f35970cf1da6`, implementation
+`9a30c01549937bd98f081081fe0ec163f1b59d27`, and closure
+`d50a80ffa5e888588af84fd5da3c22ce8c4cb60c` passed local Final+GREEN. Remote
+run `30562763189` then failed browser-unit job `90939798266`,
+packed-consumer job `90939798436`, and light shard job `90939798485`: ordinary
+`rollup@4.62.x` and ADR-0188's auto-injected
+`@rollup/wasm-node@4.62.x` both exposed
+`rollup -> dist/bin/rollup`, so correct ordinary-claim preflight rejected the
+Rifty-created pair before every Vite install.
+
+This is a `frozen-assumption` / `provenance-lie` blocker, not an npm collision
+winner or retryable CI failure. ADR-0343 and
+`npm-client/package-bin-companion-claim-admission-authority` own the required
+predecessor. Per the post-pickup demotion gate, PR #233 was re-cut as the
+contract-only demotion; link ingress must restart from fresh main after that
+predecessor lands. No production source or old carrier is retained in the
+demotion head; the immutable hashes above preserve the complete failed lineage.
