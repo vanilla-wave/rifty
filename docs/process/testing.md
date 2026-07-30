@@ -3,11 +3,7 @@
 Binding rules: `AGENTS.md` §Fidelity. Here: tiers + why parity is the gold standard.
 
 ## Gold standard — Node Parity Runner
-Same code in real Node and rifty, diff stdout. External reference — agent can't
-cheat. `tools/node-parity-runner/`; case = `setup` + `code` + `expected`.
-Exact equality is the default. An externally nondeterministic oracle may use
-only an ADR-backed, runner-owned admissibility relation that retains both raw
-traces; every unrecorded discrepancy remains a bug (ADR-0337).
+Same code in real Node and rifty, diff stdout. External reference — agent can't cheat. `tools/node-parity-runner/`; case = `setup` + `code` + `expected`. Any discrepancy = bug.
 
 ## Pyramid
 - Unit — package-local logic (Vitest). Framework-free Workbench contracts prove state, ordering, failure, and close behavior; Playground adapter tests prove only product/presentation policy over public semantic handles (ADR-0292)

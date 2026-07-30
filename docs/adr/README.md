@@ -209,7 +209,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0255 | Disposable worker realm for seeded-process parity cases |
 | 0312 | Keep synchronous SHA-256 implementations layer-local |
 | 0323 | Gate heavy PR tests on code-affecting changes |
-| 0337 | TTY parity preserves native SIGWINCH trace multiplicity |
+| 0338 | TTY parity composes exact one-axis native resize traces |
 
 ### protocol
 
@@ -315,6 +315,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0045 | 0326 | dedicated MessagePort rationale retained; unconditional structured-clone fork IPC and mixed public/control frames replaced |
 | 0308 | 0328 | generic registry retained; recipe v2 adds admission, exact dependency projection, and materialization-owned bins |
 | 0328 | 0335 | recipe-v2 authority retained; lexical-min/every-install settlement replaced by npm reify operation history and a loud collision ceiling |
+| 0337 | 0338 | raw trace retained; permissive comparator replaced by exact one-axis native resize steps |
 
 ## Corrections (active)
 
