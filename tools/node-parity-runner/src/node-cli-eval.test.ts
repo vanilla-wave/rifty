@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertNodeCliEvalOracleVersion,
   canonicalNodeCliEvalOutcome,
   createNodeCliEvalCapture,
   nodeCliEvalInvocations,
 } from './node-cli-eval.ts';
 
 describe('node CLI eval parity carrier', () => {
+  it('fails loudly if the ambient Node oracle drifts from the frozen version', () => {
+    expect(() => assertNodeCliEvalOracleVersion('v24.15.0')).toThrow(
+      'node-cli-eval oracle requires v24.16.0; received v24.15.0',
+    );
+    expect(() => assertNodeCliEvalOracleVersion('v24.16.0')).not.toThrow();
+  });
+
   it('canonicalises UTF-8 transport chunks without losing stream order', () => {
     const capture = createNodeCliEvalCapture();
     capture.push('stdout', new Uint8Array([0x61, 0xe2, 0x82]));

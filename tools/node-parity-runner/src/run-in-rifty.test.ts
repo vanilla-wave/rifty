@@ -39,6 +39,72 @@ describe('runInRifty', () => {
     REAL_WORKER_TEST_TIMEOUT_MS,
   );
 
+  it(
+    'keeps the eval-only sync API out of a program physical Worker',
+    async () => {
+      const stdout = await runInRifty({
+        kind: 'child-worker',
+        expectedPhysicalWorkers: 1,
+        cwd: '/project',
+        setup: {
+          files: {
+            'project/sync-api-probe.cjs':
+              "process.stdout.write('sync-api:' + Object.hasOwn(globalThis, '__riftyKernelSyncCall') + '\\n');\n",
+          },
+        },
+        code: `
+          const { spawn } = require('node:child_process');
+          const child = spawn('node', ['sync-api-probe.cjs'], {
+            cwd: require('node:process').cwd(),
+          });
+          let stdout = '';
+          child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+          child.once('close', () => console.log(stdout.trim()));
+        `,
+      });
+
+      expect(stdout).toBe('sync-api:false\n');
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'records a physical eval write-then-unlink provenance fault even when the final tree is clean',
+    async () => {
+      const source = `
+        const fs = require('node:fs');
+        fs.writeFileSync('/.rifty-eval-transient.cjs', 'source');
+        fs.unlinkSync('/.rifty-eval-transient.cjs');
+      `;
+
+      await expect(
+        runInRifty({
+          kind: 'node-cli-eval',
+          code: '',
+          expectedPhysicalWorkers: 1,
+          nodeCliEval: {
+            sequential: [
+              {
+                label: 'transient-vfs-carrier-fault',
+                nodeArgv: ['-e', source],
+                source,
+                print: false,
+                execArgv: ['-e', source],
+                scriptArgs: [],
+              },
+            ],
+            concurrent: [],
+          },
+        }),
+      ).rejects.toThrow(
+        'node-cli-eval physical carrier mutated its VFS: ' +
+          '[{"kind":"write","path":"/.rifty-eval-transient.cjs"},' +
+          '{"kind":"rm","path":"/.rifty-eval-transient.cjs"}]',
+      );
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
   it('ends synthetic physical-parent stdin so an inherited child can settle', async () => {
     const stdout = await runInRifty({
       kind: 'child-worker',

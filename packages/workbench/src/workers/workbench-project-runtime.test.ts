@@ -938,7 +938,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
-  it('admits CommonJS eval as one exact v3 physical child without a VFS carrier', async () => {
+  it('builds one exact v3 admitted-child launch without an owner-VFS carrier', async () => {
     const source = 'JSON.stringify({marker:"node-eval"})';
     const worker = boundaryWorker({ installSpy: false });
     const reservationEvidence: {
@@ -954,6 +954,8 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       reservationEvidence,
     );
     const before = snapshotProjectTree(h.authority);
+    const writeHistory = vi.spyOn(h.authority, 'writeFileSync');
+    const unlinkHistory = vi.spyOn(h.authority, 'rmSync');
     let during: Readonly<Record<string, readonly number[]>> | undefined;
     vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
       during = snapshotProjectTree(h.authority);
@@ -1041,6 +1043,8 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     worker.emitExit(0);
     await running;
     await vi.waitFor(() => expect(reservationEvidence.events).toEqual(['commit', 'dispose']));
+    expect(writeHistory).not.toHaveBeenCalled();
+    expect(unlinkHistory).not.toHaveBeenCalled();
     expect(snapshotProjectTree(h.authority)).toEqual(before);
     expect(h.frames).toContainEqual(
       expect.objectContaining({

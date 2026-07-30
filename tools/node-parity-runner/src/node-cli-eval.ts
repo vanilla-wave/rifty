@@ -20,6 +20,16 @@ export interface NodeCliEvalOutcome extends NodeCliEvalRawOutcome {
 
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 
+const NODE_CLI_EVAL_ORACLE_VERSION = 'v24.16.0';
+
+export function assertNodeCliEvalOracleVersion(actual: string): void {
+  if (actual !== NODE_CLI_EVAL_ORACLE_VERSION) {
+    throw new Error(
+      `node-cli-eval oracle requires ${NODE_CLI_EVAL_ORACLE_VERSION}; received ${actual}`,
+    );
+  }
+}
+
 export function nodeCliEvalPreviewScope(label: string): string {
   return `parity:node-cli-eval:${label}`;
 }

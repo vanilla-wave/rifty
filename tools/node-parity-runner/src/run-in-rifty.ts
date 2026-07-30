@@ -41,6 +41,7 @@ import {
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
+import { NodeCliEvalVfsObserver } from './node-cli-eval-vfs-observer.ts';
 import {
   canonicalNodeCliEvalOutcome,
   createNodeCliEvalCapture,
@@ -1199,7 +1200,8 @@ export async function runInRiftyInCurrentRealm(
       fsFiles[`/${rel}`] = content;
     }
   }
-  const fsMirror = new MemoryFsSync();
+  const evalFsObserver = testCase.kind === 'node-cli-eval' ? new NodeCliEvalVfsObserver() : null;
+  const fsMirror = evalFsObserver ?? new MemoryFsSync();
   fsMirror.loadFixture(fsFiles);
   // Materialize the case cwd: the Node runner mkdirs `<workDir>/<cwd>` before
   // spawning, so a cwd with no setup files inside it must exist here too
@@ -1263,6 +1265,7 @@ export async function runInRiftyInCurrentRealm(
     if (testCase.kind === 'node-cli-eval') {
       const { getKernelDispatcher } = await import('../../../packages/kernel/src/index.ts');
       const { installRuntimeJsFsHandlers } = await import('@riftydev/runtime-js');
+      evalFsObserver?.startObservation();
       installRuntimeJsFsHandlers(getKernelDispatcher(), () => fsMirror);
     }
 
@@ -1279,6 +1282,12 @@ export async function runInRiftyInCurrentRealm(
         runRiftyNodeCliEvalInvocation(invocation, cwd),
       );
       physicalWorkerMode?.assertExpected();
+      const mutations = evalFsObserver?.mutations() ?? [];
+      if (mutations.length > 0) {
+        throw new Error(
+          `node-cli-eval physical carrier mutated its VFS: ${JSON.stringify(mutations)}`,
+        );
+      }
       return output;
     }
 

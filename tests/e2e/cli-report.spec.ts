@@ -7,6 +7,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
+import { assertNodeCliEvalOracleVersion } from '../../tools/node-parity-runner/src/node-cli-eval.ts';
 import {
   capturePageProblems,
   expectTerminalContains,
@@ -19,6 +20,7 @@ import {
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 
 function hostNodeStdout(args: readonly string[]): string {
+  assertNodeCliEvalOracleVersion(process.version);
   return execFileSync(process.execPath, [...args], { encoding: 'utf8' })
     .replace(ANSI_SGR, '')
     .replaceAll('\r\n', '\n')

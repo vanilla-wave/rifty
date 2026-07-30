@@ -53,6 +53,11 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   const bootstrap = readNodeEntryBootstrap();
   const launch = bootstrap.launch;
   if ((launch as { readonly kind: unknown }).kind === 'eval') {
+    const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
+    const syncClient = new SyncRpcClient(ring);
+    publishKernelSyncApi({
+      call: (method, payload) => syncClient.call(method, payload),
+    });
     // Execute the actual Workbench node-entry module. It owns eval-vs-program
     // dispatch, loader eval, print/drain ordering, process adoption, and exit.
     await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');
@@ -94,11 +99,6 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
 async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
   const stdout = bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout');
   const stderr = bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr');
-  const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
-  const syncClient = new SyncRpcClient(ring);
-  publishKernelSyncApi({
-    call: (method, payload) => syncClient.call(method, payload),
-  });
   publishKernelProcessSpec({
     pid: spec.pid,
     ppid: spec.ppid,

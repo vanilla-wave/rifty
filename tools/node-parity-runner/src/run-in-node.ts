@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  assertNodeCliEvalOracleVersion,
   canonicalNodeCliEvalOutcome,
   createNodeCliEvalCapture,
   runNodeCliEvalMatrix,
@@ -320,6 +321,7 @@ export async function runInNode(
     }
 
     if (testCase.kind === 'node-cli-eval') {
+      assertNodeCliEvalOracleVersion(HOST_PROCESS.version);
       return await runNodeCliEvalMatrix(testCase, (invocation) =>
         runNodeCliEvalInvocation(invocation, workDir, caseCwd(testCase), timeoutMs),
       );
