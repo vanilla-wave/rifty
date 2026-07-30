@@ -86,13 +86,35 @@ const TTY_RESIZE_NODE_PREAMBLE = `
 'use strict';
 {
   const { execFileSync: __execFileSync } = require('node:child_process');
-  const __setTtySize = (cols, rows) => {
-    __execFileSync('stty', ['cols', String(cols), 'rows', String(rows)], {
+  const __stty = (...args) => {
+    __execFileSync('stty', args, {
       stdio: ['inherit', 'ignore', 'inherit'],
     });
   };
-  __setTtySize(80, 24);
-  globalThis.__riftyTtyResize = __setTtySize;
+  let __cols = 80;
+  let __rows = 24;
+  __stty('cols', String(__cols), 'rows', String(__rows));
+  globalThis.__riftyTtyResize = (cols, rows) => {
+    const colsChanged = cols !== __cols;
+    const rowsChanged = rows !== __rows;
+    if (!colsChanged && !rowsChanged) return;
+    if (colsChanged && rowsChanged) {
+      process.once('SIGWINCH', () => {
+        __rows = rows;
+        __stty('rows', String(rows));
+      });
+      __cols = cols;
+      __stty('cols', String(cols));
+      return;
+    }
+    if (colsChanged) {
+      __cols = cols;
+      __stty('cols', String(cols));
+      return;
+    }
+    __rows = rows;
+    __stty('rows', String(rows));
+  };
 }
 `;
 

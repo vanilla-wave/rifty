@@ -24,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   can deliver a duplicate signal for one live resize; the oracle now pins the
   stable dimensions and stdout/stderr resize order through the first signal
   without weakening rifty's exact-once process-control contract.
+- **TTY parity composes exact one-axis native resizes.** GNU `stty` expands a
+  combined columns/rows request into two kernel resizes; the oracle now settles
+  each axis in order and keeps byte-exact raw events. Rifty's combined
+  one-frame process-control contract remains independently pinned.
 
 - **PR = one delivered behavior; process state never opens a PR.** New
   `AGENTS.md` §PR — unit of delivery: contract flips, demotions, re-cuts,
