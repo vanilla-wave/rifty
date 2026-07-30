@@ -6,7 +6,6 @@ created: 2026-07-28
 why: the terminal source-list checkpoint proved ordered composition of exact per-source claims needs its own boundary before settlement
 user_story: As a browser-IDE user installing package CLIs, I want all package claims preserved in input order before collision checks, but today linker traversal can silently choose ownership
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-source-claim-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts

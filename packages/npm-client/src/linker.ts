@@ -38,6 +38,32 @@ export interface PreparedInstallPackage<TPackage extends ResolvedPackage = Resol
   readonly nodeModulesDir: string;
 }
 
+export interface PackageBinSource {
+  readonly package: Readonly<Pick<ResolvedPackage, 'name' | 'bin'>>;
+  readonly nodeModulesDir: string;
+}
+
+export interface PackageBinClaim {
+  readonly nodeModulesDir: string;
+  readonly command: string;
+  readonly owner: string;
+  readonly target: string;
+}
+
+export function normalizePackageBinSource(source: PackageBinSource): readonly PackageBinClaim[] {
+  const pkg = source.package;
+  const claims: PackageBinClaim[] = [];
+  for (const [command, target] of Object.entries(normalizeBin(pkg.name, pkg.bin))) {
+    claims.push({
+      nodeModulesDir: source.nodeModulesDir,
+      command,
+      owner: pkg.name,
+      target: normalizeBinTarget(target),
+    });
+  }
+  return claims;
+}
+
 export function preflightPackageInstallPaths<TPackage extends ResolvedPackage>(
   packages: readonly TPackage[],
 ): readonly PreparedInstallPackage<TPackage>[] {

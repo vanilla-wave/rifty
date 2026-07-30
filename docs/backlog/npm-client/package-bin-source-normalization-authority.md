@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal combined normalization checkpoint proved one strict package source can become exact detached claims without owning cross-source settlement
 user_story: As a browser-IDE user installing package CLIs, I want every supported package bin shape normalized once into exact scoped claims, but today the linker has no reusable package-private claim boundary
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-source-claim-authority]
+blocked_by: [npm-client/package-bin-claim-aggregation-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts

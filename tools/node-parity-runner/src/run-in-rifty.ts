@@ -433,9 +433,29 @@ function installSeededProcessMode(
       configurable: true,
     });
     if (tty) {
+      const ttyProcess = seeded;
+      let ttyCols = 80;
+      let ttyRows = 24;
+      const postTtyResize = (cols: number, rows: number): void => {
+        ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols, rows });
+      };
       Object.defineProperty(globalThis, '__riftyTtyResize', {
         value: (cols: number, rows: number): void => {
-          ipc.port2.postMessage({ kind: 'ipc:tty-resize', cols, rows });
+          const colsChanged = cols !== ttyCols;
+          const rowsChanged = rows !== ttyRows;
+          if (!colsChanged && !rowsChanged) return;
+          if (colsChanged && rowsChanged) {
+            ttyProcess.once('SIGWINCH', () => {
+              ttyRows = rows;
+              postTtyResize(cols, rows);
+            });
+            ttyCols = cols;
+            postTtyResize(cols, ttyRows);
+            return;
+          }
+          if (colsChanged) ttyCols = cols;
+          else ttyRows = rows;
+          postTtyResize(ttyCols, ttyRows);
         },
         writable: true,
         enumerable: false,

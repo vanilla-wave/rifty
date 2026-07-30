@@ -1,10 +1,10 @@
 import type { ParityCase } from '../../src/types.ts';
 
-/** A real PTY resize updates both TTY streams before Node emits SIGWINCH. */
+/** Two exact one-axis resizes keep the native/rifty trace byte-identical (ADR-0338). */
 const c: ParityCase = {
   kind: 'tty-resize',
   expected:
-    '__RIFTY_TTY_RESULT__{"initial":"80x24","final":"132x43","window":[132,43],"events":["stdout:132x43","stderr:132x43","SIGWINCH:132x43"]}',
+    '__RIFTY_TTY_RESULT__{"initial":"80x24","final":"132x43","window":[132,43],"events":["stdout:132x24","stderr:132x24","SIGWINCH:132x24","stdout:132x43","stderr:132x43","SIGWINCH:132x43"]}',
   code: `
     const process = require('node:process');
     const events = [];

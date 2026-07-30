@@ -32,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`tier: robust`) and `wasi-in-browser-showcase` (`tier: works`), which now
   carry invariants + slice bands; 8 legacy epics remain
   (`process-meta/ready-epic-goal-shape-debt`).
+- **TTY parity composes exact one-axis native resizes.** The oracle signal-settles GNU `stty` column/row mutations; rifty's combined frame stays separately pinned.
+
 - **PR = one delivered behavior; process state never opens a PR.** New
   `AGENTS.md` §PR — unit of delivery: contract flips, demotions, re-cuts,
   splits, intake drafts and lineage commit into the delivering unit's branch,
