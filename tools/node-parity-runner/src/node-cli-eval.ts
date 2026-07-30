@@ -33,6 +33,163 @@ export function assertNodeCliEvalOracleVersion(actual: string): void {
   }
 }
 
+export type NodeCliEvalSeparatedOption =
+  | '-e'
+  | '--eval'
+  | '-pe'
+  | '-p'
+  | '--print'
+  | '--print=ignored';
+
+export type NodeCliEvalSourceState = 'missing' | 'empty' | 'nonempty';
+
+interface NodeCliEvalAcceptedSourceTerminatorExpectation {
+  readonly kind: 'accepted';
+  readonly source: string;
+  readonly print: boolean;
+  readonly execArgv: readonly string[];
+  readonly scriptArgs: readonly string[];
+}
+
+interface NodeCliEvalUsageSourceTerminatorExpectation {
+  readonly kind: 'usage-error';
+  readonly stderrOption: '-e' | '--eval';
+}
+
+export interface NodeCliEvalSourceTerminatorCase {
+  readonly label: string;
+  readonly option: NodeCliEvalSeparatedOption;
+  readonly sourceState: NodeCliEvalSourceState;
+  readonly nodeArgv: readonly string[];
+  readonly expected:
+    | NodeCliEvalAcceptedSourceTerminatorExpectation
+    | NodeCliEvalUsageSourceTerminatorExpectation;
+}
+
+const SEPARATED_OPTION_CONTRACTS = Object.freeze([
+  Object.freeze({
+    label: 'short-eval',
+    option: '-e',
+    print: false,
+    source: 'mandatory',
+    stderrOption: '-e',
+  }),
+  Object.freeze({
+    label: 'long-eval',
+    option: '--eval',
+    print: false,
+    source: 'mandatory',
+    stderrOption: '--eval',
+  }),
+  Object.freeze({
+    label: 'combined-print-eval',
+    option: '-pe',
+    print: true,
+    source: 'mandatory',
+    stderrOption: '--eval',
+  }),
+  Object.freeze({
+    label: 'short-print',
+    option: '-p',
+    print: true,
+    source: 'optional',
+  }),
+  Object.freeze({
+    label: 'long-print',
+    option: '--print',
+    print: true,
+    source: 'optional',
+  }),
+  Object.freeze({
+    label: 'print-equals-ignored',
+    option: '--print=ignored',
+    print: true,
+    source: 'optional',
+  }),
+] as const);
+
+const SOURCE_STATES = Object.freeze(['missing', 'empty', 'nonempty'] as const);
+
+/**
+ * One raw-argv Cartesian contract for every separated eval/print spelling.
+ * Native Node validates these expectations before the same rows reach rifty.
+ */
+export function nodeCliEvalSourceTerminatorMatrix(
+  nonemptySource: string,
+  scriptArgs: readonly string[] = ['x'],
+): readonly NodeCliEvalSourceTerminatorCase[] {
+  if (nonemptySource.length === 0 || nonemptySource === '--') {
+    throw new TypeError('nonemptySource must be non-empty and distinct from the option terminator');
+  }
+  const trailingArgs = strings(scriptArgs, 'scriptArgs');
+  const cases = SEPARATED_OPTION_CONTRACTS.flatMap((contract) =>
+    SOURCE_STATES.map((sourceState): NodeCliEvalSourceTerminatorCase => {
+      const label = `source-terminator-${contract.label}-${sourceState}`;
+      if (sourceState === 'missing') {
+        const nodeArgv = Object.freeze([contract.option, '--']);
+        if (contract.source === 'mandatory') {
+          return Object.freeze({
+            label,
+            option: contract.option,
+            sourceState,
+            nodeArgv,
+            expected: Object.freeze({
+              kind: 'usage-error',
+              stderrOption: contract.stderrOption,
+            }),
+          });
+        }
+        return Object.freeze({
+          label,
+          option: contract.option,
+          sourceState,
+          nodeArgv,
+          expected: Object.freeze({
+            kind: 'accepted',
+            source: '',
+            print: contract.print,
+            execArgv: Object.freeze([contract.option]),
+            scriptArgs: Object.freeze([]),
+          }),
+        });
+      }
+
+      if (sourceState === 'empty') {
+        const nodeArgv = Object.freeze([contract.option, '', '--', ...trailingArgs]);
+        const mandatory = contract.source === 'mandatory';
+        return Object.freeze({
+          label,
+          option: contract.option,
+          sourceState,
+          nodeArgv,
+          expected: Object.freeze({
+            kind: 'accepted',
+            source: '',
+            print: contract.print,
+            execArgv: Object.freeze(mandatory ? [contract.option, ''] : [contract.option]),
+            scriptArgs: Object.freeze(mandatory ? trailingArgs : ['', '--', ...trailingArgs]),
+          }),
+        });
+      }
+
+      return Object.freeze({
+        label,
+        option: contract.option,
+        sourceState,
+        nodeArgv: Object.freeze([contract.option, nonemptySource, '--', ...trailingArgs]),
+        expected: Object.freeze({
+          kind: 'accepted',
+          source: nonemptySource,
+          print: contract.print,
+          execArgv: Object.freeze([contract.option, nonemptySource]),
+          scriptArgs: trailingArgs,
+        }),
+      });
+    }),
+  );
+  return Object.freeze(cases);
+}
+
 export function nodeCliEvalPreviewScope(label: string): string {
   return `parity:node-cli-eval:${label}`;
 }
@@ -60,7 +217,7 @@ function evalSemantics(
   }
   if (option === '-e' || option === '--eval' || option === '-pe') {
     const source = nodeArgv[1];
-    if (source === undefined) {
+    if (source === undefined || source === '--') {
       throw new TypeError(`${owner} ${option} requires a source argument`);
     }
     return Object.freeze({
@@ -72,12 +229,15 @@ function evalSemantics(
   }
   if (option === '-p' || option === '--print') {
     const source = nodeArgv[1];
-    if (source === undefined || source === '') {
+    if (source === '--' && nodeArgv.length > 2) {
+      throw new TypeError(`${owner} ${option} terminator selects a program entry, not eval`);
+    }
+    if (source === undefined || source === '' || source === '--') {
       return Object.freeze({
         source: '',
         print: true,
         execArgv: Object.freeze([option]),
-        scriptArgs: Object.freeze(source === undefined ? [] : nodeArgv.slice(1)),
+        scriptArgs: Object.freeze(source === undefined || source === '--' ? [] : nodeArgv.slice(1)),
       });
     }
     return Object.freeze({
@@ -101,12 +261,15 @@ function evalSemantics(
   }
   if (option.startsWith('--print=')) {
     const source = nodeArgv[1];
-    if (source === undefined || source === '') {
+    if (source === '--' && nodeArgv.length > 2) {
+      throw new TypeError(`${owner} ${option} terminator selects a program entry, not eval`);
+    }
+    if (source === undefined || source === '' || source === '--') {
       return Object.freeze({
         source: '',
         print: true,
         execArgv: Object.freeze([option]),
-        scriptArgs: Object.freeze(source === undefined ? [] : nodeArgv.slice(1)),
+        scriptArgs: Object.freeze(source === undefined || source === '--' ? [] : nodeArgv.slice(1)),
       });
     }
     return Object.freeze({

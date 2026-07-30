@@ -1,6 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { assertNodeCliEvalOracleVersion } from './node-cli-eval.ts';
+import {
+  assertNodeCliEvalOracleVersion,
+  nodeCliEvalSourceTerminatorMatrix,
+} from './node-cli-eval.ts';
 import { runInNode } from './run-in-node.ts';
 
 describe('runInNode', () => {
@@ -66,74 +69,61 @@ describe('runInNode', () => {
 });
 
 describe('Node v24.16.0 CLI eval oracle', () => {
-  it('consumes an immediate option terminator after every accepted eval spelling', () => {
+  it.each(nodeCliEvalSourceTerminatorMatrix('42', ['alpha', 'two words', '-x']))(
+    'pins $option $sourceState source × terminator raw argv',
+    ({ nodeArgv, expected }) => {
+      assertNodeCliEvalOracleVersion(process.version);
+      const probeSource =
+        'console.log(JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)}))';
+      const probeUrl = `data:text/javascript,${encodeURIComponent(probeSource)}`;
+      const outcome = spawnSync(process.execPath, nodeArgv, {
+        encoding: 'utf8',
+        env: { ...process.env, NODE_OPTIONS: `--import=${probeUrl}` },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      expect(outcome.error).toBeUndefined();
+      expect(outcome.signal).toBeNull();
+      if (expected.kind === 'usage-error') {
+        expect(outcome.status).toBe(9);
+        expect(outcome.stdout).toBe('');
+        expect(outcome.stderr).toBe(
+          `${process.execPath}: ${expected.stderrOption} requires an argument\n`,
+        );
+        return;
+      }
+
+      const identity = `${JSON.stringify({
+        execArgv: expected.execArgv,
+        argv: expected.scriptArgs,
+      })}\n`;
+      const result = expected.print ? `${expected.source === '' ? 'undefined' : '42'}\n` : '';
+      expect(outcome.status).toBe(0);
+      expect(outcome.stdout).toBe(`${identity}${result}`);
+      expect(outcome.stderr).toBe('');
+    },
+  );
+
+  it('consumes an immediate option terminator after inline --eval source', () => {
     assertNodeCliEvalOracleVersion(process.version);
     const source =
       'const value=JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)});console.log(value);value';
     const scriptArgs = ['alpha', 'two words', '-x'] as const;
-    const cases = [
-      {
-        label: '-e',
-        nodeArgv: ['-e', source, '--', ...scriptArgs],
-        execArgv: ['-e', source],
-        print: false,
-      },
-      {
-        label: '--eval',
-        nodeArgv: ['--eval', source, '--', ...scriptArgs],
-        execArgv: ['--eval', source],
-        print: false,
-      },
-      {
-        label: '--eval=',
-        nodeArgv: [`--eval=${source}`, '--', ...scriptArgs],
-        execArgv: [`--eval=${source}`],
-        print: false,
-      },
-      {
-        label: '-p',
-        nodeArgv: ['-p', source, '--', ...scriptArgs],
-        execArgv: ['-p', source],
-        print: true,
-      },
-      {
-        label: '--print',
-        nodeArgv: ['--print', source, '--', ...scriptArgs],
-        execArgv: ['--print', source],
-        print: true,
-      },
-      {
-        label: '--print=ignored',
-        nodeArgv: ['--print=ignored', source, '--', ...scriptArgs],
-        execArgv: ['--print=ignored', source],
-        print: true,
-      },
-      {
-        label: '-pe',
-        nodeArgv: ['-pe', source, '--', ...scriptArgs],
-        execArgv: ['-pe', source],
-        print: true,
-      },
-    ] as const;
+    const nodeArgv = [`--eval=${source}`, '--', ...scriptArgs];
+    const outcome = spawnSync(process.execPath, nodeArgv, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const identity = `${JSON.stringify({
+      execArgv: [`--eval=${source}`],
+      argv: scriptArgs,
+    })}\n`;
 
-    for (const testCase of cases) {
-      const outcome = spawnSync(process.execPath, testCase.nodeArgv, {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      const identity = `${JSON.stringify({
-        execArgv: testCase.execArgv,
-        argv: scriptArgs,
-      })}\n`;
-
-      expect(outcome.error, testCase.label).toBeUndefined();
-      expect(outcome.signal, testCase.label).toBeNull();
-      expect(outcome.status, testCase.label).toBe(0);
-      expect(outcome.stdout, testCase.label).toBe(
-        testCase.print ? `${identity}${identity}` : identity,
-      );
-      expect(outcome.stderr, testCase.label).toBe('');
-    }
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.signal).toBeNull();
+    expect(outcome.status).toBe(0);
+    expect(outcome.stdout).toBe(identity);
+    expect(outcome.stderr).toBe('');
   });
 
   it('distinguishes separated empty source tokens from absent source', () => {

@@ -128,6 +128,49 @@ undefined
 undefined
 ```
 
+The option terminator is part of the source grammar, not a uniform
+post-source cleanup. Cross every separated spelling with missing, empty, and
+nonempty source:
+
+```sh
+for option in -e --eval -pe -p --print --print=ignored; do
+  NODE_OPTIONS="$probe" node "$option" --
+  NODE_OPTIONS="$probe" node "$option" '' -- x
+  NODE_OPTIONS="$probe" node "$option" 42 -- x
+done
+```
+
+The preload JSON line exposes `execArgv` and `argv`; `result` is any following
+eval/print output. These are the exact normalized rows:
+
+| option | source state | raw argv after option | status | `execArgv` | `argv` | result / stderr |
+|---|---|---|---:|---|---|---|
+| `-e` | missing | `--` | 9 | n/a | n/a | `<node>: -e requires an argument\n` |
+| `-e` | empty | `'' -- x` | 0 | `["-e",""]` | `["x"]` | empty |
+| `-e` | nonempty | `42 -- x` | 0 | `["-e","42"]` | `["x"]` | empty |
+| `--eval` | missing | `--` | 9 | n/a | n/a | `<node>: --eval requires an argument\n` |
+| `--eval` | empty | `'' -- x` | 0 | `["--eval",""]` | `["x"]` | empty |
+| `--eval` | nonempty | `42 -- x` | 0 | `["--eval","42"]` | `["x"]` | empty |
+| `-pe` | missing | `--` | 9 | n/a | n/a | `<node>: --eval requires an argument\n` |
+| `-pe` | empty | `'' -- x` | 0 | `["-pe",""]` | `["x"]` | `undefined\n` |
+| `-pe` | nonempty | `42 -- x` | 0 | `["-pe","42"]` | `["x"]` | `42\n` |
+| `-p` | missing | `--` | 0 | `["-p"]` | `[]` | `undefined\n` |
+| `-p` | empty | `'' -- x` | 0 | `["-p"]` | `["","--","x"]` | `undefined\n` |
+| `-p` | nonempty | `42 -- x` | 0 | `["-p","42"]` | `["x"]` | `42\n` |
+| `--print` | missing | `--` | 0 | `["--print"]` | `[]` | `undefined\n` |
+| `--print` | empty | `'' -- x` | 0 | `["--print"]` | `["","--","x"]` | `undefined\n` |
+| `--print` | nonempty | `42 -- x` | 0 | `["--print","42"]` | `["x"]` | `42\n` |
+| `--print=ignored` | missing | `--` | 0 | `["--print=ignored"]` | `[]` | `undefined\n` |
+| `--print=ignored` | empty | `'' -- x` | 0 | `["--print=ignored"]` | `["","--","x"]` | `undefined\n` |
+| `--print=ignored` | nonempty | `42 -- x` | 0 | `["--print=ignored","42"]` | `["x"]` | `42\n` |
+
+Thus a mandatory form rejects `--` as a missing source but consumes a
+separated empty token and the following terminator. An optional form consumes
+`--` as a missing-source terminator, while a preceding empty token ends option
+parsing and preserves both that token and the later `--` in `process.argv`.
+`node -p -- x` instead selects `x` as a program entry and is outside the eval
+carrier.
+
 Run the identity and resolver probe from a cwd containing `marker.cjs`:
 
 ```sh

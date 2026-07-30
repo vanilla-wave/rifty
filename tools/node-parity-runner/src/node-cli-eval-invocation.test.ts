@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nodeCliEvalInvocations } from './node-cli-eval.ts';
+import { nodeCliEvalInvocations, nodeCliEvalSourceTerminatorMatrix } from './node-cli-eval.ts';
 import type { NodeCliEvalInvocation, ParityCase } from './types.ts';
 
 function evalCase(invocations: readonly NodeCliEvalInvocation[]): ParityCase {
@@ -70,66 +70,46 @@ describe('node CLI eval invocation model', () => {
     ]);
   });
 
-  it.each([
-    {
-      label: '-e',
-      nodeArgv: ['-e', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['-e', 'source'],
-      print: false,
-    },
-    {
-      label: '--eval',
-      nodeArgv: ['--eval', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['--eval', 'source'],
-      print: false,
-    },
-    {
-      label: '--eval=',
-      nodeArgv: ['--eval=source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['--eval=source'],
-      print: false,
-    },
-    {
-      label: '-p',
-      nodeArgv: ['-p', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['-p', 'source'],
-      print: true,
-    },
-    {
-      label: '--print',
-      nodeArgv: ['--print', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['--print', 'source'],
-      print: true,
-    },
-    {
-      label: '--print=ignored',
-      nodeArgv: ['--print=ignored', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['--print=ignored', 'source'],
-      print: true,
-    },
-    {
-      label: '-pe',
-      nodeArgv: ['-pe', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['-pe', 'source'],
-      print: true,
-    },
-  ] as const)(
-    '$label projects an immediate terminator from the sole raw argv carrier',
-    ({ label, nodeArgv, execArgv, print }) => {
-      const { sequential } = nodeCliEvalInvocations(evalCase([{ label, nodeArgv }]));
+  it.each(nodeCliEvalSourceTerminatorMatrix('source'))(
+    '$option projects the $sourceState source × terminator row from raw argv',
+    ({ label, nodeArgv, expected }) => {
+      if (expected.kind === 'usage-error') {
+        expect(() => nodeCliEvalInvocations(evalCase([{ label, nodeArgv }]))).toThrow(
+          'requires a source argument',
+        );
+        return;
+      }
 
+      const { sequential } = nodeCliEvalInvocations(evalCase([{ label, nodeArgv }]));
       expect(sequential).toEqual([
         {
           label,
           nodeArgv,
-          source: 'source',
-          print,
-          execArgv,
-          scriptArgs: ['alpha', 'two words', '-x'],
+          source: expected.source,
+          print: expected.print,
+          execArgv: expected.execArgv,
+          scriptArgs: expected.scriptArgs,
         },
       ]);
     },
   );
+
+  it('projects an immediate terminator after inline --eval source', () => {
+    const label = 'inline-eval-terminator';
+    const nodeArgv = ['--eval=source', '--', 'alpha', 'two words', '-x'];
+    const { sequential } = nodeCliEvalInvocations(evalCase([{ label, nodeArgv }]));
+
+    expect(sequential).toEqual([
+      {
+        label,
+        nodeArgv,
+        source: 'source',
+        print: false,
+        execArgv: ['--eval=source'],
+        scriptArgs: ['alpha', 'two words', '-x'],
+      },
+    ]);
+  });
 
   it.each(['-p', '--print', '--print=ignored'] as const)(
     '%s projects a separated empty token as argv, not source-bearing execArgv',
@@ -148,6 +128,17 @@ describe('node CLI eval invocation model', () => {
           scriptArgs: [''],
         },
       ]);
+    },
+  );
+
+  it.each(['-p', '--print', '--print=ignored'] as const)(
+    '%s rejects a terminator followed by a program entry as outside the eval carrier',
+    (option) => {
+      expect(() =>
+        nodeCliEvalInvocations(
+          evalCase([{ label: `program-after-${option}`, nodeArgv: [option, '--', 'x'] }]),
+        ),
+      ).toThrow('terminator selects a program entry, not eval');
     },
   );
 
