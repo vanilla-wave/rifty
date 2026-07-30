@@ -11,6 +11,9 @@
 
 ### Added
 
+- Added package-private ordered package-bin claim aggregation without
+  settlement, VFS mutation, or a public export.
+
 - Added package-private, once-read package-bin source normalization without aggregation, settlement, or a public export.
 
 - **Cancellable package acquisition (ADR-0314).** `InstallOptions.signal` plus
