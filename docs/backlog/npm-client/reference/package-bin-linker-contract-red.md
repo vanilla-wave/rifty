@@ -579,3 +579,10 @@ RED and 24 GREEN; package typecheck and backlog schema pass.
 The isolated Contract+RED review at
 `873710b408989228033079686dc6f23763ce9ca0` passed Standards and Spec with no
 findings. This checkpoint is the ready authority for implementation.
+
+Pickup `6e503039f4493cf5e18b0e9b21274181c552e51e` precedes production
+implementation `5fdc100912597b6df3c7eba86b65ed6df7e180e2`. The existing
+per-install-path schedule now carries one monotone ordinary-demand bit; only
+the linker-facing prepared projection omits companion-only bins. The frozen
+carrier blob remains `b0492dc1e1e9ac0712f3b824c4f98c162a9fd605` and runs 26/26
+GREEN. Raw package, result, manifest, and lock metadata remain unchanged.
