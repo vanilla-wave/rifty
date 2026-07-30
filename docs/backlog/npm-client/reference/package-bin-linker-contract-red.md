@@ -519,10 +519,9 @@ demotion head; the immutable hashes above preserve the complete failed lineage.
 ## Companion-claim admission successor baseline
 
 Recorded on post-#233 main
-`5fcd2cb6815de4f81a6c5cbb04a971b147284c34`. The fresh carrier at
-`334436ce968847ad238116f547ceacddabe9073d` adds no production source. Its
-`installer-shadow-shims.test.ts` blob is
-`f669efd02ecdfbd5304d0e626f625193a2a5c4a9`.
+`5fcd2cb6815de4f81a6c5cbb04a971b147284c34`. The first carrier at
+`334436ce968847ad238116f547ceacddabe9073d` and its review checkpoint
+`bc5f25b0f93837f02f301609818e0332ca7599b6` add no production source.
 
 ```sh
 pnpm vitest run --project unit \
@@ -531,12 +530,27 @@ pnpm --filter @riftydev/npm-client typecheck
 pnpm backlog:check
 ```
 
-The focused file runs 26 tests: 2 RED and 24 GREEN. Fresh and immediate
-zero-registry replay each expose two root `rollup` launcher writes and leave
-the auto companion as the final owner; the independent root/nested case also
+The first isolated review blocked its 283 inserted test lines against the
+30–100 slice plus four Spec false-greens: direct-root pre-resolution weakened
+the visit-order proof, optional ordinary demand was absent, replay never
+recovered a later ordinary claim, and scoped eligibility changed identity and
+path together.
+
+The in-place re-cut at
+`60de85fc4645c634344159322c3cca5a43fa6612` is 176 inserted test lines,
+below the `2×` boundary. Its frozen `installer-shadow-shims.test.ts` blob is
+`7408cf847cc40f809977ff0f6cca47c2254f5cf6`. Parent-owned transitive edges now
+reach the companion in both traversal orders, an optional edge is separately
+ordinary, an auto-only lock recovers a later ordinary-only launcher with zero
+registry reads, and replay places the same identity at root and nested paths
+with different demand.
+
+The focused file still runs 26 tests: 2 RED and 24 GREEN. Fresh exposes two
+root `rollup` launcher writes; both fresh and immediate zero-registry replay
+leave the auto companion as final owner. The independent root/nested case also
 leaves the root auto companion active. Faithful packument and tarball
 `package.json` fixtures retain both packages' real
 `rollup -> dist/bin/rollup` metadata. Green sentinels prove direct ordinary
-companion demand, both ordinary/companion visit orders, companion manifest
-dependencies, exact raw result/lock metadata, and a separately scoped ordinary
-claim. Package typecheck and backlog schema pass.
+lock recovery, required/optional ordinary demand, both visit orders, companion
+manifest dependencies, exact raw result/lock metadata, and exact path-keyed
+scope independence. Package typecheck and backlog schema pass.
