@@ -70,6 +70,10 @@ the delivering branch, in order:
 5. Put the drafted invariants to the user; on approval add
    `invariants-signoff: <date> — user` to `## Decisions`. Missing signature
    blocks the RUN, never the write-up.
+6. Finish with the marker in the SAME PR — one more commit adding only
+   `goal_baseline` (§Autonomous goal 2). A fit PR that lands without it forces a
+   second contract-only PR before any source, which is the chain §Autonomous
+   goal forbids. Fit PR = bootstrap PR.
 
 Only the user changes an invariant after that, and a run never edits one.
 
@@ -85,6 +89,14 @@ starts a run.
    (epic, then marker) — never a chain. It stays a separate PR only because
    `check:budget` reads the epic from merge-base (`budget.mjs:88`); see
    `process-meta/autonomous-epic-runs.md` §Residual.
+   The marker SHA has to survive the merge: every later source PR re-reads the
+   epic at it (`goal-contract.mjs:366` — ancestor check + `git show <sha>:<epic>`).
+   So either merge that bootstrap PR with a MERGE COMMIT (squash rewrites its
+   commits and the baseline stops being an ancestor — every source PR then fails
+   `goal_baseline … is unavailable or not an ancestor`), or point the marker at a
+   SHA already on `main`: marker as the branch's FIRST commit, whose parent is the
+   merge-base. The second shape is squash-safe and is the one to use when the epic
+   is already landed.
 3. Every source PR repeats exactly one same-epic pair:
 
 ```text
