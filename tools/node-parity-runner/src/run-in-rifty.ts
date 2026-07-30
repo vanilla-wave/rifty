@@ -26,6 +26,7 @@ import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
 import { asyncVfs, syncMirror } from '@riftydev/vfs';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { transform as transformWithHostEsbuild } from 'esbuild';
+import type { WorkerProcessHandle } from '../../../packages/kernel/src/index.ts';
 import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
 import type { NodeEntryBootstrapPayload } from '../../../packages/runtime-js/src/builtins/node-entry-url.ts';
 // vm-engine relative source imports (same `tools/`-harness precedent as
@@ -41,7 +42,10 @@ import {
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
-import { NodeCliEvalVfsObserver } from './node-cli-eval-vfs-observer.ts';
+import {
+  type NodeCliEvalVfsMutation,
+  NodeCliEvalVfsObserver,
+} from './node-cli-eval-vfs-observer.ts';
 import {
   canonicalNodeCliEvalOutcome,
   createNodeCliEvalCapture,
@@ -283,6 +287,21 @@ class StdioPortCapture {
   }
 }
 
+export type NodeCliEvalVfsFault = 'transient-source-file';
+
+export interface NodeCliEvalVfsProbe {
+  readonly expectedGuestMutations: readonly NodeCliEvalVfsMutation[];
+  readonly fault?: NodeCliEvalVfsFault;
+}
+
+interface NodeCliEvalPreviewExpectation {
+  readonly port: number;
+  readonly status: number;
+  readonly body: string;
+}
+
+export type NodeCliEvalPreviewProbe = Readonly<Record<string, NodeCliEvalPreviewExpectation>>;
+
 export interface RunInRiftyOptions {
   /** Same-realm fault-injection seam for the browser MessageChannel boundary. */
   readonly createMessageChannel?: () => MessageChannel;
@@ -290,10 +309,15 @@ export interface RunInRiftyOptions {
   readonly stdinTimeoutMs?: number;
   /** Parent-owned execution deadline; settlement still awaits Worker termination. */
   readonly caseTimeoutMs?: number;
+  /** Physical eval-only source-carrier audit; serializable across the disposable Worker. */
+  readonly nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe;
+  /** Physical eval-only scoped-preview audit; serializable across the disposable Worker. */
+  readonly nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe;
 }
 
 const DEFAULT_STDIN_TIMEOUT_MS = 2_000;
 const DEFAULT_CASE_TIMEOUT_MS = 30_000;
+const NODE_CLI_EVAL_PREVIEW_TIMEOUT_MS = 5_000;
 const HOST_SET_TIMEOUT = globalThis.setTimeout.bind(globalThis);
 const HOST_CLEAR_TIMEOUT = globalThis.clearTimeout.bind(globalThis);
 
@@ -639,7 +663,28 @@ interface PhysicalWorkerMode {
   teardown(): void;
 }
 
-async function installPhysicalWorkerMode(testCase: ParityCase): Promise<PhysicalWorkerMode> {
+function nodeCliEvalPreviewExpectations(
+  testCase: ParityCase,
+  probe: NodeCliEvalPreviewProbe | undefined,
+): NodeCliEvalPreviewProbe | undefined {
+  if (probe === undefined) return undefined;
+  const invocations = nodeCliEvalInvocations(testCase);
+  const labels = [...invocations.sequential, ...invocations.concurrent].map(({ label }) => label);
+  if (
+    Object.keys(probe).length !== labels.length ||
+    labels.some((label) => !Object.hasOwn(probe, label))
+  ) {
+    throw new TypeError(
+      'RunInRiftyOptions.nodeCliEvalPreviewProbe must cover every node-cli-eval invocation',
+    );
+  }
+  return probe;
+}
+
+async function installPhysicalWorkerMode(
+  testCase: ParityCase,
+  nodeCliEvalVfsFault?: NodeCliEvalVfsFault,
+): Promise<PhysicalWorkerMode> {
   const { getKernelWorkerUrl, setKernelWorkerUrl } = await import(
     '../../../packages/kernel/src/index.ts'
   );
@@ -731,7 +776,10 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<Physical
       nativeWorkerConstructions++;
       this.#worker = new Worker(new URL('./worker-env-kernel-worker.ts', import.meta.url), {
         execArgv: ['--import', 'tsx'],
-        workerData: { files: testCase.setup?.files ?? {} },
+        workerData: {
+          files: testCase.setup?.files ?? {},
+          ...(nodeCliEvalVfsFault === undefined ? {} : { nodeCliEvalVfsFault }),
+        },
       });
     }
 
@@ -838,9 +886,74 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<Physical
   };
 }
 
+async function assertNodeCliEvalPreview(
+  handle: WorkerProcessHandle,
+  label: string,
+  expectation: NodeCliEvalPreviewExpectation,
+): Promise<void> {
+  const previewScope = nodeCliEvalPreviewScope(label);
+  let cleanupControl = (): void => {};
+  await new Promise<void>((resolve, reject) => {
+    const onClose = (...args: unknown[]): void => {
+      const [code, signal] = args;
+      reject(
+        new Error(
+          `node-cli-eval preview ${label} closed before listening (${String(code)}/${String(signal)})`,
+        ),
+      );
+    };
+    const timer = HOST_SET_TIMEOUT(
+      () => reject(new Error(`node-cli-eval preview ${label} listening timeout`)),
+      NODE_CLI_EVAL_PREVIEW_TIMEOUT_MS,
+    );
+    handle.once('close', onClose);
+    const removeControl = handle.onListeningControl((control) => {
+      const exact =
+        control.pid === handle.pid &&
+        control.previewScope === previewScope &&
+        control.ports.length === 1 &&
+        control.ports[0] === expectation.port;
+      if (exact) resolve();
+      else
+        reject(
+          new Error(
+            `node-cli-eval preview ${label} wrong listening control: ${JSON.stringify(control)}`,
+          ),
+        );
+    });
+    cleanupControl = () => {
+      HOST_CLEAR_TIMEOUT(timer);
+      removeControl();
+      handle.off('close', onClose);
+    };
+  }).finally(() => cleanupControl());
+
+  const { bridgeCrossRealmPreview } = await import('@riftydev/net');
+  const previewBridge = bridgeCrossRealmPreview(expectation.port, {
+    scope: previewScope,
+    timeoutMs: NODE_CLI_EVAL_PREVIEW_TIMEOUT_MS,
+  });
+  try {
+    const response = await previewBridge(
+      new Request(`http://preview.local:${String(expectation.port)}/`),
+    );
+    const body = await response.text();
+    if (response.status !== expectation.status || body !== expectation.body) {
+      throw new Error(
+        `node-cli-eval preview ${label} expected ` +
+          `${String(expectation.status)} ${JSON.stringify(expectation.body)}; received ` +
+          `${String(response.status)} ${JSON.stringify(body)}`,
+      );
+    }
+  } finally {
+    previewBridge.dispose();
+  }
+}
+
 async function runRiftyNodeCliEvalInvocation(
   invocation: NodeCliEvalInvocation,
   defaultCwd: string,
+  previewExpectation?: NodeCliEvalPreviewExpectation,
 ): Promise<ReturnType<typeof canonicalNodeCliEvalOutcome>> {
   const { globalProcessManager } = await import('../../../packages/kernel/src/index.ts');
   const { buildConfiguredNodeEntryWorkerEntry, nodeChildSpawnOptions } = await import(
@@ -885,7 +998,7 @@ async function runRiftyNodeCliEvalInvocation(
   handle.stdout().on('data', (chunk) => capture.push('stdout', chunk));
   handle.stderr().on('data', (chunk) => capture.push('stderr', chunk));
   handle.stdin().end();
-  const raw = await new Promise<ReturnType<ReturnType<typeof createNodeCliEvalCapture>['finish']>>(
+  const rawOutcome = new Promise<ReturnType<ReturnType<typeof createNodeCliEvalCapture>['finish']>>(
     (resolve, reject) => {
       let peerFailure: Error | undefined;
       handle.on('peererror', (error) => {
@@ -904,6 +1017,35 @@ async function runRiftyNodeCliEvalInvocation(
       });
     },
   );
+  const previewFailures: Error[] = [];
+  if (previewExpectation !== undefined) {
+    try {
+      await assertNodeCliEvalPreview(handle, invocation.label, previewExpectation);
+    } catch (error) {
+      previewFailures.push(asError(error));
+    }
+    try {
+      if (!handle.kill('SIGTERM') && previewFailures.length === 0) {
+        previewFailures.push(
+          new Error(`node-cli-eval preview ${invocation.label} refused SIGTERM`),
+        );
+      }
+    } catch (error) {
+      previewFailures.push(asError(error));
+    }
+  }
+  const raw = await rawOutcome.catch((error: unknown) => {
+    previewFailures.push(asError(error));
+    return null;
+  });
+  if (previewFailures.length === 1) throw previewFailures[0];
+  if (previewFailures.length > 1) {
+    throw new AggregateError(
+      previewFailures,
+      `node-cli-eval preview ${invocation.label} probe and close failed`,
+    );
+  }
+  if (raw === null) throw new Error('node-cli-eval preview close failed without an error');
   return canonicalNodeCliEvalOutcome(invocation, raw, {
     [NODE_PROCESS_IDENTITY.execPath]: '<node>',
   });
@@ -1160,6 +1302,16 @@ export async function runInRiftyInCurrentRealm(
   testCase: ParityCase,
   options: RunInRiftyOptions = {},
 ): Promise<string> {
+  if (options.nodeCliEvalVfsProbe !== undefined && testCase.kind !== 'node-cli-eval') {
+    throw new TypeError('RunInRiftyOptions.nodeCliEvalVfsProbe requires kind node-cli-eval');
+  }
+  if (options.nodeCliEvalPreviewProbe !== undefined && testCase.kind !== 'node-cli-eval') {
+    throw new TypeError('RunInRiftyOptions.nodeCliEvalPreviewProbe requires kind node-cli-eval');
+  }
+  const previewExpectations = nodeCliEvalPreviewExpectations(
+    testCase,
+    options.nodeCliEvalPreviewProbe,
+  );
   const feedTimeoutMs = timeoutMs(
     options.stdinTimeoutMs ?? DEFAULT_STDIN_TIMEOUT_MS,
     'RunInRiftyOptions.stdinTimeoutMs',
@@ -1273,20 +1425,23 @@ export async function runInRiftyInCurrentRealm(
     // bootstrap metadata stays outside exact inherited/replacement guest env.
     let physicalWorkerMode: PhysicalWorkerMode | undefined;
     if (isPhysicalWorkerCase(testCase)) {
-      physicalWorkerMode = await installPhysicalWorkerMode(testCase);
+      physicalWorkerMode = await installPhysicalWorkerMode(
+        testCase,
+        options.nodeCliEvalVfsProbe?.fault,
+      );
       cleanups.defer(() => physicalWorkerMode?.teardown());
     }
 
     if (testCase.kind === 'node-cli-eval') {
       const output = await runNodeCliEvalMatrix(testCase, (invocation) =>
-        runRiftyNodeCliEvalInvocation(invocation, cwd),
+        runRiftyNodeCliEvalInvocation(invocation, cwd, previewExpectations?.[invocation.label]),
       );
       physicalWorkerMode?.assertExpected();
-      const mutations = evalFsObserver?.mutations() ?? [];
-      if (mutations.length > 0) {
-        throw new Error(
-          `node-cli-eval physical carrier mutated its VFS: ${JSON.stringify(mutations)}`,
-        );
+      const audit = evalFsObserver?.audit(
+        options.nodeCliEvalVfsProbe?.expectedGuestMutations ?? [],
+      ) ?? { missing: [], unexpected: [] };
+      if (audit.missing.length > 0 || audit.unexpected.length > 0) {
+        throw new Error(`node-cli-eval VFS audit mismatch: ${JSON.stringify(audit)}`);
       }
       return output;
     }
@@ -1415,11 +1570,18 @@ function runInDisposableWorker(
   testCase: ParityCase,
   stdinTimeoutMs: number,
   caseTimeoutMs: number,
+  nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe,
+  nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const worker = new Worker(new URL('./run-in-rifty-worker.ts', import.meta.url), {
       execArgv: ['--import', 'tsx'],
-      workerData: { testCase, stdinTimeoutMs },
+      workerData: {
+        testCase,
+        stdinTimeoutMs,
+        nodeCliEvalVfsProbe,
+        nodeCliEvalPreviewProbe,
+      },
     });
     let settling = false;
 
@@ -1497,7 +1659,13 @@ export async function runInRifty(
     'RunInRiftyOptions.caseTimeoutMs',
   );
   if (isSeededProcessCase(testCase) && options.createMessageChannel === undefined) {
-    return runInDisposableWorker(testCase, stdinTimeoutMs, caseTimeoutMs);
+    return runInDisposableWorker(
+      testCase,
+      stdinTimeoutMs,
+      caseTimeoutMs,
+      options.nodeCliEvalVfsProbe,
+      options.nodeCliEvalPreviewProbe,
+    );
   }
   return runInRiftyInCurrentRealm(testCase, options);
 }

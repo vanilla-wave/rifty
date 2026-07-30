@@ -5,7 +5,7 @@ describe('runInNode', () => {
   it('runs node-cli-eval with exact native argv and returns canonical process output', async () => {
     const source = `
       console.log(JSON.stringify({
-        execArgv: process.execArgv.map((value, index) => index === 1 ? '<source>' : value),
+        execArgv: process.execArgv,
         argv: process.argv,
       }));
     `;
@@ -27,21 +27,32 @@ describe('runInNode', () => {
       },
     });
 
-    expect(JSON.parse(output)).toEqual([
-      {
-        label: 'direct-short-e',
-        stdout: '{"execArgv":["-e","<source>"],"argv":["<node>","alpha"]}\n',
-        stderr: '',
-        frames: [
-          {
-            stream: 'stdout',
-            text: '{"execArgv":["-e","<source>"],"argv":["<node>","alpha"]}\n',
-          },
-        ],
-        code: 0,
-        signal: null,
-      },
-    ]);
+    const outcomes = JSON.parse(output) as {
+      readonly label: string;
+      readonly stdout: string;
+      readonly stderr: string;
+      readonly frames: readonly { readonly stream: string; readonly text: string }[];
+      readonly code: number | null;
+      readonly signal: string | null;
+    }[];
+    const outcome = outcomes[0];
+    if (outcome === undefined) throw new Error('native eval outcome missing');
+    const observed = JSON.parse(outcome.stdout) as {
+      readonly execArgv: readonly string[];
+      readonly argv: readonly string[];
+    };
+
+    expect(outcomes).toHaveLength(1);
+    expect(observed.execArgv).toEqual(['-e', source]);
+    expect(observed.argv).toEqual(['<node>', 'alpha']);
+    expect(outcome).toEqual({
+      label: 'direct-short-e',
+      stdout: outcome.stdout,
+      stderr: '',
+      frames: [{ stream: 'stdout', text: outcome.stdout }],
+      code: 0,
+      signal: null,
+    });
   });
 
   it('terminates a real native oracle that exceeds the per-case timeout', async () => {

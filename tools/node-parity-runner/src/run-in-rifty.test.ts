@@ -68,39 +68,103 @@ describe('runInRifty', () => {
     REAL_WORKER_TEST_TIMEOUT_MS,
   );
 
+  it('rejects both eval-only probes outside an eval physical child', async () => {
+    await expect(
+      runInRifty(workerEnvCase, {
+        nodeCliEvalVfsProbe: {
+          expectedGuestMutations: [],
+          fault: 'transient-source-file',
+        },
+      }),
+    ).rejects.toThrow('RunInRiftyOptions.nodeCliEvalVfsProbe requires kind node-cli-eval');
+    await expect(runInRifty(workerEnvCase, { nodeCliEvalPreviewProbe: {} })).rejects.toThrow(
+      'RunInRiftyOptions.nodeCliEvalPreviewProbe requires kind node-cli-eval',
+    );
+  });
+
   it(
-    'records a physical eval write-then-unlink provenance fault even when the final tree is clean',
+    'allows a guest write while detecting an implementation-side transient eval carrier',
     async () => {
-      const source = `
-        const fs = require('node:fs');
-        fs.writeFileSync('/.rifty-eval-transient.cjs', 'source');
-        fs.unlinkSync('/.rifty-eval-transient.cjs');
-      `;
+      const source = "require('node:fs').writeFileSync('/guest-authored.txt', 'guest');";
 
       await expect(
-        runInRifty({
+        runInRifty(
+          {
+            kind: 'node-cli-eval',
+            code: '',
+            expectedPhysicalWorkers: 1,
+            nodeCliEval: {
+              sequential: [
+                {
+                  label: 'transient-vfs-carrier-fault',
+                  nodeArgv: ['-e', source],
+                  source,
+                  print: false,
+                  execArgv: ['-e', source],
+                  scriptArgs: [],
+                },
+              ],
+              concurrent: [],
+            },
+          },
+          {
+            nodeCliEvalVfsProbe: {
+              expectedGuestMutations: [{ kind: 'write', path: '/guest-authored.txt' }],
+              fault: 'transient-source-file',
+            },
+          },
+        ),
+      ).rejects.toThrow(
+        'node-cli-eval VFS audit mismatch: ' +
+          '{"missing":[],"unexpected":' +
+          '[{"kind":"write","path":"/.rifty-eval-transient.cjs"},' +
+          '{"kind":"rm","path":"/.rifty-eval-transient.cjs"}]}',
+      );
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'consumes each concurrent eval launch scope when reporting and serving its preview',
+    async () => {
+      const firstSource =
+        "require('node:http').createServer((_request, response) => { response.statusCode = 201; response.end('first-eval-preview'); }).listen(43_151);";
+      const secondSource =
+        "require('node:http').createServer((_request, response) => { response.statusCode = 202; response.end('second-eval-preview'); }).listen(43_152);";
+      const invocation = (label: string, source: string) => ({
+        label,
+        source,
+        nodeArgv: ['-e', source],
+        print: false,
+        execArgv: ['-e', source],
+        scriptArgs: [],
+      });
+
+      const stdout = await runInRifty(
+        {
           kind: 'node-cli-eval',
           code: '',
-          expectedPhysicalWorkers: 1,
+          expectedPhysicalWorkers: 2,
           nodeCliEval: {
-            sequential: [
-              {
-                label: 'transient-vfs-carrier-fault',
-                nodeArgv: ['-e', source],
-                source,
-                print: false,
-                execArgv: ['-e', source],
-                scriptArgs: [],
-              },
+            sequential: [],
+            concurrent: [
+              invocation('preview-first', firstSource),
+              invocation('preview-second', secondSource),
             ],
-            concurrent: [],
           },
-        }),
-      ).rejects.toThrow(
-        'node-cli-eval physical carrier mutated its VFS: ' +
-          '[{"kind":"write","path":"/.rifty-eval-transient.cjs"},' +
-          '{"kind":"rm","path":"/.rifty-eval-transient.cjs"}]',
+        },
+        {
+          nodeCliEvalPreviewProbe: {
+            'preview-first': { port: 43_151, status: 201, body: 'first-eval-preview' },
+            'preview-second': { port: 43_152, status: 202, body: 'second-eval-preview' },
+          },
+        },
       );
+
+      expect(JSON.parse(stdout)).toMatchObject([
+        { label: 'preview-first', signal: 'SIGTERM' },
+        { label: 'preview-second', signal: 'SIGTERM' },
+      ]);
     },
     REAL_WORKER_TEST_TIMEOUT_MS,
   );

@@ -65,7 +65,7 @@ for (;;) {
 }
 console.log(JSON.stringify({
   argv: [process.argv[0] === process.execPath, ...process.argv.slice(1)],
-  execArgv: [process.execArgv[0], process.execArgv.length],
+  execArgv: process.execArgv,
   filename: __filename,
   dirname: __dirname,
   module: {
@@ -119,28 +119,38 @@ const concurrent: NodeCliEvalInvocation[] = [
   separated(
     'short-e-order-and-separator',
     '-e',
-    "console.log(JSON.stringify({exec:[process.execArgv[0],process.execArgv.length],argv:process.argv.slice(1)}));setTimeout(()=>console.error('stderr-after'),5);setTimeout(()=>console.log('stdout-last'),10)",
+    "console.log(JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)}));setTimeout(()=>console.error('stderr-after'),5);setTimeout(()=>console.log('stdout-last'),10)",
     false,
     ['alpha', 'two words', '-x'],
     true,
   ),
   inlineEval(
     'inline-long-eval-global-script',
-    "var evalGlobal=41;console.log(JSON.stringify({thisGlobal:this===globalThis,argumentsType:typeof arguments,global:globalThis.evalGlobal+1,exec:[process.execArgv[0].startsWith('--eval='),process.execArgv.length]}))",
+    'var evalGlobal=41;console.log(JSON.stringify({thisGlobal:this===globalThis,argumentsType:typeof arguments,global:globalThis.evalGlobal+1,execArgv:process.execArgv}))',
   ),
-  separated('short-print-raw-string', '-p', "'hello'", true),
-  separated('long-print-array-bigint', '--print', '[1,{big:2n}]', true),
+  separated(
+    'short-print-raw-string',
+    '-p',
+    "console.log(JSON.stringify(process.execArgv));'hello'",
+    true,
+  ),
+  separated(
+    'long-print-array-bigint',
+    '--print',
+    'console.log(JSON.stringify(process.execArgv));[1,{big:2n}]',
+    true,
+  ),
   separated(
     'print-equals-ignored',
     '--print=ignored',
-    'JSON.stringify({option:process.execArgv[0],length:process.execArgv.length,args:process.argv.slice(1)})',
+    'JSON.stringify({execArgv:process.execArgv,args:process.argv.slice(1)})',
     true,
     ['arg'],
   ),
   separated(
     'combined-print-eval-fulfilled-promise',
     '-pe',
-    'console.log(JSON.stringify({option:process.execArgv[0],length:process.execArgv.length}));Promise.resolve(42)',
+    'console.log(JSON.stringify({execArgv:process.execArgv}));Promise.resolve(42)',
     true,
   ),
   barePrint('bare-short-print', '-p'),

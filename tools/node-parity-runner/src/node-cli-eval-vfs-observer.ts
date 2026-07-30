@@ -8,6 +8,21 @@ export interface NodeCliEvalVfsMutation {
   readonly targetPath?: string;
 }
 
+export interface NodeCliEvalVfsAudit {
+  readonly missing: readonly NodeCliEvalVfsMutation[];
+  readonly unexpected: readonly NodeCliEvalVfsMutation[];
+}
+
+function cloneMutation(mutation: NodeCliEvalVfsMutation): NodeCliEvalVfsMutation {
+  return { ...mutation };
+}
+
+function equalMutation(left: NodeCliEvalVfsMutation, right: NodeCliEvalVfsMutation): boolean {
+  return (
+    left.kind === right.kind && left.path === right.path && left.targetPath === right.targetPath
+  );
+}
+
 /**
  * Real in-memory parity VFS with an append-only mutation history. Observation
  * starts after fixture setup, so a write-then-delete carrier cannot hide behind
@@ -23,7 +38,22 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
   }
 
   mutations(): readonly NodeCliEvalVfsMutation[] {
-    return this.#mutations.map((mutation) => ({ ...mutation }));
+    return this.#mutations.map(cloneMutation);
+  }
+
+  /**
+   * Remove each declared guest effect exactly once. Missing declarations and
+   * every remaining mutation stay visible; this is not a path allowlist.
+   */
+  audit(expectedGuestMutations: readonly NodeCliEvalVfsMutation[]): NodeCliEvalVfsAudit {
+    const unexpected = [...this.mutations()];
+    const missing: NodeCliEvalVfsMutation[] = [];
+    for (const expected of expectedGuestMutations) {
+      const match = unexpected.findIndex((actual) => equalMutation(actual, expected));
+      if (match === -1) missing.push(cloneMutation(expected));
+      else unexpected.splice(match, 1);
+    }
+    return { missing, unexpected };
   }
 
   override writeFileSync(path: string, data: Uint8Array): void {

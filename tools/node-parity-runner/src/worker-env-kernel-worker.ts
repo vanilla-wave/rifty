@@ -2,7 +2,7 @@ import hostProcess from 'node:process';
 import { parentPort, workerData } from 'node:worker_threads';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
-import { awaitDrain } from '@riftydev/runtime-js';
+import { SyncRpcFsSync, awaitDrain } from '@riftydev/runtime-js';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
@@ -30,15 +30,23 @@ import {
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { installNodeRuntime } from '../../../packages/runtime-js/src/ipc/install-process.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
+import type { NodeCliEvalVfsFault } from './run-in-rifty.ts';
 
 interface WorkerEnvHarnessData {
   readonly files: Readonly<Record<string, string>>;
+  readonly nodeCliEvalVfsFault?: NodeCliEvalVfsFault;
 }
 
 if (parentPort === null) throw new Error('worker-env kernel adapter has no parent port');
 const hostPort = parentPort;
 
 const request = workerData as WorkerEnvHarnessData;
+if (
+  request.nodeCliEvalVfsFault !== undefined &&
+  request.nodeCliEvalVfsFault !== 'transient-source-file'
+) {
+  throw new TypeError('worker-env parity received an unknown node-cli-eval VFS fault');
+}
 const vfs = new MemoryFsSync();
 vfs.loadFixture(
   Object.fromEntries(Object.entries(request.files).map(([path, source]) => [`/${path}`, source])),
@@ -52,12 +60,27 @@ hostProcess.on('unhandledRejection', (reason) => recordRejection(reason));
 async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   const bootstrap = readNodeEntryBootstrap();
   const launch = bootstrap.launch;
-  if ((launch as { readonly kind: unknown }).kind === 'eval') {
+  const launchKind = (launch as { readonly kind: unknown }).kind;
+  if (request.nodeCliEvalVfsFault !== undefined && launchKind !== 'eval') {
+    throw new TypeError('node-cli-eval VFS fault requires an eval launch');
+  }
+  if (launchKind === 'eval') {
     const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
     const syncClient = new SyncRpcClient(ring);
+    const syncCall = (method: string, payload: unknown): unknown =>
+      syncClient.call(method, payload);
     publishKernelSyncApi({
-      call: (method, payload) => syncClient.call(method, payload),
+      call: syncCall,
     });
+    if (request.nodeCliEvalVfsFault === 'transient-source-file') {
+      const source = (launch as unknown as { readonly source?: unknown }).source;
+      if (typeof source !== 'string') {
+        throw new TypeError('node-cli-eval transient source fault requires string source');
+      }
+      const remoteFs = new SyncRpcFsSync(syncCall);
+      remoteFs.writeFileSync('/.rifty-eval-transient.cjs', new TextEncoder().encode(source));
+      remoteFs.rmSync('/.rifty-eval-transient.cjs', { force: true });
+    }
     // Execute the actual Workbench node-entry module. It owns eval-vs-program
     // dispatch, loader eval, print/drain ordering, process adoption, and exit.
     await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');

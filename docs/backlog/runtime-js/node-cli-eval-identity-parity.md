@@ -22,7 +22,7 @@ preserved loader execution but gave eval a file entry, added that path to
 bytes; `workbench-project-runtime.test.ts:939` pins that no such file appears.
 Reviving it is out of scope, not an alternative.
 
-## Second readiness blocker
+## Second readiness re-cut
 
 Contract+RED at `fb857235e` rejected snapshot-only VFS provenance, an
 ambient-version oracle, and eval sync-API drift into physical program siblings.
@@ -31,10 +31,29 @@ boundaries: exact source-bearing `process.execArgv`, post-return cache absence,
 the package-internal loader seam, carrier-vs-guest VFS mutation provenance, and
 preview-scope consumption.
 
-The observable Acceptance and Parity cases below remain unchanged. Re-refinement
-must replace the lossy or misclassified REDs with physical evidence, keep the
-loader seam off public package exports, and prove preview consumption through
-the existing lifecycle before the item can return to `ready`.
+The observable Acceptance and Parity cases below remain unchanged. The current
+re-cut replaces every lossy or misclassified RED:
+
+- `node-eval-context.case.ts` and `run-in-node.test.ts` compare complete
+  source-bearing `process.execArgv` tokens against the pinned v24.16.0 oracle.
+- `module-loader/node-eval.test.ts` owns the package-internal runner RED, checks
+  two distinct detached records after return, and proves one child cache is
+  reused without either eval record entering it. `public-surface.test.ts` pins
+  both public namespaces closed.
+- The append-only parity VFS audit subtracts each declared guest mutation once;
+  an injected carrier write/delete runs below guest source through the real
+  decoded launch, SAB sync client, and remote VFS before production bootstrap.
+- A physical concurrent eval RED waits for each child's exact listening-control
+  scope, fetches each server through the scoped preview bridge, then signals and
+  awaits both supervised children. This proves lifecycle consumption and
+  cross-child isolation, not payload inequality alone.
+- Both probes reject non-eval cases, while the existing physical program
+  `env-semantics`, `stdio-plan-drain-order`, `public-ipc-json`, and
+  `missing-cwd-entry` siblings remain unchanged and GREEN.
+
+The item remains `draft` until a fresh readiness judge independently verifies
+that this evidence closes the re-refinement without weakening the preserved
+contract.
 
 ## Refinement evidence
 
