@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -53,6 +53,21 @@ re-cut replaces every lossy or misclassified RED:
 
 A fresh readiness judge independently verified that this evidence closes the
 re-refinement without weakening the preserved contract; the item is `ready`.
+
+## Third readiness re-cut
+
+Contract+RED at `4cf878752` found four carrier false-GREENs, without changing
+Acceptance or Parity:
+
+- native `nodeArgv` and the Rifty launch projection were independently declared;
+- equal path/arguments/bytes could not distinguish carrier from guest VFS work;
+- error projection could discard a carrier path before the `[eval]` frame;
+- a missing terminal-history exit attribute coerced to status 0.
+
+The item is demoted while those proofs gain one canonical invocation projection,
+actor-tagged VFS observation, pre-projection path rejection, and strict exit
+attribute decoding. The pre-demotion Acceptance and Parity remain verbatim
+below.
 
 ## Refinement evidence
 
