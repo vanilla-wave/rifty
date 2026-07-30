@@ -145,6 +145,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0318 | Retain verified shadow assets for manager lifetime |
 | 0321 | Keep shadow asset port correlation package local |
 | 0335 | Shadow recipe v2 owns materialized bin claims; npm reify owns collision settlement |
+| 0343 | Auto-injected companions do not claim package bins without ordinary demand |
 
 ### playground
 

@@ -6,7 +6,8 @@ created: 2026-07-28
 why: the terminal claim-preflight checkpoint proved pure normalization and mutation-free public/cancellable/prepared integration are separate review units
 user_story: As a browser-IDE user installing package CLIs, I want every linker path to reject ambiguous or escaping claims before changing the tree and keep support claims honest
 epic: honest-shadow-substitutions
-sources: [ADR-0335, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
+blocked_by: [npm-client/package-bin-companion-claim-admission-authority]
+sources: [ADR-0335, ADR-0343, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
   - docs/public/compat/package-tooling.md
@@ -27,6 +28,9 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 
 ## Reference contract
 
+- The committed Node v24.16.0 / npm 11.17.0 packed-tarball differential and
+  golden reproduce fresh/rebuild/incremental/removal ownership; no local-link
+  or self-authored comparator substitutes for that oracle.
 - ADR-0335 requires current or authoritative-prior ambiguity to throw exactly
   `NotImplementedError('npm-client.bin-collision-reify')` before project-tree
   mutation and remain compat ❌.
@@ -51,15 +55,20 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
   source and negatively rejects both raw `ResolvedPackage` and shaped
   `PackageBinClaim`. Its type proof compiles against the real prepared
   entrypoint.
-- The structured public compat row remains ❌ and names exactly
-  `npm-client.bin-collision-reify`; its executable assertion is unconditional.
+- The structured public compat row remains ❌ and says in present tense that
+  collision-free scopes link; ambiguous current claims or a supplied
+  authoritative-prior collision, owner transition, or removal throw exactly
+  `NotImplementedError('npm-client.bin-collision-reify')` before project-tree
+  mutation; npm's operation-sensitive ADD/CHANGE/no-op/remove/rebuild ownership
+  lifecycle remains unsupported. Its executable assertion is unconditional.
 - Independent root/nested scopes and existing non-colliding public,
   cancellable, and prepared linking remain green.
 
 ## Parity cases
 
-1. Opposite current orders reject with zero mutating VFS calls through public,
-   cancellable, and prepared paths; independent scopes remain green.
+1. Opposite current orders with distinct targets reject in both root and nested
+   scopes with zero mutating VFS calls through root-public, cancellable, and
+   prepared paths; equal commands in independent scopes remain green.
 2. Escaping targets reject with zero mutating VFS calls through all three
    paths.
 3. Narrow optional prior compiles and rejects ambiguity before mutation; raw
@@ -70,8 +79,8 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 
 | Fault class | Required outcome | Proof |
 |---|---|---|
-| observable-order | current/prior ambiguity and escaping targets precede every mutating VFS call | public/cancellable/prepared operation ledgers |
-| corrupt-input | optional prepared prior admits only narrow sources, not raw packages or shaped claims | positive/negative real-entrypoint type witnesses |
+| frozen-assumption / observable-order | oracle-proven current/prior ambiguity precedes every mutating VFS call; no static winner | packed npm probe plus public/cancellable/prepared operation ledgers |
+| corrupt-input | optional prepared prior admits only narrow sources and escaping targets reject before mutation through all three paths | positive/negative real-entrypoint type witnesses plus target ledgers |
 | provenance-lie | compat remains ❌ with the exact named ceiling | unconditional structured-row assertion |
 | sibling-drift | all three linker paths invoke the same preflight and retain non-colliding behavior | entrypoint zero-mutation and green-floor table |
 
@@ -93,6 +102,9 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 
 ## Decisions
 
+- `pre-demotion-ready-verdict: 2026-07-30 — Contract+RED @
+  33ecc7ff5e9abb5169effd54467dd1ebe4f3dfae`; the Acceptance and Parity cases
+  above are verbatim from that attempted ready contract.
 - `split-predecessor:
   cbeb4bfe04f270898aa003c04ef8e6edd3daf280`; predecessor checkpoints:
   `6fdc19c5b98b9773fa5406126e6ac35c4329b9af` and
@@ -104,3 +116,12 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
   only when both raw packages and shaped output claims remain rejected.
 - File/bin phase ordering and writer faults stay entirely in the serial phased
   successor.
+- PR #233 pickup `75eb32052b294f341388630cf193f35970cf1da6`,
+  production `9a30c01549937bd98f081081fe0ec163f1b59d27`, and closure
+  `d50a80ffa5e888588af84fd5da3c22ce8c4cb60c` passed local Final+GREEN, but
+  remote run `30562763189` exposed the unsettled companion-claim fork.
+- Per `decision-workflow.md` §Backlog readiness 5, this post-pickup item stays
+  draft and is blocked by
+  `npm-client/package-bin-companion-claim-admission-authority`. Its next
+  Contract+RED must diff against the preserved clauses above; weakening them
+  requires manual refinement.
