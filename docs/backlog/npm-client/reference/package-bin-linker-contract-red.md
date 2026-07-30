@@ -473,3 +473,12 @@ only successful omitted-prior runtime call and string-form source. Per Contract
 escalation, the in-place re-refinement folds one nested scoped-string,
 omitted-prior success into the vertical output test without widening the unit.
 The runtime and type RED ledgers remain unchanged.
+
+The next isolated review at
+`2d0608ce9f7f28a603fcc36107b5468609c877b7` confirmed every earlier blocker
+closed, then blocked Spec on two remaining identity false-greens: all current
+collisions shared a target, and the prior collision had only one input order.
+The in-place carrier now pairs opposite-order different-target root collisions
+with same-target nested collisions and adds the reversed prior collision. It
+remains below the `2×` carrier boundary. Runtime now reports 10 RED and 1
+GREEN; package typecheck retains the same four intentional `TS2578` REDs.

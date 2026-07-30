@@ -17,7 +17,7 @@ function requirePreflight(): Preflight {
   return preflight;
 }
 
-it('keeps the seam package-private', () =>
+it('keeps settlement private', () =>
   expect(npmClientRoot).not.toHaveProperty('preflightPackageBins'));
 
 function source(
@@ -73,24 +73,24 @@ it('[fault: observable-order][fault: lossy-aggregate] returns exact current clai
 });
 
 it.each([
-  ['root forward', 'node_modules', ['a-cli', 'z-cli']],
-  ['root reverse', 'node_modules', ['z-cli', 'a-cli']],
-  ['nested forward', 'node_modules/host/node_modules', ['a-cli', 'z-cli']],
-  ['nested reverse', 'node_modules/host/node_modules', ['z-cli', 'a-cli']],
+  ['root forward', 'node_modules', ['a-cli', 'z-cli'], false],
+  ['root reverse', 'node_modules', ['z-cli', 'a-cli'], false],
+  ['nested forward', 'node_modules/host/node_modules', ['a-cli', 'z-cli'], true],
+  ['nested reverse', 'node_modules/host/node_modules', ['z-cli', 'a-cli'], true],
 ] as const)(
   '[fault: frozen-assumption][fault: observable-order] rejects current collision: %s',
-  (_case, nodeModulesDir, owners) => {
+  (_case, nodeModulesDir, owners, sameTarget) => {
     const preflight = requirePreflight();
+    const target = (owner: string) => `./bin/${sameTarget ? 'shared' : owner}.js`;
     expectCollision(() =>
-      preflight(
-        owners.map((owner) => source(owner, { shared: './bin/shared.js' }, nodeModulesDir)),
-      ),
+      preflight(owners.map((owner) => source(owner, { shared: target(owner) }, nodeModulesDir))),
     );
   },
 );
 
 it.each([
   ['recorded prior collision', ['a-cli'], ['a-cli', 'z-cli']],
+  ['recorded prior collision reverse', ['a-cli'], ['z-cli', 'a-cli']],
   ['prior owner transition', ['current-cli'], ['prior-cli']],
   ['recorded prior removal', [], ['prior-cli']],
 ] as const)(
