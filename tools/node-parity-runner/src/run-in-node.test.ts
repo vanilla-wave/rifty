@@ -1,4 +1,6 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
+import { assertNodeCliEvalOracleVersion } from './node-cli-eval.ts';
 import { runInNode } from './run-in-node.ts';
 
 describe('runInNode', () => {
@@ -60,5 +62,34 @@ describe('runInNode', () => {
         { timeoutMs: 50 },
       ),
     ).rejects.toThrow('Node parity case timed out after 50ms');
+  });
+});
+
+describe('Node v24.16.0 CLI eval oracle', () => {
+  it('rejects every attached short eval/print source spelling with exact exit 9 stderr', () => {
+    assertNodeCliEvalOracleVersion(process.version);
+    const options = [
+      '-eSRC',
+      '-e=SRC',
+      '-pSRC',
+      '-p=SRC',
+      '-peSRC',
+      '-pe=SRC',
+      '-epSRC',
+      '-ep=SRC',
+    ] as const;
+
+    for (const option of options) {
+      const outcome = spawnSync(process.execPath, [option], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      expect(outcome.error).toBeUndefined();
+      expect(outcome.signal).toBeNull();
+      expect(outcome.status).toBe(9);
+      expect(outcome.stdout).toBe('');
+      expect(outcome.stderr).toBe(`${process.execPath}: bad option: ${option}\n`);
+    }
   });
 });

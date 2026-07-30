@@ -18,8 +18,14 @@ node --print
 node -e
 node --eval=
 node -ep "1"
-node -e=1
-node -p=1
+node '-eSRC'
+node '-e=SRC'
+node '-pSRC'
+node '-p=SRC'
+node '-peSRC'
+node '-pe=SRC'
+node '-epSRC'
+node '-ep=SRC'
 ```
 
 Normalized stdout/status:
@@ -37,8 +43,14 @@ undefined                                                               # 0
 node: -e requires an argument                                            # 9
 node: --eval= requires an argument                                       # 9
 node: bad option: -ep                                                    # 9
-node: bad option: -e=1                                                   # 9
-node: bad option: -p=1                                                   # 9
+node: bad option: -eSRC                                                  # 9
+node: bad option: -e=SRC                                                 # 9
+node: bad option: -pSRC                                                  # 9
+node: bad option: -p=SRC                                                 # 9
+node: bad option: -peSRC                                                 # 9
+node: bad option: -pe=SRC                                                # 9
+node: bad option: -epSRC                                                 # 9
+node: bad option: -ep=SRC                                                # 9
 ```
 
 `--print=<rhs>` is a boolean option spelling: the RHS is ignored and the next
@@ -46,7 +58,8 @@ argument is source. Missing plain `-p`/`--print` source evaluates `undefined`;
 bare `-pe`, missing `-e`, and empty `--eval=` are usage errors. `--`
 immediately after source is consumed; later arguments, including
 option-looking ones, are script arguments. `-pe <source>` is accepted; `-ep`,
-attached short-option source, `-p=`, and `-e=` are bad options.
+and every attached short-option source spelling in the matrix above are bad
+options.
 
 Run the identity and resolver probe from a cwd containing `marker.cjs`:
 

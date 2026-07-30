@@ -121,7 +121,7 @@ describe('classifyNodeInvocation', () => {
     }
   });
 
-  it('missing/empty eval and attached short-option source stay loud', () => {
+  it('missing/empty eval source stays loud', () => {
     expect(classifyNodeInvocation(['-e'])).toEqual({
       kind: 'usageError',
       message: 'node: -e requires an argument\n',
@@ -138,7 +138,19 @@ describe('classifyNodeInvocation', () => {
       kind: 'usageError',
       message: 'node: --eval requires an argument\n',
     });
-    for (const flag of ['-e=1', '-p=1', '-eSRC', '-pSRC']) {
+  });
+
+  it('every attached short eval/print source spelling stays a bad option', () => {
+    for (const flag of [
+      '-eSRC',
+      '-e=SRC',
+      '-pSRC',
+      '-p=SRC',
+      '-peSRC',
+      '-pe=SRC',
+      '-epSRC',
+      '-ep=SRC',
+    ]) {
       expect(classifyNodeInvocation([flag])).toEqual({ kind: 'badOption', flag });
     }
   });
