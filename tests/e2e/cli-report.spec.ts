@@ -16,7 +16,9 @@ import {
   assertNodeCliEvalNoCarrierPath,
   assertNodeCliEvalOracleVersion,
   createNodeCliEvalCapture,
+  resolveNodeCliEvalInvocation,
 } from '../../tools/node-parity-runner/src/node-cli-eval.ts';
+import type { NodeCliEvalInvocation } from '../../tools/node-parity-runner/src/types.ts';
 import {
   type TerminalSessionTarget,
   capturePageProblems,
@@ -39,12 +41,9 @@ const FIXTURE_FILES = {
   'fixtures/b/node_modules/eval-package/index.js': "module.exports='package-b'\n",
 } as const;
 
-interface PhysicalNodeInvocation {
-  readonly label: string;
+type PhysicalNodeInvocation = Omit<NodeCliEvalInvocation, 'cwd'> & {
   readonly cwd: '/fixtures/a' | '/fixtures/b';
-  /** Exact argv after process.execPath; the only eval carrier in this test. */
-  readonly nodeArgv: readonly string[];
-}
+};
 
 interface HostFixture {
   readonly root: string;
@@ -131,7 +130,11 @@ function shellWord(value: string): string {
 }
 
 function workbenchLine(invocation: PhysicalNodeInvocation): string {
-  return `cd ${shellWord(invocation.cwd)} && node ${invocation.nodeArgv.map(shellWord).join(' ')}`;
+  const { nodeArgv } = resolveNodeCliEvalInvocation(
+    invocation,
+    `browser node-cli-eval ${invocation.label}`,
+  );
+  return `cd ${shellWord(invocation.cwd)} && node ${nodeArgv.map(shellWord).join(' ')}`;
 }
 
 function settledCommandOutput(buffer: string, line: string): string {
@@ -180,7 +183,11 @@ function startHostInvocation(
 ): RunningHostInvocation {
   assertNodeCliEvalOracleVersion(process.version);
   const capture = createNodeCliEvalCapture();
-  const child = spawn(process.execPath, [...invocation.nodeArgv], {
+  const { nodeArgv } = resolveNodeCliEvalInvocation(
+    invocation,
+    `native browser oracle ${invocation.label}`,
+  );
+  const child = spawn(process.execPath, [...nodeArgv], {
     cwd: fixture.cwd(invocation.cwd),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -288,7 +295,11 @@ function startHostPreview(
 ): RunningHostPreview {
   assertNodeCliEvalOracleVersion(process.version);
   const capture = createNodeCliEvalCapture();
-  const child = spawn(process.execPath, [...invocation.nodeArgv], {
+  const { nodeArgv } = resolveNodeCliEvalInvocation(
+    invocation,
+    `native browser preview ${invocation.label}`,
+  );
+  const child = spawn(process.execPath, [...nodeArgv], {
     cwd: fixture.cwd(invocation.cwd),
     stdio: ['pipe', 'pipe', 'pipe'],
   });

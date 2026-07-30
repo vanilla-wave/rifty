@@ -18,10 +18,6 @@ describe('runInNode', () => {
           {
             label: 'direct-short-e',
             nodeArgv: ['-e', source, '--', 'alpha'],
-            source,
-            print: false,
-            execArgv: ['-e', source],
-            scriptArgs: ['alpha'],
           },
         ],
       },

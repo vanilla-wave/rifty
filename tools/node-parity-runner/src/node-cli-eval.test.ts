@@ -38,10 +38,6 @@ describe('node CLI eval parity carrier', () => {
       {
         label: 'throw',
         nodeArgv: [],
-        source: "throw new Error('boom')",
-        print: false,
-        execArgv: [],
-        scriptArgs: [],
         evalErrorStderr: true,
       },
       {
@@ -103,10 +99,6 @@ describe('node CLI eval parity carrier', () => {
         {
           label: 'path-leak',
           nodeArgv: ['-e', source],
-          source,
-          print: false,
-          execArgv: ['-e', source],
-          scriptArgs: [],
           evalErrorStderr: true,
         },
         {
@@ -124,10 +116,6 @@ describe('node CLI eval parity carrier', () => {
     const repeated = {
       label: 'same',
       nodeArgv: ['-p'],
-      source: 'undefined',
-      print: true,
-      execArgv: ['-p'],
-      scriptArgs: [],
     } as const;
     expect(() =>
       nodeCliEvalInvocations({

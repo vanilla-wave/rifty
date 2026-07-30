@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import type { NodeCliEvalInvocation, ParityCase } from './types.ts';
+import type { NodeCliEvalInvocation, ParityCase, ResolvedNodeCliEvalInvocation } from './types.ts';
 
 export interface NodeCliEvalFrame {
   readonly stream: 'stdout' | 'stderr';
@@ -41,42 +41,141 @@ function strings(value: readonly string[], owner: string): readonly string[] {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
     throw new TypeError(`${owner} must be an array of strings`);
   }
-  return value;
+  return Object.freeze([...value]);
 }
 
-function invocation(value: NodeCliEvalInvocation, owner: string): NodeCliEvalInvocation {
+const DERIVED_INVOCATION_FIELDS = ['source', 'print', 'execArgv', 'scriptArgs'] as const;
+
+function scriptArgs(nodeArgv: readonly string[], start: number): readonly string[] {
+  return Object.freeze(nodeArgv.slice(nodeArgv[start] === '--' ? start + 1 : start));
+}
+
+function evalSemantics(
+  nodeArgv: readonly string[],
+  owner: string,
+): Pick<ResolvedNodeCliEvalInvocation, 'source' | 'print' | 'execArgv' | 'scriptArgs'> {
+  const option = nodeArgv[0];
+  if (option === undefined) {
+    throw new TypeError(`${owner} must contain a supported eval option`);
+  }
+  if (option === '-e' || option === '--eval' || option === '-pe') {
+    const source = nodeArgv[1];
+    if (source === undefined) {
+      throw new TypeError(`${owner} ${option} requires a source argument`);
+    }
+    return Object.freeze({
+      source,
+      print: option === '-pe',
+      execArgv: Object.freeze([option, source]),
+      scriptArgs: scriptArgs(nodeArgv, 2),
+    });
+  }
+  if (option === '-p' || option === '--print') {
+    const source = nodeArgv[1];
+    if (source === undefined) {
+      return Object.freeze({
+        source: '',
+        print: true,
+        execArgv: Object.freeze([option]),
+        scriptArgs: Object.freeze([]),
+      });
+    }
+    return Object.freeze({
+      source,
+      print: true,
+      execArgv: Object.freeze([option, source]),
+      scriptArgs: scriptArgs(nodeArgv, 2),
+    });
+  }
+  if (option.startsWith('--eval=')) {
+    const source = option.slice('--eval='.length);
+    if (source.length === 0) {
+      throw new TypeError(`${owner} --eval= requires a non-empty inline source`);
+    }
+    return Object.freeze({
+      source,
+      print: false,
+      execArgv: Object.freeze([option]),
+      scriptArgs: scriptArgs(nodeArgv, 1),
+    });
+  }
+  if (option.startsWith('--print=')) {
+    const source = nodeArgv[1];
+    if (source === undefined) {
+      return Object.freeze({
+        source: '',
+        print: true,
+        execArgv: Object.freeze([option]),
+        scriptArgs: Object.freeze([]),
+      });
+    }
+    return Object.freeze({
+      source,
+      print: true,
+      execArgv: Object.freeze([option, source]),
+      scriptArgs: scriptArgs(nodeArgv, 2),
+    });
+  }
+  throw new TypeError(`${owner} has unsupported eval option ${JSON.stringify(option)}`);
+}
+
+/** Snapshot one raw CLI invocation and derive the launch consumed by rifty. */
+export function resolveNodeCliEvalInvocation(
+  value: NodeCliEvalInvocation,
+  owner = 'nodeCliEval invocation',
+): ResolvedNodeCliEvalInvocation {
   if (typeof value !== 'object' || value === null)
     throw new TypeError(`${owner} must be an object`);
   if (typeof value.label !== 'string' || value.label.length === 0) {
     throw new TypeError(`${owner}.label must be a non-empty string`);
   }
-  if (typeof value.source !== 'string') throw new TypeError(`${owner}.source must be a string`);
-  if (typeof value.print !== 'boolean') throw new TypeError(`${owner}.print must be a boolean`);
+  for (const field of DERIVED_INVOCATION_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(value, field)) {
+      throw new TypeError(`${owner}.${field} is derived from nodeArgv`);
+    }
+  }
   if (
     value.cwd !== undefined &&
-    (!value.cwd.startsWith('/') ||
+    (typeof value.cwd !== 'string' ||
+      !value.cwd.startsWith('/') ||
       value.cwd.split('/').some((part) => part === '..' || part === '.'))
   ) {
     throw new TypeError(`${owner}.cwd must be an absolute POSIX path without dot segments`);
   }
-  strings(value.nodeArgv, `${owner}.nodeArgv`);
-  strings(value.execArgv, `${owner}.execArgv`);
-  strings(value.scriptArgs, `${owner}.scriptArgs`);
-  return value;
+  if (value.evalErrorStderr !== undefined && typeof value.evalErrorStderr !== 'boolean') {
+    throw new TypeError(`${owner}.evalErrorStderr must be a boolean`);
+  }
+  if (
+    value.rejectedPromiseStdout !== undefined &&
+    typeof value.rejectedPromiseStdout !== 'boolean'
+  ) {
+    throw new TypeError(`${owner}.rejectedPromiseStdout must be a boolean`);
+  }
+  const nodeArgv = strings(value.nodeArgv, `${owner}.nodeArgv`);
+  return Object.freeze({
+    label: value.label,
+    nodeArgv,
+    ...(value.cwd === undefined ? {} : { cwd: value.cwd }),
+    ...(value.evalErrorStderr === undefined ? {} : { evalErrorStderr: value.evalErrorStderr }),
+    ...(value.rejectedPromiseStdout === undefined
+      ? {}
+      : { rejectedPromiseStdout: value.rejectedPromiseStdout }),
+    ...evalSemantics(nodeArgv, `${owner}.nodeArgv`),
+  });
 }
 
 export function nodeCliEvalInvocations(testCase: ParityCase): {
-  readonly sequential: readonly NodeCliEvalInvocation[];
-  readonly concurrent: readonly NodeCliEvalInvocation[];
+  readonly sequential: readonly ResolvedNodeCliEvalInvocation[];
+  readonly concurrent: readonly ResolvedNodeCliEvalInvocation[];
 } {
   if (testCase.kind !== 'node-cli-eval' || testCase.nodeCliEval === undefined) {
     throw new TypeError("ParityCase kind 'node-cli-eval' requires nodeCliEval");
   }
   const sequential = testCase.nodeCliEval.sequential.map((value, index) =>
-    invocation(value, `nodeCliEval.sequential[${String(index)}]`),
+    resolveNodeCliEvalInvocation(value, `nodeCliEval.sequential[${String(index)}]`),
   );
   const concurrent = (testCase.nodeCliEval.concurrent ?? []).map((value, index) =>
-    invocation(value, `nodeCliEval.concurrent[${String(index)}]`),
+    resolveNodeCliEvalInvocation(value, `nodeCliEval.concurrent[${String(index)}]`),
   );
   const labels = [...sequential, ...concurrent].map(({ label }) => label);
   if (new Set(labels).size !== labels.length) {
@@ -221,7 +320,7 @@ export function canonicalNodeCliEvalOutcome(
 
 export async function runNodeCliEvalMatrix(
   testCase: ParityCase,
-  run: (invocation: NodeCliEvalInvocation) => Promise<NodeCliEvalOutcome>,
+  run: (invocation: ResolvedNodeCliEvalInvocation) => Promise<NodeCliEvalOutcome>,
 ): Promise<string> {
   const { sequential, concurrent } = nodeCliEvalInvocations(testCase);
   const outcomes: NodeCliEvalOutcome[] = [];

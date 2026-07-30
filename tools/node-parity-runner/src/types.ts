@@ -33,9 +33,9 @@ export interface ParityCase {
   /** Exact native Worker constructions required by a physical Worker case. */
   readonly expectedPhysicalWorkers?: number;
   /**
-   * Exact native-Node argv and the corresponding typed eval launch. Present
-   * only for `kind: 'node-cli-eval'`; the Node side spawns that argv directly,
-   * while rifty sends source only in the node-entry bootstrap.
+   * Exact native-Node argv for each eval launch. Present only for
+   * `kind: 'node-cli-eval'`; the harness derives rifty's source, print mode,
+   * execArgv, and script args from this one CLI carrier before either side runs.
    */
   readonly nodeCliEval?: {
     readonly sequential: readonly NodeCliEvalInvocation[];
@@ -118,8 +118,18 @@ export interface ParityCase {
 
 export interface NodeCliEvalInvocation {
   readonly label: string;
-  /** Exact argv after process.execPath for the native Node oracle. */
+  /** Exact argv after process.execPath; sole source for both parity launches. */
   readonly nodeArgv: readonly string[];
+  /** Absolute logical cwd, defaulting to the case cwd. */
+  readonly cwd?: string;
+  /** Keep only Node's in-scope eval prelude/error/first user frame. */
+  readonly evalErrorStderr?: boolean;
+  /** Keep the rejected-Promise prefix/user frame, not Node-internal frames. */
+  readonly rejectedPromiseStdout?: boolean;
+}
+
+/** Harness-owned launch semantics derived once from {@link NodeCliEvalInvocation.nodeArgv}. */
+export interface ResolvedNodeCliEvalInvocation extends NodeCliEvalInvocation {
   /** Loader-owned eval source; never placed in rifty argv/env/VFS. */
   readonly source: string;
   readonly print: boolean;
@@ -127,12 +137,6 @@ export interface NodeCliEvalInvocation {
   readonly execArgv: readonly string[];
   /** Exact arguments after the eval source; process argv has no entry path. */
   readonly scriptArgs: readonly string[];
-  /** Absolute logical cwd, defaulting to the case cwd. */
-  readonly cwd?: string;
-  /** Keep only Node's in-scope eval prelude/error/first user frame. */
-  readonly evalErrorStderr?: boolean;
-  /** Keep the rejected-Promise prefix/user frame, not Node-internal frames. */
-  readonly rejectedPromiseStdout?: boolean;
 }
 
 /**

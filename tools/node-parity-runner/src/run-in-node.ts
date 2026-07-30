@@ -14,8 +14,7 @@ import {
   createNodeCliEvalCapture,
   runNodeCliEvalMatrix,
 } from './node-cli-eval.ts';
-import type { NodeCliEvalInvocation } from './types.ts';
-import { type ParityCase, caseCwd } from './types.ts';
+import { type ParityCase, type ResolvedNodeCliEvalInvocation, caseCwd } from './types.ts';
 
 // Rifty process modes temporarily replace the shared harness global. Keep the
 // genuine host process for native runner selection and platform checks.
@@ -200,7 +199,7 @@ function extractTtyResult(transcript: string): string {
 }
 
 async function runNodeCliEvalInvocation(
-  invocation: NodeCliEvalInvocation,
+  invocation: ResolvedNodeCliEvalInvocation,
   workDir: string,
   defaultCwd: string,
   timeoutMs: number,

@@ -4,7 +4,6 @@ function separated(
   label: string,
   option: '-e' | '--eval' | '-p' | '--print' | '-pe' | '--print=ignored',
   source: string,
-  print: boolean,
   scriptArgs: readonly string[] = [],
   separator = false,
   policies: Pick<NodeCliEvalInvocation, 'evalErrorStderr' | 'rejectedPromiseStdout'> = {},
@@ -12,10 +11,6 @@ function separated(
   return {
     label,
     nodeArgv: [option, source, ...(separator ? ['--'] : []), ...scriptArgs],
-    source,
-    print,
-    execArgv: [option, source],
-    scriptArgs,
     ...policies,
   };
 }
@@ -28,10 +23,6 @@ function inlineEval(
   return {
     label,
     nodeArgv: [`--eval=${source}`, ...scriptArgs],
-    source,
-    print: false,
-    execArgv: [`--eval=${source}`],
-    scriptArgs,
   };
 }
 
@@ -42,10 +33,6 @@ function barePrint(
   return {
     label,
     nodeArgv: [option],
-    source: '',
-    print: true,
-    execArgv: [option],
-    scriptArgs: [],
   };
 }
 
@@ -111,11 +98,11 @@ console.log(JSON.stringify({
 
 const sequential: NodeCliEvalInvocation[] = [
   {
-    ...separated('identity-and-resolver', '--eval', identitySource, false, ['alpha', 'two words']),
+    ...separated('identity-and-resolver', '--eval', identitySource, ['alpha', 'two words']),
     cwd: '/fixtures/a',
   },
   {
-    ...separated('isolation-sequential-b', '-e', isolationSource, false, ['b']),
+    ...separated('isolation-sequential-b', '-e', isolationSource, ['b']),
     cwd: '/fixtures/b',
   },
 ];
@@ -125,7 +112,6 @@ const concurrent: NodeCliEvalInvocation[] = [
     'short-e-order-and-separator',
     '-e',
     "console.log(JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)}));setTimeout(()=>console.error('stderr-after'),5);setTimeout(()=>console.log('stdout-last'),10)",
-    false,
     ['alpha', 'two words', '-x'],
     true,
   ),
@@ -137,26 +123,22 @@ const concurrent: NodeCliEvalInvocation[] = [
     'short-print-raw-string',
     '-p',
     "console.log(JSON.stringify(process.execArgv));'hello'",
-    true,
   ),
   separated(
     'long-print-array-bigint',
     '--print',
     'console.log(JSON.stringify(process.execArgv));[1,{big:2n}]',
-    true,
   ),
   separated(
     'print-equals-ignored',
     '--print=ignored',
     'JSON.stringify({execArgv:process.execArgv,args:process.argv.slice(1)})',
-    true,
     ['arg'],
   ),
   separated(
     'combined-print-eval-fulfilled-promise',
     '-pe',
     'console.log(JSON.stringify({execArgv:process.execArgv}));Promise.resolve(42)',
-    true,
   ),
   barePrint('bare-short-print', '-p'),
   barePrint('bare-long-print', '--print'),
@@ -165,45 +147,41 @@ const concurrent: NodeCliEvalInvocation[] = [
     'circular-after-timer-drain',
     '-p',
     "const value={phase:'before'};value.self=value;setTimeout(()=>{console.log('timer');value.phase='after'},0);value",
-    true,
   ),
   separated(
     'timer-settled-promise',
     '-p',
     'let settle;const promise=new Promise(resolve=>{settle=resolve});setTimeout(()=>settle(42),0);promise',
-    true,
   ),
-  separated('pending-promise', '-p', 'new Promise(()=>{})', true),
+  separated('pending-promise', '-p', 'new Promise(()=>{})'),
   separated(
     'rejected-promise-print-before-error',
     '-p',
     "Promise.reject(new Error('print-nope'))",
-    true,
     [],
     false,
     { rejectedPromiseStdout: true, evalErrorStderr: true },
   ),
-  separated('exit-code-after-print', '-p', 'process.exitCode=7;42', true),
-  separated('forced-exit-suppresses-print', '-p', 'process.exit(7);42', true),
-  separated('throw-user-frame', '-e', "throw new Error('boom')", false, [], false, {
+  separated('exit-code-after-print', '-p', 'process.exitCode=7;42'),
+  separated('forced-exit-suppresses-print', '-p', 'process.exit(7);42'),
+  separated('throw-user-frame', '-e', "throw new Error('boom')", [], false, {
     evalErrorStderr: true,
   }),
-  separated('syntax-user-prelude', '-e', 'return 1', false, [], false, { evalErrorStderr: true }),
+  separated('syntax-user-prelude', '-e', 'return 1', [], false, { evalErrorStderr: true }),
   separated(
     'unhandled-rejection-user-frame',
     '-e',
     "Promise.reject(new Error('unhandled'))",
-    false,
     [],
     false,
     { evalErrorStderr: true },
   ),
   {
-    ...separated('isolation-concurrent-a', '-e', isolationSource, false, ['a']),
+    ...separated('isolation-concurrent-a', '-e', isolationSource, ['a']),
     cwd: '/fixtures/a',
   },
   {
-    ...separated('isolation-concurrent-b', '-e', isolationSource, false, ['b']),
+    ...separated('isolation-concurrent-b', '-e', isolationSource, ['b']),
     cwd: '/fixtures/b',
   },
 ];
