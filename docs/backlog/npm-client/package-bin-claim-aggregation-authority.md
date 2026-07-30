@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Package-bin claim aggregation authority
 created: 2026-07-28
 why: the terminal source-list checkpoint proved ordered composition of exact per-source claims needs its own boundary before settlement
@@ -72,6 +72,11 @@ package-specific branch.
 
 ## Decisions
 
+ready-verdict: 2026-07-30 — Contract+RED @ c00a91638a55699aeffa74f65959973ab8c22a20
+
+- `contract-red-first: 2a51987dfc5488c7d07c86f6fc7c4a2c2839db5f`.
+- `contract-red-pass: c00a91638a55699aeffa74f65959973ab8c22a20`;
+  review-convergence lineage is recorded in the reference contract.
 - `split-predecessor:
   2ef0ecf61adb35fade0977cd0d0355be2a975ea5`; predecessor checkpoints:
   `3c4adade0ae34b076e536147f5d551e82b737055` and
