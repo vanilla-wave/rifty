@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -80,7 +80,7 @@ changing Acceptance, Parity, or loud exclusions:
   print and long-option spellings free to fall into a generic option error or
   CommonJS eval.
 
-The item is demoted while those exact sibling families gain native-oracle,
+The item was demoted while those exact sibling families gained native-oracle,
 classifier, and no-child Workbench sweeps. The pre-demotion Acceptance and
 Parity remain verbatim below.
 
@@ -232,7 +232,7 @@ identity rather than a generated workspace file, and return the real exit code.
 
 ## Decisions
 
-ready-verdict: 2026-07-30 — current code, compat, TODO, ADR, and backlog searches settle Context, freshness, and non-overlap; ADR-0337 with ADR-0155/0157/0267/0325/0326/0332/0334 settles atomic v3 transport, loader/process/stdio/preview ownership, loud exclusions, and the no-second-carrier mechanism inventory; the executable Node v24.16.0 oracle and verbatim pre-demotion Acceptance/Parity settle grammar, argv/execArgv, eval/module/resolver/cache identity, unwrapped completion, formatting, error/exit order, and isolation without weakening scope; the single raw-argv projection, package-internal and closed-public-surface RED, actor-tagged physical VFS audit, pre-projection carrier-path rejection, strict terminal-exit decoding, corrupt-bootstrap faults, concurrent scoped-preview consumption, Chromium carrier artifact, and unchanged physical siblings settle every Acceptance, Parity, Fault, and reachability boundary.
+ready-verdict: 2026-07-30 — current code, compat, TODO, ADR, and backlog searches settle Context, freshness, and non-overlap; ADR-0337 plus ADR-0155/0157/0267/0325/0326/0332/0334 settle the atomic v3 carrier, loader/process/stdio/preview authorities, loud exclusions, Decisions, Reversibility, and the no-second-carrier mechanism inventory; the executable Node v24.16.0 oracle and unchanged pre-demotion Acceptance/Parity settle the User scenario, grammar/execArgv/argv, eval/module/resolver/cache identity, unwrapped completion, formatting, lifecycle/error order, and isolation; single raw-argv derivation, exact attached-short native/classifier/owner sweeps, all accepted `--input-type=module` no-child sweeps, package-internal and closed-public-surface RED, actor-tagged physical VFS audit, pre-projection carrier-path rejection, strict terminal-exit decoding, corrupt-bootstrap faults, concurrent scoped-preview consumption, the Chromium physical-carrier artifact, and unchanged physical program siblings settle every Acceptance, Parity, Fault, loud-boundary, and reachability row without weakening scope.
 
 - ADR-0337 owns the irreversible atomic node-entry v3 shape and the one
   loader-owned unwrapped-script mechanism. There is no v2 compatibility reader.
