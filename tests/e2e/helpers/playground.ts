@@ -271,6 +271,23 @@ export async function runTerminalLineSettled(
     .toBe(true);
 }
 
+const EXACT_TERMINAL_HISTORY_EXIT_CODE = /^(?:0|[1-9]\d*)$/u;
+
+/** Decode only the terminal history's canonical nonnegative safe-integer encoding. */
+export function decodeTerminalHistoryExitCode(
+  raw: string | null | undefined,
+  line: string,
+): number {
+  if (raw === null || raw === undefined || !EXACT_TERMINAL_HISTORY_EXIT_CODE.test(raw)) {
+    throw new Error(`terminal history has no exact exit code for ${line}: ${String(raw)}`);
+  }
+  const code = Number(raw);
+  if (!Number.isSafeInteger(code)) {
+    throw new Error(`terminal history has no exact exit code for ${line}: ${raw}`);
+  }
+  return code;
+}
+
 /** Exact exit status recorded by the real terminal run, read through its history UI. */
 export async function terminalHistoryExitCode(
   page: Page,
@@ -295,11 +312,7 @@ export async function terminalHistoryExitCode(
   const raw = await items.first().getAttribute('data-exit');
   await page.keyboard.press('Escape');
   await expect(history).toHaveCount(0);
-  const code = Number(raw);
-  if (!Number.isSafeInteger(code) || code < 0) {
-    throw new Error(`terminal history has no exact exit code for ${line}: ${String(raw)}`);
-  }
-  return code;
+  return decodeTerminalHistoryExitCode(raw, line);
 }
 
 export interface ActiveProjectText {
