@@ -594,8 +594,7 @@ export async function install(
   opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, preparedPackages));
   const preparedLinkPackages = preparedPackages.map((prepared) => {
     if (!resolved.companionOnlyBinInstallPaths.has(prepared.relativePath)) return prepared;
-    const pkg = { ...prepared.package };
-    delete pkg.bin;
+    const pkg = { ...prepared.package, bin: undefined };
     return { ...prepared, package: pkg };
   });
   throwIfAborted(opts.signal);
@@ -1765,10 +1764,7 @@ async function walkAndPin(
   const pinned = new Map<string, PinnedPackage>();
   /** Install paths already scheduled this walk (synchronous path-level dedup,
    * replaces `pinned.has` since `pinned` is now populated at the await site). */
-  const scheduled = new Map<
-    string,
-    { readonly identity: string; ordinaryBinDemand: boolean }
-  >();
+  const scheduled = new Map<string, { readonly identity: string; ordinaryBinDemand: boolean }>();
   /** Paths reached by at least one non-optional edge; demand only strengthens. */
   const requiredDemandPaths = new Set<string>();
   /** Collapse concurrent same-package acquisitions to one network call. */
