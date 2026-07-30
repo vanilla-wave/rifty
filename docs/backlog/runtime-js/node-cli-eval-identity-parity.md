@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -83,6 +83,26 @@ changing Acceptance, Parity, or loud exclusions:
 The item was demoted while those exact sibling families gained native-oracle,
 classifier, and no-child Workbench sweeps. The pre-demotion Acceptance and
 Parity remain verbatim below.
+
+## Fifth readiness re-cut
+
+Contract+RED at `80f98be3e` found five remaining proof holes without changing
+Acceptance, Parity, or loud exclusions:
+
+- separated explicitly empty source tokens were not swept apart from missing
+  source through the native oracle, classifier, Workbench owner, and physical
+  parity carrier;
+- a required child's parent was compared only by id and filename, not by strict
+  identity with the detached eval record;
+- Promise result RED did not preserve the realm Promise descriptor and
+  constructor identity required by ADR-0337;
+- the physical remote-VFS audit did not expose a child-local pre-bootstrap
+  carrier/fallback;
+- Workbench launch RED replaced the sibling kernel process manager with a fake
+  handle instead of exercising the real admitted child boundary.
+
+The item is demoted while those exact proofs gain cross-surface sweeps. The
+pre-demotion Acceptance and Parity remain verbatim below.
 
 ## Refinement evidence
 
