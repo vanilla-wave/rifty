@@ -15,6 +15,7 @@ import {
 import { asyncVfs, syncMirror } from '../../../packages/vfs/src/index.ts';
 import { setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
 import workerEnvCase from '../cases/worker_threads/env-semantics.case.ts';
+import { nodeCliEvalVfsFileContent } from './node-cli-eval-vfs-observer.ts';
 import { runInRifty } from './run-in-rifty.ts';
 
 // Leave room for runInRifty's 30s diagnostic deadline under loaded CI Workers.
@@ -83,9 +84,20 @@ describe('runInRifty', () => {
   });
 
   it(
-    'allows a guest write while detecting an implementation-side transient eval carrier',
+    'does not let a physical transient carrier satisfy same-path declared guest effects',
     async () => {
-      const source = "require('node:fs').writeFileSync('/guest-authored.txt', 'guest');";
+      const carrierPath = '/.rifty-eval-transient.cjs';
+      const source = "'carrier-source';";
+      const missingGuestWrite = {
+        kind: 'write' as const,
+        path: carrierPath,
+        content: nodeCliEvalVfsFileContent(carrierPath, 'guest-authored'),
+      };
+      const unexpectedCarrierWrite = {
+        kind: 'write' as const,
+        path: carrierPath,
+        content: nodeCliEvalVfsFileContent(carrierPath, source),
+      };
 
       await expect(
         runInRifty(
@@ -109,16 +121,24 @@ describe('runInRifty', () => {
           },
           {
             nodeCliEvalVfsProbe: {
-              expectedGuestMutations: [{ kind: 'write', path: '/guest-authored.txt' }],
+              expectedGuestMutations: [
+                missingGuestWrite,
+                {
+                  kind: 'rm',
+                  path: carrierPath,
+                  recursive: false,
+                  force: true,
+                },
+              ],
               fault: 'transient-source-file',
             },
           },
         ),
       ).rejects.toThrow(
-        'node-cli-eval VFS audit mismatch: ' +
-          '{"missing":[],"unexpected":' +
-          '[{"kind":"write","path":"/.rifty-eval-transient.cjs"},' +
-          '{"kind":"rm","path":"/.rifty-eval-transient.cjs"}]}',
+        `node-cli-eval VFS audit mismatch: ${JSON.stringify({
+          missing: [missingGuestWrite],
+          unexpected: [unexpectedCarrierWrite],
+        })}`,
       );
     },
     REAL_WORKER_TEST_TIMEOUT_MS,
