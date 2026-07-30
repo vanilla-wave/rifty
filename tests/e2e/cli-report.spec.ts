@@ -172,12 +172,17 @@ function workbenchLine(invocation: PhysicalNodeInvocation): string {
   return `cd ${shellWord(invocation.cwd)} && node ${invocation.nodeArgv.map(shellWord).join(' ')}`;
 }
 
-function settledCommandOutput(buffer: string, line: string): string {
+function commandOutputAfterEcho(buffer: string, line: string): string | null {
   const normalized = buffer.replaceAll('\r\n', '\n');
   const marker = `> ${line}`;
   const start = normalized.lastIndexOf(marker);
-  if (start < 0) throw new Error(`terminal command marker missing: ${line}`);
-  const afterCommand = normalized.slice(start + marker.length).replace(/^\n/u, '');
+  if (start < 0) return null;
+  return normalized.slice(start + marker.length).replace(/^\n/u, '');
+}
+
+function settledCommandOutput(buffer: string, line: string): string {
+  const afterCommand = commandOutputAfterEcho(buffer, line);
+  if (afterCommand === null) throw new Error(`terminal command marker missing: ${line}`);
   const prompt = /(?:^|\n)>\s*$/u.exec(afterCommand);
   if (prompt === null) throw new Error(`terminal completion prompt missing: ${line}`);
   return afterCommand.slice(0, prompt.index).trimEnd();
@@ -284,7 +289,9 @@ async function runWorkbenchInvocation(
       const step = invocation.stdioHandshake[index];
       if (step === undefined) throw new Error('stdio handshake step missing');
       await expect
-        .poll(() => terminalBuffer(page), { timeout: 60_000 })
+        .poll(async () => commandOutputAfterEcho(await terminalBuffer(page), line) ?? '', {
+          timeout: 60_000,
+        })
         .toContain(step.marker.trimEnd());
       await input.focus();
       await page.keyboard.insertText(String(index + 1));
@@ -511,6 +518,15 @@ test.describe('CLI report template through the worker lifecycle', () => {
         /node-cli-eval raw eval stderr leaked a generated or absolute carrier path/u,
       );
     }
+  });
+
+  test('browser stdio handshake ignores markers embedded in the echoed command', () => {
+    const line = 'node -e "process.stdout.write(\'EVAL_ORDER:stdout-head|\')"';
+    const echo = `> ${line}\n`;
+    expect(commandOutputAfterEcho(echo, line)).toBe('');
+    expect(commandOutputAfterEcho(`${echo}EVAL_ORDER:stdout-head|`, line)).toBe(
+      'EVAL_ORDER:stdout-head|',
+    );
   });
 
   test('native oracle waits for inherited stdio pipes to close after direct-child exit', async ({
