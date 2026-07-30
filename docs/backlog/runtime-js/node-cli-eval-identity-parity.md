@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -118,8 +118,8 @@ Acceptance, Parity, or loud exclusions:
 - the real-kernel Workbench boundary did not restore an originally absent
   kernel Worker URL.
 
-The item is demoted while those exact sibling, aggregate, provenance, and
-teardown proofs gain cross-boundary sweeps. The pre-demotion Acceptance and
+The item was demoted while those exact sibling, aggregate, provenance, and
+teardown proofs gained cross-boundary sweeps. The pre-demotion Acceptance and
 Parity remain verbatim below.
 
 ## Refinement evidence
@@ -270,7 +270,7 @@ identity rather than a generated workspace file, and return the real exit code.
 
 ## Decisions
 
-ready-verdict: 2026-07-30 — current code, compat, TODO, ADR, and backlog searches settle Context, freshness, and non-overlap; the executable Node v24.16.0 oracle and preserved pre-demotion contract settle User scenario, Acceptance, Reference contract, Parity, and loud exclusions without weakening scope; ADR-0337 with ADR-0155/0157/0267/0325/0326/0332/0334 settles the atomic v3 carrier, package-internal loader seam, process/stdio/preview authorities, Reversibility, and no-second-carrier mechanism inventory; raw-argv-derived native/classifier/real-kernel-admission/physical sweeps—including separated empty tokens and attached-option/ESM-gap siblings—strict detached-parent/cache and realm-Promise identity RED, actor-tagged Workbench-owner/SAB-remote/child-local VFS provenance, pre-projection path rejection, strict exit decoding, corrupt-bootstrap rejection, concurrent scoped-preview consumption, CI-active Chromium differential, and unchanged physical-program siblings settle every Acceptance, Parity, Fault, boundary, and reachability row.
+ready-verdict: 2026-07-30 — current code, compat, TODO, ADR, and backlog searches settle Context, freshness, and non-overlap; the pinned executable Node v24.16.0 oracle and physical Workbench carrier probe settle User scenario, Acceptance, Reference contract, Parity, and loud exclusions; ADR-0337 with ADR-0155/0157/0267/0325/0326/0332/0334 settles Decisions, Reversibility, and the no-second-carrier mechanism inventory; raw-argv native, classifier, process-adoption, real-kernel, physical-Worker, and CI-active Chromium REDs settle every accepted spelling’s immediate `--`, separated empty tokens, exact eval identity/cache/Promise/lifecycle/error/preview behavior, corrupt bootstrap, and sibling rows; ordinary plus injected actor-tagged child-local/SAB/owner VFS audits, pre-projection path rejection, exact Worker/kernel-URL restoration, and unchanged physical-program siblings settle every Fault, boundary, reachability, and preserved pre-demotion row.
 
 - ADR-0337 owns the irreversible atomic node-entry v3 shape and the one
   loader-owned unwrapped-script mechanism. There is no v2 compatibility reader.
