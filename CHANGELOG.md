@@ -98,6 +98,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Node eval oracle CI no longer drifts with floating Node 24 patches.**
+  Unit/parity and browser jobs that execute the frozen v24.16.0 oracle now pin
+  that exact patch; a job-scoped guard rejects missing, duplicate, or floating pins.
+
 - **Autonomous-run gates keep executable Contract+RED before ready authority.**
   One tri-state path classifier now drives source pickup, contract drift,
   budget mass, and mechanism scanning. Test/fixture paths—including multi-dot
