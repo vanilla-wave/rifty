@@ -35,7 +35,10 @@ function inlineEval(
   };
 }
 
-function barePrint(label: string, option: '-p' | '--print'): NodeCliEvalInvocation {
+function barePrint(
+  label: string,
+  option: '-p' | '--print' | '--print=ignored',
+): NodeCliEvalInvocation {
   return {
     label,
     nodeArgv: [option],
@@ -157,6 +160,7 @@ const concurrent: NodeCliEvalInvocation[] = [
   ),
   barePrint('bare-short-print', '-p'),
   barePrint('bare-long-print', '--print'),
+  barePrint('bare-print-equals-ignored', '--print=ignored'),
   separated(
     'circular-after-timer-drain',
     '-p',

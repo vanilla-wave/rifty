@@ -62,6 +62,48 @@ describe('node CLI eval parity carrier', () => {
     expect(value.frames).toEqual([{ stream: 'stderr', text: value.stderr }]);
   });
 
+  it.each([
+    {
+      label: 'throw',
+      source: "throw new Error('boom')",
+      stderr:
+        "[eval]:1\nthrow new Error('boom')\n^\n\nError: boom\n    at [eval]:1:7\n    at /work/.rifty-eval-throw.cjs:1:7\n",
+    },
+    {
+      label: 'syntax',
+      source: 'return 1',
+      stderr:
+        '[eval]:1\nreturn 1\n^^^^^^\nReturn statement is not allowed here\n\nSyntaxError: Illegal return statement\n    at [eval]:1:1\n    at compile (/project/generated/eval-syntax.cjs:1:1)\n',
+    },
+    {
+      label: 'unhandled rejection',
+      source: "Promise.reject(new Error('unhandled'))",
+      stderr:
+        "[eval]:1\nPromise.reject(new Error('unhandled'))\n               ^\n\nError: unhandled\n    at [eval]:1:16\n    at file:///tmp/rifty-eval-unhandled.mjs:1:16\n",
+    },
+  ])('rejects a generated eval path hidden after the $label user frame', ({ source, stderr }) => {
+    expect(() =>
+      canonicalNodeCliEvalOutcome(
+        {
+          label: 'path-leak',
+          nodeArgv: ['-e', source],
+          source,
+          print: false,
+          execArgv: ['-e', source],
+          scriptArgs: [],
+          evalErrorStderr: true,
+        },
+        {
+          stdout: '',
+          stderr,
+          frames: [{ stream: 'stderr', text: stderr }],
+          code: 1,
+          signal: null,
+        },
+      ),
+    ).toThrow(/node-cli-eval raw eval stderr leaked a generated or absolute carrier path/u);
+  });
+
   it('rejects duplicate invocation labels before either runtime starts', () => {
     const repeated = {
       label: 'same',

@@ -19,6 +19,8 @@ export interface NodeCliEvalOutcome extends NodeCliEvalRawOutcome {
 }
 
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
+const ABSOLUTE_STACK_LOCATION = /(?:^|[\s(])(?:file:\/\/)?\/[^()\s]+:\d+:\d+/u;
+const GENERATED_EVAL_PATH = /\.rifty-eval-[^()\s:]*/u;
 
 const NODE_CLI_EVAL_ORACLE_VERSION = 'v24.16.0';
 
@@ -154,6 +156,27 @@ function evalError(stderr: string): string {
   return `${selected.join('\n')}\n`;
 }
 
+function assertNoEvalCarrierPath(stderr: string): void {
+  const lines = stderr
+    .replace(/\r\n/gu, '\n')
+    .replace(ANSI_SGR, '')
+    .replace(/\n+$/u, '')
+    .split('\n');
+  const userFrame = lines.findIndex((line) => /^\s+at \[eval\]:/u.test(line));
+  if (userFrame === -1) return;
+  const leaked = lines.find(
+    (line, index) =>
+      index > userFrame &&
+      /^\s+at\s+/u.test(line) &&
+      (ABSOLUTE_STACK_LOCATION.test(line) || GENERATED_EVAL_PATH.test(line)),
+  );
+  if (leaked !== undefined) {
+    throw new Error(
+      `node-cli-eval raw eval stderr leaked a generated or absolute carrier path: ${JSON.stringify(leaked)}`,
+    );
+  }
+}
+
 function rejectedPromisePrefix(stdout: string): string {
   const rejected = stdout.match(/Promise\s*\{\s*<rejected>\s+([^\n]+)/u);
   if (rejected === null) return stdout;
@@ -168,6 +191,7 @@ export function canonicalNodeCliEvalOutcome(
   raw: NodeCliEvalRawOutcome,
   replacements: Readonly<Record<string, string>> = {},
 ): NodeCliEvalOutcome {
+  if (invocation.evalErrorStderr === true) assertNoEvalCarrierPath(raw.stderr);
   let stdout = normaliseText(raw.stdout, replacements);
   let stderr = normaliseText(raw.stderr, replacements);
   if (invocation.rejectedPromiseStdout === true) stdout = rejectedPromisePrefix(stdout);
