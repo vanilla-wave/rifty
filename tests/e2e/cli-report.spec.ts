@@ -45,6 +45,10 @@ type PhysicalNodeInvocation = Omit<NodeCliEvalInvocation, 'cwd'> & {
   readonly cwd: '/fixtures/a' | '/fixtures/b';
 };
 
+type PreviewInvocation = PhysicalNodeInvocation & {
+  readonly readyMarker: string;
+};
+
 interface HostFixture {
   readonly root: string;
   cwd(logicalCwd: PhysicalNodeInvocation['cwd']): string;
@@ -88,7 +92,7 @@ const orderedInvocation: PhysicalNodeInvocation = {
   cwd: '/fixtures/a',
   nodeArgv: [
     '-e',
-    "process.stdout.write('EVAL_ORDER:stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('EVAL_ORDER:stderr-middle\\n'),5);setTimeout(()=>{process.stdout.write(new Uint8Array([172]));process.stdout.write('EVAL_ORDER:stdout-tail\\n')},10)",
+    "process.stdout.write('EVAL_ORDER:stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('EVAL_ORDER:stderr-middle\\n'),20);setTimeout(()=>{process.stdout.write(new Uint8Array([172]));process.stdout.write('EVAL_ORDER:stdout-tail\\n')},40)",
     'alpha',
   ],
 };
@@ -97,7 +101,7 @@ const eofOrderedInvocation: PhysicalNodeInvocation = {
   cwd: '/fixtures/a',
   nodeArgv: [
     '-e',
-    "process.stderr.write('EVAL_EOF:stderr-first|');setTimeout(()=>process.stdout.write('EVAL_EOF:stdout-last'),5)",
+    "process.stderr.write('EVAL_EOF:stderr-first|');setTimeout(()=>process.stdout.write('EVAL_EOF:stdout-last'),20)",
   ],
 };
 const failureInvocation: PhysicalNodeInvocation = {
@@ -133,12 +137,13 @@ function previewInvocation(
   spelling: '-e' | '--eval=',
   argument: 'alpha' | 'beta',
   port: number,
-): PhysicalNodeInvocation {
+): PreviewInvocation {
   const source =
     "const fs=require('node:fs');const http=require('node:http');const path=require('node:path');const child=require('./marker.cjs');const label=process.argv[1];const port=Number(process.argv[2]);const body=JSON.stringify({label,args:process.argv.slice(1),cwd:path.basename(process.cwd()),execArgv:process.execArgv,moduleId:module.id,cached:Object.values(require.cache).includes(module),child:{marker:child.marker,parentId:child.parentId},visible:fs.readdirSync('.').sort()});http.createServer((_req,res)=>res.end(body)).listen(port,()=>console.log('EVAL_PREVIEW_READY:'+label+':'+port))";
   return {
     label,
     cwd,
+    readyMarker: `EVAL_PREVIEW_READY:${argument}:${String(port)}`,
     nodeArgv:
       spelling === '-e'
         ? [spelling, source, argument, String(port)]
@@ -167,9 +172,9 @@ function settledCommandOutput(buffer: string, line: string): string {
   const start = normalized.lastIndexOf(marker);
   if (start < 0) throw new Error(`terminal command marker missing: ${line}`);
   const afterCommand = normalized.slice(start + marker.length).replace(/^\n/u, '');
-  const end = afterCommand.lastIndexOf('\n> ');
-  if (end < 0) throw new Error(`terminal completion prompt missing: ${line}`);
-  return afterCommand.slice(0, end).trimEnd();
+  const prompt = /(?:^|\n)>\s*$/u.exec(afterCommand);
+  if (prompt === null) throw new Error(`terminal completion prompt missing: ${line}`);
+  return afterCommand.slice(0, prompt.index).trimEnd();
 }
 
 function createHostFixture(): HostFixture {
@@ -357,10 +362,7 @@ interface RunningHostPreview {
   readonly outcome: Promise<NodeCliEvalRawOutcome>;
 }
 
-function startHostPreview(
-  fixture: HostFixture,
-  invocation: PhysicalNodeInvocation,
-): RunningHostPreview {
+function startHostPreview(fixture: HostFixture, invocation: PreviewInvocation): RunningHostPreview {
   assertNodeCliEvalOracleVersion(process.version);
   const capture = createNodeCliEvalCapture();
   const child = spawn(process.execPath, [...invocation.nodeArgv], {
@@ -379,7 +381,7 @@ function startHostPreview(
   child.stdout.on('data', (chunk: unknown) => {
     capture.push('stdout', chunk);
     stdout += String(chunk);
-    if (!readySettled && stdout.includes(`EVAL_PREVIEW_READY:${invocation.label}:`)) {
+    if (!readySettled && stdout.includes(invocation.readyMarker)) {
       readySettled = true;
       resolveReady();
     }
@@ -701,10 +703,10 @@ test.describe('CLI report template through the worker lifecycle', () => {
 
       await expect
         .poll(() => terminalBuffer(page, terminalA), { timeout: 60_000 })
-        .toContain(`EVAL_PREVIEW_READY:${invocationA.label}:${String(portBase)}`);
+        .toContain(invocationA.readyMarker);
       await expect
         .poll(() => terminalBuffer(page, terminalB), { timeout: 60_000 })
-        .toContain(`EVAL_PREVIEW_READY:${invocationB.label}:${String(portBase + 1)}`);
+        .toContain(invocationB.readyMarker);
 
       const switcher = page.locator('.rf-preview__switcher');
       await expect(switcher.locator('option', { hasText: `:${String(portBase)}` })).toHaveCount(1);

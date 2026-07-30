@@ -62,6 +62,16 @@ const promiseRealmSnapshot = () => {
   };
 };
 const promiseBefore = promiseRealmSnapshot();
+const cjsBindingDescriptors = Object.fromEntries(
+  ['require', 'module', 'exports', '__filename', '__dirname'].map((name) => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+    return [name, {
+      writable: descriptor?.writable,
+      enumerable: descriptor?.enumerable,
+      configurable: descriptor?.configurable,
+    }];
+  }),
+);
 const launchCwd = process.cwd();
 const visibleEntries = fs.readdirSync(launchCwd).sort();
 const ownerBytes = fs.readFileSync(path.join(launchCwd, 'owner-only.txt'), 'utf8');
@@ -99,6 +109,7 @@ console.log(JSON.stringify({
   mainModule: process.mainModule ?? null,
   thisGlobal: this === globalThis,
   argumentsType: typeof arguments,
+  cjsBindingDescriptors,
   cached: Object.values(require.cache).includes(module),
   ownerBytes,
   noEvalCarrier: JSON.stringify(visibleEntries) === JSON.stringify(['marker.cjs','node_modules','owner-only.txt']),
@@ -198,14 +209,14 @@ const concurrent: NodeCliEvalInvocation[] = [
   separated(
     'short-e-partial-stdout-around-stderr',
     '-e',
-    "process.stdout.write('stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('stderr-middle\\n'),5);setTimeout(()=>{process.stdout.write(new Uint8Array([172]));process.stdout.write('stdout-tail\\n')},10)",
+    "process.stdout.write('stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('stderr-middle\\n'),20);setTimeout(()=>{process.stdout.write(new Uint8Array([172]));process.stdout.write('stdout-tail\\n')},40)",
     ['alpha', 'two words', '-x'],
     true,
   ),
   separated(
     'short-e-stderr-before-stdout-eof',
     '-e',
-    "process.stderr.write('stderr-eof-first|');setTimeout(()=>process.stdout.write('stdout-eof-last'),5)",
+    "process.stderr.write('stderr-eof-first|');setTimeout(()=>process.stdout.write('stdout-eof-last'),20)",
   ),
   inlineEval(
     'inline-long-eval-global-script',

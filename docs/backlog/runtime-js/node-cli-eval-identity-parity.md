@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -462,6 +462,31 @@ sequence on the parent endpoint and proves that none becomes public user IPC.
 The package, recursive-child, runtime, WASI, worker-thread, setup-fault, and
 Chromium sibling proofs remain unchanged. The pre-demotion Acceptance and
 Parity remain verbatim below.
+
+## Twenty-seventh readiness re-cut
+
+The implementation-time carrier audit found five frozen-assumption defects
+without changing Acceptance, Parity, or loud exclusions:
+
+- the real-Chromium post-cut write assertion waited one unrelated timer even
+  though two FIFO `MessagePort` tasks may legally straddle that timer;
+- an exactly empty eval result left the terminal prompt at the start of the
+  captured suffix, while the parser accepted only a newline-prefixed prompt;
+- 5/10 ms native pipe writes could coalesce before their callbacks under load,
+  making the carrier lose the intended cross-stream boundary;
+- simultaneous native previews printed their runtime argv labels (`alpha` /
+  `beta`) while readiness waited forever for diagnostic case labels
+  (`preview-a` / `preview-b`);
+- eval's five CommonJS global property descriptors were implemented but not
+  pinned by the differential identity source.
+
+The item is demoted while those carriers are re-judged. The browser fault now
+waits for its observable protocol diagnostic before the post-cut write. Empty
+output accepts a prompt at the start or after a newline. Wider 20/40 ms writes
+retain the same admitted order while making native callback boundaries
+observable. Each preview invocation carries its exact emitted ready marker.
+The differential identity result includes the exact descriptors. The
+pre-demotion Acceptance and Parity remain verbatim below.
 
 ## Refinement evidence
 

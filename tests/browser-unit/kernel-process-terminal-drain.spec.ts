@@ -232,6 +232,12 @@ test('parent cut drains signal/failure and child-sealed peer close to exact admi
           stdout += new TextDecoder().decode(chunk);
         });
         const closed = new Promise<void>((resolve) => handle.once('close', resolve));
+        const protocolFailed =
+          terminal === 'failure'
+            ? new Promise<void>((resolve) => {
+                handle.stderr().once('data', () => resolve());
+              })
+            : null;
 
         writer.write(new TextEncoder().encode(`before-${terminal}`));
         if (terminal === 'signal') {
@@ -243,7 +249,10 @@ test('parent cut drains signal/failure and child-sealed peer close to exact admi
           spec.stdio.ipc.postMessage({ kind: 'control:peer-closing' });
         }
 
-        if (terminal !== 'signal') await new Promise((resolve) => setTimeout(resolve, 0));
+        if (protocolFailed !== null) await protocolFailed;
+        else if (terminal === 'peererror') {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
         let postCutError = '';
         try {
           writer.write(new TextEncoder().encode('after-cut'));
