@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal claim-preflight checkpoint proved pure current/prior normalization can be specified independently from linker entrypoint mutation ordering
 user_story: As a browser-IDE user installing package CLIs, I want one exact claim authority to reject ownership it cannot settle like npm, but today a broadened internal carrier could admit raw or already-shaped data
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-source-normalization-authority]
+blocked_by: [npm-client/package-bin-claim-settlement-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts

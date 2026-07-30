@@ -64,6 +64,16 @@ export function normalizePackageBinSource(source: PackageBinSource): readonly Pa
   return claims;
 }
 
+export function normalizePackageBinSources(
+  sources: readonly PackageBinSource[],
+): readonly PackageBinClaim[] {
+  const claims: PackageBinClaim[] = [];
+  for (const source of sources) {
+    for (const claim of normalizePackageBinSource(source)) claims.push(claim);
+  }
+  return claims;
+}
+
 export function preflightPackageInstallPaths<TPackage extends ResolvedPackage>(
   packages: readonly TPackage[],
 ): readonly PreparedInstallPackage<TPackage>[] {

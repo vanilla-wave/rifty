@@ -355,3 +355,81 @@ The no-pickup contract baseline keeps the executable RED in checkpoint history
 instead of leaving main red. The source slice must restore exact blob
 `808d8e7aacb4fd0feea80575cd1957f37fb42066` before its first production-source
 commit; the ready verdict and carrier bytes may not change.
+
+## Claim aggregation successor baseline
+
+Recorded on post-#223 main
+`782b1878f39efdd04e3a4ef623840c425b165f9b`, Node 24.16.0 and pnpm
+11.5.2. The fresh aggregation carrier composes only the landed single-source
+seam. It covers one readonly prepared/narrow list, an empty list, three-source
+and per-source non-monotonic order, same-scope duplicates, exact later-source
+string/object failures, once-read reached sources, and an unread suffix.
+
+```sh
+pnpm vitest run \
+  packages/npm-client/src/linker-bin-claim-aggregation.contract.test.ts
+pnpm --filter @riftydev/npm-client typecheck
+```
+
+No production source, package root, VFS path, settlement, compat, or changelog
+diff is present at this checkpoint. Runtime result: 6 tests, 5 RED and 1 GREEN;
+package typecheck adds exactly two intentional `TS2578` REDs while
+`normalizePackageBinSources` is absent.
+
+The first isolated Contract+RED review at
+`2a51987dfc5488c7d07c86f6fc7c4a2c2839db5f` passed Standards and blocked
+Spec: local redeclared shapes plus root-only sources could false-green a
+duplicated parser that drifted from the landed nested scoped-string behavior;
+the live epic also lacked this now-unblocked unit's pre-pickup Items/Budget
+authority. The in-place re-cut imports the landed types, adds a nested scoped
+string to the three-source witness, and appends exactly one Items mapping plus
+one `20–60` Budget row. The RED ledger and production-source absence are
+unchanged.
+
+The second isolated checkpoint at
+`d1a6ab025a8160305f18e86dc132e3466e988106` passed Spec and blocked Standards:
+the 215-line carrier was far above the `20–60` slice band. Per Contract
+escalation, the in-place re-refinement keeps the one deep in-process seam but
+replaces repeated fixture/scenario scaffolding with four vertical interface
+tests: private root, empty identity, one exact mixed order/duplicate witness,
+and one exact later-error table. No behavior, Budget row, or production source
+changes. The compact carrier is 119 lines, below the `2×` high-band re-cut
+threshold; runtime is 4 tests, 3 RED and 1 GREEN, with the same two intentional
+`TS2578` REDs.
+
+The re-refined checkpoint still blocked: 119 lines remained disproportionate,
+and its type proof could admit a tuple-only export while runtime narrow
+fixtures still carried full resolved-package fields. The next in-place carrier
+assigns the live conditional export to the exact list-wide type, calls empty
+and three-source shapes at compile time, uses a genuinely minimal nested
+scoped-string source at runtime, and folds the four behaviors into one vertical
+interface test.
+
+The split carrier is 88 lines: 65 runtime and 23 compile-only. Vitest has one
+intentional RED; package typecheck has exactly two intentional `TS2578` REDs.
+Production source remains untouched.
+
+The isolated review at
+`29c4aafb290bd643c42ca60eadafb31a1c3b3870` passed Standards and blocked
+Spec: exact one-argument assignment alone could admit an optional second source
+list, leaking prior/settlement surface. The final in-place carrier adds that
+negative witness. It is 90 lines total; the RED ledger and production-source
+absence are unchanged.
+
+The next isolated review at
+`4931ee371626fad3f550a037d2d2a2f071f737d7` passed Standards and blocked
+Spec: a singular-source overload could still satisfy every witness. The
+in-place carrier rejects both singular and absent source-list calls, completing
+the exact-one-list boundary. It is 94 lines total; the same RED ledger remains.
+
+The isolated review at
+`d7018e92be95121d3a94f57192371753cd83b560` passed Standards and blocked
+Spec: prepared-only singular and second-list overloads could evade narrow-only
+negatives. The final in-place carrier adds both prepared witnesses and proves
+the live export type equals the exact normalizer type, closing the overload
+class rather than enumerating it. It is 106 lines total; RED and production
+scope remain unchanged.
+
+The isolated Contract+RED review at
+`c00a91638a55699aeffa74f65959973ab8c22a20` passed Standards and Spec with no
+findings. This checkpoint is the ready authority for implementation.
