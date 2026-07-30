@@ -29,6 +29,7 @@ import {
   type NodeCliEvalVfsFault,
   runInRifty,
 } from './run-in-rifty.ts';
+import type { ParityCase } from './types.ts';
 
 // Leave room for runInRifty's 30s diagnostic deadline under loaded CI Workers.
 const REAL_WORKER_TEST_TIMEOUT_MS = 35_000;
@@ -43,11 +44,76 @@ function restoreKernelWorkerUrl(url: string | URL | null): void {
   else setKernelWorkerUrl(url);
 }
 
+const PHYSICAL_STDIO_ORDER_CASE = {
+  kind: 'child-worker',
+  expectedPhysicalWorkers: 1,
+  cwd: '/project',
+  setup: {
+    files: {
+      'project/stdio-order-child.js': `
+        process.stdout.write('stdout-0|');
+        setTimeout(() => process.stderr.write('stderr-1|'), 20);
+        setTimeout(() => process.stdout.write('stdout-2'), 40);
+      `,
+    },
+  },
+  code: `
+    const { spawn } = require('node:child_process');
+    const child = spawn('node', ['stdio-order-child.js'], {
+      cwd: require('node:process').cwd(),
+    });
+    const frames = [];
+    child.stdout.on('data', (chunk) => frames.push({
+      stream: 'stdout',
+      text: chunk.toString(),
+    }));
+    child.stderr.on('data', (chunk) => frames.push({
+      stream: 'stderr',
+      text: chunk.toString(),
+    }));
+    child.once('close', (code, signal) => {
+      console.log(JSON.stringify({ frames, code, signal }));
+    });
+  `,
+} satisfies ParityCase;
+
+const PHYSICAL_STDIO_ORDER_OUTPUT = `${JSON.stringify({
+  frames: [
+    { stream: 'stdout', text: 'stdout-0|' },
+    { stream: 'stderr', text: 'stderr-1|' },
+    { stream: 'stdout', text: 'stdout-2' },
+  ],
+  code: 0,
+  signal: null,
+})}\n`;
+
 describe('runInRifty', () => {
   it(
     'accepts the configured atomic node-entry bootstrap in physical Worker mode',
     async () => {
       await expect(runInRifty(workerEnvCase)).resolves.toBe(workerEnvCase.expected);
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'preserves admitted stdout/stderr order without a physical delivery fault',
+    async () => {
+      await expect(runInRifty(PHYSICAL_STDIO_ORDER_CASE)).resolves.toBe(
+        PHYSICAL_STDIO_ORDER_OUTPUT,
+      );
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'restores admitted write order after legal physical stdout/stderr delivery inversion',
+    async () => {
+      await expect(
+        runInRifty(PHYSICAL_STDIO_ORDER_CASE, {
+          physicalStdioDeliveryFault: 'stderr-before-two-stdout',
+        }),
+      ).resolves.toBe(PHYSICAL_STDIO_ORDER_OUTPUT);
     },
     REAL_WORKER_TEST_TIMEOUT_MS,
   );

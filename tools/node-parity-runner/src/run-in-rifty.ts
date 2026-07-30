@@ -372,6 +372,8 @@ interface NodeCliEvalPreviewExpectation {
 
 export type NodeCliEvalPreviewProbe = Readonly<Record<string, NodeCliEvalPreviewExpectation>>;
 
+export type PhysicalStdioDeliveryFault = 'stderr-before-two-stdout';
+
 export interface RunInRiftyOptions {
   /** Same-realm fault-injection seam for the browser MessageChannel boundary. */
   readonly createMessageChannel?: () => MessageChannel;
@@ -385,6 +387,8 @@ export interface RunInRiftyOptions {
   readonly nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe;
   /** Physical eval-only raw corrupt-input injection, downstream of the host builder. */
   readonly nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault;
+  /** Physical cross-port delivery inversion; leaves control IPC FIFO intact. */
+  readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
 const DEFAULT_STDIN_TIMEOUT_MS = 2_000;
@@ -742,6 +746,10 @@ interface PhysicalWorkerMode {
   teardown(): void;
 }
 
+const PHYSICAL_STDIO_DELIVERY_ACK = Object.freeze({
+  kind: 'rifty:parity-stdio-delivery-ack',
+});
+
 function nodeCliEvalPreviewExpectations(
   testCase: ParityCase,
   probe: NodeCliEvalPreviewProbe | undefined,
@@ -764,8 +772,9 @@ async function installPhysicalWorkerMode(
   testCase: ParityCase,
   nodeCliEvalVfsFault?: NodeCliEvalVfsFault,
   nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault,
+  physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault,
 ): Promise<PhysicalWorkerMode> {
-  const { getKernelWorkerUrl, setKernelWorkerUrl } = await import(
+  const { getKernelWorkerUrl, globalProcessManager, setKernelWorkerUrl } = await import(
     '../../../packages/kernel/src/index.ts'
   );
   const { clearKernelWorkerUrl, clearWorkerFactoryForTests, setWorkerFactoryForTests } =
@@ -776,6 +785,7 @@ async function installPhysicalWorkerMode(
   type WorkerInitMessage = import('../../../packages/kernel/src/worker-entry.ts').WorkerInitMessage;
   let nativeWorkerConstructions = 0;
   let validatedInitMessages = 0;
+  let stdioDeliveryAcks = 0;
   const validatedEvalLabels = new Set<string>();
   const evalInvocations =
     testCase.kind === 'node-cli-eval'
@@ -873,6 +883,7 @@ async function installPhysicalWorkerMode(
           files: testCase.kind === 'node-cli-eval' ? {} : (testCase.setup?.files ?? {}),
           nodeCliEvalVfsAudit: testCase.kind === 'node-cli-eval',
           ...(workerVfsFault === undefined ? {} : { nodeCliEvalVfsFault: workerVfsFault }),
+          ...(physicalStdioDeliveryFault === undefined ? {} : { physicalStdioDeliveryFault }),
         },
       });
     }
@@ -918,6 +929,11 @@ async function installPhysicalWorkerMode(
   );
   const previousKernelWorkerUrl = getKernelWorkerUrl();
   const previousCwd = getProcessCwd();
+  const previousSpawnWorkerDescriptor = Object.getOwnPropertyDescriptor(
+    globalProcessManager,
+    'spawnWorker',
+  );
+  const nativeSpawnWorker = globalProcessManager.spawnWorker.bind(globalProcessManager);
   const cleanups = new CleanupStack();
   let failure: unknown | typeof NO_FAILURE = NO_FAILURE;
 
@@ -934,6 +950,42 @@ async function installPhysicalWorkerMode(
     cleanups.defer(() => setProcessCwd(previousCwd));
     cleanups.defer(() => refreshRuntimeJsProcessBuiltin());
     cleanups.defer(() => restoreGlobalDescriptor('process', previousProcessDescriptor));
+    if (physicalStdioDeliveryFault !== undefined) {
+      cleanups.defer(() => {
+        if (previousSpawnWorkerDescriptor === undefined) {
+          if (!Reflect.deleteProperty(globalProcessManager, 'spawnWorker')) {
+            throw new Error('physical stdio fault could not restore ProcessManager.spawnWorker');
+          }
+          return;
+        }
+        Object.defineProperty(globalProcessManager, 'spawnWorker', previousSpawnWorkerDescriptor);
+      });
+      Object.defineProperty(globalProcessManager, 'spawnWorker', {
+        configurable: true,
+        enumerable: previousSpawnWorkerDescriptor?.enumerable ?? false,
+        writable: true,
+        value(
+          ...args: Parameters<typeof globalProcessManager.spawnWorker>
+        ): ReturnType<typeof globalProcessManager.spawnWorker> {
+          const handle = nativeSpawnWorker(...args);
+          if (handle.kind !== 'worker') {
+            throw new Error('physical stdio fault requires a Worker process handle');
+          }
+          handle.ports.stderr.addEventListener(
+            'message',
+            (event: MessageEvent): void => {
+              if (!(event.data instanceof Uint8Array)) {
+                throw new TypeError('physical stdio fault expected parent stderr bytes');
+              }
+              stdioDeliveryAcks++;
+              handle.ports.stderr.postMessage(PHYSICAL_STDIO_DELIVERY_ACK);
+            },
+            { once: true },
+          );
+          return handle;
+        },
+      });
+    }
 
     const parentProcess = new NodeProcess();
     parentProcess.env = Object.create(null) as Record<string, string | undefined>;
@@ -960,12 +1012,14 @@ async function installPhysicalWorkerMode(
 
   return {
     assertExpected() {
+      const expectedDeliveryAcks = physicalStdioDeliveryFault === undefined ? 0 : expectedWorkers;
       if (
         nativeWorkerConstructions !== expectedWorkers ||
-        validatedInitMessages !== expectedWorkers
+        validatedInitMessages !== expectedWorkers ||
+        stdioDeliveryAcks !== expectedDeliveryAcks
       ) {
         throw new Error(
-          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}`,
+          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers and ${expectedDeliveryAcks} stdio ACKs; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}, acknowledged ${stdioDeliveryAcks}`,
         );
       }
     },
@@ -1476,6 +1530,19 @@ export async function runInRiftyInCurrentRealm(
   if (options.nodeCliEvalBootstrapFault !== undefined && testCase.kind !== 'node-cli-eval') {
     throw new TypeError('RunInRiftyOptions.nodeCliEvalBootstrapFault requires kind node-cli-eval');
   }
+  if (options.physicalStdioDeliveryFault !== undefined && !isPhysicalWorkerCase(testCase)) {
+    throw new TypeError(
+      'RunInRiftyOptions.physicalStdioDeliveryFault requires a physical Worker case',
+    );
+  }
+  if (
+    options.physicalStdioDeliveryFault !== undefined &&
+    expectedPhysicalWorkerCount(testCase) !== 1
+  ) {
+    throw new TypeError(
+      'RunInRiftyOptions.physicalStdioDeliveryFault requires exactly one physical Worker',
+    );
+  }
   const previewExpectations = nodeCliEvalPreviewExpectations(
     testCase,
     options.nodeCliEvalPreviewProbe,
@@ -1661,6 +1728,7 @@ export async function runInRiftyInCurrentRealm(
         testCase,
         options.nodeCliEvalVfsProbe?.fault,
         options.nodeCliEvalBootstrapFault,
+        options.physicalStdioDeliveryFault,
       );
       cleanups.defer(() => physicalWorkerMode?.teardown());
     }
@@ -1828,6 +1896,7 @@ function runInDisposableWorker(
   nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe,
   nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe,
   nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault,
+  physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const worker = new Worker(new URL('./run-in-rifty-worker.ts', import.meta.url), {
@@ -1838,6 +1907,7 @@ function runInDisposableWorker(
         nodeCliEvalVfsProbe,
         nodeCliEvalPreviewProbe,
         nodeCliEvalBootstrapFault,
+        physicalStdioDeliveryFault,
       },
     });
     let settling = false;
@@ -1923,6 +1993,7 @@ export async function runInRifty(
       options.nodeCliEvalVfsProbe,
       options.nodeCliEvalPreviewProbe,
       options.nodeCliEvalBootstrapFault,
+      options.physicalStdioDeliveryFault,
     );
   }
   return runInRiftyInCurrentRealm(testCase, options);

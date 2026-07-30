@@ -1338,6 +1338,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     'returns exact immediate-terminator usage failure without a child: $label',
     async ({ line, stderr: expectedStderr }) => {
       const processesBefore = globalProcessManager.snapshot();
+      const workers = installRealKernelWorkerBoundary();
       const h = await harness(undefined, nodeCliPackageConfig);
       h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-terminator' });
 
@@ -1362,6 +1363,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
           .map((frame) => new TextDecoder().decode(frame.data))
           .join('');
         expect(stderr).toBe(expectedStderr);
+        expect(workers).toHaveLength(0);
         expect(globalProcessManager.snapshot()).toEqual(processesBefore);
         expect(h.frames).toContainEqual(
           expect.objectContaining({
@@ -1659,6 +1661,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     ['node -ep=SRC', 'node: bad option: -ep=SRC\n'],
   ])('returns Node-shaped exit 9 without allocating a child: %s', async (line, expectedStderr) => {
     const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
     const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval' });
 
@@ -1680,6 +1683,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       .map((frame) => new TextDecoder().decode(frame.data))
       .join('');
     expect(stderr).toBe(expectedStderr);
+    expect(workers).toHaveLength(0);
     expect(globalProcessManager.snapshot()).toEqual(processesBefore);
     expect(h.frames).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', rid: 'run-node-eval', code: 9 }),
@@ -1694,12 +1698,17 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     "node --input-type=module -p '1'",
     "node --input-type=module --print '1'",
     "node --input-type=module --print=ignored '1'",
+    "node --input-type=module --print=not-the-source '1'",
+    "node --input-type=module --print= '1'",
     "node --input-type=module -pe '1'",
     'node --input-type=module -p',
     'node --input-type=module --print',
     'node --input-type=module --print=ignored',
+    'node --input-type=module --print=not-the-source',
+    'node --input-type=module --print=',
   ])('keeps ESM eval as its named no-child context gap: %s', async (line) => {
     const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
     const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-esm-eval' });
 
@@ -1723,6 +1732,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       .map((frame) => new TextDecoder().decode(frame.data))
       .join('');
     expect(stderr).toContain('Not implemented: workbench.node.eval-module-context');
+    expect(workers).toHaveLength(0);
     expect(globalProcessManager.snapshot()).toEqual(processesBefore);
     expect(h.frames).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', rid: 'run-node-esm-eval', code: 1 }),

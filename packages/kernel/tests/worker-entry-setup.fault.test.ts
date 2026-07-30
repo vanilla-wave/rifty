@@ -94,13 +94,23 @@ function expectReaped(
   target: DispatchableWorkerTarget,
   ports: readonly ReturnType<typeof fakePort>[],
   outputState: WorkerOutputState,
+  expectedOrderFrames: readonly unknown[] = [
+    {
+      kind: 'control:stdio-order',
+      stream: 'stderr',
+      order: 0,
+      attestation: workerOutputAttestation(outputState),
+    },
+  ],
 ): void {
   expect(target.postMessage).toHaveBeenCalledWith({
     type: 'exit',
     code: 1,
     attestation: workerOutputAttestation(outputState),
   });
-  expect(ports[3]?.postMessage).not.toHaveBeenCalled();
+  expect(ports[3]?.postMessage.mock.calls.map(([frame]) => frame)).toStrictEqual(
+    expectedOrderFrames,
+  );
   expect(target.nativeClose).toHaveBeenCalledTimes(1);
   for (const port of ports) expect(port.close).toHaveBeenCalledTimes(1);
 }
@@ -137,6 +147,103 @@ describe('worker-entry setup transaction', () => {
     await target.init(spec);
 
     expectReaped(target, ports, spec.outputState);
+  });
+
+  it('publishes only the exact public process spec before guest entry', async () => {
+    const target = new DispatchableWorkerTarget();
+    const { spec, ports } = makeSpec();
+    let published: unknown;
+    setKernelPreEntryHook(() => {
+      published = Reflect.get(globalThis, KERNEL_PROCESS_SPEC_KEY);
+      const publishedStdio = (
+        published as {
+          readonly stdio?: {
+            readonly stdout?: { write(bytes: Uint8Array): void };
+            readonly stderr?: { write(bytes: Uint8Array): void };
+          };
+        }
+      ).stdio;
+      publishedStdio?.stdout?.write(new TextEncoder().encode('public-out'));
+      publishedStdio?.stderr?.write(new TextEncoder().encode('public-err'));
+      throw new Error('stop after process-spec inspection');
+    });
+    installWorkerEntry(target as unknown as DedicatedWorkerGlobalScope);
+
+    await target.init(spec);
+
+    if (typeof published !== 'object' || published === null) {
+      throw new Error('Expected production worker entry to publish a process spec');
+    }
+    const record = published as Record<PropertyKey, unknown>;
+    expect(Reflect.ownKeys(record).sort()).toEqual(['argv', 'cwd', 'env', 'pid', 'ppid', 'stdio']);
+    expect(Object.values(record).some((value) => value instanceof SharedArrayBuffer)).toBe(false);
+    expect(Object.hasOwn(record, 'outputState')).toBe(false);
+    const stdio = record.stdio;
+    if (typeof stdio !== 'object' || stdio === null) {
+      throw new Error('Expected the public process spec to carry stdio');
+    }
+    expect(Reflect.ownKeys(stdio).sort()).toEqual(['ipc', 'stderr', 'stdin', 'stdout']);
+    const attestation = workerOutputAttestation(spec.outputState);
+    const exposesOutputCapability = (value: unknown, seen = new Set<object>()): boolean => {
+      if (
+        value === spec.outputState ||
+        value === attestation ||
+        value instanceof SharedArrayBuffer
+      ) {
+        return true;
+      }
+      if (
+        value === null ||
+        (typeof value !== 'object' && typeof value !== 'function') ||
+        seen.has(value)
+      ) {
+        return false;
+      }
+      seen.add(value);
+      return Reflect.ownKeys(value).some((key) =>
+        exposesOutputCapability(Reflect.get(value, key), seen),
+      );
+    };
+    const stdioRecord = stdio as Record<PropertyKey, unknown>;
+    for (const stream of ['stdout', 'stderr'] as const) {
+      const writer = stdioRecord[stream];
+      if (typeof writer !== 'object' || writer === null) {
+        throw new Error(`Expected the public ${stream} writer capability`);
+      }
+      expect(Reflect.ownKeys(writer)).toEqual(['write']);
+      expect(typeof Reflect.get(writer, 'write')).toBe('function');
+      expect(exposesOutputCapability(writer)).toBe(false);
+    }
+    expect(
+      ports[0]?.postMessage.mock.calls.map(([frame]) =>
+        new TextDecoder().decode(frame as Uint8Array),
+      ),
+    ).toEqual(['public-out']);
+    const stderrFrames = ports[1]?.postMessage.mock.calls.map(([frame]) =>
+      new TextDecoder().decode(frame as Uint8Array),
+    );
+    expect(stderrFrames?.[0]).toBe('public-err');
+    expect(stderrFrames?.[1]).toContain('stop after process-spec inspection');
+    expectReaped(target, ports, spec.outputState, [
+      {
+        kind: 'control:stdio-order',
+        stream: 'stdout',
+        order: 0,
+        attestation,
+      },
+      {
+        kind: 'control:stdio-order',
+        stream: 'stderr',
+        order: 1,
+        attestation,
+      },
+      {
+        kind: 'control:stdio-order',
+        stream: 'stderr',
+        order: 2,
+        attestation,
+      },
+    ]);
   });
 
   it.each([

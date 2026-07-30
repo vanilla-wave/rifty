@@ -4,6 +4,7 @@ import type {
   NodeCliEvalBootstrapFault,
   NodeCliEvalPreviewProbe,
   NodeCliEvalVfsProbe,
+  PhysicalStdioDeliveryFault,
 } from './run-in-rifty.ts';
 import type { ParityCase } from './types.ts';
 
@@ -13,6 +14,7 @@ interface WorkerRequest {
   readonly nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe;
   readonly nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe;
   readonly nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault;
+  readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
 function serializeError(error: unknown): {
@@ -39,6 +41,7 @@ try {
     nodeCliEvalVfsProbe: request.nodeCliEvalVfsProbe,
     nodeCliEvalPreviewProbe: request.nodeCliEvalPreviewProbe,
     nodeCliEvalBootstrapFault: request.nodeCliEvalBootstrapFault,
+    physicalStdioDeliveryFault: request.physicalStdioDeliveryFault,
   });
   parentPort.postMessage({ ok: true, stdout });
 } catch (error) {

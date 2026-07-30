@@ -99,9 +99,16 @@ test('natural Worker exit settles only after the final stdout byte reaches the c
         }
 
         let stdout = '';
+        const controlFrames: unknown[] = [];
+        const userMessages: unknown[] = [];
         handle.stdout().on('data', (chunk: Uint8Array) => {
           stdout += new TextDecoder().decode(chunk);
         });
+        handle.ports.ipc.addEventListener('message', (event: MessageEvent) =>
+          controlFrames.push(event.data),
+        );
+        handle.ports.ipc.start();
+        handle.on('message', (message: unknown) => userMessages.push(message));
         const closed = new Promise<{ readonly code: number | null }>((resolve) => {
           handle.once('close', (code: number | null) => resolve({ code }));
         });
@@ -111,12 +118,26 @@ test('natural Worker exit settles only after the final stdout byte reaches the c
             worker.init.spec.stdio.stdout,
             worker.init.spec.outputState,
             'stdout',
+            worker.init.spec.stdio.ipc,
           )
           .write(new TextEncoder().encode('final-byte'));
         workerEntry.finalizeWorkerEntry(worker, worker.init.spec, { threw: false, code: 0 });
+        const expectedOrderFrame = {
+          kind: 'control:stdio-order',
+          stream: 'stdout',
+          order: 0,
+          attestation: workerStdio.workerOutputAttestation(worker.init.spec.outputState),
+        };
 
         return await Promise.race([
-          closed.then(({ code }) => ({ state: 'closed', code, stdout })),
+          closed.then(({ code }) => ({
+            state: 'closed',
+            code,
+            stdout,
+            controlFrames,
+            userMessages,
+            expectedOrderFrame,
+          })),
           new Promise<{ readonly state: 'hung'; readonly stdout: string }>((resolve) => {
             setTimeout(() => resolve({ state: 'hung', stdout }), 50);
           }),
@@ -133,7 +154,14 @@ test('natural Worker exit settles only after the final stdout byte reaches the c
     },
   );
 
-  expect(result).toEqual({ state: 'closed', code: 0, stdout: 'final-byte' });
+  expect(result).toEqual({
+    state: 'closed',
+    code: 0,
+    stdout: 'final-byte',
+    controlFrames: [result.state === 'closed' ? result.expectedOrderFrame : null],
+    userMessages: [],
+    expectedOrderFrame: result.state === 'closed' ? result.expectedOrderFrame : null,
+  });
 });
 
 test('parent cut drains signal/failure and child-sealed peer close to exact admitted targets', async ({
@@ -197,6 +225,7 @@ test('parent cut drains signal/failure and child-sealed peer close to exact admi
           spec.stdio.stdout,
           spec.outputState,
           'stdout',
+          spec.stdio.ipc,
         );
         let stdout = '';
         handle.stdout().on('data', (chunk: Uint8Array) => {
@@ -475,6 +504,7 @@ test('module/global error fallback and self.close both settle with exact admitte
           globalError.spec.stdio.stdout,
           globalError.spec.outputState,
           'stdout',
+          globalError.spec.stdio.ipc,
         );
         let globalStdout = '';
         let globalStderr = '';
@@ -499,6 +529,7 @@ test('module/global error fallback and self.close both settle with exact admitte
           selfClose.spec.stdio.stdout,
           selfClose.spec.outputState,
           'stdout',
+          selfClose.spec.stdio.ipc,
         );
         let selfStdout = '';
         let peerErrors = 0;

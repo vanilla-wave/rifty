@@ -39,12 +39,13 @@ import {
   NodeCliEvalVfsObserver,
   nodeCliEvalTransientSourceCarrierMutations,
 } from './node-cli-eval-vfs-observer.ts';
-import type { NodeCliEvalVfsFault } from './run-in-rifty.ts';
+import type { NodeCliEvalVfsFault, PhysicalStdioDeliveryFault } from './run-in-rifty.ts';
 
 interface WorkerEnvHarnessData {
   readonly files: Readonly<Record<string, string>>;
   readonly nodeCliEvalVfsAudit: boolean;
   readonly nodeCliEvalVfsFault?: NodeCliEvalVfsFault;
+  readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
 if (parentPort === null) throw new Error('worker-env kernel adapter has no parent port');
@@ -58,6 +59,12 @@ if (
   request.nodeCliEvalVfsFault !== 'sab-remote-transient-source-file'
 ) {
   throw new TypeError('worker-env parity received an unknown node-cli-eval VFS fault');
+}
+if (
+  request.physicalStdioDeliveryFault !== undefined &&
+  request.physicalStdioDeliveryFault !== 'stderr-before-two-stdout'
+) {
+  throw new TypeError('worker-env parity received an unknown stdio delivery fault');
 }
 if (request.nodeCliEvalVfsAudit) {
   // The disposable adapter is a real node:worker_threads Worker, while
@@ -219,7 +226,98 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   });
 }
 
+function installStdioDeliveryFault(spec: WorkerSpawnSpec): Promise<void> | undefined {
+  if (request.physicalStdioDeliveryFault === undefined) return undefined;
+
+  const ackKind = 'rifty:parity-stdio-delivery-ack';
+  const nativeStdoutPost = spec.stdio.stdout.postMessage.bind(spec.stdio.stdout);
+  const nativeStderrPost = spec.stdio.stderr.postMessage.bind(spec.stdio.stderr);
+  const heldStdout: Uint8Array[] = [];
+  let stderrWrites = 0;
+  let acknowledgements = 0;
+  let released = false;
+  let resolveProof!: () => void;
+  let rejectProof!: (error: Error) => void;
+  const proof = new Promise<void>((resolve, reject) => {
+    resolveProof = resolve;
+    rejectProof = reject;
+  });
+
+  const fail = (error: Error): never => {
+    rejectProof(error);
+    throw error;
+  };
+
+  const releaseIfProven = (): void => {
+    if (released || heldStdout.length !== 2 || stderrWrites !== 1 || acknowledgements !== 1) {
+      return;
+    }
+    for (const chunk of heldStdout) nativeStdoutPost(chunk);
+    released = true;
+    spec.stdio.stderr.removeEventListener('message', onAck);
+    resolveProof();
+  };
+  const onAck = (event: MessageEvent): void => {
+    const frame = event.data;
+    if (
+      typeof frame !== 'object' ||
+      frame === null ||
+      Reflect.ownKeys(frame).length !== 1 ||
+      (frame as { readonly kind?: unknown }).kind !== ackKind
+    ) {
+      rejectProof(new TypeError('stdio delivery fault received an invalid parent ACK'));
+      spec.stdio.stderr.removeEventListener('message', onAck);
+      return;
+    }
+    acknowledgements++;
+    if (acknowledgements !== 1) {
+      rejectProof(new Error('stdio delivery fault received duplicate parent ACK'));
+      spec.stdio.stderr.removeEventListener('message', onAck);
+      return;
+    }
+    releaseIfProven();
+  };
+  spec.stdio.stderr.addEventListener('message', onAck);
+  spec.stdio.stderr.start();
+
+  Object.defineProperty(spec.stdio.stdout, 'postMessage', {
+    configurable: true,
+    value(message: unknown): void {
+      const bytes =
+        message instanceof Uint8Array
+          ? message
+          : fail(new TypeError('stdio delivery fault expected stdout bytes'));
+      if (released || heldStdout.length === 2) {
+        fail(new Error('stdio delivery fault received extra stdout'));
+      }
+      heldStdout.push(new Uint8Array(bytes));
+      if (heldStdout.length !== 2) return;
+      if (stderrWrites !== 1) {
+        fail(new Error('stdio delivery fault received second stdout before stderr'));
+      }
+      releaseIfProven();
+    },
+  });
+  Object.defineProperty(spec.stdio.stderr, 'postMessage', {
+    configurable: true,
+    value(message: unknown): void {
+      const bytes =
+        message instanceof Uint8Array
+          ? message
+          : fail(new TypeError('stdio delivery fault expected stderr bytes'));
+      if (stderrWrites !== 0 || heldStdout.length !== 1 || released) {
+        fail(new Error('stdio delivery fault expected stderr between two stdout writes'));
+      }
+      stderrWrites = 1;
+      nativeStderrPost(new Uint8Array(bytes));
+    },
+  });
+
+  return proof;
+}
+
 async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
+  const stdioDeliveryProof = installStdioDeliveryFault(spec);
   const stdout = bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout');
   const stderr = bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr');
   if (request.nodeCliEvalVfsAudit) {
@@ -253,6 +351,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
       stderr.write(bytes);
     },
   });
+  await stdioDeliveryProof;
 
   // `worker_threads.Worker` uses serve:true. A clean entry stays alive for its
   // parentPort; only setup failure is reaped by the production kernel contract.

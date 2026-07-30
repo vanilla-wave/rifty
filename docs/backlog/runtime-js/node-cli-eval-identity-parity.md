@@ -1,12 +1,12 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
 user_story: As a CLI author probing its invocation context under `node -e` or `node -p`, I want the same argv and module identity as Node 24, but today the terminal rejects the command.
-sources: [M11, ADR-0155, ADR-0157, ADR-0337, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md, docs/backlog/runtime-js/reference/node-cli-eval-physical-carrier-probe.md]
-code: [packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/cjs.ts, tools/node-parity-runner/cases/process/node-eval-context.case.ts, tests/e2e/cli-report.spec.ts]
+sources: [M11, ADR-0155, ADR-0157, ADR-0337, ADR-0338, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md, docs/backlog/runtime-js/reference/node-cli-eval-physical-carrier-probe.md]
+code: [packages/kernel/src/worker-stdio-drain.ts, packages/kernel/src/process-manager.ts, packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/cjs.ts, tools/node-parity-runner/cases/process/node-eval-context.case.ts, tests/e2e/cli-report.spec.ts]
 ---
 
 ## Context
@@ -180,10 +180,273 @@ Acceptance, Parity, or loud exclusions:
   inversion between independent stdout/stderr ports;
 - the ninth readiness verdict was not the authoritative first Decisions line.
 
-The item is demoted while the local sibling/admission proofs are completed and
-the cross-stream mechanism is reconciled with ADR-0332 through the required
-mechanism sweep and decision record. The pre-demotion Acceptance and Parity
+The item remains demoted while the local sibling/admission proofs and
+cross-stream contract are re-judged. Every named ESM `--print=` RHS class now
+crosses source and bare forms. Each no-child family installs the real recording
+Worker boundary before execution and requires zero constructions as well as an
+unchanged ProcessManager snapshot.
+
+ADR-0338 supersedes ADR-0332 after a repo-wide mechanism sweep. The retained
+process-wide admission assigns each stdout/stderr write a trusted contiguous
+order; one kernel receiver reconstructs that order across the two independently
+delivered ports before Workbench, parity, program, WASI, or worker-thread
+consumers observe bytes. RED forces the later stderr delivery ahead of the
+earlier stdout, requires no early suffix publication, then exact
+`stdout → stderr → stdout` output and terminal drain. Raw-byte,
+authenticated-witness, invalid-order, duplicate, stale, collision, gap,
+per-stream-target, post-failure, and abandonment faults close the new boundary.
+The pre-demotion Acceptance and Parity remain verbatim below.
+
+## Eleventh readiness re-cut
+
+The fresh readiness judge for the first ADR-0338 cut found three false-GREEN
+classes without changing Acceptance, Parity, or loud exclusions:
+
+- order validation omitted non-finite, unsafe, and ceiling values;
+- byte/witness/target validation omitted wrong types, target drift, and
+  post-target overrun;
+- the envelope design changed the publicly exported raw stdout/stderr carrier
+  without inventorying that observable boundary.
+
+The item remains demoted while those classes are re-judged. ADR-0338 now
+preserves raw `Uint8Array` messages on public `WorkerStdioPorts`,
+`spawnKernelWorker`, and `WorkerProcessHandle.ports`. The existing
+IPC/private-control lane carries one output-state-attested order witness; the
+ordered receiver pairs that witness with each stream's FIFO bytes. RED retains
+the legal cross-port inversion (`stderr` delivery before the earlier admitted
+`stdout`) and adds exact public-byte, forged/malformed witness, non-finite/
+unsafe/ceiling order, wrong-byte, target-drift/overrun, and torn witness-post
+poisoning classes. Both trusted post capabilities are captured before the raw
+ports are published, and the state/Atomics intrinsics are captured before guest
+entry, so a guest intrinsic/instance/prototype interceptor cannot reveal the
+secret or mutate the attested witness. The exported IPC decoder is itself RED
+for the new private-control frame, and ProcessManager must consume that frame
+without surfacing user IPC. Physical death after a byte post and failed witness
+post discards the unprovable suffix and still settles once. The pre-demotion
+Acceptance and Parity remain verbatim below.
+
+## Twelfth readiness re-cut
+
+The fresh readiness judge for the eleventh cut found two carrier false-GREENs
+without changing Acceptance, Parity, or loud exclusions:
+
+- the physical parity adapter still had only independent per-stream capture,
+  with no RED forcing a legal cross-port inversion through its real Worker;
+- ProcessManager's integration RED consumed the private order witness but did
+  not assert that no user `'message'` event exposed it.
+
+The item remains demoted while those two proofs are re-judged. The physical
+parity RED now admits `stdout₀ → stderr₁ → stdout₂`, keeps control witnesses
+FIFO, deliberately delivers the stderr bytes before stdout₀, and requires the
+original ordered frame sequence before terminal settlement. The ProcessManager
+RED observes user IPC across the same witness deliveries and requires no
+message before or after drain. The pre-demotion Acceptance and Parity remain
+verbatim below.
+
+## Thirteenth readiness re-cut
+
+The fresh readiness judge for the twelfth cut found one receiver false-GREEN
+without changing Acceptance, Parity, or loud exclusions: every deterministic
+success path delivered the authenticated witness before its raw chunk, while
+the physical inversion did not order a raw callback against its witness.
+
+The item remains demoted while the symmetric arrival proof is re-judged. Both
+the package receiver and real ProcessManager route now deliver stderr raw bytes
+before the matching FIFO witness and the final stdout raw bytes before their
+witness. They require no early suffix publication, no user IPC disclosure,
+then exact `stdout → stderr → stdout` output and terminal drain after the
+matching witness arrives. The physical Worker inversion remains the
+independent carrier proof. The pre-demotion Acceptance and Parity remain
+verbatim below.
+
+## Fourteenth readiness re-cut
+
+The fresh readiness judge for the thirteenth cut found two receiver
+false-GREENs without changing Acceptance, Parity, or loud exclusions:
+
+- witness provenance rejected a missing or forged string secret but not a
+  wrong-type value that coerced to the real secret;
+- success paths held at most one unmatched raw chunk per stream, so a one-slot
+  receiver could pass without the required per-stream FIFO.
+
+The item remains demoted while those exact proofs are re-judged. Receiver RED
+now rejects an object whose string coercion returns the authentic attestation.
+Both the package receiver and real ProcessManager route enqueue two stdout raw
+chunks plus one stderr raw chunk before any FIFO control witness, publish each
+chunk only when its witness arrives, then drain exactly once after
+`stdout₂`. The pre-demotion Acceptance and Parity remain verbatim below.
+
+## Fifteenth readiness re-cut
+
+The fault audit for the fourteenth cut found two remaining proof holes without
+changing Acceptance, Parity, or loud exclusions:
+
+- bind-time capability capture replaced each port instance method but not its
+  prototype, so a writer that looked up the prototype later could expose the
+  trusted byte/witness pair;
+- normal cut tests did not require drain to remain pending when either the raw
+  chunk or matching witness was still missing.
+
+The item remains demoted while those exact proofs are re-judged. Primordial RED
+now poisons both port instances and their shared prototype after bind and
+requires zero interception. Receiver RED independently withholds the raw chunk
+and the witness under an immutable nonzero cut, requiring no publication,
+drain, or protocol failure. The impossible control-lane order gap remains a
+loud protocol failure because authenticated witnesses share one FIFO port. The
+pre-demotion Acceptance and Parity remain verbatim below.
+
+## Sixteenth readiness re-cut
+
+The fault audit for the fifteenth cut found one cut-time false-GREEN without
+changing Acceptance, Parity, or loud exclusions: overrun RED covered
+post-completion arrivals and already paired output, but not raw or witness
+queues that already exceeded a newly installed immutable target.
+
+The item remains demoted while that exact proof is re-judged. Receiver RED now
+buffers two unmatched stdout raw chunks before `cut({ stdout: 1, stderr: 0 })`
+and separately buffers two contiguous authenticated stdout witnesses before
+the same cut. Each must produce one protocol failure with no publication or
+drain. The pre-demotion Acceptance and Parity remain verbatim below.
+
+## Seventeenth readiness re-cut
+
+The fault audit for the sixteenth cut found one admission false-GREEN without
+changing Acceptance, Parity, or loud exclusions: RED fabricated an active
+writer and rejected re-entry, but did not prove that a real write owns the slot
+across byte post, witness post, and counter commit.
+
+The item remains demoted while that exact proof is re-judged. Writer RED now
+starts `cutWorkerOutput` synchronously from the raw port's `postMessage`
+callback. The cut must observe the real active slot, wait for witness and
+counter commit, then resolve `{ stdout: 1, stderr: 0 }`; witness order zero must
+exist and the slot must be released. The pre-demotion Acceptance and Parity
 remain verbatim below.
+
+## Eighteenth readiness re-cut
+
+The fault audit for the seventeenth cut found one provenance false-GREEN
+without changing Acceptance, Parity, or loud exclusions: witness
+authentication assumes the guest-published process spec excludes the
+kernel-owned output-state SAB, but no production-publication proof enforced
+that boundary.
+
+The item remains demoted while that exact proof is re-judged. The worker-entry
+production proof now inspects the actual global process spec at the pre-entry
+boundary and requires exact public process and stdio keys, no `outputState`,
+and no top-level `SharedArrayBuffer` value. The trusted hook may receive the
+full spawn spec; guest-visible global state may not. The pre-demotion
+Acceptance and Parity remain verbatim below.
+
+## Nineteenth readiness re-cut
+
+The fault audit for the eighteenth cut found one nested provenance false-GREEN
+without changing Acceptance, Parity, or loud exclusions: exact process and
+stdio container keys did not prevent an allowed stdout/stderr writer value
+from carrying the output-state SAB or attestation as an extra property.
+
+The item remains demoted while that exact proof is re-judged. The production
+publication proof now requires each output writer to expose exactly one own
+`write` capability and recursively rejects any structurally reachable
+output-state SAB or its attestation. The writer's closure remains opaque and
+owns the state as intended; guest-visible object properties do not. The
+pre-demotion Acceptance and Parity remain verbatim below.
+
+## Twentieth readiness re-cut
+
+The later readiness/fault audits found two false-GREENs without changing
+Acceptance, Parity, or loud exclusions:
+
+- the re-entrant cut observed active ownership during the raw post and after
+  return, but not through witness post and counter commit;
+- deserialization failure was injected on a raw output port but not on the IPC
+  lane that carries authenticated order witnesses.
+
+The item remains demoted while those exact proofs are re-judged. The writer
+RED now observes active one and committed zero inside the witness callback,
+then requires captured state stores in exact `counter=1 → active=0` order
+before the re-entrant cut returns target one. ProcessManager RED injects
+`messageerror` independently on stdout and private-control IPC, requiring one
+finite exit-1/close, no process stdout or user IPC, one exact diagnostic stderr,
+worker termination, and process record removal. The pre-demotion Acceptance
+and Parity remain verbatim below.
+
+## Twenty-first readiness re-cut
+
+The fault audit for the twentieth cut found one raw-carrier false-GREEN without
+changing Acceptance, Parity, or loud exclusions: byte-exact receiver assertions
+did not prevent the trusted writer from transferring and detaching the caller's
+`Uint8Array`.
+
+The item remains demoted while that exact proof is re-judged. A real
+`MessageChannel` RED now writes a retained non-zero-offset view, requires its
+view and backing buffer to remain synchronously attached and byte-identical,
+then requires the peer to receive the unchanged raw view plus its authenticated
+order witness. The pre-demotion Acceptance and Parity remain verbatim below.
+
+## Twenty-second readiness re-cut
+
+The fresh readiness judge for the twenty-first cut found two remaining
+Contract-sweep defects without changing Acceptance, Parity, or loud exclusions:
+
+- the twentieth prose said `messageerror` produced no output while its exact
+  existing loud-failure contract emits one diagnostic on stderr;
+- runtime-js, WASI, kernel, and Chromium sibling carriers still invoked the
+  output writer without its private-control port, permitting a witness-free
+  fallback during implementation.
+
+The item remains demoted while those exact corrections are re-judged. The
+fault wording now distinguishes absent process stdout and user IPC from the one
+exact diagnostic stderr. Every sibling carrier passes the same IPC/control
+port to the writer and retains its observable output/terminal assertions, so a
+faithful implementation can require one authenticated witness for every
+committed raw frame without a compatibility overload. The pre-demotion
+Acceptance and Parity remain verbatim below.
+
+## Twenty-third readiness re-cut
+
+The sibling sweep for the twenty-second cut found one contradictory
+worker-entry setup assertion without changing Acceptance, Parity, or loud
+exclusions: it prohibited every IPC post while the trusted setup diagnostic is
+itself a committed stderr frame that requires an authenticated order witness.
+
+The item remains demoted while that exact correction is re-judged. Setup-fault
+RED now requires the diagnostic's exact stderr/order-zero witness. The
+production publication proof also writes through the actual published stdout
+and stderr capabilities before its injected hook failure, then requires exact
+stdout-zero, stderr-one, and diagnostic-stderr-two witnesses on the supplied
+IPC port. This closes both normal publication writers and the setup-failure
+writer without a witness-free overload. The pre-demotion Acceptance and Parity
+remain verbatim below.
+
+## Twenty-fourth readiness re-cut
+
+The completed carrier sweep for the twenty-third cut found two remaining
+indirect sibling proofs without changing Acceptance, Parity, or loud
+exclusions: the descendant-settlement carrier and real Chromium Worker suite
+did not observe writer-produced witnesses on their parent IPC endpoints.
+
+The item remains demoted while those exact proofs are re-judged. The recursive
+owner RED now requires its admitted descendant-era stdout to carry exact
+order-zero authentication with no user IPC disclosure. Real Chromium natural,
+signal, global-error, and canceled-error paths likewise require exact
+state-attested stdout/stderr witness sequences on the physical parent port and
+no public `message` event; natural and global-error cover both published
+writers and the separately bound diagnostic writer. The forced physical parity
+inversion remains the custom-adapter proof. The pre-demotion Acceptance and
+Parity remain verbatim below.
+
+## Twenty-fifth readiness re-cut
+
+The carrier audit for the twenty-fourth cut found one over-constrained physical
+expectation without changing Acceptance, Parity, or loud exclusions: a timer
+throw escapes the Worker and its diagnostic stderr is emitted locally by the
+parent ProcessManager, so it cannot carry a child output-order witness.
+
+The item was demoted until that exact correction was re-judged. Real Chromium
+global-error RED now requires only the child's admitted stdout/order-zero
+witness while retaining the parent diagnostic stderr and terminal proof. The
+worker-entry setup-failure RED remains the exact child diagnostic-writer proof.
+The pre-demotion Acceptance and Parity remain verbatim below.
 
 ## Refinement evidence
 
@@ -304,6 +567,7 @@ identity rather than a generated workspace file, and return the real exit code.
 | `frozen-assumption` × CLI spelling/format | Treat `--print=` RHS as source or quote a top-level string | Node differential fails the exact `execArgv`, source, or stdout row. |
 | `sibling-drift` × launch surfaces | Workbench, parity adapter, or recursive builder invents another eval carrier | Exact v3 launch/physical-child contract rejects; all consumers use the one typed variant. |
 | `observable-order` × result/exit | Print before timer drain, twice, or after explicit exit | Ordered stdout and exit tests fail; one natural-exit owner prints or forced exit suppresses. |
+| `observable-order` × physical stdout/stderr delivery | Independent output ports deliver a later admitted write first | ADR-0338 receiver buffers the suffix and reconstructs authenticated child write order before any consumer or terminal event. |
 | `poisoned-cache` × synthetic record | Register/reuse `[eval]` or rebase its resolver after `chdir()` | Cache, parent, launch-cwd resolution, and sequential-child differentials fail. |
 | `concurrent-same-key` × same entry identity | Two `[eval]` children share cwd/module/output/preview state | Simultaneous distinct-fixture physical children expose any cross-talk. |
 | `provenance-lie` × source transport | Materialize source as a workspace/data/temp module | Before/during/after VFS observer and stack/cache identity fail; compat remains ❌. |
@@ -333,10 +597,15 @@ identity rather than a generated workspace file, and return the real exit code.
 
 ## Decisions
 
-ready-verdict: 2026-07-30 — current code, compat, TODO, ADR, and backlog searches settle Context, freshness, and non-overlap; M11, the pinned executable Node v24.16.0 CLI/identity/resolver/lifecycle oracle, and the physical Workbench probe settle User scenario, Acceptance, Reference contract, Parity, and loud exclusions; ADR-0337 with ADR-0155/0157/0267/0325/0326/0332/0334 settles Decisions, Reversibility, and the single atomic-v3 loader/lifecycle mechanism inventory; the live-Node-validated six separated spellings × three source states × terminator matrix crosses projection, classifier, real ProcessManager admission, physical parity, and CI-active Chromium, including inline, empty, mandatory-missing exit-9, module-context, and attached-option siblings; preserved loader/cache/parent/Promise/process/lifecycle/error/preview/corrupt-bootstrap REDs settle the remaining Fault rows; the physical trace publishes typed bootstrap before pre-entry, begins child-local observation before the injected carrier and `installNodeRuntime`, retains it through entry and final audit, and combines clean, Workbench-owner, SAB-remote, and child-local proofs while `env-semantics`, `stdio-plan-drain-order`, `public-ipc-json`, and `missing-cwd-entry` program siblings remain GREEN, so the eighth re-cut closes without weakening any pre-demotion Acceptance, Parity, or loud exclusion.
+ready-verdict: 2026-07-30 — Node v24.16.0 artifacts and frozen same-invocation parity/Chromium REDs settle the user scenario, supported grammar, detached `[eval]` identity/cache/resolution, print/lifecycle/errors, isolation, and acceptance carrier; ADR-0337 settles the sole v3 launch and loader seam; ADR-0338 plus package, sibling, forced-inversion, setup-fault, and real-Worker REDs settle authenticated cross-port ordering, cut/drain, failure, provenance, and public boundaries; loud ESM/preload/REPL/TypeScript exclusions, stale/overlap, and removable-mechanism sweeps are closed.
 
 - ADR-0337 owns the irreversible atomic node-entry v3 shape and the one
   loader-owned unwrapped-script mechanism. There is no v2 compatibility reader.
+- ADR-0338 owns one package-internal ordered-output receiver over the retained
+  process-wide writer admission. Workbench, parity, program, WASI, and
+  worker-thread paths consume the same ordered kernel Readables; none owns a
+  callback-arrival reorder fallback. Public stdout/stderr ports retain exact
+  byte messages; one authenticated private-control witness supplies order.
 - Supported CLI grammar is a pure Workbench classifier that retains original
   eval option tokens for `execArgv`; unsupported Node options remain loud.
 - Eval's module record reuses the CJS record/resolver authority but stays
@@ -351,9 +620,10 @@ ready-verdict: 2026-07-30 — current code, compat, TODO, ADR, and backlog searc
 
 ## Reversibility
 
-IRREVERSIBLE node-entry protocol/context choice recorded by ADR-0337. Parser,
-loader, inspector, and acceptance carriers remain replaceable behind that exact
-behavior.
+IRREVERSIBLE node-entry protocol/context choice recorded by ADR-0337 and
+cross-port output-order mechanism recorded by ADR-0338. Parser, loader,
+inspector, and acceptance carriers remain replaceable behind those exact
+behaviors.
 
 ## Pre-demotion contract (verbatim)
 
