@@ -1,6 +1,88 @@
 import { describe, expect, it } from 'vitest';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
 
+const TERMINATED_SEPARATED_EVAL_SPELLINGS = [
+  {
+    option: '-e',
+    print: false,
+    sourceRequired: true,
+    missing: 'node: -e requires an argument\n',
+  },
+  {
+    option: '--eval',
+    print: false,
+    sourceRequired: true,
+    missing: 'node: --eval requires an argument\n',
+  },
+  {
+    option: '-pe',
+    print: true,
+    sourceRequired: true,
+    missing: 'node: --eval requires an argument\n',
+  },
+  { option: '-p', print: true, sourceRequired: false, missing: '' },
+  { option: '--print', print: true, sourceRequired: false, missing: '' },
+  { option: '--print=ignored', print: true, sourceRequired: false, missing: '' },
+] as const;
+
+const TERMINATED_EVAL_SOURCE_STATES = [
+  { state: 'missing', source: undefined },
+  { state: 'empty', source: '' },
+  { state: 'nonempty', source: 'source' },
+] as const;
+
+function buildTerminatedClassifierCases(): readonly {
+  readonly label: string;
+  readonly args: readonly string[];
+  readonly expected: unknown;
+}[] {
+  return TERMINATED_SEPARATED_EVAL_SPELLINGS.flatMap((spelling) =>
+    TERMINATED_EVAL_SOURCE_STATES.map((sourceState) => {
+      if (sourceState.source === undefined) {
+        return {
+          label: `${spelling.option} / missing`,
+          args: [spelling.option, '--'],
+          expected: spelling.sourceRequired
+            ? { kind: 'usageError', message: spelling.missing }
+            : {
+                kind: 'eval',
+                source: '',
+                print: spelling.print,
+                execArgv: [spelling.option],
+                scriptArgs: [],
+              },
+        };
+      }
+
+      if (sourceState.source === '' && !spelling.sourceRequired) {
+        return {
+          label: `${spelling.option} / empty`,
+          args: [spelling.option, '', '--', 'x'],
+          expected: {
+            kind: 'eval',
+            source: '',
+            print: spelling.print,
+            execArgv: [spelling.option],
+            scriptArgs: ['', '--', 'x'],
+          },
+        };
+      }
+
+      return {
+        label: `${spelling.option} / ${sourceState.state}`,
+        args: [spelling.option, sourceState.source, '--', 'x'],
+        expected: {
+          kind: 'eval',
+          source: sourceState.source,
+          print: spelling.print,
+          execArgv: [spelling.option, sourceState.source],
+          scriptArgs: ['x'],
+        },
+      };
+    }),
+  );
+}
+
 describe('classifyNodeInvocation', () => {
   it('-v / --version → version (not a /workspace/--version path)', () => {
     expect(classifyNodeInvocation(['-v'])).toEqual({ kind: 'version' });
@@ -51,61 +133,22 @@ describe('classifyNodeInvocation', () => {
     });
   });
 
-  it.each([
-    {
-      label: '-e',
-      args: ['-e', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['-e', 'source'],
-      print: false,
-    },
-    {
-      label: '--eval',
-      args: ['--eval', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['--eval', 'source'],
-      print: false,
-    },
-    {
-      label: '--eval=',
-      args: ['--eval=source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['--eval=source'],
-      print: false,
-    },
-    {
-      label: '-p',
-      args: ['-p', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['-p', 'source'],
-      print: true,
-    },
-    {
-      label: '--print',
-      args: ['--print', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['--print', 'source'],
-      print: true,
-    },
-    {
-      label: '--print=ignored',
-      args: ['--print=ignored', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['--print=ignored', 'source'],
-      print: true,
-    },
-    {
-      label: '-pe',
-      args: ['-pe', 'source', '--', 'alpha', 'two words', '-x'],
-      execArgv: ['-pe', 'source'],
-      print: true,
-    },
-  ] as const)(
-    '$label consumes an immediate terminator before exposing entryless script args',
-    ({ args, execArgv, print }) => {
-      expect(classifyNodeInvocation(args)).toEqual({
-        kind: 'eval',
-        source: 'source',
-        print,
-        execArgv,
-        scriptArgs: ['alpha', 'two words', '-x'],
-      });
+  it.each(buildTerminatedClassifierCases())(
+    '$label crosses eval source state with the immediate terminator',
+    ({ args, expected }) => {
+      expect(classifyNodeInvocation(args)).toEqual(expected);
     },
   );
+
+  it('attached --eval= source consumes an immediate terminator too', () => {
+    expect(classifyNodeInvocation(['--eval=source', '--', 'alpha', 'two words', '-x'])).toEqual({
+      kind: 'eval',
+      source: 'source',
+      print: false,
+      execArgv: ['--eval=source'],
+      scriptArgs: ['alpha', 'two words', '-x'],
+    });
+  });
 
   it.each([
     { option: '-e', print: false, missing: 'node: -e requires an argument\n' },

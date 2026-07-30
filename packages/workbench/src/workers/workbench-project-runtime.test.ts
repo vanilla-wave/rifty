@@ -69,6 +69,131 @@ const NODE_WORKER_RUNTIME_CONFIG = Object.freeze({
   nodeEntryWorkerUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_NODE_ENTRY_WORKER_URL,
   sqliteWasmUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_SQLITE_WASM_URL,
 });
+const TERMINATOR_ADMISSION_SOURCE = 'JSON.stringify({marker:"terminator"})';
+const TERMINATED_SEPARATED_EVAL_SPELLINGS = [
+  {
+    option: '-e',
+    print: false,
+    sourceRequired: true,
+    missing: 'node: -e requires an argument\n',
+  },
+  {
+    option: '--eval',
+    print: false,
+    sourceRequired: true,
+    missing: 'node: --eval requires an argument\n',
+  },
+  {
+    option: '-pe',
+    print: true,
+    sourceRequired: true,
+    missing: 'node: --eval requires an argument\n',
+  },
+  { option: '-p', print: true, sourceRequired: false, missing: '' },
+  { option: '--print', print: true, sourceRequired: false, missing: '' },
+  { option: '--print=ignored', print: true, sourceRequired: false, missing: '' },
+] as const;
+const TERMINATED_EVAL_SOURCE_STATES = ['missing', 'empty', 'nonempty'] as const;
+
+type TerminatedEvalAdmissionCase =
+  | {
+      readonly outcome: 'usageError';
+      readonly label: string;
+      readonly line: string;
+      readonly stderr: string;
+    }
+  | {
+      readonly outcome: 'eval';
+      readonly label: string;
+      readonly line: string;
+      readonly source: string;
+      readonly print: boolean;
+      readonly execArgv: readonly string[];
+      readonly scriptArgs: readonly string[];
+    };
+
+function buildTerminatedEvalAdmissionCases(): readonly TerminatedEvalAdmissionCase[] {
+  return TERMINATED_SEPARATED_EVAL_SPELLINGS.flatMap((spelling) =>
+    TERMINATED_EVAL_SOURCE_STATES.map((sourceState): TerminatedEvalAdmissionCase => {
+      const source =
+        sourceState === 'missing'
+          ? undefined
+          : sourceState === 'empty'
+            ? ''
+            : TERMINATOR_ADMISSION_SOURCE;
+      const line =
+        source === undefined
+          ? `node ${spelling.option} --`
+          : `node ${spelling.option} '${source}' -- x`;
+      const label = `${spelling.option} / ${sourceState}`;
+
+      if (source === undefined && spelling.sourceRequired) {
+        return {
+          outcome: 'usageError',
+          label,
+          line,
+          stderr: spelling.missing,
+        };
+      }
+      if (source === undefined) {
+        return {
+          outcome: 'eval',
+          label,
+          line,
+          source: '',
+          print: spelling.print,
+          execArgv: [spelling.option],
+          scriptArgs: [],
+        };
+      }
+      if (source === '' && !spelling.sourceRequired) {
+        return {
+          outcome: 'eval',
+          label,
+          line,
+          source,
+          print: spelling.print,
+          execArgv: [spelling.option],
+          scriptArgs: ['', '--', 'x'],
+        };
+      }
+      return {
+        outcome: 'eval',
+        label,
+        line,
+        source,
+        print: spelling.print,
+        execArgv: [spelling.option, source],
+        scriptArgs: ['x'],
+      };
+    }),
+  );
+}
+
+type TerminatedEvalUsageErrorCase = Extract<
+  TerminatedEvalAdmissionCase,
+  { readonly outcome: 'usageError' }
+>;
+type TerminatedEvalChildCase = Extract<TerminatedEvalAdmissionCase, { readonly outcome: 'eval' }>;
+
+const TERMINATED_EVAL_ADMISSION_CASES = buildTerminatedEvalAdmissionCases();
+const TERMINATED_EVAL_USAGE_ERROR_CASES = TERMINATED_EVAL_ADMISSION_CASES.filter(
+  (testCase): testCase is TerminatedEvalUsageErrorCase => testCase.outcome === 'usageError',
+);
+const TERMINATED_EVAL_CHILD_CASES: readonly TerminatedEvalChildCase[] = [
+  ...TERMINATED_EVAL_ADMISSION_CASES.filter(
+    (testCase): testCase is TerminatedEvalChildCase => testCase.outcome === 'eval',
+  ),
+  {
+    outcome: 'eval',
+    label: '--eval= / nonempty',
+    line: `node --eval='${TERMINATOR_ADMISSION_SOURCE}' -- x`,
+    source: TERMINATOR_ADMISSION_SOURCE,
+    print: false,
+    execArgv: [`--eval=${TERMINATOR_ADMISSION_SOURCE}`],
+    scriptArgs: ['x'],
+  },
+];
 const PACKAGE_JSON = `${JSON.stringify({
   name: 'workbench-project-a',
   version: '1.0.0',
@@ -1207,53 +1332,54 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
-  const terminatorAdmissionSource = 'JSON.stringify({marker:"terminator"})';
-  it.each([
-    {
-      spelling: '-e',
-      line: `node -e '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
-      print: false,
-      execArgv: ['-e', terminatorAdmissionSource],
+  it.each(TERMINATED_EVAL_USAGE_ERROR_CASES)(
+    'returns exact immediate-terminator usage failure without a child: $label',
+    async ({ line, stderr: expectedStderr }) => {
+      const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
+        throw new Error('unexpected missing-source eval child spawn');
+      });
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-terminator' });
+
+      try {
+        await h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-eval-terminator',
+          rid: 'run-node-eval-terminator',
+          line,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        });
+
+        const stderr = h.frames
+          .filter(
+            (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+              frame.type === 'pty:chunk' &&
+              frame.rid === 'run-node-eval-terminator' &&
+              frame.stream === 'stderr',
+          )
+          .map((frame) => new TextDecoder().decode(frame.data))
+          .join('');
+        expect(stderr).toBe(expectedStderr);
+        expect(spawn).not.toHaveBeenCalled();
+        expect(h.frames).toContainEqual(
+          expect.objectContaining({
+            type: 'pty:exit',
+            rid: 'run-node-eval-terminator',
+            code: 9,
+            exit: { code: 9, signal: null },
+          }),
+        );
+      } finally {
+        await h.runtime.close();
+      }
     },
-    {
-      spelling: '--eval',
-      line: `node --eval '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
-      print: false,
-      execArgv: ['--eval', terminatorAdmissionSource],
-    },
-    {
-      spelling: '--eval=',
-      line: `node --eval='${terminatorAdmissionSource}' -- alpha 'two words' -x`,
-      print: false,
-      execArgv: [`--eval=${terminatorAdmissionSource}`],
-    },
-    {
-      spelling: '-p',
-      line: `node -p '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
-      print: true,
-      execArgv: ['-p', terminatorAdmissionSource],
-    },
-    {
-      spelling: '--print',
-      line: `node --print '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
-      print: true,
-      execArgv: ['--print', terminatorAdmissionSource],
-    },
-    {
-      spelling: '--print=ignored',
-      line: `node --print=ignored '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
-      print: true,
-      execArgv: ['--print=ignored', terminatorAdmissionSource],
-    },
-    {
-      spelling: '-pe',
-      line: `node -pe '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
-      print: true,
-      execArgv: ['-pe', terminatorAdmissionSource],
-    },
-  ] as const)(
-    'consumes immediate -- through one real admitted child for $spelling',
-    async ({ line, print, execArgv }) => {
+  );
+
+  it.each(TERMINATED_EVAL_CHILD_CASES)(
+    'crosses source state and immediate terminator through one real admitted child: $label',
+    async ({ line, source, print, execArgv, scriptArgs }) => {
       const workers = installRealKernelWorkerBoundary();
       const h = await harness(undefined, nodeCliPackageConfig);
       h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-terminator' });
@@ -1276,15 +1402,15 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
         const spec = worker.spec();
 
+        expect(spec.argv).toEqual([NODE_PROCESS_IDENTITY.execPath, ...scriptArgs]);
         expect(spec).toMatchObject({
-          argv: [NODE_PROCESS_IDENTITY.execPath, 'alpha', 'two words', '-x'],
           entry: {
             bootstrap: {
               protocol: 'rifty.node-entry/v3',
               payload: {
                 launch: {
                   kind: 'eval',
-                  source: terminatorAdmissionSource,
+                  source,
                   print,
                   execArgv,
                 },
