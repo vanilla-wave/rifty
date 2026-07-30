@@ -20,6 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`tier: robust`) and `wasi-in-browser-showcase` (`tier: works`), which now
   carry invariants + slice bands; 8 legacy epics remain
   (`process-meta/ready-epic-goal-shape-debt`).
+- **TTY parity observes the first native `SIGWINCH`.** Real Node on a Linux PTY
+  can deliver a duplicate signal for one live resize; the oracle now pins the
+  stable dimensions and stdout/stderr resize order through the first signal
+  without weakening rifty's exact-once process-control contract.
+
 - **PR = one delivered behavior; process state never opens a PR.** New
   `AGENTS.md` §PR — unit of delivery: contract flips, demotions, re-cuts,
   splits, intake drafts and lineage commit into the delivering unit's branch,

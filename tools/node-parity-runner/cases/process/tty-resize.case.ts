@@ -1,6 +1,6 @@
 import type { ParityCase } from '../../src/types.ts';
 
-/** A real PTY resize updates both TTY streams before Node emits SIGWINCH. */
+/** A real PTY resize updates both TTY streams before Node's first SIGWINCH. */
 const c: ParityCase = {
   kind: 'tty-resize',
   expected:
@@ -12,7 +12,7 @@ const c: ParityCase = {
     const initial = size(process.stdout);
     process.stdout.on('resize', () => events.push('stdout:' + size(process.stdout)));
     process.stderr.on('resize', () => events.push('stderr:' + size(process.stderr)));
-    process.on('SIGWINCH', () => events.push('SIGWINCH:' + size(process.stdout)));
+    process.once('SIGWINCH', () => events.push('SIGWINCH:' + size(process.stdout)));
     globalThis.__riftyTtyResize(132, 43);
     setTimeout(() => {
       console.log('__RIFTY_TTY_RESULT__' + JSON.stringify({

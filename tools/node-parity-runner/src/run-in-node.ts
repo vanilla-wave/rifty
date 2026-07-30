@@ -91,6 +91,7 @@ const TTY_RESIZE_NODE_PREAMBLE = `
       stdio: ['inherit', 'ignore', 'inherit'],
     });
   };
+  __setTtySize(80, 24);
   globalThis.__riftyTtyResize = __setTtySize;
 }
 `;
@@ -119,7 +120,7 @@ function quotePosixShellArg(value: string): string {
  *   transform) instead of diverging on a Node strip-only *limitation* rather
  *   than a rifty behaviour (ADR-0132).
  */
-export function nodeRunnerFor(testCase: ParityCase, entry: string): [string, string[]] {
+function nodeRunnerFor(testCase: ParityCase, entry: string): [string, string[]] {
   if (testCase.kind === 'ts-esm') {
     return [TSX_CLI, [entry]];
   }
@@ -127,17 +128,26 @@ export function nodeRunnerFor(testCase: ParityCase, entry: string): [string, str
     if (testCase.stdin) {
       throw new Error("ParityCase kind 'tty-resize' does not support injected stdin");
     }
-    // Set the fixture grid before Node exists. Doing this inside the oracle can
-    // leak the setup SIGWINCH into the later live-resize record.
-    const command = `stty cols 80 rows 24 && exec ${quotePosixShellArg(HOST_PROCESS.execPath)} ${quotePosixShellArg(entry)}`;
-    if (HOST_PROCESS.platform === 'linux' || HOST_PROCESS.platform === 'netbsd') {
-      return ['script', ['-q', '-e', '-c', command, '/dev/null']];
+    if (HOST_PROCESS.platform === 'linux') {
+      return [
+        'script',
+        [
+          '-q',
+          '-e',
+          '-c',
+          `exec ${quotePosixShellArg(HOST_PROCESS.execPath)} ${quotePosixShellArg(entry)}`,
+          '/dev/null',
+        ],
+      ];
     }
-    if (HOST_PROCESS.platform === 'darwin' || HOST_PROCESS.platform === 'freebsd') {
-      return ['script', ['-q', '/dev/null', '/bin/sh', '-c', command]];
-    }
-    if (HOST_PROCESS.platform === 'openbsd') {
-      return ['script', ['-c', command, '/dev/null']];
+    // TODO(backlog: toolchain-build/portable-tty-script-launcher)
+    if (
+      HOST_PROCESS.platform === 'darwin' ||
+      HOST_PROCESS.platform === 'freebsd' ||
+      HOST_PROCESS.platform === 'openbsd' ||
+      HOST_PROCESS.platform === 'netbsd'
+    ) {
+      return ['script', ['-q', '/dev/null', HOST_PROCESS.execPath, entry]];
     }
     throw new Error(
       `ParityCase kind 'tty-resize' needs POSIX script(1)+stty(1); unsupported platform ${HOST_PROCESS.platform}`,
