@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -121,6 +121,22 @@ Acceptance, Parity, or loud exclusions:
 The item was demoted while those exact sibling, aggregate, provenance, and
 teardown proofs gained cross-boundary sweeps. The pre-demotion Acceptance and
 Parity remain verbatim below.
+
+## Seventh readiness re-cut
+
+Contract+RED at `ab799709d` found one remaining `sibling-drift` cross-product
+without changing Acceptance, Parity, or loud exclusions: missing, separated
+empty, and nonempty source states were not crossed with `--` for every
+separated eval/print spelling. Node v24.16.0 treats `--` in the source position
+as the option terminator: mandatory `-e`/`--eval`/`-pe` report their usage
+error, while optional `-p`/`--print`/`--print=ignored` evaluate `undefined`
+with no script argument. A mandatory separated empty source still consumes a
+following terminator; an optional separated empty token remains a script
+argument, so a later `--` remains visible too.
+
+The item is demoted while that exact source-state/terminator matrix gains the
+same native, projection, classifier, real-admission, physical, and Chromium
+carriers. The pre-demotion Acceptance and Parity remain verbatim below.
 
 ## Refinement evidence
 
