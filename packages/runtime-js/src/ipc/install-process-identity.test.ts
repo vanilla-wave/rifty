@@ -10,7 +10,10 @@ import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
 
-function spec(ipcPort?: MessagePort): KernelProcessSpec {
+function spec(
+  ipcPort?: MessagePort,
+  argv: readonly string[] = ['node', '/entry.js'],
+): KernelProcessSpec {
   const stdout = new MessageChannel();
   const stderr = new MessageChannel();
   const stdin = new MessageChannel();
@@ -18,7 +21,7 @@ function spec(ipcPort?: MessagePort): KernelProcessSpec {
   return {
     pid: 2,
     ppid: 1,
-    argv: ['node', '/entry.js'],
+    argv: [...argv],
     env: {},
     cwd: '/workspace',
     stdio: {
@@ -103,6 +106,68 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     expect(proc.execArgv).toEqual(['--print', source, '--trace-warnings']);
     expect(originalExecArgv).toEqual(['--print', source]);
   });
+
+  // Fault class: lossy-aggregate. Falsy filtering must not collapse an
+  // explicitly empty source into the absent-source process identity.
+  it.each([
+    { option: '-e', print: false },
+    { option: '--eval', print: false },
+    { option: '-pe', print: true },
+  ] as const)(
+    'keeps the separated empty $option source in execArgv during process adoption',
+    ({ option, print }) => {
+      publishKernelEntryBootstrap({
+        protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+        payload: {
+          hostRuntime: { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+          launch: {
+            kind: 'eval',
+            source: '',
+            print,
+            execArgv: [option, ''],
+            remoteFs: true,
+          },
+        },
+      });
+
+      const proc = installNodeProcessShim(spec(undefined, ['/usr/local/bin/rifty'])) as ReturnType<
+        typeof installNodeProcessShim
+      > & {
+        execArgv: string[];
+      };
+
+      expect(proc.execArgv).toEqual([option, '']);
+      expect(proc.argv).toEqual(['/usr/local/bin/rifty']);
+    },
+  );
+
+  it.each(['-p', '--print', '--print=ignored'] as const)(
+    'keeps the separated empty token after %s in argv during process adoption',
+    (option) => {
+      publishKernelEntryBootstrap({
+        protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
+        payload: {
+          hostRuntime: { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
+          launch: {
+            kind: 'eval',
+            source: '',
+            print: true,
+            execArgv: [option],
+            remoteFs: true,
+          },
+        },
+      });
+
+      const proc = installNodeProcessShim(
+        spec(undefined, ['/usr/local/bin/rifty', '']),
+      ) as ReturnType<typeof installNodeProcessShim> & {
+        execArgv: string[];
+      };
+
+      expect(proc.execArgv).toEqual([option]);
+      expect(proc.argv).toEqual(['/usr/local/bin/rifty', '']);
+    },
+  );
 
   it('adopts eval terminal shape while keeping the physical process lane private', async () => {
     // Fault class: sibling-drift. Eval is a foreground launch at both process
