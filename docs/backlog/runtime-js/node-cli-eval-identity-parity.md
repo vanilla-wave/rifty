@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -68,6 +68,21 @@ The item was demoted while those proofs gained one canonical invocation projecti
 actor-tagged VFS observation, pre-projection path rejection, and strict exit
 attribute decoding. The pre-demotion Acceptance and Parity remain verbatim
 below.
+
+## Fourth readiness re-cut
+
+Contract+RED at `740c7705d` found two remaining `sibling-drift` holes without
+changing Acceptance, Parity, or loud exclusions:
+
+- attached short-option RED covered `-eSRC`/`-pSRC`, but not the `-peSRC` and
+  `-epSRC` siblings through the native oracle, classifier, and Workbench owner;
+- the named `--input-type=module` gap was pinned only for `-e`, leaving accepted
+  print and long-option spellings free to fall into a generic option error or
+  CommonJS eval.
+
+The item is demoted while those exact sibling families gain native-oracle,
+classifier, and no-child Workbench sweeps. The pre-demotion Acceptance and
+Parity remain verbatim below.
 
 ## Refinement evidence
 
