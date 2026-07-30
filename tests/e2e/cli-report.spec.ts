@@ -13,6 +13,7 @@ import { type Page, expect, test } from '@playwright/test';
 import {
   type NodeCliEvalFrame,
   type NodeCliEvalRawOutcome,
+  assertNodeCliEvalNoCarrierPath,
   assertNodeCliEvalOracleVersion,
   createNodeCliEvalCapture,
 } from '../../tools/node-parity-runner/src/node-cli-eval.ts';
@@ -217,6 +218,7 @@ function normalized(text: string): string {
 }
 
 function evalErrorProjection(text: string): string {
+  assertNodeCliEvalNoCarrierPath(text);
   const lines = normalized(text).split('\n');
   const header = lines.findIndex((line) => /^\[eval\]:\d+/u.test(line));
   const error = lines.findIndex(
@@ -358,6 +360,18 @@ async function stopWorkbenchPreview(
 
 test.describe('CLI report template through the worker lifecycle', () => {
   test.describe.configure({ mode: 'serial' });
+
+  test('error projection rejects raw eval carriers at every removable position', () => {
+    for (const stderr of [
+      "Error: carrier bootstrap\n    at /project/generated/eval-before.cjs:1:1\n[eval]:1\nthrow new Error('boom')\n^\n\nError: boom\n    at [eval]:1:7\n",
+      '/project/generated/eval-header.cjs:1\nreturn 1\n^^^^^^\n\nSyntaxError: Illegal return statement\n',
+      "[eval]:1\nthrow new Error('boom')\n^\n\nError: boom\n    at [eval]:1:7\n    at /work/.rifty-eval-after.cjs:1:7\n",
+    ]) {
+      expect(() => evalErrorProjection(stderr)).toThrow(
+        /node-cli-eval raw eval stderr leaked a generated or absolute carrier path/u,
+      );
+    }
+  });
 
   test('native oracle waits for inherited stdio pipes to close after direct-child exit', async ({
     browserName,

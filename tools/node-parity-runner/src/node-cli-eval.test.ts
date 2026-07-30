@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertNodeCliEvalNoCarrierPath,
   assertNodeCliEvalOracleVersion,
   canonicalNodeCliEvalOutcome,
   createNodeCliEvalCapture,
@@ -64,24 +65,39 @@ describe('node CLI eval parity carrier', () => {
 
   it.each([
     {
-      label: 'throw',
+      label: 'absolute carrier frame before the eval prelude',
+      source: "throw new Error('boom')",
+      stderr:
+        "Error: carrier bootstrap\n    at /project/generated/eval-before.cjs:1:1\n[eval]:1\nthrow new Error('boom')\n^\n\nError: boom\n    at [eval]:1:7\n",
+    },
+    {
+      label: 'absolute carrier-only error header',
+      source: 'return 1',
+      stderr:
+        '/project/generated/eval-header.cjs:1\nreturn 1\n^^^^^^\n\nSyntaxError: Illegal return statement\n',
+    },
+    {
+      label: 'generated carrier path after the throw user frame',
       source: "throw new Error('boom')",
       stderr:
         "[eval]:1\nthrow new Error('boom')\n^\n\nError: boom\n    at [eval]:1:7\n    at /work/.rifty-eval-throw.cjs:1:7\n",
     },
     {
-      label: 'syntax',
+      label: 'absolute carrier path after the syntax user frame',
       source: 'return 1',
       stderr:
         '[eval]:1\nreturn 1\n^^^^^^\nReturn statement is not allowed here\n\nSyntaxError: Illegal return statement\n    at [eval]:1:1\n    at compile (/project/generated/eval-syntax.cjs:1:1)\n',
     },
     {
-      label: 'unhandled rejection',
+      label: 'file URL carrier path after the rejection user frame',
       source: "Promise.reject(new Error('unhandled'))",
       stderr:
         "[eval]:1\nPromise.reject(new Error('unhandled'))\n               ^\n\nError: unhandled\n    at [eval]:1:16\n    at file:///tmp/rifty-eval-unhandled.mjs:1:16\n",
     },
-  ])('rejects a generated eval path hidden after the $label user frame', ({ source, stderr }) => {
+  ])('rejects $label before projecting raw stderr', ({ source, stderr }) => {
+    expect(() => assertNodeCliEvalNoCarrierPath(stderr)).toThrow(
+      /node-cli-eval raw eval stderr leaked a generated or absolute carrier path/u,
+    );
     expect(() =>
       canonicalNodeCliEvalOutcome(
         {

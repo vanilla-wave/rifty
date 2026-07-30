@@ -20,6 +20,7 @@ export interface NodeCliEvalOutcome extends NodeCliEvalRawOutcome {
 
 const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 const ABSOLUTE_STACK_LOCATION = /(?:^|[\s(])(?:file:\/\/)?\/[^()\s]+:\d+:\d+/u;
+const ABSOLUTE_ERROR_HEADER = /^(?:file:\/\/)?\/[^()\s]+:\d+(?::\d+)?$/u;
 const GENERATED_EVAL_PATH = /\.rifty-eval-[^()\s:]*/u;
 
 const NODE_CLI_EVAL_ORACLE_VERSION = 'v24.16.0';
@@ -156,19 +157,22 @@ function evalError(stderr: string): string {
   return `${selected.join('\n')}\n`;
 }
 
-function assertNoEvalCarrierPath(stderr: string): void {
+/**
+ * Reject a raw eval diagnostic before any projection can discard its physical
+ * source carrier. A leak is invalid wherever it lands: before `[eval]`, as the
+ * only header, or below the selected user frame.
+ */
+export function assertNodeCliEvalNoCarrierPath(stderr: string): void {
   const lines = stderr
     .replace(/\r\n/gu, '\n')
     .replace(ANSI_SGR, '')
     .replace(/\n+$/u, '')
     .split('\n');
-  const userFrame = lines.findIndex((line) => /^\s+at \[eval\]:/u.test(line));
-  if (userFrame === -1) return;
   const leaked = lines.find(
-    (line, index) =>
-      index > userFrame &&
-      /^\s+at\s+/u.test(line) &&
-      (ABSOLUTE_STACK_LOCATION.test(line) || GENERATED_EVAL_PATH.test(line)),
+    (line) =>
+      GENERATED_EVAL_PATH.test(line) ||
+      ABSOLUTE_STACK_LOCATION.test(line) ||
+      ABSOLUTE_ERROR_HEADER.test(line),
   );
   if (leaked !== undefined) {
     throw new Error(
@@ -191,7 +195,7 @@ export function canonicalNodeCliEvalOutcome(
   raw: NodeCliEvalRawOutcome,
   replacements: Readonly<Record<string, string>> = {},
 ): NodeCliEvalOutcome {
-  if (invocation.evalErrorStderr === true) assertNoEvalCarrierPath(raw.stderr);
+  if (invocation.evalErrorStderr === true) assertNodeCliEvalNoCarrierPath(raw.stderr);
   let stdout = normaliseText(raw.stdout, replacements);
   let stderr = normaliseText(raw.stderr, replacements);
   if (invocation.rejectedPromiseStdout === true) stdout = rejectedPromisePrefix(stdout);
