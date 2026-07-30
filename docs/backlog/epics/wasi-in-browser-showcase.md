@@ -104,4 +104,4 @@ Related (not owned here): the WASI-over-shared-VFS capability row is added by `d
 |---|---|
 | wasi-preset | 500–1200 |
 | standalone-example | 200–600 |
-| blog-surface | 300–800 |
+| blog-surface | 400–1200 |
