@@ -741,6 +741,13 @@ node -p "const x={name:'root'}; x.self=x; x"
 node -p "const x={value:'before'}; setTimeout(()=>{x.value='after';console.log('TIMER')},0); x"
 node -p "const p=new Promise(r=>setTimeout(()=>r(42),0)); p"
 node -p "process.exit(7); 42"
+node -p "setTimeout(()=>process.exit(7),0); 42"
+node -p "setTimeout(()=>{throw new Error('later')},0); 42"
+node -p "setTimeout(()=>Promise.reject(new Error('later rejection')),0); 42"
+node -p "queueMicrotask(()=>process.exit(7)); 42"
+node -p "queueMicrotask(()=>{throw new Error('microtask later')}); 42"
+node -p "Promise.resolve().then(()=>{throw new Error('then later')}); 42"
+node -p "queueMicrotask(()=>Promise.reject(new Error('microtask rejection'))); 42"
 node -e "throw new Error('boom')"
 node -e "const ="
 ```
@@ -758,6 +765,18 @@ TIMER
 { value: 'after' }                                                     # 0
 Promise { 42 }                                                         # 0
                                                                         # 7
+42                                                                     # 7
+42
+[eval]:1 ... Error: later ... at Timeout._onTimeout ([eval]:1:23)      # 1
+42
+[eval]:1 ... Error: later rejection ... at Timeout._onTimeout ([eval]:1:31) # 1
+42                                                                     # 7
+42
+[eval]:1 ... Error: microtask later ... at [eval]:1:27                 # 1
+42
+[eval]:1 ... Error: then later ... at [eval]:1:35                      # 1
+42
+[eval]:1 ... Error: microtask rejection ... at [eval]:1:35             # 1
 [eval]:1 ... Error: boom ... at [eval]:1:7                             # 1
 [eval]:1 ... SyntaxError ...                                           # 1
 ```
@@ -765,9 +784,11 @@ Promise { 42 }                                                         # 0
 The `-p` writer is console single-argument formatting, not unconditional
 `util.inspect`: a top-level string is unquoted. Node registers its result
 writer for `beforeExit` with `exit` fallback, so timer mutations and Promise
-settlement precede output; immediate `process.exit` suppresses output.
-Throw/syntax/unhandled-rejection failures exit 1, while explicit
-`process.exit(N)` and `process.exitCode=N` retain Node's exit contract.
+settlement precede output. `process.exit()` suppresses output only while initial
+evaluation is still running, before that result callback exists. A delayed
+exit prints first and retains N; a delayed throw or rejection prints first,
+then emits its fatal diagnostic and exits 1. Immediate throw/syntax failures
+still exit 1, while `process.exitCode=N` retains Node's exit contract.
 
 The implementation mechanism is independently inspectable in the exact
 installed Node:

@@ -32,6 +32,7 @@ function deps(over: Partial<NodeLifecycleDeps> = {}, reg = fakeRegistry()) {
     listPorts: reg.listPorts,
     onPortsChange: reg.onPortsChange,
     awaitDrain: vi.fn(async () => {}),
+    releaseDrainOwnership: vi.fn(),
     servePreview: vi.fn(() => () => {}),
     postListening: vi.fn(),
     readExitCode: vi.fn(() => 0),
@@ -106,6 +107,7 @@ describe('runNodeProgramLifecycle', () => {
     await run;
     expect(d.servePreview).toHaveBeenCalledWith(5174);
     expect(d.postListening).toHaveBeenCalledWith([5174]);
+    expect(d.releaseDrainOwnership).toHaveBeenCalledOnce();
     expect(d.exit).not.toHaveBeenCalled();
   });
 

@@ -24,6 +24,8 @@ function foregroundHarness(
   } = {},
 ) {
   const listeners = new Map<string, Array<(value?: unknown) => void>>();
+  const stdoutListeners: Array<(chunk: unknown) => void> = [];
+  const stderrListeners: Array<(chunk: unknown) => void> = [];
   const stdinListeners = new Map<string, Array<(...args: unknown[]) => void>>();
   const writes: Uint8Array[] = [];
   let ended = 0;
@@ -83,8 +85,12 @@ function foregroundHarness(
     return writer;
   });
   const handle = {
-    stdout: () => ({ on: (_event: 'data', _listener: (chunk: unknown) => void) => undefined }),
-    stderr: () => ({ on: (_event: 'data', _listener: (chunk: unknown) => void) => undefined }),
+    stdout: () => ({
+      on: (_event: 'data', listener: (chunk: unknown) => void) => stdoutListeners.push(listener),
+    }),
+    stderr: () => ({
+      on: (_event: 'data', listener: (chunk: unknown) => void) => stderrListeners.push(listener),
+    }),
     stdin,
     on(event: 'exit' | 'message', listener: (value?: unknown) => void) {
       const current = listeners.get(event) ?? [];
@@ -105,6 +111,12 @@ function foregroundHarness(
     resize,
     completeWrite: handle.completeWrite,
     ended: () => ended,
+    emitStdout(chunk: unknown) {
+      for (const listener of stdoutListeners) listener(chunk);
+    },
+    emitStderr(chunk: unknown) {
+      for (const listener of stderrListeners) listener(chunk);
+    },
     emitExit,
   };
 }
@@ -127,6 +139,45 @@ const settledOr = <T>(promise: Promise<T>, pending: T): Promise<T> =>
   Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(pending), 50))]);
 
 describe('foreground child stdin pump', () => {
+  it('decodes split UTF-8 independently per output stream and flushes tails at exit', async () => {
+    const h = foregroundHarness();
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const run = runForegroundChild(
+      h.handle,
+      context(undefined, {
+        stdout: {
+          write: (text) => {
+            expect(typeof text).toBe('string');
+            if (typeof text === 'string') stdout.push(text);
+          },
+        },
+        stderr: {
+          write: (text) => {
+            expect(typeof text).toBe('string');
+            if (typeof text === 'string') stderr.push(text);
+          },
+        },
+      }),
+    );
+
+    h.emitStdout(new Uint8Array([0xe2, 0x82]));
+    h.emitStderr(encoder.encode('middle'));
+    expect(stdout).toEqual([]);
+    expect(stderr).toEqual(['middle']);
+
+    h.emitStdout(new Uint8Array([0xac]));
+    h.emitStderr(new Uint8Array([0xe2]));
+    expect(stdout).toEqual(['€']);
+    expect(stderr).toEqual(['middle']);
+
+    h.emitExit(0);
+
+    await expect(run).resolves.toEqual({ code: 0, signal: null });
+    expect(stdout).toEqual(['€']);
+    expect(stderr).toEqual(['middle', '�']);
+  });
+
   it('preserves the exact signal-only child exit instead of projecting it to success', async () => {
     const h = foregroundHarness();
     const run = runForegroundChild(h.handle, context(undefined));

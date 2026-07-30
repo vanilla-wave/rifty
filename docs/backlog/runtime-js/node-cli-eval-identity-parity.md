@@ -5,7 +5,7 @@ title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
 user_story: As a CLI author probing its invocation context under `node -e` or `node -p`, I want the same argv and module identity as Node 24, but today the terminal rejects the command.
-sources: [M11, ADR-0155, ADR-0157, ADR-0337, ADR-0338, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md, docs/backlog/runtime-js/reference/node-cli-eval-physical-carrier-probe.md]
+sources: [M11, ADR-0155, ADR-0157, ADR-0339, ADR-0340, ADR-0342, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md, docs/backlog/runtime-js/reference/node-cli-eval-physical-carrier-probe.md]
 code: [packages/kernel/src/worker-stdio-drain.ts, packages/kernel/src/process-manager.ts, packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/cjs.ts, tools/node-parity-runner/cases/process/node-eval-context.case.ts, tests/e2e/cli-report.spec.ts]
 ---
 
@@ -95,7 +95,7 @@ Acceptance, Parity, or loud exclusions:
 - a required child's parent was compared only by id and filename, not by strict
   identity with the detached eval record;
 - Promise result RED did not preserve the realm Promise descriptor and
-  constructor identity required by ADR-0337;
+  constructor identity required by ADR-0339;
 - the physical remote-VFS audit did not expose a child-local pre-bootstrap
   carrier/fallback;
 - Workbench launch RED replaced the sibling kernel process manager with a fake
@@ -186,7 +186,7 @@ crosses source and bare forms. Each no-child family installs the real recording
 Worker boundary before execution and requires zero constructions as well as an
 unchanged ProcessManager snapshot.
 
-ADR-0338 supersedes ADR-0332 after a repo-wide mechanism sweep. The retained
+ADR-0340 supersedes ADR-0332 after a repo-wide mechanism sweep. The retained
 process-wide admission assigns each stdout/stderr write a trusted contiguous
 order; one kernel receiver reconstructs that order across the two independently
 delivered ports before Workbench, parity, program, WASI, or worker-thread
@@ -199,7 +199,7 @@ The pre-demotion Acceptance and Parity remain verbatim below.
 
 ## Eleventh readiness re-cut
 
-The fresh readiness judge for the first ADR-0338 cut found three false-GREEN
+The fresh readiness judge for the first ADR-0340 cut found three false-GREEN
 classes without changing Acceptance, Parity, or loud exclusions:
 
 - order validation omitted non-finite, unsafe, and ceiling values;
@@ -208,7 +208,7 @@ classes without changing Acceptance, Parity, or loud exclusions:
 - the envelope design changed the publicly exported raw stdout/stderr carrier
   without inventorying that observable boundary.
 
-The item remains demoted while those classes are re-judged. ADR-0338 now
+The item remains demoted while those classes are re-judged. ADR-0340 now
 preserves raw `Uint8Array` messages on public `WorkerStdioPorts`,
 `spawnKernelWorker`, and `WorkerProcessHandle.ports`. The existing
 IPC/private-control lane carries one output-state-attested order witness; the
@@ -515,6 +515,35 @@ would require a separately contracted node-entry protocol revision carrying
 program `execArgv`. The pre-demotion Acceptance and Parity remain verbatim
 below.
 
+## Twenty-ninth readiness re-cut
+
+Implementation-time Node v24.16.0 probes contradicted the live contract's
+blanket explicit-exit rule: only `process.exit()` during initial evaluation,
+before a completion value and print lifecycle exist, suppresses `-p` output.
+After completion, delayed exit, uncaught error, and unhandled rejection print
+the result once before their exit or diagnostic. A listened server exposes the
+same rule after the run-vs-serve branch has released a pending drain.
+
+The item remains `draft` while this corrected lifecycle contract is re-judged.
+The re-cut adds same-invocation physical differentials for timer, guest
+microtask, and served late throw/rejection/exit, including a synchronous
+terminal inside the `listen()` callback. Package REDs require a tokenized
+drain-owner handoff, direct-terminal-before-drain ownership, first-terminal
+wins, one print/diagnostic/control, explicit-exit projection bypass, and loud
+print/diagnostic/control failure. The diagnostic carrier normalizes
+Node's `Timeout._onTimeout ([eval]:L:C)` to the same retained user location as
+Rifty's direct `[eval]` frame instead of discarding Node's frame.
+
+Two implementation findings stay explicit rather than widening this item.
+Runtime-owned `SyntaxError` must preserve its own prelude before the `[eval]`
+user frame. `worker_threads.Worker` cannot inherit eval `process.execArgv`
+until its separate worker bootstrap carries those tokens, so inherited
+`execArgv` now throws
+`NotImplementedError('worker_threads.Worker.execArgv')` and remains compat ❌;
+an explicit worker `execArgv` override retains its existing support. Fresh-main
+ADR collisions reallocated this branch's eval, worker-stdio, and project-status
+decisions to ADR-0339, ADR-0340, and ADR-0341 without changing their semantics.
+
 ## Refinement evidence
 
 The item was demoted at `0fa204fd3` after the exact Node oracle contradicted two
@@ -522,7 +551,7 @@ frozen assumptions. `--print=<source>` is not an inline-source form: Node treats
 the RHS as ignored option data and obtains source from the next argument.
 Node's `-p` also uses console single-argument formatting, so a string is
 unquoted. The reproducible command/output/version artifact now settles both
-forks and the deferred print mechanism; ADR-0337 settles the required atomic v3
+forks and the deferred print mechanism; ADR-0339 settles the required atomic v3
 launch carrier. The original Acceptance and Parity sections remain verbatim at
 the end for the readiness diff. The corrected contract preserves every
 original observable: spellings are tested with Node's real meanings, and
@@ -564,9 +593,12 @@ identity rather than a generated workspace file, and return the real exit code.
 4. `-e` prints only user output. `-p` captures the script completion value and
    prints it exactly once through Node-compatible console single-argument
    formatting at natural exit after asynchronous work drains. Explicit
-   `process.exit` suppresses result output. String, undefined, object/array,
-   bigint, fulfilled/pending/rejected Promise, circular reference, and
-   post-timer mutation cases match Node v24.16.0.
+   `process.exit` during initial evaluation suppresses result output. After a
+   completion value exists, delayed `process.exit`, uncaught error, or
+   unhandled rejection prints that result exactly once before exit or
+   diagnostic, including after `listen()` wins the server branch. String,
+   undefined, object/array, bigint, fulfilled/pending/rejected Promise,
+   circular reference, and post-timer mutation cases match Node v24.16.0.
 5. Differential cases run the same source, cwd, spelling, and script arguments
    in Node v24.16.0 and through the Workbench terminal's physical supervised
    child, comparing normalized stdout, stderr user prelude/frame, ordered
@@ -589,9 +621,10 @@ identity rather than a generated workspace file, and return the real exit code.
 - Reproducible oracle:
   `docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md`.
 - Node mechanism: detached `[eval]` module + unwrapped current-context script
-  completion + `beforeExit` print with `exit` fallback.
-- Rifty carrier: ADR-0337 node-entry v3 eval launch, runtime-js loader-owned
-  eval seam, existing supervised-child lifecycle.
+  completion + one `beforeExit`/`exit` print callback; only exit before callback
+  registration suppresses output.
+- Rifty carrier: ADR-0339 node-entry v3 eval launch, runtime-js loader-owned
+  eval seam, ADR-0342 drain-owner handoff, existing supervised-child lifecycle.
 - Physical differential reachability:
   `docs/backlog/runtime-js/reference/node-cli-eval-physical-carrier-probe.md`.
 
@@ -623,10 +656,15 @@ identity rather than a generated workspace file, and return the real exit code.
    and mutates the completion object is observed before its final result
    print. A timer-settled Promise prints fulfilled.
 5. Lifecycle/errors: normal completion and `process.exitCode=N` drain then
-   exit; immediate `process.exit(N)` exits N without result output. Throw,
-   syntax failure, and unhandled rejection exit 1. Error stdout/stderr ordering,
-   source prelude/caret, and first user frame use `[eval]:<line>:<column>`; no
-   generated or project-absolute temporary filename leaks.
+   exit; immediate pre-completion `process.exit(N)` exits N without result
+   output. Post-completion delayed exit prints once then exits N; delayed
+   uncaught error or rejection prints once then emits its diagnostic and exits
+   1. Timer/drain, guest-microtask-before-drain, and served/no-drain variants,
+   including a terminal inside the `listen()` callback before drain release,
+   retain that order and settle once. Error source prelude/caret and first user
+   frame use
+   `[eval]:<line>:<column>`; no generated or project-absolute temporary
+   filename leaks.
 6. Isolation: two sequential and two simultaneous physical eval children use
    distinct cwd fixtures and preview scopes. Each returns only its own
    argv/module/resolver marker/stdout/stderr/exit, cannot enter a sibling's
@@ -638,8 +676,8 @@ identity rather than a generated workspace file, and return the real exit code.
 |---|---|---|
 | `frozen-assumption` × CLI spelling/format | Treat `--print=` RHS as source, quote a top-level string, or collapse `-- ''` into the program transition | Node differential/classifier matrix fails the exact mode, `execArgv`, argv, source, or stdout row. |
 | `sibling-drift` × launch surfaces | Workbench, parity adapter, or recursive builder invents another eval carrier | Exact v3 launch/physical-child contract rejects; all consumers use the one typed variant. |
-| `observable-order` × result/exit | Print before timer drain, twice, or after explicit exit | Ordered stdout and exit tests fail; one natural-exit owner prints or forced exit suppresses. |
-| `observable-order` × physical stdout/stderr delivery | Independent output ports deliver a later admitted write first | ADR-0338 receiver buffers the suffix and reconstructs authenticated child write order before any consumer or terminal event; the native differential's marker/ack steps causally expose each predecessor without timers. |
+| `observable-order` × result/exit | Print before tracked work, print twice, suppress a post-completion result, print after the terminal diagnostic/control, or let an orphan drain consume a served terminal | Ordered ordinary/served differentials and tokenized owner-handoff REDs fail; immediate pre-completion exit suppresses, while the first post-completion exit/error/rejection prints exactly once before termination. |
+| `observable-order` × physical stdout/stderr delivery | Independent output ports deliver a later admitted write first | ADR-0340 receiver buffers the suffix and reconstructs authenticated child write order before any consumer or terminal event; the native differential's marker/ack steps causally expose each predecessor without timers. |
 | `poisoned-cache` × synthetic record | Register/reuse `[eval]` or rebase its resolver after `chdir()` | Cache, parent, launch-cwd resolution, and sequential-child differentials fail. |
 | `concurrent-same-key` × same entry identity | Two `[eval]` children share cwd/module/output/preview state | Simultaneous distinct-fixture physical children expose any cross-talk. |
 | `provenance-lie` × source transport | Materialize source as a workspace/data/temp module | Before/during/after VFS observer and stack/cache identity fail; compat remains ❌. |
@@ -675,15 +713,15 @@ identity rather than a generated workspace file, and return the real exit code.
 
 ## Decisions
 
-ready-verdict: 2026-07-30 — Node v24.16.0 artifacts and same-invocation parity/CI-active Chromium REDs settle supported grammar, atomic v3 launch, detached `[eval]` identity/cache/resolution, print/lifecycle/errors, VFS provenance, isolation, and the acceptance carrier; ADR-0337 settles the sole launch and loader seam; ADR-0338 plus package, recursive-child, runtime-js, WASI, worker-thread, setup-fault, real-Chromium, and repaired real parity-Worker REDs settle the minimal authenticated cross-port ordering mechanism, including four-argument stdout/stderr binding to `spec.stdio.ipc`, exact state-attested stdout-zero/stderr-one/stdout-two parent witnesses under forced inversion, and zero public IPC; loud exclusions, public/raw/process-publication boundaries, stale/overlap, removable-machinery, and unchanged pre-demotion Acceptance/Parity are closed.
-
-- ADR-0337 owns the irreversible atomic node-entry v3 shape and the one
+- ADR-0339 owns the irreversible atomic node-entry v3 shape and the one
   loader-owned unwrapped-script mechanism. There is no v2 compatibility reader.
-- ADR-0338 owns one package-internal ordered-output receiver over the retained
+- ADR-0340 owns one package-internal ordered-output receiver over the retained
   process-wide writer admission. Workbench, parity, program, WASI, and
   worker-thread paths consume the same ordered kernel Readables; none owns a
   callback-arrival reorder fallback. Public stdout/stderr ports retain exact
   byte messages; one authenticated private-control witness supplies order.
+- ADR-0342 owns the eval-specific public drain-release capability and
+  identity-scoped lease handoff when Workbench's listened-port branch wins.
 - Supported CLI grammar is a pure Workbench classifier that retains original
   eval option tokens for `execArgv`; unsupported Node options remain loud.
 - The optional-print program transition is not misreported as a bad option or
@@ -701,10 +739,10 @@ ready-verdict: 2026-07-30 — Node v24.16.0 artifacts and same-invocation parity
 
 ## Reversibility
 
-IRREVERSIBLE node-entry protocol/context choice recorded by ADR-0337 and
-cross-port output-order mechanism recorded by ADR-0338. Parser, loader,
-inspector, and acceptance carriers remain replaceable behind those exact
-behaviors.
+IRREVERSIBLE node-entry protocol/context choice recorded by ADR-0339,
+cross-port output-order mechanism recorded by ADR-0340, and public drain-owner
+handoff recorded by ADR-0342. Parser, loader, inspector, and acceptance
+carriers remain replaceable behind those exact behaviors.
 
 ## Pre-demotion contract (verbatim)
 

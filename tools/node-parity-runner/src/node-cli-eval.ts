@@ -527,10 +527,12 @@ function evalError(stderr: string): string {
       index > header && /^(?:[A-Za-z][A-Za-z0-9_.]*(?:Error|Exception)|Error):/u.test(line),
   );
   if (error === -1) return stderr;
-  const userFrame = lines.find((line, index) => index > error && /^\s+at \[eval\]:/u.test(line));
+  const userFrameLocation = lines
+    .find((line, index) => index > error && /^\s+at .*\[eval\]:\d+:\d+\)?$/u.test(line))
+    ?.match(/\[eval\]:\d+:\d+/u)?.[0];
   const preludeEnd = firstBlank === -1 ? error : firstBlank;
   const selected = [...lines.slice(header, preludeEnd), '', lines[error] ?? ''];
-  if (userFrame !== undefined) selected.push(userFrame);
+  if (userFrameLocation !== undefined) selected.push(`    at ${userFrameLocation}`);
   return `${selected.join('\n')}\n`;
 }
 

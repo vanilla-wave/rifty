@@ -1,4 +1,4 @@
-# ADR 0337: Node eval script launch over node-entry v3
+# ADR 0339: Node eval script launch over node-entry v3
 
 Status: Accepted
 Date: 2026-07-30
@@ -50,6 +50,16 @@ atomic migration for that shape change.
   identity.
 - CommonJS eval is the only new runtime context. ESM eval, preload/import
   options, and the bare REPL remain distinct loud gaps.
+
+## Correction — 2026-07-30
+
+The explicit-exit sentence above applies only when `process.exit()` runs during
+initial evaluation, before a completion value and print lifecycle exist. After
+completion, delayed `process.exit()`, uncaught error, or unhandled rejection
+flushes the registered print exactly once before its exit or diagnostic. One
+first-terminal claim prevents duplicate print, diagnostic, or exit control.
+ADR-0342 records the public drain-owner release needed when a listened port
+wins after a drain has started.
 
 ## Consequences
 

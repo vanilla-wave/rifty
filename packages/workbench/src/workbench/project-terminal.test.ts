@@ -533,6 +533,9 @@ describe('ProjectTerminal lifecycle contract', () => {
     port.closeGate.resolve();
     await expect(run.ready).rejects.toBe(cancellation);
     await expect(run.exited).resolves.toBe(exactExit);
+    await expect(
+      (run as typeof run & { readonly exitCode: Promise<number> }).exitCode,
+    ).resolves.toBe(130);
     await expect(closing).resolves.toBeUndefined();
 
     expect(closeCallsBeforeExit).toEqual(['terminal-1']);

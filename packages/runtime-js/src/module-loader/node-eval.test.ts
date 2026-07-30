@@ -393,4 +393,39 @@ module.exports = { load: globalThis.${DEP_LOADS}, parent: module.parent };
     expect(thrown).toBeInstanceOf(NotImplementedError);
     expect((thrown as NotImplementedError).feature).toBe('runtime-js.node-eval-typescript-context');
   });
+
+  it.each([
+    {
+      label: 'guest microtask',
+      origin: 'uncaught' as const,
+      source: "queueMicrotask(()=>{throw new Error('micro')});42",
+      stack:
+        'Error: micro\n    at eval ([eval]:1:27)\n    at node:internal/process/task_queues:151:7',
+      caret: 26,
+    },
+    {
+      label: 'promise reaction',
+      origin: 'unhandled' as const,
+      source: "Promise.resolve().then(()=>{throw new Error('then')});42",
+      stack:
+        'Error: then\n    at eval ([eval]:1:35)\n    at node:internal/process/task_queues:105:5',
+      caret: 34,
+    },
+    {
+      label: 'timer callback',
+      origin: 'uncaught' as const,
+      source: "setTimeout(()=>{throw new Error('timer')},0);42",
+      stack:
+        'Error: timer\n    at eval ([eval]:1:23)\n    at Timeout._onTimeout (/runtime/builtins/timers.ts:108:7)',
+      caret: 16,
+    },
+  ])('projects the Node caret location for a late $label', ({ origin, source, stack, caret }) => {
+    const error = new Error('placeholder');
+    error.stack = stack;
+
+    const projected = loaderImplementation.projectNodeEvalError(error, source, origin);
+
+    expect(projected).toBe(error);
+    expect(error.stack).toContain(`${source}\n${' '.repeat(caret)}^\n`);
+  });
 });

@@ -31,7 +31,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0326 | Federated Worker child tree with separate public IPC and private control |
 | 0331 | SyncRpc v3 owns one live exchange through reply consumption |
 | 0333 | Descendant settlement barrier preserves recursive teardown ordering |
-| 0338 | Sequenced worker stdio reconstructs cross-port write order |
+| 0340 | Sequenced worker stdio reconstructs cross-port write order |
 
 ### runtime-js
 
@@ -73,7 +73,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0324 | Callable EventEmitter constructor over one listener state |
 | 0325 | CJS module records own Node metadata and lifecycle |
 | 0334 | One-shot Node process adoption across bundle boundaries |
-| 0337 | Node eval script launch over node-entry v3 |
+| 0339 | Node eval script launch over node-entry v3 |
+| 0342 | Release pending eval drain ownership when server branch wins |
 | 0345 | Expose exact Node 24.0.0 process.release identity |
 
 ### runtime-wasi
@@ -287,6 +288,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0282 | Extraction-safe Playground host and session seams |
 | 0311 | Registry-owned esbuild runtime removes the host asset URL |
 | 0319 | Preserve admitted mutations across project close |
+| 0341 | Project terminal runs expose authoritative shell status |
 
 ## Superseded (removed)
 
@@ -318,8 +320,8 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0045 | 0326 | dedicated MessagePort rationale retained; unconditional structured-clone fork IPC and mixed public/control frames replaced |
 | 0308 | 0328 | generic registry retained; recipe v2 adds admission, exact dependency projection, and materialization-owned bins |
 | 0328 | 0335 | recipe-v2 authority retained; lexical-min/every-install settlement replaced by npm reify operation history and a loud collision ceiling |
+| 0332 | 0340 | output admission/drain retained; authenticated cross-port write order added |
 | 0337 | 0338 | raw trace retained; permissive comparator replaced by exact one-axis native resize steps |
-| 0332 | 0338 | output admission/drain retained; authenticated cross-port write order added |
 | 0310 | 0344 | Pattern-1 carrier retained; impossible generic unproven-surface gap replaced by finite positive claims and RED-first specific gaps |
 
 ## Corrections (active)
@@ -338,7 +340,8 @@ superseded.
 | 0157 four-stdio-port / `makeStdioWriter` clauses | 0332 / note 2026-07-27 | stdout/stderr are kernel semantic writers; stdin and IPC remain ports |
 | 0326 unspecified final-output drain authority | 0332 / note 2026-07-27 | one process-wide cut and exact per-stream committed targets prove drain |
 | 0326 unspecified descendant-settlement/output-cut order | 0333 / note 2026-07-27 | fence admission, signal exact routes child-first, then await close-checkpoint settlement or peer death before the ancestor output cut |
-| 0326 node-entry v2 active-shape clause | 0337 / note 2026-07-30 | atomic v3 retains program/worker-thread and public-IPC discrimination, adding exact eval with no v2 reader |
+| 0326 node-entry v2 active-shape clause | 0339 / note 2026-07-30 | atomic v3 retains program/worker-thread and public-IPC discrimination, adding exact eval with no v2 reader |
+| 0339 print-mode unconditional explicit-exit suppression clause | 0339 / note 2026-07-30 | only pre-completion exit suppresses; post-completion exit or error flushes once first |
 | 0011 recursive private PID allocator clause | 0326 / note 2026-07-26 | recursive children reserve owner-root ProcessManager identities over the trusted SAB attachment |
 | 0012 realm-local unified-registry clause | 0326 / note 2026-07-26 | one federated owner-root process tree; nested managers own only direct physical Workers |
 | 0130 D4 generated direct-command selector | 0327 / note 2026-07-26 | exact script bytes select canonical direct entry versus installed `.bin`; no template-ID dispatch |

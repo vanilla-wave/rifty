@@ -1,4 +1,4 @@
-# ADR 0338: Sequenced worker stdio reconstructs cross-port write order
+# ADR 0340: Sequenced worker stdio reconstructs cross-port write order
 
 Status: Accepted (supersedes ADR-0332, removed)
 Date: 2026-07-30
@@ -163,5 +163,5 @@ This ADR supersedes and grafts all load-bearing context from ADR-0332: terminal
 admission, seal/cut/abandon, exact targets, exit attestation, transport
 fallback, diagnostic/EOF/exit/close ordering, and the semantic-writer
 corrections to ADR-0011, ADR-0038, ADR-0039, ADR-0122, ADR-0157, and ADR-0326.
-Where active ADRs cite ADR-0332 as the output authority, ADR-0338 now supplies
+Where active ADRs cite ADR-0332 as the output authority, ADR-0340 now supplies
 that authority.

@@ -114,5 +114,5 @@ all cases match
 
 That case creates five real native Workers and pins typed entry bootstrap,
 stdin/EOF, separate stdout/stderr, final drain, and exit-before-close. The eval
-case extends this proven adapter with ADR-0337's v3 role; it does not add a fake
+case extends this proven adapter with ADR-0339's v3 role; it does not add a fake
 or execute source in the harness.

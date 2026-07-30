@@ -430,6 +430,71 @@ globalThis.onmessage = ({ data }) => {
     });
   });
 
+  it('rejects inherited eval execArgv before allocating a lossy worker thread', async () => {
+    const spawn = vi
+      .spyOn(globalProcessManager, 'spawnWorker')
+      .mockImplementation(() => makeFakeWorkerHandle([]));
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const parentEntry = buildNodeEntryWorkerEntry(
+      'https://rifty.test/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js' },
+      {
+        kind: 'eval',
+        source: '42',
+        print: false,
+        execArgv: ['-e', '42'],
+        remoteFs: true,
+        remoteFsRoot: REMOTE_FS_ROOT,
+      },
+    );
+    publishKernelEntryBootstrap(parentEntry.bootstrap ?? null);
+    const parent = new NodeProcess();
+    parent.execArgv.length = 0;
+    let worker: Worker | undefined;
+    let thrown: unknown;
+
+    await withProcessGlobal(parent, async () => {
+      try {
+        worker = new Worker('/workspace/worker.mjs');
+      } catch (error) {
+        thrown = error;
+      }
+      await Promise.resolve();
+      await worker?.terminate();
+    });
+
+    expect(thrown).toEqual(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'worker_threads.Worker.execArgv',
+      }),
+    );
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('rejects an explicit execArgv override before allocating a worker thread', () => {
+    const spawn = vi
+      .spyOn(globalProcessManager, 'spawnWorker')
+      .mockImplementation(() => makeFakeWorkerHandle([]));
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+
+    expect(() => new Worker('/workspace/worker.mjs', { execArgv: [] })).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'worker_threads.Worker.execArgv',
+      }),
+    );
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it('keeps bootstrap ancestry when guest pid fields and the public spec are poisoned', async () => {
     let identity: { readonly pid: number; readonly ppid: number } | undefined;
     const restoreWorker = installKernelWorkerBoundary((init) => {

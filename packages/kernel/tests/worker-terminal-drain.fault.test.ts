@@ -73,7 +73,7 @@ function bindDesiredWorkerOutputReceiver(
     }
   ).bindWorkerStdioOutputReceiver;
   if (typeof bind !== 'function') {
-    throw new Error('ADR-0338 RED: bindWorkerStdioOutputReceiver is not implemented');
+    throw new Error('ADR-0340 RED: bindWorkerStdioOutputReceiver is not implemented');
   }
   return bind(ports, state, events);
 }
@@ -753,7 +753,7 @@ describe('Worker terminal drain fault matrix', () => {
 
     expect.soft(capturedOrder).toHaveLength(3);
     if (capturedOrder.length !== 3) {
-      subject.worker.fireError('ADR-0338 expected RED cleanup');
+      subject.worker.fireError('ADR-0340 expected RED cleanup');
       await closed;
       return;
     }
@@ -831,7 +831,7 @@ describe('Worker terminal drain fault matrix', () => {
     }
     expect.soft(writeFailure?.message).toBe('injected order witness post failure');
     if (writeFailure === undefined) {
-      subject.worker.fireError('ADR-0338 expected RED cleanup');
+      subject.worker.fireError('ADR-0340 expected RED cleanup');
       await closed;
       return;
     }

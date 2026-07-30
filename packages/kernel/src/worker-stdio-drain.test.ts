@@ -47,7 +47,7 @@ function bindDesiredWorkerOutputReceiver(
     }
   ).bindWorkerStdioOutputReceiver;
   if (typeof bind !== 'function') {
-    throw new Error('ADR-0338 RED: bindWorkerStdioOutputReceiver is not implemented');
+    throw new Error('ADR-0340 RED: bindWorkerStdioOutputReceiver is not implemented');
   }
   return bind(ports, state, events);
 }

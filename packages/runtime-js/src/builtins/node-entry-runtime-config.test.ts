@@ -537,6 +537,19 @@ describe('node-entry host bootstrap config', () => {
     ).toThrow(error);
   });
 
+  it.each([0, 1, 2])('rejects a sparse eval execArgv hole at index %i', (hole) => {
+    const execArgv = ['--trace-warnings', '--print', 'source'];
+    Reflect.deleteProperty(execArgv, hole);
+
+    expect(() =>
+      buildNodeEntryWorkerEntry(
+        'https://host.test/node.js',
+        HOST_RUNTIME,
+        evalLaunch({ execArgv }),
+      ),
+    ).toThrow(/launch.*execArgv.*string/i);
+  });
+
   it('rejects invalid terminal metadata before a worker is spawned', () => {
     expect(() =>
       buildNodeEntryWorkerEntry(

@@ -2,7 +2,7 @@ import hostProcess from 'node:process';
 import { parentPort, workerData } from 'node:worker_threads';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
-import { SyncRpcFsSync, awaitDrain } from '@riftydev/runtime-js';
+import { SyncRpcFsSync, awaitDrain, releaseNodeEvalDrainOwnership } from '@riftydev/runtime-js';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
@@ -25,6 +25,7 @@ import {
 } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { runNodeEntry } from '../../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
+  beginNodeEvalUnhandled,
   recordRejection,
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
@@ -111,7 +112,23 @@ setSyncMirror(vfs);
 
 resetKeepalive();
 installTimerGlobals();
-hostProcess.on('unhandledRejection', (reason) => recordRejection(reason));
+hostProcess.on('unhandledRejection', (reason) => {
+  if (!beginNodeEvalUnhandled(reason, 'rejection')) recordRejection(reason);
+});
+const onUncaughtException = (error: unknown): void => {
+  if (
+    (typeof error === 'object' &&
+      error !== null &&
+      (error as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT') ||
+    beginNodeEvalUnhandled(error, 'uncaught-error')
+  ) {
+    return;
+  }
+  hostProcess.removeListener('uncaughtException', onUncaughtException);
+  throw error;
+};
+hostProcess.on('uncaughtException', onUncaughtException);
+let childLocalVfsAuditReported = false;
 
 function createSyncCall(spec: WorkerSpawnSpec): (method: string, payload: unknown) => unknown {
   const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
@@ -120,9 +137,30 @@ function createSyncCall(spec: WorkerSpawnSpec): (method: string, payload: unknow
 }
 
 function reportChildLocalVfsAudit(syncCall: (method: string, payload: unknown) => unknown): void {
+  if (childLocalVfsAuditReported) return;
   syncCall(NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT, {
     actor: 'child-local',
     audit: vfs.audit([]),
+  });
+  childLocalVfsAuditReported = true;
+}
+
+function installChildLocalVfsExitAudit(spec: WorkerSpawnSpec): void {
+  if (!request.nodeCliEvalVfsAudit) return;
+  const ipc = spec.stdio.ipc;
+  const nativePost = ipc.postMessage.bind(ipc) as (
+    message: unknown,
+    options?: StructuredSerializeOptions | Transferable[],
+  ) => void;
+  Object.defineProperty(ipc, 'postMessage', {
+    configurable: true,
+    value(message: unknown, options?: StructuredSerializeOptions | Transferable[]): void {
+      const frame = message as { readonly kind?: unknown } | null;
+      if (frame?.kind === 'control:self-exit') {
+        reportChildLocalVfsAudit(createSyncCall(spec));
+      }
+      nativePost(message, options);
+    },
   });
 }
 
@@ -235,6 +273,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     listPorts,
     onPortsChange: onRegistryChange,
     awaitDrain: () => awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
+    releaseDrainOwnership: releaseNodeEvalDrainOwnership,
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
@@ -351,6 +390,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
     'stderr',
     spec.stdio.ipc,
   );
+  installChildLocalVfsExitAudit(spec);
   if (request.nodeCliEvalVfsAudit) {
     // This starts before runEntryLifecycle publishes/decodes the bootstrap and
     // stays live through process adoption, entry, and failure settlement.

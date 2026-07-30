@@ -120,6 +120,35 @@ describe('node CLI eval parity carrier', () => {
     expect(value.frames).toEqual([{ stream: 'stderr', text: value.stderr }]);
   });
 
+  it('normalises a timer callback eval frame to the same user location as a direct frame', () => {
+    const value = canonicalNodeCliEvalOutcome(
+      {
+        label: 'late-throw',
+        nodeArgv: [],
+        evalErrorStderr: true,
+      },
+      {
+        stdout: '42\n',
+        stderr:
+          "[eval]:1\nsetTimeout(()=>{throw new Error('later')},0);42\n                ^\n\nError: later\n    at Timeout._onTimeout ([eval]:1:23)\n    at listOnTimeout (node:internal/timers:605:17)\n",
+        frames: [
+          { stream: 'stdout', text: '42\n' },
+          { stream: 'stderr', text: 'Error: later\n    at Timeout._onTimeout ([eval]:1:23)\n' },
+        ],
+        code: 1,
+        signal: null,
+      },
+    );
+
+    expect(value.stderr).toBe(
+      "[eval]:1\nsetTimeout(()=>{throw new Error('later')},0);42\n                ^\n\nError: later\n    at [eval]:1:23\n",
+    );
+    expect(value.frames).toEqual([
+      { stream: 'stdout', text: '42\n' },
+      { stream: 'stderr', text: value.stderr },
+    ]);
+  });
+
   it.each([
     {
       label: 'absolute carrier frame before the eval prelude',
