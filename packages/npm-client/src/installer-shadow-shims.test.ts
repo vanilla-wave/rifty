@@ -210,13 +210,19 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
     expect.soft(rollupWrites()).toHaveLength(1);
     expect.soft(await readText(vfs, '/proj/node_modules/.bin/rollup')).toBe(launcher('rollup'));
     expect(await readText(vfs, '/proj/node_modules/.bin/helper')).toBe(launcher('helper'));
-    for (const name of ['rollup', '@rollup/wasm-node']) {
+    const packageNames = ['rollup', '@rollup/wasm-node'] as const;
+    for (const name of packageNames) {
       expect(fresh.packages.find((pkg) => pkg.name === name)?.bin).toEqual(ROLLUP_BIN);
       expect(fresh.lockfile.packages[`node_modules/${name}`]?.bin).toEqual(ROLLUP_BIN);
       expect(
         JSON.parse(await readText(vfs, `/proj/node_modules/${name}/package.json`)),
       ).toMatchObject({ bin: ROLLUP_BIN });
     }
+    const metadataPaths = [
+      '/proj/package-lock.json',
+      ...packageNames.map((name) => `/proj/node_modules/${name}/package.json`),
+    ];
+    const freshMetadata = await Promise.all(metadataPaths.map((path) => readText(vfs, path)));
     writes.mockClear();
     const { registry: replayRegistry, result: replay } = await installFixture(
       entries,
@@ -227,6 +233,12 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
     expect.soft(rollupWrites()).toHaveLength(1);
     expect.soft(await readText(vfs, '/proj/node_modules/.bin/rollup')).toBe(launcher('rollup'));
     expect(replay.lockfile).toEqual(fresh.lockfile);
+    expect(await Promise.all(metadataPaths.map((path) => readText(vfs, path)))).toEqual(
+      freshMetadata,
+    );
+    for (const name of packageNames) {
+      expect(replay.packages.find((pkg) => pkg.name === name)?.bin).toEqual(ROLLUP_BIN);
+    }
 
     const { registry: ordinaryRegistry, result: ordinary } = await installFixture(
       entries,
