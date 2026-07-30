@@ -2,22 +2,12 @@ import { describe, expect, it } from 'vitest';
 import * as npmClientRoot from './index.ts';
 import * as linker from './linker.ts';
 import {
+  type PackageBinClaim,
+  type PackageBinSource,
   type PreparedInstallPackage,
   type ResolvedPackage,
   preflightPackageInstallPaths,
 } from './linker.ts';
-
-interface PackageBinSource {
-  readonly package: Readonly<Pick<ResolvedPackage, 'name' | 'bin'>>;
-  readonly nodeModulesDir: string;
-}
-
-interface PackageBinClaim {
-  readonly nodeModulesDir: string;
-  readonly command: string;
-  readonly owner: string;
-  readonly target: string;
-}
 
 interface PackageBinClaimAggregationApi {
   normalizePackageBinSources(sources: readonly PackageBinSource[]): readonly PackageBinClaim[];
@@ -135,7 +125,7 @@ describe('package-bin claim aggregation authority', () => {
       zeta: 'bin/zeta.js',
       alpha: './bin/alpha.js',
     });
-    const zeta = observedSource('zeta', 'node_modules', './bin/zeta.js');
+    const zeta = observedSource('@zeta/tool', 'node_modules/host/node_modules', './bin/tool.js');
     const alpha = observedSource('alpha', 'node_modules', './bin/alpha.js');
     const sources = [middle.value, zeta.value, alpha.value] as const;
 
@@ -159,10 +149,10 @@ describe('package-bin claim aggregation authority', () => {
         target: 'bin/alpha.js',
       },
       {
-        nodeModulesDir: 'node_modules',
-        command: 'zeta',
-        owner: 'zeta',
-        target: 'bin/zeta.js',
+        nodeModulesDir: 'node_modules/host/node_modules',
+        command: 'tool',
+        owner: '@zeta/tool',
+        target: 'bin/tool.js',
       },
       {
         nodeModulesDir: 'node_modules',

@@ -31,8 +31,9 @@ package-specific branch.
 
 ## Acceptance
 
-- One exact readonly mixed source list admits prepared and narrow sources while
-  rejecting raw `ResolvedPackage` and shaped `PackageBinClaim`.
+- One exact readonly mixed source list admits prepared and nested scoped-string
+  narrow sources while rejecting raw `ResolvedPackage` and shaped
+  `PackageBinClaim`.
 - An empty readonly source list returns the exact empty claim list.
 - Compose the predecessor once per reached source. Preserve a deliberately
   non-monotonic three-source sequence and each source's command order exactly.
@@ -57,7 +58,7 @@ package-specific branch.
 |---|---|---|
 | observable-order | source/command order and later-error priority remain exact | non-monotonic three-source sequence plus unread suffix |
 | lossy-aggregate | duplicate scope/command facts remain distinct | same-scope duplicate sequence |
-| sibling-drift | every reached source keeps exact landed normalization behavior and one bin read | mixed list and later-error read counters |
+| sibling-drift | every reached source keeps exact landed normalization behavior and one bin read | real landed types, prepared/scoped-narrow mixed list, and later-error read counters |
 | corrupt-input | later escaping source retains exact predecessor error | valid-prefix string/object target table |
 
 ## Out of scope
@@ -75,8 +76,8 @@ package-specific branch.
   2ef0ecf61adb35fade0977cd0d0355be2a975ea5`; predecessor checkpoints:
   `3c4adade0ae34b076e536147f5d551e82b737055` and
   `2ef0ecf61adb35fade0977cd0d0355be2a975ea5`.
-- This draft receives no epic Items/Budget selection before source claim
-  normalization lands.
+- Source claim normalization has landed; this Contract+RED re-cut adds the sole
+  epic Items/Budget selection before production pickup.
 - Flat ordered composition is sufficient. No sort, comparator, key, map,
   scheduler, or state owner is permitted.
 - Keep the predecessor checkpoint's package-private

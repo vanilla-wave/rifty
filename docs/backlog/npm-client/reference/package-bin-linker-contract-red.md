@@ -375,3 +375,13 @@ No production source, package root, VFS path, settlement, compat, or changelog
 diff is present at this checkpoint. Runtime result: 6 tests, 5 RED and 1 GREEN;
 package typecheck adds exactly two intentional `TS2578` REDs while
 `normalizePackageBinSources` is absent.
+
+The first isolated Contract+RED review at
+`2a51987dfc5488c7d07c86f6fc7c4a2c2839db5f` passed Standards and blocked
+Spec: local redeclared shapes plus root-only sources could false-green a
+duplicated parser that drifted from the landed nested scoped-string behavior;
+the live epic also lacked this now-unblocked unit's pre-pickup Items/Budget
+authority. The in-place re-cut imports the landed types, adds a nested scoped
+string to the three-source witness, and appends exactly one Items mapping plus
+one `20–60` Budget row. The RED ledger and production-source absence are
+unchanged.
