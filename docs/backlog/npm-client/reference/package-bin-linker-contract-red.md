@@ -545,10 +545,21 @@ ordinary, an auto-only lock recovers a later ordinary-only launcher with zero
 registry reads, and replay places the same identity at root and nested paths
 with different demand.
 
-The focused file still runs 26 tests: 2 RED and 24 GREEN. Fresh exposes two
-root `rollup` launcher writes; both fresh and immediate zero-registry replay
-leave the auto companion as final owner. The independent root/nested case also
-leaves the root auto companion active. Faithful packument and tarball
+The second review at
+`909ed2d202b2d2f06959998a559af3a525c5e273` passed Standards and blocked
+Spec: replay asserted only final launcher state, so favourable write order
+could hide an admitted auto claim; the scoped witness also required a forbidden
+same-command last-writer winner. Per Contract escalation, the in-place
+re-refinement at `54699555839c773ad40f68ca08239c29b5e114a5` adds both replay
+operation ledgers and gives the scoped companion a non-colliding sentinel
+command. The final 182-line carrier blob is
+`49066182be7a0585bc0584ae4b42c6ea74806a4a`.
+
+The focused file still runs 26 tests: 2 RED and 24 GREEN. Fresh and immediate
+zero-registry replay each expose two root `rollup` launcher writes and leave
+the auto companion as final owner. Same-identity scoped replay exposes the
+forbidden root `wasm-rollup` write while keeping its separately scoped ordinary
+launcher collision-free. Faithful packument and tarball
 `package.json` fixtures retain both packages' real
 `rollup -> dist/bin/rollup` metadata. Green sentinels prove direct ordinary
 lock recovery, required/optional ordinary demand, both visit orders, companion
