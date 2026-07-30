@@ -271,6 +271,37 @@ export async function runTerminalLineSettled(
     .toBe(true);
 }
 
+/** Exact exit status recorded by the real terminal run, read through its history UI. */
+export async function terminalHistoryExitCode(
+  page: Page,
+  line: string,
+  targetSlot: TerminalTarget = 'active',
+): Promise<number> {
+  if (targetSlot !== 'active') {
+    const tab = terminalTab(page, targetSlot);
+    await expect(tab).toBeVisible();
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+  }
+  const slot = await terminalSlot(page, targetSlot);
+  await slot.locator('[data-testid="terminal"]').click();
+  await page.keyboard.press('Control+r');
+  const history = slot.locator('.rf-terminal-history');
+  await expect(history).toBeVisible();
+  await history.locator('.rf-terminal-history__input').fill(line);
+  const items = history.locator('.rf-terminal-history__item');
+  await expect(items.first()).toBeVisible();
+  await expect(items.first().locator('.rf-terminal-history__cmd')).toHaveText(line);
+  const raw = await items.first().getAttribute('data-exit');
+  await page.keyboard.press('Escape');
+  await expect(history).toHaveCount(0);
+  const code = Number(raw);
+  if (!Number.isSafeInteger(code) || code < 0) {
+    throw new Error(`terminal history has no exact exit code for ${line}: ${String(raw)}`);
+  }
+  return code;
+}
+
 export interface ActiveProjectText {
   readonly exists: boolean;
   readonly text: string;
