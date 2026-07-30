@@ -70,6 +70,67 @@ describe('node CLI eval invocation model', () => {
     ]);
   });
 
+  it.each([
+    {
+      label: '-e',
+      nodeArgv: ['-e', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['-e', 'source'],
+      print: false,
+    },
+    {
+      label: '--eval',
+      nodeArgv: ['--eval', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['--eval', 'source'],
+      print: false,
+    },
+    {
+      label: '--eval=',
+      nodeArgv: ['--eval=source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['--eval=source'],
+      print: false,
+    },
+    {
+      label: '-p',
+      nodeArgv: ['-p', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['-p', 'source'],
+      print: true,
+    },
+    {
+      label: '--print',
+      nodeArgv: ['--print', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['--print', 'source'],
+      print: true,
+    },
+    {
+      label: '--print=ignored',
+      nodeArgv: ['--print=ignored', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['--print=ignored', 'source'],
+      print: true,
+    },
+    {
+      label: '-pe',
+      nodeArgv: ['-pe', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['-pe', 'source'],
+      print: true,
+    },
+  ] as const)(
+    '$label projects an immediate terminator from the sole raw argv carrier',
+    ({ label, nodeArgv, execArgv, print }) => {
+      const { sequential } = nodeCliEvalInvocations(evalCase([{ label, nodeArgv }]));
+
+      expect(sequential).toEqual([
+        {
+          label,
+          nodeArgv,
+          source: 'source',
+          print,
+          execArgv,
+          scriptArgs: ['alpha', 'two words', '-x'],
+        },
+      ]);
+    },
+  );
+
   it.each(['-p', '--print', '--print=ignored'] as const)(
     '%s projects a separated empty token as argv, not source-bearing execArgv',
     (option) => {

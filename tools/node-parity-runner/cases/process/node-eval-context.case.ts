@@ -167,6 +167,39 @@ setImmediate(() => {
 completion
 `;
 
+const terminatorSource =
+  'const value=JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)});console.log(value);value';
+const terminatorInvocations = [
+  {
+    label: 'terminator-short-e',
+    nodeArgv: ['-e', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-long-eval',
+    nodeArgv: ['--eval', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-inline-long-eval',
+    nodeArgv: [`--eval=${terminatorSource}`, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-short-print',
+    nodeArgv: ['-p', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-long-print',
+    nodeArgv: ['--print', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-print-equals-ignored',
+    nodeArgv: ['--print=ignored', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-combined-print-eval',
+    nodeArgv: ['-pe', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+] satisfies readonly NodeCliEvalInvocation[];
+
 const sequential: NodeCliEvalInvocation[] = [
   {
     ...separated('identity-and-resolver', '--eval', identitySource, ['alpha', 'two words']),
@@ -179,6 +212,7 @@ const sequential: NodeCliEvalInvocation[] = [
 ];
 
 const concurrent: NodeCliEvalInvocation[] = [
+  ...terminatorInvocations,
   separated(
     'short-e-order-and-separator',
     '-e',

@@ -66,6 +66,76 @@ describe('runInNode', () => {
 });
 
 describe('Node v24.16.0 CLI eval oracle', () => {
+  it('consumes an immediate option terminator after every accepted eval spelling', () => {
+    assertNodeCliEvalOracleVersion(process.version);
+    const source =
+      'const value=JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)});console.log(value);value';
+    const scriptArgs = ['alpha', 'two words', '-x'] as const;
+    const cases = [
+      {
+        label: '-e',
+        nodeArgv: ['-e', source, '--', ...scriptArgs],
+        execArgv: ['-e', source],
+        print: false,
+      },
+      {
+        label: '--eval',
+        nodeArgv: ['--eval', source, '--', ...scriptArgs],
+        execArgv: ['--eval', source],
+        print: false,
+      },
+      {
+        label: '--eval=',
+        nodeArgv: [`--eval=${source}`, '--', ...scriptArgs],
+        execArgv: [`--eval=${source}`],
+        print: false,
+      },
+      {
+        label: '-p',
+        nodeArgv: ['-p', source, '--', ...scriptArgs],
+        execArgv: ['-p', source],
+        print: true,
+      },
+      {
+        label: '--print',
+        nodeArgv: ['--print', source, '--', ...scriptArgs],
+        execArgv: ['--print', source],
+        print: true,
+      },
+      {
+        label: '--print=ignored',
+        nodeArgv: ['--print=ignored', source, '--', ...scriptArgs],
+        execArgv: ['--print=ignored', source],
+        print: true,
+      },
+      {
+        label: '-pe',
+        nodeArgv: ['-pe', source, '--', ...scriptArgs],
+        execArgv: ['-pe', source],
+        print: true,
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const outcome = spawnSync(process.execPath, testCase.nodeArgv, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const identity = `${JSON.stringify({
+        execArgv: testCase.execArgv,
+        argv: scriptArgs,
+      })}\n`;
+
+      expect(outcome.error, testCase.label).toBeUndefined();
+      expect(outcome.signal, testCase.label).toBeNull();
+      expect(outcome.status, testCase.label).toBe(0);
+      expect(outcome.stdout, testCase.label).toBe(
+        testCase.print ? `${identity}${identity}` : identity,
+      );
+      expect(outcome.stderr, testCase.label).toBe('');
+    }
+  });
+
   it('distinguishes separated empty source tokens from absent source', () => {
     assertNodeCliEvalOracleVersion(process.version);
     const absentCases = [

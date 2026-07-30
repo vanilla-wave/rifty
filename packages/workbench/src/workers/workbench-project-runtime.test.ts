@@ -1207,6 +1207,103 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
+  const terminatorAdmissionSource = 'JSON.stringify({marker:"terminator"})';
+  it.each([
+    {
+      spelling: '-e',
+      line: `node -e '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
+      print: false,
+      execArgv: ['-e', terminatorAdmissionSource],
+    },
+    {
+      spelling: '--eval',
+      line: `node --eval '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
+      print: false,
+      execArgv: ['--eval', terminatorAdmissionSource],
+    },
+    {
+      spelling: '--eval=',
+      line: `node --eval='${terminatorAdmissionSource}' -- alpha 'two words' -x`,
+      print: false,
+      execArgv: [`--eval=${terminatorAdmissionSource}`],
+    },
+    {
+      spelling: '-p',
+      line: `node -p '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
+      print: true,
+      execArgv: ['-p', terminatorAdmissionSource],
+    },
+    {
+      spelling: '--print',
+      line: `node --print '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
+      print: true,
+      execArgv: ['--print', terminatorAdmissionSource],
+    },
+    {
+      spelling: '--print=ignored',
+      line: `node --print=ignored '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
+      print: true,
+      execArgv: ['--print=ignored', terminatorAdmissionSource],
+    },
+    {
+      spelling: '-pe',
+      line: `node -pe '${terminatorAdmissionSource}' -- alpha 'two words' -x`,
+      print: true,
+      execArgv: ['-pe', terminatorAdmissionSource],
+    },
+  ] as const)(
+    'consumes immediate -- through one real admitted child for $spelling',
+    async ({ line, print, execArgv }) => {
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-terminator' });
+      const running = Promise.resolve(
+        h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-eval-terminator',
+          rid: 'run-node-eval-terminator',
+          line,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      let worker: KernelWorkerBoundary | undefined;
+
+      try {
+        await vi.waitFor(() => expect(workers).toHaveLength(1));
+        worker = workers[0];
+        if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+        const spec = worker.spec();
+
+        expect(spec).toMatchObject({
+          argv: [NODE_PROCESS_IDENTITY.execPath, 'alpha', 'two words', '-x'],
+          entry: {
+            bootstrap: {
+              protocol: 'rifty.node-entry/v3',
+              payload: {
+                launch: {
+                  kind: 'eval',
+                  source: terminatorAdmissionSource,
+                  print,
+                  execArgv,
+                },
+              },
+            },
+          },
+        });
+        expect(globalProcessManager.get(spec.pid)).toMatchObject({
+          kind: 'worker',
+          command: 'node',
+        });
+      } finally {
+        worker?.finish(0);
+        await Promise.allSettled([running]);
+        await h.runtime.close();
+      }
+    },
+  );
+
   it.each([
     {
       line: "node -e ''",

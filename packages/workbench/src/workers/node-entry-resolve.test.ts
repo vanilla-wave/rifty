@@ -52,6 +52,62 @@ describe('classifyNodeInvocation', () => {
   });
 
   it.each([
+    {
+      label: '-e',
+      args: ['-e', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['-e', 'source'],
+      print: false,
+    },
+    {
+      label: '--eval',
+      args: ['--eval', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['--eval', 'source'],
+      print: false,
+    },
+    {
+      label: '--eval=',
+      args: ['--eval=source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['--eval=source'],
+      print: false,
+    },
+    {
+      label: '-p',
+      args: ['-p', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['-p', 'source'],
+      print: true,
+    },
+    {
+      label: '--print',
+      args: ['--print', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['--print', 'source'],
+      print: true,
+    },
+    {
+      label: '--print=ignored',
+      args: ['--print=ignored', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['--print=ignored', 'source'],
+      print: true,
+    },
+    {
+      label: '-pe',
+      args: ['-pe', 'source', '--', 'alpha', 'two words', '-x'],
+      execArgv: ['-pe', 'source'],
+      print: true,
+    },
+  ] as const)(
+    '$label consumes an immediate terminator before exposing entryless script args',
+    ({ args, execArgv, print }) => {
+      expect(classifyNodeInvocation(args)).toEqual({
+        kind: 'eval',
+        source: 'source',
+        print,
+        execArgv,
+        scriptArgs: ['alpha', 'two words', '-x'],
+      });
+    },
+  );
+
+  it.each([
     { option: '-e', print: false, missing: 'node: -e requires an argument\n' },
     { option: '--eval', print: false, missing: 'node: --eval requires an argument\n' },
     { option: '-pe', print: true, missing: 'node: --eval requires an argument\n' },

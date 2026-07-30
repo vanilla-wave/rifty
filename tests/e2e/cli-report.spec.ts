@@ -70,6 +70,46 @@ const identityInvocation: PhysicalNodeInvocation = {
   nodeArgv: ['--eval', identitySource, '--', 'alpha', 'two words', '-x'],
 };
 
+const terminatorSource =
+  'const value=JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)});console.log(value);value';
+const terminatorInvocations = [
+  {
+    label: 'terminator-short-e',
+    cwd: '/fixtures/a',
+    nodeArgv: ['-e', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-long-eval',
+    cwd: '/fixtures/a',
+    nodeArgv: ['--eval', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-inline-long-eval',
+    cwd: '/fixtures/a',
+    nodeArgv: [`--eval=${terminatorSource}`, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-short-print',
+    cwd: '/fixtures/a',
+    nodeArgv: ['-p', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-long-print',
+    cwd: '/fixtures/a',
+    nodeArgv: ['--print', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-print-equals-ignored',
+    cwd: '/fixtures/a',
+    nodeArgv: ['--print=ignored', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+  {
+    label: 'terminator-combined-print-eval',
+    cwd: '/fixtures/a',
+    nodeArgv: ['-pe', terminatorSource, '--', 'alpha', 'two words', '-x'],
+  },
+] as const satisfies readonly PhysicalNodeInvocation[];
+
 const orderedInvocation: PhysicalNodeInvocation = {
   label: 'ordered-streams',
   cwd: '/fixtures/a',
@@ -441,6 +481,37 @@ test.describe('CLI report template through the worker lifecycle', () => {
       const browser = await runWorkbenchInvocation(page, identityInvocation);
       expect(browser.exitCode).toBe(native.code);
       expect(browser.output).toBe(normalized(native.stdout));
+      problems.assertNoViteImportErrors();
+    } finally {
+      fixture.close();
+    }
+  });
+
+  test('every accepted eval spelling consumes an immediate terminator in the physical Workbench', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'physical supervised children require Chromium');
+    test.setTimeout(240_000);
+    const problems = capturePageProblems(page);
+    const fixture = createHostFixture();
+    try {
+      await bootCliReport(page);
+
+      for (const invocation of terminatorInvocations) {
+        const native = await runHostInvocation(fixture, invocation);
+        expect(
+          { code: native.code, signal: native.signal, stderr: native.stderr },
+          invocation.label,
+        ).toEqual({
+          code: 0,
+          signal: null,
+          stderr: '',
+        });
+        const browser = await runWorkbenchInvocation(page, invocation);
+        expect(browser.output, invocation.label).toBe(normalized(native.stdout));
+        expect(browser.exitCode, invocation.label).toBe(native.code);
+      }
       problems.assertNoViteImportErrors();
     } finally {
       fixture.close();
