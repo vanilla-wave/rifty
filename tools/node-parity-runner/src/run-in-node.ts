@@ -120,7 +120,7 @@ function quotePosixShellArg(value: string): string {
  *   transform) instead of diverging on a Node strip-only *limitation* rather
  *   than a rifty behaviour (ADR-0132).
  */
-function nodeRunnerFor(testCase: ParityCase, entry: string): [string, string[]] {
+export function nodeRunnerFor(testCase: ParityCase, entry: string): [string, string[]] {
   if (testCase.kind === 'ts-esm') {
     return [TSX_CLI, [entry]];
   }
