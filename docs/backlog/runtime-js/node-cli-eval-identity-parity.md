@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -146,8 +146,8 @@ observer started after the physical Worker's process-adoption pre-entry hook,
 so a source carrier created during `installNodeRuntime` could escape the
 before/during/after audit.
 
-The item is demoted while observation moves ahead of the pre-entry hook and an
-injected child-local carrier crosses that exact interval. The existing
+The item was demoted while observation moved ahead of the pre-entry hook and an
+injected child-local carrier crossed that exact interval. The existing
 Workbench-owner and SAB-remote carrier faults plus unchanged physical-program
 siblings remain the required sweep. The pre-demotion Acceptance and Parity
 remain verbatim below.
@@ -300,7 +300,7 @@ identity rather than a generated workspace file, and return the real exit code.
 
 ## Decisions
 
-ready-verdict: 2026-07-30 — current code, compat, TODO, ADR, and backlog searches settle Context, freshness, and non-overlap; M11, the pinned executable Node v24.16.0 oracle, and physical Workbench probe settle User scenario, Acceptance, Reference contract, Parity, and loud exclusions; ADR-0337 with ADR-0155/0157/0267/0325/0326/0332/0334 settles Decisions, Reversibility, and the one-carrier mechanism inventory; one live-Node-validated generated 6 separated spellings × 3 source states × terminator matrix feeds raw projection, physical parity, and CI-active Chromium, while matching classifier and real-ProcessManager-admission sweeps cover all 18 rows—15 accepted rows pin physical-v3 Worker parity and the 3 mandatory-missing rows pin exact exit 9 with zero allocation; preserved loader/cache/Promise/lifecycle/error/preview/VFS/corrupt-bootstrap REDs and unchanged physical-program siblings settle every Fault and pre-demotion row without weakening scope.
+ready-verdict: 2026-07-30 — current code, compat, TODO, ADR, and backlog searches settle Context, freshness, and non-overlap; M11, the pinned executable Node v24.16.0 CLI/identity/resolver/lifecycle oracle, and the physical Workbench probe settle User scenario, Acceptance, Reference contract, Parity, and loud exclusions; ADR-0337 with ADR-0155/0157/0267/0325/0326/0332/0334 settles Decisions, Reversibility, and the single atomic-v3 loader/lifecycle mechanism inventory; the live-Node-validated six separated spellings × three source states × terminator matrix crosses projection, classifier, real ProcessManager admission, physical parity, and CI-active Chromium, including inline, empty, mandatory-missing exit-9, module-context, and attached-option siblings; preserved loader/cache/parent/Promise/process/lifecycle/error/preview/corrupt-bootstrap REDs settle the remaining Fault rows; the physical trace publishes typed bootstrap before pre-entry, begins child-local observation before the injected carrier and `installNodeRuntime`, retains it through entry and final audit, and combines clean, Workbench-owner, SAB-remote, and child-local proofs while `env-semantics`, `stdio-plan-drain-order`, `public-ipc-json`, and `missing-cwd-entry` program siblings remain GREEN, so the eighth re-cut closes without weakening any pre-demotion Acceptance, Parity, or loud exclusion.
 
 - ADR-0337 owns the irreversible atomic node-entry v3 shape and the one
   loader-owned unwrapped-script mechanism. There is no v2 compatibility reader.
