@@ -178,6 +178,25 @@ describe('foreground child stdin pump', () => {
     expect(stderr).toEqual(['middle', '�']);
   });
 
+  it('flushes reversed incomplete UTF-8 stream tails in admission order', async () => {
+    const h = foregroundHarness();
+    const output: string[] = [];
+    const run = runForegroundChild(
+      h.handle,
+      context(undefined, {
+        stdout: { write: (text) => output.push(`stdout:${text}`) },
+        stderr: { write: (text) => output.push(`stderr:${text}`) },
+      }),
+    );
+
+    h.emitStderr(new Uint8Array([0xe2]));
+    h.emitStdout(new Uint8Array([0xe2]));
+    h.emitExit(0);
+
+    await expect(run).resolves.toEqual({ code: 0, signal: null });
+    expect(output).toEqual(['stderr:�', 'stdout:�']);
+  });
+
   it('preserves the exact signal-only child exit instead of projecting it to success', async () => {
     const h = foregroundHarness();
     const run = runForegroundChild(h.handle, context(undefined));

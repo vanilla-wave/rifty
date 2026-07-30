@@ -65,6 +65,7 @@ describe('runNodeProgramLifecycle', () => {
     expect(d.servePreview).toHaveBeenCalledWith(8080);
     expect(d.postListening).toHaveBeenCalledWith([3000, 8080]);
     expect(d.awaitDrain).not.toHaveBeenCalled();
+    expect(d.releaseDrainOwnership).not.toHaveBeenCalled();
     expect(d.exit).not.toHaveBeenCalled();
   });
 
@@ -97,17 +98,40 @@ describe('runNodeProgramLifecycle', () => {
     expect(d.postListening).toHaveBeenCalledWith([4000]);
   });
 
-  it('returned entry with a pending drain can still become a server on a later listen', async () => {
+  it('releases a pending drain before serving and publishing a later port', async () => {
     const reg = fakeRegistry();
-    const { d } = deps({ awaitDrain: vi.fn(() => new Promise<void>(() => {})) }, reg);
+    const events: string[] = [];
+    const { d } = deps(
+      {
+        awaitDrain: vi.fn(() => {
+          events.push('drain');
+          return new Promise<void>(() => {});
+        }),
+        releaseDrainOwnership: vi.fn(() => {
+          events.push('release');
+        }),
+        servePreview: vi.fn((port) => {
+          events.push(`serve:${String(port)}`);
+          return () => {};
+        }),
+        postListening: vi.fn((ports) => {
+          events.push(`post:${ports.join(',')}`);
+        }),
+      },
+      reg,
+    );
     const run = runNodeProgramLifecycle(d);
     await settle();
     expect(d.awaitDrain).toHaveBeenCalledOnce();
+    events.push('port');
     reg.listen(5174);
     await run;
-    expect(d.servePreview).toHaveBeenCalledWith(5174);
-    expect(d.postListening).toHaveBeenCalledWith([5174]);
+    const release = events.indexOf('release');
     expect(d.releaseDrainOwnership).toHaveBeenCalledOnce();
+    expect(release).toBeGreaterThan(events.indexOf('drain'));
+    expect(release).toBeGreaterThan(events.indexOf('port'));
+    expect(release).toBeLessThan(events.indexOf('serve:5174'));
+    expect(release).toBeLessThan(events.indexOf('post:5174'));
     expect(d.exit).not.toHaveBeenCalled();
   });
 

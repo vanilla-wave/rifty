@@ -1530,6 +1530,55 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
   );
 
   it.each([
+    '--input-type=module',
+    '--input-type=commonjs-typescript',
+    '--input-type=module-typescript',
+  ])(
+    'keeps an input-type post-terminator program transition in the named no-child gap: %s',
+    async (inputType) => {
+      const processesBefore = globalProcessManager.snapshot();
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({
+        type: 'pty:open',
+        sid: 'terminal-node-input-type-print-program',
+      });
+
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-input-type-print-program',
+        rid: 'run-node-input-type-print-program',
+        line: `node ${inputType} -p -- entry.cjs`,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+
+      const stderr = h.frames
+        .filter(
+          (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+            frame.type === 'pty:chunk' &&
+            frame.rid === 'run-node-input-type-print-program' &&
+            frame.stream === 'stderr',
+        )
+        .map((frame) => new TextDecoder().decode(frame.data))
+        .join('');
+      expect(stderr).toContain('Not implemented: workbench.node.print-program-context');
+      expect(workers).toHaveLength(0);
+      expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+      expect(h.frames).toContainEqual(
+        expect.objectContaining({
+          type: 'pty:exit',
+          rid: 'run-node-input-type-print-program',
+          code: 1,
+          exit: { code: 1, signal: null },
+        }),
+      );
+      await h.runtime.close();
+    },
+  );
+
+  it.each([
     {
       line: "node -e ''",
       print: false,
@@ -1792,17 +1841,6 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     "node --input-type=module -e '1'",
     "node --input-type=module --eval '1'",
     "node --input-type=module --eval='1'",
-    "node --input-type=module -p '1'",
-    "node --input-type=module --print '1'",
-    "node --input-type=module --print=ignored '1'",
-    "node --input-type=module --print=not-the-source '1'",
-    "node --input-type=module --print= '1'",
-    "node --input-type=module -pe '1'",
-    'node --input-type=module -p',
-    'node --input-type=module --print',
-    'node --input-type=module --print=ignored',
-    'node --input-type=module --print=not-the-source',
-    'node --input-type=module --print=',
   ])('keeps ESM eval as its named no-child context gap: %s', async (line) => {
     const processesBefore = globalProcessManager.snapshot();
     const workers = installRealKernelWorkerBoundary();
@@ -1833,6 +1871,96 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     expect(globalProcessManager.snapshot()).toEqual(processesBefore);
     expect(h.frames).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', rid: 'run-node-esm-eval', code: 1 }),
+    );
+    await h.runtime.close();
+  });
+
+  it.each([
+    "node --input-type=module -p '1'",
+    "node --input-type=module --print '1'",
+    "node --input-type=module --print=ignored '1'",
+    "node --input-type=module --print=not-the-source '1'",
+    "node --input-type=module --print= '1'",
+    "node --input-type=module -pe '1'",
+    'node --input-type=module -p',
+    'node --input-type=module --print',
+    'node --input-type=module --print=ignored',
+    'node --input-type=module --print=not-the-source',
+    'node --input-type=module --print=',
+    "node --input-type=module -p -- ''",
+    "node --input-type=module-typescript -p 'const n: number = 1; n'",
+    "node --input-type=module-typescript -p -- ''",
+  ])('returns Node-shaped ESM print rejection without allocating a child: %s', async (line) => {
+    const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-esm-eval' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-node-esm-eval',
+      rid: 'run-node-esm-eval',
+      line,
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const stderr = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' &&
+          frame.rid === 'run-node-esm-eval' &&
+          frame.stream === 'stderr',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(stderr).toBe(
+      'Error [ERR_EVAL_ESM_CANNOT_PRINT]: --print cannot be used with ESM input\n',
+    );
+    expect(workers).toHaveLength(0);
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-esm-eval', code: 1 }),
+    );
+    await h.runtime.close();
+  });
+
+  it.each([
+    "node --input-type=commonjs-typescript -e 'const n: number = 1'",
+    "node --input-type=commonjs-typescript -p 'const n: number = 1; n'",
+    "node --input-type=commonjs-typescript -p -- ''",
+    "node --input-type=module-typescript -e 'const n: number = 1'",
+  ])('keeps explicit TypeScript eval as its named no-child context gap: %s', async (line) => {
+    const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-ts-eval' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-node-ts-eval',
+      rid: 'run-node-ts-eval',
+      line,
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const stderr = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' &&
+          frame.rid === 'run-node-ts-eval' &&
+          frame.stream === 'stderr',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(stderr).toContain('Not implemented: runtime-js.node-eval-typescript-context');
+    expect(workers).toHaveLength(0);
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-ts-eval', code: 1 }),
     );
     await h.runtime.close();
   });

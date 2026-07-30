@@ -52,6 +52,23 @@ describe('node CLI eval parity carrier', () => {
     });
   });
 
+  it('flushes reversed incomplete UTF-8 stream tails in admission order', () => {
+    const capture = createNodeCliEvalCapture();
+    capture.push('stderr', new Uint8Array([0xe2]));
+    capture.push('stdout', new Uint8Array([0xe2]));
+
+    expect(capture.finish(0, null)).toEqual({
+      stdout: '�',
+      stderr: '�',
+      frames: [
+        { stream: 'stderr', text: '�' },
+        { stream: 'stdout', text: '�' },
+      ],
+      code: 0,
+      signal: null,
+    });
+  });
+
   it('normalises adjacent same-stream chunks into one logical line', () => {
     const capture = createNodeCliEvalCapture();
     capture.push('stdout', 'one-');

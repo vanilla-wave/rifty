@@ -408,6 +408,56 @@ function asBytes(chunk: unknown): Uint8Array {
   throw new TypeError('node-cli-eval stream emitted a non-byte chunk');
 }
 
+interface Utf8Tail {
+  bytes: Uint8Array;
+  order: number | undefined;
+}
+
+function incompleteUtf8SuffixLength(bytes: Uint8Array): number {
+  if (bytes.length === 0) return 0;
+  let lead = bytes.length - 1;
+  while (lead >= 0 && (bytes[lead]! & 0xc0) === 0x80) lead -= 1;
+  if (lead < 0) return 0;
+  const byte = bytes[lead]!;
+  const expected =
+    byte >= 0xc2 && byte <= 0xdf
+      ? 2
+      : byte >= 0xe0 && byte <= 0xef
+        ? 3
+        : byte >= 0xf0 && byte <= 0xf4
+          ? 4
+          : 0;
+  const actual = bytes.length - lead;
+  if (expected === 0 || actual >= expected) return 0;
+  const second = bytes[lead + 1];
+  if (
+    second !== undefined &&
+    ((byte === 0xe0 && second < 0xa0) ||
+      (byte === 0xed && second > 0x9f) ||
+      (byte === 0xf0 && second < 0x90) ||
+      (byte === 0xf4 && second > 0x8f))
+  ) {
+    return 0;
+  }
+  return actual;
+}
+
+function trackUtf8Tail(state: Utf8Tail, bytes: Uint8Array, order: number): void {
+  const previousLength = state.bytes.length;
+  const combined = new Uint8Array(previousLength + bytes.length);
+  combined.set(state.bytes);
+  combined.set(bytes, previousLength);
+  const length = incompleteUtf8SuffixLength(combined);
+  if (length === 0) {
+    state.bytes = new Uint8Array();
+    state.order = undefined;
+    return;
+  }
+  const start = combined.length - length;
+  state.bytes = combined.slice(start);
+  state.order = start < previousLength ? (state.order ?? order) : order;
+}
+
 /** Causally release each next child write only after its predecessor is observable. */
 export function createNodeCliEvalStdioHandshake(
   steps: NodeCliEvalInvocation['stdioHandshake'],
@@ -454,6 +504,10 @@ export function createNodeCliEvalCapture(): {
     stdout: undefined,
     stderr: undefined,
   };
+  const tails = {
+    stdout: { bytes: new Uint8Array(), order: undefined } satisfies Utf8Tail,
+    stderr: { bytes: new Uint8Array(), order: undefined } satisfies Utf8Tail,
+  };
   const output = { stdout: '', stderr: '' };
   const frames: (NodeCliEvalFrame & { readonly order: number; readonly ordinal: number })[] = [];
   let activeStream: 'stdout' | 'stderr' | undefined;
@@ -488,13 +542,28 @@ export function createNodeCliEvalCapture(): {
   return {
     push(stream, chunk) {
       const writeOrder = order++;
+      const bytes = asBytes(chunk);
+      trackUtf8Tail(tails[stream], bytes, writeOrder);
       if (activeStream !== undefined && activeStream !== stream) flushPending(activeStream);
       activeStream = stream;
-      append(stream, decoders[stream].decode(asBytes(chunk), { stream: true }), writeOrder);
+      append(stream, decoders[stream].decode(bytes, { stream: true }), writeOrder);
     },
     finish(code, signal) {
-      append('stdout', decoders.stdout.decode(), order++);
-      append('stderr', decoders.stderr.decode(), order++);
+      const flushes = [
+        {
+          stream: 'stdout' as const,
+          text: decoders.stdout.decode(),
+          order: tails.stdout.order ?? order,
+          ordinal: 0,
+        },
+        {
+          stream: 'stderr' as const,
+          text: decoders.stderr.decode(),
+          order: tails.stderr.order ?? order + 1,
+          ordinal: 1,
+        },
+      ].sort((left, right) => left.order - right.order || left.ordinal - right.ordinal);
+      for (const flush of flushes) append(flush.stream, flush.text, flush.order);
       flushPending('stdout');
       flushPending('stderr');
       return {

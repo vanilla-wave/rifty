@@ -287,6 +287,54 @@ describe('classifyNodeInvocation', () => {
     }
   });
 
+  it('splits ESM eval gaps from Node-invalid ESM print forms', () => {
+    for (const option of ['-e', '--eval', '--eval=1']) {
+      expect(classifyNodeInvocation(['--input-type=module', option, '1'])).toEqual({
+        kind: 'evalModule',
+      });
+    }
+    for (const option of ['-p', '--print', '--print=ignored', '-pe']) {
+      expect(classifyNodeInvocation(['--input-type=module', option, '1'])).toEqual({
+        kind: 'evalModulePrintError',
+      });
+    }
+  });
+
+  it('routes explicit TypeScript inputs with ESM print-error precedence', () => {
+    for (const option of ['-e', '--eval', '--eval=1', '-p', '--print', '--print=ignored', '-pe']) {
+      expect(classifyNodeInvocation(['--input-type=commonjs-typescript', option, '1'])).toEqual({
+        kind: 'evalTypeScript',
+      });
+    }
+    for (const option of ['-e', '--eval', '--eval=1']) {
+      expect(classifyNodeInvocation(['--input-type=module-typescript', option, '1'])).toEqual({
+        kind: 'evalTypeScript',
+      });
+    }
+    for (const option of ['-p', '--print', '--print=ignored', '-pe']) {
+      expect(classifyNodeInvocation(['--input-type=module-typescript', option, '1'])).toEqual({
+        kind: 'evalModulePrintError',
+      });
+    }
+  });
+
+  it('keeps input-type optional-print program transitions ahead of eval-context outcomes', () => {
+    for (const inputType of [
+      '--input-type=module',
+      '--input-type=commonjs-typescript',
+      '--input-type=module-typescript',
+    ]) {
+      expect(classifyNodeInvocation([inputType, '-p', '--', 'entry.cjs'])).toEqual({
+        kind: 'printProgram',
+      });
+    }
+    for (const inputType of ['--input-type=module', '--input-type=module-typescript']) {
+      expect(classifyNodeInvocation([inputType, '-p', '--', ''])).toEqual({
+        kind: 'evalModulePrintError',
+      });
+    }
+  });
+
   it('missing/empty eval source stays loud', () => {
     expect(classifyNodeInvocation(['-e'])).toEqual({
       kind: 'usageError',

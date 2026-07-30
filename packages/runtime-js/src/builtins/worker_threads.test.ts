@@ -431,6 +431,7 @@ globalThis.onmessage = ({ data }) => {
   });
 
   it('rejects inherited eval execArgv before allocating a lossy worker thread', async () => {
+    _resetThreadIdCounterForTests();
     const spawn = vi
       .spyOn(globalProcessManager, 'spawnWorker')
       .mockImplementation(() => makeFakeWorkerHandle([]));
@@ -474,9 +475,19 @@ globalThis.onmessage = ({ data }) => {
       }),
     );
     expect(spawn).not.toHaveBeenCalled();
+
+    publishKernelEntryBootstrap(null);
+    (globalThis as Coi).crossOriginIsolated = false;
+    writeFileSync('/worker-after-inherited-gap.js', ';');
+    const valid = new Worker('/worker-after-inherited-gap.js');
+    const exit = onceEvent(valid, 'exit');
+    expect(valid.threadId).toBe(1);
+    await exit;
+    expect(spawn).not.toHaveBeenCalled();
   });
 
-  it('rejects an explicit execArgv override before allocating a worker thread', () => {
+  it('rejects an explicit execArgv override before allocating a worker thread', async () => {
+    _resetThreadIdCounterForTests();
     const spawn = vi
       .spyOn(globalProcessManager, 'spawnWorker')
       .mockImplementation(() => makeFakeWorkerHandle([]));
@@ -492,6 +503,14 @@ globalThis.onmessage = ({ data }) => {
         feature: 'worker_threads.Worker.execArgv',
       }),
     );
+    expect(spawn).not.toHaveBeenCalled();
+
+    (globalThis as Coi).crossOriginIsolated = false;
+    writeFileSync('/worker-after-explicit-gap.js', ';');
+    const valid = new Worker('/worker-after-explicit-gap.js');
+    const exit = onceEvent(valid, 'exit');
+    expect(valid.threadId).toBe(1);
+    await exit;
     expect(spawn).not.toHaveBeenCalled();
   });
 

@@ -37,6 +37,27 @@ function barePrint(
   };
 }
 
+const nativeFatalPrintGate =
+  "if(process.platform!=='rifty'){const fs=require('node:fs');const write=process.stdout.write.bind(process.stdout);let gated=false;process.stdout.write=function(chunk,...args){const result=write(chunk,...args);if(!gated){gated=true;const token=Buffer.allocUnsafe(1);fs.readSync(0,token,0,1,null)}return result}};";
+
+function fatalAfterPrint(
+  label: string,
+  source: string,
+  stdoutMarker: string,
+  policies: Pick<NodeCliEvalInvocation, 'rejectedPromiseStdout'> = {},
+): NodeCliEvalInvocation {
+  return {
+    ...separated(label, '-p', `${nativeFatalPrintGate}${source}`, [], false, {
+      evalErrorStderr: true,
+      ...policies,
+    }),
+    // Native stdout blocks after its result write until the parent observes it.
+    // Rifty's ordered receiver is independently authoritative; the same token
+    // is harmless because the platform branch leaves its stdout untouched.
+    stdioHandshake: [{ stream: 'stdout', marker: stdoutMarker }],
+  };
+}
+
 const identitySource = String.raw`
 const fs = require('node:fs');
 const path = require('node:path');
@@ -121,7 +142,7 @@ console.log(JSON.stringify({
   exportsModuleIdentity: exports === module.exports,
   cached: Object.values(require.cache).includes(module),
   ownerBytes,
-  noEvalCarrier: JSON.stringify(visibleEntries) === JSON.stringify(['marker.cjs','node_modules','owner-only.txt']),
+  noEvalCarrier: JSON.stringify(visibleEntries) === JSON.stringify(['marker.cjs','node_modules','owner-only.txt','package.json']),
   resolvedBefore: resolvedBefore === path.join(launchCwd, 'marker.cjs'),
   resolvedAfter: resolvedAfter === path.join(launchCwd, 'marker.cjs'),
   child: {
@@ -284,80 +305,57 @@ const concurrent: NodeCliEvalInvocation[] = [
     'let settle;const promise=new Promise(resolve=>{settle=resolve});setTimeout(()=>settle(42),0);promise',
   ),
   separated('pending-promise', '-p', 'new Promise(()=>{})'),
-  separated(
+  fatalAfterPrint(
     'rejected-promise-print-before-error',
-    '-p',
     "Promise.reject(new Error('print-nope'))",
-    [],
-    false,
-    { rejectedPromiseStdout: true, evalErrorStderr: true },
+    'Promise {',
+    { rejectedPromiseStdout: true },
   ),
-  separated(
+  fatalAfterPrint(
     'late-throw-prints-before-error',
-    '-p',
     "setTimeout(()=>{throw new Error('later')},0);42",
-    [],
-    false,
-    { evalErrorStderr: true },
+    '42\n',
   ),
-  separated(
+  fatalAfterPrint(
     'late-rejection-prints-before-error',
-    '-p',
     "setTimeout(()=>Promise.reject(new Error('later rejection')),0);42",
-    [],
-    false,
-    { evalErrorStderr: true },
+    '42\n',
   ),
   separated('late-process-exit-prints-before-exit', '-p', 'setTimeout(()=>process.exit(7),0);42'),
-  separated(
+  fatalAfterPrint(
     'microtask-throw-prints-before-error',
-    '-p',
     "queueMicrotask(()=>{throw new Error('microtask later')});42",
-    [],
-    false,
-    { evalErrorStderr: true },
+    '42\n',
   ),
-  separated(
+  fatalAfterPrint(
     'promise-reaction-throw-prints-before-error',
-    '-p',
     "Promise.resolve().then(()=>{throw new Error('then later')});42",
-    [],
-    false,
-    { evalErrorStderr: true },
+    '42\n',
   ),
-  separated(
+  fatalAfterPrint(
     'microtask-rejection-prints-before-error',
-    '-p',
     "queueMicrotask(()=>Promise.reject(new Error('microtask rejection')));42",
-    [],
-    false,
-    { evalErrorStderr: true },
+    '42\n',
   ),
   separated(
     'microtask-process-exit-prints-before-exit',
     '-p',
     'queueMicrotask(()=>process.exit(7));42',
   ),
-  separated(
+  fatalAfterPrint(
     'served-late-throw-prints-before-error',
-    '-p',
-    "require('node:http').createServer((_q,r)=>r.end('unused')).listen(43161,()=>setTimeout(()=>{throw new Error('served later')},0));42",
-    [],
-    false,
-    { evalErrorStderr: true },
+    "require('node:http').createServer((_q,r)=>r.end('unused')).listen(0,()=>setTimeout(()=>{throw new Error('served later')},0));42",
+    '42\n',
   ),
-  separated(
+  fatalAfterPrint(
     'served-late-rejection-prints-before-error',
-    '-p',
-    "require('node:http').createServer((_q,r)=>r.end('unused')).listen(43162,()=>Promise.reject(new Error('served rejection')));42",
-    [],
-    false,
-    { evalErrorStderr: true },
+    "require('node:http').createServer((_q,r)=>r.end('unused')).listen(0,()=>Promise.reject(new Error('served rejection')));42",
+    '42\n',
   ),
   separated(
     'served-late-process-exit-prints-before-exit',
     '-p',
-    "require('node:http').createServer((_q,r)=>r.end('unused')).listen(43163,()=>process.exit(7));42",
+    "require('node:http').createServer((_q,r)=>r.end('unused')).listen(0,()=>process.exit(7));42",
   ),
   separated('exit-code-after-print', '-p', 'process.exitCode=7;42'),
   separated('forced-exit-suppresses-print', '-p', 'process.exit(7);42'),
@@ -392,6 +390,7 @@ export default {
       'fixtures/a/marker.cjs':
         "module.exports={marker:'a',parent:module.parent,parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
       'fixtures/a/owner-only.txt': 'owner-a',
+      'fixtures/a/package.json': '{"type":"module"}\n',
       'fixtures/a/node_modules/eval-package/index.js': "module.exports='package-a'\n",
       'fixtures/b/marker.cjs':
         "module.exports={marker:'b',parent:module.parent,parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",

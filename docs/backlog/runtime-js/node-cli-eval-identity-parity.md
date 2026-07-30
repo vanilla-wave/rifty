@@ -5,22 +5,23 @@ title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
 user_story: As a CLI author probing its invocation context under `node -e` or `node -p`, I want the same argv and module identity as Node 24, but today the terminal rejects the command.
-sources: [M11, ADR-0155, ADR-0157, ADR-0339, ADR-0340, ADR-0342, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md, docs/backlog/runtime-js/reference/node-cli-eval-physical-carrier-probe.md]
-code: [packages/kernel/src/worker-stdio-drain.ts, packages/kernel/src/process-manager.ts, packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/cjs.ts, tools/node-parity-runner/cases/process/node-eval-context.case.ts, tests/e2e/cli-report.spec.ts]
+sources: [M11, ADR-0155, ADR-0157, ADR-0339, ADR-0340, ADR-0341, ADR-0342, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md, docs/backlog/runtime-js/reference/node-cli-eval-physical-carrier-probe.md]
+code: [packages/kernel/src/worker-stdio-drain.ts, packages/kernel/src/process-manager.ts, packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, packages/workbench/src/workers/node-program-lifecycle.ts, packages/workbench/src/workbench/project-terminal.ts, apps/playground/src/adapters/playground-terminal-ui.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/module-loader/cjs.ts, packages/runtime-js/src/module-loader/loader.ts, packages/runtime-js/src/module-loader/resolver.ts, packages/runtime-js/src/repl/inspect.ts, packages/runtime-js/src/index.ts, tools/node-parity-runner/cases/process/node-eval-context.case.ts, tests/e2e/cli-report.spec.ts]
 ---
 
 ## Context
 
 Workbench is the only surface that parses `node` argv
-(`node-entry-resolve.ts:45` `classifyNodeInvocation`); its `eval` kind throws
-`NotImplementedError('workbench.node.eval-context')`
-(`workbench-project-runtime.ts:335`). Honest, but it blocks the first-screen
-Node CLI scenario. The legacy Playground path that ran a transient
+(`classifyNodeInvocation` in `node-entry-resolve.ts`); at the Contract+RED
+baseline its `eval` kind throws
+`NotImplementedError('workbench.node.eval-context')`. Honest, but it blocks the
+first-screen Node CLI scenario. The legacy Playground path that ran a transient
 `.rifty-eval-*.cjs` through `node <file>` is gone from production code — it
 preserved loader execution but gave eval a file entry, added that path to
 `process.argv`, registered the wrong module identity, and could leave workspace
-bytes; `workbench-project-runtime.test.ts:939` pins that no such file appears.
-Reviving it is out of scope, not an alternative.
+bytes; the `builds one exact v3 admitted-child launch without an owner-VFS
+carrier` Workbench test pins that no such file appears. Reviving it is out of
+scope, not an alternative.
 
 ## Second readiness re-cut
 
@@ -532,7 +533,13 @@ drain-owner handoff, direct-terminal-before-drain ownership, first-terminal
 wins, one print/diagnostic/control, explicit-exit projection bypass, and loud
 print/diagnostic/control failure. The diagnostic carrier normalizes
 Node's `Timeout._onTimeout ([eval]:L:C)` to the same retained user location as
-Rifty's direct `[eval]` frame instead of discarding Node's frame.
+Rifty's direct `[eval]` frame instead of discarding Node's frame. For every
+print-before-fatal row, the native-only stdout wrapper blocks after the result
+write until the parent observes its exact marker and releases stdin; the fatal
+stderr write therefore cannot race ahead across independent OS pipes. Rifty
+uses the same source and marker but its authenticated ADR-0340 receiver remains
+the ordering proof. Served rows bind port `0`; no fixed host-port availability
+assumption enters the differential.
 
 Two implementation findings stay explicit rather than widening this item.
 Runtime-owned `SyntaxError` must preserve its own prelude before the `[eval]`
@@ -543,6 +550,33 @@ until its separate worker bootstrap carries those tokens, so inherited
 an explicit worker `execArgv` override uses the same named loud gap. Fresh-main
 ADR collisions reallocated this branch's eval, worker-stdio, and project-status
 decisions to ADR-0339, ADR-0340, and ADR-0341 without changing their semantics.
+
+## Thirtieth readiness re-cut
+
+The fresh judge at `8977bd812` found seven final scope or carrier ambiguities
+without changing Acceptance, Parity, or the CommonJS eval boundary:
+
+- the public terminal-status carrier was not linked to the existing Chromium
+  Ctrl-C acceptance that requires owner-authored status `130`;
+- ESM print rejection and explicit TypeScript gaps lacked Node's precedence at
+  their shared optional-print terminator boundary;
+- late fatal stdout/stderr comparison relied on parent callback order rather
+  than a causal native gate;
+- the worker `execArgv` gap did not prove rejection before thread-id allocation;
+- an outer `"type":"module"` physical fixture did not pin CommonJS package
+  resolution across the `node_modules` scope boundary;
+- dual incomplete UTF-8 tails could flush stdout-first at EOF despite an
+  earlier admitted stderr suffix;
+- numeric test-line citations had gone stale during the re-cut.
+
+The item remains `draft` while this exact correction is re-judged. The
+unchanged Ctrl-C e2e now appears in sources and Parity beside ADR-0341.
+Classifier and real owner REDs pin nonempty optional-print terminators to the
+program gap after every accepted input type, while empty terminators retain
+the ESM print rejection or TypeScript gap. The native fatal gate, thread-id
+counter, physical package fixture, and admission-ordered UTF-8 EOF tails close
+their respective proof holes. Contract prose names stable tests/functions
+instead of line numbers.
 
 ## Refinement evidence
 
@@ -649,7 +683,8 @@ identity rather than a generated workspace file, and return the real exit code.
    anchored to launch cwd even after `process.chdir()`. `module.paths` matches
    Node's cwd ancestor order. The eval record is absent from `require.cache`
    before/during/after; a required child's `parent` is that same detached
-   record.
+   record. A dependency without its own manifest remains CommonJS across an
+   outer project `type:module` boundary at `node_modules`.
 4. Result order/format: raw string, `undefined`, object/array, bigint,
    `Promise { 42 }`, `Promise { <pending> }`, rejected Promise prefix, and
    `<ref *1> ... [Circular *1]` match normalized Node output. A timer that logs
@@ -668,7 +703,9 @@ identity rather than a generated workspace file, and return the real exit code.
 6. Isolation: two sequential and two simultaneous physical eval children use
    distinct cwd fixtures and preview scopes. Each returns only its own
    argv/module/resolver marker/stdout/stderr/exit, cannot enter a sibling's
-   cache, and settles exactly once.
+   cache, and settles exactly once. The CI-active simultaneous-preview
+   acceptance stops both children and observes owner-authored shell status
+   `130`, not a status reconstructed from physical `SIGTERM`.
 
 ## Fault matrix
 
@@ -677,7 +714,7 @@ identity rather than a generated workspace file, and return the real exit code.
 | `frozen-assumption` × CLI spelling/format | Treat `--print=` RHS as source, quote a top-level string, or collapse `-- ''` into the program transition | Node differential/classifier matrix fails the exact mode, `execArgv`, argv, source, or stdout row. |
 | `sibling-drift` × launch surfaces | Workbench, parity adapter, or recursive builder invents another eval carrier | Exact v3 launch/physical-child contract rejects; all consumers use the one typed variant. |
 | `observable-order` × result/exit | Print before tracked work, print twice, suppress a post-completion result, print after the terminal diagnostic/control, or let an orphan drain consume a served terminal | Ordered ordinary/served differentials and tokenized owner-handoff REDs fail; immediate pre-completion exit suppresses, while the first post-completion exit/error/rejection prints exactly once before termination. |
-| `observable-order` × physical stdout/stderr delivery | Independent output ports deliver a later admitted write first | ADR-0340 receiver buffers the suffix and reconstructs authenticated child write order before any consumer or terminal event; the native differential's marker/ack steps causally expose each predecessor without timers. |
+| `observable-order` × physical stdout/stderr delivery | Independent output ports deliver a later admitted write first, or EOF flushes two incomplete UTF-8 tails in stream order instead of admission order | ADR-0340 receiver buffers the suffix and reconstructs authenticated child write order before any consumer or terminal event; the native differential's marker/ack steps causally expose each predecessor without timers, and dual-tail REDs preserve the first admitted replacement character. |
 | `poisoned-cache` × synthetic record | Register/reuse `[eval]` or rebase its resolver after `chdir()` | Cache, parent, launch-cwd resolution, and sequential-child differentials fail. |
 | `concurrent-same-key` × same entry identity | Two `[eval]` children share cwd/module/output/preview state | Simultaneous distinct-fixture physical children expose any cross-talk. |
 | `provenance-lie` × source transport | Materialize source as a workspace/data/temp module | Before/during/after VFS observer and stack/cache identity fail; compat remains ❌. |
@@ -686,20 +723,23 @@ identity rather than a generated workspace file, and return the real exit code.
 ## Out of scope
 
 - ESM eval via `--input-type=module` is a separate runtime context. Until it has
-  its own parity contract, `node --input-type=module -e/-p` throws
+  its own parity contract, `node --input-type=module -e/--eval` throws
   `NotImplementedError('workbench.node.eval-module-context')` and remains compat
-  ❌; it never falls back to CommonJS.
+  ❌; it never falls back to CommonJS. Its print spellings instead fail before
+  child allocation with Node's `ERR_EVAL_ESM_CANNOT_PRINT` code/message and
+  status 1. See `runtime-js/node-cli-esm-eval-context`.
 - Preload/import flags `--require`/`-r` and `--import` are not added here. They
   retain explicit unsupported-option behavior and compat ❌; this item does not
-  silently ignore them.
+  silently ignore them. See `runtime-js/node-cli-preload-import-flags`.
 - The bare `node` REPL remains the ADR-0155 loud gap; eval support must not
-  masquerade as an interactive REPL.
+  masquerade as an interactive REPL. See `runtime-js/node-cli-bare-repl`.
 - Optional print followed by `-- <nonempty entry>` selects program mode in
   Node. Preserving its print option in program `process.execArgv` requires a
   separately contracted node-entry protocol revision; this item throws
   `NotImplementedError('workbench.node.print-program-context')` before child
-  allocation and records that exact compat ❌. `-- '' [args]` remains supported
-  entryless eval.
+  allocation and records that exact compat ❌, including after any accepted
+  `--input-type`. `-- '' [args]` remains entryless eval: ESM input types retain
+  the exact print rejection and CommonJS TypeScript retains its named gap.
 - Full Node CLI option parsing, TypeScript eval, and broad `util.inspect`
   options/colors/depth parity remain separate. This item implements only the
   accepted spellings and result shapes enumerated above; other flags fail
@@ -708,6 +748,10 @@ identity rather than a generated workspace file, and return the real exit code.
   require it throw
   `NotImplementedError('runtime-js.node-eval-typescript-context')` and remain
   explicit compat ❌; they never run as partial JavaScript or a file module.
+  `--input-type=module-typescript` selects this TypeScript gap for eval, while
+  its print spellings preserve the more specific
+  `ERR_EVAL_ESM_CANNOT_PRINT` rejection. See
+  `runtime-js/node-cli-typescript-eval-context`.
 - Node-internal stack frames and the `Node.js vX` trailer are not synthesized;
   the exact `[eval]` user frame is in scope.
 
@@ -722,6 +766,9 @@ identity rather than a generated workspace file, and return the real exit code.
   byte messages; one authenticated private-control witness supplies order.
 - ADR-0342 owns the eval-specific public drain-release capability and
   identity-scoped lease handoff when Workbench's listened-port branch wins.
+- ADR-0341 carries the owner-authored shell status through
+  `ProjectTerminalRun.exitCode`, preserving the CI-active Ctrl-C status `130`
+  beside the exact physical `SIGTERM`.
 - Supported CLI grammar is a pure Workbench classifier that retains original
   eval option tokens for `execArgv`; unsupported Node options remain loud.
 - The optional-print program transition is not misreported as a bad option or
@@ -740,9 +787,10 @@ identity rather than a generated workspace file, and return the real exit code.
 ## Reversibility
 
 IRREVERSIBLE node-entry protocol/context choice recorded by ADR-0339,
-cross-port output-order mechanism recorded by ADR-0340, and public drain-owner
-handoff recorded by ADR-0342. Parser, loader, inspector, and acceptance
-carriers remain replaceable behind those exact behaviors.
+cross-port output-order mechanism recorded by ADR-0340, public terminal-status
+carrier recorded by ADR-0341, and public drain-owner handoff recorded by
+ADR-0342. Parser, loader, inspector, and acceptance carriers remain replaceable
+behind those exact behaviors.
 
 ## Pre-demotion contract (verbatim)
 

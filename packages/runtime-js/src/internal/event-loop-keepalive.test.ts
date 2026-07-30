@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   activeRefs,
   awaitDrain,
@@ -15,7 +15,10 @@ import {
   unref,
 } from './event-loop-keepalive.ts';
 
-afterEach(() => resetKeepalive());
+afterEach(() => {
+  resetKeepalive();
+  vi.useRealTimers();
+});
 
 describe('event-loop keepalive', () => {
   it('ref/unref tracks active handles', () => {
@@ -231,6 +234,76 @@ describe('event-loop keepalive', () => {
     await Promise.resolve();
 
     expect(events).toEqual(['print', 'project:served', 'terminate:uncaught-error:served']);
+  });
+
+  it('routes a direct eval projection failure through lifecycle-failure termination once', async () => {
+    vi.useFakeTimers();
+    const failure = new Error('projection failed');
+    const events: string[] = [];
+    registerNodeEvalDrainLifecycle({
+      beforeExit: () => {
+        events.push('print');
+      },
+      projectUnhandled: (_reason, origin) => {
+        events.push(`project:${origin}`);
+        throw failure;
+      },
+      terminateUnhandled: (reason, origin) => {
+        events.push(`terminate:${origin}:${(reason as Error).message}`);
+        return Object.assign(new Error('process.exit(1)'), {
+          code: 'RIFTY_PROCESS_EXIT',
+          exitCode: 1,
+        });
+      },
+    });
+
+    expect(beginNodeEvalUnhandled(new Error('served'), 'uncaught-error')).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events).toEqual([
+      'print',
+      'project:uncaught-error',
+      'terminate:lifecycle-failure:projection failed',
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('routes a direct eval diagnostic failure through lifecycle-failure termination once', async () => {
+    vi.useFakeTimers();
+    const diagnosticFailure = new Error('diagnostic failed');
+    const events: string[] = [];
+    registerNodeEvalDrainLifecycle({
+      beforeExit: () => {
+        events.push('print');
+      },
+      projectUnhandled: (reason, origin) => {
+        events.push(`project:${origin}`);
+        return reason;
+      },
+      terminateUnhandled: (reason, origin) => {
+        events.push(`terminate:${origin}:${(reason as Error).message}`);
+        if (origin !== 'lifecycle-failure') throw diagnosticFailure;
+        return Object.assign(new Error('process.exit(1)'), {
+          code: 'RIFTY_PROCESS_EXIT',
+          exitCode: 1,
+        });
+      },
+    });
+
+    expect(beginNodeEvalUnhandled(new Error('served'), 'uncaught-error')).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events).toEqual([
+      'print',
+      'project:uncaught-error',
+      'terminate:uncaught-error:served',
+      'terminate:lifecycle-failure:diagnostic failed',
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('hands an explicit exit claimed before server release to the direct terminal path', async () => {

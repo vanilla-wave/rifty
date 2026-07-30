@@ -729,6 +729,24 @@ Captured output:
 }
 ```
 
+Worker `execArgv` inheritance uses the trusted launch snapshot, including
+recursively; mutating the public parent array does not change it. An explicit
+override replaces the snapshot:
+
+```sh
+node -e "const {Worker}=require('node:worker_threads');const id=a=>a.map((v,i)=>i===1?'SOURCE':v);const trusted=id(process.execArgv);process.execArgv.length=0;const w=new Worker(\"const {parentPort}=require('node:worker_threads');const id=a=>a.map((v,i)=>i===1?'SOURCE':v);parentPort.postMessage(id(process.execArgv))\",{eval:true});w.once('message',child=>console.log(JSON.stringify({trusted,public:process.execArgv,child})))"
+node -e "const {Worker}=require('node:worker_threads');const leaf=\"const {parentPort}=require('node:worker_threads');const id=a=>a.map((v,i)=>i===1?'SOURCE':v);parentPort.postMessage(id(process.execArgv))\";const middle=\"const {Worker,parentPort,workerData}=require('node:worker_threads');const id=a=>a.map((v,i)=>i===1?'SOURCE':v);const w=new Worker(workerData,{eval:true});w.once('message',child=>parentPort.postMessage({self:id(process.execArgv),child}))\";const w=new Worker(middle,{eval:true,workerData:leaf});w.once('message',x=>console.log(JSON.stringify(x)))"
+node -e "const {Worker}=require('node:worker_threads');const w=new Worker(\"const {parentPort}=require('node:worker_threads');parentPort.postMessage(process.execArgv)\",{eval:true,execArgv:['--trace-warnings']});w.once('message',x=>console.log(JSON.stringify(x)))"
+```
+
+Exact normalized output on the pinned host:
+
+```text
+{"trusted":["-e","SOURCE"],"public":[],"child":["-e","SOURCE"]}
+{"self":["-e","SOURCE"],"child":["-e","SOURCE"]}
+["--trace-warnings"]
+```
+
 Print and lifecycle probes:
 
 ```sh
@@ -803,3 +821,197 @@ captures the completion value, and installs the print callback on
 directories sequentially and through two simultaneous child processes returns
 each fixture's own marker, cwd, argv, stdout, and exit status; neither parent
 nor sibling cache contains the synthetic module.
+
+## Residual CLI contexts
+
+This pinned probe separates the eval residuals instead of inferring them from
+the CommonJS carrier. Run it from the repository root:
+
+```sh
+awk '/^```cjs residual-context-probe$/{copy=1;next}/^```$/{if(copy) exit}copy' \
+  docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md |
+  node
+```
+
+```cjs residual-context-probe
+const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
+
+assert.equal(process.version, 'v24.16.0');
+
+function run(args) {
+  const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
+  assert.equal(result.signal, null);
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
+function ok(result, stdout) {
+  assert.deepEqual(result, { status: 0, stdout, stderr: '' });
+  return { status: result.status, stdout: result.stdout };
+}
+
+function errorCode(result, code, message) {
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, new RegExp(`\\[${code}\\]`));
+  assert.ok(result.stderr.includes(message));
+  return { status: result.status, code, message };
+}
+
+const esmEval = run([
+  '--input-type=module',
+  '-e',
+  'console.log(await Promise.resolve("esm"))',
+]);
+const esmPrint = run(['--input-type=module', '-p', '42']);
+const sourceTypeScript = run(['-p', 'const value: number = 42; value']);
+const commonjsTypeScript = run([
+  '--input-type=commonjs-typescript',
+  '-p',
+  'const value: number = 42; value',
+]);
+const moduleTypeScript = run([
+  '--input-type=module-typescript',
+  '-e',
+  'console.log(await Promise.resolve(42 as number))',
+]);
+const moduleTypeScriptPrint = run([
+  '--input-type=module-typescript',
+  '-p',
+  'const value: number = 42; value',
+]);
+const unsupportedTypeScript = run([
+  '--input-type=module-typescript',
+  '-e',
+  'enum E { A }; console.log(E.A)',
+]);
+const requireLong = run([
+  '--require=./package.json',
+  '-p',
+  "Boolean(require.cache[require.resolve('./package.json')])",
+]);
+const requireShort = run([
+  '-r',
+  './package.json',
+  '-p',
+  "Boolean(require.cache[require.resolve('./package.json')])",
+]);
+const importPreload = run([
+  '--import=data:text/javascript,globalThis.riftyPreloaded=%22esm-preload%22',
+  '-p',
+  'globalThis.riftyPreloaded',
+]);
+
+console.log(JSON.stringify({
+  version: process.version,
+  esm: {
+    eval: ok(esmEval, 'esm\n'),
+    print: errorCode(
+      esmPrint,
+      'ERR_EVAL_ESM_CANNOT_PRINT',
+      '--print cannot be used with ESM input',
+    ),
+  },
+  typescript: {
+    source: ok(sourceTypeScript, '42\n'),
+    commonjsInputType: ok(commonjsTypeScript, '42\n'),
+    moduleInputType: ok(moduleTypeScript, '42\n'),
+    modulePrint: errorCode(
+      moduleTypeScriptPrint,
+      'ERR_EVAL_ESM_CANNOT_PRINT',
+      '--print cannot be used with ESM input',
+    ),
+    unsupportedSyntax: errorCode(
+      unsupportedTypeScript,
+      'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX',
+      'TypeScript enum is not supported in strip-only mode',
+    ),
+  },
+  preload: {
+    require: ok(requireLong, 'true\n'),
+    requireShort: ok(requireShort, 'true\n'),
+    import: ok(importPreload, 'esm-preload\n'),
+  },
+}, null, 2));
+```
+
+Captured output:
+
+```json
+{
+  "version": "v24.16.0",
+  "esm": {
+    "eval": {
+      "status": 0,
+      "stdout": "esm\n"
+    },
+    "print": {
+      "status": 1,
+      "code": "ERR_EVAL_ESM_CANNOT_PRINT",
+      "message": "--print cannot be used with ESM input"
+    }
+  },
+  "typescript": {
+    "source": {
+      "status": 0,
+      "stdout": "42\n"
+    },
+    "commonjsInputType": {
+      "status": 0,
+      "stdout": "42\n"
+    },
+    "moduleInputType": {
+      "status": 0,
+      "stdout": "42\n"
+    },
+    "modulePrint": {
+      "status": 1,
+      "code": "ERR_EVAL_ESM_CANNOT_PRINT",
+      "message": "--print cannot be used with ESM input"
+    },
+    "unsupportedSyntax": {
+      "status": 1,
+      "code": "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX",
+      "message": "TypeScript enum is not supported in strip-only mode"
+    }
+  },
+  "preload": {
+    "require": {
+      "status": 0,
+      "stdout": "true\n"
+    },
+    "requireShort": {
+      "status": 0,
+      "stdout": "true\n"
+    },
+    "import": {
+      "status": 0,
+      "stdout": "esm-preload\n"
+    }
+  }
+}
+```
+
+Bare `node` is interactive only on a TTY; piped stdin selects a different
+stdin-script mode. This Darwin-host command allocates a PTY, disables history,
+and strips only terminal control bytes from the transcript:
+
+```sh
+expect -c 'set timeout 5; spawn -noecho env NODE_REPL_HISTORY= node; expect "> "; send "21 * 2\r"; expect "> "; send ".exit\r"; expect eof' |
+  sed $'s/\033\\[[0-9;]*[A-Za-z]//g' |
+  tr -d '\r'
+```
+
+Captured output:
+
+```text
+Welcome to Node.js v24.16.0.
+Type ".help" for more information.
+> 21 * 2
+42
+> .exit
+```
