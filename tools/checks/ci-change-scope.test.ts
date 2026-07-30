@@ -29,6 +29,13 @@ function jobBlock(workflow: string, job: string): string {
   return nextJob === -1 ? rest : rest.slice(0, nextJob);
 }
 
+function nodeVersions(job: string): string[] {
+  return Array.from(
+    job.matchAll(/^\s+node-version:\s+([^#\s]+)(?:\s+#.*)?$/gmu),
+    (match) => match[1] ?? '',
+  );
+}
+
 describe('CI change scope', () => {
   it('allows only explicit documentation paths to skip heavy tests', () => {
     for (const path of [
@@ -165,8 +172,8 @@ describe('CI Node CLI eval oracle', () => {
     const crossBrowser = readFileSync('.github/workflows/ci-cross-browser.yml', 'utf8');
 
     for (const job of ['unit-and-conformance', 'e2e-chromium']) {
-      expect(jobBlock(ci, job)).toContain(`node-version: ${version}`);
+      expect(nodeVersions(jobBlock(ci, job)), job).toEqual([version]);
     }
-    expect(jobBlock(crossBrowser, 'e2e')).toContain(`node-version: ${version}`);
+    expect(nodeVersions(jobBlock(crossBrowser, 'e2e'))).toEqual([version]);
   });
 });

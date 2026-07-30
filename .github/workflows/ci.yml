@@ -88,7 +88,7 @@ jobs:
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.16.0 # exact executable node-cli eval oracle
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         # Skip the postinstall Playwright browser download on EVERY install — it's
@@ -139,7 +139,7 @@ jobs:
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.16.0 # exact executable node-cli eval oracle
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         # Skip the postinstall Playwright browser download on EVERY install — it's
