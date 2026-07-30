@@ -38,6 +38,11 @@ dual reader, env fallback, or permissive v1 growth. Recursive Node children
 inherit the existing owner-backed sync-FS relay/root; missing provenance fails
 before allocation.
 
+> **Correction 2026-07-30 (ADR-0337):** `rifty.node-entry/v2` is atomically
+> replaced by `rifty.node-entry/v3`. V3 retains the program and worker-thread
+> variants plus exact public-IPC discrimination, adds the exact eval variant,
+> and has no v2 reader or fallback.
+
 ### One federated process authority
 
 The owner-root kernel ProcessManager allocates a monotonic PID namespace and is

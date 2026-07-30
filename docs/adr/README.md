@@ -337,6 +337,7 @@ superseded.
 | 0157 four-stdio-port / `makeStdioWriter` clauses | 0332 / note 2026-07-27 | stdout/stderr are kernel semantic writers; stdin and IPC remain ports |
 | 0326 unspecified final-output drain authority | 0332 / note 2026-07-27 | one process-wide cut and exact per-stream committed targets prove drain |
 | 0326 unspecified descendant-settlement/output-cut order | 0333 / note 2026-07-27 | fence admission, signal exact routes child-first, then await close-checkpoint settlement or peer death before the ancestor output cut |
+| 0326 node-entry v2 active-shape clause | 0337 / note 2026-07-30 | atomic v3 retains program/worker-thread and public-IPC discrimination, adding exact eval with no v2 reader |
 | 0011 recursive private PID allocator clause | 0326 / note 2026-07-26 | recursive children reserve owner-root ProcessManager identities over the trusted SAB attachment |
 | 0012 realm-local unified-registry clause | 0326 / note 2026-07-26 | one federated owner-root process tree; nested managers own only direct physical Workers |
 | 0130 D4 generated direct-command selector | 0327 / note 2026-07-26 | exact script bytes select canonical direct entry versus installed `.bin`; no template-ID dispatch |
