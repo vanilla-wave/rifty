@@ -1184,10 +1184,14 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     ['node --eval=', 'node: --eval= requires an argument\n'],
     ['node -pe', 'node: --eval requires an argument\n'],
     ['node -ep 1', 'node: bad option: -ep\n'],
-    ['node -e=1', 'node: bad option: -e=1\n'],
-    ['node -p=1', 'node: bad option: -p=1\n'],
     ['node -eSRC', 'node: bad option: -eSRC\n'],
+    ['node -e=SRC', 'node: bad option: -e=SRC\n'],
     ['node -pSRC', 'node: bad option: -pSRC\n'],
+    ['node -p=SRC', 'node: bad option: -p=SRC\n'],
+    ['node -peSRC', 'node: bad option: -peSRC\n'],
+    ['node -epSRC', 'node: bad option: -epSRC\n'],
+    ['node -pe=SRC', 'node: bad option: -pe=SRC\n'],
+    ['node -ep=SRC', 'node: bad option: -ep=SRC\n'],
   ])('returns Node-shaped exit 9 without allocating a child: %s', async (line, expectedStderr) => {
     const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
       throw new Error('unexpected invalid Node eval child spawn');
@@ -1220,7 +1224,18 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
-  it('keeps ESM eval as its named loud context gap without allocating a CJS child', async () => {
+  it.each([
+    "node --input-type=module -e '1'",
+    "node --input-type=module --eval '1'",
+    "node --input-type=module --eval='1'",
+    "node --input-type=module -p '1'",
+    "node --input-type=module --print '1'",
+    "node --input-type=module --print=ignored '1'",
+    "node --input-type=module -pe '1'",
+    'node --input-type=module -p',
+    'node --input-type=module --print',
+    'node --input-type=module --print=ignored',
+  ])('keeps ESM eval as its named no-child context gap: %s', async (line) => {
     const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
       throw new Error('unexpected ESM eval child spawn');
     });
@@ -1231,7 +1246,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       type: 'pty:exec',
       sid: 'terminal-node-esm-eval',
       rid: 'run-node-esm-eval',
-      line: "node --input-type=module -e '1'",
+      line,
       cols: 80,
       rows: 24,
       isTTY: true,
