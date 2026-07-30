@@ -1,8 +1,10 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 
 export const NODE_CLI_EVAL_VFS_CARRIER_COMPLETE = 'parity.node-cli-eval.vfs-carrier-complete';
+export const NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH = '/.rifty-eval-transient.cjs';
 
 export type NodeCliEvalVfsProvenance = 'carrier' | 'guest';
+export type NodeCliEvalVfsActor = 'child-local' | 'sab-remote' | 'workbench-owner';
 
 export type NodeCliEvalVfsContentEntry =
   | {
@@ -17,49 +19,50 @@ export type NodeCliEvalVfsContentEntry =
 
 type NodeCliEvalVfsContent = readonly NodeCliEvalVfsContentEntry[];
 
-export type NodeCliEvalVfsMutation =
-  | {
-      readonly kind: 'write';
-      readonly provenance: NodeCliEvalVfsProvenance;
-      readonly path: string;
-      readonly content: NodeCliEvalVfsContent;
-    }
-  | {
-      readonly kind: 'mkdir';
-      readonly provenance: NodeCliEvalVfsProvenance;
-      readonly path: string;
-      readonly recursive: boolean;
-    }
-  | {
-      readonly kind: 'rm';
-      readonly provenance: NodeCliEvalVfsProvenance;
-      readonly path: string;
-      readonly recursive: boolean;
-      readonly force: boolean;
-    }
-  | {
-      readonly kind: 'utimes';
-      readonly provenance: NodeCliEvalVfsProvenance;
-      readonly path: string;
-      readonly atimeMs: number;
-      readonly mtimeMs: number;
-    }
-  | {
-      readonly kind: 'copy';
-      readonly provenance: NodeCliEvalVfsProvenance;
-      readonly operation: 'copyFileSync' | 'cpSync';
-      readonly path: string;
-      readonly targetPath: string;
-      readonly recursive: boolean;
-      readonly content: NodeCliEvalVfsContent;
-    }
-  | {
-      readonly kind: 'rename';
-      readonly provenance: NodeCliEvalVfsProvenance;
-      readonly path: string;
-      readonly targetPath: string;
-      readonly content: NodeCliEvalVfsContent;
-    };
+interface NodeCliEvalVfsAttribution {
+  readonly provenance: NodeCliEvalVfsProvenance;
+  readonly actor: NodeCliEvalVfsActor;
+}
+
+export type NodeCliEvalVfsMutation = NodeCliEvalVfsAttribution &
+  (
+    | {
+        readonly kind: 'write';
+        readonly path: string;
+        readonly content: NodeCliEvalVfsContent;
+      }
+    | {
+        readonly kind: 'mkdir';
+        readonly path: string;
+        readonly recursive: boolean;
+      }
+    | {
+        readonly kind: 'rm';
+        readonly path: string;
+        readonly recursive: boolean;
+        readonly force: boolean;
+      }
+    | {
+        readonly kind: 'utimes';
+        readonly path: string;
+        readonly atimeMs: number;
+        readonly mtimeMs: number;
+      }
+    | {
+        readonly kind: 'copy';
+        readonly operation: 'copyFileSync' | 'cpSync';
+        readonly path: string;
+        readonly targetPath: string;
+        readonly recursive: boolean;
+        readonly content: NodeCliEvalVfsContent;
+      }
+    | {
+        readonly kind: 'rename';
+        readonly path: string;
+        readonly targetPath: string;
+        readonly content: NodeCliEvalVfsContent;
+      }
+  );
 
 export interface NodeCliEvalVfsAudit {
   readonly missing: readonly NodeCliEvalVfsMutation[];
@@ -100,6 +103,7 @@ function equalMutation(left: NodeCliEvalVfsMutation, right: NodeCliEvalVfsMutati
   if (
     left.kind !== right.kind ||
     left.provenance !== right.provenance ||
+    left.actor !== right.actor ||
     left.path !== right.path
   ) {
     return false;
@@ -148,6 +152,29 @@ export function nodeCliEvalVfsFileContent(
   return [{ kind: 'file', path, bytesHex: bytesToHex(bytes) }];
 }
 
+export function nodeCliEvalTransientSourceCarrierMutations(
+  actor: NodeCliEvalVfsActor,
+  source: string,
+): readonly NodeCliEvalVfsMutation[] {
+  return [
+    {
+      kind: 'write',
+      provenance: 'carrier',
+      actor,
+      path: NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+      content: nodeCliEvalVfsFileContent(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, source),
+    },
+    {
+      kind: 'rm',
+      provenance: 'carrier',
+      actor,
+      path: NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+      recursive: false,
+      force: true,
+    },
+  ];
+}
+
 /**
  * Real in-memory parity VFS with an append-only mutation history. Observation
  * starts after fixture setup, so a write-then-delete carrier cannot hide behind
@@ -157,18 +184,21 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
   readonly #mutations: NodeCliEvalVfsMutation[] = [];
   #observing = false;
   #provenance: NodeCliEvalVfsProvenance = 'guest';
+  #actor: NodeCliEvalVfsActor = 'workbench-owner';
 
   startObservation(): void {
     this.#mutations.length = 0;
     this.#observing = true;
     this.#provenance = 'guest';
+    this.#actor = 'workbench-owner';
   }
 
-  beginCarrierObservation(): void {
+  beginCarrierObservation(actor: NodeCliEvalVfsActor): void {
     if (!this.#observing || this.#provenance !== 'guest') {
       throw new Error('node-cli-eval VFS carrier observation cannot begin');
     }
     this.#provenance = 'carrier';
+    this.#actor = actor;
   }
 
   endCarrierObservation(): void {
@@ -176,6 +206,17 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
       throw new Error('node-cli-eval VFS carrier observation cannot end');
     }
     this.#provenance = 'guest';
+    this.#actor = 'workbench-owner';
+  }
+
+  recordCarrierMutations(mutations: readonly NodeCliEvalVfsMutation[]): void {
+    if (!this.#observing || this.#provenance !== 'carrier') {
+      throw new Error('node-cli-eval VFS carrier mutations cannot be recorded');
+    }
+    if (mutations.some((mutation) => mutation.provenance !== 'carrier')) {
+      throw new TypeError('node-cli-eval recorded carrier mutations must have carrier provenance');
+    }
+    this.#mutations.push(...mutations.map(cloneMutation));
   }
 
   mutations(): readonly NodeCliEvalVfsMutation[] {
@@ -191,8 +232,14 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
     if (this.#provenance !== 'guest') {
       throw new Error('node-cli-eval VFS carrier observation did not reach its physical boundary');
     }
-    if (expectedGuestMutations.some((mutation) => mutation.provenance !== 'guest')) {
-      throw new TypeError('node-cli-eval expected mutations must have guest provenance');
+    if (
+      expectedGuestMutations.some(
+        (mutation) => mutation.provenance !== 'guest' || mutation.actor !== 'workbench-owner',
+      )
+    ) {
+      throw new TypeError(
+        'node-cli-eval expected mutations must be workbench-owner guest mutations',
+      );
     }
     const unexpected = [...this.mutations()];
     const missing: NodeCliEvalVfsMutation[] = [];
@@ -209,6 +256,7 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
     this.record({
       kind: 'write',
       provenance: this.#provenance,
+      actor: this.#actor,
       path,
       content: nodeCliEvalVfsFileContent(path, data),
     });
@@ -219,6 +267,7 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
     this.record({
       kind: 'mkdir',
       provenance: this.#provenance,
+      actor: this.#actor,
       path,
       recursive: options.recursive === true,
     });
@@ -229,6 +278,7 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
     this.record({
       kind: 'rm',
       provenance: this.#provenance,
+      actor: this.#actor,
       path,
       recursive: options.recursive === true,
       force: options.force === true,
@@ -237,7 +287,14 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
 
   override utimes(path: string, atimeMs: number, mtimeMs: number): void {
     super.utimes(path, atimeMs, mtimeMs);
-    this.record({ kind: 'utimes', provenance: this.#provenance, path, atimeMs, mtimeMs });
+    this.record({
+      kind: 'utimes',
+      provenance: this.#provenance,
+      actor: this.#actor,
+      path,
+      atimeMs,
+      mtimeMs,
+    });
   }
 
   override copyFileSync(sourcePath: string, targetPath: string): void {
@@ -245,6 +302,7 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
     this.record({
       kind: 'copy',
       provenance: this.#provenance,
+      actor: this.#actor,
       operation: 'copyFileSync',
       path: sourcePath,
       targetPath,
@@ -262,6 +320,7 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
     this.record({
       kind: 'copy',
       provenance: this.#provenance,
+      actor: this.#actor,
       operation: 'cpSync',
       path: sourcePath,
       targetPath,
@@ -275,6 +334,7 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
     this.record({
       kind: 'rename',
       provenance: this.#provenance,
+      actor: this.#actor,
       path: sourcePath,
       targetPath,
       content: this.contentAt(targetPath),

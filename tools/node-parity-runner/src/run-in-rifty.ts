@@ -46,9 +46,11 @@ import {
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
 import {
+  NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
   NODE_CLI_EVAL_VFS_CARRIER_COMPLETE,
   type NodeCliEvalVfsMutation,
   NodeCliEvalVfsObserver,
+  nodeCliEvalTransientSourceCarrierMutations,
 } from './node-cli-eval-vfs-observer.ts';
 import {
   canonicalNodeCliEvalOutcome,
@@ -291,7 +293,10 @@ class StdioPortCapture {
   }
 }
 
-export type NodeCliEvalVfsFault = 'transient-source-file';
+export type NodeCliEvalVfsFault =
+  | 'child-local-transient-source-file'
+  | 'sab-remote-transient-source-file'
+  | 'workbench-owner-transient-source-file';
 
 export interface NodeCliEvalVfsProbe {
   readonly expectedGuestMutations: readonly NodeCliEvalVfsMutation[];
@@ -734,6 +739,10 @@ async function installPhysicalWorkerMode(
         ? 'eval'
         : 'worker-thread';
   const expectedWorkers = expectedPhysicalWorkerCount(testCase);
+  const workerVfsFault =
+    nodeCliEvalVfsFault === 'workbench-owner-transient-source-file'
+      ? undefined
+      : nodeCliEvalVfsFault;
 
   function validateInitMessage(message: unknown): void {
     const init = message as Partial<WorkerInitMessage> | null;
@@ -806,7 +815,7 @@ async function installPhysicalWorkerMode(
         execArgv: ['--import', 'tsx'],
         workerData: {
           files: testCase.setup?.files ?? {},
-          ...(nodeCliEvalVfsFault === undefined ? {} : { nodeCliEvalVfsFault }),
+          ...(workerVfsFault === undefined ? {} : { nodeCliEvalVfsFault: workerVfsFault }),
         },
       });
     }
@@ -1496,24 +1505,61 @@ export async function runInRiftyInCurrentRealm(
       evalFsObserver?.startObservation();
       if (options.nodeCliEvalVfsProbe?.fault !== undefined) {
         const plan = nodeCliEvalInvocations(testCase);
-        if (plan.sequential.length + plan.concurrent.length !== 1) {
+        const invocations = [...plan.sequential, ...plan.concurrent];
+        if (invocations.length !== 1) {
           throw new TypeError(
             'RunInRiftyOptions.nodeCliEvalVfsProbe.fault requires exactly one node-cli-eval invocation',
           );
         }
-        evalFsObserver?.beginCarrierObservation();
-        dispatcher.register(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, (payload, context): null => {
-          if (
-            payload !== null ||
-            !Number.isSafeInteger(context?.callerPid) ||
-            (context?.callerPid ?? 0) <= 0
-          ) {
-            throw new TypeError('node-cli-eval VFS carrier boundary is invalid');
+        const invocation = invocations[0];
+        if (invocation === undefined) {
+          throw new Error('node-cli-eval VFS carrier invocation disappeared');
+        }
+        const fault = options.nodeCliEvalVfsProbe.fault;
+        if (fault === 'workbench-owner-transient-source-file') {
+          evalFsObserver?.beginCarrierObservation('workbench-owner');
+          try {
+            evalFsObserver?.writeFileSync(
+              NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+              new TextEncoder().encode(invocation.source),
+            );
+            evalFsObserver?.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
+          } finally {
+            evalFsObserver?.endCarrierObservation();
           }
-          evalFsObserver?.endCarrierObservation();
-          return null;
-        });
-        cleanups.defer(() => dispatcher.unregister(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE));
+        } else {
+          evalFsObserver?.beginCarrierObservation('sab-remote');
+          dispatcher.register(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, (payload, context): null => {
+            if (!Number.isSafeInteger(context?.callerPid) || (context?.callerPid ?? 0) <= 0) {
+              throw new TypeError('node-cli-eval VFS carrier boundary is invalid');
+            }
+            if (fault === 'child-local-transient-source-file') {
+              const expectedMutations = nodeCliEvalTransientSourceCarrierMutations(
+                'child-local',
+                invocation.source,
+              );
+              const expectedPayload = {
+                actor: 'child-local',
+                mutations: expectedMutations,
+              };
+              if (JSON.stringify(payload) !== JSON.stringify(expectedPayload)) {
+                throw new TypeError('node-cli-eval child-local VFS carrier boundary is invalid');
+              }
+              evalFsObserver?.recordCarrierMutations(
+                (
+                  payload as {
+                    readonly mutations: readonly NodeCliEvalVfsMutation[];
+                  }
+                ).mutations,
+              );
+            } else if (JSON.stringify(payload) !== JSON.stringify({ actor: 'sab-remote' })) {
+              throw new TypeError('node-cli-eval SAB-remote VFS carrier boundary is invalid');
+            }
+            evalFsObserver?.endCarrierObservation();
+            return null;
+          });
+          cleanups.defer(() => dispatcher.unregister(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE));
+        }
       }
       installRuntimeJsFsHandlers(dispatcher, () => fsMirror);
     }

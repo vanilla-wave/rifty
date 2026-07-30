@@ -15,8 +15,17 @@ import {
 import { asyncVfs, syncMirror } from '../../../packages/vfs/src/index.ts';
 import { setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
 import workerEnvCase from '../cases/worker_threads/env-semantics.case.ts';
-import { nodeCliEvalVfsFileContent } from './node-cli-eval-vfs-observer.ts';
-import { type NodeCliEvalBootstrapFault, runInRifty } from './run-in-rifty.ts';
+import {
+  NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+  type NodeCliEvalVfsActor,
+  nodeCliEvalTransientSourceCarrierMutations,
+  nodeCliEvalVfsFileContent,
+} from './node-cli-eval-vfs-observer.ts';
+import {
+  type NodeCliEvalBootstrapFault,
+  type NodeCliEvalVfsFault,
+  runInRifty,
+} from './run-in-rifty.ts';
 
 // Leave room for runInRifty's 30s diagnostic deadline under loaded CI Workers.
 const REAL_WORKER_TEST_TIMEOUT_MS = 35_000;
@@ -74,7 +83,7 @@ describe('runInRifty', () => {
       runInRifty(workerEnvCase, {
         nodeCliEvalVfsProbe: {
           expectedGuestMutations: [],
-          fault: 'transient-source-file',
+          fault: 'sab-remote-transient-source-file',
         },
       }),
     ).rejects.toThrow('RunInRiftyOptions.nodeCliEvalVfsProbe requires kind node-cli-eval');
@@ -106,7 +115,7 @@ describe('runInRifty', () => {
         {
           nodeCliEvalVfsProbe: {
             expectedGuestMutations: [],
-            fault: 'transient-source-file',
+            fault: 'sab-remote-transient-source-file',
           },
         },
       ),
@@ -118,23 +127,26 @@ describe('runInRifty', () => {
   it(
     'does not let a physical transient carrier satisfy same-path declared guest effects',
     async () => {
-      const carrierPath = '/.rifty-eval-transient.cjs';
+      const carrierPath = NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH;
       const source = "'carrier-source';";
       const missingGuestWrite = {
         kind: 'write' as const,
         provenance: 'guest' as const,
+        actor: 'workbench-owner' as const,
         path: carrierPath,
         content: nodeCliEvalVfsFileContent(carrierPath, source),
       };
       const unexpectedCarrierWrite = {
         kind: 'write' as const,
         provenance: 'carrier' as const,
+        actor: 'sab-remote' as const,
         path: carrierPath,
         content: nodeCliEvalVfsFileContent(carrierPath, source),
       };
       const missingGuestRm = {
         kind: 'rm' as const,
         provenance: 'guest' as const,
+        actor: 'workbench-owner' as const,
         path: carrierPath,
         recursive: false,
         force: true,
@@ -142,6 +154,7 @@ describe('runInRifty', () => {
       const unexpectedCarrierRm = {
         kind: 'rm' as const,
         provenance: 'carrier' as const,
+        actor: 'sab-remote' as const,
         path: carrierPath,
         recursive: false,
         force: true,
@@ -166,7 +179,7 @@ describe('runInRifty', () => {
           {
             nodeCliEvalVfsProbe: {
               expectedGuestMutations: [missingGuestWrite, missingGuestRm],
-              fault: 'transient-source-file',
+              fault: 'sab-remote-transient-source-file',
             },
           },
         ),
@@ -174,6 +187,60 @@ describe('runInRifty', () => {
         `node-cli-eval VFS audit mismatch: ${JSON.stringify({
           missing: [missingGuestWrite, missingGuestRm],
           unexpected: [unexpectedCarrierWrite, unexpectedCarrierRm],
+        })}`,
+      );
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it.each<readonly [label: string, fault: NodeCliEvalVfsFault, actor: NodeCliEvalVfsActor]>([
+    ['child-local pre-bootstrap MemoryFs', 'child-local-transient-source-file', 'child-local'],
+    ['SAB-remote pre-bootstrap', 'sab-remote-transient-source-file', 'sab-remote'],
+    ['Workbench-owner pre-bootstrap', 'workbench-owner-transient-source-file', 'workbench-owner'],
+  ])(
+    'requires the production eval guest mutation on owner VFS while rejecting a %s carrier',
+    async (_label, fault, actor) => {
+      const guestPath = '/eval-guest-authored.txt';
+      const guestContent = 'owner-guest';
+      const source = `require('node:fs').writeFileSync(${JSON.stringify(
+        guestPath,
+      )}, ${JSON.stringify(guestContent)});`;
+      const expectedGuestWrite = {
+        kind: 'write' as const,
+        provenance: 'guest' as const,
+        actor: 'workbench-owner' as const,
+        path: guestPath,
+        content: nodeCliEvalVfsFileContent(guestPath, guestContent),
+      };
+      const unexpectedCarrier = nodeCliEvalTransientSourceCarrierMutations(actor, source);
+
+      await expect(
+        runInRifty(
+          {
+            kind: 'node-cli-eval',
+            code: '',
+            expectedPhysicalWorkers: 1,
+            nodeCliEval: {
+              sequential: [
+                {
+                  label: `${actor}-vfs-boundary`,
+                  nodeArgv: ['-e', source],
+                },
+              ],
+              concurrent: [],
+            },
+          },
+          {
+            nodeCliEvalVfsProbe: {
+              expectedGuestMutations: [expectedGuestWrite],
+              fault,
+            },
+          },
+        ),
+      ).rejects.toThrow(
+        `node-cli-eval VFS audit mismatch: ${JSON.stringify({
+          missing: [],
+          unexpected: unexpectedCarrier,
         })}`,
       );
     },

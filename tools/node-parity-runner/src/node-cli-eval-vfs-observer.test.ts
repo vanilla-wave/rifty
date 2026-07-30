@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { NodeCliEvalVfsObserver, nodeCliEvalVfsFileContent } from './node-cli-eval-vfs-observer.ts';
+import {
+  NodeCliEvalVfsObserver,
+  nodeCliEvalTransientSourceCarrierMutations,
+  nodeCliEvalVfsFileContent,
+} from './node-cli-eval-vfs-observer.ts';
 
 describe('NodeCliEvalVfsObserver', () => {
   it('subtracts exact guest effects without hiding a transient carrier', () => {
@@ -7,7 +11,7 @@ describe('NodeCliEvalVfsObserver', () => {
     fs.loadFixture({ '/marker.cjs': "module.exports='marker'\n" });
     fs.startObservation();
 
-    fs.beginCarrierObservation();
+    fs.beginCarrierObservation('sab-remote');
     fs.writeFileSync('/.rifty-eval-transient.cjs', new TextEncoder().encode('source'));
     fs.rmSync('/.rifty-eval-transient.cjs', { force: true });
     fs.endCarrierObservation();
@@ -20,6 +24,7 @@ describe('NodeCliEvalVfsObserver', () => {
         {
           kind: 'write',
           provenance: 'guest',
+          actor: 'workbench-owner',
           path: '/guest-authored.txt',
           content: nodeCliEvalVfsFileContent('/guest-authored.txt', 'guest'),
         },
@@ -30,12 +35,14 @@ describe('NodeCliEvalVfsObserver', () => {
         {
           kind: 'write',
           provenance: 'carrier',
+          actor: 'sab-remote',
           path: '/.rifty-eval-transient.cjs',
           content: nodeCliEvalVfsFileContent('/.rifty-eval-transient.cjs', 'source'),
         },
         {
           kind: 'rm',
           provenance: 'carrier',
+          actor: 'sab-remote',
           path: '/.rifty-eval-transient.cjs',
           recursive: false,
           force: true,
@@ -48,7 +55,7 @@ describe('NodeCliEvalVfsObserver', () => {
     const fs = new NodeCliEvalVfsObserver();
     fs.startObservation();
 
-    fs.beginCarrierObservation();
+    fs.beginCarrierObservation('sab-remote');
     fs.writeFileSync('/shared.txt', new TextEncoder().encode('same'));
     fs.rmSync('/shared.txt', { force: true });
     fs.endCarrierObservation();
@@ -58,29 +65,53 @@ describe('NodeCliEvalVfsObserver', () => {
         {
           kind: 'write',
           provenance: 'guest',
+          actor: 'workbench-owner',
           path: '/shared.txt',
           content: nodeCliEvalVfsFileContent('/shared.txt', 'same'),
         },
-        { kind: 'rm', provenance: 'guest', path: '/shared.txt', recursive: false, force: true },
+        {
+          kind: 'rm',
+          provenance: 'guest',
+          actor: 'workbench-owner',
+          path: '/shared.txt',
+          recursive: false,
+          force: true,
+        },
       ]),
     ).toEqual({
       missing: [
         {
           kind: 'write',
           provenance: 'guest',
+          actor: 'workbench-owner',
           path: '/shared.txt',
           content: nodeCliEvalVfsFileContent('/shared.txt', 'same'),
         },
-        { kind: 'rm', provenance: 'guest', path: '/shared.txt', recursive: false, force: true },
+        {
+          kind: 'rm',
+          provenance: 'guest',
+          actor: 'workbench-owner',
+          path: '/shared.txt',
+          recursive: false,
+          force: true,
+        },
       ],
       unexpected: [
         {
           kind: 'write',
           provenance: 'carrier',
+          actor: 'sab-remote',
           path: '/shared.txt',
           content: nodeCliEvalVfsFileContent('/shared.txt', 'same'),
         },
-        { kind: 'rm', provenance: 'carrier', path: '/shared.txt', recursive: false, force: true },
+        {
+          kind: 'rm',
+          provenance: 'carrier',
+          actor: 'sab-remote',
+          path: '/shared.txt',
+          recursive: false,
+          force: true,
+        },
       ],
     });
   });
@@ -92,6 +123,7 @@ describe('NodeCliEvalVfsObserver', () => {
     const missingWrite = {
       kind: 'write' as const,
       provenance: 'guest' as const,
+      actor: 'workbench-owner' as const,
       path: '/missing.txt',
       content: nodeCliEvalVfsFileContent('/missing.txt', 'missing'),
     };
@@ -104,7 +136,7 @@ describe('NodeCliEvalVfsObserver', () => {
   it('rejects incomplete carrier boundaries and carrier-owned expectations', () => {
     const fs = new NodeCliEvalVfsObserver();
     fs.startObservation();
-    fs.beginCarrierObservation();
+    fs.beginCarrierObservation('sab-remote');
 
     expect(() => fs.audit([])).toThrow(
       'node-cli-eval VFS carrier observation did not reach its physical boundary',
@@ -116,12 +148,30 @@ describe('NodeCliEvalVfsObserver', () => {
         {
           kind: 'rm',
           provenance: 'carrier',
+          actor: 'sab-remote',
           path: '/carrier.txt',
           recursive: false,
           force: true,
         },
       ]),
-    ).toThrow('node-cli-eval expected mutations must have guest provenance');
+    ).toThrow('node-cli-eval expected mutations must be workbench-owner guest mutations');
+  });
+
+  it('imports physical child-local carrier evidence without reclassifying it as owner work', () => {
+    const fs = new NodeCliEvalVfsObserver();
+    fs.startObservation();
+    fs.beginCarrierObservation('sab-remote');
+    const localCarrier = nodeCliEvalTransientSourceCarrierMutations(
+      'child-local',
+      "'local-carrier';",
+    );
+    fs.recordCarrierMutations(localCarrier);
+    fs.endCarrierObservation();
+
+    expect(fs.audit([])).toEqual({
+      missing: [],
+      unexpected: localCarrier,
+    });
   });
 
   it('pins arguments and resulting bytes for every mutator', () => {
@@ -147,13 +197,21 @@ describe('NodeCliEvalVfsObserver', () => {
       {
         kind: 'write',
         provenance: 'guest',
+        actor: 'workbench-owner',
         path: '/write.txt',
         content: nodeCliEvalVfsFileContent('/write.txt', 'write'),
       },
-      { kind: 'mkdir', provenance: 'guest', path: '/made', recursive: true },
+      {
+        kind: 'mkdir',
+        provenance: 'guest',
+        actor: 'workbench-owner',
+        path: '/made',
+        recursive: true,
+      },
       {
         kind: 'utimes',
         provenance: 'guest',
+        actor: 'workbench-owner',
         path: '/stamp.txt',
         atimeMs: 11,
         mtimeMs: 22,
@@ -161,6 +219,7 @@ describe('NodeCliEvalVfsObserver', () => {
       {
         kind: 'copy',
         provenance: 'guest',
+        actor: 'workbench-owner',
         operation: 'copyFileSync',
         path: '/copy-source.txt',
         targetPath: '/copied.txt',
@@ -170,6 +229,7 @@ describe('NodeCliEvalVfsObserver', () => {
       {
         kind: 'copy',
         provenance: 'guest',
+        actor: 'workbench-owner',
         operation: 'cpSync',
         path: '/copy-tree',
         targetPath: '/copied-tree',
@@ -182,6 +242,7 @@ describe('NodeCliEvalVfsObserver', () => {
       {
         kind: 'rename',
         provenance: 'guest',
+        actor: 'workbench-owner',
         path: '/rename-source.txt',
         targetPath: '/renamed.txt',
         content: nodeCliEvalVfsFileContent('/renamed.txt', 'rename-source'),
@@ -189,6 +250,7 @@ describe('NodeCliEvalVfsObserver', () => {
       {
         kind: 'rm',
         provenance: 'guest',
+        actor: 'workbench-owner',
         path: '/remove.txt',
         recursive: false,
         force: true,

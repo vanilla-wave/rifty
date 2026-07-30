@@ -6,7 +6,7 @@ import { SyncRpcFsSync, awaitDrain } from '@riftydev/runtime-js';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
-import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
+import { setSyncMirror } from '@riftydev/vfs/internal';
 import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from '../../../packages/kernel/src/ipc/sab-ring.ts';
 import { SyncRpcClient } from '../../../packages/kernel/src/ipc/sync-client.ts';
 import {
@@ -30,7 +30,12 @@ import {
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { installNodeRuntime } from '../../../packages/runtime-js/src/ipc/install-process.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
-import { NODE_CLI_EVAL_VFS_CARRIER_COMPLETE } from './node-cli-eval-vfs-observer.ts';
+import {
+  NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+  NODE_CLI_EVAL_VFS_CARRIER_COMPLETE,
+  NodeCliEvalVfsObserver,
+  nodeCliEvalTransientSourceCarrierMutations,
+} from './node-cli-eval-vfs-observer.ts';
 import type { NodeCliEvalVfsFault } from './run-in-rifty.ts';
 
 interface WorkerEnvHarnessData {
@@ -44,11 +49,12 @@ const hostPort = parentPort;
 const request = workerData as WorkerEnvHarnessData;
 if (
   request.nodeCliEvalVfsFault !== undefined &&
-  request.nodeCliEvalVfsFault !== 'transient-source-file'
+  request.nodeCliEvalVfsFault !== 'child-local-transient-source-file' &&
+  request.nodeCliEvalVfsFault !== 'sab-remote-transient-source-file'
 ) {
   throw new TypeError('worker-env parity received an unknown node-cli-eval VFS fault');
 }
-const vfs = new MemoryFsSync();
+const vfs = new NodeCliEvalVfsObserver();
 vfs.loadFixture(
   Object.fromEntries(Object.entries(request.files).map(([path, source]) => [`/${path}`, source])),
 );
@@ -73,15 +79,35 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     publishKernelSyncApi({
       call: syncCall,
     });
-    if (request.nodeCliEvalVfsFault === 'transient-source-file') {
+    if (request.nodeCliEvalVfsFault !== undefined) {
       const source = (launch as unknown as { readonly source?: unknown }).source;
       if (typeof source !== 'string') {
         throw new TypeError('node-cli-eval transient source fault requires string source');
       }
-      const remoteFs = new SyncRpcFsSync(syncCall);
-      remoteFs.writeFileSync('/.rifty-eval-transient.cjs', new TextEncoder().encode(source));
-      remoteFs.rmSync('/.rifty-eval-transient.cjs', { force: true });
-      syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, null);
+      if (request.nodeCliEvalVfsFault === 'child-local-transient-source-file') {
+        vfs.startObservation();
+        vfs.beginCarrierObservation('child-local');
+        vfs.writeFileSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, new TextEncoder().encode(source));
+        vfs.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
+        vfs.endCarrierObservation();
+        const mutations = vfs.mutations();
+        const expected = nodeCliEvalTransientSourceCarrierMutations('child-local', source);
+        if (JSON.stringify(mutations) !== JSON.stringify(expected)) {
+          throw new Error('node-cli-eval child-local VFS carrier evidence is incomplete');
+        }
+        syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, {
+          actor: 'child-local',
+          mutations,
+        });
+      } else {
+        const remoteFs = new SyncRpcFsSync(syncCall);
+        remoteFs.writeFileSync(
+          NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+          new TextEncoder().encode(source),
+        );
+        remoteFs.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
+        syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, { actor: 'sab-remote' });
+      }
     }
     // Execute the actual Workbench node-entry module. It owns eval-vs-program
     // dispatch, loader eval, print/drain ordering, process adoption, and exit.
