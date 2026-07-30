@@ -23,7 +23,7 @@ const ABSOLUTE_STACK_LOCATION = /(?:^|[\s(])(?:file:\/\/)?\/[^()\s]+:\d+:\d+/u;
 const ABSOLUTE_ERROR_HEADER = /^(?:file:\/\/)?\/[^()\s]+:\d+(?::\d+)?$/u;
 const GENERATED_EVAL_PATH = /\.rifty-eval-[^()\s:]*/u;
 
-const NODE_CLI_EVAL_ORACLE_VERSION = 'v24.16.0';
+export const NODE_CLI_EVAL_ORACLE_VERSION = 'v24.16.0';
 
 export function assertNodeCliEvalOracleVersion(actual: string): void {
   if (actual !== NODE_CLI_EVAL_ORACLE_VERSION) {

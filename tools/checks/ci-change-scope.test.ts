@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { NODE_CLI_EVAL_ORACLE_VERSION } from '../node-parity-runner/src/node-cli-eval.ts';
 import {
   changedPathsBetween,
   isDocumentationOnlyPath,
@@ -154,5 +155,18 @@ describe('CI change scope', () => {
     ]) {
       expect(gate, dependency).toContain(`- ${dependency}`);
     }
+  });
+});
+
+describe('CI Node CLI eval oracle', () => {
+  it('pins every executable oracle carrier to the frozen Node patch', () => {
+    const version = NODE_CLI_EVAL_ORACLE_VERSION.replace(/^v/u, '');
+    const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+    const crossBrowser = readFileSync('.github/workflows/ci-cross-browser.yml', 'utf8');
+
+    for (const job of ['unit-and-conformance', 'e2e-chromium']) {
+      expect(jobBlock(ci, job)).toContain(`node-version: ${version}`);
+    }
+    expect(jobBlock(crossBrowser, 'e2e')).toContain(`node-version: ${version}`);
   });
 });
