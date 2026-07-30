@@ -217,12 +217,14 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
         JSON.parse(await readText(vfs, `/proj/node_modules/${name}/package.json`)),
       ).toMatchObject({ bin: ROLLUP_BIN });
     }
+    writes.mockClear();
     const { registry: replayRegistry, result: replay } = await installFixture(
       entries,
       { rollup: '4.62.2' },
       vfs,
     );
     expect([replayRegistry.packumentReads, replayRegistry.tarballReads]).toEqual([0, 0]);
+    expect.soft(rollupWrites()).toHaveLength(1);
     expect.soft(await readText(vfs, '/proj/node_modules/.bin/rollup')).toBe(launcher('rollup'));
     expect(replay.lockfile).toEqual(fresh.lockfile);
 
@@ -273,8 +275,8 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
     const entries = db(
       ['rollup', await cliEntry('rollup', '4.63.0')],
       ['rollup', await cliEntry('rollup', '4.62.2', { '@rollup/wasm-node': '4.62.2' })],
-      ['@rollup/wasm-node', await cliEntry('@rollup/wasm-node', '4.63.0')],
-      ['@rollup/wasm-node', await cliEntry('@rollup/wasm-node', '4.62.2')],
+      ['@rollup/wasm-node', await cliEntry('@rollup/wasm-node', '4.63.0', {}, 'wasm-rollup')],
+      ['@rollup/wasm-node', await cliEntry('@rollup/wasm-node', '4.62.2', {}, 'wasm-rollup')],
       ['host', await makeEntry('host', '1.0.0', { rollup: '4.62.2' })],
     );
     const { result: seed, vfs } = await installFixture(entries, {
@@ -296,9 +298,13 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
     lock.packages[nestedWasm] = { ...rootWasm };
     await vfs.writeFile('/proj/package-lock.json', JSON.stringify(lock));
 
+    const writes = vi.spyOn(vfs, 'writeFile');
     const { result } = await installFixture(entries, { rollup: '4.63.0', host: '1.0.0' }, vfs);
-    expect.soft(await readText(vfs, '/proj/node_modules/.bin/rollup')).toBe(launcher('rollup'));
-    expect(await readText(vfs, `/proj/${nestedRollup}/node_modules/.bin/rollup`)).toBe(
+    expect
+      .soft(writes.mock.calls.filter(([path]) => path === '/proj/node_modules/.bin/wasm-rollup'))
+      .toHaveLength(0);
+    expect.soft(await vfs.exists('/proj/node_modules/.bin/wasm-rollup')).toBe(false);
+    expect(await readText(vfs, `/proj/${nestedRollup}/node_modules/.bin/wasm-rollup`)).toBe(
       launcher('@rollup/wasm-node'),
     );
     expect(
