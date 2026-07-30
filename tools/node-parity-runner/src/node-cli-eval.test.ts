@@ -15,7 +15,7 @@ describe('node CLI eval parity carrier', () => {
     expect(() => assertNodeCliEvalOracleVersion('v24.16.0')).not.toThrow();
   });
 
-  it('canonicalises UTF-8 transport chunks without losing stream order', () => {
+  it('keeps a partial stdout frame before an intervening stderr line across split UTF-8', () => {
     const capture = createNodeCliEvalCapture();
     capture.push('stdout', new Uint8Array([0x61, 0xe2, 0x82]));
     capture.push('stderr', 'err\n');
@@ -25,12 +25,38 @@ describe('node CLI eval parity carrier', () => {
       stdout: 'a€\n',
       stderr: 'err\n',
       frames: [
+        { stream: 'stdout', text: 'a' },
         { stream: 'stderr', text: 'err\n' },
-        { stream: 'stdout', text: 'a€\n' },
+        { stream: 'stdout', text: '€\n' },
       ],
       code: 7,
       signal: null,
     });
+  });
+
+  it('keeps reversed unterminated stream tails in write order at EOF', () => {
+    const capture = createNodeCliEvalCapture();
+    capture.push('stderr', 'stderr-first');
+    capture.push('stdout', 'stdout-last');
+
+    expect(capture.finish(0, null)).toEqual({
+      stdout: 'stdout-last',
+      stderr: 'stderr-first',
+      frames: [
+        { stream: 'stderr', text: 'stderr-first' },
+        { stream: 'stdout', text: 'stdout-last' },
+      ],
+      code: 0,
+      signal: null,
+    });
+  });
+
+  it('normalises adjacent same-stream chunks into one logical line', () => {
+    const capture = createNodeCliEvalCapture();
+    capture.push('stdout', 'one-');
+    capture.push('stdout', 'line\n');
+
+    expect(capture.finish(0, null).frames).toEqual([{ stream: 'stdout', text: 'one-line\n' }]);
   });
 
   it('keeps only the contracted eval error prelude and first user frame', () => {

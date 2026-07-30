@@ -3,6 +3,8 @@ import { MemoryFsSync } from '@riftydev/vfs/internal';
 export const NODE_CLI_EVAL_VFS_CARRIER_COMPLETE = 'parity.node-cli-eval.vfs-carrier-complete';
 export const NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT = 'parity.node-cli-eval.child-local-vfs-audit';
 export const NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH = '/.rifty-eval-transient.cjs';
+export const NODE_CLI_EVAL_TRANSIENT_DECODER_PATH = '/.rifty-eval-decoder-transient.cjs';
+export const NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES = 'decoder-path-carrier';
 
 export type NodeCliEvalVfsProvenance = 'carrier' | 'guest';
 export type NodeCliEvalVfsActor = 'child-local' | 'sab-remote' | 'workbench-owner';
@@ -170,6 +172,29 @@ export function nodeCliEvalTransientSourceCarrierMutations(
       provenance: 'carrier',
       actor,
       path: NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+      recursive: false,
+      force: true,
+    },
+  ];
+}
+
+export function nodeCliEvalTransientDecoderCarrierMutations(): readonly NodeCliEvalVfsMutation[] {
+  return [
+    {
+      kind: 'write',
+      provenance: 'carrier',
+      actor: 'child-local',
+      path: NODE_CLI_EVAL_TRANSIENT_DECODER_PATH,
+      content: nodeCliEvalVfsFileContent(
+        NODE_CLI_EVAL_TRANSIENT_DECODER_PATH,
+        NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES,
+      ),
+    },
+    {
+      kind: 'rm',
+      provenance: 'carrier',
+      actor: 'child-local',
+      path: NODE_CLI_EVAL_TRANSIENT_DECODER_PATH,
       recursive: false,
       force: true,
     },

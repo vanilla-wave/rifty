@@ -56,6 +56,58 @@ describe('runInNode', () => {
     });
   });
 
+  it('captures native eval stream switches and reversed EOF tails in write-arrival order', async () => {
+    const output = await runInNode({
+      kind: 'node-cli-eval',
+      code: '',
+      expectedPhysicalWorkers: 2,
+      nodeCliEval: {
+        sequential: [
+          {
+            label: 'partial-stdout-around-stderr',
+            nodeArgv: [
+              '-e',
+              "process.stdout.write('native-stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('native-stderr-line\\n'),20);setTimeout(()=>process.stdout.write(new Uint8Array([172,...Buffer.from('native-stdout-tail\\n')])),40)",
+            ],
+          },
+          {
+            label: 'stderr-before-stdout-eof',
+            nodeArgv: [
+              '-e',
+              "process.stderr.write('native-stderr-eof|');setTimeout(()=>process.stdout.write('native-stdout-eof'),20)",
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(JSON.parse(output)).toEqual([
+      {
+        label: 'partial-stdout-around-stderr',
+        stdout: 'native-stdout-head|€native-stdout-tail\n',
+        stderr: 'native-stderr-line\n',
+        frames: [
+          { stream: 'stdout', text: 'native-stdout-head|' },
+          { stream: 'stderr', text: 'native-stderr-line\n' },
+          { stream: 'stdout', text: '€native-stdout-tail\n' },
+        ],
+        code: 0,
+        signal: null,
+      },
+      {
+        label: 'stderr-before-stdout-eof',
+        stdout: 'native-stdout-eof',
+        stderr: 'native-stderr-eof|',
+        frames: [
+          { stream: 'stderr', text: 'native-stderr-eof|' },
+          { stream: 'stdout', text: 'native-stdout-eof' },
+        ],
+        code: 0,
+        signal: null,
+      },
+    ]);
+  });
+
   it('terminates a real native oracle that exceeds the per-case timeout', async () => {
     await expect(
       runInNode(
@@ -165,6 +217,18 @@ describe('Node v24.16.0 CLI eval oracle', () => {
         stdout: 'undefined\n',
         stderr: '',
       },
+      {
+        nodeArgv: ['--print=not-the-source'],
+        status: 0,
+        stdout: 'undefined\n',
+        stderr: '',
+      },
+      {
+        nodeArgv: ['--print='],
+        status: 0,
+        stdout: 'undefined\n',
+        stderr: '',
+      },
     ] as const;
     const cases = [
       {
@@ -200,6 +264,18 @@ describe('Node v24.16.0 CLI eval oracle', () => {
       {
         nodeArgv: ['--print=ignored', ''],
         execArgv: ['--print=ignored'],
+        argv: [''],
+        stdout: 'undefined\n',
+      },
+      {
+        nodeArgv: ['--print=not-the-source', ''],
+        execArgv: ['--print=not-the-source'],
+        argv: [''],
+        stdout: 'undefined\n',
+      },
+      {
+        nodeArgv: ['--print=', ''],
+        execArgv: ['--print='],
         argv: [''],
         stdout: 'undefined\n',
       },
@@ -247,7 +323,13 @@ describe('Node v24.16.0 CLI eval oracle', () => {
       expect(identityOutcome.stderr).toBe('');
     }
 
-    for (const option of ['-p', '--print', '--print=ignored'] as const) {
+    for (const option of [
+      '-p',
+      '--print',
+      '--print=ignored',
+      '--print=not-the-source',
+      '--print=',
+    ] as const) {
       const identityOutcome = spawnSync(process.execPath, [option], {
         encoding: 'utf8',
         env: { ...process.env, NODE_OPTIONS: `--import=${probeUrl}` },

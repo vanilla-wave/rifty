@@ -92,6 +92,8 @@ const TERMINATED_SEPARATED_EVAL_SPELLINGS = [
   { option: '-p', print: true, sourceRequired: false, missing: '' },
   { option: '--print', print: true, sourceRequired: false, missing: '' },
   { option: '--print=ignored', print: true, sourceRequired: false, missing: '' },
+  { option: '--print=not-the-source', print: true, sourceRequired: false, missing: '' },
+  { option: '--print=', print: true, sourceRequired: false, missing: '' },
 ] as const;
 const TERMINATED_EVAL_SOURCE_STATES = ['missing', 'empty', 'nonempty'] as const;
 
@@ -1335,9 +1337,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
   it.each(TERMINATED_EVAL_USAGE_ERROR_CASES)(
     'returns exact immediate-terminator usage failure without a child: $label',
     async ({ line, stderr: expectedStderr }) => {
-      const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
-        throw new Error('unexpected missing-source eval child spawn');
-      });
+      const processesBefore = globalProcessManager.snapshot();
       const h = await harness(undefined, nodeCliPackageConfig);
       h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-terminator' });
 
@@ -1362,7 +1362,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
           .map((frame) => new TextDecoder().decode(frame.data))
           .join('');
         expect(stderr).toBe(expectedStderr);
-        expect(spawn).not.toHaveBeenCalled();
+        expect(globalProcessManager.snapshot()).toEqual(processesBefore);
         expect(h.frames).toContainEqual(
           expect.objectContaining({
             type: 'pty:exit',
@@ -1658,9 +1658,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     ['node -pe=SRC', 'node: bad option: -pe=SRC\n'],
     ['node -ep=SRC', 'node: bad option: -ep=SRC\n'],
   ])('returns Node-shaped exit 9 without allocating a child: %s', async (line, expectedStderr) => {
-    const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
-      throw new Error('unexpected invalid Node eval child spawn');
-    });
+    const processesBefore = globalProcessManager.snapshot();
     const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval' });
 
@@ -1682,7 +1680,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       .map((frame) => new TextDecoder().decode(frame.data))
       .join('');
     expect(stderr).toBe(expectedStderr);
-    expect(spawn).not.toHaveBeenCalled();
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
     expect(h.frames).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', rid: 'run-node-eval', code: 9 }),
     );
@@ -1701,9 +1699,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     'node --input-type=module --print',
     'node --input-type=module --print=ignored',
   ])('keeps ESM eval as its named no-child context gap: %s', async (line) => {
-    const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
-      throw new Error('unexpected ESM eval child spawn');
-    });
+    const processesBefore = globalProcessManager.snapshot();
     const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-esm-eval' });
 
@@ -1727,7 +1723,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       .map((frame) => new TextDecoder().decode(frame.data))
       .join('');
     expect(stderr).toContain('Not implemented: workbench.node.eval-module-context');
-    expect(spawn).not.toHaveBeenCalled();
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
     expect(h.frames).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', rid: 'run-node-esm-eval', code: 1 }),
     );

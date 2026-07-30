@@ -23,6 +23,8 @@ const TERMINATED_SEPARATED_EVAL_SPELLINGS = [
   { option: '-p', print: true, sourceRequired: false, missing: '' },
   { option: '--print', print: true, sourceRequired: false, missing: '' },
   { option: '--print=ignored', print: true, sourceRequired: false, missing: '' },
+  { option: '--print=not-the-source', print: true, sourceRequired: false, missing: '' },
+  { option: '--print=', print: true, sourceRequired: false, missing: '' },
 ] as const;
 
 const TERMINATED_EVAL_SOURCE_STATES = [
@@ -170,7 +172,7 @@ describe('classifyNodeInvocation', () => {
     ]);
   });
 
-  it.each(['-p', '--print', '--print=ignored'] as const)(
+  it.each(['-p', '--print', '--print=ignored', '--print=not-the-source', '--print='] as const)(
     '%s keeps a separated empty token in argv, unlike absent source',
     (option) => {
       expect([classifyNodeInvocation([option]), classifyNodeInvocation([option, ''])]).toEqual([
@@ -192,22 +194,25 @@ describe('classifyNodeInvocation', () => {
     },
   );
 
-  it('--print=RHS ignores RHS and takes source from the next argument', () => {
-    expect(classifyNodeInvocation(['--print=ignored', 'process.platform', 'alpha'])).toEqual({
-      kind: 'eval',
-      source: 'process.platform',
-      print: true,
-      execArgv: ['--print=ignored', 'process.platform'],
-      scriptArgs: ['alpha'],
-    });
-    expect(classifyNodeInvocation(['--print=ignored'])).toEqual({
-      kind: 'eval',
-      source: '',
-      print: true,
-      execArgv: ['--print=ignored'],
-      scriptArgs: [],
-    });
-  });
+  it.each(['--print=ignored', '--print=not-the-source', '--print='] as const)(
+    '%s ignores its RHS, preserves the exact spelling, and takes source from the next argument',
+    (option) => {
+      expect(classifyNodeInvocation([option, 'process.platform', 'alpha'])).toEqual({
+        kind: 'eval',
+        source: 'process.platform',
+        print: true,
+        execArgv: [option, 'process.platform'],
+        scriptArgs: ['alpha'],
+      });
+      expect(classifyNodeInvocation([option])).toEqual({
+        kind: 'eval',
+        source: '',
+        print: true,
+        execArgv: [option],
+        scriptArgs: [],
+      });
+    },
+  );
 
   it('-pe is accepted but the reversed -ep spelling is not', () => {
     expect(classifyNodeInvocation(['-pe', '1+1', 'alpha'])).toEqual({

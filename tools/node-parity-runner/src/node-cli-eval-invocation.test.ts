@@ -24,8 +24,12 @@ describe('node CLI eval invocation model', () => {
           nodeArgv: ['--eval=source-b', 'beta'],
         },
         {
-          label: 'print-equals',
-          nodeArgv: ['--print=ignored', 'source-c', 'gamma'],
+          label: 'print-equals-nonempty-rhs',
+          nodeArgv: ['--print=not-the-source', 'source-c', 'gamma'],
+        },
+        {
+          label: 'print-equals-empty-rhs',
+          nodeArgv: ['--print=', 'source-d', 'delta'],
         },
         {
           label: 'bare-print',
@@ -52,12 +56,20 @@ describe('node CLI eval invocation model', () => {
         scriptArgs: ['beta'],
       },
       {
-        label: 'print-equals',
-        nodeArgv: ['--print=ignored', 'source-c', 'gamma'],
+        label: 'print-equals-nonempty-rhs',
+        nodeArgv: ['--print=not-the-source', 'source-c', 'gamma'],
         source: 'source-c',
         print: true,
-        execArgv: ['--print=ignored', 'source-c'],
+        execArgv: ['--print=not-the-source', 'source-c'],
         scriptArgs: ['gamma'],
+      },
+      {
+        label: 'print-equals-empty-rhs',
+        nodeArgv: ['--print=', 'source-d', 'delta'],
+        source: 'source-d',
+        print: true,
+        execArgv: ['--print=', 'source-d'],
+        scriptArgs: ['delta'],
       },
       {
         label: 'bare-print',
@@ -111,7 +123,7 @@ describe('node CLI eval invocation model', () => {
     ]);
   });
 
-  it.each(['-p', '--print', '--print=ignored'] as const)(
+  it.each(['-p', '--print', '--print=ignored', '--print=not-the-source', '--print='] as const)(
     '%s projects a separated empty token as argv, not source-bearing execArgv',
     (option) => {
       const { sequential } = nodeCliEvalInvocations(
@@ -131,7 +143,7 @@ describe('node CLI eval invocation model', () => {
     },
   );
 
-  it.each(['-p', '--print', '--print=ignored'] as const)(
+  it.each(['-p', '--print', '--print=ignored', '--print=not-the-source', '--print='] as const)(
     '%s rejects a terminator followed by a program entry as outside the eval carrier',
     (option) => {
       expect(() =>

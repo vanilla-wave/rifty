@@ -39,7 +39,7 @@ export type NodeCliEvalSeparatedOption =
   | '-pe'
   | '-p'
   | '--print'
-  | '--print=ignored';
+  | `--print=${string}`;
 
 export type NodeCliEvalSourceState = 'missing' | 'empty' | 'nonempty';
 
@@ -103,6 +103,18 @@ const SEPARATED_OPTION_CONTRACTS = Object.freeze([
   Object.freeze({
     label: 'print-equals-ignored',
     option: '--print=ignored',
+    print: true,
+    source: 'optional',
+  }),
+  Object.freeze({
+    label: 'print-equals-distinct-nonempty',
+    option: '--print=not-the-source',
+    print: true,
+    source: 'optional',
+  }),
+  Object.freeze({
+    label: 'print-equals-empty',
+    option: '--print=',
     print: true,
     source: 'optional',
   }),
@@ -359,37 +371,68 @@ function asBytes(chunk: unknown): Uint8Array {
   throw new TypeError('node-cli-eval stream emitted a non-byte chunk');
 }
 
-/** UTF-8 line framing removes transport chunk boundaries, never stream order. */
+/** Line framing retains stream switches once the streaming decoder yields text. */
 export function createNodeCliEvalCapture(): {
   push(stream: 'stdout' | 'stderr', chunk: unknown): void;
   finish(code: number | null, signal: string | null): NodeCliEvalRawOutcome;
 } {
   const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
   const pending = { stdout: '', stderr: '' };
+  const pendingOrder: Record<'stdout' | 'stderr', number | undefined> = {
+    stdout: undefined,
+    stderr: undefined,
+  };
   const output = { stdout: '', stderr: '' };
-  const frames: NodeCliEvalFrame[] = [];
+  const frames: (NodeCliEvalFrame & { readonly order: number; readonly ordinal: number })[] = [];
+  let activeStream: 'stdout' | 'stderr' | undefined;
+  let order = 0;
+  let ordinal = 0;
 
-  const append = (stream: 'stdout' | 'stderr', text: string): void => {
+  const frame = (stream: 'stdout' | 'stderr', text: string, frameOrder: number): void => {
+    frames.push({ stream, text, order: frameOrder, ordinal: ordinal++ });
+  };
+
+  const flushPending = (stream: 'stdout' | 'stderr'): void => {
+    if (pending[stream].length === 0) return;
+    frame(stream, pending[stream], pendingOrder[stream] ?? order);
+    pending[stream] = '';
+    pendingOrder[stream] = undefined;
+  };
+
+  const append = (stream: 'stdout' | 'stderr', text: string, writeOrder: number): void => {
     output[stream] += text;
+    if (text.length === 0) return;
+    pendingOrder[stream] ??= writeOrder;
     pending[stream] += text;
     for (;;) {
       const newline = pending[stream].indexOf('\n');
       if (newline === -1) return;
-      frames.push({ stream, text: pending[stream].slice(0, newline + 1) });
+      frame(stream, pending[stream].slice(0, newline + 1), pendingOrder[stream] ?? writeOrder);
       pending[stream] = pending[stream].slice(newline + 1);
+      pendingOrder[stream] = pending[stream].length === 0 ? undefined : writeOrder;
     }
   };
 
   return {
     push(stream, chunk) {
-      append(stream, decoders[stream].decode(asBytes(chunk), { stream: true }));
+      const writeOrder = order++;
+      if (activeStream !== undefined && activeStream !== stream) flushPending(activeStream);
+      activeStream = stream;
+      append(stream, decoders[stream].decode(asBytes(chunk), { stream: true }), writeOrder);
     },
     finish(code, signal) {
-      append('stdout', decoders.stdout.decode());
-      append('stderr', decoders.stderr.decode());
-      if (pending.stdout.length > 0) frames.push({ stream: 'stdout', text: pending.stdout });
-      if (pending.stderr.length > 0) frames.push({ stream: 'stderr', text: pending.stderr });
-      return { ...output, frames, code, signal };
+      append('stdout', decoders.stdout.decode(), order++);
+      append('stderr', decoders.stderr.decode(), order++);
+      flushPending('stdout');
+      flushPending('stderr');
+      return {
+        ...output,
+        frames: frames
+          .sort((left, right) => left.order - right.order || left.ordinal - right.ordinal)
+          .map(({ stream, text }) => ({ stream, text })),
+        code,
+        signal,
+      };
     },
   };
 }

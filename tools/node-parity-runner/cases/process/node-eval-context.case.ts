@@ -64,6 +64,7 @@ const promiseRealmSnapshot = () => {
 const promiseBefore = promiseRealmSnapshot();
 const launchCwd = process.cwd();
 const visibleEntries = fs.readdirSync(launchCwd).sort();
+const ownerBytes = fs.readFileSync(path.join(launchCwd, 'owner-only.txt'), 'utf8');
 const child = require('./marker.cjs');
 const packageValue = require('eval-package');
 const resolvedBefore = require.resolve('./marker.cjs');
@@ -99,7 +100,8 @@ console.log(JSON.stringify({
   thisGlobal: this === globalThis,
   argumentsType: typeof arguments,
   cached: Object.values(require.cache).includes(module),
-  noEvalCarrier: JSON.stringify(visibleEntries) === JSON.stringify(['marker.cjs','node_modules']),
+  ownerBytes,
+  noEvalCarrier: JSON.stringify(visibleEntries) === JSON.stringify(['marker.cjs','node_modules','owner-only.txt']),
   resolvedBefore: resolvedBefore === path.join(launchCwd, 'marker.cjs'),
   resolvedAfter: resolvedAfter === path.join(launchCwd, 'marker.cjs'),
   child: {
@@ -194,11 +196,16 @@ const sequential: NodeCliEvalInvocation[] = [
 const concurrent: NodeCliEvalInvocation[] = [
   ...terminatorInvocations,
   separated(
-    'short-e-order-and-separator',
+    'short-e-partial-stdout-around-stderr',
     '-e',
-    "console.log(JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)}));setTimeout(()=>console.error('stderr-after'),5);setTimeout(()=>console.log('stdout-last'),10)",
+    "process.stdout.write('stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('stderr-middle\\n'),5);setTimeout(()=>{process.stdout.write(new Uint8Array([172]));process.stdout.write('stdout-tail\\n')},10)",
     ['alpha', 'two words', '-x'],
     true,
+  ),
+  separated(
+    'short-e-stderr-before-stdout-eof',
+    '-e',
+    "process.stderr.write('stderr-eof-first|');setTimeout(()=>process.stdout.write('stdout-eof-last'),5)",
   ),
   inlineEval(
     'inline-long-eval-global-script',
@@ -288,9 +295,11 @@ export default {
     files: {
       'fixtures/a/marker.cjs':
         "module.exports={marker:'a',parent:module.parent,parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
+      'fixtures/a/owner-only.txt': 'owner-a',
       'fixtures/a/node_modules/eval-package/index.js': "module.exports='package-a'\n",
       'fixtures/b/marker.cjs':
         "module.exports={marker:'b',parent:module.parent,parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
+      'fixtures/b/owner-only.txt': 'owner-b',
       'fixtures/b/node_modules/eval-package/index.js': "module.exports='package-b'\n",
     },
   },

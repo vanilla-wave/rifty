@@ -88,8 +88,16 @@ const orderedInvocation: PhysicalNodeInvocation = {
   cwd: '/fixtures/a',
   nodeArgv: [
     '-e',
-    "console.log('EVAL_ORDER:stdout-first');setTimeout(()=>console.error('EVAL_ORDER:stderr-second'),5);setTimeout(()=>console.log('EVAL_ORDER:stdout-last'),10)",
+    "process.stdout.write('EVAL_ORDER:stdout-head|');process.stdout.write(new Uint8Array([226,130]));setTimeout(()=>process.stderr.write('EVAL_ORDER:stderr-middle\\n'),5);setTimeout(()=>{process.stdout.write(new Uint8Array([172]));process.stdout.write('EVAL_ORDER:stdout-tail\\n')},10)",
     'alpha',
+  ],
+};
+const eofOrderedInvocation: PhysicalNodeInvocation = {
+  label: 'ordered-eof-streams',
+  cwd: '/fixtures/a',
+  nodeArgv: [
+    '-e',
+    "process.stderr.write('EVAL_EOF:stderr-first|');setTimeout(()=>process.stdout.write('EVAL_EOF:stdout-last'),5)",
   ],
 };
 const failureInvocation: PhysicalNodeInvocation = {
@@ -303,7 +311,7 @@ function evalErrorProjection(text: string): string {
 function orderedMarkerFrames(frames: readonly NodeCliEvalFrame[]): readonly NodeCliEvalFrame[] {
   return frames
     .map((frame) => ({ ...frame, text: normalized(frame.text) }))
-    .filter((frame) => frame.text.startsWith('EVAL_ORDER:'));
+    .filter((frame) => frame.text.includes('EVAL_ORDER:'));
 }
 
 async function renderedMarkerColors(
@@ -515,8 +523,8 @@ test.describe('CLI report template through the worker lifecycle', () => {
     try {
       await bootCliReport(page);
 
-      expect(sourceTerminatorCases).toHaveLength(18);
-      expect(new Set(sourceTerminatorCases.map(({ label }) => label)).size).toBe(18);
+      expect(sourceTerminatorCases).toHaveLength(24);
+      expect(new Set(sourceTerminatorCases.map(({ label }) => label)).size).toBe(24);
       const physicalRows: {
         readonly label: string;
         readonly expected: NodeCliEvalRawOutcome;
@@ -559,7 +567,7 @@ test.describe('CLI report template through the worker lifecycle', () => {
     }
   });
 
-  test('physical terminal preserves stdout/stderr order and exact failed eval status/frame', async ({
+  test('physical terminal preserves partial and EOF stdout/stderr order, colors, and failed eval status/frame', async ({
     page,
     browserName,
   }) => {
@@ -574,19 +582,53 @@ test.describe('CLI report template through the worker lifecycle', () => {
       const browserOrder = await runWorkbenchInvocation(page, orderedInvocation);
       const nativeFrames = orderedMarkerFrames(nativeOrder.frames);
       expect(nativeFrames.map(({ stream }) => stream)).toEqual(['stdout', 'stderr', 'stdout']);
-      expect(
-        browserOrder.output.split('\n').filter((line) => line.startsWith('EVAL_ORDER:')),
-      ).toEqual(nativeFrames.map(({ text }) => text));
+      expect(nativeFrames.map(({ text }) => text)).toEqual([
+        'EVAL_ORDER:stdout-head|',
+        'EVAL_ORDER:stderr-middle',
+        '€EVAL_ORDER:stdout-tail',
+      ]);
+      expect(browserOrder.output).toBe(physicalTerminalOracle(nativeOrder));
+      const partialMarkers = [
+        'EVAL_ORDER:stdout-head',
+        'EVAL_ORDER:stderr-middle',
+        'EVAL_ORDER:stdout-tail',
+      ] as const;
+      expect(browserOrder.output.indexOf(partialMarkers[0])).toBeGreaterThanOrEqual(0);
+      expect(browserOrder.output.indexOf(partialMarkers[0])).toBeLessThan(
+        browserOrder.output.indexOf(partialMarkers[1]),
+      );
+      expect(browserOrder.output.indexOf(partialMarkers[1])).toBeLessThan(
+        browserOrder.output.indexOf(partialMarkers[2]),
+      );
       const [stdoutFirstColor, stderrColor, stdoutLastColor] = await renderedMarkerColors(
         page,
         'active',
-        ['EVAL_ORDER:stdout-first', 'EVAL_ORDER:stderr-second', 'EVAL_ORDER:stdout-last'],
+        partialMarkers,
       );
       expect(stdoutFirstColor).not.toBeNull();
       expect(stderrColor).not.toBeNull();
       expect(stdoutLastColor).toBe(stdoutFirstColor);
       expect(stderrColor).not.toBe(stdoutFirstColor);
       expect(browserOrder.exitCode).toBe(nativeOrder.code);
+
+      const nativeEof = await runHostInvocation(fixture, eofOrderedInvocation);
+      const browserEof = await runWorkbenchInvocation(page, eofOrderedInvocation);
+      expect(nativeEof.frames).toEqual([
+        { stream: 'stderr', text: 'EVAL_EOF:stderr-first|' },
+        { stream: 'stdout', text: 'EVAL_EOF:stdout-last' },
+      ]);
+      expect(browserEof.output).toBe(physicalTerminalOracle(nativeEof));
+      expect(browserEof.output.indexOf('EVAL_EOF:stderr-first')).toBeLessThan(
+        browserEof.output.indexOf('EVAL_EOF:stdout-last'),
+      );
+      const [eofStderrColor, eofStdoutColor] = await renderedMarkerColors(page, 'active', [
+        'EVAL_EOF:stderr-first',
+        'EVAL_EOF:stdout-last',
+      ]);
+      expect(eofStderrColor).not.toBeNull();
+      expect(eofStdoutColor).not.toBeNull();
+      expect(eofStderrColor).not.toBe(eofStdoutColor);
+      expect(browserEof.exitCode).toBe(nativeEof.code);
 
       const nativeFailure = await runHostInvocation(fixture, failureInvocation);
       const browserFailure = await runWorkbenchInvocation(page, failureInvocation);

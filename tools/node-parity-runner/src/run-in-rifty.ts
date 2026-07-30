@@ -295,6 +295,7 @@ class StdioPortCapture {
 }
 
 export type NodeCliEvalVfsFault =
+  | 'child-local-transient-decoder-file'
   | 'child-local-transient-source-file'
   | 'sab-remote-transient-source-file'
   | 'workbench-owner-transient-source-file';
@@ -347,10 +348,19 @@ function childLocalVfsAudit(value: unknown): NodeCliEvalVfsAudit {
 
 export type NodeCliEvalBootstrapFault =
   | 'wrong-protocol'
+  | 'missing-source'
   | 'missing-print'
+  | 'missing-exec-argv'
+  | 'missing-remote-fs'
+  | 'source-not-string'
   | 'print-not-boolean'
+  | 'exec-argv-not-array'
+  | 'remote-fs-not-boolean'
   | 'extra-launch-field'
-  | 'exec-argv-entry-not-string'
+  | 'exec-argv-first-not-string'
+  | 'exec-argv-middle-not-string'
+  | 'exec-argv-last-not-string'
+  | 'program-bin'
   | 'program-node-serve'
   | 'program-ipc';
 
@@ -856,7 +866,12 @@ async function installPhysicalWorkerMode(
       this.#worker = new Worker(new URL('./worker-env-kernel-worker.ts', import.meta.url), {
         execArgv: ['--import', 'tsx'],
         workerData: {
-          files: testCase.setup?.files ?? {},
+          // Eval must adopt the owner-backed remote VFS. Keeping setup bytes in
+          // the child-local mirror would let a broken fallback pass on identical
+          // reads, readdir, and module resolution. Program/worker siblings retain
+          // their existing local fixture carrier.
+          files: testCase.kind === 'node-cli-eval' ? {} : (testCase.setup?.files ?? {}),
+          nodeCliEvalVfsAudit: testCase.kind === 'node-cli-eval',
           ...(workerVfsFault === undefined ? {} : { nodeCliEvalVfsFault: workerVfsFault }),
         },
       });
@@ -1037,17 +1052,44 @@ function corruptNodeCliEvalEntry(
     case 'wrong-protocol':
       protocol = 'rifty.node-entry/v2';
       break;
+    case 'missing-source':
+      Reflect.deleteProperty(launch, 'source');
+      break;
     case 'missing-print':
       Reflect.deleteProperty(launch, 'print');
+      break;
+    case 'missing-exec-argv':
+      Reflect.deleteProperty(launch, 'execArgv');
+      break;
+    case 'missing-remote-fs':
+      Reflect.deleteProperty(launch, 'remoteFs');
+      break;
+    case 'source-not-string':
+      launch.source = 42;
       break;
     case 'print-not-boolean':
       launch.print = 'yes';
       break;
+    case 'exec-argv-not-array':
+      launch.execArgv = '--eval';
+      break;
+    case 'remote-fs-not-boolean':
+      launch.remoteFs = 'yes';
+      break;
     case 'extra-launch-field':
       launch.futureEvalField = true;
       break;
-    case 'exec-argv-entry-not-string':
-      launch.execArgv = ['-e', 42];
+    case 'exec-argv-first-not-string':
+      launch.execArgv = [42, '--eval', 'source'];
+      break;
+    case 'exec-argv-middle-not-string':
+      launch.execArgv = ['--trace-warnings', 42, '--eval'];
+      break;
+    case 'exec-argv-last-not-string':
+      launch.execArgv = ['--trace-warnings', '--eval', 42];
+      break;
+    case 'program-bin':
+      launch.bin = false;
       break;
     case 'program-node-serve':
       launch.nodeServe = false;
@@ -1585,7 +1627,7 @@ export async function runInRiftyInCurrentRealm(
           } finally {
             evalFsObserver?.endCarrierObservation();
           }
-        } else {
+        } else if (fault !== 'child-local-transient-decoder-file') {
           if (fault === 'sab-remote-transient-source-file') {
             evalFsObserver?.beginCarrierObservation('sab-remote');
           }
@@ -1633,10 +1675,7 @@ export async function runInRiftyInCurrentRealm(
         ),
       );
       physicalWorkerMode?.assertExpected();
-      if (
-        options.nodeCliEvalBootstrapFault === undefined &&
-        childLocalVfsAudits.length !== expectedPhysicalWorkerCount(testCase)
-      ) {
+      if (childLocalVfsAudits.length !== expectedPhysicalWorkerCount(testCase)) {
         throw new Error(
           `node-cli-eval child-local VFS audit expected ${String(
             expectedPhysicalWorkerCount(testCase),

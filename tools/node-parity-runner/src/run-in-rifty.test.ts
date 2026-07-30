@@ -16,8 +16,11 @@ import { asyncVfs, syncMirror } from '../../../packages/vfs/src/index.ts';
 import { setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
 import workerEnvCase from '../cases/worker_threads/env-semantics.case.ts';
 import {
+  NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES,
+  NODE_CLI_EVAL_TRANSIENT_DECODER_PATH,
   NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
   type NodeCliEvalVfsActor,
+  nodeCliEvalTransientDecoderCarrierMutations,
   nodeCliEvalTransientSourceCarrierMutations,
   nodeCliEvalVfsFileContent,
 } from './node-cli-eval-vfs-observer.ts';
@@ -42,7 +45,7 @@ function restoreKernelWorkerUrl(url: string | URL | null): void {
 
 describe('runInRifty', () => {
   it(
-    'accepts the atomic node-entry v2 bootstrap in physical Worker mode',
+    'accepts the configured atomic node-entry bootstrap in physical Worker mode',
     async () => {
       await expect(runInRifty(workerEnvCase)).resolves.toBe(workerEnvCase.expected);
     },
@@ -308,12 +311,55 @@ describe('runInRifty', () => {
     REAL_WORKER_TEST_TIMEOUT_MS,
   );
 
+  it(
+    'audits a transient child-local write/delete in the physical bootstrap decoder interval',
+    async () => {
+      const source = 'undefined';
+      await expect(
+        runInRifty(
+          {
+            kind: 'node-cli-eval',
+            code: '',
+            expectedPhysicalWorkers: 1,
+            nodeCliEval: {
+              sequential: [{ label: 'decoder-interval-vfs-boundary', nodeArgv: ['-e', source] }],
+              concurrent: [],
+            },
+          },
+          {
+            nodeCliEvalVfsProbe: {
+              expectedGuestMutations: [],
+              fault: 'child-local-transient-decoder-file',
+            },
+          },
+        ),
+      ).rejects.toThrow(
+        `node-cli-eval VFS audit mismatch: ${JSON.stringify({
+          missing: [],
+          unexpected: nodeCliEvalTransientDecoderCarrierMutations(),
+        })}`,
+      );
+      expect(NODE_CLI_EVAL_TRANSIENT_DECODER_PATH).not.toBe(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH);
+      expect(NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES).not.toBe(source);
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
   it.each<readonly [label: string, fault: NodeCliEvalBootstrapFault, expectedError: RegExp]>([
     ['wrong protocol', 'wrong-protocol', /protocol.*v3.*v2/iu],
-    ['missing required field', 'missing-print', /missing field.*print/iu],
-    ['wrong field type', 'print-not-boolean', /print.*boolean/iu],
+    ['missing source', 'missing-source', /missing field.*source/iu],
+    ['missing print', 'missing-print', /missing field.*print/iu],
+    ['missing execArgv', 'missing-exec-argv', /missing field.*execArgv/iu],
+    ['missing remoteFs', 'missing-remote-fs', /missing field.*remoteFs/iu],
+    ['non-string source', 'source-not-string', /source.*string/iu],
+    ['non-boolean print', 'print-not-boolean', /print.*boolean/iu],
+    ['non-array execArgv', 'exec-argv-not-array', /execArgv.*array/iu],
+    ['non-boolean remoteFs', 'remote-fs-not-boolean', /remoteFs.*boolean/iu],
     ['extra field', 'extra-launch-field', /unexpected field.*futureEvalField/iu],
-    ['non-string execArgv entry', 'exec-argv-entry-not-string', /execArgv.*string/iu],
+    ['non-string first execArgv entry', 'exec-argv-first-not-string', /execArgv.*string/iu],
+    ['non-string middle execArgv entry', 'exec-argv-middle-not-string', /execArgv.*string/iu],
+    ['non-string last execArgv entry', 'exec-argv-last-not-string', /execArgv.*string/iu],
+    ['program-only bin', 'program-bin', /unexpected field.*bin/iu],
     ['program-only nodeServe', 'program-node-serve', /unexpected field.*nodeServe/iu],
     ['program-only ipc', 'program-ipc', /unexpected field.*ipc/iu],
   ])(

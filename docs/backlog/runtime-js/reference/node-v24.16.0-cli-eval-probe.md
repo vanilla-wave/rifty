@@ -11,6 +11,8 @@ node -e "console.log(JSON.stringify({argv:process.argv,execArgv:process.execArgv
 node --eval="console.log(JSON.stringify({argv:process.argv,execArgv:process.execArgv}))" alpha
 node -p "JSON.stringify({argv:process.argv,execArgv:process.execArgv})" alpha
 node --print=ignored "JSON.stringify({argv:process.argv,execArgv:process.execArgv})" alpha
+node --print=not-the-source "JSON.stringify({argv:process.argv,execArgv:process.execArgv})" alpha
+node --print= "JSON.stringify({argv:process.argv,execArgv:process.execArgv})" alpha
 node -pe "JSON.stringify({argv:process.argv,execArgv:process.execArgv})" alpha
 node -pe
 node -p
@@ -36,6 +38,8 @@ v24.16.0
 {"argv":["<node>","alpha"],"execArgv":["--eval=<source>"]}                # 0
 {"argv":["<node>","alpha"],"execArgv":["-p","<source>"]}                  # 0
 {"argv":["<node>","alpha"],"execArgv":["--print=ignored","<source>"]}     # 0
+{"argv":["<node>","alpha"],"execArgv":["--print=not-the-source","<source>"]} # 0
+{"argv":["<node>","alpha"],"execArgv":["--print=","<source>"]}            # 0
 {"argv":["<node>","alpha"],"execArgv":["-pe","<source>"]}                 # 0
 node: --eval requires an argument                                        # 9
 undefined                                                               # 0
@@ -70,6 +74,8 @@ node -pe ''
 node -p ''
 node --print ''
 node --print=ignored ''
+node --print=not-the-source ''
+node --print= ''
 ```
 
 Exact normalized status/stdout/stderr:
@@ -88,6 +94,10 @@ Exact normalized status/stdout/stderr:
 | `--print ''` | 0 | `undefined\n` | empty |
 | `--print=ignored` | 0 | `undefined\n` | empty |
 | `--print=ignored ''` | 0 | `undefined\n` | empty |
+| `--print=not-the-source` | 0 | `undefined\n` | empty |
+| `--print=not-the-source ''` | 0 | `undefined\n` | empty |
+| `--print=` | 0 | `undefined\n` | empty |
+| `--print= ''` | 0 | `undefined\n` | empty |
 
 The mandatory-source eval forms consume the empty token into `process.execArgv`.
 The optional-source print forms leave it in `process.argv`, distinct from the
@@ -105,6 +115,10 @@ NODE_OPTIONS="$probe" node --print
 NODE_OPTIONS="$probe" node --print ''
 NODE_OPTIONS="$probe" node --print=ignored
 NODE_OPTIONS="$probe" node --print=ignored ''
+NODE_OPTIONS="$probe" node --print=not-the-source
+NODE_OPTIONS="$probe" node --print=not-the-source ''
+NODE_OPTIONS="$probe" node --print=
+NODE_OPTIONS="$probe" node --print= ''
 ```
 
 Exact normalized stdout:
@@ -126,6 +140,14 @@ undefined
 undefined
 {"execArgv":["--print=ignored"],"argv":[""]}
 undefined
+{"execArgv":["--print=not-the-source"],"argv":[]}
+undefined
+{"execArgv":["--print=not-the-source"],"argv":[""]}
+undefined
+{"execArgv":["--print="],"argv":[]}
+undefined
+{"execArgv":["--print="],"argv":[""]}
+undefined
 ```
 
 The option terminator is part of the source grammar, not a uniform
@@ -133,7 +155,7 @@ post-source cleanup. Cross every separated spelling with missing, empty, and
 nonempty source:
 
 ```sh
-for option in -e --eval -pe -p --print --print=ignored; do
+for option in -e --eval -pe -p --print --print=ignored --print=not-the-source --print=; do
   NODE_OPTIONS="$probe" node "$option" --
   NODE_OPTIONS="$probe" node "$option" '' -- x
   NODE_OPTIONS="$probe" node "$option" 42 -- x
@@ -163,6 +185,12 @@ eval/print output. These are the exact normalized rows:
 | `--print=ignored` | missing | `--` | 0 | `["--print=ignored"]` | `[]` | `undefined\n` |
 | `--print=ignored` | empty | `'' -- x` | 0 | `["--print=ignored"]` | `["","--","x"]` | `undefined\n` |
 | `--print=ignored` | nonempty | `42 -- x` | 0 | `["--print=ignored","42"]` | `["x"]` | `42\n` |
+| `--print=not-the-source` | missing | `--` | 0 | `["--print=not-the-source"]` | `[]` | `undefined\n` |
+| `--print=not-the-source` | empty | `'' -- x` | 0 | `["--print=not-the-source"]` | `["","--","x"]` | `undefined\n` |
+| `--print=not-the-source` | nonempty | `42 -- x` | 0 | `["--print=not-the-source","42"]` | `["x"]` | `42\n` |
+| `--print=` | missing | `--` | 0 | `["--print="]` | `[]` | `undefined\n` |
+| `--print=` | empty | `'' -- x` | 0 | `["--print="]` | `["","--","x"]` | `undefined\n` |
+| `--print=` | nonempty | `42 -- x` | 0 | `["--print=","42"]` | `["x"]` | `42\n` |
 
 Thus a mandatory form rejects `--` as a missing source but consumes a
 separated empty token and the following terminator. An optional form consumes

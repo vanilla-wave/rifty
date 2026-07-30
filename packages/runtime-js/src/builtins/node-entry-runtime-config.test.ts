@@ -510,8 +510,25 @@ describe('node-entry host bootstrap config', () => {
   it.each([
     ['non-string source', { source: 42 }, /launch.*source.*string/i],
     ['non-boolean print', { print: 'yes' }, /launch.*print.*boolean/i],
+    ['non-boolean remoteFs', { remoteFs: 'yes' }, /launch.*remoteFs.*boolean/i],
     ['non-array execArgv', { execArgv: '--print' }, /launch.*execArgv.*array/i],
-    ['non-string execArgv entry', { execArgv: ['--print', 42] }, /launch.*execArgv.*string/i],
+    [
+      'non-string first execArgv entry',
+      { execArgv: [42, '--print', 'source'] },
+      /launch.*execArgv.*string/i,
+    ],
+    [
+      'non-string middle execArgv entry',
+      { execArgv: ['--trace-warnings', 42, '--print'] },
+      /launch.*execArgv.*string/i,
+    ],
+    [
+      'non-string last execArgv entry',
+      { execArgv: ['--trace-warnings', '--print', 42] },
+      /launch.*execArgv.*string/i,
+    ],
+    ['extra exact-own eval field', { futureEvalField: true }, /unexpected field.*futureEvalField/i],
+    ['program-only bin', { bin: false }, /unexpected field.*bin/i],
     ['program-only nodeServe', { nodeServe: false }, /unexpected field.*nodeServe/i],
     ['program-only ipc', { ipc: 'none' }, /unexpected field.*ipc/i],
   ])('rejects corrupt eval launch: %s', (_label, override, error) => {

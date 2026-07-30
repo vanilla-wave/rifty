@@ -32,6 +32,8 @@ import { installNodeRuntime } from '../../../packages/runtime-js/src/ipc/install
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
 import {
   NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT,
+  NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES,
+  NODE_CLI_EVAL_TRANSIENT_DECODER_PATH,
   NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
   NODE_CLI_EVAL_VFS_CARRIER_COMPLETE,
   NodeCliEvalVfsObserver,
@@ -41,6 +43,7 @@ import type { NodeCliEvalVfsFault } from './run-in-rifty.ts';
 
 interface WorkerEnvHarnessData {
   readonly files: Readonly<Record<string, string>>;
+  readonly nodeCliEvalVfsAudit: boolean;
   readonly nodeCliEvalVfsFault?: NodeCliEvalVfsFault;
 }
 
@@ -50,10 +53,27 @@ const hostPort = parentPort;
 const request = workerData as WorkerEnvHarnessData;
 if (
   request.nodeCliEvalVfsFault !== undefined &&
+  request.nodeCliEvalVfsFault !== 'child-local-transient-decoder-file' &&
   request.nodeCliEvalVfsFault !== 'child-local-transient-source-file' &&
   request.nodeCliEvalVfsFault !== 'sab-remote-transient-source-file'
 ) {
   throw new TypeError('worker-env parity received an unknown node-cli-eval VFS fault');
+}
+if (request.nodeCliEvalVfsAudit) {
+  // The disposable adapter is a real node:worker_threads Worker, while
+  // SyncRpcClient's production guard targets browser Worker globals. Expose the
+  // corresponding physical-worker markers only in eval children so the harness
+  // exercises the real SAB client without widening program siblings.
+  Object.defineProperties(globalThis, {
+    WorkerGlobalScope: {
+      value: class WorkerGlobalScope {},
+      configurable: true,
+    },
+    postMessage: {
+      value: (message: unknown): void => hostPort.postMessage(message),
+      configurable: true,
+    },
+  });
 }
 const vfs = new NodeCliEvalVfsObserver();
 vfs.loadFixture(
@@ -65,32 +85,58 @@ resetKeepalive();
 installTimerGlobals();
 hostProcess.on('unhandledRejection', (reason) => recordRejection(reason));
 
-function installObservedNodeRuntime(spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>): void {
-  const launch = readNodeEntryBootstrap().launch;
-  const launchKind = (launch as { readonly kind: unknown }).kind;
-  if (request.nodeCliEvalVfsFault !== undefined && launchKind !== 'eval') {
-    throw new TypeError('node-cli-eval VFS fault requires an eval launch');
-  }
-  if (launchKind === 'eval') {
-    // Observation begins after the kernel publishes the typed launch but before
-    // process adoption. A carrier in installNodeRuntime's pre-entry interval
-    // must remain visible even when it is deleted before user entry.
-    vfs.startObservation('child-local');
-    if (request.nodeCliEvalVfsFault === 'child-local-transient-source-file') {
-      const source = (launch as unknown as { readonly source?: unknown }).source;
-      if (typeof source !== 'string') {
-        throw new TypeError('node-cli-eval transient source fault requires string source');
-      }
+function createSyncCall(spec: WorkerSpawnSpec): (method: string, payload: unknown) => unknown {
+  const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
+  const syncClient = new SyncRpcClient(ring);
+  return (method: string, payload: unknown): unknown => syncClient.call(method, payload);
+}
+
+function reportChildLocalVfsAudit(syncCall: (method: string, payload: unknown) => unknown): void {
+  syncCall(NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT, {
+    actor: 'child-local',
+    audit: vfs.audit([]),
+  });
+}
+
+function installObservedNodeRuntime(spec: WorkerSpawnSpec): void {
+  try {
+    if (request.nodeCliEvalVfsFault === 'child-local-transient-decoder-file') {
       vfs.beginCarrierObservation('child-local');
       try {
-        vfs.writeFileSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, new TextEncoder().encode(source));
-        vfs.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
+        vfs.writeFileSync(
+          NODE_CLI_EVAL_TRANSIENT_DECODER_PATH,
+          new TextEncoder().encode(NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES),
+        );
+        vfs.rmSync(NODE_CLI_EVAL_TRANSIENT_DECODER_PATH, { force: true });
       } finally {
         vfs.endCarrierObservation();
       }
     }
+    const launch = readNodeEntryBootstrap().launch;
+    const launchKind = (launch as { readonly kind: unknown }).kind;
+    if (request.nodeCliEvalVfsFault !== undefined && launchKind !== 'eval') {
+      throw new TypeError('node-cli-eval VFS fault requires an eval launch');
+    }
+    if (launchKind === 'eval') {
+      if (request.nodeCliEvalVfsFault === 'child-local-transient-source-file') {
+        const source = (launch as unknown as { readonly source?: unknown }).source;
+        if (typeof source !== 'string') {
+          throw new TypeError('node-cli-eval transient source fault requires string source');
+        }
+        vfs.beginCarrierObservation('child-local');
+        try {
+          vfs.writeFileSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, new TextEncoder().encode(source));
+          vfs.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
+        } finally {
+          vfs.endCarrierObservation();
+        }
+      }
+    }
+    installNodeRuntime(spec);
+  } catch (error) {
+    if (request.nodeCliEvalVfsAudit) reportChildLocalVfsAudit(createSyncCall(spec));
+    throw error;
   }
-  installNodeRuntime(spec);
 }
 
 async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
@@ -101,14 +147,14 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     throw new TypeError('node-cli-eval VFS fault requires an eval launch');
   }
   if (launchKind === 'eval') {
-    const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
-    const syncClient = new SyncRpcClient(ring);
-    const syncCall = (method: string, payload: unknown): unknown =>
-      syncClient.call(method, payload);
+    const syncCall = createSyncCall(spec);
     publishKernelSyncApi({
       call: syncCall,
     });
-    if (request.nodeCliEvalVfsFault !== undefined) {
+    if (
+      request.nodeCliEvalVfsFault === 'child-local-transient-source-file' ||
+      request.nodeCliEvalVfsFault === 'sab-remote-transient-source-file'
+    ) {
       const source = (launch as unknown as { readonly source?: unknown }).source;
       if (typeof source !== 'string') {
         throw new TypeError('node-cli-eval transient source fault requires string source');
@@ -136,10 +182,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     try {
       await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');
     } finally {
-      syncCall(NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT, {
-        actor: 'child-local',
-        audit: vfs.audit([]),
-      });
+      reportChildLocalVfsAudit(syncCall);
     }
     return;
   }
@@ -179,6 +222,11 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
 async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
   const stdout = bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout');
   const stderr = bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr');
+  if (request.nodeCliEvalVfsAudit) {
+    // This starts before runEntryLifecycle publishes/decodes the bootstrap and
+    // stays live through process adoption, entry, and failure settlement.
+    vfs.startObservation('child-local');
+  }
   publishKernelProcessSpec({
     pid: spec.pid,
     ppid: spec.ppid,
