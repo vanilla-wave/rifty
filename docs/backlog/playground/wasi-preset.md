@@ -12,7 +12,7 @@ code: [apps/playground/src/presets.ts, packages/runtime-wasi/src/syscalls/path.t
 
 ## Context
 
-`presets.ts` ships 7 presets, none WASI-facing. `path_open` +
+`presets.ts` ships 11 presets, none WASI-facing. `path_open` +
 `fd_read`/`fd_write`/`fd_pread`/`fd_pwrite` are implemented
 (`packages/runtime-wasi/src/syscalls/path.ts`, `fd.ts`), and exact
 `@esbuild/wasi-preview1@0.28.0` package conformance exists. ADR-0316 removes the

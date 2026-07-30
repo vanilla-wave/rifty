@@ -12,12 +12,15 @@ code: [docs/backlog/README.md, tools/backlog/check.mjs]
 ## Context
 
 Measured on `5296991f5`: of 11 `ready`/`in-progress` epics only
-`honest-shadow-substitutions` (the one already in a run) carries `## Invariants`,
-`tier:`, and `## Budget`. The other 10 — `fault-honest-sw-preview`,
-`wasi-in-browser-showcase`, `open-auditable-launch`, `embeddable-dev-loop`,
-`cold-npm-install-speedup`, `fault-honest-opfs-persistence`,
-`trusted-state-authority`, `webcontainers-alternative-search-slot`,
-`preset-deglue`, `fast-install-resolver` — carry none of the three.
+`honest-shadow-substitutions` (the one already in a run) carried
+`## Invariants`, `tier:`, and `## Budget`; the other 10 carried none of the
+three. `fault-honest-sw-preview` and `wasi-in-browser-showcase` were fitted in
+this branch (invariants drafted from their already-ratified scenarios and each
+checked false on `14b0dad99`, carrying the user's sign-off), leaving 8:
+`open-auditable-launch`, `embeddable-dev-loop`, `cold-npm-install-speedup`,
+`fault-honest-opfs-persistence`, `trusted-state-authority`,
+`webcontainers-alternative-search-slot`, `preset-deglue`,
+`fast-install-resolver`.
 
 Not a validation hole by accident: `tools/backlog/check.mjs:231` demands
 `## Invariants` only when `goal_baseline` is present, so `backlog:check` reports

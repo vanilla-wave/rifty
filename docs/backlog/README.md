@@ -43,7 +43,7 @@ Use `docs/process/fault-classes.md`. Template: `TEMPLATE.md`.
 
 A ready/in-progress epic needs `## Outcome`, end-to-end `## User scenario`,
 numbered checkable `## Invariants` (observable statements the closing smoke
-proves; legacy epics add them at next refine), and `## Items`. Known children
+proves), and `## Items`. Known children
 seed order; reverse links (`epic: <slug>`) are the live residual set. Map a Budget slice once:
 
 ```md
@@ -52,6 +52,26 @@ seed order; reverse links (`epic: <slug>`) are the live residual set. Map a Budg
 
 A mechanism shared by two children needs an existing owner, a first substrate
 item, or an ADR explaining separation. Template: `epics/TEMPLATE.md`.
+
+### Epic fit (legacy epic → pickup shape)
+
+"Write up / flesh out epic X" is ordinary work, never a blocked ask. Do it in
+the delivering branch, in order:
+
+1. `tier` — pick from §Tier and justify it in one §Decisions line.
+2. `## Invariants` — DRAFT them from the already-ratified Outcome / User
+   scenario / Decisions. Derivation only: an invariant needing scope the epic
+   never settled is an observable fork → manual `rifty-refine` for THAT
+   statement, not for the whole epic.
+3. Check each false on current `main` and record the evidence (comment above
+   the list). A trivially-true invariant closes the goal on an empty proof.
+4. `## Budget` — one slice per item with a band; the slice names are what a run
+   picks up.
+5. Put the drafted invariants to the user; on approval add
+   `invariants-signoff: <date> — user` to `## Decisions`. Missing signature
+   blocks the RUN, never the write-up.
+
+Only the user changes an invariant after that, and a run never edits one.
 
 ## Autonomous goal
 

@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Writing an epic up is ordinary work, not a blocked ask.** `epics/TEMPLATE.md`
+  read "Invariants authored with the user … the run proves them, never writes or
+  edits them", which conflated fit time with run time and turned "flesh out epic
+  X" into a refine-request. New `backlog/README.md` §Epic fit orders the write-up
+  (tier → invariants DRAFTED from the ratified Outcome/User scenario/Decisions →
+  each checked false on main with evidence → Budget slices → user sign-off
+  recorded as `invariants-signoff:`); only a statement needing unsettled scope
+  goes to `rifty-refine`, and a missing signature blocks the RUN, not the write-up.
+  `AGENTS.md` §Data sources routes there. Applied to `fault-honest-sw-preview`
+  (`tier: robust`) and `wasi-in-browser-showcase` (`tier: works`), which now
+  carry invariants + slice bands; 8 legacy epics remain
+  (`process-meta/ready-epic-goal-shape-debt`).
 - **PR = one delivered behavior; process state never opens a PR.** New
   `AGENTS.md` §PR — unit of delivery: contract flips, demotions, re-cuts,
   splits, intake drafts and lineage commit into the delivering unit's branch,

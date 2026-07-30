@@ -19,10 +19,12 @@ tier: <works|robust|production — required for an autonomous goal>
 
 ## Invariants
 
-<!-- Frozen with the marker (shape: README §Shape). Authored with the user — refine
-     interview or direct sign-off; the run proves them, never writes or edits them.
-     Each must be false on main before the run: a trivially-true invariant closes
-     the goal on an empty proof. -->
+<!-- Frozen with the marker (shape: README §Shape). DRAFTED at fit time by whoever
+     writes the epic up — derived from Outcome/User scenario/Decisions, never new
+     scope — then signed off by the user (`invariants-signoff:` in §Decisions).
+     The RUN only proves them; it never writes or edits one. Each must be false
+     on main before the run: a trivially-true invariant closes the goal on an
+     empty proof. Procedure: README §Epic fit. -->
 
 - I1. <user-observable statement>
 
