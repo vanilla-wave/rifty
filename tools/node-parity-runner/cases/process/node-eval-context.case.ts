@@ -65,6 +65,7 @@ for (;;) {
 }
 console.log(JSON.stringify({
   argv: [process.argv[0] === process.execPath, ...process.argv.slice(1)],
+  argv0Identity: process.argv0 === (process.platform === 'rifty' ? 'rifty' : process.execPath),
   execArgv: process.execArgv,
   filename: __filename,
   dirname: __dirname,
@@ -97,6 +98,7 @@ const isolationSource = String.raw`
 const child = require('./marker.cjs');
 console.log(JSON.stringify({
   arg: process.argv[1],
+  argv0Identity: process.argv0 === (process.platform === 'rifty' ? 'rifty' : process.execPath),
   marker: child.marker,
   moduleId: module.id,
   childParent: child.parentId,

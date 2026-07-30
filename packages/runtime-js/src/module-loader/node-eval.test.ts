@@ -2,6 +2,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as loaderImplementation from './loader.ts';
+import type { ModuleRegistry } from './registry.ts';
 
 const CJS_BINDINGS = ['require', 'module', 'exports', '__filename', '__dirname'] as const;
 const EVAL_PROBE = '__riftyNodeEvalProbe';
@@ -9,6 +10,7 @@ const EVAL_RUNS = '__riftyNodeEvalRuns';
 const DEP_LOADS = '__riftyNodeEvalDepLoads';
 
 interface ReflectedNodeEvalScriptRunner {
+  readonly registry: ModuleRegistry;
   run(source: string): unknown;
 }
 
@@ -90,6 +92,7 @@ module.exports = {
 
     try {
       const runner = reflectedCreateNodeEvalScriptRunner()({ vfs, cwd: '/work' });
+      expect(runner.registry.has('/work/[eval]')).toBe(false);
       const completion = runner.run(`{
         const dep = require('./dep.cjs');
         globalThis.${EVAL_PROBE} = {
@@ -146,6 +149,7 @@ module.exports = {
         },
       });
       expect(Object.values(probe.cache)).not.toContain(probe.moduleRecord);
+      expect(runner.registry.has('/work/[eval]')).toBe(false);
     } finally {
       restoreCjsBindings(bindings);
     }
@@ -172,12 +176,14 @@ module.exports = { load: globalThis.${DEP_LOADS} };
 
     try {
       const runner = reflectedCreateNodeEvalScriptRunner()({ vfs, cwd: '/work' });
+      expect(runner.registry.has('/work/[eval]')).toBe(false);
       runner.run(source);
       const first = (Reflect.get(globalThis, EVAL_RUNS) as EvalRecordProbe[])[0];
       if (first === undefined) throw new Error('first eval probe missing');
 
       expect(first.during).toBe(false);
       expect(Object.values(first.cache)).not.toContain(first.module);
+      expect(runner.registry.has('/work/[eval]')).toBe(false);
 
       runner.run(source);
       const runs = Reflect.get(globalThis, EVAL_RUNS) as EvalRecordProbe[];
@@ -189,6 +195,7 @@ module.exports = { load: globalThis.${DEP_LOADS} };
       expect(second.module).not.toBe(first.module);
       expect(second.child).toBe(first.child);
       expect(Reflect.get(globalThis, DEP_LOADS)).toBe(1);
+      expect(runner.registry.has('/work/[eval]')).toBe(false);
       for (const cache of [first.cache, second.cache]) {
         expect(Object.values(cache)).not.toContain(first.module);
         expect(Object.values(cache)).not.toContain(second.module);
