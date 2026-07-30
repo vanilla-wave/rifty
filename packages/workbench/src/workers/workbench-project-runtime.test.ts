@@ -38,6 +38,24 @@ import {
   createWorkbenchProjectRuntime,
 } from './workbench-project-runtime.ts';
 
+// Existing kernel test-only reset is not a package API. Keep this test access
+// runtime-only so Workbench's production TypeScript graph stays package-bound.
+const KERNEL_SPAWN_WORKER_TEST_MODULE = '../../../kernel/src/spawn-worker.ts';
+const kernelSpawnWorkerTestModule: unknown = await import(KERNEL_SPAWN_WORKER_TEST_MODULE);
+if (typeof kernelSpawnWorkerTestModule !== 'object' || kernelSpawnWorkerTestModule === null) {
+  throw new TypeError('kernel spawn-worker test module is unavailable');
+}
+const clearKernelWorkerUrlCandidate: unknown = Reflect.get(
+  kernelSpawnWorkerTestModule,
+  'clearKernelWorkerUrl',
+);
+if (typeof clearKernelWorkerUrlCandidate !== 'function') {
+  throw new TypeError('kernel clearKernelWorkerUrl test seam is unavailable');
+}
+const clearKernelWorkerUrl = (): void => {
+  Reflect.apply(clearKernelWorkerUrlCandidate, undefined, []);
+};
+
 const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 const NODE_ENTRY_WORKER_URL = 'https://example.test/node-entry.js';
 const DEV_SERVER_WORKER_URL = 'https://example.test/dev-server.js';
@@ -296,15 +314,29 @@ class KernelWorkerBoundary {
   }
 }
 
-const ORIGINAL_WORKER_DESCRIPTOR = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
-const ORIGINAL_KERNEL_WORKER_URL = getKernelWorkerUrl();
-const realKernelWorkers: KernelWorkerBoundary[] = [];
+const restoreRealKernelBoundaries: Array<() => void> = [];
+
+function restoreKernelWorkerUrl(url: string | URL | null): void {
+  if (url === null) clearKernelWorkerUrl();
+  else setKernelWorkerUrl(url);
+}
+
+function restoreInstalledRealKernelBoundaries(): void {
+  for (;;) {
+    const restore = restoreRealKernelBoundaries.pop();
+    if (restore === undefined) return;
+    restore();
+  }
+}
 
 function installRealKernelWorkerBoundary(): readonly KernelWorkerBoundary[] {
+  const originalWorkerDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
+  const originalKernelWorkerUrl = getKernelWorkerUrl();
+  const workers: KernelWorkerBoundary[] = [];
   class RecordingKernelWorker extends KernelWorkerBoundary {
     constructor() {
       super();
-      realKernelWorkers.push(this);
+      workers.push(this);
     }
   }
   Object.defineProperty(globalThis, 'Worker', {
@@ -313,7 +345,19 @@ function installRealKernelWorkerBoundary(): readonly KernelWorkerBoundary[] {
     writable: true,
   });
   setKernelWorkerUrl(NODE_WORKER_RUNTIME_ENV.RIFTY_KERNEL_WORKER_URL);
-  return realKernelWorkers;
+  let restored = false;
+  restoreRealKernelBoundaries.push(() => {
+    if (restored) return;
+    restored = true;
+    for (const worker of workers.splice(0)) {
+      const pid = worker.spec().pid;
+      if (globalProcessManager.get(pid) !== null) globalProcessManager.kill(pid);
+    }
+    if (originalWorkerDescriptor === undefined) Reflect.deleteProperty(globalThis, 'Worker');
+    else Object.defineProperty(globalThis, 'Worker', originalWorkerDescriptor);
+    restoreKernelWorkerUrl(originalKernelWorkerUrl);
+  });
+  return workers;
 }
 
 function deferred<T>() {
@@ -578,18 +622,51 @@ async function harness(
 }
 
 afterEach(() => {
-  for (const worker of realKernelWorkers.splice(0)) {
-    const pid = worker.spec().pid;
-    if (globalProcessManager.get(pid) !== null) globalProcessManager.kill(pid);
-  }
-  if (ORIGINAL_WORKER_DESCRIPTOR === undefined) Reflect.deleteProperty(globalThis, 'Worker');
-  else Object.defineProperty(globalThis, 'Worker', ORIGINAL_WORKER_DESCRIPTOR);
-  if (ORIGINAL_KERNEL_WORKER_URL !== null) setKernelWorkerUrl(ORIGINAL_KERNEL_WORKER_URL);
+  restoreInstalledRealKernelBoundaries();
   vi.restoreAllMocks();
   resetSyncMirror();
 });
 
 describe('Workbench finite Node owner lifecycle Contract+RED', () => {
+  it.each([null, 'https://host.test/original-kernel-worker.js'] as const)(
+    'restores exact Worker and kernel URL globals after a real boundary with prior URL %s',
+    (priorKernelWorkerUrl) => {
+      const ambientWorkerDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
+      const ambientKernelWorkerUrl = getKernelWorkerUrl();
+      class PriorWorker {}
+      Object.defineProperty(globalThis, 'Worker', {
+        value: PriorWorker,
+        configurable: true,
+        writable: false,
+        enumerable: true,
+      });
+      restoreKernelWorkerUrl(priorKernelWorkerUrl);
+      const priorWorkerDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
+
+      try {
+        const workers = installRealKernelWorkerBoundary();
+        expect(workers).toEqual([]);
+        expect(getKernelWorkerUrl()).toBe(NODE_WORKER_RUNTIME_ENV.RIFTY_KERNEL_WORKER_URL);
+        expect(Object.getOwnPropertyDescriptor(globalThis, 'Worker')).not.toEqual(
+          priorWorkerDescriptor,
+        );
+
+        restoreInstalledRealKernelBoundaries();
+
+        expect(workers).toEqual([]);
+        expect(getKernelWorkerUrl()).toBe(priorKernelWorkerUrl);
+        expect(Object.getOwnPropertyDescriptor(globalThis, 'Worker')).toEqual(
+          priorWorkerDescriptor,
+        );
+      } finally {
+        restoreInstalledRealKernelBoundaries();
+        if (ambientWorkerDescriptor === undefined) Reflect.deleteProperty(globalThis, 'Worker');
+        else Object.defineProperty(globalThis, 'Worker', ambientWorkerDescriptor);
+        restoreKernelWorkerUrl(ambientKernelWorkerUrl);
+      }
+    },
+  );
+
   it('reports nodemon Worker peer death as a PTY lifecycle error, not a fabricated command exit', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, nodemonNodeServerPackageConfig);

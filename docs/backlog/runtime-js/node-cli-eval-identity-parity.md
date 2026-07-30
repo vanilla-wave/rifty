@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -103,6 +103,24 @@ Acceptance, Parity, or loud exclusions:
 
 The item was demoted while those exact proofs gained cross-surface sweeps. The
 pre-demotion Acceptance and Parity remain verbatim below.
+
+## Sixth readiness re-cut
+
+Contract+RED at `ac0f0a517` found four remaining proof holes without changing
+Acceptance, Parity, or loud exclusions:
+
+- immediate `--` consumption was not swept across every accepted spelling and
+  every user-visible carrier;
+- process adoption could drop separated empty eval source tokens without
+  failing its nonempty `process.execArgv` RED;
+- child-local VFS observation ran only in an injected carrier fault, not around
+  the ordinary physical production bootstrap;
+- the real-kernel Workbench boundary did not restore an originally absent
+  kernel Worker URL.
+
+The item is demoted while those exact sibling, aggregate, provenance, and
+teardown proofs gain cross-boundary sweeps. The pre-demotion Acceptance and
+Parity remain verbatim below.
 
 ## Refinement evidence
 
