@@ -30,6 +30,7 @@ import type {
   WorkerEntryDescriptor,
   WorkerProcessHandle,
 } from '../../../packages/kernel/src/index.ts';
+import { workerOutputAttestation } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
 import type { NodeEntryBootstrapPayload } from '../../../packages/runtime-js/src/builtins/node-entry-url.ts';
 // vm-engine relative source imports (same `tools/`-harness precedent as
@@ -786,6 +787,9 @@ async function installPhysicalWorkerMode(
   let nativeWorkerConstructions = 0;
   let validatedInitMessages = 0;
   let stdioDeliveryAcks = 0;
+  const stdioOrderFrames: unknown[] = [];
+  const publicStdioMessages: unknown[] = [];
+  let expectedStdioAttestation: string | undefined;
   const validatedEvalLabels = new Set<string>();
   const evalInvocations =
     testCase.kind === 'node-cli-eval'
@@ -812,6 +816,10 @@ async function installPhysicalWorkerMode(
     if (init?.type !== 'init' || entry?.kind !== 'url') {
       throw new TypeError('physical-worker parity requires a URL kernel init message');
     }
+    const workerSpec = init.spec;
+    if (workerSpec === undefined) {
+      throw new TypeError('physical-worker parity requires a Worker spawn spec');
+    }
     const envelope = entry.bootstrap;
     if (
       envelope === undefined ||
@@ -827,6 +835,12 @@ async function installPhysicalWorkerMode(
       payload?.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only'
     ) {
       throw new TypeError('physical-worker parity init has wrong launch or host marker');
+    }
+    if (physicalStdioDeliveryFault !== undefined) {
+      if (expectedStdioAttestation !== undefined) {
+        throw new Error('physical stdio fault expected exactly one Worker output state');
+      }
+      expectedStdioAttestation = workerOutputAttestation(workerSpec.outputState);
     }
     if (testCase.kind === 'node-cli-eval') {
       const expected = evalInvocations.find(
@@ -971,6 +985,11 @@ async function installPhysicalWorkerMode(
           if (handle.kind !== 'worker') {
             throw new Error('physical stdio fault requires a Worker process handle');
           }
+          handle.ports.ipc.addEventListener('message', (event: MessageEvent): void => {
+            const frame = event.data as { readonly kind?: unknown } | null;
+            if (frame?.kind === 'control:stdio-order') stdioOrderFrames.push(event.data);
+          });
+          handle.on('message', (message) => publicStdioMessages.push(message));
           handle.ports.stderr.addEventListener(
             'message',
             (event: MessageEvent): void => {
@@ -1013,13 +1032,41 @@ async function installPhysicalWorkerMode(
   return {
     assertExpected() {
       const expectedDeliveryAcks = physicalStdioDeliveryFault === undefined ? 0 : expectedWorkers;
+      const expectedOrderFrames =
+        physicalStdioDeliveryFault === undefined
+          ? []
+          : expectedStdioAttestation === undefined
+            ? null
+            : [
+                {
+                  kind: 'control:stdio-order',
+                  stream: 'stdout',
+                  order: 0,
+                  attestation: expectedStdioAttestation,
+                },
+                {
+                  kind: 'control:stdio-order',
+                  stream: 'stderr',
+                  order: 1,
+                  attestation: expectedStdioAttestation,
+                },
+                {
+                  kind: 'control:stdio-order',
+                  stream: 'stdout',
+                  order: 2,
+                  attestation: expectedStdioAttestation,
+                },
+              ];
       if (
         nativeWorkerConstructions !== expectedWorkers ||
         validatedInitMessages !== expectedWorkers ||
-        stdioDeliveryAcks !== expectedDeliveryAcks
+        stdioDeliveryAcks !== expectedDeliveryAcks ||
+        expectedOrderFrames === null ||
+        JSON.stringify(stdioOrderFrames) !== JSON.stringify(expectedOrderFrames) ||
+        publicStdioMessages.length !== 0
       ) {
         throw new Error(
-          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers and ${expectedDeliveryAcks} stdio ACKs; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}, acknowledged ${stdioDeliveryAcks}`,
+          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers, ${expectedDeliveryAcks} stdio ACKs, authenticated private order witnesses, and no public IPC messages; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}, acknowledged ${stdioDeliveryAcks}, witnessed ${JSON.stringify(stdioOrderFrames)}, published ${JSON.stringify(publicStdioMessages)}`,
         );
       }
     },

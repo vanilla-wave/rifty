@@ -48,6 +48,27 @@ interface WorkerEnvHarnessData {
   readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
+type DesiredBindWorkerStdioOutput = (
+  outputPort: MessagePort,
+  state: WorkerSpawnSpec['outputState'],
+  stream: 'stdout' | 'stderr',
+  controlPort: MessagePort,
+) => ReturnType<typeof bindWorkerStdioOutput>;
+
+function bindDesiredWorkerStdioOutput(
+  outputPort: MessagePort,
+  state: WorkerSpawnSpec['outputState'],
+  stream: 'stdout' | 'stderr',
+  controlPort: MessagePort,
+): ReturnType<typeof bindWorkerStdioOutput> {
+  return (bindWorkerStdioOutput as unknown as DesiredBindWorkerStdioOutput)(
+    outputPort,
+    state,
+    stream,
+    controlPort,
+  );
+}
+
 if (parentPort === null) throw new Error('worker-env kernel adapter has no parent port');
 const hostPort = parentPort;
 
@@ -318,8 +339,18 @@ function installStdioDeliveryFault(spec: WorkerSpawnSpec): Promise<void> | undef
 
 async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
   const stdioDeliveryProof = installStdioDeliveryFault(spec);
-  const stdout = bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout');
-  const stderr = bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr');
+  const stdout = bindDesiredWorkerStdioOutput(
+    spec.stdio.stdout,
+    spec.outputState,
+    'stdout',
+    spec.stdio.ipc,
+  );
+  const stderr = bindDesiredWorkerStdioOutput(
+    spec.stdio.stderr,
+    spec.outputState,
+    'stderr',
+    spec.stdio.ipc,
+  );
   if (request.nodeCliEvalVfsAudit) {
     // This starts before runEntryLifecycle publishes/decodes the bootstrap and
     // stays live through process adoption, entry, and failure settlement.

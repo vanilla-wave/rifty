@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -447,6 +447,21 @@ global-error RED now requires only the child's admitted stdout/order-zero
 witness while retaining the parent diagnostic stderr and terminal proof. The
 worker-entry setup-failure RED remains the exact child diagnostic-writer proof.
 The pre-demotion Acceptance and Parity remain verbatim below.
+
+## Twenty-sixth readiness re-cut
+
+The Contract+RED sibling sweep for the twenty-fifth cut found one legacy
+three-argument writer binding in the real parity Worker adapter without
+changing Acceptance, Parity, or loud exclusions.
+
+The item is demoted while that exact carrier correction is re-judged. The
+physical adapter now binds stdout and stderr with the supplied IPC/private
+control port before process publication. Its forced cross-port inversion RED
+requires the exact state-attested stdout-zero, stderr-one, stdout-two witness
+sequence on the parent endpoint and proves that none becomes public user IPC.
+The package, recursive-child, runtime, WASI, worker-thread, setup-fault, and
+Chromium sibling proofs remain unchanged. The pre-demotion Acceptance and
+Parity remain verbatim below.
 
 ## Refinement evidence
 

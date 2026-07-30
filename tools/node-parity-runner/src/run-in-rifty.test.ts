@@ -107,7 +107,7 @@ describe('runInRifty', () => {
   );
 
   it(
-    'restores admitted write order after legal physical stdout/stderr delivery inversion',
+    'restores admitted write order from authenticated private witnesses without public IPC',
     async () => {
       await expect(
         runInRifty(PHYSICAL_STDIO_ORDER_CASE, {
