@@ -30,8 +30,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0313 | One-shot opaque Worker entry capability ports |
 | 0326 | Federated Worker child tree with separate public IPC and private control |
 | 0331 | SyncRpc v3 owns one live exchange through reply consumption |
-| 0332 | Worker stdio admission proves terminal drain |
 | 0333 | Descendant settlement barrier preserves recursive teardown ordering |
+| 0338 | Sequenced worker stdio reconstructs cross-port write order |
 
 ### runtime-js
 
@@ -319,6 +319,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0308 | 0328 | generic registry retained; recipe v2 adds admission, exact dependency projection, and materialization-owned bins |
 | 0328 | 0335 | recipe-v2 authority retained; lexical-min/every-install settlement replaced by npm reify operation history and a loud collision ceiling |
 | 0337 | 0338 | raw trace retained; permissive comparator replaced by exact one-axis native resize steps |
+| 0332 | 0338 | output admission/drain retained; authenticated cross-port write order added |
 | 0310 | 0344 | Pattern-1 carrier retained; impossible generic unproven-surface gap replaced by finite positive claims and RED-first specific gaps |
 
 ## Corrections (active)
