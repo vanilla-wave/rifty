@@ -209,6 +209,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0255 | Disposable worker realm for seeded-process parity cases |
 | 0312 | Keep synchronous SHA-256 implementations layer-local |
 | 0323 | Gate heavy PR tests on code-affecting changes |
+| 0337 | TTY parity preserves native SIGWINCH trace multiplicity |
 
 ### protocol
 
