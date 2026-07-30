@@ -26,7 +26,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - Comments/ADRs/docs: extremely concise, sacrifice grammar, cut anything restating code.
 
 ## Data sources
-- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding/idea → `rifty-to-backlog`; settled draft → compile + judge verdict (`decision-workflow.md` §Backlog readiness); unresolved observable fork → request manual `rifty-refine`; unsettled fork inside a `ready` item → demote first (same §); ready → implement normally; PR review → `rifty-review`. Never implement a draft. Planned/process work never invokes `rifty-fix`.
+- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding/idea → `rifty-to-backlog`; settled draft → compile + judge verdict (`decision-workflow.md` §Backlog readiness); unresolved observable fork → request manual `rifty-refine`; unsettled fork inside a `ready` item → demote first (same §); epic missing tier/Invariants/Budget → fit it yourself (`backlog/README.md` §Epic fit) — a write-up is never a blocked ask; ready → implement normally; PR review → `rifty-review`. Never implement a draft. Planned/process work never invokes `rifty-fix`.
 - `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/decision-workflow.md` — read at any fork
 - `docs/process/fault-classes.md` — fault taxonomy + review convergence
