@@ -540,7 +540,7 @@ user frame. `worker_threads.Worker` cannot inherit eval `process.execArgv`
 until its separate worker bootstrap carries those tokens, so inherited
 `execArgv` now throws
 `NotImplementedError('worker_threads.Worker.execArgv')` and remains compat ❌;
-an explicit worker `execArgv` override retains its existing support. Fresh-main
+an explicit worker `execArgv` override uses the same named loud gap. Fresh-main
 ADR collisions reallocated this branch's eval, worker-stdio, and project-status
 decisions to ADR-0339, ADR-0340, and ADR-0341 without changing their semantics.
 
