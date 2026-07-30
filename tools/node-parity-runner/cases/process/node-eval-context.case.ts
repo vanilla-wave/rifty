@@ -39,6 +39,28 @@ function barePrint(
 const identitySource = String.raw`
 const fs = require('node:fs');
 const path = require('node:path');
+const realmPromise = Object.getPrototypeOf((async () => {})()).constructor;
+const realmPromisePrototype = realmPromise.prototype;
+const initialPromiseDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Promise');
+const promiseRealmSnapshot = () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Promise');
+  return {
+    descriptor: {
+      valueIdentity: descriptor?.value === realmPromise,
+      writable: descriptor?.writable,
+      enumerable: descriptor?.enumerable,
+      configurable: descriptor?.configurable,
+    },
+    descriptorUnchanged:
+      descriptor?.value === initialPromiseDescriptor?.value &&
+      descriptor?.writable === initialPromiseDescriptor?.writable &&
+      descriptor?.enumerable === initialPromiseDescriptor?.enumerable &&
+      descriptor?.configurable === initialPromiseDescriptor?.configurable,
+    constructorIdentity: Promise === realmPromise,
+    prototypeIdentity: Promise.prototype === realmPromisePrototype,
+  };
+};
+const promiseBefore = promiseRealmSnapshot();
 const launchCwd = process.cwd();
 const visibleEntries = fs.readdirSync(launchCwd).sort();
 const child = require('./marker.cjs');
@@ -46,6 +68,10 @@ const packageValue = require('eval-package');
 const resolvedBefore = require.resolve('./marker.cjs');
 process.chdir('/');
 const resolvedAfter = require.resolve('./marker.cjs');
+const promiseDuring = promiseRealmSnapshot();
+setImmediate(() => {
+  console.log(JSON.stringify({ promiseRealmAfter: promiseRealmSnapshot() }));
+});
 const expectedPaths = [];
 let cursor = launchCwd;
 for (;;) {
@@ -79,8 +105,13 @@ console.log(JSON.stringify({
     marker: child.marker,
     parentId: child.parentId,
     parentFilename: child.parentFilename === path.resolve(launchCwd, '[eval]'),
+    parentIdentity: child.parent === module,
   },
   packageValue,
+  promiseRealm: {
+    before: promiseBefore,
+    during: promiseDuring,
+  },
 }));
 `;
 
@@ -92,8 +123,48 @@ console.log(JSON.stringify({
   marker: child.marker,
   moduleId: module.id,
   childParent: child.parentId,
+  childParentIdentity: child.parent === module,
   cached: Object.values(require.cache).includes(module),
 }));
+`;
+
+const promiseRealmIdentitySource = String.raw`
+const realmPromise = Object.getPrototypeOf((async () => {})()).constructor;
+const realmPromisePrototype = realmPromise.prototype;
+const initialPromiseDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Promise');
+const snapshot = () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Promise');
+  return {
+    descriptor: {
+      valueIdentity: descriptor?.value === realmPromise,
+      writable: descriptor?.writable,
+      enumerable: descriptor?.enumerable,
+      configurable: descriptor?.configurable,
+    },
+    descriptorUnchanged:
+      descriptor?.value === initialPromiseDescriptor?.value &&
+      descriptor?.writable === initialPromiseDescriptor?.writable &&
+      descriptor?.enumerable === initialPromiseDescriptor?.enumerable &&
+      descriptor?.configurable === initialPromiseDescriptor?.configurable,
+    constructorIdentity: Promise === realmPromise,
+    prototypeIdentity: Promise.prototype === realmPromisePrototype,
+  };
+};
+const before = snapshot();
+const completion = Promise.resolve(42);
+const during = snapshot();
+setImmediate(() => {
+  console.log(JSON.stringify({
+    promiseRealm: {
+      before,
+      during,
+      after: snapshot(),
+      completionConstructorIdentity: completion.constructor === realmPromise,
+      completionPrototypeIdentity: Object.getPrototypeOf(completion) === realmPromisePrototype,
+    },
+  }));
+});
+completion
 `;
 
 const sequential: NodeCliEvalInvocation[] = [
@@ -138,8 +209,17 @@ const concurrent: NodeCliEvalInvocation[] = [
   separated(
     'combined-print-eval-fulfilled-promise',
     '-pe',
-    'console.log(JSON.stringify({execArgv:process.execArgv}));Promise.resolve(42)',
+    `console.log(JSON.stringify({execArgv:process.execArgv}));${promiseRealmIdentitySource}`,
   ),
+  { label: 'explicit-empty-short-eval', nodeArgv: ['-e', ''] },
+  { label: 'explicit-empty-long-eval', nodeArgv: ['--eval', ''] },
+  { label: 'explicit-empty-combined-print-eval', nodeArgv: ['-pe', ''] },
+  { label: 'explicit-empty-short-print', nodeArgv: ['-p', ''] },
+  { label: 'explicit-empty-long-print', nodeArgv: ['--print', ''] },
+  {
+    label: 'explicit-empty-print-equals-ignored',
+    nodeArgv: ['--print=ignored', ''],
+  },
   barePrint('bare-short-print', '-p'),
   barePrint('bare-long-print', '--print'),
   barePrint('bare-print-equals-ignored', '--print=ignored'),
@@ -193,10 +273,10 @@ export default {
   setup: {
     files: {
       'fixtures/a/marker.cjs':
-        "module.exports={marker:'a',parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
+        "module.exports={marker:'a',parent:module.parent,parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
       'fixtures/a/node_modules/eval-package/index.js': "module.exports='package-a'\n",
       'fixtures/b/marker.cjs':
-        "module.exports={marker:'b',parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
+        "module.exports={marker:'b',parent:module.parent,parentId:module.parent?.id,parentFilename:module.parent?.filename}\n",
       'fixtures/b/node_modules/eval-package/index.js': "module.exports='package-b'\n",
     },
   },

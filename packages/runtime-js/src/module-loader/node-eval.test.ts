@@ -23,7 +23,10 @@ interface EvalRecordProbe {
   readonly module: object;
   readonly cache: Record<string, unknown>;
   readonly during: boolean;
-  readonly child: object;
+  readonly child: {
+    readonly load: number;
+    readonly parent: object;
+  };
 }
 
 interface EvalIdentityProbe {
@@ -44,6 +47,17 @@ interface EvalIdentityProbe {
     readonly answer: number;
     readonly parentId: string;
     readonly parentFilename: string;
+    readonly parent: object;
+  };
+}
+
+interface PromiseRealmProbe {
+  during?: {
+    readonly descriptor: PropertyDescriptor | undefined;
+    readonly constructor: PromiseConstructor;
+    readonly prototype: object;
+    readonly completionConstructor: unknown;
+    readonly completionPrototype: object | null;
   };
 }
 
@@ -85,6 +99,7 @@ module.exports = {
   answer: 42,
   parentId: module.parent?.id,
   parentFilename: module.parent?.filename,
+  parent: module.parent,
 };
 `,
     });
@@ -129,7 +144,11 @@ module.exports = {
         moduleLoaded: probe.moduleLoaded,
         requireMain: probe.requireMain,
         during: probe.during,
-        dep: probe.dep,
+        dep: {
+          answer: probe.dep.answer,
+          parentId: probe.dep.parentId,
+          parentFilename: probe.dep.parentFilename,
+        },
       }).toEqual({
         thisIsGlobal: true,
         argumentsType: 'undefined',
@@ -148,6 +167,7 @@ module.exports = {
           parentFilename: '/work/[eval]',
         },
       });
+      expect(probe.dep.parent).toBe(probe.moduleRecord);
       expect(Object.values(probe.cache)).not.toContain(probe.moduleRecord);
       expect(runner.registry.has('/work/[eval]')).toBe(false);
     } finally {
@@ -161,7 +181,7 @@ module.exports = {
     vfs.loadFixture({
       '/work/dep.cjs': `
 globalThis.${DEP_LOADS} = (globalThis.${DEP_LOADS} ?? 0) + 1;
-module.exports = { load: globalThis.${DEP_LOADS} };
+module.exports = { load: globalThis.${DEP_LOADS}, parent: module.parent };
 `,
     });
     const bindings = snapshotCjsBindings();
@@ -182,6 +202,7 @@ module.exports = { load: globalThis.${DEP_LOADS} };
       if (first === undefined) throw new Error('first eval probe missing');
 
       expect(first.during).toBe(false);
+      expect(first.child.parent).toBe(first.module);
       expect(Object.values(first.cache)).not.toContain(first.module);
       expect(runner.registry.has('/work/[eval]')).toBe(false);
 
@@ -194,6 +215,8 @@ module.exports = { load: globalThis.${DEP_LOADS} };
       expect(second.during).toBe(false);
       expect(second.module).not.toBe(first.module);
       expect(second.child).toBe(first.child);
+      expect(second.child.parent).toBe(first.module);
+      expect(second.child.parent).not.toBe(second.module);
       expect(Reflect.get(globalThis, DEP_LOADS)).toBe(1);
       expect(runner.registry.has('/work/[eval]')).toBe(false);
       for (const cache of [first.cache, second.cache]) {
@@ -220,6 +243,51 @@ module.exports = { load: globalThis.${DEP_LOADS} };
       await expect(completion).resolves.toBe(42);
       expect(runner.registry.has('/work/[eval]')).toBe(false);
     } finally {
+      restoreCjsBindings(bindings);
+    }
+  });
+
+  it('preserves the realm Promise descriptor and identities before, during, and after eval', () => {
+    const vfs = new MemoryFsSync();
+    const bindings = snapshotCjsBindings();
+    const beforeDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Promise');
+    if (beforeDescriptor === undefined) throw new Error('realm Promise descriptor missing');
+    const beforeConstructor = Promise;
+    const beforePrototype = Promise.prototype;
+    const probe: PromiseRealmProbe = {};
+    Reflect.set(globalThis, EVAL_PROBE, probe);
+
+    try {
+      const runner = reflectedCreateNodeEvalScriptRunner()({ vfs, cwd: '/work' });
+      const completion = runner.run(`
+        const completion = Promise.resolve(42);
+        const probe = globalThis.${EVAL_PROBE};
+        probe.during = {
+          descriptor: Object.getOwnPropertyDescriptor(globalThis, 'Promise'),
+          constructor: Promise,
+          prototype: Promise.prototype,
+          completionConstructor: completion.constructor,
+          completionPrototype: Object.getPrototypeOf(completion),
+        };
+        completion;
+      `);
+      const during = probe.during;
+      if (during === undefined) throw new Error('eval Promise probe missing');
+
+      expect(beforeDescriptor.value).toBe(beforeConstructor);
+      expect(during.descriptor).toEqual(beforeDescriptor);
+      expect(during.constructor).toBe(beforeConstructor);
+      expect(during.prototype).toBe(beforePrototype);
+      expect(during.completionConstructor).toBe(beforeConstructor);
+      expect(during.completionPrototype).toBe(beforePrototype);
+      expect(Object.getOwnPropertyDescriptor(globalThis, 'Promise')).toEqual(beforeDescriptor);
+      expect(Promise).toBe(beforeConstructor);
+      expect(Promise.prototype).toBe(beforePrototype);
+      expect(completion).toBeInstanceOf(beforeConstructor);
+      expect((completion as { readonly constructor: unknown }).constructor).toBe(beforeConstructor);
+      expect(Object.getPrototypeOf(completion)).toBe(beforePrototype);
+    } finally {
+      Object.defineProperty(globalThis, 'Promise', beforeDescriptor);
       restoreCjsBindings(bindings);
     }
   });
