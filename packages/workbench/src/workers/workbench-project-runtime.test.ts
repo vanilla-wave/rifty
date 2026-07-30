@@ -77,6 +77,12 @@ const OPTIONAL_PRINT_SPELLINGS = [
   '--print=not-the-source',
   '--print=',
 ] as const;
+const NODE_EVAL_INPUT_TYPES = [
+  '--input-type=commonjs',
+  '--input-type=module',
+  '--input-type=commonjs-typescript',
+  '--input-type=module-typescript',
+] as const;
 const TERMINATED_SEPARATED_EVAL_SPELLINGS = [
   {
     option: '-e',
@@ -1440,6 +1446,75 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     },
   );
 
+  it.each([
+    {
+      line: "node --input-type=commonjs -e '1' alpha",
+      source: '1',
+      print: false,
+      execArgv: ['--input-type=commonjs', '-e', '1'],
+      scriptArgs: ['alpha'],
+    },
+    {
+      line: "node --input-type=commonjs --eval='2' -- beta",
+      source: '2',
+      print: false,
+      execArgv: ['--input-type=commonjs', '--eval=2'],
+      scriptArgs: ['beta'],
+    },
+    ...OPTIONAL_PRINT_SPELLINGS.map((option) => ({
+      line: `node --input-type=commonjs ${option} -- '' gamma`,
+      source: '',
+      print: true,
+      execArgv: ['--input-type=commonjs', option],
+      scriptArgs: ['', 'gamma'],
+    })),
+  ])(
+    'preserves explicit CommonJS eval identity through one admitted child: $line',
+    async ({ line, source, print, execArgv, scriptArgs }) => {
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-commonjs-eval' });
+      const running = Promise.resolve(
+        h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-commonjs-eval',
+          rid: 'run-node-commonjs-eval',
+          line,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      let worker: KernelWorkerBoundary | undefined;
+
+      try {
+        await vi.waitFor(() => expect(workers).toHaveLength(1));
+        worker = workers[0];
+        if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+        expect(worker.spec()).toMatchObject({
+          argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
+          entry: {
+            bootstrap: {
+              protocol: 'rifty.node-entry/v3',
+              payload: {
+                launch: {
+                  kind: 'eval',
+                  source,
+                  print,
+                  execArgv,
+                },
+              },
+            },
+          },
+        });
+      } finally {
+        worker?.finish(0);
+        await Promise.allSettled([running]);
+        await h.runtime.close();
+      }
+    },
+  );
+
   it.each(OPTIONAL_PRINT_SPELLINGS)(
     'keeps an empty post-terminator token in eval argv through one real child: %s',
     async (option) => {
@@ -1529,13 +1604,13 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     },
   );
 
-  it.each([
-    '--input-type=module',
-    '--input-type=commonjs-typescript',
-    '--input-type=module-typescript',
-  ])(
-    'keeps an input-type post-terminator program transition in the named no-child gap: %s',
-    async (inputType) => {
+  it.each(
+    NODE_EVAL_INPUT_TYPES.flatMap((inputType) =>
+      OPTIONAL_PRINT_SPELLINGS.map((option) => ({ inputType, option })),
+    ),
+  )(
+    'keeps an input-type post-terminator program transition in the named no-child gap: $inputType $option',
+    async ({ inputType, option }) => {
       const processesBefore = globalProcessManager.snapshot();
       const workers = installRealKernelWorkerBoundary();
       const h = await harness(undefined, nodeCliPackageConfig);
@@ -1548,7 +1623,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         type: 'pty:exec',
         sid: 'terminal-node-input-type-print-program',
         rid: 'run-node-input-type-print-program',
-        line: `node ${inputType} -p -- entry.cjs`,
+        line: `node ${inputType} ${option} -- entry.cjs`,
         cols: 80,
         rows: 24,
         isTTY: true,
@@ -1805,6 +1880,11 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     ['node -epSRC', 'node: bad option: -epSRC\n'],
     ['node -pe=SRC', 'node: bad option: -pe=SRC\n'],
     ['node -ep=SRC', 'node: bad option: -ep=SRC\n'],
+    ['node -r', 'node: -r requires an argument\n'],
+    ['node --require', 'node: --require requires an argument\n'],
+    ['node --require=', 'node: --require= requires an argument\n'],
+    ['node --import', 'node: --import requires an argument\n'],
+    ['node --import=', 'node: --import= requires an argument\n'],
   ])('returns Node-shaped exit 9 without allocating a child: %s', async (line, expectedStderr) => {
     const processesBefore = globalProcessManager.snapshot();
     const workers = installRealKernelWorkerBoundary();
@@ -1836,6 +1916,99 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     );
     await h.runtime.close();
   });
+
+  it.each([
+    'node -r preload.cjs -p 1',
+    'node --require preload.cjs -p 1',
+    'node --require=preload.cjs -p 1',
+    'node --import preload.mjs -p 1',
+    'node --import=preload.mjs -p 1',
+  ])('keeps a valid Node preload form in its named no-child context gap: %s', async (line) => {
+    const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-preload-gap' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-node-preload-gap',
+      rid: 'run-node-preload-gap',
+      line,
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const stderr = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' &&
+          frame.rid === 'run-node-preload-gap' &&
+          frame.stream === 'stderr',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(stderr).toContain('Not implemented: workbench.node.preload-context');
+    expect(workers).toHaveLength(0);
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-node-preload-gap',
+        code: 1,
+        exit: { code: 1, signal: null },
+      }),
+    );
+    await h.runtime.close();
+  });
+
+  it.each(
+    NODE_EVAL_INPUT_TYPES.flatMap((inputType) => [
+      [`node ${inputType} -e`, 'node: -e requires an argument\n'],
+      [`node ${inputType} --eval=`, 'node: --eval= requires an argument\n'],
+      [`node ${inputType} -pe`, 'node: --eval requires an argument\n'],
+    ]),
+  )(
+    'keeps eval usage precedence ahead of an accepted input type: %s',
+    async (line, expectedStderr) => {
+      const processesBefore = globalProcessManager.snapshot();
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-input-type-usage' });
+
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-input-type-usage',
+        rid: 'run-node-input-type-usage',
+        line,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+
+      const stderr = h.frames
+        .filter(
+          (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+            frame.type === 'pty:chunk' &&
+            frame.rid === 'run-node-input-type-usage' &&
+            frame.stream === 'stderr',
+        )
+        .map((frame) => new TextDecoder().decode(frame.data))
+        .join('');
+      expect(stderr).toBe(expectedStderr);
+      expect(workers).toHaveLength(0);
+      expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+      expect(h.frames).toContainEqual(
+        expect.objectContaining({
+          type: 'pty:exit',
+          rid: 'run-node-input-type-usage',
+          code: 9,
+          exit: { code: 9, signal: null },
+        }),
+      );
+      await h.runtime.close();
+    },
+  );
 
   it.each([
     "node --input-type=module -e '1'",
@@ -1887,9 +2060,11 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     'node --input-type=module --print=ignored',
     'node --input-type=module --print=not-the-source',
     'node --input-type=module --print=',
-    "node --input-type=module -p -- ''",
+    ...OPTIONAL_PRINT_SPELLINGS.map((option) => `node --input-type=module ${option} -- ''`),
     "node --input-type=module-typescript -p 'const n: number = 1; n'",
-    "node --input-type=module-typescript -p -- ''",
+    ...OPTIONAL_PRINT_SPELLINGS.map(
+      (option) => `node --input-type=module-typescript ${option} -- ''`,
+    ),
   ])('returns Node-shaped ESM print rejection without allocating a child: %s', async (line) => {
     const processesBefore = globalProcessManager.snapshot();
     const workers = installRealKernelWorkerBoundary();
@@ -1929,7 +2104,9 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
   it.each([
     "node --input-type=commonjs-typescript -e 'const n: number = 1'",
     "node --input-type=commonjs-typescript -p 'const n: number = 1; n'",
-    "node --input-type=commonjs-typescript -p -- ''",
+    ...OPTIONAL_PRINT_SPELLINGS.map(
+      (option) => `node --input-type=commonjs-typescript ${option} -- ''`,
+    ),
     "node --input-type=module-typescript -e 'const n: number = 1'",
   ])('keeps explicit TypeScript eval as its named no-child context gap: %s', async (line) => {
     const processesBefore = globalProcessManager.snapshot();

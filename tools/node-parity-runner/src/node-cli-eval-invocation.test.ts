@@ -123,6 +123,47 @@ describe('node CLI eval invocation model', () => {
     ]);
   });
 
+  it('preserves explicit CommonJS input type across eval grammar boundaries', () => {
+    const invocations = [
+      {
+        label: 'commonjs-eval',
+        nodeArgv: ['--input-type=commonjs', '-e', 'source-a', 'alpha'],
+      },
+      {
+        label: 'commonjs-inline-eval',
+        nodeArgv: ['--input-type=commonjs', '--eval=source-b', '--', 'beta'],
+      },
+      {
+        label: 'commonjs-empty-print-terminator',
+        nodeArgv: ['--input-type=commonjs', '-p', '--', '', 'gamma'],
+      },
+    ] as const satisfies readonly NodeCliEvalInvocation[];
+
+    expect(nodeCliEvalInvocations(evalCase(invocations)).sequential).toEqual([
+      {
+        ...invocations[0],
+        source: 'source-a',
+        print: false,
+        execArgv: ['--input-type=commonjs', '-e', 'source-a'],
+        scriptArgs: ['alpha'],
+      },
+      {
+        ...invocations[1],
+        source: 'source-b',
+        print: false,
+        execArgv: ['--input-type=commonjs', '--eval=source-b'],
+        scriptArgs: ['beta'],
+      },
+      {
+        ...invocations[2],
+        source: '',
+        print: true,
+        execArgv: ['--input-type=commonjs', '-p'],
+        scriptArgs: ['', 'gamma'],
+      },
+    ]);
+  });
+
   it.each(['-p', '--print', '--print=ignored', '--print=not-the-source', '--print='] as const)(
     '%s projects a separated empty token as argv, not source-bearing execArgv',
     (option) => {

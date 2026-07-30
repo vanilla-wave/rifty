@@ -17,6 +17,7 @@ interface ReflectedNodeEvalScriptRunner {
 type ReflectedCreateNodeEvalScriptRunner = (opts: {
   readonly vfs: MemoryFsSync;
   readonly cwd: string;
+  readonly explicitCommonJs?: boolean;
 }) => ReflectedNodeEvalScriptRunner;
 
 interface EvalRecordProbe {
@@ -392,6 +393,28 @@ module.exports = { load: globalThis.${DEP_LOADS}, parent: module.parent };
 
     expect(thrown).toBeInstanceOf(NotImplementedError);
     expect((thrown as NotImplementedError).feature).toBe('runtime-js.node-eval-typescript-context');
+  });
+
+  it('preserves JavaScript SyntaxError when explicit CommonJS disables TypeScript stripping', () => {
+    const vfs = new MemoryFsSync();
+    const bindings = snapshotCjsBindings();
+    let thrown: unknown;
+    try {
+      const runner = reflectedCreateNodeEvalScriptRunner()({
+        vfs,
+        cwd: '/work',
+        explicitCommonJs: true,
+      });
+      runner.run('const n: number = 1');
+    } catch (error) {
+      thrown = error;
+    } finally {
+      restoreCjsBindings(bindings);
+    }
+
+    expect(thrown).toBeInstanceOf(SyntaxError);
+    expect(thrown).not.toBeInstanceOf(NotImplementedError);
+    expect((thrown as Error).message).toContain('Missing initializer in const declaration');
   });
 
   it.each([

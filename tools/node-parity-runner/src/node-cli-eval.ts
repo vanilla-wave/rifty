@@ -258,6 +258,13 @@ function evalSemantics(
   if (option === undefined) {
     throw new TypeError(`${owner} must contain a supported eval option`);
   }
+  if (option === '--input-type=commonjs') {
+    const nested = evalSemantics(nodeArgv.slice(1), owner);
+    return Object.freeze({
+      ...nested,
+      execArgv: Object.freeze([option, ...nested.execArgv]),
+    });
+  }
   if (option === '-e' || option === '--eval' || option === '-pe') {
     const source = nodeArgv[1];
     if (source === undefined || source === '--') {

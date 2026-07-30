@@ -30,10 +30,14 @@ type, `-p -- <nonempty entry>` selects the separately named program gap;
 `module-typescript -p -- ''` retains the ESM print rejection, while
 `commonjs-typescript -p -- ''` remains this TypeScript gap.
 
-Today source that needs TypeScript and explicit TypeScript input-type eval forms
-throw `NotImplementedError('runtime-js.node-eval-typescript-context')`
-synchronously. They never execute a partially stripped program, change source
-into a file module, or allocate a child.
+Today source that needs TypeScript without an explicit input type reaches one
+admitted physical eval child, then throws
+`NotImplementedError('runtime-js.node-eval-typescript-context')` in the runtime
+loader. Explicit TypeScript input-type forms throw the same named gap in
+Workbench before child allocation. Neither path executes partially stripped
+JavaScript or changes source into a file module. Explicit
+`--input-type=commonjs` is outside this gap: Node disables implicit stripping
+there, so Rifty preserves the resulting JavaScript `SyntaxError`.
 
 No overlapping backlog item was found on 2026-07-30. A faithful contract must
 pin Node's erasable and non-erasable syntax, syntax-error priority, source

@@ -229,6 +229,20 @@ const terminatorInvocations = [
 
 const sequential: NodeCliEvalInvocation[] = [
   {
+    label: 'explicit-commonjs-identity',
+    nodeArgv: [
+      '--input-type=commonjs',
+      '-p',
+      'JSON.stringify({argv:[process.argv[0]===process.execPath,...process.argv.slice(1)],execArgv:process.execArgv,filename:__filename,dirname:__dirname})',
+      'commonjs-arg',
+    ],
+  },
+  {
+    label: 'explicit-commonjs-disables-typescript-stripping',
+    nodeArgv: ['--input-type=commonjs', '-e', 'const n: number = 1'],
+    evalErrorStderr: true,
+  },
+  {
     ...separated('identity-and-resolver', '--eval', identitySource, ['alpha', 'two words']),
     cwd: '/fixtures/a',
   },

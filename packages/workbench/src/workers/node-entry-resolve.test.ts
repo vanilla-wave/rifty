@@ -26,6 +26,13 @@ const TERMINATED_SEPARATED_EVAL_SPELLINGS = [
   { option: '--print=not-the-source', print: true, sourceRequired: false, missing: '' },
   { option: '--print=', print: true, sourceRequired: false, missing: '' },
 ] as const;
+const OPTIONAL_PRINT_SPELLINGS = [
+  '-p',
+  '--print',
+  '--print=ignored',
+  '--print=not-the-source',
+  '--print=',
+] as const;
 
 const TERMINATED_EVAL_SOURCE_STATES = [
   { state: 'missing', source: undefined },
@@ -279,10 +286,84 @@ describe('classifyNodeInvocation', () => {
       kind: 'badOption',
       flag: '--env-file=.env',
     });
-    for (const flag of ['-r', '--require', '--import']) {
-      expect(classifyNodeInvocation([flag, 'preload.cjs'])).toEqual({
-        kind: 'badOption',
-        flag,
+  });
+
+  it('routes supported preload spellings to one named no-child context gap', () => {
+    for (const args of [
+      ['-r', 'preload.cjs', '-p', '1'],
+      ['--require', 'preload.cjs', '-p', '1'],
+      ['--require=preload.cjs', '-p', '1'],
+      ['--import', 'preload.mjs', '-p', '1'],
+      ['--import=preload.mjs', '-p', '1'],
+    ]) {
+      expect(classifyNodeInvocation(args)).toEqual({ kind: 'preloadContext' });
+    }
+  });
+
+  it('preserves Node usage errors for incomplete preload options', () => {
+    for (const [args, option] of [
+      [['-r'], '-r'],
+      [['--require'], '--require'],
+      [['--require='], '--require='],
+      [['--import'], '--import'],
+      [['--import='], '--import='],
+    ] as const) {
+      expect(classifyNodeInvocation(args)).toEqual({
+        kind: 'usageError',
+        message: `node: ${option} requires an argument\n`,
+      });
+    }
+  });
+
+  it('preserves explicit CommonJS input type in eval identity and argv', () => {
+    expect(classifyNodeInvocation(['--input-type=commonjs', '-e', '1', '--', 'alpha'])).toEqual({
+      kind: 'eval',
+      source: '1',
+      print: false,
+      execArgv: ['--input-type=commonjs', '-e', '1'],
+      scriptArgs: ['alpha'],
+    });
+    expect(classifyNodeInvocation(['--input-type=commonjs', '--eval=2', '--', 'beta'])).toEqual({
+      kind: 'eval',
+      source: '2',
+      print: false,
+      execArgv: ['--input-type=commonjs', '--eval=2'],
+      scriptArgs: ['beta'],
+    });
+    expect(classifyNodeInvocation(['--input-type=commonjs', '-p'])).toEqual({
+      kind: 'eval',
+      source: '',
+      print: true,
+      execArgv: ['--input-type=commonjs', '-p'],
+      scriptArgs: [],
+    });
+    expect(classifyNodeInvocation(['--input-type=commonjs', '-p', '--', '', 'gamma'])).toEqual({
+      kind: 'eval',
+      source: '',
+      print: true,
+      execArgv: ['--input-type=commonjs', '-p'],
+      scriptArgs: ['', 'gamma'],
+    });
+  });
+
+  it('keeps missing eval-source usage ahead of every accepted input type', () => {
+    for (const inputType of [
+      '--input-type=commonjs',
+      '--input-type=module',
+      '--input-type=commonjs-typescript',
+      '--input-type=module-typescript',
+    ]) {
+      expect(classifyNodeInvocation([inputType, '-e'])).toEqual({
+        kind: 'usageError',
+        message: 'node: -e requires an argument\n',
+      });
+      expect(classifyNodeInvocation([inputType, '--eval='])).toEqual({
+        kind: 'usageError',
+        message: 'node: --eval= requires an argument\n',
+      });
+      expect(classifyNodeInvocation([inputType, '-pe'])).toEqual({
+        kind: 'usageError',
+        message: 'node: --eval requires an argument\n',
       });
     }
   });
@@ -320,18 +401,35 @@ describe('classifyNodeInvocation', () => {
 
   it('keeps input-type optional-print program transitions ahead of eval-context outcomes', () => {
     for (const inputType of [
+      '--input-type=commonjs',
       '--input-type=module',
       '--input-type=commonjs-typescript',
       '--input-type=module-typescript',
     ]) {
-      expect(classifyNodeInvocation([inputType, '-p', '--', 'entry.cjs'])).toEqual({
-        kind: 'printProgram',
-      });
+      for (const option of OPTIONAL_PRINT_SPELLINGS) {
+        expect(classifyNodeInvocation([inputType, option, '--', 'entry.cjs'])).toEqual({
+          kind: 'printProgram',
+        });
+      }
     }
-    for (const inputType of ['--input-type=module', '--input-type=module-typescript']) {
-      expect(classifyNodeInvocation([inputType, '-p', '--', ''])).toEqual({
-        kind: 'evalModulePrintError',
+    for (const option of OPTIONAL_PRINT_SPELLINGS) {
+      expect(classifyNodeInvocation(['--input-type=commonjs', option, '--', ''])).toEqual({
+        kind: 'eval',
+        source: '',
+        print: true,
+        execArgv: ['--input-type=commonjs', option],
+        scriptArgs: [''],
       });
+      expect(
+        classifyNodeInvocation(['--input-type=commonjs-typescript', option, '--', '']),
+      ).toEqual({
+        kind: 'evalTypeScript',
+      });
+      for (const inputType of ['--input-type=module', '--input-type=module-typescript']) {
+        expect(classifyNodeInvocation([inputType, option, '--', ''])).toEqual({
+          kind: 'evalModulePrintError',
+        });
+      }
     }
   });
 

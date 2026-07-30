@@ -578,6 +578,31 @@ counter, physical package fixture, and admission-ordered UTF-8 EOF tails close
 their respective proof holes. Contract prose names stable tests/functions
 instead of line numbers.
 
+## Thirty-first readiness re-cut
+
+The fresh judge at `bf9351f25` found four final grammar/residual gaps without
+changing the eval mechanism:
+
+- Node's explicit `--input-type=commonjs` is part of CommonJS eval, preserves
+  exact `execArgv`, and disables Node 24's implicit TypeScript stripping;
+- residual prose incorrectly claimed source-detected TypeScript fails before
+  child allocation, although detection belongs to the admitted runtime loader;
+- accepted input types lacked a native cross-product for missing eval source
+  and all five optional-print `--` transitions;
+- valid Node preload forms were misreported as invalid options instead of a
+  named loud unsupported-context failure.
+
+The item remains `draft` while this re-cut is judged. The v24.16.0 executable
+artifact now pins all four accepted input types across missing `-e`, empty
+`--eval=`, missing `-pe`, empty print terminator, and nonempty program
+transition. Classifier and real owner REDs mirror that precedence. Explicit
+CommonJS runs through the existing v3 eval launch and preserves JavaScript
+`SyntaxError` for TypeScript-only syntax; source-detected TypeScript without an
+input type reaches one physical child before its named loader gap. Explicit
+TypeScript input types remain no-child gaps. Valid preload forms now stop at
+`NotImplementedError('workbench.node.preload-context')` before allocation;
+only incomplete options retain Node's usage error.
+
 ## Refinement evidence
 
 The item was demoted at `0fa204fd3` after the exact Node oracle contradicted two
@@ -605,6 +630,9 @@ identity rather than a generated workspace file, and return the real exit code.
 1. Workbench parses Node 24's supported CommonJS eval spellings:
    `-e <source>`, `--eval <source>`, `--eval=<source>`, `-p [source]`,
    `--print [source]`, `--print=<ignored> [source]`, and `-pe <source>`.
+   A leading `--input-type=commonjs` preserves the same grammar and is retained
+   in `execArgv`; it disables implicit TypeScript stripping, so TypeScript-only
+   source retains JavaScript's `SyntaxError`.
    Missing source for plain `-p`/`--print` evaluates `undefined`; bare `-pe`
    is an eval usage error. For every optional print spelling, `-- '' [args]`
    remains entryless eval and preserves the empty token, while
@@ -651,7 +679,7 @@ identity rather than a generated workspace file, and return the real exit code.
 
 ## Reference contract
 
-- Oracle: Node v24.16.0, CommonJS eval mode.
+- Oracle: Node v24.16.0, implicit and explicit CommonJS eval mode.
 - Reproducible oracle:
   `docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md`.
 - Node mechanism: detached `[eval]` module + unwrapped current-context script
@@ -664,8 +692,10 @@ identity rather than a generated workspace file, and return the real exit code.
 
 ## Parity cases
 
-1. Grammar/identity: every accepted spelling preserves the exact original
-   `process.execArgv`. With script args `alpha`, `two words`,
+1. Grammar/identity: every accepted spelling, including a leading
+   `--input-type=commonjs`, preserves the exact original `process.execArgv`.
+   Explicit CommonJS disables implicit TypeScript stripping and therefore
+   preserves JavaScript's syntax failure. With script args `alpha`, `two words`,
    `process.argv === [process.execPath, 'alpha', 'two words']`; no entry path is
    present and `process.argv0` retains rifty's existing Node-process identity.
    `--print=ignored <source>` proves the RHS is not source; missing print source
@@ -729,8 +759,10 @@ identity rather than a generated workspace file, and return the real exit code.
   child allocation with Node's `ERR_EVAL_ESM_CANNOT_PRINT` code/message and
   status 1. See `runtime-js/node-cli-esm-eval-context`.
 - Preload/import flags `--require`/`-r` and `--import` are not added here. They
-  retain explicit unsupported-option behavior and compat ❌; this item does not
-  silently ignore them. See `runtime-js/node-cli-preload-import-flags`.
+  throw `NotImplementedError('workbench.node.preload-context')` before child
+  allocation and remain compat ❌; this item does not misreport them as invalid
+  options or silently ignore them. See
+  `runtime-js/node-cli-preload-import-flags`.
 - The bare `node` REPL remains the ADR-0155 loud gap; eval support must not
   masquerade as an interactive REPL. See `runtime-js/node-cli-bare-repl`.
 - Optional print followed by `-- <nonempty entry>` selects program mode in
@@ -752,6 +784,8 @@ identity rather than a generated workspace file, and return the real exit code.
   its print spellings preserve the more specific
   `ERR_EVAL_ESM_CANNOT_PRINT` rejection. See
   `runtime-js/node-cli-typescript-eval-context`.
+  `--input-type=commonjs` is supported by this item and instead preserves
+  JavaScript `SyntaxError` for TypeScript-only source.
 - Node-internal stack frames and the `Node.js vX` trailer are not synthesized;
   the exact `[eval]` user frame is in scope.
 
