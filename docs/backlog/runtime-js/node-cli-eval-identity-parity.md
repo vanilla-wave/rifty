@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -612,7 +612,7 @@ identity rather than a generated workspace file, and return the real exit code.
 
 ## Decisions
 
-ready-verdict: 2026-07-30 — Node v24.16.0 artifacts and frozen same-invocation parity/Chromium REDs settle the user scenario, supported grammar, detached `[eval]` identity/cache/resolution, print/lifecycle/errors, isolation, and acceptance carrier; ADR-0337 settles the sole v3 launch and loader seam; ADR-0338 plus package, sibling, forced-inversion, setup-fault, and real-Worker REDs settle authenticated cross-port ordering, cut/drain, failure, provenance, and public boundaries; loud ESM/preload/REPL/TypeScript exclusions, stale/overlap, and removable-mechanism sweeps are closed.
+ready-verdict: 2026-07-30 — Node v24.16.0 artifacts and same-invocation parity/CI-active Chromium REDs settle supported grammar, atomic v3 launch, detached `[eval]` identity/cache/resolution, print/lifecycle/errors, VFS provenance, isolation, and the acceptance carrier; ADR-0337 settles the sole launch and loader seam; ADR-0338 plus package, recursive-child, runtime-js, WASI, worker-thread, setup-fault, real-Chromium, and repaired real parity-Worker REDs settle the minimal authenticated cross-port ordering mechanism, including four-argument stdout/stderr binding to `spec.stdio.ipc`, exact state-attested stdout-zero/stderr-one/stdout-two parent witnesses under forced inversion, and zero public IPC; loud exclusions, public/raw/process-publication boundaries, stale/overlap, removable-machinery, and unchanged pre-demotion Acceptance/Parity are closed.
 
 - ADR-0337 owns the irreversible atomic node-entry v3 shape and the one
   loader-owned unwrapped-script mechanism. There is no v2 compatibility reader.
