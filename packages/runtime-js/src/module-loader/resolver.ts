@@ -874,9 +874,10 @@ function pickMainEntry(pkg: PackageJson): string | null {
 
 /**
  * Find the nearest `package.json` for a resolved file (used to decide ESM vs CJS
- * via the `type` field). Walks up from the file's directory. Parse failure on a
- * present-but-malformed package.json falls back to `{}` (uncached) so a broken
- * manifest classifies as a CJS scope rather than failing the whole resolve.
+ * via the `type` field). Walks up from the file's directory, stopping before a
+ * `node_modules` boundary. Parse failure on a present-but-malformed package.json
+ * falls back to `{}` (uncached) so a broken manifest classifies as a CJS scope
+ * rather than failing the whole resolve.
  */
 export function findPackageScope(
   vfs: FsSync,
@@ -885,6 +886,7 @@ export function findPackageScope(
 ): { dir: string; pkg: PackageJson } | null {
   let dir = dirname(filePath);
   while (true) {
+    if (basename(dir) === 'node_modules') return null;
     const candidate = joinPath(dir, 'package.json');
     if (vfs.statSyncOrNull(candidate)?.isFile) {
       const pkg = cachedParse(vfs, pkgCache, candidate);

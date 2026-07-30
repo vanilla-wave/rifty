@@ -1883,10 +1883,17 @@ function initialiseCjsRecord(
   record: ModuleRecord,
   deps: CjsLoaderDeps,
   parent: CjsModule | undefined,
+  identity: {
+    readonly filename: string;
+    readonly path: string;
+  } = {
+    filename: record.id,
+    path: dirname(record.id),
+  },
 ): CjsModule {
-  record.filename = record.id;
-  record.path = dirname(record.id);
-  record.paths = moduleLookupPaths(record.id);
+  record.filename = identity.filename;
+  record.path = identity.path;
+  record.paths = moduleLookupPaths(identity.filename);
   // Node reaches `module.parent` through a deprecated accessor on
   // `Module.prototype`, so it is readable (nodemon walks it) but never an own
   // enumerable key.
@@ -1907,6 +1914,15 @@ function initialiseCjsRecord(
     },
   });
   return record as CjsModule;
+}
+
+/** Initialise Node's synthetic eval module without inserting it into `require.cache`. */
+export function initialiseDetachedCjsRecord(
+  record: ModuleRecord,
+  deps: CjsLoaderDeps,
+  filename: string,
+): CjsModule {
+  return initialiseCjsRecord(record, deps, undefined, { filename, path: '.' });
 }
 
 function attachCjsChild(parent: CjsModule | undefined, child: CjsModule): void {

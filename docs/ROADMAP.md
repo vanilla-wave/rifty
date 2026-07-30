@@ -89,9 +89,9 @@ Theme (not a checklist):
 - **Runs real-ish projects.** Knock down the high-frequency runtime walls that steer ordinary npm
   code into hard failures (zlib, plausible `platform`/`arch`, fd-fs + `cp`/`mkdtemp`, http loopback);
   previews that don't hang (streaming preview frames, SW→Worker direct routing); off-main-thread heavy
-  guests + worker pools. The first-15-minute Node CLI path specifically requires real Node eval
-  identity: `docs/backlog/runtime-js/node-cli-eval-identity-parity` is a release-priority gap, and the
-  Workbench's current loud `node -e/-p` refusal must not be presented as a completed Node CLI flow.
+  guests + worker pools. The first-15-minute Node CLI path includes real Node 24 CommonJS eval
+  identity: `node -e/-p` uses the physical supervised child with entryless argv, detached `[eval]`
+  module identity, cwd resolution, ordered stdio, preview, signals, and exact shell status.
 - **Durable & portable.** `persist()`/quota, out-of-space UX, project export/import — the user's
   code survives reload and can leave the browser.
 - **Trustworthy.** An honest, auditable open-licensing position vs the proprietary/metered/CDN-locked

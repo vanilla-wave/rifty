@@ -37,6 +37,7 @@ interface WorkerOptions {
   workerData?: unknown;
   env?: Record<string, string | undefined>;
   eval?: boolean;
+  execArgv?: readonly string[];
 }
 
 function snapshotWorkerEnvironment(
@@ -105,6 +106,17 @@ export class Worker extends EventEmitter {
     this.ownerProcess = (globalThis as { process?: unknown }).process;
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
+    const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
+    if (
+      Object.prototype.hasOwnProperty.call(opts, 'execArgv') ||
+      (inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
+    ) {
+      // TODO(backlog: runtime-js/worker-threads-inherited-exec-argv)
+      throw new NotImplementedError(
+        'worker_threads.Worker.execArgv',
+        'node-entry v3 cannot preserve worker-thread execArgv identity',
+      );
+    }
     const processContext = snapshotNodeProcessContext();
     const env =
       opts.env === undefined

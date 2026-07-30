@@ -31,22 +31,41 @@ export function resolveNodeEntry(cwd: string, arg: string | undefined): ResolveR
 export type NodeInvocation =
   | { readonly kind: 'missing' }
   | { readonly kind: 'version' }
+  | { readonly kind: 'usageError'; readonly message: string }
   | { readonly kind: 'badOption'; readonly flag: string }
+  | { readonly kind: 'evalModule' }
+  | { readonly kind: 'evalModulePrintError' }
+  | { readonly kind: 'evalTypeScript' }
+  | { readonly kind: 'preloadContext' }
+  | { readonly kind: 'printProgram' }
   | {
       readonly kind: 'eval';
       readonly source: string;
       readonly print: boolean;
+      readonly execArgv: readonly string[];
       readonly scriptArgs: readonly string[];
     }
   | { readonly kind: 'entry'; readonly arg: string; readonly scriptArgs: readonly string[] };
 
-/** Recognize `-e`/`--eval`/`-p`/`--print` (and their `=value` inline forms). */
-function evalFlag(arg: string): { print: boolean; inline?: string } | null {
-  if (arg === '-e' || arg === '--eval') return { print: false };
-  if (arg === '-p' || arg === '--print') return { print: true };
-  if (arg.startsWith('--eval=')) return { print: false, inline: arg.slice('--eval='.length) };
-  if (arg.startsWith('--print=')) return { print: true, inline: arg.slice('--print='.length) };
-  return null;
+function isEvalOption(arg: string | undefined): boolean {
+  return (
+    arg === '-e' ||
+    arg === '--eval' ||
+    arg === '-p' ||
+    arg === '--print' ||
+    arg === '-pe' ||
+    arg?.startsWith('--eval=') === true ||
+    arg?.startsWith('--print=') === true
+  );
+}
+
+function argsAfterOptionalTerminator(args: readonly string[], start: number): readonly string[] {
+  return args.slice(args[start] === '--' ? start + 1 : start);
+}
+
+function evalUsageError(option: '-e' | '--eval' | '--eval=' | '-pe'): NodeInvocation {
+  const reported = option === '-pe' ? '--eval' : option;
+  return { kind: 'usageError', message: `node: ${reported} requires an argument\n` };
 }
 
 /**
@@ -59,14 +78,114 @@ export function classifyNodeInvocation(args: readonly string[]): NodeInvocation 
   if (first === undefined || first === '') return { kind: 'missing' };
   if (first === '-v' || first === '--version') return { kind: 'version' };
 
-  const ev = evalFlag(first);
-  if (ev) {
-    if (ev.inline !== undefined) {
-      return { kind: 'eval', source: ev.inline, print: ev.print, scriptArgs: args.slice(1) };
+  if (
+    (first === '--input-type=commonjs' ||
+      first === '--input-type=module' ||
+      first === '--input-type=commonjs-typescript' ||
+      first === '--input-type=module-typescript') &&
+    isEvalOption(args[1])
+  ) {
+    const nested = classifyNodeInvocation(args.slice(1));
+    if (nested.kind === 'printProgram' || nested.kind === 'usageError') return nested;
+    if (nested.kind !== 'eval') {
+      throw new Error('node input-type eval classifier reached an impossible nested outcome');
     }
-    const value = args[1];
-    if (value === undefined) return { kind: 'badOption', flag: first }; // -e/-p needs a value
-    return { kind: 'eval', source: value, print: ev.print, scriptArgs: args.slice(2) };
+    if (first === '--input-type=commonjs') {
+      return {
+        ...nested,
+        execArgv: [first, ...nested.execArgv],
+      };
+    }
+    if (first !== '--input-type=commonjs-typescript' && nested.print) {
+      return { kind: 'evalModulePrintError' };
+    }
+    return { kind: first === '--input-type=module' ? 'evalModule' : 'evalTypeScript' };
+  }
+
+  if (first === '-e' || first === '--eval' || first === '-pe') {
+    const source = args[1];
+    if (source === undefined || source === '--') return evalUsageError(first);
+    return {
+      kind: 'eval',
+      source,
+      print: first === '-pe',
+      execArgv: [first, source],
+      scriptArgs: argsAfterOptionalTerminator(args, 2),
+    };
+  }
+
+  if (first.startsWith('--eval=')) {
+    const source = first.slice('--eval='.length);
+    if (source === '') return evalUsageError('--eval=');
+    return {
+      kind: 'eval',
+      source,
+      print: false,
+      execArgv: [first],
+      scriptArgs: argsAfterOptionalTerminator(args, 1),
+    };
+  }
+
+  if (first === '-p' || first === '--print' || first.startsWith('--print=')) {
+    const source = args[1];
+    if (source === undefined) {
+      return {
+        kind: 'eval',
+        source: '',
+        print: true,
+        execArgv: [first],
+        scriptArgs: [],
+      };
+    }
+    if (source === '--') {
+      const entry = args[2];
+      if (entry !== undefined && entry !== '') return { kind: 'printProgram' };
+      return {
+        kind: 'eval',
+        source: '',
+        print: true,
+        execArgv: [first],
+        scriptArgs: args.slice(2),
+      };
+    }
+    if (source === '') {
+      return {
+        kind: 'eval',
+        source: '',
+        print: true,
+        execArgv: [first],
+        scriptArgs: args.slice(1),
+      };
+    }
+    return {
+      kind: 'eval',
+      source,
+      print: true,
+      execArgv: [first, source],
+      scriptArgs: argsAfterOptionalTerminator(args, 2),
+    };
+  }
+
+  if (first === '-r' || first === '--require' || first === '--import') {
+    // TODO(backlog: runtime-js/node-cli-preload-import-flags)
+    if (args[1] === undefined) {
+      return {
+        kind: 'usageError',
+        message: `node: ${first} requires an argument\n`,
+      };
+    }
+    return { kind: 'preloadContext' };
+  }
+
+  if (first.startsWith('--require=') || first.startsWith('--import=')) {
+    // TODO(backlog: runtime-js/node-cli-preload-import-flags)
+    if (first.endsWith('=')) {
+      return {
+        kind: 'usageError',
+        message: `node: ${first} requires an argument\n`,
+      };
+    }
+    return { kind: 'preloadContext' };
   }
 
   // Any other leading-`-` arg is an unknown/unsupported node option — loud
@@ -74,16 +193,4 @@ export function classifyNodeInvocation(args: readonly string[]): NodeInvocation 
   if (first.startsWith('-')) return { kind: 'badOption', flag: first };
 
   return { kind: 'entry', arg: first, scriptArgs: args.slice(1) };
-}
-
-/**
- * The CommonJS source to run for a `-e`/`-p` invocation. `-e` runs the source
- * verbatim (CJS — `require`/`process` available, no implicit print); `-p` wraps
- * the expression in `util.inspect(...) + '\n'` to print its value (Node's
- * `--print`). Written to a temp `.cjs` so the loader runs it through the real
- * module realm (require faithful), not `new Function`.
- */
-export function buildNodeEvalSource(source: string, print: boolean): string {
-  if (!print) return source;
-  return `process.stdout.write(require('node:util').inspect((${source})) + '\\n');\n`;
 }

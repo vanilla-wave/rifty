@@ -2,11 +2,15 @@
 
 ## [Unreleased]
 
-### Added (real Node server dev loop)
+### Added
 
 - Express, Hono, and Koa pin real `nodemon@3.1.14`; owner-VFS edits now replace
   the app Worker on the same preview port with crash recovery and teardown.
   Direct `start` and non-server templates keep their paths (ADR-0324–0327).
+
+- Playground terminals now run Node 24-compatible CommonJS `node -e/-p`
+  invocations through the physical supervised child, including exact eval
+  identity, ordered output, preview, signals, and shell status.
 
 ### Fixed
 
@@ -26,6 +30,9 @@
 - Reset-to-cold instant presets now show delayed preparation progress inside
   the launcher; Chromium acceptance covers every instant sibling and requires
   Vite 7/8 to reach their real ready output.
+- Interactive terminal history now records the owner-authored shell status
+  beside the exact physical child exit, so Ctrl-C remains status `130` while
+  lifecycle consumers retain `SIGTERM` provenance (ADR-0341).
 
 - Failed saved-project activation now restores the prior catalog ref and live
   session before reporting the target open error, preserving both causes when
@@ -262,10 +269,6 @@
 - Normalized scripts and downstream dependency maps preserve every own JSON
   key, including `__proto__`, so manifest bytes, identity, and installation
   input cannot diverge.
-- Workbench `node -e/-p` stays a loud `NotImplementedError` until its eval
-  argv/module identity matches Node; the legacy temporary-file delta is marked
-  ⚠️ in the process compat matrix and tracked in backlog.
-
 ### Changed (app-local Workbench Vite vertical)
 
 - Dedicated Node-server children now receive one validated, detached runtime

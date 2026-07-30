@@ -6,6 +6,16 @@
 
 - **Exact Node v24.0.0 `process.release` identity (ADR-0345).** Every owner and
   spawned process gets an isolated, descriptor-faithful non-LTS release object.
+- **Node 24 CommonJS eval identity (ADR-0339).** `node -e` and `node -p` run
+  one loader-owned, unwrapped `[eval]` script with entryless argv, exact
+  `execArgv`, cwd-anchored resolution, detached cache identity, and natural-exit
+  result printing. Explicit `--input-type=commonjs` retains that identity while
+  disabling Node's implicit TypeScript stripping.
+
+- **Finite eval drain handoff (ADR-0342).** Runtime consumers can release a
+  pending eval drain when a listened-server branch wins; later exit, error, or
+  rejection still prints and terminates exactly once.
+
 - **Worker-backed `child_process` plan and Node IPC (ADR-0326).** Recursive
   `spawn`/`fork` runs a fresh owner-FS Worker with validated stdio/default-JSON
   IPC and nodemon's finite `ps`/`SIGUSR2` forms; other forms stay loud gaps.

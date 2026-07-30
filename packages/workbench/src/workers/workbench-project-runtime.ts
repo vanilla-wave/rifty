@@ -19,7 +19,10 @@ import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.t
 import { readNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
-import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
+import {
+  type OwnerNodeExecution,
+  createOwnerChildNodeExecutor,
+} from './owner-child-node-executor.ts';
 import type {
   OwnerPackageConfig,
   OwnerPackageMutationKind,
@@ -296,14 +299,14 @@ export function createWorkbenchProjectRuntime(
     });
     shell.registerCommand('ps', createOwnerProcessListCommand(readRootProcessSnapshot));
     const spawnNodeEntry = (
-      entryPath: string,
+      execution: OwnerNodeExecution,
       scriptArgs: readonly string[],
       ctx: CommandContext,
     ): Promise<ProcessExit> => {
       const sid = `workbench-node-${++nodeSequence}`;
       const previewScope = createPreviewScope();
       return ownerNodeExecutor(
-        entryPath,
+        execution,
         scriptArgs,
         ctx,
         createNodePreviewRunHooks({
@@ -320,6 +323,7 @@ export function createWorkbenchProjectRuntime(
       const invocation = classifyNodeInvocation(args);
       switch (invocation.kind) {
         case 'missing': {
+          // TODO(backlog: runtime-js/node-cli-bare-repl)
           const resolved = resolveNodeEntry(ctx.cwd, undefined);
           if (!resolved.ok) ctx.stderr.write(resolved.message);
           return 1;
@@ -327,12 +331,40 @@ export function createWorkbenchProjectRuntime(
         case 'version':
           ctx.stdout.write(`${NODE_PROCESS_IDENTITY.version}\n`);
           return 0;
+        case 'usageError':
+          ctx.stderr.write(invocation.message);
+          return 9;
         case 'badOption':
           ctx.stderr.write(`node: bad option: ${invocation.flag}\n`);
           return 9;
+        case 'evalModule':
+          // TODO(backlog: runtime-js/node-cli-esm-eval-context)
+          throw new NotImplementedError('workbench.node.eval-module-context');
+        case 'evalModulePrintError':
+          ctx.stderr.write(
+            'Error [ERR_EVAL_ESM_CANNOT_PRINT]: --print cannot be used with ESM input\n',
+          );
+          return 1;
+        case 'evalTypeScript':
+          // TODO(backlog: runtime-js/node-cli-typescript-eval-context)
+          throw new NotImplementedError('runtime-js.node-eval-typescript-context');
+        case 'preloadContext':
+          // TODO(backlog: runtime-js/node-cli-preload-import-flags)
+          throw new NotImplementedError('workbench.node.preload-context');
+        case 'printProgram':
+          // TODO(backlog: runtime-js/node-cli-print-program-context)
+          throw new NotImplementedError('workbench.node.print-program-context');
         case 'eval':
-          // TODO(backlog: runtime-js/node-cli-eval-identity-parity)
-          throw new NotImplementedError('workbench.node.eval-context');
+          return spawnNodeEntry(
+            {
+              kind: 'eval',
+              source: invocation.source,
+              print: invocation.print,
+              execArgv: invocation.execArgv,
+            },
+            invocation.scriptArgs,
+            ctx,
+          );
         case 'entry': {
           const resolved = resolveNodeEntry(ctx.cwd, invocation.arg);
           if (!resolved.ok) {

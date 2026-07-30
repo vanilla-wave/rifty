@@ -40,6 +40,8 @@ export interface ProjectTerminalPort {
 
 export interface ProjectTerminalRun {
   readonly ready: Promise<void>;
+  /** Owner-authored shell status; independent from the exact physical exit (ADR-0341). */
+  readonly exitCode: Promise<number>;
   readonly exited: Promise<ProcessExit>;
   stop(): Promise<ProcessExit>;
   close(): Promise<ProcessExit>;
@@ -112,6 +114,7 @@ export function createProjectTerminal(_options: {
     readonly line: string;
     readonly admission: Deferred<ProjectTerminalAdmission>;
     readonly ready: Deferred<void>;
+    readonly exitCode: Deferred<number>;
     readonly exited: Deferred<ProcessExit>;
     handle: ProjectTerminalRun;
     lifecycle: RunLifecycle;
@@ -206,6 +209,7 @@ export function createProjectTerminal(_options: {
     state.admission.reject(error);
     state.stopOutcome?.reject(error);
     state.ready.reject(error);
+    state.exitCode.reject(error);
     state.exited.reject(error);
     rejectInput(state, error);
     rejectResizes(state, error);
@@ -445,12 +449,14 @@ export function createProjectTerminal(_options: {
   function createRun(line: string): ProjectTerminalRun {
     const admission = deferred<ProjectTerminalAdmission>();
     const ready = deferred<void>();
+    const exitCode = deferred<number>();
     const exited = deferred<ProcessExit>();
     const idleBarrier = Promise.all([...idleResizeWaiters].map((waiter) => waiter.promise)).then(
       () => undefined,
     );
     const handle: ProjectTerminalRun = {
       ready: ready.promise,
+      exitCode: exitCode.promise,
       exited: exited.promise,
       stop() {
         if (state.stopPromise !== null) return state.stopPromise;
@@ -491,6 +497,7 @@ export function createProjectTerminal(_options: {
       line,
       admission,
       ready,
+      exitCode,
       exited,
       handle,
       lifecycle: 'claimed',
@@ -548,6 +555,7 @@ export function createProjectTerminal(_options: {
               new ClosedHandleError(`Project terminal run ${id}`, terminal.exit),
             );
             state.stopOutcome?.resolve(terminal.exit);
+            state.exitCode.resolve(terminal.exitCode);
             state.exited.resolve(terminal.exit);
           },
           (error: unknown) => failRun(state, errorFrom(error)),

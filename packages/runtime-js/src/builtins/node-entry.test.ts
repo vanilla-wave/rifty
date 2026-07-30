@@ -144,7 +144,14 @@ describe('runNodeEntry', () => {
     let thrown: unknown;
 
     try {
-      await runNodeEntry({ kind: 'eval', vfs, cwd: '/work', source, print: false });
+      await runNodeEntry({
+        kind: 'eval',
+        vfs,
+        cwd: '/work',
+        source,
+        print: false,
+        explicitCommonJs: false,
+      });
     } catch (error) {
       thrown = error;
     }
@@ -155,13 +162,44 @@ describe('runNodeEntry', () => {
     );
   });
 
+  it('projects an explicit CommonJS TypeScript syntax error onto the const binding', async () => {
+    const vfs = new MemoryFsSync();
+    const source = 'const n: number = 1';
+    let thrown: unknown;
+
+    try {
+      await runNodeEntry({
+        kind: 'eval',
+        vfs,
+        cwd: '/work',
+        source,
+        print: false,
+        explicitCommonJs: true,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(SyntaxError);
+    expect((thrown as Error).stack).toBe(
+      '[eval]:1\nconst n: number = 1\n      ^\n\nSyntaxError: Missing initializer in const declaration',
+    );
+  });
+
   it('points an eval throw diagnostic at the ThrowStatement after earlier code', async () => {
     const vfs = new MemoryFsSync();
     const source = "const x=1; throw new Error('x')";
     let thrown: unknown;
 
     try {
-      await runNodeEntry({ kind: 'eval', vfs, cwd: '/work', source, print: false });
+      await runNodeEntry({
+        kind: 'eval',
+        vfs,
+        cwd: '/work',
+        source,
+        print: false,
+        explicitCommonJs: false,
+      });
     } catch (error) {
       thrown = error;
     }
@@ -182,6 +220,7 @@ describe('runNodeEntry', () => {
         cwd: '/work',
         source: "JSON.parse('{')",
         print: false,
+        explicitCommonJs: false,
       });
     } catch (error) {
       thrown = error;
@@ -221,6 +260,7 @@ describe('runNodeEntry', () => {
       cwd: '/work',
       source: 'globalThis.process={poisoned:true};42',
       print: true,
+      explicitCommonJs: false,
     });
     expect(beginNodeEvalUnhandled(new Error('later'), 'uncaught-error')).toBe(true);
     await Promise.resolve();
@@ -263,6 +303,7 @@ describe('runNodeEntry', () => {
       cwd: '/work',
       source: '42',
       print: true,
+      explicitCommonJs: false,
     });
     expect(beginNodeEvalUnhandled(new Error('later'), 'uncaught-error')).toBe(true);
     await Promise.resolve();

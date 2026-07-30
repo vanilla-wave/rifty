@@ -34,7 +34,7 @@ import { getKernelDispatcher, globalProcessManager, readKernelSyncApi } from '@r
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { awaitDrain, installConsole } from '@riftydev/runtime-js';
+import { awaitDrain, installConsole, releaseNodeEvalDrainOwnership } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import {
@@ -63,12 +63,16 @@ const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(
 );
 installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
 const bin = launch.kind === 'program' && launch.bin;
-const nodeServe = launch.kind === 'program' && launch.nodeServe;
-const previewScope = launch.kind === 'program' ? launch.previewScope : undefined;
-const entryPath = proc.argv[1];
-if (typeof entryPath !== 'string' || entryPath === '') {
-  throw new Error('node-entry-bootstrap: missing entry path (process.argv[1])');
+const nodeServe = launch.kind === 'eval' || (launch.kind === 'program' && launch.nodeServe);
+const previewScope = launch.kind === 'worker-thread' ? undefined : launch.previewScope;
+const entryPath = launch.kind === 'eval' ? undefined : proc.argv[1];
+function requiredEntryPath(value: unknown): string {
+  if (typeof value !== 'string' || value === '') {
+    throw new Error('node-entry-bootstrap: missing entry path (process.argv[1])');
+  }
+  return value;
 }
+if (launch.kind !== 'eval') requiredEntryPath(entryPath);
 
 // Realign globalThis.Buffer with THIS bundle's `require('buffer')` so a `node x.js`
 // server using express/etag (which reads the GLOBAL Buffer) doesn't trip the
@@ -111,13 +115,38 @@ if (launch.remoteFs) {
 registerSqliteBuiltin();
 installSqliteWasmSyncProvider(nodeWorkerRuntimeConfig.sqliteWasmUrl);
 
-await prepareNodeEntryRuntime({
-  bin,
-  root: proc.cwd(),
-  args: proc.argv.slice(2),
-  entryPath,
-  fs: syncMirror(),
-});
+if (launch.kind === 'eval') {
+  await prepareNodeEntryRuntime({
+    kind: 'eval',
+    root: proc.cwd(),
+    fs: syncMirror(),
+  });
+} else {
+  await prepareNodeEntryRuntime({
+    bin,
+    root: proc.cwd(),
+    args: proc.argv.slice(2),
+    entryPath: requiredEntryPath(entryPath),
+    fs: syncMirror(),
+  });
+}
+
+const runEntry = (): Promise<void> =>
+  launch.kind === 'eval'
+    ? runNodeEntry({
+        kind: 'eval',
+        vfs: syncMirror(),
+        cwd: proc.cwd(),
+        source: launch.source,
+        print: launch.print,
+        explicitCommonJs: launch.execArgv[0] === '--input-type=commonjs',
+      })
+    : runNodeEntry({
+        vfs: syncMirror(),
+        entryPath: requiredEntryPath(entryPath),
+        cwd: proc.cwd(),
+        bin,
+      });
 
 // `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
@@ -142,19 +171,14 @@ await prepareNodeEntryRuntime({
 if (nodeServe) {
   registerNetBuiltins();
   await runNodeProgramLifecycle({
-    runEntry: () =>
-      runNodeEntry({
-        vfs: syncMirror(),
-        entryPath,
-        cwd: proc.cwd(),
-        bin,
-      }),
+    runEntry,
     listPorts: () => listPorts(),
     onPortsChange: (cb) => onRegistryChange(cb),
     // A serve-capable foreground process may be a real long-lived supervisor
     // (nodemon) whose referenced watcher/timer handles are its Node lifetime.
     // The owner signal/peer boundary remains the physical stop authority.
     awaitDrain: () => awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
+    releaseDrainOwnership: releaseNodeEvalDrainOwnership,
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
@@ -166,12 +190,7 @@ if (nodeServe) {
     exit: (code) => proc.exit(code),
   });
 } else {
-  await runNodeEntry({
-    vfs: syncMirror(),
-    entryPath,
-    cwd: proc.cwd(),
-    bin,
-  });
+  await runEntry();
   // Honor process.exitCode on a clean return (Node parity, ADR-0157 D4): the kernel
   // reaps a no-throw return as exit 0, so a `.bin`/execSync CLI that set a non-zero
   // process.exitCode must surface it (proc.exit throws RIFTY_PROCESS_EXIT → kernel
