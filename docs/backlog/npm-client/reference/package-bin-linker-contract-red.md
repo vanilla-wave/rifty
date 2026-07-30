@@ -355,3 +355,23 @@ The no-pickup contract baseline keeps the executable RED in checkpoint history
 instead of leaving main red. The source slice must restore exact blob
 `808d8e7aacb4fd0feea80575cd1957f37fb42066` before its first production-source
 commit; the ready verdict and carrier bytes may not change.
+
+## Claim aggregation successor baseline
+
+Recorded on post-#223 main
+`782b1878f39efdd04e3a4ef623840c425b165f9b`, Node 24.16.0 and pnpm
+11.5.2. The fresh aggregation carrier composes only the landed single-source
+seam. It covers one readonly prepared/narrow list, an empty list, three-source
+and per-source non-monotonic order, same-scope duplicates, exact later-source
+string/object failures, once-read reached sources, and an unread suffix.
+
+```sh
+pnpm vitest run \
+  packages/npm-client/src/linker-bin-claim-aggregation.contract.test.ts
+pnpm --filter @riftydev/npm-client typecheck
+```
+
+No production source, package root, VFS path, settlement, compat, or changelog
+diff is present at this checkpoint. Runtime result: 6 tests, 5 RED and 1 GREEN;
+package typecheck adds exactly two intentional `TS2578` REDs while
+`normalizePackageBinSources` is absent.

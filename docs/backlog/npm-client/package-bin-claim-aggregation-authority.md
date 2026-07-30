@@ -33,11 +33,12 @@ package-specific branch.
 
 - One exact readonly mixed source list admits prepared and narrow sources while
   rejecting raw `ResolvedPackage` and shaped `PackageBinClaim`.
+- An empty readonly source list returns the exact empty claim list.
 - Compose the predecessor once per reached source. Preserve a deliberately
   non-monotonic three-source sequence and each source's command order exactly.
 - Same-scope duplicate commands remain separate ordered claims.
 - A later invalid source preserves the exact error and never rereads any
-  earlier or failing source.
+  earlier or failing source; following sources remain unread.
 - No current/prior settlement, named ceiling, VFS, compat, linker entrypoint, or
   public export enters this unit.
 
@@ -47,14 +48,16 @@ package-specific branch.
 2. Three non-monotonic sources return exact ordered claims.
 3. Duplicate scope/command facts remain separate in source order.
 4. Valid prefixes followed by string/object escaping targets read each reached
-   source once and return the exact error.
+   source once, leave following sources unread, and return the exact error.
+5. The empty readonly source list returns `[]`.
 
 ## Fault matrix
 
 | Fault class | Required outcome | Proof |
 |---|---|---|
-| lossy-aggregate | source/command order and duplicates remain exact | non-monotonic three-source plus duplicate sequence |
-| sibling-drift | every source uses only the predecessor once | mixed list and later-error read counters |
+| observable-order | source/command order and later-error priority remain exact | non-monotonic three-source sequence plus unread suffix |
+| lossy-aggregate | duplicate scope/command facts remain distinct | same-scope duplicate sequence |
+| sibling-drift | every reached source keeps exact landed normalization behavior and one bin read | mixed list and later-error read counters |
 | corrupt-input | later escaping source retains exact predecessor error | valid-prefix string/object target table |
 
 ## Out of scope
@@ -76,3 +79,6 @@ package-specific branch.
   normalization lands.
 - Flat ordered composition is sufficient. No sort, comparator, key, map,
   scheduler, or state owner is permitted.
+- Keep the predecessor checkpoint's package-private
+  `normalizePackageBinSources` name; direct predecessor composition is
+  implementation-review evidence, not a reason to add an injectable spy seam.
