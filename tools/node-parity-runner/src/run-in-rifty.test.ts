@@ -203,7 +203,7 @@ describe('runInRifty', () => {
     ['clean normal path', undefined, undefined],
     ['Workbench-owner pre-bootstrap', 'workbench-owner-transient-source-file', 'workbench-owner'],
     ['SAB-remote pre-bootstrap', 'sab-remote-transient-source-file', 'sab-remote'],
-    ['child-local pre-bootstrap MemoryFs', 'child-local-transient-source-file', 'child-local'],
+    ['child-local pre-entry process adoption', 'child-local-transient-source-file', 'child-local'],
   ])(
     'audits identical eval source bytes across the %s VFS boundary',
     async (_label, fault, actor) => {

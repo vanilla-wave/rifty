@@ -65,6 +65,34 @@ resetKeepalive();
 installTimerGlobals();
 hostProcess.on('unhandledRejection', (reason) => recordRejection(reason));
 
+function installObservedNodeRuntime(spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>): void {
+  const launch = readNodeEntryBootstrap().launch;
+  const launchKind = (launch as { readonly kind: unknown }).kind;
+  if (request.nodeCliEvalVfsFault !== undefined && launchKind !== 'eval') {
+    throw new TypeError('node-cli-eval VFS fault requires an eval launch');
+  }
+  if (launchKind === 'eval') {
+    // Observation begins after the kernel publishes the typed launch but before
+    // process adoption. A carrier in installNodeRuntime's pre-entry interval
+    // must remain visible even when it is deleted before user entry.
+    vfs.startObservation('child-local');
+    if (request.nodeCliEvalVfsFault === 'child-local-transient-source-file') {
+      const source = (launch as unknown as { readonly source?: unknown }).source;
+      if (typeof source !== 'string') {
+        throw new TypeError('node-cli-eval transient source fault requires string source');
+      }
+      vfs.beginCarrierObservation('child-local');
+      try {
+        vfs.writeFileSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, new TextEncoder().encode(source));
+        vfs.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
+      } finally {
+        vfs.endCarrierObservation();
+      }
+    }
+  }
+  installNodeRuntime(spec);
+}
+
 async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   const bootstrap = readNodeEntryBootstrap();
   const launch = bootstrap.launch;
@@ -80,21 +108,17 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     publishKernelSyncApi({
       call: syncCall,
     });
-    vfs.startObservation('child-local');
     if (request.nodeCliEvalVfsFault !== undefined) {
       const source = (launch as unknown as { readonly source?: unknown }).source;
       if (typeof source !== 'string') {
         throw new TypeError('node-cli-eval transient source fault requires string source');
       }
       if (request.nodeCliEvalVfsFault === 'child-local-transient-source-file') {
-        vfs.beginCarrierObservation('child-local');
-        vfs.writeFileSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, new TextEncoder().encode(source));
-        vfs.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
-        vfs.endCarrierObservation();
-        const mutations = vfs.mutations();
-        const expected = nodeCliEvalTransientSourceCarrierMutations('child-local', source);
-        if (JSON.stringify(mutations) !== JSON.stringify(expected)) {
-          throw new Error('node-cli-eval child-local VFS carrier evidence is incomplete');
+        if (
+          JSON.stringify(vfs.mutations()) !==
+          JSON.stringify(nodeCliEvalTransientSourceCarrierMutations('child-local', source))
+        ) {
+          throw new Error('node-cli-eval child-local pre-entry VFS carrier evidence is incomplete');
         }
         syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, { actor: 'child-local' });
       } else {
@@ -169,7 +193,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
     },
   });
   const outcome = await runEntryLifecycle(spec, {
-    preEntryHook: installNodeRuntime,
+    preEntryHook: installObservedNodeRuntime,
     drainHook: null,
     async runEntry(entry) {
       if (entry.kind !== 'url' || entry.url !== 'parity://node-entry') {
