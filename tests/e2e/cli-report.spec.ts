@@ -5,7 +5,7 @@
  * terminal the same raw argv. Workbench alone owns shell tokenisation, Node
  * option classification, launch construction, and supervised-child execution.
  */
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
+import { type ChildProcess, type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -55,6 +55,11 @@ interface WorkbenchOutcome {
   readonly line: string;
   readonly output: string;
   readonly exitCode: number;
+}
+
+interface RunningHostInvocation {
+  readonly child: ChildProcess;
+  readonly outcome: Promise<NodeCliEvalRawOutcome>;
 }
 
 const identitySource =
@@ -168,22 +173,32 @@ async function materializeWorkbenchFixtures(page: Page): Promise<void> {
   }
 }
 
+function startHostInvocation(
+  fixture: HostFixture,
+  invocation: PhysicalNodeInvocation,
+): RunningHostInvocation {
+  assertNodeCliEvalOracleVersion(process.version);
+  const capture = createNodeCliEvalCapture();
+  const child = spawn(process.execPath, [...invocation.nodeArgv], {
+    cwd: fixture.cwd(invocation.cwd),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  child.stdout.on('data', (chunk: unknown) => capture.push('stdout', chunk));
+  child.stderr.on('data', (chunk: unknown) => capture.push('stderr', chunk));
+  const outcome = new Promise<NodeCliEvalRawOutcome>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => {
+      resolve(capture.finish(code, signal));
+    });
+  });
+  return { child, outcome };
+}
+
 function runHostInvocation(
   fixture: HostFixture,
   invocation: PhysicalNodeInvocation,
 ): Promise<NodeCliEvalRawOutcome> {
-  assertNodeCliEvalOracleVersion(process.version);
-  const capture = createNodeCliEvalCapture();
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [...invocation.nodeArgv], {
-      cwd: fixture.cwd(invocation.cwd),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    child.stdout.on('data', (chunk: unknown) => capture.push('stdout', chunk));
-    child.stderr.on('data', (chunk: unknown) => capture.push('stderr', chunk));
-    child.once('error', reject);
-    child.once('exit', (code, signal) => resolve(capture.finish(code, signal)));
-  });
+  return startHostInvocation(fixture, invocation).outcome;
 }
 
 async function runWorkbenchInvocation(
@@ -300,7 +315,7 @@ function startHostPreview(
       }
       reject(error);
     });
-    child.once('exit', (code, signal) => {
+    child.once('close', (code, signal) => {
       const result = capture.finish(code, signal);
       if (!readySettled) {
         readySettled = true;
@@ -343,6 +358,43 @@ async function stopWorkbenchPreview(
 
 test.describe('CLI report template through the worker lifecycle', () => {
   test.describe.configure({ mode: 'serial' });
+
+  test('native oracle waits for inherited stdio pipes to close after direct-child exit', async ({
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'native oracle regression runs once');
+    const fixture = createHostFixture();
+    const invocation: PhysicalNodeInvocation = {
+      label: 'native-inherited-pipe-drain',
+      cwd: '/fixtures/a',
+      nodeArgv: [
+        '-e',
+        "const{spawn}=require('node:child_process');const child=spawn(process.execPath,['-e',\"setTimeout(()=>process.stdout.write('EVAL_CAPTURE:late\\\\n'),100)\"],{stdio:['ignore',process.stdout,process.stderr]});child.unref();process.stdout.write('EVAL_CAPTURE:direct\\n')",
+      ],
+    };
+    try {
+      const running = startHostInvocation(fixture, invocation);
+      let captureSettled = false;
+      const outcome = running.outcome.then((result) => {
+        captureSettled = true;
+        return result;
+      });
+      await new Promise<void>((resolve, reject) => {
+        running.child.once('exit', () => resolve());
+        running.child.once('error', reject);
+      });
+      await Promise.resolve();
+      expect(captureSettled).toBe(false);
+      expect(await outcome).toMatchObject({
+        stdout: 'EVAL_CAPTURE:direct\nEVAL_CAPTURE:late\n',
+        stderr: '',
+        code: 0,
+        signal: null,
+      });
+    } finally {
+      fixture.close();
+    }
+  });
 
   test('preset exits cleanly and raw Node eval reaches physical Workbench identity/cache semantics', async ({
     page,
