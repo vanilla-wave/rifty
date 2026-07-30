@@ -17,9 +17,8 @@ function requirePreflight(): Preflight {
   return preflight;
 }
 
-it('keeps settlement package-private', () => {
-  expect(npmClientRoot).not.toHaveProperty('preflightPackageBins');
-});
+it('keeps settlement package-private', () =>
+  expect(npmClientRoot).not.toHaveProperty('preflightPackageBins'));
 
 function source(
   name: string,
@@ -46,30 +45,27 @@ function expectCollision(run: () => void): void {
     caught = error;
   }
   expect.soft(caught).toBeInstanceOf(NotImplementedError);
-  expect
-    .soft((caught as NotImplementedError | undefined)?.feature)
-    .toBe('npm-client.bin-collision-reify');
+  expect.soft(caught).toMatchObject({ feature: 'npm-client.bin-collision-reify' });
 }
 
-it('[fault: lossy-aggregate] returns exact current claims for stable owners in independent scopes', () => {
+it('[fault: observable-order][fault: lossy-aggregate] returns exact current claims for stable owners in independent scopes', () => {
   const preflight = requirePreflight();
   const nestedDir = 'node_modules/host/node_modules';
   const current = [
-    source('root-cli', { shared: './bin/current-root.js', fresh: './bin/fresh.js' }),
-    source('nested-cli', { shared: './bin/current-nested.js' }, nestedDir),
+    source('middle', { middle: './bin/middle.js', shared: './bin/root.js' }),
+    source('zeta', { shared: './bin/nested.js' }, nestedDir),
+    source('alpha', { fresh: './bin/fresh.js' }),
   ] as const;
   const prior = [
-    source('nested-cli', { shared: './bin/prior-nested.js' }, nestedDir),
-    source('root-cli', { shared: './bin/prior-root.js' }),
+    source('zeta', { shared: './bin/prior-nested.js' }, nestedDir),
+    source('middle', { middle: './bin/prior-middle.js', shared: './bin/prior-root.js' }),
   ] as const;
 
   expect(preflight(current, prior)).toEqual([
-    claim('root-cli', 'shared', 'bin/current-root.js'),
-    claim('root-cli', 'fresh', 'bin/fresh.js'),
-    claim('nested-cli', 'shared', 'bin/current-nested.js', nestedDir),
-  ]);
-  expect(preflight([source('new-cli', './bin/new.js')])).toEqual([
-    claim('new-cli', 'new-cli', 'bin/new.js'),
+    claim('middle', 'middle', 'bin/middle.js'),
+    claim('middle', 'shared', 'bin/root.js'),
+    claim('zeta', 'shared', 'bin/nested.js', nestedDir),
+    claim('alpha', 'fresh', 'bin/fresh.js'),
   ]);
 });
 
@@ -84,7 +80,7 @@ it.each([
     const preflight = requirePreflight();
     expectCollision(() =>
       preflight(
-        owners.map((owner) => source(owner, { shared: `./bin/${owner}.js` }, nodeModulesDir)),
+        owners.map((owner) => source(owner, { shared: './bin/shared.js' }, nodeModulesDir)),
       ),
     );
   },
@@ -99,7 +95,17 @@ it.each([
   (_case, currentOwners, priorOwners) => {
     const preflight = requirePreflight();
     const sources = (owners: readonly string[]) =>
-      owners.map((owner) => source(owner, { shared: `./bin/${owner}.js` }));
+      owners.map((owner) => source(owner, { shared: './bin/shared.js' }));
     expectCollision(() => preflight(sources(currentOwners), sources(priorOwners)));
   },
 );
+
+it('[fault: lossy-aggregate] rejects one removed command while its owner survives', () => {
+  const preflight = requirePreflight();
+  const current = source('stable-cli', { kept: './bin/kept.js' });
+  const prior = source('stable-cli', {
+    kept: './bin/kept.js',
+    removed: './bin/removed.js',
+  });
+  expectCollision(() => preflight([current], [prior]));
+});

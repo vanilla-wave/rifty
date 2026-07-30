@@ -455,3 +455,13 @@ No production source, package root, VFS path, linker entrypoint, compat, or
 changelog diff is present at this checkpoint. Runtime result: 8 RED and 1
 GREEN; package typecheck adds exactly four intentional `TS2578` REDs while
 `preflightPackageBins` is absent.
+
+The first isolated Contract+RED review at
+`423cbaaa5ad461fbbf59581e1afc24e2427514d2` passed Standards and blocked
+Spec: the successful current order matched one descending comparator,
+owner-transition rejects also changed target, and full-owner removal did not
+prove a missing prior command while that owner survived. The in-place re-cut
+adds a non-monotonic four-claim current order with shuffled prior sources,
+same-target/different-owner current and prior witnesses, and partial command
+removal. Runtime now reports 9 RED and 1 GREEN; package typecheck retains the
+same four intentional `TS2578` REDs.
