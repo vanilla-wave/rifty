@@ -16,7 +16,7 @@ import { asyncVfs, syncMirror } from '../../../packages/vfs/src/index.ts';
 import { setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
 import workerEnvCase from '../cases/worker_threads/env-semantics.case.ts';
 import { nodeCliEvalVfsFileContent } from './node-cli-eval-vfs-observer.ts';
-import { runInRifty } from './run-in-rifty.ts';
+import { type NodeCliEvalBootstrapFault, runInRifty } from './run-in-rifty.ts';
 
 // Leave room for runInRifty's 30s diagnostic deadline under loaded CI Workers.
 const REAL_WORKER_TEST_TIMEOUT_MS = 35_000;
@@ -69,7 +69,7 @@ describe('runInRifty', () => {
     REAL_WORKER_TEST_TIMEOUT_MS,
   );
 
-  it('rejects both eval-only probes outside an eval physical child', async () => {
+  it('rejects every eval-only probe outside an eval physical child', async () => {
     await expect(
       runInRifty(workerEnvCase, {
         nodeCliEvalVfsProbe: {
@@ -81,6 +81,9 @@ describe('runInRifty', () => {
     await expect(runInRifty(workerEnvCase, { nodeCliEvalPreviewProbe: {} })).rejects.toThrow(
       'RunInRiftyOptions.nodeCliEvalPreviewProbe requires kind node-cli-eval',
     );
+    await expect(
+      runInRifty(workerEnvCase, { nodeCliEvalBootstrapFault: 'wrong-protocol' }),
+    ).rejects.toThrow('RunInRiftyOptions.nodeCliEvalBootstrapFault requires kind node-cli-eval');
   });
 
   it(
@@ -185,6 +188,56 @@ describe('runInRifty', () => {
         { label: 'preview-first', signal: 'SIGTERM' },
         { label: 'preview-second', signal: 'SIGTERM' },
       ]);
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it.each<readonly [label: string, fault: NodeCliEvalBootstrapFault, expectedError: RegExp]>([
+    ['wrong protocol', 'wrong-protocol', /protocol.*v3.*v2/iu],
+    ['missing required field', 'missing-print', /missing field.*print/iu],
+    ['wrong field type', 'print-not-boolean', /print.*boolean/iu],
+    ['extra field', 'extra-launch-field', /unexpected field.*futureEvalField/iu],
+    ['non-string execArgv entry', 'exec-argv-entry-not-string', /execArgv.*string/iu],
+    ['program-only nodeServe', 'program-node-serve', /unexpected field.*nodeServe/iu],
+    ['program-only ipc', 'program-ipc', /unexpected field.*ipc/iu],
+  ])(
+    'rejects physical corrupt eval bootstrap before source/VFS effects: %s',
+    async (_label, fault, expectedError) => {
+      const source = "require('node:fs').writeFileSync('/bootstrap-must-not-run.txt', 'ran');";
+      const output = await runInRifty(
+        {
+          kind: 'node-cli-eval',
+          code: '',
+          expectedPhysicalWorkers: 1,
+          nodeCliEval: {
+            sequential: [
+              {
+                label: `corrupt-${fault}`,
+                nodeArgv: ['-e', source],
+                source,
+                print: false,
+                execArgv: ['-e', source],
+                scriptArgs: [],
+              },
+            ],
+            concurrent: [],
+          },
+        },
+        {
+          nodeCliEvalBootstrapFault: fault,
+          nodeCliEvalVfsProbe: { expectedGuestMutations: [] },
+        },
+      );
+      const outcomes = JSON.parse(output) as readonly [
+        {
+          readonly stderr: string;
+          readonly code: number | null;
+          readonly signal: string | null;
+        },
+      ];
+
+      expect(outcomes[0]).toMatchObject({ code: 1, signal: null });
+      expect(outcomes[0].stderr).toMatch(expectedError);
     },
     REAL_WORKER_TEST_TIMEOUT_MS,
   );

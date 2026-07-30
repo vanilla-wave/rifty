@@ -26,7 +26,10 @@ import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
 import { asyncVfs, syncMirror } from '@riftydev/vfs';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { transform as transformWithHostEsbuild } from 'esbuild';
-import type { WorkerProcessHandle } from '../../../packages/kernel/src/index.ts';
+import type {
+  WorkerEntryDescriptor,
+  WorkerProcessHandle,
+} from '../../../packages/kernel/src/index.ts';
 import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
 import type { NodeEntryBootstrapPayload } from '../../../packages/runtime-js/src/builtins/node-entry-url.ts';
 // vm-engine relative source imports (same `tools/`-harness precedent as
@@ -294,6 +297,15 @@ export interface NodeCliEvalVfsProbe {
   readonly fault?: NodeCliEvalVfsFault;
 }
 
+export type NodeCliEvalBootstrapFault =
+  | 'wrong-protocol'
+  | 'missing-print'
+  | 'print-not-boolean'
+  | 'extra-launch-field'
+  | 'exec-argv-entry-not-string'
+  | 'program-node-serve'
+  | 'program-ipc';
+
 interface NodeCliEvalPreviewExpectation {
   readonly port: number;
   readonly status: number;
@@ -313,6 +325,8 @@ export interface RunInRiftyOptions {
   readonly nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe;
   /** Physical eval-only scoped-preview audit; serializable across the disposable Worker. */
   readonly nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe;
+  /** Physical eval-only raw corrupt-input injection, downstream of the host builder. */
+  readonly nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault;
 }
 
 const DEFAULT_STDIN_TIMEOUT_MS = 2_000;
@@ -320,6 +334,13 @@ const DEFAULT_CASE_TIMEOUT_MS = 30_000;
 const NODE_CLI_EVAL_PREVIEW_TIMEOUT_MS = 5_000;
 const HOST_SET_TIMEOUT = globalThis.setTimeout.bind(globalThis);
 const HOST_CLEAR_TIMEOUT = globalThis.clearTimeout.bind(globalThis);
+const PHYSICAL_NODE_ENTRY_URL = 'parity://node-entry';
+const PHYSICAL_NODE_ENTRY_HOST_RUNTIME = {
+  RIFTY_PARITY_HOST_BOOTSTRAP: 'host-only',
+  RIFTY_KERNEL_WORKER_URL: 'parity://kernel-worker',
+  RIFTY_NODE_ENTRY_WORKER_URL: PHYSICAL_NODE_ENTRY_URL,
+  RIFTY_SQLITE_WASM_URL: 'parity://sqlite-wasm',
+} as const;
 
 interface SerializedWorkerError {
   readonly name: string;
@@ -684,6 +705,7 @@ function nodeCliEvalPreviewExpectations(
 async function installPhysicalWorkerMode(
   testCase: ParityCase,
   nodeCliEvalVfsFault?: NodeCliEvalVfsFault,
+  nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault,
 ): Promise<PhysicalWorkerMode> {
   const { getKernelWorkerUrl, setKernelWorkerUrl } = await import(
     '../../../packages/kernel/src/index.ts'
@@ -719,7 +741,11 @@ async function installPhysicalWorkerMode(
       throw new TypeError('physical-worker parity requires a URL kernel init message');
     }
     const envelope = entry.bootstrap;
-    if (envelope?.protocol !== NODE_ENTRY_BOOTSTRAP_PROTOCOL) {
+    if (
+      envelope === undefined ||
+      (nodeCliEvalBootstrapFault === undefined &&
+        envelope.protocol !== NODE_ENTRY_BOOTSTRAP_PROTOCOL)
+    ) {
       throw new TypeError('physical-worker parity requires typed node-entry bootstrap');
     }
     const payload = envelope.payload as Partial<NodeEntryBootstrapPayload> | null;
@@ -740,11 +766,12 @@ async function installPhysicalWorkerMode(
       if (
         expected === undefined ||
         validatedEvalLabels.has(expected.label) ||
-        launch.source !== expected.source ||
-        launch.print !== expected.print ||
-        launch.remoteFs !== true ||
+        (nodeCliEvalBootstrapFault === undefined && launch.source !== expected.source) ||
+        (nodeCliEvalBootstrapFault === undefined && launch.print !== expected.print) ||
+        (nodeCliEvalBootstrapFault === undefined && launch.remoteFs !== true) ||
         launch.previewScope !== nodeCliEvalPreviewScope(expected.label) ||
-        JSON.stringify(launch.execArgv) !== JSON.stringify(expected.execArgv) ||
+        (nodeCliEvalBootstrapFault === undefined &&
+          JSON.stringify(launch.execArgv) !== JSON.stringify(expected.execArgv)) ||
         terminal?.stdinIsTTY !== false ||
         terminal.stdoutIsTTY !== false ||
         terminal.stderrIsTTY !== false ||
@@ -855,12 +882,7 @@ async function installPhysicalWorkerMode(
       configurable: true,
     });
     setKernelWorkerUrl('parity://kernel-worker');
-    configureNodeEntryWorker('parity://node-entry', {
-      RIFTY_PARITY_HOST_BOOTSTRAP: 'host-only',
-      RIFTY_KERNEL_WORKER_URL: 'parity://kernel-worker',
-      RIFTY_NODE_ENTRY_WORKER_URL: 'parity://node-entry',
-      RIFTY_SQLITE_WASM_URL: 'parity://sqlite-wasm',
-    });
+    configureNodeEntryWorker(PHYSICAL_NODE_ENTRY_URL, PHYSICAL_NODE_ENTRY_HOST_RUNTIME);
     setWorkerFactoryForTests(() => new NativeKernelWorkerAdapter());
   } catch (error) {
     failure = error;
@@ -950,10 +972,56 @@ async function assertNodeCliEvalPreview(
   }
 }
 
+function corruptNodeCliEvalEntry(
+  candidate: Readonly<Record<string, unknown>>,
+  fault: NodeCliEvalBootstrapFault,
+): WorkerEntryDescriptor {
+  const launch: Record<string, unknown> = {
+    ...candidate,
+    execArgv: [...(candidate.execArgv as readonly string[])],
+  };
+  let protocol = 'rifty.node-entry/v3';
+  switch (fault) {
+    case 'wrong-protocol':
+      protocol = 'rifty.node-entry/v2';
+      break;
+    case 'missing-print':
+      Reflect.deleteProperty(launch, 'print');
+      break;
+    case 'print-not-boolean':
+      launch.print = 'yes';
+      break;
+    case 'extra-launch-field':
+      launch.futureEvalField = true;
+      break;
+    case 'exec-argv-entry-not-string':
+      launch.execArgv = ['-e', 42];
+      break;
+    case 'program-node-serve':
+      launch.nodeServe = false;
+      break;
+    case 'program-ipc':
+      launch.ipc = 'none';
+      break;
+  }
+  return {
+    kind: 'url',
+    url: PHYSICAL_NODE_ENTRY_URL,
+    bootstrap: {
+      protocol,
+      payload: {
+        hostRuntime: { ...PHYSICAL_NODE_ENTRY_HOST_RUNTIME },
+        launch,
+      },
+    },
+  };
+}
+
 async function runRiftyNodeCliEvalInvocation(
   invocation: NodeCliEvalInvocation,
   defaultCwd: string,
   previewExpectation?: NodeCliEvalPreviewExpectation,
+  bootstrapFault?: NodeCliEvalBootstrapFault,
 ): Promise<ReturnType<typeof canonicalNodeCliEvalOutcome>> {
   const { globalProcessManager } = await import('../../../packages/kernel/src/index.ts');
   const { buildConfiguredNodeEntryWorkerEntry, nodeChildSpawnOptions } = await import(
@@ -978,7 +1046,10 @@ async function runRiftyNodeCliEvalInvocation(
   };
   // The carrier lands before the product union in RED. The product's exact-own
   // validator remains authoritative: v2 rejects here; v3 snapshots this shape.
-  const entry = buildConfiguredNodeEntryWorkerEntry(candidate as unknown as ConfiguredLaunch);
+  const entry =
+    bootstrapFault === undefined
+      ? buildConfiguredNodeEntryWorkerEntry(candidate as unknown as ConfiguredLaunch)
+      : corruptNodeCliEvalEntry(candidate, bootstrapFault);
   const handle = globalProcessManager.spawnWorker(
     'node',
     {
@@ -1308,6 +1379,9 @@ export async function runInRiftyInCurrentRealm(
   if (options.nodeCliEvalPreviewProbe !== undefined && testCase.kind !== 'node-cli-eval') {
     throw new TypeError('RunInRiftyOptions.nodeCliEvalPreviewProbe requires kind node-cli-eval');
   }
+  if (options.nodeCliEvalBootstrapFault !== undefined && testCase.kind !== 'node-cli-eval') {
+    throw new TypeError('RunInRiftyOptions.nodeCliEvalBootstrapFault requires kind node-cli-eval');
+  }
   const previewExpectations = nodeCliEvalPreviewExpectations(
     testCase,
     options.nodeCliEvalPreviewProbe,
@@ -1428,13 +1502,19 @@ export async function runInRiftyInCurrentRealm(
       physicalWorkerMode = await installPhysicalWorkerMode(
         testCase,
         options.nodeCliEvalVfsProbe?.fault,
+        options.nodeCliEvalBootstrapFault,
       );
       cleanups.defer(() => physicalWorkerMode?.teardown());
     }
 
     if (testCase.kind === 'node-cli-eval') {
       const output = await runNodeCliEvalMatrix(testCase, (invocation) =>
-        runRiftyNodeCliEvalInvocation(invocation, cwd, previewExpectations?.[invocation.label]),
+        runRiftyNodeCliEvalInvocation(
+          invocation,
+          cwd,
+          previewExpectations?.[invocation.label],
+          options.nodeCliEvalBootstrapFault,
+        ),
       );
       physicalWorkerMode?.assertExpected();
       const audit = evalFsObserver?.audit(
@@ -1572,6 +1652,7 @@ function runInDisposableWorker(
   caseTimeoutMs: number,
   nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe,
   nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe,
+  nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const worker = new Worker(new URL('./run-in-rifty-worker.ts', import.meta.url), {
@@ -1581,6 +1662,7 @@ function runInDisposableWorker(
         stdinTimeoutMs,
         nodeCliEvalVfsProbe,
         nodeCliEvalPreviewProbe,
+        nodeCliEvalBootstrapFault,
       },
     });
     let settling = false;
@@ -1665,6 +1747,7 @@ export async function runInRifty(
       caseTimeoutMs,
       options.nodeCliEvalVfsProbe,
       options.nodeCliEvalPreviewProbe,
+      options.nodeCliEvalBootstrapFault,
     );
   }
   return runInRiftyInCurrentRealm(testCase, options);
