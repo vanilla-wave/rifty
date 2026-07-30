@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Package-bin claim settlement authority
 created: 2026-07-28
 why: the terminal normalization checkpoint proved normalized claim settlement needs its own exact per-scope current/prior boundary
@@ -83,6 +83,11 @@ scheduler, lock, or package-specific branch.
 
 ## Decisions
 
+ready-verdict: 2026-07-30 — Contract+RED @ 5eb83f1a66818bc7f0684a98889f9517022f5dc7
+
+- `contract-red-first: 423cbaaa5ad461fbbf59581e1afc24e2427514d2`.
+- `contract-red-pass: 5eb83f1a66818bc7f0684a98889f9517022f5dc7`;
+  review-convergence lineage is recorded in the reference contract.
 - `split-predecessor:
   acf363bc6f34b7b070e787fad6619d99c3839723`; predecessor checkpoints:
   `880813bf62a85050be44c48694e6560164b5f158` and
