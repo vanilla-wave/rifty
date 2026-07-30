@@ -18,9 +18,21 @@ A developer opens a vite preset, runs the real `npm run dev`, preview goes LIVE.
 
 ## Invariants
 
-<!-- Each false on `14b0dad99`: the 403 is lost (PR #112 evidence, no test pins
-     it), `route-preview.ts:108` awaits the reply unbounded, and the WS bridge
-     has no terminal rows. -->
+<!-- Each false on `046e92330`, one line of evidence per statement:
+     I1 — `io/src/preview-protocol.ts:38` records the hang; the integration
+          tests still force `allowedHosts: true`; `Blocked request` appears
+          nowhere outside backlog docs.
+     I2 — `service-worker/src/route-preview.ts:108` awaits the reply with no
+          timer, no reject, no `onmessageerror`, through EOF at :165.
+     I3 — no `connection lost` / `polling for restart` string in any `.ts`.
+     I4 — `ECONNRESET` exists only in the errno table (`runtime-js/src/builtins/
+          os.ts:212`) and in `services/eddy`; nothing on the preview/loopback
+          broker produces it.
+     I5 — today a real 403 exists upstream and is lost, so "verbatim wherever a
+          response exists" is false. I5 closes ONLY on its own proof: in each of
+          the three flows, a real upstream response arrives byte-verbatim AND a
+          no-response case still yields the synthesized page. I1's 403 test
+          alone does not close it. -->
 
 1. I1. With the developer's own `vite.config` and no forced `allowedHosts`, a
    host-check rejection shows vite's real `403 Blocked request` page in the
