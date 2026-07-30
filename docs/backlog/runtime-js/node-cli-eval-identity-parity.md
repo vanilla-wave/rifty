@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -163,9 +163,11 @@ Acceptance, Parity, or loud exclusions:
 - corrupt bootstrap decoding happened before child-local VFS observation and
   waived the zero-effect audit.
 
-The item is demoted while those sibling-drift, provenance, observable-order,
-and corrupt-input proofs gain cross-surface sweeps. The pre-demotion Acceptance
+The item was demoted while those sibling-drift, provenance, observable-order,
+and corrupt-input proofs gained cross-surface sweeps. The pre-demotion Acceptance
 and Parity remain verbatim below.
+
+ready-verdict: 2026-07-30 — the pinned Node v24.16.0 oracle and preserved contract still settle Context, User scenario, Acceptance, Reference contract, Parity, Decisions, Reversibility, freshness, and non-overlap; original, distinct-nonempty, and empty `--print=` RHS classes now cross canonical projection, classifier, real ProcessManager admission, physical parity, and CI-active Chromium; eval children start with an empty child-local fixture and must read owner-only cwd, relative-module, package, and post-chdir resolver bytes through the remote VFS while program/worker siblings retain local fixtures; one decoded-write ledger preserves partial cross-stream and reversed-EOF order through native, physical Rifty, and Chromium terminal/color proofs; child-local observation starts before bootstrap publication and decode, detects an injected decoder-interval write/delete, and requires one zero-effect audit for every wrong-protocol, missing/wrong-type, `execArgv`-position, extra-field, and program-only corruption alongside builder rejection; named no-child tests exercise the real ProcessManager without mocking its `spawnWorker` sibling; preserved loader/cache/parent/Promise/process/lifecycle/error/preview/carrier REDs close the ninth re-cut without weakening Acceptance, Parity, or loud exclusions.
 
 ## Refinement evidence
 
