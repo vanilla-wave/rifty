@@ -385,3 +385,14 @@ authority. The in-place re-cut imports the landed types, adds a nested scoped
 string to the three-source witness, and appends exactly one Items mapping plus
 one `20–60` Budget row. The RED ledger and production-source absence are
 unchanged.
+
+The second isolated checkpoint at
+`d1a6ab025a8160305f18e86dc132e3466e988106` passed Spec and blocked Standards:
+the 215-line carrier was far above the `20–60` slice band. Per Contract
+escalation, the in-place re-refinement keeps the one deep in-process seam but
+replaces repeated fixture/scenario scaffolding with four vertical interface
+tests: private root, empty identity, one exact mixed order/duplicate witness,
+and one exact later-error table. No behavior, Budget row, or production source
+changes. The compact carrier is 119 lines, below the `2×` high-band re-cut
+threshold; runtime is 4 tests, 3 RED and 1 GREEN, with the same two intentional
+`TS2578` REDs.
