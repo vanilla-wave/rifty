@@ -33,11 +33,15 @@ interface FakeRegistryEntry {
 
 class FakeRegistry extends RegistryClient {
   private readonly db: Map<string, Map<string, FakeRegistryEntry>>;
+  packumentReads = 0;
+  tarballReads = 0;
+
   constructor(db: Map<string, Map<string, FakeRegistryEntry>>) {
     super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
     this.db = db;
   }
   override async getPackument(name: string): Promise<Packument> {
+    this.packumentReads++;
     const versions = this.db.get(name);
     if (!versions) throw new Error(`fake registry: no packument for ${name}`);
     const versionsMap: Record<string, VersionManifest> = {};
@@ -47,6 +51,7 @@ class FakeRegistry extends RegistryClient {
     return { name, 'dist-tags': { latest }, versions: versionsMap };
   }
   override async getTarball(tarballUrl: string): Promise<Uint8Array> {
+    this.tarballReads++;
     const match = /^fake:\/\/([^|]+)\|(.+)$/.exec(tarballUrl);
     if (!match) throw new Error(`fake registry: bad tarball url ${tarballUrl}`);
     const entry = this.db.get(decodeURIComponent(match[1] ?? ''))?.get(match[2] ?? '');
@@ -60,9 +65,15 @@ async function makeEntry(
   version: string,
   dependencies: Record<string, string> = {},
   files: Record<string, string> = {},
+  bin?: VersionManifest['bin'],
 ): Promise<FakeRegistryEntry> {
   const chunks: Uint8Array[] = [];
-  const packageJson = JSON.stringify({ name, version, dependencies });
+  const packageJson = JSON.stringify({
+    name,
+    version,
+    dependencies,
+    ...(bin === undefined ? {} : { bin }),
+  });
   for (const [entry, body] of Object.entries({ 'package.json': packageJson, ...files })) {
     const bytes = new TextEncoder().encode(body);
     chunks.push(buildHeader(`package/${entry}`, bytes.length), padToBlock(bytes));
@@ -72,6 +83,7 @@ async function makeEntry(
       name,
       version,
       dependencies,
+      ...(bin === undefined ? {} : { bin }),
       dist: { tarball: `fake://${encodeURIComponent(name)}|${version}` },
     },
     tarball: await gzip(concat(...chunks, TAR_TRAILER)),
@@ -101,10 +113,45 @@ afterEach(() => {
 });
 
 describe('install-time shadow shims — rollup internals patch + companion', () => {
+  const ROLLUP_BIN = { rollup: 'dist/bin/rollup' };
+  const ROLLUP_BIN_BODY = '#!/usr/bin/env node\nconsole.log("rollup");\n';
+  const WASM_BIN_BODY = '#!/usr/bin/env node\nconsole.log("wasm-rollup");\n';
+
   async function rollupDb(version = '4.62.2') {
     return db(
       ['rollup', await makeEntry('rollup', version, {}, { 'dist/native.js': REAL_ROLLUP_NATIVE })],
       ['@rollup/wasm-node', await makeEntry('@rollup/wasm-node', version)],
+    );
+  }
+
+  async function rollupBinDb(
+    wasmDependencies: Record<string, string> = {},
+    wasmBin: VersionManifest['bin'] = ROLLUP_BIN,
+  ): Promise<Map<string, Map<string, FakeRegistryEntry>>> {
+    return db(
+      [
+        'rollup',
+        await makeEntry(
+          'rollup',
+          '4.62.2',
+          {},
+          {
+            'dist/native.js': REAL_ROLLUP_NATIVE,
+            'dist/bin/rollup': ROLLUP_BIN_BODY,
+          },
+          ROLLUP_BIN,
+        ),
+      ],
+      [
+        '@rollup/wasm-node',
+        await makeEntry(
+          '@rollup/wasm-node',
+          '4.62.2',
+          wasmDependencies,
+          { 'dist/bin/rollup': WASM_BIN_BODY },
+          wasmBin,
+        ),
+      ],
     );
   }
 
@@ -131,6 +178,241 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
     expect(result.lockfile.packages['node_modules/@rollup/wasm-node']?.version).toBe('4.62.2');
     expect(await vfs.exists('/proj/node_modules/@rollup/wasm-node/package.json')).toBe(true);
     expect(lines).toContain('npm: rollup@4.62.2 internals patched from shadow registry');
+  });
+
+  it('[fault: frozen-assumption / provenance-lie] keeps an auto companion installed but links only Rollup bins on fresh and zero-registry replay', async () => {
+    const helperBin = { helper: 'bin/helper.js' };
+    const entries = await rollupBinDb({ 'companion-helper': '1.0.0' });
+    entries.set(
+      'companion-helper',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'companion-helper',
+            '1.0.0',
+            {},
+            { 'bin/helper.js': '#!/usr/bin/env node\nconsole.log("helper");\n' },
+            helperBin,
+          ),
+        ],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const writes = vi.spyOn(vfs, 'writeFile');
+    const freshRegistry = new FakeRegistry(entries);
+
+    const fresh = await install(
+      'root',
+      '1.0.0',
+      { rollup: '4.62.2' },
+      { vfs, cwd: '/proj', registry: freshRegistry },
+    );
+
+    const freshRollupWrites = writes.mock.calls.filter(
+      ([path]) => path === '/proj/node_modules/.bin/rollup',
+    );
+    expect.soft(freshRollupWrites).toHaveLength(1);
+    const expectedRollupLauncher = "#!/usr/bin/env node\nimport('../rollup/dist/bin/rollup');\n";
+    const launcher = await readText(vfs, '/proj/node_modules/.bin/rollup');
+    expect.soft(launcher).toBe(expectedRollupLauncher);
+    expect(await readText(vfs, '/proj/node_modules/.bin/helper')).toBe(
+      "#!/usr/bin/env node\nimport('../companion-helper/bin/helper.js');\n",
+    );
+    expect(fresh.packages.find(({ name }) => name === 'rollup')?.bin).toEqual(ROLLUP_BIN);
+    expect(fresh.packages.find(({ name }) => name === '@rollup/wasm-node')?.bin).toEqual(
+      ROLLUP_BIN,
+    );
+    expect(fresh.lockfile.packages['node_modules/rollup']?.bin).toEqual(ROLLUP_BIN);
+    expect(fresh.lockfile.packages['node_modules/@rollup/wasm-node']?.bin).toEqual(ROLLUP_BIN);
+    expect(
+      fresh.packages
+        .filter(({ name }) => name === 'rollup' || name === '@rollup/wasm-node')
+        .map(({ name, version }) => `${name}@${version}`)
+        .sort(),
+    ).toEqual(['@rollup/wasm-node@4.62.2', 'rollup@4.62.2']);
+    expect(JSON.parse(await readText(vfs, '/proj/node_modules/rollup/package.json'))).toMatchObject(
+      { bin: ROLLUP_BIN },
+    );
+    expect(
+      JSON.parse(await readText(vfs, '/proj/node_modules/@rollup/wasm-node/package.json')),
+    ).toMatchObject({
+      dependencies: { 'companion-helper': '1.0.0' },
+      bin: ROLLUP_BIN,
+    });
+    const freshLockText = await readText(vfs, '/proj/package-lock.json');
+
+    writes.mockClear();
+    const replayRegistry = new FakeRegistry(entries);
+    const replay = await install(
+      'root',
+      '1.0.0',
+      { rollup: '4.62.2' },
+      { vfs, cwd: '/proj', registry: replayRegistry },
+    );
+
+    expect(replayRegistry.packumentReads).toBe(0);
+    expect(replayRegistry.tarballReads).toBe(0);
+    expect(replay.provenance.resolution).toBe('lockfile');
+    expect
+      .soft(writes.mock.calls.filter(([path]) => path === '/proj/node_modules/.bin/rollup'))
+      .toHaveLength(1);
+    const replayLauncher = await readText(vfs, '/proj/node_modules/.bin/rollup');
+    expect.soft(replayLauncher).toBe(expectedRollupLauncher);
+    expect(replayLauncher).toBe(launcher);
+    expect(replay.lockfile).toEqual(fresh.lockfile);
+    expect(await readText(vfs, '/proj/package-lock.json')).toBe(freshLockText);
+    expect(replay.packages.find(({ name }) => name === '@rollup/wasm-node')?.bin).toEqual(
+      ROLLUP_BIN,
+    );
+  });
+
+  it('keeps an ordinarily requested companion bin active', async () => {
+    const entries = await rollupBinDb();
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { '@rollup/wasm-node': '4.62.2' },
+      { vfs, cwd: '/proj', registry: new FakeRegistry(entries) },
+    );
+
+    expect(await readText(vfs, '/proj/node_modules/.bin/rollup')).toBe(
+      "#!/usr/bin/env node\nimport('../@rollup/wasm-node/dist/bin/rollup');\n",
+    );
+    expect(result.packages[0]?.bin).toEqual(ROLLUP_BIN);
+    expect(result.lockfile.packages['node_modules/@rollup/wasm-node']?.bin).toEqual(ROLLUP_BIN);
+  });
+
+  it.each([
+    {
+      name: 'auto-first then ordinary-later',
+      dependencies: { rollup: '4.62.2', '@rollup/wasm-node': '4.62.2' },
+    },
+    {
+      name: 'ordinary-first then auto-later',
+      dependencies: { '@rollup/wasm-node': '4.62.2', rollup: '4.62.2' },
+    },
+  ])(
+    '[fault: observable-order] monotonically retains both ordinary claims: $name',
+    async ({ dependencies }) => {
+      const entries = await rollupBinDb({}, { 'wasm-rollup': 'dist/bin/rollup' });
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+
+      const result = await install('root', '1.0.0', dependencies, {
+        vfs,
+        cwd: '/proj',
+        registry: new FakeRegistry(entries),
+      });
+
+      expect(await readText(vfs, '/proj/node_modules/.bin/rollup')).toBe(
+        "#!/usr/bin/env node\nimport('../rollup/dist/bin/rollup');\n",
+      );
+      expect(await readText(vfs, '/proj/node_modules/.bin/wasm-rollup')).toBe(
+        "#!/usr/bin/env node\nimport('../@rollup/wasm-node/dist/bin/rollup');\n",
+      );
+      expect(result.packages.filter(({ bin }) => bin !== undefined)).toHaveLength(2);
+      expect(result.packages.filter(({ name }) => name === '@rollup/wasm-node')).toHaveLength(1);
+    },
+  );
+
+  it('[fault: sibling-drift / lossy-aggregate] derives root and nested claim demand independently and keeps companion dependencies ordinary', async () => {
+    const helperBin = { helper: 'bin/helper.js' };
+    const entries = db(
+      [
+        'rollup',
+        await makeEntry(
+          'rollup',
+          '4.63.0',
+          {},
+          {
+            'dist/native.js': REAL_ROLLUP_NATIVE,
+            'dist/bin/rollup': ROLLUP_BIN_BODY,
+          },
+          ROLLUP_BIN,
+        ),
+      ],
+      [
+        'rollup',
+        await makeEntry(
+          'rollup',
+          '4.62.2',
+          { '@rollup/wasm-node': '4.62.2' },
+          {
+            'dist/native.js': REAL_ROLLUP_NATIVE,
+            'dist/bin/rollup': ROLLUP_BIN_BODY,
+          },
+          ROLLUP_BIN,
+        ),
+      ],
+      [
+        '@rollup/wasm-node',
+        await makeEntry(
+          '@rollup/wasm-node',
+          '4.63.0',
+          { 'companion-helper': '1.0.0' },
+          { 'dist/bin/rollup': WASM_BIN_BODY },
+          ROLLUP_BIN,
+        ),
+      ],
+      [
+        '@rollup/wasm-node',
+        await makeEntry(
+          '@rollup/wasm-node',
+          '4.62.2',
+          { 'companion-helper': '1.0.0' },
+          { 'dist/bin/rollup': WASM_BIN_BODY },
+          ROLLUP_BIN,
+        ),
+      ],
+      [
+        'companion-helper',
+        await makeEntry(
+          'companion-helper',
+          '1.0.0',
+          {},
+          { 'bin/helper.js': '#!/usr/bin/env node\nconsole.log("helper");\n' },
+          helperBin,
+        ),
+      ],
+      ['uses-old-rollup', await makeEntry('uses-old-rollup', '1.0.0', { rollup: '4.62.2' })],
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { rollup: '4.63.0', 'uses-old-rollup': '1.0.0' },
+      { vfs, cwd: '/proj', registry: new FakeRegistry(entries) },
+    );
+
+    expect
+      .soft(await readText(vfs, '/proj/node_modules/.bin/rollup'))
+      .toBe("#!/usr/bin/env node\nimport('../rollup/dist/bin/rollup');\n");
+    expect(
+      await readText(
+        vfs,
+        '/proj/node_modules/uses-old-rollup/node_modules/rollup/node_modules/.bin/rollup',
+      ),
+    ).toBe("#!/usr/bin/env node\nimport('../@rollup/wasm-node/dist/bin/rollup');\n");
+    expect(await readText(vfs, '/proj/node_modules/.bin/helper')).toBe(
+      "#!/usr/bin/env node\nimport('../companion-helper/bin/helper.js');\n",
+    );
+    expect(
+      result.packages.find(
+        ({ name, version }) => name === '@rollup/wasm-node' && version === '4.63.0',
+      )?.bin,
+    ).toEqual(ROLLUP_BIN);
+    expect(
+      result.packages.find(
+        ({ name, version }) => name === '@rollup/wasm-node' && version === '4.62.2',
+      )?.bin,
+    ).toEqual(ROLLUP_BIN);
   });
 
   it('patches a NESTED rollup copy at its actual install path with a lockstep companion', async () => {

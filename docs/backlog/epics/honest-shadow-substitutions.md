@@ -123,6 +123,10 @@ Contract+RED → Final+GREEN):
     **package-bin-claim-link-ingress-authority**: compose settled claims once at
     the prepared linker convergence point before any VFS mutation; keep the root
     public, cancellable, and prepared paths plus compat honesty in lockstep.
+16. `npm-client/package-bin-companion-claim-admission-authority` —
+    **package-bin-companion-claim-admission-authority**: keep injected support
+    packages installed with truthful metadata while only ordinary per-path
+    demand admits their package-bin claims.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -162,3 +166,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | package-bin-claim-aggregation-authority | 20–60 |
 | package-bin-claim-settlement-authority | 30–80 |
 | package-bin-claim-link-ingress-authority | 20–80 |
+| package-bin-companion-claim-admission-authority | 30–100 |
