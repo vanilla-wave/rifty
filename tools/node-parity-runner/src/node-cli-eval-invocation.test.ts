@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import nodeEvalContextCase from '../cases/process/node-eval-context.case.ts';
 import { nodeCliEvalInvocations, nodeCliEvalSourceTerminatorMatrix } from './node-cli-eval.ts';
 import type { NodeCliEvalInvocation, ParityCase } from './types.ts';
 
@@ -12,6 +13,13 @@ function evalCase(invocations: readonly NodeCliEvalInvocation[]): ParityCase {
 }
 
 describe('node CLI eval invocation model', () => {
+  it('keeps the identity proof to exactly two simultaneous physical children', () => {
+    expect(nodeEvalContextCase.nodeCliEval?.concurrent?.map(({ label }) => label)).toEqual([
+      'isolation-concurrent-a',
+      'isolation-concurrent-b',
+    ]);
+  });
+
   it('derives the Rifty launch semantics from the exact native argv carrier', () => {
     const { sequential } = nodeCliEvalInvocations(
       evalCase([
