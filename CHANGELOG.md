@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **An epic fit now ends with its marker, and the marker SHA must survive the
+  merge.** Two gaps found by handing a freshly fitted epic to an agent: §Epic fit
+  stopped at sign-off, so the fit PR landed without `goal_baseline` and the run
+  needed a second contract-only PR — exactly the chain §Autonomous goal forbids;
+  and nothing said that `check:goal-contract` re-reads the epic AT the baseline
+  SHA on every later source PR (`goal-contract.mjs:366`), so squash-merging a
+  bootstrap PR whose marker points at one of its own commits silently breaks
+  every source PR after it. §Epic fit gains step 6 (marker in the same PR, fit PR
+  = bootstrap PR) and §Autonomous goal 2 states the two safe shapes: merge-commit
+  the bootstrap PR, or make the marker the branch's first commit pointing at the
+  merge-base (squash-safe, correct when the epic is already landed).
+  `fault-honest-sw-preview` gets its baseline here in the second shape.
 - **Writing an epic up is ordinary work, not a blocked ask.** `epics/TEMPLATE.md`
   read "Invariants authored with the user … the run proves them, never writes or
   edits them", which conflated fit time with run time and turned "flesh out epic
