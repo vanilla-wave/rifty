@@ -396,3 +396,15 @@ and one exact later-error table. No behavior, Budget row, or production source
 changes. The compact carrier is 119 lines, below the `2×` high-band re-cut
 threshold; runtime is 4 tests, 3 RED and 1 GREEN, with the same two intentional
 `TS2578` REDs.
+
+The re-refined checkpoint still blocked: 119 lines remained disproportionate,
+and its type proof could admit a tuple-only export while runtime narrow
+fixtures still carried full resolved-package fields. The next in-place carrier
+assigns the live conditional export to the exact list-wide type, calls empty
+and three-source shapes at compile time, uses a genuinely minimal nested
+scoped-string source at runtime, and folds the four behaviors into one vertical
+interface test.
+
+The split carrier is 88 lines: 65 runtime and 23 compile-only. Vitest has one
+intentional RED; package typecheck has exactly two intentional `TS2578` REDs.
+Production source remains untouched.
