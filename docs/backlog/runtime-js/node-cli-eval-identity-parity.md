@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -137,6 +137,20 @@ argument, so a later `--` remains visible too.
 The item was demoted while that exact source-state/terminator matrix gained the
 same native, projection, classifier, real-admission, physical, and Chromium
 carriers. The pre-demotion Acceptance and Parity remain verbatim below.
+
+## Eighth readiness re-cut
+
+Contract+RED at `b040667bd` found one remaining `provenance-lie` interval
+without changing Acceptance, Parity, or loud exclusions: the child-local VFS
+observer started after the physical Worker's process-adoption pre-entry hook,
+so a source carrier created during `installNodeRuntime` could escape the
+before/during/after audit.
+
+The item is demoted while observation moves ahead of the pre-entry hook and an
+injected child-local carrier crosses that exact interval. The existing
+Workbench-owner and SAB-remote carrier faults plus unchanged physical-program
+siblings remain the required sweep. The pre-demotion Acceptance and Parity
+remain verbatim below.
 
 ## Refinement evidence
 
