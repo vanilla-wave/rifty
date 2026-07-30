@@ -50,6 +50,9 @@ A developer opens a vite preset, runs the real `npm run dev`, preview goes LIVE.
 
 ## Decisions (epic-level, ratified at refine 2026-07-05)
 
+- invariants-signoff: 2026-07-30 — user (I1–I5 drafted from this epic's
+  ratified scenario, each checked false on `14b0dad99`).
+
 - Failure UX = parity-first (user): real responses byte-verbatim; synthesized page only when no response exists.
 - Scope = all three broker flows (user): iframe HTTP, WS/HMR, loopback http.request.
 - Boundary with preset-deglue (mechanism): retirement of forced options stays in `net/preview-websocket-bridge`; this epic only removes its blocker.

@@ -77,6 +77,8 @@ Related (not owned here): the WASI-over-shared-VFS capability row is added by `d
 
 ## Decisions
 
+- invariants-signoff: 2026-07-30 — user (I1–I5 drafted from this epic's
+  ratified scenario + ADR-0316, each checked false on `14b0dad99`).
 - ADR-0316 owns guest identity and provenance. Exact
   `@esbuild/wasi-preview1@0.28.0` is acquired only by explicit preset/example
   intent and checked against one shared version/integrity/size/SHA fixture.
