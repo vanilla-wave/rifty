@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `node -e/-p` must use Node eval identity, not a temporary-file identity
 created: 2026-07-15
 why: The only Node CLI surface rejects `node -e/-p` outright, and the retired temp-file approximation it replaced had the wrong argv and module identity.
@@ -826,6 +826,7 @@ identity rather than a generated workspace file, and return the real exit code.
 
 ## Decisions
 
+- ready-verdict: ready @ 197986991df7682ecbfe4cd1433bd17000f79a43 — executable Node v24.16 evidence and classifier/real-owner RED matrices close all four prior blockers: the full input-type source-state cross, implicit-TypeScript one-child provenance, separated-empty preload semantics, and valid preload eval/program siblings.
 - ADR-0339 owns the irreversible atomic node-entry v3 shape and the one
   loader-owned unwrapped-script mechanism. There is no v2 compatibility reader.
 - ADR-0340 owns one package-internal ordered-output receiver over the retained
