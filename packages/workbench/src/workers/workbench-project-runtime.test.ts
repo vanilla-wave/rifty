@@ -1,4 +1,10 @@
-import { globalProcessManager } from '@riftydev/kernel';
+import {
+  type WorkerSpawnSpec,
+  getKernelWorkerUrl,
+  globalProcessManager,
+  setKernelWorkerUrl,
+} from '@riftydev/kernel';
+import { finalizeWorkerEntry } from '@riftydev/kernel/worker-entry';
 import {
   type InstallOptions,
   type InstallResult,
@@ -236,14 +242,78 @@ interface BoundaryWorker {
   readonly command: () => Parameters<typeof globalProcessManager.spawnWorker>[0] | null;
   readonly spec: () => Parameters<typeof globalProcessManager.spawnWorker>[1] | null;
   readonly killedWith: () => string | null;
-  capture(
-    command: Parameters<typeof globalProcessManager.spawnWorker>[0],
-    spec: Parameters<typeof globalProcessManager.spawnWorker>[1],
-  ): void;
   emitMessage(message: unknown): void;
   emitListening(control: { pid: number; ports: number[]; previewScope?: string }): void;
   emitPeerError(error: Error): void;
   emitExit(code: number | null, signal?: string | null): void;
+}
+
+type KernelWorkerListener = (event: MessageEvent) => void;
+
+class KernelWorkerBoundary {
+  readonly posted: unknown[] = [];
+  readonly terminate = vi.fn();
+  readonly #listeners = new Map<string, Set<KernelWorkerListener>>();
+
+  postMessage(message: unknown): void {
+    this.posted.push(message);
+  }
+
+  addEventListener(type: string, listener: KernelWorkerListener): void {
+    const listeners = this.#listeners.get(type) ?? new Set<KernelWorkerListener>();
+    listeners.add(listener);
+    this.#listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: KernelWorkerListener): void {
+    this.#listeners.get(type)?.delete(listener);
+  }
+
+  spec(): WorkerSpawnSpec {
+    const init = this.posted[0] as { readonly type?: unknown; readonly spec?: unknown } | undefined;
+    if (init?.type !== 'init' || init.spec === undefined) {
+      throw new Error('kernel Worker boundary did not receive one init spec');
+    }
+    return init.spec as WorkerSpawnSpec;
+  }
+
+  finish(code: number): void {
+    const spec = this.spec();
+    finalizeWorkerEntry(
+      {
+        postMessage: (message) => {
+          const event = new MessageEvent('message', { data: message });
+          for (const listener of [...(this.#listeners.get('message') ?? [])]) listener(event);
+        },
+        close() {},
+      },
+      spec,
+      // A node-entry foreground child exits through process.exit after its
+      // lifecycle owner drains; that trusted throw reaches this exact kernel
+      // finalizer path even for code 0.
+      { threw: true, code },
+    );
+  }
+}
+
+const ORIGINAL_WORKER_DESCRIPTOR = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
+const ORIGINAL_KERNEL_WORKER_URL = getKernelWorkerUrl();
+const realKernelWorkers: KernelWorkerBoundary[] = [];
+
+function installRealKernelWorkerBoundary(): readonly KernelWorkerBoundary[] {
+  class RecordingKernelWorker extends KernelWorkerBoundary {
+    constructor() {
+      super();
+      realKernelWorkers.push(this);
+    }
+  }
+  Object.defineProperty(globalThis, 'Worker', {
+    value: RecordingKernelWorker,
+    configurable: true,
+    writable: true,
+  });
+  setKernelWorkerUrl(NODE_WORKER_RUNTIME_ENV.RIFTY_KERNEL_WORKER_URL);
+  return realKernelWorkers;
 }
 
 function deferred<T>() {
@@ -261,9 +331,7 @@ function settledOr<T, TPending>(promise: Promise<T>, pending: TPending): Promise
   ]);
 }
 
-function boundaryWorker(
-  options: { readonly installSpy?: boolean; readonly pid?: number } = {},
-): BoundaryWorker {
+function boundaryWorker(): BoundaryWorker {
   let capturedCommand: Parameters<typeof globalProcessManager.spawnWorker>[0] | null = null;
   let capturedSpec: Parameters<typeof globalProcessManager.spawnWorker>[1] | null = null;
   let killedWith: string | null = null;
@@ -302,7 +370,7 @@ function boundaryWorker(
   const control = new MessageChannel();
   const rawHandle = {
     kind: 'worker' as const,
-    pid: options.pid ?? 101,
+    pid: 101,
     ppid: 1,
     command: 'vite',
     cwd: ROOT,
@@ -343,25 +411,16 @@ function boundaryWorker(
     setCwd: () => undefined,
   };
   const handle = rawHandle as unknown as ReturnType<typeof globalProcessManager.spawnWorker>;
-  const capture = (
-    command: Parameters<typeof globalProcessManager.spawnWorker>[0],
-    spec: Parameters<typeof globalProcessManager.spawnWorker>[1],
-  ): void => {
+  vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
     capturedCommand = command;
     capturedSpec = spec;
-  };
-  if (options.installSpy !== false) {
-    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
-      capture(command, spec);
-      return handle;
-    });
-  }
+    return handle;
+  });
   return {
     handle,
     command: () => capturedCommand,
     spec: () => capturedSpec,
     killedWith: () => killedWith,
-    capture,
     emitMessage(message) {
       for (const listener of listeners.get('message') ?? []) listener(message);
     },
@@ -519,6 +578,13 @@ async function harness(
 }
 
 afterEach(() => {
+  for (const worker of realKernelWorkers.splice(0)) {
+    const pid = worker.spec().pid;
+    if (globalProcessManager.get(pid) !== null) globalProcessManager.kill(pid);
+  }
+  if (ORIGINAL_WORKER_DESCRIPTOR === undefined) Reflect.deleteProperty(globalThis, 'Worker');
+  else Object.defineProperty(globalThis, 'Worker', ORIGINAL_WORKER_DESCRIPTOR);
+  if (ORIGINAL_KERNEL_WORKER_URL !== null) setKernelWorkerUrl(ORIGINAL_KERNEL_WORKER_URL);
   vi.restoreAllMocks();
   resetSyncMirror();
 });
@@ -870,7 +936,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
   });
 
   it('runs node-cli through a supervised node child with exact empty argv and physical exit', async () => {
-    const worker = boundaryWorker();
+    const workers = installRealKernelWorkerBoundary();
     const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({
       type: 'pty:open',
@@ -889,10 +955,17 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         isTTY: true,
       }),
     );
-    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+    await vi.waitFor(() => expect(workers).toHaveLength(1));
+    const worker = workers[0];
+    if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+    const spec = worker.spec();
 
-    expect(worker.command()).toBe('node');
-    expect(worker.spec()).toMatchObject({
+    expect(globalProcessManager.get(spec.pid)).toMatchObject({
+      kind: 'worker',
+      command: 'node',
+      pid: spec.pid,
+    });
+    expect(spec).toMatchObject({
       cwd: '/',
       argv: ['rifty', '/src/cli.mjs', '', 'two words'],
       env: { USER_FLAG: 'preserved' },
@@ -924,8 +997,9 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       },
     });
 
-    worker.emitExit(7);
+    worker.finish(7);
     await running;
+    expect(globalProcessManager.get(spec.pid)).toBeNull();
     expect(h.frames).toContainEqual({
       type: 'pty:exit',
       sid: 'terminal-node-cli',
@@ -940,7 +1014,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
 
   it('builds one exact v3 admitted-child launch without an owner-VFS carrier', async () => {
     const source = 'JSON.stringify({marker:"node-eval"})';
-    const worker = boundaryWorker({ installSpy: false });
+    const workers = installRealKernelWorkerBoundary();
     const reservationEvidence: {
       events: string[];
       paths: string[];
@@ -956,12 +1030,6 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     const before = snapshotProjectTree(h.authority);
     const writeHistory = vi.spyOn(h.authority, 'writeFileSync');
     const unlinkHistory = vi.spyOn(h.authority, 'rmSync');
-    let during: Readonly<Record<string, readonly number[]>> | undefined;
-    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
-      during = snapshotProjectTree(h.authority);
-      worker.capture(command, spec);
-      return worker.handle;
-    });
     h.runtime.handlePtyFrame({
       type: 'pty:open',
       sid: 'terminal-node-eval',
@@ -979,10 +1047,17 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         isTTY: true,
       }),
     );
-    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+    await vi.waitFor(() => expect(workers).toHaveLength(1));
+    const worker = workers[0];
+    if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+    const spec = worker.spec();
 
-    expect(worker.command()).toBe('node');
-    expect(worker.spec()).toMatchObject({
+    expect(globalProcessManager.get(spec.pid)).toMatchObject({
+      kind: 'worker',
+      command: 'node',
+      pid: spec.pid,
+    });
+    expect(spec).toMatchObject({
       cwd: '/',
       argv: [NODE_PROCESS_IDENTITY.execPath, 'alpha', 'two words'],
       env: { USER_FLAG: 'preserved' },
@@ -1014,7 +1089,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         },
       },
     });
-    const entry = worker.spec()?.entry;
+    const entry = spec.entry;
     if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
       throw new Error('expected eval node-entry URL bootstrap');
     }
@@ -1033,16 +1108,14 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         'terminal',
       ].sort(),
     );
-    expect(JSON.stringify({ argv: worker.spec()?.argv, env: worker.spec()?.env })).not.toContain(
-      source,
-    );
-    expect(during).toEqual(before);
+    expect(JSON.stringify({ argv: spec.argv, env: spec.env })).not.toContain(source);
     expect(reservationEvidence.paths).toEqual([ROOT]);
     expect(reservationEvidence.events).toEqual(['commit']);
 
-    worker.emitExit(0);
+    worker.finish(0);
     await running;
     await vi.waitFor(() => expect(reservationEvidence.events).toEqual(['commit', 'dispose']));
+    expect(globalProcessManager.get(spec.pid)).toBeNull();
     expect(writeHistory).not.toHaveBeenCalled();
     expect(unlinkHistory).not.toHaveBeenCalled();
     expect(snapshotProjectTree(h.authority)).toEqual(before);
@@ -1057,11 +1130,93 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
+  it.each([
+    {
+      line: "node -e ''",
+      print: false,
+      execArgv: ['-e', ''],
+      scriptArgs: [],
+    },
+    {
+      line: "node --eval ''",
+      print: false,
+      execArgv: ['--eval', ''],
+      scriptArgs: [],
+    },
+    {
+      line: "node -pe ''",
+      print: true,
+      execArgv: ['-pe', ''],
+      scriptArgs: [],
+    },
+    {
+      line: "node -p ''",
+      print: true,
+      execArgv: ['-p'],
+      scriptArgs: [''],
+    },
+    {
+      line: "node --print ''",
+      print: true,
+      execArgv: ['--print'],
+      scriptArgs: [''],
+    },
+    {
+      line: "node --print=ignored ''",
+      print: true,
+      execArgv: ['--print=ignored'],
+      scriptArgs: [''],
+    },
+  ])(
+    'preserves explicit empty source vs absent source through the real kernel boundary: $line',
+    async ({ line, print, execArgv, scriptArgs }) => {
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-empty' });
+
+      const running = Promise.resolve(
+        h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-eval-empty',
+          rid: 'run-node-eval-empty',
+          line,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      await vi.waitFor(() => expect(workers).toHaveLength(1));
+      const worker = workers[0];
+      if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+      const spec = worker.spec();
+
+      expect(spec).toMatchObject({
+        argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
+        entry: {
+          bootstrap: {
+            protocol: 'rifty.node-entry/v3',
+            payload: {
+              launch: {
+                kind: 'eval',
+                source: '',
+                print,
+                execArgv,
+              },
+            },
+          },
+        },
+      });
+      expect(globalProcessManager.get(spec.pid)).toMatchObject({ kind: 'worker', command: 'node' });
+
+      worker.finish(0);
+      await running;
+      expect(globalProcessManager.get(spec.pid)).toBeNull();
+      await h.runtime.close();
+    },
+  );
+
   it('keeps two simultaneous eval children isolated by cwd, argv, source, and preview scope', async () => {
-    const workers = [
-      boundaryWorker({ installSpy: false, pid: 201 }),
-      boundaryWorker({ installSpy: false, pid: 202 }),
-    ];
+    const workers = installRealKernelWorkerBoundary();
     const reservationEvidence: {
       events: string[];
       paths: string[];
@@ -1076,13 +1231,6 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     );
     h.authority.mkdirSync(`${ROOT}/a`, { recursive: true });
     h.authority.mkdirSync(`${ROOT}/b`, { recursive: true });
-    let spawnIndex = 0;
-    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((command, spec) => {
-      const worker = workers[spawnIndex++];
-      if (worker === undefined) throw new Error('unexpected third eval child');
-      worker.capture(command, spec);
-      return worker.handle;
-    });
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'eval-a', cwd: `${ROOT}/a` });
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'eval-b', cwd: `${ROOT}/b` });
 
@@ -1108,9 +1256,16 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         isTTY: true,
       }),
     );
-    await vi.waitFor(() => expect(spawnIndex).toBe(2));
+    await vi.waitFor(() => expect(workers).toHaveLength(2));
+    const firstWorker = workers[0];
+    const secondWorker = workers[1];
+    if (firstWorker === undefined || secondWorker === undefined) {
+      throw new Error('expected two real kernel Worker boundaries');
+    }
+    const firstSpec = firstWorker.spec();
+    const secondSpec = secondWorker.spec();
 
-    expect(workers[0]?.spec()).toMatchObject({
+    expect(firstSpec).toMatchObject({
       cwd: '/a',
       argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-a'],
       entry: {
@@ -1129,7 +1284,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         },
       },
     });
-    expect(workers[1]?.spec()).toMatchObject({
+    expect(secondSpec).toMatchObject({
       cwd: '/b',
       argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-b'],
       entry: {
@@ -1148,8 +1303,8 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         },
       },
     });
-    const launchOf = (worker: BoundaryWorker): Readonly<Record<string, unknown>> => {
-      const entry = worker.spec()?.entry;
+    const launchOf = (worker: KernelWorkerBoundary): Readonly<Record<string, unknown>> => {
+      const entry = worker.spec().entry;
       if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
         throw new Error('expected eval node-entry URL bootstrap');
       }
@@ -1159,16 +1314,26 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       if (payload.launch === undefined) throw new Error('expected eval launch');
       return payload.launch;
     };
-    expect(launchOf(workers[0]!).previewScope).not.toBe(launchOf(workers[1]!).previewScope);
+    expect(launchOf(firstWorker).previewScope).not.toBe(launchOf(secondWorker).previewScope);
+    expect(globalProcessManager.get(firstSpec.pid)).toMatchObject({
+      kind: 'worker',
+      command: 'node',
+    });
+    expect(globalProcessManager.get(secondSpec.pid)).toMatchObject({
+      kind: 'worker',
+      command: 'node',
+    });
     expect(reservationEvidence.paths).toEqual([`${ROOT}/a`, `${ROOT}/b`]);
     expect(reservationEvidence.events).toEqual(['commit', 'commit']);
 
-    workers[1]?.emitExit(7);
-    workers[0]?.emitExit(0);
+    secondWorker.finish(7);
+    firstWorker.finish(0);
     await Promise.all([runningA, runningB]);
     await vi.waitFor(() =>
       expect(reservationEvidence.events.filter((event) => event === 'dispose')).toHaveLength(2),
     );
+    expect(globalProcessManager.get(firstSpec.pid)).toBeNull();
+    expect(globalProcessManager.get(secondSpec.pid)).toBeNull();
     expect(
       h.frames.filter((frame) => frame.type === 'pty:exit' && frame.rid === 'run-eval-a'),
     ).toEqual([expect.objectContaining({ code: 0, exit: { code: 0, signal: null } })]);
