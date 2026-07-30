@@ -17,7 +17,7 @@ function requirePreflight(): Preflight {
   return preflight;
 }
 
-it('keeps settlement package-private', () =>
+it('keeps the seam package-private', () =>
   expect(npmClientRoot).not.toHaveProperty('preflightPackageBins'));
 
 function source(
@@ -67,6 +67,9 @@ it('[fault: observable-order][fault: lossy-aggregate] returns exact current clai
     claim('zeta', 'shared', 'bin/nested.js', nestedDir),
     claim('alpha', 'fresh', 'bin/fresh.js'),
   ]);
+  expect(preflight([source('@scope/new-cli', './bin/new.js', nestedDir)])).toEqual([
+    claim('@scope/new-cli', 'new-cli', 'bin/new.js', nestedDir),
+  ]);
 });
 
 it.each([
@@ -102,10 +105,7 @@ it.each([
 
 it('[fault: lossy-aggregate] rejects one removed command while its owner survives', () => {
   const preflight = requirePreflight();
-  const current = source('stable-cli', { kept: './bin/kept.js' });
-  const prior = source('stable-cli', {
-    kept: './bin/kept.js',
-    removed: './bin/removed.js',
-  });
+  const current = source('stable', { kept: './bin/kept.js' });
+  const prior = source('stable', { kept: './bin/kept.js', removed: './bin/removed.js' });
   expectCollision(() => preflight([current], [prior]));
 });

@@ -465,3 +465,11 @@ adds a non-monotonic four-claim current order with shuffled prior sources,
 same-target/different-owner current and prior witnesses, and partial command
 removal. Runtime now reports 9 RED and 1 GREEN; package typecheck retains the
 same four intentional `TS2578` REDs.
+
+The second isolated Contract+RED review at
+`df25cdacf9d2c4bab5711aaf351f032768a2b46d` passed Standards and confirmed
+the first three blockers closed, then blocked Spec: compaction had removed the
+only successful omitted-prior runtime call and string-form source. Per Contract
+escalation, the in-place re-refinement folds one nested scoped-string,
+omitted-prior success into the vertical output test without widening the unit.
+The runtime and type RED ledgers remain unchanged.
