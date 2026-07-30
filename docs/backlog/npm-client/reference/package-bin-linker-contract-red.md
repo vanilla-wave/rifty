@@ -421,3 +421,11 @@ The next isolated review at
 Spec: a singular-source overload could still satisfy every witness. The
 in-place carrier rejects both singular and absent source-list calls, completing
 the exact-one-list boundary. It is 94 lines total; the same RED ledger remains.
+
+The isolated review at
+`d7018e92be95121d3a94f57192371753cd83b560` passed Standards and blocked
+Spec: prepared-only singular and second-list overloads could evade narrow-only
+negatives. The final in-place carrier adds both prepared witnesses and proves
+the live export type equals the exact normalizer type, closing the overload
+class rather than enumerating it. It is 106 lines total; RED and production
+scope remain unchanged.
