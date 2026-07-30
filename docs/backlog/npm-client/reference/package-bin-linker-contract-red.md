@@ -408,3 +408,10 @@ interface test.
 The split carrier is 88 lines: 65 runtime and 23 compile-only. Vitest has one
 intentional RED; package typecheck has exactly two intentional `TS2578` REDs.
 Production source remains untouched.
+
+The isolated review at
+`29c4aafb290bd643c42ca60eadafb31a1c3b3870` passed Standards and blocked
+Spec: exact one-argument assignment alone could admit an optional second source
+list, leaking prior/settlement surface. The final in-place carrier adds that
+negative witness. It is 90 lines total; the RED ledger and production-source
+absence are unchanged.
