@@ -6,6 +6,7 @@ created: 2026-07-05
 value: The preview either serves or says why — no dev-server/routing failure mode (dead worker, closed socket, misconfig) can park an iframe, an HMR socket, or a loopback http.request forever.
 user_story: As a developer, I want the preview to fail loudly with a diagnosable error when routing breaks, but today a host-check rejection reproducibly parks the iframe forever (untraced) and the bridge's termination semantics (worker death, teardown mid-request, WS upgrade) have no fault rows.
 tier: robust
+goal_baseline: 742dce2ba0fe266578aefd07cd8a07f07bfd8c23
 ---
 
 ## Outcome
