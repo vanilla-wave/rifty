@@ -56,8 +56,8 @@
 ### Fixed
 
 - Foreground stdout and stderr now decode UTF-8 incrementally per stream and
-  flush decoder tails before exit in byte-admission order, preserving split
-  code points and exact stream identity.
+  flush decoder tails before exit or peer-failure settlement in byte-admission
+  order, preserving split code points and exact stream identity.
 
 - `ProjectTerminalRun` now exposes the owner-authored shell status beside its
   exact physical exit, preserving Ctrl-C status `130` without reconstructing it

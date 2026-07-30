@@ -274,6 +274,33 @@ export function runForegroundChild(
 
     const signal = ctx.signal;
     const lifecycleErrors: Error[] = [];
+    let outputFinalized = false;
+    const finalizeOutput = (): void => {
+      if (outputFinalized) return;
+      outputFinalized = true;
+      const flushes = [
+        {
+          order: tails.stdout.order ?? outputOrder,
+          ordinal: 0,
+          decoder: stdoutDecoder,
+          writer: ctx.stdout,
+        },
+        {
+          order: tails.stderr.order ?? outputOrder + 1,
+          ordinal: 1,
+          decoder: stderrDecoder,
+          writer: ctx.stderr,
+        },
+      ].sort((left, right) => left.order - right.order || left.ordinal - right.ordinal);
+      for (const flush of flushes) {
+        try {
+          const text = flush.decoder.decode();
+          if (text) flush.writer.write(text);
+        } catch (error) {
+          lifecycleErrors.push(asError(error));
+        }
+      }
+    };
     let promiseSettled = false;
     const resolveOnce = (exit: ProcessExit): void => {
       if (promiseSettled) return;
@@ -292,6 +319,7 @@ export function runForegroundChild(
     let killSent = false;
     const failWithoutExit = (error: unknown): void => {
       lifecycleErrors.push(asError(error));
+      finalizeOutput();
       outputClosed = true;
       stopInput();
       signal?.removeEventListener('abort', onAbort);
@@ -309,6 +337,7 @@ export function runForegroundChild(
       if (exited || promiseSettled) return;
       const cause = asError(error);
       lifecycleErrors.push(new ShellCommandLifecycleError(cause.message, { cause }));
+      finalizeOutput();
       outputClosed = true;
       stopInput();
       signal?.removeEventListener('abort', onAbort);
@@ -356,28 +385,7 @@ export function runForegroundChild(
     handle.on('exit', (code, exitSignal) => {
       if (exited) return;
       exited = true;
-      const flushes = [
-        {
-          order: tails.stdout.order ?? outputOrder,
-          ordinal: 0,
-          decoder: stdoutDecoder,
-          writer: ctx.stdout,
-        },
-        {
-          order: tails.stderr.order ?? outputOrder + 1,
-          ordinal: 1,
-          decoder: stderrDecoder,
-          writer: ctx.stderr,
-        },
-      ].sort((left, right) => left.order - right.order || left.ordinal - right.ordinal);
-      for (const flush of flushes) {
-        try {
-          const text = flush.decoder.decode();
-          if (text) flush.writer.write(text);
-        } catch (error) {
-          lifecycleErrors.push(asError(error));
-        }
-      }
+      finalizeOutput();
       outputClosed = true;
       stopInput();
       signal?.removeEventListener('abort', onAbort);

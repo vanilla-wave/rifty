@@ -117,6 +117,9 @@ function foregroundHarness(
     emitStderr(chunk: unknown) {
       for (const listener of stderrListeners) listener(chunk);
     },
+    emitPeerError(error: Error) {
+      for (const listener of listeners.get('peererror') ?? []) listener(error);
+    },
     emitExit,
   };
 }
@@ -194,6 +197,25 @@ describe('foreground child stdin pump', () => {
     h.emitExit(0);
 
     await expect(run).resolves.toEqual({ code: 0, signal: null });
+    expect(output).toEqual(['stderr:�', 'stdout:�']);
+  });
+
+  it('flushes incomplete UTF-8 stream tails in admission order before peer failure', async () => {
+    const h = foregroundHarness();
+    const output: string[] = [];
+    const run = runForegroundChild(
+      h.handle,
+      context(undefined, {
+        stdout: { write: (text) => output.push(`stdout:${text}`) },
+        stderr: { write: (text) => output.push(`stderr:${text}`) },
+      }),
+    );
+
+    h.emitStderr(new Uint8Array([0xe2]));
+    h.emitStdout(new Uint8Array([0xf0]));
+    h.emitPeerError(new Error('worker peer failed'));
+
+    await expect(run).rejects.toThrow('worker peer failed');
     expect(output).toEqual(['stderr:�', 'stdout:�']);
   });
 
