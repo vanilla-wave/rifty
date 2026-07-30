@@ -6,7 +6,6 @@ created: 2026-07-28
 why: the terminal normalization checkpoint proved normalized claim settlement needs its own exact per-scope current/prior boundary
 user_story: As a browser-IDE user installing package CLIs, I want ambiguous command history rejected per node_modules scope, but today the linker can choose a tree-order winner
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-claim-aggregation-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
