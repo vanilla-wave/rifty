@@ -515,3 +515,28 @@ predecessor. Per the post-pickup demotion gate, PR #233 was re-cut as the
 contract-only demotion; link ingress must restart from fresh main after that
 predecessor lands. No production source or old carrier is retained in the
 demotion head; the immutable hashes above preserve the complete failed lineage.
+
+## Companion-claim admission successor baseline
+
+Recorded on post-#233 main
+`5fcd2cb6815de4f81a6c5cbb04a971b147284c34`. The fresh carrier at
+`334436ce968847ad238116f547ceacddabe9073d` adds no production source. Its
+`installer-shadow-shims.test.ts` blob is
+`f669efd02ecdfbd5304d0e626f625193a2a5c4a9`.
+
+```sh
+pnpm vitest run --project unit \
+  packages/npm-client/src/installer-shadow-shims.test.ts
+pnpm --filter @riftydev/npm-client typecheck
+pnpm backlog:check
+```
+
+The focused file runs 26 tests: 2 RED and 24 GREEN. Fresh and immediate
+zero-registry replay each expose two root `rollup` launcher writes and leave
+the auto companion as the final owner; the independent root/nested case also
+leaves the root auto companion active. Faithful packument and tarball
+`package.json` fixtures retain both packages' real
+`rollup -> dist/bin/rollup` metadata. Green sentinels prove direct ordinary
+companion demand, both ordinary/companion visit orders, companion manifest
+dependencies, exact raw result/lock metadata, and a separately scoped ordinary
+claim. Package typecheck and backlog schema pass.
