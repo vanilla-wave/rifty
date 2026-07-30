@@ -31,6 +31,7 @@ import {
 import { installNodeRuntime } from '../../../packages/runtime-js/src/ipc/install-process.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
 import {
+  NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT,
   NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
   NODE_CLI_EVAL_VFS_CARRIER_COMPLETE,
   NodeCliEvalVfsObserver,
@@ -79,13 +80,13 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     publishKernelSyncApi({
       call: syncCall,
     });
+    vfs.startObservation('child-local');
     if (request.nodeCliEvalVfsFault !== undefined) {
       const source = (launch as unknown as { readonly source?: unknown }).source;
       if (typeof source !== 'string') {
         throw new TypeError('node-cli-eval transient source fault requires string source');
       }
       if (request.nodeCliEvalVfsFault === 'child-local-transient-source-file') {
-        vfs.startObservation();
         vfs.beginCarrierObservation('child-local');
         vfs.writeFileSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, new TextEncoder().encode(source));
         vfs.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
@@ -95,10 +96,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
         if (JSON.stringify(mutations) !== JSON.stringify(expected)) {
           throw new Error('node-cli-eval child-local VFS carrier evidence is incomplete');
         }
-        syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, {
-          actor: 'child-local',
-          mutations,
-        });
+        syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, { actor: 'child-local' });
       } else {
         const remoteFs = new SyncRpcFsSync(syncCall);
         remoteFs.writeFileSync(
@@ -111,7 +109,14 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     }
     // Execute the actual Workbench node-entry module. It owns eval-vs-program
     // dispatch, loader eval, print/drain ordering, process adoption, and exit.
-    await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');
+    try {
+      await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');
+    } finally {
+      syncCall(NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT, {
+        actor: 'child-local',
+        audit: vfs.audit([]),
+      });
+    }
     return;
   }
   const entryPath = spec.argv[1];

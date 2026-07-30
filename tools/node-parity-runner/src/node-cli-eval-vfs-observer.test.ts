@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  NodeCliEvalVfsObserver,
-  nodeCliEvalTransientSourceCarrierMutations,
-  nodeCliEvalVfsFileContent,
-} from './node-cli-eval-vfs-observer.ts';
+import { NodeCliEvalVfsObserver, nodeCliEvalVfsFileContent } from './node-cli-eval-vfs-observer.ts';
 
 describe('NodeCliEvalVfsObserver', () => {
   it('subtracts exact guest effects without hiding a transient carrier', () => {
@@ -157,20 +153,41 @@ describe('NodeCliEvalVfsObserver', () => {
     ).toThrow('node-cli-eval expected mutations must be workbench-owner guest mutations');
   });
 
-  it('imports physical child-local carrier evidence without reclassifying it as owner work', () => {
+  it('keeps ordinary bootstrap work attributed to the observed child after a carrier phase', () => {
     const fs = new NodeCliEvalVfsObserver();
-    fs.startObservation();
-    fs.beginCarrierObservation('sab-remote');
-    const localCarrier = nodeCliEvalTransientSourceCarrierMutations(
-      'child-local',
-      "'local-carrier';",
-    );
-    fs.recordCarrierMutations(localCarrier);
+    fs.startObservation('child-local');
+    fs.beginCarrierObservation('child-local');
+    fs.writeFileSync('/carrier.cjs', new TextEncoder().encode('same-source'));
+    fs.rmSync('/carrier.cjs', { force: true });
     fs.endCarrierObservation();
+    fs.writeFileSync('/bootstrap-local.cjs', new TextEncoder().encode('same-source'));
 
     expect(fs.audit([])).toEqual({
       missing: [],
-      unexpected: localCarrier,
+      unexpected: [
+        {
+          kind: 'write',
+          provenance: 'carrier',
+          actor: 'child-local',
+          path: '/carrier.cjs',
+          content: nodeCliEvalVfsFileContent('/carrier.cjs', 'same-source'),
+        },
+        {
+          kind: 'rm',
+          provenance: 'carrier',
+          actor: 'child-local',
+          path: '/carrier.cjs',
+          recursive: false,
+          force: true,
+        },
+        {
+          kind: 'write',
+          provenance: 'guest',
+          actor: 'child-local',
+          path: '/bootstrap-local.cjs',
+          content: nodeCliEvalVfsFileContent('/bootstrap-local.cjs', 'same-source'),
+        },
+      ],
     });
   });
 

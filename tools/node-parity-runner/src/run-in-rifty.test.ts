@@ -193,12 +193,19 @@ describe('runInRifty', () => {
     REAL_WORKER_TEST_TIMEOUT_MS,
   );
 
-  it.each<readonly [label: string, fault: NodeCliEvalVfsFault, actor: NodeCliEvalVfsActor]>([
-    ['child-local pre-bootstrap MemoryFs', 'child-local-transient-source-file', 'child-local'],
-    ['SAB-remote pre-bootstrap', 'sab-remote-transient-source-file', 'sab-remote'],
+  it.each<
+    readonly [
+      label: string,
+      fault: NodeCliEvalVfsFault | undefined,
+      actor: NodeCliEvalVfsActor | undefined,
+    ]
+  >([
+    ['clean normal path', undefined, undefined],
     ['Workbench-owner pre-bootstrap', 'workbench-owner-transient-source-file', 'workbench-owner'],
+    ['SAB-remote pre-bootstrap', 'sab-remote-transient-source-file', 'sab-remote'],
+    ['child-local pre-bootstrap MemoryFs', 'child-local-transient-source-file', 'child-local'],
   ])(
-    'requires the production eval guest mutation on owner VFS while rejecting a %s carrier',
+    'audits identical eval source bytes across the %s VFS boundary',
     async (_label, fault, actor) => {
       const guestPath = '/eval-guest-authored.txt';
       const guestContent = 'owner-guest';
@@ -212,35 +219,48 @@ describe('runInRifty', () => {
         path: guestPath,
         content: nodeCliEvalVfsFileContent(guestPath, guestContent),
       };
-      const unexpectedCarrier = nodeCliEvalTransientSourceCarrierMutations(actor, source);
+      const invocationLabel = `${actor ?? 'clean'}-vfs-boundary`;
+      const run = runInRifty(
+        {
+          kind: 'node-cli-eval',
+          code: '',
+          expectedPhysicalWorkers: 1,
+          nodeCliEval: {
+            sequential: [
+              {
+                label: invocationLabel,
+                nodeArgv: ['-e', source],
+              },
+            ],
+            concurrent: [],
+          },
+        },
+        {
+          nodeCliEvalVfsProbe: {
+            expectedGuestMutations: [expectedGuestWrite],
+            ...(fault === undefined ? {} : { fault }),
+          },
+        },
+      );
 
-      await expect(
-        runInRifty(
+      if (actor === undefined) {
+        expect(JSON.parse(await run)).toEqual([
           {
-            kind: 'node-cli-eval',
-            code: '',
-            expectedPhysicalWorkers: 1,
-            nodeCliEval: {
-              sequential: [
-                {
-                  label: `${actor}-vfs-boundary`,
-                  nodeArgv: ['-e', source],
-                },
-              ],
-              concurrent: [],
-            },
+            label: invocationLabel,
+            stdout: '',
+            stderr: '',
+            frames: [],
+            code: 0,
+            signal: null,
           },
-          {
-            nodeCliEvalVfsProbe: {
-              expectedGuestMutations: [expectedGuestWrite],
-              fault,
-            },
-          },
-        ),
-      ).rejects.toThrow(
+        ]);
+        return;
+      }
+
+      await expect(run).rejects.toThrow(
         `node-cli-eval VFS audit mismatch: ${JSON.stringify({
           missing: [],
-          unexpected: unexpectedCarrier,
+          unexpected: nodeCliEvalTransientSourceCarrierMutations(actor, source),
         })}`,
       );
     },

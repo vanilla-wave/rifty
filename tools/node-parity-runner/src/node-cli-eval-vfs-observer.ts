@@ -1,6 +1,7 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 
 export const NODE_CLI_EVAL_VFS_CARRIER_COMPLETE = 'parity.node-cli-eval.vfs-carrier-complete';
+export const NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT = 'parity.node-cli-eval.child-local-vfs-audit';
 export const NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH = '/.rifty-eval-transient.cjs';
 
 export type NodeCliEvalVfsProvenance = 'carrier' | 'guest';
@@ -183,14 +184,16 @@ export function nodeCliEvalTransientSourceCarrierMutations(
 export class NodeCliEvalVfsObserver extends MemoryFsSync {
   readonly #mutations: NodeCliEvalVfsMutation[] = [];
   #observing = false;
+  #defaultActor: NodeCliEvalVfsActor = 'workbench-owner';
   #provenance: NodeCliEvalVfsProvenance = 'guest';
   #actor: NodeCliEvalVfsActor = 'workbench-owner';
 
-  startObservation(): void {
+  startObservation(actor: NodeCliEvalVfsActor = 'workbench-owner'): void {
     this.#mutations.length = 0;
     this.#observing = true;
+    this.#defaultActor = actor;
     this.#provenance = 'guest';
-    this.#actor = 'workbench-owner';
+    this.#actor = actor;
   }
 
   beginCarrierObservation(actor: NodeCliEvalVfsActor): void {
@@ -206,17 +209,7 @@ export class NodeCliEvalVfsObserver extends MemoryFsSync {
       throw new Error('node-cli-eval VFS carrier observation cannot end');
     }
     this.#provenance = 'guest';
-    this.#actor = 'workbench-owner';
-  }
-
-  recordCarrierMutations(mutations: readonly NodeCliEvalVfsMutation[]): void {
-    if (!this.#observing || this.#provenance !== 'carrier') {
-      throw new Error('node-cli-eval VFS carrier mutations cannot be recorded');
-    }
-    if (mutations.some((mutation) => mutation.provenance !== 'carrier')) {
-      throw new TypeError('node-cli-eval recorded carrier mutations must have carrier provenance');
-    }
-    this.#mutations.push(...mutations.map(cloneMutation));
+    this.#actor = this.#defaultActor;
   }
 
   mutations(): readonly NodeCliEvalVfsMutation[] {

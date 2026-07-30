@@ -46,11 +46,12 @@ import {
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
 import {
+  NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT,
   NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
   NODE_CLI_EVAL_VFS_CARRIER_COMPLETE,
+  type NodeCliEvalVfsAudit,
   type NodeCliEvalVfsMutation,
   NodeCliEvalVfsObserver,
-  nodeCliEvalTransientSourceCarrierMutations,
 } from './node-cli-eval-vfs-observer.ts';
 import {
   canonicalNodeCliEvalOutcome,
@@ -301,6 +302,47 @@ export type NodeCliEvalVfsFault =
 export interface NodeCliEvalVfsProbe {
   readonly expectedGuestMutations: readonly NodeCliEvalVfsMutation[];
   readonly fault?: NodeCliEvalVfsFault;
+}
+
+function childLocalVfsMutation(value: unknown): value is NodeCliEvalVfsMutation {
+  if (typeof value !== 'object' || value === null) return false;
+  const mutation = value as Partial<NodeCliEvalVfsMutation>;
+  return (
+    mutation.actor === 'child-local' &&
+    (mutation.provenance === 'carrier' || mutation.provenance === 'guest') &&
+    (mutation.kind === 'write' ||
+      mutation.kind === 'mkdir' ||
+      mutation.kind === 'rm' ||
+      mutation.kind === 'utimes' ||
+      mutation.kind === 'copy' ||
+      mutation.kind === 'rename') &&
+    typeof mutation.path === 'string'
+  );
+}
+
+function childLocalVfsAudit(value: unknown): NodeCliEvalVfsAudit {
+  if (typeof value !== 'object' || value === null) {
+    throw new TypeError('node-cli-eval child-local VFS audit boundary is invalid');
+  }
+  const payload = value as {
+    readonly actor?: unknown;
+    readonly audit?: {
+      readonly missing?: unknown;
+      readonly unexpected?: unknown;
+    };
+  };
+  const missing = payload.audit?.missing;
+  const unexpected = payload.audit?.unexpected;
+  if (
+    payload.actor !== 'child-local' ||
+    !Array.isArray(missing) ||
+    !missing.every(childLocalVfsMutation) ||
+    !Array.isArray(unexpected) ||
+    !unexpected.every(childLocalVfsMutation)
+  ) {
+    throw new TypeError('node-cli-eval child-local VFS audit boundary is invalid');
+  }
+  return { missing, unexpected };
 }
 
 export type NodeCliEvalBootstrapFault =
@@ -1437,6 +1479,8 @@ export async function runInRiftyInCurrentRealm(
     }
   }
   const evalFsObserver = testCase.kind === 'node-cli-eval' ? new NodeCliEvalVfsObserver() : null;
+  const childLocalVfsAudits: NodeCliEvalVfsAudit[] = [];
+  const childLocalVfsAuditPids = new Set<number>();
   const fsMirror = evalFsObserver ?? new MemoryFsSync();
   fsMirror.loadFixture(fsFiles);
   // Materialize the case cwd: the Node runner mkdirs `<workDir>/<cwd>` before
@@ -1503,6 +1547,20 @@ export async function runInRiftyInCurrentRealm(
       const { installRuntimeJsFsHandlers } = await import('@riftydev/runtime-js');
       const dispatcher = getKernelDispatcher();
       evalFsObserver?.startObservation();
+      dispatcher.register(NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT, (payload, context): null => {
+        const callerPid = context?.callerPid;
+        if (
+          !Number.isSafeInteger(callerPid) ||
+          (callerPid ?? 0) <= 0 ||
+          childLocalVfsAuditPids.has(callerPid as number)
+        ) {
+          throw new TypeError('node-cli-eval child-local VFS audit boundary is invalid');
+        }
+        childLocalVfsAuditPids.add(callerPid as number);
+        childLocalVfsAudits.push(childLocalVfsAudit(payload));
+        return null;
+      });
+      cleanups.defer(() => dispatcher.unregister(NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT));
       if (options.nodeCliEvalVfsProbe?.fault !== undefined) {
         const plan = nodeCliEvalInvocations(testCase);
         const invocations = [...plan.sequential, ...plan.concurrent];
@@ -1528,34 +1586,23 @@ export async function runInRiftyInCurrentRealm(
             evalFsObserver?.endCarrierObservation();
           }
         } else {
-          evalFsObserver?.beginCarrierObservation('sab-remote');
+          if (fault === 'sab-remote-transient-source-file') {
+            evalFsObserver?.beginCarrierObservation('sab-remote');
+          }
           dispatcher.register(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, (payload, context): null => {
             if (!Number.isSafeInteger(context?.callerPid) || (context?.callerPid ?? 0) <= 0) {
               throw new TypeError('node-cli-eval VFS carrier boundary is invalid');
             }
             if (fault === 'child-local-transient-source-file') {
-              const expectedMutations = nodeCliEvalTransientSourceCarrierMutations(
-                'child-local',
-                invocation.source,
-              );
-              const expectedPayload = {
-                actor: 'child-local',
-                mutations: expectedMutations,
-              };
-              if (JSON.stringify(payload) !== JSON.stringify(expectedPayload)) {
+              if (JSON.stringify(payload) !== JSON.stringify({ actor: 'child-local' })) {
                 throw new TypeError('node-cli-eval child-local VFS carrier boundary is invalid');
               }
-              evalFsObserver?.recordCarrierMutations(
-                (
-                  payload as {
-                    readonly mutations: readonly NodeCliEvalVfsMutation[];
-                  }
-                ).mutations,
-              );
             } else if (JSON.stringify(payload) !== JSON.stringify({ actor: 'sab-remote' })) {
               throw new TypeError('node-cli-eval SAB-remote VFS carrier boundary is invalid');
             }
-            evalFsObserver?.endCarrierObservation();
+            if (fault === 'sab-remote-transient-source-file') {
+              evalFsObserver?.endCarrierObservation();
+            }
             return null;
           });
           cleanups.defer(() => dispatcher.unregister(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE));
@@ -1586,9 +1633,29 @@ export async function runInRiftyInCurrentRealm(
         ),
       );
       physicalWorkerMode?.assertExpected();
-      const audit = evalFsObserver?.audit(
+      if (
+        options.nodeCliEvalBootstrapFault === undefined &&
+        childLocalVfsAudits.length !== expectedPhysicalWorkerCount(testCase)
+      ) {
+        throw new Error(
+          `node-cli-eval child-local VFS audit expected ${String(
+            expectedPhysicalWorkerCount(testCase),
+          )} physical reports; received ${String(childLocalVfsAudits.length)}`,
+        );
+      }
+      const ownerAudit = evalFsObserver?.audit(
         options.nodeCliEvalVfsProbe?.expectedGuestMutations ?? [],
       ) ?? { missing: [], unexpected: [] };
+      const audit = {
+        missing: [
+          ...ownerAudit.missing,
+          ...childLocalVfsAudits.flatMap((childAudit) => childAudit.missing),
+        ],
+        unexpected: [
+          ...ownerAudit.unexpected,
+          ...childLocalVfsAudits.flatMap((childAudit) => childAudit.unexpected),
+        ],
+      };
       if (audit.missing.length > 0 || audit.unexpected.length > 0) {
         throw new Error(`node-cli-eval VFS audit mismatch: ${JSON.stringify(audit)}`);
       }
