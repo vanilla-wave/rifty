@@ -6,7 +6,6 @@ created: 2026-07-28
 why: the terminal claim-preflight checkpoint proved pure normalization and mutation-free public/cancellable/prepared integration are separate review units
 user_story: As a browser-IDE user installing package CLIs, I want every linker path to reject ambiguous or escaping claims before changing the tree and keep support claims honest
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-claim-settlement-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts

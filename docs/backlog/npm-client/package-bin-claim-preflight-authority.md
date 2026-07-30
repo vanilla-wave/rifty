@@ -6,7 +6,7 @@ created: 2026-07-28
 why: the terminal combined linker checkpoint could not prove narrow current/prior claim admission and the npm-history ceiling before the first mutating VFS operation
 user_story: As a browser-IDE user installing packages with CLIs, I want ambiguous command ownership rejected before the project tree changes, but today package files can land before the linker discovers the collision
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-claim-normalization-authority]
+blocked_by: [npm-client/package-bin-claim-link-ingress-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
