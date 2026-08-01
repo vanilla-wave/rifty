@@ -11,6 +11,9 @@
 
 ### Added
 
+- Linker ingresses now run package-bin claim preflight before any VFS mutation;
+  the package-private prepared path accepts narrow authoritative-prior sources.
+
 - Added package-private current/prior package-bin claim settlement with exact
   per-scope collision ceilings and no public export or VFS mutation.
 

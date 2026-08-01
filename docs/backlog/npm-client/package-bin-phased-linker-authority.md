@@ -6,7 +6,6 @@ created: 2026-07-28
 why: the terminal combined linker checkpoint could not prove all package files settle before one detached launcher pass across every linker entrypoint and VFS fault
 user_story: As a browser-IDE user installing package CLIs, I want launchers written only after all package files settle and exact retries to repair interrupted work, but today linking interleaves package files and bins
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-claim-link-ingress-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
 code:
   - packages/npm-client/src/linker.ts
