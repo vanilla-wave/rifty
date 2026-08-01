@@ -698,3 +698,23 @@ The second isolated Contract+RED review at
 `0426d4f28de6be3888ce4d17d3c4bbdddc4d4ab0` passed Standards and Spec with no
 findings. This exact checkpoint is the ready authority for production pickup;
 the re-cut carrier blob remains frozen.
+
+### Phased-linker implementation and closure
+
+Ready/pickup parent `58c30945a4caf1d91293dd33386127958271003b`
+precedes production `d2ccdeeee19588609f65f4d2d351ac1438388098`. The prepared
+composer retains admitted claims, settles every prepared package file through
+the extracted file phase, then runs one sequential claim-only launcher phase.
+The bin phase derives target and launcher paths only from each detached claim;
+it never rereads raw `installPath` or `bin` metadata. Public API, installer
+projection, module topology, and coordination mechanisms remain unchanged.
+
+The frozen 481-line carrier runs 16/16 GREEN; package typecheck is GREEN. The
+linker/source/aggregation/settlement/ingress/path/installer regression floor
+runs 171/171 GREEN. Architecture, runtime-adapter, backlog, and contract-drift
+gates pass.
+
+Closure deletes the completed phased item and its two terminal split
+predecessors, unblocks `shadow-materialized-bin-commit-authority`, and preserves
+the epic Items/Budget lineage append-only. npm reify lifecycle settlement
+remains the same named loud gap outside this goal.
