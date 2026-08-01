@@ -649,6 +649,7 @@ export async function install(
   );
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
+  throwIfAborted(opts.signal);
   substitutions.flush();
   const result: InstallResult = {
     packages,
