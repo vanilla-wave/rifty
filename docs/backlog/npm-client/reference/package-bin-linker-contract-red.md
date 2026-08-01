@@ -610,3 +610,8 @@ verbatim from the pre-demotion contract. The canonical browser-unit case
 `Vite 7 config graph and dependency optimizer use real esbuild over owner VFS`
 runs 1/1 GREEN before source. Packed-consumer and light Vite acceptance stay
 mandatory Final+GREEN floors.
+
+Parallel fresh-context Contract+RED review at
+`d1babd77f5d249160c8ed3e51baa206fca34c4fe` returned Standards PASS and Spec
+PASS with no findings. This checkpoint is the ready authority for the fresh
+post-companion implementation.

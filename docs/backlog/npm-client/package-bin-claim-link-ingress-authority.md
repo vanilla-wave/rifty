@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Package-bin claim linker-ingress authority
 created: 2026-07-28
 why: the terminal claim-preflight checkpoint proved pure normalization and mutation-free public/cancellable/prepared integration are separate review units
@@ -104,6 +104,7 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 
 ## Decisions
 
+- ready-verdict: 2026-08-01 — Contract+RED @ d1babd77f5d249160c8ed3e51baa206fca34c4fe
 - `pre-demotion-ready-verdict: 2026-07-30 — Contract+RED @
   33ecc7ff5e9abb5169effd54467dd1ebe4f3dfae`; the Acceptance and Parity cases
   above are verbatim from that attempted ready contract.
