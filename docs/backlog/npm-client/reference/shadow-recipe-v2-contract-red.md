@@ -1,90 +1,52 @@
 # Shadow recipe v2 Contract+RED
 
-## Acquisition/replay checkpoint evidence — 2026-08-02
+## Acquisition/embedded-source re-cut — 2026-08-02
 
 Fresh source baseline is
 `main@4a2beb233cc2127ef531b0eba2584797234865f1`, including the materialized-bin
-commit authority merged by PR #237. The mapped acquisition/replay item remains
-draft until fresh Standards+Spec review passes this exact tests/docs tree; its
-later `ready-verdict` owns the reviewed commit SHA.
+commit authority merged by PR #237. The mapped Item 19 retains Budget
+`300–800`, but is narrowed in place to the first dependency-ordered unit: exact
+registry projection, integrity-verified real tarball acquisition, embedded
+`napi-wasm@1.1.3`, and truthful root/nested fresh lock facts. Protocol-v2
+trace/replay and its Workbench/Chromium consumers are deferred to blocked draft
+child `npm-client/shadow-recipe-v2-protocol-replay-authority` with its own
+Budget `200–500` and future checkpoint.
 
-The committed machine-checked tarball-member golden at
-`tools/shadow-registry/src/fixtures/lightningcss-wasm-1.32.0-tarball.json`
-binds the real `lightningcss-wasm@1.32.0` tarball to its embedded
-`napi-wasm@1.1.3` manifest and member bytes independently of catalog source or
-installer-built fixtures. The isolated successor carrier is
-`packages/npm-client/src/installer-shadow-recipe-v2-acquisition-replay-authority.contract.test.ts`
-(blob `4530972ac2fde73b0b681461a33745a2d6c72213`) plus the literal-lock replay
-carrier
-`packages/npm-client/src/installer-shadow-recipe-v2-replay-authority.contract.test.ts`
-(blob `99636f9d8dfb93c81a7b2a3fae0e607dcbc7cb89`). They own only complete source
-projection, embedded acquisition, protocol-v2 trace/replay, and their
-pre-effect drift gates. The replay carrier copies literal reviewed facts and
-does not obtain its oracle from the production attester. Neither carrier
-recopies the completed materialized-bin commit boundary.
+Combined checkpoint `812cd8b0e5c653674bae949d67f0ac21db90748f`
+contains no production source, but Standards blocked it; it is lineage only and
+cannot support a `ready-verdict`. The three blockers were:
 
-The exact npm-client checkpoint command is:
+1. **frozen-assumption / provenance-lie:** a generated miniature archive plus
+   JSON/literal cross-check never fed the real pinned npm tarball through the
+   installer or proved all four real embedded members. The replacement carrier
+   must feed integrity-verified real tarball bytes through root and nested fresh
+   installs; generated archives are mutation inputs only. Replay/Eddy repeat
+   that evidence only where their downstream ingress requires it.
+2. **unratified observable:** ten replay RED rows were manufactured solely by
+   requiring `hasCause: false`, although neither item nor ADR fixed nested error
+   shape. The downstream child keeps the mutations as public
+   `EBROKENLOCK`/`shadow-trace-drift` regressions and imposes no `cause`
+   presence/absence contract.
+3. **budget / split:** the combined checkpoint added 1,657 TypeScript test lines,
+   above twice the `300–800` source band. `docs/backlog/README.md` §Budget
+   requires separate dependency-ordered acquisition/embedded-source and
+   protocol-v2 replay items, Budgets, and checkpoints.
+
+The replacement acquisition checkpoint must bind one real-tarball carrier to
+the existing data, materialized-bin, installer provenance, planner, and
+registry-fault siblings. Its exact command, blob, and RED/GREEN counts are
+recorded only after that narrowed carrier exists and passes fresh Standards+
+Spec review. No replay, Workbench FIFO, or Chromium-v2 assertion/count from
+`812cd8b0` is evidence for Item 19.
+
+The inherited GREEN floors that remain required are:
 
 ```sh
 pnpm vitest run --project unit \
-  packages/npm-client/src/installer-shadow-recipe-v2-acquisition-replay-authority.contract.test.ts \
-  packages/npm-client/src/installer-shadow-recipe-v2-replay-authority.contract.test.ts \
-  packages/npm-client/src/shadow-recipe-v2-data-authority.contract.test.ts \
-  packages/npm-client/src/installer-shadow-materialized-bin-commit-authority.contract.test.ts \
-  packages/npm-client/src/installer-shadow-shims.test.ts \
-  packages/npm-client/src/internal/shadow/installer.contract.test.ts \
+  packages/npm-client/src/registry.fault.test.ts \
   packages/npm-client/src/internal/shadow/planner.contract.test.ts \
-  packages/npm-client/src/registry.fault.test.ts
-```
-
-It has exactly 30 RED and 117 GREEN, with no pending tests:
-
-- acquisition carrier: 10/10 RED — eight independent complete-projection
-  drifts still cross tar/cache/VFS/report/lock boundaries; exact root and nested
-  installs still fetch/cache/install `napi-wasm` as a standalone root package,
-  omit the bundled lock child, and emit protocol v1 without complete trace/bin
-  evidence;
-- literal replay carrier: 12/12 RED — matching root/nested v2 locks reject the
-  generic unsupported protocol before cache replay; ten independent lock/trace
-  corruptions reach `EBROKENLOCK` but not the required field-specific
-  pre-effect rejection path;
-- inherited touched siblings: 8 RED / 83 GREEN — data authority 6/19,
-  materialized-bin authority 1/22, installer shims 1/25, internal provenance
-  0/17; their REDs all observe the same external bundled-child/protocol/bin
-  gaps rather than fixture lookup failures;
-- inherited planner and `RegistryClient` floors: 34/34 GREEN, including all
-  eight progress-bounded/cancellation fault cases and schema-1 canonical-first
-  rejection.
-
-The Workbench real-core carrier is independently 1 RED / 1 GREEN. The second
-same-project install remains physically outside the core while the first is
-parked before lock publication; only protocol v1, missing trace bin, and
-non-canonical lock bin spelling remain RED. The real-tarball catalog authority
-is 110/110 GREEN and checks fixture blob
-`7868fd3c91752fbbaff7a9cfda33d1afe24f6a3c` against the independently captured
-tarball identity and all four embedded `napi-wasm@1.1.3` members.
-
-```sh
-pnpm vitest run --project unit \
-  packages/workbench/src/workers/owner-package-shadow-assets.contract.test.ts
-pnpm vitest run --project unit \
-  tools/shadow-registry/src/internal/catalog-v2-data-authority.contract.test.ts
-pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
-  --grep "Vite 7 config graph"
-pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
-  --grep "direct CJS require and ESM import"
-```
-
-Real Chromium direct CJS/ESM esbuild parity is 1/1 GREEN. The Vite 7.3.6 case
-completes dev/build/preview/optimize, then is exactly 1/1 RED on three soft lock
-assertions: protocol v1 instead of v2, absent trace `materialization.bin`, and
-`./bin/esbuild` instead of canonical `bin/esbuild` in the package entry.
-
-All non-behavioral checkpoint gates are GREEN:
-
-```sh
+  packages/npm-client/src/internal/shadow/installer.contract.test.ts
 pnpm --filter @riftydev/npm-client typecheck
-pnpm --filter @riftydev/workbench typecheck
 pnpm --filter @riftydev/shadow-registry typecheck
 pnpm backlog:check
 pnpm check:arch
@@ -92,18 +54,46 @@ pnpm check:runtime-adapter-boundary
 git diff --check
 ```
 
-The checkpoint contains no production-source edit. The following inherited
-GREEN floors must remain green through implementation:
+The narrowed replacement carrier runs this exact batch against the fresh
+baseline:
 
 ```sh
-pnpm vitest run --project unit \
-  packages/npm-client/src/registry.fault.test.ts \
-  packages/npm-client/src/internal/shadow/planner.contract.test.ts \
-  packages/npm-client/src/internal/shadow/installer.contract.test.ts
+pnpm --filter @riftydev/npm-client exec vitest run \
+  src/installer-shadow-recipe-v2-acquisition-replay-authority.contract.test.ts \
+  src/shadow-recipe-v2-data-authority.contract.test.ts \
+  src/installer-shadow-materialized-bin-commit-authority.contract.test.ts \
+  src/installer-shadow-shims.test.ts \
+  src/internal/shadow/installer.contract.test.ts \
+  src/internal/shadow/planner.contract.test.ts \
+  src/registry.fault.test.ts
+pnpm --filter @riftydev/shadow-registry exec vitest run \
+  src/internal/catalog-v2-data-authority.contract.test.ts
 ```
 
+The npm-client run has 18 RED and 117 GREEN tests:
+
+- the real-tarball acquisition carrier is 10/10 RED: eight complete-projection
+  mutations reach effects, while root/nested fresh, matching current-protocol
+  replay, and generic Eddy ingress still acquire a standalone child and omit
+  the exact parent bundle plus embedded-child lock facts;
+- the inherited data-authority matrix is 6 RED / 19 GREEN, with only the six
+  direct/transitive fresh/replay/Eddy LightningCSS ledgers exposing standalone
+  child registry/cache work;
+- the materialized commit sibling is 1 RED / 22 GREEN and the shim sibling is
+  1 RED / 25 GREEN because each still publishes the standalone child topology;
+- installer provenance, planner, and bounded registry floors are respectively
+  17/17, 26/26, and 8/8 GREEN.
+
+The shadow-registry authority is 110/110 GREEN. It reads the committed official
+3,821,302-byte npm archive, verifies SHA-256
+`ea1419e577dd943907c7e17a99fa7a76143d99c6279a6131e79fb4b1b098ac89`,
+matches its SRI to the registry golden, and independently inventories and
+hashes all four embedded `napi-wasm@1.1.3` members. No production source differs
+from the fresh baseline at this checkpoint.
+
 The predecessor checkpoints and counts below are retained as historical
-lineage; none serves as this successor's verdict.
+lineage; neither they nor blocked checkpoint `812cd8b0` serves as this narrowed
+successor's verdict.
 
 ## Retained predecessor lineage
 
