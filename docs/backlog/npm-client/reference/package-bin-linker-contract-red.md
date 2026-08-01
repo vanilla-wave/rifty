@@ -586,3 +586,21 @@ per-install-path schedule now carries one monotone ordinary-demand bit; only
 the linker-facing prepared projection omits companion-only bins. The frozen
 carrier blob remains `b0492dc1e1e9ac0712f3b824c4f98c162a9fd605` and runs 26/26
 GREEN. Raw package, result, manifest, and lock metadata remain unchanged.
+
+## Link-ingress post-companion re-cut baseline
+
+Fresh main `e330630a63e1bfee29d4212bf18b703efb821610` includes the companion-claim
+predecessor from PR #234. Test-only re-cut
+`1f992198b54423cd5bedf40dcef0b5b0b1caa5ab` restores the unchanged 138-line
+link-ingress carrier: Git blob `a80b1edd424638cb394e88303020c4663b2912ad`,
+SHA-256 `4c0a03ebe550a621096d64d1e5d16d3d447d326a032369133c59d71bfcfd09af`.
+It adds no production source.
+
+The focused carrier runs 11 tests: 10 RED and 1 GREEN. Current duplicates and
+escaping targets reach mutation before rejection or do not reject; supplied
+prior collision, transition, and removal are ignored; the compat row remains
+the old RED wording. Package typecheck reports only the intentional `TS2322`
+exact-signature and `TS2554` missing-fifth-argument diagnostics. The inherited
+real-installer companion suite runs 26/26 GREEN. Acceptance and Parity remain
+verbatim from the pre-demotion contract; browser Vite and packed-consumer
+acceptance stay mandatory Final+GREEN floors.

@@ -108,9 +108,9 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
   cbeb4bfe04f270898aa003c04ef8e6edd3daf280`; predecessor checkpoints:
   `6fdc19c5b98b9773fa5406126e6ac35c4329b9af` and
   `cbeb4bfe04f270898aa003c04ef8e6edd3daf280`.
-- This draft is linked from the terminal predecessors and serial pure
-  successors. It receives no epic Items/Budget selection before claim
-  settlement lands.
+- This draft was linked from the terminal predecessors and serial pure
+  successors. It received no epic Items/Budget selection before claim
+  settlement landed.
 - The prepared optional-prior type proof closes the second predecessor blocker
   only when both raw packages and shaped output claims remain rejected.
 - File/bin phase ordering and writer faults stay entirely in the serial phased
@@ -119,8 +119,15 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
   production `9a30c01549937bd98f081081fe0ec163f1b59d27`, and closure
   `d50a80ffa5e888588af84fd5da3c22ce8c4cb60c` passed local Final+GREEN, but
   remote run `30562763189` exposed the unsettled companion-claim fork.
-- Per `decision-workflow.md` §Backlog readiness 5, this post-pickup item stays
-  draft and is blocked by
+- Per `decision-workflow.md` §Backlog readiness 5, PR #233's post-pickup item
+  stayed draft and was blocked by
   `npm-client/package-bin-companion-claim-admission-authority`. Its next
   Contract+RED must diff against the preserved clauses above; weakening them
   requires manual refinement.
+- PR #234 landed companion-claim admission at
+  `e330630a63e1bfee29d4212bf18b703efb821610`; epic Item 15 and Budget row
+  `20–80` select this fresh re-cut. Acceptance and Parity remain unchanged.
+- `contract-red-recut:
+  1f992198b54423cd5bedf40dcef0b5b0b1caa5ab`; byte-identical 138-line
+  carrier, runtime 10 RED / 1 GREEN, package typecheck exactly `TS2322` +
+  `TS2554`, inherited companion floor 26/26 GREEN, no production source.
