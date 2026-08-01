@@ -182,7 +182,17 @@ export async function linkPreparedInstallTree(
   priorSources: readonly PackageBinSource[] = [],
 ): Promise<void> {
   checkpoint();
-  preflightPackageBins(packages, priorSources);
+  const claims = preflightPackageBins(packages, priorSources);
+  await linkInstallPackageFiles(vfs, root, packages, checkpoint);
+  await linkInstallPackageBins(vfs, root, claims, checkpoint);
+}
+
+export async function linkInstallPackageFiles(
+  vfs: Vfs,
+  root: string,
+  packages: readonly PreparedInstallPackage[],
+  checkpoint: () => void,
+): Promise<void> {
   const nodeModules = joinPath(root, 'node_modules');
   await vfs.mkdir(nodeModules, { recursive: true });
   checkpoint();
@@ -220,41 +230,32 @@ export async function linkPreparedInstallTree(
     );
     checkpoint();
     if (failures.length > 0) throw failures[0];
-    await linkBins(vfs, root, target, prepared, checkpoint);
-    checkpoint();
   }
 }
 
 const shimEncoder = new TextEncoder();
 
-async function linkBins(
+export async function linkInstallPackageBins(
   vfs: Vfs,
   root: string,
-  packageRoot: string,
-  prepared: PreparedInstallPackage,
+  claims: readonly PackageBinClaim[],
   checkpoint: () => void,
 ): Promise<void> {
-  const pkg = prepared.package;
-  const bins = normalizeBin(pkg.name, pkg.bin);
-  const entries = Object.entries(bins);
-  if (entries.length === 0) return;
-
-  const binDir = joinPath(root, prepared.nodeModulesDir, '.bin');
-  await vfs.mkdir(binDir, { recursive: true });
-  checkpoint();
-  for (const [command, target] of entries) {
+  for (const claim of claims) {
     checkpoint();
-    const relTarget = normalizeBinTarget(target);
+    const binDir = joinPath(root, claim.nodeModulesDir, '.bin');
+    await vfs.mkdir(binDir, { recursive: true });
+    checkpoint();
     // Existence check: a manifest pointing at a file the tarball lacks fails
     // loudly here rather than at first exec.
-    await vfs.readFile(joinPath(packageRoot, relTarget));
+    await vfs.readFile(joinPath(root, claim.nodeModulesDir, claim.owner, claim.target));
     checkpoint();
     // Launcher shim, NOT a byte copy (ADR-0050: no symlinks). A copy breaks the
     // moment the bin does a relative require/import (vite's bin/vite.js loads
     // '../dist/...'): relative resolution must happen at the REAL file's path.
     // Dynamic import() loads both CJS and ESM targets.
-    const shim = `#!/usr/bin/env node\nimport('../${pkg.name}/${relTarget}');\n`;
-    await vfs.writeFile(joinPath(binDir, command), shimEncoder.encode(shim));
+    const shim = `#!/usr/bin/env node\nimport('../${claim.owner}/${claim.target}');\n`;
+    await vfs.writeFile(joinPath(binDir, claim.command), shimEncoder.encode(shim));
     checkpoint();
   }
 }
