@@ -3,7 +3,7 @@ area: npm-client
 status: draft
 title: Package-bin phased linker authority
 created: 2026-07-28
-why: the terminal combined linker checkpoint could not prove all package files settle before one detached launcher pass across every linker entrypoint and VFS fault
+why: the terminal combined linker checkpoint could not prove all package files settle before one detached launcher pass across every linker entrypoint and detached target/launcher fault
 user_story: As a browser-IDE user installing package CLIs, I want launchers written only after all package files settle and exact retries to repair interrupted work, but today linking interleaves package files and bins
 epic: honest-shadow-substitutions
 sources: [ADR-0335, docs/backlog/npm-client/reference/package-bin-linker-contract-red.md]
@@ -101,8 +101,21 @@ package-specific branch.
   pending; landed PR #235 now supplies its serial predecessor.
 - JIT selection: epic Item 17 and Budget band `100–300`; Acceptance, Parity,
   and Fault matrix remain the settled split contract.
+- Fresh post-ingress Contract+RED checkpoint
+  `d4e914a3b1ff7b03f978815380b044ff963cfbc1` freezes the 450-line carrier:
+  Git blob `32bcdcc4f01d65016d270bf0bebd649b58f0a8dd`, SHA-256
+  `661df162c84cc309b80c90a2da02be889c83843737e7b5a369dc2168315ed795`.
+  It runs 15/15 RED; package typecheck reports exactly five intentional
+  `TS2578` diagnostics while both phase seams are absent. The inherited
+  linker/link-ingress/prepared floor runs 25/25 GREEN; backlog and runtime
+  boundary gates pass.
+- The 450-line cohesive carrier is below the mandatory `2×` high-band re-cut
+  boundary; splitting its one real-VFS fault matrix would duplicate fixtures
+  and observation plumbing.
 - The claim successors own normalization and zero-mutation ingress. This unit
-  begins only when exact detached claims enter every linker path and owns every
-  reachable mutating VFS fault in the generic linker.
-- Exact helper names and call graph are not contract. Equivalent behavioral
-  ledgers prove one writer and one ordering authority.
+  begins only when exact detached claims enter every linker path and owns the
+  target-read and launcher-write faults enumerated in this unit's matrix.
+- `linkInstallPackageFiles` and `linkInstallPackageBins` are the decided exact
+  package-private phase interfaces. Helpers inside either phase and the
+  composer's exact call graph are not contract; behavioral ledgers prove one
+  writer and one ordering authority.
