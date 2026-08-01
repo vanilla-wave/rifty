@@ -137,6 +137,11 @@ Contract+RED → Final+GREEN):
     and acquired-twin suppression before shared current/prior preflight, then
     package files → registry aliases → one bin pass → internals shims → lock →
     staged reports without a second writer, reporter, or scheduler.
+19. `npm-client/shadow-recipe-v2-acquisition-replay-authority` —
+    **shadow-recipe-v2-acquisition-replay-authority**: verify the exact
+    LightningCSS registry projection and embedded child before effects, publish
+    protocol-v2 acquisition/materialization/bin provenance, and replay the same
+    tree and lock offline through the existing owner FIFO.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -179,3 +184,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | package-bin-companion-claim-admission-authority | 30–100 |
 | package-bin-phased-linker-authority | 100–300 |
 | shadow-materialized-bin-commit-authority | 100–300 |
+| shadow-recipe-v2-acquisition-replay-authority | 300–800 |

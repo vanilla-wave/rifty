@@ -18,15 +18,18 @@ code:
 ## Context
 
 This is the serial acquisition/replay successor to blocked predecessor
-`npm-client/shadow-recipe-v2-authority` / PR #212. It starts only after
-`npm-client/shadow-materialized-bin-commit-authority` lands and remains
-deliberately unmapped from the epic Items/Budget until its own pre-pickup
-Contract+RED window.
+`npm-client/shadow-recipe-v2-authority` / PR #212. The materialized-bin
+successor landed through PR #237 on 2026-08-02 and is present at fresh baseline
+`main@4a2beb233cc2127ef531b0eba2584797234865f1`. This successor is now epic
+Item 19 with source Budget `300–800`; it remains draft until its fresh isolated
+Contract+RED checkpoint passes review.
 
 The existing installer/planner seam owns source projection, embedded-bundle
 evidence, alias publication, lock trace, and replay. The materialized-bin
 successor chain supplies one settled linker/commit boundary; this item adds no
-codec, catalog, resolver, cache, lock, FIFO, or public recipe owner.
+codec, catalog, resolver, cache, lock, FIFO, or public recipe owner. The
+committed real-tarball member golden independently closes the embedded-child
+evidence gap before the new carrier binds production behavior.
 
 ## Reference contract
 
@@ -123,6 +126,13 @@ codec, catalog, resolver, cache, lock, FIFO, or public recipe owner.
 
 ## Decisions
 
+- `2026-08-02` fresh baseline
+  `main@4a2beb233cc2127ef531b0eba2584797234865f1` includes the completed
+  materialized-bin successor from PR #237. Acquisition/replay is epic Item 19,
+  Budget `300–800`, and stays draft pending its own reviewed Contract+RED.
+- The machine-checked tarball-member golden at
+  `tools/shadow-registry/src/fixtures/lightningcss-wasm-1.32.0-tarball.json`
+  pins the real embedded child independently of installer-built fixtures.
 - `split-predecessor:
   87098d2dbaeb5665188b98cbc1a5cdd6ba876cf9`; checkpoint lineage:
   `8f3251e89020772f15ff5a13022e7f7310f703d2`,

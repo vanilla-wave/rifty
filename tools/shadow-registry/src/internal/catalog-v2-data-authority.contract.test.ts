@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import lightningRegistryGolden from '../fixtures/lightningcss-wasm-1.32.0-registry.json';
+import lightningTarballGolden from '../fixtures/lightningcss-wasm-1.32.0-tarball.json';
 import * as rootShadowRegistry from '../index.ts';
 import { shadowDigest, shadowSha256 } from './canonical.ts';
 import {
@@ -825,6 +826,57 @@ describe('shadow recipe v2 data authority', () => {
       bundledDependencies: lightningRegistryGolden.bundleDependencies,
       unsupportedFeature: 'lightningcss.acquisition',
     });
+  });
+
+  it('pins the exact LightningCSS tarball and its complete embedded package independently', () => {
+    expect(lightningTarballGolden).toEqual({
+      name: 'lightningcss-wasm',
+      version: '1.32.0',
+      tarball: {
+        bytes: 3_821_302,
+        sha256: 'ea1419e577dd943907c7e17a99fa7a76143d99c6279a6131e79fb4b1b098ac89',
+        integrity:
+          'sha512-SteAkCtRuSCDYPGHKhLV/dDs5Bk+7I4QUxWxfk4xwsTI1rQk8MQyYtpGcd3NECsUGzK0q2/KqoVS+YHCqKHUTQ==',
+      },
+      packageJson: {
+        path: 'package/package.json',
+        bytes: 1_186,
+        sha256: 'b7f16ae6a0036f2d92a22efdfff34482ec6b9ef33c519b8c0e858dbf2d403410',
+      },
+      embeddedPackages: [
+        {
+          name: 'napi-wasm',
+          version: '1.1.3',
+          root: 'package/node_modules/napi-wasm',
+          members: [
+            {
+              path: 'package/node_modules/napi-wasm/README.md',
+              bytes: 4_246,
+              sha256: 'e646406048bd592d66f5a4deeadb41ab5071ee051a530a7346f7ed2eb520e8e1',
+            },
+            {
+              path: 'package/node_modules/napi-wasm/index.js',
+              bytes: 42_418,
+              sha256: 'ad46aa59b86c852819ba521cdbde18348467e448ce4e466e83e53ea60896bc8d',
+            },
+            {
+              path: 'package/node_modules/napi-wasm/index.mjs',
+              bytes: 42_375,
+              sha256: '0108dc67b01e6f4e8493720a51f58747f5318ff13294bb4636fce108515e0101',
+            },
+            {
+              path: 'package/node_modules/napi-wasm/package.json',
+              bytes: 810,
+              sha256: '979a10d090dc49549d31ee206b60863950712145a3bebf9fe21a0919e8ca77a1',
+            },
+          ],
+        },
+      ],
+    });
+    expect(lightningTarballGolden.tarball.integrity).toBe(lightningRegistryGolden.dist.integrity);
+    expect(lightningTarballGolden.embeddedPackages.map(({ name }) => name)).toEqual(
+      lightningRegistryGolden.bundleDependencies,
+    );
   });
 
   it('exports one owner-decoded builtin object and no generic decoder through a package barrel', () => {
