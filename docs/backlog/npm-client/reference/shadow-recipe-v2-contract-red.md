@@ -10,7 +10,7 @@ registry projection, integrity-verified real tarball acquisition, embedded
 `napi-wasm@1.1.3`, and truthful root/nested fresh lock facts. Protocol-v2
 trace/replay and its Workbench/Chromium consumers are deferred to blocked draft
 child `npm-client/shadow-recipe-v2-protocol-replay-authority` with its own
-Budget `200–500` and future checkpoint.
+Budget `300–800` and future checkpoint.
 
 Combined checkpoint `812cd8b0e5c653674bae949d67f0ac21db90748f`
 contains no production source, but Standards blocked it; it is lineage only and
@@ -54,8 +54,15 @@ pnpm check:runtime-adapter-boundary
 git diff --check
 ```
 
-The narrowed replacement carrier runs this exact batch against the fresh
-baseline:
+Replacement checkpoint `f5dbb4e021380dbdbbd964e33b434e47c2348618`
+closed the three blockers above; Standards passed, but Spec blocked one missing
+negative proof: the official archive proved the embedded files positively,
+while no RED forced the installer to reject a missing or wrong embedded
+manifest before link effects. The re-cut adds missing, name-drift, and
+version/range-drift generated-tar mutations while retaining the official
+archive as the only positive oracle.
+
+The narrowed current carrier runs this exact batch against the fresh baseline:
 
 ```sh
 pnpm --filter @riftydev/npm-client exec vitest run \
@@ -70,12 +77,13 @@ pnpm --filter @riftydev/shadow-registry exec vitest run \
   src/internal/catalog-v2-data-authority.contract.test.ts
 ```
 
-The npm-client run has 18 RED and 117 GREEN tests:
+The npm-client run has 21 RED and 117 GREEN tests:
 
-- the real-tarball acquisition carrier is 10/10 RED: eight complete-projection
-  mutations reach effects, while root/nested fresh, matching current-protocol
-  replay, and generic Eddy ingress still acquire a standalone child and omit
-  the exact parent bundle plus embedded-child lock facts;
+- the acquisition carrier is 13/13 RED: eight complete-projection mutations
+  reach effects; three embedded missing/name/version mutations do not reject
+  before link effects; and root/nested fresh, matching current-protocol replay,
+  and generic Eddy ingress still acquire a standalone child and omit the exact
+  parent bundle plus embedded-child lock facts;
 - the inherited data-authority matrix is 6 RED / 19 GREEN, with only the six
   direct/transitive fresh/replay/Eddy LightningCSS ledgers exposing standalone
   child registry/cache work;

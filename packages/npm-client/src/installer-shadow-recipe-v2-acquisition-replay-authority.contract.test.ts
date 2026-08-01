@@ -110,7 +110,13 @@ async function registryEntry(
   return { manifest, tarball };
 }
 
-async function mutationSourceEntry(fields = exactProjection()): Promise<RegistryEntry> {
+async function mutationSourceEntry(
+  fields = exactProjection(),
+  embeddedManifest: Readonly<{ name: string; version: string }> | null = {
+    name: BUNDLED,
+    version: BUNDLED_VERSION,
+  },
+): Promise<RegistryEntry> {
   return await registryEntry(
     SOURCE,
     SOURCE_VERSION,
@@ -123,10 +129,11 @@ async function mutationSourceEntry(fields = exactProjection()): Promise<Registry
     },
     {
       'bin/acquired.js': 'throw new Error("acquired twin bin leaked");\n',
-      [`node_modules/${BUNDLED}/package.json`]: JSON.stringify({
-        name: BUNDLED,
-        version: BUNDLED_VERSION,
-      }),
+      ...(embeddedManifest === null
+        ? {}
+        : {
+            [`node_modules/${BUNDLED}/package.json`]: JSON.stringify(embeddedManifest),
+          }),
       [`node_modules/${BUNDLED}/index.js`]: 'module.exports = "bundled napi-wasm";\n',
     },
   );
@@ -257,6 +264,18 @@ const projectionDrifts = [
     mutate(fields: ProjectionFields): void {
       fields.bundleDependencies = ['@drift/bundled'];
     },
+  },
+] as const;
+
+const embeddedManifestDrifts = [
+  { label: 'missing manifest', manifest: null },
+  {
+    label: 'name drift',
+    manifest: { name: '@drift/napi-wasm', version: BUNDLED_VERSION },
+  },
+  {
+    label: 'version/range drift',
+    manifest: { name: BUNDLED, version: '9.9.9' },
   },
 ] as const;
 
@@ -557,6 +576,54 @@ describe('shadow recipe v2 acquisition authority', () => {
       expect.soft(registry.tarballReads, `${label}: tarballs`).toEqual([]);
       expect.soft(cache.gets, `${label}: cache gets`).toEqual([]);
       expect.soft(cache.puts, `${label}: cache puts`).toEqual([]);
+      expect.soft(reports, `${label}: reports`).toEqual([]);
+      for (const writer of writers) {
+        expect.soft(writer.mock.calls.length, `${label}: VFS writer calls`).toBe(0);
+      }
+      expect.soft(await vfs.exists('/project/node_modules'), `${label}: tree`).toBe(false);
+      expect.soft(await vfs.exists('/project/package-lock.json'), `${label}: lock`).toBe(false);
+    },
+  );
+
+  it.each(embeddedManifestDrifts)(
+    '[fault: corrupt-input/provenance-lie] rejects embedded $label before link effects',
+    async ({ label, manifest }) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const registry = new LedgerRegistry([
+        await mutationSourceEntry(exactProjection(), manifest),
+        // Poison only: embedded validation must not resolve a replacement child.
+        await registryEntry(BUNDLED, BUNDLED_VERSION),
+      ]);
+      const cache = new LedgerCache();
+      const reports: string[] = [];
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/project', { recursive: true });
+      const writers = [
+        vi.spyOn(vfs, 'mkdir'),
+        vi.spyOn(vfs, 'writeFile'),
+        vi.spyOn(vfs, 'rm'),
+        vi.spyOn(vfs, 'utimes'),
+      ];
+
+      const outcome = await installFixture(
+        vfs,
+        registry,
+        { lightningcss: '1.32.0' },
+        cache,
+        reports,
+      ).then(
+        (value) => ({ kind: 'resolved' as const, value }),
+        (error: unknown) => ({ kind: 'rejected' as const, error }),
+      );
+
+      expect.soft(outcome.kind, `${label}: outcome`).toBe('rejected');
+      expect
+        .soft(errorFact(outcome.kind === 'rejected' ? outcome.error : undefined), `${label}: error`)
+        .toEqual({ name: 'NotImplementedError', feature: FEATURE });
+      expect.soft(registry.packumentReads, `${label}: packuments`).toEqual([SOURCE]);
+      expect.soft(registry.tarballReads, `${label}: tarballs`).toEqual([SOURCE_URL]);
+      expect.soft(cache.gets, `${label}: cache gets`).toEqual([`${SOURCE}@${SOURCE_VERSION}`]);
+      expect.soft(cache.puts, `${label}: cache puts`).toEqual([`${SOURCE}@${SOURCE_VERSION}`]);
       expect.soft(reports, `${label}: reports`).toEqual([]);
       for (const writer of writers) {
         expect.soft(writer.mock.calls.length, `${label}: VFS writer calls`).toBe(0);

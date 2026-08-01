@@ -88,7 +88,9 @@ public recipe owner.
    embedded child `version`/`inBundle` facts.
 4. Removing, adding, or changing each complete acquisition map or bundle member
    rejects with `lightningcss.acquisition` before tarball/cache/VFS/report/lock
-   effects; generated archives are used only to mutate the real-tarball case.
+   effects. A missing embedded manifest or wrong child name/version rejects
+   after the bounded parent acquisition but before VFS/report/lock effects;
+   generated archives are used only for these mutation cases.
 5. Matching current-protocol replay and generic Eddy ingestion preserve the
    same parent/embedded bytes without a child source; existing schema-2
    admission, acquired-bin suppression, alias materialization, and ordinary
@@ -98,7 +100,7 @@ public recipe owner.
 
 | Fault class | Required outcome | Proof |
 |---|---|---|
-| corrupt-input / provenance-lie | complete registry maps strict-compare; the SRI-verified real tarball and embedded manifest/member set must agree with the recipe | independent map mutations plus real-tarball root/nested carrier and generated mutation cases |
+| corrupt-input / provenance-lie | complete registry maps strict-compare; the SRI-verified real tarball and embedded manifest/member set must agree with the recipe | independent map mutations, real-tarball root/nested carrier, and generated missing/name/version embedded-manifest mutations |
 | observable-order | admission precedes registry; projection precedes tarball/cache/VFS; embedded-manifest validation precedes link/report/lock | fresh-install operation ledgers |
 | unbounded-read | registry headers/bodies remain progress-bounded, runaway bodies capped, discarded responses cancelled | inherited `RegistryClient` fault suite (8/8) |
 | torn-state | parked alias abort stops later writes, emits no report/result/lock, and exact retry reconciles | root/nested alias write ledger |
@@ -132,6 +134,12 @@ public recipe owner.
   `812cd8b0e5c653674bae949d67f0ac21db90748f`; it is lineage, not a readiness
   verdict. The dependency-ordered split appends protocol/replay as epic Item 20
   without rewriting Item 19 or its Budget history.
+- Spec blocked replacement checkpoint
+  `f5dbb4e021380dbdbbd964e33b434e47c2348618`: its official-tarball positive
+  proof was complete, but no negative RED forced embedded manifest identity and
+  version/range validation before link effects. The next checkpoint adds that
+  generated-tar mutation table; the official archive remains the sole positive
+  oracle.
 - The acquisition carrier must feed the integrity-verified real pinned npm
   tarball through the fresh installer and observe all four embedded members.
   The committed JSON identity and generated miniature archives cannot replace

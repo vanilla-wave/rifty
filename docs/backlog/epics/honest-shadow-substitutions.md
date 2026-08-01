@@ -193,4 +193,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | package-bin-phased-linker-authority | 100–300 |
 | shadow-materialized-bin-commit-authority | 100–300 |
 | shadow-recipe-v2-acquisition-replay-authority | 300–800 |
-| shadow-recipe-v2-protocol-replay-authority | 200–500 |
+| shadow-recipe-v2-protocol-replay-authority | 300–800 |

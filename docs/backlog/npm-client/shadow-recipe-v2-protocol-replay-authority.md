@@ -134,6 +134,10 @@ or shadow-specific Eddy source.
   acquisition/replay checkpoint to split before implementation. This is the
   second dependency-ordered unit and stays draft behind the narrowed
   acquisition item.
+- Pre-pickup sizing at checkpoint
+  `f5dbb4e021380dbdbbd964e33b434e47c2348618` found the known replay,
+  Workbench, and Chromium carrier already near twice a `200–500` band before
+  required cache/Eddy faults. Budget re-cut to `300–800`; scope is unchanged.
 - Protocol v2 carries behavior-complete data already attested by existing
   owners; no new codec, public API, or coordination mechanism is introduced.
 - Replay mutation cases assert ADR-0335's public `EBROKENLOCK` reason only.
