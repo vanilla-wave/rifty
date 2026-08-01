@@ -45,6 +45,31 @@ The two GREEN cases retain honest existing behavior: equal command text in
 independent root/nested scopes is not a collision, and a missing package-bin
 target stays loud with no lock before an exact retry.
 
+## Fresh commit-authority successor
+
+The fresh successor starts from merged phased-linker main
+`370382d253fccd1d402e362e405a9a82dbb68cbe`. Its isolated carrier is:
+
+```sh
+pnpm vitest run \
+  packages/npm-client/src/installer-shadow-materialized-bin-commit-authority.contract.test.ts
+```
+
+It retains only shadow integration from the terminal quarry: exact recipe bin
+ownership, acquired-twin suppression, authoritative-prior collision ingress,
+the complete package-files → registry-aliases → one-bin-pass → internals-shims
+→ lock → reports ledger, and reachable alias/bin/shim/lock failure plus retry.
+Generic linker collision, scope, and writer behavior stays frozen in the
+landed successor carriers and is not reimplemented here.
+
+Fresh result: 23 tests, 23 RED. Current main publishes substitution lines
+before commit, links recipe bins before registry aliases, preserves the raw
+manifest spelling `./bin/esbuild` in the lock, ignores authoritative-prior bin
+owners, admits acquired-twin bins into result/link/lock, and completes all
+three registry-alias writes after an abort parked on the first. Every injected
+alias, bin, shim, and lock failure also observes the premature report; an exact
+retry therefore duplicates it.
+
 ## Successor allocation
 
 - `npm-client/package-bin-linker-authority` owns package-generic current/prior
