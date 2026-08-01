@@ -570,7 +570,7 @@ function hasReservedShadowIdentity(value: unknown): boolean {
   );
 }
 
-function registryAcquisitionInstallPath(substitution: AppliedShadowSubstitution): string {
+export function registryAcquisitionInstallPath(substitution: AppliedShadowSubstitution): string {
   if (substitution.acquisition.kind !== 'registry') {
     throw new TypeError('registry acquisition path requires a registry substitution');
   }
@@ -709,11 +709,13 @@ export async function materializeRegistryShadowSubstitutions(
   root: string,
   plan: ShadowAssetPlan,
   report: (line: string) => void,
+  checkpoint: () => void = () => {},
 ): Promise<void> {
   if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
     throw new TypeError('trusted shadow plan invariant failed');
   }
   for (const substitution of plan.substitutions) {
+    checkpoint();
     if (substitution.acquisition.kind !== 'registry') continue;
     const recipe = builtinShadowSubstitutionCatalog.recipes.find(
       (candidate) => candidate.id === substitution.substitutionId,
@@ -723,9 +725,12 @@ export async function materializeRegistryShadowSubstitutions(
         `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,
       );
     for (const file of recipe.materialization.files) {
+      checkpoint();
       const path = joinPath(root, `${substitution.materialization.installPath}/${file.path}`);
       await vfs.mkdir(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+      checkpoint();
       await vfs.writeFile(path, new TextEncoder().encode(file.content));
+      checkpoint();
     }
     report(
       `npm: ${substitution.trigger.name}@${substitution.trigger.requestedRange ?? '*'} materialized from shadow registry (${substitution.substitutionId})`,

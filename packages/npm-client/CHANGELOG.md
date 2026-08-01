@@ -79,6 +79,11 @@
 
 ### Fixed
 
+- Shadow substitutions now remove acquired-twin bin claims before the shared
+  current/prior preflight, link exact recipe bins after registry aliases, and
+  publish ordered substitution lines only after files, bins, internals shims,
+  and the lock commit.
+
 - Package linking now settles every prepared package file before one detached
   claim-only launcher pass; retries preserve loud target, abort, quota, and
   permission failures without rereading raw install paths or `bin` metadata.

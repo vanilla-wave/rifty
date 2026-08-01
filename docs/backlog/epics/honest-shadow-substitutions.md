@@ -132,6 +132,11 @@ Contract+RED → Final+GREEN):
     before one detached shaped-claim launcher pass across public, cancellable,
     prepared, and direct phased paths; keep target/abort/VFS faults and exact
     retry loud.
+18. `npm-client/shadow-materialized-bin-commit-authority` —
+    **shadow-materialized-bin-commit-authority**: compose exact recipe claims
+    and acquired-twin suppression before shared current/prior preflight, then
+    package files → registry aliases → one bin pass → internals shims → lock →
+    staged reports without a second writer, reporter, or scheduler.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -173,3 +178,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | package-bin-claim-link-ingress-authority | 20–80 |
 | package-bin-companion-claim-admission-authority | 30–100 |
 | package-bin-phased-linker-authority | 100–300 |
+| shadow-materialized-bin-commit-authority | 100–300 |

@@ -73,6 +73,14 @@ function recordingVfs(vfs: MemoryVfs, calls: string[], armed: () => boolean): Vf
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 async function makeEntry(
   name: string,
   version: string,
@@ -261,6 +269,64 @@ describe('install — lifecycle cancellation (ADR-0314)', () => {
         },
       ),
     ).rejects.toBe(reason);
+  });
+
+  it('[fault: torn-state] observes an abort parked in lock commit before reports or result', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const writeStarted = deferred<void>();
+    const releaseWrite = deferred<void>();
+    const writeFile = vfs.writeFile.bind(vfs);
+    let parkLock = true;
+    const write = vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+      if (parkLock && path === '/proj/package-lock.json') {
+        parkLock = false;
+        writeStarted.resolve();
+        await releaseWrite.promise;
+      }
+      await writeFile(path, data);
+    });
+    const controller = new AbortController();
+    const reason = new DOMException('project closed during package-lock commit', 'AbortError');
+    const reports: string[] = [];
+    const installing = install(
+      'root',
+      '1.0.0',
+      { esbuild: '^0.28.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new FakeRegistry(new Map()),
+        signal: controller.signal,
+        onSubstitution: (line) => reports.push(line),
+      },
+    );
+
+    await writeStarted.promise;
+    controller.abort(reason);
+    releaseWrite.resolve();
+    await expect(installing).rejects.toBe(reason);
+    expect.soft(reports).toEqual([]);
+    expect.soft(await vfs.exists('/proj/package-lock.json')).toBe(true);
+
+    write.mockRestore();
+    const result = await install(
+      'root',
+      '1.0.0',
+      { esbuild: '^0.28.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new FakeRegistry(new Map()),
+        onSubstitution: (line) => reports.push(line),
+      },
+    );
+    expect.soft(result.lockfile.packages['node_modules/esbuild']?.bin).toEqual({
+      esbuild: 'bin/esbuild',
+    });
+    expect(reports).toEqual([
+      'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)',
+    ]);
   });
 });
 

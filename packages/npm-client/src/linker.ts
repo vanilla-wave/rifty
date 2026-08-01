@@ -9,6 +9,7 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
+import { builtinShadowSubstitutionCatalog } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 import {
   type ShadowAssetPlan,
@@ -403,6 +404,14 @@ export function buildPreparedInstallLockfile(
   const lockfile = buildPreparedLockfile(rootName, rootVersion, packages);
   if (plan.substitutions.length === 0) return lockfile;
   for (const substitution of plan.substitutions) {
+    const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+      (candidate) => candidate.id === substitution.substitutionId,
+    );
+    if (!recipe) {
+      throw new NotImplementedError(
+        `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,
+      );
+    }
     let entry = lockfile.packages[substitution.materialization.installPath];
     if (!entry) {
       entry = { version: substitution.materialization.version };
@@ -410,6 +419,8 @@ export function buildPreparedInstallLockfile(
     } else if (entry.version !== substitution.materialization.version) {
       throw new TypeError(`shadow substitution ${substitution.substitutionId} entry drifted`);
     }
+    if (Object.keys(recipe.materialization.bin).length === 0) Reflect.deleteProperty(entry, 'bin');
+    else entry.bin = { ...recipe.materialization.bin };
     entry.riftyShadowRecipe = substitution.substitutionId;
   }
   return {
