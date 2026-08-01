@@ -79,6 +79,10 @@
 
 ### Fixed
 
+- Package linking now settles every prepared package file before one detached
+  claim-only launcher pass; retries preserve loud target, abort, quota, and
+  permission failures without rereading raw install paths or `bin` metadata.
+
 - Auto-injected Rollup WASM companions retain exact package/result/lock bin
   metadata but contribute no active launcher claim unless an ordinary edge
   reaches the same package identity and install path (ADR-0343).

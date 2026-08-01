@@ -635,3 +635,86 @@ Closure deletes this completed item and its terminal claim-preflight
 predecessor, unblocks phased linking, and retargets the older terminal
 claim-linker predecessor to that phased residual. Epic Items/Budget stay
 append-only; npm reify lifecycle settlement remains honestly unsupported.
+
+## Phased-linker post-ingress Contract+RED baseline
+
+Fresh main `2cdc92b3fa4b6b416006b1be8347dd4c717b5720` includes the claim
+link-ingress predecessor from PR #235. Test/docs checkpoint
+`d4e914a3b1ff7b03f978815380b044ff963cfbc1` adds no production source and
+freezes the new 450-line carrier at Git blob
+`32bcdcc4f01d65016d270bf0bebd649b58f0a8dd`, SHA-256
+`661df162c84cc309b80c90a2da02be889c83843737e7b5a369dc2168315ed795`.
+
+```sh
+pnpm vitest run --project unit \
+  packages/npm-client/src/linker-bin-phased-linker-authority.contract.test.ts
+pnpm --filter @riftydev/npm-client typecheck
+```
+
+The focused carrier runs 15 tests, all RED:
+
+- public, cancellable, and prepared paths start `.bin` work before the parked
+  second-package file settles;
+- public, cancellable, and prepared paths reread raw `bin` metadata after
+  detached claim admission; the direct phased path has no callable seams;
+- root/nested missing-target repair and first-of-two abort/retry cannot enter
+  the absent detached writer;
+- root/nested × `ENOSPC`/`EACCES` first-of-two launcher failures cannot enter
+  the absent detached writer.
+
+Package typecheck reports exactly five intentional `TS2578` diagnostics at
+the raw/claim file-phase and raw/source/prepared bin-phase negative witnesses.
+They become GREEN only if the two package-private exports retain the exact
+prepared-package and detached-claim signatures. The carrier also asserts that
+neither seam appears on `src/index.ts`.
+
+The inherited linker, link-ingress, and prepared-installer floor remains 25/25
+GREEN. `pnpm backlog:check` and `pnpm check:runtime-adapter-boundary` pass.
+Acceptance, Parity, and Fault matrix remain unchanged from the terminal split.
+
+### Phased-linker first review blocker and re-cut
+
+The first isolated Contract+RED review at
+`c424d9f94a02e8f0e3ac87b83dc92e6c08effd64` passed Standards and blocked
+Spec on three false-greens:
+
+- the direct phased path did not park a package-file write and therefore did
+  not prove that its file phase settled before its bin phase;
+- missing-target rows used one claim and could not prove later work stopped or
+  that retry landed both launchers;
+- composed ordering rows did not enumerate all four expected package-file
+  completions.
+
+In-place re-cut `a81f119e37b9f6f5f1ef5505317f45614eb13c11`
+adds direct phased ordering, first-of-two missing-target repair, and exact
+two-package completion sets. Its 481-line carrier is Git blob
+`5bb9c0078da8a653f7c18ef85f8d6839911b2299`, SHA-256
+`05dd5bd3c2b3cdd3d71006fc42a461365887c1a34041c7d0deb0d349058c5c5b`.
+The focused carrier now runs 16 tests, all RED; package typecheck retains the
+same exact five intentional `TS2578` diagnostics. The inherited 25/25 floor
+remains GREEN. No production source differs from fresh main.
+
+The second isolated Contract+RED review at
+`0426d4f28de6be3888ce4d17d3c4bbdddc4d4ab0` passed Standards and Spec with no
+findings. This exact checkpoint is the ready authority for production pickup;
+the re-cut carrier blob remains frozen.
+
+### Phased-linker implementation and closure
+
+Ready/pickup parent `58c30945a4caf1d91293dd33386127958271003b`
+precedes production `d2ccdeeee19588609f65f4d2d351ac1438388098`. The prepared
+composer retains admitted claims, settles every prepared package file through
+the extracted file phase, then runs one sequential claim-only launcher phase.
+The bin phase derives target and launcher paths only from each detached claim;
+it never rereads raw `installPath` or `bin` metadata. Public API, installer
+projection, module topology, and coordination mechanisms remain unchanged.
+
+The frozen 481-line carrier runs 16/16 GREEN; package typecheck is GREEN. The
+linker/source/aggregation/settlement/ingress/path/installer regression floor
+runs 171/171 GREEN. Architecture, runtime-adapter, backlog, and contract-drift
+gates pass.
+
+Closure deletes the completed phased item and its two terminal split
+predecessors, unblocks `shadow-materialized-bin-commit-authority`, and preserves
+the epic Items/Budget lineage append-only. npm reify lifecycle settlement
+remains the same named loud gap outside this goal.

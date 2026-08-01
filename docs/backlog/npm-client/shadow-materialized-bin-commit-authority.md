@@ -6,7 +6,6 @@ created: 2026-07-28
 why: the terminal materialized-bin RED proved acquired registry bins can leak and substitution success publishes before aliases, launchers, shims, or the lock have settled
 user_story: As a browser-IDE user invoking a substituted package CLI, I want the exact materialized package to own its launcher only after one coherent install commit, but today a failed install can still report success
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/package-bin-phased-linker-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/shadow-materialized-bin-contract-red.md]
 code:
   - packages/npm-client/src/installer.ts
@@ -18,10 +17,9 @@ code:
 
 This is the second split successor to terminal predecessor
 `npm-client/shadow-materialized-bin-authority` at
-`9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`. It starts after
-`npm-client/package-bin-phased-linker-authority` lands and consumes the serial
-claim-preflight/phased-linker authority plus its prepared install-path
-predecessor.
+`9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`. Phased-linker production
+`d2ccdeeee19588609f65f4d2d351ac1438388098` supplies the serial
+claim-preflight/file/bin authority plus its prepared install-path predecessor.
 
 This unit owns exact recipe claims, acquired-twin suppression, installer phase
 order, and commit-scoped substitution reporting. Exact registry acquisition,
@@ -101,6 +99,10 @@ serial successor `npm-client/shadow-recipe-v2-acquisition-replay-authority`.
 
 ## Decisions
 
+- Phased-linker pickup `58c30945a4caf1d91293dd33386127958271003b`
+  and production `d2ccdeeee19588609f65f4d2d351ac1438388098` close the generic
+  package-bin predecessor chain. This draft is now unblocked; it receives no
+  epic Items/Budget selection until its own JIT fit.
 - `split-predecessor:
   9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`; predecessor checkpoints:
   `4c5b583620eebb962b1ea11f355cb5f64c4aa4b8` and
