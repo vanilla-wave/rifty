@@ -61,6 +61,7 @@ import {
 } from './fetch-and-unpack.ts';
 import {
   bundleCompletenessGapForPaths,
+  lockfilePathBareName,
   pinnedEntryForParent,
   readExistingLockfile,
   writeLockfileIfChanged,
@@ -74,13 +75,20 @@ import {
   materializeRegistryShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
   planTrustedAppliedShadowSubstitutions,
+  registryAcquisitionInstallPath,
 } from './internal/shadow/planner.ts';
 import {
   type Lockfile,
+  type PackageBinClaim,
+  type PackageBinSource,
   type PreparedInstallPackage,
   type ResolvedPackage,
   buildPreparedInstallLockfile,
-  linkPreparedInstallTree,
+  linkInstallPackageBins,
+  linkInstallPackageFiles,
+  normalizePackageBinSource,
+  normalizePackageBinSources,
+  preflightPackageBins,
   preflightPackageInstallPaths,
 } from './linker.ts';
 import type { OverrideMap } from './overrides.ts';
@@ -464,12 +472,12 @@ export async function install(
     opts.overrides,
   );
 
-  let existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
+  const priorLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
   // Decode once at lockfile ingress; frozen owner-internal consumers receive
   // this plan rather than reparsing the same clone at every dependency edge.
-  let existingShadowPlan = existingLockfile
-    ? planShadowSubstitutionsFromLockfile(existingLockfile)
-    : null;
+  const priorShadowPlan = priorLockfile ? planShadowSubstitutionsFromLockfile(priorLockfile) : null;
+  let existingLockfile = priorLockfile;
+  let existingShadowPlan = priorShadowPlan;
 
   // ADR-0182 opt-in fast path: when a resolver is configured AND no covering
   // lockfile already gives the zero-network fast path, fetch + verify eddy's
@@ -592,31 +600,46 @@ export async function install(
   warnUnsatisfiedPeers(packages);
   const preparedPackages = preflightPackageInstallPaths(packages);
   opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, preparedPackages));
-  const preparedLinkPackages = preparedPackages.map((prepared) => {
-    if (!resolved.companionOnlyBinInstallPaths.has(prepared.relativePath)) return prepared;
-    const pkg = { ...prepared.package, bin: undefined };
-    return { ...prepared, package: pkg };
-  });
+  const currentBinSources = installPackageBinSources(
+    preparedPackages,
+    shadowPlan,
+    resolved.companionOnlyBinInstallPaths,
+  );
+  const binClaims = preflightPackageBins(
+    currentBinSources,
+    lockfilePackageBinSources(
+      priorLockfile,
+      priorShadowPlan,
+      resolved.companionOnlyBinInstallPaths,
+      currentBinSources,
+      preparedPackages,
+    ),
+  );
   throwIfAborted(opts.signal);
   try {
-    await linkPreparedInstallTree(opts.vfs, opts.cwd, preparedLinkPackages, () =>
-      throwIfAborted(opts.signal),
+    const checkpoint = () => throwIfAborted(opts.signal);
+    await linkInstallPackageFiles(opts.vfs, opts.cwd, preparedPackages, checkpoint);
+    await materializeRegistryShadowSubstitutions(
+      opts.vfs,
+      opts.cwd,
+      shadowPlan,
+      substitutions.line,
+      checkpoint,
+    );
+    await linkInstallPackageBins(opts.vfs, opts.cwd, binClaims, checkpoint);
+    // ADR-0188: install-time internals shims into the actual installed dirs —
+    // AFTER package files, aliases, and bins. Both paths (+ eddy).
+    await applyInternalsShims(
+      opts.vfs,
+      opts.cwd,
+      packages.filter((pkg) => !pinnedShadowSubstitutions.has(pkg)),
+      substitutions.line,
+      checkpoint,
     );
   } catch (error) {
     throwIfAborted(opts.signal);
     throw error;
   }
-  throwIfAborted(opts.signal);
-  await materializeRegistryShadowSubstitutions(opts.vfs, opts.cwd, shadowPlan, substitutions.line);
-  throwIfAborted(opts.signal);
-  // ADR-0188: install-time internals shims into the actual installed dirs —
-  // AFTER link so tarball bytes never clobber a shim. Both paths (+ eddy).
-  await applyInternalsShims(
-    opts.vfs,
-    opts.cwd,
-    packages.filter((pkg) => !pinnedShadowSubstitutions.has(pkg)),
-    substitutions.line,
-  );
   throwIfAborted(opts.signal);
   const lockfile = buildPreparedInstallLockfile(
     rootName,
@@ -626,7 +649,7 @@ export async function install(
   );
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
-  throwIfAborted(opts.signal);
+  substitutions.flush();
   const result: InstallResult = {
     packages,
     lockfile,
@@ -669,6 +692,155 @@ export function packageLinkTargets(
     }
   }
   return [...targets];
+}
+
+function installPackageBinSources(
+  packages: readonly PreparedInstallPackage<PinnedPackage>[],
+  shadowPlan: ShadowAssetPlan,
+  companionOnlyInstallPaths: ReadonlySet<string>,
+): readonly PackageBinSource[] {
+  const sources: PackageBinSource[] = packages.map((prepared) => ({
+    package:
+      companionOnlyInstallPaths.has(prepared.relativePath) ||
+      pinnedShadowSubstitutions.has(prepared.package)
+        ? { name: prepared.package.name }
+        : prepared.package,
+    nodeModulesDir: prepared.nodeModulesDir,
+  }));
+  for (const substitution of shadowPlan.substitutions) {
+    const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+      (candidate) => candidate.id === substitution.substitutionId,
+    );
+    if (!recipe) {
+      throw new NotImplementedError(
+        `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,
+      );
+    }
+    sources.push({
+      package: {
+        name: substitution.materialization.name,
+        bin: { ...recipe.materialization.bin },
+      },
+      nodeModulesDir: packageNodeModulesDir(
+        substitution.materialization.installPath,
+        substitution.materialization.name,
+      ),
+    });
+  }
+  return sources;
+}
+
+function lockfilePackageBinSources(
+  lockfile: Lockfile | null,
+  shadowPlan: ShadowAssetPlan | null,
+  companionOnlyInstallPaths: ReadonlySet<string>,
+  currentSources: readonly PackageBinSource[],
+  currentPackages: readonly PreparedInstallPackage<PinnedPackage>[],
+): readonly PackageBinSource[] {
+  if (!lockfile) return [];
+  const excluded = new Set(companionOnlyInstallPaths);
+  for (const substitution of shadowPlan?.substitutions ?? []) {
+    if (substitution.acquisition.kind === 'registry') {
+      excluded.add(registryAcquisitionInstallPath(substitution));
+    }
+  }
+  const upgradedCompanionClaims = companionDemandUpgradePriorClaims(
+    lockfile,
+    currentSources,
+    currentPackages,
+    companionOnlyInstallPaths,
+  );
+  const sources: PackageBinSource[] = [];
+  for (const [installPath, entry] of Object.entries(lockfile.packages)) {
+    if (installPath === '' || entry.bin === undefined || excluded.has(installPath)) continue;
+    const name = lockfilePathBareName(installPath);
+    const source: PackageBinSource = {
+      package: { name, bin: entry.bin },
+      nodeModulesDir: packageNodeModulesDir(installPath, name),
+    };
+    for (const claim of normalizePackageBinSource(source)) {
+      if (upgradedCompanionClaims.has(packageBinClaimKey(claim))) continue;
+      sources.push({
+        package: { name: claim.owner, bin: { [claim.command]: claim.target } },
+        nodeModulesDir: claim.nodeModulesDir,
+      });
+    }
+  }
+  return sources;
+}
+
+/** ADR-0343: raw lock metadata retains inactive companion bins. A current
+ * ordinary edge upgrades that exact companion claim, not a reify owner change. */
+function companionDemandUpgradePriorClaims(
+  lockfile: Lockfile,
+  currentSources: readonly PackageBinSource[],
+  currentPackages: readonly PreparedInstallPackage<PinnedPackage>[],
+  companionOnlyInstallPaths: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const currentClaims = new Set(normalizePackageBinSources(currentSources).map(packageBinClaimKey));
+  const currentByPath = new Map(
+    currentPackages.map((prepared) => [prepared.relativePath, prepared.package]),
+  );
+  const excluded = new Set<string>();
+  for (const [triggerPath, triggerEntry] of Object.entries(lockfile.packages)) {
+    if (triggerPath === '' || triggerEntry.bin === undefined || currentByPath.has(triggerPath)) {
+      continue;
+    }
+    const triggerName = lockfilePathBareName(triggerPath);
+    const triggerSource: PackageBinSource = {
+      package: { name: triggerName, bin: triggerEntry.bin },
+      nodeModulesDir: packageNodeModulesDir(triggerPath, triggerName),
+    };
+    const triggerClaims = normalizePackageBinSource(triggerSource);
+    for (const [companionName, companionVersion] of Object.entries(
+      companionRequestsFor(triggerName, triggerEntry.version),
+    )) {
+      const companion = pinnedEntryForParent(lockfile, companionName, triggerPath);
+      if (
+        !companion ||
+        companion.entry.version !== companionVersion ||
+        companion.entry.bin === undefined ||
+        companionOnlyInstallPaths.has(companion.installPath)
+      ) {
+        continue;
+      }
+      const currentCompanion = currentByPath.get(companion.installPath);
+      if (
+        currentCompanion?.name !== companionName ||
+        currentCompanion.version !== companionVersion
+      ) {
+        continue;
+      }
+      const companionSource: PackageBinSource = {
+        package: { name: companionName, bin: companion.entry.bin },
+        nodeModulesDir: packageNodeModulesDir(companion.installPath, companionName),
+      };
+      for (const companionClaim of normalizePackageBinSource(companionSource)) {
+        if (!currentClaims.has(packageBinClaimKey(companionClaim))) continue;
+        for (const triggerClaim of triggerClaims) {
+          if (
+            triggerClaim.nodeModulesDir === companionClaim.nodeModulesDir &&
+            triggerClaim.command === companionClaim.command
+          ) {
+            excluded.add(packageBinClaimKey(triggerClaim));
+          }
+        }
+      }
+    }
+  }
+  return excluded;
+}
+
+function packageBinClaimKey(claim: PackageBinClaim): string {
+  return `${claim.nodeModulesDir}\0${claim.command}\0${claim.owner}`;
+}
+
+function packageNodeModulesDir(installPath: string, packageName: string): string {
+  const suffix = `/${packageName}`;
+  if (!installPath.endsWith(suffix)) {
+    throw new TypeError(`package bin source has invalid install path ${installPath}`);
+  }
+  return installPath.slice(0, -suffix.length);
 }
 
 function isStrictDescendant(root: string, path: string): boolean {
@@ -1325,29 +1497,34 @@ function declineEddy(
 }
 
 /**
- * Per-install substitution-provenance reporter (ADR-0188). `redirect` dedupes
- * within one run (the same baked redirect can surface via the top-level
- * pre-pass AND the walk); wording is the backlog contract — it MUST name the
- * shadow registry.
+ * Per-install substitution-provenance reporter (ADR-0188). Lines stay ordered
+ * and staged until lock commit. `redirect` dedupes the same baked redirect
+ * surfacing through both the top-level pre-pass and walk.
  */
 interface SubstitutionReporter {
   redirect(source: string, range: string | null, target: string, version: string): void;
   line(text: string): void;
+  flush(): void;
 }
 
 function createSubstitutionReporter(sink: (line: string) => void): SubstitutionReporter {
   const seen = new Set<string>();
+  const staged: string[] = [];
   return {
     redirect(source, range, target, version): void {
       const key = `${source}@${range ?? '*'}→${target}@${version}`;
       if (seen.has(key)) return;
       seen.add(key);
-      sink(
+      staged.push(
         `npm: ${source}@${range ?? '*'} → ${target}@${version} (substituted from shadow registry, ADR-0051)`,
       );
     },
     line(text): void {
-      sink(text);
+      staged.push(text);
+    },
+    flush(): void {
+      for (const line of staged) sink(line);
+      staged.length = 0;
     },
   };
 }
@@ -2178,12 +2355,17 @@ async function pinToPackage(
           ]),
         )
       : await extractTarGz(acquisition.result.bytes);
+  const bin = pin.shadow
+    ? pin.shadow.acquisition.kind === 'registry'
+      ? undefined
+      : { ...pin.shadow.recipe.materialization.bin }
+    : pin.bin;
   const pkg: PinnedPackage = {
     name: pin.name,
     version: pin.version,
     files,
     dependencies: pin.dependencies,
-    bin: pin.bin,
+    ...(bin === undefined ? {} : { bin }),
     resolved: pin.resolved,
     installPath,
     ...(acquisition.kind === 'tarball' ? { integrity: acquisition.result.integrity } : {}),

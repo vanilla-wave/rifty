@@ -102,6 +102,7 @@ export async function applyInternalsShims(
   cwd: string,
   packages: readonly ShimTargetPackage[],
   report: (line: string) => void,
+  checkpoint: () => void = () => {},
 ): Promise<void> {
   const installedVersions = new Map<string, Set<string>>();
   for (const pkg of packages) {
@@ -111,6 +112,7 @@ export async function applyInternalsShims(
   }
 
   for (const pkg of packages) {
+    checkpoint();
     const shim = internalsShims[pkg.name];
     if (!shim) continue;
     assertShimSupported(pkg.name, pkg.version);
@@ -130,9 +132,12 @@ export async function applyInternalsShims(
     const installPath = pkg.installPath ?? `node_modules/${pkg.name}`;
     const targetRel = shim.into ? aliasInstallPath(installPath, pkg.name, shim.into) : installPath;
     for (const [rel, content] of Object.entries(shim.files)) {
+      checkpoint();
       const fullPath = joinPath(cwd, `${targetRel}/${rel}`);
       await vfs.mkdir(fullPath.slice(0, fullPath.lastIndexOf('/')), { recursive: true });
+      checkpoint();
       await vfs.writeFile(fullPath, enc.encode(content));
+      checkpoint();
     }
     report(
       `npm: ${publicName(pkg.name, shim)}@${pkg.version} internals patched from shadow registry`,
