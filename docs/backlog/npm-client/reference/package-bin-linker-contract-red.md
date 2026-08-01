@@ -515,3 +515,74 @@ predecessor. Per the post-pickup demotion gate, PR #233 was re-cut as the
 contract-only demotion; link ingress must restart from fresh main after that
 predecessor lands. No production source or old carrier is retained in the
 demotion head; the immutable hashes above preserve the complete failed lineage.
+
+## Companion-claim admission successor baseline
+
+Recorded on post-#233 main
+`5fcd2cb6815de4f81a6c5cbb04a971b147284c34`. The first carrier at
+`334436ce968847ad238116f547ceacddabe9073d` and its review checkpoint
+`bc5f25b0f93837f02f301609818e0332ca7599b6` add no production source.
+
+```sh
+pnpm vitest run --project unit \
+  packages/npm-client/src/installer-shadow-shims.test.ts
+pnpm --filter @riftydev/npm-client typecheck
+pnpm backlog:check
+```
+
+The first isolated review blocked its 283 inserted test lines against the
+30–100 slice plus four Spec false-greens: direct-root pre-resolution weakened
+the visit-order proof, optional ordinary demand was absent, replay never
+recovered a later ordinary claim, and scoped eligibility changed identity and
+path together.
+
+The in-place re-cut at
+`60de85fc4645c634344159322c3cca5a43fa6612` is 176 inserted test lines,
+below the `2×` boundary. Its frozen `installer-shadow-shims.test.ts` blob is
+`7408cf847cc40f809977ff0f6cca47c2254f5cf6`. Parent-owned transitive edges now
+reach the companion in both traversal orders, an optional edge is separately
+ordinary, an auto-only lock recovers a later ordinary-only launcher with zero
+registry reads, and replay places the same identity at root and nested paths
+with different demand.
+
+The second review at
+`909ed2d202b2d2f06959998a559af3a525c5e273` passed Standards and blocked
+Spec: replay asserted only final launcher state, so favourable write order
+could hide an admitted auto claim; the scoped witness also required a forbidden
+same-command last-writer winner. Per Contract escalation, the in-place
+re-refinement at `54699555839c773ad40f68ca08239c29b5e114a5` adds both replay
+operation ledgers and gives the scoped companion a non-colliding sentinel
+command. The re-refined 182-line carrier blob is
+`49066182be7a0585bc0584ae4b42c6ea74806a4a`.
+
+The focused file still runs 26 tests: 2 RED and 24 GREEN. Fresh and immediate
+zero-registry replay each expose two root `rollup` launcher writes and leave
+the auto companion as final owner. Same-identity scoped replay exposes the
+forbidden root `wasm-rollup` write while keeping its separately scoped ordinary
+launcher collision-free. Faithful packument and tarball
+`package.json` fixtures retain both packages' real
+`rollup -> dist/bin/rollup` metadata. Green sentinels prove direct ordinary
+lock recovery, required/optional ordinary demand, both visit orders, companion
+manifest dependencies, exact raw result/lock metadata, and exact path-keyed
+scope independence. Package typecheck and backlog schema pass.
+
+The third isolated review at
+`858b7b17447f66534aa7c22553f6b8e00f9243e6` passed Standards and blocked
+Spec: replay did not compare persisted lock/manifest bytes or assert both
+packages' replay result bins. The in-place re-refinement at
+`6ece532b4fb6d5c03ed5e37dc2d7c109f68821fa` restores that proof for the
+lockfile plus both installed manifests and replay results. The carrier is 194
+inserted lines, still below the mandatory `2×` high-band boundary; its frozen
+blob is `b0492dc1e1e9ac0712f3b824c4f98c162a9fd605`. The RED ledger remains 2
+RED and 24 GREEN; package typecheck and backlog schema pass.
+
+The isolated Contract+RED review at
+`873710b408989228033079686dc6f23763ce9ca0` passed Standards and Spec with no
+findings. This checkpoint is the ready authority for implementation.
+
+Pickup `6e503039f4493cf5e18b0e9b21274181c552e51e` precedes production
+implementation `5fdc100912597b6df3c7eba86b65ed6df7e180e2`. The existing
+per-install-path schedule now carries one monotone ordinary-demand bit; only
+the linker-facing prepared projection omits companion-only bins. The frozen
+carrier blob remains `b0492dc1e1e9ac0712f3b824c4f98c162a9fd605` and runs 26/26
+GREEN. Raw package, result, manifest, and lock metadata remain unchanged.

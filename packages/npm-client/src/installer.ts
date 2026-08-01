@@ -278,6 +278,11 @@ type PinnedPackage = ResolvedPackage & {
   installPath: string;
 };
 
+interface WalkAndPinResult {
+  readonly packages: Map<string, PinnedPackage>;
+  readonly companionOnlyBinInstallPaths: ReadonlySet<string>;
+}
+
 const pinnedShadowSubstitutions = new WeakMap<PinnedPackage, AppliedShadowSubstitution>();
 
 export interface InstallResult {
@@ -522,7 +527,7 @@ export async function install(
   );
 
   const cacheHits = new Map<string, boolean>();
-  let resolved: Map<string, PinnedPackage>;
+  let resolved: WalkAndPinResult;
   try {
     resolved = await walkAndPin(
       plan.source,
@@ -550,7 +555,7 @@ export async function install(
     throw error;
   }
   throwIfAborted(opts.signal);
-  const packages = [...resolved.values()];
+  const packages = [...resolved.packages.values()];
   const provenancePackages: InstallPackageProvenance[] = [];
   const seenProvenance = new Set<string>();
   for (const pkg of packages) {
@@ -587,9 +592,14 @@ export async function install(
   warnUnsatisfiedPeers(packages);
   const preparedPackages = preflightPackageInstallPaths(packages);
   opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, preparedPackages));
+  const preparedLinkPackages = preparedPackages.map((prepared) => {
+    if (!resolved.companionOnlyBinInstallPaths.has(prepared.relativePath)) return prepared;
+    const pkg = { ...prepared.package, bin: undefined };
+    return { ...prepared, package: pkg };
+  });
   throwIfAborted(opts.signal);
   try {
-    await linkPreparedInstallTree(opts.vfs, opts.cwd, preparedPackages, () =>
+    await linkPreparedInstallTree(opts.vfs, opts.cwd, preparedLinkPackages, () =>
       throwIfAborted(opts.signal),
     );
   } catch (error) {
@@ -1734,7 +1744,7 @@ async function walkAndPin(
   rootName: string,
   fetchCtx: FetchAndUnpackCtx,
   onPackage?: (event: InstallProgressEvent) => void,
-): Promise<Map<string, PinnedPackage>> {
+): Promise<WalkAndPinResult> {
   // Direct roots resolve first and surviving identities reserve flat slots
   // before descendant DFS. Descendant placement stays serial/request-ordered;
   // packument prefetch and tarball acquisition may overlap without owning paths.
@@ -1754,7 +1764,7 @@ async function walkAndPin(
   const pinned = new Map<string, PinnedPackage>();
   /** Install paths already scheduled this walk (synchronous path-level dedup,
    * replaces `pinned.has` since `pinned` is now populated at the await site). */
-  const scheduled = new Map<string, string>();
+  const scheduled = new Map<string, { readonly identity: string; ordinaryBinDemand: boolean }>();
   /** Paths reached by at least one non-optional edge; demand only strengthens. */
   const requiredDemandPaths = new Set<string>();
   /** Collapse concurrent same-package acquisitions to one network call. */
@@ -1828,6 +1838,7 @@ async function walkAndPin(
     // When set, this node (and its subtree) is reached via an optional dep; a
     // fetch failure warns-and-skips instead of aborting, with this descriptor.
     optional: { depName: string; depRange: string; parentName: string } | null,
+    ordinaryBinDemand = true,
     preparedPin?: ResolvedPin,
   ): Promise<void> {
     return (async () => {
@@ -1850,7 +1861,7 @@ async function walkAndPin(
       if (installPath === undefined) {
         installPath = choosePlacement(pin, ctx.parentInstallPath, flatByName);
       } else {
-        const preferredIdentity = scheduled.get(installPath);
+        const preferredIdentity = scheduled.get(installPath)?.identity;
         const flat =
           installPath === `node_modules/${pin.name}` ? flatByName.get(pin.name) : undefined;
         if (
@@ -1865,9 +1876,9 @@ async function walkAndPin(
         flatByName.set(pin.name, { version: pin.version, identity: key });
       }
       if (optional === null) requiredDemandPaths.add(installPath);
-      const scheduledIdentity = scheduled.get(installPath);
-      if (scheduledIdentity !== undefined) {
-        if (scheduledIdentity !== key) {
+      const scheduledPackage = scheduled.get(installPath);
+      if (scheduledPackage !== undefined) {
+        if (scheduledPackage.identity !== key) {
           throw Object.assign(
             new Error(
               `EINSTALLPATHCONFLICT: '${installPath}' was assigned to two different package identities`,
@@ -1875,9 +1886,10 @@ async function walkAndPin(
             { code: 'EINSTALLPATHCONFLICT', installPath },
           );
         }
+        if (ordinaryBinDemand) scheduledPackage.ordinaryBinDemand = true;
         return;
       }
-      scheduled.set(installPath, key);
+      scheduled.set(installPath, { identity: key, ordinaryBinDemand });
       const claimedFlat = flatSlotFreeBefore && installPath === `node_modules/${pin.name}`;
 
       const p = acquirePin(pin);
@@ -1969,7 +1981,7 @@ async function walkAndPin(
       const companions = companionRequestsFor(pin.name, pin.version);
       prefetchPackuments(companions, childContext);
       for (const [depName, depRange] of Object.entries(companions)) {
-        await visit(depName, depRange, childContext, optional);
+        await visit(depName, depRange, childContext, optional, false);
       }
     })();
   }
@@ -2032,11 +2044,11 @@ async function walkAndPin(
     }
 
     for (const root of requiredRoots) {
-      await visit(root.name, root.range, rootContext, null, root.pin);
+      await visit(root.name, root.range, rootContext, null, true, root.pin);
     }
     for (const root of optionalRoots) {
       try {
-        await visit(root.name, root.range, rootContext, root.optional, root.pin);
+        await visit(root.name, root.range, rootContext, root.optional, true, root.pin);
       } catch (error) {
         warnOptional(root.optional!, error);
       }
@@ -2074,7 +2086,13 @@ async function walkAndPin(
       warnOptional(optionalFailure, error);
     }
   }
-  return pinned;
+  const companionOnlyBinInstallPaths = new Set<string>();
+  for (const [installPath, scheduledPackage] of scheduled) {
+    if (!scheduledPackage.ordinaryBinDemand && pinned.has(installPath)) {
+      companionOnlyBinInstallPaths.add(installPath);
+    }
+  }
+  return { packages: pinned, companionOnlyBinInstallPaths };
 }
 
 /** Emit the existing optional-dependency warn message verbatim. */

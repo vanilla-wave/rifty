@@ -76,6 +76,10 @@
 
 ### Fixed
 
+- Auto-injected Rollup WASM companions retain exact package/result/lock bin
+  metadata but contribute no active launcher claim unless an ordinary edge
+  reaches the same package identity and install path (ADR-0343).
+
 - Resolved package install paths now pass one byte-canonical `node_modules`
   preflight before target publication, linker, or lockfile effects; target,
   file, bin, and lock consumers share the exact prepared package identity.
