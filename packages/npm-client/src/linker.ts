@@ -179,8 +179,10 @@ export async function linkPreparedInstallTree(
   root: string,
   packages: readonly PreparedInstallPackage[],
   checkpoint: () => void,
+  priorSources: readonly PackageBinSource[] = [],
 ): Promise<void> {
   checkpoint();
+  preflightPackageBins(packages, priorSources);
   const nodeModules = joinPath(root, 'node_modules');
   await vfs.mkdir(nodeModules, { recursive: true });
   checkpoint();
