@@ -62,7 +62,10 @@ the complete package-files → registry-aliases → one-bin-pass → internals-s
 Generic linker collision, scope, and writer behavior stays frozen in the
 landed successor carriers and is not reimplemented here.
 
-Fresh result: 23 tests, 23 RED. Current main publishes substitution lines
+Fresh checkpoint `5119f6bcb1cbfcd4e5de797124be99c7ac7de4ef`: 23 tests,
+23 RED. Carrier blob `ba78e2fbb15086ef4e2c75f73f15c82976992242`, SHA-256
+`63114cec4073e44789dbb87ef4ff3d8acd600569a3f36d0b4253833a984d6cff`.
+Current main publishes substitution lines
 before commit, links recipe bins before registry aliases, preserves the raw
 manifest spelling `./bin/esbuild` in the lock, ignores authoritative-prior bin
 owners, admits acquired-twin bins into result/link/lock, and completes all

@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Shadow materialized-bin commit authority
 created: 2026-07-28
 why: the terminal materialized-bin RED proved acquired registry bins can leak and substitution success publishes before aliases, launchers, shims, or the lock have settled
@@ -99,10 +99,21 @@ serial successor `npm-client/shadow-recipe-v2-acquisition-replay-authority`.
 
 ## Decisions
 
+ready-verdict: 2026-08-01 — Contract+RED @ 5119f6bcb1cbfcd4e5de797124be99c7ac7de4ef
+
+- JIT selection: epic Item 18 and Budget band `100–300`; Acceptance, Parity,
+  and Fault matrix remain the settled split contract.
+- Fresh post-phased-linker carrier: Git blob
+  `ba78e2fbb15086ef4e2c75f73f15c82976992242`, SHA-256
+  `63114cec4073e44789dbb87ef4ff3d8acd600569a3f36d0b4253833a984d6cff`.
+  It runs 23/23 RED; npm-client typecheck, Biome, backlog, runtime-boundary,
+  linker, and inherited Workbench FIFO floors stay GREEN.
+- Parallel exact-SHA Standards and Spec Contract+RED reviews PASS at
+  `5119f6bcb1cbfcd4e5de797124be99c7ac7de4ef`; production pickup remains zero.
 - Phased-linker pickup `58c30945a4caf1d91293dd33386127958271003b`
   and production `d2ccdeeee19588609f65f4d2d351ac1438388098` close the generic
-  package-bin predecessor chain. This draft is now unblocked; it receives no
-  epic Items/Budget selection until its own JIT fit.
+  package-bin predecessor chain and supplied the fresh base for this JIT
+  selection.
 - `split-predecessor:
   9967b5093c4aa6a8dfdf7f35f77a7e8b802a8a97`; predecessor checkpoints:
   `4c5b583620eebb962b1ea11f355cb5f64c4aa4b8` and
