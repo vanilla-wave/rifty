@@ -596,11 +596,17 @@ link-ingress carrier: Git blob `a80b1edd424638cb394e88303020c4663b2912ad`,
 SHA-256 `4c0a03ebe550a621096d64d1e5d16d3d447d326a032369133c59d71bfcfd09af`.
 It adds no production source.
 
+ADR-0343 and PR #234 own companion eligibility and raw package, result,
+manifest, and lock metadata. Link ingress consumes only the existing prepared
+projection; it does not reinterpret or broaden those facts.
+
 The focused carrier runs 11 tests: 10 RED and 1 GREEN. Current duplicates and
 escaping targets reach mutation before rejection or do not reject; supplied
 prior collision, transition, and removal are ignored; the compat row remains
 the old RED wording. Package typecheck reports only the intentional `TS2322`
 exact-signature and `TS2554` missing-fifth-argument diagnostics. The inherited
 real-installer companion suite runs 26/26 GREEN. Acceptance and Parity remain
-verbatim from the pre-demotion contract; browser Vite and packed-consumer
-acceptance stay mandatory Final+GREEN floors.
+verbatim from the pre-demotion contract. The canonical browser-unit case
+`Vite 7 config graph and dependency optimizer use real esbuild over owner VFS`
+runs 1/1 GREEN before source. Packed-consumer and light Vite acceptance stay
+mandatory Final+GREEN floors.

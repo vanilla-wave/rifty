@@ -39,6 +39,9 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 - The source-claim, aggregation, and claim-settlement predecessors own pure
   claim semantics. This unit owns only their truthful composition at existing
   linker ingresses.
+- ADR-0343 and PR #234 own companion eligibility plus raw package, result,
+  manifest, and lock metadata. This unit consumes only the existing
+  linker-facing prepared projection; it does not broaden that boundary.
 
 ## Acceptance
 
@@ -130,4 +133,5 @@ module, comparator, coordinator, scheduler, lock, or package-specific branch.
 - `contract-red-recut:
   1f992198b54423cd5bedf40dcef0b5b0b1caa5ab`; byte-identical 138-line
   carrier, runtime 10 RED / 1 GREEN, package typecheck exactly `TS2322` +
-  `TS2554`, inherited companion floor 26/26 GREEN, no production source.
+  `TS2554`, inherited companion floor 26/26 GREEN, canonical browser Vite
+  floor 1/1 GREEN, no production source.
