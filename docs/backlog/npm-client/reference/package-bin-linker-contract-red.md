@@ -615,3 +615,23 @@ Parallel fresh-context Contract+RED review at
 `d1babd77f5d249160c8ed3e51baa206fca34c4fe` returned Standards PASS and Spec
 PASS with no findings. This checkpoint is the ready authority for the fresh
 post-companion implementation.
+
+### Link-ingress post-companion implementation and closure
+
+Ready/pickup parent `b85ca2470e81b1991b8bd67765cf9e69d1c2efb5` precedes production
+`40d8c7954cc1995352b80916c392afa03840fcf9`. The prepared entrypoint adds only
+the optional narrow prior parameter and one settled-claim preflight after the
+existing checkpoint and before the first `mkdir`; public API and installer
+projection remain unchanged. The exact compat ❌ row and npm-client changelog
+record the shipped ceiling.
+
+The frozen carrier remains byte-identical and runs 11/11 GREEN. Package
+typecheck is GREEN; pure source/aggregation/settlement plus linker floor run
+26/26 GREEN; the companion predecessor runs 26/26 GREEN; the canonical browser
+Vite case runs 1/1 GREEN both before and after source. Packed-consumer and light
+Vite remain required final branch validation.
+
+Closure deletes this completed item and its terminal claim-preflight
+predecessor, unblocks phased linking, and retargets the older terminal
+claim-linker predecessor to that phased residual. Epic Items/Budget stay
+append-only; npm reify lifecycle settlement remains honestly unsupported.
