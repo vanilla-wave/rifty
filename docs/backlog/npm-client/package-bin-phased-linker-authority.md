@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Package-bin phased linker authority
 created: 2026-07-28
 why: the terminal combined linker checkpoint could not prove all package files settle before one detached launcher pass across every linker entrypoint and detached target/launcher fault
@@ -93,6 +93,8 @@ package-specific branch.
 
 ## Decisions
 
+ready-verdict: 2026-08-01 — Contract+RED @ 0426d4f28de6be3888ce4d17d3c4bbdddc4d4ab0
+
 - `split-predecessor:
   30416e72eea35cd992ef87f62b951d6c70eb45fb`; predecessor checkpoints:
   `e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed` and
@@ -120,6 +122,9 @@ package-specific branch.
   `05dd5bd3c2b3cdd3d71006fc42a461365887c1a34041c7d0deb0d349058c5c5b`.
   It runs 16/16 RED with the same five intentional `TS2578` diagnostics and
   keeps the inherited 25/25 floor GREEN.
+- Second isolated review at
+  `0426d4f28de6be3888ce4d17d3c4bbdddc4d4ab0` passed Standards and Spec with
+  no findings. This checkpoint is the ready authority for implementation.
 - The 481-line cohesive carrier is below the mandatory `2×` high-band re-cut
   boundary; splitting its one real-VFS fault matrix would duplicate fixtures
   and observation plumbing.
