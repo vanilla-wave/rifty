@@ -259,22 +259,51 @@ function observedPackage(value: ResolvedPackage): ObservedPackage {
 }
 
 describe('package-bin phased linker authority', () => {
-  it.each(['public', 'cancellable', 'prepared'] as const)(
+  it.each(['public', 'cancellable', 'prepared', 'phased'] as const)(
     '[fault: observable-order] %s settles every package file before the first bin operation',
     async (entrypoint) => {
       const packages = pair('node_modules', `order-${entrypoint}`);
       const { vfs, prepared, claims } = await project(packages);
       vfs.parkedWritePath = targetPath('/project', claims[1] as PackageBinClaim);
+      const expectedFileCompletions = packages
+        .flatMap((pkg) =>
+          Object.keys(pkg.files).map((entry) => `/project/${pkg.installPath}/${entry}`),
+        )
+        .sort();
 
-      const linking = linkComposed(entrypoint, vfs, packages, prepared);
+      let filePhaseSettled = false;
+      let linking: Promise<void>;
+      let linkBins: LinkBins | undefined;
+      if (entrypoint === 'phased') {
+        const linkFiles = requirePhase('linkInstallPackageFiles');
+        linkBins = requirePhase('linkInstallPackageBins');
+        linking = linkFiles(vfs, '/project', prepared, () => {});
+        void linking.then(
+          () => {
+            filePhaseSettled = true;
+          },
+          () => {
+            filePhaseSettled = true;
+          },
+        );
+      } else linking = linkComposed(entrypoint, vfs, packages, prepared);
       await vfs.writeStarted.promise;
+      await Promise.resolve();
       const prematureBinEvents = vfs.events.filter((event) => !event.startsWith('file-complete:'));
       const parkedFileCompleted = vfs.events.includes(`file-complete:${vfs.parkedWritePath}`);
+      const filePhaseSettledBeforeRelease = filePhaseSettled;
       vfs.releaseWrite.resolve();
       await linking;
+      if (linkBins) await linkBins(vfs, '/project', claims, () => {});
 
       expect.soft(parkedFileCompleted).toBe(false);
       expect.soft(prematureBinEvents).toEqual([]);
+      if (entrypoint === 'phased') expect.soft(filePhaseSettledBeforeRelease).toBe(false);
+      const completedFiles = vfs.events
+        .filter((event) => event.startsWith('file-complete:'))
+        .map((event) => event.slice('file-complete:'.length))
+        .sort();
+      expect.soft(completedFiles).toEqual(expectedFileCompletions);
       const firstBin = vfs.events.findIndex((event) => !event.startsWith('file-complete:'));
       const lastFile = vfs.events.findLastIndex((event) => event.startsWith('file-complete:'));
       expect.soft(firstBin).toBeGreaterThan(-1);
@@ -345,18 +374,20 @@ describe('package-bin phased linker authority', () => {
   );
 
   it.each(['root', 'nested'] as const)(
-    '[fault: corrupt-input] keeps a missing %s target loud and repairs exactly',
+    '[fault: corrupt-input] keeps the first of two missing %s targets loud and repairs exactly',
     async (scope) => {
       const linkFiles = requirePhase('linkInstallPackageFiles');
       const linkBins = requirePhase('linkInstallPackageBins');
       const nodeModulesDir = scope === 'root' ? 'node_modules' : 'node_modules/host/node_modules';
       const packages = [
         pkg(`missing-${scope}`, nodeModulesDir, `missing-${scope}`, 'bin/missing.js', false),
+        pkg(`missing-later-${scope}`, nodeModulesDir, `later-${scope}`, 'bin/later.js'),
       ];
       const { vfs, prepared, claims } = await project(packages);
       const claim = claims[0] as PackageBinClaim;
       const target = targetPath('/project', claim);
-      const launcher = launcherPath('/project', claim);
+      const targets = claims.map((value) => targetPath('/project', value));
+      const launchers = claims.map((value) => launcherPath('/project', value));
       await linkFiles(vfs, '/project', prepared, () => {});
 
       await expect(linkBins(vfs, '/project', claims, () => {})).rejects.toMatchObject({
@@ -365,15 +396,15 @@ describe('package-bin phased linker authority', () => {
       });
       expect.soft(vfs.targetReads).toEqual([target]);
       expect.soft(vfs.launcherAttempts).toEqual([]);
-      expect(await vfs.exists(launcher)).toBe(false);
+      for (const launcher of launchers) expect.soft(await vfs.exists(launcher)).toBe(false);
 
       await vfs.mkdir(target.slice(0, target.lastIndexOf('/')), { recursive: true });
       await vfs.writeFile(target, encoder.encode('export const repaired = true;\n'));
       vfs.resetBinLedger();
       await linkBins(vfs, '/project', claims, () => {});
-      expect.soft(vfs.targetReads).toEqual([target]);
-      expect.soft(vfs.launcherAttempts).toEqual([launcher]);
-      expect(await vfs.readFileText(launcher)).toBe(shim(claim));
+      expect.soft(vfs.targetReads).toEqual(targets);
+      expect.soft(vfs.launcherAttempts).toEqual(launchers);
+      await expectExactLaunchers(vfs, claims);
     },
   );
 
