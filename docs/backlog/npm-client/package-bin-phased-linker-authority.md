@@ -15,10 +15,9 @@ code:
 
 This is the serial second split successor to terminal
 `npm-client/package-bin-claim-linker-authority` at
-`30416e72eea35cd992ef87f62b951d6c70eb45fb`. It starts only after
-`npm-client/package-bin-claim-link-ingress-authority` lands and consumes the
-serial normalization/link-ingress boundary's prepared packages and detached
-claims.
+`30416e72eea35cd992ef87f62b951d6c70eb45fb`. Landed PR #235 at
+`main@2cdc92b3fa4b6b416006b1be8347dd4c717b5720` supplies the serial
+normalization/link-ingress boundary's prepared packages and detached claims.
 
 The existing linker remains the sole package-file and launcher writer. This
 unit adds no module, public API, comparator, coordinator, scheduler, lock, or
@@ -85,8 +84,7 @@ package-specific branch.
 - Current/prior collision and transition settlement;
   `npm-client/package-bin-claim-settlement-authority` owns them.
 - Public/cancellable/prepared zero-mutation integration, optional prior ingress,
-  public compat, and the non-colliding floor;
-  `npm-client/package-bin-claim-link-ingress-authority` owns them.
+  public compat, and the non-colliding floor; landed PR #235 owns them.
 - Recipe materialization, acquired-twin suppression, aliases, shims, lock,
   reports, and their order;
   `npm-client/shadow-materialized-bin-commit-authority` owns them.
@@ -99,9 +97,10 @@ package-specific branch.
   30416e72eea35cd992ef87f62b951d6c70eb45fb`; predecessor checkpoints:
   `e39bb917bfbbe9ef4a5e6c034e54637a9a8a25ed` and
   `30416e72eea35cd992ef87f62b951d6c70eb45fb`.
-- This draft is linked from the terminal predecessors and link-ingress
-  contract; it receives no epic Items/Budget selection before link ingress
-  lands.
+- This draft was linked from the terminal predecessors while link ingress was
+  pending; landed PR #235 now supplies its serial predecessor.
+- JIT selection: epic Item 17 and Budget band `100–300`; Acceptance, Parity,
+  and Fault matrix remain the settled split contract.
 - The claim successors own normalization and zero-mutation ingress. This unit
   begins only when exact detached claims enter every linker path and owns every
   reachable mutating VFS fault in the generic linker.
