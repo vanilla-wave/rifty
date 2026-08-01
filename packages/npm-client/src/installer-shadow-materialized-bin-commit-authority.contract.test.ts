@@ -180,7 +180,8 @@ async function lightningEntries(
         'node_modules/napi-wasm/index.js': 'module.exports = "bundled napi-wasm";\n',
       },
     }),
-    // Poison only; desired path must never request it.
+    // Kept reachable while the acquired manifest's dependency projection is
+    // still traversed; the recipe's bundled member remains the installed byte source.
     await registryEntry('napi-wasm', '1.1.3'),
   ];
 }
@@ -279,6 +280,7 @@ describe('shadow materialized-bin commit authority', () => {
       '/project/node_modules/lightningcss-wasm/package.json',
       '/project/node_modules/lightningcss-wasm/node_modules/napi-wasm/index.js',
       '/project/node_modules/lightningcss-wasm/node_modules/napi-wasm/package.json',
+      '/project/node_modules/napi-wasm/package.json',
       '/project/node_modules/rollup/dist/native.js',
       '/project/node_modules/rollup/package.json',
       '/project/node_modules/@rollup/wasm-node/package.json',
@@ -794,7 +796,7 @@ describe('shadow materialized-bin commit authority', () => {
         onSubstitution: (line) => reports.push(line),
       });
 
-      await Promise.race([writeStarted.promise, installing]);
+      await writeStarted.promise;
       controller.abort(reason);
       releaseWrite.resolve();
       await expect(installing).rejects.toBe(reason);

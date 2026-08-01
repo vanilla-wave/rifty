@@ -1,16 +1,16 @@
 # Shadow recipe v2 Contract+RED
 
-## Acquisition/embedded-source re-cut — 2026-08-02
+## Acquisition-validation re-cut — 2026-08-02
 
 Fresh source baseline is
 `main@4a2beb233cc2127ef531b0eba2584797234865f1`, including the materialized-bin
 commit authority merged by PR #237. The mapped Item 19 retains Budget
-`300–800`, but is narrowed in place to the first dependency-ordered unit: exact
-registry projection, integrity-verified real tarball acquisition, embedded
-`napi-wasm@1.1.3`, and truthful root/nested fresh lock facts. Protocol-v2
-trace/replay and its Workbench/Chromium consumers are deferred to blocked draft
-child `npm-client/shadow-recipe-v2-protocol-replay-authority` with its own
-Budget `300–800` and future checkpoint.
+`300–800`, but is narrowed in place to exact registry projection and embedded
+manifest validation at the shared fresh/current-replay/Eddy package ingress.
+Bundled-source traversal/lock topology is deferred to blocked draft child
+`npm-client/shadow-recipe-v2-embedded-source-authority` (Budget `200–500`);
+protocol-v2 replay and its Workbench/Chromium consumers follow in blocked draft
+`npm-client/shadow-recipe-v2-protocol-replay-authority` (Budget `300–800`).
 
 Combined checkpoint `812cd8b0e5c653674bae949d67f0ac21db90748f`
 contains no production source, but Standards blocked it; it is lineage only and
@@ -32,12 +32,14 @@ cannot support a `ready-verdict`. The three blockers were:
    requires separate dependency-ordered acquisition/embedded-source and
    protocol-v2 replay items, Budgets, and checkpoints.
 
-The replacement acquisition checkpoint must bind one real-tarball carrier to
-the existing data, materialized-bin, installer provenance, planner, and
-registry-fault siblings. Its exact command, blob, and RED/GREEN counts are
-recorded only after that narrowed carrier exists and passes fresh Standards+
-Spec review. No replay, Workbench FIFO, or Chromium-v2 assertion/count from
-`812cd8b0` is evidence for Item 19.
+Replacement checkpoint `f5dbb4e021380dbdbbd964e33b434e47c2348618`
+closed those blockers, but Spec found no negative proof for embedded manifest
+identity/version validation. As the second consecutive Contract+RED blocker,
+`docs/process/fault-classes.md` §Review convergence requires another split.
+Technical PASS `0455ceb9683d6bed9a0ddc9f4fd1a5738ab537d7` cannot authorize pickup:
+it is lineage for the validation → embedded-source topology → protocol-v2
+sequence. No topology, protocol-v2, Workbench FIFO, or Chromium assertion from
+those combined checkpoints is evidence for narrowed Item 19.
 
 The inherited GREEN floors that remain required are:
 
@@ -54,22 +56,11 @@ pnpm check:runtime-adapter-boundary
 git diff --check
 ```
 
-Replacement checkpoint `f5dbb4e021380dbdbbd964e33b434e47c2348618`
-closed the three blockers above; Standards passed, but Spec blocked one missing
-negative proof: the official archive proved the embedded files positively,
-while no RED forced the installer to reject a missing or wrong embedded
-manifest before link effects. The re-cut adds missing, name-drift, and
-version/range-drift generated-tar mutations while retaining the official
-archive as the only positive oracle.
-
 The narrowed current carrier runs this exact batch against the fresh baseline:
 
 ```sh
 pnpm --filter @riftydev/npm-client exec vitest run \
   src/installer-shadow-recipe-v2-acquisition-replay-authority.contract.test.ts \
-  src/shadow-recipe-v2-data-authority.contract.test.ts \
-  src/installer-shadow-materialized-bin-commit-authority.contract.test.ts \
-  src/installer-shadow-shims.test.ts \
   src/internal/shadow/installer.contract.test.ts \
   src/internal/shadow/planner.contract.test.ts \
   src/registry.fault.test.ts
@@ -77,18 +68,12 @@ pnpm --filter @riftydev/shadow-registry exec vitest run \
   src/internal/catalog-v2-data-authority.contract.test.ts
 ```
 
-The npm-client run has 21 RED and 117 GREEN tests:
+The npm-client run has 11 RED and 53 GREEN tests:
 
-- the acquisition carrier is 13/13 RED: eight complete-projection mutations
-  reach effects; three embedded missing/name/version mutations do not reject
-  before link effects; and root/nested fresh, matching current-protocol replay,
-  and generic Eddy ingress still acquire a standalone child and omit the exact
-  parent bundle plus embedded-child lock facts;
-- the inherited data-authority matrix is 6 RED / 19 GREEN, with only the six
-  direct/transitive fresh/replay/Eddy LightningCSS ledgers exposing standalone
-  child registry/cache work;
-- the materialized commit sibling is 1 RED / 22 GREEN and the shim sibling is
-  1 RED / 25 GREEN because each still publishes the standalone child topology;
+- the acquisition-validation carrier is 11 RED / 2 GREEN: eight complete-
+  projection mutations reach effects; three embedded missing/name/version
+  mutations reach link instead of rejecting; root/nested official-tar fresh,
+  matching current-protocol replay, and generic Eddy validation are GREEN;
 - installer provenance, planner, and bounded registry floors are respectively
   17/17, 26/26, and 8/8 GREEN.
 
@@ -97,11 +82,12 @@ The shadow-registry authority is 110/110 GREEN. It reads the committed official
 `ea1419e577dd943907c7e17a99fa7a76143d99c6279a6131e79fb4b1b098ac89`,
 matches its SRI to the registry golden, and independently inventories and
 hashes all four embedded `napi-wasm@1.1.3` members. No production source differs
-from the fresh baseline at this checkpoint.
+from the fresh baseline at this checkpoint. Standalone bundled-source topology
+is deliberately neither asserted nor blessed by this validation checkpoint.
 
 The predecessor checkpoints and counts below are retained as historical
-lineage; neither they nor blocked checkpoint `812cd8b0` serves as this narrowed
-successor's verdict.
+lineage; neither they nor checkpoints `812cd8b0`, `f5dbb4e0`, or `0455ceb9`
+serves as this narrowed successor's verdict.
 
 ## Retained predecessor lineage
 

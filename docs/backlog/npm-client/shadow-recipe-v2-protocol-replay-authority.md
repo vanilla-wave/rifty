@@ -6,7 +6,7 @@ created: 2026-08-02
 why: the acquisition re-cut leaves current lock traces unable to prove complete recipe behavior or replay the embedded source offline without trusting incomplete provenance
 user_story: As a browser-IDE user reopening an installed project, I want the exact acquired source, materialized files, bins, and lock evidence replayed offline, but today protocol v1 rejects the reviewed v2 facts and incomplete traces can hide drift
 epic: honest-shadow-substitutions
-blocked_by: npm-client/shadow-recipe-v2-acquisition-replay-authority
+blocked_by: npm-client/shadow-recipe-v2-embedded-source-authority
 sources: [ADR-0335, docs/backlog/npm-client/reference/shadow-recipe-v2-contract-red.md]
 code:
   - packages/npm-client/src/installer.ts
@@ -22,9 +22,10 @@ Standards review blocked combined checkpoint
 `812cd8b0e5c653674bae949d67f0ac21db90748f`: its two TypeScript carriers plus
 Workbench and Chromium additions exceeded twice the acquisition slice budget,
 and ten replay rows prescribed an unratified nested error-cause shape. The
-dependency-ordered predecessor now owns only exact fresh acquisition and the
-embedded source. This draft starts only after that item lands, then extends the
-same installer/planner/linker seam with complete protocol-v2 provenance and
+validation predecessor owns exact registry/embedded ingress; its embedded-source
+child owns traversal, current lock topology, and current replay/Eddy
+completeness. This draft starts only after both land, then extends the same
+installer/planner/linker seam with complete protocol-v2 provenance and literal
 offline replay. It adds no public API, resolver, cache, lock, FIFO, scheduler,
 or shadow-specific Eddy source.
 
@@ -33,7 +34,7 @@ or shadow-specific Eddy source.
 - ADR-0335 keeps lockfile provenance authoritative: matching replay regenerates
   exact files and bins without registry reads; recipe-v1 identity and behavior
   drift fail `EBROKENLOCK` with `shadow-trace-drift`.
-- The acquisition predecessor supplies exact LightningCSS registry maps, the
+- The validation and embedded-source predecessors supply exact LightningCSS registry maps, the
   SRI-verified real `lightningcss-wasm@1.32.0` tarball, the embedded
   `napi-wasm@1.1.3` manifest/members, and truthful fresh lock facts. This item
   serializes and consumes those already-attested facts; it does not re-own
@@ -131,9 +132,9 @@ or shadow-specific Eddy source.
 
 - `split-predecessor:
   812cd8b0e5c653674bae949d67f0ac21db90748f`; Standards required the combined
-  acquisition/replay checkpoint to split before implementation. This is the
-  second dependency-ordered unit and stays draft behind the narrowed
-  acquisition item.
+  acquisition/replay checkpoint to split before implementation. Contract
+  escalation at `f5dbb4e021380dbdbbd964e33b434e47c2348618` inserted the
+  embedded-source topology unit ahead of this protocol unit, which stays draft.
 - Pre-pickup sizing at checkpoint
   `f5dbb4e021380dbdbbd964e33b434e47c2348618` found the known replay,
   Workbench, and Chromium carrier already near twice a `200–500` band before

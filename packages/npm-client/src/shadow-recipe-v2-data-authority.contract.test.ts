@@ -64,20 +64,9 @@ const CASES: MatrixCase[] = RECIPES.flatMap((recipe) =>
   ),
 );
 
-type FixtureManifest = VersionManifest & {
-  readonly bundleDependencies?: readonly string[];
-};
-
 interface RegistryEntry {
-  readonly manifest: FixtureManifest;
+  readonly manifest: VersionManifest;
   readonly tarball: Uint8Array;
-}
-
-interface RegistryEntryOptions {
-  readonly optionalDependencies?: Readonly<Record<string, string>>;
-  readonly peerDependencies?: Readonly<Record<string, string>>;
-  readonly bundleDependencies?: readonly string[];
-  readonly files?: Readonly<Record<string, string>>;
 }
 
 class InMemoryTarballCache implements TarballCache {
@@ -139,34 +128,20 @@ async function registryEntry(
   name: string,
   version: string,
   dependencies: Readonly<Record<string, string>> = {},
-  options: RegistryEntryOptions = {},
 ): Promise<RegistryEntry> {
-  const manifestFields = {
-    name,
-    version,
-    dependencies: { ...dependencies },
-    ...(options.optionalDependencies === undefined
-      ? {}
-      : { optionalDependencies: { ...options.optionalDependencies } }),
-    ...(options.peerDependencies === undefined
-      ? {}
-      : { peerDependencies: { ...options.peerDependencies } }),
-    ...(options.bundleDependencies === undefined
-      ? {}
-      : { bundleDependencies: [...options.bundleDependencies] }),
-  };
-  const chunks: Uint8Array[] = [];
-  for (const [path, text] of Object.entries({
-    'package.json': JSON.stringify(manifestFields),
-    ...(options.files ?? {}),
-  })) {
-    const bytes = new TextEncoder().encode(text);
-    chunks.push(buildHeader(`package/${path}`, bytes.length), padToBlock(bytes));
-  }
-  const tarball = await gzip(concat(...chunks, TAR_TRAILER));
+  const packageJson = new TextEncoder().encode(JSON.stringify({ name, version, dependencies }));
+  const tarball = await gzip(
+    concat(
+      buildHeader('package/package.json', packageJson.length),
+      padToBlock(packageJson),
+      TAR_TRAILER,
+    ),
+  );
   return {
     manifest: {
-      ...manifestFields,
+      name,
+      version,
+      dependencies: { ...dependencies },
       dist: {
         tarball: `https://registry.test/${name}-${version}.tgz`,
         integrity: await computeIntegrity(tarball),
@@ -187,24 +162,7 @@ async function registryEntries(
   }
   if (recipe.name === 'lightningcss') {
     entries.push(
-      await registryEntry(
-        'lightningcss-wasm',
-        '1.32.0',
-        { 'napi-wasm': '^1.0.1' },
-        {
-          optionalDependencies: {},
-          peerDependencies: {},
-          bundleDependencies: ['napi-wasm'],
-          files: {
-            'node_modules/napi-wasm/package.json': JSON.stringify({
-              name: 'napi-wasm',
-              version: '1.1.3',
-            }),
-            'node_modules/napi-wasm/index.js': 'module.exports = "bundled napi-wasm";\n',
-          },
-        },
-      ),
-      // Poison only; desired path must never request it.
+      await registryEntry('lightningcss-wasm', '1.32.0', { 'napi-wasm': '^1.0.1' }),
       await registryEntry('napi-wasm', '1.1.3'),
     );
   }
@@ -326,8 +284,12 @@ function supportedFreshEvents(recipe: RecipeCase, shape: Shape): string[] {
     ? [
         'packument:lightningcss-wasm',
         'cache:get:lightningcss-wasm@1.32.0',
+        'packument:napi-wasm',
         'tarball:lightningcss-wasm',
+        'cache:get:napi-wasm@1.1.3',
+        'tarball:napi-wasm',
         'cache:put:lightningcss-wasm@1.32.0',
+        'cache:put:napi-wasm@1.1.3',
       ]
     : [
         `packument:${HOST}`,
@@ -335,16 +297,22 @@ function supportedFreshEvents(recipe: RecipeCase, shape: Shape): string[] {
         'packument:lightningcss-wasm',
         `tarball:${HOST}`,
         'cache:get:lightningcss-wasm@1.32.0',
+        'packument:napi-wasm',
         'tarball:lightningcss-wasm',
+        'cache:get:napi-wasm@1.1.3',
+        'tarball:napi-wasm',
         `cache:put:${HOST}@1.0.0`,
         'cache:put:lightningcss-wasm@1.32.0',
+        'cache:put:napi-wasm@1.1.3',
       ];
 }
 
 function replayCacheEvents(recipe: RecipeCase, shape: Shape): string[] {
   return [
     ...(shape === 'transitive' ? [`cache:get:${HOST}@1.0.0`] : []),
-    ...(recipe.name === 'lightningcss' ? ['cache:get:lightningcss-wasm@1.32.0'] : []),
+    ...(recipe.name === 'lightningcss'
+      ? ['cache:get:lightningcss-wasm@1.32.0', 'cache:get:napi-wasm@1.1.3']
+      : []),
   ];
 }
 
@@ -354,7 +322,11 @@ function supportedEddyEvents(recipe: RecipeCase, shape: Shape): string[] {
       ? ['eddy:POST', ...supportedFreshEvents(recipe, shape)]
       : ['eddy:POST'];
   }
-  const names = [...(shape === 'transitive' ? [`${HOST}@1.0.0`] : []), 'lightningcss-wasm@1.32.0'];
+  const names = [
+    ...(shape === 'transitive' ? [`${HOST}@1.0.0`] : []),
+    'lightningcss-wasm@1.32.0',
+    'napi-wasm@1.1.3',
+  ];
   return [
     'eddy:POST',
     ...names.map((name) => `cache:put:${name}`),
@@ -496,7 +468,7 @@ describe('shadow recipe v2 data authority — ordinary install', () => {
       caught = error;
     }
 
-    expect.soft(events).toEqual(expectedEvents(testCase));
+    expect(events).toEqual(expectedEvents(testCase));
     if (testCase.outcome === 'supported') {
       expect(caught).toBeUndefined();
       expect(fetchSpy).toHaveBeenCalledTimes(testCase.source === 'eddy' ? 1 : 0);

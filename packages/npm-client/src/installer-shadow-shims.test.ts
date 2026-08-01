@@ -26,18 +26,9 @@ import { matchesRange } from './semver.ts';
 import { applyInternalsShims } from './shadow-shims.ts';
 import { computeIntegrity } from './tarball-cache.ts';
 
-type FixtureManifest = VersionManifest & {
-  readonly bundleDependencies?: readonly string[];
-};
-
 interface FakeRegistryEntry {
-  manifest: FixtureManifest;
+  manifest: VersionManifest;
   tarball: Uint8Array;
-}
-
-interface EntryManifestOptions {
-  readonly peerDependencies?: Readonly<Record<string, string>>;
-  readonly bundleDependencies?: readonly string[];
 }
 
 class FakeRegistry extends RegistryClient {
@@ -76,30 +67,20 @@ async function makeEntry(
   files: Record<string, string> = {},
   bin?: VersionManifest['bin'],
   optionalDependencies: Record<string, string> = {},
-  manifestOptions: EntryManifestOptions = {},
 ): Promise<FakeRegistryEntry> {
   const chunks: Uint8Array[] = [];
-  const manifestFields = {
-    name,
-    version,
-    dependencies,
-    bin,
-    optionalDependencies,
-    ...(manifestOptions.peerDependencies === undefined
-      ? {}
-      : { peerDependencies: { ...manifestOptions.peerDependencies } }),
-    ...(manifestOptions.bundleDependencies === undefined
-      ? {}
-      : { bundleDependencies: [...manifestOptions.bundleDependencies] }),
-  };
-  const packageJson = JSON.stringify(manifestFields);
+  const packageJson = JSON.stringify({ name, version, dependencies, bin, optionalDependencies });
   for (const [entry, body] of Object.entries({ 'package.json': packageJson, ...files })) {
     const bytes = new TextEncoder().encode(body);
     chunks.push(buildHeader(`package/${entry}`, bytes.length), padToBlock(bytes));
   }
   return {
     manifest: {
-      ...manifestFields,
+      name,
+      version,
+      dependencies,
+      bin,
+      optionalDependencies,
       dist: { tarball: `fake://${encodeURIComponent(name)}|${version}` },
     },
     tarball: await gzip(concat(...chunks, TAR_TRAILER)),
@@ -773,29 +754,17 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     const recipeId = 'rifty.shadow-substitution.lightningcss.v2';
     const materializeLine = `npm: lightningcss@^1.32.0 materialized from shadow registry (${recipeId})`;
     const registry = new FakeRegistry(
-      db(
-        [
+      db([
+        'lightningcss-wasm',
+        await makeEntry(
           'lightningcss-wasm',
-          await makeEntry(
-            'lightningcss-wasm',
-            '1.32.0',
-            { 'napi-wasm': '^1.0.1' },
-            {
-              'index.js': 'module.exports = { transform() {} };',
-              'node_modules/napi-wasm/package.json': JSON.stringify({
-                name: 'napi-wasm',
-                version: '1.1.3',
-              }),
-              'node_modules/napi-wasm/index.js': 'module.exports = "bundled napi-wasm";\n',
-            },
-            undefined,
-            {},
-            { peerDependencies: {}, bundleDependencies: ['napi-wasm'] },
-          ),
-        ],
-        // Poison only; desired path must never request it.
-        ['napi-wasm', await makeEntry('napi-wasm', '1.1.3')],
-      ),
+          '1.32.0',
+          {},
+          {
+            'index.js': 'module.exports = { transform() {} };',
+          },
+        ),
+      ]),
     );
 
     const freshTrace: string[] = [];
@@ -809,18 +778,9 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
       version: '1.32.0',
       riftyShadowRecipe: recipeId,
     });
-    expect.soft(first.lockfile.packages['node_modules/lightningcss-wasm']).toMatchObject({
+    expect(first.lockfile.packages['node_modules/lightningcss-wasm']).toMatchObject({
       version: '1.32.0',
-      dependencies: { 'napi-wasm': '^1.0.1' },
-      bundleDependencies: ['napi-wasm'],
     });
-    expect
-      .soft(first.lockfile.packages['node_modules/lightningcss-wasm/node_modules/napi-wasm'])
-      .toMatchObject({
-        version: '1.1.3',
-        inBundle: true,
-      });
-    expect.soft(first.lockfile.packages['node_modules/napi-wasm']).toBeUndefined();
     expect(
       first.lockfile.rifty?.shadowSubstitutions.applied.map(
         (substitution) => substitution.substitutionId,
@@ -831,22 +791,6 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     expect(await readText(vfs, '/proj/node_modules/lightningcss/index.mjs')).toContain(
       "from 'lightningcss-wasm'",
     );
-    expect
-      .soft(
-        JSON.parse(
-          await readText(
-            vfs,
-            '/proj/node_modules/lightningcss-wasm/node_modules/napi-wasm/package.json',
-          ),
-        ),
-      )
-      .toMatchObject({ name: 'napi-wasm', version: '1.1.3' });
-    expect
-      .soft(
-        await readText(vfs, '/proj/node_modules/lightningcss-wasm/node_modules/napi-wasm/index.js'),
-      )
-      .toBe('module.exports = "bundled napi-wasm";\n');
-    expect.soft(await vfs.exists('/proj/node_modules/napi-wasm')).toBe(false);
     expect(shadowAssetPlanForInstallResult(first)).toMatchObject({
       assets: [],
       bindings: [],
