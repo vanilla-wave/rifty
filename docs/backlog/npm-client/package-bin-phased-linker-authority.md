@@ -109,7 +109,18 @@ package-specific branch.
   `TS2578` diagnostics while both phase seams are absent. The inherited
   linker/link-ingress/prepared floor runs 25/25 GREEN; backlog and runtime
   boundary gates pass.
-- The 450-line cohesive carrier is below the mandatory `2×` high-band re-cut
+- First isolated Contract+RED review at
+  `c424d9f94a02e8f0e3ac87b83dc92e6c08effd64` passed Standards and blocked
+  three Spec false-greens: direct phased ordering did not park a package file,
+  missing-target rows had no later claim, and composed ledgers did not
+  enumerate every completed package file.
+- In-place re-cut `a81f119e37b9f6f5f1ef5505317f45614eb13c11`
+  freezes the 481-line carrier: Git blob
+  `5bb9c0078da8a653f7c18ef85f8d6839911b2299`, SHA-256
+  `05dd5bd3c2b3cdd3d71006fc42a461365887c1a34041c7d0deb0d349058c5c5b`.
+  It runs 16/16 RED with the same five intentional `TS2578` diagnostics and
+  keeps the inherited 25/25 floor GREEN.
+- The 481-line cohesive carrier is below the mandatory `2×` high-band re-cut
   boundary; splitting its one real-VFS fault matrix would duplicate fixtures
   and observation plumbing.
 - The claim successors own normalization and zero-mutation ingress. This unit

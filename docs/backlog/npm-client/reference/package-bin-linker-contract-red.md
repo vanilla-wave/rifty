@@ -671,3 +671,25 @@ neither seam appears on `src/index.ts`.
 The inherited linker, link-ingress, and prepared-installer floor remains 25/25
 GREEN. `pnpm backlog:check` and `pnpm check:runtime-adapter-boundary` pass.
 Acceptance, Parity, and Fault matrix remain unchanged from the terminal split.
+
+### Phased-linker first review blocker and re-cut
+
+The first isolated Contract+RED review at
+`c424d9f94a02e8f0e3ac87b83dc92e6c08effd64` passed Standards and blocked
+Spec on three false-greens:
+
+- the direct phased path did not park a package-file write and therefore did
+  not prove that its file phase settled before its bin phase;
+- missing-target rows used one claim and could not prove later work stopped or
+  that retry landed both launchers;
+- composed ordering rows did not enumerate all four expected package-file
+  completions.
+
+In-place re-cut `a81f119e37b9f6f5f1ef5505317f45614eb13c11`
+adds direct phased ordering, first-of-two missing-target repair, and exact
+two-package completion sets. Its 481-line carrier is Git blob
+`5bb9c0078da8a653f7c18ef85f8d6839911b2299`, SHA-256
+`05dd5bd3c2b3cdd3d71006fc42a461365887c1a34041c7d0deb0d349058c5c5b`.
+The focused carrier now runs 16 tests, all RED; package typecheck retains the
+same exact five intentional `TS2578` diagnostics. The inherited 25/25 floor
+remains GREEN. No production source differs from fresh main.
