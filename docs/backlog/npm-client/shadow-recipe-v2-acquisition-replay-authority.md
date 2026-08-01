@@ -6,7 +6,6 @@ created: 2026-07-28
 why: the blocked recipe-v2 predecessor proved the current LightningCSS registry twin is neither verified as an exact acquisition nor consumed as one embedded bundle, and incomplete lock evidence can replay forged materialization
 user_story: As a browser-IDE user installing a registry-backed substitution, I want the exact reviewed source, embedded dependency, materialized bytes, bins, and offline replay to agree before success, but today rifty fetches the bundled child separately and trusts incomplete provenance
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-materialized-bin-commit-authority]
 sources: [ADR-0335, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md]
 code:
   - packages/npm-client/src/installer.ts

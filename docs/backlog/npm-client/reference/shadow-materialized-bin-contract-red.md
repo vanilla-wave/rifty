@@ -100,3 +100,35 @@ gate includes installer and linker and rejects concrete esbuild,
 LightningCSS/acquisition-member, Sass, and Vite names or control-flow
 identifiers, so the RED cannot close through a package-specific second bin
 writer.
+
+## Commit-authority implementation and closure
+
+Ready/pickup parent `3d0abdff3d439193658590b3b4be985ae70633fe`
+precedes production `39b017ffd20192932d1c7b1836fab7baf930f152`.
+The installer preserves the authoritative prior lock/plan for collision
+preflight, suppresses raw acquisition and companion-only bin claims, then adds
+each exact recipe materialization claim through the existing shared linker.
+It settles package files, registry aliases, one bin pass, internals shims, the
+lock, staged reports, and the result in that order. The lock records only the
+exact recipe bin map. No public API, module, writer, reporter, scheduler, or
+coordination mechanism was added.
+
+Final+GREEN found one `torn-state / observable-order` residual: an abort while
+the lock write was parked could settle after the write and publish reports plus
+a result. Test-only RED `4830171c4` reproduces that race with an `AbortError`,
+zero reports, and exact retry. GREEN `b2e837895e8eee3039639450b3fc4c5df40f812f`
+adds the single post-lock, pre-flush abort checkpoint. Parallel Standards and
+Spec re-review PASS on that exact SHA.
+
+The frozen 980-line carrier remains Git blob
+`ba78e2fbb15086ef4e2c75f73f15c82976992242`, SHA-256
+`63114cec4073e44789dbb87ef4ff3d8acd600569a3f36d0b4253833a984d6cff`,
+and runs 23/23 GREEN. The lock-abort sibling sweep runs 102/102 GREEN; package
+typecheck, Biome, packed external-consumer Vite preview/HMR, direct CJS/ESM
+esbuild, Vite 7 config/optimizer Chromium acceptance, and literal-declaration
+`pnpm pr:check` pass.
+
+Closure deletes the completed item and its terminal split predecessor,
+unblocks `shadow-recipe-v2-acquisition-replay-authority`, and preserves epic
+Items/Budget lineage append-only. Exact registry projection, embedded-bundle
+evidence, protocol-v2 trace, and offline replay remain in that serial residual.
