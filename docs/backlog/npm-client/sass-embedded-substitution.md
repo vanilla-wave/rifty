@@ -52,18 +52,19 @@ verbatim in the reference artifact.
   install row. The twice-reproduced real-Node build bytes and offline npm
   replay are pinned in `reference/sass-vite-7.3.6-node-build.md`.
 
-## Readiness blockers
+## Readiness evidence
 
-- Resolve the post-pickup invalid-construction lifecycle fork through manual
-  `rifty-refine`; no implementation pickup while the observable choice is open.
-- Commit the complete Node v24.16.0
-  `sass@1.100.0`/`sass-embedded@1.100.0` differential command, exact output,
-  package identities, and timeout/deadlock procedure behind all nine parity
-  rows. ADR-0310's summary and the selector-only probe are not the artifact.
-- Close every row in the Fault matrix below with a reachable proof target. The
-  official Sass manifest is the positive carrier for non-bundled required
-  traversal and omitted-optional suppression; injected or synthetic recipes
-  cannot close either branch.
+- The complete Node v24.16.0 differential, exact package/entry identities,
+  normalized nine-row output, and isolated twice-run deadlock procedure are
+  committed and independently executable.
+- The twice-reproduced Node/npm Vite build and offline replay pin exact output
+  bytes, warning count, lock facts, and the observed absence of an external
+  CSS map.
+- Every Fault-matrix row has a reachable Contract+RED target. Official npm
+  tarballs carry positive Sass traversal; generated archives carry only
+  corrupt/injection inputs. Exact commands, counts, ledgers, inherited bounds,
+  and the zero-production-source checkpoint are recorded in
+  `reference/sass-embedded-contract-red.md`.
 
 ## Acceptance
 
