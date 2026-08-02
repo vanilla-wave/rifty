@@ -54,13 +54,14 @@ npm-compatible lock topology, and the two existing Eddy completeness gates.
   version and `inBundle: true`. The parent and child facts settle through the
   existing linker-owned lock builder; no second writer or public package shape.
 - Matching current-protocol root/nested replay reads only the parent cache
-  entry, revalidates the embedded manifest against the exact child lock fact,
-  regenerates the same tree/reports, performs zero registry reads, and leaves
-  raw lock bytes unchanged.
+  entry, requires the embedded manifest version to equal the exact child lock
+  version and satisfy the recorded recipe range, regenerates the same tree/
+  reports, performs zero registry reads, and leaves raw lock bytes unchanged.
 - Generic Eddy adoption seeds and reads the parent tarball only. Client and
-  service completeness gates exclude only plan-proven embedded child paths;
-  forged `inBundle` or malformed shadow trace remains an ordinary completeness
-  gap, never an exception or registry fallback.
+  service completeness gates exclude only plan-proven embedded child paths, so
+  a valid bundle never falls back to a child registry source. Forged `inBundle`
+  or malformed shadow trace remains an ordinary completeness gap: the client
+  declines to standard resolution and the service refuses storage.
 - Acquired registry-twin bins remain suppressed; registry alias materialization
   continues through the landed phased commit boundary. Preserve validation,
   data, materialized-bin, planner, registry-fault, and ordinary package suites.
@@ -110,6 +111,10 @@ npm-compatible lock topology, and the two existing Eddy completeness gates.
   dependency-ordered units. Technical PASS `0455ceb9` is lineage, not pickup.
 - Plan-proven embedded paths are the only completeness exception. A raw
   `inBundle: true` flag cannot bypass ordinary tarball requirements.
+- Eddy gap handling stays unchanged: client decline may enter the existing
+  standard resolver; service storage rejects the incomplete bundle.
+- Embedded lock topology drift uses the existing public `EBROKENLOCK` /
+  `shadow-trace-drift` classification; nested `cause` shape is not contracted.
 - Internal pinned/linker facts may carry bundle topology; `ResolvedPackage`
   remains unchanged. Existing npm-compatible `LockfileEntry` owns the settled
   `bundleDependencies`/`inBundle` fields under ADR-0335.

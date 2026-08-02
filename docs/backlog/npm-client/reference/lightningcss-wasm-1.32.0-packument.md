@@ -94,3 +94,39 @@ The recipe projection must therefore preserve the required
 `napi-wasm@^1.0.1` range, bundled membership, and exact embedded
 `napi-wasm@1.1.3` artifact. Empty fake-registry metadata or a separately
 resolved `napi-wasm` tarball is not evidence for this package.
+
+## npm lock topology oracle
+
+npm 11.17.0 on Node v24.16.0 installed the pinned archive locally with scripts
+disabled and no registry source for the embedded package:
+
+```sh
+repo_root=$PWD
+oracle_dir=$(mktemp -d)
+cd "$oracle_dir"
+npm init -y
+npm install --ignore-scripts --cache "$oracle_dir/cache" \
+  "$repo_root/tools/shadow-registry/src/fixtures/lightningcss-wasm-1.32.0.tgz"
+jq '.packages | with_entries(select(.key | contains("lightningcss-wasm")))' \
+  package-lock.json
+```
+
+Relevant lockfile-v3 projection (the local-file `resolved` value is omitted):
+
+```json
+{
+  "node_modules/lightningcss-wasm": {
+    "version": "1.32.0",
+    "integrity": "sha512-SteAkCtRuSCDYPGHKhLV/dDs5Bk+7I4QUxWxfk4xwsTI1rQk8MQyYtpGcd3NECsUGzK0q2/KqoVS+YHCqKHUTQ==",
+    "bundleDependencies": ["napi-wasm"],
+    "dependencies": {"napi-wasm": "^1.0.1"}
+  },
+  "node_modules/lightningcss-wasm/node_modules/napi-wasm": {
+    "version": "1.1.3",
+    "inBundle": true
+  }
+}
+```
+
+The physical tree contains those four embedded members only below the parent;
+npm does not add a root `node_modules/napi-wasm` or fetch a child tarball.
