@@ -1,0 +1,447 @@
+{
+  "schema": 1,
+  "oracle": "sass@1.100.0",
+  "version": "dart-sass\t1.100.0\t(Sass Compiler)\t[Dart]\ndart2js\t3.12.0\t(Dart Compiler)\t[Dart]",
+  "rows": {
+    "module": {
+      "cjsKeys": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "Compiler",
+        "Exception",
+        "FALSE",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "cli_pkg_main_0_",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "load",
+        "loadParserExports_",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ],
+      "esmKeys": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "Compiler",
+        "CustomFunction",
+        "Exception",
+        "FALSE",
+        "ListSeparator",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "PromiseOr",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "default",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "parser_",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ],
+      "esmDefaultKeys": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "Compiler",
+        "CustomFunction",
+        "Exception",
+        "FALSE",
+        "ListSeparator",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "PromiseOr",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "parser_",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ],
+      "undefinedEsmExports": [
+        "CustomFunction",
+        "ListSeparator",
+        "PromiseOr",
+        "parser_"
+      ],
+      "cjsToEsmIdentity": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "Compiler",
+        "Exception",
+        "FALSE",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ],
+      "esmNamedToDefaultIdentity": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "Compiler",
+        "CustomFunction",
+        "Exception",
+        "FALSE",
+        "ListSeparator",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "PromiseOr",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "parser_",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ]
+    },
+    "compile": {
+      "sync": {
+        "css": ".card {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/basic.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "async": {
+        "css": ".card {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/basic.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      }
+    },
+    "sourceMap": {
+      "sync": {
+        "css": ".mapped {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/mapped.scss"
+        ],
+        "hasSourceMap": true,
+        "sourceMapJson": "{\"version\":3,\"sourceRoot\":\"\",\"sources\":[\"file:///contract/mapped.scss\"],\"names\":[],\"mappings\":\"AAAA;EAAU\",\"sourcesContent\":[\".mapped { color: #123456; }\\n\"]}"
+      },
+      "async": {
+        "css": ".mapped {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/mapped.scss"
+        ],
+        "hasSourceMap": true,
+        "sourceMapJson": "{\"version\":3,\"sourceRoot\":\"\",\"sources\":[\"file:///contract/mapped.scss\"],\"names\":[],\"mappings\":\"AAAA;EAAU\",\"sourcesContent\":[\".mapped { color: #123456; }\\n\"]}"
+      }
+    },
+    "lifecycle": {
+      "syncInstance": true,
+      "syncFirst": {
+        "css": ".one {\n  order: 1;\n}",
+        "loadedUrls": [],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncSecond": {
+        "css": ".two {\n  order: 2;\n}",
+        "loadedUrls": [],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncDisposeType": "undefined",
+      "syncPostDispose": {
+        "name": "Error",
+        "message": "Compiler has already been disposed.",
+        "toString": "Error: Compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "asyncInstance": true,
+      "asyncFirst": {
+        "css": ".one {\n  order: 1;\n}",
+        "loadedUrls": [],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncSecond": {
+        "css": ".two {\n  order: 2;\n}",
+        "loadedUrls": [],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncDisposeType": "promise",
+      "asyncPostDispose": {
+        "name": "Error",
+        "message": "Compiler has already been disposed.",
+        "toString": "Error: Compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      }
+    },
+    "importers": {
+      "sync": {
+        "css": ".imported {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/importer.scss",
+          "contract:tokens"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncTrace": [
+        "canonicalize:tokens:false:file:///contract/importer.scss",
+        "load:contract:tokens"
+      ],
+      "async": {
+        "css": ".imported {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/importer.scss",
+          "contract:tokens"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncTrace": [
+        "canonicalize:tokens:false:file:///contract/importer.scss",
+        "load:contract:tokens"
+      ]
+    },
+    "logger": {
+      "result": {
+        "css": ".warning {\n  width: 3px;\n}",
+        "loadedUrls": [
+          "file:///contract/logger.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "warnings": [
+        {
+          "message": "capsule warning",
+          "deprecation": false,
+          "deprecationId": null,
+          "stack": "/contract/logger.scss 1:1  root stylesheet\n",
+          "span": null
+        },
+        {
+          "message": "Using / for division outside of calc() is deprecated and will be removed in Dart Sass 2.0.0.\n\nRecommendation: math.div(12px, 4) or calc(12px / 4)\n\nMore info and automated migrator: https://sass-lang.com/d/slash-div",
+          "deprecation": true,
+          "deprecationId": "slash-div",
+          "stack": "/contract/logger.scss 2:20  root stylesheet\n",
+          "span": {
+            "text": "12px / 4",
+            "context": ".warning { width: (12px / 4); }\n",
+            "urlType": "object",
+            "url": "file:///contract/logger.scss",
+            "start": {
+              "offset": 44,
+              "line": 1,
+              "column": 19
+            },
+            "end": {
+              "offset": 52,
+              "line": 1,
+              "column": 27
+            }
+          }
+        }
+      ]
+    },
+    "errors": {
+      "syntax": {
+        "name": "Error",
+        "message": "expected \"}\".\n  ╷\n1 │ a { color: red;\n  │                ^\n  ╵\n  - 1:16  root stylesheet",
+        "toString": "expected \"}\".\n  ╷\n1 │ a { color: red;\n  │                ^\n  ╵\n  - 1:16  root stylesheet",
+        "sassMessage": "expected \"}\".",
+        "sassStack": "- 1:16  root stylesheet\n",
+        "span": {
+          "text": "",
+          "context": "a { color: red;",
+          "urlType": "object",
+          "url": null,
+          "start": {
+            "offset": 15,
+            "line": 0,
+            "column": 15
+          },
+          "end": {
+            "offset": 15,
+            "line": 0,
+            "column": 15
+          }
+        }
+      },
+      "missingUse": {
+        "name": "Error",
+        "message": "Can't find stylesheet to import.\n  ╷\n1 │ @use 'does-not-exist';\n  │ ^^^^^^^^^^^^^^^^^^^^^\n  ╵\n  /contract/missing-use.scss 1:1  root stylesheet",
+        "toString": "Can't find stylesheet to import.\n  ╷\n1 │ @use 'does-not-exist';\n  │ ^^^^^^^^^^^^^^^^^^^^^\n  ╵\n  /contract/missing-use.scss 1:1  root stylesheet",
+        "sassMessage": "Can't find stylesheet to import.",
+        "sassStack": "/contract/missing-use.scss 1:1  root stylesheet\n",
+        "span": {
+          "text": "@use 'does-not-exist'",
+          "context": "@use 'does-not-exist';",
+          "urlType": "object",
+          "url": "file:///contract/missing-use.scss",
+          "start": {
+            "offset": 0,
+            "line": 0,
+            "column": 0
+          },
+          "end": {
+            "offset": 21,
+            "line": 0,
+            "column": 21
+          }
+        }
+      }
+    },
+    "legacy": {
+      "css": ".legacy {\n  color: #123456;\n}",
+      "statsKeys": [
+        "duration",
+        "end",
+        "entry",
+        "includedFiles",
+        "start"
+      ],
+      "warnings": [
+        {
+          "message": "The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.\n\nMore info: https://sass-lang.com/d/legacy-js-api",
+          "deprecation": true,
+          "deprecationId": "legacy-js-api",
+          "stack": "null",
+          "span": null
+        },
+        {
+          "message": "legacy warning",
+          "deprecation": false,
+          "deprecationId": null,
+          "stack": "stdin 1:1  root stylesheet\n",
+          "span": null
+        }
+      ],
+      "stderr": ""
+    }
+  }
+}

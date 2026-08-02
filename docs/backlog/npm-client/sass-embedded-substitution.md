@@ -5,7 +5,7 @@ title: sass-embedded@1.100.0 via synthesized facade — second substitution, sea
 created: 2026-07-23
 why: real Vite SCSS projects pin sass-embedded, whose Dart platform binary cannot run in the browser; the exact pure-JS Sass twin matches the named compile and Vite surfaces but not invalid-construction process liveness, so this second substitution remains the package-generic seam proof only after that observable fork is refined
 epic: honest-shadow-substitutions
-sources: [ADR-0310, ADR-0335, docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md, docs/backlog/npm-client/reference/sass-constructor-liveness-post-pickup-fork.md]
+sources: [ADR-0310, ADR-0335, docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md, docs/backlog/npm-client/reference/sass-1.100.0-packument.md, docs/backlog/npm-client/reference/sass-1.100.0-node-differential.md, docs/backlog/npm-client/reference/sass-constructor-liveness-post-pickup-fork.md]
 ---
 
 ## Context
@@ -62,7 +62,8 @@ verbatim in the reference artifact.
 - The exact non-bundled required dependencies enter the ordinary resolver and
   materialize their complete registry closure with exact range, version,
   integrity, tree, and lock facts. The omitted `@parcel/watcher` optional
-  dependency causes zero registry/cache reads and no tree or lock entry.
+  dependency causes zero registry/cache reads and no tree or materialized-child
+  lock entry.
 - Zero `sass-embedded` platform binary/optional packages fetched; the exact
   `sass@1.100.0` twin and its dependencies are recorded; no runtime-asset
   capability is created and zero manager/store operations run.

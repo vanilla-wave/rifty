@@ -4,6 +4,9 @@ import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import lightningRegistryGolden from '../fixtures/lightningcss-wasm-1.32.0-registry.json';
 import lightningTarballGolden from '../fixtures/lightningcss-wasm-1.32.0-tarball.json';
+import sassClosureGolden from '../fixtures/sass-1.100.0-closure.json';
+import sassRegistryGolden from '../fixtures/sass-1.100.0-registry.json';
+import sassTarballGolden from '../fixtures/sass-1.100.0-tarball.json';
 import * as rootShadowRegistry from '../index.ts';
 import { shadowDigest, shadowSha256 } from './canonical.ts';
 import {
@@ -16,6 +19,17 @@ import * as internalShadowRegistry from './index.ts';
 
 const tarballBytes = readFileSync(
   new URL('../fixtures/lightningcss-wasm-1.32.0.tgz', import.meta.url),
+);
+const sassTarballBytes = readFileSync(new URL('../fixtures/sass-1.100.0.tgz', import.meta.url));
+const sassClosureTarballs: ReadonlyMap<string, Uint8Array> = new Map(
+  (
+    [
+      ['chokidar', 'chokidar-5.0.0.tgz'],
+      ['readdirp', 'readdirp-5.0.0.tgz'],
+      ['immutable', 'immutable-5.1.9.tgz'],
+      ['source-map-js', 'source-map-js-1.2.1.tgz'],
+    ] as const
+  ).map(([name, file]) => [name, readFileSync(new URL(`../fixtures/${file}`, import.meta.url))]),
 );
 
 function hash(algorithm: 'sha256' | 'sha512', bytes: Uint8Array): string {
@@ -943,6 +957,77 @@ describe('shadow recipe v2 data authority', () => {
         name: embedded.name,
         version: embedded.version,
       });
+    }
+  });
+
+  it('pins the official Sass tarball and exact non-optional registry closure independently', () => {
+    expect(sassRegistryGolden).toEqual({
+      name: 'sass',
+      version: '1.100.0',
+      dist: {
+        integrity:
+          'sha512-B5j0rYMlinhhOo9tjQebMVVn0TfyXAF+wB3b2ggZUuJ/is/Y+7+JGjirAMxHZ9Z3hIP98NPfamlAkBHa1lAaXQ==',
+      },
+      dependencies: {
+        chokidar: '^5.0.0',
+        immutable: '^5.1.5',
+        'source-map-js': '>=0.6.2 <2.0.0',
+      },
+      optionalDependencies: { '@parcel/watcher': '^2.4.1' },
+      peerDependencies: {},
+      bundleDependencies: [],
+      bin: { sass: 'sass.js' },
+    });
+    expect(sassTarballBytes.byteLength).toBe(sassTarballGolden.tarball.bytes);
+    expect(hash('sha256', sassTarballBytes)).toBe(sassTarballGolden.tarball.sha256);
+    expect(`sha512-${createHash('sha512').update(sassTarballBytes).digest('base64')}`).toBe(
+      sassRegistryGolden.dist.integrity,
+    );
+
+    const members = tarballMembers(sassTarballBytes);
+    const packageJson = members.get(sassTarballGolden.packageJson.path);
+    if (!packageJson) throw new Error('official Sass tarball is missing package.json');
+    expect(packageJson.byteLength).toBe(sassTarballGolden.packageJson.bytes);
+    expect(hash('sha256', packageJson)).toBe(sassTarballGolden.packageJson.sha256);
+    expect(JSON.parse(new TextDecoder().decode(packageJson))).toMatchObject({
+      name: sassRegistryGolden.name,
+      version: sassRegistryGolden.version,
+      dependencies: sassRegistryGolden.dependencies,
+      optionalDependencies: sassRegistryGolden.optionalDependencies,
+      bin: sassRegistryGolden.bin,
+    });
+    expect([...members.keys()].filter((path) => path.startsWith('package/node_modules/'))).toEqual(
+      [],
+    );
+    for (const member of sassTarballGolden.members) {
+      const bytes = members.get(member.path);
+      if (!bytes) throw new Error(`official Sass tarball is missing ${member.path}`);
+      expect(bytes.byteLength, `${member.path} bytes`).toBe(member.bytes);
+      expect(hash('sha256', bytes), `${member.path} sha256`).toBe(member.sha256);
+    }
+
+    expect(sassClosureGolden).toMatchObject({
+      root: 'sass@1.100.0',
+      omittedOptionalDependencies: sassRegistryGolden.optionalDependencies,
+    });
+    for (const pkg of sassClosureGolden.packages) {
+      const bytes = sassClosureTarballs.get(pkg.name);
+      if (!bytes) throw new Error(`official Sass closure tarball is missing for ${pkg.name}`);
+      expect(bytes.byteLength, `${pkg.name} bytes`).toBe(pkg.bytes);
+      expect(hash('sha256', bytes), `${pkg.name} sha256`).toBe(pkg.sha256);
+      expect(`sha512-${createHash('sha512').update(bytes).digest('base64')}`).toBe(pkg.integrity);
+      const manifest = tarballMembers(bytes).get('package/package.json');
+      if (!manifest) throw new Error(`official ${pkg.name} tarball is missing package.json`);
+      const decoded = JSON.parse(new TextDecoder().decode(manifest)) as Readonly<{
+        name?: unknown;
+        version?: unknown;
+        dependencies?: unknown;
+      }>;
+      expect(decoded).toMatchObject({
+        name: pkg.name,
+        version: pkg.version,
+      });
+      expect(decoded.dependencies ?? {}).toEqual(pkg.dependencies);
     }
   });
 
