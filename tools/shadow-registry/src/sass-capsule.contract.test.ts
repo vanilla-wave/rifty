@@ -100,7 +100,11 @@ function materializeOfficialPackage(root: string, name: string, fixture: string)
   }
 }
 
-function materializeRecipeCapsule(): { readonly container: string; readonly packageRoot: string } {
+function materializeRecipeCapsule(): {
+  readonly container: string;
+  readonly packageRoot: string;
+  readonly compilerPath: string;
+} {
   const recipe = builtinShadowSubstitutionCatalog.recipes.find(
     (candidate) => candidate.trigger.name === 'sass-embedded',
   );
@@ -117,7 +121,9 @@ function materializeRecipeCapsule(): { readonly container: string; readonly pack
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, file.content);
     }
-    return { container, packageRoot };
+    const compilerPath = join(container, 'compiler.scss');
+    writeFileSync(compilerPath, '$contract: true;\n');
+    return { container, packageRoot, compilerPath };
   } catch (error) {
     rmSync(container, { recursive: true, force: true });
     throw error;
@@ -125,8 +131,8 @@ function materializeRecipeCapsule(): { readonly container: string; readonly pack
 }
 
 describe('materialized sass-embedded recipe capsule', () => {
-  it('matches the committed nine-row embedded oracle beside the exact pure Sass tree', async () => {
-    const { container, packageRoot } = materializeRecipeCapsule();
+  it('matches the committed schema-two embedded oracle beside the exact pure Sass tree', async () => {
+    const { container, packageRoot, compilerPath } = materializeRecipeCapsule();
     try {
       const cjsConsumer = join(container, 'consumer.cjs');
       const esmConsumer = join(container, 'consumer.mjs');
@@ -143,6 +149,15 @@ describe('materialized sass-embedded recipe capsule', () => {
       const actual = await probeSassContract(
         { cjs, esm } satisfies SassContractModules,
         'sass-embedded@1.100.0',
+        {
+          compilerPath,
+          normalizeCompilerUrl(url): string {
+            const value = String(url);
+            return value === pathToFileURL(compilerPath).href
+              ? 'file:///contract/compiler.scss'
+              : value;
+          },
+        },
       );
 
       expect(actual).toEqual(embeddedFixture as SassContractTranscript);

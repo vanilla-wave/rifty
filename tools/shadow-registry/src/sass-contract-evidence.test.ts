@@ -36,13 +36,13 @@ describe('Sass 1.100.0 exact Node differential evidence', () => {
 
   it('records all exact matches and only the finite adapted divergence rows', () => {
     expect(sassTranscript).toMatchObject({
-      schema: 1,
+      schema: 2,
       oracle: 'sass@1.100.0',
       version:
         'dart-sass\t1.100.0\t(Sass Compiler)\t[Dart]\ndart2js\t3.12.0\t(Dart Compiler)\t[Dart]',
     });
     expect(embeddedTranscript).toMatchObject({
-      schema: 1,
+      schema: 2,
       oracle: 'sass-embedded@1.100.0',
       version: 'sass-embedded\t1.100.0',
     });
@@ -53,6 +53,49 @@ describe('Sass 1.100.0 exact Node differential evidence', () => {
     for (const row of ['module', 'lifecycle', 'errors', 'legacy'] as const) {
       expect(sassTranscript.rows[row], row).not.toEqual(embeddedTranscript.rows[row]);
     }
+
+    const sassLifecycle = sassTranscript.rows.lifecycle;
+    const embeddedLifecycle = embeddedTranscript.rows.lifecycle;
+    expect(sassLifecycle.syncDirectConstruction.message).toBe(
+      'Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.',
+    );
+    expect(embeddedLifecycle.syncDirectConstruction.message).toBe(
+      'Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.',
+    );
+    expect(sassLifecycle.asyncDirectConstruction.message).toBe(
+      'AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.',
+    );
+    expect(embeddedLifecycle.asyncDirectConstruction.message).toBe(
+      'Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.',
+    );
+    expect(sassLifecycle.syncPathFirst).toEqual(embeddedLifecycle.syncPathFirst);
+    expect(sassLifecycle.syncPathSecond).toEqual(embeddedLifecycle.syncPathSecond);
+    expect(sassLifecycle.asyncPathFirst).toEqual(embeddedLifecycle.asyncPathFirst);
+    expect(sassLifecycle.asyncPathSecond).toEqual(embeddedLifecycle.asyncPathSecond);
+    expect(sassLifecycle.syncDisposeReturnKind).toBe('undefined');
+    expect(embeddedLifecycle.syncDisposeReturnKind).toBe('undefined');
+    expect(sassLifecycle.asyncDisposeReturnKind).toBe('promise');
+    expect(embeddedLifecycle.asyncDisposeReturnKind).toBe('promise');
+    expect(sassLifecycle.asyncDisposeResolvedKind).toBe('null');
+    expect(embeddedLifecycle.asyncDisposeResolvedKind).toBe('undefined');
+    expect(sassLifecycle.syncPostDisposePath.message).toBe('Compiler has already been disposed.');
+    expect(sassLifecycle.syncPostDisposeString.message).toBe('Compiler has already been disposed.');
+    expect(embeddedLifecycle.syncPostDisposePath.message).toBe(
+      'Compiler caused error: Sync compiler has already been disposed.',
+    );
+    expect(embeddedLifecycle.syncPostDisposeString.message).toBe(
+      'Compiler caused error: Sync compiler has already been disposed.',
+    );
+    expect(sassLifecycle.asyncPostDisposePath.message).toBe('Compiler has already been disposed.');
+    expect(sassLifecycle.asyncPostDisposeString.message).toBe(
+      'Compiler has already been disposed.',
+    );
+    expect(embeddedLifecycle.asyncPostDisposePath.message).toBe(
+      'Compiler caused error: Async compiler has already been disposed.',
+    );
+    expect(embeddedLifecycle.asyncPostDisposeString.message).toBe(
+      'Compiler caused error: Async compiler has already been disposed.',
+    );
   });
 
   it('pins the isolated async-importer deadlock twice without leaving a child alive', () => {

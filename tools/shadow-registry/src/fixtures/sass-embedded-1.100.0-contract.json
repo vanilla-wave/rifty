@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "oracle": "sass-embedded@1.100.0",
   "version": "sass-embedded\t1.100.0",
   "rows": {
@@ -251,7 +251,31 @@
       }
     },
     "lifecycle": {
+      "syncDirectConstruction": {
+        "name": "Error",
+        "message": "Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.",
+        "toString": "Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
       "syncInstance": true,
+      "syncPathFirst": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncPathSecond": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
       "syncFirst": {
         "css": ".one {\n  order: 1;\n}",
         "loadedUrls": [],
@@ -264,8 +288,8 @@
         "hasSourceMap": false,
         "sourceMapJson": null
       },
-      "syncDisposeType": "undefined",
-      "syncPostDispose": {
+      "syncDisposeReturnKind": "undefined",
+      "syncPostDisposePath": {
         "name": "Error",
         "message": "Compiler caused error: Sync compiler has already been disposed.",
         "toString": "Error: Compiler caused error: Sync compiler has already been disposed.",
@@ -273,7 +297,39 @@
         "sassStack": null,
         "span": null
       },
+      "syncPostDisposeString": {
+        "name": "Error",
+        "message": "Compiler caused error: Sync compiler has already been disposed.",
+        "toString": "Error: Compiler caused error: Sync compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "asyncDirectConstruction": {
+        "name": "Error",
+        "message": "Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.",
+        "toString": "Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
       "asyncInstance": true,
+      "asyncPathFirst": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncPathSecond": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
       "asyncFirst": {
         "css": ".one {\n  order: 1;\n}",
         "loadedUrls": [],
@@ -286,8 +342,17 @@
         "hasSourceMap": false,
         "sourceMapJson": null
       },
-      "asyncDisposeType": "promise",
-      "asyncPostDispose": {
+      "asyncDisposeReturnKind": "promise",
+      "asyncDisposeResolvedKind": "undefined",
+      "asyncPostDisposePath": {
+        "name": "Error",
+        "message": "Compiler caused error: Async compiler has already been disposed.",
+        "toString": "Error: Compiler caused error: Async compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "asyncPostDisposeString": {
         "name": "Error",
         "message": "Compiler caused error: Async compiler has already been disposed.",
         "toString": "Error: Compiler caused error: Async compiler has already been disposed.",

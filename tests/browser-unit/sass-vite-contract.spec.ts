@@ -188,6 +188,8 @@ function directCjsContractRunner(probeBundle: string): string {
   return `${probeBundle}
 const fs = require('node:fs');
 const cjs = require('sass-embedded');
+const compilerPath = '/scratch/.sass-compiler.scss';
+const compilerUrl = 'file:///scratch/.sass-compiler.scss';
 
 module.exports.__promise = (async () => {
   const outputPath = process.argv[2];
@@ -196,6 +198,13 @@ module.exports.__promise = (async () => {
   const transcript = await RiftySassContractProbe.probeSassContract(
     {cjs, esm},
     'sass-embedded@1.100.0',
+    {
+      compilerPath,
+      normalizeCompilerUrl(url) {
+        const value = String(url);
+        return value === compilerUrl ? 'file:///contract/compiler.scss' : value;
+      },
+    },
   );
   fs.writeFileSync(outputPath, JSON.stringify(transcript));
 })();
@@ -209,11 +218,20 @@ import * as esm from 'sass-embedded';
 ${probeBundle}
 const require = createRequire(import.meta.url);
 const cjs = require('sass-embedded');
+const compilerPath = '/scratch/.sass-compiler.scss';
+const compilerUrl = 'file:///scratch/.sass-compiler.scss';
 const outputPath = process.argv[2];
 if (!outputPath) throw new Error('missing Sass ESM contract output path');
 const transcript = await RiftySassContractProbe.probeSassContract(
   {cjs, esm},
   'sass-embedded@1.100.0',
+  {
+    compilerPath,
+    normalizeCompilerUrl(url) {
+      const value = String(url);
+      return value === compilerUrl ? 'file:///contract/compiler.scss' : value;
+    },
+  },
 );
 fs.writeFileSync(outputPath, JSON.stringify(transcript));
 `;
@@ -592,6 +610,7 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
       templateId: 'browser-unit:sass-vite-contract-v2',
       files: {
         ...BROWSER_PROJECT_FILES,
+        '/.sass-compiler.scss': '$contract: true;\n',
         '/.sass-contract.cjs': directCjsContractRunner(probeBundle),
         '/.sass-contract.mjs': directEsmContractRunner(probeBundle),
         '/.inspect-sass-build.cjs': BUILD_INSPECTOR,

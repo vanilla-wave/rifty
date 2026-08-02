@@ -5,13 +5,15 @@ export interface SassCompileResult {
 }
 
 export interface SassCompiler {
+  compile(path: string, options?: unknown): SassCompileResult;
   compileString(source: string, options?: unknown): SassCompileResult;
-  dispose(): void;
+  dispose(): unknown;
 }
 
 export interface SassAsyncCompiler {
+  compileAsync(path: string, options?: unknown): Promise<SassCompileResult>;
   compileStringAsync(source: string, options?: unknown): Promise<SassCompileResult>;
-  dispose(): Promise<void>;
+  dispose(): Promise<unknown>;
 }
 
 export interface SassContractApi {
@@ -31,6 +33,11 @@ export interface SassContractApi {
 export interface SassContractModules {
   readonly cjs: SassContractApi & Readonly<Record<string, unknown>>;
   readonly esm: Readonly<Record<string, unknown>>;
+}
+
+export interface SassContractProbeOptions {
+  readonly compilerPath: string;
+  normalizeCompilerUrl(url: URL): string;
 }
 
 interface SourceLocationTranscript {
@@ -73,7 +80,7 @@ interface WarningTranscript {
 }
 
 export interface SassContractTranscript {
-  readonly schema: 1;
+  readonly schema: 2;
   readonly oracle: 'sass@1.100.0' | 'sass-embedded@1.100.0';
   readonly version: string;
   readonly rows: Readonly<{
@@ -94,16 +101,25 @@ export interface SassContractTranscript {
       async: CompileTranscript;
     }>;
     lifecycle: Readonly<{
+      syncDirectConstruction: ErrorTranscript;
       syncInstance: boolean;
+      syncPathFirst: CompileTranscript;
+      syncPathSecond: CompileTranscript;
       syncFirst: CompileTranscript;
       syncSecond: CompileTranscript;
-      syncDisposeType: string;
-      syncPostDispose: ErrorTranscript;
+      syncDisposeReturnKind: string;
+      syncPostDisposePath: ErrorTranscript;
+      syncPostDisposeString: ErrorTranscript;
+      asyncDirectConstruction: ErrorTranscript;
       asyncInstance: boolean;
+      asyncPathFirst: CompileTranscript;
+      asyncPathSecond: CompileTranscript;
       asyncFirst: CompileTranscript;
       asyncSecond: CompileTranscript;
-      asyncDisposeType: string;
-      asyncPostDispose: ErrorTranscript;
+      asyncDisposeReturnKind: string;
+      asyncDisposeResolvedKind: string;
+      asyncPostDisposePath: ErrorTranscript;
+      asyncPostDisposeString: ErrorTranscript;
     }>;
     importers: Readonly<{
       sync: CompileTranscript;
@@ -189,13 +205,22 @@ async function caught(run: () => unknown | Promise<unknown>): Promise<ErrorTrans
   throw new Error('Sass contract expected an error');
 }
 
-function compileTranscript(result: SassCompileResult): CompileTranscript {
+function compileTranscript(
+  result: SassCompileResult,
+  normalizeUrl: (url: URL) => string = String,
+): CompileTranscript {
   return {
     css: result.css,
-    loadedUrls: result.loadedUrls.map(String),
+    loadedUrls: result.loadedUrls.map(normalizeUrl),
     hasSourceMap: Object.hasOwn(result, 'sourceMap'),
     sourceMapJson: result.sourceMap === undefined ? null : JSON.stringify(result.sourceMap),
   };
+}
+
+function returnKind(value: unknown): string {
+  if (value === null) return 'null';
+  if (value instanceof Promise) return 'promise';
+  return typeof value;
 }
 
 function warningTranscript(message: string, options: unknown): WarningTranscript {
@@ -283,6 +308,7 @@ function moduleRow(modules: SassContractModules) {
 export async function probeSassContract(
   modules: SassContractModules,
   oracle: SassContractTranscript['oracle'],
+  options: SassContractProbeOptions,
 ): Promise<SassContractTranscript> {
   const basicSource = '$accent: #123456;\n.card { color: $accent; }\n';
   const basicOptions = { url: new URL('file:///contract/basic.scss') };
@@ -302,15 +328,39 @@ export async function probeSassContract(
     await modules.cjs.compileStringAsync(mapSource, mapOptions),
   );
 
+  const syncDirectConstruction = await caught(() => Reflect.construct(modules.cjs.Compiler, []));
+  const asyncDirectConstruction = await caught(() =>
+    Reflect.construct(modules.cjs.AsyncCompiler, []),
+  );
+
   const syncCompiler = modules.cjs.initCompiler();
   const syncInstance = syncCompiler instanceof modules.cjs.Compiler;
+  const syncPathFirst = compileTranscript(
+    syncCompiler.compile(options.compilerPath),
+    options.normalizeCompilerUrl,
+  );
+  const syncPathSecond = compileTranscript(
+    syncCompiler.compile(options.compilerPath),
+    options.normalizeCompilerUrl,
+  );
   const syncFirst = compileTranscript(syncCompiler.compileString('.one { order: 1; }'));
   const syncSecond = compileTranscript(syncCompiler.compileString('.two { order: 2; }'));
   const syncDispose = syncCompiler.dispose();
-  const syncPostDispose = await caught(() => syncCompiler.compileString('.late { order: 3; }'));
+  const syncPostDisposePath = await caught(() => syncCompiler.compile(options.compilerPath));
+  const syncPostDisposeString = await caught(() =>
+    syncCompiler.compileString('.late { order: 3; }'),
+  );
 
   const asyncCompiler = await modules.cjs.initAsyncCompiler();
   const asyncInstance = asyncCompiler instanceof modules.cjs.AsyncCompiler;
+  const asyncPathFirst = compileTranscript(
+    await asyncCompiler.compileAsync(options.compilerPath),
+    options.normalizeCompilerUrl,
+  );
+  const asyncPathSecond = compileTranscript(
+    await asyncCompiler.compileAsync(options.compilerPath),
+    options.normalizeCompilerUrl,
+  );
   const asyncFirst = compileTranscript(
     await asyncCompiler.compileStringAsync('.one { order: 1; }'),
   );
@@ -318,8 +368,9 @@ export async function probeSassContract(
     await asyncCompiler.compileStringAsync('.two { order: 2; }'),
   );
   const asyncDispose = asyncCompiler.dispose();
-  await asyncDispose;
-  const asyncPostDispose = await caught(() =>
+  const asyncDisposeResolved = await asyncDispose;
+  const asyncPostDisposePath = await caught(() => asyncCompiler.compileAsync(options.compilerPath));
+  const asyncPostDisposeString = await caught(() =>
     asyncCompiler.compileStringAsync('.late { order: 3; }'),
   );
 
@@ -364,7 +415,7 @@ export async function probeSassContract(
   const legacy = legacyCapture.value;
 
   return {
-    schema: 1,
+    schema: 2,
     oracle,
     version: modules.cjs.info,
     rows: {
@@ -372,16 +423,25 @@ export async function probeSassContract(
       compile: { sync: compileSync, async: compileAsync },
       sourceMap: { sync: sourceMapSync, async: sourceMapAsync },
       lifecycle: {
+        syncDirectConstruction,
         syncInstance,
+        syncPathFirst,
+        syncPathSecond,
         syncFirst,
         syncSecond,
-        syncDisposeType: typeof syncDispose,
-        syncPostDispose,
+        syncDisposeReturnKind: returnKind(syncDispose),
+        syncPostDisposePath,
+        syncPostDisposeString,
+        asyncDirectConstruction,
         asyncInstance,
+        asyncPathFirst,
+        asyncPathSecond,
         asyncFirst,
         asyncSecond,
-        asyncDisposeType: asyncDispose instanceof Promise ? 'promise' : typeof asyncDispose,
-        asyncPostDispose,
+        asyncDisposeReturnKind: returnKind(asyncDispose),
+        asyncDisposeResolvedKind: returnKind(asyncDisposeResolved),
+        asyncPostDisposePath,
+        asyncPostDisposeString,
       },
       importers: {
         sync: importerSync,

@@ -3,14 +3,14 @@ area: npm-client
 status: draft
 title: sass-embedded@1.100.0 via synthesized facade — second substitution, seam proof
 created: 2026-07-23
-why: real Vite SCSS projects pin sass-embedded, whose Dart platform binary cannot run in the browser; the exact pure-JS Sass twin matches the named compile and Vite surfaces but not invalid-construction process liveness, so this second substitution remains the package-generic seam proof only after that observable fork is refined
+why: real Vite SCSS projects pin sass-embedded, whose Dart platform binary cannot run in the browser; ADR-0344's evidence proves the exact pure-JS Sass twin matches every named supported surface Vite and direct consumers touch, while invalid direct construction remains an explicit gap
 epic: honest-shadow-substitutions
-sources: [ADR-0310, ADR-0335, docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md, docs/backlog/npm-client/reference/sass-1.100.0-packument.md, docs/backlog/npm-client/reference/sass-1.100.0-node-differential.md, docs/backlog/npm-client/reference/sass-constructor-liveness-post-pickup-fork.md]
+sources: [ADR-0344, ADR-0335, docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md, docs/backlog/npm-client/reference/sass-1.100.0-packument.md, docs/backlog/npm-client/reference/sass-1.100.0-node-differential.md, docs/backlog/npm-client/reference/sass-constructor-liveness-post-pickup-fork.md]
 ---
 
 ## Context
 
-Slice `sass-scale-proof` (see epic §Budget). Carrier decided by ADR-0310
+Slice `sass-scale-proof` (see epic §Budget). Carrier decided by ADR-0344
 (Pattern 1: immutable synthesized `sass-embedded@1.100.0` facade over the
 exact upstream pure-JS `sass@1.100.0` twin; finite adapted divergence list;
 no runtime assets/MessagePort/adapter). The PR is deliberately constrained to
@@ -89,10 +89,11 @@ verbatim in the reference artifact.
   capability is created and zero manager/store operations run.
 - Direct guest CJS `require('sass-embedded')` and ESM
   `import('sass-embedded')` probes match the finite Node oracle from the
-  ADR-0310 differential suite, including lifecycle
-  (initCompiler/initAsyncCompiler, two compilations, dispose, post-dispose
-  error texts), sync+async importers, logger warn/deprecation, sourceMap
-  bytes, error `sassMessage`/span/message shape, synthesized `info`.
+  ADR-0344 differential suite, including lifecycle
+  (direct construction errors; repeated path and string compilations;
+  sync/async dispose return values; path/string post-dispose error texts),
+  sync+async importers, logger warn/deprecation, sourceMap bytes, error
+  `sassMessage`/span/message shape, synthesized `info`.
 - Real Vite 7.3.6 SCSS project: nested partial and Vite-resolved `@use`,
   custom importer and a warning; dev renders exact normalized CSS, an edit
   HMRs, and build emits the exact Node-oracle CSS/dependency facts. Node emits
@@ -117,14 +118,15 @@ verbatim in the reference artifact.
 ## Parity cases
 
 Oracle: real Node v24.16.0 `sass-embedded@1.100.0`. Enumerated from the
-ADR-0310 spike; each is a differential test:
+ADR-0344 evidence; each is a differential test:
 
 1. CJS/ESM export shape (cleaned namespace; no dart2js dead keys).
 2. `compileString`/`compileStringAsync` css + `loadedUrls` + absent sourceMap.
 3. `sourceMap: true` + `sourceMapIncludeSources: true` byte-identical map.
-4. Compiler lifecycle: two compiles, dispose, post-dispose sync/async error
-   texts (`Compiler caused error: Sync|Async compiler has already been
-   disposed.`).
+4. Compiler lifecycle: direct construction errors; repeated `compile` /
+   `compileString` and `compileAsync` / `compileStringAsync`; dispose return
+   values; exact post-dispose path/string errors (`Compiler caused error:
+   Sync|Async compiler has already been disposed.`).
 5. Modern importer sync + async incl. `containingUrl`; `loadedUrls` content.
 6. Logger: `@warn` call shape; `slash-div` deprecation id + span.
 7. Errors: `expected "}".` and missing-@use — `Error: `-prefixed message,
@@ -159,7 +161,7 @@ ADR-0310 spike; each is a differential test:
   `npm-client/shadow-recipe-v2-dependency-projection-execution` and
   `npm-client/npm-11-peer-placement-authority`, outside this frozen goal.
 - A Sass runtime-asset adapter or any no-op Workbench adapter to fake N=2 on
-  the runtime-asset seam (forbidden by ADR-0310).
+  the runtime-asset seam (forbidden by ADR-0344).
 
 ## Decisions
 
@@ -167,7 +169,7 @@ ADR-0310 spike; each is a differential test:
   ready positive claim; attempt/checkpoint lineage and the complete frozen
   Acceptance/Parity text are retained in
   `reference/sass-constructor-liveness-post-pickup-fork.md`.
-- ADR-0310 owns the carrier and the adapted-divergence list.
+- ADR-0344 owns the carrier, finite positive claims, and adapted-divergence list.
 - ADR-0335 owns the recipe/materialization model this slice instantiates.
 - The pinned Sass 1.100.0 selector probe proves `process.versions.node` is the
   Node-path selector; `process.release` is not a prerequisite.
@@ -184,5 +186,8 @@ ADR-0310 spike; each is a differential test:
   catch-all. The exact namespace and finite Node differential are the positive
   claim; only observed unsupported selectors, CLI/watch, and declaration
   surfaces receive named gaps.
+- `goal-recut: 2026-08-02` — decision-subagent superseded ADR-0310 with
+  ADR-0344: proof coverage is not a runtime discriminator; unknown observed
+  mismatches are RED-first parity defects or specific reachable gaps.
 - Delete-on-done with the sass-scale-proof PR; epic closure requires this
   slice (not optional downstream).

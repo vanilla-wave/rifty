@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -160,24 +161,40 @@ async function expectedArtifacts(projectRoot: string) {
   }
   const sass = await packageModules(projectRoot, 'sass');
   const embedded = await packageModules(projectRoot, 'sass-embedded');
-  const transcripts: Readonly<Record<string, SassContractTranscript>> = {
-    'sass-1.100.0-contract.json': await probeSassContract(sass.modules, 'sass@1.100.0'),
-    'sass-embedded-1.100.0-contract.json': await probeSassContract(
-      embedded.modules,
-      'sass-embedded@1.100.0',
-    ),
-  };
-  return {
-    ...transcripts,
-    'sass-1.100.0-node-oracle-environment.json': {
-      schema: 1,
-      node: process.version,
-      platform: process.platform,
-      arch: process.arch,
-      packages: [sass.identity, embedded.identity],
-      platformPackage: await platformPackageIdentity(projectRoot),
-    },
-  };
+  const compilerRoot = await mkdtemp(join(tmpdir(), '.rifty-sass-contract-compiler-'));
+  try {
+    const compilerPath = join(compilerRoot, 'compiler.scss');
+    await writeFile(compilerPath, '$contract: true;\n');
+    const compilerUrl = pathToFileURL(compilerPath).href;
+    const options = {
+      compilerPath,
+      normalizeCompilerUrl(url: URL): string {
+        const value = String(url);
+        return value === compilerUrl ? 'file:///contract/compiler.scss' : value;
+      },
+    };
+    const transcripts: Readonly<Record<string, SassContractTranscript>> = {
+      'sass-1.100.0-contract.json': await probeSassContract(sass.modules, 'sass@1.100.0', options),
+      'sass-embedded-1.100.0-contract.json': await probeSassContract(
+        embedded.modules,
+        'sass-embedded@1.100.0',
+        options,
+      ),
+    };
+    return {
+      ...transcripts,
+      'sass-1.100.0-node-oracle-environment.json': {
+        schema: 1,
+        node: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        packages: [sass.identity, embedded.identity],
+        platformPackage: await platformPackageIdentity(projectRoot),
+      },
+    };
+  } finally {
+    await rm(compilerRoot, { recursive: true, force: true });
+  }
 }
 
 async function main(): Promise<void> {

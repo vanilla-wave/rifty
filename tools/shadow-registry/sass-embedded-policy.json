@@ -74,7 +74,7 @@
     },
     {
       "surface": "Compile and compiler lifecycle",
-      "notes": "compileString, compileStringAsync, initCompiler, and initAsyncCompiler cover repeated compilation, disposal, and exact post-dispose errors."
+      "notes": "The finite oracle pins direct construction, repeated path/string compilation, sync/async disposal outcomes, and exact post-dispose errors."
     },
     {
       "surface": "Modern importers, logger, source maps, and errors",

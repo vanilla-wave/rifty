@@ -5,10 +5,10 @@ packages `sass@1.100.0`, `sass-embedded@1.100.0`, and selected platform package
 `sass-embedded-darwin-arm64@1.100.0`. The complete normalized results are:
 
 - `tools/shadow-registry/src/fixtures/sass-1.100.0-contract.json` — SHA-256
-  `bf29a8ac815b5ca72571e02bbfc24b670d50c2a982cee5114117f7c36c82d424`;
+  `3e693fbe059238f3ac83189489bd1bc8f1bd01e4263b7cc5f927c93811fe6a7c`;
 - `tools/shadow-registry/src/fixtures/sass-embedded-1.100.0-contract.json` —
   SHA-256
-  `13740911f6ab5a9d3dc256f8f7a037986e1c4e48114dc52ad99866f514cafe8d`;
+  `5a927a51e3e09b0c433ff555b610968217ff42bd0b865a6581540e2287cad6d9`;
 - `tools/shadow-registry/src/fixtures/sass-1.100.0-node-oracle-environment.json`
   — SHA-256
   `742255bb8a4a0aac7797dc157744b90197f7cd90b5960625f6d18cee51737d2e`;
@@ -17,9 +17,9 @@ packages `sass@1.100.0`, `sass-embedded@1.100.0`, and selected platform package
   `c7c8833a3541aceda8a034b9c8c7ee153faae549ba22aab956553732cd99b3c2`.
 
 The shared nine-row probe SHA-256 is
-`5cd76232178b084b00b09e954ea93cd3969d00ac13c1eebcb35baa3ecc9ca740`.
+`7e3abf0c47e14f0360bd8b332021e71345449c6d54458742642242412ac1117a`.
 Generator SHA-256 is
-`b47a1eb333d670e0fce1b4cc1f26132982cde48ddb59debd9301548725610556`.
+`8200db6834c892acc413c71c041d61b0bb7c3a77f023e5cb1de29a16aa9f5864`.
 The isolated deadlock probe SHA-256 is
 `941c5abda4013bf0bdeba9b88558932b0415a48b179364cdc192ad5c11e4677b`.
 
@@ -61,16 +61,18 @@ entry bytes. It records:
 | CJS/ESM module shape | DIFF: embedded removes pure Sass CJS dead keys `cli_pkg_main_0_`, `load`, `loadParserExports_` and ESM `parser_`; its ESM namespace instead carries undefined type-only `CalculationOperator` |
 | sync/async compile | MATCH: CSS, `loadedUrls`, absent sourceMap |
 | source map | MATCH: CSS and byte-identical normalized JSON including mappings, sources, and sourcesContent |
-| compiler lifecycle | MATCH through two compiles and disposal; DIFF only post-dispose messages, which embedded prefixes with `Compiler caused error: Sync|Async` |
+| compiler lifecycle | MATCH through two `compile(path)` and two string compiles per sync/async compiler; DIFF: embedded prefixes direct-construction and both post-dispose method errors with `Compiler caused error: ...`, and async dispose resolves `undefined` where pure Sass resolves `null` |
 | modern importers | MATCH: sync importer and promised async importer under async compile, including `containingUrl`, call order, CSS, and loaded URLs |
 | logger | MATCH: `@warn`, slash-div deprecation id/message/stack/span, and CSS |
 | errors | DIFF: embedded prefixes `Error: ` in message/toString; syntax-error `span.url` is undefined instead of pure Sass null; sassMessage, sassStack, coordinates, text, and missing-use URL match |
 | info | DIFF: pure Dart/dart2js identity versus exact `sass-embedded\t1.100.0` |
 | legacy renderSync | MATCH CSS/stats keys; DIFF: embedded sends legacy-js-api deprecation to stderr and reports the warning stack as `-`, while pure Sass sends the deprecation through the logger and reports `stdin` |
 
-The committed JSON files contain every input result, URL, warning, error
-field, source coordinate, compiler-disposal result, and export-identity list;
-the table is only an index.
+The schema-two JSON files contain every input result, URL, warning, error field,
+source coordinate, compiler-disposal result, and export-identity list. Lifecycle
+path compilation uses a real caller-created SCSS file and normalizes only its
+exact URL to `file:///contract/compiler.scss`; the table is only an index. The
+oracle makes no prototype-reflection claim.
 
 ## Sync compile plus async importer
 

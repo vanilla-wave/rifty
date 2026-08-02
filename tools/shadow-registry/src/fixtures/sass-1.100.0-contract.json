@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "oracle": "sass@1.100.0",
   "version": "dart-sass\t1.100.0\t(Sass Compiler)\t[Dart]\ndart2js\t3.12.0\t(Dart Compiler)\t[Dart]",
   "rows": {
@@ -254,7 +254,31 @@
       }
     },
     "lifecycle": {
+      "syncDirectConstruction": {
+        "name": "Error",
+        "message": "Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.",
+        "toString": "Error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
       "syncInstance": true,
+      "syncPathFirst": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncPathSecond": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
       "syncFirst": {
         "css": ".one {\n  order: 1;\n}",
         "loadedUrls": [],
@@ -267,8 +291,8 @@
         "hasSourceMap": false,
         "sourceMapJson": null
       },
-      "syncDisposeType": "undefined",
-      "syncPostDispose": {
+      "syncDisposeReturnKind": "undefined",
+      "syncPostDisposePath": {
         "name": "Error",
         "message": "Compiler has already been disposed.",
         "toString": "Error: Compiler has already been disposed.",
@@ -276,7 +300,39 @@
         "sassStack": null,
         "span": null
       },
+      "syncPostDisposeString": {
+        "name": "Error",
+        "message": "Compiler has already been disposed.",
+        "toString": "Error: Compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "asyncDirectConstruction": {
+        "name": "Error",
+        "message": "AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.",
+        "toString": "Error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
       "asyncInstance": true,
+      "asyncPathFirst": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncPathSecond": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
       "asyncFirst": {
         "css": ".one {\n  order: 1;\n}",
         "loadedUrls": [],
@@ -289,8 +345,17 @@
         "hasSourceMap": false,
         "sourceMapJson": null
       },
-      "asyncDisposeType": "promise",
-      "asyncPostDispose": {
+      "asyncDisposeReturnKind": "promise",
+      "asyncDisposeResolvedKind": "null",
+      "asyncPostDisposePath": {
+        "name": "Error",
+        "message": "Compiler has already been disposed.",
+        "toString": "Error: Compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "asyncPostDisposeString": {
         "name": "Error",
         "message": "Compiler has already been disposed.",
         "toString": "Error: Compiler has already been disposed.",
