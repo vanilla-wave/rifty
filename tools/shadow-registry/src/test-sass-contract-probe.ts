@@ -84,9 +84,19 @@ interface CompilerIdentityTranscript {
   readonly constructorIsExport: boolean;
   readonly constructorStable: boolean;
   readonly prototypeConstructorIsExport: boolean;
-  readonly compileMethodStable: boolean;
-  readonly compileStringMethodStable: boolean;
-  readonly disposeMethodStable: boolean;
+  readonly constructorName: string | null;
+  readonly constructorLength: number | null;
+  readonly constructorPrototypeWritable: boolean | null;
+  readonly compileMethod: MethodIdentityTranscript;
+  readonly compileStringMethod: MethodIdentityTranscript;
+  readonly disposeMethod: MethodIdentityTranscript;
+}
+
+interface MethodIdentityTranscript {
+  readonly name: string | null;
+  readonly length: number | null;
+  readonly stable: boolean;
+  readonly instanceIsPrototypeMethod: boolean;
 }
 
 export interface SassContractTranscript {
@@ -101,6 +111,8 @@ export interface SassContractTranscript {
       undefinedEsmExports: readonly string[];
       cjsToEsmIdentity: readonly string[];
       esmNamedToDefaultIdentity: readonly string[];
+      cjsAccessorExports: readonly string[];
+      esmDefaultAccessorExports: readonly string[];
     }>;
     compile: Readonly<{
       sync: CompileTranscript;
@@ -326,6 +338,12 @@ function moduleRow(modules: SassContractModules) {
   const esmKeys = Object.keys(modules.esm).sort();
   const esmDefault = objectValue(modules.esm.default);
   if (!esmDefault) throw new Error('Sass contract: ESM default export is missing');
+  const lifecycleExports = ['Compiler', 'AsyncCompiler', 'initCompiler', 'initAsyncCompiler'];
+  const accessorExports = (namespace: Readonly<Record<string, unknown>>): string[] =>
+    lifecycleExports.filter((key) => {
+      const descriptor = Reflect.getOwnPropertyDescriptor(namespace, key);
+      return descriptor !== undefined && typeof descriptor.get === 'function' && !descriptor.set;
+    });
   return {
     cjsKeys,
     esmKeys,
@@ -337,6 +355,22 @@ function moduleRow(modules: SassContractModules) {
     esmNamedToDefaultIdentity: esmKeys.filter(
       (key) => key !== 'default' && modules.esm[key] === esmDefault[key],
     ),
+    cjsAccessorExports: accessorExports(modules.cjs),
+    esmDefaultAccessorExports: accessorExports(esmDefault),
+  };
+}
+
+function methodIdentity(
+  compiler: object,
+  prototype: object | null,
+  method: string,
+): MethodIdentityTranscript {
+  const value = Reflect.get(compiler, method);
+  return {
+    name: typeof value === 'function' ? value.name : null,
+    length: typeof value === 'function' ? value.length : null,
+    stable: value === Reflect.get(compiler, method),
+    instanceIsPrototypeMethod: prototype !== null && value === Reflect.get(prototype, method),
   };
 }
 
@@ -349,17 +383,20 @@ function compilerIdentity(
   const prototype = Reflect.getPrototypeOf(compiler);
   const exportedPrototype = Reflect.get(Constructor, 'prototype') as object;
   const constructor = Reflect.get(compiler, 'constructor');
+  const prototypeDescriptor = Reflect.getOwnPropertyDescriptor(Constructor, 'prototype');
   return {
     directPrototypeIsExportPrototype: prototype === exportedPrototype,
     constructorIsExport: constructor === Constructor,
     constructorStable: constructor === Reflect.get(compiler, 'constructor'),
     prototypeConstructorIsExport:
       prototype !== null && Reflect.get(prototype, 'constructor') === Constructor,
-    compileMethodStable:
-      Reflect.get(compiler, compileMethod) === Reflect.get(compiler, compileMethod),
-    compileStringMethodStable:
-      Reflect.get(compiler, compileStringMethod) === Reflect.get(compiler, compileStringMethod),
-    disposeMethodStable: Reflect.get(compiler, 'dispose') === Reflect.get(compiler, 'dispose'),
+    constructorName: typeof Constructor.name === 'string' ? Constructor.name : null,
+    constructorLength: typeof Constructor.length === 'number' ? Constructor.length : null,
+    constructorPrototypeWritable:
+      typeof prototypeDescriptor?.writable === 'boolean' ? prototypeDescriptor.writable : null,
+    compileMethod: methodIdentity(compiler, prototype, compileMethod),
+    compileStringMethod: methodIdentity(compiler, prototype, compileStringMethod),
+    disposeMethod: methodIdentity(compiler, prototype, 'dispose'),
   };
 }
 

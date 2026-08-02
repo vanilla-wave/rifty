@@ -212,6 +212,18 @@
         "sassNull",
         "sassTrue",
         "types"
+      ],
+      "cjsAccessorExports": [
+        "Compiler",
+        "AsyncCompiler",
+        "initCompiler",
+        "initAsyncCompiler"
+      ],
+      "esmDefaultAccessorExports": [
+        "Compiler",
+        "AsyncCompiler",
+        "initCompiler",
+        "initAsyncCompiler"
       ]
     },
     "compile": {
@@ -265,9 +277,27 @@
         "constructorIsExport": true,
         "constructorStable": true,
         "prototypeConstructorIsExport": true,
-        "compileMethodStable": true,
-        "compileStringMethodStable": true,
-        "disposeMethodStable": true
+        "constructorName": "Compiler",
+        "constructorLength": 1,
+        "constructorPrototypeWritable": false,
+        "compileMethod": {
+          "name": "compile",
+          "length": 2,
+          "stable": true,
+          "instanceIsPrototypeMethod": true
+        },
+        "compileStringMethod": {
+          "name": "compileString",
+          "length": 2,
+          "stable": true,
+          "instanceIsPrototypeMethod": true
+        },
+        "disposeMethod": {
+          "name": "dispose",
+          "length": 0,
+          "stable": true,
+          "instanceIsPrototypeMethod": true
+        }
       },
       "syncPathFirst": {
         "css": "",
@@ -328,9 +358,27 @@
         "constructorIsExport": true,
         "constructorStable": true,
         "prototypeConstructorIsExport": true,
-        "compileMethodStable": true,
-        "compileStringMethodStable": true,
-        "disposeMethodStable": true
+        "constructorName": "AsyncCompiler",
+        "constructorLength": 1,
+        "constructorPrototypeWritable": false,
+        "compileMethod": {
+          "name": "compileAsync",
+          "length": 2,
+          "stable": true,
+          "instanceIsPrototypeMethod": true
+        },
+        "compileStringMethod": {
+          "name": "compileStringAsync",
+          "length": 2,
+          "stable": true,
+          "instanceIsPrototypeMethod": true
+        },
+        "disposeMethod": {
+          "name": "dispose",
+          "length": 0,
+          "stable": true,
+          "instanceIsPrototypeMethod": true
+        }
       },
       "asyncPathFirst": {
         "css": "",
