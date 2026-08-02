@@ -1,10 +1,83 @@
-import { spawn } from 'node:child_process';
-import { readFile, realpath, writeFile } from 'node:fs/promises';
+import { execFile, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { join, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
 const probePath = fileURLToPath(import.meta.url);
+const execFileAsync = promisify(execFile);
+const activeProcessGroups = new Set();
+
+function sha256(bytes) {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+async function fileIdentity(projectRoot, path) {
+  const bytes = await readFile(path);
+  return {
+    path: relative(projectRoot, path),
+    bytes: bytes.byteLength,
+    sha256: sha256(bytes),
+  };
+}
+
+async function oracleEnvironment(projectRoot) {
+  const lock = JSON.parse(await readFile(join(projectRoot, 'package-lock.json'), 'utf8'));
+  const packageIdentity = async (name) => {
+    const manifestPath = join(projectRoot, 'node_modules', name, 'package.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    const lockEntry = lock.packages?.[`node_modules/${name}`];
+    if (
+      manifest.name !== name ||
+      manifest.version !== '1.100.0' ||
+      lockEntry?.version !== '1.100.0' ||
+      typeof lockEntry.integrity !== 'string'
+    ) {
+      throw new Error(`${name} exact lock identity is missing`);
+    }
+    return { name, version: manifest.version, integrity: lockEntry.integrity };
+  };
+
+  const nodeModules = join(projectRoot, 'node_modules');
+  const platformCandidates = (await readdir(nodeModules, { withFileTypes: true }))
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        entry.name.startsWith('sass-embedded-') &&
+        entry.name !== 'sass-embedded',
+    )
+    .map(({ name }) => name);
+  if (platformCandidates.length !== 1) {
+    throw new Error(
+      `expected one installed Sass platform package, got ${platformCandidates.length}`,
+    );
+  }
+  const platformPackage = await packageIdentity(platformCandidates[0]);
+  const embeddedRequire = createRequire(
+    join(projectRoot, 'node_modules', 'sass-embedded', 'package.json'),
+  );
+  const compilerPathModule = embeddedRequire('./dist/lib/src/compiler-path.js');
+  const compilerCommand = compilerPathModule.compilerCommand;
+  if (!Array.isArray(compilerCommand) || compilerCommand.length !== 2) {
+    throw new Error('sass-embedded must select the platform Dart command plus snapshot');
+  }
+  const platformRoot = join(nodeModules, platformPackage.name);
+  for (const path of compilerCommand) {
+    if (typeof path !== 'string' || relative(platformRoot, path).startsWith('..')) {
+      throw new Error('sass-embedded compiler command escaped the exact platform package');
+    }
+  }
+  return {
+    packages: await Promise.all([packageIdentity('sass'), packageIdentity('sass-embedded')]),
+    platformPackage,
+    compilerCommand: await Promise.all(
+      compilerCommand.map((path) => fileIdentity(projectRoot, path)),
+    ),
+    compilerExecutable: compilerCommand[0],
+  };
+}
 
 async function loadPackage(projectRoot, packageName, moduleKind) {
   const packageRoot = join(projectRoot, 'node_modules', packageName);
@@ -21,32 +94,146 @@ async function loadPackage(projectRoot, packageName, moduleKind) {
   return import(pathToFileURL(join(packageRoot, entry)).href);
 }
 
-async function childRun(projectRoot, packageName, moduleKind, constructorName) {
+async function publishOutcome(outcome) {
+  console.log(JSON.stringify(outcome));
+  if (typeof process.send !== 'function') return;
+  await new Promise((resolveSend, reject) => {
+    process.send({ kind: 'sass-constructor-outcome', outcome }, (error) => {
+      if (error) reject(error);
+      else resolveSend();
+    });
+  });
+  process.disconnect();
+}
+
+async function childRun(projectRoot, packageName, moduleKind, operation) {
   const sass = await loadPackage(projectRoot, packageName, moduleKind);
+  if (operation === 'ImportOnly') {
+    await publishOutcome({ outcome: 'imported' });
+    return;
+  }
   try {
-    new sass[constructorName]();
-    console.log(JSON.stringify({ outcome: 'returned' }));
+    Reflect.construct(sass[operation], []);
+    await publishOutcome({ outcome: 'returned' });
     process.exitCode = 2;
   } catch (error) {
-    console.log(
-      JSON.stringify({
-        outcome: 'throw',
-        name: typeof error?.name === 'string' ? error.name : null,
-        message: typeof error?.message === 'string' ? error.message : null,
-        toString: String(error),
-      }),
-    );
+    await publishOutcome({
+      outcome: 'throw',
+      name: typeof error?.name === 'string' ? error.name : null,
+      message: typeof error?.message === 'string' ? error.message : null,
+      toString: String(error),
+    });
   }
 }
 
-async function isolatedRun(projectRoot, packageName, moduleKind, constructorName, timeoutMs) {
+function killProcessGroup(processGroupId) {
+  try {
+    process.kill(-processGroupId, 'SIGKILL');
+  } catch (error) {
+    if (error?.code !== 'ESRCH') throw error;
+  }
+}
+
+function cleanupActiveProcessGroups() {
+  for (const processGroupId of activeProcessGroups) killProcessGroup(processGroupId);
+}
+
+function installParentCleanup() {
+  process.once('exit', cleanupActiveProcessGroups);
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    const relay = () => {
+      cleanupActiveProcessGroups();
+      process.removeListener(signal, relay);
+      process.kill(process.pid, signal);
+    };
+    process.once(signal, relay);
+  }
+}
+
+function processGroupExists(processGroupId) {
+  try {
+    process.kill(-processGroupId, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ESRCH') return false;
+    throw error;
+  }
+}
+
+async function waitForProcessGroupExit(processGroupId) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (!processGroupExists(processGroupId)) return true;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+  }
+  return !processGroupExists(processGroupId);
+}
+
+async function processGroupMembers(processGroupId) {
+  const { stdout } = await execFileAsync('/bin/ps', ['-axo', 'pid=,ppid=,pgid=,comm=']);
+  return stdout.split('\n').flatMap((line) => {
+    const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
+    if (match === null || Number(match[3]) !== processGroupId) return [];
+    return [
+      {
+        pid: Number(match[1]),
+        parentPid: Number(match[2]),
+        command: match[4],
+      },
+    ];
+  });
+}
+
+async function inspectCompilerProcessGroup(processGroupId, projectRoot, compilerExecutable) {
+  let members = [];
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    members = await processGroupMembers(processGroupId);
+    const leader = members.find(({ pid }) => pid === processGroupId);
+    const compilerChild = members.find(
+      ({ parentPid, command }) => parentPid === processGroupId && command === compilerExecutable,
+    );
+    if (
+      members.length === 2 &&
+      leader !== undefined &&
+      basename(leader.command) === basename(process.execPath) &&
+      compilerChild !== undefined
+    ) {
+      return {
+        memberCount: members.length,
+        leaderCommand: basename(leader.command),
+        compilerChildCommand: relative(projectRoot, compilerChild.command),
+        compilerChildParent: 'leader',
+      };
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+  }
+  throw new Error(`unexpected Sass compiler process group: ${JSON.stringify(members)}`);
+}
+
+async function isolatedRun(
+  projectRoot,
+  packageName,
+  moduleKind,
+  constructorName,
+  startupTimeoutMs,
+  postOutcomeTimeoutMs,
+  compilerExecutable,
+) {
   const child = spawn(
     process.execPath,
     [probePath, '--child', projectRoot, packageName, moduleKind, constructorName],
-    { detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
+    { detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
   );
+  if (child.pid === undefined) throw new Error('Sass constructor probe did not receive a pid');
+  const processGroupId = child.pid;
+  activeProcessGroups.add(processGroupId);
   let stdout = '';
   let stderr = '';
+  let outcome;
+  let startupTimedOut = false;
+  let postOutcomeTimedOut = false;
+  let timerFailure;
+  let processGroupInspection;
+  let postOutcomeTimer;
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
   child.stdout.on('data', (chunk) => {
@@ -56,22 +243,89 @@ async function isolatedRun(projectRoot, packageName, moduleKind, constructorName
     stderr += chunk;
   });
 
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    if (child.pid === undefined) return;
-    try {
-      process.kill(-child.pid, 'SIGKILL');
-    } catch (error) {
-      if (error?.code !== 'ESRCH') throw error;
+  child.once('message', (message) => {
+    if (
+      message === null ||
+      typeof message !== 'object' ||
+      message.kind !== 'sass-constructor-outcome' ||
+      message.outcome === null ||
+      typeof message.outcome !== 'object'
+    ) {
+      timerFailure = new Error('Sass constructor child sent a malformed outcome');
+      killProcessGroup(processGroupId);
+      return;
     }
-  }, timeoutMs);
-  const result = await new Promise((resolveClose, reject) => {
-    child.once('error', reject);
-    child.once('close', (exitCode, signal) => resolveClose({ exitCode, signal }));
+    outcome = message.outcome;
+    clearTimeout(startupTimer);
+    if (packageName === 'sass-embedded' && constructorName !== 'ImportOnly') {
+      processGroupInspection = inspectCompilerProcessGroup(
+        processGroupId,
+        projectRoot,
+        compilerExecutable,
+      );
+    }
+    postOutcomeTimer = setTimeout(() => {
+      postOutcomeTimedOut = true;
+      try {
+        killProcessGroup(processGroupId);
+      } catch (error) {
+        timerFailure = error;
+        child.kill('SIGKILL');
+      }
+    }, postOutcomeTimeoutMs);
   });
-  clearTimeout(timer);
-  return { timedOut, ...result, stdout, stderr };
+
+  const startupTimer = setTimeout(() => {
+    startupTimedOut = true;
+    try {
+      killProcessGroup(processGroupId);
+    } catch (error) {
+      timerFailure = error;
+      child.kill('SIGKILL');
+    }
+  }, startupTimeoutMs);
+  const exitPromise = new Promise((resolveExit, reject) => {
+    child.once('error', reject);
+    child.once('exit', (exitCode, signal) => resolveExit({ exitCode, signal }));
+  });
+  const closePromise = new Promise((resolveClose) => child.once('close', resolveClose));
+  let result;
+  let runFailure;
+  let processGroup;
+  try {
+    result = await exitPromise;
+    clearTimeout(startupTimer);
+    clearTimeout(postOutcomeTimer);
+    await closePromise;
+    if (processGroupInspection !== undefined) processGroup = await processGroupInspection;
+    if (outcome === undefined) throw new Error('Sass constructor child exited without an outcome');
+    if (timerFailure !== undefined) throw timerFailure;
+  } catch (error) {
+    runFailure = error;
+  }
+  clearTimeout(startupTimer);
+  clearTimeout(postOutcomeTimer);
+  let processGroupGone = await waitForProcessGroupExit(processGroupId);
+  const cleanupForced = !processGroupGone;
+  if (cleanupForced) {
+    killProcessGroup(processGroupId);
+    processGroupGone = await waitForProcessGroupExit(processGroupId);
+  }
+  activeProcessGroups.delete(processGroupId);
+  if (!processGroupGone) throw new Error(`Sass probe process group ${processGroupId} survived`);
+  if (runFailure !== undefined) throw runFailure;
+  return {
+    outcomeChannel: 'ipc',
+    outcome,
+    startupTimedOut,
+    postOutcomeTimedOut,
+    cleanupForced,
+    processGroupGone,
+    processGroup,
+    ...result,
+    stdout,
+    stderr,
+  };
 }
 
 async function parentRun(mode, requestedRoot) {
@@ -79,18 +333,28 @@ async function parentRun(mode, requestedRoot) {
     throw new Error(`Sass constructor oracle requires Node v24.16.0, got ${process.version}`);
   }
   const projectRoot = await realpath(requestedRoot);
-  const timeoutMs = 1_500;
+  const environment = await oracleEnvironment(projectRoot);
+  const startupTimeoutMs = 5_000;
+  const postOutcomeTimeoutMs = 1_500;
   const attempts = 2;
   const runs = {};
   for (const packageName of ['sass', 'sass-embedded']) {
     runs[packageName] = {};
     for (const moduleKind of ['cjs', 'esm']) {
       runs[packageName][moduleKind] = {};
-      for (const constructorName of ['Compiler', 'AsyncCompiler']) {
+      for (const constructorName of ['ImportOnly', 'Compiler', 'AsyncCompiler']) {
         const constructorRuns = [];
         for (let attempt = 0; attempt < attempts; attempt += 1) {
           constructorRuns.push(
-            await isolatedRun(projectRoot, packageName, moduleKind, constructorName, timeoutMs),
+            await isolatedRun(
+              projectRoot,
+              packageName,
+              moduleKind,
+              constructorName,
+              startupTimeoutMs,
+              postOutcomeTimeoutMs,
+              environment.compilerExecutable,
+            ),
           );
         }
         runs[packageName][moduleKind][constructorName] = constructorRuns;
@@ -102,8 +366,14 @@ async function parentRun(mode, requestedRoot) {
     node: process.version,
     platform: process.platform,
     arch: process.arch,
-    timeoutMs,
+    startupTimeoutMs,
+    postOutcomeTimeoutMs,
     attempts,
+    environment: {
+      packages: environment.packages,
+      platformPackage: environment.platformPackage,
+      compilerCommand: environment.compilerCommand,
+    },
     runs,
   };
   const output = new URL('../src/fixtures/sass-1.100.0-constructor-liveness.json', import.meta.url);
@@ -125,5 +395,6 @@ if (process.argv[2] === '--child') {
   if (projectRoot === undefined) {
     throw new Error('usage: sass-constructor-liveness-probe.mjs --write|--check <oracle-project>');
   }
+  installParentCleanup();
   await parentRun(process.argv[2], resolve(projectRoot));
 }

@@ -21,18 +21,29 @@ node tools/shadow-registry/tools/sass-constructor-liveness-probe.mjs \
 
 The process-group probe is
 `tools/shadow-registry/tools/sass-constructor-liveness-probe.mjs`, SHA-256
-`58a5bed9e362ef626db8c799dd26bce176d50b3ddc7720e1e2e7d8cf09e3665c`.
+`ad6b9f6f3a8543d59d9f5fd2bd5d6ae58f357fc9be2be69f82988008272976ff`.
 The complete artifact is
 `tools/shadow-registry/src/fixtures/sass-1.100.0-constructor-liveness.json`,
 SHA-256
-`231137b72e29e4e7cbe20cf3b4ffa19bb7fd07734dfa16d63f221e284c603b5c`.
+`27b905ad4e1122e27ffdf364cab3d7a2bd067e305cc773f61a3b606377d236c8`.
 
-Each of CJS and ESM runs `Compiler` and `AsyncCompiler` twice in an isolated
-process group. Pure Sass throws the documented direct-construction error and
-exits 0 naturally. Exact embedded prints the corresponding
-`Compiler caused error: ...` value, then remains refed past 1,500 ms; the probe
-sends `SIGKILL` to the whole group. All eight embedded runs time out; all eight
-pure runs exit. No child survives the probe.
+Each package's CJS and ESM entry first passes a twice-run import-only control,
+then runs `Compiler` and `AsyncCompiler` twice in isolated process groups. Pure
+Sass throws the exact direct-construction error and exits 0 naturally. Exact
+embedded publishes the corresponding exact
+`Compiler caused error: ...` value, then remains refed for 1,500 ms measured
+from a structured IPC outcome; a separate 5,000 ms startup bound cannot collide
+with this lifetime window. All eight embedded constructor runs hit the
+post-outcome bound; all eight pure constructor runs and all import controls
+exit. Exact name/message/toString/stdout are frozen.
+
+The artifact pins both package integrities, exact
+`sass-embedded-darwin-arm64@1.100.0` integrity, and byte identities for its Dart
+executable plus snapshot. Before timeout the probe reads PID/PPID/PGID state and
+requires exactly the Node leader plus that platform Dart executable as its
+child. It then sends `SIGKILL` to the group and verifies group disappearance.
+Error-path/exit/SIGINT/SIGTERM cleanup covers failed and interrupted probes;
+every completed attempt proves its group gone before the next attempt.
 
 The embedded constructors start their Dart child before the constructor body
 rejects and expose no handle to dispose after the caught error. The synthesized

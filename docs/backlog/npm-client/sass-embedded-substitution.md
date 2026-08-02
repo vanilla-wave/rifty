@@ -3,7 +3,7 @@ area: npm-client
 status: draft
 title: sass-embedded@1.100.0 via synthesized facade — second substitution, seam proof
 created: 2026-07-23
-why: real Vite SCSS projects pin sass-embedded, whose dart platform binary cannot run in the browser; ADR-0310's spike proved the exact pure-JS sass twin matches every surface Vite and direct consumers touch, so Sass ships as the registry's second substitution and proves the seam is package-generic
+why: real Vite SCSS projects pin sass-embedded, whose Dart platform binary cannot run in the browser; the exact pure-JS Sass twin matches the named compile and Vite surfaces but not invalid-construction process liveness, so this second substitution remains the package-generic seam proof only after that observable fork is refined
 epic: honest-shadow-substitutions
 sources: [ADR-0310, ADR-0335, docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md, docs/backlog/npm-client/reference/sass-constructor-liveness-post-pickup-fork.md]
 ---
