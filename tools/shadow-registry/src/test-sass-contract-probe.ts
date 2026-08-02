@@ -58,6 +58,7 @@ interface SourceSpanTranscript {
 interface ErrorTranscript {
   readonly name: string | null;
   readonly message: string | null;
+  readonly feature: string | null;
   readonly toString: string;
   readonly sassMessage: string | null;
   readonly sassStack: string | null;
@@ -83,12 +84,14 @@ interface CompilerIdentityTranscript {
   readonly directPrototypeIsExportPrototype: boolean;
   readonly constructorIsExport: boolean;
   readonly constructorStable: boolean;
+  readonly instanceHasOwnConstructor: boolean;
   readonly prototypeConstructorIsExport: boolean;
   readonly prototypeHasOwnConstructor: boolean;
   readonly prototypeConstructorDescriptor: PropertyDescriptorTranscript;
   readonly constructorName: string | null;
   readonly constructorLength: number | null;
-  readonly constructorPrototypeWritable: boolean | null;
+  readonly constructorOwnKeys: readonly string[];
+  readonly constructorPrototypeDescriptor: PropertyDescriptorTranscript;
   readonly compileMethod: MethodIdentityTranscript;
   readonly compileStringMethod: MethodIdentityTranscript;
   readonly disposeMethod: MethodIdentityTranscript;
@@ -98,6 +101,8 @@ interface MethodIdentityTranscript {
   readonly name: string | null;
   readonly length: number | null;
   readonly stable: boolean;
+  readonly sameAcrossInstances: boolean;
+  readonly instanceHasOwnMethod: boolean;
   readonly instanceIsPrototypeMethod: boolean;
   readonly prototypeHasOwnMethod: boolean;
   readonly prototypeDescriptor: PropertyDescriptorTranscript;
@@ -119,9 +124,9 @@ interface ReflectionOperationTranscript {
 
 interface CompilerReflectionTranscript {
   readonly ownKeys: ReflectionOperationTranscript;
-  readonly getKinds: ReflectionOperationTranscript;
-  readonly hasKeys: ReflectionOperationTranscript;
-  readonly descriptors: ReflectionOperationTranscript;
+  readonly getKinds: Readonly<Record<string, ReflectionOperationTranscript>>;
+  readonly hasKeys: Readonly<Record<string, ReflectionOperationTranscript>>;
+  readonly descriptors: Readonly<Record<string, ReflectionOperationTranscript>>;
 }
 
 export interface SassContractTranscript {
@@ -204,6 +209,7 @@ export interface SassContractTranscript {
 const constructorLivenessGap: ErrorTranscript = {
   name: 'NotImplementedError',
   message: 'Not implemented: sass-embedded.compiler-construction-liveness',
+  feature: 'sass-embedded.compiler-construction-liveness',
   toString: 'NotImplementedError: Not implemented: sass-embedded.compiler-construction-liveness',
   sassMessage: null,
   sassStack: null,
@@ -213,6 +219,7 @@ const constructorLivenessGap: ErrorTranscript = {
 const compilerInternalReflectionGap: ErrorTranscript = {
   name: 'NotImplementedError',
   message: 'Not implemented: sass-embedded.compiler-internal-reflection',
+  feature: 'sass-embedded.compiler-internal-reflection',
   toString: 'NotImplementedError: Not implemented: sass-embedded.compiler-internal-reflection',
   sassMessage: null,
   sassStack: null,
@@ -224,11 +231,13 @@ const reflectionGapOperation = (): ReflectionOperationTranscript => ({
   error: compilerInternalReflectionGap,
 });
 
-const compilerReflectionGap = (): CompilerReflectionTranscript => ({
+const compilerReflectionGap = (
+  internalKeys: readonly string[],
+): CompilerReflectionTranscript => ({
   ownKeys: reflectionGapOperation(),
-  getKinds: reflectionGapOperation(),
-  hasKeys: reflectionGapOperation(),
-  descriptors: reflectionGapOperation(),
+  getKinds: Object.fromEntries(internalKeys.map((key) => [key, reflectionGapOperation()])),
+  hasKeys: Object.fromEntries(internalKeys.map((key) => [key, reflectionGapOperation()])),
+  descriptors: Object.fromEntries(internalKeys.map((key) => [key, reflectionGapOperation()])),
 });
 
 export function sassFacadeContract(embedded: SassContractTranscript): SassContractTranscript {
@@ -239,9 +248,15 @@ export function sassFacadeContract(embedded: SassContractTranscript): SassContra
       lifecycle: {
         ...embedded.rows.lifecycle,
         syncDirectConstruction: constructorLivenessGap,
-        syncReflection: { cjs: compilerReflectionGap(), esm: compilerReflectionGap() },
+        syncReflection: {
+          cjs: compilerReflectionGap(syncEmbeddedInternalKeys),
+          esm: compilerReflectionGap(syncEmbeddedInternalKeys),
+        },
         asyncDirectConstruction: constructorLivenessGap,
-        asyncReflection: { cjs: compilerReflectionGap(), esm: compilerReflectionGap() },
+        asyncReflection: {
+          cjs: compilerReflectionGap(asyncEmbeddedInternalKeys),
+          esm: compilerReflectionGap(asyncEmbeddedInternalKeys),
+        },
       },
     },
   };
@@ -292,6 +307,7 @@ function errorTranscript(error: unknown): ErrorTranscript {
   return {
     name: stringValue(value?.name),
     message: stringValue(value?.message),
+    feature: stringValue(value?.feature),
     toString: String(error),
     sassMessage: stringValue(value?.sassMessage),
     sassStack: stringValue(value?.sassStack),
@@ -445,6 +461,7 @@ function moduleRow(modules: SassContractModules) {
 
 function methodIdentity(
   compiler: object,
+  peerCompiler: object,
   prototype: object | null,
   method: string,
 ): MethodIdentityTranscript {
@@ -455,6 +472,8 @@ function methodIdentity(
     name: typeof value === 'function' ? value.name : null,
     length: typeof value === 'function' ? value.length : null,
     stable: value === Reflect.get(compiler, method),
+    sameAcrossInstances: value === Reflect.get(peerCompiler, method),
+    instanceHasOwnMethod: Object.hasOwn(compiler, method),
     instanceIsPrototypeMethod: prototype !== null && value === Reflect.get(prototype, method),
     prototypeHasOwnMethod: descriptor !== undefined,
     prototypeDescriptor: propertyDescriptorTranscript(descriptor),
@@ -463,6 +482,7 @@ function methodIdentity(
 
 function compilerIdentity(
   compiler: object,
+  peerCompiler: object,
   Constructor: abstract new (...args: readonly unknown[]) => object,
   compileMethod: string,
   compileStringMethod: string,
@@ -477,17 +497,20 @@ function compilerIdentity(
     directPrototypeIsExportPrototype: prototype === exportedPrototype,
     constructorIsExport: constructor === Constructor,
     constructorStable: constructor === Reflect.get(compiler, 'constructor'),
+    instanceHasOwnConstructor: Object.hasOwn(compiler, 'constructor'),
     prototypeConstructorIsExport:
       prototype !== null && Reflect.get(prototype, 'constructor') === Constructor,
     prototypeHasOwnConstructor: prototypeConstructorDescriptor !== undefined,
     prototypeConstructorDescriptor: propertyDescriptorTranscript(prototypeConstructorDescriptor),
     constructorName: typeof Constructor.name === 'string' ? Constructor.name : null,
     constructorLength: typeof Constructor.length === 'number' ? Constructor.length : null,
-    constructorPrototypeWritable:
-      typeof prototypeDescriptor?.writable === 'boolean' ? prototypeDescriptor.writable : null,
-    compileMethod: methodIdentity(compiler, prototype, compileMethod),
-    compileStringMethod: methodIdentity(compiler, prototype, compileStringMethod),
-    disposeMethod: methodIdentity(compiler, prototype, 'dispose'),
+    constructorOwnKeys: Reflect.ownKeys(Constructor).map((key) =>
+      typeof key === 'symbol' ? String(key) : key,
+    ),
+    constructorPrototypeDescriptor: propertyDescriptorTranscript(prototypeDescriptor),
+    compileMethod: methodIdentity(compiler, peerCompiler, prototype, compileMethod),
+    compileStringMethod: methodIdentity(compiler, peerCompiler, prototype, compileStringMethod),
+    disposeMethod: methodIdentity(compiler, peerCompiler, prototype, 'dispose'),
   };
 }
 
@@ -528,17 +551,22 @@ function compilerReflection(
     ownKeys: reflectionOperation(() =>
       Reflect.ownKeys(compiler).map((key) => (typeof key === 'symbol' ? String(key) : key)),
     ),
-    getKinds: reflectionOperation(() =>
-      Object.fromEntries(internalKeys.map((key) => [key, returnKind(Reflect.get(compiler, key))])),
+    getKinds: Object.fromEntries(
+      internalKeys.map((key) => [
+        key,
+        reflectionOperation(() => returnKind(Reflect.get(compiler, key))),
+      ]),
     ),
-    hasKeys: reflectionOperation(() => internalKeys.filter((key) => Reflect.has(compiler, key))),
-    descriptors: reflectionOperation(() =>
-      Object.fromEntries(
-        internalKeys.map((key) => [
-          key,
+    hasKeys: Object.fromEntries(
+      internalKeys.map((key) => [key, reflectionOperation(() => Reflect.has(compiler, key))]),
+    ),
+    descriptors: Object.fromEntries(
+      internalKeys.map((key) => [
+        key,
+        reflectionOperation(() =>
           propertyDescriptorTranscript(Reflect.getOwnPropertyDescriptor(compiler, key)),
-        ]),
-      ),
+        ),
+      ]),
     ),
   };
 }
@@ -573,9 +601,11 @@ export async function probeSassContract(
   );
 
   const syncCompiler = modules.cjs.initCompiler();
+  const syncPeerCompiler = modules.cjs.initCompiler();
   const syncInstance = syncCompiler instanceof modules.cjs.Compiler;
   const syncIdentity = compilerIdentity(
     syncCompiler,
+    syncPeerCompiler,
     modules.cjs.Compiler,
     'compile',
     'compileString',
@@ -585,6 +615,7 @@ export async function probeSassContract(
     cjs: compilerReflection(syncCompiler, syncEmbeddedInternalKeys),
     esm: compilerReflection(esmSyncCompiler, syncEmbeddedInternalKeys),
   };
+  syncPeerCompiler.dispose();
   esmSyncCompiler.dispose();
   const syncPathFirst = compileTranscript(
     syncCompiler.compile(options.compilerPath),
@@ -603,9 +634,11 @@ export async function probeSassContract(
   );
 
   const asyncCompiler = await modules.cjs.initAsyncCompiler();
+  const asyncPeerCompiler = await modules.cjs.initAsyncCompiler();
   const asyncInstance = asyncCompiler instanceof modules.cjs.AsyncCompiler;
   const asyncIdentity = compilerIdentity(
     asyncCompiler,
+    asyncPeerCompiler,
     modules.cjs.AsyncCompiler,
     'compileAsync',
     'compileStringAsync',
@@ -615,6 +648,7 @@ export async function probeSassContract(
     cjs: compilerReflection(asyncCompiler, asyncEmbeddedInternalKeys),
     esm: compilerReflection(esmAsyncCompiler, asyncEmbeddedInternalKeys),
   };
+  await asyncPeerCompiler.dispose();
   await esmAsyncCompiler.dispose();
   const asyncPathFirst = compileTranscript(
     await asyncCompiler.compileAsync(options.compilerPath),
