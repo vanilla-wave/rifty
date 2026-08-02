@@ -2,9 +2,10 @@
 
 Re-recorded 2026-08-03 from fresh
 `main@2df89ddea7b5eb2d494ba2c9f4b229a8e6e4a970`, including the exact
-constructor-liveness authority merged by PR #241. The refined complete Sass
-test carrier is `850fe429a9e310e694022491a3214f7a78c6de1f`; no production source
-differs from the fresh baseline. Slice `sass-scale-proof` keeps Budget
+constructor-liveness authority merged by PR #241. The refined base carrier is
+`850fe429a9e310e694022491a3214f7a78c6de1f`; constructor pre-target behavior
+is added by `6fb90d0ffa437115134e3159859ee9880a0c2b55`. No production source differs
+from the fresh baseline. Slice `sass-scale-proof` keeps Budget
 `1000–3000` and adds no resolver, cache, lock writer, scheduler, asset
 capability, or package-specific generic branch.
 
