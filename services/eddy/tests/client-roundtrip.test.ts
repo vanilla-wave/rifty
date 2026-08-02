@@ -21,6 +21,20 @@ import {
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  BUNDLED,
+  BUNDLED_VERSION,
+  LedgerRegistry,
+  LedgerVfs,
+  SOURCE,
+  SOURCE_INTEGRITY,
+  SOURCE_VERSION,
+  eddyBundleFor,
+  freshScope,
+  installFixture,
+  parentOnlyLockfile,
+  writeProject,
+} from '../../../packages/npm-client/src/_test-fixtures/shadow-recipe-v2-embedded-source.ts';
+import {
   LOCAL_REGISTRY_BASE_URL,
   makeLocalFetcher,
 } from '../../../tests/integration/fixtures/local-registry.ts';
@@ -67,6 +81,67 @@ async function buildBundleFor(deps: Record<string, string>): Promise<Uint8Array>
   );
   if (built.kind !== 'bundle') throw new Error('setup: expected a bundle');
   return built.bytes;
+}
+
+async function literalV2Fixture() {
+  const fresh = await freshScope('root');
+  const lock = parentOnlyLockfile(fresh.result.lockfile, 'root');
+  const trace = (
+    lock as unknown as {
+      rifty: {
+        shadowSubstitutions: {
+          protocol: string;
+          applied: Array<{
+            acquisition: Record<string, unknown>;
+            materialization: Record<string, unknown>;
+          }>;
+        };
+      };
+    }
+  ).rifty.shadowSubstitutions;
+  const fact = trace.applied[0];
+  if (!fact) throw new Error('fixture lacks the LightningCSS trace fact');
+  trace.protocol = 'rifty.shadow-substitutions/v2';
+  fact.acquisition = {
+    ...fact.acquisition,
+    dependencies: { [BUNDLED]: '^1.0.1' },
+    optionalDependencies: {},
+    peerDependencies: {},
+    bundleDependencies: [BUNDLED],
+    bundled: [{ name: BUNDLED, version: BUNDLED_VERSION, inBundle: true }],
+  };
+  fact.materialization = { ...fact.materialization, bin: {} };
+  return { ...fresh, lock, bundle: await eddyBundleFor(lock, fresh.entries) };
+}
+
+function replayFaultCache(fault: 'none' | 'missing' | 'corrupt') {
+  const entries = new Map<string, Uint8Array>();
+  const gets: string[] = [];
+  const puts: string[] = [];
+  const key = (name: string, version: string, integrity: string) =>
+    `${name}\0${version}\0${integrity}`;
+  return {
+    gets,
+    puts,
+    cache: {
+      async get(name: string, version: string, integrity: string) {
+        const readKey = key(name, version, integrity);
+        gets.push(readKey);
+        const bytes = entries.get(readKey)?.slice() ?? null;
+        if (name !== SOURCE || gets.filter((candidate) => candidate === readKey).length < 2) {
+          return bytes;
+        }
+        if (fault === 'missing') return null;
+        if (fault === 'corrupt' && bytes) bytes[0] = (bytes[0] ?? 0) ^ 0xff;
+        return bytes;
+      },
+      async put(name: string, version: string, integrity: string, bytes: Uint8Array) {
+        puts.push(key(name, version, integrity));
+        entries.set(key(name, version, integrity), bytes.slice());
+        return `memory:${name}@${version}`;
+      },
+    },
+  };
 }
 
 let eddy: EddyServer;
@@ -1009,6 +1084,116 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
       await closeServer(raw.server);
     }
   });
+
+  it('[fault: incomplete-evidence / provenance-lie] literal v2 incompleteness declines before adoption and runs standard', async () => {
+    const literal = await literalV2Fixture();
+    const controlServer = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(literal.bundle));
+    });
+    try {
+      const vfs = new LedgerVfs();
+      await writeProject(vfs, literal.dependencies);
+      const control = await installFixture(
+        vfs,
+        new LedgerRegistry([]),
+        literal.dependencies,
+        replayFaultCache('none').cache,
+        [],
+        controlServer.url,
+      ).then(
+        (value) => ({ status: 'resolved' as const, value }),
+        (error: unknown) => ({ status: 'rejected' as const, error }),
+      );
+      expect.soft(control.status, 'unmodified literal v2 decodes').toBe('resolved');
+      expect.soft(control.status === 'resolved' ? control.value.source : undefined).toBe('eddy');
+    } finally {
+      await closeServer(controlServer.server);
+    }
+
+    const contents = unpackEddyBundle(literal.bundle);
+    contents.manifest.tarballs = contents.manifest.tarballs.filter((t) => t.name !== SOURCE);
+    contents.tarballs = contents.tarballs.filter((t) => t.entry.name !== SOURCE);
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(packEddyBundle(contents)));
+    });
+    const warnings: string[] = [];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+      warnings.push(args.map(String).join(' '));
+    });
+    try {
+      const vfs = new LedgerVfs();
+      await writeProject(vfs, literal.dependencies);
+      const registry = new LedgerRegistry(literal.entries);
+      const result = await installFixture(
+        vfs,
+        registry,
+        literal.dependencies,
+        replayFaultCache('none').cache,
+        [],
+        raw.url,
+      );
+      expect(result.source).toBe('standard');
+      expect(warnings).toEqual([
+        expect.stringContaining(`bundle omits the tarball for ${SOURCE}@${SOURCE_VERSION}`),
+      ]);
+      expect(registry.packumentReads.length + registry.tarballReads.length).toBeGreaterThan(0);
+      expect(await vfs.exists('/project/node_modules/lightningcss/package.json')).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+      await closeServer(raw.server);
+    }
+  });
+
+  it.each(['missing', 'corrupt'] as const)(
+    '[fault: poisoned-cache / false-fallback] adopted literal v2 replay rejects a %s parent with no effects',
+    async (fault) => {
+      const literal = await literalV2Fixture();
+      const raw = await startRaw((_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/x-tar' });
+        res.end(Buffer.from(literal.bundle));
+      });
+      try {
+        const vfs = new LedgerVfs();
+        await writeProject(vfs, literal.dependencies);
+        vfs.clearLedger();
+        const registry = new LedgerRegistry(literal.entries);
+        const replayCache = replayFaultCache(fault);
+        const reports: string[] = [];
+        const outcome = await installFixture(
+          vfs,
+          registry,
+          literal.dependencies,
+          replayCache.cache,
+          reports,
+          raw.url,
+        ).then(
+          (value) => ({ status: 'resolved' as const, value }),
+          (error: unknown) => ({ status: 'rejected' as const, error }),
+        );
+        const error = outcome.status === 'rejected' ? outcome.error : undefined;
+        expect.soft(outcome.status).toBe('rejected');
+        expect
+          .soft({
+            code: (error as { code?: unknown } | undefined)?.code,
+            reason: (error as { reason?: unknown } | undefined)?.reason,
+          })
+          .toEqual({ code: 'EBROKENLOCK', reason: 'shadow-trace-drift' });
+        expect.soft(registry.packumentReads).toEqual([]);
+        expect.soft(registry.tarballReads).toEqual([]);
+        const sourceKey = `${SOURCE}\0${SOURCE_VERSION}\0${SOURCE_INTEGRITY}`;
+        expect.soft(replayCache.puts).toEqual([sourceKey]);
+        expect.soft(replayCache.gets).toEqual([sourceKey, sourceKey]);
+        expect.soft(reports).toEqual([]);
+        expect.soft(vfs.mutations).toEqual([]);
+        await expect.soft(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+        await expect.soft(vfs.exists('/project/node_modules')).resolves.toBe(false);
+      } finally {
+        await closeServer(raw.server);
+      }
+    },
+  );
 
   it('refuses a bundle whose manifest names DUPLICATE member files (two packages sharing one member)', async () => {
     // Regression (round 9): duplicate `file` values collapse in the client's

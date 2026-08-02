@@ -6,8 +6,8 @@ Fresh source baseline is
 `main@d2e59e3c4ab303ed76203f1ac3d590fe76d3722b`, including embedded-source
 authority merged by PR #239. JIT Item 21 selects
 `shadow-recipe-v2-protocol-replay-authority` at Budget `300–800`; the other
-reverse-linked goal residuals remain unmapped. The three TypeScript carriers
-add 1,262 lines, below the mandatory pre-pickup re-cut threshold of 1,600
+reverse-linked goal residuals remain unmapped. The four TypeScript carriers
+add 1,580 lines, below the mandatory pre-pickup re-cut threshold of 1,600
 (twice the band high).
 
 The checkpoint batch is:
@@ -26,28 +26,36 @@ pnpm --filter @riftydev/npm-client exec vitest run \
 pnpm --filter @riftydev/workbench exec vitest run \
   src/workers/owner-package-shadow-assets.contract.test.ts
 pnpm vitest run --project unit services/eddy/tests/s3-bundle-store.test.ts
+pnpm vitest run --project unit services/eddy/tests/client-roundtrip.test.ts
 pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
   --grep "Vite 7 config graph"
 pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
   --grep "direct CJS require and ESM import"
 ```
 
-The npm-client batch is exactly **50 RED / 150 GREEN** across 200 rows. The
-new literal carrier is 50/50 RED because current ingress rejects protocol v2:
-two official-archive fresh/replay parity rows; 34 root/nested strict trace and
+The npm-client batch is exactly **94 RED / 150 GREEN** across 244 rows. The
+new literal carrier is 94/94 RED because current ingress rejects protocol v2:
+two official-archive fresh/replay parity rows; 78 root/nested strict trace and
 lock drift rows; four missing/corrupt pinned-parent rows; and ten substituted
-embedded-manifest rows. Every mutation first proves its unmodified literal
-control would decode, so generic protocol rejection cannot falsely satisfy a
-fault row. Inherited acquisition, embedded-source, data, materialized-bin,
-shims, planner, installer, and bounded registry floors remain 150/150 GREEN.
+embedded-manifest rows. The drift table independently covers every promised
+acquisition scalar/map/container, bundled child/container, and materialization
+scalar/files/bin/container shape, including missing, malformed, extra, and
+disagreeing values. Every mutation first proves its unmodified literal control
+would decode, so generic protocol rejection cannot falsely satisfy a fault row.
+Inherited acquisition, embedded-source, data, materialized-bin, shims,
+planner, installer, and bounded registry floors remain 150/150 GREEN.
 
 Workbench is **1 RED / 1 GREEN**: the real-core parked-lock test proves the
 existing owner FIFO physically excludes the second same-project install, then
 observes only protocol v1 and missing trace `materialization.bin`. Eddy
-client/service completeness is 36/36 GREEN. The real Chromium Vite 7.3.6 row
-completes dev/build/preview/optimize, then observes protocol v1, missing trace
-bin, and stale `./bin/esbuild` in its actual project lock. The independent
-direct CJS/ESM Chromium differential and loud CLI behavior are 1/1 GREEN.
+service completeness remains 36/36 GREEN; the full client roundtrip is **3 RED
+/ 35 GREEN**. Its literal-v2 control prevents generic protocol decline from
+satisfying the pre-adoption row, while the missing/corrupt post-adoption rows
+fix the exact LightningCSS parent cache ledger and require zero registry,
+VFS, report, tree, or lock effects. The real Chromium Vite 7.3.6 row completes
+dev/build/preview/optimize, then observes protocol v1, missing trace bin, and
+stale `./bin/esbuild` in its actual project lock. The independent direct CJS/ESM
+Chromium differential and loud CLI behavior are 1/1 GREEN.
 
 npm-client and Workbench typechecks, Biome, and diff checks pass. Eddy and
 Chromium commands require loopback permission in the restricted runner; their
@@ -59,10 +67,13 @@ carry required/optional/peer/bundle maps plus exact bundled child facts;
 materialization carries exact files and canonical bins. Positives consume the
 committed official LightningCSS archive and compare raw lock bytes, exact
 cache/registry/report ledgers, hashes, aliases, bins, and full trees with a
-fresh install. Generated tarballs are limited to corruption inputs. ADR-0182
-keeps pre-adoption Eddy decline on standard fallback; adopted replay/cache
-failure remains loud. No new public API, codec module, resolver, cache, lock,
-FIFO, scheduler, or shadow-specific Eddy source is prescribed.
+fresh install. Generated tarballs are limited to corruption inputs. The Eddy
+carrier independently proves the `false-fallback` fault axis: incomplete
+evidence declines before adoption, while missing/corrupt pinned parent bytes
+after adoption stay loud without registry fallback or publication. ADR-0182's
+standard fallback remains the pre-adoption path. No new public API, codec
+module, resolver, cache, lock, FIFO, scheduler, or shadow-specific Eddy source
+is prescribed.
 
 ## Embedded-source topology — 2026-08-02
 

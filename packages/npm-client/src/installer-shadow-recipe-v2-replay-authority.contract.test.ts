@@ -643,9 +643,23 @@ function registryTraceAcquisition(lock: ReplayLock): Record<string, unknown> {
   return acquisition as Record<string, unknown>;
 }
 
-function firstBundledTraceFact(lock: ReplayLock): Record<string, unknown> {
+function traceFactRecord(lock: ReplayLock): Record<string, unknown> {
+  return lightningTraceFact(lock) as unknown as Record<string, unknown>;
+}
+
+function materializationTrace(lock: ReplayLock): Record<string, unknown> {
+  return lightningTraceFact(lock).materialization as unknown as Record<string, unknown>;
+}
+
+function bundledTraceFacts(lock: ReplayLock): unknown[] {
   const bundled = registryTraceAcquisition(lock).bundled;
-  if (!Array.isArray(bundled) || bundled.length !== 1) {
+  if (!Array.isArray(bundled)) throw new Error('fixture LightningCSS bundled facts are malformed');
+  return bundled;
+}
+
+function firstBundledTraceFact(lock: ReplayLock): Record<string, unknown> {
+  const bundled = bundledTraceFacts(lock);
+  if (bundled.length !== 1) {
     throw new Error('fixture LightningCSS trace bundled facts are missing');
   }
   const first: unknown = bundled[0];
@@ -653,6 +667,13 @@ function firstBundledTraceFact(lock: ReplayLock): Record<string, unknown> {
     throw new Error('fixture LightningCSS bundled fact is malformed');
   }
   return first as Record<string, unknown>;
+}
+
+function firstMaterializationFile(lock: ReplayLock): Record<string, unknown> {
+  const files = lightningTraceFact(lock).materialization.files;
+  const first = files[0];
+  if (!first) throw new Error('fixture LightningCSS materialization file is missing');
+  return first as unknown as Record<string, unknown>;
 }
 
 const replayCorruptions = [
@@ -730,6 +751,32 @@ const replayCorruptions = [
       registryTraceAcquisition(lock).bundleDependencies = [];
     },
   },
+  ...(
+    [
+      ['kind', 'synthetic'],
+      ['name', 'forged-source'],
+      ['version', '9.9.9'],
+      ['resolved', 'https://registry.test/forged-source-1.32.0.tgz'],
+      ['integrity', `sha512-${'A'.repeat(86)}==`],
+    ] as const
+  ).map(([field, value]) => ({
+    label: `trace acquisition ${field}`,
+    mutate(lock: ReplayLock): void {
+      registryTraceAcquisition(lock)[field] = value;
+    },
+  })),
+  {
+    label: 'trace acquisition missing',
+    mutate(lock: ReplayLock): void {
+      Reflect.deleteProperty(traceFactRecord(lock), 'acquisition');
+    },
+  },
+  {
+    label: 'trace acquisition malformed',
+    mutate(lock: ReplayLock): void {
+      traceFactRecord(lock).acquisition = [];
+    },
+  },
   {
     label: 'trace bundled child version',
     mutate(lock: ReplayLock): void {
@@ -743,11 +790,89 @@ const replayCorruptions = [
     },
   },
   {
+    label: 'trace bundled child name',
+    mutate(lock: ReplayLock): void {
+      firstBundledTraceFact(lock).name = 'forged-napi-wasm';
+    },
+  },
+  {
+    label: 'trace bundled missing',
+    mutate(lock: ReplayLock): void {
+      Reflect.deleteProperty(registryTraceAcquisition(lock), 'bundled');
+    },
+  },
+  {
+    label: 'trace bundled malformed',
+    mutate(lock: ReplayLock): void {
+      registryTraceAcquisition(lock).bundled = {};
+    },
+  },
+  {
+    label: 'trace bundled child malformed',
+    mutate(lock: ReplayLock): void {
+      bundledTraceFacts(lock)[0] = null;
+    },
+  },
+  {
+    label: 'trace bundled extra child',
+    mutate(lock: ReplayLock): void {
+      bundledTraceFacts(lock).push({ name: 'extra-child', version: '1.0.0', inBundle: true });
+    },
+  },
+  ...(
+    [
+      ['installPath', 'node_modules/forged-lightningcss'],
+      ['name', 'forged-lightningcss'],
+      ['version', '9.9.9'],
+    ] as const
+  ).map(([field, value]) => ({
+    label: `materialization.${field}`,
+    mutate(lock: ReplayLock): void {
+      materializationTrace(lock)[field] = value;
+    },
+  })),
+  {
+    label: 'materialization missing',
+    mutate(lock: ReplayLock): void {
+      Reflect.deleteProperty(traceFactRecord(lock), 'materialization');
+    },
+  },
+  {
+    label: 'materialization malformed',
+    mutate(lock: ReplayLock): void {
+      traceFactRecord(lock).materialization = [];
+    },
+  },
+  {
     label: 'materialization.files',
     mutate(lock: ReplayLock): void {
       const first = lightningTraceFact(lock).materialization.files[0];
       if (!first) throw new Error('fixture LightningCSS materialization file is missing');
       first.sha256 = '0'.repeat(64);
+    },
+  },
+  {
+    label: 'materialization file path',
+    mutate(lock: ReplayLock): void {
+      firstMaterializationFile(lock).path = 'forged.cjs';
+    },
+  },
+  {
+    label: 'materialization file bytes',
+    mutate(lock: ReplayLock): void {
+      firstMaterializationFile(lock).bytes = 9_999;
+    },
+  },
+  {
+    label: 'materialization files missing',
+    mutate(lock: ReplayLock): void {
+      Reflect.deleteProperty(materializationTrace(lock), 'files');
+    },
+  },
+  {
+    label: 'materialization files malformed',
+    mutate(lock: ReplayLock): void {
+      materializationTrace(lock).files = {};
     },
   },
   {
@@ -760,6 +885,12 @@ const replayCorruptions = [
     label: 'materialization.bin missing',
     mutate(lock: ReplayLock): void {
       Reflect.deleteProperty(lightningTraceFact(lock).materialization, 'bin');
+    },
+  },
+  {
+    label: 'materialization.bin malformed',
+    mutate(lock: ReplayLock): void {
+      materializationTrace(lock).bin = [];
     },
   },
   {

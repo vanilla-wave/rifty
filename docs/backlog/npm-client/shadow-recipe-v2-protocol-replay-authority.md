@@ -110,6 +110,7 @@ or shadow-specific Eddy source.
 | corrupt-input / provenance-lie | strict-decode and compare every v2 acquisition/materialization/bundled-child field; cache bytes and embedded manifest must match | independent literal-lock and cache mutation tables |
 | observable-order | full lock/trace validation precedes cache selection; cache/embedded validation precedes VFS/report/lock mutation | exact root/nested operation ledgers |
 | poisoned-cache / provenance-lie | only pinned parent sources are read; wrong integrity, bytes, child identity, version, range, or placement reject before link | root/nested parent and embedded-manifest corruption table |
+| false-fallback | incomplete pre-adoption evidence declines to the standard source, while an adopted v2 replay/cache failure stays loud without registry fallback or publication | literal Eddy pre-adoption decline and post-adoption cache-fault ledgers |
 | unbounded-read | cache/tar decoding and inherited registry reads retain their bounded/cancellable owners | inherited extraction and `RegistryClient` fault suites |
 | torn-state | abort or failure during aliases/bins/lock emits no later report/result/lock and exact retry reconciles | inherited root/nested materialized commit matrix plus replay retry |
 | quota-perm-fail | alias/bin/lock `ENOSPC`/`EACCES` stays loud, publishes no false success, and exact retry reconciles | inherited commit faults exercised with v2 replay |
