@@ -73,6 +73,17 @@ child/process-group proof. `sassFacadeContract()` changes only the two rifty
 direct-construction transcript fields to the selected named gap; it does not
 rewrite the external oracle fixture.
 
+Fresh post-ready audit carrier
+`4c57343215c643e728061267770b554fc16f5537`, completed by
+`266dfd38cef279090a4c724157fa9c2edf7bba14`, extends that same shared probe with
+initialized compiler reflection, method identity/name/arity, and lifecycle
+export accessor facts. Exact embedded uses its exported length-one class as the
+direct prototype constructor and keeps compile/string/dispose reads stable in
+both compiler kinds. The inherited pure-Sass wrapper is **1 RED / 2 GREEN** in
+its executable capsule: those facts and all four accessor exports mismatch
+while the other two capsule rows remain green. The source fix must preserve the
+selected direct-construction gap and every existing lifecycle transcript.
+
 The two normalized transcript JSON files are exact generator-owned bytes and
 their two explicit paths are excluded from Biome formatting; the generator's
 byte check is authoritative while `pnpm lint` covers every non-generated file.

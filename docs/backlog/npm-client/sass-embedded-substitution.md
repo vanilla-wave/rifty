@@ -94,7 +94,10 @@ retained verbatim in the reference artifact.
   path/string post-dispose error texts), sync+async importers, logger
   warn/deprecation with absolute color-neutral frames, sourceMap bytes, error
   `sassMessage`/span/message shape with absolute color-neutral frames, and
-  synthesized `info`.
+  synthesized `info`. Initialized compilers preserve the embedded direct
+  prototype/constructor identities, exact public method names/arity and stable
+  compile/dispose method identity; CJS and ESM-default lifecycle exports retain
+  the embedded accessor descriptors.
 - CJS and ESM direct `new Compiler()` / `new AsyncCompiler()` synchronously
   throw
   `NotImplementedError('sass-embedded.compiler-construction-liveness')` before
@@ -127,14 +130,16 @@ retained verbatim in the reference artifact.
 Oracle: real Node v24.16.0 `sass-embedded@1.100.0`. Enumerated from the
 ADR-0344 evidence; each is a differential test:
 
-1. CJS/ESM export shape (cleaned namespace; no dart2js dead keys).
+1. CJS/ESM export shape (cleaned namespace; no dart2js dead keys; compiler
+   lifecycle exports retain their CJS and ESM-default accessor shape).
 2. `compileString`/`compileStringAsync` css + `loadedUrls` + absent sourceMap.
 3. `sourceMap: true` + `sourceMapIncludeSources: true` byte-identical map.
 4. Initialized compiler lifecycle: repeated `compile` / `compileString` and
    `compileAsync` / `compileStringAsync`; dispose return values; exact
    post-dispose path/string errors (`Compiler caused error: Sync|Async compiler
-   has already been disposed.`); initialized instances retain `instanceof`
-   against the exported constructor anchors.
+   has already been disposed.`); initialized instances retain `instanceof`,
+   direct prototype/constructor identity against the exported anchors, and
+   exact stable compile/string/dispose method name, arity, and identity.
 5. Modern importer sync + async incl. `containingUrl`; `loadedUrls` content.
 6. Logger: `@warn` call shape; `slash-div` deprecation id + span.
 7. Errors: `expected "}".` and missing-@use — `Error: `-prefixed message,

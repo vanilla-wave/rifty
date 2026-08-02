@@ -66,6 +66,10 @@
         "notes": "Report the exact embedded Sync and Async compiler post-dispose error texts."
       },
       {
+        "id": "compiler-identity",
+        "notes": "Expose initialized compilers with the exported length-one constructor as their direct prototype constructor; preserve lifecycle export accessors and exact stable public method name, arity, and identity."
+      },
+      {
         "id": "legacy-logger-routing",
         "notes": "Send legacy-js-api deprecation to stderr and normalize the warning stack from stdin to the embedded dash spelling."
       }
@@ -82,7 +86,7 @@
     },
     {
       "surface": "Compile and initialized compiler lifecycle",
-      "notes": "The finite oracle pins repeated path/string compilation, sync/async disposal outcomes, and exact post-dispose errors."
+      "notes": "The finite oracle pins repeated path/string compilation, sync/async disposal outcomes, exact post-dispose errors, lifecycle export accessors, exported constructor/prototype identity, and exact stable public method name, arity, and identity."
     },
     {
       "surface": "Modern importers, logger, source maps, and errors",

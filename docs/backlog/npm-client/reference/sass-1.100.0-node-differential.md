@@ -5,10 +5,10 @@ packages `sass@1.100.0`, `sass-embedded@1.100.0`, and selected platform package
 `sass-embedded-darwin-arm64@1.100.0`. The complete normalized results are:
 
 - `tools/shadow-registry/src/fixtures/sass-1.100.0-contract.json` — SHA-256
-  `3e693fbe059238f3ac83189489bd1bc8f1bd01e4263b7cc5f927c93811fe6a7c`;
+  `7b1aab818e3e20e876f6c951c4d15e46cb131fb2674e7a6d3c93546dcf17f6fa`;
 - `tools/shadow-registry/src/fixtures/sass-embedded-1.100.0-contract.json` —
   SHA-256
-  `5a927a51e3e09b0c433ff555b610968217ff42bd0b865a6581540e2287cad6d9`;
+  `9052e0b4d90617d8fa1bb5eccd53eb69444fb0a0ac0628248bdcca0cd6de0abd`;
 - `tools/shadow-registry/src/fixtures/sass-1.100.0-node-oracle-environment.json`
   — SHA-256
   `742255bb8a4a0aac7797dc157744b90197f7cd90b5960625f6d18cee51737d2e`;
@@ -17,13 +17,13 @@ packages `sass@1.100.0`, `sass-embedded@1.100.0`, and selected platform package
   `c7c8833a3541aceda8a034b9c8c7ee153faae549ba22aab956553732cd99b3c2`.
 
 The fixtures were generated from the shared nine-row probe at commit
-`edf9230512e7ec8ec05ba3e2d52636cf41ea5c55`, SHA-256
-`7e3abf0c47e14f0360bd8b332021e71345449c6d54458742642242412ac1117a`.
-The current file SHA-256 is
-`c44317660c38048a323deca9265dd94c9824c796b5bab5233a7a8763f17c5c1b`:
-the only later addition is `sassFacadeContract()`, which derives rifty's two
-selected constructor-gap fields without changing `probeSassContract()` or the
-external oracle fixtures.
+`266dfd38cef279090a4c724157fa9c2edf7bba14`, SHA-256
+`8badbdfd4db4fb499fee71cc80aaa4eaefff27399c24de043206d37b040656a3`.
+The lifecycle row includes initialized-instance prototype/constructor identity
+and stable public method identity/name/arity. The module row includes the four
+compiler lifecycle accessor exports. `sassFacadeContract()` derives only
+rifty's two selected direct-constructor gap fields; it does not rewrite those
+external oracle facts.
 Generator SHA-256 is
 `8200db6834c892acc413c71c041d61b0bb7c3a77f023e5cb1de29a16aa9f5864`.
 The isolated deadlock probe SHA-256 is
@@ -64,10 +64,10 @@ entry bytes. It records:
 
 | row | exact relation |
 |---|---|
-| CJS/ESM module shape | DIFF: embedded removes pure Sass CJS dead keys `cli_pkg_main_0_`, `load`, `loadParserExports_` and ESM `parser_`; its ESM namespace instead carries undefined type-only `CalculationOperator` |
+| CJS/ESM module shape | DIFF: embedded removes pure Sass CJS dead keys `cli_pkg_main_0_`, `load`, `loadParserExports_` and ESM `parser_`; its ESM namespace instead carries undefined type-only `CalculationOperator`; CJS and ESM-default compiler lifecycle exports are enumerable configurable accessors |
 | sync/async compile | MATCH: CSS, `loadedUrls`, absent sourceMap |
 | source map | MATCH: CSS and byte-identical normalized JSON including mappings, sources, and sourcesContent |
-| compiler lifecycle | MATCH through two `compile(path)` and two string compiles per sync/async compiler; DIFF: embedded prefixes direct-construction and both post-dispose method errors with `Compiler caused error: ...`, and async dispose resolves `undefined` where pure Sass resolves `null` |
+| compiler lifecycle | MATCH through two `compile(path)` and two string compiles per sync/async compiler; public method identities are stable in both; DIFF: embedded initialized instances have the exported length-one constructor as direct prototype constructor while pure Sass returns an internal subclass, embedded methods retain exact names/arity on that prototype, embedded prefixes direct-construction and both post-dispose method errors with `Compiler caused error: ...`, and async dispose resolves `undefined` where pure Sass resolves `null` |
 | modern importers | MATCH: sync importer and promised async importer under async compile, including `containingUrl`, call order, CSS, and loaded URLs |
 | logger | MATCH: `@warn`, slash-div deprecation id/message/stack/span, and CSS |
 | errors | DIFF: embedded prefixes `Error: ` in message/toString; syntax-error `span.url` is undefined instead of pure Sass null; under one TTY pure Sass defaults message/toString color on while embedded defaults it off; sassMessage, sassStack, coordinates, text, and missing-use URL match |
@@ -75,10 +75,11 @@ entry bytes. It records:
 | legacy renderSync | MATCH CSS/stats keys; DIFF: embedded sends legacy-js-api deprecation to stderr and reports the warning stack as `-`, while pure Sass sends the deprecation through the logger and reports `stdin` |
 
 The schema-two JSON files contain every input result, URL, warning, error field,
-source coordinate, compiler-disposal result, and export-identity list. Lifecycle
-path compilation uses a real caller-created SCSS file and normalizes only its
-exact URL to `file:///contract/compiler.scss`; the table is only an index. The
-oracle makes no prototype-reflection claim.
+source coordinate, compiler-disposal result, export identity, initialized
+compiler prototype/constructor identity, and public-method stability fact.
+Lifecycle path compilation uses a real caller-created SCSS file and normalizes
+only its exact URL to `file:///contract/compiler.scss`; the table is only an
+index.
 
 ## Same-PTY alert color
 

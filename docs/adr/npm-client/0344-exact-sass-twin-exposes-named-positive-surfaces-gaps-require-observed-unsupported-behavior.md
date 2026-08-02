@@ -21,8 +21,9 @@ shared probe (`npm-client/reference/sass-1.100.0-node-differential.md`):
 - measured differences are the cleaned dart2js export namespace, `info`,
   exception message/toString prefix, null-to-undefined `span.url`, absolute
   exception/logger file frames, embedded's no-color default, compiler disposal
-  outcomes (including async dispose resolution), and legacy logger/stderr
-  routing;
+  outcomes (including async dispose resolution), initialized compiler
+  constructor/prototype/method identity and lifecycle export accessors, and
+  legacy logger/stderr routing;
 - direct `Compiler` / `AsyncCompiler` construction starts a refed Dart child
   before exact embedded rejects and keeps Node alive, while pure Sass rejects
   and exits naturally; the exact CJS/ESM × sync/async process-group evidence is
@@ -58,11 +59,15 @@ and working upstream behavior while still missing unenumerated inputs.
   differential and Chromium acceptance rows may publish positive compat.
 - Adapt only measured differences: export namespace, `info`, exception
   message/toString and `span.url`, absolute file frames, the no-color default,
-  initialized-compiler disposal outcomes, and legacy logger routing. Preserve
-  the async-importer synchronous throw as a documented warning instead of
-  reproducing a permanent deadlock.
+  initialized-compiler disposal and exported constructor/prototype identity,
+  lifecycle export accessors, and legacy logger routing. Preserve public
+  compiler method name, arity, descriptor placement, and stable identity.
+  Preserve the async-importer synchronous throw as a documented warning instead
+  of reproducing a permanent deadlock.
 - Keep `Compiler` and `AsyncCompiler` as namespace, prototype, and `instanceof`
   anchors for instances returned by `initCompiler()` and `initAsyncCompiler()`.
+  Their direct prototype and `constructor` identities match those anchors, and
+  repeated public method reads remain stable.
   Direct construction in either module format synchronously throws
   `NotImplementedError('sass-embedded.compiler-construction-liveness')` before
   invoking the pure-Sass target or creating any active resource. It is compat
