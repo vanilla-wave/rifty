@@ -73,6 +73,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0324 | Callable EventEmitter constructor over one listener state |
 | 0325 | CJS module records own Node metadata and lifecycle |
 | 0334 | One-shot Node process adoption across bundle boundaries |
+| 0345 | Expose exact Node 24.0.0 process.release identity |
 
 ### runtime-wasi
 

@@ -188,9 +188,9 @@ ADR-0344 evidence; each is a differential test:
   positive compile/Vite claim remain unchanged; no runtime carrier is added.
 - ADR-0344 owns the carrier, finite positive claims, and adapted-divergence list.
 - ADR-0335 owns the recipe/materialization model this slice instantiates.
-- The pinned Sass 1.100.0 selector probe proves bootstrap requires
-  `process.versions.node` and path compilation additionally requires exact
-  `process.release.name === 'node'`; ADR-0345 owns the shared runtime identity.
+- The corrected Sass 1.100.0 selector probe proves two required gates:
+  `process.versions.node` selects the Node bootstrap and
+  `process.release.name === 'node'` selects the Node path API (ADR-0345).
 - `goal-recut: 2026-08-02` — the official Sass manifest is the real builtin
   carrier for non-bundled required traversal and omitted optional suppression.
   Retained optionals, non-empty peers, and positive scoped keys have no honest
