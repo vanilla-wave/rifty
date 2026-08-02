@@ -1085,7 +1085,7 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
     }
   });
 
-  it('[fault: incomplete-evidence / provenance-lie] literal v2 incompleteness declines before adoption and runs standard', async () => {
+  it('[fault: false-fallback / provenance-lie] literal v2 incompleteness declines before adoption and runs standard', async () => {
     const literal = await literalV2Fixture();
     const controlServer = await startRaw((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/x-tar' });

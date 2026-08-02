@@ -7,7 +7,7 @@ Fresh source baseline is
 authority merged by PR #239. JIT Item 21 selects
 `shadow-recipe-v2-protocol-replay-authority` at Budget `300–800`; the other
 reverse-linked goal residuals remain unmapped. The four TypeScript carriers
-add 1,580 lines, below the mandatory pre-pickup re-cut threshold of 1,600
+add 1,578 lines, below the mandatory pre-pickup re-cut threshold of 1,600
 (twice the band high).
 
 The checkpoint batch is:
