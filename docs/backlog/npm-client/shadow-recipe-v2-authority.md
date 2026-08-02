@@ -139,14 +139,15 @@ clause; the complete npm reify lifecycle is an explicit outside-goal draft.
   recognition in generic consumers.
 - Reinterpreting recipe-v1 lockfiles or falling back to acquired/native bins.
 - A public recipe/plugin API or remotely supplied executable policy.
-- Matching non-bundled required and retained-optional traversal, omitted
-  optional suppression, non-empty peer metadata handoff, and accepted scoped
-  keys in every projection map. The required goal child
-  `npm-client/shadow-recipe-v2-dependency-projection-execution` owns that
-  executable positive authority.
+- Matching non-bundled required traversal and omitted-optional suppression;
+  the real official Sass carrier owns those goal-required branches in
+  `npm-client/sass-embedded-substitution`. Retained-optional execution,
+  non-empty peer handoff, and accepted scoped keys in every projection map have
+  no honest current builtin carrier and remain in the ordinary draft
+  `npm-client/shadow-recipe-v2-dependency-projection-execution`.
 - Traversing, resolving, placing, or replaying peer dependency trees. Exact
-  non-empty peer metadata handoff belongs to the dependency-projection child;
-  npm execution authority is the required goal child
+  non-empty peer metadata handoff belongs to the dependency-projection draft;
+  npm execution authority is the outside-goal draft
   `npm-client/npm-11-peer-placement-authority`.
 - Concurrent-safe raw public `npm-client.install()` calls; the supported
   Workbench product boundary physically excludes them and the generic SDK gap
@@ -189,8 +190,11 @@ clause; the complete npm reify lifecycle is an explicit outside-goal draft.
   claims: the positive LightningCSS oracle has one required bundled dependency
   and empty optional/peer maps, so mutation-only RED cannot prove non-bundled
   traversal, omission, non-empty peer handoff, or accepted scoped keys. The
-  binding second-checkpoint split preserves those clauses in
-  `npm-client/shadow-recipe-v2-dependency-projection-execution`.
+  binding second-checkpoint split preserved those clauses in
+  `npm-client/shadow-recipe-v2-dependency-projection-execution`. The 2026-08-02
+  catalog-carrier audit subsequently moved the real required/omitted branches
+  into Sass and reclassified the carrierless retained/peer/scoped residuals as
+  ordinary backlog without narrowing the frozen goal.
 - The committed owner-decoded builtin catalog drives the real install core in
   contract tests. The public root export remains builtin-only; remote/custom
   recipes cannot reach executable policy.

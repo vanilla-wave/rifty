@@ -85,11 +85,15 @@ Contract+RED → Final+GREEN):
 5. `npm-client/shadow-recipe-v2-authority` —
    **recipe-v2-authority**: blocked pre-pickup predecessor; its six recorded
    Contract+RED blockers forced explicit materialized-bin,
-   acquisition/replay, and broad projection successors. No source pickup.
+   acquisition/replay, and projection follow-ups. The real Sass carrier owns
+   reachable non-bundled-required and omitted-optional execution; retained
+   optional/peer/scoped residuals have no honest builtin carrier and remain
+   ordinary backlog outside this frozen goal. No source pickup.
 6. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
    capsule per the spike-decided pattern, real Node/Vite acceptance,
-   generic-file no-change gate. Draft until its full differential artifact and
-   fault matrix are committed; required for epic closure, not optional.
+   data-driven generic seam gate, and official Sass projection traversal. Draft
+   until its full differential artifact and fault matrix are committed;
+   required for epic closure, not optional.
 7. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption
    narrowing, owner READMEs, dead code imported by extraction).

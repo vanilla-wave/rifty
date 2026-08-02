@@ -14,7 +14,9 @@ Slice `sass-scale-proof` (see epic §Budget). Carrier decided by ADR-0310
 (Pattern 1: immutable synthesized `sass-embedded@1.100.0` facade over the
 exact upstream pure-JS `sass@1.100.0` twin; finite adapted divergence list;
 no runtime assets/MessagePort/adapter). The PR is deliberately constrained to
-package-specific files so review can see whether the seam is real.
+Sass-owned recognition and facade files plus the smallest data-driven generic
+catalog, registry-source, installer, and provenance seams needed to execute a
+second real recipe. Generic code never recognizes a Sass package name.
 
 ## Post-pickup lifecycle fork
 
@@ -43,13 +45,24 @@ verbatim in the reference artifact.
   `sass@1.100.0`/`sass-embedded@1.100.0` differential command, exact output,
   package identities, and timeout/deadlock procedure behind all nine parity
   rows. ADR-0310's summary and the selector-only probe are not the artifact.
-- Close every row in the Fault matrix below with a reachable proof target after
-  the recipe-v2 dependency-projection execution contract becomes ready.
+- Close every row in the Fault matrix below with a reachable proof target. The
+  official Sass manifest is the positive carrier for non-bundled required
+  traversal and omitted-optional suppression; injected or synthetic recipes
+  cannot close either branch.
 
 ## Acceptance
 
 - Fresh/replay/snapshot and applicable general-Eddy materialization retain the
   exact substitution marker and acquisition provenance.
+- Before tarball work, the official `sass@1.100.0` manifest exactly matches the
+  recipe's complete required, optional, peer, bundled, and omitted-optional
+  projection. Drift in any map rejects with
+  `NotImplementedError('sass-embedded.acquisition')` before cache, VFS, tree,
+  lock, facade, or success effects.
+- The exact non-bundled required dependencies enter the ordinary resolver and
+  materialize their complete registry closure with exact range, version,
+  integrity, tree, and lock facts. The omitted `@parcel/watcher` optional
+  dependency causes zero registry/cache reads and no tree or lock entry.
 - Zero `sass-embedded` platform binary/optional packages fetched; the exact
   `sass@1.100.0` twin and its dependencies are recorded; no runtime-asset
   capability is created and zero manager/store operations run.
@@ -71,10 +84,12 @@ verbatim in the reference artifact.
 - Budget carries a measured cold-install delta row (bytes + wall time for the
   twin) through the perf harness, committed as matched evidence like the
   esbuild rows; the gate is honest recording, not a threshold.
-- Seam gate: a repository check lists generic files this slice is forbidden to
-  modify (generic planner, manager/store, MessagePort, package-tree authority,
-  owner/VFS/bootstrap/kernel path, runtime-js, esbuild adapter). Needing any
-  of them means the seam failed — return to decision review, do not patch.
+- Seam gate: a repository check rejects Sass-name recognition in generic
+  catalog consumers, registry resolution, installer/planner/provenance, VFS,
+  Workbench, kernel/runtime, manager/store, MessagePort, or the esbuild adapter.
+  Generic edits are limited to data-driven catalog redirect derivation,
+  dependency-projection execution, and exact lock/replay validation. No second
+  resolver, cache, lock, scheduler, facade publisher, or package-tree owner.
 
 ## Parity cases
 
@@ -98,10 +113,10 @@ ADR-0310 spike; each is a differential test:
 
 | Fault class | Required outcome | Proof |
 |---|---|---|
-| corrupt-input | drifted recipe, dependency projection, facade bytes, bin target, or provenance rejects before publish/reuse | catalog/installer mutation table |
+| corrupt-input | drifted recipe, every complete dependency map, facade bytes, bin target, or provenance rejects before publish/reuse | catalog/installer/lock mutation table |
 | observable-order | unsupported version/CLI rejects before rejected-package acquisition or writes; importer/logger lifecycle matches the pinned Node order | ordered install + differential ledgers |
 | provenance-lie | fresh/replay/snapshot preserve exact Sass/twin identities and never substitute native or host bytes | fresh→replay→snapshot differential |
-| unbounded-read / corrupt-input / provenance-lie | stalled, partial, corrupt, or failed registry/tarball acquisition publishes no facade, bin, success report, or lock; retry materializes exact bytes | acquisition boundary faults + retry |
+| unbounded-read / corrupt-input / provenance-lie | stalled, partial, corrupt, or failed Sass or required-closure registry/tarball acquisition publishes no facade, bin, success report, or lock; retry materializes exact bytes | parent/required-child acquisition boundary faults + retry |
 | torn-state | abort during facade/bin writes publishes no lock/success; retry reconciles the exact tree | materialization abort fault |
 | quota-perm-fail | facade/bin write rejection remains loud and publishes no lock/success | VFS fault matrix |
 | sibling-drift | direct CJS/ESM and Vite dev/HMR/build share one recipe/facade and adapted-divergence table | full acceptance cross-product |
@@ -112,6 +127,11 @@ ADR-0310 spike; each is a differential test:
   `NotImplementedError('sass-embedded.version')` + compat ❌.
 - The `sass` CLI/bin — `NotImplementedError('sass-embedded.cli')` + compat ❌.
 - Watch mode / `@parcel/watcher` surface.
+- Retained-optional execution, non-empty peer handoff/placement, and a positive
+  scoped key in every projection map. No current builtin recipe honestly
+  carries those branches; they remain explicit in
+  `npm-client/shadow-recipe-v2-dependency-projection-execution` and
+  `npm-client/npm-11-peer-placement-authority`, outside this frozen goal.
 - A Sass runtime-asset adapter or any no-op Workbench adapter to fake N=2 on
   the runtime-asset seam (forbidden by ADR-0310).
 
@@ -125,5 +145,10 @@ ADR-0310 spike; each is a differential test:
 - ADR-0335 owns the recipe/materialization model this slice instantiates.
 - The pinned Sass 1.100.0 selector probe proves `process.versions.node` is the
   Node-path selector; `process.release` is not a prerequisite.
+- `goal-recut: 2026-08-02` — the official Sass manifest is the real builtin
+  carrier for non-bundled required traversal and omitted optional suppression.
+  Retained optionals, non-empty peers, and positive scoped keys have no honest
+  production carrier in the frozen catalog and remain ordinary backlog rather
+  than blocking the Sass outcome.
 - Delete-on-done with the sass-scale-proof PR; epic closure requires this
   slice (not optional downstream).
