@@ -16,8 +16,14 @@ packages `sass@1.100.0`, `sass-embedded@1.100.0`, and selected platform package
   — SHA-256
   `c7c8833a3541aceda8a034b9c8c7ee153faae549ba22aab956553732cd99b3c2`.
 
-The shared nine-row probe SHA-256 is
+The fixtures were generated from the shared nine-row probe at commit
+`edf9230512e7ec8ec05ba3e2d52636cf41ea5c55`, SHA-256
 `7e3abf0c47e14f0360bd8b332021e71345449c6d54458742642242412ac1117a`.
+The current file SHA-256 is
+`c44317660c38048a323deca9265dd94c9824c796b5bab5233a7a8763f17c5c1b`:
+the only later addition is `sassFacadeContract()`, which derives rifty's two
+selected constructor-gap fields without changing `probeSassContract()` or the
+external oracle fixtures.
 Generator SHA-256 is
 `8200db6834c892acc413c71c041d61b0bb7c3a77f023e5cb1de29a16aa9f5864`.
 The isolated deadlock probe SHA-256 is

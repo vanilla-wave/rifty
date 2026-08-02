@@ -138,12 +138,15 @@ RIFTY_SASS_NETWORK_MODE=verify \
 pnpm test:browser-unit tests/browser-unit/sass-network-measurement.spec.ts
 ```
 
-The shadow-registry batch is exactly **7 RED / 129 GREEN** across 136 rows.
-RED is limited to the absent Sass recipe, redirect, two executable capsule
-rows, and owner-decoded catalog rows. The second capsule row first validates
-the committed two-attempt embedded deadlock versus pure-Sass throw evidence,
-then remains RED on the absent facade-side recipe. The official Node
-differential remains 3/3 GREEN and constructor-liveness authority is 1/1 GREEN.
+The shadow-registry batch is exactly **8 RED / 129 GREEN** across 137 rows.
+RED is limited to the absent Sass recipe, redirect, three executable capsule
+rows, and owner-decoded catalog rows. One capsule row instruments both
+constructor exports in the exact official pure-Sass tree, then requires CJS
+and ESM direct construction to throw the selected named gap with zero target
+constructor entries. The deadlock capsule row first validates the committed
+two-attempt embedded deadlock versus pure-Sass throw evidence, then remains RED
+on the absent facade-side recipe. The official Node differential remains 3/3
+GREEN and constructor-liveness authority is 1/1 GREEN.
 
 The npm-client Sass carrier is exactly **36 RED / 1 GREEN**. The GREEN row
 independently verifies every official archive. RED covers six non-exact
@@ -220,7 +223,7 @@ produce the results above.
 | Fault class | Reachable proof |
 |---|---|
 | corrupt-input | re-signed catalog/materialization mutations; all official-manifest maps; lock/trace injections; corrupt/partial parent and child archives |
-| observable-order | direct construction rejects before pure-Sass target/resource creation; non-exact admission and projection drift reject before forbidden acquisition/publication; CLI/watch remain loud after facade install; importer/logger/initialized-compiler order is the shared Node probe |
+| observable-order | the exact official pure-Sass constructor exports are instrumented and CJS/ESM direct construction records zero target entries before the named rejection; the liveness oracle and capsule prove no target resource survives; non-exact admission and projection drift reject before forbidden acquisition/publication; CLI/watch remain loud after facade install; importer/logger/initialized-compiler order is the shared Node probe |
 | provenance-lie | exact official fresh, raw replay, durable reopen, general-Eddy, tree, lock, trace, and zero-native/watcher ledgers |
 | unbounded-read | Sass parent/child reached stalls plus inherited 8/8 registry no-progress, byte-cap, retry, and cancellation suite |
 | torn-state | parked facade and launcher writes publish no lock/report; exact retry reconciles |

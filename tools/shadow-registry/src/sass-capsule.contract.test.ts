@@ -132,6 +132,66 @@ function materializeRecipeCapsule(): {
 }
 
 describe('materialized sass-embedded recipe capsule', () => {
+  it('rejects direct construction before entering either pure-Sass constructor', async () => {
+    const { container } = materializeRecipeCapsule();
+    try {
+      const cjsConsumer = join(container, 'constructor-consumer.cjs');
+      const esmConsumer = join(container, 'constructor-consumer.mjs');
+      writeFileSync(cjsConsumer, '');
+      writeFileSync(
+        esmConsumer,
+        "export * from 'sass-embedded';\nexport {default} from 'sass-embedded';\n",
+      );
+
+      type Constructor = new (...args: unknown[]) => unknown;
+      const requireFromCapsule = createRequire(cjsConsumer);
+      const pureSass = requireFromCapsule(join(container, 'node_modules/sass/sass.node.js')) as {
+        Compiler: Constructor;
+        AsyncCompiler: Constructor;
+      };
+      let targetConstructions = 0;
+      const observeConstruction = (Constructor: Constructor): Constructor =>
+        new Proxy(Constructor, {
+          construct(target, args, newTarget) {
+            targetConstructions += 1;
+            return Reflect.construct(target, args, newTarget);
+          },
+        });
+      pureSass.Compiler = observeConstruction(pureSass.Compiler);
+      pureSass.AsyncCompiler = observeConstruction(pureSass.AsyncCompiler);
+
+      const cjs = requireFromCapsule('sass-embedded') as Readonly<Record<string, unknown>>;
+      const esm = (await import(pathToFileURL(esmConsumer).href)) as Readonly<
+        Record<string, unknown>
+      >;
+      for (const [moduleKind, namespace] of [
+        ['cjs', cjs],
+        ['esm', esm],
+      ] as const) {
+        for (const constructorName of ['Compiler', 'AsyncCompiler'] as const) {
+          const Constructor = namespace[constructorName];
+          if (typeof Constructor !== 'function') {
+            throw new Error(`${moduleKind} ${constructorName} export is not a constructor`);
+          }
+          let thrown: unknown;
+          try {
+            Reflect.construct(Constructor, []);
+          } catch (error) {
+            thrown = error;
+          }
+          expect(thrown, `${moduleKind} ${constructorName}`).toMatchObject({
+            name: 'NotImplementedError',
+            message: 'Not implemented: sass-embedded.compiler-construction-liveness',
+            feature: 'sass-embedded.compiler-construction-liveness',
+          });
+        }
+      }
+      expect(targetConstructions).toBe(0);
+    } finally {
+      rmSync(container, { recursive: true, force: true });
+    }
+  });
+
   it('matches the committed schema-two embedded oracle beside the exact pure Sass tree', async () => {
     const { container, packageRoot, compilerPath } = materializeRecipeCapsule();
     try {
