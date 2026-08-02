@@ -3,7 +3,7 @@
 Recorded 2026-08-02 from fresh
 `main@b01a34bef711585c23fe9d66a563f0ba0010e0d9`, including protocol-v2 replay
 authority merged by PR #240. The complete Sass test carrier is
-`839d0dab1c1f0802013ec5ec94fe87c1ee42fd7e`; no production source differs
+`b9c0629ffae7cddd6838b37805a98c87830856ed`; no production source differs
 from the fresh baseline. Slice `sass-scale-proof` keeps Budget `1000–3000`
 and adds no resolver, cache, lock writer, scheduler, asset capability, or
 package-specific generic branch.
