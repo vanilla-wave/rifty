@@ -6,7 +6,6 @@ created: 2026-08-02
 why: validated bundled bytes are still resolved, cached, installed, and locked again as a standalone child instead of remaining one embedded source
 user_story: As a browser-IDE user installing or reopening LightningCSS, I want its reviewed embedded dependency consumed from the parent archive without a second registry source
 epic: honest-shadow-substitutions
-blocked_by: npm-client/shadow-recipe-v2-acquisition-replay-authority
 sources: [ADR-0335, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md]
 code:
   - packages/npm-client/src/installer.ts

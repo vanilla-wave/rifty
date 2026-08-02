@@ -6,7 +6,6 @@ created: 2026-07-26
 why: the Sass RED proved recipe v1 admits unproven ranges, copies unproven registry dependencies, and can expose the acquired package bin instead of the substituted package bin; those are missing generic policy authorities, not Sass exceptions
 user_story: As a browser-IDE user installing a builtin-substituted package, I want its accepted request, acquired source projection, visible bins, and replay provenance to be exactly the reviewed recipe, but today recipe v1 can widen each of those boundaries
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-recipe-v2-acquisition-replay-authority]
 sources: [ADR-0278, ADR-0310, ADR-0335, docs/backlog/npm-client/reference/lightningcss-wasm-1.32.0-packument.md, docs/backlog/npm-client/reference/npm-11-bin-collision-probe.md]
 code:
   - packages/npm-client/src/installer.ts

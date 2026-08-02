@@ -175,3 +175,31 @@ independently reports the same three lock gaps from the project’s actual
 `package-lock.json`. The separate direct CJS/ESM Chromium differential is 1/1
 GREEN against real Node esbuild 0.28.0 and observes the loud unsupported CLI
 without Vite.
+
+## Acquisition-validation implementation and closure
+
+Ready/pickup parent `5d6f3ff17b4ac7ff92b9d71869bf12d261cb2140`
+precedes production `734d830ce421dca93ea64af1b2bd002af4d76015`.
+The existing registry source now exact-compares required, complete optional,
+peer, and either npm bundle-alias projection immediately after version
+selection. The shared extracted-package ingress validates every recipe-declared
+bundled manifest name and admitted version before package assembly, VFS,
+reports, or lock mutation. Fresh, current replay, and Eddy therefore share one
+private validation seam. No public API, protocol, topology, source, cache,
+lock, or coordination mechanism was added.
+
+The frozen carrier remains Git blob
+`a44d57f4ed17a9da978ec199d56150988762b26b`, SHA-256
+`0d4817585dd69f040f3faab62aa0230af984e2d88ad9fe942fbd418c503c2df2`,
+and runs 13/13 GREEN. The stabilized acquisition/data/materialized-bin/shims/
+installer/planner/catalog batch runs 240/240 GREEN; npm-client typecheck,
+Biome, diff, contract-drift, goal-contract, budget, and backlog gates pass.
+
+Pre-pickup process correction
+`88f1470c1a45b45510fe089e1561f23a30d1a0f0` keeps only this selected slice's
+Items/Budget mapping. The two latest mandatory split children and the earlier
+dependency-projection child remain reverse-linked draft goal residuals; each
+mapping and Budget row waits for its own pre-pickup branch. Closure deletes the
+completed validation item and subtracts only its exact blockers.
+Embedded-source topology, broad projection execution, and protocol-v2 replay
+remain unimplemented and loud where already specified.
