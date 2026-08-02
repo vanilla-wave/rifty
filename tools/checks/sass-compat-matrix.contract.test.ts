@@ -74,12 +74,14 @@ describe('sass-embedded public compatibility contract', () => {
       'absolute-file-stacks',
       'embedded-alert-color-default',
       'compiler-dispose-errors',
+      'compiler-identity',
       'legacy-logger-routing',
     ]);
     expect(
       value.unsupported.flatMap((entry) => (entry.kind === 'runtime-throw' ? [entry.feature] : [])),
     ).toEqual([
       'sass-embedded.compiler-construction-liveness',
+      'sass-embedded.compiler-internal-reflection',
       'sass-embedded.version',
       'sass-embedded.cli',
       'sass-embedded.watch',

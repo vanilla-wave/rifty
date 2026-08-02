@@ -216,13 +216,74 @@
         "sassTrue",
         "types"
       ],
-      "cjsAccessorExports": [],
-      "esmDefaultAccessorExports": [
-        "Compiler",
-        "AsyncCompiler",
-        "initCompiler",
-        "initAsyncCompiler"
-      ]
+      "cjsLifecycleExportDescriptors": {
+        "Compiler": {
+          "kind": "data",
+          "enumerable": true,
+          "configurable": true,
+          "writable": true,
+          "hasGetter": false,
+          "hasSetter": false
+        },
+        "AsyncCompiler": {
+          "kind": "data",
+          "enumerable": true,
+          "configurable": true,
+          "writable": true,
+          "hasGetter": false,
+          "hasSetter": false
+        },
+        "initCompiler": {
+          "kind": "data",
+          "enumerable": true,
+          "configurable": true,
+          "writable": true,
+          "hasGetter": false,
+          "hasSetter": false
+        },
+        "initAsyncCompiler": {
+          "kind": "data",
+          "enumerable": true,
+          "configurable": true,
+          "writable": true,
+          "hasGetter": false,
+          "hasSetter": false
+        }
+      },
+      "esmDefaultLifecycleExportDescriptors": {
+        "Compiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        },
+        "AsyncCompiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        },
+        "initCompiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        },
+        "initAsyncCompiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        }
+      }
     },
     "compile": {
       "sync": {
@@ -275,6 +336,15 @@
         "constructorIsExport": false,
         "constructorStable": true,
         "prototypeConstructorIsExport": false,
+        "prototypeHasOwnConstructor": true,
+        "prototypeConstructorDescriptor": {
+          "kind": "data",
+          "enumerable": true,
+          "configurable": true,
+          "writable": true,
+          "hasGetter": false,
+          "hasSetter": false
+        },
         "constructorName": "sass.Compiler",
         "constructorLength": 0,
         "constructorPrototypeWritable": true,
@@ -282,19 +352,218 @@
           "name": "compile",
           "length": 0,
           "stable": true,
-          "instanceIsPrototypeMethod": true
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": false,
+          "prototypeDescriptor": {
+            "kind": "missing",
+            "enumerable": null,
+            "configurable": null,
+            "writable": null,
+            "hasGetter": false,
+            "hasSetter": false
+          }
         },
         "compileStringMethod": {
           "name": "compileString",
           "length": 0,
           "stable": true,
-          "instanceIsPrototypeMethod": true
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": false,
+          "prototypeDescriptor": {
+            "kind": "missing",
+            "enumerable": null,
+            "configurable": null,
+            "writable": null,
+            "hasGetter": false,
+            "hasSetter": false
+          }
         },
         "disposeMethod": {
           "name": "dispose",
           "length": 0,
           "stable": true,
-          "instanceIsPrototypeMethod": true
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": false,
+          "prototypeDescriptor": {
+            "kind": "missing",
+            "enumerable": null,
+            "configurable": null,
+            "writable": null,
+            "hasGetter": false,
+            "hasSetter": false
+          }
+        }
+      },
+      "syncReflection": {
+        "cjs": {
+          "ownKeys": {
+            "value": [
+              "_disposed"
+            ],
+            "error": null
+          },
+          "getKinds": {
+            "value": {
+              "process": "undefined",
+              "compilationId": "undefined",
+              "dispatchers": "undefined",
+              "stdout$": "undefined",
+              "stderr$": "undefined",
+              "disposed": "undefined",
+              "messageTransformer": "undefined"
+            },
+            "error": null
+          },
+          "hasKeys": {
+            "value": [],
+            "error": null
+          },
+          "descriptors": {
+            "value": {
+              "process": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "compilationId": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "dispatchers": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "stdout$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "stderr$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "disposed": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "messageTransformer": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              }
+            },
+            "error": null
+          }
+        },
+        "esm": {
+          "ownKeys": {
+            "value": [
+              "_disposed"
+            ],
+            "error": null
+          },
+          "getKinds": {
+            "value": {
+              "process": "undefined",
+              "compilationId": "undefined",
+              "dispatchers": "undefined",
+              "stdout$": "undefined",
+              "stderr$": "undefined",
+              "disposed": "undefined",
+              "messageTransformer": "undefined"
+            },
+            "error": null
+          },
+          "hasKeys": {
+            "value": [],
+            "error": null
+          },
+          "descriptors": {
+            "value": {
+              "process": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "compilationId": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "dispatchers": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "stdout$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "stderr$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "disposed": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "messageTransformer": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              }
+            },
+            "error": null
+          }
         }
       },
       "syncPathFirst": {
@@ -356,6 +625,15 @@
         "constructorIsExport": false,
         "constructorStable": true,
         "prototypeConstructorIsExport": false,
+        "prototypeHasOwnConstructor": true,
+        "prototypeConstructorDescriptor": {
+          "kind": "data",
+          "enumerable": true,
+          "configurable": true,
+          "writable": true,
+          "hasGetter": false,
+          "hasSetter": false
+        },
         "constructorName": "sass.AsyncCompiler",
         "constructorLength": 0,
         "constructorPrototypeWritable": true,
@@ -363,19 +641,242 @@
           "name": "compileAsync",
           "length": 0,
           "stable": true,
-          "instanceIsPrototypeMethod": true
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": false,
+          "prototypeDescriptor": {
+            "kind": "missing",
+            "enumerable": null,
+            "configurable": null,
+            "writable": null,
+            "hasGetter": false,
+            "hasSetter": false
+          }
         },
         "compileStringMethod": {
           "name": "compileStringAsync",
           "length": 0,
           "stable": true,
-          "instanceIsPrototypeMethod": true
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": false,
+          "prototypeDescriptor": {
+            "kind": "missing",
+            "enumerable": null,
+            "configurable": null,
+            "writable": null,
+            "hasGetter": false,
+            "hasSetter": false
+          }
         },
         "disposeMethod": {
           "name": "dispose",
           "length": 0,
           "stable": true,
-          "instanceIsPrototypeMethod": true
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": false,
+          "prototypeDescriptor": {
+            "kind": "missing",
+            "enumerable": null,
+            "configurable": null,
+            "writable": null,
+            "hasGetter": false,
+            "hasSetter": false
+          }
+        }
+      },
+      "asyncReflection": {
+        "cjs": {
+          "ownKeys": {
+            "value": [
+              "compilations",
+              "_disposed"
+            ],
+            "error": null
+          },
+          "getKinds": {
+            "value": {
+              "process": "undefined",
+              "compilationId": "undefined",
+              "compilations": "object",
+              "disposed": "undefined",
+              "messageTransformer": "undefined",
+              "exit$": "undefined",
+              "stdout$": "undefined",
+              "stderr$": "undefined"
+            },
+            "error": null
+          },
+          "hasKeys": {
+            "value": [
+              "compilations"
+            ],
+            "error": null
+          },
+          "descriptors": {
+            "value": {
+              "process": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "compilationId": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "compilations": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "disposed": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "messageTransformer": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "exit$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "stdout$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "stderr$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              }
+            },
+            "error": null
+          }
+        },
+        "esm": {
+          "ownKeys": {
+            "value": [
+              "compilations",
+              "_disposed"
+            ],
+            "error": null
+          },
+          "getKinds": {
+            "value": {
+              "process": "undefined",
+              "compilationId": "undefined",
+              "compilations": "object",
+              "disposed": "undefined",
+              "messageTransformer": "undefined",
+              "exit$": "undefined",
+              "stdout$": "undefined",
+              "stderr$": "undefined"
+            },
+            "error": null
+          },
+          "hasKeys": {
+            "value": [
+              "compilations"
+            ],
+            "error": null
+          },
+          "descriptors": {
+            "value": {
+              "process": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "compilationId": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "compilations": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "disposed": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "messageTransformer": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "exit$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "stdout$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "stderr$": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              }
+            },
+            "error": null
+          }
         }
       },
       "asyncPathFirst": {

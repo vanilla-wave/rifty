@@ -115,6 +115,12 @@
       "notes": "Exact embedded starts a refed Dart child before rejecting construction; the no-runtime-asset facade cannot reproduce that lifecycle."
     },
     {
+      "surface": "Initialized compiler internal reflection",
+      "kind": "runtime-throw",
+      "feature": "sass-embedded.compiler-internal-reflection",
+      "notes": "Exact embedded exposes live Dart process and dispatcher internals. The no-runtime facade does not fabricate those values; ownKeys and access to the observed internal names stay loud."
+    },
+    {
       "surface": "Other versions and version ranges",
       "kind": "runtime-throw",
       "feature": "sass-embedded.version",

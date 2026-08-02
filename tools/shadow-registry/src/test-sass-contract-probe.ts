@@ -84,6 +84,8 @@ interface CompilerIdentityTranscript {
   readonly constructorIsExport: boolean;
   readonly constructorStable: boolean;
   readonly prototypeConstructorIsExport: boolean;
+  readonly prototypeHasOwnConstructor: boolean;
+  readonly prototypeConstructorDescriptor: PropertyDescriptorTranscript;
   readonly constructorName: string | null;
   readonly constructorLength: number | null;
   readonly constructorPrototypeWritable: boolean | null;
@@ -97,6 +99,29 @@ interface MethodIdentityTranscript {
   readonly length: number | null;
   readonly stable: boolean;
   readonly instanceIsPrototypeMethod: boolean;
+  readonly prototypeHasOwnMethod: boolean;
+  readonly prototypeDescriptor: PropertyDescriptorTranscript;
+}
+
+interface PropertyDescriptorTranscript {
+  readonly kind: 'accessor' | 'data' | 'missing';
+  readonly enumerable: boolean | null;
+  readonly configurable: boolean | null;
+  readonly writable: boolean | null;
+  readonly hasGetter: boolean;
+  readonly hasSetter: boolean;
+}
+
+interface ReflectionOperationTranscript {
+  readonly value: unknown;
+  readonly error: ErrorTranscript | null;
+}
+
+interface CompilerReflectionTranscript {
+  readonly ownKeys: ReflectionOperationTranscript;
+  readonly getKinds: ReflectionOperationTranscript;
+  readonly hasKeys: ReflectionOperationTranscript;
+  readonly descriptors: ReflectionOperationTranscript;
 }
 
 export interface SassContractTranscript {
@@ -111,8 +136,8 @@ export interface SassContractTranscript {
       undefinedEsmExports: readonly string[];
       cjsToEsmIdentity: readonly string[];
       esmNamedToDefaultIdentity: readonly string[];
-      cjsAccessorExports: readonly string[];
-      esmDefaultAccessorExports: readonly string[];
+      cjsLifecycleExportDescriptors: Readonly<Record<string, PropertyDescriptorTranscript>>;
+      esmDefaultLifecycleExportDescriptors: Readonly<Record<string, PropertyDescriptorTranscript>>;
     }>;
     compile: Readonly<{
       sync: CompileTranscript;
@@ -126,6 +151,10 @@ export interface SassContractTranscript {
       syncDirectConstruction: ErrorTranscript;
       syncInstance: boolean;
       syncIdentity: CompilerIdentityTranscript;
+      syncReflection: Readonly<{
+        cjs: CompilerReflectionTranscript;
+        esm: CompilerReflectionTranscript;
+      }>;
       syncPathFirst: CompileTranscript;
       syncPathSecond: CompileTranscript;
       syncFirst: CompileTranscript;
@@ -136,6 +165,10 @@ export interface SassContractTranscript {
       asyncDirectConstruction: ErrorTranscript;
       asyncInstance: boolean;
       asyncIdentity: CompilerIdentityTranscript;
+      asyncReflection: Readonly<{
+        cjs: CompilerReflectionTranscript;
+        esm: CompilerReflectionTranscript;
+      }>;
       asyncPathFirst: CompileTranscript;
       asyncPathSecond: CompileTranscript;
       asyncFirst: CompileTranscript;
@@ -177,6 +210,27 @@ const constructorLivenessGap: ErrorTranscript = {
   span: null,
 };
 
+const compilerInternalReflectionGap: ErrorTranscript = {
+  name: 'NotImplementedError',
+  message: 'Not implemented: sass-embedded.compiler-internal-reflection',
+  toString: 'NotImplementedError: Not implemented: sass-embedded.compiler-internal-reflection',
+  sassMessage: null,
+  sassStack: null,
+  span: null,
+};
+
+const reflectionGapOperation = (): ReflectionOperationTranscript => ({
+  value: null,
+  error: compilerInternalReflectionGap,
+});
+
+const compilerReflectionGap = (): CompilerReflectionTranscript => ({
+  ownKeys: reflectionGapOperation(),
+  getKinds: reflectionGapOperation(),
+  hasKeys: reflectionGapOperation(),
+  descriptors: reflectionGapOperation(),
+});
+
 export function sassFacadeContract(embedded: SassContractTranscript): SassContractTranscript {
   return {
     ...embedded,
@@ -185,7 +239,9 @@ export function sassFacadeContract(embedded: SassContractTranscript): SassContra
       lifecycle: {
         ...embedded.rows.lifecycle,
         syncDirectConstruction: constructorLivenessGap,
+        syncReflection: { cjs: compilerReflectionGap(), esm: compilerReflectionGap() },
         asyncDirectConstruction: constructorLivenessGap,
+        asyncReflection: { cjs: compilerReflectionGap(), esm: compilerReflectionGap() },
       },
     },
   };
@@ -333,17 +389,44 @@ function captureStderr<T>(run: () => T): { readonly value: T; readonly stderr: s
   }
 }
 
+function propertyDescriptorTranscript(
+  descriptor: PropertyDescriptor | undefined,
+): PropertyDescriptorTranscript {
+  if (descriptor === undefined) {
+    return {
+      kind: 'missing',
+      enumerable: null,
+      configurable: null,
+      writable: null,
+      hasGetter: false,
+      hasSetter: false,
+    };
+  }
+  return {
+    kind: 'value' in descriptor ? 'data' : 'accessor',
+    enumerable: descriptor.enumerable ?? false,
+    configurable: descriptor.configurable ?? false,
+    writable: typeof descriptor.writable === 'boolean' ? descriptor.writable : null,
+    hasGetter: typeof descriptor.get === 'function',
+    hasSetter: typeof descriptor.set === 'function',
+  };
+}
+
 function moduleRow(modules: SassContractModules) {
   const cjsKeys = Object.keys(modules.cjs).sort();
   const esmKeys = Object.keys(modules.esm).sort();
   const esmDefault = objectValue(modules.esm.default);
   if (!esmDefault) throw new Error('Sass contract: ESM default export is missing');
   const lifecycleExports = ['Compiler', 'AsyncCompiler', 'initCompiler', 'initAsyncCompiler'];
-  const accessorExports = (namespace: Readonly<Record<string, unknown>>): string[] =>
-    lifecycleExports.filter((key) => {
-      const descriptor = Reflect.getOwnPropertyDescriptor(namespace, key);
-      return descriptor !== undefined && typeof descriptor.get === 'function' && !descriptor.set;
-    });
+  const exportDescriptors = (
+    namespace: Readonly<Record<string, unknown>>,
+  ): Readonly<Record<string, PropertyDescriptorTranscript>> =>
+    Object.fromEntries(
+      lifecycleExports.map((key) => [
+        key,
+        propertyDescriptorTranscript(Reflect.getOwnPropertyDescriptor(namespace, key)),
+      ]),
+    );
   return {
     cjsKeys,
     esmKeys,
@@ -355,8 +438,8 @@ function moduleRow(modules: SassContractModules) {
     esmNamedToDefaultIdentity: esmKeys.filter(
       (key) => key !== 'default' && modules.esm[key] === esmDefault[key],
     ),
-    cjsAccessorExports: accessorExports(modules.cjs),
-    esmDefaultAccessorExports: accessorExports(esmDefault),
+    cjsLifecycleExportDescriptors: exportDescriptors(modules.cjs),
+    esmDefaultLifecycleExportDescriptors: exportDescriptors(esmDefault),
   };
 }
 
@@ -366,11 +449,15 @@ function methodIdentity(
   method: string,
 ): MethodIdentityTranscript {
   const value = Reflect.get(compiler, method);
+  const descriptor =
+    prototype === null ? undefined : Reflect.getOwnPropertyDescriptor(prototype, method);
   return {
     name: typeof value === 'function' ? value.name : null,
     length: typeof value === 'function' ? value.length : null,
     stable: value === Reflect.get(compiler, method),
     instanceIsPrototypeMethod: prototype !== null && value === Reflect.get(prototype, method),
+    prototypeHasOwnMethod: descriptor !== undefined,
+    prototypeDescriptor: propertyDescriptorTranscript(descriptor),
   };
 }
 
@@ -384,12 +471,16 @@ function compilerIdentity(
   const exportedPrototype = Reflect.get(Constructor, 'prototype') as object;
   const constructor = Reflect.get(compiler, 'constructor');
   const prototypeDescriptor = Reflect.getOwnPropertyDescriptor(Constructor, 'prototype');
+  const prototypeConstructorDescriptor =
+    prototype === null ? undefined : Reflect.getOwnPropertyDescriptor(prototype, 'constructor');
   return {
     directPrototypeIsExportPrototype: prototype === exportedPrototype,
     constructorIsExport: constructor === Constructor,
     constructorStable: constructor === Reflect.get(compiler, 'constructor'),
     prototypeConstructorIsExport:
       prototype !== null && Reflect.get(prototype, 'constructor') === Constructor,
+    prototypeHasOwnConstructor: prototypeConstructorDescriptor !== undefined,
+    prototypeConstructorDescriptor: propertyDescriptorTranscript(prototypeConstructorDescriptor),
     constructorName: typeof Constructor.name === 'string' ? Constructor.name : null,
     constructorLength: typeof Constructor.length === 'number' ? Constructor.length : null,
     constructorPrototypeWritable:
@@ -400,11 +491,64 @@ function compilerIdentity(
   };
 }
 
+const syncEmbeddedInternalKeys = [
+  'process',
+  'compilationId',
+  'dispatchers',
+  'stdout$',
+  'stderr$',
+  'disposed',
+  'messageTransformer',
+] as const;
+
+const asyncEmbeddedInternalKeys = [
+  'process',
+  'compilationId',
+  'compilations',
+  'disposed',
+  'messageTransformer',
+  'exit$',
+  'stdout$',
+  'stderr$',
+] as const;
+
+function reflectionOperation(run: () => unknown): ReflectionOperationTranscript {
+  try {
+    return { value: run(), error: null };
+  } catch (error) {
+    return { value: null, error: errorTranscript(error) };
+  }
+}
+
+function compilerReflection(
+  compiler: object,
+  internalKeys: readonly string[],
+): CompilerReflectionTranscript {
+  return {
+    ownKeys: reflectionOperation(() =>
+      Reflect.ownKeys(compiler).map((key) => (typeof key === 'symbol' ? String(key) : key)),
+    ),
+    getKinds: reflectionOperation(() =>
+      Object.fromEntries(internalKeys.map((key) => [key, returnKind(Reflect.get(compiler, key))])),
+    ),
+    hasKeys: reflectionOperation(() => internalKeys.filter((key) => Reflect.has(compiler, key))),
+    descriptors: reflectionOperation(() =>
+      Object.fromEntries(
+        internalKeys.map((key) => [
+          key,
+          propertyDescriptorTranscript(Reflect.getOwnPropertyDescriptor(compiler, key)),
+        ]),
+      ),
+    ),
+  };
+}
+
 export async function probeSassContract(
   modules: SassContractModules,
   oracle: SassContractTranscript['oracle'],
   options: SassContractProbeOptions,
 ): Promise<SassContractTranscript> {
+  const esmApi = modules.esm as unknown as SassContractApi;
   const basicSource = '$accent: #123456;\n.card { color: $accent; }\n';
   const basicOptions = { url: new URL('file:///contract/basic.scss') };
   const compileSync = compileTranscript(modules.cjs.compileString(basicSource, basicOptions));
@@ -436,6 +580,12 @@ export async function probeSassContract(
     'compile',
     'compileString',
   );
+  const esmSyncCompiler = esmApi.initCompiler();
+  const syncReflection = {
+    cjs: compilerReflection(syncCompiler, syncEmbeddedInternalKeys),
+    esm: compilerReflection(esmSyncCompiler, syncEmbeddedInternalKeys),
+  };
+  esmSyncCompiler.dispose();
   const syncPathFirst = compileTranscript(
     syncCompiler.compile(options.compilerPath),
     options.normalizeCompilerUrl,
@@ -460,6 +610,12 @@ export async function probeSassContract(
     'compileAsync',
     'compileStringAsync',
   );
+  const esmAsyncCompiler = await esmApi.initAsyncCompiler();
+  const asyncReflection = {
+    cjs: compilerReflection(asyncCompiler, asyncEmbeddedInternalKeys),
+    esm: compilerReflection(esmAsyncCompiler, asyncEmbeddedInternalKeys),
+  };
+  await esmAsyncCompiler.dispose();
   const asyncPathFirst = compileTranscript(
     await asyncCompiler.compileAsync(options.compilerPath),
     options.normalizeCompilerUrl,
@@ -533,6 +689,7 @@ export async function probeSassContract(
         syncDirectConstruction,
         syncInstance,
         syncIdentity,
+        syncReflection,
         syncPathFirst,
         syncPathSecond,
         syncFirst,
@@ -543,6 +700,7 @@ export async function probeSassContract(
         asyncDirectConstruction,
         asyncInstance,
         asyncIdentity,
+        asyncReflection,
         asyncPathFirst,
         asyncPathSecond,
         asyncFirst,
