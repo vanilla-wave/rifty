@@ -1,5 +1,9 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import lightningRegistryGolden from '../fixtures/lightningcss-wasm-1.32.0-registry.json';
+import lightningTarballGolden from '../fixtures/lightningcss-wasm-1.32.0-tarball.json';
 import * as rootShadowRegistry from '../index.ts';
 import { shadowDigest, shadowSha256 } from './canonical.ts';
 import {
@@ -9,6 +13,34 @@ import {
   decodeShadowSubstitutionCatalog,
 } from './codec.ts';
 import * as internalShadowRegistry from './index.ts';
+
+const tarballBytes = readFileSync(
+  new URL('../fixtures/lightningcss-wasm-1.32.0.tgz', import.meta.url),
+);
+
+function hash(algorithm: 'sha256' | 'sha512', bytes: Uint8Array): string {
+  return createHash(algorithm).update(bytes).digest('hex');
+}
+
+function tarballMembers(tgz: Uint8Array): ReadonlyMap<string, Uint8Array> {
+  const tar = gunzipSync(tgz);
+  const decoder = new TextDecoder();
+  const members = new Map<string, Uint8Array>();
+  let offset = 0;
+  while (offset + 512 <= tar.byteLength) {
+    const header = tar.subarray(offset, offset + 512);
+    if (header.every((byte) => byte === 0)) break;
+    const nul = header.indexOf(0);
+    const name = decoder.decode(header.subarray(0, nul === -1 ? 100 : nul));
+    const sizeField = decoder.decode(header.subarray(124, 136)).replace(/\0.*$/, '').trim();
+    const size = Number.parseInt(sizeField || '0', 8);
+    const type = header[156];
+    const start = offset + 512;
+    if (type === 0 || type === 48) members.set(name, tar.subarray(start, start + size));
+    offset = start + Math.ceil(size / 512) * 512;
+  }
+  return members;
+}
 
 function rawFile(path: string, content: string) {
   return {
@@ -825,6 +857,93 @@ describe('shadow recipe v2 data authority', () => {
       bundledDependencies: lightningRegistryGolden.bundleDependencies,
       unsupportedFeature: 'lightningcss.acquisition',
     });
+  });
+
+  it('pins the exact LightningCSS tarball and its complete embedded package independently', () => {
+    expect(lightningTarballGolden).toEqual({
+      name: 'lightningcss-wasm',
+      version: '1.32.0',
+      tarball: {
+        bytes: 3_821_302,
+        sha256: 'ea1419e577dd943907c7e17a99fa7a76143d99c6279a6131e79fb4b1b098ac89',
+        integrity:
+          'sha512-SteAkCtRuSCDYPGHKhLV/dDs5Bk+7I4QUxWxfk4xwsTI1rQk8MQyYtpGcd3NECsUGzK0q2/KqoVS+YHCqKHUTQ==',
+      },
+      packageJson: {
+        path: 'package/package.json',
+        bytes: 1_186,
+        sha256: 'b7f16ae6a0036f2d92a22efdfff34482ec6b9ef33c519b8c0e858dbf2d403410',
+      },
+      embeddedPackages: [
+        {
+          name: 'napi-wasm',
+          version: '1.1.3',
+          root: 'package/node_modules/napi-wasm',
+          members: [
+            {
+              path: 'package/node_modules/napi-wasm/README.md',
+              bytes: 4_246,
+              sha256: 'e646406048bd592d66f5a4deeadb41ab5071ee051a530a7346f7ed2eb520e8e1',
+            },
+            {
+              path: 'package/node_modules/napi-wasm/index.js',
+              bytes: 42_418,
+              sha256: 'ad46aa59b86c852819ba521cdbde18348467e448ce4e466e83e53ea60896bc8d',
+            },
+            {
+              path: 'package/node_modules/napi-wasm/index.mjs',
+              bytes: 42_375,
+              sha256: '0108dc67b01e6f4e8493720a51f58747f5318ff13294bb4636fce108515e0101',
+            },
+            {
+              path: 'package/node_modules/napi-wasm/package.json',
+              bytes: 810,
+              sha256: '979a10d090dc49549d31ee206b60863950712145a3bebf9fe21a0919e8ca77a1',
+            },
+          ],
+        },
+      ],
+    });
+    expect(lightningTarballGolden.tarball.integrity).toBe(lightningRegistryGolden.dist.integrity);
+    expect(lightningTarballGolden.embeddedPackages.map(({ name }) => name)).toEqual(
+      lightningRegistryGolden.bundleDependencies,
+    );
+
+    expect(tarballBytes.byteLength).toBe(lightningTarballGolden.tarball.bytes);
+    expect(hash('sha256', tarballBytes)).toBe(lightningTarballGolden.tarball.sha256);
+    expect(`sha512-${createHash('sha512').update(tarballBytes).digest('base64')}`).toBe(
+      lightningTarballGolden.tarball.integrity,
+    );
+    const members = tarballMembers(tarballBytes);
+    const packageJson = members.get(lightningTarballGolden.packageJson.path);
+    if (!packageJson) throw new Error('official LightningCSS tarball is missing package.json');
+    expect(packageJson.byteLength).toBe(lightningTarballGolden.packageJson.bytes);
+    expect(hash('sha256', packageJson)).toBe(lightningTarballGolden.packageJson.sha256);
+    expect(JSON.parse(new TextDecoder().decode(packageJson))).toMatchObject({
+      name: lightningTarballGolden.name,
+      version: lightningTarballGolden.version,
+      dependencies: lightningRegistryGolden.dependencies,
+      bundledDependencies: lightningRegistryGolden.bundleDependencies,
+    });
+
+    for (const embedded of lightningTarballGolden.embeddedPackages) {
+      const actualMembers = [...members.keys()].filter((path) =>
+        path.startsWith(`${embedded.root}/`),
+      );
+      expect(actualMembers.sort()).toEqual(embedded.members.map(({ path }) => path).sort());
+      for (const expected of embedded.members) {
+        const bytes = members.get(expected.path);
+        if (!bytes) throw new Error(`official LightningCSS tarball is missing ${expected.path}`);
+        expect(bytes.byteLength, `${expected.path} bytes`).toBe(expected.bytes);
+        expect(hash('sha256', bytes), `${expected.path} sha256`).toBe(expected.sha256);
+      }
+      const manifest = members.get(`${embedded.root}/package.json`);
+      if (!manifest) throw new Error(`embedded ${embedded.name} is missing package.json`);
+      expect(JSON.parse(new TextDecoder().decode(manifest))).toMatchObject({
+        name: embedded.name,
+        version: embedded.version,
+      });
+    }
   });
 
   it('exports one owner-decoded builtin object and no generic decoder through a package barrel', () => {

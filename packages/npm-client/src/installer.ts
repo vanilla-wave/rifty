@@ -1561,6 +1561,63 @@ function registryRecipeForResolution(
   return recipe;
 }
 
+function exactStringRecord(actual: unknown, expected: Readonly<Record<string, string>>): boolean {
+  if (actual === undefined) return Object.keys(expected).length === 0;
+  if (actual === null || typeof actual !== 'object' || Array.isArray(actual)) return false;
+  const entries = Object.entries(actual as Record<string, unknown>);
+  return (
+    entries.length === Object.keys(expected).length &&
+    entries.every(([name, range]) => typeof range === 'string' && expected[name] === range)
+  );
+}
+
+function exactStringMembership(actual: unknown, expected: readonly string[]): boolean {
+  if (actual === undefined) return expected.length === 0;
+  if (!Array.isArray(actual) || actual.some((name) => typeof name !== 'string')) return false;
+  const actualNames = new Set(actual as string[]);
+  return (
+    actualNames.size === actual.length &&
+    actualNames.size === expected.length &&
+    expected.every((name) => actualNames.has(name))
+  );
+}
+
+function assertRegistryShadowProjection(
+  recipe: BuiltinShadowSubstitutionRecipe,
+  manifest: VersionManifest,
+): void {
+  if (recipe.acquisition.kind !== 'registry') {
+    throw new TypeError(`shadow recipe ${recipe.id} has no registry acquisition`);
+  }
+  const projection = recipe.acquisition.dependencyProjection;
+  const manifestWithBundleAliases = manifest as VersionManifest & {
+    readonly bundleDependencies?: unknown;
+    readonly bundledDependencies?: unknown;
+  };
+  const bundleAliases = [
+    manifestWithBundleAliases.bundleDependencies,
+    manifestWithBundleAliases.bundledDependencies,
+  ].filter((value) => value !== undefined);
+  const expectedOptionalDependencies = {
+    ...projection.optionalDependencies,
+    ...projection.omittedOptionalDependencies,
+  };
+  const matches =
+    exactStringRecord(manifest.dependencies, projection.dependencies) &&
+    exactStringRecord(manifest.optionalDependencies, expectedOptionalDependencies) &&
+    exactStringRecord(manifest.peerDependencies, projection.peerDependencies) &&
+    (bundleAliases.length === 0
+      ? projection.bundledDependencies.length === 0
+      : bundleAliases.every((value) =>
+          exactStringMembership(value, projection.bundledDependencies),
+        ));
+  if (matches) return;
+  throw new NotImplementedError(
+    projection.unsupportedFeature,
+    `shadow recipe ${recipe.id} registry dependency projection drifted`,
+  );
+}
+
 function assertDirectShadowRecipeAdmissions(
   dependencies: Readonly<Record<string, string>>,
   optionalDependencies: Readonly<Record<string, string>>,
@@ -2356,6 +2413,7 @@ async function pinToPackage(
           ]),
         )
       : await extractTarGz(acquisition.result.bytes);
+  assertRegistryShadowEmbeddedManifests(pin, files);
   const bin = pin.shadow
     ? pin.shadow.acquisition.kind === 'registry'
       ? undefined
@@ -2400,6 +2458,45 @@ async function pinToPackage(
     pinnedShadowSubstitutions.set(pkg, fact);
   }
   return pkg;
+}
+
+function assertRegistryShadowEmbeddedManifests(
+  pin: ResolvedPin,
+  files: Readonly<Record<string, Uint8Array>>,
+): void {
+  if (pin.shadow?.acquisition.kind !== 'registry') return;
+  const acquisition = pin.shadow.recipe.acquisition;
+  if (acquisition.kind !== 'registry') {
+    throw new TypeError(`shadow recipe ${pin.shadow.recipe.id} has no registry acquisition`);
+  }
+  const projection = acquisition.dependencyProjection;
+  for (const name of projection.bundledDependencies) {
+    const range = projection.dependencies[name] ?? projection.optionalDependencies[name];
+    const bytes = files[`node_modules/${name}/package.json`];
+    let manifest: Record<string, unknown> | null = null;
+    if (bytes !== undefined) {
+      try {
+        const value = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+          manifest = value as Record<string, unknown>;
+        }
+      } catch {
+        // The named acquisition feature owns every malformed embedded manifest.
+      }
+    }
+    if (
+      range !== undefined &&
+      manifest?.name === name &&
+      typeof manifest.version === 'string' &&
+      matchesRange(manifest.version, range)
+    ) {
+      continue;
+    }
+    throw new NotImplementedError(
+      projection.unsupportedFeature,
+      `shadow recipe ${pin.shadow.recipe.id} embedded dependency ${name} drifted`,
+    );
+  }
 }
 
 function shadowMaterializationInstallPath(
@@ -2694,6 +2791,8 @@ function createRegistrySource(
       if (!manifest) {
         throw new Error(`Packument missing version manifest ${effectiveName}@${pick}`);
       }
+      const shadowRecipe = registryRecipeForResolution(recipe, effectiveName, pick);
+      if (shadowRecipe) assertRegistryShadowProjection(shadowRecipe, manifest);
 
       // ADR-0188: baked redirects are never silent — user-visible provenance.
       if (override && override.source === 'baked' && override.name !== name) {
@@ -2721,7 +2820,6 @@ function createRegistrySource(
         }
       }
 
-      const shadowRecipe = registryRecipeForResolution(recipe, effectiveName, pick);
       return {
         origin: 'metadata',
         name: effectiveName,

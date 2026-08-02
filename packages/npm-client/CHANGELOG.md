@@ -79,6 +79,10 @@
 
 ### Fixed
 
+- Registry-backed shadow recipes now reject dependency/bundle projection drift
+  before acquisition and validate bundled manifests at the shared fresh,
+  replay, and Eddy extraction ingress.
+
 - Shadow substitutions now remove acquired-twin bin claims before the shared
   current/prior preflight, link exact recipe bins after registry aliases, and
   publish ordered substitution lines only after files, bins, internals shims,
