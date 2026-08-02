@@ -4,7 +4,7 @@ status: draft
 title: Shadow recipe v2 protocol and replay authority
 created: 2026-08-02
 why: the acquisition re-cut leaves current lock traces unable to prove complete recipe behavior or replay the embedded source offline without trusting incomplete provenance
-user_story: As a browser-IDE user reopening an installed project, I want the exact acquired source, materialized files, bins, and lock evidence replayed offline, but today protocol v1 rejects the reviewed v2 facts and incomplete traces can hide drift
+user_story: As a browser-IDE user reopening an installed project, I want the exact acquired source, materialized files, bins, and lock evidence replayed offline, but today protocol v1 cannot carry the reviewed behavior-complete facts and literal v2 traces are unsupported
 epic: honest-shadow-substitutions
 sources: [ADR-0335, docs/backlog/npm-client/reference/shadow-recipe-v2-contract-red.md]
 code:
@@ -68,8 +68,10 @@ or shadow-specific Eddy source.
 - Eddy bundle adoption applies the same v2 trace and embedded-source checks.
   Its completeness gate accepts only the acquisition-plan-proven bundled child
   without a standalone tarball entry; every other reachable lock package still
-  requires its ordinary source. No Eddy failure becomes registry fallback and
-  no shadow-specific Eddy acquisition path returns.
+  requires its ordinary source. After adoption, replay/cache failure stays loud
+  rather than becoming registry fallback. Pre-adoption completeness decline
+  keeps ADR-0182's standard fallback; no shadow-specific Eddy acquisition path
+  returns.
 - Two supported Workbench installs targeting one project remain physically
   serialized by the existing owner FIFO through materialized files, bins,
   reports, and lock commit. While the first real npm-client install is parked
@@ -93,8 +95,9 @@ or shadow-specific Eddy source.
    depends on an unratified `cause` shape.
 3. Cached parent or embedded-manifest corruption fails before link/report/lock;
    the exact acquisition-plan-proven embedded child needs no standalone source.
-4. Eddy adoption accepts the same complete embedded topology and rejects an
-   unexplained missing ordinary tarball member without falling back.
+4. Eddy adoption accepts the same complete embedded topology; an unexplained
+   missing ordinary tarball member declines before adoption, while an adopted
+   v2 replay/cache failure stays loud without falling back.
 5. Same-project Workbench installs enter the real core in FIFO order and the
    second stays outside until the first complete commit settles.
 6. Real Chromium Vite 7.3.6 completes dev/build/preview/optimize with exact v2
@@ -140,10 +143,16 @@ or shadow-specific Eddy source.
   required cache/Eddy faults. Budget re-cut to `300–800`; scope is unchanged.
 - Protocol v2 carries behavior-complete data already attested by existing
   owners; no new codec, public API, or coordination mechanism is introduced.
+- Protocol-v2 registry acquisition facts use manifest/lock spellings
+  `dependencies`, `optionalDependencies`, `peerDependencies`, and
+  `bundleDependencies`, plus exact `bundled` child facts. Materialization adds
+  the canonical `bin` map. Recipe identity/digest remains the authority for
+  fields outside this executable projection.
 - Replay mutation cases assert ADR-0335's public `EBROKENLOCK` reason only.
   Nested error-cause presence or absence is not observable contract.
 - General Eddy remains the standard source path. This item changes only lock
   adoption/completeness where the attested acquisition plan proves an embedded
-  child; it does not restore the rejected shadow-specific Eddy path.
+  child. ADR-0182 pre-adoption decline still uses standard fallback; adopted
+  replay failures remain loud. No rejected shadow-specific Eddy path returns.
 - Workbench and Chromium are acceptance consumers of the same core protocol,
   not alternate trace, FIFO, linker, or package-specific owners.
