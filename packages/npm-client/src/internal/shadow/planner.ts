@@ -493,24 +493,133 @@ export function decodeShadowAssetPlan(value: unknown): ShadowAssetPlan {
   return plan;
 }
 
-export const SHADOW_LOCKFILE_PROTOCOL = 'rifty.shadow-substitutions/v1' as const;
+export const SHADOW_LOCKFILE_PROTOCOL = 'rifty.shadow-substitutions/v2' as const;
 const SHADOW_RESOLVED_PREFIX = 'rifty:shadow-substitution/';
+
+interface RegistryShadowTraceAcquisition {
+  readonly kind: 'registry';
+  readonly name: string;
+  readonly version: string;
+  readonly resolved: string;
+  readonly integrity: string;
+  readonly dependencies: Readonly<Record<string, string>>;
+  readonly optionalDependencies: Readonly<Record<string, string>>;
+  readonly peerDependencies: Readonly<Record<string, string>>;
+  readonly bundleDependencies: readonly string[];
+  readonly bundled: readonly Readonly<{
+    name: string;
+    version: string;
+    inBundle: true;
+  }>[];
+}
+
+interface ShadowSubstitutionLockfileTraceFact {
+  readonly catalog: Readonly<{ id: string; digest: string }>;
+  readonly substitutionId: string;
+  readonly recipeDigest: string;
+  readonly trigger: Readonly<{ name: string; requestedRange: string | null; version: string }>;
+  readonly acquisition: Readonly<{ kind: 'synthetic' }> | RegistryShadowTraceAcquisition;
+  readonly materialization: Readonly<{
+    installPath: string;
+    name: string;
+    version: string;
+    files: readonly Readonly<{ path: string; sha256: string; bytes: number }>[];
+    bin: Readonly<Record<string, string>>;
+  }>;
+  readonly binding?: Readonly<{ adapterId: string; assets: readonly string[] }>;
+}
 
 export interface ShadowSubstitutionLockfileTrace {
   readonly protocol: typeof SHADOW_LOCKFILE_PROTOCOL;
-  readonly applied: readonly AppliedShadowSubstitution[];
+  readonly applied: readonly ShadowSubstitutionLockfileTraceFact[];
 }
 
 export function createShadowSubstitutionLockfileTrace(
   plan: ShadowAssetPlan,
+  lockfile: { readonly packages: Readonly<Record<string, unknown>> },
 ): ShadowSubstitutionLockfileTrace {
   if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
     throw new TypeError('trusted shadow plan invariant failed');
   }
+  const embeddedSources = registryShadowEmbeddedSourcesFromLockfile(lockfile, plan);
+  const embeddedByAcquisitionPath = new Map(
+    embeddedSources.map((source) => [source.acquisitionInstallPath, source]),
+  );
+  if (embeddedByAcquisitionPath.size !== embeddedSources.length) {
+    throw new TypeError('shadow embedded source facts are ambiguous');
+  }
   return freezeDeep({
     protocol: SHADOW_LOCKFILE_PROTOCOL,
-    applied: structuredClone(plan.substitutions),
+    applied: plan.substitutions.map((substitution): ShadowSubstitutionLockfileTraceFact => {
+      const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+        (candidate) => candidate.id === substitution.substitutionId,
+      );
+      if (!recipe) {
+        throw new NotImplementedError(
+          `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,
+        );
+      }
+      const acquisition =
+        substitution.acquisition.kind === 'synthetic'
+          ? ({ kind: 'synthetic' } as const)
+          : registryTraceAcquisition(
+              substitution,
+              recipe,
+              embeddedByAcquisitionPath.get(registryAcquisitionInstallPath(substitution)),
+            );
+      return {
+        catalog: { ...substitution.catalog },
+        substitutionId: substitution.substitutionId,
+        recipeDigest: substitution.recipeDigest,
+        trigger: { ...substitution.trigger },
+        acquisition,
+        materialization: {
+          installPath: substitution.materialization.installPath,
+          name: substitution.materialization.name,
+          version: substitution.materialization.version,
+          files: substitution.materialization.files.map((file) => ({ ...file })),
+          bin: { ...recipe.materialization.bin },
+        },
+        ...(substitution.binding
+          ? {
+              binding: {
+                adapterId: substitution.binding.adapterId,
+                assets: [...substitution.binding.assets],
+              },
+            }
+          : {}),
+      };
+    }),
   });
+}
+
+function registryTraceAcquisition(
+  substitution: AppliedShadowSubstitution,
+  recipe: BuiltinShadowSubstitutionRecipe,
+  embeddedSource: RegistryShadowEmbeddedSource | undefined,
+): RegistryShadowTraceAcquisition {
+  if (substitution.acquisition.kind !== 'registry' || recipe.acquisition.kind !== 'registry') {
+    throw new TypeError(`shadow substitution ${substitution.substitutionId} acquisition drifted`);
+  }
+  const projection = recipe.acquisition.dependencyProjection;
+  const bundled = embeddedSource?.dependencies ?? [];
+  if (bundled.length !== projection.bundledDependencies.length) {
+    throw new TypeError(
+      `shadow substitution ${substitution.substitutionId} embedded source count drifted`,
+    );
+  }
+  return {
+    kind: 'registry',
+    name: substitution.acquisition.name,
+    version: substitution.acquisition.version,
+    resolved: substitution.acquisition.resolved,
+    integrity: substitution.acquisition.integrity,
+    dependencies: { ...projection.dependencies },
+    optionalDependencies: { ...projection.optionalDependencies },
+    peerDependencies: { ...projection.peerDependencies },
+    bundleDependencies: [...projection.bundledDependencies],
+    bundled: bundled.map(({ name, version }) => ({ name, version, inBundle: true })),
+  };
 }
 
 function brokenShadowTrace(message: string, cause?: unknown): Error {
@@ -570,6 +679,151 @@ function rejectSchemaOneTrace(applied: readonly unknown[]): void {
     brokenShadowTrace(`schema-1 shadow substitution for ${first.packageName} cannot replay as v2`),
     { packageName: first.packageName },
   );
+}
+
+function strictStringRecord(value: unknown, label: string): Record<string, string> {
+  const record = plain(value, label);
+  const descriptors = Object.getOwnPropertyDescriptors(record);
+  if (Object.values(descriptors).some((descriptor) => descriptor.enumerable !== true)) {
+    throw new TypeError(`${label} has non-enumerable fields`);
+  }
+  return Object.fromEntries(
+    Object.entries(record).map(([name, range]) => [
+      text(name, `${label} name`),
+      text(range, `${label}.${name}`),
+    ]),
+  );
+}
+
+function decodeTraceAcquisition(value: unknown): Readonly<{
+  applied: AppliedShadowSubstitution['acquisition'];
+  trace: ShadowSubstitutionLockfileTraceFact['acquisition'];
+}> {
+  const raw = plain(value, 'shadow trace acquisition');
+  if (raw.kind === 'synthetic') {
+    exact(raw, ['kind'], 'synthetic shadow trace acquisition');
+    const acquisition = { kind: 'synthetic' as const };
+    return { applied: acquisition, trace: acquisition };
+  }
+  if (raw.kind !== 'registry') {
+    throw new TypeError('shadow trace acquisition kind is unsupported');
+  }
+  const registry = exact(
+    raw,
+    [
+      'bundleDependencies',
+      'bundled',
+      'dependencies',
+      'integrity',
+      'kind',
+      'name',
+      'optionalDependencies',
+      'peerDependencies',
+      'resolved',
+      'version',
+    ],
+    'registry shadow trace acquisition',
+  );
+  const applied = {
+    kind: 'registry' as const,
+    name: text(registry.name, 'shadow trace acquisition name'),
+    version: text(registry.version, 'shadow trace acquisition version'),
+    resolved: text(registry.resolved, 'shadow trace acquisition resolved'),
+    integrity: strictIntegrity(registry.integrity, 'shadow trace acquisition integrity'),
+  };
+  const dependencies = strictStringRecord(
+    registry.dependencies,
+    'shadow trace acquisition dependencies',
+  );
+  const optionalDependencies = strictStringRecord(
+    registry.optionalDependencies,
+    'shadow trace acquisition optionalDependencies',
+  );
+  const peerDependencies = strictStringRecord(
+    registry.peerDependencies,
+    'shadow trace acquisition peerDependencies',
+  );
+  const bundleDependencies = decodeDenseDataArray(
+    registry.bundleDependencies,
+    'shadow trace acquisition bundleDependencies',
+  ).map((name, index) => text(name, `shadow trace acquisition bundleDependencies ${index}`));
+  const bundled = decodeDenseDataArray(registry.bundled, 'shadow trace acquisition bundled').map(
+    (value, index) => {
+      const child = exact(
+        value,
+        ['inBundle', 'name', 'version'],
+        `shadow trace acquisition bundled ${index}`,
+      );
+      if (child.inBundle !== true) {
+        throw new TypeError(`shadow trace acquisition bundled ${index} inBundle must be true`);
+      }
+      return {
+        name: text(child.name, `shadow trace acquisition bundled ${index} name`),
+        version: text(child.version, `shadow trace acquisition bundled ${index} version`),
+        inBundle: true as const,
+      };
+    },
+  );
+  return {
+    applied,
+    trace: {
+      ...applied,
+      dependencies,
+      optionalDependencies,
+      peerDependencies,
+      bundleDependencies,
+      bundled,
+    },
+  };
+}
+
+function decodeTraceApplied(value: unknown): Readonly<{
+  applied: AppliedShadowSubstitution;
+  trace: ShadowSubstitutionLockfileTraceFact;
+}> {
+  const hasBinding = value !== null && typeof value === 'object' && Object.hasOwn(value, 'binding');
+  const raw = exact(
+    value,
+    [
+      'acquisition',
+      ...(hasBinding ? ['binding'] : []),
+      'catalog',
+      'materialization',
+      'recipeDigest',
+      'substitutionId',
+      'trigger',
+    ],
+    'shadow trace applied substitution',
+  );
+  const acquisition = decodeTraceAcquisition(raw.acquisition);
+  const materialization = exact(
+    raw.materialization,
+    ['bin', 'files', 'installPath', 'name', 'version'],
+    'shadow trace materialization',
+  );
+  const bin = strictStringRecord(materialization.bin, 'shadow trace materialization bin');
+  const applied = decodeApplied({
+    catalog: raw.catalog,
+    substitutionId: raw.substitutionId,
+    recipeDigest: raw.recipeDigest,
+    trigger: raw.trigger,
+    acquisition: acquisition.applied,
+    materialization: {
+      installPath: materialization.installPath,
+      name: materialization.name,
+      version: materialization.version,
+      files: materialization.files,
+    },
+    ...(hasBinding ? { binding: raw.binding } : {}),
+  });
+  return {
+    applied,
+    trace: freezeDeep({
+      ...applied,
+      acquisition: acquisition.trace,
+      materialization: { ...applied.materialization, bin },
+    }),
+  };
 }
 
 function hasReservedShadowIdentity(value: unknown): boolean {
@@ -748,11 +1002,12 @@ export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowAsset
       ['applied', 'protocol'],
       'shadow lockfile trace',
     );
-    if (trace.protocol !== SHADOW_LOCKFILE_PROTOCOL)
-      throw new TypeError('shadow lockfile trace protocol is unsupported');
     const rawApplied = decodeDenseDataArray(trace.applied, 'shadow lockfile trace applied');
     rejectSchemaOneTrace(rawApplied);
-    const suppliedApplied = rawApplied.map(decodeApplied);
+    if (trace.protocol !== SHADOW_LOCKFILE_PROTOCOL)
+      throw new TypeError('shadow lockfile trace protocol is unsupported');
+    const decodedTrace = rawApplied.map(decodeTraceApplied);
+    const suppliedApplied = decodedTrace.map(({ applied }) => applied);
     const plan = planTrustedAppliedShadowSubstitutions(suppliedApplied);
     for (const substitution of plan.substitutions) {
       validateLockfileEntryProvenance(packages, substitution);
@@ -783,11 +1038,13 @@ export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowAsset
         throw brokenShadowTrace(`shadow identity at ${installPath} has no unique trace fact`);
       }
     }
-    const canonical = createShadowSubstitutionLockfileTrace(plan);
-    const suppliedTrace = { protocol: trace.protocol, applied: suppliedApplied };
+    const canonical = createShadowSubstitutionLockfileTrace(plan, { packages });
+    const suppliedTrace = {
+      protocol: trace.protocol,
+      applied: decodedTrace.map(({ trace: fact }) => fact),
+    };
     if (canonicalShadowJson(canonical) !== canonicalShadowJson(suppliedTrace))
       throw new TypeError('shadow lockfile trace is non-canonical');
-    registryShadowEmbeddedSourcesFromLockfile({ packages }, plan);
     return plan;
   } catch (error) {
     if (isBrokenShadowTrace(error)) throw error;

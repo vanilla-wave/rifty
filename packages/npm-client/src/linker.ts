@@ -434,7 +434,7 @@ export function buildPreparedInstallLockfile(
   return {
     ...lockfile,
     rifty: {
-      shadowSubstitutions: createShadowSubstitutionLockfileTrace(plan),
+      shadowSubstitutions: createShadowSubstitutionLockfileTrace(plan, lockfile),
     },
   };
 }
