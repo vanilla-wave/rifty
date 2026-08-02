@@ -142,18 +142,6 @@ Contract+RED → Final+GREEN):
     LightningCSS registry projection before acquisition effects and validate
     the official tarball's embedded manifest at the shared fresh/replay/Eddy
     ingress before link effects.
-20. `npm-client/shadow-recipe-v2-embedded-source-authority` —
-    **shadow-recipe-v2-embedded-source-authority**: consume the validated
-    bundled child without standalone traversal/cache/tree/bin, publish exact
-    parent bundle plus embedded-child lock facts, and preserve that topology
-    through current-protocol replay and generic Eddy completeness.
-21. `npm-client/shadow-recipe-v2-protocol-replay-authority` —
-    **shadow-recipe-v2-protocol-replay-authority**: dependency-ordered split
-    after embedded-source topology; publish and consume exact protocol-v2
-    trace/bin facts, replay literal root/nested locks offline, validate cached
-    embedded evidence, and prove Eddy, Workbench FIFO, and Chromium Vite lock
-    consumers. Split lineage: `812cd8b0e5c653674bae949d67f0ac21db90748f`
-    then `f5dbb4e021380dbdbbd964e33b434e47c2348618`.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -197,5 +185,3 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | package-bin-phased-linker-authority | 100–300 |
 | shadow-materialized-bin-commit-authority | 100–300 |
 | shadow-recipe-v2-acquisition-replay-authority | 300–800 |
-| shadow-recipe-v2-embedded-source-authority | 200–500 |
-| shadow-recipe-v2-protocol-replay-authority | 300–800 |
