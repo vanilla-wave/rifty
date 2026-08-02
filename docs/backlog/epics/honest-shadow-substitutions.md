@@ -93,8 +93,8 @@ Contract+RED → Final+GREEN):
    capsule per the spike-decided pattern, initialized compiler lifecycle and
    real Node/Vite acceptance, explicit direct-construction liveness gap selected
    by the user on 2026-08-03, data-driven generic seam gate, and official Sass
-   projection traversal. Draft until its fresh post-refinement Contract+RED;
-   required for epic closure, not optional.
+   projection traversal. Fresh post-refinement Contract+RED passed at
+   `e062b0bac`; ready and required for epic closure, not optional.
 7. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption
    narrowing, owner READMEs, dead code imported by extraction).

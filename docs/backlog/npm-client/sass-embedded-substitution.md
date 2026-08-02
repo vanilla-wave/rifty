@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: sass-embedded@1.100.0 via synthesized facade — second substitution, seam proof
 created: 2026-07-23
 why: real Vite SCSS projects pin sass-embedded, whose Dart platform binary cannot run in the browser; ADR-0344's evidence proves the exact pure-JS Sass twin matches every named supported surface Vite and direct consumers touch, while invalid direct construction remains an explicit gap
@@ -179,6 +179,8 @@ ADR-0344 evidence; each is a differential test:
   the runtime-asset seam (forbidden by ADR-0344).
 
 ## Decisions
+
+ready-verdict: 2026-08-03 — Contract+RED @ e062b0bac244d0034685a82458bf38947b364f8d — PASS: fresh origin/main@2df89ddea7b5eb2d494ba2c9f4b229a8e6e4a970 with zero production-source diff; exact Node/npm/Vite/Chromium artifacts and localized 8/129, 36/1, 94/0, 1/48, 1/21, 2/2, 6/4 plus browser/perf REDs settle every Acceptance, Parity, and reachable production-tier Fault row; user-selected option A is ADR-0344-consistent, externally pinned, and proves the direct-constructor named gap before pure-Sass target entry; no stale overlap, unowned mechanism, or unnecessary machinery remains; frozen goal Outcome, User scenario, tier, and Invariants at e34bd3db82c5088f57c32934b3a45b001b578d3e are unchanged and compatible.
 
 - `post-pickup-demotion: 2026-08-02` — exact constructor liveness disproved the
   ready positive claim; attempt/checkpoint lineage and the complete frozen
