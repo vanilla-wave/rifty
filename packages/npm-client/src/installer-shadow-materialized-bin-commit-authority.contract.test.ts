@@ -280,7 +280,6 @@ describe('shadow materialized-bin commit authority', () => {
       '/project/node_modules/lightningcss-wasm/package.json',
       '/project/node_modules/lightningcss-wasm/node_modules/napi-wasm/index.js',
       '/project/node_modules/lightningcss-wasm/node_modules/napi-wasm/package.json',
-      '/project/node_modules/napi-wasm/package.json',
       '/project/node_modules/rollup/dist/native.js',
       '/project/node_modules/rollup/package.json',
       '/project/node_modules/@rollup/wasm-node/package.json',

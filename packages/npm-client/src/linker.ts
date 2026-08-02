@@ -12,10 +12,13 @@ import { NotImplementedError } from '@riftydev/io';
 import { builtinShadowSubstitutionCatalog } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 import {
+  type RegistryShadowEmbeddedSource,
   type ShadowAssetPlan,
   type ShadowSubstitutionLockfileTrace,
   createShadowSubstitutionLockfileTrace,
+  registryAcquisitionInstallPath,
 } from './internal/shadow/planner.ts';
+import { matchesRange } from './semver.ts';
 
 export interface ResolvedPackage {
   name: string;
@@ -303,6 +306,8 @@ export interface LockfileEntry {
   resolved?: string;
   integrity?: string;
   dependencies?: Record<string, string>;
+  bundleDependencies?: string[];
+  inBundle?: boolean;
   bin?: string | Record<string, string>;
   /**
    * Persisted so the fast path can run the post-install missing-peer warn
@@ -386,9 +391,10 @@ export function buildInstallLockfile(
   rootVersion: string,
   packages: Parameters<typeof buildLockfile>[2],
   planValue: ShadowAssetPlan,
+  embeddedSources: readonly RegistryShadowEmbeddedSource[] = [],
 ): Lockfile {
   const prepared = preflightPackageInstallPaths(packages);
-  return buildPreparedInstallLockfile(rootName, rootVersion, prepared, planValue);
+  return buildPreparedInstallLockfile(rootName, rootVersion, prepared, planValue, embeddedSources);
 }
 
 export function buildPreparedInstallLockfile(
@@ -396,13 +402,13 @@ export function buildPreparedInstallLockfile(
   rootVersion: string,
   packages: readonly PreparedInstallPackage<LockfilePackage>[],
   planValue: ShadowAssetPlan,
+  embeddedSources: readonly RegistryShadowEmbeddedSource[] = [],
 ): Lockfile {
   const plan = planValue;
   if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
     throw new TypeError('trusted installer shadow plan invariant failed');
   }
   const lockfile = buildPreparedLockfile(rootName, rootVersion, packages);
-  if (plan.substitutions.length === 0) return lockfile;
   for (const substitution of plan.substitutions) {
     const recipe = builtinShadowSubstitutionCatalog.recipes.find(
       (candidate) => candidate.id === substitution.substitutionId,
@@ -423,10 +429,111 @@ export function buildPreparedInstallLockfile(
     else entry.bin = { ...recipe.materialization.bin };
     entry.riftyShadowRecipe = substitution.substitutionId;
   }
+  appendRegistryShadowEmbeddedSources(lockfile, plan, embeddedSources);
+  if (plan.substitutions.length === 0) return lockfile;
   return {
     ...lockfile,
     rifty: {
       shadowSubstitutions: createShadowSubstitutionLockfileTrace(plan),
     },
   };
+}
+
+function appendRegistryShadowEmbeddedSources(
+  lockfile: Lockfile,
+  plan: ShadowAssetPlan,
+  embeddedSources: readonly RegistryShadowEmbeddedSource[],
+): void {
+  const remainingSources = [...embeddedSources];
+  for (const substitution of plan.substitutions) {
+    if (substitution.acquisition.kind !== 'registry') continue;
+    const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+      (candidate) => candidate.id === substitution.substitutionId,
+    );
+    if (!recipe) {
+      throw new NotImplementedError(
+        `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,
+      );
+    }
+    if (recipe.acquisition.kind !== 'registry') {
+      throw new TypeError(`shadow substitution ${substitution.substitutionId} acquisition drifted`);
+    }
+    const bundledNames = recipe.acquisition.dependencyProjection.bundledDependencies;
+    if (bundledNames.length === 0) continue;
+
+    const acquisitionInstallPath = registryAcquisitionInstallPath(substitution);
+    const matchingIndexes = remainingSources.flatMap((source, index) =>
+      source.acquisitionInstallPath === acquisitionInstallPath ? [index] : [],
+    );
+    if (matchingIndexes.length !== 1) {
+      throw new TypeError(
+        `shadow substitution ${substitution.substitutionId} embedded source count drifted`,
+      );
+    }
+    const sourceIndex = matchingIndexes[0];
+    if (sourceIndex === undefined) {
+      throw new TypeError(
+        `shadow substitution ${substitution.substitutionId} embedded source count drifted`,
+      );
+    }
+    const source = remainingSources[sourceIndex];
+    if (source === undefined) {
+      throw new TypeError(
+        `shadow substitution ${substitution.substitutionId} embedded source count drifted`,
+      );
+    }
+    remainingSources.splice(sourceIndex, 1);
+
+    const dependenciesByName = new Map(
+      source.dependencies.map((dependency) => [dependency.name, dependency]),
+    );
+    if (
+      dependenciesByName.size !== source.dependencies.length ||
+      dependenciesByName.size !== bundledNames.length
+    ) {
+      throw new TypeError(
+        `shadow substitution ${substitution.substitutionId} embedded dependencies drifted`,
+      );
+    }
+    const parentEntry = lockfile.packages[acquisitionInstallPath];
+    if (!parentEntry || parentEntry.version !== substitution.acquisition.version) {
+      throw new TypeError(
+        `shadow substitution ${substitution.substitutionId} acquisition entry drifted`,
+      );
+    }
+
+    for (const name of bundledNames) {
+      const range =
+        recipe.acquisition.dependencyProjection.dependencies[name] ??
+        recipe.acquisition.dependencyProjection.optionalDependencies[name];
+      const dependency = dependenciesByName.get(name);
+      const installPath = `${acquisitionInstallPath}/node_modules/${name}`;
+      if (
+        range === undefined ||
+        dependency?.range !== range ||
+        dependency.installPath !== installPath ||
+        !matchesRange(dependency.version, range) ||
+        parentEntry.dependencies?.[name] !== range ||
+        Object.hasOwn(lockfile.packages, installPath)
+      ) {
+        throw new TypeError(
+          `shadow substitution ${substitution.substitutionId} embedded dependency ${name} drifted`,
+        );
+      }
+    }
+
+    parentEntry.bundleDependencies = [...bundledNames];
+    for (const name of bundledNames) {
+      const dependency = dependenciesByName.get(name);
+      if (!dependency) {
+        throw new TypeError(
+          `shadow substitution ${substitution.substitutionId} embedded dependency ${name} drifted`,
+        );
+      }
+      lockfile.packages[dependency.installPath] = { version: dependency.version, inBundle: true };
+    }
+  }
+  if (remainingSources.length > 0) {
+    throw new TypeError('shadow embedded source facts do not match the installer plan');
+  }
 }

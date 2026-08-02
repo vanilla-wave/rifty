@@ -6,7 +6,6 @@ created: 2026-08-02
 why: the acquisition re-cut leaves current lock traces unable to prove complete recipe behavior or replay the embedded source offline without trusting incomplete provenance
 user_story: As a browser-IDE user reopening an installed project, I want the exact acquired source, materialized files, bins, and lock evidence replayed offline, but today protocol v1 rejects the reviewed v2 facts and incomplete traces can hide drift
 epic: honest-shadow-substitutions
-blocked_by: npm-client/shadow-recipe-v2-embedded-source-authority
 sources: [ADR-0335, docs/backlog/npm-client/reference/shadow-recipe-v2-contract-red.md]
 code:
   - packages/npm-client/src/installer.ts

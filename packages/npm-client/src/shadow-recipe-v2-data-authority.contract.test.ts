@@ -325,12 +325,8 @@ function supportedFreshEvents(recipe: RecipeCase, shape: Shape): string[] {
     ? [
         'packument:lightningcss-wasm',
         'cache:get:lightningcss-wasm@1.32.0',
-        'packument:napi-wasm',
         'tarball:lightningcss-wasm',
-        'cache:get:napi-wasm@1.1.3',
-        'tarball:napi-wasm',
         'cache:put:lightningcss-wasm@1.32.0',
-        'cache:put:napi-wasm@1.1.3',
       ]
     : [
         `packument:${HOST}`,
@@ -338,22 +334,16 @@ function supportedFreshEvents(recipe: RecipeCase, shape: Shape): string[] {
         'packument:lightningcss-wasm',
         `tarball:${HOST}`,
         'cache:get:lightningcss-wasm@1.32.0',
-        'packument:napi-wasm',
         'tarball:lightningcss-wasm',
-        'cache:get:napi-wasm@1.1.3',
-        'tarball:napi-wasm',
         `cache:put:${HOST}@1.0.0`,
         'cache:put:lightningcss-wasm@1.32.0',
-        'cache:put:napi-wasm@1.1.3',
       ];
 }
 
 function replayCacheEvents(recipe: RecipeCase, shape: Shape): string[] {
   return [
     ...(shape === 'transitive' ? [`cache:get:${HOST}@1.0.0`] : []),
-    ...(recipe.name === 'lightningcss'
-      ? ['cache:get:lightningcss-wasm@1.32.0', 'cache:get:napi-wasm@1.1.3']
-      : []),
+    ...(recipe.name === 'lightningcss' ? ['cache:get:lightningcss-wasm@1.32.0'] : []),
   ];
 }
 
@@ -363,11 +353,7 @@ function supportedEddyEvents(recipe: RecipeCase, shape: Shape): string[] {
       ? ['eddy:POST', ...supportedFreshEvents(recipe, shape)]
       : ['eddy:POST'];
   }
-  const names = [
-    ...(shape === 'transitive' ? [`${HOST}@1.0.0`] : []),
-    'lightningcss-wasm@1.32.0',
-    'napi-wasm@1.1.3',
-  ];
+  const names = [...(shape === 'transitive' ? [`${HOST}@1.0.0`] : []), 'lightningcss-wasm@1.32.0'];
   return [
     'eddy:POST',
     ...names.map((name) => `cache:put:${name}`),

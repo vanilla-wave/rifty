@@ -1,5 +1,64 @@
 # Shadow recipe v2 Contract+RED
 
+## Embedded-source topology — 2026-08-02
+
+Fresh source baseline is
+`main@752e63166b5bf7527fd83781d5005bb048869490`, including acquisition
+validation merged by PR #238. JIT Item 20 selects
+`shadow-recipe-v2-embedded-source-authority` at Budget `200–500`; the blocked
+protocol-v2 child remains unmapped until its own pre-pickup branch.
+
+npm 11.17.0 on Node v24.16.0 installed the committed official archive locally
+with scripts disabled and no child registry source. Its lockfile-v3 oracle
+retains parent `dependencies` and `bundleDependencies`, then records only
+`{version:"1.1.3",inBundle:true}` at the nested `napi-wasm` path. Reproduction
+and exact projection are pinned in
+`reference/lightningcss-wasm-1.32.0-packument.md`.
+
+The checkpoint batch is:
+
+```sh
+pnpm --filter @riftydev/npm-client exec vitest run \
+  src/installer-shadow-recipe-v2-embedded-source-authority.contract.test.ts \
+  src/installer-shadow-recipe-v2-acquisition-replay-authority.contract.test.ts \
+  src/shadow-recipe-v2-data-authority.contract.test.ts \
+  src/installer-shadow-materialized-bin-commit-authority.contract.test.ts \
+  src/installer-shadow-shims.test.ts \
+  src/internal/shadow/installer.contract.test.ts \
+  src/internal/shadow/planner.contract.test.ts \
+  src/registry.fault.test.ts
+pnpm vitest run --project unit services/eddy/tests/s3-bundle-store.test.ts \
+  -t 'current-protocol LightningCSS|embedded-source completeness exception'
+pnpm --filter @riftydev/shadow-registry exec vitest run \
+  src/internal/catalog-v2-data-authority.contract.test.ts
+```
+
+The npm-client run is exactly **17 RED / 133 GREEN** across 150 rows:
+
+- the new official-tar carrier is 10 RED / 2 GREEN: root/nested fresh,
+  transformed parent-only current replay, generic Eddy, and child version/
+  `inBundle` faults are RED; raw `inBundle` and malformed-trace standard
+  fallback guards are GREEN. Every successful source path fixes the complete
+  registry, cache, and VFS-mutation ledger;
+- the inherited data and phased-commit carriers expose 7 topology RED while
+  keeping 41 rows GREEN;
+- frozen acquisition validation, shims, internal installer, planner, and
+  registry-fault floors remain 90/90 GREEN. The frozen predecessor carrier is
+  untouched.
+
+The full S3-store suite is **2 RED / 34 GREEN** (the selected carrier is 2 RED /
+2 GREEN): valid root and nested parent-only objects are currently misclassified
+as incomplete; forged membership and malformed trace remain misses. The
+independent official archive/data authority is 110/110 GREEN. npm-client, Eddy,
+and shadow-registry typechecks plus backlog,
+architecture, runtime-adapter, source-grep, and diff gates pass. No production
+source differs from the fresh baseline.
+
+ADR-0335 settles the only wording fork: valid plan-proven paths are the sole
+completeness exception; invalid proof keeps the existing client standard
+fallback and service miss. No protocol, public recipe API, resolver, cache,
+lock writer, scheduler, or package-name branch is prescribed.
+
 ## Acquisition-validation re-cut — 2026-08-02
 
 Fresh source baseline is
@@ -203,3 +262,27 @@ mapping and Budget row waits for its own pre-pickup branch. Closure deletes the
 completed validation item and subtracts only its exact blockers.
 Embedded-source topology, broad projection execution, and protocol-v2 replay
 remain unimplemented and loud where already specified.
+
+## Embedded-source implementation and closure
+
+Ready/pickup parent `6e9ad39edd11a4264eda6e1bbc1a8cf8652b9c3a`
+precedes production `0976e26d7a5431cbdc38bd7faed6135a02ef9738`.
+The existing planner now proves exact embedded membership and physical paths
+from the decoded recipe plus lock topology before replay/cache effects. The
+installer consumes those members only from the validated parent archive,
+filters their standalone prefetch/traversal, and exact-checks extracted
+versions. The existing linker remains the sole lock writer for parent
+`bundleDependencies` and nested child `{ version, inBundle: true }`; the
+existing lock reader applies the same attested-path rule to client and service
+completeness. No public API, protocol, registry source, cache entry, lock
+writer, or coordination mechanism was added.
+
+The embedded-source batch runs 150/150 GREEN, the S3 client/service suite
+36/36 GREEN, and shadow registry authority 110/110 GREEN. npm-client
+typecheck, Biome, diff, architecture, contract-drift, and the exact goal budget
+pass; production is 411 hand-written insertions inside Budget `200–500`.
+
+Closure deletes the completed embedded-source item and subtracts only its
+exact blocker from the protocol-v2 child. Dependency-projection execution and
+protocol-v2 replay remain explicit goal residuals awaiting their own
+pre-pickup mapping and readiness work.

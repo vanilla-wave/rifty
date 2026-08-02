@@ -142,6 +142,11 @@ Contract+RED → Final+GREEN):
     LightningCSS registry projection before acquisition effects and validate
     the official tarball's embedded manifest at the shared fresh/replay/Eddy
     ingress before link effects.
+20. `npm-client/shadow-recipe-v2-embedded-source-authority` —
+    **shadow-recipe-v2-embedded-source-authority**: consume recipe-proven
+    embedded dependencies from the validated parent archive across fresh,
+    current replay, npm-compatible lock topology, and shared Eddy completeness
+    without a standalone child source.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -185,3 +190,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | package-bin-phased-linker-authority | 100–300 |
 | shadow-materialized-bin-commit-authority | 100–300 |
 | shadow-recipe-v2-acquisition-replay-authority | 300–800 |
+| shadow-recipe-v2-embedded-source-authority | 200–500 |

@@ -9,9 +9,25 @@
 import { createHash } from 'node:crypto';
 import { type Server, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { packEddyBundle, unpackEddyBundle } from '@riftydev/npm-client';
-import type { EddyBundleManifestV1 } from '@riftydev/npm-client';
+import {
+  closureHashOf,
+  computeIntegrity,
+  packEddyBundle,
+  unpackEddyBundle,
+} from '@riftydev/npm-client';
+import type { EddyBundleManifestV1, Lockfile } from '@riftydev/npm-client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import {
+  BUNDLED_VERSION,
+  SOURCE,
+  SOURCE_INTEGRITY,
+  SOURCE_VERSION,
+  type Scope,
+  eddyBundleFor,
+  freshScope,
+  parentOnlyLockfile,
+  scopePaths,
+} from '../../../packages/npm-client/src/_test-fixtures/shadow-recipe-v2-embedded-source.ts';
 import {
   LOCAL_REGISTRY_BASE_URL,
   makeLocalFetcher,
@@ -115,6 +131,7 @@ function publicReadKey(path: string): string {
 let HASH: string;
 let manifest: EddyBundleManifestV1;
 let bundleBytes: Uint8Array;
+const embeddedBundles = new Map<Scope, Readonly<{ bytes: Uint8Array; hash: string }>>();
 beforeAll(async () => {
   const built = await resolveBundle(
     { dependencies: { debug: '^4.4.1' } },
@@ -124,6 +141,16 @@ beforeAll(async () => {
   bundleBytes = built.bytes;
   manifest = unpackEddyBundle(bundleBytes).manifest;
   HASH = manifest.asOf.closureHash;
+
+  for (const scope of ['root', 'nested'] as const) {
+    const seed = await freshScope(scope);
+    const lockfile = parentOnlyLockfile(seed.result.lockfile, scope);
+    const bytes = await eddyBundleFor(lockfile, seed.entries);
+    embeddedBundles.set(scope, {
+      bytes,
+      hash: unpackEddyBundle(bytes).manifest.asOf.closureHash,
+    });
+  }
 });
 
 interface FakeS3 {
@@ -379,6 +406,87 @@ describe('S3BundleStore', () => {
     fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
     expect(await store.get(HASH)).toBeNull(); // incomplete → miss
   });
+
+  it.each(['root', 'nested'] as const)(
+    '[fault: sibling-drift/provenance-lie] accepts a current-protocol LightningCSS %s carrier whose child is embedded in its parent tarball',
+    async (scope) => {
+      const embedded = embeddedBundles.get(scope);
+      if (!embedded) throw new Error(`missing ${scope} embedded bundle fixture`);
+      fake = await startFakeS3();
+      const store = makeStore(fake.url);
+      const key = `/eddy-bundles/bundle/${s3PathHash(embedded.hash)}`;
+      const contents = unpackEddyBundle(embedded.bytes);
+      const lockfile = JSON.parse(contents.lockfileText) as Lockfile;
+      const parent = contents.tarballs.find((tarball) => tarball.entry.version === SOURCE_VERSION);
+
+      expect(contents.manifest.tarballs).toContainEqual({
+        file: `tarballs/${SOURCE}-${SOURCE_VERSION}.tgz`,
+        name: SOURCE,
+        version: SOURCE_VERSION,
+        integrity: SOURCE_INTEGRITY,
+      });
+      expect(lockfile.packages[scopePaths(scope).child]).toEqual({
+        version: BUNDLED_VERSION,
+        inBundle: true,
+      });
+      expect(parent?.entry).toEqual({
+        file: `tarballs/${SOURCE}-${SOURCE_VERSION}.tgz`,
+        name: SOURCE,
+        version: SOURCE_VERSION,
+        integrity: SOURCE_INTEGRITY,
+      });
+      expect(await computeIntegrity(parent?.bytes ?? new Uint8Array())).toBe(SOURCE_INTEGRITY);
+
+      fake.objects.set(key, Buffer.from(embedded.bytes));
+      const hit = await store.get(embedded.hash);
+      expect(hit).not.toBeNull();
+      expect(hit?.bytes.byteLength).toBe(embedded.bytes.byteLength);
+      expect(
+        createHash('sha256')
+          .update(hit?.bytes ?? new Uint8Array())
+          .digest('hex'),
+      ).toBe(createHash('sha256').update(embedded.bytes).digest('hex'));
+    },
+  );
+
+  it.each([
+    {
+      guard: 'raw forged inBundle without an attested plan',
+      mutate(lockfile: Record<string, unknown>): void {
+        Reflect.deleteProperty(lockfile, 'rifty');
+      },
+    },
+    {
+      guard: 'malformed shadow trace',
+      mutate(lockfile: Record<string, unknown>): void {
+        lockfile.rifty = {
+          shadowSubstitutions: { protocol: 'malformed', applied: [] },
+        };
+      },
+    },
+  ])(
+    '[fault: provenance-lie] keeps $guard outside the embedded-source completeness exception',
+    async ({ mutate }) => {
+      fake = await startFakeS3();
+      const store = makeStore(fake.url);
+      const embedded = embeddedBundles.get('root');
+      if (!embedded) throw new Error('missing root embedded bundle fixture');
+      const key = `/eddy-bundles/bundle/${s3PathHash(embedded.hash)}`;
+      const contents = unpackEddyBundle(embedded.bytes);
+      const lockfile = JSON.parse(contents.lockfileText) as Record<string, unknown> & {
+        packages: Lockfile['packages'];
+      };
+      const packages = structuredClone(lockfile.packages);
+
+      mutate(lockfile);
+
+      expect(lockfile.packages).toEqual(packages);
+      expect(await closureHashOf(lockfile as unknown as Lockfile)).toBe(embedded.hash);
+      contents.lockfileText = JSON.stringify(lockfile);
+      fake.objects.set(key, Buffer.from(packEddyBundle(contents)));
+      expect(await store.get(embedded.hash)).toBeNull();
+    },
+  );
 
   it('rejects an object with a NON-v3 lockfile (hash ignores lockfileVersion; clients bounce non-v3)', async () => {
     // closureHashOf canonicalizes `packages` only, so mutating

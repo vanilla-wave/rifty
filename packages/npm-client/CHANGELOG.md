@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Registry-backed shadow recipes now consume plan-proven bundled dependencies
+  from the parent archive, with npm-compatible embedded lock facts and offline
+  replay/Eddy completeness at exact install paths.
+
 - Builtin shadow admission now executes the attested recipe policy before
   rejected-package cache, registry, Eddy, or VFS work. Schema-1 substitution
   traces loud-fail with canonical trigger attribution instead of being

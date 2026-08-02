@@ -70,12 +70,15 @@ import { assertShadowRecipeAdmission } from './internal/shadow/admission.ts';
 import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
 import {
   type AppliedShadowSubstitution,
+  type RegistryShadowEmbeddedDependency,
+  type RegistryShadowEmbeddedSource,
   type ShadowAssetPlan,
   attestBuiltinShadowSubstitution,
   materializeRegistryShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
   planTrustedAppliedShadowSubstitutions,
   registryAcquisitionInstallPath,
+  registryShadowEmbeddedSourcesFromLockfile,
 } from './internal/shadow/planner.ts';
 import {
   type Lockfile,
@@ -291,7 +294,12 @@ interface WalkAndPinResult {
   readonly companionOnlyBinInstallPaths: ReadonlySet<string>;
 }
 
-const pinnedShadowSubstitutions = new WeakMap<PinnedPackage, AppliedShadowSubstitution>();
+interface PinnedShadowState {
+  readonly substitution: AppliedShadowSubstitution;
+  readonly embeddedSource?: RegistryShadowEmbeddedSource;
+}
+
+const pinnedShadowSubstitutions = new WeakMap<PinnedPackage, PinnedShadowState>();
 
 export interface InstallResult {
   packages: ResolvedPackage[];
@@ -371,6 +379,7 @@ interface ResolvedPin {
           integrity?: string;
         }>;
     materializationInstallPath?: string;
+    expectedEmbeddedDependencies?: readonly RegistryShadowEmbeddedDependency[];
   }>;
 }
 
@@ -570,7 +579,7 @@ export async function install(
     const key = `${pkg.name}@${pkg.version}`;
     if (seenProvenance.has(key)) continue;
     seenProvenance.add(key);
-    const shadow = pinnedShadowSubstitutions.get(pkg);
+    const shadow = pinnedShadowSubstitutions.get(pkg)?.substitution;
     const cacheHit = cacheHits.get(key);
     if (cacheHit === undefined && shadow?.acquisition.kind !== 'synthetic') {
       throw new Error(`install provenance missing fetch result for ${key}`);
@@ -593,10 +602,14 @@ export async function install(
   // warn output is identical whichever path the install took.
   const shadowPlan = planTrustedAppliedShadowSubstitutions(
     packages.flatMap((pkg) => {
-      const substitution = pinnedShadowSubstitutions.get(pkg);
-      return substitution ? [substitution] : [];
+      const substitution = pinnedShadowSubstitutions.get(pkg)?.substitution;
+      return substitution === undefined ? [] : [substitution];
     }),
   );
+  const embeddedSources = packages.flatMap((pkg) => {
+    const source = pinnedShadowSubstitutions.get(pkg)?.embeddedSource;
+    return source === undefined ? [] : [source];
+  });
   warnUnsatisfiedPeers(packages);
   const preparedPackages = preflightPackageInstallPaths(packages);
   opts.assertPortablePaths?.(packageLinkTargets(opts.cwd, preparedPackages));
@@ -646,6 +659,7 @@ export async function install(
     normalizedRootVersion,
     preparedPackages,
     shadowPlan,
+    embeddedSources,
   );
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
@@ -1839,6 +1853,11 @@ function analyzeLockfileRequest(
   overrides: OverrideMap | undefined,
 ): LockfileRequestAnalysis {
   const reachablePaths = new Set<string>();
+  const embeddedPaths = new Set(
+    registryShadowEmbeddedSourcesFromLockfile(lockfile, shadowPlan).flatMap((source) =>
+      source.dependencies.map((dependency) => dependency.installPath),
+    ),
+  );
   let ownership: LockfileRequestOwnership = 'replay';
   const recordOwnership = (next: LockfileRequestOwnership): void => {
     ownership = mergeLockfileRequestOwnership(ownership, next);
@@ -1876,6 +1895,7 @@ function analyzeLockfileRequest(
       lockfilePathTranslations: [],
     };
     for (const [childName, childRange] of Object.entries(hit.entry.dependencies ?? {})) {
+      if (embeddedPaths.has(`${hit.installPath}/node_modules/${childName}`)) continue;
       visit(childName, childRange, childContext);
     }
     for (const [companionName, companionRange] of Object.entries(
@@ -2015,10 +2035,28 @@ async function walkAndPin(
   }> = [];
 
   function prefetchPackuments(dependencies: Record<string, string>, ctx: ResolveContext): void {
+    prefetchDependencyEntries(Object.entries(dependencies), ctx);
+  }
+
+  function prefetchDependencyEntries(
+    dependencies: readonly (readonly [string, string])[],
+    ctx: ResolveContext,
+  ): void {
     if (!source.prefetch) return;
-    for (const [depName, depRange] of Object.entries(dependencies)) {
+    for (const [depName, depRange] of dependencies) {
       source.prefetch(depName, depRange, ctx);
     }
+  }
+
+  function traversedDependencyEntries(
+    pin: ResolvedPin,
+    dependencies: Record<string, string>,
+  ): [string, string][] {
+    const bundled =
+      pin.shadow?.recipe.acquisition.kind === 'registry'
+        ? pin.shadow.recipe.acquisition.dependencyProjection.bundledDependencies
+        : [];
+    return Object.entries(dependencies).filter(([name]) => !bundled.includes(name));
   }
 
   function acquirePin(pin: ResolvedPin): Promise<PinAcquisitionResult> {
@@ -2191,16 +2229,18 @@ async function walkAndPin(
               ]
             : ctx.lockfilePathTranslations,
       };
-      prefetchPackuments(pin.dependencies, childContext);
-      for (const [depName, depRange] of Object.entries(pin.dependencies)) {
+      const requiredDependencies = traversedDependencyEntries(pin, pin.dependencies);
+      prefetchDependencyEntries(requiredDependencies, childContext);
+      for (const [depName, depRange] of requiredDependencies) {
         await visit(depName, depRange, childContext, optional);
       }
       // npm contract: a missing optional dep is non-fatal (typically
       // platform-specific native helpers like fsevents). A resolve-time failure
       // is caught here; a fetch-time failure is attributed at the await site via
       // the `optional` descriptor propagated into the subtree.
-      prefetchPackuments(pin.optionalDependencies, childContext);
-      for (const [depName, depRange] of Object.entries(pin.optionalDependencies)) {
+      const optionalDependencies = traversedDependencyEntries(pin, pin.optionalDependencies);
+      prefetchDependencyEntries(optionalDependencies, childContext);
+      for (const [depName, depRange] of optionalDependencies) {
         const desc = { depName, depRange, parentName: pin.name };
         try {
           await visit(depName, depRange, childContext, desc);
@@ -2413,7 +2453,7 @@ async function pinToPackage(
           ]),
         )
       : await extractTarGz(acquisition.result.bytes);
-  assertRegistryShadowEmbeddedManifests(pin, files);
+  const embeddedDependencies = assertRegistryShadowEmbeddedManifests(pin, files, installPath);
   const bin = pin.shadow
     ? pin.shadow.acquisition.kind === 'registry'
       ? undefined
@@ -2455,7 +2495,17 @@ async function pinToPackage(
                   : pin.shadow.acquisition.integrity!,
             },
     });
-    pinnedShadowSubstitutions.set(pkg, fact);
+    pinnedShadowSubstitutions.set(pkg, {
+      substitution: fact,
+      ...(embeddedDependencies.length === 0
+        ? {}
+        : {
+            embeddedSource: {
+              acquisitionInstallPath: installPath,
+              dependencies: embeddedDependencies,
+            },
+          }),
+    });
   }
   return pkg;
 }
@@ -2463,13 +2513,15 @@ async function pinToPackage(
 function assertRegistryShadowEmbeddedManifests(
   pin: ResolvedPin,
   files: Readonly<Record<string, Uint8Array>>,
-): void {
-  if (pin.shadow?.acquisition.kind !== 'registry') return;
+  installPath: string,
+): readonly RegistryShadowEmbeddedDependency[] {
+  if (pin.shadow?.acquisition.kind !== 'registry') return [];
   const acquisition = pin.shadow.recipe.acquisition;
   if (acquisition.kind !== 'registry') {
     throw new TypeError(`shadow recipe ${pin.shadow.recipe.id} has no registry acquisition`);
   }
   const projection = acquisition.dependencyProjection;
+  const embeddedDependencies: RegistryShadowEmbeddedDependency[] = [];
   for (const name of projection.bundledDependencies) {
     const range = projection.dependencies[name] ?? projection.optionalDependencies[name];
     const bytes = files[`node_modules/${name}/package.json`];
@@ -2484,19 +2536,45 @@ function assertRegistryShadowEmbeddedManifests(
         // The named acquisition feature owns every malformed embedded manifest.
       }
     }
-    if (
+    const version = typeof manifest?.version === 'string' ? manifest.version : undefined;
+    const validManifest =
       range !== undefined &&
       manifest?.name === name &&
-      typeof manifest.version === 'string' &&
-      matchesRange(manifest.version, range)
+      version !== undefined &&
+      matchesRange(version, range);
+    const expected = pin.shadow.expectedEmbeddedDependencies?.find(
+      (dependency) => dependency.name === name,
+    );
+    if (
+      validManifest &&
+      (pin.origin !== 'lockfile' || (expected?.range === range && expected.version === version))
     ) {
+      embeddedDependencies.push({
+        name,
+        range,
+        version,
+        installPath: `${installPath}/node_modules/${name}`,
+      });
       continue;
+    }
+    if (pin.origin === 'lockfile') {
+      throw Object.assign(
+        new Error(
+          `EBROKENLOCK: shadow recipe ${pin.shadow.recipe.id} embedded dependency ${name} disagrees with its lockfile fact`,
+        ),
+        {
+          code: 'EBROKENLOCK' as const,
+          packageName: pin.name,
+          reason: 'shadow-trace-drift' as const,
+        },
+      );
     }
     throw new NotImplementedError(
       projection.unsupportedFeature,
       `shadow recipe ${pin.shadow.recipe.id} embedded dependency ${name} drifted`,
     );
   }
+  return embeddedDependencies;
 }
 
 function shadowMaterializationInstallPath(
@@ -2526,6 +2604,7 @@ function createLockfileSource(
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
 ): ResolutionSource {
+  const embeddedSources = registryShadowEmbeddedSourcesFromLockfile(lockfile, shadowPlan);
   return {
     async resolve(name, range, ctx): Promise<ResolvedPin> {
       const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
@@ -2610,6 +2689,10 @@ function createLockfileSource(
           },
         );
       }
+      const embeddedSource =
+        shadowRecipe?.acquisition.kind === 'registry'
+          ? embeddedSources.find((source) => source.acquisitionInstallPath === installPath)
+          : undefined;
       if (synthetic) {
         substitutions.line(
           `npm: ${name}@${range ?? '*'} materialized from shadow registry (${synthetic.id})`,
@@ -2646,6 +2729,9 @@ function createLockfileSource(
                         resolved: entry.resolved!,
                         integrity: entry.integrity,
                       } as const),
+                ...(embeddedSource === undefined
+                  ? {}
+                  : { expectedEmbeddedDependencies: embeddedSource.dependencies }),
               },
             }
           : {}),

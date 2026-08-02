@@ -9,6 +9,7 @@ import {
   shadowDigest,
 } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import { matchesRange } from '../../semver.ts';
 import { isSchemaOneBuiltinShadowSubstitutionIdentity } from './schema-one-identity.ts';
 
 export interface AppliedShadowSubstitution {
@@ -39,6 +40,18 @@ export interface ShadowAssetPlan {
   readonly substitutions: readonly Readonly<AppliedShadowSubstitution>[];
   readonly assets: readonly Readonly<ShadowRuntimeAsset>[];
   readonly bindings: readonly Readonly<{ adapterId: string; assets: readonly string[] }>[];
+}
+
+export interface RegistryShadowEmbeddedDependency {
+  readonly name: string;
+  readonly range: string;
+  readonly version: string;
+  readonly installPath: string;
+}
+
+export interface RegistryShadowEmbeddedSource {
+  readonly acquisitionInstallPath: string;
+  readonly dependencies: readonly RegistryShadowEmbeddedDependency[];
 }
 
 export interface AttestBuiltinShadowSubstitutionInput {
@@ -584,6 +597,83 @@ export function registryAcquisitionInstallPath(substitution: AppliedShadowSubsti
   }`;
 }
 
+export function registryShadowEmbeddedSourcesFromLockfile(
+  lockfile: { readonly packages: Readonly<Record<string, unknown>> },
+  plan: ShadowAssetPlan,
+): readonly RegistryShadowEmbeddedSource[] {
+  try {
+    const packages = plain(lockfile.packages, 'lockfile packages');
+    const sources: RegistryShadowEmbeddedSource[] = [];
+    for (const substitution of plan.substitutions) {
+      if (substitution.acquisition.kind !== 'registry') continue;
+      const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+        (candidate) => candidate.id === substitution.substitutionId,
+      );
+      if (!recipe || recipe.acquisition.kind !== 'registry') {
+        throw brokenShadowTrace(
+          `registry shadow substitution ${substitution.substitutionId} has no registry recipe`,
+        );
+      }
+      const projection = recipe.acquisition.dependencyProjection;
+      if (projection.bundledDependencies.length === 0) continue;
+
+      const acquisitionInstallPath = registryAcquisitionInstallPath(substitution);
+      const acquisitionEntry = plain(
+        packages[acquisitionInstallPath],
+        `lockfile package ${acquisitionInstallPath}`,
+      );
+      const suppliedBundleDependencies = decodeDenseDataArray(
+        acquisitionEntry.bundleDependencies,
+        `lockfile package ${acquisitionInstallPath} bundleDependencies`,
+      );
+      if (
+        suppliedBundleDependencies.length !== projection.bundledDependencies.length ||
+        suppliedBundleDependencies.some(
+          (name, index) => name !== projection.bundledDependencies[index],
+        )
+      ) {
+        throw brokenShadowTrace(
+          `registry shadow substitution ${substitution.substitutionId} bundle membership drifted`,
+        );
+      }
+      const acquisitionDependencies = plain(
+        acquisitionEntry.dependencies,
+        `lockfile package ${acquisitionInstallPath} dependencies`,
+      );
+      const dependencies: RegistryShadowEmbeddedDependency[] = [];
+      for (const name of projection.bundledDependencies) {
+        const range = projection.dependencies[name] ?? projection.optionalDependencies[name];
+        if (range === undefined || acquisitionDependencies[name] !== range) {
+          throw brokenShadowTrace(
+            `registry shadow substitution ${substitution.substitutionId} bundled dependency ${name} range drifted`,
+          );
+        }
+        const installPath = `${acquisitionInstallPath}/node_modules/${name}`;
+        const child = exact(
+          packages[installPath],
+          ['inBundle', 'version'],
+          `lockfile package ${installPath}`,
+        );
+        if (
+          child.inBundle !== true ||
+          typeof child.version !== 'string' ||
+          !matchesRange(child.version, range)
+        ) {
+          throw brokenShadowTrace(
+            `registry shadow substitution ${substitution.substitutionId} bundled dependency ${name} topology drifted`,
+          );
+        }
+        dependencies.push({ name, range, version: child.version, installPath });
+      }
+      sources.push({ acquisitionInstallPath, dependencies });
+    }
+    return sources;
+  } catch (error) {
+    if (isBrokenShadowTrace(error)) throw error;
+    throw brokenShadowTrace('registry shadow embedded-source topology is malformed', error);
+  }
+}
+
 function validateLockfileEntryProvenance(
   packages: Record<string, unknown>,
   substitution: AppliedShadowSubstitution,
@@ -697,6 +787,7 @@ export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowAsset
     const suppliedTrace = { protocol: trace.protocol, applied: suppliedApplied };
     if (canonicalShadowJson(canonical) !== canonicalShadowJson(suppliedTrace))
       throw new TypeError('shadow lockfile trace is non-canonical');
+    registryShadowEmbeddedSourcesFromLockfile({ packages }, plan);
     return plan;
   } catch (error) {
     if (isBrokenShadowTrace(error)) throw error;
