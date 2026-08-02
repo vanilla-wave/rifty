@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Shadow recipe v2 acquisition validation authority
 created: 2026-07-28
 why: the blocked recipe-v2 predecessor proved the current LightningCSS registry twin is accepted without verifying its exact registry projection or embedded manifest
@@ -110,6 +110,8 @@ protocol-v2 provenance and acceptance consumers.
   lock, FIFO, or coordination mechanism.
 
 ## Decisions
+
+ready-verdict: 2026-08-02 — Contract+RED @ d562792e0d3df017dec11487f23dba3cb520635f
 
 - `2026-08-02` fresh baseline
   `main@4a2beb233cc2127ef531b0eba2584797234865f1` includes PR #237.
