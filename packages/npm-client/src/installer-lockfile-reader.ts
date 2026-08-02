@@ -5,6 +5,12 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import {
+  type RegistryShadowEmbeddedSource,
+  planShadowSubstitutionsFromLockfile,
+  registryAcquisitionInstallPath,
+  registryShadowEmbeddedSourcesFromLockfile,
+} from './internal/shadow/planner.ts';
 import type { Lockfile, LockfileEntry } from './linker.ts';
 import { matchesRange } from './semver.ts';
 
@@ -147,6 +153,85 @@ export function lockfileCovers(
   return pinned;
 }
 
+interface BundleShadowContext {
+  readonly acquisitionByMaterializationPath: ReadonlyMap<string, string>;
+  readonly embeddedSources: readonly RegistryShadowEmbeddedSource[];
+}
+
+function bundleShadowContext(lockfile: Lockfile): BundleShadowContext | string {
+  try {
+    const plan = planShadowSubstitutionsFromLockfile(lockfile);
+    const embeddedSources = registryShadowEmbeddedSourcesFromLockfile(lockfile, plan);
+    const acquisitionByMaterializationPath = new Map<string, string>();
+    for (const substitution of plan.substitutions) {
+      if (substitution.acquisition.kind !== 'registry') continue;
+      acquisitionByMaterializationPath.set(
+        substitution.materialization.installPath,
+        registryAcquisitionInstallPath(substitution),
+      );
+    }
+    return { acquisitionByMaterializationPath, embeddedSources };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `bundle lockfile shadow trace/topology is invalid (${message})`;
+  }
+}
+
+function exactBundleReachablePaths(
+  lockfile: Lockfile,
+  request: Record<string, string>,
+  acquisitionByMaterializationPath: ReadonlyMap<string, string>,
+): ReadonlySet<string> {
+  const reachablePaths = new Set<string>();
+  const queue = Object.keys(request).map((name) => ({ name, parentInstallPath: '' }));
+  for (let index = 0; index < queue.length; index += 1) {
+    const edge = queue[index];
+    if (!edge) continue;
+    const hit = pinnedEntryForParent(lockfile, edge.name, edge.parentInstallPath);
+    if (!hit) continue;
+    const installPath = acquisitionByMaterializationPath.get(hit.installPath) ?? hit.installPath;
+    if (reachablePaths.has(installPath)) continue;
+    const entry = installPath === hit.installPath ? hit.entry : lockfile.packages[installPath];
+    if (!entry) continue;
+    reachablePaths.add(installPath);
+    for (const name of Object.keys(entry.dependencies ?? {})) {
+      queue.push({ name, parentInstallPath: installPath });
+    }
+  }
+  return reachablePaths;
+}
+
+function bundleCompletenessGapForValidatedPaths(
+  lockfile: Lockfile,
+  reachablePaths: ReadonlySet<string>,
+  tarballs: ReadonlyArray<{ name: string; version: string; integrity: string }>,
+  embeddedSources: readonly RegistryShadowEmbeddedSource[],
+): string | null {
+  const embeddedDependencyPaths = new Set(
+    embeddedSources.flatMap((source) =>
+      source.dependencies.map((dependency) => dependency.installPath),
+    ),
+  );
+  const integrityByNameVersion = new Map<string, string>();
+  for (const t of tarballs) integrityByNameVersion.set(`${t.name}@${t.version}`, t.integrity);
+  for (const [path, entry] of Object.entries(lockfile.packages)) {
+    if (path === '') continue; // the root project is not a tarball
+    if (!reachablePaths.has(path) || embeddedDependencyPaths.has(path)) continue;
+    const name = lockfilePathBareName(path);
+    if (!entry.version || !entry.resolved || !entry.integrity) {
+      return `bundle lockfile entry ${path} lacks replay fields (resolved/integrity)`;
+    }
+    const integrity = integrityByNameVersion.get(`${name}@${entry.version}`);
+    if (integrity === undefined) {
+      return `bundle omits the tarball for ${name}@${entry.version}`;
+    }
+    if (integrity !== entry.integrity) {
+      return `bundle tarball integrity for ${name}@${entry.version} does not match its lockfile`;
+    }
+  }
+  return null;
+}
+
 /**
  * Eddy-bundle completeness gate (round 6): every lockfile package REACHABLE
  * from the request must be replayable FROM THE BUNDLE — a `resolved` +
@@ -166,13 +251,19 @@ export function bundleCompletenessGap(
   request: Record<string, string>,
   tarballs: ReadonlyArray<{ name: string; version: string; integrity: string }>,
 ): string | null {
-  const reachableNames = lockfileSubgraph(lockfile, Object.keys(request));
-  const reachablePaths = new Set(
-    Object.keys(lockfile.packages).filter(
-      (path) => path !== '' && reachableNames.has(lockfilePathBareName(path)),
-    ),
+  const shadow = bundleShadowContext(lockfile);
+  if (typeof shadow === 'string') return shadow;
+  const reachablePaths = exactBundleReachablePaths(
+    lockfile,
+    request,
+    shadow.acquisitionByMaterializationPath,
   );
-  return bundleCompletenessGapForPaths(lockfile, reachablePaths, tarballs);
+  return bundleCompletenessGapForValidatedPaths(
+    lockfile,
+    reachablePaths,
+    tarballs,
+    shadow.embeddedSources,
+  );
 }
 
 /** Exact-path variant for callers that already own override/companion traversal. */
@@ -181,24 +272,14 @@ export function bundleCompletenessGapForPaths(
   reachablePaths: ReadonlySet<string>,
   tarballs: ReadonlyArray<{ name: string; version: string; integrity: string }>,
 ): string | null {
-  const integrityByNameVersion = new Map<string, string>();
-  for (const t of tarballs) integrityByNameVersion.set(`${t.name}@${t.version}`, t.integrity);
-  for (const [path, entry] of Object.entries(lockfile.packages)) {
-    if (path === '') continue; // the root project is not a tarball
-    if (!reachablePaths.has(path)) continue;
-    const name = lockfilePathBareName(path);
-    if (!entry.version || !entry.resolved || !entry.integrity) {
-      return `bundle lockfile entry ${path} lacks replay fields (resolved/integrity)`;
-    }
-    const integrity = integrityByNameVersion.get(`${name}@${entry.version}`);
-    if (integrity === undefined) {
-      return `bundle omits the tarball for ${name}@${entry.version}`;
-    }
-    if (integrity !== entry.integrity) {
-      return `bundle tarball integrity for ${name}@${entry.version} does not match its lockfile`;
-    }
-  }
-  return null;
+  const shadow = bundleShadowContext(lockfile);
+  if (typeof shadow === 'string') return shadow;
+  return bundleCompletenessGapForValidatedPaths(
+    lockfile,
+    reachablePaths,
+    tarballs,
+    shadow.embeddedSources,
+  );
 }
 
 /**
