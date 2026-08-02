@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "api": "sass-embedded",
+  "state": "contract-red",
+  "version": "1.100.0",
+  "source": {
+    "package": "sass",
+    "version": "1.100.0"
+  },
+  "admission": {
+    "kind": "exact-only",
+    "unsupportedFeature": "sass-embedded.version"
+  },
+  "acquisition": {
+    "dependencies": {
+      "chokidar": "^5.0.0",
+      "immutable": "^5.1.5",
+      "source-map-js": ">=0.6.2 <2.0.0"
+    },
+    "optionalDependencies": {},
+    "omittedOptionalDependencies": {
+      "@parcel/watcher": "^2.4.1"
+    },
+    "peerDependencies": {},
+    "bundledDependencies": [],
+    "unsupportedFeature": "sass-embedded.acquisition"
+  },
+  "facade": {
+    "info": "sass-embedded\t1.100.0",
+    "exceptionMessagePrefix": "Error: ",
+    "absentSpanUrl": "undefined",
+    "disposedErrorMessages": {
+      "sync": "Compiler caused error: Sync compiler has already been disposed.",
+      "async": "Compiler caused error: Async compiler has already been disposed."
+    },
+    "cjsOmittedExports": ["cli_pkg_main_0_", "load", "loadParserExports_"],
+    "esmOmittedExports": ["parser_"],
+    "esmUndefinedExports": ["CalculationOperator", "CustomFunction", "ListSeparator", "PromiseOr"],
+    "adaptations": [
+      {
+        "id": "clean-export-namespace",
+        "notes": "Omit pure-Sass dart2js implementation keys and expose the sass-embedded CJS/ESM namespace."
+      },
+      {
+        "id": "embedded-info",
+        "notes": "Report the exact sass-embedded info string."
+      },
+      {
+        "id": "exception-message-prefix",
+        "notes": "Prefix Exception.message and Exception.toString() with the embedded Error prefix."
+      },
+      {
+        "id": "exception-span-url",
+        "notes": "Expose undefined rather than null for an absent span.url."
+      },
+      {
+        "id": "compiler-dispose-errors",
+        "notes": "Report the exact embedded Sync and Async compiler post-dispose error texts."
+      },
+      {
+        "id": "legacy-logger-routing",
+        "notes": "Send legacy-js-api deprecation to stderr and normalize the warning stack from stdin to the embedded dash spelling."
+      }
+    ]
+  },
+  "surfaces": [
+    {
+      "surface": "Exact install substitution",
+      "notes": "Only the literal sass-embedded@1.100.0 request acquires sass@1.100.0; the native watcher is omitted and no runtime-asset binding is created."
+    },
+    {
+      "surface": "Direct CommonJS and ESM loading",
+      "notes": "The synthesized facade exposes the measured sass-embedded namespace through require() and import()."
+    },
+    {
+      "surface": "Compile and compiler lifecycle",
+      "notes": "compileString, compileStringAsync, initCompiler, and initAsyncCompiler cover repeated compilation, disposal, and exact post-dispose errors."
+    },
+    {
+      "surface": "Modern importers, logger, source maps, and errors",
+      "notes": "The finite Node oracle covers sync/async importers, containingUrl, warnings/deprecations, source-map bytes, sassMessage, and spans."
+    },
+    {
+      "surface": "Legacy render API",
+      "notes": "renderSync output, stats keys, and legacy-js-api deprecation match the exact Node oracle."
+    },
+    {
+      "surface": "Vite 7.3.6 SCSS dev, HMR, and build",
+      "notes": "A real nested-partial project proves normalized CSS, edits, maps, warnings, imports, and dependency facts."
+    }
+  ],
+  "divergence": {
+    "id": "sync-compile-async-importer",
+    "behavior": "throw-pure-sass-exception",
+    "surface": "Sync compile with an async importer",
+    "notes": "Pure Sass throws a clean Exception; real sass-embedded deadlocks the event loop. Rifty preserves the loud throw and records the deliberate divergence."
+  },
+  "unsupported": [
+    {
+      "surface": "Other versions and version ranges",
+      "feature": "sass-embedded.version",
+      "notes": "Every request except the literal 1.100.0 is rejected before registry or VFS work."
+    },
+    {
+      "surface": "Sass CLI/bin",
+      "feature": "sass-embedded.cli",
+      "notes": "The materialized sass bin is a loud gap; the acquired pure-Sass bin never leaks."
+    },
+    {
+      "surface": "Watch mode and @parcel/watcher",
+      "feature": "sass-embedded.watch",
+      "notes": "Watch mode is outside the proven facade; @parcel/watcher is never acquired."
+    },
+    {
+      "surface": "TypeScript declaration surface",
+      "feature": "sass-embedded.types",
+      "notes": "The runtime facade does not publish approximate or dangling declarations; exact declaration materialization remains unsupported."
+    },
+    {
+      "surface": "Unproven legacy or API surfaces",
+      "feature": "sass-embedded.unproven",
+      "notes": "Any surface outside the finite oracle fails loudly instead of approximating behavior."
+    }
+  ],
+  "tests": [
+    "tools/checks/sass-compat-matrix.contract.test.ts",
+    "tools/checks/runtime-adapter-boundary.test.ts",
+    "tools/shadow-registry/src/sass-contract-evidence.test.ts",
+    "tools/shadow-registry/src/internal/catalog.contract.test.ts",
+    "tools/shadow-registry/src/sass-capsule.contract.test.ts",
+    "packages/npm-client/src/installer-sass-embedded-substitution.contract.test.ts",
+    "packages/workbench/src/workers/owner-package-shadow-assets.contract.test.ts",
+    "tests/browser-unit/sass-vite-contract.spec.ts",
+    "tests/browser-unit/sass-network-measurement.spec.ts"
+  ],
+  "limitations": [
+    "Only the exact sass-embedded@1.100.0 facade over exact sass@1.100.0 is in this contract.",
+    "Contract+RED records intended behavior; supported rows stay partial until direct Node differential and real Chromium Vite acceptance are green.",
+    "The sync-compile async-importer deadlock is an explicit deliberate divergence, never a parity claim."
+  ]
+}

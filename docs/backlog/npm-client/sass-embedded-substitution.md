@@ -37,6 +37,21 @@ make invalid direct construction an explicit named gap and narrow only that
 positive claim. The pre-demotion Acceptance and Parity cases are retained
 verbatim in the reference artifact.
 
+## Reference contract
+
+- Node v24.16.0 runs one committed nine-row probe against exact public
+  `sass@1.100.0` and `sass-embedded@1.100.0`; package identities, complete
+  normalized transcripts, reproduction command, and the isolated two-attempt
+  deadlock procedure are pinned in
+  `reference/sass-1.100.0-node-differential.md`.
+- The public `sass@1.100.0` packument, tarball bytes, required closure, and
+  omitted `@parcel/watcher` projection are pinned in
+  `reference/sass-1.100.0-packument.md` and executable shadow-registry tests.
+- Real Chromium with exact Vite 7.3.6 is the integration oracle for direct
+  CJS/ESM loading, SCSS dev/HMR/build, offline replay, and the measured cold
+  install row. The twice-reproduced real-Node build bytes and offline npm
+  replay are pinned in `reference/sass-vite-7.3.6-node-build.md`.
+
 ## Readiness blockers
 
 - Resolve the post-pickup invalid-construction lifecycle fork through manual
@@ -52,8 +67,9 @@ verbatim in the reference artifact.
 
 ## Acceptance
 
-- Fresh/replay/snapshot and applicable general-Eddy materialization retain the
-  exact substitution marker and acquisition provenance.
+- Fresh install, lockfile replay, durable reopen, and applicable general-Eddy
+  materialization retain the exact substitution marker and acquisition
+  provenance.
 - Before tarball work, the official `sass@1.100.0` manifest exactly matches the
   recipe's complete required, optional, peer, bundled, and omitted-optional
   projection. Drift in any map rejects with
@@ -74,8 +90,9 @@ verbatim in the reference artifact.
   error texts), sync+async importers, logger warn/deprecation, sourceMap
   bytes, error `sassMessage`/span/message shape, synthesized `info`.
 - Real Vite 7.3.6 SCSS project: nested partial and Vite-resolved `@use`,
-  custom importer, a warning, source map; dev renders exact normalized CSS,
-  an edit HMRs, build emits matching CSS/map/dependency facts.
+  custom importer and a warning; dev renders exact normalized CSS, an edit
+  HMRs, and build emits the exact Node-oracle CSS/dependency facts. Node emits
+  no external CSS map for this configuration, so rifty must not invent one.
 - The named divergence (sync compile + async importer: loud throw where real
   sass-embedded deadlocks) is a compat ⚠ note with a differential test
   pinning BOTH behaviors.
@@ -116,7 +133,7 @@ ADR-0310 spike; each is a differential test:
 |---|---|---|
 | corrupt-input | drifted recipe, every complete dependency map, facade bytes, bin target, or provenance rejects before publish/reuse | catalog/installer/lock mutation table |
 | observable-order | unsupported version/CLI rejects before rejected-package acquisition or writes; importer/logger lifecycle matches the pinned Node order | ordered install + differential ledgers |
-| provenance-lie | fresh/replay/snapshot preserve exact Sass/twin identities and never substitute native or host bytes | fresh→replay→snapshot differential |
+| provenance-lie | fresh/replay/durable reopen/general Eddy preserve exact Sass/twin identities and never substitute native or host bytes | fresh→replay→durable reopen plus general-Eddy differential |
 | unbounded-read / corrupt-input / provenance-lie | stalled, partial, corrupt, or failed Sass or required-closure registry/tarball acquisition publishes no facade, bin, success report, or lock; retry materializes exact bytes | parent/required-child acquisition boundary faults + retry |
 | torn-state | abort during facade/bin writes publishes no lock/success; retry reconciles the exact tree | materialization abort fault |
 | quota-perm-fail | facade/bin write rejection remains loud and publishes no lock/success | VFS fault matrix |
@@ -128,6 +145,9 @@ ADR-0310 spike; each is a differential test:
   `NotImplementedError('sass-embedded.version')` + compat ❌.
 - The `sass` CLI/bin — `NotImplementedError('sass-embedded.cli')` + compat ❌.
 - Watch mode / `@parcel/watcher` surface.
+- TypeScript declarations — `NotImplementedError('sass-embedded.types')` in
+  the public compatibility contract; the runtime facade publishes no dangling
+  or approximate `types` target.
 - Retained-optional execution, non-empty peer handoff/placement, and a positive
   scoped key in every projection map. No current builtin recipe honestly
   carries those branches; they remain explicit in
@@ -151,5 +171,9 @@ ADR-0310 spike; each is a differential test:
   Retained optionals, non-empty peers, and positive scoped keys have no honest
   production carrier in the frozen catalog and remain ordinary backlog rather
   than blocking the Sass outcome.
+- `goal-recut: 2026-08-02` — baked dependency snapshot materialization is not a
+  frozen Sass outcome or user path; the slice proves the epic's actual fresh,
+  durable offline reopen, lock replay, and general-Eddy sources without adding
+  a Sass-specific snapshot carrier.
 - Delete-on-done with the sass-scale-proof PR; epic closure requires this
   slice (not optional downstream).

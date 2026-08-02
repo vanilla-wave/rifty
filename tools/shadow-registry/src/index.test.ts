@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bakedOverrides, internalsShims } from './index.ts';
+import { builtinShadowSubstitutionCatalog } from './internal/index.ts';
 
 describe('shadow-registry', () => {
   it('bakedOverrides contains the bcrypt → bcryptjs entry', () => {
@@ -15,6 +16,27 @@ describe('shadow-registry', () => {
     expect(bakedOverrides.lightningcss).toBe('lightningcss-wasm@1.32.0');
   });
 
+  it('bakedOverrides replaces exact sass-embedded with the exact pure Sass twin', () => {
+    expect(bakedOverrides['sass-embedded']).toBe('sass@1.100.0');
+  });
+
+  it('derives every registry-backed builtin redirect from the owner-decoded catalog', () => {
+    const registryRedirects = Object.fromEntries(
+      builtinShadowSubstitutionCatalog.recipes.flatMap((recipe) =>
+        recipe.acquisition.kind === 'registry'
+          ? [
+              [
+                recipe.trigger.name,
+                `${recipe.acquisition.name}@${recipe.acquisition.version}`,
+              ] as const,
+            ]
+          : [],
+      ),
+    );
+
+    expect(bakedOverrides).toEqual({ bcrypt: 'bcryptjs', ...registryRedirects });
+  });
+
   it('internalsShims are keyed by installed trigger with package-relative file paths', () => {
     expect(Object.keys(internalsShims).sort()).toEqual(['lightningcss-wasm', 'rollup']);
     for (const shim of Object.values(internalsShims)) {
@@ -27,6 +49,11 @@ describe('shadow-registry', () => {
         expect(rel).not.toContain('node_modules');
       }
     }
+  });
+
+  it('keeps the install-only Sass recipe out of the internals-shim path', () => {
+    expect(internalsShims.sass).toBeUndefined();
+    expect(internalsShims['sass-embedded']).toBeUndefined();
   });
 
   it('rollup shim is ONE mode-independent file delegating to the real WASM parser', () => {

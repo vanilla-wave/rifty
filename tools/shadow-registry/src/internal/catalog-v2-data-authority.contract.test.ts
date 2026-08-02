@@ -1031,6 +1031,31 @@ describe('shadow recipe v2 data authority', () => {
     }
   });
 
+  it('owner-decodes the official Sass manifest into retained and omitted acquisition policy', () => {
+    const sass = builtinShadowSubstitutionCatalog.recipes.find(
+      (recipe) => recipe.trigger.name === 'sass-embedded',
+    );
+    if (!sass || sass.acquisition.kind !== 'registry') {
+      throw new Error('owner-decoded builtin Sass recipe is missing');
+    }
+
+    expect(sass.acquisition).toEqual({
+      kind: 'registry',
+      name: sassRegistryGolden.name,
+      version: sassRegistryGolden.version,
+      dependencyProjection: {
+        dependencies: sassRegistryGolden.dependencies,
+        optionalDependencies: {},
+        omittedOptionalDependencies: sassRegistryGolden.optionalDependencies,
+        peerDependencies: sassRegistryGolden.peerDependencies,
+        bundledDependencies: sassRegistryGolden.bundleDependencies,
+        unsupportedFeature: 'sass-embedded.acquisition',
+      },
+    });
+    expect(Object.isFrozen(sass)).toBe(true);
+    expect(Object.isFrozen(sass.acquisition.dependencyProjection)).toBe(true);
+  });
+
   it('exports one owner-decoded builtin object and no generic decoder through a package barrel', () => {
     expect(internalShadowRegistry.builtinShadowSubstitutionCatalog).toBe(
       builtinShadowSubstitutionCatalog,
@@ -1047,7 +1072,7 @@ describe('shadow recipe v2 data authority', () => {
     );
   });
 
-  it('strict-decodes exact-only admission as data without a builtin exact-only recipe', () => {
+  it('strict-decodes exact-only admission as generic catalog data', () => {
     const catalog = rawSchema2Catalog();
     setAt(catalog, ['recipes', 0, 'admission', 'kind'], 'exact-only');
     resign(catalog);
@@ -1055,7 +1080,7 @@ describe('shadow recipe v2 data authority', () => {
     expect(decodeShadowSubstitutionCatalog(catalog)).toEqual(catalog);
   });
 
-  it('ships both builtin siblings as schema 2 with data-owned admission features', () => {
+  it('ships all builtin recipes as schema 2 with data-owned admission features', () => {
     expect(builtinShadowSubstitutionCatalog).toMatchObject({
       schema: 2,
       id: 'rifty.shadow-substitutions.builtin.v2',
@@ -1076,6 +1101,11 @@ describe('shadow recipe v2 data authority', () => {
         id: 'rifty.shadow-substitution.lightningcss.v2',
         schema: 2,
         admission: { kind: 'semver-admits', unsupportedFeature: 'lightningcss.version' },
+      },
+      {
+        id: 'rifty.shadow-substitution.sass-embedded.v2',
+        schema: 2,
+        admission: { kind: 'exact-only', unsupportedFeature: 'sass-embedded.version' },
       },
     ]);
   });

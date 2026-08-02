@@ -6,6 +6,7 @@ import {
   type InstallResult,
   type Packument,
   RegistryClient,
+  type VersionManifest,
   install,
 } from '@riftydev/npm-client';
 import {
@@ -33,6 +34,83 @@ const assetBytes = new Uint8Array(
 );
 const assetSha256 = createHash('sha256').update(assetBytes).digest('hex');
 const ROOTS = ['/projects/first', '/projects/second'] as const;
+const sassFixtureRoot = new URL('../../../../tools/shadow-registry/src/fixtures/', import.meta.url);
+
+interface SassRegistryFixture {
+  readonly name: string;
+  readonly version: string;
+  readonly dist: { readonly integrity: string };
+  readonly dependencies: Readonly<Record<string, string>>;
+  readonly optionalDependencies: Readonly<Record<string, string>>;
+  readonly peerDependencies: Readonly<Record<string, string>>;
+  readonly bin: Readonly<Record<string, string>>;
+}
+
+interface SassClosureFixture {
+  readonly packages: readonly {
+    readonly name: string;
+    readonly version: string;
+    readonly dependencies: Readonly<Record<string, string>>;
+    readonly integrity: string;
+  }[];
+}
+
+interface SassRegistryEntry {
+  readonly manifest: VersionManifest;
+  readonly tarball: Uint8Array;
+}
+
+const sassRegistryFixture = JSON.parse(
+  await readFile(new URL('sass-1.100.0-registry.json', sassFixtureRoot), 'utf8'),
+) as SassRegistryFixture;
+const sassClosureFixture = JSON.parse(
+  await readFile(new URL('sass-1.100.0-closure.json', sassFixtureRoot), 'utf8'),
+) as SassClosureFixture;
+
+function fixtureTarballUrl(name: string): string {
+  return `fixture:${encodeURIComponent(name)}`;
+}
+
+const sassRegistryEntries = new Map<string, SassRegistryEntry>(
+  await Promise.all(
+    [
+      {
+        name: sassRegistryFixture.name,
+        version: sassRegistryFixture.version,
+        manifest: {
+          name: sassRegistryFixture.name,
+          version: sassRegistryFixture.version,
+          dependencies: { ...sassRegistryFixture.dependencies },
+          optionalDependencies: { ...sassRegistryFixture.optionalDependencies },
+          peerDependencies: { ...sassRegistryFixture.peerDependencies },
+          bin: { ...sassRegistryFixture.bin },
+          dist: {
+            integrity: sassRegistryFixture.dist.integrity,
+            tarball: fixtureTarballUrl(sassRegistryFixture.name),
+          },
+        } satisfies VersionManifest,
+      },
+      ...sassClosureFixture.packages.map((fixture) => ({
+        name: fixture.name,
+        version: fixture.version,
+        manifest: {
+          name: fixture.name,
+          version: fixture.version,
+          dependencies: { ...fixture.dependencies },
+          dist: {
+            integrity: fixture.integrity,
+            tarball: fixtureTarballUrl(fixture.name),
+          },
+        } satisfies VersionManifest,
+      })),
+    ].map(async ({ name, version, manifest }) => {
+      const tarball = new Uint8Array(
+        await readFile(new URL(`${name}-${version}.tgz`, sassFixtureRoot)),
+      );
+      return [name, { manifest, tarball }] as const;
+    }),
+  ),
+);
 
 class RejectingRegistry extends RegistryClient {
   constructor() {
@@ -45,6 +123,41 @@ class RejectingRegistry extends RegistryClient {
 
   override async getTarball(url: string): Promise<Uint8Array> {
     throw new Error(`synthetic esbuild must not read registry tarball ${url}`);
+  }
+}
+
+class SassFixtureRegistry extends RegistryClient {
+  readonly packuments: string[] = [];
+  readonly tarballs: string[] = [];
+
+  constructor() {
+    super({ baseUrl: '/sass-fixture', fetch: async () => new Response('', { status: 599 }) });
+  }
+
+  override async getPackument(name: string): Promise<Packument> {
+    this.packuments.push(name);
+    const entry = sassRegistryEntries.get(name);
+    if (entry === undefined) {
+      if (name === 'sass-embedded') {
+        throw new Error(
+          'missing Sass shadow recipe: owner attempted sass-embedded registry metadata',
+        );
+      }
+      throw new Error(`unexpected Sass fixture packument ${name}`);
+    }
+    return {
+      name,
+      'dist-tags': { latest: entry.manifest.version },
+      versions: { [entry.manifest.version]: entry.manifest },
+    };
+  }
+
+  override async getTarball(url: string): Promise<Uint8Array> {
+    this.tarballs.push(url);
+    const name = decodeURIComponent(url.slice('fixture:'.length));
+    const entry = sassRegistryEntries.get(name);
+    if (entry === undefined) throw new Error(`unexpected Sass fixture tarball ${url}`);
+    return entry.tarball.slice();
   }
 }
 
@@ -68,6 +181,29 @@ function packageConfig(root: string, name: string): OwnerPackageConfig {
     },
     templateId: 'esbuild-contract',
     slug: name,
+    fromScratch: true,
+  };
+}
+
+function sassPackageConfig(root: string): OwnerPackageConfig {
+  const packageJson = `${JSON.stringify({
+    name: 'sass-zero-assets',
+    version: '1.0.0',
+    dependencies: { 'sass-embedded': '1.100.0' },
+  })}\n`;
+  return {
+    cfg: {
+      runtime: 'node-cli',
+      root,
+      entryPath: `${root}/main.mjs`,
+      packageName: 'sass-zero-assets',
+      packageVersion: '1.0.0',
+      installDeps: { 'sass-embedded': '1.100.0' },
+      packageJson,
+      seedFiles: {},
+    },
+    templateId: 'sass-zero-asset-contract',
+    slug: 'sass-zero-assets',
     fromScratch: true,
   };
 }
@@ -186,6 +322,77 @@ it('freezes exact runtime plans and reuses one ready asset across projects', asy
   }
 
   await manager.close();
+});
+
+it('keeps the registry-backed Sass substitution outside the asset manager and store', async () => {
+  const root = '/projects/sass-zero-assets';
+  const config = sassPackageConfig(root);
+  const pair = createMemoryFs();
+  const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+    ownerEpoch: 'owner-sass-zero-assets-contract',
+    initialRoots: ['/'],
+  });
+  setSyncMirror(owner, { async: pair.vfs });
+  owner.mkdirSync(root, { recursive: true });
+  owner.writeFileSync(`${root}/package.json`, new TextEncoder().encode(config.cfg.packageJson));
+
+  const shadowAssets: PackageTreeShadowAssetBoundary = Object.freeze({
+    async ensure(plan: ShadowAssetPlan) {
+      throw new Error(
+        `Sass zero-asset plan must not enter asset manager ensure: ${plan.requiredSetDigest}`,
+      );
+    },
+    serve(_ready: ShadowAssetReadySet, _port: MessagePort) {
+      throw new Error('Sass zero-asset plan must not create an asset MessagePort server');
+    },
+  });
+  const registry = new SassFixtureRegistry();
+  let installPlan: ShadowAssetPlan | undefined;
+  const state = createOwnerPackageState({
+    primeInitialPrefetch: false,
+    vfs: new SyncMirrorVfs(),
+    fsSync: owner,
+    installStampClaims,
+    flush: async () => ({ failures: [], total: 0 }),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry,
+    shadowAssets,
+    install: async (arg1) => {
+      if (typeof arg1 === 'string') throw new Error('owner install must use InstallOptions');
+      const result = await install(arg1);
+      installPlan = shadowAssetPlanForInstallResult(result);
+      return result;
+    },
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+
+  await state.activateAndEnsure(config);
+  if (installPlan === undefined) throw new Error('owner Sass install plan was not observed');
+  expect(installPlan.assets).toEqual([]);
+  expect(installPlan.bindings).toEqual([]);
+  expect(installPlan.substitutions).toHaveLength(1);
+  expect(installPlan.substitutions[0]).toMatchObject({
+    substitutionId: 'rifty.shadow-substitution.sass-embedded.v2',
+    acquisition: { kind: 'registry', name: 'sass', version: '1.100.0' },
+    materialization: {
+      installPath: 'node_modules/sass-embedded',
+      name: 'sass-embedded',
+      version: '1.100.0',
+    },
+  });
+  expect(registry.packuments).not.toContain('sass-embedded');
+
+  const reservation = await state.reserveChildAdmission(root);
+  try {
+    expect(reservation.snapshot.ready).toBeNull();
+    expect(reservation.snapshot.capabilityPorts).toEqual({});
+  } finally {
+    reservation.snapshot.dispose();
+    reservation.commit();
+  }
 });
 
 // Fault class: concurrent-same-key. The owner FIFO must physically exclude the
