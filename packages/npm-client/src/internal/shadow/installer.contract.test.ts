@@ -17,6 +17,10 @@ import schemaOneShadowLockfile from './fixtures/schema-1-shadow-lockfile.json';
 import { shadowAssetPlanForInstallResult } from './install-result.ts';
 import { planShadowSubstitutionsFromLockfile } from './planner.ts';
 
+type LightningManifest = VersionManifest & {
+  readonly bundleDependencies: readonly string[];
+};
+
 class MemoryTarballCache implements TarballCache {
   readonly #entries = new Map<string, Uint8Array>();
 
@@ -49,20 +53,38 @@ class RejectingRegistry extends RegistryClient {
 }
 
 class LightningRegistry extends RegistryClient {
-  readonly #tarball: Uint8Array;
+  readonly #tarballs: ReadonlyMap<string, Uint8Array>;
 
-  constructor(tarball: Uint8Array) {
+  constructor(parentTarball: Uint8Array, compatibilityPoisonTarball: Uint8Array) {
     super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
-    this.#tarball = tarball;
+    this.#tarballs = new Map([
+      ['https://registry.test/lightningcss-wasm-1.32.0.tgz', parentTarball],
+      ['https://registry.test/napi-wasm-1.1.3.tgz', compatibilityPoisonTarball],
+    ]);
   }
 
   override async getPackument(name: string): Promise<Packument> {
-    if (name !== 'lightningcss-wasm') throw new Error(`unexpected registry package ${name}`);
-    const manifest: VersionManifest = {
-      name,
-      version: '1.32.0',
-      dist: { tarball: 'https://registry.test/lightningcss-wasm-1.32.0.tgz' },
-    };
+    let manifest: VersionManifest;
+    if (name === 'lightningcss-wasm') {
+      const parent: LightningManifest = {
+        name,
+        version: '1.32.0',
+        dependencies: { 'napi-wasm': '^1.0.1' },
+        optionalDependencies: {},
+        peerDependencies: {},
+        bundleDependencies: ['napi-wasm'],
+        dist: { tarball: 'https://registry.test/lightningcss-wasm-1.32.0.tgz' },
+      };
+      manifest = parent;
+    } else if (name === 'napi-wasm') {
+      manifest = {
+        name,
+        version: '1.1.3',
+        dist: { tarball: 'https://registry.test/napi-wasm-1.1.3.tgz' },
+      };
+    } else {
+      throw new Error(`unexpected registry package ${name}`);
+    }
     return {
       name,
       'dist-tags': { latest: manifest.version },
@@ -71,26 +93,42 @@ class LightningRegistry extends RegistryClient {
   }
 
   override async getTarball(url: string): Promise<Uint8Array> {
-    if (url !== 'https://registry.test/lightningcss-wasm-1.32.0.tgz') {
-      throw new Error(`unexpected registry tarball ${url}`);
-    }
-    return this.#tarball.slice();
+    const tarball = this.#tarballs.get(url);
+    if (!tarball) throw new Error(`unexpected registry tarball ${url}`);
+    return tarball.slice();
   }
 }
 
+async function fixtureTarball(files: Readonly<Record<string, string>>): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  for (const [path, text] of Object.entries(files)) {
+    const bytes = new TextEncoder().encode(text);
+    chunks.push(buildHeader(`package/${path}`, bytes.length), padToBlock(bytes));
+  }
+  return gzip(concat(...chunks, TAR_TRAILER));
+}
+
 async function lightningRegistry(): Promise<LightningRegistry> {
-  const packageJson = new TextEncoder().encode(
-    JSON.stringify({ name: 'lightningcss-wasm', version: '1.32.0' }),
-  );
-  return new LightningRegistry(
-    await gzip(
-      concat(
-        buildHeader('package/package.json', packageJson.length),
-        padToBlock(packageJson),
-        TAR_TRAILER,
-      ),
-    ),
-  );
+  const parentTarball = await fixtureTarball({
+    'package.json': JSON.stringify({
+      name: 'lightningcss-wasm',
+      version: '1.32.0',
+      dependencies: { 'napi-wasm': '^1.0.1' },
+      optionalDependencies: {},
+      peerDependencies: {},
+      bundleDependencies: ['napi-wasm'],
+    }),
+    'node_modules/napi-wasm/package.json': JSON.stringify({
+      name: 'napi-wasm',
+      version: '1.1.3',
+    }),
+    'node_modules/napi-wasm/index.js': 'module.exports = "bundled napi-wasm";\n',
+  });
+  const compatibilityPoisonTarball = await fixtureTarball({
+    'package.json': JSON.stringify({ name: 'napi-wasm', version: '1.1.3' }),
+    'index.js': 'module.exports = "standalone compatibility poison";\n',
+  });
+  return new LightningRegistry(parentTarball, compatibilityPoisonTarball);
 }
 
 async function freshLockfile(
