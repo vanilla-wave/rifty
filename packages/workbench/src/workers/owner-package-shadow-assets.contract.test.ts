@@ -395,6 +395,248 @@ it('keeps the registry-backed Sass substitution outside the asset manager and st
   }
 });
 
+// Fault class: concurrent-same-key. Sass has no asset-manager carrier, but its
+// real installer still enters the same owner FIFO exactly once per project.
+it('physically excludes same-project Sass installs while the first lockfile commit is parked', async () => {
+  const root = '/projects/sass-fifo';
+  const config = sassPackageConfig(root);
+  const facadePaths = [
+    'dist/bin/sass.js',
+    'dist/lib/index.js',
+    'dist/lib/index.mjs',
+    'package.json',
+  ] as const;
+  const stableMaterializedPaths = [
+    ...facadePaths.map((path) => `node_modules/sass-embedded/${path}`),
+    'node_modules/.bin/sass',
+  ] as const;
+  const pair = createMemoryFs();
+  const { authority: owner, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
+    ownerEpoch: 'owner-sass-physical-exclusion-contract',
+    initialRoots: ['/'],
+  });
+  setSyncMirror(owner, { async: pair.vfs });
+  owner.mkdirSync(root, { recursive: true });
+  owner.writeFileSync(`${root}/package.json`, new TextEncoder().encode(config.cfg.packageJson));
+
+  const shadowAssets: PackageTreeShadowAssetBoundary = Object.freeze({
+    async ensure(plan: ShadowAssetPlan) {
+      throw new Error(`Sass FIFO must not enter asset ensure: ${plan.requiredSetDigest}`);
+    },
+    serve(_ready: ShadowAssetReadySet, _port: MessagePort) {
+      throw new Error('Sass FIFO must not create an asset MessagePort server');
+    },
+  });
+  const registry = new SassFixtureRegistry();
+  const projectVfs = new SyncMirrorVfs();
+  let markFirstAtLock!: () => void;
+  const firstAtLock = new Promise<void>((resolve) => {
+    markFirstAtLock = resolve;
+  });
+  let openFirstLockGate!: () => void;
+  const firstLockGate = new Promise<void>((resolve) => {
+    openFirstLockGate = resolve;
+  });
+  let gateOpen = false;
+  const releaseFirst = (): void => {
+    if (gateOpen) return;
+    gateOpen = true;
+    openFirstLockGate();
+  };
+  const writeAttempts: Array<{ readonly install: number; readonly path: string }> = [];
+  const results: InstallResult[] = [];
+  let coreEntries = 0;
+  let active = 0;
+  let maxActive = 0;
+
+  const state = createOwnerPackageState({
+    primeInitialPrefetch: false,
+    vfs: projectVfs,
+    fsSync: owner,
+    installStampClaims,
+    flush: async () => ({ failures: [], total: 0 }),
+    nodeWorkerRuntimeEnv: {},
+    log: () => {},
+    registry,
+    shadowAssets,
+    install: async (arg1) => {
+      if (typeof arg1 === 'string') throw new Error('owner install must use InstallOptions');
+      const options: InstallOptions = arg1;
+      const installOrdinal = ++coreEntries;
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      let parked = false;
+      const observedVfs = new Proxy(options.vfs, {
+        get(target, property) {
+          if (property === 'writeFile') {
+            return async (...args: Parameters<InstallOptions['vfs']['writeFile']>) => {
+              const [path] = args;
+              writeAttempts.push({ install: installOrdinal, path });
+              if (installOrdinal === 1 && path === `${root}/package-lock.json` && !parked) {
+                parked = true;
+                markFirstAtLock();
+                await firstLockGate;
+              }
+              return target.writeFile(...args);
+            };
+          }
+          const value: unknown = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      try {
+        const result = await install({ ...options, vfs: observedVfs });
+        results.push(result);
+        return result;
+      } finally {
+        active -= 1;
+      }
+    },
+    resolverUrl: () => undefined,
+    resolverBundleBaseUrl: () => undefined,
+    resolverPin: () => undefined,
+  });
+
+  await state.transition(config);
+  const shell = new Shell({ cwd: root });
+  shell.registerCommand(
+    'npm',
+    state.createNpmCommand(async () => 0),
+  );
+  const first = shell.run('npm install');
+  let second: ReturnType<typeof shell.run> | undefined;
+  try {
+    await Promise.race([
+      firstAtLock,
+      first.then((outcome) => {
+        throw new Error(
+          `first Sass install exited before its lock write: ${outcome.exitCode} ${outcome.stdout}`,
+        );
+      }),
+    ]);
+    expect(coreEntries).toBe(1);
+    expect(active).toBe(1);
+    expect(maxActive).toBe(1);
+    expect(owner.existsSync(`${root}/package-lock.json`)).toBe(false);
+    const revisionAtPark = owner.treeRevision;
+    const attemptsAtPark = [...writeAttempts];
+    const materializedAtPark = await Promise.all(
+      stableMaterializedPaths.map((path) => projectVfs.readFile(`${root}/${path}`)),
+    );
+
+    second = shell.run('npm install');
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(coreEntries).toBe(1);
+    expect(active).toBe(1);
+    expect(owner.treeRevision).toBe(revisionAtPark);
+    expect(writeAttempts).toEqual(attemptsAtPark);
+
+    releaseFirst();
+    const [firstOutcome, secondOutcome] = await Promise.all([first, second]);
+    expect(firstOutcome.exitCode, firstOutcome.stdout).toBe(0);
+    expect(secondOutcome.exitCode, secondOutcome.stdout).toBe(0);
+    await state.quiesce();
+
+    expect(coreEntries).toBe(2);
+    expect(maxActive).toBe(1);
+    expect(active).toBe(0);
+    expect(results).toHaveLength(2);
+    const [firstResult, secondResult] = results;
+    if (!firstResult || !secondResult) throw new Error('both Sass FIFO results are required');
+    expect(secondResult.lockfile).toEqual(firstResult.lockfile);
+
+    const persistedLockText = await projectVfs.readFileText(`${root}/package-lock.json`);
+    expect(persistedLockText).toBe(JSON.stringify(firstResult.lockfile, null, 2));
+    const lockfile = JSON.parse(persistedLockText) as InstallResult['lockfile'];
+    expect(lockfile).toEqual(firstResult.lockfile);
+    expect(lockfile).toEqual(secondResult.lockfile);
+    expect(Object.keys(lockfile.packages).sort()).toEqual([
+      '',
+      'node_modules/chokidar',
+      'node_modules/immutable',
+      'node_modules/readdirp',
+      'node_modules/sass',
+      'node_modules/sass-embedded',
+      'node_modules/source-map-js',
+    ]);
+    expect(lockfile.packages['node_modules/sass']).toEqual({
+      version: '1.100.0',
+      resolved: fixtureTarballUrl('sass'),
+      integrity: sassRegistryFixture.dist.integrity,
+      dependencies: { ...sassRegistryFixture.dependencies },
+    });
+    expect(lockfile.packages['node_modules/sass-embedded']).toEqual({
+      version: '1.100.0',
+      bin: { sass: 'dist/bin/sass.js' },
+      riftyShadowRecipe: 'rifty.shadow-substitution.sass-embedded.v2',
+    });
+
+    const materializedAfterBoth = await Promise.all(
+      stableMaterializedPaths.map((path) => projectVfs.readFile(`${root}/${path}`)),
+    );
+    expect(materializedAfterBoth).toEqual(materializedAtPark);
+    expect(new TextDecoder().decode(materializedAfterBoth.at(-1))).toBe(
+      "#!/usr/bin/env node\nimport('../sass-embedded/dist/bin/sass.js');\n",
+    );
+    const fileFacts = facadePaths.map((path, index) => {
+      const bytes = materializedAfterBoth[index];
+      if (!bytes) throw new Error(`Sass FIFO materialization bytes missing for ${path}`);
+      return {
+        path,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+        bytes: bytes.byteLength,
+      };
+    });
+    expect(lockfile.rifty?.shadowSubstitutions).toEqual({
+      protocol: 'rifty.shadow-substitutions/v2',
+      applied: [
+        {
+          catalog: {
+            id: 'rifty.shadow-substitutions.builtin.v2',
+            digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+          },
+          substitutionId: 'rifty.shadow-substitution.sass-embedded.v2',
+          recipeDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
+          trigger: {
+            name: 'sass-embedded',
+            requestedRange: '1.100.0',
+            version: '1.100.0',
+          },
+          acquisition: {
+            kind: 'registry',
+            name: 'sass',
+            version: '1.100.0',
+            resolved: fixtureTarballUrl('sass'),
+            integrity: sassRegistryFixture.dist.integrity,
+            dependencies: { ...sassRegistryFixture.dependencies },
+            optionalDependencies: {},
+            peerDependencies: {},
+            bundleDependencies: [],
+            bundled: [],
+          },
+          materialization: {
+            installPath: 'node_modules/sass-embedded',
+            name: 'sass-embedded',
+            version: '1.100.0',
+            files: fileFacts,
+            bin: { sass: 'dist/bin/sass.js' },
+          },
+        },
+      ],
+    });
+    for (const file of fileFacts) {
+      const bytes = await projectVfs.readFile(`${root}/node_modules/sass-embedded/${file.path}`);
+      expect(bytes.byteLength).toBe(file.bytes);
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(file.sha256);
+    }
+    expect(registry.packuments).not.toContain('sass-embedded');
+    expect(registry.packuments).not.toContain('@parcel/watcher');
+  } finally {
+    releaseFirst();
+    await Promise.allSettled([first, ...(second === undefined ? [] : [second])]);
+  }
+});
+
 // Fault class: concurrent-same-key. The owner FIFO must physically exclude the
 // second real installer, not merely correlate its eventual result.
 it('physically excludes same-project installs while the first lockfile commit is parked', async () => {

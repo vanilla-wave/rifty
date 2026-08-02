@@ -1,8 +1,14 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import * as runtimeAdapterBoundary from './runtime-adapter-boundary.mjs';
 
-const { GENERIC_RUNTIME_ADAPTER_MODULES, runtimeAdapterBoundaryViolations } =
-  runtimeAdapterBoundary;
+const {
+  GENERIC_RUNTIME_ADAPTER_MODULES,
+  evaluateRuntimeAdapterBoundary,
+  runtimeAdapterBoundaryViolations,
+} = runtimeAdapterBoundary;
 
 const EXPECTED_GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/npm-client/src/installer.ts',
@@ -72,6 +78,58 @@ describe('runtime adapter generic-module boundary', () => {
     }
     for (const paths of Object.values(surface)) {
       expect(Object.isFrozen(paths)).toBe(true);
+    }
+  });
+
+  it('walks every Sass-forbidden category through the repository evaluator', () => {
+    const root = mkdtempSync(join(tmpdir(), '.rifty-sass-boundary-contract-'));
+    const write = (path: string, source = ''): void => {
+      const target = join(root, path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, source);
+    };
+    try {
+      for (const paths of Object.values(EXPECTED_SASS_FORBIDDEN_SURFACE)) {
+        for (const path of paths) {
+          if (/\.[cm]?[jt]s$/u.test(path)) write(path);
+          else write(`${path}/boundary-empty.ts`);
+        }
+      }
+      for (const path of EXPECTED_GENERIC_RUNTIME_ADAPTER_MODULES) write(path);
+
+      const injections = [
+        ['packages/npm-client/src/installer.ts', 'SASS_CATALOG_CONSUMER'],
+        ['packages/npm-client/src/registry.ts', 'SASS_REGISTRY_SOURCE'],
+        ['packages/vfs/src/sass-contract.ts', 'SASS_VFS_RUNTIME'],
+        ['packages/kernel/src/sass-contract.ts', 'SASS_KERNEL_RUNTIME'],
+        ['packages/workbench/src/sass-contract.ts', 'SASS_WORKBENCH_RUNTIME'],
+        ['packages/workbench/src/workers/owner-storage.ts', 'SASS_MANAGER_STORE_MESSAGE_PORT'],
+        ['packages/workbench/src/workers/workbench-runtime-adapters.ts', 'SASS_ESBUILD_ADAPTER'],
+      ] as const;
+      for (const [path, identifier] of injections) write(path, `${identifier};\n`);
+
+      const excludedNonProductionSources = [
+        'packages/vfs/src/sass-boundary.test.ts',
+        'packages/workbench/src/sass-boundary.contract.test.ts',
+        'packages/kernel/src/fixtures/sass-boundary.ts',
+      ] as const;
+      for (const path of excludedNonProductionSources) {
+        write(
+          path,
+          `const SASS_EMBEDDED_RECIPE = 'sass-embedded@1.100.0';\nif (isSassEmbedded(input)) activate(SASS_EMBEDDED_RECIPE);\n`,
+        );
+      }
+
+      expect(evaluateRuntimeAdapterBoundary(root).sort()).toEqual(
+        injections
+          .map(
+            ([path, identifier]) =>
+              `${path}:1: consumer-specific runtime identifier ${JSON.stringify(identifier)}`,
+          )
+          .sort(),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

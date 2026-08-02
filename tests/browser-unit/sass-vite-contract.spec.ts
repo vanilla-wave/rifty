@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { type Page, expect, test } from '@playwright/test';
+import { type Page, type Route, expect, test } from '@playwright/test';
+import {
+  SASS_VITE_BUILD_PALETTE_EDIT,
+  SASS_VITE_NODE_ORACLE_ENVIRONMENT,
+  SASS_VITE_OFFLINE_HMR_PALETTE,
+  SASS_VITE_PROJECT_FILES,
+} from '../../tools/shadow-registry/src/fixtures/sass-vite-7.3.6-project.ts';
 import type { SassContractTranscript } from '../../tools/shadow-registry/src/test-sass-contract-probe.ts';
 import {
   bootOwner,
@@ -58,6 +64,14 @@ interface LockfileEvidence {
       readonly applied?: readonly unknown[];
     };
   };
+}
+
+interface SassTreeEvidence {
+  readonly files: readonly {
+    readonly path: string;
+    readonly bytes: number;
+    readonly sha256: string;
+  }[];
 }
 
 interface SassRegistryOracle {
@@ -251,56 +265,45 @@ fs.writeFileSync('.sass-build.json', JSON.stringify({
 }));
 `;
 
-const VITE_CONFIG = `import {fileURLToPath} from 'node:url';
-import {defineConfig} from 'vite';
+const SASS_TREE_INSPECTOR = `const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 
-export default defineConfig({
-  resolve: {
-    alias: {
-      '@styles': fileURLToPath(new URL('./src/styles', import.meta.url)),
-    },
-  },
-  css: {
-    devSourcemap: true,
-    preprocessorOptions: {
-      scss: {
-        importers: [{
-          canonicalize(url) {
-            return url === 'virtual:spacing' ? new URL('virtual:spacing') : null;
-          },
-          load(url) {
-            if (url.protocol !== 'virtual:') return null;
-            return {contents: '$space: 11px;', syntax: 'scss'};
-          },
-        }],
-      },
-    },
-  },
-  build: {
-    sourcemap: true,
-  },
-});
-`;
+const roots = ${JSON.stringify([
+  'node_modules/sass-embedded',
+  'node_modules/sass',
+  ...sassClosureOracle.packages.map(({ name }) => `node_modules/${name}`),
+  'node_modules/.bin/sass',
+])};
 
-const STYLE_SCSS = `@use '@styles/palette';
-@use './styles/nested';
-@use 'virtual:spacing' as spacing;
-
-@warn "rifty-sass-warning";
-
-.card {
-  color: palette.$accent;
-  padding: spacing.$space;
-  @include nested.label;
+function walk(target) {
+  const entry = fs.lstatSync(target);
+  if (!entry.isDirectory()) return [target];
+  return fs.readdirSync(target).flatMap((name) => walk(path.join(target, name)));
 }
+
+const files = roots.flatMap(walk).sort();
+const evidence = files.map((file) => {
+  const bytes = fs.readFileSync(file);
+  return {
+    path: file.replaceAll(path.sep, '/'),
+    bytes: bytes.byteLength,
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+  };
+});
+const outputPath = process.argv[2];
+if (!outputPath) throw new Error('missing Sass tree inventory output path');
+fs.writeFileSync(outputPath, JSON.stringify({files: evidence}));
 `;
 
-const MAIN_JS =
-  "import './style.scss';\ndocument.getElementById('app').innerHTML = '<div class=\"card\"><span class=\"label\">sass-ready</span></div>';\n";
-const INITIAL_PALETTE = '$accent: rgb(32, 64, 128);\n';
-const BUILT_PALETTE = '$accent: rgb(9, 87, 65);\n';
-const OFFLINE_HMR_PALETTE = '$accent: rgb(71, 22, 99);\n';
-const NESTED_SCSS = '@mixin label { .label { font-weight: 700; } }\n';
+const MAIN_JS = SASS_VITE_PROJECT_FILES['src/main.js'];
+const BUILT_PALETTE = SASS_VITE_BUILD_PALETTE_EDIT.to;
+const OFFLINE_HMR_PALETTE = SASS_VITE_OFFLINE_HMR_PALETTE;
+const BROWSER_PROJECT_FILES = Object.freeze(
+  Object.fromEntries(
+    Object.entries(SASS_VITE_PROJECT_FILES).map(([path, content]) => [`/${path}`, content]),
+  ),
+);
 
 function registryPaths(urls: readonly string[]): string[] {
   return urls.flatMap((value) => {
@@ -339,6 +342,39 @@ async function readText(page: Page, path: string): Promise<string> {
   const file = await readOwnerFile(page, path);
   if (!file.ok) throw new Error(`Cannot read ${path}: ${file.error}`);
   return file.text;
+}
+
+async function inspectSassTree(page: Page): Promise<SassTreeEvidence> {
+  const outputPath = '/scratch/.sass-tree-evidence.json';
+  const inspected = await execLine(page, `node .inspect-sass-tree.cjs ${outputPath}`);
+  expect(inspected.exit, inspected.out).toBe(0);
+  return readJson<SassTreeEvidence>(page, outputPath);
+}
+
+async function expectSassFacadeAbsent(page: Page): Promise<void> {
+  for (const path of [
+    '/scratch/node_modules/sass-embedded/package.json',
+    '/scratch/node_modules/sass-embedded/dist/lib/index.js',
+    '/scratch/node_modules/sass-embedded/dist/lib/index.mjs',
+    '/scratch/node_modules/sass-embedded/dist/bin/sass.js',
+    '/scratch/node_modules/.bin/sass',
+  ]) {
+    expect((await readOwnerFile(page, path)).ok, `${path} must remain unpublished`).toBe(false);
+  }
+}
+
+async function expectRequiredDurableStorage(page: Page): Promise<void> {
+  expect(
+    await page.evaluate(async (fixtureUrl) => {
+      const fixture = await import(/* @vite-ignore */ fixtureUrl);
+      return fixture.currentWorkbench().snapshot().storage;
+    }, sealedWorkbenchFixtureUrl),
+  ).toEqual({ policy: 'required', backend: 'opfs', durability: 'durable' });
+}
+
+async function reloadHarness(page: Page): Promise<void> {
+  await page.reload();
+  await expect(page.locator('#browser-unit-harness')).toHaveAttribute('data-status', 'ready');
 }
 
 function plainRecord(value: unknown, label: string): Readonly<Record<string, unknown>> {
@@ -548,27 +584,22 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
   const probeBundle = await bundleContractProbe();
   const bootOptions = {
     workspaceId: 'bu-sass-vite-contract',
-    persistence: 'preferred' as const,
+    persistence: 'required' as const,
     plan: {
       kind: 'vite' as const,
       id: 'scratch',
       starterId: 'sass-vite-contract',
       templateId: 'browser-unit:sass-vite-contract-v2',
       files: {
-        '/package.json': '{"name":"sass-vite-contract","private":true,"type":"module"}\n',
-        '/index.html': '<div id="app"></div><script type="module" src="/src/main.js"></script>\n',
-        '/src/main.js': MAIN_JS,
-        '/src/style.scss': STYLE_SCSS,
-        '/src/styles/_palette.scss': INITIAL_PALETTE,
-        '/src/styles/_nested.scss': NESTED_SCSS,
-        '/vite.config.js': VITE_CONFIG,
+        ...BROWSER_PROJECT_FILES,
         '/.sass-contract.cjs': directCjsContractRunner(probeBundle),
         '/.sass-contract.mjs': directEsmContractRunner(probeBundle),
         '/.inspect-sass-build.cjs': BUILD_INSPECTOR,
+        '/.inspect-sass-tree.cjs': SASS_TREE_INSPECTOR,
       },
       dependencies: {
-        vite: '7.3.6',
-        'sass-embedded': '1.100.0',
+        vite: SASS_VITE_NODE_ORACLE_ENVIRONMENT.vite,
+        'sass-embedded': SASS_VITE_NODE_ORACLE_ENVIRONMENT.sassEmbedded,
       },
       firstMaterialization: { kind: 'install' as const },
       port: 5175,
@@ -582,6 +613,29 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
   ownerOpen = true;
 
   try {
+    await expectRequiredDurableStorage(page);
+    const sassTarballPattern = /\/npm-registry\/sass\/-\/sass-1\.100\.0\.tgz(?:\?|$)/u;
+    let injectedSassTarballFaults = 0;
+    const abortSassTarball = async (route: Route): Promise<void> => {
+      injectedSassTarballFaults += 1;
+      await route.abort('failed');
+    };
+    await context.route(sassTarballPattern, abortSassTarball);
+    const failedInstall = await execLine(page, 'npm install');
+    expect(injectedSassTarballFaults).toBeGreaterThan(0);
+    expect(failedInstall.exit, failedInstall.out).not.toBe(0);
+    expect((await readOwnerFile(page, '/scratch/package-lock.json')).ok).toBe(false);
+    await expectSassFacadeAbsent(page);
+
+    ownerOpen = false;
+    await reloadHarness(page);
+    await bootOwner(page, bootOptions);
+    ownerOpen = true;
+    await expectRequiredDurableStorage(page);
+    expect((await readOwnerFile(page, '/scratch/package-lock.json')).ok).toBe(false);
+    await expectSassFacadeAbsent(page);
+    await context.unroute(sassTarballPattern, abortSassTarball);
+
     const install = await execLine(page, 'npm install');
     expect(
       forbiddenNativeRequests(registryPaths(requests)),
@@ -610,6 +664,10 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
     const cli = await execLine(page, 'sass --version');
     expect(cli.exit, cli.out).toBe(1);
     expect(cli.out).toContain('sass-embedded.cli');
+    const watch = await execLine(page, 'sass --watch');
+    expect(watch.exit, watch.out).toBe(1);
+    expect(watch.out).toContain('sass-embedded.watch');
+    expect(watch.out).not.toContain('sass-embedded.cli');
 
     const preview = await startViteProject(page);
     viteRunOpen = true;
@@ -738,6 +796,19 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
       expect(file.sha256).toEqual(expect.stringMatching(/^[0-9a-f]{64}$/u));
     }
 
+    const freshSassTree = await inspectSassTree(page);
+    const freshSassTreeByPath = new Map(
+      freshSassTree.files.map((file) => [file.path, file] as const),
+    );
+    for (const file of materializedFileFacts) {
+      const path = `node_modules/sass-embedded/${String(file.path)}`;
+      expect(freshSassTreeByPath.get(path), `${path} must match its provenance bytes`).toEqual({
+        path,
+        bytes: file.bytes,
+        sha256: file.sha256,
+      });
+    }
+
     const freshRegistryPaths = registryPaths(requests);
     expect(freshRegistryPaths.some((path) => path.includes('/sass/-/sass-1.100.0.tgz'))).toBe(true);
     for (const dependency of ['/chokidar', '/readdirp', '/immutable', '/source-map-js']) {
@@ -748,16 +819,18 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
       'exact Sass shadow must not read native carrier/platform/watcher registry entries',
     ).toEqual([]);
 
-    await flushOwnerDurable(page);
-    await closeOwner(page);
-    ownerOpen = false;
     const blockedRegistryRequests: string[] = [];
-    await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
+    const registryPattern = /\/npm-registry(?:\/|$)/u;
+    await context.route(registryPattern, async (route) => {
       blockedRegistryRequests.push(route.request().url());
       await route.abort();
     });
+    await flushOwnerDurable(page);
+    ownerOpen = false;
+    await reloadHarness(page);
     await bootOwner(page, bootOptions);
     ownerOpen = true;
+    await expectRequiredDurableStorage(page);
 
     const replay = await execLine(page, 'npm install');
     expect(replay.exit, replay.out).toBe(0);
@@ -766,6 +839,11 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
     const replayLockfile = JSON.parse(replayLockText) as LockfileEvidence;
     expect(replayLockfile.lockfileVersion).toBe(sassViteNodeBuildOracle.lockfile.version);
     expect(replayLockfile.rifty?.shadowSubstitutions).toEqual(freshShadowProvenance);
+    expect(await inspectSassTree(page)).toEqual(freshSassTree);
+    expect(
+      blockedRegistryRequests,
+      'abrupt reopen and exact Sass tree replay must perform zero registry requests',
+    ).toEqual([]);
 
     const offlineViteVersion = await execLine(page, 'vite --version');
     expect(offlineViteVersion.exit, offlineViteVersion.out).toBe(
@@ -864,6 +942,6 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
     ).toEqual([]);
   } finally {
     if (viteRunOpen) await stopViteProject(page).catch(() => {});
-    if (ownerOpen) await closeOwner(page);
+    if (ownerOpen) await closeOwner(page).catch(() => {});
   }
 });

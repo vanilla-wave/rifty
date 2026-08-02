@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import deadlockFixture from './fixtures/sass-1.100.0-async-importer-deadlock.json';
 import embeddedFixture from './fixtures/sass-embedded-1.100.0-contract.json';
 import { builtinShadowSubstitutionCatalog } from './internal/index.ts';
 import {
@@ -23,6 +24,32 @@ const oracleTarballs = [
   ['immutable', 'immutable-5.1.9.tgz'],
   ['source-map-js', 'source-map-js-1.2.1.tgz'],
 ] as const;
+const asyncImporterError = `The canonicalize() function can't return a Promise for synchronous compile functions.
+  ╷
+1 │ @use 'tokens';
+  │ ^^^^^^^^^^^^^
+  ╵
+  - 1:1  root stylesheet`;
+
+interface DeadlockRun {
+  readonly timedOut: boolean;
+  readonly exitCode: number | null;
+  readonly signal: string | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+interface DeadlockEvidence {
+  readonly schema: 1;
+  readonly timeoutMs: number;
+  readonly attempts: number;
+  readonly runs: {
+    readonly sass: readonly DeadlockRun[];
+    readonly sassEmbedded: readonly DeadlockRun[];
+  };
+}
+
+const deadlockEvidence = deadlockFixture as DeadlockEvidence;
 
 function nulTerminated(bytes: Uint8Array): string {
   const nul = bytes.indexOf(0);
@@ -73,26 +100,34 @@ function materializeOfficialPackage(root: string, name: string, fixture: string)
   }
 }
 
+function materializeRecipeCapsule(): { readonly container: string; readonly packageRoot: string } {
+  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+    (candidate) => candidate.trigger.name === 'sass-embedded',
+  );
+  if (!recipe) throw new Error('builtin sass-embedded recipe is missing');
+
+  const container = mkdtempSync(join(tmpdir(), '.rifty-sass-capsule-contract-'));
+  try {
+    for (const [name, fixture] of oracleTarballs) {
+      materializeOfficialPackage(container, name, fixture);
+    }
+    const packageRoot = join(container, 'node_modules', 'sass-embedded');
+    for (const file of recipe.materialization.files) {
+      const target = join(packageRoot, ...file.path.split('/'));
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, file.content);
+    }
+    return { container, packageRoot };
+  } catch (error) {
+    rmSync(container, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 describe('materialized sass-embedded recipe capsule', () => {
   it('matches the committed nine-row embedded oracle beside the exact pure Sass tree', async () => {
-    const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-      (candidate) => candidate.trigger.name === 'sass-embedded',
-    );
-    if (!recipe) throw new Error('builtin sass-embedded recipe is missing');
-
-    const container = mkdtempSync(join(tmpdir(), '.rifty-sass-capsule-contract-'));
+    const { container, packageRoot } = materializeRecipeCapsule();
     try {
-      for (const [name, fixture] of oracleTarballs) {
-        materializeOfficialPackage(container, name, fixture);
-      }
-
-      const packageRoot = join(container, 'node_modules', 'sass-embedded');
-      for (const file of recipe.materialization.files) {
-        const target = join(packageRoot, ...file.path.split('/'));
-        mkdirSync(dirname(target), { recursive: true });
-        writeFileSync(target, file.content);
-      }
-
       const cjsConsumer = join(container, 'consumer.cjs');
       const esmConsumer = join(container, 'consumer.mjs');
       writeFileSync(cjsConsumer, '');
@@ -119,6 +154,77 @@ describe('materialized sass-embedded recipe capsule', () => {
       expect(cli.signal).toBeNull();
       expect(cli.stdout).toBe('');
       expect(cli.stderr).toContain('NotImplementedError: Not implemented: sass-embedded.cli');
+      const watch = spawnSync(
+        process.execPath,
+        [join(packageRoot, 'dist/bin/sass.js'), '--watch'],
+        { encoding: 'utf8' },
+      );
+      expect(watch.error).toBeUndefined();
+      expect(watch.status).toBe(1);
+      expect(watch.signal).toBeNull();
+      expect(watch.stdout).toBe('');
+      expect(watch.stderr).toContain('NotImplementedError: Not implemented: sass-embedded.watch');
+      expect(watch.stderr).not.toContain('sass-embedded.cli');
+    } finally {
+      rmSync(container, { recursive: true, force: true });
+    }
+  });
+
+  it('throws the pure-Sass sync/async-importer error while real embedded times out', () => {
+    expect(deadlockEvidence).toMatchObject({ schema: 1, timeoutMs: 2_000, attempts: 2 });
+    expect(deadlockEvidence.runs.sass).toHaveLength(deadlockEvidence.attempts);
+    for (const run of deadlockEvidence.runs.sass) {
+      expect(run).toMatchObject({ timedOut: false, exitCode: 0, signal: null, stderr: '' });
+      expect(JSON.parse(run.stdout)).toEqual({
+        outcome: 'throw',
+        name: 'Error',
+        message: asyncImporterError,
+        toString: asyncImporterError,
+      });
+    }
+    expect(deadlockEvidence.runs.sassEmbedded).toHaveLength(deadlockEvidence.attempts);
+    for (const run of deadlockEvidence.runs.sassEmbedded) {
+      expect(run).toEqual({
+        timedOut: true,
+        exitCode: null,
+        signal: 'SIGKILL',
+        stdout: '',
+        stderr: '',
+      });
+    }
+
+    const { container } = materializeRecipeCapsule();
+    try {
+      const cjs = createRequire(join(container, 'consumer.cjs'))(
+        'sass-embedded',
+      ) as SassContractApi;
+      const importer = {
+        canonicalize(): Promise<URL> {
+          return Promise.resolve(new URL('contract:tokens'));
+        },
+        load(): Promise<{ readonly contents: string; readonly syntax: 'scss' }> {
+          return Promise.resolve({ contents: '$accent: #123456;', syntax: 'scss' });
+        },
+      };
+      let returned = false;
+      let thrown: unknown;
+      try {
+        cjs.compileString("@use 'tokens';", { importers: [importer] });
+        returned = true;
+      } catch (error) {
+        thrown = error;
+      }
+      expect(returned, 'sync compile must throw before returning control').toBe(false);
+      expect(thrown).toBeInstanceOf(Error);
+      expect({
+        name: (thrown as Error).name,
+        message: (thrown as Error).message,
+        toString: String(thrown),
+      }).toEqual({
+        name: 'Error',
+        message: asyncImporterError,
+        toString: asyncImporterError,
+      });
     } finally {
       rmSync(container, { recursive: true, force: true });
     }

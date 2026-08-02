@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -47,6 +48,23 @@ interface SubstitutionArtifact {
   };
 }
 
+type MeasurementMode = 'capture-after' | 'capture-before' | 'verify';
+
+function measurementMode(): MeasurementMode {
+  const value = process.env.RIFTY_SASS_NETWORK_MODE ?? 'verify';
+  if (value === 'capture-after' || value === 'capture-before' || value === 'verify') {
+    return value;
+  }
+  throw new Error(`invalid RIFTY_SASS_NETWORK_MODE ${value}`);
+}
+
+function measurementRevision(): string {
+  return (
+    process.env.RIFTY_SASS_NETWORK_REVISION ??
+    execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+  );
+}
+
 function registryPath(value: string): string | null {
   const url = new URL(value);
   let path: string;
@@ -82,10 +100,18 @@ function validateMeasurement(measurement: Measurement): void {
 }
 
 function validateCommittedEvidence(): void {
+  const committedBefore = JSON.parse(
+    readFileSync(
+      new URL('../../perf/sass-shadow-substitution-before.json', import.meta.url),
+      'utf8',
+    ),
+  ) as Measurement;
   const artifact = JSON.parse(
     readFileSync(new URL('../../perf/sass-shadow-substitution.json', import.meta.url), 'utf8'),
   ) as SubstitutionArtifact;
   expect(artifact.schema).toBe(1);
+  validateMeasurement(committedBefore);
+  expect(artifact.before).toEqual(committedBefore);
   expect(artifact.before.scenario).toEqual(artifact.after.scenario);
   expect(artifact.before.environment).toEqual(artifact.after.environment);
   validateMeasurement(artifact.before);
@@ -125,8 +151,8 @@ test('records matched cold Sass twin install bytes and wall time without a thres
   page,
 }, testInfo) => {
   test.setTimeout(240_000);
-  const unshadowedBaseline = process.env.RIFTY_SASS_NETWORK_ALLOW_UNSHADOWED_BASELINE === '1';
-  if (!unshadowedBaseline) {
+  const mode = measurementMode();
+  if (mode === 'verify') {
     validateCommittedEvidence();
   }
   const responses: RecordedResponse[] = [];
@@ -196,7 +222,7 @@ test('records matched cold Sass twin install bytes and wall time without a thres
     responses.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
     const measurement: Measurement = {
       schema: 1,
-      revision: process.env.RIFTY_SASS_NETWORK_REVISION ?? 'working-tree',
+      revision: measurementRevision(),
       scenario: {
         id: 'cold-sass-embedded-1.100.0-install',
         persistence: 'ephemeral',
@@ -227,7 +253,7 @@ test('records matched cold Sass twin install bytes and wall time without a thres
       writeFileSync(absolute, `${JSON.stringify(measurement, null, 2)}\n`);
     }
 
-    if (unshadowedBaseline) {
+    if (mode === 'capture-before') {
       expect(measurement.install, install.out).toEqual({
         exit: 1,
         outcome: "NotImplementedError('npm-client.bin-collision-reify')",

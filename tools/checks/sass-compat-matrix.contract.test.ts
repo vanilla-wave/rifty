@@ -25,7 +25,10 @@ interface SassPolicy {
   }>;
   readonly surfaces: readonly Readonly<{ surface: string }>[];
   readonly divergence: Readonly<{ surface: string }>;
-  readonly unsupported: readonly Readonly<{ surface: string; feature: string }>[];
+  readonly unsupported: readonly Readonly<
+    | { surface: string; kind: 'runtime-throw'; feature: string; notes: string }
+    | { surface: string; kind: 'not-published'; notes: string }
+  >[];
 }
 
 async function policy(): Promise<SassPolicy> {
@@ -71,25 +74,32 @@ describe('sass-embedded public compatibility contract', () => {
       'compiler-dispose-errors',
       'legacy-logger-routing',
     ]);
-    expect(value.unsupported.map(({ feature }) => feature)).toEqual([
-      'sass-embedded.version',
-      'sass-embedded.cli',
-      'sass-embedded.watch',
-      'sass-embedded.types',
-      'sass-embedded.unproven',
-    ]);
+    expect(
+      value.unsupported.flatMap((entry) => (entry.kind === 'runtime-throw' ? [entry.feature] : [])),
+    ).toEqual(['sass-embedded.version', 'sass-embedded.cli', 'sass-embedded.watch']);
+    expect(value.unsupported.find(({ kind }) => kind === 'not-published')).toMatchObject({
+      surface: 'TypeScript declaration surface',
+      kind: 'not-published',
+      notes: expect.stringContaining('No TypeScript declarations'),
+    });
   });
 
   it('publishes supported rows, the measured divergence, and every explicit failure', async () => {
     const value = await policy();
+    expect(value.state).toBe('final-green');
     const matrix = await readFile(matrixUrl, 'utf8').catch(() => '');
     for (const { surface } of value.surfaces) {
       expect(matrix).toContain(`| ${surface} | ✅ |`);
     }
     expect(matrix).toContain(`| ${value.divergence.surface} | ⚠️ |`);
-    for (const { feature, surface } of value.unsupported) {
-      expect(matrix).toContain(`| ${surface} | ❌ |`);
-      expect(matrix).toContain(`NotImplementedError('${feature}')`);
+    for (const entry of value.unsupported) {
+      expect(matrix).toContain(`| ${entry.surface} | ❌ |`);
+      if (entry.kind === 'runtime-throw') {
+        expect(matrix).toContain(`NotImplementedError('${entry.feature}')`);
+      } else {
+        expect(matrix).toContain(entry.notes);
+        expect(matrix).not.toContain("NotImplementedError('sass-embedded.types')");
+      }
     }
   });
 });

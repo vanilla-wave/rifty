@@ -98,28 +98,26 @@
   "unsupported": [
     {
       "surface": "Other versions and version ranges",
+      "kind": "runtime-throw",
       "feature": "sass-embedded.version",
       "notes": "Every request except the literal 1.100.0 is rejected before registry or VFS work."
     },
     {
       "surface": "Sass CLI/bin",
+      "kind": "runtime-throw",
       "feature": "sass-embedded.cli",
       "notes": "The materialized sass bin is a loud gap; the acquired pure-Sass bin never leaks."
     },
     {
       "surface": "Watch mode and @parcel/watcher",
+      "kind": "runtime-throw",
       "feature": "sass-embedded.watch",
       "notes": "Watch mode is outside the proven facade; @parcel/watcher is never acquired."
     },
     {
       "surface": "TypeScript declaration surface",
-      "feature": "sass-embedded.types",
-      "notes": "The runtime facade does not publish approximate or dangling declarations; exact declaration materialization remains unsupported."
-    },
-    {
-      "surface": "Unproven legacy or API surfaces",
-      "feature": "sass-embedded.unproven",
-      "notes": "Any surface outside the finite oracle fails loudly instead of approximating behavior."
+      "kind": "not-published",
+      "notes": "No TypeScript declarations or types target are published; exact declaration materialization remains unsupported."
     }
   ],
   "tests": [
@@ -134,7 +132,7 @@
     "tests/browser-unit/sass-network-measurement.spec.ts"
   ],
   "limitations": [
-    "Only the exact sass-embedded@1.100.0 facade over exact sass@1.100.0 is in this contract.",
+    "Only the exact sass-embedded@1.100.0 facade over exact sass@1.100.0 and the finite differential rows are claimed by this contract.",
     "Contract+RED records intended behavior; supported rows stay partial until direct Node differential and real Chromium Vite acceptance are green.",
     "The sync-compile async-importer deadlock is an explicit deliberate divergence, never a parity claim."
   ]

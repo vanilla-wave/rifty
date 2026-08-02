@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "oracle": "real-node-vite-sass-build",
   "recorded": "2026-08-02",
   "reproductions": 2,
@@ -12,13 +12,27 @@
     "sassEmbedded": "1.100.0"
   },
   "fixture": {
-    "packageJsonSha256": "8865d76ad4ec2df06ff0cc65ae0d47af189bef5f308446c404f95f9c687a3c3e",
-    "indexHtmlSha256": "a1dc84c5629cadf3a51ee544c87966790bd3e548b462ba8b531771d694eda8f8",
-    "mainJsSha256": "6f3b20284b83031b20f26441a533cfff059d296f8dd40f20ef7d476eda8f2f95",
-    "styleScssSha256": "7a8b48115ffac156d21364e462f967f5e96b61d2ffc15e1bcc469887900542fb",
-    "editedPaletteSha256": "76b3ff6675146e250dccb79f8a529175b644a6929109874ce100392991a7bf78",
-    "nestedPartialSha256": "6bf77719dbf78db117ecd2b09ce12c7e15a4ba7cc7b47320c1ffcf3d397f12dc",
-    "viteConfigSha256": "6741dbfd8804481a6521a4a4b6ab59d238472b6e6d7ca746ce6ff11309cfe14d"
+    "inputSha256ByPath": {
+      "index.html": "a1dc84c5629cadf3a51ee544c87966790bd3e548b462ba8b531771d694eda8f8",
+      "package.json": "8865d76ad4ec2df06ff0cc65ae0d47af189bef5f308446c404f95f9c687a3c3e",
+      "src/main.js": "6f3b20284b83031b20f26441a533cfff059d296f8dd40f20ef7d476eda8f2f95",
+      "src/style.scss": "7a8b48115ffac156d21364e462f967f5e96b61d2ffc15e1bcc469887900542fb",
+      "src/styles/_nested.scss": "6bf77719dbf78db117ecd2b09ce12c7e15a4ba7cc7b47320c1ffcf3d397f12dc",
+      "src/styles/_palette.scss": "43778c1bc93f88b0aa2f1727eafa5e781150205fb4cbdf5727e23d70a0e7091c",
+      "vite.config.js": "6741dbfd8804481a6521a4a4b6ab59d238472b6e6d7ca746ce6ff11309cfe14d"
+    },
+    "edit": {
+      "path": "src/styles/_palette.scss",
+      "from": "$accent: rgb(32, 64, 128);\n",
+      "fromSha256": "43778c1bc93f88b0aa2f1727eafa5e781150205fb4cbdf5727e23d70a0e7091c",
+      "to": "$accent: rgb(9, 87, 65);\n",
+      "toSha256": "76b3ff6675146e250dccb79f8a529175b644a6929109874ce100392991a7bf78"
+    }
+  },
+  "lockFixture": {
+    "path": "tools/shadow-registry/src/fixtures/sass-vite-7.3.6-package-lock.fixture",
+    "bytes": 60340,
+    "sha256": "50be275d9e16dcab67a80947e81a21c4ca7260db9dd1c6bdfca7d2cda862079f"
   },
   "viteVersion": {
     "exit": 0,
