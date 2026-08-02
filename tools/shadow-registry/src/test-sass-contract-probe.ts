@@ -144,6 +144,29 @@ export interface SassContractTranscript {
   }>;
 }
 
+const constructorLivenessGap: ErrorTranscript = {
+  name: 'NotImplementedError',
+  message: 'Not implemented: sass-embedded.compiler-construction-liveness',
+  toString: 'NotImplementedError: Not implemented: sass-embedded.compiler-construction-liveness',
+  sassMessage: null,
+  sassStack: null,
+  span: null,
+};
+
+export function sassFacadeContract(embedded: SassContractTranscript): SassContractTranscript {
+  return {
+    ...embedded,
+    rows: {
+      ...embedded.rows,
+      lifecycle: {
+        ...embedded.rows.lifecycle,
+        syncDirectConstruction: constructorLivenessGap,
+        asyncDirectConstruction: constructorLivenessGap,
+      },
+    },
+  };
+}
+
 function objectValue(value: unknown): Readonly<Record<string, unknown>> | null {
   return typeof value === 'object' && value !== null
     ? (value as Readonly<Record<string, unknown>>)

@@ -31,11 +31,11 @@ attempts reproduce the difference in
 This is `observable-order` plus `frozen-assumption`: the ready transcript pinned
 the error value but erased post-catch process liveness. A timer, MessagePort, or
 unrelated Worker would fake the missing Dart child; the frozen carrier forbids
-shipping the native runtime asset. Manual `rifty-refine` must settle the
-observable fork: change the carrier to preserve the real child lifecycle, or
-make invalid direct construction an explicit named gap and narrow only that
-positive claim. The pre-demotion Acceptance and Parity cases are retained
-verbatim in the reference artifact.
+shipping the native runtime asset. On 2026-08-03 the user selected the honest
+no-runtime outcome: invalid direct construction is a named unsupported gap,
+while instances returned by `initCompiler()` / `initAsyncCompiler()` retain the
+full positive lifecycle claim. The pre-demotion Acceptance and Parity cases are
+retained verbatim in the reference artifact.
 
 ## Reference contract
 
@@ -89,11 +89,16 @@ verbatim in the reference artifact.
   capability is created and zero manager/store operations run.
 - Direct guest CJS `require('sass-embedded')` and ESM
   `import('sass-embedded')` probes match the finite Node oracle from the
-  ADR-0344 differential suite, including lifecycle
-  (direct construction errors; repeated path and string compilations;
-  sync/async dispose return values; path/string post-dispose error texts),
-  sync+async importers, logger warn/deprecation, sourceMap bytes, error
-  `sassMessage`/span/message shape, synthesized `info`.
+  ADR-0344 differential suite, including initialized compiler lifecycle
+  (repeated path and string compilations; sync/async dispose return values;
+  path/string post-dispose error texts), sync+async importers, logger
+  warn/deprecation, sourceMap bytes, error `sassMessage`/span/message shape,
+  and synthesized `info`.
+- CJS and ESM direct `new Compiler()` / `new AsyncCompiler()` synchronously
+  throw
+  `NotImplementedError('sass-embedded.compiler-construction-liveness')` before
+  the pure-Sass constructor or any active resource. The exact embedded child
+  liveness stays pinned by the post-pickup oracle and the surface is compat ❌.
 - Real Vite 7.3.6 SCSS project: nested partial and Vite-resolved `@use`,
   custom importer and a warning; dev renders exact normalized CSS, an edit
   HMRs, and build emits the exact Node-oracle CSS/dependency facts. Node emits
@@ -101,10 +106,11 @@ verbatim in the reference artifact.
 - The named divergence (sync compile + async importer: loud throw where real
   sass-embedded deadlocks) is a compat ⚠ note with a differential test
   pinning BOTH behaviors.
-- Unsupported versions, CLI/bin, watch mode, and missing TypeScript
-  declarations are explicit compat ❌. Reachable runtime gaps throw their
-  exact named `NotImplementedError('sass-embedded.<gap>')`; the facade claims
-  only the finite differential rows rather than inventing a catch-all API gap.
+- Direct compiler construction, unsupported versions, CLI/bin, watch mode, and
+  missing TypeScript declarations are explicit compat ❌. Reachable runtime
+  gaps throw their exact named `NotImplementedError('sass-embedded.<gap>')`;
+  the facade claims only the finite differential rows rather than inventing a
+  catch-all API gap.
 - Budget carries a measured cold-install delta row (bytes + wall time for the
   twin) through the perf harness, committed as matched evidence like the
   esbuild rows; the gate is honest recording, not a threshold.
@@ -123,23 +129,28 @@ ADR-0344 evidence; each is a differential test:
 1. CJS/ESM export shape (cleaned namespace; no dart2js dead keys).
 2. `compileString`/`compileStringAsync` css + `loadedUrls` + absent sourceMap.
 3. `sourceMap: true` + `sourceMapIncludeSources: true` byte-identical map.
-4. Compiler lifecycle: direct construction errors; repeated `compile` /
-   `compileString` and `compileAsync` / `compileStringAsync`; dispose return
-   values; exact post-dispose path/string errors (`Compiler caused error:
-   Sync|Async compiler has already been disposed.`).
+4. Initialized compiler lifecycle: repeated `compile` / `compileString` and
+   `compileAsync` / `compileStringAsync`; dispose return values; exact
+   post-dispose path/string errors (`Compiler caused error: Sync|Async compiler
+   has already been disposed.`); initialized instances retain `instanceof`
+   against the exported constructor anchors.
 5. Modern importer sync + async incl. `containingUrl`; `loadedUrls` content.
 6. Logger: `@warn` call shape; `slash-div` deprecation id + span.
 7. Errors: `expected "}".` and missing-@use — `Error: `-prefixed message,
    sassMessage, span start/end/text, `span.url: undefined`.
 8. `info === "sass-embedded\t1.100.0"`.
 9. Legacy `renderSync` output + stats keys + legacy-js-api deprecation.
+10. CJS/ESM direct construction: exact embedded starts a refed Dart child before
+    its construction error and remains alive; rifty synchronously throws
+    `NotImplementedError('sass-embedded.compiler-construction-liveness')`
+    before target construction or resource creation.
 
 ## Fault matrix
 
 | Fault class | Required outcome | Proof |
 |---|---|---|
 | corrupt-input | drifted recipe, every complete dependency map, facade bytes, bin target, or provenance rejects before publish/reuse | catalog/installer/lock mutation table |
-| observable-order | unsupported version rejects before rejected-package acquisition or writes; CLI/watch execution stays loud after the pure-JS facade install without native acquisition; importer/logger lifecycle matches the pinned Node order | ordered install, CLI/watch, and differential ledgers |
+| observable-order | direct construction rejects before target construction or any active resource; unsupported version rejects before rejected-package acquisition or writes; CLI/watch execution stays loud after the pure-JS facade install without native acquisition; importer/logger lifecycle matches the pinned Node order | constructor-liveness oracle, ordered install, CLI/watch, and differential ledgers |
 | provenance-lie | fresh/replay/durable reopen/general Eddy preserve exact Sass/twin identities and never substitute native or host bytes | fresh→replay→durable reopen plus general-Eddy differential |
 | unbounded-read / corrupt-input / provenance-lie | stalled, partial, corrupt, or failed Sass or required-closure registry/tarball acquisition publishes no facade, bin, success report, or lock; retry materializes exact bytes | parent/required-child acquisition boundary faults + retry; real Chromium Sass-tarball network loss + abrupt required-OPFS reopen |
 | torn-state | abort during facade/bin writes publishes no lock/success; retry reconciles the exact tree | materialization abort fault |
@@ -149,6 +160,9 @@ ADR-0344 evidence; each is a differential test:
 
 ## Out of scope
 
+- Direct `new Compiler()` / `new AsyncCompiler()` process-lifecycle parity —
+  `NotImplementedError('sass-embedded.compiler-construction-liveness')` +
+  compat ❌; exported anchors remain for initialized-instance `instanceof`.
 - `sass-embedded` versions other than 1.100.0 and any version range —
   `NotImplementedError('sass-embedded.version')` + compat ❌.
 - The `sass` CLI/bin — `NotImplementedError('sass-embedded.cli')` + compat ❌.
@@ -169,10 +183,14 @@ ADR-0344 evidence; each is a differential test:
   ready positive claim; attempt/checkpoint lineage and the complete frozen
   Acceptance/Parity text are retained in
   `reference/sass-constructor-liveness-post-pickup-fork.md`.
+- `manual-refine: 2026-08-03 — user` — direct constructor liveness becomes the
+  named unsupported gap; initialized compiler lifecycle and every other
+  positive compile/Vite claim remain unchanged; no runtime carrier is added.
 - ADR-0344 owns the carrier, finite positive claims, and adapted-divergence list.
 - ADR-0335 owns the recipe/materialization model this slice instantiates.
-- The pinned Sass 1.100.0 selector probe proves `process.versions.node` is the
-  Node-path selector; `process.release` is not a prerequisite.
+- The pinned Sass 1.100.0 selector probe proves bootstrap requires
+  `process.versions.node` and path compilation additionally requires exact
+  `process.release.name === 'node'`; ADR-0345 owns the shared runtime identity.
 - `goal-recut: 2026-08-02` — the official Sass manifest is the real builtin
   carrier for non-bundled required traversal and omitted optional suppression.
   Retained optionals, non-empty peers, and positive scoped keys have no honest

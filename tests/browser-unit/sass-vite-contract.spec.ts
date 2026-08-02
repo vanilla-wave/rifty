@@ -8,7 +8,10 @@ import {
   SASS_VITE_OFFLINE_HMR_PALETTE,
   SASS_VITE_PROJECT_FILES,
 } from '../../tools/shadow-registry/src/fixtures/sass-vite-7.3.6-project.ts';
-import type { SassContractTranscript } from '../../tools/shadow-registry/src/test-sass-contract-probe.ts';
+import {
+  type SassContractTranscript,
+  sassFacadeContract,
+} from '../../tools/shadow-registry/src/test-sass-contract-probe.ts';
 import {
   bootOwner,
   closeOwner,
@@ -115,17 +118,19 @@ interface PreviewHandle {
   readonly url: string;
 }
 
-const expectedContract = JSON.parse(
-  readFileSync(
-    fileURLToPath(
-      new URL(
-        '../../tools/shadow-registry/src/fixtures/sass-embedded-1.100.0-contract.json',
-        import.meta.url,
+const expectedContract = sassFacadeContract(
+  JSON.parse(
+    readFileSync(
+      fileURLToPath(
+        new URL(
+          '../../tools/shadow-registry/src/fixtures/sass-embedded-1.100.0-contract.json',
+          import.meta.url,
+        ),
       ),
+      'utf8',
     ),
-    'utf8',
-  ),
-) as SassContractTranscript;
+  ) as SassContractTranscript,
+);
 const sassRegistryOracle = JSON.parse(
   readFileSync(
     fileURLToPath(

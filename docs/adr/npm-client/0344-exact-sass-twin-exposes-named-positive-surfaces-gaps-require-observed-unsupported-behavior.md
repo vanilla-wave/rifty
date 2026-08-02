@@ -15,12 +15,18 @@ Sass is required scope of the shadow-substitution series. Exact Node v24.16.0
 evidence compares public `sass@1.100.0` and `sass-embedded@1.100.0` with one
 shared probe (`npm-client/reference/sass-1.100.0-node-differential.md`):
 
-- module namespace, compile, source-map, compiler lifecycle, importer, logger,
-  error, `info`, and legacy rows record every observed value and identity;
+- module namespace, compile, source-map, initialized compiler lifecycle,
+  importer, logger, error, `info`, and legacy rows record every observed value
+  and identity;
 - measured differences are the cleaned dart2js export namespace, `info`,
   exception message/toString prefix, null-to-undefined `span.url`, compiler
-  construction/disposal outcomes (including async dispose resolution), and
-  legacy logger/stderr routing;
+  disposal outcomes (including async dispose resolution), and legacy
+  logger/stderr routing;
+- direct `Compiler` / `AsyncCompiler` construction starts a refed Dart child
+  before exact embedded rejects and keeps Node alive, while pure Sass rejects
+  and exits naturally; the exact CJS/ESM × sync/async process-group evidence is
+  pinned in
+  `npm-client/reference/sass-constructor-liveness-post-pickup-fork.md`;
 - sync compile with an async importer is the one deliberate divergence: pure
   Sass throws synchronously while real embedded deadlocks permanently in two
   isolated process-group attempts;
@@ -50,18 +56,25 @@ and working upstream behavior while still missing unenumerated inputs.
   Namespace presence is not a blanket compatibility claim: only the named Node
   differential and Chromium acceptance rows may publish positive compat.
 - Adapt only measured differences: export namespace, `info`, exception
-  message/toString and `span.url`, compiler construction/disposal outcomes, and
+  message/toString and `span.url`, initialized-compiler disposal outcomes, and
   legacy logger routing. Preserve the async-importer synchronous throw as a
   documented warning instead of reproducing a permanent deadlock.
+- Keep `Compiler` and `AsyncCompiler` as namespace, prototype, and `instanceof`
+  anchors for instances returned by `initCompiler()` and `initAsyncCompiler()`.
+  Direct construction in either module format synchronously throws
+  `NotImplementedError('sass-embedded.compiler-construction-liveness')` before
+  invoking the pure-Sass target or creating any active resource. It is compat
+  failure, not a positive lifecycle claim or warning.
 - Do not invent a generic “unproven API” branch. A newly observed mismatch with
   exact Node `sass-embedded@1.100.0` is a parity defect: add RED evidence, then
   adapt it faithfully or publish a specific compat failure and named
   `NotImplementedError` at its reachable boundary.
-- Known unsupported surfaces stay exact: every request other than literal
-  `1.100.0` throws `NotImplementedError('sass-embedded.version')`; CLI and watch
-  execution throw `sass-embedded.cli` and `sass-embedded.watch`; TypeScript
-  declarations are not published and remain compat failure without a
-  fictitious runtime throw.
+- Known unsupported surfaces stay exact: direct compiler construction throws
+  `sass-embedded.compiler-construction-liveness`; every request other than
+  literal `1.100.0` throws `sass-embedded.version`; CLI and watch execution
+  throw `sass-embedded.cli` and `sass-embedded.watch`; TypeScript declarations
+  are not published and remain compat failure without a fictitious runtime
+  throw.
 
 ## Consequences
 

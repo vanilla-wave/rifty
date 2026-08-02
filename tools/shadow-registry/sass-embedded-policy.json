@@ -73,8 +73,8 @@
       "notes": "The synthesized facade exposes the measured sass-embedded namespace through require() and import()."
     },
     {
-      "surface": "Compile and compiler lifecycle",
-      "notes": "The finite oracle pins direct construction, repeated path/string compilation, sync/async disposal outcomes, and exact post-dispose errors."
+      "surface": "Compile and initialized compiler lifecycle",
+      "notes": "The finite oracle pins repeated path/string compilation, sync/async disposal outcomes, and exact post-dispose errors."
     },
     {
       "surface": "Modern importers, logger, source maps, and errors",
@@ -96,6 +96,12 @@
     "notes": "Pure Sass throws a clean Exception; real sass-embedded deadlocks the event loop. Rifty preserves the loud throw and records the deliberate divergence."
   },
   "unsupported": [
+    {
+      "surface": "Direct Compiler and AsyncCompiler construction",
+      "kind": "runtime-throw",
+      "feature": "sass-embedded.compiler-construction-liveness",
+      "notes": "Exact embedded starts a refed Dart child before rejecting construction; the no-runtime-asset facade cannot reproduce that lifecycle."
+    },
     {
       "surface": "Other versions and version ranges",
       "kind": "runtime-throw",

@@ -76,7 +76,12 @@ describe('sass-embedded public compatibility contract', () => {
     ]);
     expect(
       value.unsupported.flatMap((entry) => (entry.kind === 'runtime-throw' ? [entry.feature] : [])),
-    ).toEqual(['sass-embedded.version', 'sass-embedded.cli', 'sass-embedded.watch']);
+    ).toEqual([
+      'sass-embedded.compiler-construction-liveness',
+      'sass-embedded.version',
+      'sass-embedded.cli',
+      'sass-embedded.watch',
+    ]);
     expect(value.unsupported.find(({ kind }) => kind === 'not-published')).toMatchObject({
       surface: 'TypeScript declaration surface',
       kind: 'not-published',

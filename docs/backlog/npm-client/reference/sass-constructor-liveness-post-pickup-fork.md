@@ -58,6 +58,16 @@ Fault class: product `observable-order`; oracle `frozen-assumption` /
 `lossy-aggregate`. Per `decision-workflow.md` §Backlog readiness 5, this
 post-pickup observable fork demotes the item and requires manual refinement.
 
+## Manual refinement outcome
+
+On 2026-08-03 the user selected the no-runtime option: direct CJS/ESM
+`new Compiler()` and `new AsyncCompiler()` become the explicit compat ❌ gap
+`NotImplementedError('sass-embedded.compiler-construction-liveness')` before
+the pure-Sass target or any active resource. Initialized compiler instances,
+their exported `instanceof` anchors, compile/dispose lifecycle, and every other
+positive Sass/Vite claim remain in scope. The verbatim pre-demotion sections
+below stay unchanged as the review-diff authority.
+
 ## Pre-demotion Acceptance — verbatim
 
 - Fresh install, lockfile replay, durable reopen, and applicable general-Eddy

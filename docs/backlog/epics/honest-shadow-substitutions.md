@@ -90,9 +90,10 @@ Contract+RED → Final+GREEN):
    optional/peer/scoped residuals have no honest builtin carrier and remain
    ordinary backlog outside this frozen goal. No source pickup.
 6. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
-   capsule per the spike-decided pattern, real Node/Vite acceptance,
-   data-driven generic seam gate, and official Sass projection traversal. Draft
-   until its full differential artifact and fault matrix are committed;
+   capsule per the spike-decided pattern, initialized compiler lifecycle and
+   real Node/Vite acceptance, explicit direct-construction liveness gap selected
+   by the user on 2026-08-03, data-driven generic seam gate, and official Sass
+   projection traversal. Draft until its fresh post-refinement Contract+RED;
    required for epic closure, not optional.
 7. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption

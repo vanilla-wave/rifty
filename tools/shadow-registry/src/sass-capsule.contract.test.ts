@@ -14,6 +14,7 @@ import {
   type SassContractModules,
   type SassContractTranscript,
   probeSassContract,
+  sassFacadeContract,
 } from './test-sass-contract-probe.ts';
 
 const decoder = new TextDecoder();
@@ -160,7 +161,7 @@ describe('materialized sass-embedded recipe capsule', () => {
         },
       );
 
-      expect(actual).toEqual(embeddedFixture as SassContractTranscript);
+      expect(actual).toEqual(sassFacadeContract(embeddedFixture as SassContractTranscript));
       const cli = spawnSync(process.execPath, [join(packageRoot, 'dist/bin/sass.js')], {
         encoding: 'utf8',
       });
