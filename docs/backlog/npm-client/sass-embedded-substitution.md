@@ -5,8 +5,7 @@ title: sass-embedded@1.100.0 via synthesized facade — second substitution, sea
 created: 2026-07-23
 why: real Vite SCSS projects pin sass-embedded, whose dart platform binary cannot run in the browser; ADR-0310's spike proved the exact pure-JS sass twin matches every surface Vite and direct consumers touch, so Sass ships as the registry's second substitution and proves the seam is package-generic
 epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-recipe-v2-dependency-projection-execution]
-sources: [ADR-0310, ADR-0335, docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md]
+sources: [ADR-0310, ADR-0335, docs/backlog/npm-client/reference/sass-1.100-node-selector-probe.md, docs/backlog/npm-client/reference/sass-constructor-liveness-post-pickup-fork.md]
 ---
 
 ## Context
@@ -17,8 +16,29 @@ exact upstream pure-JS `sass@1.100.0` twin; finite adapted divergence list;
 no runtime assets/MessagePort/adapter). The PR is deliberately constrained to
 package-specific files so review can see whether the seam is real.
 
+## Post-pickup lifecycle fork
+
+The autonomous attempt reached ready at `171f62f86fbb3fefff856a5a71cb4cda209a0e1c`
+and product head `9618ab31f0d758e5836a5c3c7525fe166b5a0df2`. Final review found
+that exact `sass-embedded@1.100.0` starts a refed Dart child before both invalid
+compiler constructors throw. The pure-Sass facade throws the adapted exact
+error but naturally exits. CJS/ESM × sync/async constructor × two isolated
+attempts reproduce the difference in
+`reference/sass-constructor-liveness-post-pickup-fork.md`.
+
+This is `observable-order` plus `frozen-assumption`: the ready transcript pinned
+the error value but erased post-catch process liveness. A timer, MessagePort, or
+unrelated Worker would fake the missing Dart child; the frozen carrier forbids
+shipping the native runtime asset. Manual `rifty-refine` must settle the
+observable fork: change the carrier to preserve the real child lifecycle, or
+make invalid direct construction an explicit named gap and narrow only that
+positive claim. The pre-demotion Acceptance and Parity cases are retained
+verbatim in the reference artifact.
+
 ## Readiness blockers
 
+- Resolve the post-pickup invalid-construction lifecycle fork through manual
+  `rifty-refine`; no implementation pickup while the observable choice is open.
 - Commit the complete Node v24.16.0
   `sass@1.100.0`/`sass-embedded@1.100.0` differential command, exact output,
   package identities, and timeout/deadlock procedure behind all nine parity
@@ -97,6 +117,10 @@ ADR-0310 spike; each is a differential test:
 
 ## Decisions
 
+- `post-pickup-demotion: 2026-08-02` — exact constructor liveness disproved the
+  ready positive claim; attempt/checkpoint lineage and the complete frozen
+  Acceptance/Parity text are retained in
+  `reference/sass-constructor-liveness-post-pickup-fork.md`.
 - ADR-0310 owns the carrier and the adapted-divergence list.
 - ADR-0335 owns the recipe/materialization model this slice instantiates.
 - The pinned Sass 1.100.0 selector probe proves `process.versions.node` is the

@@ -1,0 +1,150 @@
+{
+  "schema": 1,
+  "node": "v24.16.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "timeoutMs": 1500,
+  "attempts": 2,
+  "runs": {
+    "sass": {
+      "cjs": {
+        "Compiler": [
+          {
+            "timedOut": false,
+            "exitCode": 0,
+            "signal": null,
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
+            "stderr": ""
+          },
+          {
+            "timedOut": false,
+            "exitCode": 0,
+            "signal": null,
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
+            "stderr": ""
+          }
+        ],
+        "AsyncCompiler": [
+          {
+            "timedOut": false,
+            "exitCode": 0,
+            "signal": null,
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
+            "stderr": ""
+          },
+          {
+            "timedOut": false,
+            "exitCode": 0,
+            "signal": null,
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
+            "stderr": ""
+          }
+        ]
+      },
+      "esm": {
+        "Compiler": [
+          {
+            "timedOut": false,
+            "exitCode": 0,
+            "signal": null,
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
+            "stderr": ""
+          },
+          {
+            "timedOut": false,
+            "exitCode": 0,
+            "signal": null,
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
+            "stderr": ""
+          }
+        ],
+        "AsyncCompiler": [
+          {
+            "timedOut": false,
+            "exitCode": 0,
+            "signal": null,
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
+            "stderr": ""
+          },
+          {
+            "timedOut": false,
+            "exitCode": 0,
+            "signal": null,
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
+            "stderr": ""
+          }
+        ]
+      }
+    },
+    "sass-embedded": {
+      "cjs": {
+        "Compiler": [
+          {
+            "timedOut": true,
+            "exitCode": null,
+            "signal": "SIGKILL",
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
+            "stderr": ""
+          },
+          {
+            "timedOut": true,
+            "exitCode": null,
+            "signal": "SIGKILL",
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
+            "stderr": ""
+          }
+        ],
+        "AsyncCompiler": [
+          {
+            "timedOut": true,
+            "exitCode": null,
+            "signal": "SIGKILL",
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
+            "stderr": ""
+          },
+          {
+            "timedOut": true,
+            "exitCode": null,
+            "signal": "SIGKILL",
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
+            "stderr": ""
+          }
+        ]
+      },
+      "esm": {
+        "Compiler": [
+          {
+            "timedOut": true,
+            "exitCode": null,
+            "signal": "SIGKILL",
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
+            "stderr": ""
+          },
+          {
+            "timedOut": true,
+            "exitCode": null,
+            "signal": "SIGKILL",
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
+            "stderr": ""
+          }
+        ],
+        "AsyncCompiler": [
+          {
+            "timedOut": true,
+            "exitCode": null,
+            "signal": "SIGKILL",
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
+            "stderr": ""
+          },
+          {
+            "timedOut": true,
+            "exitCode": null,
+            "signal": "SIGKILL",
+            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
+            "stderr": ""
+          }
+        ]
+      }
+    }
+  }
+}
