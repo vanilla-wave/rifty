@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Shadow recipe v2 protocol and replay authority
 created: 2026-08-02
 why: the acquisition re-cut leaves current lock traces unable to prove complete recipe behavior or replay the embedded source offline without trusting incomplete provenance
@@ -132,6 +132,8 @@ or shadow-specific Eddy source.
   lock, FIFO, scheduler, or coordination mechanism.
 
 ## Decisions
+
+ready-verdict: 2026-08-02 — Contract+RED @ d33008cd40fa94e3665ed9b7bb0e0968f5b8adb7
 
 - `split-predecessor:
   812cd8b0e5c653674bae949d67f0ac21db90748f`; Standards required the combined
