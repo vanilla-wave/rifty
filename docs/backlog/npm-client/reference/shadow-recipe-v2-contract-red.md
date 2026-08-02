@@ -361,3 +361,28 @@ Closure deletes the completed embedded-source item and subtracts only its
 exact blocker from the protocol-v2 child. Dependency-projection execution and
 protocol-v2 replay remain explicit goal residuals awaiting their own
 pre-pickup mapping and readiness work.
+
+## Protocol-v2 replay implementation and closure
+
+Ready/pickup parent `5d32f44792065b73a450b2b4e10739568d5f46f7`
+precedes production `2963f388c619ea87ce39a9da439ff53501722481`.
+The existing planner/linker seam now emits and strict-decodes behavior-complete
+protocol-v2 trace facts from the final lock topology. Lock replay compares the
+complete canonical projection before effects, then registry-backed recipes read
+only their exact integrity-keyed cache entry and independently verify its bytes.
+The existing lock writer preserves raw bytes for JSON-equivalent replay. No
+public API, resolver, cache, lock writer, FIFO, scheduler, or Eddy source was
+added.
+
+The stabilized npm-client batch runs 244/244 GREEN, Eddy client/service 74/74,
+and the real Workbench FIFO carrier 2/2. Fresh-baked TypeScript, Vite 7, and
+Vite 8 artifacts are current at `92f28c0ffcc1fdd10dab391005b2ef0bdf26a856`;
+real Chromium Vite 7.3.6 and direct CJS/ESM esbuild acceptance are 2/2 GREEN.
+The exact goal-declared `pnpm pr:check` passes all 25 gates. Production is 342
+hand-written insertions inside Budget `300–800`.
+
+Closure deletes the completed protocol-replay item. Broad dependency-projection
+execution, peer placement, Sass scale proof, the terminal blocked predecessor,
+and measured cleanup remain reverse-linked goal residuals. The known snapshot
+identity coverage gap remains recorded in
+`playground/baked-snapshot-regeneration`.
