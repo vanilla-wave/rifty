@@ -193,10 +193,10 @@ function directCjsContractRunner(probeBundle: string): string {
   return `${probeBundle}
 const fs = require('node:fs');
 const cjs = require('sass-embedded');
-const compilerPath = '/scratch/.sass-compiler.scss';
-const compilerUrl = 'file:///scratch/.sass-compiler.scss';
+const compilerPath = '/.sass-compiler.scss';
+const compilerUrl = 'file:///.sass-compiler.scss';
 
-module.exports.__promise = (async () => {
+void (async () => {
   const outputPath = process.argv[2];
   if (!outputPath) throw new Error('missing Sass CJS contract output path');
   const esm = await import('sass-embedded');
@@ -219,12 +219,12 @@ module.exports.__promise = (async () => {
 function directEsmContractRunner(probeBundle: string): string {
   return `import {createRequire} from 'node:module';
 import * as fs from 'node:fs';
-import * as esm from 'sass-embedded';
 ${probeBundle}
 const require = createRequire(import.meta.url);
 const cjs = require('sass-embedded');
-const compilerPath = '/scratch/.sass-compiler.scss';
-const compilerUrl = 'file:///scratch/.sass-compiler.scss';
+const esm = await import('sass-embedded');
+const compilerPath = '/.sass-compiler.scss';
+const compilerUrl = 'file:///.sass-compiler.scss';
 const outputPath = process.argv[2];
 if (!outputPath) throw new Error('missing Sass ESM contract output path');
 const transcript = await RiftySassContractProbe.probeSassContract(
@@ -368,10 +368,11 @@ async function readText(page: Page, path: string): Promise<string> {
 }
 
 async function inspectSassTree(page: Page): Promise<SassTreeEvidence> {
-  const outputPath = '/scratch/.sass-tree-evidence.json';
-  const inspected = await execLine(page, `node .inspect-sass-tree.cjs ${outputPath}`);
+  const guestOutputPath = '/.sass-tree-evidence.json';
+  const ownerOutputPath = '/scratch/.sass-tree-evidence.json';
+  const inspected = await execLine(page, `node .inspect-sass-tree.cjs ${guestOutputPath}`);
   expect(inspected.exit, inspected.out).toBe(0);
-  return readJson<SassTreeEvidence>(page, outputPath);
+  return readJson<SassTreeEvidence>(page, ownerOutputPath);
 }
 
 async function expectSassFacadeAbsent(page: Page): Promise<void> {
@@ -765,8 +766,24 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
     );
     const freshShadowProvenance = lockfile.rifty?.shadowSubstitutions;
     expect(freshShadowProvenance?.protocol).toBe('rifty.shadow-substitutions/v2');
-    expect(freshShadowProvenance?.applied).toHaveLength(1);
-    const applied = plainRecord(freshShadowProvenance?.applied?.[0], 'Sass substitution trace');
+    const appliedFacts = freshShadowProvenance?.applied ?? [];
+    expect(appliedFacts).toHaveLength(2);
+    expect(
+      appliedFacts
+        .map((value, index) => plainRecord(value, `substitution trace ${String(index)}`))
+        .map(({ substitutionId }) => substitutionId)
+        .sort(),
+    ).toEqual(
+      ['rifty.shadow-substitution.esbuild.v2', 'rifty.shadow-substitution.sass-embedded.v2'].sort(),
+    );
+    const applied = plainRecord(
+      appliedFacts.find(
+        (value, index) =>
+          plainRecord(value, `substitution trace ${String(index)}`).substitutionId ===
+          'rifty.shadow-substitution.sass-embedded.v2',
+      ),
+      'Sass substitution trace',
+    );
     expect(Object.keys(applied).sort()).toEqual([
       'acquisition',
       'catalog',

@@ -29,6 +29,9 @@ import { shadowAssetPlanForInstallResult } from './internal/shadow/install-resul
 import type { Lockfile } from './linker.ts';
 import { computeIntegrity } from './tarball-cache.ts';
 
+// Full official-archive tree/retry rows exceed Vitest's 5 s default on cold CI.
+vi.setConfig({ testTimeout: 20_000 });
+
 const ROOT = '/project';
 const SASS_ACQUISITION_FEATURE = 'sass-embedded.acquisition';
 const SASS_VERSION_FEATURE = 'sass-embedded.version';
@@ -348,15 +351,14 @@ function entryInstallPath(fixture: ScopeFixture, entry: RegistryEntry): string {
 
 function expectedLockPackages(fixture: ScopeFixture): Lockfile['packages'] {
   const packages: Lockfile['packages'] = {};
-  const rootDependencies: Record<string, string> = {};
   for (const entry of fixture.entries) {
     const installPath = entryInstallPath(fixture, entry);
     packages[installPath] = expectedRegistryLockEntry(entry);
-    if (installPath === `node_modules/${entry.manifest.name}`) {
-      rootDependencies[entry.manifest.name] = entry.manifest.version;
-    }
   }
-  packages[''] = { version: '1.0.0', dependencies: rootDependencies };
+  packages[''] = {
+    version: '1.0.0',
+    dependencies: { ...fixture.dependencies },
+  };
   packages[fixture.aliasPath] = {
     version: SASS_TRIGGER_VERSION,
     bin: { sass: SASS_BIN },

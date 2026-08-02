@@ -71,6 +71,8 @@ describe('sass-embedded public compatibility contract', () => {
       'embedded-info',
       'exception-message-prefix',
       'exception-span-url',
+      'absolute-file-stacks',
+      'embedded-alert-color-default',
       'compiler-dispose-errors',
       'legacy-logger-routing',
     ]);

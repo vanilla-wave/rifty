@@ -64,7 +64,7 @@ entry bytes. It records:
 | compiler lifecycle | MATCH through two `compile(path)` and two string compiles per sync/async compiler; DIFF: embedded prefixes direct-construction and both post-dispose method errors with `Compiler caused error: ...`, and async dispose resolves `undefined` where pure Sass resolves `null` |
 | modern importers | MATCH: sync importer and promised async importer under async compile, including `containingUrl`, call order, CSS, and loaded URLs |
 | logger | MATCH: `@warn`, slash-div deprecation id/message/stack/span, and CSS |
-| errors | DIFF: embedded prefixes `Error: ` in message/toString; syntax-error `span.url` is undefined instead of pure Sass null; sassMessage, sassStack, coordinates, text, and missing-use URL match |
+| errors | DIFF: embedded prefixes `Error: ` in message/toString; syntax-error `span.url` is undefined instead of pure Sass null; under one TTY pure Sass defaults message/toString color on while embedded defaults it off; sassMessage, sassStack, coordinates, text, and missing-use URL match |
 | info | DIFF: pure Dart/dart2js identity versus exact `sass-embedded\t1.100.0` |
 | legacy renderSync | MATCH CSS/stats keys; DIFF: embedded sends legacy-js-api deprecation to stderr and reports the warning stack as `-`, while pure Sass sends the deprecation through the logger and reports `stdin` |
 
@@ -73,6 +73,23 @@ source coordinate, compiler-disposal result, and export-identity list. Lifecycle
 path compilation uses a real caller-created SCSS file and normalizes only its
 exact URL to `file:///contract/compiler.scss`; the table is only an index. The
 oracle makes no prototype-reflection claim.
+
+## Same-PTY alert color
+
+A supplemental raw probe ran both exact packages inside one BSD `script` PTY
+(`stdout.isTTY === true`, `TERM=dumb`). For the same syntax error it counted ESC
+bytes without rewriting the fields:
+
+| package | default message / toString | `alertColor:false` | `alertColor:true` | sassStack |
+|---|---:|---:|---:|---:|
+| `sass@1.100.0` | 12 / 12 | 0 / 0 | 12 / 12 | 0 |
+| `sass-embedded@1.100.0` | 0 / 0 | 0 / 0 | 12 / 12 | 0 |
+
+Reproduce from the exact tree above with `script -q /dev/null`, require each
+package, call `compileString('a { color: red;', options)` for omitted, false,
+and true `alertColor`, then count `\x1b` in `message`, `String(error)`, and
+`sassStack`. The facade therefore supplies only the embedded default
+`alertColor:false`; explicit caller values remain authoritative.
 
 ## Sync compile plus async importer
 

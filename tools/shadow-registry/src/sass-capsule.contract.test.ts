@@ -147,21 +147,48 @@ describe('materialized sass-embedded recipe capsule', () => {
       const esm = (await import(pathToFileURL(esmConsumer).href)) as Readonly<
         Record<string, unknown>
       >;
-      const actual = await probeSassContract(
-        { cjs, esm } satisfies SassContractModules,
-        'sass-embedded@1.100.0',
-        {
-          compilerPath,
-          normalizeCompilerUrl(url): string {
-            const value = String(url);
-            return value === pathToFileURL(compilerPath).href
-              ? 'file:///contract/compiler.scss'
-              : value;
+      const stdoutIsTty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+      let actual: SassContractTranscript;
+      let explicitColorMessage: string;
+      let explicitNoColorMessage: string;
+      Object.defineProperty(process.stdout, 'isTTY', {
+        configurable: true,
+        value: true,
+      });
+      try {
+        actual = await probeSassContract(
+          { cjs, esm } satisfies SassContractModules,
+          'sass-embedded@1.100.0',
+          {
+            compilerPath,
+            normalizeCompilerUrl(url): string {
+              const value = String(url);
+              return value === pathToFileURL(compilerPath).href
+                ? 'file:///contract/compiler.scss'
+                : value;
+            },
           },
-        },
-      );
+        );
+        const syntaxErrorMessage = (alertColor: boolean): string => {
+          try {
+            cjs.compileString('a { color: red;', { alertColor });
+          } catch (error) {
+            if (error instanceof Error) return error.message;
+            throw error;
+          }
+          throw new Error('Sass color contract expected a syntax error');
+        };
+        explicitColorMessage = syntaxErrorMessage(true);
+        explicitNoColorMessage = syntaxErrorMessage(false);
+      } finally {
+        if (stdoutIsTty) Object.defineProperty(process.stdout, 'isTTY', stdoutIsTty);
+        else Reflect.deleteProperty(process.stdout, 'isTTY');
+      }
 
       expect(actual).toEqual(sassFacadeContract(embeddedFixture as SassContractTranscript));
+      const ansiCsi = `${String.fromCharCode(27)}[`;
+      expect(explicitColorMessage).toContain(ansiCsi);
+      expect(explicitNoColorMessage).not.toContain(ansiCsi);
       const cli = spawnSync(process.execPath, [join(packageRoot, 'dist/bin/sass.js')], {
         encoding: 'utf8',
       });

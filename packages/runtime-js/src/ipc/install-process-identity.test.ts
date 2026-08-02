@@ -63,19 +63,22 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     const expected = {
       name: 'node',
       sourceUrl: 'https://nodejs.org/download/release/v24.0.0/node-v24.0.0.tar.gz',
-      headersUrl:
-        'https://nodejs.org/download/release/v24.0.0/node-v24.0.0-headers.tar.gz',
+      headersUrl: 'https://nodejs.org/download/release/v24.0.0/node-v24.0.0-headers.tar.gz',
     };
 
-    expect(first.release).toEqual(expected);
+    expect(first.release).toStrictEqual(expected);
     expect(first.release).not.toBe(second.release);
-    expect(Object.getOwnPropertyDescriptor(first, 'release')).toMatchObject({
+    expect(Reflect.ownKeys(first.release)).toStrictEqual(['name', 'sourceUrl', 'headersUrl']);
+    expect(Object.getPrototypeOf(first.release)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(first, 'release')).toStrictEqual({
+      value: first.release,
       writable: false,
       enumerable: true,
       configurable: true,
     });
-    for (const key of Object.keys(expected)) {
-      expect(Object.getOwnPropertyDescriptor(first.release, key)).toMatchObject({
+    for (const [key, value] of Object.entries(expected)) {
+      expect(Object.getOwnPropertyDescriptor(first.release, key)).toStrictEqual({
+        value,
         writable: false,
         enumerable: true,
         configurable: true,
@@ -84,6 +87,6 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     expect(Object.isExtensible(first.release)).toBe(true);
     expect(Object.isFrozen(first.release)).toBe(false);
     expect(Reflect.deleteProperty(first.release, 'name')).toBe(true);
-    expect(second.release).toEqual(expected);
+    expect(second.release).toStrictEqual(expected);
   });
 });

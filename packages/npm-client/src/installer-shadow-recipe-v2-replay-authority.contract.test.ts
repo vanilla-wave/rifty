@@ -32,7 +32,7 @@ const encoder = new TextEncoder();
 
 const CATALOG = {
   id: 'rifty.shadow-substitutions.builtin.v2',
-  digest: 'a037016265e1c348254b3f067403278f5baee8b1f39e2bcd16f535fd0b9c3b52',
+  digest: '48700496b14183f5b471303000f041dfa4a06fb291b488477c456481d2832d38',
 } as const;
 
 const ESBUILD_RECIPE = {
@@ -397,9 +397,7 @@ async function replayFixture(scope: Scope): Promise<ReplayFixture> {
   const packages: Record<string, ReplayPackageEntry> = {
     '': {
       version: '1.0.0',
-      dependencies: nested
-        ? { esbuild: '0.28.0', 'lightningcss-wasm': '1.32.1', 'nested-host': '1.0.0' }
-        : { esbuild: '0.28.0', 'lightningcss-wasm': '1.32.0' },
+      dependencies: { ...dependencies },
     },
     'node_modules/esbuild': {
       version: '0.28.0',

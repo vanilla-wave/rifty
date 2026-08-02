@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
-import type { Packument, VersionManifest } from '../registry.ts';
+import type { Packument, RegistryRequestOptions, VersionManifest } from '../registry.ts';
 import { RegistryClient } from '../registry.ts';
 import { type TarballCache, computeIntegrity } from '../tarball-cache.ts';
 import { TAR_TRAILER, buildHeader, concat, gzip, padToBlock } from './tar-builder.ts';
@@ -159,6 +159,30 @@ function corruptBytes(bytes: Uint8Array): Uint8Array {
   return corrupted;
 }
 
+function waitForRelease(release: Promise<void>, signal: AbortSignal | undefined): Promise<void> {
+  if (signal === undefined) return release;
+  if (signal.aborted) {
+    return Promise.reject(signal.reason instanceof Error ? signal.reason : new Error('aborted'));
+  }
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => {
+      signal.removeEventListener('abort', onAbort);
+      reject(signal.reason instanceof Error ? signal.reason : new Error('aborted'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    release.then(
+      () => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 export class SassFixtureRegistry extends RegistryClient {
   readonly packumentReads: string[] = [];
   readonly tarballReads: string[] = [];
@@ -199,7 +223,10 @@ export class SassFixtureRegistry extends RegistryClient {
     };
   }
 
-  override async getTarball(url: string): Promise<Uint8Array> {
+  override async getTarball(
+    url: string,
+    options: RegistryRequestOptions = {},
+  ): Promise<Uint8Array> {
     const entry = this.#byUrl.get(url);
     if (!entry) throw new Error(`Sass contract forbids registry tarball ${url}`);
     this.tarballReads.push(url);
@@ -209,7 +236,7 @@ export class SassFixtureRegistry extends RegistryClient {
       if (fault.kind === 'throw') throw fault.error;
       if (fault.kind === 'stall') {
         fault.reached();
-        await fault.release;
+        await waitForRelease(fault.release, options.signal);
         return entry.tarball.slice();
       }
       if (fault.kind === 'partial') {
