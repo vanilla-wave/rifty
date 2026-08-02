@@ -3,10 +3,17 @@
 Recorded 2026-08-02 from fresh
 `main@b01a34bef711585c23fe9d66a563f0ba0010e0d9`, including protocol-v2 replay
 authority merged by PR #240. The complete Sass test carrier is
-`b9c0629ffae7cddd6838b37805a98c87830856ed`; no production source differs
+`4471f20d7c62d8de4533a9ed0211d8a7bfc1b6ed`; no production source differs
 from the fresh baseline. Slice `sass-scale-proof` keeps Budget `1000–3000`
 and adds no resolver, cache, lock writer, scheduler, asset capability, or
 package-specific generic branch.
+
+The first fresh checkpoint blocked ADR-0310's generic “unproven API” gap as
+impossible to detect honestly at runtime. A decision subagent superseded it
+with ADR-0344: only finite named rows publish positive compatibility; a newly
+observed mismatch is RED-first or becomes a specific reachable gap. Schema 2
+therefore extends the lifecycle row with direct construction, path and string
+compilation, sync/async disposal outcomes, and both post-dispose method errors.
 
 ## External oracles
 
@@ -17,6 +24,10 @@ identity, entry bytes, complete normalized transcripts, and two isolated
 and SHA-256 facts are pinned in
 `sass-1.100.0-node-differential.md`; its independent evidence suite is 3/3
 GREEN.
+
+The two normalized transcript JSON files are exact generator-owned bytes and
+their two explicit paths are excluded from Biome formatting; the generator's
+byte check is authoritative while `pnpm lint` covers every non-generated file.
 
 Node v24.16.0 with npm 11.17.0 installed exact Vite 7.3.6 and
 `sass-embedded@1.100.0` into two isolated fresh trees, then replayed one with
