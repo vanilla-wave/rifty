@@ -95,7 +95,6 @@ async function loadPackage(projectRoot, packageName, moduleKind) {
 }
 
 async function publishOutcome(outcome) {
-  console.log(JSON.stringify(outcome));
   if (typeof process.send !== 'function') return;
   await new Promise((resolveSend, reject) => {
     process.send({ kind: 'sass-constructor-outcome', outcome }, (error) => {
@@ -169,7 +168,9 @@ async function waitForProcessGroupExit(processGroupId) {
 }
 
 async function processGroupMembers(processGroupId) {
-  const { stdout } = await execFileAsync('/bin/ps', ['-axo', 'pid=,ppid=,pgid=,comm=']);
+  const { stdout } = await execFileAsync('/bin/ps', ['-axo', 'pid=,ppid=,pgid=,comm='], {
+    timeout: 250,
+  });
   return stdout.split('\n').flatMap((line) => {
     const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
     if (match === null || Number(match[3]) !== processGroupId) return [];
@@ -183,28 +184,42 @@ async function processGroupMembers(processGroupId) {
   });
 }
 
-async function inspectCompilerProcessGroup(processGroupId, projectRoot, compilerExecutable) {
+function exactCompilerProcessGroup(members, processGroupId, projectRoot, compilerExecutable) {
+  const leader = members.find(({ pid }) => pid === processGroupId);
+  const compilerChild = members.find(
+    ({ parentPid, command }) => parentPid === processGroupId && command === compilerExecutable,
+  );
+  if (
+    members.length !== 2 ||
+    leader === undefined ||
+    basename(leader.command) !== basename(process.execPath) ||
+    compilerChild === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    memberCount: members.length,
+    leaderCommand: basename(leader.command),
+    compilerChildCommand: relative(projectRoot, compilerChild.command),
+    compilerChildParent: 'leader',
+  };
+}
+
+async function inspectCompilerProcessGroup(processGroupId, projectRoot, compilerExecutable, retry) {
   let members = [];
-  for (let attempt = 0; attempt < 50; attempt += 1) {
+  const expiresAt = Date.now() + (retry ? 750 : 0);
+  let inspectAgain = true;
+  while (inspectAgain) {
     members = await processGroupMembers(processGroupId);
-    const leader = members.find(({ pid }) => pid === processGroupId);
-    const compilerChild = members.find(
-      ({ parentPid, command }) => parentPid === processGroupId && command === compilerExecutable,
+    const exact = exactCompilerProcessGroup(
+      members,
+      processGroupId,
+      projectRoot,
+      compilerExecutable,
     );
-    if (
-      members.length === 2 &&
-      leader !== undefined &&
-      basename(leader.command) === basename(process.execPath) &&
-      compilerChild !== undefined
-    ) {
-      return {
-        memberCount: members.length,
-        leaderCommand: basename(leader.command),
-        compilerChildCommand: relative(projectRoot, compilerChild.command),
-        compilerChildParent: 'leader',
-      };
-    }
-    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    if (exact !== undefined) return exact;
+    inspectAgain = retry && Date.now() < expiresAt;
+    if (inspectAgain) await new Promise((resolveWait) => setTimeout(resolveWait, 10));
   }
   throw new Error(`unexpected Sass compiler process group: ${JSON.stringify(members)}`);
 }
@@ -221,27 +236,19 @@ async function isolatedRun(
   const child = spawn(
     process.execPath,
     [probePath, '--child', projectRoot, packageName, moduleKind, constructorName],
-    { detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
+    { detached: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] },
   );
   if (child.pid === undefined) throw new Error('Sass constructor probe did not receive a pid');
   const processGroupId = child.pid;
   activeProcessGroups.add(processGroupId);
-  let stdout = '';
-  let stderr = '';
   let outcome;
   let startupTimedOut = false;
   let postOutcomeTimedOut = false;
   let timerFailure;
   let processGroupInspection;
+  let deadlineProcessGroup;
+  let deadlineInspectionPromise;
   let postOutcomeTimer;
-  child.stdout.setEncoding('utf8');
-  child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (chunk) => {
-    stdout += chunk;
-  });
-  child.stderr.on('data', (chunk) => {
-    stderr += chunk;
-  });
 
   child.once('message', (message) => {
     if (
@@ -262,16 +269,39 @@ async function isolatedRun(
         processGroupId,
         projectRoot,
         compilerExecutable,
-      );
+        true,
+      ).catch((error) => {
+        timerFailure = error;
+        try {
+          killProcessGroup(processGroupId);
+        } catch {
+          child.kill('SIGKILL');
+        }
+        return undefined;
+      });
     }
     postOutcomeTimer = setTimeout(() => {
       postOutcomeTimedOut = true;
-      try {
-        killProcessGroup(processGroupId);
-      } catch (error) {
-        timerFailure = error;
-        child.kill('SIGKILL');
-      }
+      deadlineInspectionPromise = (async () => {
+        try {
+          if (packageName === 'sass-embedded' && constructorName !== 'ImportOnly') {
+            deadlineProcessGroup = await inspectCompilerProcessGroup(
+              processGroupId,
+              projectRoot,
+              compilerExecutable,
+              false,
+            );
+          }
+          killProcessGroup(processGroupId);
+        } catch (error) {
+          timerFailure = error;
+          try {
+            killProcessGroup(processGroupId);
+          } catch {
+            child.kill('SIGKILL');
+          }
+        }
+      })();
     }, postOutcomeTimeoutMs);
   });
 
@@ -288,30 +318,30 @@ async function isolatedRun(
     child.once('error', reject);
     child.once('exit', (exitCode, signal) => resolveExit({ exitCode, signal }));
   });
-  const closePromise = new Promise((resolveClose) => child.once('close', resolveClose));
   let result;
   let runFailure;
   let processGroup;
+  let processGroupGone = false;
+  let cleanupForced = false;
   try {
     result = await exitPromise;
-    clearTimeout(startupTimer);
-    clearTimeout(postOutcomeTimer);
-    await closePromise;
+    if (deadlineInspectionPromise !== undefined) await deadlineInspectionPromise;
     if (processGroupInspection !== undefined) processGroup = await processGroupInspection;
     if (outcome === undefined) throw new Error('Sass constructor child exited without an outcome');
     if (timerFailure !== undefined) throw timerFailure;
   } catch (error) {
     runFailure = error;
-  }
-  clearTimeout(startupTimer);
-  clearTimeout(postOutcomeTimer);
-  let processGroupGone = await waitForProcessGroupExit(processGroupId);
-  const cleanupForced = !processGroupGone;
-  if (cleanupForced) {
-    killProcessGroup(processGroupId);
+  } finally {
+    clearTimeout(startupTimer);
+    clearTimeout(postOutcomeTimer);
     processGroupGone = await waitForProcessGroupExit(processGroupId);
+    cleanupForced = !processGroupGone;
+    if (cleanupForced) {
+      killProcessGroup(processGroupId);
+      processGroupGone = await waitForProcessGroupExit(processGroupId);
+    }
+    activeProcessGroups.delete(processGroupId);
   }
-  activeProcessGroups.delete(processGroupId);
   if (!processGroupGone) throw new Error(`Sass probe process group ${processGroupId} survived`);
   if (runFailure !== undefined) throw runFailure;
   return {
@@ -322,9 +352,8 @@ async function isolatedRun(
     cleanupForced,
     processGroupGone,
     processGroup,
+    deadlineProcessGroup,
     ...result,
-    stdout,
-    stderr,
   };
 }
 

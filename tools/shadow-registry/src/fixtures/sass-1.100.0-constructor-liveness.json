@@ -51,9 +51,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"imported\"}\n",
-            "stderr": ""
+            "signal": null
           },
           {
             "outcomeChannel": "ipc",
@@ -65,9 +63,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"imported\"}\n",
-            "stderr": ""
+            "signal": null
           }
         ],
         "Compiler": [
@@ -84,9 +80,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": null
           },
           {
             "outcomeChannel": "ipc",
@@ -101,9 +95,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": null
           }
         ],
         "AsyncCompiler": [
@@ -120,9 +112,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": null
           },
           {
             "outcomeChannel": "ipc",
@@ -137,9 +127,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": null
           }
         ]
       },
@@ -155,9 +143,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"imported\"}\n",
-            "stderr": ""
+            "signal": null
           },
           {
             "outcomeChannel": "ipc",
@@ -169,9 +155,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"imported\"}\n",
-            "stderr": ""
+            "signal": null
           }
         ],
         "Compiler": [
@@ -188,9 +172,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": null
           },
           {
             "outcomeChannel": "ipc",
@@ -205,9 +187,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": null
           }
         ],
         "AsyncCompiler": [
@@ -224,9 +204,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": null
           },
           {
             "outcomeChannel": "ipc",
@@ -241,9 +219,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": null
           }
         ]
       }
@@ -261,9 +237,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"imported\"}\n",
-            "stderr": ""
+            "signal": null
           },
           {
             "outcomeChannel": "ipc",
@@ -275,9 +249,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"imported\"}\n",
-            "stderr": ""
+            "signal": null
           }
         ],
         "Compiler": [
@@ -299,10 +271,14 @@
               "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
               "compilerChildParent": "leader"
             },
+            "deadlineProcessGroup": {
+              "memberCount": 2,
+              "leaderCommand": "node",
+              "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
+              "compilerChildParent": "leader"
+            },
             "exitCode": null,
-            "signal": "SIGKILL",
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": "SIGKILL"
           },
           {
             "outcomeChannel": "ipc",
@@ -322,10 +298,14 @@
               "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
               "compilerChildParent": "leader"
             },
+            "deadlineProcessGroup": {
+              "memberCount": 2,
+              "leaderCommand": "node",
+              "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
+              "compilerChildParent": "leader"
+            },
             "exitCode": null,
-            "signal": "SIGKILL",
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": "SIGKILL"
           }
         ],
         "AsyncCompiler": [
@@ -347,10 +327,14 @@
               "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
               "compilerChildParent": "leader"
             },
+            "deadlineProcessGroup": {
+              "memberCount": 2,
+              "leaderCommand": "node",
+              "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
+              "compilerChildParent": "leader"
+            },
             "exitCode": null,
-            "signal": "SIGKILL",
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": "SIGKILL"
           },
           {
             "outcomeChannel": "ipc",
@@ -370,10 +354,14 @@
               "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
               "compilerChildParent": "leader"
             },
+            "deadlineProcessGroup": {
+              "memberCount": 2,
+              "leaderCommand": "node",
+              "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
+              "compilerChildParent": "leader"
+            },
             "exitCode": null,
-            "signal": "SIGKILL",
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": "SIGKILL"
           }
         ]
       },
@@ -389,9 +377,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"imported\"}\n",
-            "stderr": ""
+            "signal": null
           },
           {
             "outcomeChannel": "ipc",
@@ -403,9 +389,7 @@
             "cleanupForced": false,
             "processGroupGone": true,
             "exitCode": 0,
-            "signal": null,
-            "stdout": "{\"outcome\":\"imported\"}\n",
-            "stderr": ""
+            "signal": null
           }
         ],
         "Compiler": [
@@ -427,10 +411,14 @@
               "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
               "compilerChildParent": "leader"
             },
+            "deadlineProcessGroup": {
+              "memberCount": 2,
+              "leaderCommand": "node",
+              "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
+              "compilerChildParent": "leader"
+            },
             "exitCode": null,
-            "signal": "SIGKILL",
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": "SIGKILL"
           },
           {
             "outcomeChannel": "ipc",
@@ -450,10 +438,14 @@
               "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
               "compilerChildParent": "leader"
             },
+            "deadlineProcessGroup": {
+              "memberCount": 2,
+              "leaderCommand": "node",
+              "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
+              "compilerChildParent": "leader"
+            },
             "exitCode": null,
-            "signal": "SIGKILL",
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": "SIGKILL"
           }
         ],
         "AsyncCompiler": [
@@ -475,10 +467,14 @@
               "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
               "compilerChildParent": "leader"
             },
+            "deadlineProcessGroup": {
+              "memberCount": 2,
+              "leaderCommand": "node",
+              "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
+              "compilerChildParent": "leader"
+            },
             "exitCode": null,
-            "signal": "SIGKILL",
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": "SIGKILL"
           },
           {
             "outcomeChannel": "ipc",
@@ -498,10 +494,14 @@
               "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
               "compilerChildParent": "leader"
             },
+            "deadlineProcessGroup": {
+              "memberCount": 2,
+              "leaderCommand": "node",
+              "compilerChildCommand": "node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart",
+              "compilerChildParent": "leader"
+            },
             "exitCode": null,
-            "signal": "SIGKILL",
-            "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\",\"toString\":\"Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.\"}\n",
-            "stderr": ""
+            "signal": "SIGKILL"
           }
         ]
       }

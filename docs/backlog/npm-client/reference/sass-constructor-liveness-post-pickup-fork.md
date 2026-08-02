@@ -21,11 +21,11 @@ node tools/shadow-registry/tools/sass-constructor-liveness-probe.mjs \
 
 The process-group probe is
 `tools/shadow-registry/tools/sass-constructor-liveness-probe.mjs`, SHA-256
-`ad6b9f6f3a8543d59d9f5fd2bd5d6ae58f357fc9be2be69f82988008272976ff`.
+`eaf7aad9871c389fe68ae658bdf1c2621d2ba156922b1a0a5393b4f87de8a582`.
 The complete artifact is
 `tools/shadow-registry/src/fixtures/sass-1.100.0-constructor-liveness.json`,
 SHA-256
-`27b905ad4e1122e27ffdf364cab3d7a2bd067e305cc773f61a3b606377d236c8`.
+`d9d832b238591f07b89191995f59fdf6dcb651c426ec59f8ac9e5236a05ba0f6`.
 
 Each package's CJS and ESM entry first passes a twice-run import-only control,
 then runs `Compiler` and `AsyncCompiler` twice in isolated process groups. Pure
@@ -35,13 +35,15 @@ embedded publishes the corresponding exact
 from a structured IPC outcome; a separate 5,000 ms startup bound cannot collide
 with this lifetime window. All eight embedded constructor runs hit the
 post-outcome bound; all eight pure constructor runs and all import controls
-exit. Exact name/message/toString/stdout are frozen.
+exit. Exact name/message/toString are frozen through IPC.
 
 The artifact pins both package integrities, exact
 `sass-embedded-darwin-arm64@1.100.0` integrity, and byte identities for its Dart
 executable plus snapshot. Before timeout the probe reads PID/PPID/PGID state and
 requires exactly the Node leader plus that platform Dart executable as its
-child. It then sends `SIGKILL` to the group and verifies group disappearance.
+child. At the 1,500 ms deadline it re-reads the same group and requires the same
+exact leader/child shape before sending `SIGKILL`. The probe inherits no output
+pipes, settles on leader exit, and verifies group disappearance in `finally`.
 Error-path/exit/SIGINT/SIGTERM cleanup covers failed and interrupted probes;
 every completed attempt proves its group gone before the next attempt.
 

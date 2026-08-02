@@ -60,8 +60,6 @@ describe('Sass 1.100.0 invalid-construction liveness evidence', () => {
             processGroupGone: true,
             exitCode: 0,
             signal: null,
-            stdout: '{"outcome":"imported"}\n',
-            stderr: '',
           });
         }
       }
@@ -90,9 +88,7 @@ describe('Sass 1.100.0 invalid-construction liveness evidence', () => {
             processGroupGone: true,
             exitCode: 0,
             signal: null,
-            stderr: '',
           });
-          expect(run.stdout).toBe(`${JSON.stringify(run.outcome)}\n`);
         }
         for (const run of embeddedRuns) {
           expect(run).toMatchObject({
@@ -113,11 +109,15 @@ describe('Sass 1.100.0 invalid-construction liveness evidence', () => {
               compilerChildCommand: 'node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart',
               compilerChildParent: 'leader',
             },
+            deadlineProcessGroup: {
+              memberCount: 2,
+              leaderCommand: 'node',
+              compilerChildCommand: 'node_modules/sass-embedded-darwin-arm64/dart-sass/src/dart',
+              compilerChildParent: 'leader',
+            },
             exitCode: null,
             signal: 'SIGKILL',
-            stderr: '',
           });
-          expect(run.stdout).toBe(`${JSON.stringify(run.outcome)}\n`);
         }
       }
     }
