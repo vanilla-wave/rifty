@@ -3,10 +3,14 @@ area: playground
 status: draft
 title: Baked snapshot regeneration policy + git size pressure
 created: 2026-06-13
-why: the committed snapshot (now 14.3 MB gz) drifts silently when a baked template's install map changes, and every re-bake permanently grows git history
-user_story: As a developer picking an instant playground template, I want its baked `node_modules` snapshot to boot instantly with the deps it advertises, but today drift silently falls back to a real install with no CI guard so I lose the instant-boot win unannounced.
+why: the committed snapshot (now 14.3 MB gz) can drift from current install behavior while still passing its freshness gate, and every re-bake permanently grows git history
+user_story: As a developer picking an instant playground template, I want its baked tree and lock evidence to match the current installer, but today some drift either loses instant boot or restores stale evidence unannounced.
 sources: [docs/adr/playground/0135-sandbox-setup-kinds-instant-vs-from-scratch.md]
-code: [apps/playground/tools/bake-dep-snapshots.ts]
+code:
+  - apps/playground/tools/bake-dep-snapshots.ts
+  - tools/shadow-registry/tools/generate-install-artifact-identity.ts
+  - tools/shadow-registry/src/snapshot-artifact-check.ts
+  - packages/workbench/src/glue/dep-snapshot.ts
 ---
 
 ## Context
@@ -25,10 +29,22 @@ Update 2026-07-12 (superseded by ADR-0261): CI now proves exact package input, i
 identity, and embedded shadow bytes for every committed snapshot. Silent policy
 drift is closed; range-resolution cadence and Git storage remain open here.
 
+Update 2026-08-01 (protocol-v2 Contract+RED): linker-only lock serialization
+drift is not covered by the install-artifact identity. After the canonical
+shadow `bin` spelling shipped, all three committed snapshots still carried the
+old spelling and protocol v1; `check-dep-snapshot-artifacts.ts` nevertheless
+reported them current. Instant restore then wrote those embedded lock bytes
+verbatim. The protocol-v2 slice must honestly re-bake the shipped artifacts;
+the residual class is making freshness identity change whenever installer lock
+serialization changes, without making routine install behavior depend on a
+manually bumped version.
+
 ## Options or Next
 
 - Range-resolution drift (same ranges, newer published versions) — decide whether periodic re-bakes are wanted at all; the lockfile inside the snapshot keeps installs deterministic either way.
   Happened 2026-07-25 (PR #175): an identity-refresh rebake silently absorbed `postcss` 8.5.22 → 8.5.23 via vite's floating `^8.5.6` in all three presets; declared post-hoc in the playground CHANGELOG. Bake resolves against live npmjs (`bake-dep-snapshots.ts:38`) — pin bake inputs to the committed lockfile to kill the class.
+- Freshness identity — derive or bind it to the current canonical lock writer so
+  linker-only serialization changes make committed snapshots loudly stale.
 - Git size: Git LFS, or move the asset out of the repo (deploy-time bake) if re-bakes become frequent.
 
 ## Reversibility

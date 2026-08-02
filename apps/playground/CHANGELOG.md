@@ -26,6 +26,9 @@
 
 ### Changed (Workbench extraction)
 
+- TypeScript, Vite 7, and Vite 8 instant snapshots now carry protocol-v2
+  shadow provenance and the canonical `bin/esbuild` lock spelling.
+
 - Vite snapshot bake now consumes the exact Workbench-normalized manifest.
   Exact Vite 8 carries its visible proven Rolldown WASI runtime alias in both
   cold installs and the regenerated instant artifact; that live-registry

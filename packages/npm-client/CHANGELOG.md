@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Shadow lock traces now use behavior-complete protocol v2 facts. Replay
+  strictly checks acquisition maps, bundled children, materialized files/bins,
+  and exact pinned cache bytes before registry or project mutation.
+
 - Registry-backed shadow recipes now consume plan-proven bundled dependencies
   from the parent archive, with npm-compatible embedded lock facts and offline
   replay/Eddy completeness at exact install paths.

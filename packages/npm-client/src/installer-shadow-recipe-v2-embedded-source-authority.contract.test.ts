@@ -344,13 +344,9 @@ describe('shadow recipe v2 embedded-source authority', () => {
         .toEqual({ code: 'EBROKENLOCK', reason: 'shadow-trace-drift' });
       expect.soft(registry.packumentReads, `${scope} ${label}: packuments`).toEqual([]);
       expect.soft(registry.tarballReads, `${scope} ${label}: tarballs`).toEqual([]);
-      if (label === 'version') {
-        expect
-          .soft(cache.gets, `${scope} ${label}: parent cache validation`)
-          .toContain(`${SOURCE}@${SOURCE_VERSION}`);
-      } else {
-        expect.soft(cache.gets, `${scope} ${label}: pre-cache rejection`).toEqual([]);
-      }
+      // Protocol v2 carries the exact child version; lock/trace drift owns the
+      // rejection before parent bytes for both child fields.
+      expect.soft(cache.gets, `${scope} ${label}: pre-cache rejection`).toEqual([]);
       expect.soft(cache.gets.filter((entry) => entry.startsWith(`${BUNDLED}@`))).toEqual([]);
       expect.soft(cache.puts, `${scope} ${label}: cache writes`).toEqual([]);
       expect.soft(reports, `${scope} ${label}: reports`).toEqual([]);

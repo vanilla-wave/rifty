@@ -1971,6 +1971,42 @@ type PinAcquisitionResult =
   | Readonly<{ kind: 'synthetic' }>
   | Readonly<{ kind: 'tarball'; result: FetchAndUnpackResult }>;
 
+function brokenShadowReplayCache(pin: ResolvedPin, detail: string): Error {
+  return Object.assign(
+    new Error(`EBROKENLOCK: shadow recipe ${pin.shadow?.recipe.id ?? pin.name} ${detail}`),
+    {
+      code: 'EBROKENLOCK' as const,
+      packageName: pin.name,
+      reason: 'shadow-trace-drift' as const,
+    },
+  );
+}
+
+async function readRegistryShadowReplayCache(
+  pin: ResolvedPin,
+  fetchCtx: FetchAndUnpackCtx,
+): Promise<FetchAndUnpackResult> {
+  const acquisition = pin.shadow?.acquisition;
+  if (pin.origin !== 'lockfile' || acquisition?.kind !== 'registry') {
+    throw new TypeError('registry shadow replay cache requires a lockfile acquisition');
+  }
+  throwIfAborted(fetchCtx.signal);
+  const integrity = acquisition.integrity;
+  const algorithm = integrity === undefined ? null : parseIntegrityAlgorithm(integrity);
+  if (integrity === undefined || algorithm === null) {
+    throw brokenShadowReplayCache(pin, 'has an invalid replay-cache integrity');
+  }
+  const bytes = await fetchCtx.cache.get(acquisition.name, acquisition.version, integrity);
+  throwIfAborted(fetchCtx.signal);
+  if (bytes === null) throw brokenShadowReplayCache(pin, 'is missing its pinned cache bytes');
+  const actual = await computeIntegrity(bytes, algorithm);
+  throwIfAborted(fetchCtx.signal);
+  if (actual !== integrity) {
+    throw brokenShadowReplayCache(pin, 'has corrupt pinned cache bytes');
+  }
+  return { bytes, cacheHit: true, integrity };
+}
+
 /**
  * Single traversal driver: for each node, ask `source` for its pin, decide
  * placement, fetch the tarball, record it, recurse into `dependencies` and
@@ -2065,6 +2101,11 @@ async function walkAndPin(
     if (pending) return pending;
     if (pin.shadow?.acquisition.kind === 'synthetic') {
       pending = Promise.resolve({ kind: 'synthetic' });
+    } else if (pin.origin === 'lockfile' && pin.shadow?.acquisition.kind === 'registry') {
+      pending = sem.run(async () => ({
+        kind: 'tarball' as const,
+        result: await readRegistryShadowReplayCache(pin, fetchCtx),
+      }));
     } else {
       pending = sem.run(async () => ({
         kind: 'tarball' as const,

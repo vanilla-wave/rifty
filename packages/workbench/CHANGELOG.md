@@ -21,6 +21,9 @@
 
 ### Changed
 
+- Package-owner installs now commit and replay protocol-v2 shadow facts while
+  retaining the same-project FIFO through materialization and lock publication.
+
 - Exact Vite 8.0.16 definitions serialize the visible npm-standard proven
   Rolldown WASI runtime override before project identity; an explicit caller
   value wins and every other Vite version remains unchanged (ADR-0336).

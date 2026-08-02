@@ -1,5 +1,80 @@
 # Shadow recipe v2 Contract+RED
 
+## Protocol-v2 replay authority — 2026-08-02
+
+Fresh source baseline is
+`main@d2e59e3c4ab303ed76203f1ac3d590fe76d3722b`, including embedded-source
+authority merged by PR #239. JIT Item 21 selects
+`shadow-recipe-v2-protocol-replay-authority` at Budget `300–800`; the other
+reverse-linked goal residuals remain unmapped. The four TypeScript carriers
+add 1,578 lines, below the mandatory pre-pickup re-cut threshold of 1,600
+(twice the band high).
+
+The checkpoint batch is:
+
+```sh
+pnpm --filter @riftydev/npm-client exec vitest run \
+  src/installer-shadow-recipe-v2-replay-authority.contract.test.ts \
+  src/installer-shadow-recipe-v2-embedded-source-authority.contract.test.ts \
+  src/installer-shadow-recipe-v2-acquisition-replay-authority.contract.test.ts \
+  src/shadow-recipe-v2-data-authority.contract.test.ts \
+  src/installer-shadow-materialized-bin-commit-authority.contract.test.ts \
+  src/installer-shadow-shims.test.ts \
+  src/internal/shadow/installer.contract.test.ts \
+  src/internal/shadow/planner.contract.test.ts \
+  src/registry.fault.test.ts
+pnpm --filter @riftydev/workbench exec vitest run \
+  src/workers/owner-package-shadow-assets.contract.test.ts
+pnpm vitest run --project unit services/eddy/tests/s3-bundle-store.test.ts
+pnpm vitest run --project unit services/eddy/tests/client-roundtrip.test.ts
+pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
+  --grep "Vite 7 config graph"
+pnpm test:browser-unit tests/browser-unit/esbuild-vite-contract.spec.ts \
+  --grep "direct CJS require and ESM import"
+```
+
+The npm-client batch is exactly **94 RED / 150 GREEN** across 244 rows. The
+new literal carrier is 94/94 RED because current ingress rejects protocol v2:
+two official-archive fresh/replay parity rows; 78 root/nested strict trace and
+lock drift rows; four missing/corrupt pinned-parent rows; and ten substituted
+embedded-manifest rows. The drift table independently covers every promised
+acquisition scalar/map/container, bundled child/container, and materialization
+scalar/files/bin/container shape, including missing, malformed, extra, and
+disagreeing values. Every mutation first proves its unmodified literal control
+would decode, so generic protocol rejection cannot falsely satisfy a fault row.
+Inherited acquisition, embedded-source, data, materialized-bin, shims,
+planner, installer, and bounded registry floors remain 150/150 GREEN.
+
+Workbench is **1 RED / 1 GREEN**: the real-core parked-lock test proves the
+existing owner FIFO physically excludes the second same-project install, then
+observes only protocol v1 and missing trace `materialization.bin`. Eddy
+service completeness remains 36/36 GREEN; the full client roundtrip is **3 RED
+/ 35 GREEN**. Its literal-v2 control prevents generic protocol decline from
+satisfying the pre-adoption row, while the missing/corrupt post-adoption rows
+fix the exact LightningCSS parent cache ledger and require zero registry,
+VFS, report, tree, or lock effects. The real Chromium Vite 7.3.6 row completes
+dev/build/preview/optimize, then observes protocol v1, missing trace bin, and
+stale `./bin/esbuild` in its actual project lock. The independent direct CJS/ESM
+Chromium differential and loud CLI behavior are 1/1 GREEN.
+
+npm-client and Workbench typechecks, Biome, and diff checks pass. Eddy and
+Chromium commands require loopback permission in the restricted runner; their
+unrestricted local reruns produce the results above. No production source
+differs from the fresh baseline.
+
+The literal v2 shape is independent of the production attester. Registry facts
+carry required/optional/peer/bundle maps plus exact bundled child facts;
+materialization carries exact files and canonical bins. Positives consume the
+committed official LightningCSS archive and compare raw lock bytes, exact
+cache/registry/report ledgers, hashes, aliases, bins, and full trees with a
+fresh install. Generated tarballs are limited to corruption inputs. The Eddy
+carrier independently proves the `false-fallback` fault axis: incomplete
+evidence declines before adoption, while missing/corrupt pinned parent bytes
+after adoption stay loud without registry fallback or publication. ADR-0182's
+standard fallback remains the pre-adoption path. No new public API, codec
+module, resolver, cache, lock, FIFO, scheduler, or shadow-specific Eddy source
+is prescribed.
+
 ## Embedded-source topology — 2026-08-02
 
 Fresh source baseline is
@@ -286,3 +361,28 @@ Closure deletes the completed embedded-source item and subtracts only its
 exact blocker from the protocol-v2 child. Dependency-projection execution and
 protocol-v2 replay remain explicit goal residuals awaiting their own
 pre-pickup mapping and readiness work.
+
+## Protocol-v2 replay implementation and closure
+
+Ready/pickup parent `5d32f44792065b73a450b2b4e10739568d5f46f7`
+precedes production `2963f388c619ea87ce39a9da439ff53501722481`.
+The existing planner/linker seam now emits and strict-decodes behavior-complete
+protocol-v2 trace facts from the final lock topology. Lock replay compares the
+complete canonical projection before effects, then registry-backed recipes read
+only their exact integrity-keyed cache entry and independently verify its bytes.
+The existing lock writer preserves raw bytes for JSON-equivalent replay. No
+public API, resolver, cache, lock writer, FIFO, scheduler, or Eddy source was
+added.
+
+The stabilized npm-client batch runs 244/244 GREEN, Eddy client/service 74/74,
+and the real Workbench FIFO carrier 2/2. Fresh-baked TypeScript, Vite 7, and
+Vite 8 artifacts are current at `92f28c0ffcc1fdd10dab391005b2ef0bdf26a856`;
+real Chromium Vite 7.3.6 and direct CJS/ESM esbuild acceptance are 2/2 GREEN.
+The exact goal-declared `pnpm pr:check` passes all 25 gates. Production is 342
+hand-written insertions inside Budget `300–800`.
+
+Closure deletes the completed protocol-replay item. Broad dependency-projection
+execution, peer placement, Sass scale proof, the terminal blocked predecessor,
+and measured cleanup remain reverse-linked goal residuals. The known snapshot
+identity coverage gap remains recorded in
+`playground/baked-snapshot-regeneration`.

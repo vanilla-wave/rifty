@@ -147,6 +147,10 @@ Contract+RED → Final+GREEN):
     embedded dependencies from the validated parent archive across fresh,
     current replay, npm-compatible lock topology, and shared Eddy completeness
     without a standalone child source.
+21. `npm-client/shadow-recipe-v2-protocol-replay-authority` —
+    **shadow-recipe-v2-protocol-replay-authority**: emit and strict-replay
+    behavior-complete protocol-v2 provenance through the existing planner,
+    installer, linker, Eddy, Workbench FIFO, and Chromium Vite consumers.
 
 The quarry's conditional Vite temp-cache slice is dead: the ADR-0307 probe
 passed, so no temp-cache is ported and Vite writes temp modules to the real
@@ -191,3 +195,4 @@ Run tripwires (`docs/backlog/README.md` §Budget):
 | shadow-materialized-bin-commit-authority | 100–300 |
 | shadow-recipe-v2-acquisition-replay-authority | 300–800 |
 | shadow-recipe-v2-embedded-source-authority | 200–500 |
+| shadow-recipe-v2-protocol-replay-authority | 300–800 |
