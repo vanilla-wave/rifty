@@ -32,7 +32,7 @@ const encoder = new TextEncoder();
 
 const CATALOG = {
   id: 'rifty.shadow-substitutions.builtin.v2',
-  digest: '48700496b14183f5b471303000f041dfa4a06fb291b488477c456481d2832d38',
+  digest: '375c6c90489e1e9ccc8bca59402cdda94739eb331863c6fdaaf32a95118cf4a1',
 } as const;
 
 const ESBUILD_RECIPE = {

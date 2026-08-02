@@ -19,9 +19,10 @@ shared probe (`npm-client/reference/sass-1.100.0-node-differential.md`):
   importer, logger, error, `info`, and legacy rows record every observed value
   and identity;
 - measured differences are the cleaned dart2js export namespace, `info`,
-  exception message/toString prefix, null-to-undefined `span.url`, compiler
-  disposal outcomes (including async dispose resolution), and legacy
-  logger/stderr routing;
+  exception message/toString prefix, null-to-undefined `span.url`, absolute
+  exception/logger file frames, embedded's no-color default, compiler disposal
+  outcomes (including async dispose resolution), and legacy logger/stderr
+  routing;
 - direct `Compiler` / `AsyncCompiler` construction starts a refed Dart child
   before exact embedded rejects and keeps Node alive, while pure Sass rejects
   and exits naturally; the exact CJS/ESM × sync/async process-group evidence is
@@ -56,9 +57,10 @@ and working upstream behavior while still missing unenumerated inputs.
   Namespace presence is not a blanket compatibility claim: only the named Node
   differential and Chromium acceptance rows may publish positive compat.
 - Adapt only measured differences: export namespace, `info`, exception
-  message/toString and `span.url`, initialized-compiler disposal outcomes, and
-  legacy logger routing. Preserve the async-importer synchronous throw as a
-  documented warning instead of reproducing a permanent deadlock.
+  message/toString and `span.url`, absolute file frames, the no-color default,
+  initialized-compiler disposal outcomes, and legacy logger routing. Preserve
+  the async-importer synchronous throw as a documented warning instead of
+  reproducing a permanent deadlock.
 - Keep `Compiler` and `AsyncCompiler` as namespace, prototype, and `instanceof`
   anchors for instances returned by `initCompiler()` and `initAsyncCompiler()`.
   Direct construction in either module format synchronously throws

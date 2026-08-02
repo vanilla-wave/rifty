@@ -92,8 +92,9 @@ retained verbatim in the reference artifact.
   ADR-0344 differential suite, including initialized compiler lifecycle
   (repeated path and string compilations; sync/async dispose return values;
   path/string post-dispose error texts), sync+async importers, logger
-  warn/deprecation, sourceMap bytes, error `sassMessage`/span/message shape,
-  and synthesized `info`.
+  warn/deprecation with absolute color-neutral frames, sourceMap bytes, error
+  `sassMessage`/span/message shape with absolute color-neutral frames, and
+  synthesized `info`.
 - CJS and ESM direct `new Compiler()` / `new AsyncCompiler()` synchronously
   throw
   `NotImplementedError('sass-embedded.compiler-construction-liveness')` before

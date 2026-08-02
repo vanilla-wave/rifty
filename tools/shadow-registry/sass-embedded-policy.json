@@ -54,6 +54,14 @@
         "notes": "Expose undefined rather than null for an absent span.url."
       },
       {
+        "id": "absolute-file-stacks",
+        "notes": "Retain absolute file paths in exception and logger stack frames."
+      },
+      {
+        "id": "embedded-alert-color-default",
+        "notes": "Default alertColor to false like sass-embedded while preserving explicit true or false."
+      },
+      {
         "id": "compiler-dispose-errors",
         "notes": "Report the exact embedded Sync and Async compiler post-dispose error texts."
       },
