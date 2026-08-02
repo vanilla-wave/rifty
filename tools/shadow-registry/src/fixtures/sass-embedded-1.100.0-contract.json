@@ -260,6 +260,15 @@
         "span": null
       },
       "syncInstance": true,
+      "syncIdentity": {
+        "directPrototypeIsExportPrototype": true,
+        "constructorIsExport": true,
+        "constructorStable": true,
+        "prototypeConstructorIsExport": true,
+        "compileMethodStable": true,
+        "compileStringMethodStable": true,
+        "disposeMethodStable": true
+      },
       "syncPathFirst": {
         "css": "",
         "loadedUrls": [
@@ -314,6 +323,15 @@
         "span": null
       },
       "asyncInstance": true,
+      "asyncIdentity": {
+        "directPrototypeIsExportPrototype": true,
+        "constructorIsExport": true,
+        "constructorStable": true,
+        "prototypeConstructorIsExport": true,
+        "compileMethodStable": true,
+        "compileStringMethodStable": true,
+        "disposeMethodStable": true
+      },
       "asyncPathFirst": {
         "css": "",
         "loadedUrls": [

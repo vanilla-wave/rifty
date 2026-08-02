@@ -79,6 +79,16 @@ interface WarningTranscript {
   readonly span: SourceSpanTranscript | null;
 }
 
+interface CompilerIdentityTranscript {
+  readonly directPrototypeIsExportPrototype: boolean;
+  readonly constructorIsExport: boolean;
+  readonly constructorStable: boolean;
+  readonly prototypeConstructorIsExport: boolean;
+  readonly compileMethodStable: boolean;
+  readonly compileStringMethodStable: boolean;
+  readonly disposeMethodStable: boolean;
+}
+
 export interface SassContractTranscript {
   readonly schema: 2;
   readonly oracle: 'sass@1.100.0' | 'sass-embedded@1.100.0';
@@ -103,6 +113,7 @@ export interface SassContractTranscript {
     lifecycle: Readonly<{
       syncDirectConstruction: ErrorTranscript;
       syncInstance: boolean;
+      syncIdentity: CompilerIdentityTranscript;
       syncPathFirst: CompileTranscript;
       syncPathSecond: CompileTranscript;
       syncFirst: CompileTranscript;
@@ -112,6 +123,7 @@ export interface SassContractTranscript {
       syncPostDisposeString: ErrorTranscript;
       asyncDirectConstruction: ErrorTranscript;
       asyncInstance: boolean;
+      asyncIdentity: CompilerIdentityTranscript;
       asyncPathFirst: CompileTranscript;
       asyncPathSecond: CompileTranscript;
       asyncFirst: CompileTranscript;
@@ -328,6 +340,29 @@ function moduleRow(modules: SassContractModules) {
   };
 }
 
+function compilerIdentity(
+  compiler: object,
+  Constructor: abstract new (...args: readonly unknown[]) => object,
+  compileMethod: string,
+  compileStringMethod: string,
+): CompilerIdentityTranscript {
+  const prototype = Reflect.getPrototypeOf(compiler);
+  const exportedPrototype = Reflect.get(Constructor, 'prototype') as object;
+  const constructor = Reflect.get(compiler, 'constructor');
+  return {
+    directPrototypeIsExportPrototype: prototype === exportedPrototype,
+    constructorIsExport: constructor === Constructor,
+    constructorStable: constructor === Reflect.get(compiler, 'constructor'),
+    prototypeConstructorIsExport:
+      prototype !== null && Reflect.get(prototype, 'constructor') === Constructor,
+    compileMethodStable:
+      Reflect.get(compiler, compileMethod) === Reflect.get(compiler, compileMethod),
+    compileStringMethodStable:
+      Reflect.get(compiler, compileStringMethod) === Reflect.get(compiler, compileStringMethod),
+    disposeMethodStable: Reflect.get(compiler, 'dispose') === Reflect.get(compiler, 'dispose'),
+  };
+}
+
 export async function probeSassContract(
   modules: SassContractModules,
   oracle: SassContractTranscript['oracle'],
@@ -358,6 +393,12 @@ export async function probeSassContract(
 
   const syncCompiler = modules.cjs.initCompiler();
   const syncInstance = syncCompiler instanceof modules.cjs.Compiler;
+  const syncIdentity = compilerIdentity(
+    syncCompiler,
+    modules.cjs.Compiler,
+    'compile',
+    'compileString',
+  );
   const syncPathFirst = compileTranscript(
     syncCompiler.compile(options.compilerPath),
     options.normalizeCompilerUrl,
@@ -376,6 +417,12 @@ export async function probeSassContract(
 
   const asyncCompiler = await modules.cjs.initAsyncCompiler();
   const asyncInstance = asyncCompiler instanceof modules.cjs.AsyncCompiler;
+  const asyncIdentity = compilerIdentity(
+    asyncCompiler,
+    modules.cjs.AsyncCompiler,
+    'compileAsync',
+    'compileStringAsync',
+  );
   const asyncPathFirst = compileTranscript(
     await asyncCompiler.compileAsync(options.compilerPath),
     options.normalizeCompilerUrl,
@@ -448,6 +495,7 @@ export async function probeSassContract(
       lifecycle: {
         syncDirectConstruction,
         syncInstance,
+        syncIdentity,
         syncPathFirst,
         syncPathSecond,
         syncFirst,
@@ -457,6 +505,7 @@ export async function probeSassContract(
         syncPostDisposeString,
         asyncDirectConstruction,
         asyncInstance,
+        asyncIdentity,
         asyncPathFirst,
         asyncPathSecond,
         asyncFirst,
