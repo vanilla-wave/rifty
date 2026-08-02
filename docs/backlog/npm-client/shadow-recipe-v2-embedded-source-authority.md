@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Shadow recipe v2 embedded-source authority
 created: 2026-08-02
 why: validated bundled bytes are still resolved, cached, installed, and locked again as a standalone child instead of remaining one embedded source
@@ -104,6 +104,8 @@ npm-compatible lock topology, and the two existing Eddy completeness gates.
   FIFO/coordination mechanism.
 
 ## Decisions
+
+ready-verdict: 2026-08-02 — Contract+RED @ e89afffbf78ae1177504b93c09640341d321512e
 
 - `split-predecessor:
   f5dbb4e021380dbdbbd964e33b434e47c2348618`; the second consecutive blocked
