@@ -3,7 +3,7 @@
  *
  * The persistent workspace owner runs a shell-resolved
  * `node_modules/.bin/<name>` launcher shim IN ITS OWN REALM via `runNodeEntry`
- * — NOT by spawning a per-bin Worker (the page-side `createBinExecutor` does
+ * — NOT by spawning a per-bin Worker (the superseded page-side executor did
  * that, ADR-0137). Because the owner already holds the installed `node_modules`
  * tree in its `syncMirror()`, the bin's relative `import`/`require` resolve
  * against a real tree (the gap ADR-0143 closed by moving npm + bin to the owner).
@@ -25,6 +25,9 @@
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import type { BinExecutor, CommandContext, Writer } from '@riftydev/shell';
 import { type FsSync, syncMirror } from '@riftydev/vfs';
+
+// TODO(backlog: shell/d-owner-worker-milestone) Delete zero-caller P2 owner after
+// app-build reachability gate; ADR-0150 child executor owns production.
 
 /** Exit code for an interrupted run (128 + SIGINT(2)) — matches the shell. */
 const SIGINT_EXIT = 130;

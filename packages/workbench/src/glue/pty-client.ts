@@ -2,9 +2,9 @@
  * PAGE-side pty channel client (ADR-0146 owner-resident shell). Mirror of the owner `pty-server`:
  * translates terminal-manager calls into `pty:*` page→owner frames over an
  * injected `send`, and correlates owner→page frames back to per-run callbacks
- * by `rid`. Pure — no Worker/kernel coupling; the realVite glue wires `send` to
- * `handle.send({ type: PTY_IPC_TYPE, frame })` and feeds `onFrame` from
- * `handle.on('message')`.
+ * by `rid`. Pure — no Worker/kernel coupling; the Workbench browser owner wraps
+ * `send` in its sealed project PTY/preview messages and feeds validated replies
+ * into `onFrame`.
  *
  * `exec` first requires bounded `pty:run-ready` admission, then leaves the real
  * process lifetime unbounded until `pty:exit`; `execResult` also exposes the

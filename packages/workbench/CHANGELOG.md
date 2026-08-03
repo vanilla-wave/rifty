@@ -21,6 +21,9 @@
 
 ### Changed
 
+- Remove unreachable page-side bin execution and PTY routing classifiers; the
+  owner child executor and sealed Workbench protocol remain the runtime owners.
+
 - Package-owner install and replay now prove the zero-runtime-asset Sass recipe
   through the same FIFO, lock, provenance, and durable tree owner as existing
   catalog substitutions.

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { type Loader, build, transform } from 'esbuild';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { EXTRACTION_MAP } from './extraction-map.ts';
@@ -220,18 +221,77 @@ function resolvedExportEntries(): readonly string[] {
   return Object.values(readManifest().exports).map((target) => resolve(PACKAGE_ROOT, target));
 }
 
+function sourceLoader(path: string): Loader {
+  switch (extname(path)) {
+    case '.ts':
+    case '.mts':
+    case '.cts':
+      return 'ts';
+    case '.tsx':
+      return 'tsx';
+    case '.jsx':
+      return 'jsx';
+    case '.json':
+      return 'json';
+    default:
+      return 'js';
+  }
+}
+
+async function runtimeBearingSourcesOutsideBuild(): Promise<readonly string[]> {
+  const manifest = readManifest();
+  const result = await build({
+    absWorkingDir: PACKAGE_ROOT,
+    entryPoints: resolvedExportEntries(),
+    bundle: true,
+    external: Object.keys(manifest.dependencies).flatMap((dependency) => [
+      dependency,
+      `${dependency}/*`,
+    ]),
+    format: 'esm',
+    logLevel: 'silent',
+    metafile: true,
+    outdir: resolve(PACKAGE_ROOT, '.runtime-reachability-output'),
+    platform: 'browser',
+    target: 'es2022',
+    treeShaking: true,
+    write: false,
+  });
+  const runtimeInputs = new Set(
+    Object.keys(result.metafile.inputs).map((path) => resolve(PACKAGE_ROOT, path)),
+  );
+  const outsideBuild = productionFiles(PACKAGE_SRC_ROOT).filter((path) => !runtimeInputs.has(path));
+  const emitted = await Promise.all(
+    outsideBuild.map(async (path) => ({
+      path,
+      code: (
+        await transform(readFileSync(path, 'utf8'), {
+          format: 'esm',
+          loader: sourceLoader(path),
+          target: 'es2022',
+          treeShaking: true,
+        })
+      ).code,
+    })),
+  );
+  return emitted
+    .filter(({ code }) => code.trim().length > 0)
+    .map(({ path }) => relative(PACKAGE_ROOT, path))
+    .sort();
+}
+
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the retained 226-file move, including all 109 tests and three fixtures', () => {
-    expect(EXTRACTION_MAP).toHaveLength(226);
-    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(226);
-    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(226);
+  it('pins the retained 224-file move, including all 107 tests and three fixtures', () => {
+    expect(EXTRACTION_MAP).toHaveLength(224);
+    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(224);
+    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(224);
     expect(
       EXTRACTION_MAP.filter(([, target]) =>
         /(?:[\\/]test-fixtures[\\/]|(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$)/u.test(
           target,
         ),
       ),
-    ).toHaveLength(112);
+    ).toHaveLength(110);
 
     expect(
       EXTRACTION_MAP.filter(([source]) => existsSync(resolve(APP_SRC_ROOT, source))).map(
@@ -263,6 +323,10 @@ describe('@riftydev/workbench extraction boundary', () => {
     expect(closure.unresolvedEdges).toEqual([]);
     expect(packageProductionFiles).toHaveLength(136);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
+  });
+
+  it('does not retain runtime-bearing source outside the seven published build entries', async () => {
+    expect(await runtimeBearingSourcesOutsideBuild()).toEqual([]);
   });
 
   it('imports only declared lower packages and no App, bundler query, env, Solid, or Monaco code', () => {

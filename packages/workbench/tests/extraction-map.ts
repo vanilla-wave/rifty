@@ -1,6 +1,5 @@
 // Exact -M50 rename oracle from the reviewed quarry cut.
 export const EXTRACTION_MAP = [
-  ['glue/bin-executor.test.ts', 'glue/bin-executor.test.ts'],
   ['glue/bin-executor.ts', 'glue/bin-executor.ts'],
   ['glue/bounded-asset-fetch.fault.test.ts', 'glue/bounded-asset-fetch.fault.test.ts'],
   ['glue/bounded-asset-fetch.ts', 'glue/bounded-asset-fetch.ts'],
@@ -46,7 +45,6 @@ export const EXTRACTION_MAP = [
   ['glue/project-seed-paths.ts', 'glue/project-seed-paths.ts'],
   ['glue/pty-client.test.ts', 'glue/pty-client.test.ts'],
   ['glue/pty-client.ts', 'glue/pty-client.ts'],
-  ['glue/pty-protocol.test.ts', 'glue/pty-protocol.test.ts'],
   ['glue/pty-protocol.ts', 'glue/pty-protocol.ts'],
   ['glue/reachable-cwd.test.ts', 'glue/reachable-cwd.test.ts'],
   ['glue/reachable-cwd.ts', 'glue/reachable-cwd.ts'],

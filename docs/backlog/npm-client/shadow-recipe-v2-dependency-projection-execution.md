@@ -101,7 +101,8 @@ not block Sass or epic closure.
 
 - Schema-2 codec/admission, exact current LightningCSS metadata verification,
   embedded bundle extraction/lock, materialized bins, v2 replay, Workbench
-  FIFO, and Chromium acceptance; the predecessor owns them.
+  FIFO, and Chromium acceptance; ADR-0335 and the landed recipe-v2 split
+  authorities own them.
 - Sass non-bundled required traversal and omitted-optional suppression;
   `npm-client/sass-embedded-substitution` owns their real positive carrier.
 - Traversing, resolving, placing, conflicting, or replaying peer dependency
