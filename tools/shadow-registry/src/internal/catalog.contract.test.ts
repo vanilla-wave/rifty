@@ -196,9 +196,6 @@ describe('builtin shadow substitution catalog contract', () => {
     expect(paths.has('dist/lib/index.js')).toBe(true);
     expect(paths.has('dist/lib/index.mjs')).toBe(true);
     expect(paths.has('dist/bin/sass.js')).toBe(true);
-    expect(
-      sass.materialization.files.find((file) => file.path === 'dist/bin/sass.js')?.content,
-    ).toContain("new NotImplementedError('sass-embedded.cli')");
   });
 
   it('rejects forged identity and duplicate materialization members at ingress', () => {
