@@ -75,14 +75,29 @@ rewrite the external oracle fixture.
 
 Fresh post-ready audit carrier
 `4c57343215c643e728061267770b554fc16f5537`, completed by
-`266dfd38cef279090a4c724157fa9c2edf7bba14`, extends that same shared probe with
-initialized compiler reflection, method identity/name/arity, and lifecycle
-export accessor facts. Exact embedded uses its exported length-one class as the
-direct prototype constructor and keeps compile/string/dispose reads stable in
-both compiler kinds. The inherited pure-Sass wrapper is **1 RED / 2 GREEN** in
-its executable capsule: those facts and all four accessor exports mismatch
-while the other two capsule rows remain green. The source fix must preserve the
-selected direct-construction gap and every existing lifecycle transcript.
+`266dfd38cef279090a4c724157fa9c2edf7bba14`,
+`76f4f735642b2fccd85571320a382f9d0fce7b6d`, and
+`ee7b62ad8731fd5a8ad6a9c1cc30e4d24717db07`, then finalized by
+`5628be3cc460832296b01359bbcd4e9efb02f1e1`, extends that same shared probe with
+initialized compiler reflection, complete constructor/prototype/method
+identity, cross-instance method identity, lifecycle export accessor facts, and
+exact gap feature values. Exact embedded uses its exported length-one class as
+the direct prototype constructor and keeps compile/string/dispose reads stable
+within and across both compiler kinds. The inherited pure-Sass wrapper is **1
+RED / 2 GREEN** in its executable capsule: those facts and all four accessor
+exports mismatch while the other two capsule rows remain green. The source fix
+must preserve the selected direct-construction gap and every existing lifecycle
+transcript.
+
+The same exact CJS/ESM × sync/async oracle pins the embedded-only live process,
+dispatcher, compilation, stream, and disposal own fields. Pure Sass exposes a
+different internal object, so copying names or returning `undefined` would lie.
+The selected no-runtime carrier therefore makes ownKeys and each independent
+get/has/own-descriptor access to every finite observed name a second explicit
+RED named `sass-embedded.compiler-internal-reflection`, including the exact
+`NotImplementedError.feature`; public compiler methods remain in the positive
+row. The union probe also pins embedded's absent/false/missing result for the
+pure-only `_disposed` name, so no inherited pure-Sass state may leak.
 
 The two normalized transcript JSON files are exact generator-owned bytes and
 their two explicit paths are excluded from Biome formatting; the generator's

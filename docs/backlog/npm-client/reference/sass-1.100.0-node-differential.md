@@ -5,10 +5,10 @@ packages `sass@1.100.0`, `sass-embedded@1.100.0`, and selected platform package
 `sass-embedded-darwin-arm64@1.100.0`. The complete normalized results are:
 
 - `tools/shadow-registry/src/fixtures/sass-1.100.0-contract.json` — SHA-256
-  `7b1aab818e3e20e876f6c951c4d15e46cb131fb2674e7a6d3c93546dcf17f6fa`;
+  `0efdad34c6ad5e8c7db1424de1f4dd3dd2585ae4513e7c87cfa03d3eebcbf699`;
 - `tools/shadow-registry/src/fixtures/sass-embedded-1.100.0-contract.json` —
   SHA-256
-  `9052e0b4d90617d8fa1bb5eccd53eb69444fb0a0ac0628248bdcca0cd6de0abd`;
+  `19491e365e065f107aa851e99c4174c69f5e8b852d8e601e052324c065719dac`;
 - `tools/shadow-registry/src/fixtures/sass-1.100.0-node-oracle-environment.json`
   — SHA-256
   `742255bb8a4a0aac7797dc157744b90197f7cd90b5960625f6d18cee51737d2e`;
@@ -17,13 +17,16 @@ packages `sass@1.100.0`, `sass-embedded@1.100.0`, and selected platform package
   `c7c8833a3541aceda8a034b9c8c7ee153faae549ba22aab956553732cd99b3c2`.
 
 The fixtures were generated from the shared nine-row probe at commit
-`266dfd38cef279090a4c724157fa9c2edf7bba14`, SHA-256
-`8badbdfd4db4fb499fee71cc80aaa4eaefff27399c24de043206d37b040656a3`.
-The lifecycle row includes initialized-instance prototype/constructor identity
-and stable public method identity/name/arity. The module row includes the four
-compiler lifecycle accessor exports. `sassFacadeContract()` derives only
-rifty's two selected direct-constructor gap fields; it does not rewrite those
-external oracle facts.
+`5628be3cc460832296b01359bbcd4e9efb02f1e1`, SHA-256
+`c4251f56b87cdb61a7d2b8d83b591c9ae987ba5d101c146e42b24f0f796062a3`.
+The lifecycle row includes initialized-instance prototype/constructor identity,
+the complete constructor/prototype descriptors and own placement, and stable
+public method identity/name/arity within and across instances. The module row
+includes complete descriptors for the four compiler lifecycle accessor
+exports. CJS/ESM × sync/async reflection records every observed internal name
+independently, including exact embedded absence of pure-only `_disposed`.
+`sassFacadeContract()` derives only rifty's selected constructor-liveness and
+internal-reflection gaps; it does not rewrite positive external oracle facts.
 Generator SHA-256 is
 `8200db6834c892acc413c71c041d61b0bb7c3a77f023e5cb1de29a16aa9f5864`.
 The isolated deadlock probe SHA-256 is
@@ -67,7 +70,7 @@ entry bytes. It records:
 | CJS/ESM module shape | DIFF: embedded removes pure Sass CJS dead keys `cli_pkg_main_0_`, `load`, `loadParserExports_` and ESM `parser_`; its ESM namespace instead carries undefined type-only `CalculationOperator`; CJS and ESM-default compiler lifecycle exports are enumerable configurable accessors |
 | sync/async compile | MATCH: CSS, `loadedUrls`, absent sourceMap |
 | source map | MATCH: CSS and byte-identical normalized JSON including mappings, sources, and sourcesContent |
-| compiler lifecycle | MATCH through two `compile(path)` and two string compiles per sync/async compiler; public method identities are stable in both; DIFF: embedded initialized instances have the exported length-one constructor as direct prototype constructor while pure Sass returns an internal subclass, embedded methods retain exact names/arity on that prototype, embedded prefixes direct-construction and both post-dispose method errors with `Compiler caused error: ...`, and async dispose resolves `undefined` where pure Sass resolves `null` |
+| compiler lifecycle | MATCH through two `compile(path)` and two string compiles per sync/async compiler; public method identities are stable within and across instances; DIFF: embedded initialized instances have the exported length-one constructor as direct prototype constructor while pure Sass returns an internal subclass, embedded constructors have exactly `length,name,prototype` own keys and a non-enumerable/non-configurable/non-writable prototype descriptor, embedded methods retain exact names/arity/own descriptors on that prototype, embedded exposes live Dart process/dispatcher own fields where pure Sass has a different internal object, embedded prefixes direct-construction and both post-dispose method errors with `Compiler caused error: ...`, and async dispose resolves `undefined` where pure Sass resolves `null` |
 | modern importers | MATCH: sync importer and promised async importer under async compile, including `containingUrl`, call order, CSS, and loaded URLs |
 | logger | MATCH: `@warn`, slash-div deprecation id/message/stack/span, and CSS |
 | errors | DIFF: embedded prefixes `Error: ` in message/toString; syntax-error `span.url` is undefined instead of pure Sass null; under one TTY pure Sass defaults message/toString color on while embedded defaults it off; sassMessage, sassStack, coordinates, text, and missing-use URL match |
@@ -77,9 +80,15 @@ entry bytes. It records:
 The schema-two JSON files contain every input result, URL, warning, error field,
 source coordinate, compiler-disposal result, export identity, initialized
 compiler prototype/constructor identity, and public-method stability fact.
+The identity facts include instance-own placement, complete descriptors, exact
+constructor own keys, and cross-instance method equality.
 Lifecycle path compilation uses a real caller-created SCSS file and normalizes
 only its exact URL to `file:///contract/compiler.scss`; the table is only an
-index.
+index. CJS/ESM × sync/async reflection additionally records exact own keys,
+value kinds, membership, and complete descriptors for the finite observed
+embedded internal names; rifty maps only that internal reflection to a named
+gap rather than fabricating Dart objects, while retaining exact absence for the
+pure-only `_disposed` field.
 
 ## Same-PTY alert color
 

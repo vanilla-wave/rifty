@@ -61,13 +61,14 @@ and working upstream behavior while still missing unenumerated inputs.
   message/toString and `span.url`, absolute file frames, the no-color default,
   initialized-compiler disposal and exported constructor/prototype identity,
   lifecycle export accessors, and legacy logger routing. Preserve public
-  compiler method name, arity, descriptor placement, and stable identity.
+  compiler method name, arity, descriptor placement, and stable identity within
+  and across instances; preserve exact constructor own keys and descriptors.
   Preserve the async-importer synchronous throw as a documented warning instead
   of reproducing a permanent deadlock.
 - Keep `Compiler` and `AsyncCompiler` as namespace, prototype, and `instanceof`
   anchors for instances returned by `initCompiler()` and `initAsyncCompiler()`.
   Their direct prototype and `constructor` identities match those anchors, and
-  repeated public method reads remain stable.
+  repeated and cross-instance public method reads remain stable.
   Direct construction in either module format synchronously throws
   `NotImplementedError('sass-embedded.compiler-construction-liveness')` before
   invoking the pure-Sass target or creating any active resource. It is compat
@@ -77,11 +78,14 @@ and working upstream behavior while still missing unenumerated inputs.
   adapt it faithfully or publish a specific compat failure and named
   `NotImplementedError` at its reachable boundary.
 - Known unsupported surfaces stay exact: direct compiler construction throws
-  `sass-embedded.compiler-construction-liveness`; every request other than
-  literal `1.100.0` throws `sass-embedded.version`; CLI and watch execution
-  throw `sass-embedded.cli` and `sass-embedded.watch`; TypeScript declarations
-  are not published and remain compat failure without a fictitious runtime
-  throw.
+  `sass-embedded.compiler-construction-liveness`; ownKeys and get/has/own-
+  descriptor access to the finite observed embedded-only compiler process and
+  dispatcher names throw `sass-embedded.compiler-internal-reflection`, while
+  pure-only `_disposed` remains absent; every
+  request other than literal `1.100.0` throws `sass-embedded.version`; CLI and
+  watch execution throw `sass-embedded.cli` and `sass-embedded.watch`;
+  TypeScript declarations are not published and remain compat failure without
+  a fictitious runtime throw.
 
 ## Consequences
 

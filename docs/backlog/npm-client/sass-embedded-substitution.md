@@ -95,14 +95,22 @@ retained verbatim in the reference artifact.
   warn/deprecation with absolute color-neutral frames, sourceMap bytes, error
   `sassMessage`/span/message shape with absolute color-neutral frames, and
   synthesized `info`. Initialized compilers preserve the embedded direct
-  prototype/constructor identities, exact public method names/arity and stable
-  compile/dispose method identity; CJS and ESM-default lifecycle exports retain
-  the embedded accessor descriptors.
+  prototype/constructor identities, exact constructor own keys and descriptors,
+  exact public method names/arity/placement, and stable compile/dispose method
+  identity within and across instances; CJS and ESM-default lifecycle exports
+  retain the embedded accessor descriptors.
 - CJS and ESM direct `new Compiler()` / `new AsyncCompiler()` synchronously
   throw
   `NotImplementedError('sass-embedded.compiler-construction-liveness')` before
   the pure-Sass constructor or any active resource. The exact embedded child
   liveness stays pinned by the post-pickup oracle and the surface is compat ❌.
+- Initialized compiler public methods retain the positive lifecycle claim, but
+  reflection over the observed embedded-only Dart process/dispatcher fields is
+  explicit compat ❌: `Reflect.ownKeys` and get/has/own-descriptor access to
+  those finite names throw
+  `NotImplementedError('sass-embedded.compiler-internal-reflection')` rather
+  than returning absent or fabricated values; the inherited pure-only
+  `_disposed` name remains exactly absent.
 - Real Vite 7.3.6 SCSS project: nested partial and Vite-resolved `@use`,
   custom importer and a warning; dev renders exact normalized CSS, an edit
   HMRs, and build emits the exact Node-oracle CSS/dependency facts. Node emits
@@ -139,7 +147,8 @@ ADR-0344 evidence; each is a differential test:
    post-dispose path/string errors (`Compiler caused error: Sync|Async compiler
    has already been disposed.`); initialized instances retain `instanceof`,
    direct prototype/constructor identity against the exported anchors, and
-   exact stable compile/string/dispose method name, arity, and identity.
+   exact constructor own keys/descriptors plus stable compile/string/dispose
+   method name, arity, own placement, and within-/cross-instance identity.
 5. Modern importer sync + async incl. `containingUrl`; `loadedUrls` content.
 6. Logger: `@warn` call shape; `slash-div` deprecation id + span.
 7. Errors: `expected "}".` and missing-@use — `Error: `-prefixed message,
@@ -150,13 +159,20 @@ ADR-0344 evidence; each is a differential test:
     its construction error and remains alive; rifty synchronously throws
     `NotImplementedError('sass-embedded.compiler-construction-liveness')`
     before target construction or resource creation.
+11. CJS/ESM initialized compiler internal reflection: the exact oracle pins
+    sync/async own keys, value kinds, membership, and complete own descriptors;
+    rifty throws
+    `NotImplementedError('sass-embedded.compiler-internal-reflection')` for
+    ownKeys and each independent get/has/own-descriptor access to every observed
+    embedded-only name, with the exact `.feature` value; pure-only `_disposed`
+    remains observably absent.
 
 ## Fault matrix
 
 | Fault class | Required outcome | Proof |
 |---|---|---|
 | corrupt-input | drifted recipe, every complete dependency map, facade bytes, bin target, or provenance rejects before publish/reuse | catalog/installer/lock mutation table |
-| observable-order | direct construction rejects before target construction or any active resource; unsupported version rejects before rejected-package acquisition or writes; CLI/watch execution stays loud after the pure-JS facade install without native acquisition; importer/logger lifecycle matches the pinned Node order | constructor-liveness oracle, ordered install, CLI/watch, and differential ledgers |
+| observable-order | direct construction rejects before target construction or any active resource; observed embedded-only compiler reflection rejects before an absent/fabricated value; unsupported version rejects before rejected-package acquisition or writes; CLI/watch execution stays loud after the pure-JS facade install without native acquisition; importer/logger lifecycle matches the pinned Node order | constructor-liveness/reflection oracle, ordered install, CLI/watch, and differential ledgers |
 | provenance-lie | fresh/replay/durable reopen/general Eddy preserve exact Sass/twin identities and never substitute native or host bytes | fresh→replay→durable reopen plus general-Eddy differential |
 | unbounded-read / corrupt-input / provenance-lie | stalled, partial, corrupt, or failed Sass or required-closure registry/tarball acquisition publishes no facade, bin, success report, or lock; retry materializes exact bytes | parent/required-child acquisition boundary faults + retry; real Chromium Sass-tarball network loss + abrupt required-OPFS reopen |
 | torn-state | abort during facade/bin writes publishes no lock/success; retry reconciles the exact tree | materialization abort fault |
@@ -169,6 +185,10 @@ ADR-0344 evidence; each is a differential test:
 - Direct `new Compiler()` / `new AsyncCompiler()` process-lifecycle parity —
   `NotImplementedError('sass-embedded.compiler-construction-liveness')` +
   compat ❌; exported anchors remain for initialized-instance `instanceof`.
+- Initialized compiler Dart-process/dispatcher reflection —
+  `NotImplementedError('sass-embedded.compiler-internal-reflection')` + compat
+  ❌ for ownKeys and observed internal-name access; pure-only `_disposed`
+  remains absent and public methods remain exact.
 - `sass-embedded` versions other than 1.100.0 and any version range —
   `NotImplementedError('sass-embedded.version')` + compat ❌.
 - The `sass` CLI/bin — `NotImplementedError('sass-embedded.cli')` + compat ❌.
