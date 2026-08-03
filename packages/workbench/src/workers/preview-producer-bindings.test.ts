@@ -1,11 +1,7 @@
 import { type CommandContext, Shell } from '@riftydev/shell';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  type BinSpawnRequest,
-  type BinWorkerHandle,
-  createBinExecutor,
-} from '../glue/bin-executor.ts';
-import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
+import type { BinSpawnRequest } from '../glue/bin-executor.ts';
+import type { OwnerToPageFrame, PreviewPortEntry } from '../glue/pty-protocol.ts';
 import type { ForegroundListeningControl } from '../glue/run-foreground-child.ts';
 import {
   type DevServerFailure,
@@ -97,6 +93,18 @@ function producerContext(signal?: AbortSignal): CommandContext {
   };
 }
 
+function installedBinRequest(ctx: CommandContext, args: readonly string[] = []): BinSpawnRequest {
+  return {
+    shimPath: '/workspace/node_modules/.bin/vite',
+    args,
+    env: ctx.env,
+    cwd: ctx.cwd,
+    isTTY: ctx.isTTY === true,
+    cols: ctx.cols,
+    rows: ctx.rows,
+  };
+}
+
 function previewHarness() {
   const sent: OwnerToPageFrame[] = [];
   const previews = createPreviewRegistry({ send: (frame) => sent.push(frame) });
@@ -125,38 +133,6 @@ async function replaceActorRun(
 
 function pendingFailure(): Promise<DevServerFailure> {
   return new Promise(() => {});
-}
-
-function controllableBinSpawn() {
-  let onMessage: (message: unknown) => void = () => {};
-  let onListening: (control: ForegroundListeningControl) => void = () => {};
-  let onExit: (code?: unknown, signal?: unknown) => void = () => {};
-  const spawn = vi.fn(
-    (_request: BinSpawnRequest): BinWorkerHandle => ({
-      stdout: () => ({ on: () => {} }),
-      stderr: () => ({ on: () => {} }),
-      stdin: () => {
-        throw new Error('unexpected stdin access');
-      },
-      on: (event, listener) => {
-        if (event === 'message') onMessage = listener as (message: unknown) => void;
-        if (event === 'exit') {
-          onExit = listener as (code?: unknown, signal?: unknown) => void;
-        }
-      },
-      onListeningControl: (listener) => {
-        onListening = listener;
-      },
-      resize: () => true,
-      kill: () => true,
-    }),
-  );
-  return {
-    spawn,
-    emitMessage: (message: unknown) => onMessage(message),
-    emitListening: (control: ForegroundListeningControl) => onListening(control),
-    emitExit: (code: number | null, signal: string | null = null) => onExit(code, signal),
-  };
 }
 
 function controllableNodeSpawn() {
@@ -206,9 +182,10 @@ describe('owner preview producer admission capture', () => {
 
   it("does not let actor A's inline env assignment acquire actor B's admission", async () => {
     const preview = previewHarness();
-    const child = controllableBinSpawn();
+    const holdA = deferred<number>();
     const holdB = deferred<number>();
     let binRunSeq = 0;
+    let port: PreviewPortEntry | undefined;
     const server = createPtyServer({
       send: () => {},
       makeShell: (_seed, ptySid) => {
@@ -216,19 +193,20 @@ describe('owner preview producer admission capture', () => {
           (sid) => server.activeAdmission(sid),
           ptySid,
         );
-        const executor = createBinExecutor({
-          spawn: child.spawn,
-          ...createInstalledBinPreviewHooks({
-            captureOrigin,
-            allocateSid: () => `bin-${++binRunSeq}`,
-            previews: preview.previews,
-          }),
+        const hooks = createInstalledBinPreviewHooks({
+          captureOrigin,
+          allocateSid: () => `bin-${++binRunSeq}`,
+          previews: preview.previews,
         });
         const shell = new Shell({ cwd: '/workspace', env: {} });
         shell.registerCommand('hold', () => holdB.promise);
-        shell.registerCommand('launch-preview', (_args, ctx) =>
-          executor('/workspace/node_modules/.bin/vite', [], ctx),
-        );
+        shell.registerCommand('launch-preview', (_args, ctx) => {
+          const request = installedBinRequest(ctx);
+          hooks.onStart?.(request, ctx);
+          hooks.onListening?.(request, { pid: 41, ports: [5173], previewScope: 'scope-a' }, ctx);
+          port = preview.latest().ports[0];
+          return holdA.promise.finally(() => hooks.onExit?.(request, ctx));
+        });
         return shell;
       },
     });
@@ -266,15 +244,9 @@ describe('owner preview producer admission capture', () => {
       ptySid: 'terminal-b',
       ptyRid: 'run-b',
     });
-    await vi.waitFor(() => expect(child.spawn).toHaveBeenCalledOnce());
-    child.emitListening({
-      pid: 41,
-      ports: [5173],
-      previewScope: 'scope-a',
-    });
-    const port = preview.latest().ports[0];
+    await vi.waitFor(() => expect(port).toBeDefined());
 
-    child.emitExit(0);
+    holdA.resolve(0);
     holdB.resolve(0);
     await Promise.all([runningA, runningB]);
 
@@ -407,28 +379,22 @@ describe('owner preview producer admission capture', () => {
     const actor = actorHarness();
     const first = actor.start('run-a', 0);
     const preview = previewHarness();
-    const child = controllableBinSpawn();
     const captureOrigin = createPreviewOriginCapture(
       (ptySid) => actor.server.activeAdmission(ptySid),
       'terminal-shared',
     );
     let binRunSeq = 0;
-    const executor = createBinExecutor({
-      spawn: child.spawn,
-      ...createInstalledBinPreviewHooks({
-        captureOrigin,
-        allocateSid: () => `bin-${++binRunSeq}`,
-        previews: preview.previews,
-      }),
+    const hooks = createInstalledBinPreviewHooks({
+      captureOrigin,
+      allocateSid: () => `bin-${++binRunSeq}`,
+      previews: preview.previews,
     });
-    const running = executor('/workspace/node_modules/.bin/vite', [], producerContext());
+    const ctx = producerContext();
+    const request = installedBinRequest(ctx);
+    hooks.onStart?.(request, ctx);
 
     const second = await replaceActorRun(actor, first);
-    child.emitListening({
-      pid: 41,
-      ports: [5173],
-      previewScope: 'scope-bin-a',
-    });
+    hooks.onListening?.(request, { pid: 41, ports: [5173], previewScope: 'scope-bin-a' }, ctx);
 
     expect(preview.latest().ports[0]).toMatchObject({
       source: 'node',
@@ -436,8 +402,7 @@ describe('owner preview producer admission capture', () => {
       ptyRid: 'run-a',
     });
 
-    child.emitExit(0);
-    await running;
+    hooks.onExit?.(request, ctx);
     await second.release();
   });
 
@@ -558,26 +523,23 @@ describe('owner preview producer admission capture', () => {
     await second.release();
   });
 
-  it('refuses a PTY-marked installed-bin launch when the actor has no admission', async () => {
+  it('refuses a PTY-marked installed-bin launch when the actor has no admission', () => {
     const actor = actorHarness();
     const preview = previewHarness();
-    const child = controllableBinSpawn();
     const captureOrigin = createPreviewOriginCapture(
       (ptySid) => actor.server.activeAdmission(ptySid),
       'terminal-shared',
     );
-    const executor = createBinExecutor({
-      spawn: child.spawn,
-      ...createInstalledBinPreviewHooks({
-        captureOrigin,
-        allocateSid: () => 'bin-1',
-        previews: preview.previews,
-      }),
+    const hooks = createInstalledBinPreviewHooks({
+      captureOrigin,
+      allocateSid: () => 'bin-1',
+      previews: preview.previews,
     });
+    const ctx = producerContext();
+    const request = installedBinRequest(ctx);
 
-    await expect(
-      executor('/workspace/node_modules/.bin/vite', [], producerContext()),
-    ).rejects.toThrow('no active PTY admission for terminal-shared');
-    expect(child.spawn).not.toHaveBeenCalled();
+    expect(() => hooks.onStart?.(request, ctx)).toThrow(
+      'no active PTY admission for terminal-shared',
+    );
   });
 });

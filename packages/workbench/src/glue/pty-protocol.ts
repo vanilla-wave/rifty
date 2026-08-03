@@ -1,5 +1,5 @@
-// pty channel frame protocol (ADR-0146). Carried as kernel fork-IPC payload
-// { type:'rifty:pty', frame } alongside rifty:vfs-write. Structured-clone-safe only.
+// PTY frame types (ADR-0146). Structured-clone-safe only; the sealed Workbench
+// owner protocol owns transport envelopes and runtime validation.
 import type { ProcessExit } from '@riftydev/shell';
 
 export type PtyStream = 'stdout' | 'stderr';
@@ -189,43 +189,3 @@ export type OwnerToPageFrame =
   | PtyPreview
   | PtyDevConfigReady;
 export type PtyFrame = PageToOwnerFrame | OwnerToPageFrame;
-
-/** kernel fork-IPC envelope discriminator (sits beside 'rifty:vfs-write'). */
-export const PTY_IPC_TYPE = 'rifty:pty' as const;
-export type PtyIpcMessage = { type: typeof PTY_IPC_TYPE; frame: PtyFrame };
-export function isPtyIpcMessage(m: unknown): m is PtyIpcMessage {
-  return !!m && typeof m === 'object' && (m as { type?: unknown }).type === PTY_IPC_TYPE;
-}
-
-const PAGE_TO_OWNER = new Set([
-  'pty:open',
-  'pty:exec',
-  'pty:stdin',
-  'pty:stdin-eof',
-  'pty:signal',
-  'pty:resize',
-  'pty:session-resize',
-  'pty:close',
-  'pty:dev-server-req',
-  'pty:dev-config',
-  'pty:preview-req',
-]);
-const OWNER_TO_PAGE = new Set([
-  'pty:ready',
-  'pty:run-ready',
-  'pty:chunk',
-  'pty:exit',
-  'pty:resize-ack',
-  'pty:session-resize-ack',
-  'pty:stdin-ack',
-  'pty:close-ack',
-  'pty:dev-server',
-  'pty:preview',
-  'pty:dev-config-ready',
-]);
-export function isPageToOwner(f: PtyFrame): f is PageToOwnerFrame {
-  return PAGE_TO_OWNER.has(f.type);
-}
-export function isOwnerToPage(f: PtyFrame): f is OwnerToPageFrame {
-  return OWNER_TO_PAGE.has(f.type);
-}

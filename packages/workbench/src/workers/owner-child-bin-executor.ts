@@ -7,7 +7,7 @@
  * run-to-completion CLIs still exit through node-entry lifecycle, while CLIs
  * that listen() stay alive and post their ports like `node <file>`.
  * The owner stays responsive (blocking work left its thread — ADR-0150
- * invariant). Stream/kill/exit reuse `glue/bin-executor.ts`'s createBinExecutor.
+ * invariant). Stream/kill/exit use the shared foreground-child driver directly.
  */
 
 import {
