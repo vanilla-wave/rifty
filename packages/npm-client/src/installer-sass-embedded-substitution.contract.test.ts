@@ -29,8 +29,8 @@ import { shadowAssetPlanForInstallResult } from './internal/shadow/install-resul
 import type { Lockfile } from './linker.ts';
 import { computeIntegrity } from './tarball-cache.ts';
 
-// Full official-archive tree/retry rows exceed Vitest's 5 s default on cold CI.
-vi.setConfig({ testTimeout: 20_000 });
+// Full official-archive tree/retry rows reach 40 s under shared CI contention.
+vi.setConfig({ testTimeout: 60_000 });
 
 const ROOT = '/project';
 const SASS_ACQUISITION_FEATURE = 'sass-embedded.acquisition';
