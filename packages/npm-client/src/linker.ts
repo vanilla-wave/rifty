@@ -306,6 +306,8 @@ export interface LockfileEntry {
   resolved?: string;
   integrity?: string;
   dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
   bundleDependencies?: string[];
   inBundle?: boolean;
   bin?: string | Record<string, string>;
@@ -325,6 +327,12 @@ type LockfilePackage = ResolvedPackage & {
   integrity?: string;
   peerDependencies?: Record<string, string>;
 };
+
+export interface RootLockfileDependencyMaps {
+  readonly dependencies: Readonly<Record<string, string>>;
+  readonly devDependencies: Readonly<Record<string, string>>;
+  readonly optionalDependencies: Readonly<Record<string, string>>;
+}
 
 /**
  * Build a v3 lockfile from the resolved package set. Each non-root entry
@@ -349,14 +357,26 @@ function buildPreparedLockfile(
   rootName: string,
   rootVersion: string,
   packages: readonly PreparedInstallPackage<LockfilePackage>[],
+  rootDependencyMaps?: RootLockfileDependencyMaps,
 ): Lockfile {
-  // Root entry lists only FLAT (hoisted) deps, matching npm's lockfile
-  // shape. A nested copy is reachable only via its parent's entry.
+  // Standalone callers have only placement facts; install() supplies the
+  // root's declared maps so hoisting never manufactures root authority.
   const flatTopLevel: Record<string, string> = {};
   for (const { package: p, relativePath } of packages) {
     if (relativePath === `node_modules/${p.name}`) {
       flatTopLevel[p.name] = p.version;
     }
+  }
+  const rootEntry: LockfileEntry = {
+    version: rootVersion,
+    dependencies:
+      rootDependencyMaps === undefined ? flatTopLevel : { ...rootDependencyMaps.dependencies },
+  };
+  if (rootDependencyMaps && Object.keys(rootDependencyMaps.devDependencies).length > 0) {
+    rootEntry.devDependencies = { ...rootDependencyMaps.devDependencies };
+  }
+  if (rootDependencyMaps && Object.keys(rootDependencyMaps.optionalDependencies).length > 0) {
+    rootEntry.optionalDependencies = { ...rootDependencyMaps.optionalDependencies };
   }
   const lf: Lockfile = {
     name: rootName,
@@ -364,7 +384,7 @@ function buildPreparedLockfile(
     lockfileVersion: 3,
     requires: true,
     packages: {
-      '': { version: rootVersion, dependencies: flatTopLevel },
+      '': rootEntry,
     },
   };
   for (const { package: p, relativePath } of packages) {
@@ -392,9 +412,17 @@ export function buildInstallLockfile(
   packages: Parameters<typeof buildLockfile>[2],
   planValue: ShadowAssetPlan,
   embeddedSources: readonly RegistryShadowEmbeddedSource[] = [],
+  rootDependencyMaps?: RootLockfileDependencyMaps,
 ): Lockfile {
   const prepared = preflightPackageInstallPaths(packages);
-  return buildPreparedInstallLockfile(rootName, rootVersion, prepared, planValue, embeddedSources);
+  return buildPreparedInstallLockfile(
+    rootName,
+    rootVersion,
+    prepared,
+    planValue,
+    embeddedSources,
+    rootDependencyMaps,
+  );
 }
 
 export function buildPreparedInstallLockfile(
@@ -403,12 +431,13 @@ export function buildPreparedInstallLockfile(
   packages: readonly PreparedInstallPackage<LockfilePackage>[],
   planValue: ShadowAssetPlan,
   embeddedSources: readonly RegistryShadowEmbeddedSource[] = [],
+  rootDependencyMaps?: RootLockfileDependencyMaps,
 ): Lockfile {
   const plan = planValue;
   if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
     throw new TypeError('trusted installer shadow plan invariant failed');
   }
-  const lockfile = buildPreparedLockfile(rootName, rootVersion, packages);
+  const lockfile = buildPreparedLockfile(rootName, rootVersion, packages, rootDependencyMaps);
   for (const substitution of plan.substitutions) {
     const recipe = builtinShadowSubstitutionCatalog.recipes.find(
       (candidate) => candidate.id === substitution.substitutionId,

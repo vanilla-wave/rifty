@@ -4,6 +4,11 @@
 
 ### Changed
 
+- Lockfile root entries preserve the project's declared dependency maps and
+  requested ranges; hoisted transitive packages no longer acquire false root
+  authority.
+- Registry-backed Sass substitution validates and materializes the exact pure
+  Sass required closure while suppressing only the attested native watcher.
 - Shadow lock traces now use behavior-complete protocol v2 facts. Replay
   strictly checks acquisition maps, bundled children, materialized files/bins,
   and exact pinned cache bytes before registry or project mutation.

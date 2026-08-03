@@ -1,0 +1,484 @@
+{
+  "schema": 1,
+  "before": {
+    "schema": 1,
+    "revision": "06c24ad9e426b0b0581d4833f806f72979f345c3",
+    "scenario": {
+      "id": "cold-sass-embedded-1.100.0-install",
+      "persistence": "ephemeral",
+      "command": "npm install",
+      "instrumentation": "BrowserContext.response+wall-clock"
+    },
+    "environment": {
+      "browserName": "chromium",
+      "browserVersion": "148.0.7778.96",
+      "nodeVersion": "v24.16.0",
+      "platform": "darwin",
+      "architecture": "arm64"
+    },
+    "responses": [
+      {
+        "path": "/npm-registry/@bufbuild/protobuf",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 254894,
+        "bodySha256": "8dda46ac7fa02d40d2bddf1466558a46a0e6ecfc97034acd6c382ca016b9b1a1"
+      },
+      {
+        "path": "/npm-registry/@bufbuild/protobuf/-/protobuf-2.13.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 223370,
+        "bodySha256": "4eb996801abc4c105ad2e2932da5f113409148f80b72217e59c79cda80ebbb1e"
+      },
+      {
+        "path": "/npm-registry/@parcel/watcher",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 124080,
+        "bodySha256": "b44dfc7720bec06a4f2ab4554b1a2e0324b70bb7152d6fdf7a3edc23e4f0bbfd"
+      },
+      {
+        "path": "/npm-registry/chokidar",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 255902,
+        "bodySha256": "cd9f335fc3cef388d3ed48b31614c9d772b5704eefd54fbc957fd0f55eb56452"
+      },
+      {
+        "path": "/npm-registry/chokidar/-/chokidar-5.0.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 23399,
+        "bodySha256": "45d07ea7d57ee482c733ab3c547cc49edc1423bc231507e41ff99d2711f7f5e3"
+      },
+      {
+        "path": "/npm-registry/colorjs.io",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 143702,
+        "bodySha256": "12b055230ceff14e88bcf3a0aedead4b8af9a3a0b621f181c573780493c7422a"
+      },
+      {
+        "path": "/npm-registry/colorjs.io/-/colorjs.io-0.5.2.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 2137108,
+        "bodySha256": "49f3ea5c4efd4648e8869d2c9434c495cbf41951323470e329c1161c4dc9a204"
+      },
+      {
+        "path": "/npm-registry/has-flag",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 15180,
+        "bodySha256": "bb87a26a491b7b0b05b69fa9e1653c5f9f13c60b15a9a860450ddffeaa745644"
+      },
+      {
+        "path": "/npm-registry/has-flag/-/has-flag-4.0.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 2206,
+        "bodySha256": "77a7eb1411d927bb8a5ca7069dbe168886d63c88f446f0b81500a2cf23ddb5b1"
+      },
+      {
+        "path": "/npm-registry/immutable",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 283603,
+        "bodySha256": "85cdafeb6697a1bd31c6058521e64ce42713d55a60a69bdf25bb103bc1e87a8b"
+      },
+      {
+        "path": "/npm-registry/immutable/-/immutable-5.1.9.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 148909,
+        "bodySha256": "9481d33c209e07f82933a0f8132348ee9325d72ce196ebc47a93b9b2703f3068"
+      },
+      {
+        "path": "/npm-registry/readdirp",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 107589,
+        "bodySha256": "05e5beef7bb0c11b34a1250b5f31863b979b685fea8566d0f1d13406550afe7a"
+      },
+      {
+        "path": "/npm-registry/readdirp/-/readdirp-5.0.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 7530,
+        "bodySha256": "01ecd9d6bf8fdb4b8c462b23d1d8f69604841050ac4316e6fe67967a62b00407"
+      },
+      {
+        "path": "/npm-registry/rxjs",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 980097,
+        "bodySha256": "1012d67ed1fb45292c12507802f5200fc912c5396215f68073d9a507d6d51d9f"
+      },
+      {
+        "path": "/npm-registry/rxjs/-/rxjs-7.8.2.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 751525,
+        "bodySha256": "2312f8ffd9726ffd7bd53ea12c5f13663d09a3dc3326f448c70b88f5ef6fac82"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-all-unknown",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 32646,
+        "bodySha256": "07473fbb0e325014b91168f8f55b6e769329eb2b96314267aecaabd6b98edcdf"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-all-unknown/-/sass-embedded-all-unknown-1.100.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 467,
+        "bodySha256": "cc9f0ed23890c087b40b1644a40404fa803f67c17bc95759a7b654fa2c0c89b5"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-android-arm",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 105173,
+        "bodySha256": "2bf567cdb0072d4081a3840f18b7efb5f1bef56481b404cd376ceb700d178336"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-android-arm64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 106215,
+        "bodySha256": "094c09959ed9be1f31f872692993cfb3fa6394f7906af39ae3df0548a967186b"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-android-riscv64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 83129,
+        "bodySha256": "568dbab09483e11dc9346112af4827cbe909cded183dce3c9918430c61282216"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-android-x64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 105220,
+        "bodySha256": "ffbb57ced1257f71d955759d60283df6aec46db44407f5d1e030f387dc730c35"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-darwin-arm64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 163868,
+        "bodySha256": "1486ad0a8f1229732ada36480f17ecdc466db5205eda94eb19062ff34ff438fa"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-darwin-x64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 162496,
+        "bodySha256": "e0a1f92afe0eb30debf78f03a38d53fa11f349f2bbdf63fa0f5ccc098cc4c94c"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-linux-arm",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 160373,
+        "bodySha256": "5f9dd11e52c903ef307321b994c67dde8024f4c2febf44c05eef01f01415738c"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-linux-arm64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 161746,
+        "bodySha256": "83c5bf625bcfe807669b9e7004e692cd138b19dafb6ece245dc8ea6ae802e310"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-linux-musl-arm",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 106088,
+        "bodySha256": "c863148147fc5927b248de93713c4f4da028bb3377dcb3b4fa2cd61f09d8d768"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-linux-musl-arm64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 107152,
+        "bodySha256": "86b22e92c7f16839eedfe960bcfa36c24bb69bc3bcf4b94c2e33e8f57bd25abe"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-linux-musl-riscv64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 84280,
+        "bodySha256": "0fd091b4b4feb476ddc5417f396838261a19d120f9409cddfcbebc2f0a62b8a0"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-linux-musl-x64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 106155,
+        "bodySha256": "0218399fc951535f2c59a7314f61c49f616d4696d2ad508984ae3c6645d6eddf"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-linux-riscv64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 82629,
+        "bodySha256": "2fca9a1bd9706406433fe633a61e646245c74f4f200dfd12c6ef5f7a28a204d3"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-linux-x64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 162130,
+        "bodySha256": "b1fd4246b3e5579f168eb3d0f8448efcd29bd1b2e2710375af40e6085e78e1f4"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-unknown-all",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 32719,
+        "bodySha256": "a03f249c5a4ed234534c26426f0e3775888fd6cc7e3f29bb2faa08947a502d4d"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-unknown-all/-/sass-embedded-unknown-all-1.100.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 468,
+        "bodySha256": "c3eba57e7ef5966aa2cb20c548d9203e0f572c4f5dc88169244d9f18f33cacbb"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-win32-arm64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 96391,
+        "bodySha256": "399edbc6ee7ddddf0d8de20b9801c619cf28e97ec2161166badc8c89cb306ae2"
+      },
+      {
+        "path": "/npm-registry/sass-embedded-win32-x64",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 161852,
+        "bodySha256": "de70296c9fa81257b5ec3285ca5f6960f831426c1c1ff57215c4194d839cf38c"
+      },
+      {
+        "path": "/npm-registry/sass-embedded",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 419718,
+        "bodySha256": "2e46c80732ef04770fccdd2b4c595bca45f510c0f8eca726582e54132673ec53"
+      },
+      {
+        "path": "/npm-registry/sass-embedded/-/sass-embedded-1.100.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 194359,
+        "bodySha256": "c03a97560afcc90016c52e52330d76a20d39aeb3197058df3f104f0407454d8c"
+      },
+      {
+        "path": "/npm-registry/sass",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 743214,
+        "bodySha256": "799f2d148a6216c698e018fae002bd12e2a1c0ad7cffd1c530408fa722e5a296"
+      },
+      {
+        "path": "/npm-registry/sass/-/sass-1.100.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 927111,
+        "bodySha256": "21c392fda32899b07c59a5e132f2503b72429ae47600bf205420e981214a4af9"
+      },
+      {
+        "path": "/npm-registry/source-map-js",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 62640,
+        "bodySha256": "a4d82cd21d0cdd29219e6ee1bd7bec1cbffc0a0e960eab222393d7f8566071a9"
+      },
+      {
+        "path": "/npm-registry/source-map-js/-/source-map-js-1.2.1.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 35340,
+        "bodySha256": "f126a6f9fca487a43219d8cb8c3a955279187a966119d548eb5cd47e999d4853"
+      },
+      {
+        "path": "/npm-registry/supports-color",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 124169,
+        "bodySha256": "d1371ae858233341cfaeb3226de1212f9f26c649e9ed4885f9e3226f5179f7c7"
+      },
+      {
+        "path": "/npm-registry/supports-color/-/supports-color-8.1.1.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 3726,
+        "bodySha256": "ea69d9b5801e109932f9f12b5499c06de3fde936119a21c5941b2759d4364fb0"
+      },
+      {
+        "path": "/npm-registry/sync-child-process",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 9190,
+        "bodySha256": "c93ed3e1ceca15d3bb4e8484663f7a691556d4d7ea0828d8576b365e0605f92c"
+      },
+      {
+        "path": "/npm-registry/sync-child-process/-/sync-child-process-1.0.2.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 19391,
+        "bodySha256": "314281d3535de3c09c766b8ecbff0ea2b82ef0debd82137eda4522ed79f59cae"
+      },
+      {
+        "path": "/npm-registry/sync-message-port",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 18719,
+        "bodySha256": "273fb1897d38e6da636169122aa445876c930bbc0f537648e1a352860e5af5d7"
+      },
+      {
+        "path": "/npm-registry/sync-message-port/-/sync-message-port-1.2.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 29790,
+        "bodySha256": "b627feb47661023bcaa6d4dc9a4ec71b5c2e9d36a0a2f1e7913a45d3cade03f7"
+      },
+      {
+        "path": "/npm-registry/tslib",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 108843,
+        "bodySha256": "42db9c603e28bd85f194c34c4dae3a2b45c0df07656849ef88d2462c5d65de05"
+      },
+      {
+        "path": "/npm-registry/tslib/-/tslib-2.8.1.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 18477,
+        "bodySha256": "66f635d5eeabae44807534976913a102cf615b9a045368359c9f79ae6ee2119e"
+      },
+      {
+        "path": "/npm-registry/varint",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 25127,
+        "bodySha256": "9466f02444a2cf66b7cda7f13bef77c594cacacce5b6cd9a74a26ae836d6855a"
+      },
+      {
+        "path": "/npm-registry/varint/-/varint-6.0.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 3674,
+        "bodySha256": "06e4df1a73de1e7576e53e25dfa736d2d71a5dde56a734bf2965c3af35820801"
+      }
+    ],
+    "totalBodyBytes": 10223779,
+    "installWallTimeMs": 4800,
+    "install": {
+      "exit": 1,
+      "outcome": "NotImplementedError('npm-client.bin-collision-reify')"
+    }
+  },
+  "after": {
+    "schema": 1,
+    "revision": "82c38510d40bb8cd964fc7bc129c11e30a9937ff",
+    "scenario": {
+      "id": "cold-sass-embedded-1.100.0-install",
+      "persistence": "ephemeral",
+      "command": "npm install",
+      "instrumentation": "BrowserContext.response+wall-clock"
+    },
+    "environment": {
+      "browserName": "chromium",
+      "browserVersion": "148.0.7778.96",
+      "nodeVersion": "v24.16.0",
+      "platform": "darwin",
+      "architecture": "arm64"
+    },
+    "responses": [
+      {
+        "path": "/npm-registry/chokidar",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 255902,
+        "bodySha256": "cd9f335fc3cef388d3ed48b31614c9d772b5704eefd54fbc957fd0f55eb56452"
+      },
+      {
+        "path": "/npm-registry/chokidar/-/chokidar-5.0.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 23399,
+        "bodySha256": "45d07ea7d57ee482c733ab3c547cc49edc1423bc231507e41ff99d2711f7f5e3"
+      },
+      {
+        "path": "/npm-registry/immutable",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 283603,
+        "bodySha256": "85cdafeb6697a1bd31c6058521e64ce42713d55a60a69bdf25bb103bc1e87a8b"
+      },
+      {
+        "path": "/npm-registry/immutable/-/immutable-5.1.9.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 148909,
+        "bodySha256": "9481d33c209e07f82933a0f8132348ee9325d72ce196ebc47a93b9b2703f3068"
+      },
+      {
+        "path": "/npm-registry/readdirp",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 107589,
+        "bodySha256": "05e5beef7bb0c11b34a1250b5f31863b979b685fea8566d0f1d13406550afe7a"
+      },
+      {
+        "path": "/npm-registry/readdirp/-/readdirp-5.0.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 7530,
+        "bodySha256": "01ecd9d6bf8fdb4b8c462b23d1d8f69604841050ac4316e6fe67967a62b00407"
+      },
+      {
+        "path": "/npm-registry/sass",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 743214,
+        "bodySha256": "799f2d148a6216c698e018fae002bd12e2a1c0ad7cffd1c530408fa722e5a296"
+      },
+      {
+        "path": "/npm-registry/sass/-/sass-1.100.0.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 927111,
+        "bodySha256": "21c392fda32899b07c59a5e132f2503b72429ae47600bf205420e981214a4af9"
+      },
+      {
+        "path": "/npm-registry/source-map-js",
+        "status": 200,
+        "contentType": "application/json",
+        "bodyBytes": 62640,
+        "bodySha256": "a4d82cd21d0cdd29219e6ee1bd7bec1cbffc0a0e960eab222393d7f8566071a9"
+      },
+      {
+        "path": "/npm-registry/source-map-js/-/source-map-js-1.2.1.tgz",
+        "status": 200,
+        "contentType": "application/octet-stream",
+        "bodyBytes": 35340,
+        "bodySha256": "f126a6f9fca487a43219d8cb8c3a955279187a966119d548eb5cd47e999d4853"
+      }
+    ],
+    "totalBodyBytes": 2595237,
+    "installWallTimeMs": 1495,
+    "install": {
+      "exit": 0,
+      "outcome": "success"
+    }
+  },
+  "delta": {
+    "bodyBytes": -7628542,
+    "installWallTimeMs": -3305
+  }
+}

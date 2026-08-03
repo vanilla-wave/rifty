@@ -44,7 +44,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsup",
     "catalog:generate": "tsx tools/generate-shadow-substitution-catalog.ts --write",
-    "catalog:check": "tsx tools/generate-shadow-substitution-catalog.ts --check"
+    "catalog:check": "tsx tools/generate-shadow-substitution-catalog.ts --check",
+    "sass-vite-oracle:generate": "tsx tools/generate-sass-vite-node-oracle.ts --write",
+    "sass-vite-oracle:check": "tsx tools/generate-sass-vite-node-oracle.ts --check"
   },
   "devDependencies": {
     "@riftydev/vfs": "workspace:*",

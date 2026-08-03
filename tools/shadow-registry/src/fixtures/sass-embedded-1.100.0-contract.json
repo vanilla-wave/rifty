@@ -1,0 +1,1474 @@
+{
+  "schema": 2,
+  "oracle": "sass-embedded@1.100.0",
+  "version": "sass-embedded\t1.100.0",
+  "rows": {
+    "module": {
+      "cjsKeys": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "Compiler",
+        "Exception",
+        "FALSE",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ],
+      "esmKeys": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "CalculationOperator",
+        "Compiler",
+        "CustomFunction",
+        "Exception",
+        "FALSE",
+        "ListSeparator",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "PromiseOr",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "default",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ],
+      "esmDefaultKeys": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "CalculationOperator",
+        "Compiler",
+        "CustomFunction",
+        "Exception",
+        "FALSE",
+        "ListSeparator",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "PromiseOr",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ],
+      "undefinedEsmExports": [
+        "CalculationOperator",
+        "CustomFunction",
+        "ListSeparator",
+        "PromiseOr"
+      ],
+      "cjsToEsmIdentity": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "Compiler",
+        "Exception",
+        "FALSE",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ],
+      "esmNamedToDefaultIdentity": [
+        "AsyncCompiler",
+        "CalculationInterpolation",
+        "CalculationOperation",
+        "CalculationOperator",
+        "Compiler",
+        "CustomFunction",
+        "Exception",
+        "FALSE",
+        "ListSeparator",
+        "Logger",
+        "NULL",
+        "NodePackageImporter",
+        "PromiseOr",
+        "SassArgumentList",
+        "SassBoolean",
+        "SassCalculation",
+        "SassColor",
+        "SassFunction",
+        "SassList",
+        "SassMap",
+        "SassMixin",
+        "SassNumber",
+        "SassString",
+        "TRUE",
+        "Value",
+        "Version",
+        "compile",
+        "compileAsync",
+        "compileString",
+        "compileStringAsync",
+        "deprecations",
+        "info",
+        "initAsyncCompiler",
+        "initCompiler",
+        "render",
+        "renderSync",
+        "sassFalse",
+        "sassNull",
+        "sassTrue",
+        "types"
+      ],
+      "cjsLifecycleExportDescriptors": {
+        "Compiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        },
+        "AsyncCompiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        },
+        "initCompiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        },
+        "initAsyncCompiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        }
+      },
+      "esmDefaultLifecycleExportDescriptors": {
+        "Compiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        },
+        "AsyncCompiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        },
+        "initCompiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        },
+        "initAsyncCompiler": {
+          "kind": "accessor",
+          "enumerable": true,
+          "configurable": true,
+          "writable": null,
+          "hasGetter": true,
+          "hasSetter": false
+        }
+      }
+    },
+    "compile": {
+      "sync": {
+        "css": ".card {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/basic.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "async": {
+        "css": ".card {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/basic.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      }
+    },
+    "sourceMap": {
+      "sync": {
+        "css": ".mapped {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/mapped.scss"
+        ],
+        "hasSourceMap": true,
+        "sourceMapJson": "{\"version\":3,\"sourceRoot\":\"\",\"sources\":[\"file:///contract/mapped.scss\"],\"names\":[],\"mappings\":\"AAAA;EAAU\",\"sourcesContent\":[\".mapped { color: #123456; }\\n\"]}"
+      },
+      "async": {
+        "css": ".mapped {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/mapped.scss"
+        ],
+        "hasSourceMap": true,
+        "sourceMapJson": "{\"version\":3,\"sourceRoot\":\"\",\"sources\":[\"file:///contract/mapped.scss\"],\"names\":[],\"mappings\":\"AAAA;EAAU\",\"sourcesContent\":[\".mapped { color: #123456; }\\n\"]}"
+      }
+    },
+    "lifecycle": {
+      "syncDirectConstruction": {
+        "name": "Error",
+        "message": "Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.",
+        "feature": null,
+        "toString": "Error: Compiler caused error: Compiler can not be directly constructed. Please use `sass.initCompiler()` instead.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "syncInstance": true,
+      "syncIdentity": {
+        "directPrototypeIsExportPrototype": true,
+        "constructorIsExport": true,
+        "constructorStable": true,
+        "instanceHasOwnConstructor": false,
+        "prototypeConstructorIsExport": true,
+        "prototypeHasOwnConstructor": true,
+        "prototypeConstructorDescriptor": {
+          "kind": "data",
+          "enumerable": false,
+          "configurable": true,
+          "writable": true,
+          "hasGetter": false,
+          "hasSetter": false
+        },
+        "constructorName": "Compiler",
+        "constructorLength": 1,
+        "constructorOwnKeys": [
+          "length",
+          "name",
+          "prototype"
+        ],
+        "constructorPrototypeDescriptor": {
+          "kind": "data",
+          "enumerable": false,
+          "configurable": false,
+          "writable": false,
+          "hasGetter": false,
+          "hasSetter": false
+        },
+        "compileMethod": {
+          "name": "compile",
+          "length": 2,
+          "stable": true,
+          "sameAcrossInstances": true,
+          "instanceHasOwnMethod": false,
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": true,
+          "prototypeDescriptor": {
+            "kind": "data",
+            "enumerable": false,
+            "configurable": true,
+            "writable": true,
+            "hasGetter": false,
+            "hasSetter": false
+          }
+        },
+        "compileStringMethod": {
+          "name": "compileString",
+          "length": 2,
+          "stable": true,
+          "sameAcrossInstances": true,
+          "instanceHasOwnMethod": false,
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": true,
+          "prototypeDescriptor": {
+            "kind": "data",
+            "enumerable": false,
+            "configurable": true,
+            "writable": true,
+            "hasGetter": false,
+            "hasSetter": false
+          }
+        },
+        "disposeMethod": {
+          "name": "dispose",
+          "length": 0,
+          "stable": true,
+          "sameAcrossInstances": true,
+          "instanceHasOwnMethod": false,
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": true,
+          "prototypeDescriptor": {
+            "kind": "data",
+            "enumerable": false,
+            "configurable": true,
+            "writable": true,
+            "hasGetter": false,
+            "hasSetter": false
+          }
+        }
+      },
+      "syncReflection": {
+        "cjs": {
+          "ownKeys": {
+            "value": [
+              "process",
+              "compilationId",
+              "dispatchers",
+              "stdout$",
+              "stderr$",
+              "disposed",
+              "messageTransformer"
+            ],
+            "error": null
+          },
+          "getKinds": {
+            "process": {
+              "value": "object",
+              "error": null
+            },
+            "compilationId": {
+              "value": "number",
+              "error": null
+            },
+            "dispatchers": {
+              "value": "object",
+              "error": null
+            },
+            "stdout$": {
+              "value": "object",
+              "error": null
+            },
+            "stderr$": {
+              "value": "object",
+              "error": null
+            },
+            "disposed": {
+              "value": "boolean",
+              "error": null
+            },
+            "messageTransformer": {
+              "value": "object",
+              "error": null
+            },
+            "_disposed": {
+              "value": "undefined",
+              "error": null
+            }
+          },
+          "hasKeys": {
+            "process": {
+              "value": true,
+              "error": null
+            },
+            "compilationId": {
+              "value": true,
+              "error": null
+            },
+            "dispatchers": {
+              "value": true,
+              "error": null
+            },
+            "stdout$": {
+              "value": true,
+              "error": null
+            },
+            "stderr$": {
+              "value": true,
+              "error": null
+            },
+            "disposed": {
+              "value": true,
+              "error": null
+            },
+            "messageTransformer": {
+              "value": true,
+              "error": null
+            },
+            "_disposed": {
+              "value": false,
+              "error": null
+            }
+          },
+          "descriptors": {
+            "process": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "compilationId": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "dispatchers": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "stdout$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "stderr$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "disposed": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "messageTransformer": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "_disposed": {
+              "value": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            }
+          }
+        },
+        "esm": {
+          "ownKeys": {
+            "value": [
+              "process",
+              "compilationId",
+              "dispatchers",
+              "stdout$",
+              "stderr$",
+              "disposed",
+              "messageTransformer"
+            ],
+            "error": null
+          },
+          "getKinds": {
+            "process": {
+              "value": "object",
+              "error": null
+            },
+            "compilationId": {
+              "value": "number",
+              "error": null
+            },
+            "dispatchers": {
+              "value": "object",
+              "error": null
+            },
+            "stdout$": {
+              "value": "object",
+              "error": null
+            },
+            "stderr$": {
+              "value": "object",
+              "error": null
+            },
+            "disposed": {
+              "value": "boolean",
+              "error": null
+            },
+            "messageTransformer": {
+              "value": "object",
+              "error": null
+            },
+            "_disposed": {
+              "value": "undefined",
+              "error": null
+            }
+          },
+          "hasKeys": {
+            "process": {
+              "value": true,
+              "error": null
+            },
+            "compilationId": {
+              "value": true,
+              "error": null
+            },
+            "dispatchers": {
+              "value": true,
+              "error": null
+            },
+            "stdout$": {
+              "value": true,
+              "error": null
+            },
+            "stderr$": {
+              "value": true,
+              "error": null
+            },
+            "disposed": {
+              "value": true,
+              "error": null
+            },
+            "messageTransformer": {
+              "value": true,
+              "error": null
+            },
+            "_disposed": {
+              "value": false,
+              "error": null
+            }
+          },
+          "descriptors": {
+            "process": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "compilationId": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "dispatchers": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "stdout$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "stderr$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "disposed": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "messageTransformer": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "_disposed": {
+              "value": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            }
+          }
+        }
+      },
+      "syncPathFirst": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncPathSecond": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncFirst": {
+        "css": ".one {\n  order: 1;\n}",
+        "loadedUrls": [],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncSecond": {
+        "css": ".two {\n  order: 2;\n}",
+        "loadedUrls": [],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncDisposeReturnKind": "undefined",
+      "syncPostDisposePath": {
+        "name": "Error",
+        "message": "Compiler caused error: Sync compiler has already been disposed.",
+        "feature": null,
+        "toString": "Error: Compiler caused error: Sync compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "syncPostDisposeString": {
+        "name": "Error",
+        "message": "Compiler caused error: Sync compiler has already been disposed.",
+        "feature": null,
+        "toString": "Error: Compiler caused error: Sync compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "asyncDirectConstruction": {
+        "name": "Error",
+        "message": "Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.",
+        "feature": null,
+        "toString": "Error: Compiler caused error: AsyncCompiler can not be directly constructed. Please use `sass.initAsyncCompiler()` instead.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "asyncInstance": true,
+      "asyncIdentity": {
+        "directPrototypeIsExportPrototype": true,
+        "constructorIsExport": true,
+        "constructorStable": true,
+        "instanceHasOwnConstructor": false,
+        "prototypeConstructorIsExport": true,
+        "prototypeHasOwnConstructor": true,
+        "prototypeConstructorDescriptor": {
+          "kind": "data",
+          "enumerable": false,
+          "configurable": true,
+          "writable": true,
+          "hasGetter": false,
+          "hasSetter": false
+        },
+        "constructorName": "AsyncCompiler",
+        "constructorLength": 1,
+        "constructorOwnKeys": [
+          "length",
+          "name",
+          "prototype"
+        ],
+        "constructorPrototypeDescriptor": {
+          "kind": "data",
+          "enumerable": false,
+          "configurable": false,
+          "writable": false,
+          "hasGetter": false,
+          "hasSetter": false
+        },
+        "compileMethod": {
+          "name": "compileAsync",
+          "length": 2,
+          "stable": true,
+          "sameAcrossInstances": true,
+          "instanceHasOwnMethod": false,
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": true,
+          "prototypeDescriptor": {
+            "kind": "data",
+            "enumerable": false,
+            "configurable": true,
+            "writable": true,
+            "hasGetter": false,
+            "hasSetter": false
+          }
+        },
+        "compileStringMethod": {
+          "name": "compileStringAsync",
+          "length": 2,
+          "stable": true,
+          "sameAcrossInstances": true,
+          "instanceHasOwnMethod": false,
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": true,
+          "prototypeDescriptor": {
+            "kind": "data",
+            "enumerable": false,
+            "configurable": true,
+            "writable": true,
+            "hasGetter": false,
+            "hasSetter": false
+          }
+        },
+        "disposeMethod": {
+          "name": "dispose",
+          "length": 0,
+          "stable": true,
+          "sameAcrossInstances": true,
+          "instanceHasOwnMethod": false,
+          "instanceIsPrototypeMethod": true,
+          "prototypeHasOwnMethod": true,
+          "prototypeDescriptor": {
+            "kind": "data",
+            "enumerable": false,
+            "configurable": true,
+            "writable": true,
+            "hasGetter": false,
+            "hasSetter": false
+          }
+        }
+      },
+      "asyncReflection": {
+        "cjs": {
+          "ownKeys": {
+            "value": [
+              "process",
+              "compilationId",
+              "compilations",
+              "disposed",
+              "messageTransformer",
+              "exit$",
+              "stdout$",
+              "stderr$"
+            ],
+            "error": null
+          },
+          "getKinds": {
+            "process": {
+              "value": "object",
+              "error": null
+            },
+            "compilationId": {
+              "value": "number",
+              "error": null
+            },
+            "compilations": {
+              "value": "object",
+              "error": null
+            },
+            "disposed": {
+              "value": "boolean",
+              "error": null
+            },
+            "messageTransformer": {
+              "value": "object",
+              "error": null
+            },
+            "exit$": {
+              "value": "promise",
+              "error": null
+            },
+            "stdout$": {
+              "value": "object",
+              "error": null
+            },
+            "stderr$": {
+              "value": "object",
+              "error": null
+            },
+            "_disposed": {
+              "value": "undefined",
+              "error": null
+            }
+          },
+          "hasKeys": {
+            "process": {
+              "value": true,
+              "error": null
+            },
+            "compilationId": {
+              "value": true,
+              "error": null
+            },
+            "compilations": {
+              "value": true,
+              "error": null
+            },
+            "disposed": {
+              "value": true,
+              "error": null
+            },
+            "messageTransformer": {
+              "value": true,
+              "error": null
+            },
+            "exit$": {
+              "value": true,
+              "error": null
+            },
+            "stdout$": {
+              "value": true,
+              "error": null
+            },
+            "stderr$": {
+              "value": true,
+              "error": null
+            },
+            "_disposed": {
+              "value": false,
+              "error": null
+            }
+          },
+          "descriptors": {
+            "process": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "compilationId": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "compilations": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "disposed": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "messageTransformer": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "exit$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "stdout$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "stderr$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "_disposed": {
+              "value": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            }
+          }
+        },
+        "esm": {
+          "ownKeys": {
+            "value": [
+              "process",
+              "compilationId",
+              "compilations",
+              "disposed",
+              "messageTransformer",
+              "exit$",
+              "stdout$",
+              "stderr$"
+            ],
+            "error": null
+          },
+          "getKinds": {
+            "process": {
+              "value": "object",
+              "error": null
+            },
+            "compilationId": {
+              "value": "number",
+              "error": null
+            },
+            "compilations": {
+              "value": "object",
+              "error": null
+            },
+            "disposed": {
+              "value": "boolean",
+              "error": null
+            },
+            "messageTransformer": {
+              "value": "object",
+              "error": null
+            },
+            "exit$": {
+              "value": "promise",
+              "error": null
+            },
+            "stdout$": {
+              "value": "object",
+              "error": null
+            },
+            "stderr$": {
+              "value": "object",
+              "error": null
+            },
+            "_disposed": {
+              "value": "undefined",
+              "error": null
+            }
+          },
+          "hasKeys": {
+            "process": {
+              "value": true,
+              "error": null
+            },
+            "compilationId": {
+              "value": true,
+              "error": null
+            },
+            "compilations": {
+              "value": true,
+              "error": null
+            },
+            "disposed": {
+              "value": true,
+              "error": null
+            },
+            "messageTransformer": {
+              "value": true,
+              "error": null
+            },
+            "exit$": {
+              "value": true,
+              "error": null
+            },
+            "stdout$": {
+              "value": true,
+              "error": null
+            },
+            "stderr$": {
+              "value": true,
+              "error": null
+            },
+            "_disposed": {
+              "value": false,
+              "error": null
+            }
+          },
+          "descriptors": {
+            "process": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "compilationId": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "compilations": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "disposed": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "messageTransformer": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "exit$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "stdout$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "stderr$": {
+              "value": {
+                "kind": "data",
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "_disposed": {
+              "value": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            }
+          }
+        }
+      },
+      "asyncPathFirst": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncPathSecond": {
+        "css": "",
+        "loadedUrls": [
+          "file:///contract/compiler.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncFirst": {
+        "css": ".one {\n  order: 1;\n}",
+        "loadedUrls": [],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncSecond": {
+        "css": ".two {\n  order: 2;\n}",
+        "loadedUrls": [],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncDisposeReturnKind": "promise",
+      "asyncDisposeResolvedKind": "undefined",
+      "asyncPostDisposePath": {
+        "name": "Error",
+        "message": "Compiler caused error: Async compiler has already been disposed.",
+        "feature": null,
+        "toString": "Error: Compiler caused error: Async compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      },
+      "asyncPostDisposeString": {
+        "name": "Error",
+        "message": "Compiler caused error: Async compiler has already been disposed.",
+        "feature": null,
+        "toString": "Error: Compiler caused error: Async compiler has already been disposed.",
+        "sassMessage": null,
+        "sassStack": null,
+        "span": null
+      }
+    },
+    "importers": {
+      "sync": {
+        "css": ".imported {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/importer.scss",
+          "contract:tokens"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "syncTrace": [
+        "canonicalize:tokens:false:file:///contract/importer.scss",
+        "load:contract:tokens"
+      ],
+      "async": {
+        "css": ".imported {\n  color: #123456;\n}",
+        "loadedUrls": [
+          "file:///contract/importer.scss",
+          "contract:tokens"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "asyncTrace": [
+        "canonicalize:tokens:false:file:///contract/importer.scss",
+        "load:contract:tokens"
+      ]
+    },
+    "logger": {
+      "result": {
+        "css": ".warning {\n  width: 3px;\n}",
+        "loadedUrls": [
+          "file:///contract/logger.scss"
+        ],
+        "hasSourceMap": false,
+        "sourceMapJson": null
+      },
+      "warnings": [
+        {
+          "message": "capsule warning",
+          "deprecation": false,
+          "deprecationId": null,
+          "stack": "/contract/logger.scss 1:1  root stylesheet\n",
+          "span": null
+        },
+        {
+          "message": "Using / for division outside of calc() is deprecated and will be removed in Dart Sass 2.0.0.\n\nRecommendation: math.div(12px, 4) or calc(12px / 4)\n\nMore info and automated migrator: https://sass-lang.com/d/slash-div",
+          "deprecation": true,
+          "deprecationId": "slash-div",
+          "stack": "/contract/logger.scss 2:20  root stylesheet\n",
+          "span": {
+            "text": "12px / 4",
+            "context": ".warning { width: (12px / 4); }\n",
+            "urlType": "object",
+            "url": "file:///contract/logger.scss",
+            "start": {
+              "offset": 44,
+              "line": 1,
+              "column": 19
+            },
+            "end": {
+              "offset": 52,
+              "line": 1,
+              "column": 27
+            }
+          }
+        }
+      ]
+    },
+    "errors": {
+      "syntax": {
+        "name": "Error",
+        "message": "Error: expected \"}\".\n  ╷\n1 │ a { color: red;\n  │                ^\n  ╵\n  - 1:16  root stylesheet",
+        "feature": null,
+        "toString": "Error: expected \"}\".\n  ╷\n1 │ a { color: red;\n  │                ^\n  ╵\n  - 1:16  root stylesheet",
+        "sassMessage": "expected \"}\".",
+        "sassStack": "- 1:16  root stylesheet\n",
+        "span": {
+          "text": "",
+          "context": "a { color: red;",
+          "urlType": "undefined",
+          "url": null,
+          "start": {
+            "offset": 15,
+            "line": 0,
+            "column": 15
+          },
+          "end": {
+            "offset": 15,
+            "line": 0,
+            "column": 15
+          }
+        }
+      },
+      "missingUse": {
+        "name": "Error",
+        "message": "Error: Can't find stylesheet to import.\n  ╷\n1 │ @use 'does-not-exist';\n  │ ^^^^^^^^^^^^^^^^^^^^^\n  ╵\n  /contract/missing-use.scss 1:1  root stylesheet",
+        "feature": null,
+        "toString": "Error: Can't find stylesheet to import.\n  ╷\n1 │ @use 'does-not-exist';\n  │ ^^^^^^^^^^^^^^^^^^^^^\n  ╵\n  /contract/missing-use.scss 1:1  root stylesheet",
+        "sassMessage": "Can't find stylesheet to import.",
+        "sassStack": "/contract/missing-use.scss 1:1  root stylesheet\n",
+        "span": {
+          "text": "@use 'does-not-exist'",
+          "context": "@use 'does-not-exist';",
+          "urlType": "object",
+          "url": "file:///contract/missing-use.scss",
+          "start": {
+            "offset": 0,
+            "line": 0,
+            "column": 0
+          },
+          "end": {
+            "offset": 21,
+            "line": 0,
+            "column": 21
+          }
+        }
+      }
+    },
+    "legacy": {
+      "css": ".legacy {\n  color: #123456;\n}",
+      "statsKeys": [
+        "duration",
+        "end",
+        "entry",
+        "includedFiles",
+        "start"
+      ],
+      "warnings": [
+        {
+          "message": "legacy warning",
+          "deprecation": false,
+          "deprecationId": null,
+          "stack": "- 1:1  root stylesheet\n",
+          "span": null
+        }
+      ],
+      "stderr": "Deprecation [legacy-js-api]: The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.\n\nMore info: https://sass-lang.com/d/legacy-js-api\n"
+    }
+  }
+}

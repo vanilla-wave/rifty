@@ -42,6 +42,7 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     const proc = installNodeProcessShim(spec());
     // Exact cowsay/yargs trigger: reading .electron on undefined versions → TypeError
     expect(proc.versions).toBeDefined();
+    expect(Object.hasOwn(proc.versions, 'node')).toBe(true);
     expect(proc.versions.node).toBe('24.0.0');
     expect(proc.versions.electron).toBeUndefined();
   });
@@ -54,5 +55,38 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     expect(proc.argv0).toBe('rifty');
     expect(proc.execPath).toBe('/usr/local/bin/rifty');
     expect(proc.title).toBe('rifty');
+  });
+
+  it('exposes the exact isolated Node v24.0.0 release identity (ADR-0345)', () => {
+    const first = installNodeProcessShim(spec());
+    const second = installNodeProcessShim(spec());
+    const expected = {
+      name: 'node',
+      sourceUrl: 'https://nodejs.org/download/release/v24.0.0/node-v24.0.0.tar.gz',
+      headersUrl: 'https://nodejs.org/download/release/v24.0.0/node-v24.0.0-headers.tar.gz',
+    };
+
+    expect(first.release).toStrictEqual(expected);
+    expect(first.release).not.toBe(second.release);
+    expect(Reflect.ownKeys(first.release)).toStrictEqual(['name', 'sourceUrl', 'headersUrl']);
+    expect(Object.getPrototypeOf(first.release)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(first, 'release')).toStrictEqual({
+      value: first.release,
+      writable: false,
+      enumerable: true,
+      configurable: true,
+    });
+    for (const [key, value] of Object.entries(expected)) {
+      expect(Object.getOwnPropertyDescriptor(first.release, key)).toStrictEqual({
+        value,
+        writable: false,
+        enumerable: true,
+        configurable: true,
+      });
+    }
+    expect(Object.isExtensible(first.release)).toBe(true);
+    expect(Object.isFrozen(first.release)).toBe(false);
+    expect(Reflect.deleteProperty(first.release, 'name')).toBe(true);
+    expect(second.release).toStrictEqual(expected);
   });
 });

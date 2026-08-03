@@ -1,0 +1,50 @@
+{
+  "root": "sass@1.100.0",
+  "packages": [
+    {
+      "name": "chokidar",
+      "range": "^5.0.0",
+      "version": "5.0.0",
+      "dependencies": {
+        "readdirp": "^5.0.0"
+      },
+      "integrity": "sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==",
+      "tarball": "https://registry.npmjs.org/chokidar/-/chokidar-5.0.0.tgz",
+      "bytes": 23399,
+      "sha256": "45d07ea7d57ee482c733ab3c547cc49edc1423bc231507e41ff99d2711f7f5e3"
+    },
+    {
+      "name": "readdirp",
+      "range": "^5.0.0",
+      "version": "5.0.0",
+      "dependencies": {},
+      "integrity": "sha512-9u/XQ1pvrQtYyMpZe7DXKv2p5CNvyVwzUB6uhLAnQwHMSgKMBR62lc7AHljaeteeHXn11XTAaLLUVZYVZyuRBQ==",
+      "tarball": "https://registry.npmjs.org/readdirp/-/readdirp-5.0.0.tgz",
+      "bytes": 7530,
+      "sha256": "01ecd9d6bf8fdb4b8c462b23d1d8f69604841050ac4316e6fe67967a62b00407"
+    },
+    {
+      "name": "immutable",
+      "range": "^5.1.5",
+      "version": "5.1.9",
+      "dependencies": {},
+      "integrity": "sha512-m8nVez3rwrgmWxtLMt1ZYXB2Lv7OKYn/disyxAlSDYAlKSlFoPPfIAmAM/M5xqL4m4C/wAPw7S2/CNaUii1Hxg==",
+      "tarball": "https://registry.npmjs.org/immutable/-/immutable-5.1.9.tgz",
+      "bytes": 148909,
+      "sha256": "9481d33c209e07f82933a0f8132348ee9325d72ce196ebc47a93b9b2703f3068"
+    },
+    {
+      "name": "source-map-js",
+      "range": ">=0.6.2 <2.0.0",
+      "version": "1.2.1",
+      "dependencies": {},
+      "integrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==",
+      "tarball": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+      "bytes": 35340,
+      "sha256": "f126a6f9fca487a43219d8cb8c3a955279187a966119d548eb5cd47e999d4853"
+    }
+  ],
+  "omittedOptionalDependencies": {
+    "@parcel/watcher": "^2.4.1"
+  }
+}

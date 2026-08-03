@@ -695,6 +695,21 @@ function strictStringRecord(value: unknown, label: string): Record<string, strin
   );
 }
 
+function optionalStringRecord(value: unknown, label: string): Record<string, string> {
+  return value === undefined ? {} : strictStringRecord(value, label);
+}
+
+function matchesStringRecord(
+  actual: Readonly<Record<string, string>>,
+  expected: Readonly<Record<string, string>>,
+): boolean {
+  const entries = Object.entries(actual);
+  return (
+    entries.length === Object.keys(expected).length &&
+    entries.every(([name, range]) => expected[name] === range)
+  );
+}
+
 function decodeTraceAcquisition(value: unknown): Readonly<{
   applied: AppliedShadowSubstitution['acquisition'];
   trace: ShadowSubstitutionLockfileTraceFact['acquisition'];
@@ -869,16 +884,38 @@ export function registryShadowEmbeddedSourcesFromLockfile(
         );
       }
       const projection = recipe.acquisition.dependencyProjection;
-      if (projection.bundledDependencies.length === 0) continue;
-
       const acquisitionInstallPath = registryAcquisitionInstallPath(substitution);
       const acquisitionEntry = plain(
         packages[acquisitionInstallPath],
         `lockfile package ${acquisitionInstallPath}`,
       );
-      const suppliedBundleDependencies = decodeDenseDataArray(
-        acquisitionEntry.bundleDependencies,
-        `lockfile package ${acquisitionInstallPath} bundleDependencies`,
+      const acquisitionDependencies = optionalStringRecord(
+        acquisitionEntry.dependencies,
+        `lockfile package ${acquisitionInstallPath} dependencies`,
+      );
+      if (!matchesStringRecord(acquisitionDependencies, projection.dependencies)) {
+        throw brokenShadowTrace(
+          `registry shadow substitution ${substitution.substitutionId} dependency projection drifted`,
+        );
+      }
+      const acquisitionPeerDependencies = optionalStringRecord(
+        acquisitionEntry.peerDependencies,
+        `lockfile package ${acquisitionInstallPath} peerDependencies`,
+      );
+      if (!matchesStringRecord(acquisitionPeerDependencies, projection.peerDependencies)) {
+        throw brokenShadowTrace(
+          `registry shadow substitution ${substitution.substitutionId} peer dependency projection drifted`,
+        );
+      }
+      const suppliedBundleDependencies = (
+        acquisitionEntry.bundleDependencies === undefined
+          ? []
+          : decodeDenseDataArray(
+              acquisitionEntry.bundleDependencies,
+              `lockfile package ${acquisitionInstallPath} bundleDependencies`,
+            )
+      ).map((name, index) =>
+        text(name, `lockfile package ${acquisitionInstallPath} bundleDependencies ${index}`),
       );
       if (
         suppliedBundleDependencies.length !== projection.bundledDependencies.length ||
@@ -890,10 +927,8 @@ export function registryShadowEmbeddedSourcesFromLockfile(
           `registry shadow substitution ${substitution.substitutionId} bundle membership drifted`,
         );
       }
-      const acquisitionDependencies = plain(
-        acquisitionEntry.dependencies,
-        `lockfile package ${acquisitionInstallPath} dependencies`,
-      );
+      if (projection.bundledDependencies.length === 0) continue;
+
       const dependencies: RegistryShadowEmbeddedDependency[] = [];
       for (const name of projection.bundledDependencies) {
         const range = projection.dependencies[name] ?? projection.optionalDependencies[name];

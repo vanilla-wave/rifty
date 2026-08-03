@@ -41,12 +41,18 @@ if (!lightningcssRecipe || lightningcssRecipe.acquisition.kind !== 'registry') {
   throw new Error('shadow-registry builtin lightningcss recipe is missing');
 }
 
+const registryRedirects = Object.fromEntries(
+  builtinShadowSubstitutionCatalog.recipes.flatMap((recipe) =>
+    recipe.acquisition.kind === 'registry'
+      ? [[recipe.trigger.name, `${recipe.acquisition.name}@${recipe.acquisition.version}`] as const]
+      : [],
+  ),
+);
+
 export const bakedOverrides: OverrideMap = {
   // bcrypt's native bindings don't load in the browser; bcryptjs is a drop-in.
   bcrypt: 'bcryptjs',
-  // Vite 8 imports lightningcss lazily. The native package loads `.node`
-  // bindings; lightningcss-wasm ships the same NAPI surface backed by WASM.
-  lightningcss: `${lightningcssRecipe.acquisition.name}@${lightningcssRecipe.acquisition.version}`,
+  ...registryRedirects,
 };
 
 // ONE mode-independent rollup native entry (ADR-0188): always the real WASM

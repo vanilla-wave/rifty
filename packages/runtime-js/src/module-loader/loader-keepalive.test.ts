@@ -88,6 +88,23 @@ describe('routed user-code import() keeps the loop alive (esm.ts dynamicImport)'
     expect(activeRefs()).toBe(0);
   });
 
+  it('refs while a detached CJS-routed import() is in flight', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/package.json': JSON.stringify({ type: 'module' }),
+      '/work/a.cjs': "void import('./b.ts');\n",
+      '/work/b.ts': 'export const x = 1;\n',
+    });
+    const { loader, release } = gatedLoader(vfs);
+
+    await loader.loadById('/work/a.cjs');
+    expect(activeRefs()).toBeGreaterThanOrEqual(1);
+
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(activeRefs()).toBe(0);
+  });
+
   it('unrefs even when a routed import() rejects', async () => {
     const vfs = new MemoryFsSync();
     vfs.loadFixture({

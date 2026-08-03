@@ -241,6 +241,11 @@ projection claims: the only positive registry oracle has required bundled
 matching non-bundled traversal, optional omission, non-empty peer handoff, or
 accepted scoped keys. The binding split preserves those clauses in the required
 draft child `npm-client/shadow-recipe-v2-dependency-projection-execution`.
+The later 2026-08-02 catalog-carrier audit moved the real non-bundled-required
+and omitted-optional branches into `npm-client/sass-embedded-substitution` and
+reclassified the carrierless retained-optional/peer/scoped residual as ordinary
+backlog outside the frozen goal; this paragraph records the checkpoint's
+original split, not a current Sass blocker.
 The transcript below is the now-executable LightningCSS
 metadata/bundle/materialized-bin/replay unit; counts remain unchanged.
 Fresh first checkpoint `092d931a` blocked two omitted proof rows and one stale
@@ -329,14 +334,17 @@ and runs 13/13 GREEN. The stabilized acquisition/data/materialized-bin/shims/
 installer/planner/catalog batch runs 240/240 GREEN; npm-client typecheck,
 Biome, diff, contract-drift, goal-contract, budget, and backlog gates pass.
 
-Pre-pickup process correction
+At that checkpoint, pre-pickup process correction
 `88f1470c1a45b45510fe089e1561f23a30d1a0f0` keeps only this selected slice's
 Items/Budget mapping. The two latest mandatory split children and the earlier
-dependency-projection child remain reverse-linked draft goal residuals; each
+dependency-projection child remained reverse-linked draft goal residuals; each
 mapping and Budget row waits for its own pre-pickup branch. Closure deletes the
 completed validation item and subtracts only its exact blockers.
 Embedded-source topology, broad projection execution, and protocol-v2 replay
-remain unimplemented and loud where already specified.
+remained unimplemented and loud where already specified. Later slices landed
+embedded-source and protocol-v2 authority; the 2026-08-02 carrier audit moved
+Sass-reachable projection branches into the Sass slice and retained the rest as
+ordinary backlog.
 
 ## Embedded-source implementation and closure
 
@@ -381,8 +389,10 @@ real Chromium Vite 7.3.6 and direct CJS/ESM esbuild acceptance are 2/2 GREEN.
 The exact goal-declared `pnpm pr:check` passes all 25 gates. Production is 342
 hand-written insertions inside Budget `300–800`.
 
-Closure deletes the completed protocol-replay item. Broad dependency-projection
-execution, peer placement, Sass scale proof, the terminal blocked predecessor,
-and measured cleanup remain reverse-linked goal residuals. The known snapshot
-identity coverage gap remains recorded in
+Closure deletes the completed protocol-replay item. Sass scale proof, the
+terminal blocked predecessor, and measured cleanup remain reverse-linked goal
+residuals. Broad retained-optional/scoped projection execution and npm peer
+placement are explicit ordinary drafts outside the frozen goal because neither
+current builtin recipe carries those branches. The known snapshot identity
+coverage gap remains recorded in
 `playground/baked-snapshot-regeneration`.

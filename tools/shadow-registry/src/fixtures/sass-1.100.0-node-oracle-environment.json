@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "node": "v24.16.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "packages": [
+    {
+      "name": "sass",
+      "version": "1.100.0",
+      "integrity": "sha512-B5j0rYMlinhhOo9tjQebMVVn0TfyXAF+wB3b2ggZUuJ/is/Y+7+JGjirAMxHZ9Z3hIP98NPfamlAkBHa1lAaXQ==",
+      "packageJson": {
+        "path": "node_modules/sass/package.json",
+        "bytes": 856,
+        "sha256": "93e944aabda9ad95cd809f22c5dc240afd29f6ee789f73de7f9f6a03642d4f2c"
+      },
+      "cjsEntry": {
+        "path": "node_modules/sass/sass.node.js",
+        "bytes": 343,
+        "sha256": "eb7a01ba57a04a0a421bdef0bf2f43558af4790b540a45501ec83900b07b0625"
+      },
+      "esmEntry": {
+        "path": "node_modules/sass/sass.node.mjs",
+        "bytes": 5502,
+        "sha256": "45c68fef99d4c4ce5bffc14a48297a386b115ac056264e739dce3fdc0ad13f53"
+      }
+    },
+    {
+      "name": "sass-embedded",
+      "version": "1.100.0",
+      "integrity": "sha512-Ut8wlQSk19tm7jMK6mz6cF1+e+E7tUnW2tM02zQDPnOTcVbV8qCQG8UWxZkkNlY50+hV3hqP24OOkUlMz8xBpw==",
+      "packageJson": {
+        "path": "node_modules/sass-embedded/package.json",
+        "bytes": 3262,
+        "sha256": "fd3df36658fba4e30e3addb689aac2bf9c4ef52aa7d40c5c366fd17eb56d280a"
+      },
+      "cjsEntry": {
+        "path": "node_modules/sass-embedded/dist/lib/index.js",
+        "bytes": 6092,
+        "sha256": "e3b853a07574696f36cc8e515c13a6ecc185954a0cb603b0f280a6ee789c965b"
+      },
+      "esmEntry": {
+        "path": "node_modules/sass-embedded/dist/lib/index.mjs",
+        "bytes": 5634,
+        "sha256": "03401efc8b091a872145385940e4d574d1dc1d648ab7d4a639cee176a5a0e30a"
+      }
+    }
+  ],
+  "platformPackage": {
+    "name": "sass-embedded-darwin-arm64",
+    "version": "1.100.0",
+    "integrity": "sha512-1PVlYi61POo93IT/FfrG1mc1tAHxeSTyUALF2aOFmXGWjVXr3bQzEQiBGCOvQbj/ix+5hNyXFXcEMEyKvtUJJA==",
+    "packageJson": {
+      "path": "node_modules/sass-embedded-darwin-arm64/package.json",
+      "bytes": 357,
+      "sha256": "579ed315398bdc8d505040174d8b5e01ab0b85234da58f618ac415eda564268a"
+    }
+  }
+}

@@ -21,6 +21,9 @@
 
 ### Changed
 
+- Package-owner install and replay now prove the zero-runtime-asset Sass recipe
+  through the same FIFO, lock, provenance, and durable tree owner as existing
+  catalog substitutions.
 - Package-owner installs now commit and replay protocol-v2 shadow facts while
   retaining the same-project FIFO through materialization and lock publication.
 

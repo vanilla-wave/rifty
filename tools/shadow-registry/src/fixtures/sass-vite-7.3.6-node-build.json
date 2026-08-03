@@ -1,0 +1,91 @@
+{
+  "schema": 2,
+  "oracle": "real-node-vite-sass-build",
+  "recorded": "2026-08-02",
+  "reproductions": 2,
+  "environment": {
+    "node": "v24.16.0",
+    "npm": "11.17.0",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "vite": "7.3.6",
+    "sassEmbedded": "1.100.0"
+  },
+  "fixture": {
+    "inputSha256ByPath": {
+      "index.html": "a1dc84c5629cadf3a51ee544c87966790bd3e548b462ba8b531771d694eda8f8",
+      "package.json": "8865d76ad4ec2df06ff0cc65ae0d47af189bef5f308446c404f95f9c687a3c3e",
+      "src/main.js": "6f3b20284b83031b20f26441a533cfff059d296f8dd40f20ef7d476eda8f2f95",
+      "src/style.scss": "7a8b48115ffac156d21364e462f967f5e96b61d2ffc15e1bcc469887900542fb",
+      "src/styles/_nested.scss": "6bf77719dbf78db117ecd2b09ce12c7e15a4ba7cc7b47320c1ffcf3d397f12dc",
+      "src/styles/_palette.scss": "43778c1bc93f88b0aa2f1727eafa5e781150205fb4cbdf5727e23d70a0e7091c",
+      "vite.config.js": "6741dbfd8804481a6521a4a4b6ab59d238472b6e6d7ca746ce6ff11309cfe14d"
+    },
+    "edit": {
+      "path": "src/styles/_palette.scss",
+      "from": "$accent: rgb(32, 64, 128);\n",
+      "fromSha256": "43778c1bc93f88b0aa2f1727eafa5e781150205fb4cbdf5727e23d70a0e7091c",
+      "to": "$accent: rgb(9, 87, 65);\n",
+      "toSha256": "76b3ff6675146e250dccb79f8a529175b644a6929109874ce100392991a7bf78"
+    }
+  },
+  "lockFixture": {
+    "path": "tools/shadow-registry/src/fixtures/sass-vite-7.3.6-package-lock.fixture",
+    "bytes": 60340,
+    "sha256": "50be275d9e16dcab67a80947e81a21c4ca7260db9dd1c6bdfca7d2cda862079f"
+  },
+  "viteVersion": {
+    "exit": 0,
+    "stdout": "vite/7.3.6 darwin-arm64 node-v24.16.0\n",
+    "stdoutSha256": "2137d7f1d6433dbde53963e9bd5b851361d93f3e06781fed0375b44a12600846",
+    "stderr": ""
+  },
+  "build": {
+    "exit": 0,
+    "warningOccurrences": 1,
+    "warningStderr": "WARNING: rifty-sass-warning\n    ../../../../src/style.scss 5:1  root stylesheet\n\n",
+    "warningStderrSha256": "aef15a6aa6f115bbc288b1580a0a5ec9280e9b67c4973fdba13720cc63e91ce3",
+    "files": [
+      {
+        "path": "dist/assets/index-CN9dmDIi.js",
+        "bytes": 859,
+        "sha256": "8bff9d3b7de21f1fea99aa18481c8659c3be7c3e8450d0b70bd87e52ffbede8d"
+      },
+      {
+        "path": "dist/assets/index-CN9dmDIi.js.map",
+        "bytes": 287,
+        "sha256": "d01a3b0fb7adaa59be57abaf7958f60deb7c8dbfe34be892d3a36ef12e179d4f"
+      },
+      {
+        "path": "dist/assets/index-CVHxFmnK.css",
+        "bytes": 63,
+        "sha256": "c679544c3b4695a1fe14921735a18157522f56a3bf6ab3e681a95ffad6401fa3"
+      },
+      {
+        "path": "dist/index.html",
+        "bytes": 167,
+        "sha256": "675c9f130ce1afee8cb7d614335f9664210a715dbfd49cc2b5d8a06dae7b89c2"
+      }
+    ],
+    "css": ".card{color:#095741;padding:11px}.card .label{font-weight:700}\n",
+    "externalCssSourceMap": false
+  },
+  "lockfile": {
+    "version": 3,
+    "bytes": 60340,
+    "sha256": "50be275d9e16dcab67a80947e81a21c4ca7260db9dd1c6bdfca7d2cda862079f",
+    "rootDependencies": {
+      "sass-embedded": "1.100.0",
+      "vite": "7.3.6"
+    },
+    "nonRootIdentities": 113,
+    "installedIdentities": 35,
+    "allIdentityIntegritySha256": "1b9da51a4a3e6c751935bd100954dd66491dbc2126738afd5a43065e1b04eb7c",
+    "installedIdentityIntegritySha256": "1bb75663d542516c33e94efeb274e0dc0a4143c81448ccaf0a33c0f625d91b02"
+  },
+  "offlineReplay": {
+    "command": "npm ci --ignore-scripts --offline",
+    "exit": 0,
+    "buildMatchesFresh": true
+  }
+}

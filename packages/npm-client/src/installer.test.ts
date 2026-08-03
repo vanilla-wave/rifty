@@ -593,6 +593,37 @@ describe('install — package.json defaults', () => {
     expect(await vfs.exists('/proj/node_modules/pure/package.json')).toBe(true);
   });
 
+  it('writes declared root dependency maps instead of the hoisted transitive closure', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('direct', new Map([['1.0.0', await makeEntry('direct', '1.0.0', { leaf: '^1.0.0' })]]));
+    db.set('leaf', new Map([['1.0.0', await makeEntry('leaf', '1.0.0')]]));
+    db.set('dev', new Map([['1.0.0', await makeEntry('dev', '1.0.0')]]));
+    db.set('optional', new Map([['1.0.0', await makeEntry('optional', '1.0.0')]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '2.3.4',
+        dependencies: { direct: '^1.0.0' },
+        devDependencies: { dev: '~1.0.0' },
+        optionalDependencies: { optional: '1.x' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.lockfile.packages['']).toEqual({
+      version: '2.3.4',
+      dependencies: { direct: '^1.0.0' },
+      devDependencies: { dev: '~1.0.0' },
+      optionalDependencies: { optional: '1.x' },
+    });
+    expect(result.lockfile.packages['node_modules/leaf']).toBeDefined();
+  });
+
   it('keeps root optionalDependencies non-fatal when package.json drives install', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('dep', new Map([['1.0.0', await makeEntry('dep', '1.0.0')]]));

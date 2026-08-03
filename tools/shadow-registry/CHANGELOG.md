@@ -4,6 +4,12 @@
 
 ### Changed
 
+- The builtin catalog now carries exact `sass-embedded@1.100.0` as an
+  install-only facade over registry-acquired `sass@1.100.0`; direct CJS/ESM
+  compile, initialized compiler lifecycle, importers, logging, errors, and Vite
+  7 SCSS are pinned against Node, while direct construction, initialized
+  compiler internal reflection, CLI/watch/types, and the async-importer
+  deadlock remain explicit gaps (ADR-0344).
 - Snapshot drift validation derives Vite package bytes through Workbench's
   final manifest normalizer, matching the bake authority byte-for-byte
   (ADR-0336).

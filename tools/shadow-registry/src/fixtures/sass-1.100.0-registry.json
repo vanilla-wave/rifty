@@ -1,0 +1,20 @@
+{
+  "name": "sass",
+  "version": "1.100.0",
+  "dist": {
+    "integrity": "sha512-B5j0rYMlinhhOo9tjQebMVVn0TfyXAF+wB3b2ggZUuJ/is/Y+7+JGjirAMxHZ9Z3hIP98NPfamlAkBHa1lAaXQ=="
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "immutable": "^5.1.5",
+    "source-map-js": ">=0.6.2 <2.0.0"
+  },
+  "optionalDependencies": {
+    "@parcel/watcher": "^2.4.1"
+  },
+  "peerDependencies": {},
+  "bundleDependencies": [],
+  "bin": {
+    "sass": "sass.js"
+  }
+}

@@ -131,6 +131,22 @@ describe('runNodeEntry', () => {
     expect(g.__script).toBe(1);
   });
 
+  it('does not treat a plain script exported Promise as a process-lifecycle handle', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/script.cjs': 'module.exports.__promise = new Promise(() => {});\n',
+    });
+
+    const result = await Promise.race([
+      runNodeEntry({ vfs, entryPath: '/work/script.cjs', cwd: '/work' }).then(
+        () => 'resolved' as const,
+      ),
+      new Promise<'timed-out'>((resolve) => setTimeout(() => resolve('timed-out'), 50)),
+    ]);
+
+    expect(result).toBe('resolved');
+  });
+
   it('throws a loud, named error when a .bin shim is not a recognizable launcher (never a silent no-op)', async () => {
     const vfs = new MemoryFsSync();
     vfs.loadFixture({ '/proj/node_modules/.bin/weird': 'not a launcher\n' });

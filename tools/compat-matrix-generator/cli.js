@@ -14,6 +14,7 @@ const conformanceDir = new URL('../../tests/conformance/', here);
 const matrixDir = new URL('../../docs/public/compat/', here);
 const rootDir = new URL('../../', here);
 const esbuildPolicyUrl = new URL('../shadow-registry/esbuild-runtime-policy.json', here);
+const sassPolicyUrl = new URL('../shadow-registry/sass-embedded-policy.json', here);
 
 const legend =
   'Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not implemented (throws `NotImplementedError` or `UNSUPPORTED_PROTOCOL`).';
@@ -157,6 +158,106 @@ function buildEsbuildMatrix(policyValue) {
 
 const esbuildPolicy = JSON.parse(await readFile(esbuildPolicyUrl, 'utf8'));
 const esbuildMatrix = buildEsbuildMatrix(esbuildPolicy);
+
+function sassPolicyRecord(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`sass-embedded policy: ${label} must be an object`);
+  }
+  return value;
+}
+
+function sassPolicyString(value, label) {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`sass-embedded policy: ${label} must be a non-empty string`);
+  }
+  return value;
+}
+
+function sassPolicyArray(value, label) {
+  if (!Array.isArray(value)) {
+    throw new Error(`sass-embedded policy: ${label} must be an array`);
+  }
+  return value;
+}
+
+function buildSassMatrix(policyValue) {
+  const policy = sassPolicyRecord(policyValue, 'root');
+  if (policy.schema !== 1) throw new Error('sass-embedded policy: schema must be 1');
+  if (policy.api !== 'sass-embedded') {
+    throw new Error('sass-embedded policy: api must be sass-embedded');
+  }
+  if (policy.state !== 'contract-red' && policy.state !== 'final-green') {
+    throw new Error('sass-embedded policy: state must be contract-red or final-green');
+  }
+  const finalGreen = policy.state === 'final-green';
+  const version = sassPolicyString(policy.version, 'version');
+  const source = sassPolicyRecord(policy.source, 'source');
+  const sourcePackage = sassPolicyString(source.package, 'source.package');
+  const sourceVersion = sassPolicyString(source.version, 'source.version');
+  const admission = sassPolicyRecord(policy.admission, 'admission');
+  if (admission.kind !== 'exact-only') {
+    throw new Error('sass-embedded policy: admission.kind must be exact-only');
+  }
+  sassPolicyString(admission.unsupportedFeature, 'admission.unsupportedFeature');
+
+  const surfaces = sassPolicyArray(policy.surfaces, 'surfaces').map((value, index) => {
+    const entry = sassPolicyRecord(value, `surfaces[${index}]`);
+    return [
+      sassPolicyString(entry.surface, `surfaces[${index}].surface`),
+      finalGreen ? '✅' : '⚠️',
+      sassPolicyString(entry.notes, `surfaces[${index}].notes`),
+    ];
+  });
+  const divergence = sassPolicyRecord(policy.divergence, 'divergence');
+  const divergenceRow = [
+    sassPolicyString(divergence.surface, 'divergence.surface'),
+    '⚠️',
+    sassPolicyString(divergence.notes, 'divergence.notes'),
+  ];
+  sassPolicyString(divergence.id, 'divergence.id');
+  sassPolicyString(divergence.behavior, 'divergence.behavior');
+
+  const unsupported = sassPolicyArray(policy.unsupported, 'unsupported').map((value, index) => {
+    const entry = sassPolicyRecord(value, `unsupported[${index}]`);
+    const surface = sassPolicyString(entry.surface, `unsupported[${index}].surface`);
+    const notes = sassPolicyString(entry.notes, `unsupported[${index}].notes`);
+    if (entry.kind === 'runtime-throw') {
+      const feature = sassPolicyString(entry.feature, `unsupported[${index}].feature`);
+      return [surface, '❌', `${notes} Throws \`NotImplementedError('${feature}')\`.`];
+    }
+    if (entry.kind !== 'not-published') {
+      throw new Error(
+        `sass-embedded policy: unsupported[${index}].kind must be runtime-throw or not-published`,
+      );
+    }
+    if (Object.hasOwn(entry, 'feature')) {
+      throw new Error(`sass-embedded policy: unsupported[${index}] not-published has a feature`);
+    }
+    return [surface, '❌', notes];
+  });
+  const tests = sassPolicyArray(policy.tests, 'tests').map(
+    (value, index) => `\`${sassPolicyString(value, `tests[${index}]`)}\``,
+  );
+  const limitations = sassPolicyArray(policy.limitations, 'limitations').map((value, index) =>
+    sassPolicyString(value, `limitations[${index}]`),
+  );
+
+  return {
+    file: 'sass-embedded.md',
+    title: 'Compatibility matrix — sass-embedded',
+    intro: `Exact install-only facade claim for \`sass-embedded@${version}\` over \`${sourcePackage}@${sourceVersion}\`; ${
+      finalGreen
+        ? 'Final+GREEN is proven against real Node and Chromium.'
+        : 'Contract+RED is recorded; supported rows remain partial until Final+GREEN.'
+    }`,
+    rows: [...surfaces, divergenceRow, ...unsupported],
+    tests,
+    limitations,
+  };
+}
+
+const sassPolicy = JSON.parse(await readFile(sassPolicyUrl, 'utf8'));
+const sassMatrix = buildSassMatrix(sassPolicy);
 
 const viteCommandMatrix = {
   file: 'vite-command.md',
@@ -1032,6 +1133,7 @@ const matrices = [
     ],
   },
   esbuildMatrix,
+  sassMatrix,
   viteCommandMatrix,
 ];
 
@@ -1126,7 +1228,7 @@ undocumented, not supported. The point is honest fit: tested support, visible ca
 unsupported rows.
 
 Each markdown here cites the covering tests in \`tests/conformance/\` and \`tests/integration/\` for a
-Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\`/\`esbuild-js-api.md\`/\`vite-command.md\` are rendered by \`pnpm compat:generate\`
+Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\`/\`esbuild-js-api.md\`/\`sass-embedded.md\`/\`vite-command.md\` are rendered by \`pnpm compat:generate\`
 from static inventories whose cited test files are existence-checked, not re-run — deriving statuses
 from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-test-result-sink\`.
 
@@ -1139,6 +1241,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [ts-language-service.md](./ts-language-service.md) — in-browser \`ts.LanguageService\` over the VFS (\`@riftydev/ts-language-service\`, ADR-0166)
 - [package-tooling.md](./package-tooling.md) — real package CLIs in the browser shell (Prettier, ESLint, typed \`typescript-eslint\`)
 - [esbuild-js-api.md](./esbuild-js-api.md) — direct CJS/ESM and Vite 7 share exact registry-owned esbuild 0.28.0 over guest VFS; CLI and D4 gaps stay loud (ADR-0226/0308/0311)
+- [sass-embedded.md](./sass-embedded.md) — exact sass-embedded 1.100.0 facade over the exact pure-JS Sass twin; direct construction, initialized-compiler reflection, CLI/watch/types gaps, and the sync-importer divergence stay visible (ADR-0344)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [vite-command.md](./vite-command.md) — playground \`vite\` command through the installed \`.bin\` CLI (ADR-0174)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)

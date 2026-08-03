@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "node": "v24.16.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "timeoutMs": 2000,
+  "attempts": 2,
+  "runs": {
+    "sass": [
+      {
+        "timedOut": false,
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"The canonicalize() function can't return a Promise for synchronous compile functions.\\n  ╷\\n1 │ @use 'tokens';\\n  │ ^^^^^^^^^^^^^\\n  ╵\\n  - 1:1  root stylesheet\",\"toString\":\"The canonicalize() function can't return a Promise for synchronous compile functions.\\n  ╷\\n1 │ @use 'tokens';\\n  │ ^^^^^^^^^^^^^\\n  ╵\\n  - 1:1  root stylesheet\"}\n",
+        "stderr": ""
+      },
+      {
+        "timedOut": false,
+        "exitCode": 0,
+        "signal": null,
+        "stdout": "{\"outcome\":\"throw\",\"name\":\"Error\",\"message\":\"The canonicalize() function can't return a Promise for synchronous compile functions.\\n  ╷\\n1 │ @use 'tokens';\\n  │ ^^^^^^^^^^^^^\\n  ╵\\n  - 1:1  root stylesheet\",\"toString\":\"The canonicalize() function can't return a Promise for synchronous compile functions.\\n  ╷\\n1 │ @use 'tokens';\\n  │ ^^^^^^^^^^^^^\\n  ╵\\n  - 1:1  root stylesheet\"}\n",
+        "stderr": ""
+      }
+    ],
+    "sassEmbedded": [
+      {
+        "timedOut": true,
+        "exitCode": null,
+        "signal": "SIGKILL",
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "timedOut": true,
+        "exitCode": null,
+        "signal": "SIGKILL",
+        "stdout": "",
+        "stderr": ""
+      }
+    ]
+  }
+}

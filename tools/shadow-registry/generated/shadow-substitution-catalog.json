@@ -105,6 +105,71 @@
         ]
       },
       "digest": "1800acdcf6efc1eb97de67a1fa4bb27d7f0c77c583b270644e258543be0dcfc4"
+    },
+    {
+      "schema": 2,
+      "id": "rifty.shadow-substitution.sass-embedded.v2",
+      "trigger": {
+        "name": "sass-embedded",
+        "version": "1.100.0"
+      },
+      "admission": {
+        "kind": "exact-only",
+        "unsupportedFeature": "sass-embedded.version"
+      },
+      "acquisition": {
+        "kind": "registry",
+        "name": "sass",
+        "version": "1.100.0",
+        "dependencyProjection": {
+          "dependencies": {
+            "chokidar": "^5.0.0",
+            "immutable": "^5.1.5",
+            "source-map-js": ">=0.6.2 <2.0.0"
+          },
+          "optionalDependencies": {},
+          "omittedOptionalDependencies": {
+            "@parcel/watcher": "^2.4.1"
+          },
+          "peerDependencies": {},
+          "bundledDependencies": [],
+          "unsupportedFeature": "sass-embedded.acquisition"
+        }
+      },
+      "materialization": {
+        "name": "sass-embedded",
+        "version": "1.100.0",
+        "bin": {
+          "sass": "dist/bin/sass.js"
+        },
+        "files": [
+          {
+            "path": "dist/bin/sass.js",
+            "content": "#!/usr/bin/env node\nclass NotImplementedError extends Error {\n  constructor(feature) {\n    super('Not implemented: ' + feature);\n    this.name = 'NotImplementedError';\n    this.feature = feature;\n  }\n}\nif (process.argv.includes('--watch')) {\n  throw new NotImplementedError('sass-embedded.watch');\n}\nthrow new NotImplementedError('sass-embedded.cli');\n",
+            "sha256": "a35fd1e32de57ff67363540b4cbc6a698ccf66ef9aa1d0c3edebca7f86284124",
+            "bytes": 352
+          },
+          {
+            "path": "dist/lib/index.js",
+            "content": "'use strict';\n\nconst sass = require('../../../sass/sass.node.js');\nconst {fileURLToPath} = require('node:url');\n\nconst DEAD_EXPORTS = new Set(['cli_pkg_main_0_', 'load', 'loadParserExports_']);\nconst ASYNC_IMPORTER_ERROR = \"The canonicalize() function can't return a Promise for synchronous compile functions.\";\n\nclass NotImplementedError extends Error {\n  constructor(feature) {\n    super('Not implemented: ' + feature);\n    this.name = 'NotImplementedError';\n    this.feature = feature;\n  }\n}\n\nfunction adaptSpan(span) {\n  if (span == null || span.url !== null) return span;\n  return new Proxy(span, {\n    get(target, key) {\n      return key === 'url' ? undefined : Reflect.get(target, key, target);\n    },\n  });\n}\n\nfunction absoluteFirstFrame(stack, url) {\n  if (typeof stack !== 'string' || url == null) return stack;\n  let path;\n  try {\n    path = fileURLToPath(url);\n  } catch {\n    return stack;\n  }\n  const newline = stack.indexOf('\\n');\n  const first = newline === -1 ? stack : stack.slice(0, newline);\n  const position = first.search(/ \\d+:\\d+(?:\\s|$)/);\n  if (position === -1) return stack;\n  const adapted = path + first.slice(position);\n  return newline === -1 ? adapted : adapted + stack.slice(newline);\n}\n\nfunction adaptLoggerDetails(details, fallbackUrl) {\n  if (details == null || typeof details !== 'object') return details;\n  const stack = absoluteFirstFrame(details.stack, details.span?.url ?? fallbackUrl);\n  return stack === details.stack ? details : {...details, stack};\n}\n\nfunction adaptCompileOptions(options) {\n  const adapted = options == null\n    ? {alertColor: false}\n    : typeof options === 'object' && options.alertColor == null\n      ? {...options, alertColor: false}\n      : options;\n  if (adapted == null || typeof adapted !== 'object' || adapted.logger == null) return adapted;\n  const logger = adapted.logger;\n  return {\n    ...adapted,\n    logger: {\n      ...logger,\n      warn(message, details) {\n        return logger.warn(message, adaptLoggerDetails(details, adapted.url));\n      },\n    },\n  };\n}\n\nfunction adaptCompileArgs(args) {\n  if (args.length === 0) return args;\n  return [args[0], adaptCompileOptions(args[1]), ...args.slice(2)];\n}\n\nfunction adaptException(error) {\n  if (!(error instanceof sass.Exception) || error.message.startsWith(ASYNC_IMPORTER_ERROR)) {\n    return error;\n  }\n  const span = Reflect.get(error, 'span', error);\n  const originalStack = Reflect.get(error, 'sassStack', error);\n  const stack = absoluteFirstFrame(originalStack, span?.url);\n  const pathMessage = stack === originalStack\n    ? error.message\n    : error.message.replace(originalStack.trimEnd(), stack.trimEnd());\n  const message = pathMessage.startsWith('Error: ') ? pathMessage : 'Error: ' + pathMessage;\n  return new Proxy(error, {\n    get(target, key) {\n      if (key === 'message') return message;\n      if (key === 'toString') return () => message;\n      if (key === 'sassStack') return stack;\n      if (key === 'span') return adaptSpan(span);\n      return Reflect.get(target, key, target);\n    },\n  });\n}\n\nfunction adaptFailure(error, compilerKind) {\n  if (error instanceof Error && error.message === 'Compiler has already been disposed.') {\n    return new Error('Compiler caused error: ' + compilerKind + ' compiler has already been disposed.');\n  }\n  return adaptException(error);\n}\n\nfunction syncCall(run, compilerKind) {\n  try {\n    return run();\n  } catch (error) {\n    throw adaptFailure(error, compilerKind);\n  }\n}\n\nasync function asyncCall(run, compilerKind) {\n  try {\n    return await run();\n  } catch (error) {\n    throw adaptFailure(error, compilerKind);\n  }\n}\n\nconst compilerTargets = new WeakMap();\nconst SYNC_COMPILER_INTERNAL_KEYS = new Set([\n  'process',\n  'compilationId',\n  'dispatchers',\n  'stdout$',\n  'stderr$',\n  'disposed',\n  'messageTransformer',\n]);\nconst ASYNC_COMPILER_INTERNAL_KEYS = new Set([\n  'process',\n  'compilationId',\n  'compilations',\n  'disposed',\n  'messageTransformer',\n  'exit$',\n  'stdout$',\n  'stderr$',\n]);\n\nfunction compilerTarget(compiler) {\n  const target = compilerTargets.get(compiler);\n  if (target === undefined) throw new TypeError('Illegal compiler invocation');\n  return target;\n}\n\nfunction initializedCompiler(Constructor, target, internalKeys) {\n  const compiler = Object.create(Constructor.prototype);\n  const proxy = new Proxy(compiler, {\n    ownKeys() {\n      throw new NotImplementedError('sass-embedded.compiler-internal-reflection');\n    },\n    get(target, key, receiver) {\n      if (internalKeys.has(key)) {\n        throw new NotImplementedError('sass-embedded.compiler-internal-reflection');\n      }\n      return Reflect.get(target, key, receiver);\n    },\n    has(target, key) {\n      if (internalKeys.has(key)) {\n        throw new NotImplementedError('sass-embedded.compiler-internal-reflection');\n      }\n      return Reflect.has(target, key);\n    },\n    getOwnPropertyDescriptor(target, key) {\n      if (internalKeys.has(key)) {\n        throw new NotImplementedError('sass-embedded.compiler-internal-reflection');\n      }\n      return Reflect.getOwnPropertyDescriptor(target, key);\n    },\n  });\n  compilerTargets.set(proxy, target);\n  return proxy;\n}\n\nclass Compiler {\n  constructor(_direct) {\n    throw new NotImplementedError('sass-embedded.compiler-construction-liveness');\n  }\n\n  compile(path, options) {\n    const target = compilerTarget(this);\n    const args = adaptCompileArgs(Array.from(arguments));\n    return syncCall(() => Reflect.apply(target.compile, target, args), 'Sync');\n  }\n\n  compileString(source, options) {\n    const target = compilerTarget(this);\n    const args = adaptCompileArgs(Array.from(arguments));\n    return syncCall(() => Reflect.apply(target.compileString, target, args), 'Sync');\n  }\n\n  dispose() {\n    const target = compilerTarget(this);\n    return Reflect.apply(target.dispose, target, arguments);\n  }\n}\n\nclass AsyncCompiler {\n  constructor(_direct) {\n    throw new NotImplementedError('sass-embedded.compiler-construction-liveness');\n  }\n\n  compileAsync(path, options) {\n    const target = compilerTarget(this);\n    const args = adaptCompileArgs(Array.from(arguments));\n    return asyncCall(() => Reflect.apply(target.compileAsync, target, args), 'Async');\n  }\n\n  compileStringAsync(source, options) {\n    const target = compilerTarget(this);\n    const args = adaptCompileArgs(Array.from(arguments));\n    return asyncCall(() => Reflect.apply(target.compileStringAsync, target, args), 'Async');\n  }\n\n  async dispose() {\n    const target = compilerTarget(this);\n    await Reflect.apply(target.dispose, target, arguments);\n  }\n}\n\nfunction initCompiler(...args) {\n  return initializedCompiler(Compiler, sass.initCompiler(...args), SYNC_COMPILER_INTERNAL_KEYS);\n}\n\nasync function initAsyncCompiler(...args) {\n  const target = await sass.initAsyncCompiler(...args);\n  return initializedCompiler(AsyncCompiler, target, ASYNC_COMPILER_INTERNAL_KEYS);\n}\n\nfunction legacyOptions(options) {\n  if (options == null || typeof options !== 'object' || options.logger == null) return options;\n  const logger = options.logger;\n  return {\n    ...options,\n    logger: {\n      ...logger,\n      warn(message, details) {\n        if (details?.deprecationType?.id === 'legacy-js-api') {\n          process.stderr.write('Deprecation [legacy-js-api]: ' + message + '\\n');\n          return;\n        }\n        const adapted = adaptLoggerDetails(details, options.url);\n        const stack = typeof adapted?.stack === 'string'\n          ? adapted.stack.replace(/^stdin /, '- ')\n          : adapted?.stack;\n        logger.warn(message, {...adapted, stack});\n      },\n    },\n  };\n}\n\nconst facade = {};\nfor (const [key, value] of Object.entries(sass)) {\n  if (!DEAD_EXPORTS.has(key)) facade[key] = value;\n}\n\nfacade.info = 'sass-embedded\\t1.100.0';\nfacade.compile = (...args) => syncCall(() => sass.compile(...adaptCompileArgs(args)), 'Sync');\nfacade.compileAsync = (...args) => asyncCall(() => sass.compileAsync(...adaptCompileArgs(args)), 'Async');\nfacade.compileString = (...args) => syncCall(() => sass.compileString(...adaptCompileArgs(args)), 'Sync');\nfacade.compileStringAsync = (...args) => asyncCall(() => sass.compileStringAsync(...adaptCompileArgs(args)), 'Async');\nfacade.renderSync = (options) => syncCall(() => sass.renderSync(legacyOptions(options)), 'Sync');\nfacade.render = (options, callback) => sass.render(legacyOptions(options), (error, result) => callback(error == null ? null : adaptFailure(error, 'Async'), result));\n\nObject.defineProperties(facade, {\n  Compiler: {enumerable: true, configurable: true, get() { return Compiler; }},\n  AsyncCompiler: {enumerable: true, configurable: true, get() { return AsyncCompiler; }},\n  initCompiler: {enumerable: true, configurable: true, get() { return initCompiler; }},\n  initAsyncCompiler: {enumerable: true, configurable: true, get() { return initAsyncCompiler; }},\n});\n\nmodule.exports = facade;\n",
+            "sha256": "bbad4f18440a1be93ff9ca784331406726dfe499c7bd89621e50deb2198cf603",
+            "bytes": 8867
+          },
+          {
+            "path": "dist/lib/index.mjs",
+            "content": "import cjs from './index.js';\n\nconst facade = {\n  ...cjs,\n  get Compiler() { return cjs.Compiler; },\n  get AsyncCompiler() { return cjs.AsyncCompiler; },\n  get initCompiler() { return cjs.initCompiler; },\n  get initAsyncCompiler() { return cjs.initAsyncCompiler; },\n  CalculationOperator: undefined,\n  CustomFunction: undefined,\n  ListSeparator: undefined,\n  PromiseOr: undefined,\n};\n\nexport const {\n  AsyncCompiler,\n  CalculationInterpolation,\n  CalculationOperation,\n  CalculationOperator,\n  Compiler,\n  CustomFunction,\n  Exception,\n  FALSE,\n  ListSeparator,\n  Logger,\n  NULL,\n  NodePackageImporter,\n  PromiseOr,\n  SassArgumentList,\n  SassBoolean,\n  SassCalculation,\n  SassColor,\n  SassFunction,\n  SassList,\n  SassMap,\n  SassMixin,\n  SassNumber,\n  SassString,\n  TRUE,\n  Value,\n  Version,\n  compile,\n  compileAsync,\n  compileString,\n  compileStringAsync,\n  deprecations,\n  info,\n  initAsyncCompiler,\n  initCompiler,\n  render,\n  renderSync,\n  sassFalse,\n  sassNull,\n  sassTrue,\n  types,\n} = facade;\n\nexport default facade;\n",
+            "sha256": "82fd937f1d01dff1a9b4a8ed9ca4b2f7af38213a87201c889d5d7a4437294306",
+            "bytes": 1023
+          },
+          {
+            "path": "package.json",
+            "content": "{\n  \"name\": \"sass-embedded\",\n  \"version\": \"1.100.0\",\n  \"main\": \"dist/lib/index.js\",\n  \"exports\": {\n    \"import\": {\n      \"default\": \"./dist/lib/index.mjs\"\n    },\n    \"default\": \"./dist/lib/index.js\"\n  },\n  \"bin\": {\n    \"sass\": \"dist/bin/sass.js\"\n  }\n}",
+            "sha256": "3c289f237ed4edf6e6d312fefdf1c5dfa1739f7a0ad3d710b2b33a50d9246362",
+            "bytes": 251
+          }
+        ]
+      },
+      "digest": "eb0ca99df87e4df12d1fc3ec5b7fe8eb563cf68fe9527d7997c7e650fca95712"
     }
   ],
   "assets": [
@@ -122,5 +187,5 @@
       "maxUnpackedBytes": 14483968
     }
   ],
-  "digest": "a037016265e1c348254b3f067403278f5baee8b1f39e2bcd16f535fd0b9c3b52"
+  "digest": "beae1cd857dcf1af520842eb1633bf2ba9c390d9835f5552d914b2f7be57d82c"
 }

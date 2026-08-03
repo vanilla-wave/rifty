@@ -7,7 +7,60 @@ import {
   shadowDigest,
   shadowSha256,
 } from './index.ts';
+import type { BuiltinShadowSubstitutionCatalog } from './model.ts';
 import sha256FixedVectors from './sha256-fixed-vectors.json';
+
+function recordAt(value: unknown, path: readonly PropertyKey[]): Record<PropertyKey, unknown> {
+  let current = value;
+  for (const key of path) {
+    if (current === null || typeof current !== 'object') {
+      throw new Error(`test fixture path ${path.map(String).join('.')} is not an object`);
+    }
+    current = Reflect.get(current, key);
+  }
+  if (current === null || typeof current !== 'object') {
+    throw new Error(`test fixture path ${path.map(String).join('.')} is not an object`);
+  }
+  return current as Record<PropertyKey, unknown>;
+}
+
+function resignCatalog(catalog: BuiltinShadowSubstitutionCatalog): void {
+  for (const recipe of catalog.recipes) {
+    const record = recipe as unknown as Record<string, unknown>;
+    const { digest: _digest, ...payload } = record;
+    Reflect.set(record, 'digest', shadowDigest(payload));
+  }
+  const record = catalog as unknown as Record<string, unknown>;
+  const { digest: _digest, ...payload } = record;
+  Reflect.set(record, 'digest', shadowDigest(payload));
+}
+
+function mutateMaterializationFile(
+  catalog: BuiltinShadowSubstitutionCatalog,
+  recipeIndex: number,
+  path: string,
+): void {
+  const files = recordAt(catalog, ['recipes', recipeIndex, 'materialization']).files;
+  if (!Array.isArray(files)) throw new Error('sass materialization files are missing');
+  const file = files.find(
+    (candidate) =>
+      candidate !== null &&
+      typeof candidate === 'object' &&
+      Reflect.get(candidate, 'path') === path,
+  );
+  if (!file) throw new Error(`sass materialization file ${path} is missing`);
+  const current = String(Reflect.get(file, 'content'));
+  const content =
+    path === 'package.json'
+      ? JSON.stringify({
+          ...(JSON.parse(current) as Record<string, unknown>),
+          description: 'drift',
+        })
+      : `${current}\n// drift`;
+  Reflect.set(file, 'content', content);
+  Reflect.set(file, 'bytes', new TextEncoder().encode(content).byteLength);
+  Reflect.set(file, 'sha256', shadowSha256(content));
+}
 
 describe('builtin shadow substitution catalog contract', () => {
   it('is exactly the generated digest projection of the digest-free source', () => {
@@ -84,6 +137,67 @@ describe('builtin shadow substitution catalog contract', () => {
     );
   });
 
+  it('owns the exact install-only sass-embedded facade over the official Sass projection', () => {
+    const sass = builtinShadowSubstitutionCatalog.recipes.find(
+      (recipe) => recipe.trigger.name === 'sass-embedded',
+    );
+    if (!sass) throw new Error('builtin sass-embedded recipe is missing');
+
+    expect(sass).toMatchObject({
+      schema: 2,
+      id: 'rifty.shadow-substitution.sass-embedded.v2',
+      trigger: { name: 'sass-embedded', version: '1.100.0' },
+      admission: { kind: 'exact-only', unsupportedFeature: 'sass-embedded.version' },
+      acquisition: {
+        kind: 'registry',
+        name: 'sass',
+        version: '1.100.0',
+        dependencyProjection: {
+          dependencies: {
+            chokidar: '^5.0.0',
+            immutable: '^5.1.5',
+            'source-map-js': '>=0.6.2 <2.0.0',
+          },
+          optionalDependencies: {},
+          omittedOptionalDependencies: { '@parcel/watcher': '^2.4.1' },
+          peerDependencies: {},
+          bundledDependencies: [],
+          unsupportedFeature: 'sass-embedded.acquisition',
+        },
+      },
+      materialization: {
+        name: 'sass-embedded',
+        version: '1.100.0',
+        bin: { sass: 'dist/bin/sass.js' },
+      },
+    });
+    expect(sass.binding).toBeUndefined();
+    expect(sass.materialization.files.map((file) => file.path)).toEqual([
+      'dist/bin/sass.js',
+      'dist/lib/index.js',
+      'dist/lib/index.mjs',
+      'package.json',
+    ]);
+
+    const manifestFile = sass.materialization.files.find((file) => file.path === 'package.json');
+    if (!manifestFile) throw new Error('sass-embedded facade manifest is missing');
+    const manifest = JSON.parse(manifestFile.content) as Readonly<Record<string, unknown>>;
+    expect(manifest).toEqual({
+      name: 'sass-embedded',
+      version: '1.100.0',
+      main: 'dist/lib/index.js',
+      exports: {
+        import: { default: './dist/lib/index.mjs' },
+        default: './dist/lib/index.js',
+      },
+      bin: { sass: 'dist/bin/sass.js' },
+    });
+    const paths = new Set(sass.materialization.files.map((file) => file.path));
+    expect(paths.has('dist/lib/index.js')).toBe(true);
+    expect(paths.has('dist/lib/index.mjs')).toBe(true);
+    expect(paths.has('dist/bin/sass.js')).toBe(true);
+  });
+
   it('rejects forged identity and duplicate materialization members at ingress', () => {
     expect(() =>
       decodeBuiltinShadowSubstitutionCatalog({
@@ -109,6 +223,140 @@ describe('builtin shadow substitution catalog contract', () => {
       ],
     };
     expect(() => decodeBuiltinShadowSubstitutionCatalog(forged)).toThrow(/duplicate path/i);
+  });
+
+  it('rejects every re-signed Sass policy or materialization mutation at builtin ingress', () => {
+    const baseline = structuredClone(builtinShadowSubstitutionCatalog);
+    const sassIndex = baseline.recipes.findIndex(
+      (recipe) => recipe.trigger.name === 'sass-embedded',
+    );
+    if (sassIndex === -1) throw new Error('builtin sass-embedded recipe is missing');
+
+    const cases: readonly Readonly<{
+      label: string;
+      mutate: (catalog: BuiltinShadowSubstitutionCatalog, recipeIndex: number) => void;
+    }>[] = [
+      {
+        label: 'admission kind',
+        mutate(catalog, recipeIndex) {
+          Reflect.set(
+            recordAt(catalog, ['recipes', recipeIndex, 'admission']),
+            'kind',
+            'semver-admits',
+          );
+        },
+      },
+      {
+        label: 'required dependencies',
+        mutate(catalog, recipeIndex) {
+          Reflect.set(
+            recordAt(catalog, [
+              'recipes',
+              recipeIndex,
+              'acquisition',
+              'dependencyProjection',
+              'dependencies',
+            ]),
+            'immutable',
+            '^6.0.0',
+          );
+        },
+      },
+      {
+        label: 'retained optional dependencies',
+        mutate(catalog, recipeIndex) {
+          const projection = recordAt(catalog, [
+            'recipes',
+            recipeIndex,
+            'acquisition',
+            'dependencyProjection',
+          ]);
+          Reflect.set(recordAt(projection, ['optionalDependencies']), '@parcel/watcher', '^2.4.1');
+          Reflect.deleteProperty(
+            recordAt(projection, ['omittedOptionalDependencies']),
+            '@parcel/watcher',
+          );
+        },
+      },
+      {
+        label: 'omitted optional dependencies',
+        mutate(catalog, recipeIndex) {
+          Reflect.set(
+            recordAt(catalog, [
+              'recipes',
+              recipeIndex,
+              'acquisition',
+              'dependencyProjection',
+              'omittedOptionalDependencies',
+            ]),
+            '@parcel/watcher',
+            '^3.0.0',
+          );
+        },
+      },
+      {
+        label: 'peer dependencies',
+        mutate(catalog, recipeIndex) {
+          Reflect.set(
+            recordAt(catalog, [
+              'recipes',
+              recipeIndex,
+              'acquisition',
+              'dependencyProjection',
+              'peerDependencies',
+            ]),
+            'unexpected-peer',
+            '^1.0.0',
+          );
+        },
+      },
+      {
+        label: 'bundled dependencies',
+        mutate(catalog, recipeIndex) {
+          const projection = recordAt(catalog, [
+            'recipes',
+            recipeIndex,
+            'acquisition',
+            'dependencyProjection',
+          ]);
+          Reflect.set(projection, 'bundledDependencies', ['chokidar']);
+        },
+      },
+      ...(
+        ['dist/bin/sass.js', 'dist/lib/index.js', 'dist/lib/index.mjs', 'package.json'] as const
+      ).map((path) => ({
+        label: `${path} bytes`,
+        mutate(catalog: BuiltinShadowSubstitutionCatalog, recipeIndex: number) {
+          mutateMaterializationFile(catalog, recipeIndex, path);
+        },
+      })),
+      {
+        label: 'bin target',
+        mutate(catalog, recipeIndex) {
+          Reflect.set(
+            recordAt(catalog, ['recipes', recipeIndex, 'materialization', 'bin']),
+            'sass',
+            'dist/bin/missing.js',
+          );
+        },
+      },
+      {
+        label: 'runtime binding',
+        mutate(catalog, recipeIndex) {
+          Reflect.set(recordAt(catalog, ['recipes', recipeIndex]), 'binding', {
+            adapterId: 'rifty.runtime-adapter.esbuild.v1',
+            assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
+          });
+        },
+      },
+    ];
+
+    for (const mutation of cases) {
+      const forged = structuredClone(baseline);
+      mutation.mutate(forged, sassIndex);
+      resignCatalog(forged);
+      expect(() => decodeBuiltinShadowSubstitutionCatalog(forged), mutation.label).toThrow();
+    }
   });
 
   it('rejects getters, non-normal paths, invalid SRI, and recomputed foreign builtin ids', () => {

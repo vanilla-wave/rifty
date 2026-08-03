@@ -6,7 +6,7 @@ created: 2026-07-23
 value: Real projects that depend on native-backed packages (esbuild directly or through Vite, sass-embedded) install and run faithfully in the browser through one builtin, parity-proven substitution registry
 user_story: As a browser-IDE user, I want npm install of a project using esbuild or sass-embedded to just work — direct require, through Vite, offline on reopen — but today each native binding stops the project or costs a re-acquisition
 tier: production
-sources: [ADR-0307, ADR-0309, ADR-0310, ADR-0335, PR-160]
+sources: [ADR-0307, ADR-0309, ADR-0344, ADR-0335, PR-160]
 goal_baseline: e34bd3db82c5088f57c32934b3a45b001b578d3e
 ---
 
@@ -85,11 +85,16 @@ Contract+RED → Final+GREEN):
 5. `npm-client/shadow-recipe-v2-authority` —
    **recipe-v2-authority**: blocked pre-pickup predecessor; its six recorded
    Contract+RED blockers forced explicit materialized-bin,
-   acquisition/replay, and broad projection successors. No source pickup.
+   acquisition/replay, and projection follow-ups. The real Sass carrier owns
+   reachable non-bundled-required and omitted-optional execution; retained
+   optional/peer/scoped residuals have no honest builtin carrier and remain
+   ordinary backlog outside this frozen goal. No source pickup.
 6. `npm-client/sass-embedded-substitution` — **sass-scale-proof**: exact Sass
-   capsule per the spike-decided pattern, real Node/Vite acceptance,
-   generic-file no-change gate. Draft until its full differential artifact and
-   fault matrix are committed; required for epic closure, not optional.
+   capsule per the spike-decided pattern, initialized compiler lifecycle and
+   real Node/Vite acceptance, explicit direct-construction liveness gap selected
+   by the user on 2026-08-03, data-driven generic seam gate, and official Sass
+   projection traversal. Fresh post-refinement Contract+RED passed at
+   `e062b0bac`; ready and required for epic closure, not optional.
 7. `playground/shadow-series-measured-cleanup` — **measured-cleanup**:
    independently deletable leftovers behind reachability gates (arch exemption
    narrowing, owner READMEs, dead code imported by extraction).

@@ -5,8 +5,6 @@ title: npm 11 peer placement authority — traversal, conflicts, and replay
 created: 2026-07-28
 why: the recipe-v2 Contract+RED exposed that verified peer metadata still feeds only a warning pass, so missing peers, conflicting peers, their ordinary dependencies, and offline replay diverge from npm 11
 user_story: As a browser-IDE user installing a package with peer dependencies, I want the same dependency tree or loud conflict that npm 11 produces, but today rifty can report success with an incomplete or incompatible tree
-epic: honest-shadow-substitutions
-blocked_by: [npm-client/shadow-recipe-v2-dependency-projection-execution]
 sources: [ADR-0335, docs/backlog/npm-client/reference/npm-11-peer-placement-probe.md]
 code:
   - packages/npm-client/src/installer.ts
@@ -19,11 +17,11 @@ code:
 The second consecutive Contract+RED blocker on the recipe-v2 execution unit
 showed that npm peer traversal, placement, conflict resolution, lock facts, and
 replay are a separate behavioral authority from shadow acquisition projection
-and materialized bins. The dependency-projection predecessor verifies and hands
-off the exact non-empty peer map before tarball work. This required goal child
-owns consuming that verified map through the ordinary installer path; it is
-draft and deliberately unmapped from the epic Items/Budget until its own
-pre-pickup readiness window.
+and materialized bins. A future registry-backed recipe with peers must verify
+and hand off its exact map before tarball work, but neither current builtin
+recipe carries a non-empty peer map. This ordinary npm correctness item is
+therefore outside the frozen `honest-shadow-substitutions` goal; it does not
+block Sass or epic closure.
 
 Today the installer persists `peerDependencies` only for a post-install
 missing-peer warning. It neither resolves a missing peer and its dependency
@@ -132,3 +130,7 @@ registry requests.
 - `split-predecessor: d5ffb3d2de8a27b26a13f541d2e5d16260d4b8d8` —
   second consecutive Contract+RED blocker forced this unit split; checkpoint
   lineage is preserved rather than restarted.
+- `goal-recut: 2026-08-02` — peer placement is real npm correctness work, but
+  the frozen goal requires Sass with an empty peer map. Keep the npm 11 golden
+  and gap explicit as ordinary backlog; do not invent a shadow carrier or hold
+  Sass delivery behind it.
