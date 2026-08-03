@@ -1,14 +1,13 @@
-# glue — page-realm integration
+# glue — app-local browser integration
 
-Page-side ports, clients, and bridges connecting the UI to the owner worker and
-platform packages: `*-port.ts` (page↔owner request/reply), `*-client.ts` (frame
-marshaling: VFS, PTY, TS LS), project index/boot/seed, npm/git/preview/HMR
-wiring.
+Framework-free Playground policy and browser adapters: editor/file-tree state,
+SCM presentation, terminal UX, persistence, project seed/configuration, Monaco,
+HMR, and browser capability helpers.
 
-Belongs here: the page-realm side of ONE channel or concern, one file per
-channel. Doesn't: owner-realm authority (→ `../workers`), UI state/rendering
-(→ `../adapters`, `../components`), Workbench public surface + protocol
-(→ `../workbench`), generic Node/platform behavior (→ `packages/*`).
+Belongs here: app-specific state or adaptation shared by UI surfaces. Doesn't:
+page↔owner ports, Workbench protocol, project/package authority, or worker
+lifecycle (→ `@riftydev/workbench`); Solid rendering (→ `../components` and
+`../adapters`); generic Node/platform behavior (→ `packages/*`).
 
 Known debt: sibling request/reply correlation engines await one substrate
 (`backlog: playground/correlated-broadcast-bridge-helper`); minting another

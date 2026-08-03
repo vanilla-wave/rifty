@@ -98,8 +98,8 @@ registry requests.
 ## Out of scope
 
 - Recipe schema/admission, acquisition projection verification, bundled
-  extraction, materialized bins, v2 trace migration, and Workbench FIFO; the
-  predecessor owns them.
+  extraction, materialized bins, v2 trace migration, and Workbench FIFO;
+  ADR-0335 and the landed recipe-v2 split authorities own them.
 - `peerDependenciesMeta.optional`, `--legacy-peer-deps`, `--force`, workspaces,
   linked peers, cyclic peer graphs, and npm's general multi-peer backtracking.
   They loud-throw `NotImplementedError('npm.peer-optional')`,
@@ -117,8 +117,8 @@ registry requests.
 ## Decisions
 
 - The ordinary installer traversal owns peer execution for both normal and
-  shadow-acquired packages; the recipe-v2 predecessor owns only exact peer-map
-  verification.
+  shadow-acquired packages; the landed recipe-v2 data/acquisition authorities
+  own exact peer-map verification.
 - The npm 11 graph is the placement authority: direct incompatibility rejects,
   while a nested satisfiable peer environment nests source+peer and preserves
   the conflicting root peer.
