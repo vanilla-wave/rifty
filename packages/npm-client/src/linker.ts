@@ -370,9 +370,7 @@ function buildPreparedLockfile(
   const rootEntry: LockfileEntry = {
     version: rootVersion,
     dependencies:
-      rootDependencyMaps === undefined
-        ? flatTopLevel
-        : { ...rootDependencyMaps.dependencies },
+      rootDependencyMaps === undefined ? flatTopLevel : { ...rootDependencyMaps.dependencies },
   };
   if (rootDependencyMaps && Object.keys(rootDependencyMaps.devDependencies).length > 0) {
     rootEntry.devDependencies = { ...rootDependencyMaps.devDependencies };
