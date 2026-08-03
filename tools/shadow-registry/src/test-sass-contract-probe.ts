@@ -232,12 +232,22 @@ const reflectionGapOperation = (): ReflectionOperationTranscript => ({
 });
 
 const compilerReflectionGap = (
-  internalKeys: readonly string[],
+  embedded: CompilerReflectionTranscript,
+  gapKeys: readonly string[],
 ): CompilerReflectionTranscript => ({
   ownKeys: reflectionGapOperation(),
-  getKinds: Object.fromEntries(internalKeys.map((key) => [key, reflectionGapOperation()])),
-  hasKeys: Object.fromEntries(internalKeys.map((key) => [key, reflectionGapOperation()])),
-  descriptors: Object.fromEntries(internalKeys.map((key) => [key, reflectionGapOperation()])),
+  getKinds: {
+    ...embedded.getKinds,
+    ...Object.fromEntries(gapKeys.map((key) => [key, reflectionGapOperation()])),
+  },
+  hasKeys: {
+    ...embedded.hasKeys,
+    ...Object.fromEntries(gapKeys.map((key) => [key, reflectionGapOperation()])),
+  },
+  descriptors: {
+    ...embedded.descriptors,
+    ...Object.fromEntries(gapKeys.map((key) => [key, reflectionGapOperation()])),
+  },
 });
 
 export function sassFacadeContract(embedded: SassContractTranscript): SassContractTranscript {
@@ -249,13 +259,25 @@ export function sassFacadeContract(embedded: SassContractTranscript): SassContra
         ...embedded.rows.lifecycle,
         syncDirectConstruction: constructorLivenessGap,
         syncReflection: {
-          cjs: compilerReflectionGap(syncEmbeddedInternalKeys),
-          esm: compilerReflectionGap(syncEmbeddedInternalKeys),
+          cjs: compilerReflectionGap(
+            embedded.rows.lifecycle.syncReflection.cjs,
+            syncEmbeddedInternalKeys,
+          ),
+          esm: compilerReflectionGap(
+            embedded.rows.lifecycle.syncReflection.esm,
+            syncEmbeddedInternalKeys,
+          ),
         },
         asyncDirectConstruction: constructorLivenessGap,
         asyncReflection: {
-          cjs: compilerReflectionGap(asyncEmbeddedInternalKeys),
-          esm: compilerReflectionGap(asyncEmbeddedInternalKeys),
+          cjs: compilerReflectionGap(
+            embedded.rows.lifecycle.asyncReflection.cjs,
+            asyncEmbeddedInternalKeys,
+          ),
+          esm: compilerReflectionGap(
+            embedded.rows.lifecycle.asyncReflection.esm,
+            asyncEmbeddedInternalKeys,
+          ),
         },
       },
     },
@@ -535,6 +557,9 @@ const asyncEmbeddedInternalKeys = [
   'stderr$',
 ] as const;
 
+const syncObservedReflectionKeys = [...syncEmbeddedInternalKeys, '_disposed'] as const;
+const asyncObservedReflectionKeys = [...asyncEmbeddedInternalKeys, '_disposed'] as const;
+
 function reflectionOperation(run: () => unknown): ReflectionOperationTranscript {
   try {
     return { value: run(), error: null };
@@ -612,8 +637,8 @@ export async function probeSassContract(
   );
   const esmSyncCompiler = esmApi.initCompiler();
   const syncReflection = {
-    cjs: compilerReflection(syncCompiler, syncEmbeddedInternalKeys),
-    esm: compilerReflection(esmSyncCompiler, syncEmbeddedInternalKeys),
+    cjs: compilerReflection(syncCompiler, syncObservedReflectionKeys),
+    esm: compilerReflection(esmSyncCompiler, syncObservedReflectionKeys),
   };
   syncPeerCompiler.dispose();
   esmSyncCompiler.dispose();
@@ -645,8 +670,8 @@ export async function probeSassContract(
   );
   const esmAsyncCompiler = await esmApi.initAsyncCompiler();
   const asyncReflection = {
-    cjs: compilerReflection(asyncCompiler, asyncEmbeddedInternalKeys),
-    esm: compilerReflection(esmAsyncCompiler, asyncEmbeddedInternalKeys),
+    cjs: compilerReflection(asyncCompiler, asyncObservedReflectionKeys),
+    esm: compilerReflection(esmAsyncCompiler, asyncObservedReflectionKeys),
   };
   await asyncPeerCompiler.dispose();
   await esmAsyncCompiler.dispose();

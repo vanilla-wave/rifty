@@ -453,6 +453,10 @@
             "messageTransformer": {
               "value": "object",
               "error": null
+            },
+            "_disposed": {
+              "value": "undefined",
+              "error": null
             }
           },
           "hasKeys": {
@@ -482,6 +486,10 @@
             },
             "messageTransformer": {
               "value": true,
+              "error": null
+            },
+            "_disposed": {
+              "value": false,
               "error": null
             }
           },
@@ -558,6 +566,17 @@
                 "enumerable": true,
                 "configurable": true,
                 "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "_disposed": {
+              "value": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
                 "hasGetter": false,
                 "hasSetter": false
               },
@@ -606,6 +625,10 @@
             "messageTransformer": {
               "value": "object",
               "error": null
+            },
+            "_disposed": {
+              "value": "undefined",
+              "error": null
             }
           },
           "hasKeys": {
@@ -635,6 +658,10 @@
             },
             "messageTransformer": {
               "value": true,
+              "error": null
+            },
+            "_disposed": {
+              "value": false,
               "error": null
             }
           },
@@ -711,6 +738,17 @@
                 "enumerable": true,
                 "configurable": true,
                 "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "_disposed": {
+              "value": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
                 "hasGetter": false,
                 "hasSetter": false
               },
@@ -905,6 +943,10 @@
             "stderr$": {
               "value": "object",
               "error": null
+            },
+            "_disposed": {
+              "value": "undefined",
+              "error": null
             }
           },
           "hasKeys": {
@@ -938,6 +980,10 @@
             },
             "stderr$": {
               "value": true,
+              "error": null
+            },
+            "_disposed": {
+              "value": false,
               "error": null
             }
           },
@@ -1025,6 +1071,17 @@
                 "enumerable": true,
                 "configurable": true,
                 "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "_disposed": {
+              "value": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
                 "hasGetter": false,
                 "hasSetter": false
               },
@@ -1078,6 +1135,10 @@
             "stderr$": {
               "value": "object",
               "error": null
+            },
+            "_disposed": {
+              "value": "undefined",
+              "error": null
             }
           },
           "hasKeys": {
@@ -1111,6 +1172,10 @@
             },
             "stderr$": {
               "value": true,
+              "error": null
+            },
+            "_disposed": {
+              "value": false,
               "error": null
             }
           },
@@ -1198,6 +1263,17 @@
                 "enumerable": true,
                 "configurable": true,
                 "writable": true,
+                "hasGetter": false,
+                "hasSetter": false
+              },
+              "error": null
+            },
+            "_disposed": {
+              "value": {
+                "kind": "missing",
+                "enumerable": null,
+                "configurable": null,
+                "writable": null,
                 "hasGetter": false,
                 "hasSetter": false
               },
