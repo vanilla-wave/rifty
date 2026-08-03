@@ -230,8 +230,9 @@ ready-verdict: 2026-08-03 — Contract+RED @ e062b0bac244d0034685a82458bf38947b3
   a Sass-specific snapshot carrier.
 - `goal-recut: 2026-08-02` — remove the impossible generic "unproven API"
   catch-all. The exact namespace and finite Node differential are the positive
-  claim; only observed unsupported selectors, CLI/watch, and declaration
-  surfaces receive named gaps.
+  claim; only finite observed unsupported surfaces receive named gaps,
+  including direct-construction liveness, compiler internal reflection,
+  selectors, CLI/watch, and declarations.
 - `goal-recut: 2026-08-02` — decision-subagent superseded ADR-0310 with
   ADR-0344: proof coverage is not a runtime discriminator; unknown observed
   mismatches are RED-first parity defects or specific reachable gaps.

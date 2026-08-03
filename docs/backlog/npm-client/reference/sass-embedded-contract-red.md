@@ -69,9 +69,9 @@ GREEN.
 
 The independent constructor-liveness evidence is 1/1 GREEN. Its exact
 CJS/ESM × sync/async × two-attempt artifact retains the real embedded Dart
-child/process-group proof. `sassFacadeContract()` changes only the two rifty
-direct-construction transcript fields to the selected named gap; it does not
-rewrite the external oracle fixture.
+child/process-group proof. `sassFacadeContract()` changes only rifty's two
+selected gap surfaces: sync/async direct construction and CJS/ESM sync/async
+internal reflection. It does not rewrite the external oracle fixtures.
 
 Fresh post-ready audit carrier
 `4c57343215c643e728061267770b554fc16f5537`, completed by
@@ -250,13 +250,13 @@ produce the results above.
 | Fault class | Reachable proof |
 |---|---|
 | corrupt-input | re-signed catalog/materialization mutations; all official-manifest maps; lock/trace injections; corrupt/partial parent and child archives |
-| observable-order | the exact official pure-Sass constructor exports are instrumented and CJS/ESM direct construction records zero target entries before the named rejection; the liveness oracle and capsule prove no target resource survives; non-exact admission and projection drift reject before forbidden acquisition/publication; CLI/watch remain loud after facade install; importer/logger/initialized-compiler order is the shared Node probe |
+| observable-order | the exact official pure-Sass constructor exports are instrumented and CJS/ESM direct construction records zero target entries before the named rejection; the liveness oracle and capsule prove no target resource survives; every observed embedded-only reflection name rejects independently before an absent/fabricated value while `_disposed` remains absent; non-exact admission and projection drift reject before forbidden acquisition/publication; CLI/watch remain loud after facade install; importer/logger/initialized-compiler order is the shared Node probe |
 | provenance-lie | exact official fresh, raw replay, durable reopen, general-Eddy, tree, lock, trace, and zero-native/watcher ledgers |
 | unbounded-read | Sass parent/child reached stalls plus inherited 8/8 registry no-progress, byte-cap, retry, and cancellation suite |
 | torn-state | parked facade and launcher writes publish no lock/report; exact retry reconciles |
 | quota-perm-fail | facade and launcher `ENOSPC`/`EACCES` stay loud and unpublished; exact retry reconciles |
 | concurrent-same-key | Sass owner FIFO parks the first lock write; both callers converge on one persisted lock, complete v2 trace, and exact materialized bytes |
-| sibling-drift | one capsule and shared nine-row probe feed direct CJS/ESM and real Chromium Vite dev/HMR/build/reopen; one helper replaces only the two selected constructor-gap fields while exact liveness evidence stays unchanged |
+| sibling-drift | one capsule and shared nine-row probe feed direct CJS/ESM and real Chromium Vite dev/HMR/build/reopen; one helper derives only the selected constructor-liveness and internal-reflection gaps while exact external fixtures and liveness evidence stay unchanged |
 
 The contract prescribes only Sass-owned catalog/facade data, execution of the
 existing generic dependency projection, strict replay validation at the
