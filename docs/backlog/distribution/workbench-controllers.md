@@ -45,15 +45,6 @@ close-path source. Now observed from two distinct callers — the sealed fixture
 teardown as well as the instant-Vite active close — which places the nested
 boundary in the shared fixture close, not in one spec.
 
-2026-08-03 run `30778688580` retained the masked primary trace: owner teardown
-removed a pending process reservation, then an admitted nodemon restart reached
-late `process.commit` and failed with `PID 15 has no matching reservation`.
-Classify the runtime race as `observable-order` at process-federation
-reserve/commit ↔ owner teardown; keep raw late commit loud. Deterministic RED
-parks that interval and requires shutdown cancellation above commit authority.
-The sealed fixture also needs phase-labelled recursive error serialization so
-its cleanup cannot mask the primary failure at the Playwright boundary.
-
 ## Public contract
 
 The package root exports only:
