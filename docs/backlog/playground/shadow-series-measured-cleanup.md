@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Measured cleanup after the shadow series — emitted-runtime reachability
 created: 2026-07-23
 why: the Workbench extraction left runtime-bearing symbols that no sealed package entry can execute, while stale owner and predecessor docs still describe authorities moved by the series
@@ -91,6 +91,8 @@ state that the directory now owns.
   surface.
 
 ## Decisions
+
+ready-verdict: 2026-08-03 — Contract+RED @ f54bf09b7
 
 - Reachability means emitted runtime reachable from the package's seven
   declared exports. Type imports keep source ownership but cannot justify

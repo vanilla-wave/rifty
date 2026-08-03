@@ -6,7 +6,7 @@ created: 2026-06-14
 why: ADR-0143 decided D (one owner-worker holds node_modules and supervises shell/CLI/execSync execution; PAGE = viewer). It is milestone-scale + multi-ADR; this tracks the phases, decided forks, ordering, and per-phase status so the work is explicit, not silent backlog.
 user_story: As a developer at the rifty prompt, I `npm install cowsay` then run `cowsay hi` and want the CLI to actually run (and the editor/explorer to reflect the same tree) — originally the bin worker could not see the shell's node_modules (ENOENT). Delivered when one owner-worker owns install + execution supervision and the PAGE is a thin viewer.
 sources: [ADR-0143, ADR-0144, ADR-0077, ADR-0011, ADR-0080, ADR-0072, M11]
-code: [packages/kernel/src/worker-entry.ts, packages/kernel/src/spawn-worker.ts, apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/glue/realVite.ts, apps/playground/src/adapters/terminal-manager.ts, packages/shell/src/shell.ts, apps/playground/src/App.tsx]
+code: [packages/kernel/src/worker-entry.ts, packages/kernel/src/spawn-worker.ts, apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/glue/realVite.ts, apps/playground/src/adapters/terminal-manager.ts, apps/playground/src/workers/owner-bin-executor.ts, apps/playground/src/workers/owner-bin-executor.test.ts, packages/shell/src/shell.ts, apps/playground/src/App.tsx]
 ---
 
 ## Context
@@ -36,6 +36,15 @@ ADR-0143 chose **D (owner-worker)** over B (SAB fs-proxy). D is milestone-scale 
 - P2: per-session isolation — N in-realm Shells in one owner (shared thread) vs one worker-process per session (needs P6). v1 = shared; isolation at P6.
 - P2: cwd/prompt ownership — owner is source of truth, pushes cwd snapshots to PAGE for the prompt + persistence.
 - P4: is the dev server a co-resident task or a child worker-process the owner supervises? v1 co-resident; supervisor at P6.
+
+## Measured residual (2026-08-03)
+
+P6a replaced the app-local in-realm `createOwnerBinExecutor`, but
+`apps/playground/src/workers/owner-bin-executor.ts` and its self-only test still
+remain. Repository search finds no production caller; ADR-0150 and the live
+Workbench runtime both select the supervised child executor. Delete the pair
+through an app-build reachability gate when this pre-shadow milestone is
+closed; it predates and is outside the frozen shadow-substitution goal.
 
 ## Implementation map — verified seams (2026-06-14)
 
