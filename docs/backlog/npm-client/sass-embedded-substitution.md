@@ -207,6 +207,8 @@ ADR-0344 evidence; each is a differential test:
 
 ready-verdict: 2026-08-03 — Contract+RED @ e062b0bac244d0034685a82458bf38947b364f8d — PASS: fresh origin/main@2df89ddea7b5eb2d494ba2c9f4b229a8e6e4a970 with zero production-source diff; exact Node/npm/Vite/Chromium artifacts and localized 8/129, 36/1, 94/0, 1/48, 1/21, 2/2, 6/4 plus browser/perf REDs settle every Acceptance, Parity, and reachable production-tier Fault row; user-selected option A is ADR-0344-consistent, externally pinned, and proves the direct-constructor named gap before pure-Sass target entry; no stale overlap, unowned mechanism, or unnecessary machinery remains; frozen goal Outcome, User scenario, tier, and Invariants at e34bd3db82c5088f57c32934b3a45b001b578d3e are unchanged and compatible.
 
+identity-refinement-verdict: 2026-08-03 — PASS: Contract+RED identity/reflection at 73c17a382bd36e63097951eed524dec734d063eb pins exact Node v24.16.0 constructor, prototype, method-identity, accessor-descriptor, and per-key CJS/ESM sync/async reflection behavior; pure-only `_disposed` remains absent, clean-archive execution localizes exactly 1 RED / 2 GREEN with evidence 3/3 GREEN and no extra policy RED, all ADR/item/reference/policy artifacts agree, and no production-source diff, overlap, behavioral fork, or new mechanism invalidates option A, the frozen goal, or ready status.
+
 - `post-pickup-demotion: 2026-08-02` — exact constructor liveness disproved the
   ready positive claim; attempt/checkpoint lineage and the complete frozen
   Acceptance/Parity text are retained in
