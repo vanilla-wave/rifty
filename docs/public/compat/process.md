@@ -16,7 +16,7 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 | Keepalive counts `setTimeout`/`setInterval` | ✅ | libuv-style refcount; loop stays alive while a refed timer exists |
 | Keepalive counts `setImmediate` | ✅ | |
 | Keepalive counts pending dynamic `import()` | ✅ | Both `loader.import` and routed user-code `import()` (`__import`) |
-| `unhandledrejection` → stderr + non-zero exit | ✅ | Record-not-swallow; never silent `exit 0`. Node parity (default warn + non-zero) |
+| `unhandledrejection` → stderr + non-zero exit | ⚠️ | Observed events are loud, but a detached rejection dispatched after the final zero-ref sample can race reap and exit 0. See `backlog/runtime-js/late-unhandled-rejection-drain` |
 | **Drain cap: a refed loop that never drains is force-killed** | ⚠️ | **Deliberate non-Node divergence.** At 30 s the worker exits 1 + a self-explanatory stderr line, where Node runs forever. Browser-worker safety-net against a genuine hang/leak — generous + loud. Legit-forever programs use `serve:true` (the cap never fires there). See ADR-0152 §4 |
 | Detached `fetch()` / network keepalive | ✅ | The global `fetch` is keepalive-counted: ref on dispatch, held until the response BODY is consumed (Node keeps the socket refed until the body is read). `http.request` to an external host routes through `fetch` (covered); loopback `http.request` is in-process (no socket); `https`/`net.connect` are loud-throws. A never-consumed body holds the realm to the drain cap (loud). ADR-0158 |
 | `fs.watch` / `fs.watchFile` keepalive | ✅ | The poll `setInterval` is keepalive-counted; `FSWatcher.ref()`/`.unref()` opt the realm in/out via the poll handle (Node parity) — an unrefed watcher no longer holds the realm to the drain cap |

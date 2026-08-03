@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "api": "sass-embedded",
-  "state": "contract-red",
+  "state": "final-green",
   "version": "1.100.0",
   "source": {
     "package": "sass",
@@ -67,7 +67,7 @@
       },
       {
         "id": "compiler-identity",
-        "notes": "Expose initialized compilers with the exported length-one constructor as their direct prototype constructor; preserve lifecycle export accessors and exact stable public method name, arity, and identity."
+        "notes": "Expose initialized compilers with the exported length-one constructor as their direct prototype constructor; preserve exact constructor and prototype descriptors, lifecycle export accessors, and public method name, arity, placement, and identity within and across instances."
       },
       {
         "id": "legacy-logger-routing",
@@ -86,7 +86,7 @@
     },
     {
       "surface": "Compile and initialized compiler lifecycle",
-      "notes": "The finite oracle pins repeated path/string compilation, sync/async disposal outcomes, exact post-dispose errors, lifecycle export accessors, exported constructor/prototype identity, and exact stable public method name, arity, and identity."
+      "notes": "The finite oracle pins repeated path/string compilation, sync/async disposal outcomes, exact post-dispose errors, lifecycle export accessors, exported constructor/prototype descriptors, and exact public method name, arity, placement, and identity within and across instances."
     },
     {
       "surface": "Modern importers, logger, source maps, and errors",
@@ -118,7 +118,7 @@
       "surface": "Initialized compiler internal reflection",
       "kind": "runtime-throw",
       "feature": "sass-embedded.compiler-internal-reflection",
-      "notes": "Exact embedded exposes live Dart process and dispatcher internals. The no-runtime facade does not fabricate those values; ownKeys and access to the observed internal names stay loud."
+      "notes": "Exact embedded exposes live Dart process and dispatcher internals. The no-runtime facade does not fabricate those values; ownKeys and each get/has/own-descriptor access to the observed embedded-only names stay loud, while pure-only _disposed remains absent."
     },
     {
       "surface": "Other versions and version ranges",
@@ -157,7 +157,7 @@
   ],
   "limitations": [
     "Only the exact sass-embedded@1.100.0 facade over exact sass@1.100.0 and the finite differential rows are claimed by this contract.",
-    "Contract+RED records intended behavior; supported rows stay partial until direct Node differential and real Chromium Vite acceptance are green.",
+    "Supported rows are proven by the exact Node differential and real Chromium Vite acceptance; named unsupported surfaces remain explicit failures.",
     "The sync-compile async-importer deadlock is an explicit deliberate divergence, never a parity claim."
   ]
 }

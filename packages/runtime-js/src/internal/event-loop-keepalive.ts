@@ -127,6 +127,8 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
         return;
       }
       if (state.refCount <= 0) {
+        // TODO(backlog: runtime-js/late-unhandled-rejection-drain): cover a late
+        // browser unhandledrejection task without a second drain owner.
         resolve();
         return;
       }

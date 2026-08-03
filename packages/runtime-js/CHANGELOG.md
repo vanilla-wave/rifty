@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Exact Node v24.0.0 `process.release` identity (ADR-0345).** Every owner and
+  spawned process gets an isolated, descriptor-faithful non-LTS release object.
 - **Worker-backed `child_process` plan and Node IPC (ADR-0326).** Recursive
   `spawn`/`fork` runs a fresh owner-FS Worker with validated stdio/default-JSON
   IPC and nodemon's finite `ps`/`SIGUSR2` forms; other forms stay loud gaps.

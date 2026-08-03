@@ -29,6 +29,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import {
   type BuiltinShadowSubstitutionRecipe,
+  type ShadowRegistryDependencyProjection,
   builtinShadowSubstitutionCatalog,
 } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
@@ -86,6 +87,7 @@ import {
   type PackageBinSource,
   type PreparedInstallPackage,
   type ResolvedPackage,
+  type RootLockfileDependencyMaps,
   buildPreparedInstallLockfile,
   linkInstallPackageBins,
   linkInstallPackageFiles,
@@ -388,6 +390,7 @@ interface NormalizedInstallRequest {
   readonly rootVersion: string;
   readonly dependencies: Record<string, string>;
   readonly optionalDependencies: Record<string, string>;
+  readonly rootLockfileDependencyMaps: RootLockfileDependencyMaps;
   readonly opts: InstallOptions;
 }
 
@@ -460,6 +463,7 @@ export async function install(
     rootVersion: normalizedRootVersion,
     dependencies,
     optionalDependencies,
+    rootLockfileDependencyMaps,
     opts,
   } = request;
   throwIfAborted(opts.signal);
@@ -660,6 +664,7 @@ export async function install(
     preparedPackages,
     shadowPlan,
     embeddedSources,
+    rootLockfileDependencyMaps,
   );
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
@@ -885,6 +890,7 @@ async function normalizeInstallArgs(
   let normalizedRootVersion: string | undefined;
   let dependencies: Record<string, string> | undefined;
   let optionalDependencies: Record<string, string> = {};
+  let rootLockfileDependencyMaps: RootLockfileDependencyMaps | undefined;
   let opts: InstallOptions | undefined;
   let shouldReadPackageJson = false;
 
@@ -909,6 +915,11 @@ async function normalizeInstallArgs(
     const manifest = await readRootPackageJson(opts.vfs, opts.cwd);
     rootName = rootName ?? manifest.name ?? 'root';
     normalizedRootVersion = normalizedRootVersion ?? manifest.version ?? '0.0.0';
+    rootLockfileDependencyMaps = {
+      dependencies: { ...manifest.dependencies },
+      devDependencies: { ...manifest.devDependencies },
+      optionalDependencies: { ...manifest.optionalDependencies },
+    };
     dependencies = { ...manifest.devDependencies, ...manifest.dependencies };
     optionalDependencies = { ...manifest.optionalDependencies };
     for (const name of Object.keys(optionalDependencies)) {
@@ -921,11 +932,23 @@ async function normalizeInstallArgs(
   }
 
   dependencies ??= {};
+  rootLockfileDependencyMaps ??= {
+    dependencies: { ...dependencies },
+    devDependencies: {},
+    optionalDependencies: { ...optionalDependencies },
+  };
   rootName ??= 'root';
   normalizedRootVersion ??= '0.0.0';
   assertRegistryDependencySpecs(dependencies, optionalDependencies);
   assertRegistryOverrideTargets(opts.overrides);
-  return { rootName, rootVersion: normalizedRootVersion, dependencies, optionalDependencies, opts };
+  return {
+    rootName,
+    rootVersion: normalizedRootVersion,
+    dependencies,
+    optionalDependencies,
+    rootLockfileDependencyMaps,
+    opts,
+  };
 }
 
 function isInstallOptions(value: unknown): value is InstallOptions {
@@ -1599,7 +1622,7 @@ function exactStringMembership(actual: unknown, expected: readonly string[]): bo
 function assertRegistryShadowProjection(
   recipe: BuiltinShadowSubstitutionRecipe,
   manifest: VersionManifest,
-): void {
+): ShadowRegistryDependencyProjection {
   if (recipe.acquisition.kind !== 'registry') {
     throw new TypeError(`shadow recipe ${recipe.id} has no registry acquisition`);
   }
@@ -1625,7 +1648,7 @@ function assertRegistryShadowProjection(
       : bundleAliases.every((value) =>
           exactStringMembership(value, projection.bundledDependencies),
         ));
-  if (matches) return;
+  if (matches) return projection;
   throw new NotImplementedError(
     projection.unsupportedFeature,
     `shadow recipe ${recipe.id} registry dependency projection drifted`,
@@ -2919,7 +2942,9 @@ function createRegistrySource(
         throw new Error(`Packument missing version manifest ${effectiveName}@${pick}`);
       }
       const shadowRecipe = registryRecipeForResolution(recipe, effectiveName, pick);
-      if (shadowRecipe) assertRegistryShadowProjection(shadowRecipe, manifest);
+      const shadowProjection = shadowRecipe
+        ? assertRegistryShadowProjection(shadowRecipe, manifest)
+        : undefined;
 
       // ADR-0188: baked redirects are never silent — user-visible provenance.
       if (override && override.source === 'baked' && override.name !== name) {
@@ -2953,10 +2978,19 @@ function createRegistrySource(
         version: pick,
         resolved: manifest.dist.tarball,
         integrity: expectedIntegrity,
-        dependencies: manifest.dependencies ?? {},
+        dependencies:
+          shadowProjection === undefined
+            ? (manifest.dependencies ?? {})
+            : { ...shadowProjection.dependencies },
         bin: manifest.bin,
-        peerDependencies: manifest.peerDependencies,
-        optionalDependencies: manifest.optionalDependencies ?? {},
+        peerDependencies:
+          shadowProjection === undefined
+            ? manifest.peerDependencies
+            : { ...shadowProjection.peerDependencies },
+        optionalDependencies:
+          shadowProjection === undefined
+            ? (manifest.optionalDependencies ?? {})
+            : { ...shadowProjection.optionalDependencies },
         ...(shadowRecipe
           ? {
               shadow: {

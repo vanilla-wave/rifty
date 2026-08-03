@@ -26,6 +26,8 @@
 
 ### Changed (Workbench extraction)
 
+- Dependency snapshots are re-baked against the catalog identity containing
+  the exact Sass substitution; preset dependency sets remain unchanged.
 - TypeScript, Vite 7, and Vite 8 instant snapshots now carry protocol-v2
   shadow provenance and the canonical `bin/esbuild` lock spelling.
 

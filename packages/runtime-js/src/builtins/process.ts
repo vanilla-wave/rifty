@@ -42,7 +42,11 @@ import {
   readNodeProcessBootstrapIdentity,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
-import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
+import {
+  NODE_PROCESS_IDENTITY,
+  type NodeProcessRelease,
+  createNodeProcessRelease,
+} from './process-identity.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
   'rifty.runtime-js.process-terminal-bootstrap.v1',
@@ -519,6 +523,7 @@ export class NodeProcess extends EventEmitter {
   // foreground CLI in its own supervised child worker). `Record` (not the narrow
   // literal) so reads of absent keys (e.g. `versions.electron` — yargs) type-check.
   readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
+  declare readonly release: NodeProcessRelease;
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
@@ -558,6 +563,12 @@ export class NodeProcess extends EventEmitter {
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    Object.defineProperty(this, 'release', {
+      value: createNodeProcessRelease(),
+      writable: false,
+      enumerable: true,
+      configurable: true,
+    });
     Object.defineProperty(this, NODE_PROCESS_TERMINAL_BOOTSTRAP, {
       value: (terminal: unknown): void => this.#applyTerminalBootstrap(terminal),
       enumerable: false,

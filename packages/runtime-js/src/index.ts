@@ -22,7 +22,7 @@ export type {
 export type { TelemetryEntry, TelemetryKind } from './telemetry/divergence-sink.ts';
 export { registerBuiltin, isBuiltinSpecifier, listBuiltins } from './builtins/index.ts';
 export type { BuiltinFactory } from './builtins/index.ts';
-// Single source of truth for `process.version`/identity (owner + spawned child).
+// Single source of truth for `process.version`/`release` identity (owner + spawned child).
 // Exposed so the host (e.g. the playground's `node -v`) reports the SAME version
 // the child's `process.version` does, never a drifting hardcode.
 export { NODE_PROCESS_IDENTITY } from './builtins/process-identity.ts';
