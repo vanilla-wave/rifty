@@ -2673,6 +2673,30 @@ body.rf-resizing iframe {
   background: var(--rf-hover);
   color: var(--rf-text);
 }
+.rf-launcher__progress {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 18px;
+  border-bottom: 1px solid var(--rf-line-panel);
+  background: var(--rf-accent-sel);
+  color: var(--rf-text-dim);
+  font: 500 11.5px / 16px var(--rf-font-sans);
+}
+.rf-launcher__progress strong {
+  color: var(--rf-accent-text-2);
+  font-weight: 600;
+}
+.rf-launcher__progress-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--rf-line-strong);
+  border-top-color: var(--rf-accent);
+  border-radius: 50%;
+  animation: rf-spin 0.7s linear infinite;
+}
 
 /* ---- Starters tab (the gallery) ---- */
 .rf-starters {

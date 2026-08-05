@@ -25,6 +25,7 @@ export function Launcher(props: {
   scratch: Scratch | null;
   activeId: ActiveId;
   ownerBlocked: boolean;
+  instantPrepareLabel?: string;
   storage: 'opfs' | 'memory';
   menuFor: string | null;
   q: string;
@@ -95,6 +96,19 @@ export function Launcher(props: {
               <Icon name="x" size={14} />
             </button>
           </header>
+          <Show when={props.instantPrepareLabel}>
+            {(label) => (
+              <div
+                class="rf-launcher__progress"
+                role="status"
+                aria-label={`Preparing instant project ${label()}`}
+              >
+                <span class="rf-launcher__progress-spinner" aria-hidden="true" />
+                <span>Preparing instant project</span>
+                <strong>{label()}</strong>
+              </div>
+            )}
+          </Show>
           <Show
             when={props.tab === 'starters'}
             fallback={

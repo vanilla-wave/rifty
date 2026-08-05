@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { runChecks } from '../../tools/checks/pr-check.mjs';
+import { runCheckPhases, runChecks } from '../../tools/checks/pr-check.mjs';
 
 const node = process.execPath;
 const ok = (name: string) => ({ name, command: node, args: ['-e', 'process.exit(0)'] });
@@ -54,5 +54,45 @@ describe('runChecks', () => {
     ];
     // serial execution would deadlock the first task to its 3s timeout (exit 1)
     expect((await runChecks(tasks, { jobs: 2 })).ok).toBe(true);
+  });
+});
+
+describe('runCheckPhases', () => {
+  it('finishes the parallel phase before running resource-heavy tasks serially', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pc-phases-'));
+    tmps.push(dir);
+    const parallelDone = join(dir, 'parallel-done');
+    const firstHeavyDone = join(dir, 'first-heavy-done');
+    const delayedWrite = (path: string) =>
+      `const fs=require('fs');setTimeout(()=>{fs.writeFileSync(${JSON.stringify(path)},'1')},100);`;
+    const requireFileThenWrite = (required: string, output: string) =>
+      `const fs=require('fs');if(!fs.existsSync(${JSON.stringify(required)}))process.exit(1);setTimeout(()=>{fs.writeFileSync(${JSON.stringify(output)},'1')},100);`;
+
+    const result = await runCheckPhases(
+      [{ name: 'parallel', command: node, args: ['-e', delayedWrite(parallelDone)] }],
+      [
+        {
+          name: 'first-heavy',
+          command: node,
+          args: ['-e', requireFileThenWrite(parallelDone, firstHeavyDone)],
+        },
+        {
+          name: 'second-heavy',
+          command: node,
+          args: [
+            '-e',
+            `const fs=require('fs');process.exit(fs.existsSync(${JSON.stringify(firstHeavyDone)})?0:1)`,
+          ],
+        },
+      ],
+      { jobs: 2 },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.results.map((entry) => entry.name)).toEqual([
+      'parallel',
+      'first-heavy',
+      'second-heavy',
+    ]);
   });
 });
