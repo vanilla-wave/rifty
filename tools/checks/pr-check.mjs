@@ -51,35 +51,13 @@ export async function runChecks(tasks, { jobs = availableParallelism(), onResult
   return { results, ok: results.every((r) => r.code === 0) };
 }
 
-/**
- * Keep timing-sensitive Worker suites out of the parallel static/build pool
- * and out of each other's resource envelope.
- * @param {Task[]} parallelTasks
- * @param {Task[]} serialTasks
- * @param {{ jobs?: number, onResult?: (r: Result) => void }} [opts]
- * @returns {Promise<{ results: Result[], ok: boolean }>}
- */
-export async function runCheckPhases(
-  parallelTasks,
-  serialTasks,
-  { jobs = availableParallelism(), onResult } = {},
-) {
-  const parallel = await runChecks(parallelTasks, { jobs, onResult });
-  const serial = await runChecks(serialTasks, { jobs: 1, onResult });
-  return {
-    results: [...parallel.results, ...serial.results],
-    ok: parallel.ok && serial.ok,
-  };
-}
-
 // Playwright lanes are not here:
 // they spin up browser workers + a vite dev server and, run alongside these,
 // starve the timing-sensitive parity/stream checks. Run them separately:
 // `pnpm test:e2e` and `pnpm test:browser-unit` (CI keeps its own e2e-chromium
-// and browser-unit-chromium jobs). Static/build checks below are independent;
-// Worker-heavy unit and parity suites run serially after that pool.
+// and browser-unit-chromium jobs). All tasks below are mutually independent.
 /** @type {Task[]} */
-const PARALLEL_TASKS = [
+const TASKS = [
   'lint',
   'typecheck',
   'build:libs',
@@ -104,22 +82,14 @@ const PARALLEL_TASKS = [
   'check:sync-sha256-cores',
   'backlog:check',
   'refs:check',
+  'test:run',
+  'test:parity',
 ].map((name) => ({ name, command: 'pnpm', args: ['run', name] }));
-
-/** @type {Task[]} */
-const SERIAL_TASKS = ['test:run', 'test:parity'].map((name) => ({
-  name,
-  command: 'pnpm',
-  args: ['run', name],
-}));
 
 async function main() {
   const jobs = availableParallelism();
-  const taskCount = PARALLEL_TASKS.length + SERIAL_TASKS.length;
-  console.log(
-    `pr:check — ${String(taskCount)} checks, up to ${String(jobs)} static/build in parallel; 2 Worker suites serial\n`,
-  );
-  const { results, ok } = await runCheckPhases(PARALLEL_TASKS, SERIAL_TASKS, {
+  console.log(`pr:check — ${TASKS.length} checks, up to ${jobs} in parallel\n`);
+  const { results, ok } = await runChecks(TASKS, {
     jobs,
     onResult: (r) => {
       const mark = r.code === 0 ? '✓' : '✗';
