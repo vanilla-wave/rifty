@@ -59,4 +59,13 @@ describe('Launcher', () => {
     );
     expect(starters).toMatch(/data-preset="real-vite"[^>]*disabled/);
   });
+
+  it('identifies slow instant preparation inside the still-open launcher', () => {
+    const html = renderToString(() =>
+      Launcher({ ...base, tab: 'starters', ownerBlocked: true, instantPrepareLabel: 'Vite 8' }),
+    );
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-label="Preparing instant project Vite 8"');
+    expect(html).toContain('Preparing instant project');
+  });
 });

@@ -10,6 +10,10 @@
 
 ### Fixed
 
+- Reset-to-cold instant presets now show delayed preparation progress inside
+  the launcher; Chromium acceptance covers every instant sibling and requires
+  Vite 7/8 to reach their real ready output.
+
 - Failed saved-project activation now restores the prior catalog ref and live
   session before reporting the target open error, preserving both causes when
   restoration also fails.

@@ -57,6 +57,7 @@ import {
 import { scratchDisplayName } from '../glue/project-display-name.ts';
 import type { ActiveId, ProjectIndex } from '../glue/project-index.ts';
 import type { ScmResourceRow } from '../glue/scm-status.ts';
+import { withSlowProgress } from '../glue/slow-progress.ts';
 import type { StarterGroup } from '../glue/starter.ts';
 import { starterById } from '../glue/starter.ts';
 import { pathFromTerminalFileLink } from '../glue/terminal-links.ts';
@@ -220,6 +221,7 @@ export function App(props: AppProps) {
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [paletteData, setPaletteData] = createSignal<readonly PaletteItem[]>([]);
   const [projectBusy, setProjectBusy] = createSignal(false);
+  const [instantPrepareLabel, setInstantPrepareLabel] = createSignal<string>();
   const [workbenchReady, setWorkbenchReady] = createSignal(false);
   const [bound, setBound] = createSignal<BoundProject>();
   const [sessions, setSessions] = createSignal<readonly TerminalSessionSnapshot[]>([]);
@@ -654,12 +656,13 @@ export function App(props: AppProps) {
 
   async function transition(
     operation: (app: PlaygroundAppRuntime) => Promise<PlaygroundAppProjectContext | null>,
+    instantPreset?: Preset,
   ): Promise<PlaygroundAppProjectContext | null> {
     if (!workbenchReady()) throw new Error('Playground Workbench is not ready');
     if (projectBusy()) throw new Error('Project transition is already running');
     const app = currentRuntime();
     setProjectBusy(true);
-    try {
+    const work = (async () => {
       await disposeBound();
       let context: PlaygroundAppProjectContext | null;
       try {
@@ -673,7 +676,15 @@ export function App(props: AppProps) {
       }
       if (context !== null) await bindProject(context);
       return context;
+    })();
+    try {
+      if (instantPreset?.setup !== 'instant') return await work;
+      return await withSlowProgress(work, {
+        delayMs: 250,
+        onSlow: () => setInstantPrepareLabel(instantPreset.label),
+      });
     } finally {
+      setInstantPrepareLabel(undefined);
       setProjectBusy(false);
     }
   }
@@ -685,11 +696,14 @@ export function App(props: AppProps) {
         store.closeLauncher();
         return;
       }
-      await transition((app) =>
-        app.createScratch(planFor('scratch', starterId), { preserveDirtySameStarter: true }),
+      const preset = presetForId(starterId);
+      await transition(
+        (app) =>
+          app.createScratch(planFor('scratch', starterId), { preserveDirtySameStarter: true }),
+        preset,
       );
       store.closeLauncher();
-      flashToast(`New scratch from ${presetForId(starterId).label}`, 'success');
+      flashToast(`New scratch from ${preset.label}`, 'success');
     } catch (error) {
       flashError(`Starter open failed: ${errorMessage(error)}`);
     }
@@ -701,7 +715,8 @@ export function App(props: AppProps) {
         store.closeLauncher();
         return;
       }
-      await transition((app) => app.activate(planForTarget(id)));
+      const plan = planForTarget(id);
+      await transition((app) => app.activate(plan), presetForId(plan.starterId));
       store.closeLauncher();
     } catch (error) {
       flashError(`Project switch failed: ${errorMessage(error)}`);
@@ -895,7 +910,8 @@ export function App(props: AppProps) {
     const dialog = store.dialog();
     if (dialog?.kind !== 'reset') return;
     try {
-      await transition((app) => app.reset(planForTarget(dialog.id)));
+      const plan = planForTarget(dialog.id);
+      await transition((app) => app.reset(plan), presetForId(plan.starterId));
       store.setDialog(null);
       flashToast('Reset to starter', 'success');
     } catch (error) {
@@ -1769,6 +1785,7 @@ export function App(props: AppProps) {
         scratch={store.scratch()}
         activeId={store.activeId()}
         ownerBlocked={projectAdmissionBlocked()}
+        instantPrepareLabel={instantPrepareLabel()}
         storage={store.storage()}
         menuFor={store.menuFor()}
         q={store.q()}
