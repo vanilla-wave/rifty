@@ -25,6 +25,10 @@ Use `docs/process/fault-classes.md` §§Boundary failure models/Class-kill and
 2. Own-product finding lacks a user-action path → keep the attempted repro in draft.
 3. Finding exceeds epic tier → block on a tier-raise ADR.
 4. Proposed coordination mechanism → record the §Class-kill inventory.
+5. Claimed oracle/Node behavior without a reproducible artifact (command +
+   output + version) → record as an open fork, never as fact; model memory is
+   not evidence, a prescribed carrier with no spike/ADR fact = frozen
+   assumption.
 
 ## 4. Mint
 
@@ -33,6 +37,6 @@ to the discovering unit's branch, never its own PR (`AGENTS.md` §PR): `draft`,
 observed `## Context`, honest sources, optional real-path `user_story`, and a code
 marker when anchored. Done when `pnpm backlog:check` passes.
 
-After capture: `decision-workflow.md` §Backlog readiness owns draft→ready
-(judge verdict — in an active goal run the unit's Contract+RED plays that role; an unresolved observable fork = request manual `rifty-refine`,
-don't self-run the interview).
+After capture: `decision-workflow.md` §Backlog readiness owns draft→ready;
+verification = the unit's Contract+RED checkpoint at pickup (an unresolved
+observable fork = request manual `rifty-refine`, don't self-run the interview).

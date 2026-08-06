@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **One contract gate: readiness verification = the pickup Contract+RED
+  checkpoint.** The standalone fresh-context readiness judge duplicated the
+  checkpoint (same fresh-context raw-contract read, weaker scope — no RED/diff)
+  and charged every convergence loop twice: a 19h eval-parity session ran ~26
+  judges beside 13 checkpoints finding the same blocker classes, while the
+  judge-blessed item itself arrived with 3 oracle errors. §Backlog readiness
+  now: compile with reproducible artifacts → `ready`; the checkpoint records
+  `ready-verdict: <date> — Contract+RED @ <sha>` at pickup (the goal-run
+  special case is now the general rule). The evidence gate moves to capture:
+  `rifty-to-backlog` gate 5 refuses model-memory oracle claims — artifact or
+  open fork. Accepted trade: a compile-only flip stays unverified until
+  pickup; the demotion rule (§Backlog readiness 5) covers it.
 - **An epic fit now ends with its marker, and the marker SHA must survive the
   merge.** Two gaps found by handing a freshly fitted epic to an agent: §Epic fit
   stopped at sign-off, so the fit PR landed without `goal_baseline` and the run
