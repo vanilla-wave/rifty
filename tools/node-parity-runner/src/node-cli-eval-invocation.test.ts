@@ -1,7 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import nodeEvalContextCase from '../cases/process/node-eval-context.case.ts';
+import nodeEvalContextErrorsCase from '../cases/process/node-eval-context-errors.case.ts';
+import nodeEvalContextLifecycleACase from '../cases/process/node-eval-context-lifecycle-a.case.ts';
+import nodeEvalContextLifecycleBCase from '../cases/process/node-eval-context-lifecycle-b.case.ts';
+import nodeEvalContextOutputACase from '../cases/process/node-eval-context-output-a.case.ts';
+import nodeEvalContextOutputBCase from '../cases/process/node-eval-context-output-b.case.ts';
+import nodeEvalContextTerminatorsACase from '../cases/process/node-eval-context-terminators-a.case.ts';
+import nodeEvalContextTerminatorsBCase from '../cases/process/node-eval-context-terminators-b.case.ts';
+import nodeEvalContextTerminatorsCCase from '../cases/process/node-eval-context-terminators-c.case.ts';
+import nodeEvalContextCase, {
+  nodeEvalContextAllInvocations,
+} from '../cases/process/node-eval-context.case.ts';
 import { nodeCliEvalInvocations, nodeCliEvalSourceTerminatorMatrix } from './node-cli-eval.ts';
 import type { NodeCliEvalInvocation, ParityCase } from './types.ts';
+
+const nodeEvalContextAuxiliaryCases = [
+  nodeEvalContextTerminatorsACase,
+  nodeEvalContextTerminatorsBCase,
+  nodeEvalContextTerminatorsCCase,
+  nodeEvalContextOutputACase,
+  nodeEvalContextOutputBCase,
+  nodeEvalContextLifecycleACase,
+  nodeEvalContextLifecycleBCase,
+  nodeEvalContextErrorsCase,
+] as const;
 
 function evalCase(invocations: readonly NodeCliEvalInvocation[]): ParityCase {
   return {
@@ -18,6 +39,25 @@ describe('node CLI eval invocation model', () => {
       'isolation-concurrent-a',
       'isolation-concurrent-b',
     ]);
+  });
+
+  it('preserves all 63 eval differentials across bounded physical cohorts', () => {
+    for (const testCase of nodeEvalContextAuxiliaryCases) {
+      expect(testCase.nodeCliEval?.sequential).toEqual([]);
+      expect(testCase.nodeCliEval?.concurrent?.length).toBeLessThanOrEqual(8);
+      expect(testCase.expectedPhysicalWorkers).toBe(testCase.nodeCliEval?.concurrent?.length);
+    }
+
+    const allCases = [nodeEvalContextCase, ...nodeEvalContextAuxiliaryCases];
+    const labels = allCases.flatMap((testCase) => [
+      ...(testCase.nodeCliEval?.sequential ?? []),
+      ...(testCase.nodeCliEval?.concurrent ?? []),
+    ]);
+    const expectedLabels = nodeEvalContextAllInvocations.map(({ label }) => label).toSorted();
+
+    expect(labels).toHaveLength(63);
+    expect(new Set(labels.map(({ label }) => label)).size).toBe(63);
+    expect(labels.map(({ label }) => label).toSorted()).toEqual(expectedLabels);
   });
 
   it('derives the Rifty launch semantics from the exact native argv carrier', () => {

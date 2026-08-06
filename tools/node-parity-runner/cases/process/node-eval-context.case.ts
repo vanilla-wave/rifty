@@ -252,8 +252,7 @@ const sequential: NodeCliEvalInvocation[] = [
   },
 ];
 
-const concurrent: NodeCliEvalInvocation[] = [
-  ...terminatorInvocations,
+const outputAndEmptyInvocations = [
   {
     ...separated(
       'short-e-partial-stdout-around-stderr',
@@ -308,6 +307,9 @@ const concurrent: NodeCliEvalInvocation[] = [
   barePrint('bare-short-print', '-p'),
   barePrint('bare-long-print', '--print'),
   barePrint('bare-print-equals-ignored', '--print=ignored'),
+] satisfies readonly NodeCliEvalInvocation[];
+
+const lifecycleInvocations = [
   separated(
     'circular-after-timer-drain',
     '-p',
@@ -373,6 +375,9 @@ const concurrent: NodeCliEvalInvocation[] = [
   ),
   separated('exit-code-after-print', '-p', 'process.exitCode=7;42'),
   separated('forced-exit-suppresses-print', '-p', 'process.exit(7);42'),
+] satisfies readonly NodeCliEvalInvocation[];
+
+const errorInvocations = [
   separated('throw-user-frame', '-e', "throw new Error('boom')", [], false, {
     evalErrorStderr: true,
   }),
@@ -385,6 +390,9 @@ const concurrent: NodeCliEvalInvocation[] = [
     false,
     { evalErrorStderr: true },
   ),
+] satisfies readonly NodeCliEvalInvocation[];
+
+const isolationConcurrent = [
   {
     ...separated('isolation-concurrent-a', '-e', isolationSource, ['a']),
     cwd: '/fixtures/a',
@@ -393,7 +401,39 @@ const concurrent: NodeCliEvalInvocation[] = [
     ...separated('isolation-concurrent-b', '-e', isolationSource, ['b']),
     cwd: '/fixtures/b',
   },
-];
+] satisfies readonly NodeCliEvalInvocation[];
+
+export const nodeEvalContextInvocationGroups = {
+  terminatorsA: terminatorInvocations.slice(0, 8),
+  terminatorsB: terminatorInvocations.slice(8, 16),
+  terminatorsC: terminatorInvocations.slice(16),
+  outputA: outputAndEmptyInvocations.slice(0, 8),
+  outputB: outputAndEmptyInvocations.slice(8),
+  lifecycleA: lifecycleInvocations.slice(0, 8),
+  lifecycleB: lifecycleInvocations.slice(8),
+  errors: errorInvocations,
+} satisfies Readonly<Record<string, readonly NodeCliEvalInvocation[]>>;
+
+export const nodeEvalContextAllInvocations = [
+  ...sequential,
+  ...terminatorInvocations,
+  ...outputAndEmptyInvocations,
+  ...lifecycleInvocations,
+  ...errorInvocations,
+  ...isolationConcurrent,
+] satisfies readonly NodeCliEvalInvocation[];
+
+export function nodeEvalContextConcurrentCase(
+  invocations: readonly NodeCliEvalInvocation[],
+): ParityCase {
+  return {
+    kind: 'node-cli-eval',
+    code: '',
+    cwd: '/',
+    expectedPhysicalWorkers: invocations.length,
+    nodeCliEval: { sequential: [], concurrent: invocations },
+  };
+}
 
 export default {
   kind: 'node-cli-eval',
@@ -412,6 +452,6 @@ export default {
       'fixtures/b/node_modules/eval-package/index.js': "module.exports='package-b'\n",
     },
   },
-  expectedPhysicalWorkers: sequential.length + concurrent.length,
-  nodeCliEval: { sequential, concurrent },
+  expectedPhysicalWorkers: sequential.length + isolationConcurrent.length,
+  nodeCliEval: { sequential, concurrent: isolationConcurrent },
 } satisfies ParityCase;
