@@ -20,6 +20,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `rifty-to-backlog` gate 5 refuses model-memory oracle claims — artifact or
   open fork. Accepted trade: a compile-only flip stays unverified until
   pickup; the demotion rule (§Backlog readiness 5) covers it.
+- **`pr:check` runs its tasks sequentially.** `test:run` and `test:parity`
+  each saturate every core; the concurrency pool made them time-fail each
+  other (3/3 aggregate runs in the eval-parity session) while each lane passed
+  alone. Pool deleted rather than phased (supersedes `d7f862bc5` by owner
+  call): the heavy tasks dominate runtime, so parallelism bought seconds and
+  cost green runs.
 - **An epic fit now ends with its marker, and the marker SHA must survive the
   merge.** Two gaps found by handing a freshly fitted epic to an agent: §Epic fit
   stopped at sign-off, so the fit PR landed without `goal_baseline` and the run

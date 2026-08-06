@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Local static/build/unit/parity PR gate. Browser lanes run separately.
- * Tasks run in parallel; any failure fails the gate.
+ * Tasks run sequentially — test:run and test:parity each saturate every core;
+ * scheduled concurrently they time-fail each other. Any failure fails the gate.
  */
 import { spawn } from 'node:child_process';
-import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 /** @typedef {{ name: string, command: string, args?: string[] }} Task */
@@ -32,22 +32,19 @@ function runOne(/** @type {Task} */ task) {
 }
 
 /**
- * Run tasks with a bounded concurrency pool.
+ * Run tasks one at a time in declaration order.
  * @param {Task[]} tasks
- * @param {{ jobs?: number, onResult?: (r: Result) => void }} [opts]
+ * @param {{ onResult?: (r: Result) => void }} [opts]
  * @returns {Promise<{ results: Result[], ok: boolean }>}
  */
-export async function runChecks(tasks, { jobs = availableParallelism(), onResult } = {}) {
-  const results = new Array(tasks.length);
-  let next = 0;
-  async function worker() {
-    for (let i = next++; i < tasks.length; i = next++) {
-      results[i] = await runOne(tasks[i]);
-      onResult?.(results[i]);
-    }
+export async function runChecks(tasks, { onResult } = {}) {
+  /** @type {Result[]} */
+  const results = [];
+  for (const task of tasks) {
+    const result = await runOne(task);
+    results.push(result);
+    onResult?.(result);
   }
-  const pool = Array.from({ length: Math.max(1, Math.min(jobs, tasks.length)) }, worker);
-  await Promise.all(pool);
   return { results, ok: results.every((r) => r.code === 0) };
 }
 
@@ -87,10 +84,8 @@ const TASKS = [
 ].map((name) => ({ name, command: 'pnpm', args: ['run', name] }));
 
 async function main() {
-  const jobs = availableParallelism();
-  console.log(`pr:check — ${TASKS.length} checks, up to ${jobs} in parallel\n`);
+  console.log(`pr:check — ${TASKS.length} checks, sequential\n`);
   const { results, ok } = await runChecks(TASKS, {
-    jobs,
     onResult: (r) => {
       const mark = r.code === 0 ? '✓' : '✗';
       console.log(`  ${mark} ${r.name} (${(r.durationMs / 1000).toFixed(1)}s)`);

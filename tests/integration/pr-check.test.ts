@@ -17,42 +17,48 @@ afterAll(() => {
   for (const d of tmps) rmSync(d, { recursive: true, force: true });
 });
 
-// signals SELF, then blocks until OTHER appears — only exits 0 if a peer runs concurrently
-const rendezvous = (self: string, other: string) =>
-  `const fs=require('fs');fs.writeFileSync(${JSON.stringify(self)},'1');` +
-  `const d=Date.now()+3000;while(!fs.existsSync(${JSON.stringify(other)})){if(Date.now()>d)process.exit(1);}process.exit(0);`;
-
 describe('runChecks', () => {
   it('reports each task exit code and ok=false when any fails', async () => {
-    const { results, ok: pass } = await runChecks([ok('a'), fail('b', 3)], { jobs: 2 });
+    const { results, ok: pass } = await runChecks([ok('a'), fail('b', 3)]);
     expect(pass).toBe(false);
     expect(results.find((r) => r.name === 'a')?.code).toBe(0);
     expect(results.find((r) => r.name === 'b')?.code).toBe(3);
   });
 
   it('ok=true when every task passes', async () => {
-    expect((await runChecks([ok('a'), ok('b')], { jobs: 2 })).ok).toBe(true);
+    expect((await runChecks([ok('a'), ok('b')])).ok).toBe(true);
   });
 
   it('captures stdout and stderr of each task', async () => {
-    const { results } = await runChecks(
-      [{ name: 'e', command: node, args: ['-e', 'console.log("OUT");console.error("ERR")'] }],
-      { jobs: 1 },
-    );
+    const { results } = await runChecks([
+      { name: 'e', command: node, args: ['-e', 'console.log("OUT");console.error("ERR")'] },
+    ]);
     expect(results[0].output).toContain('OUT');
     expect(results[0].output).toContain('ERR');
   });
 
-  it('runs tasks concurrently up to the job limit', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'pc-'));
+  it('runs tasks one at a time in declaration order', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pc-serial-'));
     tmps.push(dir);
-    const a = join(dir, 'a');
-    const b = join(dir, 'b');
+    const first = join(dir, 'first');
     const tasks = [
-      { name: 'A', command: node, args: ['-e', rendezvous(a, b)] },
-      { name: 'B', command: node, args: ['-e', rendezvous(b, a)] },
+      {
+        name: 'first',
+        command: node,
+        args: [
+          '-e',
+          `setTimeout(()=>{require('fs').writeFileSync(${JSON.stringify(first)},'1');process.exit(0)},100)`,
+        ],
+      },
+      // exits 0 only if `first` already finished — a concurrent pool starts it too early
+      {
+        name: 'second',
+        command: node,
+        args: ['-e', `process.exit(require('fs').existsSync(${JSON.stringify(first)})?0:1)`],
+      },
     ];
-    // serial execution would deadlock the first task to its 3s timeout (exit 1)
-    expect((await runChecks(tasks, { jobs: 2 })).ok).toBe(true);
+    const { results, ok: pass } = await runChecks(tasks);
+    expect(pass).toBe(true);
+    expect(results.map((r) => r.name)).toEqual(['first', 'second']);
   });
 });
