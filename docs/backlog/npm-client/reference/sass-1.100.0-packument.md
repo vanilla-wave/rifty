@@ -1,6 +1,7 @@
 # Sass 1.100.0 registry, tarball, and required closure
 
-Captured 2026-08-02 from the public npm registry with Node v24.16.0,
+Captured 2026-08-02, closure refreshed 2026-08-07 (readdirp 5.0.0→5.1.1
+published upstream 2026-08-06), from the public npm registry with Node v24.16.0,
 npm 11.17.0, bsdtar 3.5.3 / libarchive 3.7.4, and OpenSSL 3.6.2. The exact
 archives are committed under `tools/shadow-registry/src/fixtures/`; JSON
 identities are in `sass-1.100.0-registry.json`,
@@ -86,7 +87,7 @@ Exact physical closure:
 ```text
 sass@1.100.0
 ├── chokidar@5.0.0
-│   └── readdirp@5.0.0
+│   └── readdirp@5.1.1
 ├── immutable@5.1.9
 └── source-map-js@1.2.1
 ```
@@ -94,7 +95,7 @@ sass@1.100.0
 | package | range from parent | version | bytes | SHA-256 | integrity |
 |---|---|---:|---:|---|---|
 | `chokidar` | `^5.0.0` | 5.0.0 | 23,399 | `45d07ea7d57ee482c733ab3c547cc49edc1423bc231507e41ff99d2711f7f5e3` | `sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==` |
-| `readdirp` | `^5.0.0` | 5.0.0 | 7,530 | `01ecd9d6bf8fdb4b8c462b23d1d8f69604841050ac4316e6fe67967a62b00407` | `sha512-9u/XQ1pvrQtYyMpZe7DXKv2p5CNvyVwzUB6uhLAnQwHMSgKMBR62lc7AHljaeteeHXn11XTAaLLUVZYVZyuRBQ==` |
+| `readdirp` | `^5.0.0` | 5.1.1 | 9,058 | `935a688197715ea14c184e4a56542d6abe99a75b2c6d805d24a4cdf36514d5a5` | `sha512-Kko+Y5XQ6fM+Ce3dq3m9YGxnacYZYl9cA1wZjaF3Vbry2L3i1qVg8+CAgNPsXRArPMUMCaOR7oa9Nqntc43JKA==` |
 | `immutable` | `^5.1.5` | 5.1.9 | 148,909 | `9481d33c209e07f82933a0f8132348ee9325d72ce196ebc47a93b9b2703f3068` | `sha512-m8nVez3rwrgmWxtLMt1ZYXB2Lv7OKYn/disyxAlSDYAlKSlFoPPfIAmAM/M5xqL4m4C/wAPw7S2/CNaUii1Hxg==` |
 | `source-map-js` | `>=0.6.2 <2.0.0` | 1.2.1 | 35,340 | `f126a6f9fca487a43219d8cb8c3a955279187a966119d548eb5cd47e999d4853` | `sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==` |
 

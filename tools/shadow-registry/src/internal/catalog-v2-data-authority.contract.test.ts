@@ -25,7 +25,7 @@ const sassClosureTarballs: ReadonlyMap<string, Uint8Array> = new Map(
   (
     [
       ['chokidar', 'chokidar-5.0.0.tgz'],
-      ['readdirp', 'readdirp-5.0.0.tgz'],
+      ['readdirp', 'readdirp-5.1.1.tgz'],
       ['immutable', 'immutable-5.1.9.tgz'],
       ['source-map-js', 'source-map-js-1.2.1.tgz'],
     ] as const

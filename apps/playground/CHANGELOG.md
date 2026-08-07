@@ -10,6 +10,19 @@
 
 ### Fixed
 
+- Preset open no longer paints the "Starting dev server…" loader inside the
+  12px splitter track between editor and preview: an always-rendered editor
+  slot pins splitter/preview to their grid tracks while the lazy editor chunk
+  (or a project-switch teardown) leaves the editor empty. E2E holds the chunk
+  in flight and asserts preview-pane geometry
+  (`tests/e2e/preset-open-layout.spec.ts`).
+
+- Re-picking the current dirty scratch's starter no longer opens the
+  "Discard unsaved scratch?" dialog — the owner preserve contract
+  (`preserveDirtySameStarter`) keeps the draft either way, so the prompt
+  threatened a discard it never performed; the pick now just reopens the
+  scratch (e2e in `tests/e2e/project-management.spec.ts`).
+
 - Reset-to-cold instant presets now show delayed preparation progress inside
   the launcher; Chromium acceptance covers every instant sibling and requires
   Vite 7/8 to reach their real ready output.

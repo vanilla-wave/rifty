@@ -21,7 +21,7 @@ const decoder = new TextDecoder();
 const oracleTarballs = [
   ['sass', 'sass-1.100.0.tgz'],
   ['chokidar', 'chokidar-5.0.0.tgz'],
-  ['readdirp', 'readdirp-5.0.0.tgz'],
+  ['readdirp', 'readdirp-5.1.1.tgz'],
   ['immutable', 'immutable-5.1.9.tgz'],
   ['source-map-js', 'source-map-js-1.2.1.tgz'],
 ] as const;

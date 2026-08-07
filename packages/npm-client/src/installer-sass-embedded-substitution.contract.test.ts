@@ -41,7 +41,7 @@ const SASS_BIN = 'dist/bin/sass.js';
 const EXPECTED_REQUIRED_VERSIONS = Object.freeze({
   chokidar: '5.0.0',
   immutable: '5.1.9',
-  readdirp: '5.0.0',
+  readdirp: '5.1.1',
   'source-map-js': '1.2.1',
 });
 
@@ -915,12 +915,12 @@ describe('sass-embedded official installer fixture authority', () => {
     expect(entries.map(({ manifest }) => `${manifest.name}@${manifest.version}`)).toEqual([
       'sass@1.100.0',
       'chokidar@5.0.0',
-      'readdirp@5.0.0',
+      'readdirp@5.1.1',
       'immutable@5.1.9',
       'source-map-js@1.2.1',
     ]);
     expect(entries.map(({ tarball }) => tarball.byteLength)).toEqual([
-      927_111, 23_399, 7_530, 148_909, 35_340,
+      927_111, 23_399, 9_058, 148_909, 35_340,
     ]);
     for (const entry of entries) {
       expect(await computeIntegrity(entry.tarball)).toBe(entry.manifest.dist.integrity);
