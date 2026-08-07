@@ -846,7 +846,11 @@ export function App(props: AppProps) {
   }
 
   function onPickStarter(starterId: string): void {
-    if (store.dirty() && bound()?.context.plan.id === 'scratch') {
+    const current = bound()?.context.plan;
+    // Same-starter re-pick preserves the dirty scratch (createScratch guard +
+    // owner preserveDirtySameStarter), so a discard prompt would lie — only a
+    // pick that really replaces the draft asks.
+    if (store.dirty() && current?.id === 'scratch' && current.starterId !== starterId) {
       store.openDialog({ kind: 'switch', pendingStarter: starterId });
       return;
     }
@@ -1631,40 +1635,46 @@ export function App(props: AppProps) {
 
           <main class="rf-main" data-console={layout.consoleCollapsed() ? 'collapsed' : 'open'}>
             <div class="rf-editorarea" data-preview={hasPreview() ? 'on' : 'off'}>
-              <Show when={bound()} keyed>
-                {(project) => (
-                  <EditorHost
-                    initialEditorFiles={initialEditorFiles}
-                    root={() => '/'}
-                    vfs={project.mirror}
-                    registerApi={(api) => bindEditor(api, project)}
-                    onActive={(info) => {
-                      setActiveFile(info.label);
-                      setActiveLang(info.language);
-                      setActiveFilePath(info.path);
-                    }}
-                    onFileWritten={(path, content) => {
-                      // TODO(backlog: playground/editor-conflict-recovery)
-                      return project.documents.write(path, content);
-                    }}
-                    persistenceAtRisk={healthUi.persistenceAtRisk}
-                    readNodeModulesFile={(path) =>
-                      readPlaygroundEditorRemoteFile(project.context.session.files, path)
-                    }
-                    readGitOriginalText={(input) =>
-                      readPlaygroundGitOriginalText(
-                        project.context.tools.scm,
-                        project.mirror,
-                        input,
-                      )
-                    }
-                    gitStatus={gitStatus}
-                    previewUrl={previewUrl}
-                    onOpenPreviewTab={() => openPreviewTab()}
-                    onError={flashError}
-                  />
-                )}
-              </Show>
+              {/* Stable first grid child: keeps splitter/preview in tracks 2/3
+                  while the lazy editor chunk (or a switch teardown) leaves the
+                  editor slot empty — else auto-placement drops the preview into
+                  the 12px splitter track. */}
+              <div class="rf-editorslot">
+                <Show when={bound()} keyed>
+                  {(project) => (
+                    <EditorHost
+                      initialEditorFiles={initialEditorFiles}
+                      root={() => '/'}
+                      vfs={project.mirror}
+                      registerApi={(api) => bindEditor(api, project)}
+                      onActive={(info) => {
+                        setActiveFile(info.label);
+                        setActiveLang(info.language);
+                        setActiveFilePath(info.path);
+                      }}
+                      onFileWritten={(path, content) => {
+                        // TODO(backlog: playground/editor-conflict-recovery)
+                        return project.documents.write(path, content);
+                      }}
+                      persistenceAtRisk={healthUi.persistenceAtRisk}
+                      readNodeModulesFile={(path) =>
+                        readPlaygroundEditorRemoteFile(project.context.session.files, path)
+                      }
+                      readGitOriginalText={(input) =>
+                        readPlaygroundGitOriginalText(
+                          project.context.tools.scm,
+                          project.mirror,
+                          input,
+                        )
+                      }
+                      gitStatus={gitStatus}
+                      previewUrl={previewUrl}
+                      onOpenPreviewTab={() => openPreviewTab()}
+                      onError={flashError}
+                    />
+                  )}
+                </Show>
+              </div>
               <Show when={hasPreview()}>
                 <Splitter
                   orientation="vertical"

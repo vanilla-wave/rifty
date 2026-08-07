@@ -279,6 +279,14 @@ body {
 .rf-editorarea[data-preview="on"] {
   grid-template-columns: minmax(0, 1fr) var(--rf-split) var(--rf-preview-w);
 }
+/* Always-rendered editor slot (track 1): pins splitter/preview to tracks 2/3
+   even while the lazy editor chunk / a project switch leaves it empty. */
+.rf-editorslot {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
 
 /* ====================================================================== */
 /* Top bar (card)                                                          */
