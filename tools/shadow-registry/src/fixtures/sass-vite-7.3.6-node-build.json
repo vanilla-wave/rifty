@@ -32,7 +32,7 @@
   "lockFixture": {
     "path": "tools/shadow-registry/src/fixtures/sass-vite-7.3.6-package-lock.fixture",
     "bytes": 60340,
-    "sha256": "50be275d9e16dcab67a80947e81a21c4ca7260db9dd1c6bdfca7d2cda862079f"
+    "sha256": "0563c4068addadfd31a2deda5d0363ac4dd65ae486cf3f79e69cc04ca3312e83"
   },
   "viteVersion": {
     "exit": 0,
@@ -73,15 +73,15 @@
   "lockfile": {
     "version": 3,
     "bytes": 60340,
-    "sha256": "50be275d9e16dcab67a80947e81a21c4ca7260db9dd1c6bdfca7d2cda862079f",
+    "sha256": "0563c4068addadfd31a2deda5d0363ac4dd65ae486cf3f79e69cc04ca3312e83",
     "rootDependencies": {
       "sass-embedded": "1.100.0",
       "vite": "7.3.6"
     },
     "nonRootIdentities": 113,
     "installedIdentities": 35,
-    "allIdentityIntegritySha256": "1b9da51a4a3e6c751935bd100954dd66491dbc2126738afd5a43065e1b04eb7c",
-    "installedIdentityIntegritySha256": "1bb75663d542516c33e94efeb274e0dc0a4143c81448ccaf0a33c0f625d91b02"
+    "allIdentityIntegritySha256": "6ef2569cbe38a3e9da74999a962526b3d4e3db86d3b836e8c9a0e7dea32f5a26",
+    "installedIdentityIntegritySha256": "8a2713865182d71459ab93ef4152ced432b31890ebee6ade1faef1c801993059"
   },
   "offlineReplay": {
     "command": "npm ci --ignore-scripts --offline",
