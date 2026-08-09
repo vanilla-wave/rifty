@@ -26,13 +26,11 @@
   the tree; listener failures surface only after every local cleanup attempt,
   and authenticated owner death still settles finitely.
 
-- **Worker terminal drain is exact and finite (ADR-0332).** One opaque
-  process-wide admission state gates stdout/stderr EOF and terminal events on
-  committed per-stream targets; canceled global errors remain nonterminal,
-  sealed attestation transports cross-fallback, and abrupt death claims no
-  drain. Parent diagnostics follow exact child stderr; final bytes and local
-  EOF precede `close`, matching Node. `KernelProcessSpec.stdout/stderr` now
-  expose semantic byte writers; raw ports and output admission remain private.
+- **Worker output order and terminal drain are exact (ADR-0340).** One opaque
+  process-wide admission state authenticates stdout/stderr write order across
+  their independent raw-byte ports and gates terminal events on exact targets.
+  Canceled global errors remain nonterminal, abrupt death claims no drain, and
+  parent diagnostics, EOF, exit, and close retain Node ordering.
 
 - Route retirement attempts every upstream teardown and still removes local
   process authority before surfacing one error or their aggregate.

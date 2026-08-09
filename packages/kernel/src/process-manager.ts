@@ -22,8 +22,11 @@ import { readKernelProcessSpec, readKernelSyncApi } from './shared-globals.ts';
 import { type SpawnWorkerSpec, spawnKernelWorker } from './spawn-worker.ts';
 import type { WorkerStdioPorts } from './worker-entry.ts';
 import {
+  type WorkerStdioOutputReceiver,
   abandonWorkerOutput,
+  bindWorkerStdioOutputReceiver,
   cutWorkerOutput,
+  decodeWorkerStdioOrderFrame,
   isWorkerOutputChildSealed,
 } from './worker-stdio-drain.ts';
 
@@ -63,6 +66,12 @@ export type IpcFrame =
   | { readonly kind: 'control:self-exit'; readonly code: number }
   | { readonly kind: 'control:peer-closing' }
   | { readonly kind: 'control:kill-tree'; readonly pid: number; readonly signal: string }
+  | {
+      readonly kind: 'control:stdio-order';
+      readonly stream: 'stdout' | 'stderr';
+      readonly order: number;
+      readonly attestation: string;
+    }
   | {
       readonly kind: 'control:listening';
       readonly ports: readonly number[];
@@ -238,6 +247,7 @@ export const DESCENDANT_SETTLEMENT_DEADLINE_MS = 1_000;
 
 /** Encoder for forwarded worker-error text pushed onto a child's stderr stream. */
 const STDERR_ENCODER = new TextEncoder();
+const HOST_SET_TIMEOUT = globalThis.setTimeout.bind(globalThis);
 const PROCESS_RESERVE_RPC = 'process.reserve';
 const PROCESS_COMMIT_RPC = 'process.commit';
 const PROCESS_ABORT_RPC = 'process.abort';
@@ -405,6 +415,8 @@ export function decodeIpcFrame(value: unknown): IpcFrame {
         signal: controlSignal(record.signal),
       };
     }
+    case 'control:stdio-order':
+      return decodeWorkerStdioOrderFrame(value);
     case 'control:listening': {
       const hasScope = Object.prototype.hasOwnProperty.call(value, 'previewScope');
       const record = fields(hasScope ? ['ports', 'previewScope'] : ['ports']);
@@ -782,16 +794,15 @@ export class ProcessManager {
       #stdoutReadable: Readable;
       #stderrReadable: Readable;
       #stdinWritable: Writable | null = null;
+      #outputReceiver: WorkerStdioOutputReceiver;
 
       // User IPC disconnect is logical: TTY/process controls keep using this
       // port until the worker exits (ADR-0225/0230).
       #ipcStarted = false;
       #ipcDisconnected = false;
       #controlClosed = false;
-      #stdoutReceived = 0;
-      #stderrReceived = 0;
-      #stdoutExpected: number | null = null;
-      #stderrExpected: number | null = null;
+      #outputDrained = false;
+      #outputProjected = false;
       #terminalOutcome: WorkerTerminalOutcome | null = null;
       #terminalFinishing = false;
       #terminalScheduled = false;
@@ -801,14 +812,23 @@ export class ProcessManager {
 
       constructor() {
         super();
-        this.#stdoutReadable = bindPortAsReadable(ports.stdout, {
-          onChunk: () => this._markStdioChunk('stdout'),
-          onProtocolError: (error) => this._failStdioProtocol(error),
-        });
-        this.#stderrReadable = bindPortAsReadable(ports.stderr, {
-          onChunk: () => this._markStdioChunk('stderr'),
-          onProtocolError: (error) => this._failStdioProtocol(error),
-        });
+        this.#stdoutReadable = new Readable({ read() {} });
+        this.#stderrReadable = new Readable({ read() {} });
+        this.#outputReceiver = bindWorkerStdioOutputReceiver(
+          { stdout: ports.stdout, stderr: ports.stderr },
+          spawnResult.spec.outputState,
+          {
+            onChunk: (stream, bytes) => {
+              this.#outputProjected = true;
+              (stream === 'stdout' ? this.#stdoutReadable : this.#stderrReadable).push(bytes);
+            },
+            onDrained: () => {
+              this.#outputDrained = true;
+              this._finishTerminalIfDrained();
+            },
+            onProtocolError: (error) => this._failStdioProtocol(error),
+          },
+        );
       }
 
       get cwd(): string {
@@ -839,11 +859,13 @@ export class ProcessManager {
           let frame: IpcFrame;
           try {
             frame = decodeIpcFrame(ev.data);
-          } catch {
-            manager.failRecord(record, 1);
+          } catch (error) {
+            this._failStdioProtocol(error instanceof Error ? error : new Error(String(error)));
             return;
           }
-          if (frame.kind === 'ipc:message') {
+          if (frame.kind === 'control:stdio-order') {
+            this.#outputReceiver.acceptOrderFrame(frame);
+          } else if (frame.kind === 'ipc:message') {
             if (this.#ipcDisconnected) return;
             this.emit('message', frame.payload);
           } else if (frame.kind === 'ipc:disconnect') {
@@ -1057,44 +1079,6 @@ export class ProcessManager {
         }
         return this._transition({ kind: 'peererror', error });
       }
-      _markStdioChunk(stream: 'stdout' | 'stderr'): void {
-        if (stream === 'stdout') this.#stdoutReceived++;
-        else this.#stderrReceived++;
-        const received = stream === 'stdout' ? this.#stdoutReceived : this.#stderrReceived;
-        const expected = stream === 'stdout' ? this.#stdoutExpected : this.#stderrExpected;
-        if (expected !== null && received > expected) {
-          this._failStdioProtocol(
-            new Error(
-              `Worker ${stream} received ${String(received)} chunks after terminal target ${String(expected)}`,
-            ),
-          );
-          return;
-        }
-        this._finishTerminalIfDrained();
-      }
-      _setStdioTarget(stream: 'stdout' | 'stderr', chunks: number): void {
-        const current = stream === 'stdout' ? this.#stdoutExpected : this.#stderrExpected;
-        if (current !== null && current !== chunks) {
-          this._failStdioProtocol(
-            new Error(
-              `Worker ${stream} terminal target changed from ${String(current)} to ${String(chunks)}`,
-            ),
-          );
-          return;
-        }
-        if (stream === 'stdout') this.#stdoutExpected = chunks;
-        else this.#stderrExpected = chunks;
-        const received = stream === 'stdout' ? this.#stdoutReceived : this.#stderrReceived;
-        if (received > chunks) {
-          this._failStdioProtocol(
-            new Error(
-              `Worker ${stream} received ${String(received)} chunks beyond terminal target ${String(chunks)}`,
-            ),
-          );
-          return;
-        }
-        this._finishTerminalIfDrained();
-      }
       _failStdioProtocol(error: Error): void {
         if (!manager.isLive(record) || this.#terminalFinishing) return;
         this._queueTerminalDiagnostic(`${error.message}\n`);
@@ -1174,14 +1158,14 @@ export class ProcessManager {
         if (!manager.isLive(record) || this.#terminalFinishing || this.#terminalAbandoned) {
           return;
         }
-        this._setStdioTarget('stdout', stdout);
-        this._setStdioTarget('stderr', stderr);
+        this.#outputReceiver.cut({ stdout, stderr });
       }
       _abandonTerminal(): void {
         if (!manager.isLive(record) || this.#terminalFinishing) {
           return;
         }
         this.#terminalAbandoned = true;
+        this.#outputReceiver.abandon();
         try {
           abandonWorkerOutput(spawnResult.spec.outputState);
         } catch (error) {
@@ -1205,18 +1189,11 @@ export class ProcessManager {
       }
       _finishTerminalIfDrained(): void {
         const outcome = this.#terminalOutcome;
-        if (
-          this.#terminalAbandoned ||
-          outcome === null ||
-          this.#stdoutExpected === null ||
-          this.#stderrExpected === null ||
-          this.#stdoutReceived !== this.#stdoutExpected ||
-          this.#stderrReceived !== this.#stderrExpected
-        ) {
+        if (this.#terminalAbandoned || outcome === null || !this.#outputDrained) {
           return;
         }
         const diagnosticEmitted = this._emitTerminalDiagnostic();
-        if (this.#stdoutReceived === 0 && this.#stderrReceived === 0 && !diagnosticEmitted) {
+        if (!this.#outputProjected && !diagnosticEmitted) {
           this._finishTerminal(outcome);
           return;
         }
@@ -1225,23 +1202,17 @@ export class ProcessManager {
       _scheduleTerminalFinish(): void {
         if (this.#terminalScheduled || this.#terminalFinishing) return;
         this.#terminalScheduled = true;
-        queueMicrotask(() => {
+        HOST_SET_TIMEOUT(() => {
           this.#terminalScheduled = false;
           const outcome = this.#terminalOutcome;
           if (outcome === null || !manager.isLive(record) || this.#terminalFinishing) {
             return;
           }
-          if (
-            !this.#terminalAbandoned &&
-            (this.#stdoutExpected === null ||
-              this.#stderrExpected === null ||
-              this.#stdoutReceived !== this.#stdoutExpected ||
-              this.#stderrReceived !== this.#stderrExpected)
-          ) {
+          if (!this.#terminalAbandoned && !this.#outputDrained) {
             return;
           }
           this._finishTerminal(outcome);
-        });
+        }, 0);
       }
       _finishTerminal(outcome: WorkerTerminalOutcome): void {
         if (
@@ -2388,36 +2359,6 @@ export function installProcessFederation(manager: ProcessManager): void {
       : relayOptional(PROCESS_SNAPSHOT_RPC, payload);
     return relayed === undefined ? manager.snapshot() : relayed;
   });
-}
-
-/**
- * Wrap the raw `MessagePort` triple as `@riftydev/io` streams: push-side
- * `Readable` and post-side `Writable`. Kept here as they're only meaningful
- * for a `WorkerProcessHandle`.
- */
-interface WorkerStdioReadableEvents {
-  onChunk(): void;
-  onProtocolError(error: Error): void;
-}
-
-function bindPortAsReadable(port: MessagePort, events: WorkerStdioReadableEvents): Readable {
-  const r = new Readable({ read() {} });
-  port.onmessage = (ev: MessageEvent) => {
-    const data = ev.data;
-    if (data instanceof Uint8Array) {
-      r.push(data);
-      events.onChunk();
-      return;
-    }
-    events.onProtocolError(new Error('Worker stdio received a malformed frame'));
-  };
-  port.onmessageerror = () => {
-    events.onProtocolError(new Error('Worker stdio failed to deserialize a frame'));
-  };
-  // Browsers don't auto-start the port when only `onmessage` is set
-  // (vs `addEventListener('message', …)`); kick it.
-  port.start();
-  return r;
 }
 
 function bindPortAsWritable(port: MessagePort): Writable {

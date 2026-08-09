@@ -39,6 +39,7 @@ export { installConsole, type ConsoleSink } from './repl/console.ts';
 export {
   awaitDrain,
   installEventLoopKeepalive,
+  releaseNodeEvalDrainOwnership,
   trackKeepalivePromise,
 } from './internal/event-loop-keepalive.ts';
 export { installFetchKeepalive } from './builtins/fetch-keepalive.ts';

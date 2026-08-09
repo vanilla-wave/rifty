@@ -15,7 +15,11 @@ import {
   setKernelWorkerUrl,
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
-import { bindWorkerStdioOutput, sealWorkerOutput } from '../src/worker-stdio-drain.ts';
+import {
+  bindWorkerStdioOutput,
+  sealWorkerOutput,
+  workerOutputAttestation,
+} from '../src/worker-stdio-drain.ts';
 import { attestedExitEvent } from './attested-exit.ts';
 
 type WorkerListener = (ev: MessageEvent) => void;
@@ -62,6 +66,22 @@ function sealWorkerOutputFor(worker: FakeWorker): void {
     };
   };
   sealWorkerOutput(init.spec.outputState);
+}
+
+function bindDesiredWorkerStdioOutput(
+  port: MessagePort,
+  state: import('../src/worker-stdio-drain.ts').WorkerOutputState,
+  output: 'stdout' | 'stderr',
+  controlPort: MessagePort,
+): ReturnType<typeof bindWorkerStdioOutput> {
+  return (
+    bindWorkerStdioOutput as unknown as (
+      outputPort: MessagePort,
+      outputState: import('../src/worker-stdio-drain.ts').WorkerOutputState,
+      outputName: 'stdout' | 'stderr',
+      orderPort: MessagePort,
+    ) => ReturnType<typeof bindWorkerStdioOutput>
+  )(port, state, output, controlPort);
 }
 
 describe('ProcessManager — cwd inheritance (ADR-0019)', () => {
@@ -284,26 +304,43 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     });
     if (handle.kind !== 'worker') throw new Error('expected worker handle');
     const chunks: string[] = [];
+    const controlFrames: unknown[] = [];
+    const userMessages: unknown[] = [];
     handle.stdout().on('data', (chunk: unknown) => {
       chunks.push(new TextDecoder().decode(chunk as Uint8Array));
     });
+    handle.ports.ipc.addEventListener('message', (event) => controlFrames.push(event.data));
+    handle.ports.ipc.start();
+    handle.on('message', (message) => userMessages.push(message));
 
     const w = factoryWorker as FakeWorker;
     const init = w.posted[0] as {
       spec: {
-        stdio: { stdout: MessagePort };
+        stdio: { stdout: MessagePort; ipc: MessagePort };
         outputState: import('../src/worker-stdio-drain.ts').WorkerOutputState;
       };
     };
     const exit = once(handle, 'exit');
-    bindWorkerStdioOutput(init.spec.stdio.stdout, init.spec.outputState, 'stdout').write(
-      new TextEncoder().encode('late\n'),
-    );
+    bindDesiredWorkerStdioOutput(
+      init.spec.stdio.stdout,
+      init.spec.outputState,
+      'stdout',
+      init.spec.stdio.ipc,
+    ).write(new TextEncoder().encode('late\n'));
     sealWorkerOutputFor(w);
     w.fire('message', attestedExitEvent(w, 0));
     await exit;
 
     expect(chunks.join('')).toBe('late\n');
+    expect(controlFrames).toStrictEqual([
+      {
+        kind: 'control:stdio-order',
+        stream: 'stdout',
+        order: 0,
+        attestation: workerOutputAttestation(init.spec.outputState),
+      },
+    ]);
+    expect(userMessages).toEqual([]);
     expect(handle.exitCode).toBe(0);
   });
 

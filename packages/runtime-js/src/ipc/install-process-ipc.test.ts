@@ -6,6 +6,10 @@ import {
   bindNodeProcessDescendantAuthority,
   postNodeProcessListeningControl,
 } from '../builtins/process.ts';
+import {
+  registerNodeEvalDrainLifecycle,
+  resetKeepalive,
+} from '../internal/event-loop-keepalive.ts';
 import { installNodeProcessShim } from './install-process.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
@@ -31,6 +35,7 @@ function spec(): KernelProcessSpec {
 }
 
 afterEach(() => {
+  resetKeepalive();
   publishKernelEntryBootstrap(null);
   Object.defineProperty(globalThis, 'process', {
     value: originalProcess,
@@ -42,6 +47,77 @@ afterEach(() => {
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 10));
 
 describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
+  it('flushes a registered eval result before a delayed process.exit control', async () => {
+    const ipc = new MessageChannel();
+    const events: string[] = [];
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    registerNodeEvalDrainLifecycle({
+      beforeExit: async () => {
+        await Promise.resolve();
+        events.push('print');
+      },
+      projectUnhandled: (reason) => reason,
+      terminateUnhandled: (reason) => reason,
+    });
+    const response = new Promise<unknown>((resolve) => {
+      ipc.port2.onmessage = (event) => {
+        events.push('exit');
+        resolve(event.data);
+      };
+      ipc.port2.start();
+    });
+
+    expect(() => process.exit(7)).toThrow(
+      expect.objectContaining({ code: 'RIFTY_PROCESS_EXIT', exitCode: 7 }),
+    );
+    expect(events).toEqual([]);
+    await expect(response).resolves.toEqual({ kind: 'control:self-exit', code: 7 });
+    expect(events).toEqual(['print', 'exit']);
+  });
+
+  it('routes a failed delayed eval exit control through the loud lifecycle failure path', async () => {
+    const ipc = new MessageChannel();
+    const controlFailure = new Error('exit control failed');
+    const post = vi.spyOn(ipc.port1, 'postMessage').mockImplementation(() => {
+      throw controlFailure;
+    });
+    const events: string[] = [];
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    registerNodeEvalDrainLifecycle({
+      beforeExit: () => {
+        events.push('print');
+      },
+      projectUnhandled: () => {
+        throw new Error('control failure must not be projected as a guest error');
+      },
+      terminateUnhandled: (reason, origin) => {
+        expect(reason).toBe(controlFailure);
+        events.push(`terminate:${origin}`);
+        expect(() => process.exit(1)).toThrow('process exit requires an active control port');
+        return Object.assign(new Error('process.exit(1)'), {
+          code: 'RIFTY_PROCESS_EXIT',
+          exitCode: 1,
+        });
+      },
+    });
+
+    expect(() => process.exit(7)).toThrow(
+      expect.objectContaining({ code: 'RIFTY_PROCESS_EXIT', exitCode: 7 }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(post).toHaveBeenCalledOnce();
+    expect(events).toEqual(['print', 'terminate:lifecycle-failure']);
+  });
+
   it('exposes parent ipc:message frames as process "message" events', async () => {
     const ipc = new MessageChannel();
     const process = installNodeProcessShim({

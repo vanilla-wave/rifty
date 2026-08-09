@@ -28,6 +28,7 @@ import {
   type WorkerOutputState,
   bindWorkerStdioOutput,
   sealWorkerOutput,
+  workerOutputAttestation,
 } from '../src/worker-stdio-drain.ts';
 import { attestedExit } from './attested-exit.ts';
 
@@ -74,6 +75,22 @@ interface BoundaryInit {
 
 function initOf(worker: BoundaryWorker): BoundaryInit {
   return worker.posted[0] as BoundaryInit;
+}
+
+function bindDesiredWorkerStdioOutput(
+  port: MessagePort,
+  state: WorkerOutputState,
+  output: 'stdout' | 'stderr',
+  controlPort: MessagePort,
+): ReturnType<typeof bindWorkerStdioOutput> {
+  return (
+    bindWorkerStdioOutput as unknown as (
+      outputPort: MessagePort,
+      outputState: WorkerOutputState,
+      outputName: 'stdout' | 'stderr',
+      orderPort: MessagePort,
+    ) => ReturnType<typeof bindWorkerStdioOutput>
+  )(port, state, output, controlPort);
 }
 
 function captureControls(worker: BoundaryWorker): unknown[] {
@@ -546,16 +563,22 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     const owner = manager.spawnWorker('nodemon', { ...workerSpec('nodemon'), serve: true });
     if (owner.kind !== 'worker') throw new Error('expected Worker owner');
     const controls = captureControls(worker);
+    const orderFrames: unknown[] = [];
+    const userMessages: unknown[] = [];
+    owner.ports.ipc.addEventListener('message', (event) => orderFrames.push(event.data));
+    owner.ports.ipc.start();
+    owner.on('message', (message) => userMessages.push(message));
     const pid = manager.reserveRemoteProcess('node', owner.pid, '/workspace', owner.pid);
     manager.commitRemoteProcess(pid, owner.pid);
     const output: string[] = [];
     owner.stdout().on('data', (chunk: unknown) => {
       output.push(new TextDecoder().decode(chunk as Uint8Array));
     });
-    const stdout = bindWorkerStdioOutput(
+    const stdout = bindDesiredWorkerStdioOutput(
       initOf(worker).spec.stdio.stdout,
       initOf(worker).spec.outputState,
       'stdout',
+      initOf(worker).spec.stdio.ipc,
     );
 
     expect(owner.kill('SIGTERM')).toBe(true);
@@ -571,6 +594,15 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     await vi.waitFor(() => expect(owner.signalCode).toBe('SIGTERM'));
     expect(worker.terminate).toHaveBeenCalledTimes(1);
     expect(output.join('')).toBe('descendant closed\n');
+    expect(orderFrames).toStrictEqual([
+      {
+        kind: 'control:stdio-order',
+        stream: 'stdout',
+        order: 0,
+        attestation: workerOutputAttestation(initOf(worker).spec.outputState),
+      },
+    ]);
+    expect(userMessages).toEqual([]);
     expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
   });
 
@@ -1320,9 +1352,12 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     });
 
     const stdio = initOf(worker).spec.stdio;
-    bindWorkerStdioOutput(stdio.stdout, initOf(worker).spec.outputState, 'stdout').write(
-      new TextEncoder().encode('late\n'),
-    );
+    bindDesiredWorkerStdioOutput(
+      stdio.stdout,
+      initOf(worker).spec.outputState,
+      'stdout',
+      stdio.ipc,
+    ).write(new TextEncoder().encode('late\n'));
     trigger(child.ports.ipc);
     await vi.waitFor(() => expect(child.exitCode).toBe(7));
     expect(chunks.join('')).toBe('late\n');

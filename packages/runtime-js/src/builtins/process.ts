@@ -25,13 +25,18 @@ import {
   globalProcessManager,
 } from '@riftydev/kernel';
 import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
-import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import {
+  beginNodeEvalExplicitExit,
+  ref as refEventLoop,
+  unref as unrefEventLoop,
+} from '../internal/event-loop-keepalive.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import {
+  type NodeEntryLaunch,
   type NodeEntryTerminalBootstrap,
   readNodeEntryBootstrapIfPresent,
   snapshotNodeEntryTerminalBootstrap,
@@ -448,10 +453,9 @@ interface ProcessTerminalBootstrap {
   readonly rows: number;
 }
 
-function processTerminalBootstrap(): ProcessTerminalBootstrap {
-  const bootstrap = readNodeEntryBootstrapIfPresent();
-  if (bootstrap !== null) {
-    const terminal = bootstrap.launch.kind === 'program' ? bootstrap.launch.terminal : undefined;
+function processTerminalBootstrap(launch: NodeEntryLaunch | undefined): ProcessTerminalBootstrap {
+  if (launch !== undefined) {
+    const terminal = launch.kind === 'worker-thread' ? undefined : launch.terminal;
     return (
       terminal ?? {
         stdinIsTTY: false,
@@ -513,6 +517,7 @@ export class NodeProcess extends EventEmitter {
   pid: number;
   ppid: number;
   argv: string[];
+  execArgv: string[] = [];
   readonly argv0 = NODE_PROCESS_IDENTITY.argv0;
   readonly execPath = NODE_PROCESS_IDENTITY.execPath;
   readonly platform = NODE_PROCESS_IDENTITY.platform;
@@ -620,19 +625,23 @@ export class NodeProcess extends EventEmitter {
       this.pid = spec.pid;
       this.ppid = spec.ppid;
       this.argv = [...spec.argv];
+      const launch = readNodeEntryBootstrapIfPresent()?.launch;
+      this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
       // Copy so per-process env mutation does not leak into the published
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
-      const terminal = processTerminalBootstrap();
+      const terminal = processTerminalBootstrap(launch);
       const size = { cols: terminal.cols, rows: terminal.rows };
       this.stdout = makeStdioWriter(spec.stdio.stdout, 1, terminal.stdoutIsTTY, size);
       this.stderr = makeStdioWriter(spec.stdio.stderr, 2, terminal.stderrIsTTY, size);
       const reader = makeStdinReader(spec.stdio.stdin, terminal.stdinIsTTY);
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
-      const launch = readNodeEntryBootstrapIfPresent()?.launch;
-      if (launch?.kind === 'program' && (launch.ipc ?? 'none') === 'none') {
+      if (
+        launch?.kind === 'eval' ||
+        (launch?.kind === 'program' && (launch.ipc ?? 'none') === 'none')
+      ) {
         this.#wireControl(spec.stdio.ipc);
       } else if (launch?.kind === 'worker-thread') {
         this.#wireWorkerIpc(spec.stdio.ipc);
@@ -742,11 +751,17 @@ export class NodeProcess extends EventEmitter {
   exit(code: unknown = 0): never {
     const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
     this.#exitCode = c;
-    if (this.#ipcPort !== null) this.#requestSelfExit(toUint8ExitCode(c));
-    throw Object.assign(new Error(`process.exit(${c})`), {
+    const exitCode = toUint8ExitCode(c);
+    const exitError = Object.assign(new Error(`process.exit(${c})`), {
       code: RIFTY_PROCESS_EXIT,
-      exitCode: toUint8ExitCode(c), // OS-style uint8 wrap (process.exit(257) → 1)
+      exitCode, // OS-style uint8 wrap (process.exit(257) → 1)
     });
+    const evalLifecycleOwned = beginNodeEvalExplicitExit(exitError, () => {
+      this.#requestSelfExit(exitCode);
+      return exitError;
+    });
+    if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
+    throw exitError;
   }
 
   kill(pid: number, signal = 'SIGTERM'): boolean {
@@ -913,10 +928,14 @@ export class NodeProcess extends EventEmitter {
   }
 
   #requestSelfExit(code: number): void {
+    if (this.#controlClosed || this.#ipcPort === null) {
+      throw new Error('process exit requires an active control port');
+    }
     try {
-      this.#ipcPort?.postMessage({ kind: 'control:self-exit', code } satisfies IpcFrame);
-    } catch {
+      this.#ipcPort.postMessage({ kind: 'control:self-exit', code } satisfies IpcFrame);
+    } catch (error) {
       this.#closeControl();
+      throw error;
     }
   }
 

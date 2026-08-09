@@ -64,10 +64,67 @@ export interface ForegroundChildOpts {
   readonly onExit?: () => void;
 }
 
-const decoder = new TextDecoder();
-
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+interface Utf8Tail {
+  bytes: Uint8Array;
+  order: number | undefined;
+}
+
+function outputBytes(chunk: unknown): Uint8Array | null {
+  if (chunk instanceof Uint8Array) return chunk;
+  if (chunk instanceof ArrayBuffer) return new Uint8Array(chunk);
+  if (ArrayBuffer.isView(chunk)) {
+    return new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+  }
+  return null;
+}
+
+function incompleteUtf8SuffixLength(bytes: Uint8Array): number {
+  if (bytes.length === 0) return 0;
+  let lead = bytes.length - 1;
+  while (lead >= 0 && (bytes[lead]! & 0xc0) === 0x80) lead -= 1;
+  if (lead < 0) return 0;
+  const byte = bytes[lead]!;
+  const expected =
+    byte >= 0xc2 && byte <= 0xdf
+      ? 2
+      : byte >= 0xe0 && byte <= 0xef
+        ? 3
+        : byte >= 0xf0 && byte <= 0xf4
+          ? 4
+          : 0;
+  const actual = bytes.length - lead;
+  if (expected === 0 || actual >= expected) return 0;
+  const second = bytes[lead + 1];
+  if (
+    second !== undefined &&
+    ((byte === 0xe0 && second < 0xa0) ||
+      (byte === 0xed && second > 0x9f) ||
+      (byte === 0xf0 && second < 0x90) ||
+      (byte === 0xf4 && second > 0x8f))
+  ) {
+    return 0;
+  }
+  return actual;
+}
+
+function trackUtf8Tail(state: Utf8Tail, bytes: Uint8Array, order: number): void {
+  const previousLength = state.bytes.length;
+  const combined = new Uint8Array(previousLength + bytes.length);
+  combined.set(state.bytes);
+  combined.set(bytes, previousLength);
+  const length = incompleteUtf8SuffixLength(combined);
+  if (length === 0) {
+    state.bytes = new Uint8Array();
+    state.order = undefined;
+    return;
+  }
+  const start = combined.length - length;
+  state.bytes = combined.slice(start);
+  state.order = start < previousLength ? (state.order ?? order) : order;
 }
 
 function writeChildStdin(destination: ForegroundWritable, chunk: Uint8Array): Promise<void> {
@@ -142,13 +199,16 @@ async function pumpForegroundStdin(
   }
 }
 
-function decodeChunk(chunk: unknown): string {
-  if (chunk instanceof Uint8Array) return decoder.decode(chunk);
-  if (chunk instanceof ArrayBuffer) return decoder.decode(new Uint8Array(chunk));
-  if (ArrayBuffer.isView(chunk)) {
-    return decoder.decode(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+function decodeChunk(decoder: TextDecoder, tail: Utf8Tail, chunk: unknown, order: number): string {
+  const bytes = outputBytes(chunk);
+  if (bytes !== null) {
+    trackUtf8Tail(tail, bytes, order);
+    return decoder.decode(bytes, { stream: true });
   }
-  return typeof chunk === 'string' ? chunk : '';
+  if (typeof chunk !== 'string') return '';
+  tail.bytes = new Uint8Array();
+  tail.order = undefined;
+  return decoder.decode() + chunk;
 }
 
 /**
@@ -167,13 +227,25 @@ export function runForegroundChild(
     // kernel buffers between `kill` and teardown must not land in the terminal
     // AFTER the foreground run already resolved (shell exit 130).
     let outputClosed = false;
-    const stream = (chunk: unknown, w: { write(s: string): void }): void => {
+    const stdoutDecoder = new TextDecoder();
+    const stderrDecoder = new TextDecoder();
+    const tails = {
+      stdout: { bytes: new Uint8Array(), order: undefined } satisfies Utf8Tail,
+      stderr: { bytes: new Uint8Array(), order: undefined } satisfies Utf8Tail,
+    };
+    let outputOrder = 0;
+    const stream = (
+      decoder: TextDecoder,
+      tail: Utf8Tail,
+      chunk: unknown,
+      w: { write(s: string): void },
+    ): void => {
       if (outputClosed) return;
-      const text = decodeChunk(chunk);
+      const text = decodeChunk(decoder, tail, chunk, outputOrder++);
       if (text) w.write(text);
     };
-    handle.stdout().on('data', (c) => stream(c, ctx.stdout));
-    handle.stderr().on('data', (c) => stream(c, ctx.stderr));
+    handle.stdout().on('data', (c) => stream(stdoutDecoder, tails.stdout, c, ctx.stdout));
+    handle.stderr().on('data', (c) => stream(stderrDecoder, tails.stderr, c, ctx.stderr));
     if (opts.onMessage) handle.on('message', opts.onMessage);
     if (opts.onListening) {
       if (handle.onListeningControl === undefined) {
@@ -202,6 +274,33 @@ export function runForegroundChild(
 
     const signal = ctx.signal;
     const lifecycleErrors: Error[] = [];
+    let outputFinalized = false;
+    const finalizeOutput = (): void => {
+      if (outputFinalized) return;
+      outputFinalized = true;
+      const flushes = [
+        {
+          order: tails.stdout.order ?? outputOrder,
+          ordinal: 0,
+          decoder: stdoutDecoder,
+          writer: ctx.stdout,
+        },
+        {
+          order: tails.stderr.order ?? outputOrder + 1,
+          ordinal: 1,
+          decoder: stderrDecoder,
+          writer: ctx.stderr,
+        },
+      ].sort((left, right) => left.order - right.order || left.ordinal - right.ordinal);
+      for (const flush of flushes) {
+        try {
+          const text = flush.decoder.decode();
+          if (text) flush.writer.write(text);
+        } catch (error) {
+          lifecycleErrors.push(asError(error));
+        }
+      }
+    };
     let promiseSettled = false;
     const resolveOnce = (exit: ProcessExit): void => {
       if (promiseSettled) return;
@@ -220,6 +319,7 @@ export function runForegroundChild(
     let killSent = false;
     const failWithoutExit = (error: unknown): void => {
       lifecycleErrors.push(asError(error));
+      finalizeOutput();
       outputClosed = true;
       stopInput();
       signal?.removeEventListener('abort', onAbort);
@@ -237,6 +337,7 @@ export function runForegroundChild(
       if (exited || promiseSettled) return;
       const cause = asError(error);
       lifecycleErrors.push(new ShellCommandLifecycleError(cause.message, { cause }));
+      finalizeOutput();
       outputClosed = true;
       stopInput();
       signal?.removeEventListener('abort', onAbort);
@@ -284,6 +385,7 @@ export function runForegroundChild(
     handle.on('exit', (code, exitSignal) => {
       if (exited) return;
       exited = true;
+      finalizeOutput();
       outputClosed = true;
       stopInput();
       signal?.removeEventListener('abort', onAbort);

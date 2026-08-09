@@ -1,10 +1,20 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { runInRiftyInCurrentRealm } from './run-in-rifty.ts';
+import type {
+  NodeCliEvalBootstrapFault,
+  NodeCliEvalPreviewProbe,
+  NodeCliEvalVfsProbe,
+  PhysicalStdioDeliveryFault,
+} from './run-in-rifty.ts';
 import type { ParityCase } from './types.ts';
 
 interface WorkerRequest {
   readonly testCase: ParityCase;
   readonly stdinTimeoutMs: number;
+  readonly nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe;
+  readonly nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe;
+  readonly nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault;
+  readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
 function serializeError(error: unknown): {
@@ -28,6 +38,10 @@ const request = workerData as WorkerRequest;
 try {
   const stdout = await runInRiftyInCurrentRealm(request.testCase, {
     stdinTimeoutMs: request.stdinTimeoutMs,
+    nodeCliEvalVfsProbe: request.nodeCliEvalVfsProbe,
+    nodeCliEvalPreviewProbe: request.nodeCliEvalPreviewProbe,
+    nodeCliEvalBootstrapFault: request.nodeCliEvalBootstrapFault,
+    physicalStdioDeliveryFault: request.physicalStdioDeliveryFault,
   });
   parentPort.postMessage({ ok: true, stdout });
 } catch (error) {

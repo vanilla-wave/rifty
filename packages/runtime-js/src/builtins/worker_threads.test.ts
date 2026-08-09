@@ -13,6 +13,7 @@ import {
   KERNEL_PROCESS_SPEC_KEY,
   type ProcessHandle,
   type SpawnWorkerSpec,
+  type WorkerInitMessage,
   globalProcessManager,
   publishKernelEntryBootstrap,
   publishKernelProcessSpec,
@@ -255,6 +256,104 @@ globalThis.onmessage = ({ data }) => {
     }
   });
 
+  it('publishes trusted stdout and stderr before a kernel-backed Worker settles', async () => {
+    let publishInit!: (init: WorkerInitMessage) => void;
+    const initReady = new Promise<WorkerInitMessage>((resolve) => {
+      publishInit = resolve;
+    });
+    const restoreWorker = installKernelWorkerBoundary((init) => {
+      publishInit(init as unknown as WorkerInitMessage);
+    });
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const parent = new NodeProcess();
+
+    try {
+      await withProcessGlobal(parent, async () => {
+        const events: string[] = [];
+        const worker = new Worker('/workspace/w-output-carrier.mjs');
+        worker.on('stdout', (chunk) => events.push(`stdout:${decodeOutput(chunk)}`));
+        worker.on('stderr', (chunk) => events.push(`stderr:${decodeOutput(chunk)}`));
+        worker.on('error', () => events.push('error'));
+        worker.on('exit', (code) => events.push(`exit:${String(code)}`));
+        const userMessages: unknown[] = [];
+        worker.on('message', (message) => userMessages.push(message));
+        const exited = onceEvent<number>(worker, 'exit');
+
+        const init = await initReady;
+        const kernelHandle = (
+          worker as unknown as {
+            readonly workerHandle: ProcessHandle | null;
+          }
+        ).workerHandle;
+        if (kernelHandle?.kind !== 'worker') {
+          throw new Error('expected kernel-backed Worker process handle');
+        }
+        const controlFrames: unknown[] = [];
+        kernelHandle.ports.ipc.addEventListener('message', (event) =>
+          controlFrames.push(event.data),
+        );
+        kernelHandle.ports.ipc.start();
+        const stdio = await vi.importActual<{
+          bindWorkerStdioOutput(
+            port: MessagePort,
+            state: WorkerInitMessage['spec']['outputState'],
+            output: 'stdout' | 'stderr',
+            controlPort: MessagePort,
+          ): { write(bytes: Uint8Array): void };
+          sealWorkerOutput(state: WorkerInitMessage['spec']['outputState']): boolean;
+          workerOutputAttestation(state: WorkerInitMessage['spec']['outputState']): string;
+        }>('../../../kernel/src/worker-stdio-drain.ts');
+        stdio
+          .bindWorkerStdioOutput(
+            init.spec.stdio.stdout,
+            init.spec.outputState,
+            'stdout',
+            init.spec.stdio.ipc,
+          )
+          .write(new TextEncoder().encode('thread-out'));
+        stdio
+          .bindWorkerStdioOutput(
+            init.spec.stdio.stderr,
+            init.spec.outputState,
+            'stderr',
+            init.spec.stdio.ipc,
+          )
+          .write(new TextEncoder().encode('thread-err'));
+        stdio.sealWorkerOutput(init.spec.outputState);
+        closeKernelWorkerPeer(init);
+
+        expect(await exited).toBe(1);
+        expect(events).toContain('stdout:thread-out');
+        expect(events).toContain('stderr:thread-err');
+        expect(events.indexOf('stdout:thread-out')).toBeLessThan(events.indexOf('error'));
+        expect(events.indexOf('stderr:thread-err')).toBeLessThan(events.indexOf('error'));
+        expect(events.at(-1)).toBe('exit:1');
+        expect(controlFrames).toStrictEqual([
+          {
+            kind: 'control:stdio-order',
+            stream: 'stdout',
+            order: 0,
+            attestation: stdio.workerOutputAttestation(init.spec.outputState),
+          },
+          {
+            kind: 'control:stdio-order',
+            stream: 'stderr',
+            order: 1,
+            attestation: stdio.workerOutputAttestation(init.spec.outputState),
+          },
+          { kind: 'control:peer-closing' },
+        ]);
+        expect(userMessages).toEqual([]);
+      });
+    } finally {
+      restoreWorker();
+    }
+  });
+
   it("delivers one kernel construction fault once through emnapi's Node bridge", async () => {
     const constructionError = new Error('kernel spawn failed once');
     vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
@@ -329,6 +428,90 @@ globalThis.onmessage = ({ data }) => {
       );
       await worker.terminate();
     });
+  });
+
+  it('rejects inherited eval execArgv before allocating a lossy worker thread', async () => {
+    _resetThreadIdCounterForTests();
+    const spawn = vi
+      .spyOn(globalProcessManager, 'spawnWorker')
+      .mockImplementation(() => makeFakeWorkerHandle([]));
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const parentEntry = buildNodeEntryWorkerEntry(
+      'https://rifty.test/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js' },
+      {
+        kind: 'eval',
+        source: '42',
+        print: false,
+        execArgv: ['-e', '42'],
+        remoteFs: true,
+        remoteFsRoot: REMOTE_FS_ROOT,
+      },
+    );
+    publishKernelEntryBootstrap(parentEntry.bootstrap ?? null);
+    const parent = new NodeProcess();
+    parent.execArgv.length = 0;
+    let worker: Worker | undefined;
+    let thrown: unknown;
+
+    await withProcessGlobal(parent, async () => {
+      try {
+        worker = new Worker('/workspace/worker.mjs');
+      } catch (error) {
+        thrown = error;
+      }
+      await Promise.resolve();
+      await worker?.terminate();
+    });
+
+    expect(thrown).toEqual(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'worker_threads.Worker.execArgv',
+      }),
+    );
+    expect(spawn).not.toHaveBeenCalled();
+
+    publishKernelEntryBootstrap(null);
+    (globalThis as Coi).crossOriginIsolated = false;
+    writeFileSync('/worker-after-inherited-gap.js', ';');
+    const valid = new Worker('/worker-after-inherited-gap.js');
+    const exit = onceEvent(valid, 'exit');
+    expect(valid.threadId).toBe(1);
+    await exit;
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('rejects an explicit execArgv override before allocating a worker thread', async () => {
+    _resetThreadIdCounterForTests();
+    const spawn = vi
+      .spyOn(globalProcessManager, 'spawnWorker')
+      .mockImplementation(() => makeFakeWorkerHandle([]));
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+
+    expect(() => new Worker('/workspace/worker.mjs', { execArgv: [] })).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'worker_threads.Worker.execArgv',
+      }),
+    );
+    expect(spawn).not.toHaveBeenCalled();
+
+    (globalThis as Coi).crossOriginIsolated = false;
+    writeFileSync('/worker-after-explicit-gap.js', ';');
+    const valid = new Worker('/worker-after-explicit-gap.js');
+    const exit = onceEvent(valid, 'exit');
+    expect(valid.threadId).toBe(1);
+    await exit;
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it('keeps bootstrap ancestry when guest pid fields and the public spec are poisoned', async () => {
@@ -675,6 +858,11 @@ globalThis.onmessage = ({ data }) => {
 
 const onceEvent = <T = unknown>(emitter: EventEmitter, event: string): Promise<T> =>
   new Promise<T>((resolve) => emitter.once(event, (...args: unknown[]) => resolve(args[0] as T)));
+
+function decodeOutput(chunk: unknown): string {
+  if (!(chunk instanceof Uint8Array)) throw new TypeError('expected Uint8Array output');
+  return new TextDecoder().decode(chunk);
+}
 
 describe('worker_threads Node parity (threadId / online / terminate)', () => {
   it('keeps unsupported eval and data-URL success paths loud', async () => {

@@ -20,6 +20,7 @@ export {
   buildNodeEntryWorkerEntry,
   readNodeEntryBootstrap,
   type NodeEntryBootstrapPayload,
+  type NodeEntryEvalLaunch,
   type NodeEntryLaunch,
   type NodeEntryProgramLaunch,
   type NodeEntryTerminalBootstrap,

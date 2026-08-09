@@ -15,7 +15,21 @@ import {
 import { asyncVfs, syncMirror } from '../../../packages/vfs/src/index.ts';
 import { setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
 import workerEnvCase from '../cases/worker_threads/env-semantics.case.ts';
-import { runInRifty } from './run-in-rifty.ts';
+import {
+  NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES,
+  NODE_CLI_EVAL_TRANSIENT_DECODER_PATH,
+  NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+  type NodeCliEvalVfsActor,
+  nodeCliEvalTransientDecoderCarrierMutations,
+  nodeCliEvalTransientSourceCarrierMutations,
+  nodeCliEvalVfsFileContent,
+} from './node-cli-eval-vfs-observer.ts';
+import {
+  type NodeCliEvalBootstrapFault,
+  type NodeCliEvalVfsFault,
+  runInRifty,
+} from './run-in-rifty.ts';
+import type { ParityCase } from './types.ts';
 
 // Leave room for runInRifty's 30s diagnostic deadline under loaded CI Workers.
 const REAL_WORKER_TEST_TIMEOUT_MS = 35_000;
@@ -30,11 +44,424 @@ function restoreKernelWorkerUrl(url: string | URL | null): void {
   else setKernelWorkerUrl(url);
 }
 
+const PHYSICAL_STDIO_ORDER_CASE = {
+  kind: 'child-worker',
+  expectedPhysicalWorkers: 1,
+  cwd: '/project',
+  setup: {
+    files: {
+      'project/stdio-order-child.js': `
+        process.stdout.write('stdout-0|');
+        setTimeout(() => process.stderr.write('stderr-1|'), 20);
+        setTimeout(() => process.stdout.write('stdout-2'), 40);
+      `,
+    },
+  },
+  code: `
+    const { spawn } = require('node:child_process');
+    const child = spawn('node', ['stdio-order-child.js'], {
+      cwd: require('node:process').cwd(),
+    });
+    const frames = [];
+    child.stdout.on('data', (chunk) => frames.push({
+      stream: 'stdout',
+      text: chunk.toString(),
+    }));
+    child.stderr.on('data', (chunk) => frames.push({
+      stream: 'stderr',
+      text: chunk.toString(),
+    }));
+    child.once('close', (code, signal) => {
+      console.log(JSON.stringify({ frames, code, signal }));
+    });
+  `,
+} satisfies ParityCase;
+
+const PHYSICAL_STDIO_ORDER_OUTPUT = `${JSON.stringify({
+  frames: [
+    { stream: 'stdout', text: 'stdout-0|' },
+    { stream: 'stderr', text: 'stderr-1|' },
+    { stream: 'stdout', text: 'stdout-2' },
+  ],
+  code: 0,
+  signal: null,
+})}\n`;
+
 describe('runInRifty', () => {
   it(
-    'accepts the atomic node-entry v2 bootstrap in physical Worker mode',
+    'accepts the configured atomic node-entry bootstrap in physical Worker mode',
     async () => {
       await expect(runInRifty(workerEnvCase)).resolves.toBe(workerEnvCase.expected);
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'preserves admitted stdout/stderr order without a physical delivery fault',
+    async () => {
+      await expect(runInRifty(PHYSICAL_STDIO_ORDER_CASE)).resolves.toBe(
+        PHYSICAL_STDIO_ORDER_OUTPUT,
+      );
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'restores admitted write order from authenticated private witnesses without public IPC',
+    async () => {
+      await expect(
+        runInRifty(PHYSICAL_STDIO_ORDER_CASE, {
+          physicalStdioDeliveryFault: 'stderr-before-two-stdout',
+        }),
+      ).resolves.toBe(PHYSICAL_STDIO_ORDER_OUTPUT);
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'keeps the eval-only sync API out of a program physical Worker',
+    async () => {
+      const stdout = await runInRifty({
+        kind: 'child-worker',
+        expectedPhysicalWorkers: 1,
+        cwd: '/project',
+        setup: {
+          files: {
+            'project/sync-api-probe.cjs':
+              "process.stdout.write('sync-api:' + Object.hasOwn(globalThis, '__riftyKernelSyncCall') + '\\n');\n",
+          },
+        },
+        code: `
+          const { spawn } = require('node:child_process');
+          const child = spawn('node', ['sync-api-probe.cjs'], {
+            cwd: require('node:process').cwd(),
+          });
+          let stdout = '';
+          child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+          child.once('close', () => console.log(stdout.trim()));
+        `,
+      });
+
+      expect(stdout).toBe('sync-api:false\n');
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it('rejects every eval-only probe outside an eval physical child', async () => {
+    await expect(
+      runInRifty(workerEnvCase, {
+        nodeCliEvalVfsProbe: {
+          expectedGuestMutations: [],
+          fault: 'sab-remote-transient-source-file',
+        },
+      }),
+    ).rejects.toThrow('RunInRiftyOptions.nodeCliEvalVfsProbe requires kind node-cli-eval');
+    await expect(runInRifty(workerEnvCase, { nodeCliEvalPreviewProbe: {} })).rejects.toThrow(
+      'RunInRiftyOptions.nodeCliEvalPreviewProbe requires kind node-cli-eval',
+    );
+    await expect(
+      runInRifty(workerEnvCase, { nodeCliEvalBootstrapFault: 'wrong-protocol' }),
+    ).rejects.toThrow('RunInRiftyOptions.nodeCliEvalBootstrapFault requires kind node-cli-eval');
+  });
+
+  it('rejects a global VFS carrier phase spanning multiple eval children', async () => {
+    const invocation = (label: string) => ({
+      label,
+      nodeArgv: ['-e', ''],
+    });
+
+    await expect(
+      runInRifty(
+        {
+          kind: 'node-cli-eval',
+          code: '',
+          expectedPhysicalWorkers: 2,
+          nodeCliEval: {
+            sequential: [invocation('first'), invocation('second')],
+            concurrent: [],
+          },
+        },
+        {
+          nodeCliEvalVfsProbe: {
+            expectedGuestMutations: [],
+            fault: 'sab-remote-transient-source-file',
+          },
+        },
+      ),
+    ).rejects.toThrow(
+      'RunInRiftyOptions.nodeCliEvalVfsProbe.fault requires exactly one node-cli-eval invocation',
+    );
+  });
+
+  it(
+    'does not let a physical transient carrier satisfy same-path declared guest effects',
+    async () => {
+      const carrierPath = NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH;
+      const source = "'carrier-source';";
+      const missingGuestWrite = {
+        kind: 'write' as const,
+        provenance: 'guest' as const,
+        actor: 'workbench-owner' as const,
+        path: carrierPath,
+        content: nodeCliEvalVfsFileContent(carrierPath, source),
+      };
+      const unexpectedCarrierWrite = {
+        kind: 'write' as const,
+        provenance: 'carrier' as const,
+        actor: 'sab-remote' as const,
+        path: carrierPath,
+        content: nodeCliEvalVfsFileContent(carrierPath, source),
+      };
+      const missingGuestRm = {
+        kind: 'rm' as const,
+        provenance: 'guest' as const,
+        actor: 'workbench-owner' as const,
+        path: carrierPath,
+        recursive: false,
+        force: true,
+      };
+      const unexpectedCarrierRm = {
+        kind: 'rm' as const,
+        provenance: 'carrier' as const,
+        actor: 'sab-remote' as const,
+        path: carrierPath,
+        recursive: false,
+        force: true,
+      };
+
+      await expect(
+        runInRifty(
+          {
+            kind: 'node-cli-eval',
+            code: '',
+            expectedPhysicalWorkers: 1,
+            nodeCliEval: {
+              sequential: [
+                {
+                  label: 'transient-vfs-carrier-fault',
+                  nodeArgv: ['-e', source],
+                },
+              ],
+              concurrent: [],
+            },
+          },
+          {
+            nodeCliEvalVfsProbe: {
+              expectedGuestMutations: [missingGuestWrite, missingGuestRm],
+              fault: 'sab-remote-transient-source-file',
+            },
+          },
+        ),
+      ).rejects.toThrow(
+        `node-cli-eval VFS audit mismatch: ${JSON.stringify({
+          missing: [missingGuestWrite, missingGuestRm],
+          unexpected: [unexpectedCarrierWrite, unexpectedCarrierRm],
+        })}`,
+      );
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it.each<
+    readonly [
+      label: string,
+      fault: NodeCliEvalVfsFault | undefined,
+      actor: NodeCliEvalVfsActor | undefined,
+    ]
+  >([
+    ['clean normal path', undefined, undefined],
+    ['Workbench-owner pre-bootstrap', 'workbench-owner-transient-source-file', 'workbench-owner'],
+    ['SAB-remote pre-bootstrap', 'sab-remote-transient-source-file', 'sab-remote'],
+    ['child-local pre-entry process adoption', 'child-local-transient-source-file', 'child-local'],
+  ])(
+    'audits identical eval source bytes across the %s VFS boundary',
+    async (_label, fault, actor) => {
+      const guestPath = '/eval-guest-authored.txt';
+      const guestContent = 'owner-guest';
+      const source = `require('node:fs').writeFileSync(${JSON.stringify(
+        guestPath,
+      )}, ${JSON.stringify(guestContent)});`;
+      const expectedGuestWrite = {
+        kind: 'write' as const,
+        provenance: 'guest' as const,
+        actor: 'workbench-owner' as const,
+        path: guestPath,
+        content: nodeCliEvalVfsFileContent(guestPath, guestContent),
+      };
+      const invocationLabel = `${actor ?? 'clean'}-vfs-boundary`;
+      const run = runInRifty(
+        {
+          kind: 'node-cli-eval',
+          code: '',
+          expectedPhysicalWorkers: 1,
+          nodeCliEval: {
+            sequential: [
+              {
+                label: invocationLabel,
+                nodeArgv: ['-e', source],
+              },
+            ],
+            concurrent: [],
+          },
+        },
+        {
+          nodeCliEvalVfsProbe: {
+            expectedGuestMutations: [expectedGuestWrite],
+            ...(fault === undefined ? {} : { fault }),
+          },
+        },
+      );
+
+      if (actor === undefined) {
+        expect(JSON.parse(await run)).toEqual([
+          {
+            label: invocationLabel,
+            stdout: '',
+            stderr: '',
+            frames: [],
+            code: 0,
+            signal: null,
+          },
+        ]);
+        return;
+      }
+
+      await expect(run).rejects.toThrow(
+        `node-cli-eval VFS audit mismatch: ${JSON.stringify({
+          missing: [],
+          unexpected: nodeCliEvalTransientSourceCarrierMutations(actor, source),
+        })}`,
+      );
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'consumes each concurrent eval launch scope when reporting and serving its preview',
+    async () => {
+      const firstSource =
+        "require('node:http').createServer((_request, response) => { response.statusCode = 201; response.end('first-eval-preview'); }).listen(43_151);";
+      const secondSource =
+        "require('node:http').createServer((_request, response) => { response.statusCode = 202; response.end('second-eval-preview'); }).listen(43_152);";
+      const invocation = (label: string, source: string) => ({
+        label,
+        nodeArgv: ['-e', source],
+      });
+
+      const stdout = await runInRifty(
+        {
+          kind: 'node-cli-eval',
+          code: '',
+          expectedPhysicalWorkers: 2,
+          nodeCliEval: {
+            sequential: [],
+            concurrent: [
+              invocation('preview-first', firstSource),
+              invocation('preview-second', secondSource),
+            ],
+          },
+        },
+        {
+          nodeCliEvalPreviewProbe: {
+            'preview-first': { port: 43_151, status: 201, body: 'first-eval-preview' },
+            'preview-second': { port: 43_152, status: 202, body: 'second-eval-preview' },
+          },
+        },
+      );
+
+      expect(JSON.parse(stdout)).toMatchObject([
+        { label: 'preview-first', signal: 'SIGTERM' },
+        { label: 'preview-second', signal: 'SIGTERM' },
+      ]);
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'audits a transient child-local write/delete in the physical bootstrap decoder interval',
+    async () => {
+      const source = 'undefined';
+      await expect(
+        runInRifty(
+          {
+            kind: 'node-cli-eval',
+            code: '',
+            expectedPhysicalWorkers: 1,
+            nodeCliEval: {
+              sequential: [{ label: 'decoder-interval-vfs-boundary', nodeArgv: ['-e', source] }],
+              concurrent: [],
+            },
+          },
+          {
+            nodeCliEvalVfsProbe: {
+              expectedGuestMutations: [],
+              fault: 'child-local-transient-decoder-file',
+            },
+          },
+        ),
+      ).rejects.toThrow(
+        `node-cli-eval VFS audit mismatch: ${JSON.stringify({
+          missing: [],
+          unexpected: nodeCliEvalTransientDecoderCarrierMutations(),
+        })}`,
+      );
+      expect(NODE_CLI_EVAL_TRANSIENT_DECODER_PATH).not.toBe(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH);
+      expect(NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES).not.toBe(source);
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it.each<readonly [label: string, fault: NodeCliEvalBootstrapFault, expectedError: RegExp]>([
+    ['wrong protocol', 'wrong-protocol', /protocol.*v3.*v2/iu],
+    ['missing source', 'missing-source', /missing field.*source/iu],
+    ['missing print', 'missing-print', /missing field.*print/iu],
+    ['missing execArgv', 'missing-exec-argv', /missing field.*execArgv/iu],
+    ['missing remoteFs', 'missing-remote-fs', /missing field.*remoteFs/iu],
+    ['non-string source', 'source-not-string', /source.*string/iu],
+    ['non-boolean print', 'print-not-boolean', /print.*boolean/iu],
+    ['non-array execArgv', 'exec-argv-not-array', /execArgv.*array/iu],
+    ['non-boolean remoteFs', 'remote-fs-not-boolean', /remoteFs.*boolean/iu],
+    ['extra field', 'extra-launch-field', /unexpected field.*futureEvalField/iu],
+    ['non-string first execArgv entry', 'exec-argv-first-not-string', /execArgv.*string/iu],
+    ['non-string middle execArgv entry', 'exec-argv-middle-not-string', /execArgv.*string/iu],
+    ['non-string last execArgv entry', 'exec-argv-last-not-string', /execArgv.*string/iu],
+    ['program-only bin', 'program-bin', /unexpected field.*bin/iu],
+    ['program-only nodeServe', 'program-node-serve', /unexpected field.*nodeServe/iu],
+    ['program-only ipc', 'program-ipc', /unexpected field.*ipc/iu],
+  ])(
+    'rejects physical corrupt eval bootstrap before source/VFS effects: %s',
+    async (_label, fault, expectedError) => {
+      const source = "require('node:fs').writeFileSync('/bootstrap-must-not-run.txt', 'ran');";
+      const output = await runInRifty(
+        {
+          kind: 'node-cli-eval',
+          code: '',
+          expectedPhysicalWorkers: 1,
+          nodeCliEval: {
+            sequential: [
+              {
+                label: `corrupt-${fault}`,
+                nodeArgv: ['-e', source],
+              },
+            ],
+            concurrent: [],
+          },
+        },
+        {
+          nodeCliEvalBootstrapFault: fault,
+          nodeCliEvalVfsProbe: { expectedGuestMutations: [] },
+        },
+      );
+      const outcomes = JSON.parse(output) as readonly [
+        {
+          readonly stderr: string;
+          readonly code: number | null;
+          readonly signal: string | null;
+        },
+      ];
+
+      expect(outcomes[0]).toMatchObject({ code: 1, signal: null });
+      expect(outcomes[0].stderr).toMatch(expectedError);
     },
     REAL_WORKER_TEST_TIMEOUT_MS,
   );

@@ -10,12 +10,19 @@
 
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
+import { beginNodeEvalUnhandled, resetKeepalive } from '../internal/event-loop-keepalive.ts';
 import { createRequire } from './module.ts';
 import { parseBinLauncherTarget, runNodeEntry } from './node-entry.ts';
 
 const g = globalThis as Record<string, unknown>;
+const originalProcessDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
 
-afterEach(() => resetSyncMirror());
+afterEach(() => {
+  resetSyncMirror();
+  resetKeepalive();
+  if (originalProcessDescriptor === undefined) Reflect.deleteProperty(globalThis, 'process');
+  else Object.defineProperty(globalThis, 'process', originalProcessDescriptor);
+});
 
 describe('parseBinLauncherTarget', () => {
   it('extracts the dynamic-import target from a linker launcher shim', () => {
@@ -129,6 +136,183 @@ describe('runNodeEntry', () => {
     await runNodeEntry({ vfs, entryPath: '/work/script.js', cwd: '/work' });
 
     expect(g.__script).toBe(1);
+  });
+
+  it('projects a hashbang eval syntax error onto its second source line', async () => {
+    const vfs = new MemoryFsSync();
+    const source = '#!/usr/bin/env node\nreturn 1';
+    let thrown: unknown;
+
+    try {
+      await runNodeEntry({
+        kind: 'eval',
+        vfs,
+        cwd: '/work',
+        source,
+        print: false,
+        explicitCommonJs: false,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(SyntaxError);
+    expect((thrown as Error).stack).toBe(
+      '[eval]:2\nreturn 1\n^^^^^^\nReturn statement is not allowed here\n\nSyntaxError: Illegal return statement',
+    );
+  });
+
+  it('projects an explicit CommonJS TypeScript syntax error onto the const binding', async () => {
+    const vfs = new MemoryFsSync();
+    const source = 'const n: number = 1';
+    let thrown: unknown;
+
+    try {
+      await runNodeEntry({
+        kind: 'eval',
+        vfs,
+        cwd: '/work',
+        source,
+        print: false,
+        explicitCommonJs: true,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(SyntaxError);
+    expect((thrown as Error).stack).toBe(
+      '[eval]:1\nconst n: number = 1\n      ^\n\nSyntaxError: Missing initializer in const declaration',
+    );
+  });
+
+  it('points an eval throw diagnostic at the ThrowStatement after earlier code', async () => {
+    const vfs = new MemoryFsSync();
+    const source = "const x=1; throw new Error('x')";
+    let thrown: unknown;
+
+    try {
+      await runNodeEntry({
+        kind: 'eval',
+        vfs,
+        cwd: '/work',
+        source,
+        print: false,
+        explicitCommonJs: false,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect((thrown as Error).stack).toBe(
+      "[eval]:1\nconst x=1; throw new Error('x')\n           ^\n\nError: x\n    at [eval]:1:18",
+    );
+  });
+
+  it('preserves a runtime-owned SyntaxError prelude before the eval user frame', async () => {
+    const vfs = new MemoryFsSync();
+    let thrown: unknown;
+
+    try {
+      await runNodeEntry({
+        kind: 'eval',
+        vfs,
+        cwd: '/work',
+        source: "JSON.parse('{')",
+        print: false,
+        explicitCommonJs: false,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(SyntaxError);
+    expect((thrown as Error).stack).toBe(
+      "SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n" +
+        '    at JSON.parse (<anonymous>)\n' +
+        '    at [eval]:1:6',
+    );
+  });
+
+  it('uses process terminal capabilities captured before eval mutates the global', async () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const exits: number[] = [];
+    Object.defineProperty(globalThis, 'process', {
+      configurable: true,
+      writable: true,
+      value: {
+        stdout: { write: (chunk: string) => stdout.push(chunk) },
+        stderr: { write: (chunk: string) => stderr.push(chunk) },
+        exit(code: number) {
+          exits.push(code);
+          throw Object.assign(new Error(`process.exit(${String(code)})`), {
+            code: 'RIFTY_PROCESS_EXIT',
+            exitCode: code,
+          });
+        },
+      },
+    });
+
+    await runNodeEntry({
+      kind: 'eval',
+      vfs: new MemoryFsSync(),
+      cwd: '/work',
+      source: 'globalThis.process={poisoned:true};42',
+      print: true,
+      explicitCommonJs: false,
+    });
+    expect(beginNodeEvalUnhandled(new Error('later'), 'uncaught-error')).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(stdout).toEqual(['42\n']);
+    expect(stderr).toHaveLength(1);
+    expect(stderr[0]).toContain('Error: later');
+    expect(exits).toEqual([1]);
+  });
+
+  it('reports print failure through captured stderr before exiting 1', async () => {
+    const printFailure = new Error('stdout failed');
+    const stderr: string[] = [];
+    const exits: number[] = [];
+    Object.defineProperty(globalThis, 'process', {
+      configurable: true,
+      writable: true,
+      value: {
+        stdout: {
+          write() {
+            throw printFailure;
+          },
+        },
+        stderr: { write: (chunk: string) => stderr.push(chunk) },
+        exit(code: number) {
+          exits.push(code);
+          throw Object.assign(new Error(`process.exit(${String(code)})`), {
+            code: 'RIFTY_PROCESS_EXIT',
+            exitCode: code,
+          });
+        },
+      },
+    });
+
+    await runNodeEntry({
+      kind: 'eval',
+      vfs: new MemoryFsSync(),
+      cwd: '/work',
+      source: '42',
+      print: true,
+      explicitCommonJs: false,
+    });
+    expect(beginNodeEvalUnhandled(new Error('later'), 'uncaught-error')).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(stderr).toHaveLength(1);
+    expect(stderr[0]).toContain('Error: stdout failed');
+    expect(exits).toEqual([1]);
   });
 
   it('does not treat a plain script exported Promise as a process-lifecycle handle', async () => {

@@ -72,17 +72,32 @@ async function activateWorkbenchCapabilities(
 }
 
 /** Privileged generic entry preparation over strict ready bindings and adapter ids. */
-export async function prepareNodeEntryRuntime(options: {
-  readonly bin: boolean;
-  readonly root: string;
-  readonly args: readonly string[];
-  readonly entryPath: string;
-  readonly fs: FsSync;
-}): Promise<void> {
+export async function prepareNodeEntryRuntime(
+  options:
+    | {
+        readonly kind?: 'program';
+        readonly bin: boolean;
+        readonly root: string;
+        readonly args: readonly string[];
+        readonly entryPath: string;
+        readonly fs: FsSync;
+      }
+    | {
+        readonly kind: 'eval';
+        readonly root: string;
+        readonly fs: FsSync;
+      },
+): Promise<void> {
   const capabilities = consumeWorkbenchCapabilities();
   let integration: ReturnType<typeof planNodeEntryIntegration>;
   try {
-    integration = planNodeEntryIntegration(options);
+    integration =
+      options.kind === 'eval'
+        ? {
+            activateRuntimeAdapters: true,
+            complete: async () => {},
+          }
+        : planNodeEntryIntegration(options);
   } catch (error) {
     closeThenThrow(capabilities, error);
   }

@@ -385,6 +385,7 @@ describe('ProjectTerminal lifecycle contract', () => {
 
     const admissionFailure = await admission.catch((error: unknown) => error);
     await expect(run.ready).rejects.toBe(failure);
+    await expect(run.exitCode).rejects.toBe(failure);
     await expect(run.exited).rejects.toBe(failure);
     await expect(run.close()).rejects.toBe(failure);
     await terminal.close();
@@ -533,6 +534,9 @@ describe('ProjectTerminal lifecycle contract', () => {
     port.closeGate.resolve();
     await expect(run.ready).rejects.toBe(cancellation);
     await expect(run.exited).resolves.toBe(exactExit);
+    await expect(
+      (run as typeof run & { readonly exitCode: Promise<number> }).exitCode,
+    ).resolves.toBe(130);
     await expect(closing).resolves.toBeUndefined();
 
     expect(closeCallsBeforeExit).toEqual(['terminal-1']);
