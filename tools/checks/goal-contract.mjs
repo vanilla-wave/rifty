@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Run-goal tripwire. `Goal-Baseline: <epic>@<exact SHA>` freezes the epic's
- * observable promise across every implementation slice. Item order and run
- * bookkeeping stay mutable; value, tier, Outcome, User scenario, Invariants
- * do not.
+ * Run-goal tripwire. `Goal-Baseline: <epic>@<run-id>` freezes the epic's
+ * observable promise across every implementation slice. Every check compares
+ * merge-base content vs PR-head content of the aggregate diff; goal_baseline
+ * is a write-once opaque 40-hex run id — never dereferenced, no history walk.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -35,9 +35,8 @@ export function parseGoalBaseline(value) {
 }
 
 /**
- * History to audit. GitHub checks out a synthetic merge commit for PR jobs;
- * its first parent is main, so marker lineage must instead walk the exact PR
- * head recorded in the event.
+ * PR-head identity. GitHub checks out a synthetic merge commit for PR jobs;
+ * gates must read HEAD content from the exact PR head recorded in the event.
  */
 export function historyHeadRevision(env, readEvent) {
   if (!env.GITHUB_EVENT_PATH) return { revision: 'HEAD', kind: 'checkout', error: null };
@@ -158,96 +157,70 @@ export function evaluateGoal(baselineText, currentText, linkedItems) {
   return violations;
 }
 
-function withoutGoalBaseline(text) {
-  return text.replace(/^goal_baseline:\s*[^\r\n]*(?:\r?\n|$)/mu, '');
-}
-
 /**
- * Validate one epic's marker along first-parent history. `states[0]` is the
- * merge-base; every following state is one commit through HEAD.
+ * One epic's marker transition, merge-base content vs head content.
+ * `contractOnlyPR` covers ALL aggregate changed paths; `declaredGoal` is the
+ * parsed Goal-Baseline or null.
  */
-export function evaluateMarkerHistory(path, states, hasNonContractChanges, declaredGoal) {
+export function evaluateMarkerTransition(
+  path,
+  baseText,
+  headText,
+  { contractOnlyPR, declaredGoal },
+) {
   const violations = [];
   const slug = EPIC_PATH_RE.exec(path)?.[1] ?? null;
-  const baseMarker = inspectGoalBaseline(states[0]?.text ?? null);
-  if (baseMarker.error !== null) {
-    violations.push(`${path}: merge-base ${baseMarker.error}`);
+  const base = inspectGoalBaseline(baseText);
+  if (base.error !== null) {
+    violations.push(`${path}: merge-base ${base.error}`);
     return { canonical: null, deleted: false, introduced: false, violations };
   }
-
-  let canonical = baseMarker.value;
-  let deleted = false;
-  let introduced = false;
-  for (let index = 1; index < states.length; index += 1) {
-    const previous = states[index - 1];
-    const current = states[index];
-    const marker = inspectGoalBaseline(current.text);
-    if (marker.error !== null) {
-      violations.push(`${path}@${current.sha.slice(0, 12)}: ${marker.error}`);
-      continue;
-    }
-
-    if (canonical !== null) {
-      if (current.text === null) {
-        deleted = true;
-        continue;
-      }
-      if (deleted) {
-        violations.push(`${path}: marker-bearing epic reappeared after deletion`);
-        continue;
-      }
-      if (marker.value !== canonical) {
-        violations.push(
-          `${path}: active goal_baseline changed from ${canonical} to ${marker.value ?? 'missing'}`,
-        );
-      }
-      continue;
-    }
-
-    if (current.text === null || marker.value === null) continue;
-    introduced = true;
-    canonical = marker.value;
-    if (hasNonContractChanges) {
-      violations.push(
-        `${path}: establish and land goal_baseline in a contract-only PR before source work`,
-      );
-    }
-    if (previous.text === null) {
-      violations.push(`${path}: goal_baseline parent lacks the ready epic`);
-      continue;
-    }
-    if (canonical !== previous.sha) {
-      violations.push(
-        `${path}: new goal_baseline must equal its marker commit parent ${previous.sha}`,
-      );
-    }
-    if (frontmatterValue(previous.text, 'status') !== 'ready') {
-      violations.push(`${path}: goal_baseline parent must contain a ready epic`);
-    }
-    const baseline = goalContract(previous.text);
-    if (
-      baseline === null ||
-      baseline.value === null ||
-      baseline.tier === null ||
-      baseline.outcome === null ||
-      baseline.userScenario === null ||
-      baseline.invariants === null
-    ) {
-      violations.push(`${path}: goal_baseline parent lacks the complete observable contract`);
-    }
-    if (withoutGoalBaseline(current.text) !== previous.text) {
-      violations.push(`${path}: marker commit may only add goal_baseline`);
-    }
+  const head = inspectGoalBaseline(headText);
+  if (head.error !== null) {
+    violations.push(`${path}: ${head.error}`);
+    return { canonical: base.value, deleted: false, introduced: false, violations };
   }
 
+  if (base.value !== null) {
+    if (headText === null) {
+      if (declaredGoal?.epicSlug !== slug || declaredGoal.sha !== base.value) {
+        violations.push(`${path}: deleting an active goal requires its matching Goal-Baseline`);
+      }
+      return { canonical: base.value, deleted: true, introduced: false, violations };
+    }
+    if (head.value === null) {
+      violations.push(`${path}: goal_baseline removed while the run is active`);
+      return { canonical: base.value, deleted: false, introduced: false, violations };
+    }
+    if (head.value !== base.value) {
+      violations.push(`${path}: active goal_baseline changed from ${base.value} to ${head.value}`);
+      return { canonical: base.value, deleted: false, introduced: false, violations };
+    }
+    violations.push(...evaluateGoal(baseText, headText, []).map((v) => `${path}: ${v}`));
+    return { canonical: base.value, deleted: false, introduced: false, violations };
+  }
+
+  if (head.value === null) {
+    return { canonical: null, deleted: false, introduced: false, violations };
+  }
+  // Bootstrap: marker absent at merge-base, present at head.
+  if (!contractOnlyPR) {
+    violations.push(
+      `${path}: establish and land goal_baseline in a contract-only PR before source work`,
+    );
+  }
+  const contract = goalContract(headText);
   if (
-    canonical !== null &&
-    deleted &&
-    (declaredGoal?.epicSlug !== slug || declaredGoal.sha !== canonical)
+    frontmatterValue(headText, 'status') !== 'ready' ||
+    contract.value === null ||
+    contract.tier === null ||
+    contract.outcome === null ||
+    contract.userScenario === null ||
+    contract.invariants === null
   ) {
-    violations.push(`${path}: deleting an active goal requires its matching Goal-Baseline`);
+    violations.push(`${path}: goal_baseline epic lacks the complete observable contract`);
   }
-  return { canonical, deleted, introduced, violations };
+  return { canonical: head.value, deleted: false, introduced: true, violations };
 }
 
 /** A closing goal cannot be replaced/renamed through another epic in the PR. */
@@ -283,17 +256,15 @@ function showText(revision, path) {
   }
 }
 
-function historyChangedPaths(base, commits) {
-  const paths = new Set();
-  let parent = base;
-  for (const commit of commits) {
-    const rows = git('diff', '--name-status', parent, commit).trim().split('\n').filter(Boolean);
-    for (const row of rows) {
-      for (const path of row.split('\t').slice(1)) paths.add(path);
+function headTextOf(revision, path) {
+  if (revision === 'HEAD') {
+    try {
+      return readFileSync(path, 'utf8');
+    } catch {
+      return null;
     }
-    parent = commit;
   }
-  return paths;
+  return showText(revision, path);
 }
 
 function walkMarkdown(dir) {
@@ -343,41 +314,29 @@ function main() {
     process.exit(1);
   }
 
-  const commits = git('rev-list', '--first-parent', '--reverse', `${mergeBase}..${revision}`)
-    .trim()
-    .split('\n')
-    .filter(Boolean);
-  const changedPaths = historyChangedPaths(mergeBase, commits);
+  const changedPaths = new Set();
+  const rows = git('diff', '--name-status', mergeBase, revision).trim().split('\n').filter(Boolean);
+  for (const row of rows) {
+    for (const path of row.split('\t').slice(1)) changedPaths.add(path);
+  }
   const goal = declarations.length === 1 ? parseGoalBaseline(declarations[0]) : null;
   const paths = new Set([...changedPaths].filter((path) => EPIC_PATH_RE.test(path)));
   if (goal !== null) paths.add(`docs/backlog/epics/${goal.epicSlug}.md`);
-  const hasNonContractChanges = !isContractOnlyBootstrap([...changedPaths]);
+  const contractOnlyPR = isContractOnlyBootstrap([...changedPaths]);
   const histories = new Map();
   const markerViolations = [];
   for (const path of paths) {
-    const states = [
-      { sha: mergeBase, text: showText(mergeBase, path) },
-      ...commits.map((sha) => ({ sha, text: showText(sha, path) })),
-    ];
-    const result = evaluateMarkerHistory(path, states, hasNonContractChanges, goal);
+    const baseText = showText(mergeBase, path);
+    const headText = headTextOf(revision, path);
+    const result = evaluateMarkerTransition(path, baseText, headText, {
+      contractOnlyPR,
+      declaredGoal: goal,
+    });
     histories.set(path, result);
     markerViolations.push(...result.violations);
-    if (result.canonical !== null && !result.deleted) {
-      try {
-        git('merge-base', '--is-ancestor', result.canonical, revision);
-      } catch {
-        markerViolations.push(
-          `${path}: goal_baseline ${result.canonical} is unavailable or not an ancestor`,
-        );
-        continue;
-      }
-      const baseline = showText(result.canonical, path);
-      const current = readFileSync(path, 'utf8');
-      if (baseline === null) {
-        markerViolations.push(`${path}: goal_baseline commit does not contain the epic`);
-      } else {
-        markerViolations.push(...evaluateGoal(baseline, current, []).map((v) => `${path}: ${v}`));
-      }
+    if (result.canonical !== null && result.deleted) {
+      const residuals = linkedItems(EPIC_PATH_RE.exec(path)?.[1] ?? '');
+      markerViolations.push(...evaluateGoal(baseText, null, residuals).map((v) => `${path}: ${v}`));
     }
   }
   markerViolations.push(...closureIdentityViolations(histories));
@@ -415,28 +374,9 @@ function main() {
     );
     process.exit(1);
   }
-  let baselineText;
-  try {
-    baselineText = git('show', `${goal.sha}:${path}`);
-  } catch {
-    console.error(`goal-contract: ✗ ${path} does not exist at ${goal.sha}`);
-    process.exit(1);
-  }
-  let currentText = null;
-  try {
-    currentText = readFileSync(path, 'utf8');
-  } catch {
-    /* delete-on-done candidate */
-  }
-  const residuals = linkedItems(goal.epicSlug);
-  const violations = evaluateGoal(baselineText, currentText, residuals);
-  if (violations.length > 0) {
-    console.error(`goal-contract: ${violations.length} violation(s) for ${declarations[0]}:`);
-    for (const violation of violations) console.error(`  ✗ ${violation}`);
-    process.exit(1);
-  }
-  const state =
-    currentText === null ? 'closure candidate' : `${residuals.length} open child item(s)`;
+  const state = history.deleted
+    ? 'closure candidate'
+    : `${linkedItems(goal.epicSlug).length} open child item(s)`;
   console.log(`goal-contract: OK (${declarations[0]}: ${state})`);
 }
 

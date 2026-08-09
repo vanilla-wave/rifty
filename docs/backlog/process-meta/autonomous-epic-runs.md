@@ -35,27 +35,15 @@ lineage each given its own docs PR).
 
 ## Residual — machine gates still mandate a second PR
 
-§PR is canon, but four gates encode PR-as-unit-of-process and were left
-untouched; each is a reachable §PR violation, not an ergonomics nit. Reproduced
-against `5296991f5`:
+§PR is canon, but gates encoded PR-as-unit-of-process. Two of four residuals
+closed by the content-anchor re-cut (gates read the aggregate merge-base→head
+diff): contract-drift now allows the in-PR `ready`→`draft` demotion, and the
+insertion band excludes `docs/backlog/**`. Remaining:
 
-- `tools/checks/budget.mjs:88` — epic must exist at merge-base, so a goal's
-  bootstrap cannot ride the delivering branch: first slice PR of every new goal
-  exits 1. Keeps `backlog/README.md:61-65` §Autonomous goal 1–2 mandating a
-  contract-only bootstrap PR.
-- `tools/checks/contract-drift.mjs:81-84` (pinned by `contract-drift.test.ts:55`)
-  rejects an in-place `ready`→`draft` edit in the post-pickup diff, and pickup
-  freezes at the first source commit — so `decision-workflow.md:51-53` mid-build
-  demotion has no legal in-PR path and keeps its separate-PR mandate.
-- `tools/checks/budget.mjs:136-143` counts `docs/**` against the slice insertion
-  band (only `generated` globs and test-support are skipped). Absorbing
-  discoveries into the branch consumes the band, whose canonical remedy is
-  "re-cut the slice" — the split §PR removes. `backlog/README.md:94` still
-  defines the band at PR scope.
+- `check:budget` — epic must exist at merge-base, so a goal's bootstrap cannot
+  ride the delivering branch: first slice PR of every new goal exits 1. Keeps
+  §Autonomous goal 1–2 mandating a contract-only bootstrap PR (deliberate).
 - CI is `pull_request`/`merge_group`/`push→main` only (`.github/workflows/ci.yml:3-8`),
   so moving PR-open to Final+GREEN would leave the branch with zero CI until the
   merge candidate. `rifty-review` SKILL.md:6,:51 also hardcode "the PR body" as
   checkpoint review input. PR-open timing therefore stays at first Contract+RED.
-
-Each needs a RED test before its fix (`contract-drift.test.ts:211` pins the
-current `beside source` message and must be re-cut, not edited green).

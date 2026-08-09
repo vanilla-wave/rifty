@@ -33,29 +33,24 @@ Shape and validation: `docs/backlog/README.md`. Never implement a draft.
 2. Resolve internal forks yourself. A missing section is not a reason to invoke a skill.
 3. Remaining user-observable fork → leave draft, surface the exact branch, and
    request manual `rifty-refine`; don't interview mid-task.
-4. Otherwise compile the contract and get a fresh-context judge verdict: a subagent
-   receives the doc path (item or epic) + repo access only — no framing, no «I think
-   it's settled» (frame-then-validate voids the check). It independently re-checks
-   stale/overlap, evidence behind every Parity/Fault row (model memory is not
-   evidence; spike evidence counts only as a reproducible artifact — command +
-   output + version, else the row is unverified), boundary rows, and the mechanism
-   inventory — including machinery the Acceptance is deliverable without
-   (prescribed carrier with no spike/ADR = frozen assumption, not ready). Its verdict text is copied VERBATIM as the first line of the doc's
-   `## Decisions`: `ready-verdict: <date> — <what settled each section>`. Clean →
-   set `ready`, run `pnpm backlog:check`, continue; open fork → step 3;
-   missing/unverifiable evidence → step 1. No «settled with caveats».
-   Inside an active goal run the judge is skipped — the unit's Contract+RED
-   checkpoint (fresh reviewer, raw contract) IS this verification; the flip
-   records `ready-verdict: <date> — Contract+RED @ <sha>` instead. One fresh
-   context per contract, never two.
+4. Otherwise compile the contract: every Parity/Fault row carries a reproducible
+   artifact — command + output + version; model memory is not evidence; a
+   prescribed carrier with no spike/ADR fact = frozen assumption. All forks
+   resolved + rows evidenced → set `ready`, run `pnpm backlog:check`, continue;
+   open fork → step 3; missing/unverifiable evidence → step 1. No «settled with
+   caveats». Verification is the unit's Contract+RED checkpoint at pickup (fresh
+   reviewer, raw contract, no framing — frame-then-validate voids the check);
+   before implementation its verdict is copied VERBATIM as the first line of the
+   doc's `## Decisions`: `ready-verdict: <date> — Contract+RED @ <sha>`. One
+   fresh context per contract, never two.
 5. An unsettled fork discovered in an already-`ready` item (mid-build or review) →
    demote to `draft` recording the fork AND the pre-demotion Acceptance/Parity
-   verbatim; the re-flip judge diffs against them — any weakening is a
+   verbatim; the next Contract+RED checkpoint diffs the re-cut against them — any weakening is a
    user-observable fork → manual `rifty-refine`. Never absorb silently. (An
-   active goal epic itself cannot be demoted — `check:goal-contract`.) Pre-pickup
-   this commits in the discovering PR; post-pickup it needs its own, because
-   `check:contract-drift` rejects an in-place `ready`→`draft` edit after pickup
-   (`process-meta/autonomous-epic-runs.md` §Residual).
+   active goal epic itself cannot be demoted — `check:goal-contract`.) The
+   demotion commits in the discovering PR — pre- or post-pickup;
+   `check:contract-drift` allows the `ready`→`draft` flip, the recorded fork +
+   verbatim Acceptance stay mandatory.
 
 ### Refine altitude
 

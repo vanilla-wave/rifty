@@ -1,28 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import { closeItemDependencies, evaluate, statusOf } from './contract-drift.mjs';
 
-const item = (status: string) => `---\narea: playground\nstatus: ${status}\ntitle: T\n---\n\nbody`;
+const item = (status: string) =>
+  `---\narea: playground\nstatus: ${status}\ntitle: T\n---\n\nbody\n`;
+const verdict = 'ready-verdict: 2026-08-01 — Contract+RED @ abc\n';
 
 const read = (base: string | null, head: string | null) => (_path: string, side: 'base' | 'head') =>
   side === 'base' ? base : head;
 
-const readyEpic = `---
+const epic = (status: string, outcome = 'Ship it.', items = 'close me.') => `---
 kind: epic
-status: ready
+status: ${status}
+value: V
+tier: 1
 title: E
 ---
 
+## Outcome
+
+${outcome}
+
+## User scenario
+
+Run it.
+
+## Invariants
+
+Hold.
+
 ## Items
 
-1. \`playground/x\` — **x-slice**: close me.
-2. \`playground/y\` — **y-slice**: keep me.
+1. \`playground/x\` — **x-slice**: ${items}
 
 ## Budget
 
 | slice | band |
 |---|---|
 | x-slice | 10–20 |
-| y-slice | 20–30 |
 `;
 
 const closedChild = `---
@@ -45,22 +59,39 @@ describe('evaluate', () => {
   const src = { status: 'M', path: 'packages/vfs/src/index.ts' };
   const contract = { status: 'M', path: 'docs/backlog/playground/x.md' };
 
-  it('flags an in-place ready-contract edit alongside source changes', () => {
-    const violations = evaluate([src, contract], read(item('ready'), item('ready')));
+  it('flags an aggregate ready-contract rewrite beside source changes', () => {
+    const violations = evaluate([src, contract], read(item('ready'), `${item('ready')} rewritten`));
     expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain('content must match merge-base');
     expect(violations[0]).toContain('docs/backlog/playground/x.md');
   });
 
-  it('flags a ready→draft demotion alongside source changes', () => {
-    expect(evaluate([src, contract], read(item('ready'), item('draft')))).toHaveLength(1);
+  it('flags an in-place ready→in-progress edit as a rewrite', () => {
+    expect(evaluate([src, contract], read(item('ready'), item('in-progress')))).toHaveLength(1);
   });
 
-  it('passes draft edits, docs-only diffs, adds, and deletes', () => {
-    expect(evaluate([src, contract], read(item('draft'), item('draft')))).toHaveLength(0);
-    expect(evaluate([contract], read(item('ready'), item('ready')))).toHaveLength(0);
-    expect(evaluate([src, { ...contract, status: 'A' }], read(null, item('ready')))).toHaveLength(
+  it('allows head equal to merge-base modulo ready-verdict lines', () => {
+    expect(evaluate([src, contract], read(item('ready'), item('ready')))).toHaveLength(0);
+    expect(evaluate([src, contract], read(item('ready'), item('ready') + verdict))).toHaveLength(0);
+    expect(evaluate([src, contract], read(item('ready') + verdict, item('ready')))).toHaveLength(0);
+  });
+
+  it('requires a recorded verdict for a ready flip beside source', () => {
+    const flipped = evaluate([src, contract], read(item('draft'), item('ready')));
+    expect(flipped).toHaveLength(1);
+    expect(flipped[0]).toContain('ready flip without pickup Contract+RED verdict');
+    expect(evaluate([src, contract], read(item('draft'), item('ready') + verdict))).toHaveLength(0);
+    const added = { ...contract, status: 'A' };
+    expect(evaluate([src, added], read(null, item('in-progress')))).toHaveLength(1);
+    expect(evaluate([src, added], read(null, item('ready') + verdict))).toHaveLength(0);
+  });
+
+  it('passes draft edits, docs-only diffs, demotions, and deletes', () => {
+    expect(evaluate([src, contract], read(item('draft'), `${item('draft')} edited`))).toHaveLength(
       0,
     );
+    expect(evaluate([contract], read(item('ready'), `${item('ready')} rewritten`))).toHaveLength(0);
+    expect(evaluate([src, contract], read(item('ready'), item('draft')))).toHaveLength(0);
     expect(evaluate([src, { ...contract, status: 'D' }], read(item('ready'), null))).toHaveLength(
       0,
     );
@@ -74,16 +105,38 @@ describe('evaluate', () => {
     'apps/playground/src/glue/test-monaco-editor.ts',
     'packages/runtime-wasi/src/syscalls/fd-test-fixture.ts',
   ])('does not treat test support as implementation source: %s', (path) => {
-    expect(evaluate([{ status: 'A', path }, contract], read(item('ready'), item('ready')))).toEqual(
-      [],
-    );
+    expect(
+      evaluate(
+        [{ status: 'A', path }, contract],
+        read(item('ready'), `${item('ready')} rewritten`),
+      ),
+    ).toEqual([]);
   });
 
-  it('guards in-progress epics and skips README/TEMPLATE', () => {
-    const epic = { status: 'M', path: 'docs/backlog/epics/e.md' };
-    expect(evaluate([src, epic], read(item('in-progress'), item('in-progress')))).toHaveLength(1);
+  it('guards only frozen epic fields beside source', () => {
+    const epicEntry = { status: 'M', path: 'docs/backlog/epics/e.md' };
+    const frozen = evaluate([src, epicEntry], read(epic('ready'), epic('ready', 'Rewritten.')));
+    expect(frozen).toHaveLength(1);
+    expect(frozen[0]).toBe('docs/backlog/epics/e.md: frozen Outcome changed beside source');
+    expect(
+      evaluate(
+        [src, epicEntry],
+        read(epic('in-progress'), epic('in-progress').replace('value: V', 'value: W')),
+      )[0],
+    ).toContain('frozen value changed beside source');
+    expect(
+      evaluate([src, epicEntry], read(epic('ready'), epic('ready', 'Ship it.', 'closed.'))),
+    ).toHaveLength(0);
+    expect(
+      evaluate([src, epicEntry], read(epic('draft'), epic('draft', 'Rewritten.'))),
+    ).toHaveLength(0);
+  });
+
+  it('skips README/TEMPLATE', () => {
     const readme = { status: 'M', path: 'docs/backlog/README.md' };
-    expect(evaluate([src, readme], read(item('ready'), item('ready')))).toHaveLength(0);
+    expect(evaluate([src, readme], read(item('ready'), `${item('ready')} rewritten`))).toHaveLength(
+      0,
+    );
   });
 
   it('rejects a process referee changed anywhere in the implementation PR', () => {
@@ -96,23 +149,6 @@ describe('evaluate', () => {
       expect(evaluate([src], read(null, null), [src, referee])[0]).toContain('own process referee');
       expect(evaluate([referee], read(null, null))).toEqual([]);
     }
-  });
-
-  it('closes a child without rewriting the historical epic ledger', () => {
-    const deleted = { status: 'D', path: 'docs/backlog/playground/x.md' };
-    const epicEntry = { status: 'M', path: 'docs/backlog/epics/e.md' };
-    const byPath =
-      (headEpic: string) =>
-      (path: string, side: 'base' | 'head'): string | null => {
-        if (path === deleted.path) return side === 'base' ? closedChild : null;
-        if (path === epicEntry.path) return side === 'base' ? readyEpic : headEpic;
-        return null;
-      };
-
-    expect(evaluate([src, deleted], byPath(readyEpic))).toEqual([]);
-    expect(
-      evaluate([src, deleted, epicEntry], byPath(readyEpic.replace('keep me.', 'rewritten.'))),
-    ).toHaveLength(1);
   });
 
   it('allows only deleted ready keys to leave a dependent blocked_by list', () => {
@@ -141,6 +177,7 @@ body
       };
 
     expect(evaluate([src, deleted, dependent], byPath(headDependent))).toEqual([]);
+    expect(evaluate([src, deleted, dependent], byPath(headDependent + verdict))).toEqual([]);
     expect(
       evaluate([src, deleted, dependent], byPath(headDependent.replace('body', 'rewritten body'))),
     ).toHaveLength(1);
@@ -167,14 +204,14 @@ blocked_by: [playground/x, playground/z]
   });
 });
 
-describe('synthetic merge ref (CI)', () => {
-  it('honors in-PR commit sequencing via the event head, blind without it', async () => {
+describe('aggregate diff (git integration)', () => {
+  it('anchors to merge-base content regardless of commit topology', async () => {
     const { execFileSync, spawnSync } = await import('node:child_process');
     const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
-    const root = mkdtempSync(join(tmpdir(), 'rifty-drift-merge-'));
+    const root = mkdtempSync(join(tmpdir(), 'rifty-drift-aggregate-'));
     const g = (...args: string[]) =>
       execFileSync('git', ['-c', 'user.name=R', '-c', 'user.email=r@e.t', ...args], {
         cwd: root,
@@ -196,157 +233,31 @@ describe('synthetic merge ref (CI)', () => {
       writeFileSync(join(root, 'packages/x/src/a.ts'), 'export const a = 2;\n');
       g('add', '.');
       g('commit', '-m', 'source second');
-      const prSha = g('rev-parse', 'HEAD').trim();
-      g('checkout', 'main');
-      g('merge', '--no-ff', '--no-edit', 'pr');
-      const eventPath = join(root, 'event.json');
-      writeFileSync(eventPath, JSON.stringify({ pull_request: { head: { sha: prSha } } }));
       const script = fileURLToPath(new URL('./contract-drift.mjs', import.meta.url));
+      // Verdict-less flip fails even when the flip commit precedes source.
       const blind = spawnSync(process.execPath, [script], {
         cwd: root,
         encoding: 'utf8',
         env: { ...process.env, GITHUB_EVENT_PATH: undefined },
       });
       expect(blind.status).toBe(1);
-      expect(blind.stderr).toContain('beside source');
+      expect(blind.stderr).toContain('ready flip without pickup Contract+RED verdict');
+      // Recording the verdict makes the same aggregate diff pass.
+      writeFileSync(join(root, 'docs/backlog/net/x.md'), item('ready') + verdict);
+      g('add', '.');
+      g('commit', '-m', 'record verdict');
+      const prSha = g('rev-parse', 'HEAD').trim();
+      const eventPath = join(root, 'event.json');
+      writeFileSync(eventPath, JSON.stringify({ pull_request: { head: { sha: prSha } } }));
+      g('checkout', 'main');
+      g('merge', '--no-ff', '--no-edit', 'pr');
       const sighted = execFileSync(process.execPath, [script], {
         cwd: root,
         encoding: 'utf8',
         env: { ...process.env, GITHUB_EVENT_PATH: eventPath },
       });
       expect(sighted).toContain('contract-drift: OK');
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it('keeps RED tests before JIT authority for contract-drift and budget', async () => {
-    const { execFileSync, spawnSync } = await import('node:child_process');
-    const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
-    const { tmpdir } = await import('node:os');
-    const { join } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
-    const root = mkdtempSync(join(tmpdir(), 'rifty-pickup-gates-'));
-    const g = (...args: string[]) =>
-      execFileSync('git', ['-c', 'user.name=R', '-c', 'user.email=r@e.t', ...args], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-    const initialEpic = `---
-kind: epic
-status: ready
-title: Goal
-created: 2026-07-28
-value: Goal
----
-
-## Outcome
-
-Goal.
-
-## User scenario
-
-Run it.
-
-## Items
-
-Known work.
-
-## Budget
-
-- new coordination mechanisms: 0
-
-| slice | band |
-|---|---|
-| seed | 1–10 |
-`;
-    try {
-      mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
-      mkdirSync(join(root, 'docs/backlog/playground'), { recursive: true });
-      mkdirSync(join(root, 'packages/x/src'), { recursive: true });
-      const epicPath = join(root, 'docs/backlog/epics/goal.md');
-      writeFileSync(epicPath, initialEpic);
-      g('init', '-b', 'main');
-      g('add', '.');
-      g('commit', '-m', 'base');
-      const baseline = g('rev-parse', 'HEAD').trim();
-      g('update-ref', 'refs/remotes/origin/main', baseline);
-      g('checkout', '-b', 'pr');
-
-      writeFileSync(
-        join(root, 'packages/x/src/save.contract.test.ts'),
-        "import { it } from 'vitest';\nit('RED', () => {});\n",
-      );
-      g('add', '.');
-      g('commit', '-m', 'contract red');
-
-      writeFileSync(
-        join(root, 'docs/backlog/playground/save.md'),
-        `---
-area: playground
-status: ready
-title: Save
-created: 2026-07-28
-why: Required by goal
-epic: goal
----
-`,
-      );
-      writeFileSync(
-        epicPath,
-        initialEpic
-          .replace('Known work.', '- `playground/save` — **save**: just-in-time unit.')
-          .replace('| seed | 1–10 |', '| seed | 1–10 |\n| save | 1–10 |'),
-      );
-      g('add', '.');
-      g('commit', '-m', 'ready authority');
-
-      writeFileSync(join(root, 'packages/x/src/save.ts'), 'export const saved = true;\n');
-      g('add', '.');
-      g('commit', '-m', 'implementation');
-      const prSha = g('rev-parse', 'HEAD').trim();
-      const eventPath = join(root, 'event.json');
-      writeFileSync(
-        eventPath,
-        JSON.stringify({
-          pull_request: {
-            head: { sha: prSha },
-            body: [`Goal-Baseline: goal@${baseline}`, 'Budget-Slice: goal/save'].join('\n'),
-          },
-        }),
-      );
-
-      const contractScript = fileURLToPath(new URL('./contract-drift.mjs', import.meta.url));
-      const budgetScript = fileURLToPath(new URL('./budget.mjs', import.meta.url));
-      const env = {
-        ...process.env,
-        GITHUB_EVENT_PATH: eventPath,
-        RIFTY_GOAL_BASELINE: undefined,
-        RIFTY_BUDGET_SLICE: undefined,
-      };
-      const drift = spawnSync(process.execPath, [contractScript], {
-        cwd: root,
-        encoding: 'utf8',
-        env,
-      });
-      const budget = spawnSync(process.execPath, [budgetScript], {
-        cwd: root,
-        encoding: 'utf8',
-        env,
-      });
-      expect({
-        contractStatus: drift.status,
-        contractStdout: drift.stdout,
-        contractStderr: drift.stderr,
-        budgetStatus: budget.status,
-        budgetStdout: budget.stdout,
-        budgetStderr: budget.stderr,
-      }).toMatchObject({
-        contractStatus: 0,
-        contractStdout: expect.stringContaining('contract-drift: OK'),
-        budgetStatus: 0,
-        budgetStdout: expect.stringContaining('budget: OK (goal/save:'),
-      });
+      expect(sighted).toContain('vs');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

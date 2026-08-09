@@ -13,7 +13,7 @@ Candidate mechanics (pick at refine):
 
 - implementer entry points (skills / agent preamble) refuse a `status: draft` target — cheapest, catches the front door;
 - `pr:check` cross-ref: a PR that claims delivery of an item (branch↔item or PR-body marker convention — to design) requires that item `ready`;
-- same gate family: a `draft→ready` flip in the diff requires its `ready-verdict:` line, judge-authored — a parent-transcribed verdict is a laundering channel (2026-07-25 audit exploit #1); candidate: verdict artifact hashes the item content;
+- same gate family: a picked-up item requires its `ready-verdict:` line citing the Contract+RED checkpoint SHA — a parent-transcribed verdict is a laundering channel (2026-07-25 audit exploit #1); candidate: verdict artifact hashes the item content;
 - NOT a gate on epics having draft children — that's the designed shape (decision-workflow); the violation is implementing a draft child, not having one.
 
 Must not block legit exploratory spikes (not deliveries).

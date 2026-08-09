@@ -26,7 +26,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - Comments/ADRs/docs: extremely concise, sacrifice grammar, cut anything restating code.
 
 ## Data sources
-- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding/idea → `rifty-to-backlog`; settled draft → compile + judge verdict (`decision-workflow.md` §Backlog readiness); unresolved observable fork → request manual `rifty-refine`; unsettled fork inside a `ready` item → demote first (same §); epic missing tier/Invariants/Budget → fit it yourself (`backlog/README.md` §Epic fit) — a write-up is never a blocked ask; ready → implement normally; PR review → `rifty-review`. Never implement a draft. Planned/process work never invokes `rifty-fix`.
+- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding/idea → `rifty-to-backlog`; settled draft → compile to `ready`, verified at pickup Contract+RED (`decision-workflow.md` §Backlog readiness); unresolved observable fork → request manual `rifty-refine`; unsettled fork inside a `ready` item → demote first (same §); epic missing tier/Invariants/Budget → fit it yourself (`backlog/README.md` §Epic fit) — a write-up is never a blocked ask; ready → implement normally; PR review → `rifty-review`. Never implement a draft. Planned/process work never invokes `rifty-fix`.
 - `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/decision-workflow.md` — read at any fork
 - `docs/process/fault-classes.md` — fault taxonomy + review convergence
@@ -51,7 +51,7 @@ Explicit whole-ready-epic hand-off or a `Goal-Baseline` task/PR → run loop:
 One PR = one reviewable delivered behavior. Never a workspace, hypothesis probe, or vehicle for process state.
 - Everything the unit discovers commits into its branch: contract flips, demotions, re-cuts, splits, intake drafts, lineage. A finding never opens a second PR.
 - Too small to review alone → rides with the next delivery, never its own PR.
-- A rule demanding a separate PR holds only if it names the gate forcing it (today: `decision-workflow.md` §Backlog readiness 5, `backlog/README.md` §Autonomous goal 1). Unnamed → apply this one and quote both clauses in the PR.
+- A rule demanding a separate PR holds only if it names the gate forcing it (today: `backlog/README.md` §Autonomous goal 1). Unnamed → apply this one and quote both clauses in the PR.
 - Binds PRs an agent opens on its own judgment. A PR the user explicitly asks for is their call: open it, name what it carries (zero source, docs-only, process state), never refuse or re-litigate.
 
 ## DoD (per PR)

@@ -30,8 +30,8 @@ A draft needs `## Context`. A ready item needs:
 - `## Parity cases`: enumerated oracle behaviors and RED targets;
 - `## Out of scope`: named loud throws + compat ❌;
 - `## Decisions`: every fork resolved or ADR-linked;
-- any `draft→ready` flip: a `ready-verdict:` line — from the fresh-context
-  judge, or inside an active goal run from the unit's Contract+RED checkpoint
+- once picked up: `ready-verdict: <date> — Contract+RED @ <sha>` from the
+  unit's checkpoint, recorded before implementation
   (`decision-workflow.md` §Backlog readiness).
 
 External-oracle work adds `## Reference contract` with pinned version/mechanism;
@@ -87,16 +87,12 @@ starts a run.
 2. In a later commit — the SAME contract-only PR is fine — add only
    `goal_baseline: <the ready-epic commit's SHA>`. ONE bootstrap PR, two commits
    (epic, then marker) — never a chain. It stays a separate PR only because
-   `check:budget` reads the epic from merge-base (`budget.mjs:88`); see
+   `check:budget` reads the epic authority from merge-base; see
    `process-meta/autonomous-epic-runs.md` §Residual.
-   The marker SHA has to survive the merge: every later source PR re-reads the
-   epic at it (`goal-contract.mjs:366` — ancestor check + `git show <sha>:<epic>`).
-   So either merge that bootstrap PR with a MERGE COMMIT (squash rewrites its
-   commits and the baseline stops being an ancestor — every source PR then fails
-   `goal_baseline … is unavailable or not an ancestor`), or point the marker at a
-   SHA already on `main`: marker as the branch's FIRST commit, whose parent is the
-   merge-base. The second shape is squash-safe and is the one to use when the epic
-   is already landed.
+   The marker is an opaque write-once run id (conventionally that commit's SHA):
+   gates compare it as a string against merge-base and never resolve it — merge
+   strategy and squash cannot break it. Frozen fields are checked against the
+   merge-base copy of the epic, inductively frozen since bootstrap.
 3. Every source PR repeats exactly one same-epic pair:
 
 ```text
@@ -122,28 +118,30 @@ proof, fresh `goal_complete: true`, and DoD green on one SHA; then delete it.
 Each autonomous source PR selects one epic `## Budget` row. Tripwires:
 
 - scope implemented outside ready items: `0`;
-- ready-contract edits after pickup: `0`;
+- ready-contract rewrites vs merge-base: `0`;
 - new coordination mechanisms: `0`, unless the named substrate item owns one;
-- hand-written insertion band = inserted lines in the slice source PR (tests/
-  generated globs excluded — `check:budget`): above high warns; at `2×` high re-cut;
+- hand-written insertion band = inserted lines in the slice source PR (tests,
+  `docs/backlog/**`, generated globs excluded — `check:budget`): above high
+  warns; at `2×` high re-cut;
 - expected-RED batch far above the slice band → the unit is too big: split it
   before implementation.
 
-Pickup is the parent of the first production-source commit. Before pickup,
-Contract+RED may append one ready JIT child, its Items mapping, and its Budget
-row; existing rows/tripwires cannot weaken. After pickup, closure may only
-subtract exact `blocked_by:` dependencies from ready items; Items prose and
-Budget stay as authority. Optional `generated globs` exclude generated files
-from the band.
+Gates read the aggregate PR diff (merge-base → head), never commit topology.
+The PR may append one ready JIT child, its Items mapping, and its Budget row;
+existing rows/tripwires cannot weaken. A guarded ready contract otherwise
+matches merge-base — allowed deltas: the pickup `ready-verdict:` line, exact
+`blocked_by:` subtraction for items the PR deletes, and a `ready`→`draft`
+demotion (fork + pre-demotion Acceptance recorded, §Backlog readiness 5).
+Optional `generated globs` exclude generated files from the band.
 
 ## Gates
 
 | Owner | Enforces |
 |---|---|
 | `backlog:check` | schema, ready sections, links, markers |
-| `check:goal-contract` | bootstrap/marker history, frozen fields, linked-child deletion |
-| `check:budget` | paired declaration, append-only Budget, pickup row/item, band |
-| `check:contract-drift` | post-pickup ready contracts and process referees |
+| `check:goal-contract` | write-once marker vs merge-base, frozen fields, contract-only bootstrap, closure |
+| `check:budget` | paired declaration, append-only Budget vs merge-base, ready item, band |
+| `check:contract-drift` | ready-contract content vs merge-base and process referees |
 | Final review | routing/run membership, checkpoint order, semantic scope/residuals, full mechanism sweep, acceptance |
 
 Machine gates prove only the listed local facts; review owns contextual

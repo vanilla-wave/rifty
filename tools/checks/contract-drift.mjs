@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
- * Contract-authority tripwire. Contract+RED commits before pickup establish JIT
- * authority. Implementation cannot rewrite it; closure may only subtract exact
- * dependencies for deleted ready children. Process referees land separately.
+ * Contract-authority tripwire on the aggregate PR diff (merge-base vs head).
+ * Beside source: ready contracts must match merge-base content (modulo
+ * ready-verdict lines + closure of items deleted here), ready flips need a
+ * recorded pickup verdict, frozen epic fields never change. Process referees
+ * land separately.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { historyHeadRevision } from './goal-contract.mjs';
-import { classifyAutonomousRunPath, pickupCommit } from './run-pickup.mjs';
+import { goalContract, historyHeadRevision } from './goal-contract.mjs';
+import { classifyAutonomousRunPath } from './run-pickup.mjs';
 
 const CONTRACT_RE = /^docs\/backlog\/.+\.md$/;
 const SKIP_RE = /\/(?:README|TEMPLATE)\.md$/;
@@ -17,6 +19,14 @@ const ITEM_PATH_RE = /^docs\/backlog\/(?!epics\/)(.+)\.md$/;
 const EPIC_PATH_RE = /^docs\/backlog\/epics\/[^/]+\.md$/;
 const REFEREE_RE =
   /^(?:tools\/checks\/(?:(?:budget|contract-drift|goal-contract|run-pickup)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|tools\/review\/(?:review-schema\.json|blockers\.mjs))$/;
+const READY_VERDICT_LINE_RE = /^ready-verdict:[^\n]*\n?/gm;
+const FROZEN_FIELDS = [
+  ['value', 'value'],
+  ['tier', 'tier'],
+  ['outcome', 'Outcome'],
+  ['userScenario', 'User scenario'],
+  ['invariants', 'Invariants'],
+];
 
 /** Frontmatter `status:` value, or null. */
 export function statusOf(text) {
@@ -40,8 +50,12 @@ export function closeItemDependencies(itemText, deletedItems) {
   return itemText.replace(line[0], replacement);
 }
 
+function stripReadyVerdicts(text) {
+  return (text ?? '').replace(READY_VERDICT_LINE_RE, '');
+}
+
 /**
- * @param {{status:string,path:string}[]} entries  post-pickup git name-status rows
+ * @param {{status:string,path:string}[]} entries  aggregate base..head name-status rows
  * @param {(path:string, side:'base'|'head') => string|null} read
  * @param {{status:string,path:string}[]} refereeEntries  full-PR rows
  * @returns {string[]} violations (empty = pass)
@@ -60,28 +74,44 @@ export function evaluate(entries, read, refereeEntries = entries) {
     if (entry.status !== 'D') continue;
     const item = ITEM_PATH_RE.exec(entry.path)?.[1];
     if (!item) continue;
-    const baseItem = read(entry.path, 'base');
-    if (statusOf(baseItem) !== 'ready') continue;
+    if (statusOf(read(entry.path, 'base')) !== 'ready') continue;
     closedItems.push(item);
   }
   const violations = [];
   for (const entry of entries) {
-    if (entry.status !== 'M' || !CONTRACT_RE.test(entry.path) || SKIP_RE.test(entry.path)) {
+    if (entry.status === 'D' || !CONTRACT_RE.test(entry.path) || SKIP_RE.test(entry.path)) {
       continue;
     }
-    const oldText = read(entry.path, 'base');
-    const newText = read(entry.path, 'head');
-    const oldStatus = statusOf(oldText);
-    const newStatus = statusOf(newText);
-    const epic = EPIC_PATH_RE.test(entry.path);
-    if (!epic && oldStatus === 'ready' && newStatus === 'ready') {
-      const closed = closeItemDependencies(oldText, closedItems);
-      if (closed !== null && closed === newText) continue;
+    const baseText = read(entry.path, 'base');
+    const headText = read(entry.path, 'head');
+    if (headText === null) continue;
+    if (EPIC_PATH_RE.test(entry.path)) {
+      if (!GUARDED.has(statusOf(baseText))) continue;
+      const base = goalContract(baseText);
+      const head = goalContract(headText);
+      for (const [key, label] of FROZEN_FIELDS) {
+        if (base[key] !== head[key]) {
+          violations.push(`${entry.path}: frozen ${label} changed beside source`);
+        }
+      }
+      continue;
     }
-    if (GUARDED.has(oldStatus) || GUARDED.has(newStatus)) {
+    const baseStatus = statusOf(baseText);
+    const headStatus = statusOf(headText);
+    if (GUARDED.has(baseStatus)) {
+      if (!GUARDED.has(headStatus)) continue; // demotion — review discipline owns the fork record
+      const strippedBase = stripReadyVerdicts(baseText);
+      const strippedHead = stripReadyVerdicts(headText);
+      if (strippedHead === strippedBase) continue;
+      const closed = closeItemDependencies(strippedBase, closedItems);
+      if (closed !== null && closed === strippedHead) continue;
       violations.push(
-        `${entry.path}: ready contract edited in-place (${oldStatus} → ${newStatus}) beside source — split the contract-authority change`,
+        `${entry.path}: ready contract rewritten beside source — content must match merge-base`,
       );
+      continue;
+    }
+    if (GUARDED.has(headStatus) && !/^ready-verdict:/m.test(headText)) {
+      violations.push(`${entry.path}: ready flip without pickup Contract+RED verdict`);
     }
   }
   return violations;
@@ -105,35 +135,29 @@ function main() {
     console.log('contract-drift: SKIPPED — no origin/main merge-base (shallow clone?)');
     return;
   }
-  const pickup = pickupCommit(base, git, head);
-  const parseEntries = (text) =>
-    text
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => {
-        const parts = line.split('\t');
-        return { status: parts[0][0], path: parts[parts.length - 1] };
-      });
-  const fullEntries = parseEntries(git('diff', '--name-status', base, head));
-  const entries = parseEntries(git('diff', '--name-status', pickup, head));
+  const entries = git('diff', '--name-status', base, head)
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split('\t');
+      return { status: parts[0][0], path: parts[parts.length - 1] };
+    });
   const read = (path, side) => {
     try {
-      if (side === 'base') return git('show', `${pickup}:${path}`);
+      if (side === 'base') return git('show', `${base}:${path}`);
       return head === 'HEAD' ? readFileSync(path, 'utf8') : git('show', `${head}:${path}`);
     } catch {
       return null;
     }
   };
-  const violations = evaluate(entries, read, fullEntries);
+  const violations = evaluate(entries, read);
   if (violations.length > 0) {
-    console.error(`contract-drift: ${violations.length} violation(s) vs ${pickup.slice(0, 12)}:`);
+    console.error(`contract-drift: ${violations.length} violation(s) vs ${base.slice(0, 12)}:`);
     for (const violation of violations) console.error(`  ✗ ${violation}`);
     process.exit(1);
   }
-  console.log(
-    `contract-drift: OK (${entries.length} post-pickup path(s) vs ${pickup.slice(0, 12)})`,
-  );
+  console.log(`contract-drift: OK (${entries.length} path(s) vs ${base.slice(0, 12)})`);
 }
 
 if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {

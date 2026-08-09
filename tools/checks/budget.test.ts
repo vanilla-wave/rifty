@@ -63,11 +63,20 @@ describe('validateBudgetAuthority', () => {
 
   it('accepts an identical existing slice and one selected JIT row/item', () => {
     expect(validateBudgetAuthority(epic, epic, 'oracle-slice')).toEqual([]);
-    const pickup = addRow(epic, '| jit | 10–20 |').replace(
+    const head = addRow(epic, '| jit | 10–20 |').replace(
       '## Items',
       '## Items\n\n- `playground/jit` — **jit**: ready.',
     );
-    expect(validateBudgetAuthority(epic, pickup, 'jit')).toEqual([]);
+    expect(validateBudgetAuthority(epic, head, 'jit')).toEqual([]);
+  });
+
+  it('reports missing and removed Budget authority', () => {
+    expect(validateBudgetAuthority('## Items\n', epic, 'oracle-slice')).toEqual([
+      'merge-base epic has no ## Budget authority',
+    ]);
+    expect(validateBudgetAuthority(epic, '## Items\n', 'oracle-slice')).toEqual([
+      'head epic removed ## Budget authority',
+    ]);
   });
 
   it.each([
@@ -82,9 +91,9 @@ describe('validateBudgetAuthority', () => {
     ],
     ['rewritten tripwire', epic.replace('mechanisms: 0', 'mechanisms: 1')],
     ['rewritten glob', epic.replace('docs/public/compat/**', 'docs/public/**')],
-  ])('rejects %s', (_case, pickup) => {
-    expect(validateBudgetAuthority(epic, pickup, 'oracle-slice')).toEqual([
-      'pickup rewrites merge-base Budget content or existing rows',
+  ])('rejects %s', (_case, head) => {
+    expect(validateBudgetAuthority(epic, head, 'oracle-slice')).toEqual([
+      'head rewrites merge-base Budget content or existing rows',
     ]);
   });
 
@@ -92,21 +101,21 @@ describe('validateBudgetAuthority', () => {
     const extra = addRow(epic, '| jit | 10–20 |\n| extra | 1–2 |');
     expect(validateBudgetAuthority(epic, extra, 'jit')).toEqual(
       expect.arrayContaining([
-        'pickup adds 2 Budget rows; want at most one',
-        'pickup adds Budget row "extra" instead of selected slice "jit"',
+        'head adds 2 Budget rows; want at most one',
+        'head adds Budget row "extra" instead of selected slice "jit"',
       ]),
     );
 
     const wrong = addRow(epic, '| other | 10–20 |');
     expect(validateBudgetAuthority(epic, wrong, 'jit')).toEqual([
-      'pickup adds Budget row "other" instead of selected slice "jit"',
+      'head adds Budget row "other" instead of selected slice "jit"',
     ]);
 
     const duplicate = addRow(epic, '| jit | 10–20 |\n| jit | 10–20 |');
     expect(validateBudgetAuthority(epic, duplicate, 'jit')).toEqual(
       expect.arrayContaining([
-        'pickup duplicates Budget row "jit"',
-        'pickup adds 2 Budget rows; want at most one',
+        'head duplicates Budget row "jit"',
+        'head adds 2 Budget rows; want at most one',
       ]),
     );
   });
@@ -182,12 +191,15 @@ describe('evaluateMass', () => {
     });
   });
 
+  // docs/backlog/** is excluded by main()'s numstat pre-filter (contract
+  // authorship, not implementation mass) — proven in the aggregate-diff test
+  // below; evaluateMass itself stays a pure band check over its rows.
   it.each([
     'docs/process/testing.md',
+    'packages/x/CHANGELOG.md',
     'tools/checks/run-pickup.mjs',
     'tools/test-utils/helper.ts',
     'tests-manual/e2e/save.ts',
-    'docs/backlog/process-meta/test-coverage-debt.md',
     'docs/process/a-test-fixture.md',
   ])('counts ordinary hand-written other path %s', (path) => {
     expect(evaluateMass([{ added: 5000, path }], band, [])).toMatchObject({
@@ -333,15 +345,11 @@ describe('validateRunDeclarations', () => {
       slice: 'oracle-slice',
     });
   });
+});
 
-  it('takes JIT row and ready-item authority before source and retains it after closure', () => {
-    const root = mkdtempSync(join(tmpdir(), 'rifty-budget-pickup-'));
-    try {
-      mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
-      mkdirSync(join(root, 'docs/backlog/playground'), { recursive: true });
-      mkdirSync(join(root, 'packages/x/src'), { recursive: true });
-      const epicPath = join(root, 'docs/backlog/epics/goal.md');
-      const initialEpic = `---
+describe('budget.mjs against a git repo (base..head aggregate)', () => {
+  const script = fileURLToPath(new URL('./budget.mjs', import.meta.url));
+  const initialEpic = `---
 kind: epic
 status: ready
 title: Goal
@@ -367,21 +375,87 @@ Known work.
 |---|---|
 | seed | 1–10 |
 `;
-      writeFileSync(epicPath, initialEpic);
-      execFileSync('git', ['init', '-b', 'main'], { cwd: root });
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'base'],
-        { cwd: root },
-      );
-      const baseline = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', baseline], { cwd: root });
 
-      const itemPath = join(root, 'docs/backlog/playground/jit.md');
+  type Repo = { root: string; g: (...args: string[]) => string; commit: (message: string) => void };
+
+  const makeRepo = (): Repo => {
+    const root = mkdtempSync(join(tmpdir(), 'rifty-budget-aggregate-'));
+    const g = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+    const commit = (message: string) => {
+      g('add', '.');
+      g('-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', message);
+    };
+    mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
+    mkdirSync(join(root, 'docs/backlog/playground'), { recursive: true });
+    mkdirSync(join(root, 'packages/x/src'), { recursive: true });
+    return { root, g, commit };
+  };
+
+  const run = (repo: Repo, baseline: string) =>
+    execFileSync(process.execPath, [script], {
+      cwd: repo.root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GITHUB_EVENT_PATH: undefined,
+        RIFTY_GOAL_BASELINE: `goal@${baseline}`,
+        RIFTY_BUDGET_SLICE: 'goal/jit',
+      },
+    });
+
+  it('takes JIT row and ready-item authority from head; backlog docs carry no mass', () => {
+    const repo = makeRepo();
+    try {
+      const epicPath = join(repo.root, 'docs/backlog/epics/goal.md');
+      writeFileSync(epicPath, initialEpic);
+      repo.g('init', '-b', 'main');
+      repo.commit('base');
+      const baseline = repo.g('rev-parse', 'HEAD').trim();
+      repo.g('update-ref', 'refs/remotes/origin/main', baseline);
+
+      // One PR commit mixing contract + source: the old per-commit pickup
+      // walk rejected this shape; the aggregate diff accepts it.
+      writeFileSync(
+        join(repo.root, 'docs/backlog/playground/jit.md'),
+        `---
+area: playground
+status: ready
+title: JIT
+created: 2026-07-25
+why: Required by goal
+epic: goal
+---
+${'Contract prose, excluded from mass.\n'.repeat(40)}`,
+      );
+      writeFileSync(
+        epicPath,
+        initialEpic
+          .replace('Known work.', '- `playground/jit` — **jit**: just-in-time unit.')
+          .replace('| seed | 1–10 |', '| seed | 1–10 |\n| jit | 1–10 |'),
+      );
+      writeFileSync(join(repo.root, 'packages/x/src/a.ts'), 'export const shipped = true;\n');
+      repo.commit('contract red + source');
+
+      const output = run(repo, baseline);
+      expect(output).toContain('budget: OK');
+      expect(output).toContain('goal/jit');
+      expect(output).toContain('within band 1–10');
+    } finally {
+      rmSync(repo.root, { recursive: true, force: true });
+    }
+  });
+
+  it('retains base authority when head closes the item and then the epic', () => {
+    const repo = makeRepo();
+    try {
+      const epicPath = join(repo.root, 'docs/backlog/epics/goal.md');
+      const itemPath = join(repo.root, 'docs/backlog/playground/jit.md');
+      writeFileSync(
+        epicPath,
+        initialEpic
+          .replace('Known work.', '- `playground/jit` — **jit**: shipped unit.')
+          .replace('| seed | 1–10 |', '| seed | 1–10 |\n| jit | 1–10 |'),
+      );
       writeFileSync(
         itemPath,
         `---
@@ -394,54 +468,20 @@ epic: goal
 ---
 `,
       );
-      writeFileSync(
-        epicPath,
-        initialEpic
-          .replace('Known work.', '- `playground/jit` — **jit**: just-in-time unit.')
-          .replace('| seed | 1–10 |', '| seed | 1–10 |\n| jit | 1–10 |'),
-      );
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        [
-          '-c',
-          'user.name=Rifty',
-          '-c',
-          'user.email=rifty@example.test',
-          'commit',
-          '-m',
-          'contract red',
-        ],
-        { cwd: root },
-      );
-      writeFileSync(join(root, 'packages/x/src/a.ts'), 'export const shipped = true;\n');
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'source'],
-        { cwd: root },
-      );
-      rmSync(itemPath);
-      writeFileSync(
-        epicPath,
-        initialEpic.replace('Known work.', '- `playground/jit` — **jit**: historical unit.'),
-      );
+      repo.g('init', '-b', 'main');
+      repo.commit('base with ready item');
+      const baseline = repo.g('rev-parse', 'HEAD').trim();
+      repo.g('update-ref', 'refs/remotes/origin/main', baseline);
 
-      const script = fileURLToPath(new URL('./budget.mjs', import.meta.url));
-      const output = execFileSync(process.execPath, [script], {
-        cwd: root,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          GITHUB_EVENT_PATH: undefined,
-          RIFTY_GOAL_BASELINE: `goal@${baseline}`,
-          RIFTY_BUDGET_SLICE: 'goal/jit',
-        },
-      });
-      expect(output).toContain('budget: OK');
-      expect(output).toContain('goal/jit');
+      rmSync(itemPath);
+      repo.commit('close item on done');
+      expect(run(repo, baseline)).toContain('budget: OK');
+
+      rmSync(epicPath);
+      repo.commit('terminal goal closure');
+      expect(run(repo, baseline)).toContain('budget: OK');
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      rmSync(repo.root, { recursive: true, force: true });
     }
   });
 });
