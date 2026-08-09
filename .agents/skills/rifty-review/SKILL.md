@@ -44,12 +44,8 @@ spend attempts, never the PR — `fault-classes.md` Lineage row), its body namin
 prior local verdict SHAs. Final+GREEN requires the PR and first runs
 `pnpm pr:check` on the committed SHA.
 
-Reviewer stdout is redirected — never poll or read it. It streams the reviewer's
-own file reads, test runs, and hook noise back into the caller's window (measured:
-~1.3k tokens per poll, peaks at 10k, 12–24 polls per run) while the binding
-verdict is the schema JSON already written to `-o`. Liveness comes from the
-process state, not from output. Log is for post-mortem only: read it when
-`verdict.json` is missing after exit.
+Never poll or read reviewer stdout — the verdict is the `-o` JSON, liveness is
+the process state. Log is post-mortem: read it only if `verdict.json` is missing.
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
