@@ -24,6 +24,7 @@
     "check:e2e-coverage": "node tools/checks/e2e-coverage.mjs",
     "check:source-grep": "node tools/checks/source-grep-ratchet.mjs",
     "check:dir-owner": "node tools/checks/dir-owner.mjs",
+    "check:file-size": "node tools/checks/file-size.mjs",
     "check:budget": "node tools/checks/budget.mjs",
     "check:goal-contract": "node tools/checks/goal-contract.mjs",
     "check:contract-drift": "node tools/checks/contract-drift.mjs",

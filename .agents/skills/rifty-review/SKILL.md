@@ -44,12 +44,20 @@ spend attempts, never the PR — `fault-classes.md` Lineage row), its body namin
 prior local verdict SHAs. Final+GREEN requires the PR and first runs
 `pnpm pr:check` on the committed SHA.
 
+Reviewer stdout is redirected — never poll or read it. It streams the reviewer's
+own file reads, test runs, and hook noise back into the caller's window (measured:
+~1.3k tokens per poll, peaks at 10k, 12–24 polls per run) while the binding
+verdict is the schema JSON already written to `-o`. Liveness comes from the
+process state, not from output. Log is for post-mortem only: read it when
+`verdict.json` is missing after exit.
+
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
 codex exec -C "$(git rev-parse --show-toplevel)" -s read-only -c approval_policy="never" \
   --skip-git-repo-check --output-schema tools/review/review-schema.json -o "$RUN/verdict.json" \
-  "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, exact Goal-Baseline when declared, current-unit contract, and every changed file. Do not modify files. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations."
-node tools/review/blockers.mjs "$RUN/verdict.json"
+  "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, exact Goal-Baseline when declared, current-unit contract, and every changed file. Do not modify files. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations." \
+  >"$RUN/log" 2>&1
+node tools/review/blockers.mjs "$RUN/verdict.json"  # missing verdict → tail -n 40 "$RUN/log"
 ```
 
 Exit 0 → unit passes (`goal_complete:false` = continue the goal); exit 1 →
