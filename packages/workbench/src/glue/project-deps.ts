@@ -37,7 +37,7 @@ import {
   type PackageAcquisitionAuthority,
   PackageAcquisitionError,
 } from '../workers/package-acquisition-authority.ts';
-import { type DepSnapshotV2, fetchDepSnapshot as realFetchDepSnapshot } from './dep-snapshot.ts';
+import { type DepSnapshotV3, fetchDepSnapshot as realFetchDepSnapshot } from './dep-snapshot.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import type { InstallStampPromotionResult } from './install-stamp-authority.ts';
 import { isStampedTreeDamage, readPackageJsonText } from './install-stamp.ts';
@@ -77,7 +77,7 @@ export interface EnsureProjectDepsOptions {
   readonly install?: () => Promise<InstallResult>;
   readonly log: (line: string) => void;
   /** Test seam; defaults to fetch + gunzip + parse. */
-  readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV2 | null>;
+  readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV3 | null>;
   /**
    * Drains the realm's OPFS write-through and reports persist failures
    * (ADR-0187 Corrected). NEVER awaited on the boot critical path — it promotes

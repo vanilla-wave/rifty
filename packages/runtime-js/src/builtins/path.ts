@@ -3,7 +3,6 @@
  * `@riftydev/vfs/path`, plus the methods specific to the Node API.
  */
 import {
-  joinPath,
   normalizePath,
   basename as vfsBasename,
   dirname as vfsDirname,
@@ -24,8 +23,8 @@ export const sep = '/';
 export const delimiter = ':';
 
 export function join(...parts: string[]): string {
-  if (parts.length === 0) return '.';
-  return joinPath(...parts);
+  const joined = parts.filter((part) => part.length > 0).join('/');
+  return normalize(joined);
 }
 
 export function resolve(...parts: string[]): string {
@@ -55,7 +54,7 @@ export function resolve(...parts: string[]): string {
 }
 
 export function normalize(p: string): string {
-  if (p === '') return '.';
+  if (p === '' || p === '.') return '.';
   const trailing = p.endsWith('/') && p !== '/';
   const out = normalizePath(p);
   if (trailing && !out.endsWith('/')) return `${out}/`;

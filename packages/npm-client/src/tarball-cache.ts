@@ -57,7 +57,8 @@ export async function computeIntegrity(
   return `${algorithm}-${b64}`;
 }
 
-function cachePathFor(name: string, version: string, integrity: string): string {
+/** Exact VFS key used by cache writers and portable snapshot replay state. */
+export function tarballCachePath(name: string, version: string, integrity: string): string {
   const prefix = integrity.includes('-') ? (integrity.split('-')[1]?.slice(0, 2) ?? '00') : '00';
   // Escape slashes in scoped names so each entry stays a single file rather
   // than spawning extra path segments under the prefix.
@@ -76,7 +77,7 @@ export class VfsTarballCache implements TarballCache {
   constructor(private readonly vfs: Vfs) {}
 
   async get(name: string, version: string, integrity: string): Promise<Uint8Array | null> {
-    const path = cachePathFor(name, version, integrity);
+    const path = tarballCachePath(name, version, integrity);
     if (!(await this.vfs.exists(path))) return null;
     const bytes = await this.vfs.readFile(path);
     const algorithm = parseIntegrityAlgorithm(integrity);
@@ -94,7 +95,7 @@ export class VfsTarballCache implements TarballCache {
   }
 
   async put(name: string, version: string, integrity: string, bytes: Uint8Array): Promise<string> {
-    const path = cachePathFor(name, version, integrity);
+    const path = tarballCachePath(name, version, integrity);
     const dir = path.slice(0, path.lastIndexOf('/'));
     await this.vfs.mkdir(dir, { recursive: true });
     await this.vfs.writeFile(path, bytes);

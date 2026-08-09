@@ -6,6 +6,14 @@ describe('node:path', () => {
     expect(path.join('/a', 'b', 'c')).toBe('/a/b/c');
     expect(path.join('/a', '..', 'b')).toBe('/b');
     expect(path.join('a', 'b', 'c')).toBe('a/b/c');
+    expect(path.join('.')).toBe('.');
+    expect(path.join('', './')).toBe('./');
+    expect(path.join('foo', '../')).toBe('./');
+    expect(path.join('foo', '..', './')).toBe('./');
+    expect(path.join('..', './')).toBe('../');
+    expect(path.join('../..', './')).toBe('../../');
+    expect(path.join('foo/', 'bar/')).toBe('foo/bar/');
+    expect(path.join('/', './')).toBe('/');
   });
   it('resolve', () => {
     expect(path.resolve('/a/b', 'c')).toBe('/a/b/c');
@@ -31,6 +39,7 @@ describe('node:path', () => {
     }
   });
   it('normalize', () => {
+    expect(path.normalize('.')).toBe('.');
     expect(path.normalize('/a/./b/../c')).toBe('/a/c');
     expect(path.normalize('/a//b')).toBe('/a/b');
   });

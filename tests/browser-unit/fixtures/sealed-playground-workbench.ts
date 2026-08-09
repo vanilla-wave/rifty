@@ -15,7 +15,7 @@ import type { ProjectSpec } from '../../../apps/playground/src/templates/project
 
 export interface SealedWorkbenchBootOptions {
   readonly workspaceId: string;
-  readonly template?: 'hidden-empty' | 'typescript' | 'vite';
+  readonly template?: 'hidden-empty' | 'typescript' | 'vite' | 'vite8';
   readonly root?: string;
   readonly slug?: string;
   readonly setup?: 'instant' | 'from-scratch';
@@ -102,8 +102,12 @@ async function templateSpec(
     const url = '/src/templates/typescript.ts';
     return (await import(/* @vite-ignore */ url)).TYPESCRIPT_TEMPLATE;
   }
-  const url = '/src/templates/vite.ts';
-  return (await import(/* @vite-ignore */ url)).VITE_TEMPLATE;
+  if (template === 'vite') {
+    const url = '/src/templates/vite.ts';
+    return (await import(/* @vite-ignore */ url)).VITE_TEMPLATE;
+  }
+  const url = '/src/templates/vite8.ts';
+  return (await import(/* @vite-ignore */ url)).VITE8_TEMPLATE;
 }
 
 async function projectPlan(options: SealedWorkbenchBootOptions): Promise<PlaygroundProjectPlan> {

@@ -24,6 +24,10 @@
 
 ### Added
 
+- Export the pure `tarballCachePath` key function so dependency snapshot v3
+  carries registry-shadow replay bytes without duplicating cache-key policy
+  (ADR-0346).
+
 - Linker ingresses now run package-bin claim preflight before any VFS mutation;
   the package-private prepared path accepts narrow authoritative-prior sources.
 
