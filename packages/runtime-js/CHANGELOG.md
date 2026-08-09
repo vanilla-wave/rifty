@@ -37,6 +37,10 @@
 
 ### Fixed
 
+- Public `spawnRuntime` Worker crashes now stay owned by the runtime controller
+  after it rejects pending calls and publishes stderr/exit, instead of also
+  rethrowing the same error into the creator global.
+
 - Trusted process identity now survives duplicated production Worker bundles,
   so recursive children keep the owner PID authority and publish preview state
   (ADR-0334).

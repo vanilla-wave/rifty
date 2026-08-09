@@ -329,6 +329,46 @@ export async function executeProjectLine(
   }
 }
 
+export async function executeProjectLineOutcome(line: string): Promise<{
+  readonly exitCode: number;
+  readonly exit: ProcessExit;
+  readonly closeExit: ProcessExit;
+  readonly closeShared: boolean;
+  readonly settlements: number;
+  readonly out: string;
+}> {
+  const fixture = requireActive();
+  const terminal = fixture.terminal ?? fixture.project.terminals.open();
+  fixture.terminal = terminal;
+  let out = '';
+  let settlements = 0;
+  const detach = terminal.attach((chunk) => {
+    out += chunk;
+  });
+  try {
+    const run = terminal.run(line);
+    const exited = run.exited.then((exit) => {
+      settlements += 1;
+      return exit;
+    });
+    const [exitCode, exit] = await Promise.all([run.exitCode, exited]);
+    const closing = run.close();
+    const repeatedClose = run.close();
+    const closeExit = await closing;
+    await Promise.resolve();
+    return Object.freeze({
+      exitCode,
+      exit,
+      closeExit,
+      closeShared: closing === repeatedClose,
+      settlements,
+      out,
+    });
+  } finally {
+    detach();
+  }
+}
+
 export async function executeProjectLineUntil(
   line: string,
   marker: string,

@@ -1,0 +1,21 @@
+{
+  "environment": {
+    "node": "v24.16.0",
+    "vite": "8.0.16",
+    "rolldown": "1.0.3"
+  },
+  "fixture": {
+    "moduleCount": 256,
+    "missingSpecifier": "./issue-247-item-5-missing.js",
+    "importer": "src/chain/255.js"
+  },
+  "command": "CI=1 NO_COLOR=1 vite build",
+  "runs": 2,
+  "result": {
+    "exitCode": 1,
+    "diagnosticCode": "UNRESOLVED_IMPORT",
+    "diagnostic": "Could not resolve './issue-247-item-5-missing.js' in src/chain/255.js",
+    "diagnosticOccurrences": 1,
+    "distEntries": []
+  }
+}

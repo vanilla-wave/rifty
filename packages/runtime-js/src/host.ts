@@ -235,6 +235,8 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
       }
     });
     worker.addEventListener('error', (event: ErrorEvent) => {
+      // This controller owns the crash; do not rethrow it into the creator.
+      event.preventDefault();
       // Reject every in-flight eval so callers see the failure instead of
       // hanging forever. Match Node's pattern: synthesise an Error with a
       // stable `code` so callers can branch on it.

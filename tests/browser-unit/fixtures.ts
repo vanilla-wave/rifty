@@ -20,6 +20,15 @@ interface OwnerExecResult {
   readonly out: string;
 }
 
+export interface OwnerExecOutcome {
+  readonly exitCode: number;
+  readonly exit: { readonly code: number | null; readonly signal: string | null };
+  readonly closeExit: { readonly code: number | null; readonly signal: string | null };
+  readonly closeShared: boolean;
+  readonly settlements: number;
+  readonly out: string;
+}
+
 export async function gotoHarness(page: Page): Promise<void> {
   await page.goto('/unit-harness.html');
   await expect(page.locator('#browser-unit-harness')).toHaveAttribute('data-status', 'ready');
@@ -40,6 +49,16 @@ export function execLine(page: Page, line: string): Promise<OwnerExecResult> {
     async ({ fixtureUrl, command }) => {
       const fixture = await import(/* @vite-ignore */ fixtureUrl);
       return fixture.executeProjectLine(command);
+    },
+    { fixtureUrl: sealedWorkbenchFixtureUrl, command: line },
+  );
+}
+
+export function execLineOutcome(page: Page, line: string): Promise<OwnerExecOutcome> {
+  return page.evaluate(
+    async ({ fixtureUrl, command }) => {
+      const fixture = await import(/* @vite-ignore */ fixtureUrl);
+      return fixture.executeProjectLineOutcome(command);
     },
     { fixtureUrl: sealedWorkbenchFixtureUrl, command: line },
   );

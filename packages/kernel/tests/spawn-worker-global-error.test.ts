@@ -8,7 +8,7 @@
  * message is forwarded to the child's stderr so `handle.stderr().on('data')`
  * sees it (and the terminal EADDRINUSE quick-fix can fire on the real string).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ProcessManager } from '../src/process-manager.ts';
 import type { WorkerProcessHandle } from '../src/process-manager.ts';
 import {
@@ -95,15 +95,18 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
 
       // Drive the worker's uncaught async error — an unhandled EADDRINUSE
       // EventEmitter re-throw surfaces here as the global 'error' event.
+      const preventDefault = vi.fn();
       const ev = {
         type: 'error',
         message: 'Uncaught Error: listen EADDRINUSE: address already in use :::3000',
         filename: 'server.js',
         lineno: 12,
+        preventDefault,
       } as unknown as MessageEvent;
       worker()?.fire('error', ev);
       await flushWorkerExit();
 
+      expect(preventDefault).toHaveBeenCalledOnce();
       expect(stderr.text()).toContain('EADDRINUSE');
       expect(exitCode).toBe(1);
     });
@@ -138,6 +141,7 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
       const ev = {
         type: 'error',
         message: 'Uncaught Error: listen EADDRINUSE: address already in use :::3000',
+        preventDefault: vi.fn(),
       } as unknown as MessageEvent;
       worker()?.fire('error', ev);
       await flushWorkerExit();

@@ -47,9 +47,11 @@ class FakeWorker {
     for (const listener of this.listeners.message) listener(event);
   }
 
-  crash(message: string): void {
-    const event = { message } as ErrorEvent;
+  crash(message: string) {
+    const preventDefault = vi.fn();
+    const event = { message, preventDefault } as unknown as ErrorEvent;
     for (const listener of this.listeners.error) listener(event);
+    return preventDefault;
   }
 }
 
@@ -128,8 +130,10 @@ describe('spawnRuntime fs controller', () => {
     await expect(resetRead).rejects.toMatchObject({ name: 'WorkerTerminated' });
 
     const errorRead = runtime.fs.readFile('/error.txt');
-    fakeWorker(1).crash('boom');
-    await expect(errorRead).rejects.toMatchObject({ code: 'WORKER_CRASHED' });
+    const errorResult = errorRead.catch((error: unknown) => error);
+    const preventDefault = fakeWorker(1).crash('boom');
+    expect(preventDefault).toHaveBeenCalledOnce();
+    await expect(errorResult).resolves.toMatchObject({ code: 'WORKER_CRASHED' });
 
     const disposable = spawnRuntime({ workerUrl: '/worker.js' });
     const disposeRead = disposable.fs.readFile('/dispose.txt');
