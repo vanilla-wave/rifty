@@ -48,6 +48,8 @@ export interface NodeLifecycleDeps {
   readonly onPortsChange: (cb: () => void) => () => void;
   /** Await event-loop drain (keepalive awaitDrain). */
   readonly awaitDrain: () => Promise<void>;
+  /** Disown a pending eval drain when a listened port wins the server branch. */
+  readonly releaseDrainOwnership: () => void;
   /** Wire `/preview/<port>/` for a listened port; returns a teardown. */
   readonly servePreview: (port: number) => () => void;
   /** Report the CURRENT listened port set to the owner (rifty:node-listening). */
@@ -155,6 +157,7 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
 
     const ports = deps.listPorts();
     if (ports.length > 0) {
+      if (drainStarted) deps.releaseDrainOwnership();
       const served = servePorts(deps, ports);
       lateErrorsShouldSurface = true;
       // Keep following the registry for the realm's whole life: close() reposts

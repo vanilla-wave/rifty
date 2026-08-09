@@ -1,15 +1,30 @@
 import { NotImplementedError } from '@riftydev/io';
-import type { FsSync } from '@riftydev/vfs';
+import { type FsSync, joinPath } from '@riftydev/vfs';
+import { type Node as AcornNode, parse as acornParse } from 'acorn';
+// TODO(backlog: runtime-js/lazy-typescript-tsconfig-discovery):
+// share the lazy compiler boundary with eval-context detection.
+import ts from 'typescript';
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
-import { type CjsExtensionHook, type CjsExtensions, type CjsRequire, executeCjs } from './cjs.ts';
+import {
+  type CjsExtensionHook,
+  type CjsExtensions,
+  type CjsRequire,
+  executeCjs,
+  initialiseDetachedCjsRecord,
+} from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
 import { type TransformSourceHook, executeEsm } from './esm.ts';
 import { cjsNamespaceFor } from './interop.ts';
-import { type CjsModule, type ModuleRecord, ModuleRegistry } from './registry.ts';
+import {
+  type CjsModule,
+  type ModuleRecord,
+  ModuleRegistry,
+  createModuleRecord,
+} from './registry.ts';
 import type { PathAliases, ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
 import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
@@ -77,6 +92,29 @@ export interface ModuleLoader {
 }
 
 const STUB_FROM_FILE_DEFAULT = '/__entry__';
+// biome-ignore lint/security/noGlobalEval: exact unwrapped Node CLI eval seam.
+const indirectEvalPrimordial = globalThis.eval;
+const objectDefinePropertyPrimordial = Object.defineProperty;
+const reflectApplyPrimordial = Reflect.apply;
+
+export interface NodeEvalScriptRunner {
+  readonly registry: ModuleRegistry;
+  run(source: string): unknown;
+}
+
+interface ModuleLoaderCore {
+  readonly loader: ModuleLoader;
+  runNodeEvalScript(source: string, explicitCommonJs: boolean): unknown;
+}
+
+interface AcornSyntaxFailure extends Error {
+  readonly loc?: {
+    readonly line: number;
+    readonly column: number;
+  };
+  readonly pos?: number;
+  readonly raisedAt?: number;
+}
 
 setSameRealmWorkerModuleImporter(async (vfs, script, cwd) => {
   const loader = createModuleLoader(vfs, { cwd });
@@ -105,7 +143,337 @@ function loadBuiltinOrThrow(id: string): Record<string, unknown> {
   return builtin;
 }
 
-export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoader {
+function parsesAsJavaScriptScript(source: string): boolean {
+  try {
+    acornParse(source, {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      allowAwaitOutsideFunction: false,
+      allowReturnOutsideFunction: false,
+      allowHashBang: true,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const TYPESCRIPT_ONLY_MODIFIERS = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.DeclareKeyword,
+  ts.SyntaxKind.AbstractKeyword,
+  ts.SyntaxKind.ReadonlyKeyword,
+  ts.SyntaxKind.PublicKeyword,
+  ts.SyntaxKind.PrivateKeyword,
+  ts.SyntaxKind.ProtectedKeyword,
+  ts.SyntaxKind.OverrideKeyword,
+]);
+
+function hasTypeScriptOnlySyntax(node: ts.Node): boolean {
+  if (
+    ts.isTypeNode(node) ||
+    ts.isTypeParameterDeclaration(node) ||
+    ts.isInterfaceDeclaration(node) ||
+    ts.isTypeAliasDeclaration(node) ||
+    ts.isEnumDeclaration(node) ||
+    ts.isModuleDeclaration(node) ||
+    ts.isImportEqualsDeclaration(node) ||
+    ts.isNamespaceExportDeclaration(node) ||
+    ts.isTypeAssertionExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isSatisfiesExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isTypeOnlyImportOrExportDeclaration(node) ||
+    (ts.isExportAssignment(node) && node.isExportEquals) ||
+    (ts.isHeritageClause(node) && node.token === ts.SyntaxKind.ImplementsKeyword) ||
+    (ts.isFunctionLike(node) && (!('body' in node) || node.body === undefined)) ||
+    (ts.isVariableDeclaration(node) && node.exclamationToken !== undefined) ||
+    (ts.isParameter(node) &&
+      (node.questionToken !== undefined ||
+        (ts.isIdentifier(node.name) && node.name.text === 'this'))) ||
+    (ts.isPropertyDeclaration(node) &&
+      (node.questionToken !== undefined || node.exclamationToken !== undefined)) ||
+    (ts.isMethodDeclaration(node) && node.questionToken !== undefined)
+  ) {
+    return true;
+  }
+  if (
+    ts.canHaveModifiers(node) &&
+    ts.getModifiers(node)?.some((modifier) => TYPESCRIPT_ONLY_MODIFIERS.has(modifier.kind))
+  ) {
+    return true;
+  }
+  let found = false;
+  ts.forEachChild(node, (child) => {
+    if (!found && hasTypeScriptOnlySyntax(child)) found = true;
+  });
+  return found;
+}
+
+function isAcornNode(value: unknown): value is AcornNode {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.type === 'string' &&
+    typeof record.start === 'number' &&
+    typeof record.end === 'number'
+  );
+}
+
+function sourceOffset(source: string, line: number, column: number): number | null {
+  let offset = 0;
+  for (let current = 1; current < line; current += 1) {
+    const newline = source.indexOf('\n', offset);
+    if (newline === -1) return null;
+    offset = newline + 1;
+  }
+  return offset + column;
+}
+
+function nodeEvalThrowLocation(
+  source: string,
+  frameLine: number,
+  frameColumn: number,
+): { readonly line: number; readonly column: number } | null {
+  const position = sourceOffset(source, frameLine, frameColumn);
+  if (position === null) return null;
+  let root: AcornNode;
+  try {
+    root = acornParse(source, {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      allowAwaitOutsideFunction: false,
+      allowReturnOutsideFunction: false,
+      allowHashBang: true,
+      locations: true,
+    });
+  } catch {
+    return null;
+  }
+  let best: AcornNode | null = null;
+  const pending: AcornNode[] = [root];
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (node === undefined) break;
+    if (
+      node.type === 'ThrowStatement' &&
+      node.start <= position &&
+      position < node.end &&
+      (best === null || node.start > best.start)
+    ) {
+      best = node;
+    }
+    for (const value of Object.values(node as unknown as Record<string, unknown>)) {
+      if (Array.isArray(value)) {
+        for (const child of value) {
+          if (isAcornNode(child)) pending.push(child);
+        }
+      } else if (isAcornNode(value)) {
+        pending.push(value);
+      }
+    }
+  }
+  const start = best?.loc?.start;
+  return start === undefined || start === null ? null : { line: start.line, column: start.column };
+}
+
+function nodeEvalConstBindingMarker(
+  source: string,
+  position: number,
+): { readonly line: number; readonly column: number; readonly width: number } | null {
+  const syntax = ts.createSourceFile(
+    '[eval].ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const bindings: ts.Identifier[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.type !== undefined &&
+      ts.isVariableDeclarationList(node.parent) &&
+      (node.parent.flags & ts.NodeFlags.Const) !== 0 &&
+      node.name.getEnd() <= position &&
+      position <= node.type.getEnd()
+    ) {
+      bindings.push(node.name);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(syntax);
+  let binding = bindings[0];
+  if (binding === undefined) return null;
+  for (const candidate of bindings.slice(1)) {
+    if (candidate.getStart(syntax) > binding.getStart(syntax)) binding = candidate;
+  }
+  const start = binding.getStart(syntax);
+  const location = syntax.getLineAndCharacterOfPosition(start);
+  return {
+    line: location.line + 1,
+    column: location.character,
+    width: Math.max(1, binding.getEnd() - start),
+  };
+}
+
+function nodeEvalSyntaxPrelude(source: string, error: SyntaxError): string | null {
+  let parsed: AcornSyntaxFailure | null = null;
+  try {
+    acornParse(source, {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      allowAwaitOutsideFunction: false,
+      allowReturnOutsideFunction: false,
+      allowHashBang: true,
+    });
+  } catch (failure) {
+    parsed = failure as AcornSyntaxFailure;
+  }
+  if (parsed === null) return null;
+  let line = parsed?.loc?.line ?? 1;
+  let column = parsed?.loc?.column ?? 0;
+  let width = Math.max(1, (parsed?.raisedAt ?? column + 1) - (parsed?.pos ?? column));
+  if (
+    error.message === 'Missing initializer in const declaration' &&
+    typeof parsed.pos === 'number'
+  ) {
+    const marker = nodeEvalConstBindingMarker(source, parsed.pos);
+    if (marker !== null) {
+      line = marker.line;
+      column = marker.column;
+      width = marker.width;
+    }
+  }
+  const lineText = source.split('\n')[line - 1] ?? '';
+  const explanation =
+    error.message === 'Illegal return statement'
+      ? 'Return statement is not allowed here\n'
+      : error.message.startsWith('Unexpected token') && lineText[column] === ';'
+        ? 'Expression expected\n'
+        : '';
+  return `[eval]:${line}\n${lineText}\n${' '.repeat(column)}${'^'.repeat(width)}\n${explanation}\n`;
+}
+
+function nodeEvalStackThroughUserFrame(stack: string): string | null {
+  const lines = stack.split('\n');
+  const frameIndex = lines.findIndex((line) =>
+    /^\s+at (?:eval \()?\[eval\]:\d+:\d+\)?$/u.test(line),
+  );
+  if (frameIndex === -1) return null;
+  const frame = /(?:eval \()?\[eval\]:(\d+):(\d+)\)?/u.exec(lines[frameIndex] ?? '');
+  if (frame === null) return null;
+  lines[frameIndex] = `    at [eval]:${frame[1]}:${frame[2]}`;
+  return lines.slice(0, frameIndex + 1).join('\n');
+}
+
+function nodeEvalFirstCallbackFrame(stack: string): string | null {
+  return (
+    stack
+      .split('\n')
+      .find((line) => /^\s+at (?:[A-Za-z0-9_$.[\]<> ]+ \()?\[eval\]:\d+:\d+\)?$/u.test(line)) ??
+    null
+  );
+}
+
+function nodeEvalHasTimerWrapperFrame(stack: string): boolean {
+  return stack
+    .split('\n')
+    .some(
+      (line) =>
+        /^\s+at Timeout\._onTimeout \(/u.test(line) ||
+        /\/builtins\/timers\.[cm]?[jt]s:\d+:\d+\)?$/u.test(line),
+    );
+}
+
+/** Project the host eval frame to Node's sole claimed `[eval]` user frame. */
+export function projectNodeEvalError(
+  error: unknown,
+  source: string,
+  origin: 'sync' | 'unhandled' | 'uncaught' = 'sync',
+): unknown {
+  if (!(error instanceof Error)) return error;
+  const firstLine =
+    (error.stack ?? `${error.name}: ${error.message}`).split('\n')[0] ?? error.message;
+  if (error instanceof SyntaxError) {
+    const prelude = nodeEvalSyntaxPrelude(source, error);
+    if (prelude !== null) {
+      error.stack = `${prelude}${firstLine}`;
+      return error;
+    }
+  }
+  const stack = error.stack ?? firstLine;
+  const frame = /(?:eval \()?\[eval\]:(\d+):(\d+)\)?/u.exec(stack);
+  if (frame === null) return error;
+  const frameLine = Number(frame[1]);
+  const frameColumn = Number(frame[2]);
+  const thrown = nodeEvalThrowLocation(source, frameLine, Math.max(0, frameColumn - 1));
+  if (origin === 'sync' && thrown === null) {
+    error.stack = nodeEvalStackThroughUserFrame(stack) ?? stack;
+    return error;
+  }
+  const useThrowLocation =
+    thrown !== null &&
+    (origin === 'sync' || (origin === 'uncaught' && nodeEvalHasTimerWrapperFrame(stack)));
+  const preludeLine = useThrowLocation ? thrown.line : frameLine;
+  const lineText = source.split('\n')[preludeLine - 1] ?? '';
+  const caretColumn = useThrowLocation ? thrown.column : Math.max(0, frameColumn - 1);
+  const callbackFrame = origin === 'uncaught' ? nodeEvalFirstCallbackFrame(stack) : null;
+  error.stack =
+    `[eval]:${String(preludeLine)}\n${lineText}\n${' '.repeat(caretColumn)}^\n\n` +
+    `${firstLine}${
+      callbackFrame === null
+        ? `\n    at [eval]:${String(frameLine)}:${String(frameColumn)}`
+        : `\n${callbackFrame}`
+    }`;
+  return error;
+}
+
+function requiresTypeScriptEvalContext(source: string): boolean {
+  if (parsesAsJavaScriptScript(source)) return false;
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.None,
+      target: ts.ScriptTarget.ESNext,
+    },
+    fileName: '[eval].ts',
+    reportDiagnostics: true,
+  });
+  if (
+    transpiled.diagnostics?.some(
+      (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
+    )
+  ) {
+    return false;
+  }
+  const syntax = ts.createSourceFile(
+    '[eval].ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  return hasTypeScriptOnlySyntax(syntax) && parsesAsJavaScriptScript(transpiled.outputText);
+}
+
+function installNodeEvalCjsBindings(moduleObject: CjsModule, require: CjsRequire): void {
+  for (const [key, value] of [
+    ['require', require],
+    ['module', moduleObject],
+    ['exports', moduleObject.exports],
+    ['__filename', '[eval]'],
+    ['__dirname', '.'],
+  ] as const) {
+    objectDefinePropertyPrimordial(globalThis, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+}
+
+function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoaderCore {
   const registry = new ModuleRegistry();
   const resolver = createResolver(vfs, {
     paths: opts.paths,
@@ -359,7 +727,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
 
   __setCreateRequireImpl(makeRequire);
 
-  return {
+  const loader: ModuleLoader = {
     require(specifier, from = cwd) {
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: false });
       if (resolved.kind === 'builtin') {
@@ -419,5 +787,40 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     registry,
     resolver,
+  };
+
+  return {
+    loader,
+    runNodeEvalScript(source, explicitCommonJs) {
+      if (!explicitCommonJs && requiresTypeScriptEvalContext(source)) {
+        // TODO(backlog: runtime-js/node-cli-typescript-eval-context)
+        throw new NotImplementedError('runtime-js.node-eval-typescript-context');
+      }
+      const filename = joinPath(cwd, '[eval]');
+      const record = createModuleRecord('[eval]', 'cjs');
+      const moduleObject = initialiseDetachedCjsRecord(record, deps, filename);
+      const require = makeRequire(filename, moduleObject);
+      installNodeEvalCjsBindings(moduleObject, require);
+      return reflectApplyPrimordial(indirectEvalPrimordial, globalThis, [
+        `${source}\n//# sourceURL=[eval]`,
+      ]);
+    },
+  };
+}
+
+export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoader {
+  return createModuleLoaderCore(vfs, opts).loader;
+}
+
+/** Package-internal Node CLI eval seam; intentionally absent from `module-loader/index.ts`. */
+export function createNodeEvalScriptRunner(opts: {
+  readonly vfs: FsSync;
+  readonly cwd: string;
+  readonly explicitCommonJs: boolean;
+}): NodeEvalScriptRunner {
+  const core = createModuleLoaderCore(opts.vfs, { cwd: opts.cwd });
+  return {
+    registry: core.loader.registry,
+    run: (source) => core.runNodeEvalScript(source, opts.explicitCommonJs),
   };
 }

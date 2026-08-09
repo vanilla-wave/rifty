@@ -173,14 +173,20 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
     run: ActiveRun,
     exited: Promise<ProcessExit>,
     lifecycle?: PlaygroundProjectLifecyclePresentation,
+    authoritativeExitCode?: Promise<number>,
   ): Promise<ProcessExit> => {
     let exit: ProcessExit;
+    let exitCode: number | undefined;
     try {
-      exit = await exited;
+      if (authoritativeExitCode === undefined) {
+        exit = await exited;
+      } else {
+        [exit, exitCode] = await Promise.all([exited, authoritativeExitCode]);
+      }
       if (lifecycle?.kind === 'node-cli') {
         buffer(
           state,
-          `[cli] completed with exit code ${String(shellCommandExitCode(exit))}\n`,
+          `[cli] completed with exit code ${String(exitCode ?? shellCommandExitCode(exit))}\n`,
           'stdout',
         );
       }
@@ -195,7 +201,7 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
         }
       }
     }
-    state.exitCode = exit.code ?? undefined;
+    state.exitCode = exitCode ?? exit.code ?? undefined;
     publish();
     return exit;
   };
@@ -266,12 +272,14 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
       state.status = 'running';
       state.exitCode = undefined;
       publish();
-      const exit = await settle(
+      await settle(
         state,
         run,
         run.ready.then(() => run.exited),
+        undefined,
+        run.exitCode,
       );
-      return exit.code ?? (exit.signal === null ? 0 : 1);
+      return run.exitCode;
     },
 
     write: (id, data) => get(id).terminal.write(data),

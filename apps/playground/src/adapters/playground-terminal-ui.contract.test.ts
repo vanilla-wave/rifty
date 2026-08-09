@@ -21,8 +21,10 @@ function deferred<T>() {
 function terminalHarness() {
   const listeners = new Set<(chunk: string, stream: 'stdout' | 'stderr') => void>();
   const runExit = deferred<ProcessExit>();
+  const runExitCode = deferred<number>();
   const run = {
     ready: Promise.resolve(),
+    exitCode: runExitCode.promise,
     exited: runExit.promise,
     stop: vi.fn(async () => ({ code: null, signal: 'SIGINT' }) as ProcessExit),
     close: vi.fn(async () => ({ code: 0, signal: null }) as ProcessExit),
@@ -47,6 +49,7 @@ function terminalHarness() {
     terminal,
     run,
     runExit,
+    runExitCode,
     setState(cwd: string, env: Readonly<Record<string, string>>) {
       terminalState = Object.freeze({ cwd, env: Object.freeze({ ...env }) });
     },
@@ -220,12 +223,44 @@ describe('Playground semantic terminal UI adapter', () => {
     await ui.write(opened.id, 'answer\n');
     await ui.resize(opened.id, 100, 40);
     await ui.stop(opened.id);
+    interactive.runExitCode.resolve(7);
     interactive.runExit.resolve({ code: 7, signal: null });
 
     await expect(line).resolves.toBe(7);
     expect(interactive.terminal.write).toHaveBeenCalledWith('answer\n');
     expect(interactive.run.stop).toHaveBeenCalledTimes(1);
     expect(interactive.run.close).toHaveBeenCalledTimes(1);
+    await ui.dispose();
+  });
+
+  it('uses the owner shell status instead of reconstructing it from physical exit', async () => {
+    const interactive = terminalHarness();
+    const exactExit = deferred<ProcessExit>();
+    const exitCode = deferred<number>();
+    const run = {
+      ready: Promise.resolve(),
+      exited: exactExit.promise,
+      exitCode: exitCode.promise,
+      stop: vi.fn(async () => ({ code: null, signal: 'SIGTERM' }) as ProcessExit),
+      close: vi.fn(async () => ({ code: null, signal: 'SIGTERM' }) as ProcessExit),
+    };
+    interactive.terminal.run.mockReturnValueOnce(run);
+    const session = {
+      files: {},
+      documents: {},
+      run: vi.fn(),
+      terminals: { open: vi.fn(() => interactive.terminal) },
+      close: vi.fn(),
+    } as unknown as ProjectSession<unknown>;
+    const ui = createPlaygroundTerminalUi(session);
+    const opened = ui.createSession('Terminal 1');
+
+    const line = ui.runLine(opened.id, 'node -e server');
+    exactExit.resolve({ code: null, signal: 'SIGTERM' });
+    exitCode.resolve(130);
+
+    await expect(line).resolves.toBe(130);
+    expect(ui.sessions()[0]).toMatchObject({ status: 'idle', exitCode: 130 });
     await ui.dispose();
   });
 
@@ -255,6 +290,7 @@ describe('Playground semantic terminal UI adapter', () => {
     void exited.promise.catch(() => {});
     const failedRun = {
       ready: ready.promise,
+      exitCode: exited.promise.then(() => 1),
       exited: exited.promise,
       stop: vi.fn(async () => ({ code: null, signal: 'SIGINT' }) as ProcessExit),
       close: vi.fn(async () => ({ code: 1, signal: null }) as ProcessExit),

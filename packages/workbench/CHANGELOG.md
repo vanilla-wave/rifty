@@ -4,6 +4,13 @@
 
 ### Added
 
+- The terminal `node` command now admits Node 24-compatible CommonJS
+  `-e`/`--eval`, `-p`/`--print`, and explicit `--input-type=commonjs`
+  invocations through the same supervised physical child, VFS, preview, signal,
+  and exit lifecycle as `node <file>`. An empty first token after `--` remains
+  eval argv; accepted ESM, TypeScript, preload, and print-to-program contexts
+  fail in their named gaps.
+
 - **Installed nodemon owns curated Node-server development (ADR-0327).** Exact
   script bytes select direct-entry or installed-bin execution; recursive apps
   reuse PTY/preview ownership and the owner-root finite `ps` surface.
@@ -47,6 +54,14 @@
   with no host fallback (ADR-0311).
 
 ### Fixed
+
+- Foreground stdout and stderr now decode UTF-8 incrementally per stream and
+  flush decoder tails before exit or peer-failure settlement in byte-admission
+  order, preserving split code points and exact stream identity.
+
+- `ProjectTerminalRun` now exposes the owner-authored shell status beside its
+  exact physical exit, preserving Ctrl-C status `130` without reconstructing it
+  from `SIGTERM` (ADR-0341).
 
 - Preserve an exact trusted dependency tree across Scratch-to-project Save:
   the existing package FIFO copies claim-free bytes, then mints target-root

@@ -5,7 +5,7 @@ import {
 } from '@riftydev/kernel';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 
-export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v2' as const;
+export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v3' as const;
 
 export interface NodeEntryTerminalBootstrap {
   readonly stdinIsTTY: boolean;
@@ -28,6 +28,18 @@ export interface NodeEntryProgramLaunch {
   readonly terminal?: NodeEntryTerminalBootstrap;
 }
 
+export interface NodeEntryEvalLaunch {
+  readonly kind: 'eval';
+  readonly source: string;
+  readonly print: boolean;
+  readonly execArgv: readonly string[];
+  readonly remoteFs: boolean;
+  /** Host-only physical root behind the child's public `/` namespace. */
+  readonly remoteFsRoot?: string;
+  readonly previewScope?: string;
+  readonly terminal?: NodeEntryTerminalBootstrap;
+}
+
 export interface NodeEntryWorkerThreadLaunch {
   readonly kind: 'worker-thread';
   readonly remoteFs: boolean;
@@ -37,7 +49,10 @@ export interface NodeEntryWorkerThreadLaunch {
   readonly workerDataJson?: string;
 }
 
-export type NodeEntryLaunch = NodeEntryProgramLaunch | NodeEntryWorkerThreadLaunch;
+export type NodeEntryLaunch =
+  | NodeEntryProgramLaunch
+  | NodeEntryEvalLaunch
+  | NodeEntryWorkerThreadLaunch;
 
 export interface NodeEntryBootstrapPayload {
   readonly hostRuntime: Readonly<Record<string, string>>;
@@ -122,6 +137,27 @@ function booleanOwnField(record: Record<string, unknown>, key: string, owner: st
   return booleanValue(requiredOwnField(record, key, owner), key, owner);
 }
 
+function stringOwnField(record: Record<string, unknown>, key: string, owner: string): string {
+  const value = requiredOwnField(record, key, owner);
+  if (typeof value !== 'string') throw new TypeError(`${owner}.${key} must be a string`);
+  return value;
+}
+
+function stringArrayOwnField(
+  record: Record<string, unknown>,
+  key: string,
+  owner: string,
+): readonly string[] {
+  const value = requiredOwnField(record, key, owner);
+  if (!Array.isArray(value)) throw new TypeError(`${owner}.${key} must be an array`);
+  for (let index = 0; index < value.length; index++) {
+    if (typeof value[index] !== 'string') {
+      throw new TypeError(`${owner}.${key} must be an array of strings`);
+    }
+  }
+  return Object.freeze([...value]);
+}
+
 function positiveInteger(value: unknown, owner: string): number {
   if (!Number.isSafeInteger(value) || (value as number) <= 0) {
     throw new RangeError(`${owner} must be a positive safe integer`);
@@ -146,6 +182,14 @@ function remoteFsRootValue(value: unknown, remoteFs: boolean): string | undefine
     throw new TypeError(
       'node-entry bootstrap launch.remoteFsRoot requires launch.remoteFs to be true',
     );
+  }
+  return value;
+}
+
+function previewScopeValue(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value === '') {
+    throw new TypeError('node-entry bootstrap launch.previewScope must be a non-empty string');
   }
   return value;
 }
@@ -190,10 +234,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       throw new TypeError('node-entry bootstrap launch.ipc must be none or json');
     }
     const nodeServe = booleanOwnField(record, 'nodeServe', 'node-entry bootstrap launch');
-    const previewScope = optionalOwnField(record, 'previewScope');
-    if (previewScope !== undefined && (typeof previewScope !== 'string' || previewScope === '')) {
-      throw new TypeError('node-entry bootstrap launch.previewScope must be a non-empty string');
-    }
+    const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));
     const terminal = optionalOwnField(record, 'terminal');
     return Object.freeze({
       kind: 'program',
@@ -202,6 +243,39 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
       ...(ipc === undefined ? {} : { ipc }),
       nodeServe,
+      ...(previewScope === undefined ? {} : { previewScope }),
+      ...(terminal === undefined ? {} : { terminal: snapshotNodeEntryTerminalBootstrap(terminal) }),
+    });
+  }
+  if (kind === 'eval') {
+    assertAllowedOwnFields(
+      record,
+      [
+        'kind',
+        'source',
+        'print',
+        'execArgv',
+        'remoteFs',
+        'remoteFsRoot',
+        'previewScope',
+        'terminal',
+      ],
+      'node-entry bootstrap eval launch',
+    );
+    const source = stringOwnField(record, 'source', 'node-entry bootstrap launch');
+    const print = booleanOwnField(record, 'print', 'node-entry bootstrap launch');
+    const execArgv = stringArrayOwnField(record, 'execArgv', 'node-entry bootstrap launch');
+    const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
+    const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
+    const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));
+    const terminal = optionalOwnField(record, 'terminal');
+    return Object.freeze({
+      kind: 'eval',
+      source,
+      print,
+      execArgv,
+      remoteFs,
+      ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
       ...(previewScope === undefined ? {} : { previewScope }),
       ...(terminal === undefined ? {} : { terminal: snapshotNodeEntryTerminalBootstrap(terminal) }),
     });
@@ -237,7 +311,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       ...(workerDataJson === undefined ? {} : { workerDataJson }),
     });
   }
-  throw new TypeError('node-entry bootstrap launch.kind must be program or worker-thread');
+  throw new TypeError('node-entry bootstrap launch.kind must be program, eval, or worker-thread');
 }
 
 function snapshotPayload(value: unknown): NodeEntryBootstrapPayload {
@@ -277,7 +351,9 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
   const current = readNodeEntryBootstrapIfPresent();
   const inheritedRoot = current?.launch.remoteFsRoot;
   const inheritedPreviewScope =
-    current?.launch.kind === 'program' ? current.launch.previewScope : undefined;
+    current !== null && current.launch.kind !== 'worker-thread'
+      ? current.launch.previewScope
+      : undefined;
   if (current?.launch.remoteFs === true && launch.remoteFs && inheritedRoot === undefined) {
     throw new TypeError('recursive node-entry remote FS requires an inherited owner remoteFsRoot');
   }
@@ -290,7 +366,7 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
   }
   if (
     inheritedPreviewScope !== undefined &&
-    launch.kind === 'program' &&
+    launch.kind !== 'worker-thread' &&
     launch.previewScope !== undefined &&
     launch.previewScope !== inheritedPreviewScope
   ) {
@@ -300,7 +376,7 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
     ...launch,
     ...(inheritedRoot !== undefined && launch.remoteFs ? { remoteFsRoot: inheritedRoot } : {}),
     ...(inheritedPreviewScope !== undefined &&
-    launch.kind === 'program' &&
+    launch.kind !== 'worker-thread' &&
     launch.previewScope === undefined
       ? { previewScope: inheritedPreviewScope }
       : {}),

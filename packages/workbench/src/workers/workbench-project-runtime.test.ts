@@ -1,10 +1,17 @@
-import { globalProcessManager } from '@riftydev/kernel';
+import {
+  type WorkerSpawnSpec,
+  getKernelWorkerUrl,
+  globalProcessManager,
+  setKernelWorkerUrl,
+} from '@riftydev/kernel';
+import { finalizeWorkerEntry } from '@riftydev/kernel/worker-entry';
 import {
   type InstallOptions,
   type InstallResult,
   RegistryClient,
   install as installPackages,
 } from '@riftydev/npm-client';
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import {
   NODE_ENTRY_BOOTSTRAP_PROTOCOL,
   type NodeEntryBootstrapPayload,
@@ -22,11 +29,32 @@ import {
   type OwnerPackageState,
   createOwnerPackageState,
 } from './owner-package-state.ts';
-import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
+import {
+  type OwnerVfsAuthority,
+  createOwnerVfsAuthorityComposition,
+} from './owner-vfs-authority.ts';
 import {
   type WorkbenchProjectRuntime,
   createWorkbenchProjectRuntime,
 } from './workbench-project-runtime.ts';
+
+// Existing kernel test-only reset is not a package API. Keep this test access
+// runtime-only so Workbench's production TypeScript graph stays package-bound.
+const KERNEL_SPAWN_WORKER_TEST_MODULE = '../../../kernel/src/spawn-worker.ts';
+const kernelSpawnWorkerTestModule: unknown = await import(KERNEL_SPAWN_WORKER_TEST_MODULE);
+if (typeof kernelSpawnWorkerTestModule !== 'object' || kernelSpawnWorkerTestModule === null) {
+  throw new TypeError('kernel spawn-worker test module is unavailable');
+}
+const clearKernelWorkerUrlCandidate: unknown = Reflect.get(
+  kernelSpawnWorkerTestModule,
+  'clearKernelWorkerUrl',
+);
+if (typeof clearKernelWorkerUrlCandidate !== 'function') {
+  throw new TypeError('kernel clearKernelWorkerUrl test seam is unavailable');
+}
+const clearKernelWorkerUrl = (): void => {
+  Reflect.apply(clearKernelWorkerUrlCandidate, undefined, []);
+};
 
 const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
 const NODE_ENTRY_WORKER_URL = 'https://example.test/node-entry.js';
@@ -41,6 +69,147 @@ const NODE_WORKER_RUNTIME_CONFIG = Object.freeze({
   nodeEntryWorkerUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_NODE_ENTRY_WORKER_URL,
   sqliteWasmUrl: NODE_WORKER_RUNTIME_ENV.RIFTY_SQLITE_WASM_URL,
 });
+const TERMINATOR_ADMISSION_SOURCE = 'JSON.stringify({marker:"terminator"})';
+const OPTIONAL_PRINT_SPELLINGS = [
+  '-p',
+  '--print',
+  '--print=ignored',
+  '--print=not-the-source',
+  '--print=',
+] as const;
+const NODE_EVAL_INPUT_TYPES = [
+  '--input-type=commonjs',
+  '--input-type=module',
+  '--input-type=commonjs-typescript',
+  '--input-type=module-typescript',
+] as const;
+const TERMINATED_SEPARATED_EVAL_SPELLINGS = [
+  {
+    option: '-e',
+    print: false,
+    sourceRequired: true,
+    missing: 'node: -e requires an argument\n',
+  },
+  {
+    option: '--eval',
+    print: false,
+    sourceRequired: true,
+    missing: 'node: --eval requires an argument\n',
+  },
+  {
+    option: '-pe',
+    print: true,
+    sourceRequired: true,
+    missing: 'node: --eval requires an argument\n',
+  },
+  ...OPTIONAL_PRINT_SPELLINGS.map((option) => ({
+    option,
+    print: true as const,
+    sourceRequired: false as const,
+    missing: '' as const,
+  })),
+] as const;
+const TERMINATED_EVAL_SOURCE_STATES = ['missing', 'empty', 'nonempty'] as const;
+
+type TerminatedEvalAdmissionCase =
+  | {
+      readonly outcome: 'usageError';
+      readonly label: string;
+      readonly line: string;
+      readonly stderr: string;
+    }
+  | {
+      readonly outcome: 'eval';
+      readonly label: string;
+      readonly line: string;
+      readonly source: string;
+      readonly print: boolean;
+      readonly execArgv: readonly string[];
+      readonly scriptArgs: readonly string[];
+    };
+
+function buildTerminatedEvalAdmissionCases(): readonly TerminatedEvalAdmissionCase[] {
+  return TERMINATED_SEPARATED_EVAL_SPELLINGS.flatMap((spelling) =>
+    TERMINATED_EVAL_SOURCE_STATES.map((sourceState): TerminatedEvalAdmissionCase => {
+      const source =
+        sourceState === 'missing'
+          ? undefined
+          : sourceState === 'empty'
+            ? ''
+            : TERMINATOR_ADMISSION_SOURCE;
+      const line =
+        source === undefined
+          ? `node ${spelling.option} --`
+          : `node ${spelling.option} '${source}' -- x`;
+      const label = `${spelling.option} / ${sourceState}`;
+
+      if (source === undefined && spelling.sourceRequired) {
+        return {
+          outcome: 'usageError',
+          label,
+          line,
+          stderr: spelling.missing,
+        };
+      }
+      if (source === undefined) {
+        return {
+          outcome: 'eval',
+          label,
+          line,
+          source: '',
+          print: spelling.print,
+          execArgv: [spelling.option],
+          scriptArgs: [],
+        };
+      }
+      if (source === '' && !spelling.sourceRequired) {
+        return {
+          outcome: 'eval',
+          label,
+          line,
+          source,
+          print: spelling.print,
+          execArgv: [spelling.option],
+          scriptArgs: ['', '--', 'x'],
+        };
+      }
+      return {
+        outcome: 'eval',
+        label,
+        line,
+        source,
+        print: spelling.print,
+        execArgv: [spelling.option, source],
+        scriptArgs: ['x'],
+      };
+    }),
+  );
+}
+
+type TerminatedEvalUsageErrorCase = Extract<
+  TerminatedEvalAdmissionCase,
+  { readonly outcome: 'usageError' }
+>;
+type TerminatedEvalChildCase = Extract<TerminatedEvalAdmissionCase, { readonly outcome: 'eval' }>;
+
+const TERMINATED_EVAL_ADMISSION_CASES = buildTerminatedEvalAdmissionCases();
+const TERMINATED_EVAL_USAGE_ERROR_CASES = TERMINATED_EVAL_ADMISSION_CASES.filter(
+  (testCase): testCase is TerminatedEvalUsageErrorCase => testCase.outcome === 'usageError',
+);
+const TERMINATED_EVAL_CHILD_CASES: readonly TerminatedEvalChildCase[] = [
+  ...TERMINATED_EVAL_ADMISSION_CASES.filter(
+    (testCase): testCase is TerminatedEvalChildCase => testCase.outcome === 'eval',
+  ),
+  {
+    outcome: 'eval',
+    label: '--eval= / nonempty',
+    line: `node --eval='${TERMINATOR_ADMISSION_SOURCE}' -- x`,
+    source: TERMINATOR_ADMISSION_SOURCE,
+    print: false,
+    execArgv: [`--eval=${TERMINATOR_ADMISSION_SOURCE}`],
+    scriptArgs: ['x'],
+  },
+];
 const PACKAGE_JSON = `${JSON.stringify({
   name: 'workbench-project-a',
   version: '1.0.0',
@@ -238,6 +407,100 @@ interface BoundaryWorker {
   emitExit(code: number | null, signal?: string | null): void;
 }
 
+type KernelWorkerListener = (event: MessageEvent) => void;
+
+class KernelWorkerBoundary {
+  readonly posted: unknown[] = [];
+  readonly terminate = vi.fn();
+  readonly #listeners = new Map<string, Set<KernelWorkerListener>>();
+
+  postMessage(message: unknown): void {
+    this.posted.push(message);
+  }
+
+  addEventListener(type: string, listener: KernelWorkerListener): void {
+    const listeners = this.#listeners.get(type) ?? new Set<KernelWorkerListener>();
+    listeners.add(listener);
+    this.#listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: KernelWorkerListener): void {
+    this.#listeners.get(type)?.delete(listener);
+  }
+
+  spec(): WorkerSpawnSpec {
+    const init = this.posted[0] as { readonly type?: unknown; readonly spec?: unknown } | undefined;
+    if (init?.type !== 'init' || init.spec === undefined) {
+      throw new Error('kernel Worker boundary did not receive one init spec');
+    }
+    return init.spec as WorkerSpawnSpec;
+  }
+
+  finish(code: number): void {
+    const spec = this.spec();
+    finalizeWorkerEntry(
+      {
+        postMessage: (message) => {
+          const event = new MessageEvent('message', { data: message });
+          for (const listener of [...(this.#listeners.get('message') ?? [])]) listener(event);
+        },
+        close() {},
+      },
+      spec,
+      // A node-entry foreground child exits through process.exit after its
+      // lifecycle owner drains; that trusted throw reaches this exact kernel
+      // finalizer path even for code 0.
+      { threw: true, code },
+    );
+  }
+}
+
+const restoreRealKernelBoundaries: Array<() => void> = [];
+
+function restoreKernelWorkerUrl(url: string | URL | null): void {
+  if (url === null) clearKernelWorkerUrl();
+  else setKernelWorkerUrl(url);
+}
+
+function restoreInstalledRealKernelBoundaries(): void {
+  for (;;) {
+    const restore = restoreRealKernelBoundaries.pop();
+    if (restore === undefined) return;
+    restore();
+  }
+}
+
+function installRealKernelWorkerBoundary(): readonly KernelWorkerBoundary[] {
+  const originalWorkerDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
+  const originalKernelWorkerUrl = getKernelWorkerUrl();
+  const workers: KernelWorkerBoundary[] = [];
+  class RecordingKernelWorker extends KernelWorkerBoundary {
+    constructor() {
+      super();
+      workers.push(this);
+    }
+  }
+  Object.defineProperty(globalThis, 'Worker', {
+    value: RecordingKernelWorker,
+    configurable: true,
+    writable: true,
+  });
+  setKernelWorkerUrl(NODE_WORKER_RUNTIME_ENV.RIFTY_KERNEL_WORKER_URL);
+  let restored = false;
+  restoreRealKernelBoundaries.push(() => {
+    if (restored) return;
+    restored = true;
+    for (const worker of workers.splice(0)) {
+      const pid = worker.spec().pid;
+      if (globalProcessManager.get(pid) !== null) globalProcessManager.kill(pid);
+    }
+    if (originalWorkerDescriptor === undefined) Reflect.deleteProperty(globalThis, 'Worker');
+    else Object.defineProperty(globalThis, 'Worker', originalWorkerDescriptor);
+    restoreKernelWorkerUrl(originalKernelWorkerUrl);
+  });
+  return workers;
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   const promise = new Promise<T>((done) => {
@@ -362,6 +625,23 @@ function boundaryWorker(): BoundaryWorker {
   };
 }
 
+function snapshotProjectTree(
+  authority: OwnerVfsAuthority,
+): Readonly<Record<string, readonly number[]>> {
+  const files: Record<string, readonly number[]> = {};
+  const walk = (directory: string): void => {
+    for (const entry of authority.readdirSync(directory)) {
+      const path = `${directory}/${entry.name}`;
+      if (entry.isDirectory) walk(path);
+      else files[path.slice(ROOT.length)] = [...authority.readFileBytesSync(path)];
+    }
+  };
+  walk(ROOT);
+  return Object.fromEntries(
+    Object.entries(files).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+  );
+}
+
 async function harness(
   onSend?: (frame: OwnerToPageFrame, runtime: () => WorkbenchProjectRuntime) => void,
   activePackageConfig: OwnerPackageConfig = packageConfig,
@@ -483,11 +763,51 @@ async function harness(
 }
 
 afterEach(() => {
+  restoreInstalledRealKernelBoundaries();
   vi.restoreAllMocks();
   resetSyncMirror();
 });
 
 describe('Workbench finite Node owner lifecycle Contract+RED', () => {
+  it.each([null, 'https://host.test/original-kernel-worker.js'] as const)(
+    'restores exact Worker and kernel URL globals after a real boundary with prior URL %s',
+    (priorKernelWorkerUrl) => {
+      const ambientWorkerDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
+      const ambientKernelWorkerUrl = getKernelWorkerUrl();
+      class PriorWorker {}
+      Object.defineProperty(globalThis, 'Worker', {
+        value: PriorWorker,
+        configurable: true,
+        writable: false,
+        enumerable: true,
+      });
+      restoreKernelWorkerUrl(priorKernelWorkerUrl);
+      const priorWorkerDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Worker');
+
+      try {
+        const workers = installRealKernelWorkerBoundary();
+        expect(workers).toEqual([]);
+        expect(getKernelWorkerUrl()).toBe(NODE_WORKER_RUNTIME_ENV.RIFTY_KERNEL_WORKER_URL);
+        expect(Object.getOwnPropertyDescriptor(globalThis, 'Worker')).not.toEqual(
+          priorWorkerDescriptor,
+        );
+
+        restoreInstalledRealKernelBoundaries();
+
+        expect(workers).toEqual([]);
+        expect(getKernelWorkerUrl()).toBe(priorKernelWorkerUrl);
+        expect(Object.getOwnPropertyDescriptor(globalThis, 'Worker')).toEqual(
+          priorWorkerDescriptor,
+        );
+      } finally {
+        restoreInstalledRealKernelBoundaries();
+        if (ambientWorkerDescriptor === undefined) Reflect.deleteProperty(globalThis, 'Worker');
+        else Object.defineProperty(globalThis, 'Worker', ambientWorkerDescriptor);
+        restoreKernelWorkerUrl(ambientKernelWorkerUrl);
+      }
+    },
+  );
+
   it('reports nodemon Worker peer death as a PTY lifecycle error, not a fabricated command exit', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, nodemonNodeServerPackageConfig);
@@ -834,7 +1154,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
   });
 
   it('runs node-cli through a supervised node child with exact empty argv and physical exit', async () => {
-    const worker = boundaryWorker();
+    const workers = installRealKernelWorkerBoundary();
     const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({
       type: 'pty:open',
@@ -853,10 +1173,17 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         isTTY: true,
       }),
     );
-    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+    await vi.waitFor(() => expect(workers).toHaveLength(1));
+    const worker = workers[0];
+    if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+    const spec = worker.spec();
 
-    expect(worker.command()).toBe('node');
-    expect(worker.spec()).toMatchObject({
+    expect(globalProcessManager.get(spec.pid)).toMatchObject({
+      kind: 'worker',
+      command: 'node',
+      pid: spec.pid,
+    });
+    expect(spec).toMatchObject({
       cwd: '/',
       argv: ['rifty', '/src/cli.mjs', '', 'two words'],
       env: { USER_FLAG: 'preserved' },
@@ -888,8 +1215,9 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       },
     });
 
-    worker.emitExit(7);
+    worker.finish(7);
     await running;
+    expect(globalProcessManager.get(spec.pid)).toBeNull();
     expect(h.frames).toContainEqual({
       type: 'pty:exit',
       sid: 'terminal-node-cli',
@@ -902,17 +1230,720 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
-  it.each([
-    "node -e '1'",
-    "node --eval '1'",
-    'node --eval=1',
-    "node -p '1'",
-    "node --print '1'",
-    'node --print=1',
-  ])('keeps unsupported eval context loud without a temp write or child: %s', async (line) => {
-    const spawn = vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation(() => {
-      throw new Error('unexpected Node eval child spawn');
+  it('builds one exact v3 admitted-child launch without an owner-VFS carrier', async () => {
+    const source = 'JSON.stringify({marker:"node-eval"})';
+    const workers = installRealKernelWorkerBoundary();
+    const reservationEvidence: {
+      events: string[];
+      paths: string[];
+      ready?: unknown;
+    } = { events: [], paths: [] };
+    const h = await harness(
+      undefined,
+      nodeCliPackageConfig,
+      async () => {},
+      undefined,
+      reservationEvidence,
+    );
+    const before = snapshotProjectTree(h.authority);
+    const writeHistory = vi.spyOn(h.authority, 'writeFileSync');
+    const unlinkHistory = vi.spyOn(h.authority, 'rmSync');
+    h.runtime.handlePtyFrame({
+      type: 'pty:open',
+      sid: 'terminal-node-eval',
+      env: { USER_FLAG: 'preserved' },
     });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-eval',
+        rid: 'run-node-eval',
+        line: `node -pe '${source}' alpha 'two words'`,
+        cols: 97,
+        rows: 37,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(workers).toHaveLength(1));
+    const worker = workers[0];
+    if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+    const spec = worker.spec();
+
+    expect(globalProcessManager.get(spec.pid)).toMatchObject({
+      kind: 'worker',
+      command: 'node',
+      pid: spec.pid,
+    });
+    expect(spec).toMatchObject({
+      cwd: '/',
+      argv: [NODE_PROCESS_IDENTITY.execPath, 'alpha', 'two words'],
+      env: { USER_FLAG: 'preserved' },
+      serve: true,
+      entry: {
+        kind: 'url',
+        url: NODE_ENTRY_WORKER_URL,
+        bootstrap: {
+          protocol: 'rifty.node-entry/v3',
+          payload: {
+            hostRuntime: NODE_WORKER_RUNTIME_ENV,
+            launch: {
+              kind: 'eval',
+              source,
+              print: true,
+              execArgv: ['-pe', source],
+              remoteFs: true,
+              remoteFsRoot: ROOT,
+              previewScope: expect.any(String),
+              terminal: {
+                stdinIsTTY: false,
+                stdoutIsTTY: true,
+                stderrIsTTY: true,
+                cols: 97,
+                rows: 37,
+              },
+            },
+          },
+        },
+      },
+    });
+    const entry = spec.entry;
+    if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
+      throw new Error('expected eval node-entry URL bootstrap');
+    }
+    const payload = entry.bootstrap.payload as {
+      readonly launch?: Readonly<Record<string, unknown>>;
+    };
+    expect(Object.keys(payload.launch ?? {}).sort()).toEqual(
+      [
+        'execArgv',
+        'kind',
+        'previewScope',
+        'print',
+        'remoteFs',
+        'remoteFsRoot',
+        'source',
+        'terminal',
+      ].sort(),
+    );
+    expect(JSON.stringify({ argv: spec.argv, env: spec.env })).not.toContain(source);
+    expect(reservationEvidence.paths).toEqual([ROOT]);
+    expect(reservationEvidence.events).toEqual(['commit']);
+
+    worker.finish(0);
+    await running;
+    await vi.waitFor(() => expect(reservationEvidence.events).toEqual(['commit', 'dispose']));
+    expect(globalProcessManager.get(spec.pid)).toBeNull();
+    expect(writeHistory).not.toHaveBeenCalled();
+    expect(unlinkHistory).not.toHaveBeenCalled();
+    expect(snapshotProjectTree(h.authority)).toEqual(before);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-node-eval',
+        code: 0,
+        exit: { code: 0, signal: null },
+      }),
+    );
+    await h.runtime.close();
+  });
+
+  it.each(TERMINATED_EVAL_USAGE_ERROR_CASES)(
+    'returns exact immediate-terminator usage failure without a child: $label',
+    async ({ line, stderr: expectedStderr }) => {
+      const processesBefore = globalProcessManager.snapshot();
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-terminator' });
+
+      try {
+        await h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-eval-terminator',
+          rid: 'run-node-eval-terminator',
+          line,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        });
+
+        const stderr = h.frames
+          .filter(
+            (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+              frame.type === 'pty:chunk' &&
+              frame.rid === 'run-node-eval-terminator' &&
+              frame.stream === 'stderr',
+          )
+          .map((frame) => new TextDecoder().decode(frame.data))
+          .join('');
+        expect(stderr).toBe(expectedStderr);
+        expect(workers).toHaveLength(0);
+        expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+        expect(h.frames).toContainEqual(
+          expect.objectContaining({
+            type: 'pty:exit',
+            rid: 'run-node-eval-terminator',
+            code: 9,
+            exit: { code: 9, signal: null },
+          }),
+        );
+      } finally {
+        await h.runtime.close();
+      }
+    },
+  );
+
+  it.each(TERMINATED_EVAL_CHILD_CASES)(
+    'crosses source state and immediate terminator through one real admitted child: $label',
+    async ({ line, source, print, execArgv, scriptArgs }) => {
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-terminator' });
+      const running = Promise.resolve(
+        h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-eval-terminator',
+          rid: 'run-node-eval-terminator',
+          line,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      let worker: KernelWorkerBoundary | undefined;
+
+      try {
+        await vi.waitFor(() => expect(workers).toHaveLength(1));
+        worker = workers[0];
+        if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+        const spec = worker.spec();
+
+        expect(spec.argv).toEqual([NODE_PROCESS_IDENTITY.execPath, ...scriptArgs]);
+        expect(spec).toMatchObject({
+          entry: {
+            bootstrap: {
+              protocol: 'rifty.node-entry/v3',
+              payload: {
+                launch: {
+                  kind: 'eval',
+                  source,
+                  print,
+                  execArgv,
+                },
+              },
+            },
+          },
+        });
+        expect(globalProcessManager.get(spec.pid)).toMatchObject({
+          kind: 'worker',
+          command: 'node',
+        });
+      } finally {
+        worker?.finish(0);
+        await Promise.allSettled([running]);
+        await h.runtime.close();
+      }
+    },
+  );
+
+  it.each([
+    {
+      line: "node --input-type=commonjs -e '1' alpha",
+      source: '1',
+      print: false,
+      execArgv: ['--input-type=commonjs', '-e', '1'],
+      scriptArgs: ['alpha'],
+    },
+    {
+      line: "node --input-type=commonjs --eval='2' -- beta",
+      source: '2',
+      print: false,
+      execArgv: ['--input-type=commonjs', '--eval=2'],
+      scriptArgs: ['beta'],
+    },
+    ...[
+      { option: '-e', print: false },
+      { option: '--eval', print: false },
+      { option: '-pe', print: true },
+    ].map(({ option, print }) => ({
+      line: `node --input-type=commonjs ${option} ''`,
+      source: '',
+      print,
+      execArgv: ['--input-type=commonjs', option, ''],
+      scriptArgs: [],
+    })),
+    ...OPTIONAL_PRINT_SPELLINGS.map((option) => ({
+      line: `node --input-type=commonjs ${option} -- '' gamma`,
+      source: '',
+      print: true,
+      execArgv: ['--input-type=commonjs', option],
+      scriptArgs: ['', 'gamma'],
+    })),
+  ])(
+    'preserves explicit CommonJS eval identity through one admitted child: $line',
+    async ({ line, source, print, execArgv, scriptArgs }) => {
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-commonjs-eval' });
+      const running = Promise.resolve(
+        h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-commonjs-eval',
+          rid: 'run-node-commonjs-eval',
+          line,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      let worker: KernelWorkerBoundary | undefined;
+
+      try {
+        await vi.waitFor(() => expect(workers).toHaveLength(1));
+        worker = workers[0];
+        if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+        expect(worker.spec()).toMatchObject({
+          argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
+          entry: {
+            bootstrap: {
+              protocol: 'rifty.node-entry/v3',
+              payload: {
+                launch: {
+                  kind: 'eval',
+                  source,
+                  print,
+                  execArgv,
+                },
+              },
+            },
+          },
+        });
+      } finally {
+        worker?.finish(0);
+        await Promise.allSettled([running]);
+        await h.runtime.close();
+      }
+    },
+  );
+
+  it('admits implicit TypeScript eval as exactly one v3 child before the loader-owned gap', async () => {
+    const workers = installRealKernelWorkerBoundary();
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-implicit-ts-eval' });
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-implicit-ts-eval',
+        rid: 'run-node-implicit-ts-eval',
+        line: "node -e 'const n: number = 1'",
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    let worker: KernelWorkerBoundary | undefined;
+
+    try {
+      await vi.waitFor(() => expect(workers).toHaveLength(1));
+      worker = workers[0];
+      if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+      expect(worker.spec()).toMatchObject({
+        argv: [NODE_PROCESS_IDENTITY.execPath],
+        entry: {
+          bootstrap: {
+            protocol: 'rifty.node-entry/v3',
+            payload: {
+              launch: {
+                kind: 'eval',
+                source: 'const n: number = 1',
+                print: false,
+                execArgv: ['-e', 'const n: number = 1'],
+              },
+            },
+          },
+        },
+      });
+      expect(workers).toHaveLength(1);
+    } finally {
+      worker?.finish(1);
+      await Promise.allSettled([running]);
+      await h.runtime.close();
+    }
+  });
+
+  it.each(OPTIONAL_PRINT_SPELLINGS)(
+    'keeps an empty post-terminator token in eval argv through one real child: %s',
+    async (option) => {
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-empty-entry' });
+      const running = Promise.resolve(
+        h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-eval-empty-entry',
+          rid: 'run-node-eval-empty-entry',
+          line: `node ${option} -- '' alpha -x`,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      let worker: KernelWorkerBoundary | undefined;
+
+      try {
+        await vi.waitFor(() => expect(workers).toHaveLength(1));
+        worker = workers[0];
+        if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+        expect(worker.spec()).toMatchObject({
+          argv: [NODE_PROCESS_IDENTITY.execPath, '', 'alpha', '-x'],
+          entry: {
+            bootstrap: {
+              protocol: 'rifty.node-entry/v3',
+              payload: {
+                launch: {
+                  kind: 'eval',
+                  source: '',
+                  print: true,
+                  execArgv: [option],
+                },
+              },
+            },
+          },
+        });
+      } finally {
+        worker?.finish(0);
+        await Promise.allSettled([running]);
+        await h.runtime.close();
+      }
+    },
+  );
+
+  it.each(OPTIONAL_PRINT_SPELLINGS)(
+    'keeps the post-terminator program transition a named no-child gap: %s',
+    async (option) => {
+      const processesBefore = globalProcessManager.snapshot();
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-print-program' });
+
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-print-program',
+        rid: 'run-node-print-program',
+        line: `node ${option} -- entry.cjs alpha -x`,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+
+      const stderr = h.frames
+        .filter(
+          (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+            frame.type === 'pty:chunk' &&
+            frame.rid === 'run-node-print-program' &&
+            frame.stream === 'stderr',
+        )
+        .map((frame) => new TextDecoder().decode(frame.data))
+        .join('');
+      expect(stderr).toContain('Not implemented: workbench.node.print-program-context');
+      expect(workers).toHaveLength(0);
+      expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+      expect(h.frames).toContainEqual(
+        expect.objectContaining({
+          type: 'pty:exit',
+          rid: 'run-node-print-program',
+          code: 1,
+          exit: { code: 1, signal: null },
+        }),
+      );
+      await h.runtime.close();
+    },
+  );
+
+  it.each(
+    NODE_EVAL_INPUT_TYPES.flatMap((inputType) =>
+      OPTIONAL_PRINT_SPELLINGS.map((option) => ({ inputType, option })),
+    ),
+  )(
+    'keeps an input-type post-terminator program transition in the named no-child gap: $inputType $option',
+    async ({ inputType, option }) => {
+      const processesBefore = globalProcessManager.snapshot();
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({
+        type: 'pty:open',
+        sid: 'terminal-node-input-type-print-program',
+      });
+
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-input-type-print-program',
+        rid: 'run-node-input-type-print-program',
+        line: `node ${inputType} ${option} -- entry.cjs`,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+
+      const stderr = h.frames
+        .filter(
+          (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+            frame.type === 'pty:chunk' &&
+            frame.rid === 'run-node-input-type-print-program' &&
+            frame.stream === 'stderr',
+        )
+        .map((frame) => new TextDecoder().decode(frame.data))
+        .join('');
+      expect(stderr).toContain('Not implemented: workbench.node.print-program-context');
+      expect(workers).toHaveLength(0);
+      expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+      expect(h.frames).toContainEqual(
+        expect.objectContaining({
+          type: 'pty:exit',
+          rid: 'run-node-input-type-print-program',
+          code: 1,
+          exit: { code: 1, signal: null },
+        }),
+      );
+      await h.runtime.close();
+    },
+  );
+
+  it.each([
+    {
+      line: "node -e ''",
+      print: false,
+      execArgv: ['-e', ''],
+      scriptArgs: [],
+    },
+    {
+      line: "node --eval ''",
+      print: false,
+      execArgv: ['--eval', ''],
+      scriptArgs: [],
+    },
+    {
+      line: "node -pe ''",
+      print: true,
+      execArgv: ['-pe', ''],
+      scriptArgs: [],
+    },
+    {
+      line: "node -p ''",
+      print: true,
+      execArgv: ['-p'],
+      scriptArgs: [''],
+    },
+    {
+      line: "node --print ''",
+      print: true,
+      execArgv: ['--print'],
+      scriptArgs: [''],
+    },
+    {
+      line: "node --print=ignored ''",
+      print: true,
+      execArgv: ['--print=ignored'],
+      scriptArgs: [''],
+    },
+  ])(
+    'preserves explicit empty source vs absent source through the real kernel boundary: $line',
+    async ({ line, print, execArgv, scriptArgs }) => {
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval-empty' });
+
+      const running = Promise.resolve(
+        h.runtime.handlePtyFrame({
+          type: 'pty:exec',
+          sid: 'terminal-node-eval-empty',
+          rid: 'run-node-eval-empty',
+          line,
+          cols: 80,
+          rows: 24,
+          isTTY: true,
+        }),
+      );
+      await vi.waitFor(() => expect(workers).toHaveLength(1));
+      const worker = workers[0];
+      if (worker === undefined) throw new Error('expected one real kernel Worker boundary');
+      const spec = worker.spec();
+
+      expect(spec).toMatchObject({
+        argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
+        entry: {
+          bootstrap: {
+            protocol: 'rifty.node-entry/v3',
+            payload: {
+              launch: {
+                kind: 'eval',
+                source: '',
+                print,
+                execArgv,
+              },
+            },
+          },
+        },
+      });
+      expect(globalProcessManager.get(spec.pid)).toMatchObject({ kind: 'worker', command: 'node' });
+
+      worker.finish(0);
+      await running;
+      expect(globalProcessManager.get(spec.pid)).toBeNull();
+      await h.runtime.close();
+    },
+  );
+
+  it('keeps two simultaneous eval children isolated by cwd, argv, source, and preview scope', async () => {
+    const workers = installRealKernelWorkerBoundary();
+    const reservationEvidence: {
+      events: string[];
+      paths: string[];
+      ready?: unknown;
+    } = { events: [], paths: [] };
+    const h = await harness(
+      undefined,
+      nodeCliPackageConfig,
+      async () => {},
+      undefined,
+      reservationEvidence,
+    );
+    h.authority.mkdirSync(`${ROOT}/a`, { recursive: true });
+    h.authority.mkdirSync(`${ROOT}/b`, { recursive: true });
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'eval-a', cwd: `${ROOT}/a` });
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'eval-b', cwd: `${ROOT}/b` });
+
+    const runningA = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'eval-a',
+        rid: 'run-eval-a',
+        line: 'node -e \'console.log("a")\' argv-a',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    const runningB = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'eval-b',
+        rid: 'run-eval-b',
+        line: 'node -p \'"b"\' argv-b',
+        cols: 81,
+        rows: 25,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(workers).toHaveLength(2));
+    const firstWorker = workers[0];
+    const secondWorker = workers[1];
+    if (firstWorker === undefined || secondWorker === undefined) {
+      throw new Error('expected two real kernel Worker boundaries');
+    }
+    const firstSpec = firstWorker.spec();
+    const secondSpec = secondWorker.spec();
+
+    expect(firstSpec).toMatchObject({
+      cwd: '/a',
+      argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-a'],
+      entry: {
+        bootstrap: {
+          protocol: 'rifty.node-entry/v3',
+          payload: {
+            launch: {
+              kind: 'eval',
+              source: 'console.log("a")',
+              print: false,
+              execArgv: ['-e', 'console.log("a")'],
+              remoteFsRoot: ROOT,
+              previewScope: expect.any(String),
+            },
+          },
+        },
+      },
+    });
+    expect(secondSpec).toMatchObject({
+      cwd: '/b',
+      argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-b'],
+      entry: {
+        bootstrap: {
+          protocol: 'rifty.node-entry/v3',
+          payload: {
+            launch: {
+              kind: 'eval',
+              source: '"b"',
+              print: true,
+              execArgv: ['-p', '"b"'],
+              remoteFsRoot: ROOT,
+              previewScope: expect.any(String),
+            },
+          },
+        },
+      },
+    });
+    const launchOf = (worker: KernelWorkerBoundary): Readonly<Record<string, unknown>> => {
+      const entry = worker.spec().entry;
+      if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
+        throw new Error('expected eval node-entry URL bootstrap');
+      }
+      const payload = entry.bootstrap.payload as {
+        readonly launch?: Readonly<Record<string, unknown>>;
+      };
+      if (payload.launch === undefined) throw new Error('expected eval launch');
+      return payload.launch;
+    };
+    expect(launchOf(firstWorker).previewScope).not.toBe(launchOf(secondWorker).previewScope);
+    expect(globalProcessManager.get(firstSpec.pid)).toMatchObject({
+      kind: 'worker',
+      command: 'node',
+    });
+    expect(globalProcessManager.get(secondSpec.pid)).toMatchObject({
+      kind: 'worker',
+      command: 'node',
+    });
+    expect(reservationEvidence.paths).toEqual([`${ROOT}/a`, `${ROOT}/b`]);
+    expect(reservationEvidence.events).toEqual(['commit', 'commit']);
+
+    secondWorker.finish(7);
+    firstWorker.finish(0);
+    await Promise.all([runningA, runningB]);
+    await vi.waitFor(() =>
+      expect(reservationEvidence.events.filter((event) => event === 'dispose')).toHaveLength(2),
+    );
+    expect(globalProcessManager.get(firstSpec.pid)).toBeNull();
+    expect(globalProcessManager.get(secondSpec.pid)).toBeNull();
+    expect(
+      h.frames.filter((frame) => frame.type === 'pty:exit' && frame.rid === 'run-eval-a'),
+    ).toEqual([expect.objectContaining({ code: 0, exit: { code: 0, signal: null } })]);
+    expect(
+      h.frames.filter((frame) => frame.type === 'pty:exit' && frame.rid === 'run-eval-b'),
+    ).toEqual([expect.objectContaining({ code: 7, exit: { code: 7, signal: null } })]);
+    await h.runtime.close();
+  });
+
+  it.each([
+    ['node -e', 'node: -e requires an argument\n'],
+    ['node --eval', 'node: --eval requires an argument\n'],
+    ['node --eval=', 'node: --eval= requires an argument\n'],
+    ['node -pe', 'node: --eval requires an argument\n'],
+    ['node -ep 1', 'node: bad option: -ep\n'],
+    ['node -eSRC', 'node: bad option: -eSRC\n'],
+    ['node -e=SRC', 'node: bad option: -e=SRC\n'],
+    ['node -pSRC', 'node: bad option: -pSRC\n'],
+    ['node -p=SRC', 'node: bad option: -p=SRC\n'],
+    ['node -peSRC', 'node: bad option: -peSRC\n'],
+    ['node -epSRC', 'node: bad option: -epSRC\n'],
+    ['node -pe=SRC', 'node: bad option: -pe=SRC\n'],
+    ['node -ep=SRC', 'node: bad option: -ep=SRC\n'],
+    ['node -r', 'node: -r requires an argument\n'],
+    ['node --require', 'node: --require requires an argument\n'],
+    ['node --require=', 'node: --require= requires an argument\n'],
+    ['node --import', 'node: --import requires an argument\n'],
+    ['node --import=', 'node: --import= requires an argument\n'],
+  ])('returns Node-shaped exit 9 without allocating a child: %s', async (line, expectedStderr) => {
+    const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
     const h = await harness(undefined, nodeCliPackageConfig);
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-eval' });
 
@@ -933,13 +1964,260 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       )
       .map((frame) => new TextDecoder().decode(frame.data))
       .join('');
-    expect(stderr).toContain('Not implemented: workbench.node.eval-context');
-    expect(spawn).not.toHaveBeenCalled();
-    expect(
-      h.authority.readdirSync(ROOT).some((entry) => entry.name.startsWith('.rifty-eval-')),
-    ).toBe(false);
+    expect(stderr).toBe(expectedStderr);
+    expect(workers).toHaveLength(0);
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
     expect(h.frames).toContainEqual(
-      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-eval', code: 1 }),
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-eval', code: 9 }),
+    );
+    await h.runtime.close();
+  });
+
+  it.each([
+    'node -r preload.cjs -p 1',
+    'node --require preload.cjs -p 1',
+    'node --require=preload.cjs -p 1',
+    'node --import preload.mjs -p 1',
+    'node --import=preload.mjs -p 1',
+    "node -r '' -p 1",
+    "node --require '' -p 1",
+    "node --import '' -p 1",
+    'node -r preload.cjs entry.cjs',
+    'node --require preload.cjs entry.cjs',
+    'node --require=preload.cjs entry.cjs',
+    'node --import preload.mjs entry.cjs',
+    'node --import=preload.mjs entry.cjs',
+    "node -r '' entry.cjs",
+    "node --require '' entry.cjs",
+    "node --import '' entry.cjs",
+  ])('keeps a valid Node preload form in its named no-child context gap: %s', async (line) => {
+    const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-preload-gap' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-node-preload-gap',
+      rid: 'run-node-preload-gap',
+      line,
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const stderr = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' &&
+          frame.rid === 'run-node-preload-gap' &&
+          frame.stream === 'stderr',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(stderr).toContain('Not implemented: workbench.node.preload-context');
+    expect(workers).toHaveLength(0);
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({
+        type: 'pty:exit',
+        rid: 'run-node-preload-gap',
+        code: 1,
+        exit: { code: 1, signal: null },
+      }),
+    );
+    await h.runtime.close();
+  });
+
+  it.each(
+    NODE_EVAL_INPUT_TYPES.flatMap((inputType) => [
+      [`node ${inputType} -e`, 'node: -e requires an argument\n'],
+      [`node ${inputType} --eval`, 'node: --eval requires an argument\n'],
+      [`node ${inputType} --eval=`, 'node: --eval= requires an argument\n'],
+      [`node ${inputType} -pe`, 'node: --eval requires an argument\n'],
+      [`node ${inputType} -e --`, 'node: -e requires an argument\n'],
+      [`node ${inputType} --eval --`, 'node: --eval requires an argument\n'],
+      [`node ${inputType} -pe --`, 'node: --eval requires an argument\n'],
+    ]),
+  )(
+    'keeps eval usage precedence ahead of an accepted input type: %s',
+    async (line, expectedStderr) => {
+      const processesBefore = globalProcessManager.snapshot();
+      const workers = installRealKernelWorkerBoundary();
+      const h = await harness(undefined, nodeCliPackageConfig);
+      h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-input-type-usage' });
+
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-node-input-type-usage',
+        rid: 'run-node-input-type-usage',
+        line,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+
+      const stderr = h.frames
+        .filter(
+          (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+            frame.type === 'pty:chunk' &&
+            frame.rid === 'run-node-input-type-usage' &&
+            frame.stream === 'stderr',
+        )
+        .map((frame) => new TextDecoder().decode(frame.data))
+        .join('');
+      expect(stderr).toBe(expectedStderr);
+      expect(workers).toHaveLength(0);
+      expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+      expect(h.frames).toContainEqual(
+        expect.objectContaining({
+          type: 'pty:exit',
+          rid: 'run-node-input-type-usage',
+          code: 9,
+          exit: { code: 9, signal: null },
+        }),
+      );
+      await h.runtime.close();
+    },
+  );
+
+  it.each([
+    "node --input-type=module -e '1'",
+    "node --input-type=module --eval '1'",
+    "node --input-type=module --eval='1'",
+    "node --input-type=module -e ''",
+    "node --input-type=module --eval ''",
+  ])('keeps ESM eval as its named no-child context gap: %s', async (line) => {
+    const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-esm-eval' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-node-esm-eval',
+      rid: 'run-node-esm-eval',
+      line,
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const stderr = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' &&
+          frame.rid === 'run-node-esm-eval' &&
+          frame.stream === 'stderr',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(stderr).toContain('Not implemented: workbench.node.eval-module-context');
+    expect(workers).toHaveLength(0);
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-esm-eval', code: 1 }),
+    );
+    await h.runtime.close();
+  });
+
+  it.each([
+    "node --input-type=module -p '1'",
+    "node --input-type=module --print '1'",
+    "node --input-type=module --print=ignored '1'",
+    "node --input-type=module --print=not-the-source '1'",
+    "node --input-type=module --print= '1'",
+    "node --input-type=module -pe '1'",
+    'node --input-type=module -p',
+    'node --input-type=module --print',
+    'node --input-type=module --print=ignored',
+    'node --input-type=module --print=not-the-source',
+    'node --input-type=module --print=',
+    ...OPTIONAL_PRINT_SPELLINGS.map((option) => `node --input-type=module ${option} -- ''`),
+    "node --input-type=module-typescript -p 'const n: number = 1; n'",
+    ...OPTIONAL_PRINT_SPELLINGS.map(
+      (option) => `node --input-type=module-typescript ${option} -- ''`,
+    ),
+    "node --input-type=module -pe ''",
+    "node --input-type=module-typescript -pe ''",
+  ])('returns Node-shaped ESM print rejection without allocating a child: %s', async (line) => {
+    const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-esm-eval' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-node-esm-eval',
+      rid: 'run-node-esm-eval',
+      line,
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const stderr = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' &&
+          frame.rid === 'run-node-esm-eval' &&
+          frame.stream === 'stderr',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(stderr).toBe(
+      'Error [ERR_EVAL_ESM_CANNOT_PRINT]: --print cannot be used with ESM input\n',
+    );
+    expect(workers).toHaveLength(0);
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-esm-eval', code: 1 }),
+    );
+    await h.runtime.close();
+  });
+
+  it.each([
+    "node --input-type=commonjs-typescript -e 'const n: number = 1'",
+    "node --input-type=commonjs-typescript -p 'const n: number = 1; n'",
+    "node --input-type=commonjs-typescript -e ''",
+    "node --input-type=commonjs-typescript --eval ''",
+    "node --input-type=commonjs-typescript -pe ''",
+    ...OPTIONAL_PRINT_SPELLINGS.map(
+      (option) => `node --input-type=commonjs-typescript ${option} -- ''`,
+    ),
+    "node --input-type=module-typescript -e 'const n: number = 1'",
+    "node --input-type=module-typescript -e ''",
+    "node --input-type=module-typescript --eval ''",
+  ])('keeps explicit TypeScript eval as its named no-child context gap: %s', async (line) => {
+    const processesBefore = globalProcessManager.snapshot();
+    const workers = installRealKernelWorkerBoundary();
+    const h = await harness(undefined, nodeCliPackageConfig);
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-node-ts-eval' });
+
+    await h.runtime.handlePtyFrame({
+      type: 'pty:exec',
+      sid: 'terminal-node-ts-eval',
+      rid: 'run-node-ts-eval',
+      line,
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+
+    const stderr = h.frames
+      .filter(
+        (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:chunk' }> =>
+          frame.type === 'pty:chunk' &&
+          frame.rid === 'run-node-ts-eval' &&
+          frame.stream === 'stderr',
+      )
+      .map((frame) => new TextDecoder().decode(frame.data))
+      .join('');
+    expect(stderr).toContain('Not implemented: runtime-js.node-eval-typescript-context');
+    expect(workers).toHaveLength(0);
+    expect(globalProcessManager.snapshot()).toEqual(processesBefore);
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-node-ts-eval', code: 1 }),
     );
     await h.runtime.close();
   });

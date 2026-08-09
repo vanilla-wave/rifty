@@ -20,8 +20,13 @@
  * stays self-contained for the unit project.
  */
 
-import type { ProcessHandle, SpawnWorkerSpec } from '@riftydev/kernel';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import {
+  type ProcessHandle,
+  type SpawnWorkerSpec,
+  type WorkerInitMessage,
+  setKernelWorkerUrl,
+} from '@riftydev/kernel';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   __clearWasiWorkerUrlForTests,
   __setSpawnerForTests,
@@ -138,6 +143,97 @@ describe('createWasiProcess — spawn-worker wiring (ADR 0038)', () => {
       setWasiWorkerUrl('https://example.invalid/wasi-worker.js');
     }
   });
+
+  it('publishes trusted stdout and stderr before the physical worker handle settles', async () => {
+    const captured: { init: WorkerInitMessage | null } = { init: null };
+    class BoundaryWorker {
+      postMessage(message: unknown): void {
+        captured.init = message as WorkerInitMessage;
+      }
+      terminate(): void {}
+      addEventListener(): void {}
+      removeEventListener(): void {}
+    }
+    vi.stubGlobal('Worker', BoundaryWorker);
+    setKernelWorkerUrl('https://example.invalid/kernel-worker.js');
+
+    try {
+      const handle = createWasiProcess({ wasm: 'https://example.invalid/hello.wasm' });
+      if (handle.kind !== 'worker') throw new Error('expected physical Worker process');
+
+      const events: string[] = [];
+      const controlFrames: unknown[] = [];
+      const userMessages: unknown[] = [];
+      handle.stdout().on('data', (chunk) => events.push(`stdout:${decodeOutput(chunk)}`));
+      handle.stderr().on('data', (chunk) => events.push(`stderr:${decodeOutput(chunk)}`));
+      handle.on('peererror', () => events.push('peererror'));
+      handle.on('message', (message) => userMessages.push(message));
+      handle.ports.ipc.addEventListener('message', (event) => controlFrames.push(event.data));
+      handle.ports.ipc.start();
+      const closed = new Promise<void>((resolve) => {
+        handle.on('close', () => {
+          events.push('close');
+          resolve();
+        });
+      });
+
+      const init = captured.init;
+      if (init === null) throw new Error('kernel Worker init was not published');
+      const stdio = await vi.importActual<{
+        bindWorkerStdioOutput(
+          port: MessagePort,
+          state: WorkerInitMessage['spec']['outputState'],
+          output: 'stdout' | 'stderr',
+          controlPort: MessagePort,
+        ): { write(bytes: Uint8Array): void };
+        sealWorkerOutput(state: WorkerInitMessage['spec']['outputState']): boolean;
+        workerOutputAttestation(state: WorkerInitMessage['spec']['outputState']): string;
+      }>('../../kernel/src/worker-stdio-drain.ts');
+      stdio
+        .bindWorkerStdioOutput(
+          init.spec.stdio.stdout,
+          init.spec.outputState,
+          'stdout',
+          init.spec.stdio.ipc,
+        )
+        .write(new TextEncoder().encode('wasi-out'));
+      stdio
+        .bindWorkerStdioOutput(
+          init.spec.stdio.stderr,
+          init.spec.outputState,
+          'stderr',
+          init.spec.stdio.ipc,
+        )
+        .write(new TextEncoder().encode('wasi-err'));
+      stdio.sealWorkerOutput(init.spec.outputState);
+      init.spec.stdio.ipc.postMessage({ kind: 'control:peer-closing' });
+
+      await closed;
+      expect(events).toContain('stdout:wasi-out');
+      expect(events).toContain('stderr:wasi-err');
+      expect(events.indexOf('stdout:wasi-out')).toBeLessThan(events.indexOf('peererror'));
+      expect(events.indexOf('stderr:wasi-err')).toBeLessThan(events.indexOf('peererror'));
+      expect(events.at(-1)).toBe('close');
+      expect(controlFrames).toStrictEqual([
+        {
+          kind: 'control:stdio-order',
+          stream: 'stdout',
+          order: 0,
+          attestation: stdio.workerOutputAttestation(init.spec.outputState),
+        },
+        {
+          kind: 'control:stdio-order',
+          stream: 'stderr',
+          order: 1,
+          attestation: stdio.workerOutputAttestation(init.spec.outputState),
+        },
+        { kind: 'control:peer-closing' },
+      ]);
+      expect(userMessages).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 // ===== Layer 2: runWasiInWorker against a fake process shim =====
@@ -189,6 +285,11 @@ function makeFakeProcess(env: Record<string, string>, args: string[] = []): Fake
     exitCode: null,
   };
   return proc;
+}
+
+function decodeOutput(chunk: unknown): string {
+  if (!(chunk instanceof Uint8Array)) throw new TypeError('expected Uint8Array output');
+  return new TextDecoder().decode(chunk);
 }
 
 class ProcessExitForTests extends Error {

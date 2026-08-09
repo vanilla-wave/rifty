@@ -282,6 +282,35 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
       text: expect.stringContaining(dirtyMarker),
     });
   });
+
+  test('re-picking the current dirty scratch starter reopens it without a discard prompt', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(240_000);
+    page.on('pageerror', (err) => console.log('[pageerror]', err.message));
+
+    await bootScratch(page);
+    const marker = await dirtyScratchViaEditor(page);
+
+    await page.click('[data-action="open-launcher"]');
+    await page.getByRole('button', { name: 'Starters', exact: true }).click();
+    await page.click('[data-preset="project-files"]');
+
+    // Same starter as the dirty scratch: the owner preserve contract
+    // (preserveDirtySameStarter) keeps the draft, so no dialog may threaten a
+    // discard it will not perform — the pick just reopens the scratch.
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+    await expect(page.locator('.rf-dialog[role="dialog"]')).toHaveCount(0);
+    await expect(page.locator('[data-action="open-launcher"][data-dirty="true"]')).toBeVisible();
+
+    await newShell(page);
+    expect(await readActiveProjectText(page, 'src/main.js', OWNER_TIMEOUT)).toMatchObject({
+      exists: true,
+      text: expect.stringContaining(marker),
+    });
+  });
 });
 
 test.describe('ADR-0165 §6 — named-project Reset is a real project-tree restore', () => {

@@ -19,10 +19,76 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
+import { registerNodeEvalDrainLifecycle } from '../internal/event-loop-keepalive.ts';
 import { ModuleLoadError } from '../module-loader/errors.ts';
-import { type ModuleLoader, createModuleLoader } from '../module-loader/loader.ts';
+import {
+  type ModuleLoader,
+  createModuleLoader,
+  createNodeEvalScriptRunner,
+  projectNodeEvalError,
+} from '../module-loader/loader.ts';
+import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
 
 const utf8 = new TextDecoder();
+const reflectApplyPrimordial = Reflect.apply;
+
+interface NodeEvalTerminalProcess {
+  writeStdout(chunk: string): void;
+  writeStderr(chunk: string): void;
+  exit(code: number): unknown;
+}
+
+interface RiftyProcessExit {
+  readonly code: 'RIFTY_PROCESS_EXIT';
+  readonly exitCode: number;
+}
+
+function isRiftyProcessExit(reason: unknown): reason is RiftyProcessExit {
+  return (
+    typeof reason === 'object' &&
+    reason !== null &&
+    (reason as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT' &&
+    typeof (reason as { readonly exitCode?: unknown }).exitCode === 'number'
+  );
+}
+
+function captureNodeEvalTerminalProcess(): NodeEvalTerminalProcess {
+  const process = (
+    globalThis as typeof globalThis & {
+      process?: {
+        readonly stdout?: { readonly write?: (chunk: string) => unknown };
+        readonly stderr?: { readonly write?: (chunk: string) => unknown };
+        readonly exit?: (code?: unknown) => unknown;
+      };
+    }
+  ).process;
+  const stdout = process?.stdout;
+  const stderr = process?.stderr;
+  const writeStdout = stdout?.write;
+  const writeStderr = stderr?.write;
+  const exit = process?.exit;
+  if (
+    process === undefined ||
+    stdout === undefined ||
+    stderr === undefined ||
+    typeof writeStdout !== 'function' ||
+    typeof writeStderr !== 'function' ||
+    typeof exit !== 'function'
+  ) {
+    throw new Error('node eval requires the active process stdout, stderr, and exit');
+  }
+  return {
+    writeStdout(chunk) {
+      reflectApplyPrimordial(writeStdout, stdout, [chunk]);
+    },
+    writeStderr(chunk) {
+      reflectApplyPrimordial(writeStderr, stderr, [chunk]);
+    },
+    exit(code) {
+      return reflectApplyPrimordial(exit, process, [code]);
+    },
+  };
+}
 
 /**
  * Real-Node printed form of an uncaught CJS-loader `MODULE_NOT_FOUND`: the
@@ -86,7 +152,8 @@ export function parseBinLauncherTarget(source: string): string | null {
   return m ? (m[1] as string) : null;
 }
 
-export interface RunNodeEntryOptions {
+export interface RunNodeProgramEntryOptions {
+  readonly kind?: 'program';
   readonly vfs: FsSync;
   /** Absolute VFS path: a `.bin` launcher shim when `bin`, else a Node script. */
   readonly entryPath: string;
@@ -96,6 +163,17 @@ export interface RunNodeEntryOptions {
   /** Loader factory seam (tests inject; production uses the real loader). */
   readonly createLoader?: (vfs: FsSync, opts: { cwd: string }) => ModuleLoader;
 }
+
+export interface RunNodeEvalEntryOptions {
+  readonly kind: 'eval';
+  readonly vfs: FsSync;
+  readonly cwd: string;
+  readonly source: string;
+  readonly print: boolean;
+  readonly explicitCommonJs: boolean;
+}
+
+export type RunNodeEntryOptions = RunNodeProgramEntryOptions | RunNodeEvalEntryOptions;
 
 function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | null {
   const candidates = [ns.__promise];
@@ -113,6 +191,50 @@ function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | nu
 
 /** Import the resolved Node entry (or a `.bin` launcher's target) via the loader. */
 export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
+  if (opts.kind === 'eval') {
+    // Capture the installed process capabilities before guest code can replace
+    // `process`, its streams, or their methods. Late eval terminals are runtime
+    // work and must not trust guest-mutated globals.
+    const terminalProcess = captureNodeEvalTerminalProcess();
+    let completion: unknown;
+    try {
+      completion = createNodeEvalScriptRunner({
+        vfs: opts.vfs,
+        cwd: opts.cwd,
+        explicitCommonJs: opts.explicitCommonJs,
+      }).run(opts.source);
+    } catch (error) {
+      throw projectNodeEvalError(error, opts.source);
+    }
+    registerNodeEvalDrainLifecycle({
+      beforeExit: async () => {
+        if (!opts.print) return;
+        const output = await formatNodeEvalPrintValue(completion);
+        terminalProcess.writeStdout(`${output}\n`);
+      },
+      projectUnhandled: (reason, origin) =>
+        projectNodeEvalError(
+          reason,
+          opts.source,
+          origin === 'uncaught-error' ? 'uncaught' : 'unhandled',
+        ),
+      terminateUnhandled: (reason) => {
+        const message =
+          reason instanceof Error
+            ? (reason.stack ?? `${reason.name}: ${reason.message}`)
+            : String(reason);
+        terminalProcess.writeStderr(`${message}\n`);
+        try {
+          const returned = terminalProcess.exit(1);
+          throw new Error(`node eval process.exit(1) returned ${String(returned)}`);
+        } catch (error) {
+          if (isRiftyProcessExit(error)) return error;
+          throw error;
+        }
+      },
+    });
+    return;
+  }
   const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
   try {
     if (opts.bin) {

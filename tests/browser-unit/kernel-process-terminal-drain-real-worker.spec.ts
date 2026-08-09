@@ -3,12 +3,15 @@ import { type Page, expect, test } from '@playwright/test';
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const processManagerModuleUrl = `/@fs${workspacePath}/packages/kernel/src/process-manager.ts`;
 const spawnWorkerModuleUrl = `/@fs${workspacePath}/packages/kernel/src/spawn-worker.ts`;
+const workerStdioModuleUrl = `/@fs${workspacePath}/packages/kernel/src/worker-stdio-drain.ts`;
 const hostAssetsModuleUrl = '/src/browser-unit/workbench-vite-host-assets.ts';
 
 type RealWorkerScenario = 'natural' | 'busy-signal' | 'global-error' | 'canceled-global-error';
 
 interface RealWorkerResult {
+  readonly attestation: string;
   readonly coi: boolean;
+  readonly controlFrames: readonly unknown[];
   readonly events: readonly string[];
   readonly exitCode: number | null;
   readonly live: boolean;
@@ -16,24 +19,37 @@ interface RealWorkerResult {
   readonly stderr: string;
   readonly stdout: string;
   readonly terminateCalls: number;
+  readonly userMessages: readonly unknown[];
 }
 
 async function runRealWorker(page: Page, scenario: RealWorkerScenario): Promise<RealWorkerResult> {
   await page.goto('/unit-harness.html');
   return await page.evaluate(
-    async ({ hostAssetsUrl, processManagerUrl, scenario, spawnWorkerUrl }) => {
-      const [{ ProcessManager }, spawnWorker, hostAssets] = await Promise.all([
+    async ({ hostAssetsUrl, processManagerUrl, scenario, spawnWorkerUrl, workerStdioUrl }) => {
+      const [{ ProcessManager }, spawnWorker, workerStdio, hostAssets] = await Promise.all([
         import(/* @vite-ignore */ processManagerUrl),
         import(/* @vite-ignore */ spawnWorkerUrl),
+        import(/* @vite-ignore */ workerStdioUrl),
         import(/* @vite-ignore */ hostAssetsUrl),
       ]);
       const kernelWorkerUrl = hostAssets.workbenchViteHostAssets.workers.kernel;
       let terminateCalls = 0;
+      let outputState: SharedArrayBuffer | null = null;
       spawnWorker.setKernelWorkerUrl(kernelWorkerUrl);
       spawnWorker.setWorkerFactoryForTests((url: string | URL) => {
         const real = new Worker(url, { type: 'module' });
         return {
           postMessage(message: unknown, transfer?: readonly Transferable[]) {
+            const candidate = message as {
+              readonly type?: unknown;
+              readonly spec?: { readonly outputState?: unknown };
+            };
+            if (
+              candidate.type === 'init' &&
+              candidate.spec?.outputState instanceof SharedArrayBuffer
+            ) {
+              outputState = candidate.spec.outputState;
+            }
             real.postMessage(message, transfer as Transferable[] | undefined);
           },
           terminate() {
@@ -93,6 +109,8 @@ async function runRealWorker(page: Page, scenario: RealWorkerScenario): Promise<
       if (handle.kind !== 'worker') throw new Error('expected real Worker handle');
 
       const events: string[] = [];
+      const controlFrames: unknown[] = [];
+      const userMessages: unknown[] = [];
       let stdout = '';
       let stderr = '';
       let ready: (() => void) | undefined;
@@ -113,6 +131,12 @@ async function runRealWorker(page: Page, scenario: RealWorkerScenario): Promise<
         stderr += new TextDecoder().decode(chunk);
         events.push('stderr');
       });
+      handle.ports.ipc.addEventListener('message', (event: MessageEvent) => {
+        const frame = event.data as { readonly kind?: unknown };
+        if (frame?.kind === 'control:stdio-order') controlFrames.push(frame);
+      });
+      handle.ports.ipc.start();
+      handle.on('message', (message: unknown) => userMessages.push(message));
       handle.on('exit', (code: number | null, signal: string | null) => {
         events.push(`exit:${String(code)}/${String(signal)}`);
       });
@@ -137,8 +161,11 @@ async function runRealWorker(page: Page, scenario: RealWorkerScenario): Promise<
           if (!handle.kill('SIGTERM')) throw new Error('busy Worker refused SIGTERM');
         }
         await within(closed, `real ${scenario} Worker close`);
+        if (outputState === null) throw new Error('real Worker init did not carry output state');
         return {
+          attestation: workerStdio.workerOutputAttestation(outputState),
           coi: globalThis.crossOriginIsolated === true,
+          controlFrames,
           events,
           exitCode: handle.exitCode,
           live: manager.get(handle.pid) !== null,
@@ -146,6 +173,7 @@ async function runRealWorker(page: Page, scenario: RealWorkerScenario): Promise<
           stderr,
           stdout,
           terminateCalls,
+          userMessages,
         };
       } finally {
         if (manager.get(handle.pid) !== null) handle.kill('SIGTERM');
@@ -158,6 +186,7 @@ async function runRealWorker(page: Page, scenario: RealWorkerScenario): Promise<
       processManagerUrl: processManagerModuleUrl,
       scenario,
       spawnWorkerUrl: spawnWorkerModuleUrl,
+      workerStdioUrl: workerStdioModuleUrl,
     },
   );
 }
@@ -174,6 +203,21 @@ test('real Chromium Worker drains natural final stdout/stderr before exit then c
   expect(result.signalCode).toBeNull();
   expect(result.live).toBe(false);
   expect(result.terminateCalls).toBe(1);
+  expect(result.controlFrames).toStrictEqual([
+    {
+      kind: 'control:stdio-order',
+      stream: 'stdout',
+      order: 0,
+      attestation: result.attestation,
+    },
+    {
+      kind: 'control:stdio-order',
+      stream: 'stderr',
+      order: 1,
+      attestation: result.attestation,
+    },
+  ]);
+  expect(result.userMessages).toEqual([]);
   const exitIndex = result.events.indexOf('exit:0/null');
   expect(exitIndex).toBeGreaterThan(result.events.lastIndexOf('stdout'));
   expect(exitIndex).toBeGreaterThan(result.events.lastIndexOf('stderr'));
@@ -192,6 +236,15 @@ test('real Chromium busy-loop Worker settles SIGTERM without child cooperation',
   expect(result.signalCode).toBe('SIGTERM');
   expect(result.live).toBe(false);
   expect(result.terminateCalls).toBe(1);
+  expect(result.controlFrames).toStrictEqual([
+    {
+      kind: 'control:stdio-order',
+      stream: 'stdout',
+      order: 0,
+      attestation: result.attestation,
+    },
+  ]);
+  expect(result.userMessages).toEqual([]);
   expect(result.events).toContain('exit:null/SIGTERM');
   expect(result.events.at(-1)).toBe('close:null/SIGTERM');
 });
@@ -208,6 +261,15 @@ test('real Chromium global Worker error preserves output and settles failure onc
   expect(result.signalCode).toBeNull();
   expect(result.live).toBe(false);
   expect(result.terminateCalls).toBe(1);
+  expect(result.controlFrames).toStrictEqual([
+    {
+      kind: 'control:stdio-order',
+      stream: 'stdout',
+      order: 0,
+      attestation: result.attestation,
+    },
+  ]);
+  expect(result.userMessages).toEqual([]);
   expect(result.events.filter((event) => event.startsWith('exit:'))).toEqual(['exit:1/null']);
   expect(result.events.at(-1)).toBe('close:1/null');
 });
@@ -224,6 +286,15 @@ test('canceling a real Chromium Worker global error leaves output open for clean
   expect(result.signalCode).toBeNull();
   expect(result.live).toBe(false);
   expect(result.terminateCalls).toBe(1);
+  expect(result.controlFrames).toStrictEqual([
+    {
+      kind: 'control:stdio-order',
+      stream: 'stdout',
+      order: 0,
+      attestation: result.attestation,
+    },
+  ]);
+  expect(result.userMessages).toEqual([]);
   expect(result.events).not.toContain('peererror');
   expect(result.events.filter((event) => event.startsWith('exit:'))).toEqual(['exit:0/null']);
   expect(result.events.at(-1)).toBe('close:0/null');

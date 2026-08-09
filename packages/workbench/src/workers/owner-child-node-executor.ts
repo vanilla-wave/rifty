@@ -10,7 +10,11 @@ import {
   globalProcessManager,
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
-import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
+import {
+  type NodeEntryLaunch,
+  buildNodeEntryWorkerEntry,
+} from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { InstallRuntimeJsExecSyncOptions } from '@riftydev/runtime-js/ipc/exec-sync-handler';
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
@@ -176,8 +180,17 @@ export function createOwnerExecSyncRunner(
   };
 }
 
+export interface OwnerNodeEvalExecution {
+  readonly kind: 'eval';
+  readonly source: string;
+  readonly print: boolean;
+  readonly execArgv: readonly string[];
+}
+
+export type OwnerNodeExecution = string | OwnerNodeEvalExecution;
+
 export function buildNodeChildSpawnSpec(
-  programEntry: string,
+  execution: OwnerNodeExecution,
   args: readonly string[],
   env: Record<string, string>,
   cwd: string,
@@ -190,21 +203,37 @@ export function buildNodeChildSpawnSpec(
   remoteFsRoot?: string,
   capabilityPorts?: KernelEntryCapabilityPorts,
 ): SpawnWorkerSpec {
-  const workerEntry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
-    kind: 'program',
-    bin: false,
+  const common = {
     remoteFs: true,
     ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
-    nodeServe: true,
     ...(previewScope === undefined ? {} : { previewScope }),
     terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
-  });
+  } as const;
+  const launch: NodeEntryLaunch =
+    typeof execution === 'string'
+      ? {
+          kind: 'program',
+          bin: false,
+          ...common,
+          nodeServe: true,
+        }
+      : {
+          kind: 'eval',
+          source: execution.source,
+          print: execution.print,
+          execArgv: execution.execArgv,
+          ...common,
+        };
+  const workerEntry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, launch);
   return {
     entry:
       capabilityPorts === undefined
         ? workerEntry
         : attachOwnerChildCapabilities(workerEntry, capabilityPorts),
-    argv: ['rifty', programEntry, ...args],
+    argv:
+      typeof execution === 'string'
+        ? ['rifty', execution, ...args]
+        : [NODE_PROCESS_IDENTITY.execPath, ...args],
     // serve:true → kernel keeps it alive; the entry-scoped bootstrap owns the
     // run-vs-serve decision (ADR-0155) without changing observable guest env.
     env: { ...env },
@@ -237,7 +266,7 @@ export interface NodeRunHooks {
   readonly onExit: (sid: string) => void;
 }
 export type OwnerNodeExecutor = (
-  entry: string,
+  execution: OwnerNodeExecution,
   args: readonly string[],
   ctx: CommandContext,
   hooks: NodeRunHooks,
@@ -262,13 +291,13 @@ export function createOwnerChildNodeExecutor(
   // `async` so a synchronous `spawn` throw (the kind guard / host-boundary
   // failure) surfaces as a rejected promise, not a sync throw. The spawn + the
   // shared driver's listener registration run before the first suspension.
-  return async (entry, args, ctx, hooks) => {
-    const reservation = await reserveAdmission(entry);
+  return async (execution, args, ctx, hooks) => {
+    const reservation = await reserveAdmission(typeof execution === 'string' ? execution : ctx.cwd);
     let handle: NodeChildHandle;
     try {
       handle = spawn(
         buildNodeChildSpawnSpec(
-          entry,
+          execution,
           args,
           ctx.env,
           ctx.cwd,

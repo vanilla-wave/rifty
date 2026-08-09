@@ -109,6 +109,37 @@ describe('resolver package.json parse cache (#5, Q-2026-06-06-320)', () => {
   });
 });
 
+describe('resolver package scope', () => {
+  it.each([
+    '/app/node_modules/dep/index.js',
+    '/app/node_modules/@scope/dep/index.js',
+    '/app/node_modules/outer/node_modules/dep/index.js',
+  ])('does not inherit an outer type:module scope across node_modules for %s', (entry) => {
+    const fs = new MemoryFsSync();
+    fs.loadFixture({
+      '/app/package.json': JSON.stringify({ type: 'module' }),
+      [entry]: "module.exports = 'commonjs';",
+    });
+    const loader = createModuleLoader(fs);
+
+    expect(loader.require(entry, '/app/[eval]')).toBe('commonjs');
+  });
+
+  it('still honors a package-owned type:module scope inside node_modules', () => {
+    const fs = new MemoryFsSync();
+    fs.loadFixture({
+      '/app/package.json': JSON.stringify({ type: 'commonjs' }),
+      '/app/node_modules/dep/package.json': JSON.stringify({ type: 'module' }),
+      '/app/node_modules/dep/index.js': 'export default 42;',
+    });
+    const loader = createModuleLoader(fs);
+
+    expect(loader.resolver.resolve('dep', { fromFile: '/app/[eval]', esm: false }).kind).toBe(
+      'esm',
+    );
+  });
+});
+
 describe('resolver resolution cache (#15, Q-2026-06-06-321)', () => {
   // Drive `loader.resolver.resolve(...)` directly: this exercises the resolution
   // memo (`resolveSpecifierToFile`) in isolation from the registry / executed-

@@ -37,6 +37,24 @@ export interface ModuleRecord {
   cjsNamespace?: Record<string, unknown>;
 }
 
+/** Build one loader-owned record without deciding whether it belongs in a registry. */
+export function createModuleRecord(id: string, kind: ModuleKind): ModuleRecord {
+  const record = { id, exports: Object.create(null) } as ModuleRecord;
+  for (const [key, value] of [
+    ['kind', kind],
+    ['state', 'loading'],
+    ['slots', Object.create(null)],
+  ] as const) {
+    Object.defineProperty(record, key, {
+      value,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return record;
+}
+
 export class ModuleRegistry {
   private readonly records: Map<string, ModuleRecord> = new Map();
 
@@ -60,19 +78,7 @@ export class ModuleRegistry {
       // the loader's own bookkeeping must not enumerate: Node's module has no
       // `kind`/`state`/`slots`/`error`, and packages copy or serialize
       // `module` by its keys. Writable and configurable — only invisible.
-      rec = { id, exports: Object.create(null) } as ModuleRecord;
-      for (const [key, value] of [
-        ['kind', kind],
-        ['state', 'loading'],
-        ['slots', Object.create(null)],
-      ] as const) {
-        Object.defineProperty(rec, key, {
-          value,
-          writable: true,
-          enumerable: false,
-          configurable: true,
-        });
-      }
+      rec = createModuleRecord(id, kind);
       this.records.set(id, rec);
     }
     return rec;

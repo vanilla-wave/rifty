@@ -14,6 +14,16 @@ const DEFAULT_DEPTH = 3;
 const MAX_ARRAY_ITEMS = 30;
 const MAX_OBJECT_KEYS = 30;
 const MAX_STRING_LEN = 120;
+const PromiseConstructorPrimordial = Promise;
+const promiseThenPrimordial = Promise.prototype.then;
+const promiseResolvePrimordial = Promise.resolve;
+const reflectApplyPrimordial = Reflect.apply;
+
+interface InspectContext {
+  readonly ancestors: WeakSet<object>;
+  readonly referenceIds: WeakMap<object, number>;
+  nextReferenceId: number;
+}
 
 export interface InspectOptions {
   /** Nesting levels to render before collapsing to `[Object]`/`[Array]`. `null` = unlimited. */
@@ -35,13 +45,22 @@ export function inspect(value: unknown, options?: InspectOptions): string {
       : typeof depthOpt === 'number'
         ? depthOpt
         : DEFAULT_DEPTH;
-  return inspectValue(value, 0, new WeakSet(), maxDepth);
+  return inspectValue(
+    value,
+    0,
+    {
+      ancestors: new WeakSet(),
+      referenceIds: new WeakMap(),
+      nextReferenceId: 1,
+    },
+    maxDepth,
+  );
 }
 
 function inspectValue(
   value: unknown,
   depth: number,
-  seen: WeakSet<object>,
+  context: InspectContext,
   maxDepth: number,
 ): string {
   if (value === undefined) return 'undefined';
@@ -61,11 +80,26 @@ function inspectValue(
   // `buffer.INSPECT_MAX_BYTES`. Checked before the generic Uint8Array/object
   // paths so a Buffer never falls through to a key dump.
   if (Buffer.isBuffer(value)) return formatBuffer(value as Uint8Array);
-  if (value instanceof Map) return formatMap(value, depth, seen, maxDepth);
-  if (value instanceof Set) return formatSet(value, depth, seen, maxDepth);
-  if (Array.isArray(value)) return formatArray(value, depth, seen, maxDepth);
-  if (type === 'object') return formatObject(value as object, depth, seen, maxDepth);
+  if (value instanceof Map) return formatMap(value, depth, context, maxDepth);
+  if (value instanceof Set) return formatSet(value, depth, context, maxDepth);
+  if (Array.isArray(value)) return formatArray(value, depth, context, maxDepth);
+  if (type === 'object') return formatObject(value as object, depth, context, maxDepth);
   return String(value);
+}
+
+function circularReference(value: object, context: InspectContext): string | null {
+  if (!context.ancestors.has(value)) return null;
+  let id = context.referenceIds.get(value);
+  if (id === undefined) {
+    id = context.nextReferenceId++;
+    context.referenceIds.set(value, id);
+  }
+  return `[Circular *${id}]`;
+}
+
+function referencePrefix(value: object, context: InspectContext): string {
+  const id = context.referenceIds.get(value);
+  return id === undefined ? '' : `<ref *${id}> `;
 }
 
 // Per-codepoint control-character escapes, matching Node's `strEscape` meta map.
@@ -134,45 +168,53 @@ function formatError(err: Error): string {
 function formatArray(
   arr: readonly unknown[],
   depth: number,
-  seen: WeakSet<object>,
+  context: InspectContext,
   maxDepth: number,
 ): string {
-  if (seen.has(arr)) return '[Circular]';
+  const circular = circularReference(arr, context);
+  if (circular !== null) return circular;
   if (depth > maxDepth) return '[Array]';
-  seen.add(arr);
+  context.ancestors.add(arr);
   const items = arr
     .slice(0, MAX_ARRAY_ITEMS)
-    .map((v) => inspectValue(v, depth + 1, seen, maxDepth));
+    .map((v) => inspectValue(v, depth + 1, context, maxDepth));
   if (arr.length > MAX_ARRAY_ITEMS) items.push(`... ${arr.length - MAX_ARRAY_ITEMS} more items`);
-  seen.delete(arr);
-  return `[ ${items.join(', ')} ]`;
+  context.ancestors.delete(arr);
+  return `${referencePrefix(arr, context)}[ ${items.join(', ')} ]`;
 }
 
-function formatObject(obj: object, depth: number, seen: WeakSet<object>, maxDepth: number): string {
-  if (seen.has(obj)) return '[Circular]';
+function formatObject(
+  obj: object,
+  depth: number,
+  context: InspectContext,
+  maxDepth: number,
+): string {
+  const circular = circularReference(obj, context);
+  if (circular !== null) return circular;
   if (depth > maxDepth) return '[Object]';
-  seen.add(obj);
+  context.ancestors.add(obj);
   const keys = Object.keys(obj);
   const ctor = obj.constructor && obj.constructor.name !== 'Object' ? obj.constructor.name : '';
   const items = keys.slice(0, MAX_OBJECT_KEYS).map((k) => {
     const v = (obj as Record<string, unknown>)[k];
-    return `${k}: ${inspectValue(v, depth + 1, seen, maxDepth)}`;
+    return `${k}: ${inspectValue(v, depth + 1, context, maxDepth)}`;
   });
   if (keys.length > MAX_OBJECT_KEYS) items.push(`... ${keys.length - MAX_OBJECT_KEYS} more keys`);
-  seen.delete(obj);
+  context.ancestors.delete(obj);
   const prefix = ctor ? `${ctor} ` : '';
-  return `${prefix}{ ${items.join(', ')} }`;
+  return `${referencePrefix(obj, context)}${prefix}{ ${items.join(', ')} }`;
 }
 
 function formatMap(
   map: Map<unknown, unknown>,
   depth: number,
-  seen: WeakSet<object>,
+  context: InspectContext,
   maxDepth: number,
 ): string {
-  if (seen.has(map)) return '[Circular]';
+  const circular = circularReference(map, context);
+  if (circular !== null) return circular;
   if (depth > maxDepth) return '[Map]';
-  seen.add(map);
+  context.ancestors.add(map);
   const items: string[] = [];
   let i = 0;
   for (const [k, v] of map) {
@@ -181,23 +223,29 @@ function formatMap(
       break;
     }
     items.push(
-      `${inspectValue(k, depth + 1, seen, maxDepth)} => ${inspectValue(v, depth + 1, seen, maxDepth)}`,
+      `${inspectValue(k, depth + 1, context, maxDepth)} => ${inspectValue(
+        v,
+        depth + 1,
+        context,
+        maxDepth,
+      )}`,
     );
     i += 1;
   }
-  seen.delete(map);
-  return `Map(${map.size}) { ${items.join(', ')} }`;
+  context.ancestors.delete(map);
+  return `${referencePrefix(map, context)}Map(${map.size}) { ${items.join(', ')} }`;
 }
 
 function formatSet(
   set: Set<unknown>,
   depth: number,
-  seen: WeakSet<object>,
+  context: InspectContext,
   maxDepth: number,
 ): string {
-  if (seen.has(set)) return '[Circular]';
+  const circular = circularReference(set, context);
+  if (circular !== null) return circular;
   if (depth > maxDepth) return '[Set]';
-  seen.add(set);
+  context.ancestors.add(set);
   const items: string[] = [];
   let i = 0;
   for (const v of set) {
@@ -205,13 +253,53 @@ function formatSet(
       items.push(`... ${set.size - MAX_ARRAY_ITEMS} more`);
       break;
     }
-    items.push(inspectValue(v, depth + 1, seen, maxDepth));
+    items.push(inspectValue(v, depth + 1, context, maxDepth));
     i += 1;
   }
-  seen.delete(set);
-  return `Set(${set.size}) { ${items.join(', ')} }`;
+  context.ancestors.delete(set);
+  return `${referencePrefix(set, context)}Set(${set.size}) { ${items.join(', ')} }`;
 }
 
 export function formatArgs(args: readonly unknown[]): string {
   return args.map((a) => (typeof a === 'string' ? a : inspect(a))).join(' ');
+}
+
+type PromiseSnapshot =
+  | { readonly kind: 'pending' }
+  | { readonly kind: 'fulfilled'; readonly value: unknown }
+  | { readonly kind: 'rejected'; readonly reason: unknown };
+
+async function snapshotPromise(promise: Promise<unknown>): Promise<PromiseSnapshot> {
+  let snapshot: PromiseSnapshot = { kind: 'pending' };
+  reflectApplyPrimordial(promiseThenPrimordial, promise, [
+    (value: unknown) => {
+      snapshot = { kind: 'fulfilled', value };
+    },
+    (reason: unknown) => {
+      snapshot = { kind: 'rejected', reason };
+    },
+  ]);
+  await reflectApplyPrimordial(promiseResolvePrimordial, PromiseConstructorPrimordial, []);
+  return snapshot;
+}
+
+function formatNodeEvalRejectedReason(reason: unknown): string {
+  if (!(reason instanceof Error)) return inspect(reason);
+  const stack = reason.stack ?? `${reason.name}: ${reason.message}`;
+  const title = stack.split('\n', 1)[0] ?? `${reason.name}: ${reason.message}`;
+  const frame = /(?:^|\n)\s+at (?:eval \()?\[eval\]:(\d+):(\d+)\)?(?:\n|$)/u.exec(stack);
+  if (frame === null) return inspect(reason);
+  return `${title}\n    at [eval]:${frame[1]}:${frame[2]}`;
+}
+
+/** Node CLI `-p`'s deferred one-argument console formatting. */
+export async function formatNodeEvalPrintValue(value: unknown): Promise<string> {
+  if (!(value instanceof PromiseConstructorPrimordial)) {
+    return typeof value === 'string' ? value : inspect(value);
+  }
+  const snapshot = await snapshotPromise(value);
+  if (snapshot.kind === 'pending') return 'Promise { <pending> }';
+  if (snapshot.kind === 'fulfilled') return `Promise { ${inspect(snapshot.value)} }`;
+  const reason = formatNodeEvalRejectedReason(snapshot.reason).replaceAll('\n', '\n  ');
+  return `Promise {\n  <rejected> ${reason}\n}`;
 }

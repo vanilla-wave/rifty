@@ -1,7 +1,118 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
+import {
+  assertNodeCliEvalOracleVersion,
+  nodeCliEvalSourceTerminatorMatrix,
+} from './node-cli-eval.ts';
 import { runInNode } from './run-in-node.ts';
 
 describe('runInNode', () => {
+  it('runs node-cli-eval with exact native argv and returns canonical process output', async () => {
+    const source = `
+      console.log(JSON.stringify({
+        execArgv: process.execArgv,
+        argv: process.argv,
+      }));
+    `;
+    const output = await runInNode({
+      kind: 'node-cli-eval',
+      code: '',
+      expectedPhysicalWorkers: 1,
+      nodeCliEval: {
+        sequential: [
+          {
+            label: 'direct-short-e',
+            nodeArgv: ['-e', source, '--', 'alpha'],
+          },
+        ],
+      },
+    });
+
+    const outcomes = JSON.parse(output) as {
+      readonly label: string;
+      readonly stdout: string;
+      readonly stderr: string;
+      readonly frames: readonly { readonly stream: string; readonly text: string }[];
+      readonly code: number | null;
+      readonly signal: string | null;
+    }[];
+    const outcome = outcomes[0];
+    if (outcome === undefined) throw new Error('native eval outcome missing');
+    const observed = JSON.parse(outcome.stdout) as {
+      readonly execArgv: readonly string[];
+      readonly argv: readonly string[];
+    };
+
+    expect(outcomes).toHaveLength(1);
+    expect(observed.execArgv).toEqual(['-e', source]);
+    expect(observed.argv).toEqual(['<node>', 'alpha']);
+    expect(outcome).toEqual({
+      label: 'direct-short-e',
+      stdout: outcome.stdout,
+      stderr: '',
+      frames: [{ stream: 'stdout', text: outcome.stdout }],
+      code: 0,
+      signal: null,
+    });
+  });
+
+  it('captures native eval stream switches and reversed EOF tails in write-arrival order', async () => {
+    const output = await runInNode({
+      kind: 'node-cli-eval',
+      code: '',
+      expectedPhysicalWorkers: 2,
+      nodeCliEval: {
+        sequential: [
+          {
+            label: 'partial-stdout-around-stderr',
+            nodeArgv: [
+              '-e',
+              "let phase=0;process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{for(const token of chunk){if(phase===0&&token==='1'){phase=1;process.stderr.write('native-stderr-line\\n')}else if(phase===1&&token==='2'){phase=2;process.stdout.write(new Uint8Array([172,...Buffer.from('native-stdout-tail\\n')]));process.stdin.pause();process.stdin.destroy?.()}else{throw new Error('stdio handshake protocol')}}});process.stdout.write('native-stdout-head|');process.stdout.write(new Uint8Array([226,130]))",
+            ],
+            stdioHandshake: [
+              { stream: 'stdout', marker: 'native-stdout-head|' },
+              { stream: 'stderr', marker: 'native-stderr-line\n' },
+            ],
+          },
+          {
+            label: 'stderr-before-stdout-eof',
+            nodeArgv: [
+              '-e',
+              "let released=false;process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{for(const token of chunk){if(!released&&token==='1'){released=true;process.stdout.write('native-stdout-eof');process.stdin.pause();process.stdin.destroy?.()}else{throw new Error('stdio handshake protocol')}}});process.stderr.write('native-stderr-eof|')",
+            ],
+            stdioHandshake: [{ stream: 'stderr', marker: 'native-stderr-eof|' }],
+          },
+        ],
+      },
+    });
+
+    expect(JSON.parse(output)).toEqual([
+      {
+        label: 'partial-stdout-around-stderr',
+        stdout: 'native-stdout-head|€native-stdout-tail\n',
+        stderr: 'native-stderr-line\n',
+        frames: [
+          { stream: 'stdout', text: 'native-stdout-head|' },
+          { stream: 'stderr', text: 'native-stderr-line\n' },
+          { stream: 'stdout', text: '€native-stdout-tail\n' },
+        ],
+        code: 0,
+        signal: null,
+      },
+      {
+        label: 'stderr-before-stdout-eof',
+        stdout: 'native-stdout-eof',
+        stderr: 'native-stderr-eof|',
+        frames: [
+          { stream: 'stderr', text: 'native-stderr-eof|' },
+          { stream: 'stdout', text: 'native-stdout-eof' },
+        ],
+        code: 0,
+        signal: null,
+      },
+    ]);
+  });
+
   it('terminates a real native oracle that exceeds the per-case timeout', async () => {
     await expect(
       runInNode(
@@ -11,5 +122,257 @@ describe('runInNode', () => {
         { timeoutMs: 50 },
       ),
     ).rejects.toThrow('Node parity case timed out after 50ms');
+  });
+});
+
+describe('Node v24.16.0 CLI eval oracle', () => {
+  it.each(nodeCliEvalSourceTerminatorMatrix('42', ['alpha', 'two words', '-x']))(
+    'pins $option $sourceState source × terminator raw argv',
+    ({ nodeArgv, expected }) => {
+      assertNodeCliEvalOracleVersion(process.version);
+      const probeSource =
+        'console.log(JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)}))';
+      const probeUrl = `data:text/javascript,${encodeURIComponent(probeSource)}`;
+      const outcome = spawnSync(process.execPath, nodeArgv, {
+        encoding: 'utf8',
+        env: { ...process.env, NODE_OPTIONS: `--import=${probeUrl}` },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      expect(outcome.error).toBeUndefined();
+      expect(outcome.signal).toBeNull();
+      if (expected.kind === 'usage-error') {
+        expect(outcome.status).toBe(9);
+        expect(outcome.stdout).toBe('');
+        expect(outcome.stderr).toBe(
+          `${process.execPath}: ${expected.stderrOption} requires an argument\n`,
+        );
+        return;
+      }
+
+      const identity = `${JSON.stringify({
+        execArgv: expected.execArgv,
+        argv: expected.scriptArgs,
+      })}\n`;
+      const result = expected.print ? `${expected.source === '' ? 'undefined' : '42'}\n` : '';
+      expect(outcome.status).toBe(0);
+      expect(outcome.stdout).toBe(`${identity}${result}`);
+      expect(outcome.stderr).toBe('');
+    },
+  );
+
+  it('consumes an immediate option terminator after inline --eval source', () => {
+    assertNodeCliEvalOracleVersion(process.version);
+    const source =
+      'const value=JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)});console.log(value);value';
+    const scriptArgs = ['alpha', 'two words', '-x'] as const;
+    const nodeArgv = [`--eval=${source}`, '--', ...scriptArgs];
+    const outcome = spawnSync(process.execPath, nodeArgv, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const identity = `${JSON.stringify({
+      execArgv: [`--eval=${source}`],
+      argv: scriptArgs,
+    })}\n`;
+
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.signal).toBeNull();
+    expect(outcome.status).toBe(0);
+    expect(outcome.stdout).toBe(identity);
+    expect(outcome.stderr).toBe('');
+  });
+
+  it('distinguishes separated empty source tokens from absent source', () => {
+    assertNodeCliEvalOracleVersion(process.version);
+    const absentCases = [
+      {
+        nodeArgv: ['-e'],
+        status: 9,
+        stdout: '',
+        stderr: `${process.execPath}: -e requires an argument\n`,
+      },
+      {
+        nodeArgv: ['--eval'],
+        status: 9,
+        stdout: '',
+        stderr: `${process.execPath}: --eval requires an argument\n`,
+      },
+      {
+        nodeArgv: ['-pe'],
+        status: 9,
+        stdout: '',
+        stderr: `${process.execPath}: --eval requires an argument\n`,
+      },
+      {
+        nodeArgv: ['-p'],
+        status: 0,
+        stdout: 'undefined\n',
+        stderr: '',
+      },
+      {
+        nodeArgv: ['--print'],
+        status: 0,
+        stdout: 'undefined\n',
+        stderr: '',
+      },
+      {
+        nodeArgv: ['--print=ignored'],
+        status: 0,
+        stdout: 'undefined\n',
+        stderr: '',
+      },
+      {
+        nodeArgv: ['--print=not-the-source'],
+        status: 0,
+        stdout: 'undefined\n',
+        stderr: '',
+      },
+      {
+        nodeArgv: ['--print='],
+        status: 0,
+        stdout: 'undefined\n',
+        stderr: '',
+      },
+    ] as const;
+    const cases = [
+      {
+        nodeArgv: ['-e', ''],
+        execArgv: ['-e', ''],
+        argv: [],
+        stdout: '',
+      },
+      {
+        nodeArgv: ['--eval', ''],
+        execArgv: ['--eval', ''],
+        argv: [],
+        stdout: '',
+      },
+      {
+        nodeArgv: ['-pe', ''],
+        execArgv: ['-pe', ''],
+        argv: [],
+        stdout: 'undefined\n',
+      },
+      {
+        nodeArgv: ['-p', ''],
+        execArgv: ['-p'],
+        argv: [''],
+        stdout: 'undefined\n',
+      },
+      {
+        nodeArgv: ['--print', ''],
+        execArgv: ['--print'],
+        argv: [''],
+        stdout: 'undefined\n',
+      },
+      {
+        nodeArgv: ['--print=ignored', ''],
+        execArgv: ['--print=ignored'],
+        argv: [''],
+        stdout: 'undefined\n',
+      },
+      {
+        nodeArgv: ['--print=not-the-source', ''],
+        execArgv: ['--print=not-the-source'],
+        argv: [''],
+        stdout: 'undefined\n',
+      },
+      {
+        nodeArgv: ['--print=', ''],
+        execArgv: ['--print='],
+        argv: [''],
+        stdout: 'undefined\n',
+      },
+    ] as const;
+    const probeSource =
+      'console.log(JSON.stringify({execArgv:process.execArgv,argv:process.argv.slice(1)}))';
+    const probeUrl = `data:text/javascript,${encodeURIComponent(probeSource)}`;
+
+    for (const testCase of absentCases) {
+      const outcome = spawnSync(process.execPath, testCase.nodeArgv, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(outcome.error).toBeUndefined();
+      expect(outcome.signal).toBeNull();
+      expect(outcome.status).toBe(testCase.status);
+      expect(outcome.stdout).toBe(testCase.stdout);
+      expect(outcome.stderr).toBe(testCase.stderr);
+    }
+
+    for (const testCase of cases) {
+      const outcome = spawnSync(process.execPath, testCase.nodeArgv, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(outcome.error).toBeUndefined();
+      expect(outcome.signal).toBeNull();
+      expect(outcome.status).toBe(0);
+      expect(outcome.stdout).toBe(testCase.stdout);
+      expect(outcome.stderr).toBe('');
+
+      const identityOutcome = spawnSync(process.execPath, testCase.nodeArgv, {
+        encoding: 'utf8',
+        env: { ...process.env, NODE_OPTIONS: `--import=${probeUrl}` },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const identity = JSON.stringify({
+        execArgv: testCase.execArgv,
+        argv: testCase.argv,
+      });
+      expect(identityOutcome.error).toBeUndefined();
+      expect(identityOutcome.signal).toBeNull();
+      expect(identityOutcome.status).toBe(0);
+      expect(identityOutcome.stdout).toBe(`${identity}\n${testCase.stdout}`);
+      expect(identityOutcome.stderr).toBe('');
+    }
+
+    for (const option of [
+      '-p',
+      '--print',
+      '--print=ignored',
+      '--print=not-the-source',
+      '--print=',
+    ] as const) {
+      const identityOutcome = spawnSync(process.execPath, [option], {
+        encoding: 'utf8',
+        env: { ...process.env, NODE_OPTIONS: `--import=${probeUrl}` },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const identity = JSON.stringify({ execArgv: [option], argv: [] });
+      expect(identityOutcome.error).toBeUndefined();
+      expect(identityOutcome.signal).toBeNull();
+      expect(identityOutcome.status).toBe(0);
+      expect(identityOutcome.stdout).toBe(`${identity}\nundefined\n`);
+      expect(identityOutcome.stderr).toBe('');
+    }
+  });
+
+  it('rejects every attached short eval/print source spelling with exact exit 9 stderr', () => {
+    assertNodeCliEvalOracleVersion(process.version);
+    const options = [
+      '-eSRC',
+      '-e=SRC',
+      '-pSRC',
+      '-p=SRC',
+      '-peSRC',
+      '-pe=SRC',
+      '-epSRC',
+      '-ep=SRC',
+    ] as const;
+
+    for (const option of options) {
+      const outcome = spawnSync(process.execPath, [option], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      expect(outcome.error).toBeUndefined();
+      expect(outcome.signal).toBeNull();
+      expect(outcome.status).toBe(9);
+      expect(outcome.stdout).toBe('');
+      expect(outcome.stderr).toBe(`${process.execPath}: bad option: ${option}\n`);
+    }
   });
 });

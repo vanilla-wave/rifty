@@ -2,12 +2,17 @@ import hostProcess from 'node:process';
 import { parentPort, workerData } from 'node:worker_threads';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
-import { awaitDrain } from '@riftydev/runtime-js';
+import { SyncRpcFsSync, awaitDrain, releaseNodeEvalDrainOwnership } from '@riftydev/runtime-js';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
-import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
-import { publishKernelProcessSpec } from '../../../packages/kernel/src/shared-globals.ts';
+import { setSyncMirror } from '@riftydev/vfs/internal';
+import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from '../../../packages/kernel/src/ipc/sab-ring.ts';
+import { SyncRpcClient } from '../../../packages/kernel/src/ipc/sync-client.ts';
+import {
+  publishKernelProcessSpec,
+  publishKernelSyncApi,
+} from '../../../packages/kernel/src/shared-globals.ts';
 import {
   type WorkerInitMessage,
   type WorkerSpawnSpec,
@@ -20,21 +25,86 @@ import {
 } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { runNodeEntry } from '../../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
+  beginNodeEvalUnhandled,
   recordRejection,
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { installNodeRuntime } from '../../../packages/runtime-js/src/ipc/install-process.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
+import {
+  NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT,
+  NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES,
+  NODE_CLI_EVAL_TRANSIENT_DECODER_PATH,
+  NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+  NODE_CLI_EVAL_VFS_CARRIER_COMPLETE,
+  NodeCliEvalVfsObserver,
+  nodeCliEvalTransientSourceCarrierMutations,
+} from './node-cli-eval-vfs-observer.ts';
+import type { NodeCliEvalVfsFault, PhysicalStdioDeliveryFault } from './run-in-rifty.ts';
 
 interface WorkerEnvHarnessData {
   readonly files: Readonly<Record<string, string>>;
+  readonly nodeCliEvalVfsAudit: boolean;
+  readonly nodeCliEvalVfsFault?: NodeCliEvalVfsFault;
+  readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
+}
+
+type DesiredBindWorkerStdioOutput = (
+  outputPort: MessagePort,
+  state: WorkerSpawnSpec['outputState'],
+  stream: 'stdout' | 'stderr',
+  controlPort: MessagePort,
+) => ReturnType<typeof bindWorkerStdioOutput>;
+
+function bindDesiredWorkerStdioOutput(
+  outputPort: MessagePort,
+  state: WorkerSpawnSpec['outputState'],
+  stream: 'stdout' | 'stderr',
+  controlPort: MessagePort,
+): ReturnType<typeof bindWorkerStdioOutput> {
+  return (bindWorkerStdioOutput as unknown as DesiredBindWorkerStdioOutput)(
+    outputPort,
+    state,
+    stream,
+    controlPort,
+  );
 }
 
 if (parentPort === null) throw new Error('worker-env kernel adapter has no parent port');
 const hostPort = parentPort;
 
 const request = workerData as WorkerEnvHarnessData;
-const vfs = new MemoryFsSync();
+if (
+  request.nodeCliEvalVfsFault !== undefined &&
+  request.nodeCliEvalVfsFault !== 'child-local-transient-decoder-file' &&
+  request.nodeCliEvalVfsFault !== 'child-local-transient-source-file' &&
+  request.nodeCliEvalVfsFault !== 'sab-remote-transient-source-file'
+) {
+  throw new TypeError('worker-env parity received an unknown node-cli-eval VFS fault');
+}
+if (
+  request.physicalStdioDeliveryFault !== undefined &&
+  request.physicalStdioDeliveryFault !== 'stderr-before-two-stdout'
+) {
+  throw new TypeError('worker-env parity received an unknown stdio delivery fault');
+}
+if (request.nodeCliEvalVfsAudit) {
+  // The disposable adapter is a real node:worker_threads Worker, while
+  // SyncRpcClient's production guard targets browser Worker globals. Expose the
+  // corresponding physical-worker markers only in eval children so the harness
+  // exercises the real SAB client without widening program siblings.
+  Object.defineProperties(globalThis, {
+    WorkerGlobalScope: {
+      value: class WorkerGlobalScope {},
+      configurable: true,
+    },
+    postMessage: {
+      value: (message: unknown): void => hostPort.postMessage(message),
+      configurable: true,
+    },
+  });
+}
+const vfs = new NodeCliEvalVfsObserver();
 vfs.loadFixture(
   Object.fromEntries(Object.entries(request.files).map(([path, source]) => [`/${path}`, source])),
 );
@@ -42,11 +112,146 @@ setSyncMirror(vfs);
 
 resetKeepalive();
 installTimerGlobals();
-hostProcess.on('unhandledRejection', (reason) => recordRejection(reason));
+hostProcess.on('unhandledRejection', (reason) => {
+  if (!beginNodeEvalUnhandled(reason, 'rejection')) recordRejection(reason);
+});
+const onUncaughtException = (error: unknown): void => {
+  if (
+    (typeof error === 'object' &&
+      error !== null &&
+      (error as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT') ||
+    beginNodeEvalUnhandled(error, 'uncaught-error')
+  ) {
+    return;
+  }
+  hostProcess.removeListener('uncaughtException', onUncaughtException);
+  throw error;
+};
+hostProcess.on('uncaughtException', onUncaughtException);
+let childLocalVfsAuditReported = false;
+
+function createSyncCall(spec: WorkerSpawnSpec): (method: string, payload: unknown) => unknown {
+  const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
+  const syncClient = new SyncRpcClient(ring);
+  return (method: string, payload: unknown): unknown => syncClient.call(method, payload);
+}
+
+function reportChildLocalVfsAudit(syncCall: (method: string, payload: unknown) => unknown): void {
+  if (childLocalVfsAuditReported) return;
+  syncCall(NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT, {
+    actor: 'child-local',
+    audit: vfs.audit([]),
+  });
+  childLocalVfsAuditReported = true;
+}
+
+function installChildLocalVfsExitAudit(spec: WorkerSpawnSpec): void {
+  if (!request.nodeCliEvalVfsAudit) return;
+  const ipc = spec.stdio.ipc;
+  const nativePost = ipc.postMessage.bind(ipc) as (
+    message: unknown,
+    options?: StructuredSerializeOptions | Transferable[],
+  ) => void;
+  Object.defineProperty(ipc, 'postMessage', {
+    configurable: true,
+    value(message: unknown, options?: StructuredSerializeOptions | Transferable[]): void {
+      const frame = message as { readonly kind?: unknown } | null;
+      if (frame?.kind === 'control:self-exit') {
+        reportChildLocalVfsAudit(createSyncCall(spec));
+      }
+      nativePost(message, options);
+    },
+  });
+}
+
+function installObservedNodeRuntime(spec: WorkerSpawnSpec): void {
+  try {
+    if (request.nodeCliEvalVfsFault === 'child-local-transient-decoder-file') {
+      vfs.beginCarrierObservation('child-local');
+      try {
+        vfs.writeFileSync(
+          NODE_CLI_EVAL_TRANSIENT_DECODER_PATH,
+          new TextEncoder().encode(NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES),
+        );
+        vfs.rmSync(NODE_CLI_EVAL_TRANSIENT_DECODER_PATH, { force: true });
+      } finally {
+        vfs.endCarrierObservation();
+      }
+    }
+    const launch = readNodeEntryBootstrap().launch;
+    const launchKind = (launch as { readonly kind: unknown }).kind;
+    if (request.nodeCliEvalVfsFault !== undefined && launchKind !== 'eval') {
+      throw new TypeError('node-cli-eval VFS fault requires an eval launch');
+    }
+    if (launchKind === 'eval') {
+      if (request.nodeCliEvalVfsFault === 'child-local-transient-source-file') {
+        const source = (launch as unknown as { readonly source?: unknown }).source;
+        if (typeof source !== 'string') {
+          throw new TypeError('node-cli-eval transient source fault requires string source');
+        }
+        vfs.beginCarrierObservation('child-local');
+        try {
+          vfs.writeFileSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, new TextEncoder().encode(source));
+          vfs.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
+        } finally {
+          vfs.endCarrierObservation();
+        }
+      }
+    }
+    installNodeRuntime(spec);
+  } catch (error) {
+    if (request.nodeCliEvalVfsAudit) reportChildLocalVfsAudit(createSyncCall(spec));
+    throw error;
+  }
+}
 
 async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   const bootstrap = readNodeEntryBootstrap();
   const launch = bootstrap.launch;
+  const launchKind = (launch as { readonly kind: unknown }).kind;
+  if (request.nodeCliEvalVfsFault !== undefined && launchKind !== 'eval') {
+    throw new TypeError('node-cli-eval VFS fault requires an eval launch');
+  }
+  if (launchKind === 'eval') {
+    const syncCall = createSyncCall(spec);
+    publishKernelSyncApi({
+      call: syncCall,
+    });
+    if (
+      request.nodeCliEvalVfsFault === 'child-local-transient-source-file' ||
+      request.nodeCliEvalVfsFault === 'sab-remote-transient-source-file'
+    ) {
+      const source = (launch as unknown as { readonly source?: unknown }).source;
+      if (typeof source !== 'string') {
+        throw new TypeError('node-cli-eval transient source fault requires string source');
+      }
+      if (request.nodeCliEvalVfsFault === 'child-local-transient-source-file') {
+        if (
+          JSON.stringify(vfs.mutations()) !==
+          JSON.stringify(nodeCliEvalTransientSourceCarrierMutations('child-local', source))
+        ) {
+          throw new Error('node-cli-eval child-local pre-entry VFS carrier evidence is incomplete');
+        }
+        syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, { actor: 'child-local' });
+      } else {
+        const remoteFs = new SyncRpcFsSync(syncCall);
+        remoteFs.writeFileSync(
+          NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+          new TextEncoder().encode(source),
+        );
+        remoteFs.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
+        syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, { actor: 'sab-remote' });
+      }
+    }
+    // Execute the actual Workbench node-entry module. It owns eval-vs-program
+    // dispatch, loader eval, print/drain ordering, process adoption, and exit.
+    try {
+      await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');
+    } finally {
+      reportChildLocalVfsAudit(syncCall);
+    }
+    return;
+  }
   const entryPath = spec.argv[1];
   if (entryPath === undefined) throw new Error('worker-env parity child has no argv[1]');
   const runEntry = () =>
@@ -68,6 +273,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     listPorts,
     onPortsChange: onRegistryChange,
     awaitDrain: () => awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
+    releaseDrainOwnership: releaseNodeEvalDrainOwnership,
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
@@ -80,9 +286,116 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   });
 }
 
+function installStdioDeliveryFault(spec: WorkerSpawnSpec): Promise<void> | undefined {
+  if (request.physicalStdioDeliveryFault === undefined) return undefined;
+
+  const ackKind = 'rifty:parity-stdio-delivery-ack';
+  const nativeStdoutPost = spec.stdio.stdout.postMessage.bind(spec.stdio.stdout);
+  const nativeStderrPost = spec.stdio.stderr.postMessage.bind(spec.stdio.stderr);
+  const heldStdout: Uint8Array[] = [];
+  let stderrWrites = 0;
+  let acknowledgements = 0;
+  let released = false;
+  let resolveProof!: () => void;
+  let rejectProof!: (error: Error) => void;
+  const proof = new Promise<void>((resolve, reject) => {
+    resolveProof = resolve;
+    rejectProof = reject;
+  });
+
+  const fail = (error: Error): never => {
+    rejectProof(error);
+    throw error;
+  };
+
+  const releaseIfProven = (): void => {
+    if (released || heldStdout.length !== 2 || stderrWrites !== 1 || acknowledgements !== 1) {
+      return;
+    }
+    for (const chunk of heldStdout) nativeStdoutPost(chunk);
+    released = true;
+    spec.stdio.stderr.removeEventListener('message', onAck);
+    resolveProof();
+  };
+  const onAck = (event: MessageEvent): void => {
+    const frame = event.data;
+    if (
+      typeof frame !== 'object' ||
+      frame === null ||
+      Reflect.ownKeys(frame).length !== 1 ||
+      (frame as { readonly kind?: unknown }).kind !== ackKind
+    ) {
+      rejectProof(new TypeError('stdio delivery fault received an invalid parent ACK'));
+      spec.stdio.stderr.removeEventListener('message', onAck);
+      return;
+    }
+    acknowledgements++;
+    if (acknowledgements !== 1) {
+      rejectProof(new Error('stdio delivery fault received duplicate parent ACK'));
+      spec.stdio.stderr.removeEventListener('message', onAck);
+      return;
+    }
+    releaseIfProven();
+  };
+  spec.stdio.stderr.addEventListener('message', onAck);
+  spec.stdio.stderr.start();
+
+  Object.defineProperty(spec.stdio.stdout, 'postMessage', {
+    configurable: true,
+    value(message: unknown): void {
+      const bytes =
+        message instanceof Uint8Array
+          ? message
+          : fail(new TypeError('stdio delivery fault expected stdout bytes'));
+      if (released || heldStdout.length === 2) {
+        fail(new Error('stdio delivery fault received extra stdout'));
+      }
+      heldStdout.push(new Uint8Array(bytes));
+      if (heldStdout.length !== 2) return;
+      if (stderrWrites !== 1) {
+        fail(new Error('stdio delivery fault received second stdout before stderr'));
+      }
+      releaseIfProven();
+    },
+  });
+  Object.defineProperty(spec.stdio.stderr, 'postMessage', {
+    configurable: true,
+    value(message: unknown): void {
+      const bytes =
+        message instanceof Uint8Array
+          ? message
+          : fail(new TypeError('stdio delivery fault expected stderr bytes'));
+      if (stderrWrites !== 0 || heldStdout.length !== 1 || released) {
+        fail(new Error('stdio delivery fault expected stderr between two stdout writes'));
+      }
+      stderrWrites = 1;
+      nativeStderrPost(new Uint8Array(bytes));
+    },
+  });
+
+  return proof;
+}
+
 async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
-  const stdout = bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout');
-  const stderr = bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr');
+  const stdioDeliveryProof = installStdioDeliveryFault(spec);
+  const stdout = bindDesiredWorkerStdioOutput(
+    spec.stdio.stdout,
+    spec.outputState,
+    'stdout',
+    spec.stdio.ipc,
+  );
+  const stderr = bindDesiredWorkerStdioOutput(
+    spec.stdio.stderr,
+    spec.outputState,
+    'stderr',
+    spec.stdio.ipc,
+  );
+  installChildLocalVfsExitAudit(spec);
+  if (request.nodeCliEvalVfsAudit) {
+    // This starts before runEntryLifecycle publishes/decodes the bootstrap and
+    // stays live through process adoption, entry, and failure settlement.
+    vfs.startObservation('child-local');
+  }
   publishKernelProcessSpec({
     pid: spec.pid,
     ppid: spec.ppid,
@@ -97,7 +410,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
     },
   });
   const outcome = await runEntryLifecycle(spec, {
-    preEntryHook: installNodeRuntime,
+    preEntryHook: installObservedNodeRuntime,
     drainHook: null,
     async runEntry(entry) {
       if (entry.kind !== 'url' || entry.url !== 'parity://node-entry') {
@@ -109,6 +422,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
       stderr.write(bytes);
     },
   });
+  await stdioDeliveryProof;
 
   // `worker_threads.Worker` uses serve:true. A clean entry stays alive for its
   // parentPort; only setup failure is reaped by the production kernel contract.

@@ -13,6 +13,7 @@
  * Console is replaced for the duration of the case, then restored.
  */
 import { Worker } from 'node:worker_threads';
+import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import {
   NodeProcess,
   applyNodeProcessTerminalBootstrap,
@@ -25,6 +26,11 @@ import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
 import { asyncVfs, syncMirror } from '@riftydev/vfs';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { transform as transformWithHostEsbuild } from 'esbuild';
+import type {
+  WorkerEntryDescriptor,
+  WorkerProcessHandle,
+} from '../../../packages/kernel/src/index.ts';
+import { workerOutputAttestation } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { refreshRuntimeJsProcessBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
 import type { NodeEntryBootstrapPayload } from '../../../packages/runtime-js/src/builtins/node-entry-url.ts';
 // vm-engine relative source imports (same `tools/`-harness precedent as
@@ -40,7 +46,23 @@ import {
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
-import { type ParityCase, caseCwd } from './types.ts';
+import {
+  NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT,
+  NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+  NODE_CLI_EVAL_VFS_CARRIER_COMPLETE,
+  type NodeCliEvalVfsAudit,
+  type NodeCliEvalVfsMutation,
+  NodeCliEvalVfsObserver,
+} from './node-cli-eval-vfs-observer.ts';
+import {
+  canonicalNodeCliEvalOutcome,
+  createNodeCliEvalCapture,
+  createNodeCliEvalStdioHandshake,
+  nodeCliEvalInvocations,
+  nodeCliEvalPreviewScope,
+  runNodeCliEvalMatrix,
+} from './node-cli-eval.ts';
+import { type ParityCase, type ResolvedNodeCliEvalInvocation, caseCwd } from './types.ts';
 
 /**
  * Normalised shape returned by the injected `__riftyHttpRequest` driver. Both
@@ -274,6 +296,86 @@ class StdioPortCapture {
   }
 }
 
+export type NodeCliEvalVfsFault =
+  | 'child-local-transient-decoder-file'
+  | 'child-local-transient-source-file'
+  | 'sab-remote-transient-source-file'
+  | 'workbench-owner-transient-source-file';
+
+export interface NodeCliEvalVfsProbe {
+  readonly expectedGuestMutations: readonly NodeCliEvalVfsMutation[];
+  readonly fault?: NodeCliEvalVfsFault;
+}
+
+function childLocalVfsMutation(value: unknown): value is NodeCliEvalVfsMutation {
+  if (typeof value !== 'object' || value === null) return false;
+  const mutation = value as Partial<NodeCliEvalVfsMutation>;
+  return (
+    mutation.actor === 'child-local' &&
+    (mutation.provenance === 'carrier' || mutation.provenance === 'guest') &&
+    (mutation.kind === 'write' ||
+      mutation.kind === 'mkdir' ||
+      mutation.kind === 'rm' ||
+      mutation.kind === 'utimes' ||
+      mutation.kind === 'copy' ||
+      mutation.kind === 'rename') &&
+    typeof mutation.path === 'string'
+  );
+}
+
+function childLocalVfsAudit(value: unknown): NodeCliEvalVfsAudit {
+  if (typeof value !== 'object' || value === null) {
+    throw new TypeError('node-cli-eval child-local VFS audit boundary is invalid');
+  }
+  const payload = value as {
+    readonly actor?: unknown;
+    readonly audit?: {
+      readonly missing?: unknown;
+      readonly unexpected?: unknown;
+    };
+  };
+  const missing = payload.audit?.missing;
+  const unexpected = payload.audit?.unexpected;
+  if (
+    payload.actor !== 'child-local' ||
+    !Array.isArray(missing) ||
+    !missing.every(childLocalVfsMutation) ||
+    !Array.isArray(unexpected) ||
+    !unexpected.every(childLocalVfsMutation)
+  ) {
+    throw new TypeError('node-cli-eval child-local VFS audit boundary is invalid');
+  }
+  return { missing, unexpected };
+}
+
+export type NodeCliEvalBootstrapFault =
+  | 'wrong-protocol'
+  | 'missing-source'
+  | 'missing-print'
+  | 'missing-exec-argv'
+  | 'missing-remote-fs'
+  | 'source-not-string'
+  | 'print-not-boolean'
+  | 'exec-argv-not-array'
+  | 'remote-fs-not-boolean'
+  | 'extra-launch-field'
+  | 'exec-argv-first-not-string'
+  | 'exec-argv-middle-not-string'
+  | 'exec-argv-last-not-string'
+  | 'program-bin'
+  | 'program-node-serve'
+  | 'program-ipc';
+
+interface NodeCliEvalPreviewExpectation {
+  readonly port: number;
+  readonly status: number;
+  readonly body: string;
+}
+
+export type NodeCliEvalPreviewProbe = Readonly<Record<string, NodeCliEvalPreviewExpectation>>;
+
+export type PhysicalStdioDeliveryFault = 'stderr-before-two-stdout';
+
 export interface RunInRiftyOptions {
   /** Same-realm fault-injection seam for the browser MessageChannel boundary. */
   readonly createMessageChannel?: () => MessageChannel;
@@ -281,12 +383,28 @@ export interface RunInRiftyOptions {
   readonly stdinTimeoutMs?: number;
   /** Parent-owned execution deadline; settlement still awaits Worker termination. */
   readonly caseTimeoutMs?: number;
+  /** Physical eval-only source-carrier audit; serializable across the disposable Worker. */
+  readonly nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe;
+  /** Physical eval-only scoped-preview audit; serializable across the disposable Worker. */
+  readonly nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe;
+  /** Physical eval-only raw corrupt-input injection, downstream of the host builder. */
+  readonly nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault;
+  /** Physical cross-port delivery inversion; leaves control IPC FIFO intact. */
+  readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
 const DEFAULT_STDIN_TIMEOUT_MS = 2_000;
 const DEFAULT_CASE_TIMEOUT_MS = 30_000;
+const NODE_CLI_EVAL_PREVIEW_TIMEOUT_MS = 5_000;
 const HOST_SET_TIMEOUT = globalThis.setTimeout.bind(globalThis);
 const HOST_CLEAR_TIMEOUT = globalThis.clearTimeout.bind(globalThis);
+const PHYSICAL_NODE_ENTRY_URL = 'parity://node-entry';
+const PHYSICAL_NODE_ENTRY_HOST_RUNTIME = {
+  RIFTY_PARITY_HOST_BOOTSTRAP: 'host-only',
+  RIFTY_KERNEL_WORKER_URL: 'parity://kernel-worker',
+  RIFTY_NODE_ENTRY_WORKER_URL: PHYSICAL_NODE_ENTRY_URL,
+  RIFTY_SQLITE_WASM_URL: 'parity://sqlite-wasm',
+} as const;
 
 interface SerializedWorkerError {
   readonly name: string;
@@ -306,7 +424,11 @@ function timeoutMs(value: number, label: string): number {
 }
 
 function isPhysicalWorkerCase(testCase: ParityCase): boolean {
-  return testCase.kind === 'worker-env' || testCase.kind === 'child-worker';
+  return (
+    testCase.kind === 'worker-env' ||
+    testCase.kind === 'child-worker' ||
+    testCase.kind === 'node-cli-eval'
+  );
 }
 
 function expectedPhysicalWorkerCount(testCase: ParityCase): number {
@@ -621,8 +743,40 @@ async function installSqliteMode(): Promise<void> {
  * the runner's disposable outer Worker so every process-global binding is
  * discarded after the case.
  */
-async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => void> {
-  const { getKernelWorkerUrl, setKernelWorkerUrl } = await import(
+interface PhysicalWorkerMode {
+  assertExpected(): void;
+  teardown(): void;
+}
+
+const PHYSICAL_STDIO_DELIVERY_ACK = Object.freeze({
+  kind: 'rifty:parity-stdio-delivery-ack',
+});
+
+function nodeCliEvalPreviewExpectations(
+  testCase: ParityCase,
+  probe: NodeCliEvalPreviewProbe | undefined,
+): NodeCliEvalPreviewProbe | undefined {
+  if (probe === undefined) return undefined;
+  const invocations = nodeCliEvalInvocations(testCase);
+  const labels = [...invocations.sequential, ...invocations.concurrent].map(({ label }) => label);
+  if (
+    Object.keys(probe).length !== labels.length ||
+    labels.some((label) => !Object.hasOwn(probe, label))
+  ) {
+    throw new TypeError(
+      'RunInRiftyOptions.nodeCliEvalPreviewProbe must cover every node-cli-eval invocation',
+    );
+  }
+  return probe;
+}
+
+async function installPhysicalWorkerMode(
+  testCase: ParityCase,
+  nodeCliEvalVfsFault?: NodeCliEvalVfsFault,
+  nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault,
+  physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault,
+): Promise<PhysicalWorkerMode> {
+  const { getKernelWorkerUrl, globalProcessManager, setKernelWorkerUrl } = await import(
     '../../../packages/kernel/src/index.ts'
   );
   const { clearKernelWorkerUrl, clearWorkerFactoryForTests, setWorkerFactoryForTests } =
@@ -633,8 +787,29 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
   type WorkerInitMessage = import('../../../packages/kernel/src/worker-entry.ts').WorkerInitMessage;
   let nativeWorkerConstructions = 0;
   let validatedInitMessages = 0;
-  const expectedLaunchKind = testCase.kind === 'child-worker' ? 'program' : 'worker-thread';
+  let stdioDeliveryAcks = 0;
+  const stdioOrderFrames: unknown[] = [];
+  const publicStdioMessages: unknown[] = [];
+  let expectedStdioAttestation: string | undefined;
+  const validatedEvalLabels = new Set<string>();
+  const evalInvocations =
+    testCase.kind === 'node-cli-eval'
+      ? (() => {
+          const plan = nodeCliEvalInvocations(testCase);
+          return [...plan.sequential, ...plan.concurrent];
+        })()
+      : [];
+  const expectedLaunchKind =
+    testCase.kind === 'child-worker'
+      ? 'program'
+      : testCase.kind === 'node-cli-eval'
+        ? 'eval'
+        : 'worker-thread';
   const expectedWorkers = expectedPhysicalWorkerCount(testCase);
+  const workerVfsFault =
+    nodeCliEvalVfsFault === 'workbench-owner-transient-source-file'
+      ? undefined
+      : nodeCliEvalVfsFault;
 
   function validateInitMessage(message: unknown): void {
     const init = message as Partial<WorkerInitMessage> | null;
@@ -642,16 +817,64 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
     if (init?.type !== 'init' || entry?.kind !== 'url') {
       throw new TypeError('physical-worker parity requires a URL kernel init message');
     }
+    const workerSpec = init.spec;
+    if (workerSpec === undefined) {
+      throw new TypeError('physical-worker parity requires a Worker spawn spec');
+    }
     const envelope = entry.bootstrap;
-    if (envelope?.protocol !== NODE_ENTRY_BOOTSTRAP_PROTOCOL) {
+    if (
+      envelope === undefined ||
+      (nodeCliEvalBootstrapFault === undefined &&
+        envelope.protocol !== NODE_ENTRY_BOOTSTRAP_PROTOCOL)
+    ) {
       throw new TypeError('physical-worker parity requires typed node-entry bootstrap');
     }
     const payload = envelope.payload as Partial<NodeEntryBootstrapPayload> | null;
+    const launch = payload?.launch as unknown as Record<string, unknown> | undefined;
     if (
-      payload?.launch?.kind !== expectedLaunchKind ||
-      payload.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only'
+      launch?.kind !== expectedLaunchKind ||
+      payload?.hostRuntime?.RIFTY_PARITY_HOST_BOOTSTRAP !== 'host-only'
     ) {
       throw new TypeError('physical-worker parity init has wrong launch or host marker');
+    }
+    if (physicalStdioDeliveryFault !== undefined) {
+      if (expectedStdioAttestation !== undefined) {
+        throw new Error('physical stdio fault expected exactly one Worker output state');
+      }
+      expectedStdioAttestation = workerOutputAttestation(workerSpec.outputState);
+    }
+    if (testCase.kind === 'node-cli-eval') {
+      const expected = evalInvocations.find(
+        ({ label }) => nodeCliEvalPreviewScope(label) === launch.previewScope,
+      );
+      const spec = init.spec;
+      const cwd = expected?.cwd ?? caseCwd(testCase);
+      const terminal = launch.terminal as Record<string, unknown> | undefined;
+      if (
+        expected === undefined ||
+        validatedEvalLabels.has(expected.label) ||
+        (nodeCliEvalBootstrapFault === undefined && launch.source !== expected.source) ||
+        (nodeCliEvalBootstrapFault === undefined && launch.print !== expected.print) ||
+        (nodeCliEvalBootstrapFault === undefined && launch.remoteFs !== true) ||
+        launch.previewScope !== nodeCliEvalPreviewScope(expected.label) ||
+        (nodeCliEvalBootstrapFault === undefined &&
+          JSON.stringify(launch.execArgv) !== JSON.stringify(expected.execArgv)) ||
+        terminal?.stdinIsTTY !== false ||
+        terminal.stdoutIsTTY !== false ||
+        terminal.stderrIsTTY !== false ||
+        terminal.cols !== 80 ||
+        terminal.rows !== 24 ||
+        spec?.cwd !== cwd ||
+        spec.serve !== true ||
+        JSON.stringify(spec.argv) !==
+          JSON.stringify([NODE_PROCESS_IDENTITY.execPath, ...expected.scriptArgs]) ||
+        JSON.stringify(spec.env) !== '{}'
+      ) {
+        throw new TypeError(
+          `node-cli-eval physical launch does not match invocation ${expected?.label ?? '<missing>'}`,
+        );
+      }
+      validatedEvalLabels.add(expected.label);
     }
     validatedInitMessages++;
   }
@@ -667,7 +890,16 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
       nativeWorkerConstructions++;
       this.#worker = new Worker(new URL('./worker-env-kernel-worker.ts', import.meta.url), {
         execArgv: ['--import', 'tsx'],
-        workerData: { files: testCase.setup?.files ?? {} },
+        workerData: {
+          // Eval must adopt the owner-backed remote VFS. Keeping setup bytes in
+          // the child-local mirror would let a broken fallback pass on identical
+          // reads, readdir, and module resolution. Program/worker siblings retain
+          // their existing local fixture carrier.
+          files: testCase.kind === 'node-cli-eval' ? {} : (testCase.setup?.files ?? {}),
+          nodeCliEvalVfsAudit: testCase.kind === 'node-cli-eval',
+          ...(workerVfsFault === undefined ? {} : { nodeCliEvalVfsFault: workerVfsFault }),
+          ...(physicalStdioDeliveryFault === undefined ? {} : { physicalStdioDeliveryFault }),
+        },
       });
     }
 
@@ -712,20 +944,15 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
   );
   const previousKernelWorkerUrl = getKernelWorkerUrl();
   const previousCwd = getProcessCwd();
+  const previousSpawnWorkerDescriptor = Object.getOwnPropertyDescriptor(
+    globalProcessManager,
+    'spawnWorker',
+  );
+  const nativeSpawnWorker = globalProcessManager.spawnWorker.bind(globalProcessManager);
   const cleanups = new CleanupStack();
   let failure: unknown | typeof NO_FAILURE = NO_FAILURE;
 
   try {
-    cleanups.defer(() => {
-      if (
-        nativeWorkerConstructions !== expectedWorkers ||
-        validatedInitMessages !== expectedWorkers
-      ) {
-        throw new Error(
-          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}`,
-        );
-      }
-    });
     cleanups.defer(clearWorkerFactoryForTests);
     cleanups.defer(resetNodeEntryWorkerUrl);
     cleanups.defer(() => {
@@ -738,6 +965,47 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
     cleanups.defer(() => setProcessCwd(previousCwd));
     cleanups.defer(() => refreshRuntimeJsProcessBuiltin());
     cleanups.defer(() => restoreGlobalDescriptor('process', previousProcessDescriptor));
+    if (physicalStdioDeliveryFault !== undefined) {
+      cleanups.defer(() => {
+        if (previousSpawnWorkerDescriptor === undefined) {
+          if (!Reflect.deleteProperty(globalProcessManager, 'spawnWorker')) {
+            throw new Error('physical stdio fault could not restore ProcessManager.spawnWorker');
+          }
+          return;
+        }
+        Object.defineProperty(globalProcessManager, 'spawnWorker', previousSpawnWorkerDescriptor);
+      });
+      Object.defineProperty(globalProcessManager, 'spawnWorker', {
+        configurable: true,
+        enumerable: previousSpawnWorkerDescriptor?.enumerable ?? false,
+        writable: true,
+        value(
+          ...args: Parameters<typeof globalProcessManager.spawnWorker>
+        ): ReturnType<typeof globalProcessManager.spawnWorker> {
+          const handle = nativeSpawnWorker(...args);
+          if (handle.kind !== 'worker') {
+            throw new Error('physical stdio fault requires a Worker process handle');
+          }
+          handle.ports.ipc.addEventListener('message', (event: MessageEvent): void => {
+            const frame = event.data as { readonly kind?: unknown } | null;
+            if (frame?.kind === 'control:stdio-order') stdioOrderFrames.push(event.data);
+          });
+          handle.on('message', (message) => publicStdioMessages.push(message));
+          handle.ports.stderr.addEventListener(
+            'message',
+            (event: MessageEvent): void => {
+              if (!(event.data instanceof Uint8Array)) {
+                throw new TypeError('physical stdio fault expected parent stderr bytes');
+              }
+              stdioDeliveryAcks++;
+              handle.ports.stderr.postMessage(PHYSICAL_STDIO_DELIVERY_ACK);
+            },
+            { once: true },
+          );
+          return handle;
+        },
+      });
+    }
 
     const parentProcess = new NodeProcess();
     parentProcess.env = Object.create(null) as Record<string, string | undefined>;
@@ -753,9 +1021,7 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
       configurable: true,
     });
     setKernelWorkerUrl('parity://kernel-worker');
-    configureNodeEntryWorker('parity://node-entry', {
-      RIFTY_PARITY_HOST_BOOTSTRAP: 'host-only',
-    });
+    configureNodeEntryWorker(PHYSICAL_NODE_ENTRY_URL, PHYSICAL_NODE_ENTRY_HOST_RUNTIME);
     setWorkerFactoryForTests(() => new NativeKernelWorkerAdapter());
   } catch (error) {
     failure = error;
@@ -764,7 +1030,312 @@ async function installPhysicalWorkerMode(testCase: ParityCase): Promise<() => vo
     if (failure !== NO_FAILURE) disposePreservingFailure(cleanups, failure);
   }
 
-  return () => cleanups.dispose();
+  return {
+    assertExpected() {
+      const expectedDeliveryAcks = physicalStdioDeliveryFault === undefined ? 0 : expectedWorkers;
+      const expectedOrderFrames =
+        physicalStdioDeliveryFault === undefined
+          ? []
+          : expectedStdioAttestation === undefined
+            ? null
+            : [
+                {
+                  kind: 'control:stdio-order',
+                  stream: 'stdout',
+                  order: 0,
+                  attestation: expectedStdioAttestation,
+                },
+                {
+                  kind: 'control:stdio-order',
+                  stream: 'stderr',
+                  order: 1,
+                  attestation: expectedStdioAttestation,
+                },
+                {
+                  kind: 'control:stdio-order',
+                  stream: 'stdout',
+                  order: 2,
+                  attestation: expectedStdioAttestation,
+                },
+              ];
+      if (
+        nativeWorkerConstructions !== expectedWorkers ||
+        validatedInitMessages !== expectedWorkers ||
+        stdioDeliveryAcks !== expectedDeliveryAcks ||
+        expectedOrderFrames === null ||
+        JSON.stringify(stdioOrderFrames) !== JSON.stringify(expectedOrderFrames) ||
+        publicStdioMessages.length !== 0
+      ) {
+        throw new Error(
+          `physical-worker parity expected ${expectedWorkers} typed-bootstrap Workers, ${expectedDeliveryAcks} stdio ACKs, authenticated private order witnesses, and no public IPC messages; constructed ${nativeWorkerConstructions}, initialized ${validatedInitMessages}, acknowledged ${stdioDeliveryAcks}, witnessed ${JSON.stringify(stdioOrderFrames)}, published ${JSON.stringify(publicStdioMessages)}`,
+        );
+      }
+    },
+    teardown() {
+      cleanups.dispose();
+    },
+  };
+}
+
+async function assertNodeCliEvalPreview(
+  handle: WorkerProcessHandle,
+  label: string,
+  expectation: NodeCliEvalPreviewExpectation,
+): Promise<void> {
+  const previewScope = nodeCliEvalPreviewScope(label);
+  let cleanupControl = (): void => {};
+  await new Promise<void>((resolve, reject) => {
+    const onClose = (...args: unknown[]): void => {
+      const [code, signal] = args;
+      reject(
+        new Error(
+          `node-cli-eval preview ${label} closed before listening (${String(code)}/${String(signal)})`,
+        ),
+      );
+    };
+    const timer = HOST_SET_TIMEOUT(
+      () => reject(new Error(`node-cli-eval preview ${label} listening timeout`)),
+      NODE_CLI_EVAL_PREVIEW_TIMEOUT_MS,
+    );
+    handle.once('close', onClose);
+    const removeControl = handle.onListeningControl((control) => {
+      const exact =
+        control.pid === handle.pid &&
+        control.previewScope === previewScope &&
+        control.ports.length === 1 &&
+        control.ports[0] === expectation.port;
+      if (exact) resolve();
+      else
+        reject(
+          new Error(
+            `node-cli-eval preview ${label} wrong listening control: ${JSON.stringify(control)}`,
+          ),
+        );
+    });
+    cleanupControl = () => {
+      HOST_CLEAR_TIMEOUT(timer);
+      removeControl();
+      handle.off('close', onClose);
+    };
+  }).finally(() => cleanupControl());
+
+  const { bridgeCrossRealmPreview } = await import('@riftydev/net');
+  const previewBridge = bridgeCrossRealmPreview(expectation.port, {
+    scope: previewScope,
+    timeoutMs: NODE_CLI_EVAL_PREVIEW_TIMEOUT_MS,
+  });
+  try {
+    const response = await previewBridge(
+      new Request(`http://preview.local:${String(expectation.port)}/`),
+    );
+    const body = await response.text();
+    if (response.status !== expectation.status || body !== expectation.body) {
+      throw new Error(
+        `node-cli-eval preview ${label} expected ` +
+          `${String(expectation.status)} ${JSON.stringify(expectation.body)}; received ` +
+          `${String(response.status)} ${JSON.stringify(body)}`,
+      );
+    }
+  } finally {
+    previewBridge.dispose();
+  }
+}
+
+function corruptNodeCliEvalEntry(
+  candidate: Readonly<Record<string, unknown>>,
+  fault: NodeCliEvalBootstrapFault,
+): WorkerEntryDescriptor {
+  const launch: Record<string, unknown> = {
+    ...candidate,
+    execArgv: [...(candidate.execArgv as readonly string[])],
+  };
+  let protocol = 'rifty.node-entry/v3';
+  switch (fault) {
+    case 'wrong-protocol':
+      protocol = 'rifty.node-entry/v2';
+      break;
+    case 'missing-source':
+      Reflect.deleteProperty(launch, 'source');
+      break;
+    case 'missing-print':
+      Reflect.deleteProperty(launch, 'print');
+      break;
+    case 'missing-exec-argv':
+      Reflect.deleteProperty(launch, 'execArgv');
+      break;
+    case 'missing-remote-fs':
+      Reflect.deleteProperty(launch, 'remoteFs');
+      break;
+    case 'source-not-string':
+      launch.source = 42;
+      break;
+    case 'print-not-boolean':
+      launch.print = 'yes';
+      break;
+    case 'exec-argv-not-array':
+      launch.execArgv = '--eval';
+      break;
+    case 'remote-fs-not-boolean':
+      launch.remoteFs = 'yes';
+      break;
+    case 'extra-launch-field':
+      launch.futureEvalField = true;
+      break;
+    case 'exec-argv-first-not-string':
+      launch.execArgv = [42, '--eval', 'source'];
+      break;
+    case 'exec-argv-middle-not-string':
+      launch.execArgv = ['--trace-warnings', 42, '--eval'];
+      break;
+    case 'exec-argv-last-not-string':
+      launch.execArgv = ['--trace-warnings', '--eval', 42];
+      break;
+    case 'program-bin':
+      launch.bin = false;
+      break;
+    case 'program-node-serve':
+      launch.nodeServe = false;
+      break;
+    case 'program-ipc':
+      launch.ipc = 'none';
+      break;
+  }
+  return {
+    kind: 'url',
+    url: PHYSICAL_NODE_ENTRY_URL,
+    bootstrap: {
+      protocol,
+      payload: {
+        hostRuntime: { ...PHYSICAL_NODE_ENTRY_HOST_RUNTIME },
+        launch,
+      },
+    },
+  };
+}
+
+async function runRiftyNodeCliEvalInvocation(
+  invocation: ResolvedNodeCliEvalInvocation,
+  defaultCwd: string,
+  previewExpectation?: NodeCliEvalPreviewExpectation,
+  bootstrapFault?: NodeCliEvalBootstrapFault,
+): Promise<ReturnType<typeof canonicalNodeCliEvalOutcome>> {
+  const { globalProcessManager } = await import('../../../packages/kernel/src/index.ts');
+  const { buildConfiguredNodeEntryWorkerEntry, nodeChildSpawnOptions } = await import(
+    '../../../packages/runtime-js/src/builtins/node-entry-runtime-config.ts'
+  );
+  type ConfiguredLaunch = Parameters<typeof buildConfiguredNodeEntryWorkerEntry>[0];
+  const cwd = invocation.cwd ?? defaultCwd;
+  const candidate = {
+    kind: 'eval',
+    source: invocation.source,
+    print: invocation.print,
+    execArgv: [...invocation.execArgv],
+    remoteFs: true,
+    previewScope: nodeCliEvalPreviewScope(invocation.label),
+    terminal: {
+      stdinIsTTY: false,
+      stdoutIsTTY: false,
+      stderrIsTTY: false,
+      cols: 80,
+      rows: 24,
+    },
+  };
+  // The carrier lands before the product union in RED. The product's exact-own
+  // validator remains authoritative: v2 rejects here; v3 snapshots this shape.
+  const entry =
+    bootstrapFault === undefined
+      ? buildConfiguredNodeEntryWorkerEntry(candidate as unknown as ConfiguredLaunch)
+      : corruptNodeCliEvalEntry(candidate, bootstrapFault);
+  const handle = globalProcessManager.spawnWorker(
+    'node',
+    {
+      entry,
+      argv: [NODE_PROCESS_IDENTITY.execPath, ...invocation.scriptArgs],
+      env: {},
+      cwd,
+      serve: true,
+    },
+    1,
+    nodeChildSpawnOptions(cwd, false),
+  );
+  if (handle.kind !== 'worker') {
+    throw new Error('node-cli-eval parity expected a physical Worker handle');
+  }
+  const capture = createNodeCliEvalCapture();
+  const stdin = handle.stdin();
+  let handshakeError: Error | undefined;
+  const handshake = createNodeCliEvalStdioHandshake(invocation.stdioHandshake, (token) => {
+    stdin.write(token);
+  });
+  const captureChunk = (stream: 'stdout' | 'stderr', chunk: unknown): void => {
+    capture.push(stream, chunk);
+    try {
+      handshake.observe(stream, chunk);
+    } catch (error) {
+      handshakeError = asError(error);
+      handle.kill('SIGTERM');
+    }
+  };
+  handle.stdout().on('data', (chunk) => captureChunk('stdout', chunk));
+  handle.stderr().on('data', (chunk) => captureChunk('stderr', chunk));
+  if (invocation.stdioHandshake === undefined) stdin.end();
+  const rawOutcome = new Promise<ReturnType<ReturnType<typeof createNodeCliEvalCapture>['finish']>>(
+    (resolve, reject) => {
+      let peerFailure: Error | undefined;
+      handle.on('peererror', (error) => {
+        peerFailure = error instanceof Error ? error : new Error(String(error));
+      });
+      handle.on('close', (code, signal) => {
+        if (peerFailure !== undefined) reject(peerFailure);
+        else if (handshakeError !== undefined) reject(handshakeError);
+        else {
+          try {
+            handshake.finish();
+            resolve(
+              capture.finish(
+                typeof code === 'number' ? code : null,
+                typeof signal === 'string' ? signal : null,
+              ),
+            );
+          } catch (error) {
+            reject(asError(error));
+          }
+        }
+      });
+    },
+  );
+  const previewFailures: Error[] = [];
+  if (previewExpectation !== undefined) {
+    try {
+      await assertNodeCliEvalPreview(handle, invocation.label, previewExpectation);
+    } catch (error) {
+      previewFailures.push(asError(error));
+    }
+    try {
+      if (!handle.kill('SIGTERM') && previewFailures.length === 0) {
+        previewFailures.push(
+          new Error(`node-cli-eval preview ${invocation.label} refused SIGTERM`),
+        );
+      }
+    } catch (error) {
+      previewFailures.push(asError(error));
+    }
+  }
+  const raw = await rawOutcome.catch((error: unknown) => {
+    previewFailures.push(asError(error));
+    return null;
+  });
+  if (previewFailures.length === 1) throw previewFailures[0];
+  if (previewFailures.length > 1) {
+    throw new AggregateError(
+      previewFailures,
+      `node-cli-eval preview ${invocation.label} probe and close failed`,
+    );
+  }
+  if (raw === null) throw new Error('node-cli-eval preview close failed without an error');
+  return canonicalNodeCliEvalOutcome(invocation, raw, {
+    [NODE_PROCESS_IDENTITY.execPath]: '<node>',
+  });
 }
 
 /**
@@ -1018,6 +1589,32 @@ export async function runInRiftyInCurrentRealm(
   testCase: ParityCase,
   options: RunInRiftyOptions = {},
 ): Promise<string> {
+  if (options.nodeCliEvalVfsProbe !== undefined && testCase.kind !== 'node-cli-eval') {
+    throw new TypeError('RunInRiftyOptions.nodeCliEvalVfsProbe requires kind node-cli-eval');
+  }
+  if (options.nodeCliEvalPreviewProbe !== undefined && testCase.kind !== 'node-cli-eval') {
+    throw new TypeError('RunInRiftyOptions.nodeCliEvalPreviewProbe requires kind node-cli-eval');
+  }
+  if (options.nodeCliEvalBootstrapFault !== undefined && testCase.kind !== 'node-cli-eval') {
+    throw new TypeError('RunInRiftyOptions.nodeCliEvalBootstrapFault requires kind node-cli-eval');
+  }
+  if (options.physicalStdioDeliveryFault !== undefined && !isPhysicalWorkerCase(testCase)) {
+    throw new TypeError(
+      'RunInRiftyOptions.physicalStdioDeliveryFault requires a physical Worker case',
+    );
+  }
+  if (
+    options.physicalStdioDeliveryFault !== undefined &&
+    expectedPhysicalWorkerCount(testCase) !== 1
+  ) {
+    throw new TypeError(
+      'RunInRiftyOptions.physicalStdioDeliveryFault requires exactly one physical Worker',
+    );
+  }
+  const previewExpectations = nodeCliEvalPreviewExpectations(
+    testCase,
+    options.nodeCliEvalPreviewProbe,
+  );
   const feedTimeoutMs = timeoutMs(
     options.stdinTimeoutMs ?? DEFAULT_STDIN_TIMEOUT_MS,
     'RunInRiftyOptions.stdinTimeoutMs',
@@ -1058,7 +1655,10 @@ export async function runInRiftyInCurrentRealm(
       fsFiles[`/${rel}`] = content;
     }
   }
-  const fsMirror = new MemoryFsSync();
+  const evalFsObserver = testCase.kind === 'node-cli-eval' ? new NodeCliEvalVfsObserver() : null;
+  const childLocalVfsAudits: NodeCliEvalVfsAudit[] = [];
+  const childLocalVfsAuditPids = new Set<number>();
+  const fsMirror = evalFsObserver ?? new MemoryFsSync();
   fsMirror.loadFixture(fsFiles);
   // Materialize the case cwd: the Node runner mkdirs `<workDir>/<cwd>` before
   // spawning, so a cwd with no setup files inside it must exist here too
@@ -1119,11 +1719,122 @@ export async function runInRiftyInCurrentRealm(
       cleanups.defer(teardownExecSync);
     }
 
+    if (testCase.kind === 'node-cli-eval') {
+      const { getKernelDispatcher } = await import('../../../packages/kernel/src/index.ts');
+      const { installRuntimeJsFsHandlers } = await import('@riftydev/runtime-js');
+      const dispatcher = getKernelDispatcher();
+      evalFsObserver?.startObservation();
+      dispatcher.register(NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT, (payload, context): null => {
+        const callerPid = context?.callerPid;
+        if (
+          !Number.isSafeInteger(callerPid) ||
+          (callerPid ?? 0) <= 0 ||
+          childLocalVfsAuditPids.has(callerPid as number)
+        ) {
+          throw new TypeError('node-cli-eval child-local VFS audit boundary is invalid');
+        }
+        childLocalVfsAuditPids.add(callerPid as number);
+        childLocalVfsAudits.push(childLocalVfsAudit(payload));
+        return null;
+      });
+      cleanups.defer(() => dispatcher.unregister(NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT));
+      if (options.nodeCliEvalVfsProbe?.fault !== undefined) {
+        const plan = nodeCliEvalInvocations(testCase);
+        const invocations = [...plan.sequential, ...plan.concurrent];
+        if (invocations.length !== 1) {
+          throw new TypeError(
+            'RunInRiftyOptions.nodeCliEvalVfsProbe.fault requires exactly one node-cli-eval invocation',
+          );
+        }
+        const invocation = invocations[0];
+        if (invocation === undefined) {
+          throw new Error('node-cli-eval VFS carrier invocation disappeared');
+        }
+        const fault = options.nodeCliEvalVfsProbe.fault;
+        if (fault === 'workbench-owner-transient-source-file') {
+          evalFsObserver?.beginCarrierObservation('workbench-owner');
+          try {
+            evalFsObserver?.writeFileSync(
+              NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
+              new TextEncoder().encode(invocation.source),
+            );
+            evalFsObserver?.rmSync(NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH, { force: true });
+          } finally {
+            evalFsObserver?.endCarrierObservation();
+          }
+        } else if (fault !== 'child-local-transient-decoder-file') {
+          if (fault === 'sab-remote-transient-source-file') {
+            evalFsObserver?.beginCarrierObservation('sab-remote');
+          }
+          dispatcher.register(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, (payload, context): null => {
+            if (!Number.isSafeInteger(context?.callerPid) || (context?.callerPid ?? 0) <= 0) {
+              throw new TypeError('node-cli-eval VFS carrier boundary is invalid');
+            }
+            if (fault === 'child-local-transient-source-file') {
+              if (JSON.stringify(payload) !== JSON.stringify({ actor: 'child-local' })) {
+                throw new TypeError('node-cli-eval child-local VFS carrier boundary is invalid');
+              }
+            } else if (JSON.stringify(payload) !== JSON.stringify({ actor: 'sab-remote' })) {
+              throw new TypeError('node-cli-eval SAB-remote VFS carrier boundary is invalid');
+            }
+            if (fault === 'sab-remote-transient-source-file') {
+              evalFsObserver?.endCarrierObservation();
+            }
+            return null;
+          });
+          cleanups.defer(() => dispatcher.unregister(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE));
+        }
+      }
+      installRuntimeJsFsHandlers(dispatcher, () => fsMirror);
+    }
+
     // ADR-0267: only a physical kernel child can prove that typed host
     // bootstrap metadata stays outside exact inherited/replacement guest env.
+    let physicalWorkerMode: PhysicalWorkerMode | undefined;
     if (isPhysicalWorkerCase(testCase)) {
-      const teardownPhysicalWorker = await installPhysicalWorkerMode(testCase);
-      cleanups.defer(teardownPhysicalWorker);
+      physicalWorkerMode = await installPhysicalWorkerMode(
+        testCase,
+        options.nodeCliEvalVfsProbe?.fault,
+        options.nodeCliEvalBootstrapFault,
+        options.physicalStdioDeliveryFault,
+      );
+      cleanups.defer(() => physicalWorkerMode?.teardown());
+    }
+
+    if (testCase.kind === 'node-cli-eval') {
+      const output = await runNodeCliEvalMatrix(testCase, (invocation) =>
+        runRiftyNodeCliEvalInvocation(
+          invocation,
+          cwd,
+          previewExpectations?.[invocation.label],
+          options.nodeCliEvalBootstrapFault,
+        ),
+      );
+      physicalWorkerMode?.assertExpected();
+      if (childLocalVfsAudits.length !== expectedPhysicalWorkerCount(testCase)) {
+        throw new Error(
+          `node-cli-eval child-local VFS audit expected ${String(
+            expectedPhysicalWorkerCount(testCase),
+          )} physical reports; received ${String(childLocalVfsAudits.length)}`,
+        );
+      }
+      const ownerAudit = evalFsObserver?.audit(
+        options.nodeCliEvalVfsProbe?.expectedGuestMutations ?? [],
+      ) ?? { missing: [], unexpected: [] };
+      const audit = {
+        missing: [
+          ...ownerAudit.missing,
+          ...childLocalVfsAudits.flatMap((childAudit) => childAudit.missing),
+        ],
+        unexpected: [
+          ...ownerAudit.unexpected,
+          ...childLocalVfsAudits.flatMap((childAudit) => childAudit.unexpected),
+        ],
+      };
+      if (audit.missing.length > 0 || audit.unexpected.length > 0) {
+        throw new Error(`node-cli-eval VFS audit mismatch: ${JSON.stringify(audit)}`);
+      }
+      return output;
     }
 
     // Preload QuickJS before any user code runs: a case can opt the `vm.*` sandbox
@@ -1224,6 +1935,7 @@ export async function runInRiftyInCurrentRealm(
         await new Promise((r) => setTimeout(r, 5));
       }
     }
+    physicalWorkerMode?.assertExpected();
     return seededProcess?.stdoutText() ?? captured.join('');
   } catch (error) {
     failure = error;
@@ -1249,11 +1961,22 @@ function runInDisposableWorker(
   testCase: ParityCase,
   stdinTimeoutMs: number,
   caseTimeoutMs: number,
+  nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe,
+  nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe,
+  nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault,
+  physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const worker = new Worker(new URL('./run-in-rifty-worker.ts', import.meta.url), {
       execArgv: ['--import', 'tsx'],
-      workerData: { testCase, stdinTimeoutMs },
+      workerData: {
+        testCase,
+        stdinTimeoutMs,
+        nodeCliEvalVfsProbe,
+        nodeCliEvalPreviewProbe,
+        nodeCliEvalBootstrapFault,
+        physicalStdioDeliveryFault,
+      },
     });
     let settling = false;
 
@@ -1331,7 +2054,15 @@ export async function runInRifty(
     'RunInRiftyOptions.caseTimeoutMs',
   );
   if (isSeededProcessCase(testCase) && options.createMessageChannel === undefined) {
-    return runInDisposableWorker(testCase, stdinTimeoutMs, caseTimeoutMs);
+    return runInDisposableWorker(
+      testCase,
+      stdinTimeoutMs,
+      caseTimeoutMs,
+      options.nodeCliEvalVfsProbe,
+      options.nodeCliEvalPreviewProbe,
+      options.nodeCliEvalBootstrapFault,
+      options.physicalStdioDeliveryFault,
+    );
   }
   return runInRiftyInCurrentRealm(testCase, options);
 }

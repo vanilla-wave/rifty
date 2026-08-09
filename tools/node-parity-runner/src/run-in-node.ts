@@ -8,7 +8,14 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type ParityCase, caseCwd } from './types.ts';
+import {
+  assertNodeCliEvalOracleVersion,
+  canonicalNodeCliEvalOutcome,
+  createNodeCliEvalCapture,
+  createNodeCliEvalStdioHandshake,
+  runNodeCliEvalMatrix,
+} from './node-cli-eval.ts';
+import { type ParityCase, type ResolvedNodeCliEvalInvocation, caseCwd } from './types.ts';
 
 // Rifty process modes temporarily replace the shared harness global. Keep the
 // genuine host process for native runner selection and platform checks.
@@ -192,6 +199,117 @@ function extractTtyResult(transcript: string): string {
   return `${records[0]}\n`;
 }
 
+async function runNodeCliEvalInvocation(
+  invocation: ResolvedNodeCliEvalInvocation,
+  workDir: string,
+  defaultCwd: string,
+  timeoutMs: number,
+): Promise<ReturnType<typeof canonicalNodeCliEvalOutcome>> {
+  const logicalCwd = invocation.cwd ?? defaultCwd;
+  const cwd = join(workDir, ...logicalCwd.split('/').filter(Boolean));
+  await mkdir(cwd, { recursive: true });
+  const raw = await new Promise<ReturnType<ReturnType<typeof createNodeCliEvalCapture>['finish']>>(
+    (resolve, reject) => {
+      const capture = createNodeCliEvalCapture();
+      const child = spawn(HOST_PROCESS.execPath, [...invocation.nodeArgv], {
+        cwd,
+        stdio: [invocation.stdioHandshake === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+      });
+      const stdout = child.stdout;
+      const stderr = child.stderr;
+      if (stdout === null || stderr === null) {
+        child.kill('SIGKILL');
+        throw new Error(`Node CLI eval invocation ${invocation.label} has no output pipes`);
+      }
+      let settled = false;
+      let timeoutError: Error | undefined;
+      let handshakeError: Error | undefined;
+      let killCloseTimer: ReturnType<typeof setTimeout> | undefined;
+      const finish = (
+        outcome:
+          | { readonly ok: true; readonly code: number | null; readonly signal: string | null }
+          | { readonly ok: false; readonly error: Error },
+      ): void => {
+        if (settled) return;
+        settled = true;
+        HOST_CLEAR_TIMEOUT(caseTimer);
+        if (killCloseTimer !== undefined) HOST_CLEAR_TIMEOUT(killCloseTimer);
+        if (outcome.ok) resolve(capture.finish(outcome.code, outcome.signal));
+        else reject(outcome.error);
+      };
+      const handshake = createNodeCliEvalStdioHandshake(invocation.stdioHandshake, (token) => {
+        if (child.stdin === null || child.stdin.destroyed) {
+          throw new Error(`Node CLI eval invocation ${invocation.label} has no writable stdin`);
+        }
+        child.stdin.write(token);
+      });
+      const captureChunk = (stream: 'stdout' | 'stderr', chunk: unknown): void => {
+        capture.push(stream, chunk);
+        try {
+          handshake.observe(stream, chunk);
+        } catch (error) {
+          handshakeError = error instanceof Error ? error : new Error(String(error));
+          child.kill('SIGKILL');
+        }
+      };
+      stdout.on('data', (chunk) => captureChunk('stdout', chunk));
+      stderr.on('data', (chunk) => captureChunk('stderr', chunk));
+      child.once('error', (error) => finish({ ok: false, error }));
+      child.once('close', (code, signal) => {
+        if (timeoutError !== undefined) {
+          finish({ ok: false, error: timeoutError });
+          return;
+        }
+        if (handshakeError !== undefined) {
+          finish({ ok: false, error: handshakeError });
+          return;
+        }
+        try {
+          handshake.finish();
+        } catch (error) {
+          finish({
+            ok: false,
+            error: error instanceof Error ? error : new Error(String(error)),
+          });
+          return;
+        }
+        finish({ ok: true, code, signal });
+      });
+      const caseTimer = HOST_SET_TIMEOUT(() => {
+        timeoutError = new Error(
+          `Node CLI eval invocation ${invocation.label} timed out after ${timeoutMs}ms`,
+        );
+        try {
+          child.kill('SIGKILL');
+        } catch (error) {
+          finish({
+            ok: false,
+            error: new AggregateError(
+              [timeoutError, error],
+              'Node CLI eval timeout and termination failed',
+            ),
+          });
+          return;
+        }
+        killCloseTimer = HOST_SET_TIMEOUT(
+          () =>
+            finish({
+              ok: false,
+              error: new Error(
+                `Node CLI eval invocation ${invocation.label} did not close after SIGKILL`,
+              ),
+            }),
+          KILL_CLOSE_GRACE_MS,
+        );
+      }, timeoutMs);
+    },
+  );
+  return canonicalNodeCliEvalOutcome(invocation, raw, {
+    [HOST_PROCESS.execPath]: '<node>',
+    [workDir]: '<root>',
+  });
+}
+
 export async function runInNode(
   testCase: ParityCase,
   options: RunInNodeOptions = {},
@@ -238,6 +356,13 @@ export async function runInNode(
     // harness supplies the minimal `{ "type": "module" }`.
     if (testCase.kind === 'ts-esm' && !testCase.setup?.files?.['package.json']) {
       await writeFile(join(entryDir, 'package.json'), JSON.stringify({ type: 'module' }), 'utf8');
+    }
+
+    if (testCase.kind === 'node-cli-eval') {
+      assertNodeCliEvalOracleVersion(HOST_PROCESS.version);
+      return await runNodeCliEvalMatrix(testCase, (invocation) =>
+        runNodeCliEvalInvocation(invocation, workDir, caseCwd(testCase), timeoutMs),
+      );
     }
 
     // `ts-esm`: run the `.ts` entry through a FULL TS transform (vendored `tsx`)

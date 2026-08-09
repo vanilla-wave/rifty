@@ -239,8 +239,8 @@ function publishProcessSpec(spec: WorkerSpawnSpec): void {
     env: spec.env,
     cwd: spec.cwd,
     stdio: {
-      stdout: bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout'),
-      stderr: bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr'),
+      stdout: bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout', spec.stdio.ipc),
+      stderr: bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr', spec.stdio.ipc),
       stdin: spec.stdio.stdin,
       ipc: spec.stdio.ipc,
     },
@@ -503,7 +503,12 @@ export function installWorkerEntry(
         if (!event.defaultPrevented) sealWorkerOutput(spec.outputState);
       });
     });
-    const stderr = bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr');
+    const stderr = bindWorkerStdioOutput(
+      spec.stdio.stderr,
+      spec.outputState,
+      'stderr',
+      spec.stdio.ipc,
+    );
     // Run pre-entry hook + entry, drain a run-to-completion child's loop, and
     // compute the outcome — the realm-independent core (unit-tested via
     // runEntryLifecycle). ADR-0152: serve workers are kept

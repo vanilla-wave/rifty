@@ -2,17 +2,37 @@
 
 ## [Unreleased]
 
-### Added (real Node server dev loop)
+### Added
 
 - Express, Hono, and Koa pin real `nodemon@3.1.14`; owner-VFS edits now replace
   the app Worker on the same preview port with crash recovery and teardown.
   Direct `start` and non-server templates keep their paths (ADR-0324–0327).
 
+- Playground terminals now run Node 24-compatible CommonJS `node -e/-p`
+  invocations through the physical supervised child, including exact eval
+  identity, ordered output, preview, signals, and shell status.
+
 ### Fixed
+
+- Preset open no longer paints the "Starting dev server…" loader inside the
+  12px splitter track between editor and preview: an always-rendered editor
+  slot pins splitter/preview to their grid tracks while the lazy editor chunk
+  (or a project-switch teardown) leaves the editor empty. E2E holds the chunk
+  in flight and asserts preview-pane geometry
+  (`tests/e2e/preset-open-layout.spec.ts`).
+
+- Re-picking the current dirty scratch's starter no longer opens the
+  "Discard unsaved scratch?" dialog — the owner preserve contract
+  (`preserveDirtySameStarter`) keeps the draft either way, so the prompt
+  threatened a discard it never performed; the pick now just reopens the
+  scratch (e2e in `tests/e2e/project-management.spec.ts`).
 
 - Reset-to-cold instant presets now show delayed preparation progress inside
   the launcher; Chromium acceptance covers every instant sibling and requires
   Vite 7/8 to reach their real ready output.
+- Interactive terminal history now records the owner-authored shell status
+  beside the exact physical child exit, so Ctrl-C remains status `130` while
+  lifecycle consumers retain `SIGTERM` provenance (ADR-0341).
 
 - Failed saved-project activation now restores the prior catalog ref and live
   session before reporting the target open error, preserving both causes when
@@ -249,10 +269,6 @@
 - Normalized scripts and downstream dependency maps preserve every own JSON
   key, including `__proto__`, so manifest bytes, identity, and installation
   input cannot diverge.
-- Workbench `node -e/-p` stays a loud `NotImplementedError` until its eval
-  argv/module identity matches Node; the legacy temporary-file delta is marked
-  ⚠️ in the process compat matrix and tracked in backlog.
-
 ### Changed (app-local Workbench Vite vertical)
 
 - Dedicated Node-server children now receive one validated, detached runtime
