@@ -47,10 +47,10 @@ Shape and validation: `docs/backlog/README.md`. Never implement a draft.
    demote to `draft` recording the fork AND the pre-demotion Acceptance/Parity
    verbatim; the next Contract+RED checkpoint diffs the re-cut against them — any weakening is a
    user-observable fork → manual `rifty-refine`. Never absorb silently. (An
-   active goal epic itself cannot be demoted — `check:goal-contract`.) Pre-pickup
-   this commits in the discovering PR; post-pickup it needs its own, because
-   `check:contract-drift` rejects an in-place `ready`→`draft` edit after pickup
-   (`process-meta/autonomous-epic-runs.md` §Residual).
+   active goal epic itself cannot be demoted — `check:goal-contract`.) The
+   demotion commits in the discovering PR — pre- or post-pickup;
+   `check:contract-drift` allows the `ready`→`draft` flip, the recorded fork +
+   verbatim Acceptance stay mandatory.
 
 ### Refine altitude
 

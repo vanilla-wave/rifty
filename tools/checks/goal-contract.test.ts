@@ -8,7 +8,7 @@ import {
   closureIdentityViolations,
   declaredGoals,
   evaluateGoal,
-  evaluateMarkerHistory,
+  evaluateMarkerTransition,
   goalContract,
   historyHeadRevision,
   inspectGoalBaseline,
@@ -19,13 +19,24 @@ import {
 
 const sha = '0123456789abcdef0123456789abcdef01234567';
 const nextSha = '89abcdef0123456789abcdef0123456789abcdef';
-const markerSha = 'abcdef0123456789abcdef0123456789abcdef01';
 const childEnv = (overrides: NodeJS.ProcessEnv = {}) => ({
   ...process.env,
   GITHUB_EVENT_PATH: undefined,
   RIFTY_GOAL_BASELINE: undefined,
   ...overrides,
 });
+const script = fileURLToPath(new URL('./goal-contract.mjs', import.meta.url));
+const commit = (cwd: string, message: string) => {
+  execFileSync('git', ['add', '-A'], { cwd });
+  execFileSync(
+    'git',
+    ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', message],
+    { cwd },
+  );
+  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+};
+const setOriginMain = (cwd: string, revision: string) =>
+  execFileSync('git', ['update-ref', 'refs/remotes/origin/main', revision], { cwd });
 const epic = ({
   value = 'A real package runs',
   tier = 'robust',
@@ -116,131 +127,6 @@ describe('declaredGoals / parseGoalBaseline', () => {
   });
 });
 
-describe('goal-contract CLI history head', () => {
-  it('validates marker commits on the PR head, not the synthetic merge first parent', () => {
-    const root = mkdtempSync(join(tmpdir(), 'rifty-goal-pr-head-'));
-    try {
-      const epicDir = join(root, 'docs/backlog/epics');
-      const epicPath = join(epicDir, 'goal.md');
-      mkdirSync(epicDir, { recursive: true });
-      writeFileSync(epicPath, epic());
-      execFileSync('git', ['init', '-b', 'main'], { cwd: root });
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'base'],
-        { cwd: root },
-      );
-      const base = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', base], { cwd: root });
-
-      execFileSync('git', ['switch', '-c', 'feature'], { cwd: root });
-      writeFileSync(epicPath, epic().replace('Mutable run bookkeeping.', 'Refined bookkeeping.'));
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        [
-          '-c',
-          'user.name=Rifty',
-          '-c',
-          'user.email=rifty@example.test',
-          'commit',
-          '-m',
-          'contract',
-        ],
-        { cwd: root },
-      );
-      const contract = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-      writeFileSync(
-        epicPath,
-        withMarker(epic().replace('Mutable run bookkeeping.', 'Refined bookkeeping.'), contract),
-      );
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'marker'],
-        { cwd: root },
-      );
-      const pullRequestHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-
-      execFileSync('git', ['switch', 'main'], { cwd: root });
-      execFileSync(
-        'git',
-        [
-          '-c',
-          'user.name=Rifty',
-          '-c',
-          'user.email=rifty@example.test',
-          'merge',
-          '--no-ff',
-          'feature',
-          '-m',
-          'synthetic merge',
-        ],
-        { cwd: root },
-      );
-      const eventPath = join(root, 'event.json');
-      writeFileSync(
-        eventPath,
-        JSON.stringify({ pull_request: { body: '', head: { sha: pullRequestHead } } }),
-      );
-
-      const script = fileURLToPath(new URL('./goal-contract.mjs', import.meta.url));
-      const env = childEnv({ GITHUB_EVENT_PATH: eventPath });
-      expect(
-        execFileSync(process.execPath, [script], { cwd: root, encoding: 'utf8', env }),
-      ).toContain('1 marker(s) established');
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it('fails closed when the exact PR head commit is unavailable', () => {
-    const root = mkdtempSync(join(tmpdir(), 'rifty-goal-missing-pr-head-'));
-    try {
-      writeFileSync(join(root, 'README.md'), 'fixture\n');
-      execFileSync('git', ['init', '-b', 'main'], { cwd: root });
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'base'],
-        { cwd: root },
-      );
-      const base = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', base], { cwd: root });
-      const eventPath = join(root, 'event.json');
-      writeFileSync(
-        eventPath,
-        JSON.stringify({ pull_request: { body: '', head: { sha: nextSha } } }),
-      );
-
-      const script = fileURLToPath(new URL('./goal-contract.mjs', import.meta.url));
-      const result = spawnSync(process.execPath, [script], {
-        cwd: root,
-        encoding: 'utf8',
-        env: childEnv({ GITHUB_EVENT_PATH: eventPath }),
-      });
-      expect(result.status).toBe(1);
-      expect(result.stdout).not.toContain('SKIPPED');
-      expect(result.stderr).toContain('no origin/main merge-base for pull-request history');
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-});
-
 describe('goalContract / evaluateGoal', () => {
   it('freezes only observable goal fields, not status, Items, or Budget', () => {
     const baseline = epic();
@@ -319,219 +205,126 @@ describe('goalContract / evaluateGoal', () => {
       'goal epic deleted with open residual items: playground/a',
     ]);
   });
-
-  it('rejects a later PR-body SHA that differs from the persistent epic marker', () => {
-    const root = mkdtempSync(join(tmpdir(), 'rifty-goal-baseline-'));
-    try {
-      const epicDir = join(root, 'docs/backlog/epics');
-      const sourceDir = join(root, 'packages/x/src');
-      mkdirSync(epicDir, { recursive: true });
-      mkdirSync(sourceDir, { recursive: true });
-      const epicPath = join(epicDir, 'goal.md');
-      writeFileSync(epicPath, epic());
-      execFileSync('git', ['init', '-b', 'main'], { cwd: root });
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'goal'],
-        { cwd: root },
-      );
-      const baseline = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', baseline], { cwd: root });
-
-      writeFileSync(
-        epicPath,
-        epic().replace('tier: robust', `tier: robust\ngoal_baseline: ${baseline}`),
-      );
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'marker'],
-        { cwd: root },
-      );
-      const markerCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', markerCommit], {
-        cwd: root,
-      });
-      writeFileSync(join(sourceDir, 'a.ts'), 'export const shipped = true;\n');
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'source'],
-        { cwd: root },
-      );
-
-      const script = fileURLToPath(new URL('./goal-contract.mjs', import.meta.url));
-      const env = childEnv({ RIFTY_GOAL_BASELINE: `goal@${baseline}` });
-      expect(
-        execFileSync(process.execPath, [script], { cwd: root, encoding: 'utf8', env }),
-      ).toContain('goal-contract: OK');
-      const ratchet = spawnSync(process.execPath, [script], {
-        cwd: root,
-        encoding: 'utf8',
-        env: childEnv({ RIFTY_GOAL_BASELINE: `goal@${markerCommit}` }),
-      });
-      expect(ratchet.status).toBe(1);
-      expect(ratchet.stderr).toContain('keeps goal_baseline');
-
-      const landedRun = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', landedRun], { cwd: root });
-      writeFileSync(epicPath, withMarker(epic(), landedRun));
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'tamper'],
-        { cwd: root },
-      );
-      writeFileSync(epicPath, withMarker(epic(), baseline));
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'restore'],
-        { cwd: root },
-      );
-      const noGoalEnv = childEnv();
-      const transientTamper = spawnSync(process.execPath, [script], {
-        cwd: root,
-        encoding: 'utf8',
-        env: noGoalEnv,
-      });
-      expect(transientTamper.status).toBe(1);
-      expect(transientTamper.stderr).toContain('active goal_baseline changed');
-      const restored = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-      execFileSync('git', ['update-ref', 'refs/remotes/origin/main', restored], { cwd: root });
-
-      const narrowed = withMarker(epic({ outcome: 'Only installation works.' }), baseline);
-      writeFileSync(epicPath, narrowed);
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        [
-          '-c',
-          'user.name=Rifty',
-          '-c',
-          'user.email=rifty@example.test',
-          'commit',
-          '-m',
-          'narrow-before-pickup',
-        ],
-        { cwd: root },
-      );
-      const narrowedBaseline = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: root,
-        encoding: 'utf8',
-      }).trim();
-      writeFileSync(
-        epicPath,
-        withMarker(epic({ outcome: 'Only installation works.' }), narrowedBaseline),
-      );
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'ratchet'],
-        { cwd: root },
-      );
-      writeFileSync(join(sourceDir, 'b.ts'), 'export const more = true;\n');
-      execFileSync('git', ['add', '.'], { cwd: root });
-      execFileSync(
-        'git',
-        ['-c', 'user.name=Rifty', '-c', 'user.email=rifty@example.test', 'commit', '-m', 'more'],
-        { cwd: root },
-      );
-      const synchronousRatchet = spawnSync(process.execPath, [script], {
-        cwd: root,
-        encoding: 'utf8',
-        env: childEnv({ RIFTY_GOAL_BASELINE: `goal@${narrowedBaseline}` }),
-      });
-      expect(synchronousRatchet.status).toBe(1);
-      expect(synchronousRatchet.stderr).toContain('active goal_baseline changed');
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
 });
 
-describe('evaluateMarkerHistory', () => {
+describe('evaluateMarkerTransition', () => {
   const path = 'docs/backlog/epics/goal.md';
+  const opts = (overrides = {}) => ({ contractOnlyPR: true, declaredGoal: null, ...overrides });
 
-  it('allows one contract-only marker commit pointing to its ready parent', () => {
+  it('ignores an epic without a marker on either side', () => {
+    expect(evaluateMarkerTransition(path, epic(), epic({ tier: 'works' }), opts())).toEqual({
+      canonical: null,
+      deleted: false,
+      introduced: false,
+      violations: [],
+    });
+  });
+
+  it('reports marker parse errors on either side', () => {
     expect(
-      evaluateMarkerHistory(
+      evaluateMarkerTransition(path, withMarker(withMarker(epic(), sha), nextSha), epic(), opts())
+        .violations[0],
+    ).toContain('merge-base want one goal_baseline');
+    expect(
+      evaluateMarkerTransition(path, epic(), withMarker(epic(), 'abc123'), opts()).violations[0],
+    ).toContain('exact 40-hex');
+  });
+
+  it('allows bookkeeping edits and blocks frozen drift or demotion in an active run', () => {
+    const base = withMarker(epic(), sha);
+    expect(
+      evaluateMarkerTransition(
         path,
-        [
-          { sha, text: epic() },
-          { sha: markerSha, text: withMarker(epic(), sha) },
-        ],
-        false,
-        null,
+        base,
+        withMarker(epic().replace('Mutable run bookkeeping.', 'Re-cut.'), sha),
+        opts({ contractOnlyPR: false }),
       ),
-    ).toMatchObject({ canonical: sha, introduced: true, violations: [] });
+    ).toEqual({ canonical: sha, deleted: false, introduced: false, violations: [] });
+    expect(
+      evaluateMarkerTransition(
+        path,
+        base,
+        withMarker(epic({ outcome: 'Only installation works.' }), sha),
+        opts(),
+      ).violations,
+    ).toEqual([`${path}: frozen Outcome changed from baseline`]);
+    expect(
+      evaluateMarkerTransition(
+        path,
+        base,
+        withMarker(epic().replace('status: ready', 'status: draft'), sha),
+        opts(),
+      ).violations[0],
+    ).toContain('demoted to draft');
+  });
+
+  it('rejects change and removal of an active marker', () => {
+    const base = withMarker(epic(), sha);
+    expect(
+      evaluateMarkerTransition(path, base, withMarker(epic(), nextSha), opts()).violations,
+    ).toEqual([`${path}: active goal_baseline changed from ${sha} to ${nextSha}`]);
+    expect(evaluateMarkerTransition(path, base, epic(), opts()).violations).toEqual([
+      `${path}: goal_baseline removed while the run is active`,
+    ]);
+  });
+
+  it('allows terminal deletion only with the matching declaration', () => {
+    const base = withMarker(epic(), sha);
+    expect(
+      evaluateMarkerTransition(path, base, null, opts({ declaredGoal: { epicSlug: 'goal', sha } })),
+    ).toMatchObject({ canonical: sha, deleted: true, violations: [] });
+    expect(evaluateMarkerTransition(path, base, null, opts()).violations[0]).toContain(
+      'matching Goal-Baseline',
+    );
+    expect(
+      evaluateMarkerTransition(
+        path,
+        base,
+        null,
+        opts({ declaredGoal: { epicSlug: 'goal', sha: nextSha } }),
+      ).violations[0],
+    ).toContain('matching Goal-Baseline');
+  });
+
+  it('allows a contract-only bootstrap of a ready, complete epic', () => {
+    for (const base of [epic(), null]) {
+      expect(evaluateMarkerTransition(path, base, withMarker(epic(), sha), opts())).toEqual({
+        canonical: sha,
+        deleted: false,
+        introduced: true,
+        violations: [],
+      });
+    }
   });
 
   it('requires marker establishment to land before a source PR', () => {
     expect(
-      evaluateMarkerHistory(
+      evaluateMarkerTransition(
         path,
-        [
-          { sha, text: epic() },
-          { sha: markerSha, text: withMarker(epic(), sha) },
-        ],
-        true,
-        { epicSlug: 'goal', sha },
+        epic(),
+        withMarker(epic(), sha),
+        opts({ contractOnlyPR: false }),
       ).violations[0],
     ).toContain('contract-only PR');
   });
 
-  it('rejects change, removal, and reappearance of an active marker', () => {
-    const base = withMarker(epic(), sha);
+  it('rejects bootstrap on a non-ready or incomplete epic', () => {
     expect(
-      evaluateMarkerHistory(
+      evaluateMarkerTransition(
         path,
-        [
-          { sha: markerSha, text: base },
-          { sha: nextSha, text: withMarker(epic(), nextSha) },
-        ],
-        true,
-        { epicSlug: 'goal', sha: nextSha },
-      ).violations[0],
-    ).toContain('changed');
-    expect(
-      evaluateMarkerHistory(
-        path,
-        [
-          { sha: markerSha, text: base },
-          { sha: nextSha, text: epic() },
-          { sha, text: base },
-        ],
-        false,
         null,
+        withMarker(epic().replace('status: ready', 'status: draft'), sha),
+        opts(),
       ).violations,
-    ).toEqual(expect.arrayContaining([expect.stringContaining('missing')]));
-  });
-
-  it('allows terminal deletion only with the matching declaration', () => {
-    const states = [
-      { sha: markerSha, text: withMarker(epic(), sha) },
-      { sha: nextSha, text: null },
-    ];
-    expect(evaluateMarkerHistory(path, states, true, { epicSlug: 'goal', sha }).violations).toEqual(
-      [],
-    );
-    expect(evaluateMarkerHistory(path, states, true, null).violations[0]).toContain(
-      'matching Goal-Baseline',
-    );
+    ).toEqual([`${path}: goal_baseline epic lacks the complete observable contract`]);
+    expect(
+      evaluateMarkerTransition(
+        path,
+        null,
+        withMarker(epic(), sha).replace(/## Invariants[\s\S]*?## Items/, '## Items'),
+        opts(),
+      ).violations[0],
+    ).toContain('complete observable contract');
   });
 
   it('rejects closure coupled to an epic rename or replacement', () => {
@@ -565,6 +358,158 @@ describe('evaluateMarkerHistory', () => {
       'docs/public/compat/index.html',
     ]) {
       expect(isContractOnlyBootstrap(['docs/backlog/epics/goal.md', path])).toBe(false);
+    }
+  });
+});
+
+describe('goal-contract CLI', () => {
+  it('reads head content from the exact PR head, not the checked-out worktree', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rifty-goal-pr-head-'));
+    try {
+      const epicPath = join(root, 'docs/backlog/epics/goal.md');
+      mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
+      writeFileSync(epicPath, epic());
+      execFileSync('git', ['init', '-b', 'main'], { cwd: root });
+      const base = commit(root, 'base');
+      setOriginMain(root, base);
+
+      execFileSync('git', ['switch', '-c', 'feature'], { cwd: root });
+      writeFileSync(epicPath, withMarker(epic(), sha));
+      const pullRequestHead = commit(root, 'marker');
+      execFileSync('git', ['switch', 'main'], { cwd: root });
+
+      const eventPath = join(root, 'event.json');
+      writeFileSync(
+        eventPath,
+        JSON.stringify({ pull_request: { body: '', head: { sha: pullRequestHead } } }),
+      );
+      expect(
+        execFileSync(process.execPath, [script], {
+          cwd: root,
+          encoding: 'utf8',
+          env: childEnv({ GITHUB_EVENT_PATH: eventPath }),
+        }),
+      ).toContain('1 marker(s) established');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when the exact PR head commit is unavailable', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rifty-goal-missing-pr-head-'));
+    try {
+      writeFileSync(join(root, 'README.md'), 'fixture\n');
+      execFileSync('git', ['init', '-b', 'main'], { cwd: root });
+      const base = commit(root, 'base');
+      setOriginMain(root, base);
+      const eventPath = join(root, 'event.json');
+      writeFileSync(
+        eventPath,
+        JSON.stringify({ pull_request: { body: '', head: { sha: nextSha } } }),
+      );
+
+      const result = spawnSync(process.execPath, [script], {
+        cwd: root,
+        encoding: 'utf8',
+        env: childEnv({ GITHUB_EVENT_PATH: eventPath }),
+      });
+      expect(result.status).toBe(1);
+      expect(result.stdout).not.toContain('SKIPPED');
+      expect(result.stderr).toContain('no origin/main merge-base for pull-request history');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('anchors the declared run to merge-base vs head content, not commit topology', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rifty-goal-baseline-'));
+    try {
+      const epicPath = join(root, 'docs/backlog/epics/goal.md');
+      const sourceDir = join(root, 'packages/x/src');
+      mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
+      mkdirSync(sourceDir, { recursive: true });
+      writeFileSync(epicPath, epic());
+      execFileSync('git', ['init', '-b', 'main'], { cwd: root });
+      const baseline = commit(root, 'goal');
+      setOriginMain(root, baseline);
+
+      writeFileSync(epicPath, withMarker(epic(), baseline));
+      const markerCommit = commit(root, 'marker');
+      setOriginMain(root, markerCommit);
+      writeFileSync(join(sourceDir, 'a.ts'), 'export const shipped = true;\n');
+      commit(root, 'source');
+
+      expect(
+        execFileSync(process.execPath, [script], {
+          cwd: root,
+          encoding: 'utf8',
+          env: childEnv({ RIFTY_GOAL_BASELINE: `goal@${baseline}` }),
+        }),
+      ).toContain('goal-contract: OK');
+      const ratchet = spawnSync(process.execPath, [script], {
+        cwd: root,
+        encoding: 'utf8',
+        env: childEnv({ RIFTY_GOAL_BASELINE: `goal@${markerCommit}` }),
+      });
+      expect(ratchet.status).toBe(1);
+      expect(ratchet.stderr).toContain('keeps goal_baseline');
+
+      writeFileSync(epicPath, withMarker(epic(), nextSha));
+      commit(root, 'tamper');
+      writeFileSync(epicPath, withMarker(epic(), baseline));
+      commit(root, 'restore');
+      expect(
+        execFileSync(process.execPath, [script], { cwd: root, encoding: 'utf8', env: childEnv() }),
+      ).toContain('no autonomous goal declared');
+
+      writeFileSync(epicPath, withMarker(epic(), nextSha));
+      commit(root, 'retamper');
+      const changed = spawnSync(process.execPath, [script], {
+        cwd: root,
+        encoding: 'utf8',
+        env: childEnv(),
+      });
+      expect(changed.status).toBe(1);
+      expect(changed.stderr).toContain('active goal_baseline changed');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('allows closure only after every reverse-linked residual is gone', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rifty-goal-closure-'));
+    try {
+      const epicPath = join(root, 'docs/backlog/epics/goal.md');
+      const itemPath = join(root, 'docs/backlog/playground/a.md');
+      mkdirSync(join(root, 'docs/backlog/epics'), { recursive: true });
+      mkdirSync(join(root, 'docs/backlog/playground'), { recursive: true });
+      writeFileSync(epicPath, withMarker(epic(), sha));
+      writeFileSync(itemPath, '---\nkind: item\nstatus: ready\nepic: goal\n---\n\nChild.\n');
+      execFileSync('git', ['init', '-b', 'main'], { cwd: root });
+      const base = commit(root, 'base');
+      setOriginMain(root, base);
+
+      rmSync(epicPath);
+      commit(root, 'close epic');
+      const residual = spawnSync(process.execPath, [script], {
+        cwd: root,
+        encoding: 'utf8',
+        env: childEnv({ RIFTY_GOAL_BASELINE: `goal@${sha}` }),
+      });
+      expect(residual.status).toBe(1);
+      expect(residual.stderr).toContain('open residual items: playground/a');
+
+      rmSync(itemPath);
+      commit(root, 'close item');
+      expect(
+        execFileSync(process.execPath, [script], {
+          cwd: root,
+          encoding: 'utf8',
+          env: childEnv({ RIFTY_GOAL_BASELINE: `goal@${sha}` }),
+        }),
+      ).toContain('closure candidate');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

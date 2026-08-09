@@ -1,21 +1,24 @@
 #!/usr/bin/env node
 /**
  * Budget tripwire (docs/backlog/README.md §Budget). An autonomous source PR
- * names one Goal-Baseline + Budget-Slice. Merge-base Budget is immutable;
- * Contract+RED may append the selected JIT row before pickup. Hand-written
- * insertions: > band warns, >= 2× fails. Mechanism detection is advisory.
+ * names one Goal-Baseline + Budget-Slice. Every check compares merge-base vs
+ * PR-head aggregate content: merge-base Budget is immutable; head may append
+ * the selected JIT row. Hand-written insertions: > band warns, >= 2× fails.
+ * Mechanism detection is advisory.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as ts from 'typescript';
 import { declaredGoals, historyHeadRevision, parseGoalBaseline } from './goal-contract.mjs';
-import { classifyAutonomousRunPath, pickupCommit } from './run-pickup.mjs';
+import { classifyAutonomousRunPath } from './run-pickup.mjs';
 
 const MECHANISM_RE = /\b(epoch|generation|fifo|ledger|lease|seenRequest\w*|opId)\b/i;
 const BUDGET_SECTION_RE = /^## Budget[ \t]*(?:\r?\n|$)[\s\S]*?(?=^##[ \t]+|$(?![\s\S]))/mu;
 const BUDGET_ROW_RE =
   /^\|\s*`?([\w./-]+)`?\s*\|\s*(\d[\d_]*)\s*[–-]\s*(\d[\d_]*)\s*\|[^\r\n]*(?:\r?\n)?$/u;
+/** Contract authorship is not implementation mass. */
+const CONTRACT_AUTHORSHIP_RE = /^docs\/backlog\//u;
 
 /** `a/{b => c}/d` and `a => b` numstat paths resolve to the new path. */
 export function newPath(path) {
@@ -79,24 +82,24 @@ export function parseBudget(epicText) {
 }
 
 /**
- * Freeze merge-base Budget bytes; Contract+RED may add only its selected row.
+ * Freeze merge-base Budget bytes; head may add only its selected JIT row.
  * @returns {string[]} violations (empty = valid evolution)
  */
-export function validateBudgetAuthority(baseEpicText, pickupEpicText, selectedSlice) {
+export function validateBudgetAuthority(baseEpicText, headEpicText, selectedSlice) {
   const base = budgetSection(baseEpicText);
-  const pickup = budgetSection(pickupEpicText);
+  const head = budgetSection(headEpicText);
   if (base === null) return ['merge-base epic has no ## Budget authority'];
-  if (pickup === null) return ['pickup epic removed ## Budget authority'];
+  if (head === null) return ['head epic removed ## Budget authority'];
 
   const baseRows = budgetLines(base).map(budgetRow).filter(Boolean);
-  const pickupRows = budgetLines(pickup).map(budgetRow).filter(Boolean);
+  const headRows = budgetLines(head).map(budgetRow).filter(Boolean);
   const baseSlices = new Set(baseRows.map((row) => row.slice));
-  const newRows = pickupRows.filter((row) => !baseSlices.has(row.slice));
+  const newRows = headRows.filter((row) => !baseSlices.has(row.slice));
   const violations = [];
 
   for (const [side, rows] of [
     ['merge-base', baseRows],
-    ['pickup', pickupRows],
+    ['head', headRows],
   ]) {
     const seen = new Set();
     for (const row of rows) {
@@ -105,24 +108,24 @@ export function validateBudgetAuthority(baseEpicText, pickupEpicText, selectedSl
     }
   }
   if (newRows.length > 1) {
-    violations.push(`pickup adds ${newRows.length} Budget rows; want at most one`);
+    violations.push(`head adds ${newRows.length} Budget rows; want at most one`);
   }
   for (const row of newRows) {
     if (row.slice !== selectedSlice) {
       violations.push(
-        `pickup adds Budget row "${row.slice}" instead of selected slice "${selectedSlice}"`,
+        `head adds Budget row "${row.slice}" instead of selected slice "${selectedSlice}"`,
       );
     }
   }
 
-  const fixedPickup = budgetLines(pickup)
+  const fixedHead = budgetLines(head)
     .filter((line) => {
       const row = budgetRow(line);
       return row === null || baseSlices.has(row.slice);
     })
     .join('');
-  if (fixedPickup !== base) {
-    violations.push('pickup rewrites merge-base Budget content or existing rows');
+  if (fixedHead !== base) {
+    violations.push('head rewrites merge-base Budget content or existing rows');
   }
   return violations;
 }
@@ -191,7 +194,10 @@ function sliceItemEntries(epicText) {
   );
 }
 
-/** Every selected row maps once to a ready, reverse-linked item at pickup. */
+/**
+ * Every selected row maps once to a ready, reverse-linked item. `read` sees the
+ * head text, or the base text when this PR deleted the item (closed on done).
+ */
 export function validateSelectedSliceItems(epicText, selected, epicSlug, read) {
   const entries = sliceItemEntries(epicText);
   const violations = [];
@@ -297,6 +303,14 @@ function git(...args) {
   return execFileSync('git', args, { encoding: 'utf8' });
 }
 
+function showText(revision, path) {
+  try {
+    return git('show', `${revision}:${path}`);
+  } catch {
+    return null;
+  }
+}
+
 function main() {
   const readEvent = (path) => readFileSync(path, 'utf8');
   const selection = declaredBudgetSelection(process.env, readEvent);
@@ -317,80 +331,73 @@ function main() {
     process.exit(1);
   }
   const head = historyHead.revision;
-  let mergeBase;
+  let base;
   try {
-    mergeBase = git('merge-base', 'origin/main', head).trim();
+    base = git('merge-base', 'origin/main', head).trim();
   } catch {
     console.error('budget: ✗ no origin/main merge-base; declared tripwire cannot be checked');
     process.exit(1);
   }
-  const pickup = pickupCommit(mergeBase, git, head);
-  const readAtPickup = (path) => {
+  const readHead = (path) => {
+    if (head !== 'HEAD') return showText(head, path);
     try {
-      return git('show', `${pickup}:${path}`);
+      return readFileSync(path, 'utf8');
     } catch {
       return null;
     }
   };
+  const readBase = (path) => showText(base, path);
   const epicPath = `docs/backlog/epics/${epicSlug}.md`;
-  const epicText = readAtPickup(epicPath);
+  const baseEpicText = readBase(epicPath);
+  // Head epic is the authority; terminal closure deletes it — fall back to base.
+  const epicText = readHead(epicPath) ?? baseEpicText;
   if (epicText === null) {
-    console.error(`budget: ✗ declared epic ${epicPath} not found at pickup ${pickup.slice(0, 12)}`);
+    console.error(`budget: ✗ declared epic ${epicPath} not found at base ${base.slice(0, 12)}`);
     process.exit(1);
-  }
-  let baseEpicText = null;
-  try {
-    baseEpicText = git('show', `${mergeBase}:${epicPath}`);
-  } catch {
-    /* reported by the authority validator */
   }
   const authorityViolations = validateBudgetAuthority(baseEpicText, epicText, slice);
   if (authorityViolations.length > 0) {
     console.error(
-      `budget: ${authorityViolations.length} authority violation(s) from merge-base to pickup:`,
+      `budget: ${authorityViolations.length} authority violation(s) from merge-base to head:`,
     );
     for (const violation of authorityViolations) console.error(`  ✗ ${violation}`);
     process.exit(1);
   }
   const budget = parseBudget(epicText);
   if (!budget || !budget.slices.has(slice)) {
-    console.error(`budget: ✗ epic ${epicSlug} declared no pickup Budget slice "${slice}"`);
+    console.error(`budget: ✗ epic ${epicSlug} declared no head Budget slice "${slice}"`);
     process.exit(1);
   }
-  const itemViolations = validateSelectedSliceItems(epicText, [slice], epicSlug, readAtPickup);
+  const readItem = (path) => readHead(path) ?? readBase(path);
+  const itemViolations = validateSelectedSliceItems(epicText, [slice], epicSlug, readItem);
   if (itemViolations.length > 0) {
     console.error(
-      `budget: ${itemViolations.length} invalid selected item(s) at pickup ${pickup.slice(0, 12)}:`,
+      `budget: ${itemViolations.length} invalid selected item(s) vs base ${base.slice(0, 12)}:`,
     );
     for (const violation of itemViolations) console.error(`  ✗ ${violation}`);
     process.exit(1);
   }
-  const numstat = git('diff', '-M', '--numstat', pickup, head)
+  const numstat = git('diff', '-M', '--numstat', base, head)
     .trim()
     .split('\n')
     .filter(Boolean)
     .map((line) => {
       const [added, , ...rest] = line.split('\t');
       return { added: added === '-' ? null : Number(added), path: newPath(rest.join('\t')) };
-    });
+    })
+    .filter((row) => !CONTRACT_AUTHORSHIP_RE.test(row.path));
   const mass = evaluateMass(numstat, budget.slices.get(slice), budget.generated);
   const failures = [];
   if (mass.level === 'fail') failures.push(mass.message);
   else if (mass.level === 'warn') console.warn(`budget: ⚠ ${mass.message}`);
   if (budget.mechanismsZero && !budget.substrate) {
-    const addedPaths = git('diff', '--name-status', pickup)
+    const addedPaths = git('diff', '--name-status', base, head)
       .trim()
       .split('\n')
       .filter((line) => line.startsWith('A'))
       .map((line) => line.split('\t').pop());
     const hits = scanMechanisms(
-      addedPaths.map((path) => {
-        try {
-          return { path, content: readFileSync(path, 'utf8') };
-        } catch {
-          return { path, content: '' };
-        }
-      }),
+      addedPaths.map((path) => ({ path, content: readHead(path) ?? '' })),
     );
     if (hits.length > 0) {
       console.warn(

@@ -26,6 +26,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   alone. Pool deleted rather than phased (supersedes `d7f862bc5` by owner
   call): the heavy tasks dominate runtime, so parallelism bought seconds and
   cost green runs.
+- **Gates anchor to content, not commit history.** `check:contract-drift`,
+  `check:goal-contract`, `check:budget` now read one aggregate merge-base→head
+  diff; commit-topology machinery (pickup inference, marker lineage walking,
+  per-commit attribution, ancestor checks) is deleted. A 4-day session audit
+  found the history anchors' only real catches were self-inflicted — the
+  rebase-replay CHANGELOG triplication existed because the gates themselves
+  forbade merge-from-main — while costing three full re-reviews of
+  byte-identical trees, forced separate demotion PRs (#233→#235, #241), and
+  marker-SHA squash fragility. Now: a ready contract must match merge-base
+  (allowed deltas: pickup `ready-verdict:` line, exact `blocked_by:`
+  subtraction, `ready`→`draft` demotion — in-PR demotion is legal, the
+  §Backlog readiness 5 separate-PR mandate is gone); epic frozen fields are
+  checked against merge-base, inductively frozen since bootstrap;
+  `goal_baseline` is an opaque write-once run id gates never resolve — merge
+  strategy and squash are irrelevant; the insertion band excludes
+  `docs/backlog/**`; merge-from-main is legal. Review verdicts bind to the
+  checked tree, not the commit.
 - **An epic fit now ends with its marker, and the marker SHA must survive the
   merge.** Two gaps found by handing a freshly fitted epic to an agent: §Epic fit
   stopped at sign-off, so the fit PR landed without `goal_baseline` and the run
