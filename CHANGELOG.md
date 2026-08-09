@@ -43,6 +43,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   strategy and squash are irrelevant; the insertion band excludes
   `docs/backlog/**`; merge-from-main is legal. Review verdicts bind to the
   checked tree, not the commit.
+- **Two context-cost gaps, both measured on real agent sessions over this repo.**
+  A full audit of two 132h Codex sessions (43 and 31 compactions, 894M and 518M
+  billed input tokens) found the two largest avoidable sinks, neither of which a
+  bigger context window fixes. (1) `rifty-review` launched the checkpoint
+  reviewer as a live process and polled its stdout every 30s, pulling the
+  reviewer's OWN file reads, test runs and hook noise into the caller's window —
+  ~1.3k tokens per poll, peaks at 10k, 12-24 polls per run, 15.8% of one
+  session's entire bill — while the binding verdict was already on disk via
+  `-o`. The documented command now redirects stdout to a log; liveness comes from
+  process state (proven by 109 real polls that returned empty output and still
+  reported `Process running`), and the log is read only when `verdict.json` is
+  missing. (2) Reads of a file already in the window were 42-45% of all reads,
+  but with a line multiplier of 1.04-1.11 — not repeats, a sliding line-number
+  walk over files too big to read at once. `installer.ts` (3066 lines) took 213
+  reads = 12.5% of every source-read token; top-10 files = 38%. New gate
+  `pnpm check:file-size`: prod sources ≤ 800 lines, today's 48 offenders pinned
+  at current size and shrink-only, real burn-down re-recorded so it cannot
+  regrow. Burn-down plan:
+  `docs/backlog/toolchain-build/oversized-source-burndown.md`.
 - **An epic fit now ends with its marker, and the marker SHA must survive the
   merge.** Two gaps found by handing a freshly fitted epic to an agent: §Epic fit
   stopped at sign-off, so the fit PR landed without `goal_baseline` and the run

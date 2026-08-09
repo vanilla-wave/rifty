@@ -14,11 +14,15 @@ test-results/
 .env.local
 .vite/
 .playwright-mcp/
-# `.claude/` is local agent state, EXCEPT shared skills: Claude Code reads
-# .claude/skills, Codex reads .agents/skills via symlink — one committed source.
+# `.claude/` is local agent state, EXCEPT shared skills and user commands:
+# Claude Code reads .claude/skills, Codex reads .agents/skills via symlink — one
+# committed source. `.claude/commands/` is user-invoked only: loaded when the
+# user types the slash command, never advertised to a model as a skill.
 .claude/*
 !.claude/skills/
 !.claude/skills/**
+!.claude/commands/
+!.claude/commands/**
 docs/superpowers/
 /vite-iframe-*.png
 /vite-running-in-browser.png

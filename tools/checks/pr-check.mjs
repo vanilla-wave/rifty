@@ -70,6 +70,7 @@ const TASKS = [
   'check:publish-config-drift',
   'check:source-grep',
   'check:dir-owner',
+  'check:file-size',
   'check:contract-drift',
   'check:goal-contract',
   'check:budget',
