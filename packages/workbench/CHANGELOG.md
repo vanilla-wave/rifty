@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Dependency snapshot v3 now carries the exact integrity-pinned cache closure
+  required by registry-backed shadow replay, verifies it before mutation, and
+  merges it before publishing the restored lockfile. The first explicit install
+  after instant Vite 8 restore no longer fails `EBROKENLOCK` (ADR-0346).
+
 ### Added
 
 - The terminal `node` command now admits Node 24-compatible CommonJS

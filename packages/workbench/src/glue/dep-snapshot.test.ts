@@ -1,8 +1,9 @@
-import type { InstallResult } from '@riftydev/npm-client';
+import { readFile } from 'node:fs/promises';
+import { type InstallResult, type Packument, RegistryClient, install } from '@riftydev/npm-client';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  type DepSnapshotV2,
+  type DepSnapshotV3,
   buildDepSnapshot,
   fetchDepSnapshot,
   parseDepSnapshot,
@@ -24,6 +25,78 @@ const PACKAGE_JSON_TEXT = JSON.stringify({
   dependencies: { vite: '^5.4.0' },
 });
 const PACKAGE_LOCK_TEXT = '{"lockfileVersion":3,"packages":{}}';
+const LIGHTNING_SOURCE = 'lightningcss-wasm';
+const LIGHTNING_VERSION = '1.32.0';
+const LIGHTNING_URL = `https://registry.test/${LIGHTNING_SOURCE}-${LIGHTNING_VERSION}.tgz`;
+const LIGHTNING_INTEGRITY =
+  'sha512-SteAkCtRuSCDYPGHKhLV/dDs5Bk+7I4QUxWxfk4xwsTI1rQk8MQyYtpGcd3NECsUGzK0q2/KqoVS+YHCqKHUTQ==';
+const LIGHTNING_TARBALL_URL = new URL(
+  '../../../../tools/shadow-registry/src/fixtures/lightningcss-wasm-1.32.0.tgz',
+  import.meta.url,
+);
+const LIGHTNING_DEPENDENCIES = { lightningcss: '^1.32.0' };
+const LIGHTNING_PACKAGE_JSON_TEXT = JSON.stringify({
+  name: 'fixture',
+  version: '1.0.0',
+  dependencies: LIGHTNING_DEPENDENCIES,
+});
+
+class LightningRegistry extends RegistryClient {
+  constructor(private readonly tarball: Uint8Array) {
+    super({
+      baseUrl: 'https://registry.test',
+      fetch: async () => new Response('', { status: 599 }),
+    });
+  }
+
+  override async getPackument(name: string): Promise<Packument> {
+    if (name !== LIGHTNING_SOURCE) throw new Error(`unexpected packument ${name}`);
+    const manifest: Packument['versions'][string] & { bundleDependencies: string[] } = {
+      name,
+      version: LIGHTNING_VERSION,
+      dependencies: { 'napi-wasm': '^1.0.1' },
+      optionalDependencies: {},
+      peerDependencies: {},
+      bundleDependencies: ['napi-wasm'],
+      main: 'index.mjs',
+      module: 'index.mjs',
+      type: 'module',
+      dist: { tarball: LIGHTNING_URL, integrity: LIGHTNING_INTEGRITY },
+    };
+    return {
+      name,
+      'dist-tags': { latest: LIGHTNING_VERSION },
+      versions: { [LIGHTNING_VERSION]: manifest },
+    };
+  }
+
+  override async getTarball(url: string): Promise<Uint8Array> {
+    if (url !== LIGHTNING_URL) throw new Error(`unexpected tarball ${url}`);
+    return this.tarball.slice();
+  }
+}
+
+let lightningSnapshotPromise: Promise<DepSnapshotV3> | undefined;
+
+async function lightningSnapshot(): Promise<DepSnapshotV3> {
+  lightningSnapshotPromise ??= (async () => {
+    const baked = createMemoryFs();
+    await baked.vfs.mkdir(ROOT, { recursive: true });
+    await baked.vfs.writeFile(`${ROOT}/package.json`, LIGHTNING_PACKAGE_JSON_TEXT);
+    const fresh = await install('fixture', '1.0.0', LIGHTNING_DEPENDENCIES, {
+      vfs: baked.vfs,
+      cwd: ROOT,
+      registry: new LightningRegistry(new Uint8Array(await readFile(LIGHTNING_TARBALL_URL))),
+      onSubstitution: () => undefined,
+    });
+    return buildDepSnapshot(baked.fsSync, ROOT, {
+      templateId: 'vite8',
+      deps: LIGHTNING_DEPENDENCIES,
+      packages: fresh.packages.length,
+    });
+  })();
+  return structuredClone(await lightningSnapshotPromise);
+}
 
 function ensureProjectDependencies(opts: TestEnsureProjectDepsOptions) {
   const {
@@ -91,7 +164,7 @@ function bakedFs(): MemoryFsSync {
 }
 
 describe('dep snapshot (ADR-0135)', () => {
-  it('round-trips the node_modules tree, nested copies, binaries, and the lockfile', () => {
+  it('round-trips the node_modules tree, nested copies, binaries, and the lockfile', async () => {
     const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
       templateId: 'vite',
       deps: { vite: '^5.4.0' },
@@ -101,7 +174,7 @@ describe('dep snapshot (ADR-0135)', () => {
 
     const target = new MemoryFsSync();
     target.mkdirSync(ROOT, { recursive: true });
-    restoreDepSnapshot(target, ROOT, reparsed);
+    await restoreDepSnapshot(target, ROOT, reparsed);
 
     expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/vite/package.json`))).toBe(
       '{"name":"vite"}',
@@ -122,6 +195,132 @@ describe('dep snapshot (ADR-0135)', () => {
     expect(reparsed.deps).toEqual({ vite: '^5.4.0' });
     expect(reparsed.packageJsonText).toBe(PACKAGE_JSON_TEXT);
     expect(reparsed.installArtifactIdentity).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it('[fault: lossy-aggregate / torn-state] restores lockfile replay bytes without replacing sibling cache entries', async () => {
+    const snapshot = await lightningSnapshot();
+    const reparsed = parseDepSnapshot(serializeDepSnapshot(snapshot));
+    const cacheFile = reparsed.tarballCache.files[0];
+    if (!cacheFile) throw new Error('LightningCSS snapshot omitted its replay cache');
+    const cachePath = `${reparsed.tarballCache.root}/${cacheFile.path}`;
+    const target = new MemoryFsSync();
+    const siblingPath = '/.rifty/tarball-cache/zz/sibling-1.0.0.tgz';
+    write(target, siblingPath, enc.encode('keep'));
+
+    await restoreDepSnapshot(target, ROOT, reparsed);
+
+    expect(Buffer.from(target.readFileBytesSync(cachePath)).toString('base64')).toBe(
+      cacheFile.content,
+    );
+    expect(dec.decode(target.readFileBytesSync(siblingPath))).toBe('keep');
+    expect(dec.decode(target.readFileBytesSync(`${ROOT}/package-lock.json`))).toBe(
+      snapshot.lockfile,
+    );
+  });
+
+  it('[fault: lossy-aggregate] refuses to restore a shadow-replay lockfile without its pinned bytes', async () => {
+    const snapshot = await lightningSnapshot();
+    const missing = {
+      ...snapshot,
+      tarballCache: { ...snapshot.tarballCache, files: [] },
+    } satisfies DepSnapshotV3;
+    const target = new MemoryFsSync();
+    write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('keep'));
+
+    await expect(restoreDepSnapshot(target, ROOT, missing)).rejects.toThrow(
+      /cache does not match its lockfile closure/,
+    );
+    expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/keep/index.js`))).toBe('keep');
+    expect(target.existsSync(`${ROOT}/package-lock.json`)).toBe(false);
+  });
+
+  it('[fault: torn-state / quota-perm-fail] does not publish the lockfile when cache merge fails', async () => {
+    const snapshot = await lightningSnapshot();
+    const cacheFile = snapshot.tarballCache.files[0];
+    if (!cacheFile) throw new Error('LightningCSS snapshot omitted its replay cache');
+    const cachePath = `${snapshot.tarballCache.root}/${cacheFile.path}`;
+    class FailingCacheWriteFs extends MemoryFsSync {
+      failCacheWrite = false;
+
+      override writeFileSync(path: string, data: Uint8Array): void {
+        if (this.failCacheWrite && path === cachePath)
+          throw new Error('injected cache write failure');
+        super.writeFileSync(path, data);
+      }
+    }
+    const target = new FailingCacheWriteFs();
+    const priorLockfile = '{"lockfileVersion":3,"name":"prior"}';
+    const siblingPath = '/.rifty/tarball-cache/zz/sibling-1.0.0.tgz';
+    write(target, `${ROOT}/package-lock.json`, enc.encode(priorLockfile));
+    write(target, siblingPath, enc.encode('keep-cache'));
+    target.failCacheWrite = true;
+
+    await expect(restoreDepSnapshot(target, ROOT, snapshot)).rejects.toThrow(
+      'injected cache write failure',
+    );
+
+    expect(dec.decode(target.readFileBytesSync(`${ROOT}/package-lock.json`))).toBe(priorLockfile);
+    expect(dec.decode(target.readFileBytesSync(siblingPath))).toBe('keep-cache');
+    expect(target.existsSync(cachePath)).toBe(false);
+  });
+
+  it('does not carry ordinary lockfile tarballs whose replay may use the registry', () => {
+    const fs = bakedFs();
+    write(
+      fs,
+      `${ROOT}/package-lock.json`,
+      enc.encode(
+        JSON.stringify({
+          lockfileVersion: 3,
+          packages: {
+            'node_modules/lightningcss-wasm': {
+              version: '1.32.0',
+              integrity: LIGHTNING_INTEGRITY,
+            },
+          },
+        }),
+      ),
+    );
+    write(fs, '/.rifty/tarball-cache/St/lightningcss-wasm-1.32.0.tgz', new Uint8Array([1]));
+
+    const snapshot = buildDepSnapshot(fs, ROOT, {
+      templateId: 'ordinary-lockfile',
+      deps: { vite: '^5.4.0' },
+      packages: 8,
+    });
+
+    expect(snapshot.tarballCache.files).toEqual([]);
+  });
+
+  it('runs the first post-restore registry shadow replay from the carried cache with zero registry fetches', async () => {
+    const snapshot = await lightningSnapshot();
+    expect(snapshot.tarballCache.files).toHaveLength(1);
+
+    const restored = createMemoryFs();
+    await restored.vfs.mkdir(ROOT, { recursive: true });
+    await restored.vfs.writeFile(`${ROOT}/package.json`, LIGHTNING_PACKAGE_JSON_TEXT);
+    await restoreDepSnapshot(restored.fsSync, ROOT, snapshot);
+    const registryFetch = vi.fn<typeof fetch>(async () => {
+      throw new Error('registry fetch forbidden during matched shadow replay');
+    });
+    const events: Array<{ name: string; version: string; cacheHit: boolean }> = [];
+
+    const replay = await install('fixture', '1.0.0', LIGHTNING_DEPENDENCIES, {
+      vfs: restored.vfs,
+      cwd: ROOT,
+      registry: new RegistryClient({ baseUrl: 'https://registry.invalid', fetch: registryFetch }),
+      onPackage: (event) => events.push(event),
+      onSubstitution: () => undefined,
+    });
+
+    expect(registryFetch).not.toHaveBeenCalled();
+    expect(events).toEqual([{ name: 'lightningcss-wasm', version: '1.32.0', cacheHit: true }]);
+    expect(replay.provenance.resolution).toBe('lockfile');
+    expect(replay.provenance.packages).toContainEqual({
+      name: 'lightningcss-wasm',
+      version: '1.32.0',
+      transport: 'cache',
+    });
   });
 
   it('never serializes top-level or nested install-stamp claims', () => {
@@ -159,32 +358,66 @@ describe('dep snapshot (ADR-0135)', () => {
     'a/node_modules/.rifty-install-stamp.json',
     '.rifty-install-stamp.json/payload',
     'a/node_modules/.rifty-install-stamp.json/payload',
-  ])('rejects marker-bearing snapshot ingress before replacing destination bytes: %s', (path) => {
-    const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
-      templateId: 'vite',
-      deps: { vite: '^5.4.0' },
-      packages: 8,
-    });
-    const markerBearing = {
+  ])(
+    'rejects marker-bearing snapshot ingress before replacing destination bytes: %s',
+    async (path) => {
+      const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
+        templateId: 'vite',
+        deps: { vite: '^5.4.0' },
+        packages: 8,
+      });
+      const markerBearing = {
+        ...snapshot,
+        nodeModules: {
+          ...snapshot.nodeModules,
+          files: [
+            ...snapshot.nodeModules.files,
+            {
+              path,
+              encoding: 'base64' as const,
+              content: btoa('forged-claim'),
+            },
+          ],
+        },
+      } satisfies DepSnapshotV3;
+      const target = new MemoryFsSync();
+      write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('keep'));
+
+      await expect(restoreDepSnapshot(target, ROOT, markerBearing)).rejects.toThrow(
+        /install-stamp claim/,
+      );
+      expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/keep/index.js`))).toBe(
+        'keep',
+      );
+      expect(target.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(false);
+    },
+  );
+
+  it('[fault: poisoned-cache] rejects corrupt replay bytes before any destination mutation', async () => {
+    const snapshot = await lightningSnapshot();
+    const cacheFile = snapshot.tarballCache.files[0];
+    if (!cacheFile) throw new Error('LightningCSS snapshot omitted its replay cache');
+    const cachePath = `${snapshot.tarballCache.root}/${cacheFile.path}`;
+    const corrupt = {
       ...snapshot,
-      nodeModules: {
-        ...snapshot.nodeModules,
-        files: [
-          ...snapshot.nodeModules.files,
-          {
-            path,
-            encoding: 'base64' as const,
-            content: btoa('forged-claim'),
-          },
-        ],
+      tarballCache: {
+        ...snapshot.tarballCache,
+        files: snapshot.tarballCache.files.map((file) => ({
+          ...file,
+          content: btoa('corrupt'),
+        })),
       },
-    } satisfies DepSnapshotV2;
+    } satisfies DepSnapshotV3;
     const target = new MemoryFsSync();
     write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('keep'));
+    const siblingPath = '/.rifty/tarball-cache/zz/sibling-1.0.0.tgz';
+    write(target, siblingPath, enc.encode('keep-cache'));
 
-    expect(() => restoreDepSnapshot(target, ROOT, markerBearing)).toThrow(/install-stamp claim/);
+    await expect(restoreDepSnapshot(target, ROOT, corrupt)).rejects.toThrow(/integrity mismatch/);
+
     expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/keep/index.js`))).toBe('keep');
-    expect(target.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(false);
+    expect(dec.decode(target.readFileBytesSync(siblingPath))).toBe('keep-cache');
+    expect(target.existsSync(cachePath)).toBe(false);
   });
 
   it('serializes bake and migration payloads in one stable top-level order', () => {
@@ -201,8 +434,9 @@ describe('dep snapshot (ADR-0135)', () => {
       deps: baked.deps,
       packages: baked.packages,
       lockfile: baked.lockfile,
+      tarballCache: baked.tarballCache,
       nodeModules: baked.nodeModules,
-    } satisfies DepSnapshotV2;
+    } satisfies DepSnapshotV3;
 
     expect(serializeDepSnapshot(migrationOrder)).toBe(serializeDepSnapshot(baked));
     expect(Object.keys(JSON.parse(serializeDepSnapshot(baked)) as object)).toEqual([
@@ -213,11 +447,12 @@ describe('dep snapshot (ADR-0135)', () => {
       'packageJsonText',
       'installArtifactIdentity',
       'lockfile',
+      'tarballCache',
       'nodeModules',
     ]);
   });
 
-  it('restores the baked tree into a DIFFERENT root (multi-project dynamic root, ADR-0165)', () => {
+  it('restores the baked tree into a DIFFERENT root (multi-project dynamic root, ADR-0165)', async () => {
     // Baked at /workspace, restored into a per-project root. Archive paths are
     // root-RELATIVE, so the restore must RE-ROOT, not throw "Archive root mismatch"
     // — the multi-project active root is /scratch or /projects/<id>, never the
@@ -230,7 +465,7 @@ describe('dep snapshot (ADR-0135)', () => {
     });
     const target = new MemoryFsSync();
     const projectRoot = '/projects/p1';
-    restoreDepSnapshot(target, projectRoot, snapshot);
+    await restoreDepSnapshot(target, projectRoot, snapshot);
 
     expect(
       dec.decode(target.readFileBytesSync(`${projectRoot}/node_modules/vite/package.json`)),
@@ -243,7 +478,7 @@ describe('dep snapshot (ADR-0135)', () => {
     expect(target.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(false);
   });
 
-  it('restore REPLACES a stale node_modules instead of merging over it', () => {
+  it('restore REPLACES a stale node_modules instead of merging over it', async () => {
     const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
       templateId: 'vite',
       deps: { vite: '^5.4.0' },
@@ -252,7 +487,7 @@ describe('dep snapshot (ADR-0135)', () => {
 
     const target = new MemoryFsSync();
     write(target, `${ROOT}/node_modules/stale-pkg/index.js`, enc.encode('stale'));
-    restoreDepSnapshot(target, ROOT, snapshot);
+    await restoreDepSnapshot(target, ROOT, snapshot);
 
     expect(target.existsSync(`${ROOT}/node_modules/stale-pkg/index.js`)).toBe(false);
     expect(target.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(true);
@@ -260,7 +495,7 @@ describe('dep snapshot (ADR-0135)', () => {
 
   it('rejects malformed snapshots loudly', () => {
     expect(() => parseDepSnapshot('{"version":1}')).toThrow('version');
-    expect(() => parseDepSnapshot('{"version":2,"templateId":"vite"}')).toThrow('Malformed');
+    expect(() => parseDepSnapshot('{"version":3,"templateId":"vite"}')).toThrow('Malformed');
     const mismatched = buildDepSnapshot(bakedFs(), ROOT, {
       templateId: 'vite',
       deps: { vite: '^5.4.0' },
@@ -313,7 +548,7 @@ describe('dep snapshot (ADR-0135)', () => {
       templateId: 'vite',
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
-      fetchSnapshot: async () => rawSnapshot as unknown as DepSnapshotV2,
+      fetchSnapshot: async () => rawSnapshot as unknown as DepSnapshotV3,
       install: async () => {
         installed = true;
         return installResult(9);
@@ -372,7 +607,7 @@ describe('dep snapshot (ADR-0135)', () => {
         packages: 8,
       }),
       installArtifactIdentity: `sha256:${'0'.repeat(64)}`,
-    } satisfies DepSnapshotV2;
+    } satisfies DepSnapshotV3;
 
     const result = await ensureProjectDependencies({
       vfs,

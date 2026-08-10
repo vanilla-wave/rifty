@@ -11,7 +11,7 @@ code: [tests/integration/fullstack-demo-live-run.opt-in.test.ts]
 
 ## Context
 
-Running the full rifty stack (installProcessGlobals + timer patches + live install + fs streams) IN-PROCESS inside a vitest worker leaves teardown-time async work whose errors cross vitest's RPC boundary and fail to deserialize — post-suite noise, tests unaffected. Known-good pattern: `vite-live-run.opt-in` spawns its smoke as a SEPARATE tsx child (`tests/integration/fixtures/real-vite-smoke.ts`) precisely to keep runtime globals out of the vitest realm.
+Running the full rifty stack (installProcessGlobals + timer patches + live install + fs streams) IN-PROCESS inside a vitest worker leaves teardown-time async work whose errors cross vitest's RPC boundary and fail to deserialize — post-suite noise, tests unaffected. Known-good pattern: spawn a separate tsx child when a smoke installs runtime globals. The successor `tests/integration/fixtures/real-vite-install-smoke.ts` stops before that boundary; real Vite execution lives in the COI browser-unit lane.
 
 ## Options or Next
 

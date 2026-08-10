@@ -4,7 +4,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildProjectPackageJson } from '../../../apps/playground/src/templates/project-spec.ts';
 import { allProjectSpecs } from '../../../apps/playground/src/templates/registry.ts';
 import identityFile from '../../../packages/workbench/src/generated/install-artifact-identity.json';
-import { serializeDepSnapshot } from '../../../packages/workbench/src/glue/dep-snapshot.ts';
+import {
+  serializeDepSnapshot,
+  verifyDepSnapshotReplayCache,
+} from '../../../packages/workbench/src/glue/dep-snapshot.ts';
 import { effectiveDepsFromPackageJsonText } from '../../../packages/workbench/src/glue/install-stamp.ts';
 import {
   inspectProjectDefinition,
@@ -54,7 +57,7 @@ async function main(): Promise<void> {
     } catch {
       throw new Error(`${spec.id}: snapshot is unreadable; run a full \`pnpm snapshots:bake\``);
     }
-    assertSnapshotArtifactCurrent({
+    const snapshot = assertSnapshotArtifactCurrent({
       bytes,
       snapshotId: spec.bakedNodeModulesSnapshotId,
       label: spec.id,
@@ -66,6 +69,14 @@ async function main(): Promise<void> {
       canonicalize: serializeDepSnapshot,
       validateInstallFiles: proveViteCliPatchInput,
     });
+    try {
+      await verifyDepSnapshotReplayCache(snapshot);
+    } catch (error) {
+      throw new Error(
+        `${spec.id}: ${error instanceof Error ? error.message : String(error)}; run a full \`pnpm snapshots:bake\``,
+        { cause: error },
+      );
+    }
   }
   console.log('snapshot artifacts: current');
 }

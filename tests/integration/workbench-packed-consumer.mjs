@@ -396,8 +396,8 @@ function lockfilePackageName(path) {
 async function materializeSnapshotPackages(snapshotRoot) {
   const compressed = await readFile(viteSnapshot);
   const snapshot = JSON.parse(String(await gunzipAsync(compressed)));
-  if (snapshot.version !== 2 || snapshot.templateId !== 'vite') {
-    throw new Error('Packed consumer requires the committed Vite snapshot v2');
+  if (snapshot.version !== 3 || snapshot.templateId !== 'vite') {
+    throw new Error('Packed consumer requires the committed Vite snapshot v3');
   }
   const lockfile = JSON.parse(snapshot.lockfile);
   const expected = new Map();

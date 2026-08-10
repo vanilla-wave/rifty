@@ -5,7 +5,7 @@ export const sealedWorkbenchFixtureUrl = `/@fs${workspacePath}/tests/browser-uni
 
 export interface BootOwnerOptions {
   readonly workspaceId: string;
-  readonly template?: 'hidden-empty' | 'typescript' | 'vite';
+  readonly template?: 'hidden-empty' | 'typescript' | 'vite' | 'vite8';
   readonly root?: string;
   readonly slug?: string;
   readonly setup?: 'instant' | 'from-scratch';

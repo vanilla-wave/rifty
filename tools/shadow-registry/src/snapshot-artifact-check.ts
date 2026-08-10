@@ -8,13 +8,18 @@ interface SnapshotFile {
 }
 
 export interface CheckedDepSnapshot {
-  readonly version: 2;
+  readonly version: 3;
   readonly templateId: string;
   readonly packageJsonText: string;
   readonly installArtifactIdentity: string;
   readonly deps: Readonly<Record<string, string>>;
   readonly packages: number;
   readonly lockfile: string;
+  readonly tarballCache: {
+    readonly version: 1;
+    readonly root: string;
+    readonly files: readonly SnapshotFile[];
+  };
   readonly nodeModules: {
     readonly version: 1;
     readonly root: string;
@@ -64,10 +69,11 @@ function parseSnapshot(json: string, label: string): CheckedDepSnapshot {
   if (!raw || typeof raw !== 'object' || !('version' in raw)) {
     stale(label, 'snapshot metadata is malformed');
   }
-  if (raw.version !== 2) stale(label, `snapshot version ${String(raw.version)} is not v2`);
+  if (raw.version !== 3) stale(label, `snapshot version ${String(raw.version)} is not v3`);
 
   const snapshot = raw as Partial<CheckedDepSnapshot>;
   const files = snapshot.nodeModules?.files;
+  const cacheFiles = snapshot.tarballCache?.files;
   if (
     typeof snapshot.templateId !== 'string' ||
     typeof snapshot.packageJsonText !== 'string' ||
@@ -76,6 +82,17 @@ function parseSnapshot(json: string, label: string): CheckedDepSnapshot {
     !isStringMap(snapshot.deps) ||
     typeof snapshot.packages !== 'number' ||
     typeof snapshot.lockfile !== 'string' ||
+    snapshot.tarballCache?.version !== 1 ||
+    snapshot.tarballCache.root !== '/.rifty/tarball-cache' ||
+    !Array.isArray(cacheFiles) ||
+    !cacheFiles.every(
+      (file) =>
+        !!file &&
+        typeof file === 'object' &&
+        typeof file.path === 'string' &&
+        file.encoding === 'base64' &&
+        typeof file.content === 'string',
+    ) ||
     snapshot.nodeModules?.version !== 1 ||
     typeof snapshot.nodeModules.root !== 'string' ||
     !Array.isArray(files) ||
@@ -137,7 +154,9 @@ function proveCurrentShimBytes(
 }
 
 /** Read-only contract/drift gate. Never rewrites or relabels an archive. */
-export function assertSnapshotArtifactCurrent(expectation: SnapshotArtifactExpectation): void {
+export function assertSnapshotArtifactCurrent(
+  expectation: SnapshotArtifactExpectation,
+): CheckedDepSnapshot {
   if (
     typeof expectation.snapshotId !== 'string' ||
     !/^sha256:[0-9a-f]{64}$/.test(expectation.snapshotId)
@@ -193,4 +212,5 @@ export function assertSnapshotArtifactCurrent(expectation: SnapshotArtifactExpec
   if (snapshotId !== expectation.snapshotId) {
     stale(expectation.label, 'snapshotId differs from the exact serialized snapshot bytes');
   }
+  return snapshot;
 }

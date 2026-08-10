@@ -24,19 +24,25 @@ function serialize(snapshot: CheckedDepSnapshot): string {
     packageJsonText: snapshot.packageJsonText,
     installArtifactIdentity: snapshot.installArtifactIdentity,
     lockfile: snapshot.lockfile,
+    tarballCache: snapshot.tarballCache,
     nodeModules: snapshot.nodeModules,
   });
 }
 
 function snapshot(): CheckedDepSnapshot {
   return {
-    version: 2,
+    version: 3,
     templateId: 'fixture',
     deps: { native: '1.0.0' },
     packages: 1,
     packageJsonText: PACKAGE_JSON_TEXT,
     installArtifactIdentity: CURRENT_IDENTITY,
     lockfile: '{}',
+    tarballCache: {
+      version: 1,
+      root: '/.rifty/tarball-cache',
+      files: [],
+    },
     nodeModules: {
       version: 1,
       root: '/workspace/node_modules',
@@ -73,7 +79,7 @@ function expectation(
 }
 
 describe('snapshot artifact drift check', () => {
-  it('accepts a canonical current v2 artifact', () => {
+  it('accepts a canonical current v3 artifact', () => {
     expect(() => assertSnapshotArtifactCurrent(expectation())).not.toThrow();
   });
 
@@ -107,13 +113,13 @@ describe('snapshot artifact drift check', () => {
     );
   });
 
-  it('rejects legacy v1 metadata instead of migrating it', () => {
-    const legacy = { ...snapshot(), version: 1 };
+  it('rejects legacy v2 metadata instead of migrating it', () => {
+    const legacy = { ...snapshot(), version: 2 };
     const input = {
       ...expectation(),
       bytes: gzipSync(Buffer.from(JSON.stringify(legacy)), { level: 9 }),
     };
-    expect(() => assertSnapshotArtifactCurrent(input)).toThrow(/version 1.*pnpm snapshots:bake/);
+    expect(() => assertSnapshotArtifactCurrent(input)).toThrow(/version 2.*pnpm snapshots:bake/);
   });
 
   it('rejects semantically equal but noncanonical serialized bytes', () => {
