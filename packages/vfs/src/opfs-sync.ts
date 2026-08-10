@@ -123,16 +123,25 @@ export interface PersistFailureReport {
 const PERSIST_REPORT_SAMPLE = 20;
 
 /**
- * Reporting bound for one queued OPFS side effect. The browser operation
- * itself cannot be cancelled and remains on the FIFO tail; only `flush()`
- * reporting is released so durability callers fail loudly instead of hanging.
+ * Reporting bound for one active OPFS side effect. FIFO queue wait is not I/O
+ * time. The browser operation itself cannot be cancelled and remains on the
+ * FIFO tail; only `flush()` reporting is released so durability callers fail
+ * loudly instead of hanging.
  */
 const PERSIST_OPERATION_REPORT_TIMEOUT_MS = 30_000;
 
 interface PersistOperation {
-  readonly path: string;
+  readonly paths: readonly string[];
   readonly op: PersistFailure['op'];
   readonly sequence: number;
+}
+
+interface PendingPersistOperation {
+  readonly operation: PersistOperation;
+  phase: 'queued' | 'active';
+  reporting: Promise<void>;
+  reportingSettled: boolean;
+  settleReporting: () => void;
 }
 
 interface TrackedPersistFailure {
@@ -196,12 +205,14 @@ export class OpfsFsSync implements FsSync {
    * async write-through.
    */
   private readonly content = new Map<string, Uint8Array>();
-  /** In-flight async OPFS write-through / structural promises; drained by {@link flush}. */
-  private readonly pending: Array<Promise<void>> = [];
+  /** Queued/active OPFS side effects, keyed by FIFO sequence for flush watermarks. */
+  private readonly pending = new Map<number, PendingPersistOperation>();
   /** Serialises OPFS side effects so durable state follows sync call order. */
   private pendingTail: Promise<void> = Promise.resolve();
   /** Real FIFO tail ownership; independent of bounded reporting entries. */
   private pendingTailActive = false;
+  /** Active uncancellable operation whose watchdog already released reporting. */
+  private timedOutHead: PersistOperation | null = null;
   /**
    * Paired async OPFS surface used for content write-through, content
    * preload, and durable file-bearing structural moves/deletes. `null` when
@@ -449,7 +460,7 @@ export class OpfsFsSync implements FsSync {
    * ({@link flush} reports them); the next `refreshIndex` reconciles disk.
    */
   private persistMkdirAsync(path: string, recursive: boolean): void {
-    this.enqueuePending({ path, op: 'mkdir' }, async (operation) => {
+    this.enqueuePending({ paths: [path], op: 'mkdir' }, async (operation) => {
       try {
         await this.persistDirectoryPath(path, recursive);
         this.healPersistFailure(path, operation.sequence);
@@ -472,7 +483,7 @@ export class OpfsFsSync implements FsSync {
    * reconciles any mismatch.
    */
   private persistRmAsync(path: string, recursive: boolean): void {
-    this.enqueuePending({ path, op: 'rm' }, async (operation) => {
+    this.enqueuePending({ paths: [path], op: 'rm' }, async (operation) => {
       try {
         const parent = await this.resolveParent(path);
         await parent.removeEntry(basename(path), { recursive });
@@ -610,7 +621,7 @@ export class OpfsFsSync implements FsSync {
   private enqueueWriteThrough(normalized: string, data: Uint8Array): void {
     const surface = this.asyncSurface;
     if (!surface) return;
-    this.enqueuePending({ path: normalized, op: 'write' }, async (operation) => {
+    this.enqueuePending({ paths: [normalized], op: 'write' }, async (operation) => {
       try {
         await surface.writeFile(normalized, data);
         this.healPersistFailure(normalized, operation.sequence);
@@ -664,40 +675,70 @@ export class OpfsFsSync implements FsSync {
     }
   }
 
-  /**
-   * Tracks bounded REPORTING for `p`. Timeout does not cancel or skip the
-   * underlying operation: `pendingTail` keeps waiting, preserving FIFO. Its
-   * eventual success/failure still runs the ordinary ledger heal/replace path.
-   */
-  private trackPending(operation: PersistOperation, p: Promise<void>): void {
-    let settled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let settleReporting!: () => void;
-    const reporting = new Promise<void>((resolve) => {
-      settleReporting = () => {
-        if (settled) return;
-        settled = true;
-        if (timer !== null) clearTimeout(timer);
+  private resetPendingReporting(pending: PendingPersistOperation): void {
+    pending.reportingSettled = false;
+    pending.reporting = new Promise<void>((resolve) => {
+      pending.settleReporting = () => {
+        if (pending.reportingSettled) return;
+        pending.reportingSettled = true;
         resolve();
       };
-      timer = setTimeout(() => {
-        this.recordPersistFailure(
-          operation.path,
-          operation.op,
-          new Error(
-            `OPFS ${operation.op} did not settle within ${PERSIST_OPERATION_REPORT_TIMEOUT_MS}ms`,
-          ),
-          operation.sequence,
-        );
-        settleReporting();
-      }, PERSIST_OPERATION_REPORT_TIMEOUT_MS);
     });
-    void p.then(settleReporting, settleReporting);
-    this.pending.push(reporting);
-    void reporting.finally(() => {
-      const i = this.pending.indexOf(reporting);
-      if (i >= 0) this.pending.splice(i, 1);
-    });
+  }
+
+  private recordOperationFailure(operation: PersistOperation, err: unknown): void {
+    for (const path of operation.paths) {
+      this.recordPersistFailure(path, operation.op, err, operation.sequence);
+    }
+  }
+
+  private reportBlockedPending(pending: PendingPersistOperation, blocker: PersistOperation): void {
+    if (pending.phase !== 'queued') return;
+    const blockerPath = blocker.paths[0] ?? '/';
+    this.recordOperationFailure(
+      pending.operation,
+      new Error(
+        `OPFS ${pending.operation.op} blocked behind timed out FIFO predecessor ` +
+          `${blocker.op} ${blockerPath}`,
+      ),
+    );
+    pending.settleReporting();
+  }
+
+  private async runPending(
+    pending: PendingPersistOperation,
+    task: (operation: PersistOperation) => Promise<void>,
+  ): Promise<void> {
+    // A predecessor timeout may already have released this queued operation's
+    // reporting promise. Once it becomes active, future flushes receive a new
+    // active-I/O barrier; earlier flushes keep their bounded dirty result.
+    if (pending.reportingSettled) this.resetPendingReporting(pending);
+    pending.phase = 'active';
+    const { operation } = pending;
+    const timer = setTimeout(() => {
+      this.recordOperationFailure(
+        operation,
+        new Error(
+          `OPFS ${operation.op} did not settle within ${PERSIST_OPERATION_REPORT_TIMEOUT_MS}ms`,
+        ),
+      );
+      this.timedOutHead = operation;
+      pending.settleReporting();
+      for (const queued of this.pending.values()) {
+        if (queued.operation.sequence > operation.sequence) {
+          this.reportBlockedPending(queued, operation);
+        }
+      }
+    }, PERSIST_OPERATION_REPORT_TIMEOUT_MS);
+
+    try {
+      await task(operation);
+    } finally {
+      clearTimeout(timer);
+      pending.settleReporting();
+      this.pending.delete(operation.sequence);
+      if (this.timedOutHead?.sequence === operation.sequence) this.timedOutHead = null;
+    }
   }
 
   private enqueuePending(
@@ -711,11 +752,25 @@ export class OpfsFsSync implements FsSync {
     // an explicit stamp barrier (tripwire: the FIFO pin in opfs-sync.test.ts).
     // Chain from the REAL operation tail. The first task still starts
     // synchronously so it captures its already-defensively-copied bytes before
-    // the caller can reuse a buffer. Reporting promises may time out and
-    // self-remove while this tail remains active; `pendingTailActive`, not
-    // `pending.length`, therefore owns FIFO admission.
-    const sequenced = { ...operation, sequence: ++this.persistOperationSequence };
-    const run = () => task(sequenced);
+    // the caller can reuse a buffer. Timed-out records stay tracked until the
+    // real operation settles; `pendingTailActive`, not reporting state,
+    // therefore owns FIFO admission.
+    const sequenced: PersistOperation = {
+      ...operation,
+      sequence: ++this.persistOperationSequence,
+    };
+    const pending: PendingPersistOperation = {
+      operation: sequenced,
+      phase: 'queued',
+      reporting: Promise.resolve(),
+      reportingSettled: true,
+      settleReporting: () => {},
+    };
+    this.resetPendingReporting(pending);
+    this.pending.set(sequenced.sequence, pending);
+    if (this.timedOutHead) this.reportBlockedPending(pending, this.timedOutHead);
+
+    const run = () => this.runPending(pending, task);
     const p = this.pendingTailActive ? this.pendingTail.then(run, run) : run();
     this.pendingTailActive = true;
     const tail = p.catch(() => {});
@@ -723,7 +778,6 @@ export class OpfsFsSync implements FsSync {
     void tail.finally(() => {
       if (this.pendingTail === tail) this.pendingTailActive = false;
     });
-    this.trackPending(sequenced, p);
   }
 
   /**
@@ -737,7 +791,11 @@ export class OpfsFsSync implements FsSync {
    * (the install stamp) gate on `report.total === 0`.
    */
   async flush(): Promise<PersistFailureReport> {
-    await Promise.allSettled([...this.pending]);
+    const watermark = this.persistOperationSequence;
+    const reporting = [...this.pending.values()]
+      .filter(({ operation }) => operation.sequence <= watermark)
+      .map((pending) => pending.reporting);
+    await Promise.allSettled(reporting);
     const failures: PersistFailure[] = [];
     for (const tracked of this.persistFailures.values()) {
       if (failures.length >= PERSIST_REPORT_SAMPLE) break;
@@ -1097,7 +1155,10 @@ export class OpfsFsSync implements FsSync {
   ): void {
     const surface = this.asyncSurface;
     this.enqueuePending(
-      { path: fileMoves[0]?.newPath ?? srcRoot, op: 'rename' },
+      {
+        paths: [...new Set([srcRoot, ...dirCreates, ...fileMoves.map(({ newPath }) => newPath)])],
+        op: 'rename',
+      },
       async (operation) => {
         try {
           if (fileMoves.length > 0 && !surface) return;
@@ -1135,22 +1196,17 @@ export class OpfsFsSync implements FsSync {
           // subtree no longer describes any divergence (same rule as
           // `persistRmAsync`). Without this, a pre-rename write failure on a
           // moved path would read as torn forever.
-          for (const move of fileMoves) {
-            this.healPersistFailure(move.newPath, operation.sequence);
-            this.healAncestorPersistFailures(move.newPath, operation.sequence);
+          for (const path of operation.paths) {
+            if (path === srcRoot) continue;
+            this.healPersistFailure(path, operation.sequence);
+            this.healAncestorPersistFailures(path, operation.sequence);
           }
           this.clearPersistFailuresUnder(srcRoot, operation.sequence);
         } catch (err) {
-          // Mismatch reconciles on the next refreshIndex (same posture as
-          // enqueueWriteThrough / persistRmAsync). Recorded per DESTINATION
-          // path — those are the files a reload would find missing; a later
-          // successful write-through of the same path heals the entry.
-          for (const move of fileMoves) {
-            this.recordPersistFailure(move.newPath, 'rename', err, operation.sequence);
-          }
-          if (fileMoves.length === 0) {
-            this.recordPersistFailure(srcRoot, 'rename', err, operation.sequence);
-          }
+          // Any source/destination can now differ from the atomic sync view.
+          // Record the full move footprint so a root-scoped durability gate
+          // cannot miss a cross-root rename; a later successful move heals it.
+          this.recordOperationFailure(operation, err);
         }
       },
     );

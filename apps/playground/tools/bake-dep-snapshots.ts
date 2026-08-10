@@ -19,6 +19,7 @@ import { createMemoryFs } from '@riftydev/vfs/internal';
 import {
   buildDepSnapshot,
   serializeDepSnapshot,
+  verifyDepSnapshotReplayCache,
 } from '../../../packages/workbench/src/glue/dep-snapshot.ts';
 import { readEffectiveDeps } from '../../../packages/workbench/src/glue/install-stamp.ts';
 import {
@@ -85,6 +86,7 @@ for (const spec of baked) {
     deps,
     packages: result.packages.length,
   });
+  await verifyDepSnapshotReplayCache(snapshot);
 
   const json = serializeDepSnapshot(snapshot);
   const gz = gzipSync(Buffer.from(json), { level: 9 });

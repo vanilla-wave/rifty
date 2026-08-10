@@ -193,6 +193,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0327 | Installed nodemon owns the Workbench Node-server dev loop |
 | 0329 | Authority-owned project Save rebinds exact installed-tree trust |
 | 0336 | Exact Vite 8 projects pin the proven Rolldown WASI runtime |
+| 0346 | Baked dependency snapshots carry replay tarball cache |
 
 ### toolchain-build
 
@@ -358,6 +359,7 @@ superseded.
 | 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
 | 0278 depth-insensitive archive `.git`/`.rifty` exclusion clause | 0286 / note 2026-07-17 | Git and nested ordinary `.rifty` round-trip; root `.rifty` remains private |
+| 0278 snapshot v2 serialized identity / templateId / stale-version proof clauses | 0346 / note 2026-08-10 | snapshotId covers canonical v3 bytes; templateId names v3; stale v2 rejects before effects |
 | 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
 | 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |

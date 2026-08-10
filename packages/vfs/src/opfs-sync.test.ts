@@ -1116,6 +1116,99 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     return Promise.race([flush, Promise.resolve(null)]);
   }
 
+  it('does not charge healthy FIFO queue wait against the active persist watchdog', async () => {
+    vi.useFakeTimers();
+    const completed: string[] = [];
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: async (path) => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 20_000));
+        completed.push(path);
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/a.txt', new Uint8Array([1]));
+    fs.writeFileSync('/b.txt', new Uint8Array([2]));
+    fs.writeFileSync('/c.txt', new Uint8Array([3]));
+
+    const flush = fs.flush();
+    await vi.runAllTimersAsync();
+
+    await expect(flush).resolves.toMatchObject({ total: 0, failures: [] });
+    expect(completed).toEqual(['/a.txt', '/b.txt', '/c.txt']);
+  });
+
+  it('flush captures a FIFO sequence watermark and does not wait for later writes', async () => {
+    const first = deferredPersist();
+    const later = deferredPersist();
+    const started: string[] = [];
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path) => {
+        started.push(path);
+        return path === '/first.txt' ? first.promise : later.promise;
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/first.txt', new Uint8Array([1]));
+    const firstFlush = fs.flush();
+    fs.writeFileSync('/later.txt', new Uint8Array([2]));
+
+    first.resolve();
+    await waitForMicrotaskCondition(() => started.includes('/later.txt'), 'later write-through');
+    await expect(firstFlush).resolves.toMatchObject({ total: 0 });
+
+    later.resolve();
+    await expect(fs.flush()).resolves.toMatchObject({ total: 0 });
+  });
+
+  it('reports every queued operation blocked behind a genuinely hung FIFO head', async () => {
+    vi.useFakeTimers();
+    const head = deferredPersist();
+    const started: string[] = [];
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path) => {
+        started.push(path);
+        return path === '/hung.txt' ? head.promise : Promise.resolve();
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/hung.txt', new Uint8Array([1]));
+    fs.writeFileSync('/other-root.txt', new Uint8Array([2]));
+
+    const flush = fs.flush();
+    try {
+      const report = await advanceToWatchdog(flush);
+
+      expect(started).toEqual(['/hung.txt']);
+      expect(report).not.toBeNull();
+      expect(report).toMatchObject({ total: 2 });
+      expect(report?.anyFailure?.((path) => path === '/hung.txt')).toBe(true);
+      expect(report?.anyFailure?.((path) => path === '/other-root.txt')).toBe(true);
+      expect(report?.failures.find(({ path }) => path === '/other-root.txt')?.message).toMatch(
+        /blocked behind.*timed out/i,
+      );
+
+      head.resolve();
+      await waitForMicrotaskCondition(
+        () => started.includes('/other-root.txt'),
+        'blocked write-through after late head success',
+      );
+      await expect(fs.flush()).resolves.toMatchObject({ total: 0, failures: [] });
+    } finally {
+      head.resolve();
+      await flush;
+      await Promise.resolve();
+    }
+  });
+
   it('bounds a hung persist, keeps the mirror live, and heals when the operation finishes late', async () => {
     vi.useFakeTimers();
     const persist = deferredPersist();
@@ -1217,15 +1310,44 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     const renameFlush = renameFs.flush();
     const renameReport = await advanceToWatchdog(renameFlush);
     expect(renameReport).toMatchObject({
-      total: 1,
-      failures: [expect.objectContaining({ path: '/after.txt', op: 'rename' })],
+      total: 2,
     });
+    expect(renameReport?.anyFailure?.((path) => path === '/before.txt')).toBe(true);
+    expect(renameReport?.anyFailure?.((path) => path === '/after.txt')).toBe(true);
     expect(renameFs.existsSync('/before.txt')).toBe(false);
     expect([...renameFs.readFileBytesSync('/after.txt')]).toEqual([1]);
     renamePersist.resolve();
     await renameFlush;
     await Promise.resolve();
     await expect(renameFs.flush()).resolves.toMatchObject({ total: 0 });
+  });
+
+  it('heals the full empty-directory rename footprint after late success', async () => {
+    vi.useFakeTimers();
+    const removePersist = deferredPersist();
+    const fake = buildMutableRoot({ dirs: ['/', '/before', '/before/empty'] });
+    const removeEntry = fake.root.removeEntry.bind(fake.root);
+    (fake.root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = async (
+      name,
+      options,
+    ) => {
+      if (name === 'before') await removePersist.promise;
+      await removeEntry(name, options);
+    };
+    const fs = new OpfsFsSync(fake.root);
+    await fs.refreshIndex();
+
+    fs.renameSync('/before', '/after');
+    const timedOutFlush = fs.flush();
+    const timedOut = await advanceToWatchdog(timedOutFlush);
+    expect(timedOut).toMatchObject({ total: 3 });
+    expect(timedOut?.anyFailure?.((path) => path === '/after')).toBe(true);
+    expect(timedOut?.anyFailure?.((path) => path === '/after/empty')).toBe(true);
+
+    removePersist.resolve();
+    await timedOutFlush;
+    await Promise.resolve();
+    await expect(fs.flush()).resolves.toMatchObject({ total: 0, failures: [] });
   });
 
   it('replaces a hung ledger record with the eventual persist rejection', async () => {
@@ -1275,11 +1397,20 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     first.resolve();
     await waitForMicrotaskCondition(() => writes === 2, 'second same-path write-through');
 
-    // The second write is still hung. The first write's late success must not
-    // heal the newer operation's watchdog record for the same path.
-    await expect(fs.flush()).resolves.toMatchObject({
+    // The second write is now ACTIVE. A new flush gets its fresh active-I/O
+    // barrier instead of reusing the predecessor's already-released report.
+    // Its own watchdog must preserve the newer same-path failure.
+    const secondFlush = fs.flush();
+    await vi.runAllTimersAsync();
+    await expect(secondFlush).resolves.toMatchObject({
       total: 1,
-      failures: [expect.objectContaining({ path: '/same-path.txt', op: 'write' })],
+      failures: [
+        expect.objectContaining({
+          path: '/same-path.txt',
+          op: 'write',
+          message: expect.stringContaining('did not settle'),
+        }),
+      ],
     });
 
     second.resolve();

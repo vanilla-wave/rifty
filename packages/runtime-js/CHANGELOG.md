@@ -40,6 +40,10 @@
 - Public `spawnRuntime` Worker crashes now stay owned by the runtime controller
   after it rejects pending calls and publishes stderr/exit, instead of also
   rethrowing the same error into the creator global.
+- **`path.join` preserves Node's trailing-separator identity.** Dot-relative and
+  directory joins now retain a final `/`, so Vite `base: './'` emits usable
+  `./assets/*` references instead of `.assets/*`; `path.normalize('.')` also
+  remains relative instead of inheriting the VFS root sentinel.
 
 - Trusted process identity now survives duplicated production Worker bundles,
   so recursive children keep the owner PID authority and publish preview state
@@ -1701,10 +1705,9 @@
   (chokidar/readdirp) calls these on the happy path; `vite createServer` +
   `listen` + `transformRequest` now run in-process. Regression:
   `tests/conformance/builtins/fs-realpath-readdir.test.ts`, the rewritten
-  `src/builtins/fs.test.ts` contract block, and the opt-in
-  `tests/integration/vite-live-run.opt-in.test.ts` (spawns
-  `tests/integration/fixtures/real-vite-smoke.ts`). M12 symlink rewrite tracked
-  by a `TODO(M12)` anchor in `fs.ts`.
+  `src/builtins/fs.test.ts` contract block, and the real-COI Vite contract in
+  `tests/browser-unit/esbuild-vite-contract.spec.ts`. M12 symlink rewrite
+  tracked by a `TODO(M12)` anchor in `fs.ts`.
 
 - **`node:string_decoder` `StringDecoder` is now a callable constructor.**
   iconv-lite's `InternalDecoder` does `StringDecoder.call(this, enc)` then
