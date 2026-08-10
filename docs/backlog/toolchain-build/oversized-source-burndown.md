@@ -45,6 +45,12 @@ Next: cut one ready item per file, worst first, each in the branch that already
 touches it — a split rides with a delivery, never its own PR (§PR). No repo-wide
 sweep: an unmotivated split is worse than a long file.
 
+Ratchet slip: PR #249 (d34577d54) grew `vfs/src/opfs-sync.ts` 1159→1215 past its
+pin unnoticed — CI runs no `check:file-size`, only local `pr:check` does, so the
+gate went red repo-wide until re-pinned at 1215 (PR #250). Debt stands: the
+watchdog rework is the growth; its seam analysis belongs to this item. A
+CI-side file-size lane would close the class.
+
 ## Reversibility
 REVERSIBLE per file while the move stays inside a package and `src/index.ts`
 keeps its shape. A split that changes cross-package public API or introduces a
