@@ -337,6 +337,8 @@ export function spawnKernelWorker(
   // before the exit-1 dispatch — keeping the diagnostic from vanishing behind
   // the opaque exit 1 (backlog/kernel/worker-global-error-to-stderr).
   const onError = (ev: MessageEvent): void => {
+    // This boundary owns the fatal outcome; do not rethrow it into the creator.
+    ev.preventDefault();
     if (terminated || uncaughtErrorObserved) return;
     uncaughtErrorObserved = true;
     const e = ev as unknown as { message?: unknown; filename?: unknown; lineno?: unknown };

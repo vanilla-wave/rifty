@@ -17,6 +17,10 @@
 
 ### Fixed
 
+- Managed Worker crashes now stay owned by their child process boundary. The
+  kernel still publishes child stderr plus one failure exit, but cancels the
+  browser default that otherwise rethrew the same error into every supervisor.
+
 - A Worker whose federated commit is rejected now rolls back its unpublished
   physical realm and routes synchronously, so owner teardown cannot leak it.
 

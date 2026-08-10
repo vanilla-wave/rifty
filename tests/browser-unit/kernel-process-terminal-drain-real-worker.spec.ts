@@ -12,6 +12,7 @@ interface RealWorkerResult {
   readonly attestation: string;
   readonly coi: boolean;
   readonly controlFrames: readonly unknown[];
+  readonly creatorErrors: readonly string[];
   readonly events: readonly string[];
   readonly exitCode: number | null;
   readonly live: boolean;
@@ -33,6 +34,12 @@ async function runRealWorker(page: Page, scenario: RealWorkerScenario): Promise<
         import(/* @vite-ignore */ hostAssetsUrl),
       ]);
       const kernelWorkerUrl = hostAssets.workbenchViteHostAssets.workers.kernel;
+      const creatorErrors: string[] = [];
+      const onCreatorError = (event: ErrorEvent): void => {
+        creatorErrors.push(event.message);
+        event.preventDefault();
+      };
+      globalThis.addEventListener('error', onCreatorError);
       let terminateCalls = 0;
       let outputState: SharedArrayBuffer | null = null;
       spawnWorker.setKernelWorkerUrl(kernelWorkerUrl);
@@ -166,6 +173,7 @@ async function runRealWorker(page: Page, scenario: RealWorkerScenario): Promise<
           attestation: workerStdio.workerOutputAttestation(outputState),
           coi: globalThis.crossOriginIsolated === true,
           controlFrames,
+          creatorErrors,
           events,
           exitCode: handle.exitCode,
           live: manager.get(handle.pid) !== null,
@@ -179,6 +187,7 @@ async function runRealWorker(page: Page, scenario: RealWorkerScenario): Promise<
         if (manager.get(handle.pid) !== null) handle.kill('SIGTERM');
         spawnWorker.clearWorkerFactoryForTests();
         spawnWorker.clearKernelDispatcher();
+        globalThis.removeEventListener('error', onCreatorError);
       }
     },
     {
@@ -257,6 +266,7 @@ test('real Chromium global Worker error preserves output and settles failure onc
   expect(result.coi).toBe(true);
   expect(result.stdout).toBe('before-real-global-error');
   expect(result.stderr).toContain('real-global-error');
+  expect(result.creatorErrors).toEqual([]);
   expect(result.exitCode).toBe(1);
   expect(result.signalCode).toBeNull();
   expect(result.live).toBe(false);

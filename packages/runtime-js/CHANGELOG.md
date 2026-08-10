@@ -37,6 +37,9 @@
 
 ### Fixed
 
+- Public `spawnRuntime` Worker crashes now stay owned by the runtime controller
+  after it rejects pending calls and publishes stderr/exit, instead of also
+  rethrowing the same error into the creator global.
 - **`path.join` preserves Node's trailing-separator identity.** Dot-relative and
   directory joins now retain a final `/`, so Vite `base: './'` emits usable
   `./assets/*` references instead of `.assets/*`; `path.normalize('.')` also

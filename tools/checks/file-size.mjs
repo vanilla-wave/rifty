@@ -70,11 +70,13 @@ export const BASELINE = [
   { file: 'apps/playground/src/components/editor-host-core.ts', max: 1270 },
   { file: 'tools/compat-matrix-generator/cli.js', max: 1269 },
   { file: 'packages/runtime-js/src/builtins/process.ts', max: 1226 },
+  // Re-pinned after PR #249 (d34577d54) landed the watchdog rework at 1215 with
+  // the pin unbumped — CI runs no file-size gate, so pr:check went red repo-wide.
+  { file: 'packages/vfs/src/opfs-sync.ts', max: 1215 },
   {
     file: 'packages/workbench/src/workbench/internal/playground-session-tools-transport.ts',
     max: 1191,
   },
-  { file: 'packages/vfs/src/opfs-sync.ts', max: 1159 },
   { file: 'packages/shell/src/shell.ts', max: 1144 },
   { file: 'packages/npm-client/src/internal/shadow/planner.ts', max: 1123 },
   { file: 'packages/git/src/git.ts', max: 1118 },
