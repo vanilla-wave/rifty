@@ -77,7 +77,7 @@ interface ProjectSpecBase {
    * availability is separate (ADR-0320). Absent → install as usual.
    */
   readonly bakedNodeModulesUrl?: string;
-  /** SHA-256 of the exact uncompressed serialized v2 snapshot bytes. */
+  /** SHA-256 of the exact uncompressed serialized v3 snapshot bytes. */
   readonly bakedNodeModulesSnapshotId?: string;
   /**
    * Template id recorded inside the baked snapshot. Defaults to this spec's id;

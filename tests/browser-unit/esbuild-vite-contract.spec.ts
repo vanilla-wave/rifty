@@ -82,6 +82,11 @@ interface ProjectShadowLockEvidence {
         readonly catalog?: unknown;
         readonly substitutionId?: string;
         readonly recipeDigest?: string;
+        readonly acquisition?: {
+          readonly kind?: string;
+          readonly name?: string;
+          readonly version?: string;
+        };
         readonly materialization?: {
           readonly installPath?: string;
           readonly name?: string;
@@ -1362,6 +1367,54 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
   }
 });
 
+test('committed Vite 8 instant snapshot replays its registry shadow from cache', async ({
+  context,
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const shadowSourceRequests: string[] = [];
+  await context.route(/\/lightningcss-wasm(?:\/|$)/u, async (route) => {
+    shadowSourceRequests.push(route.request().url());
+    await route.abort();
+  });
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: `bu-vite8-snapshot-replay-${randomUUID()}`,
+    template: 'vite8',
+    setup: 'instant',
+    persistence: 'required',
+  });
+
+  try {
+    const before = await readOwnerFile(page, '/scratch/package-lock.json');
+    expect(before.ok, before.error).toBe(true);
+    const lockfile = JSON.parse(before.text) as ProjectShadowLockEvidence;
+    const lightning = lockfile.rifty?.shadowSubstitutions?.applied?.find(
+      ({ substitutionId }) => substitutionId === 'rifty.shadow-substitution.lightningcss.v2',
+    );
+    expect(lightning?.acquisition).toMatchObject({
+      kind: 'registry',
+      name: 'lightningcss-wasm',
+      version: '1.32.0',
+    });
+
+    const replay = await execLine(page, 'npm install');
+    expect(replay.exit, replay.out).toBe(0);
+    const after = await readOwnerFile(page, '/scratch/package-lock.json');
+    expect(after.ok, after.error).toBe(true);
+    const replayedLockfile = JSON.parse(after.text) as ProjectShadowLockEvidence;
+    expect(replayedLockfile.rifty?.shadowSubstitutions).toEqual(
+      lockfile.rifty?.shadowSubstitutions,
+    );
+    expect(
+      shadowSourceRequests,
+      'matched registry-shadow replay must use the snapshot cache',
+    ).toEqual([]);
+  } finally {
+    await closeOwner(page);
+  }
+});
+
 test('real Rifty install honors the npm-standard Vite 8 WASI runtime alias', async ({ page }) => {
   test.setTimeout(180_000);
   await gotoHarness(page);
@@ -1409,7 +1462,7 @@ test('real Rifty install honors the npm-standard Vite 8 WASI runtime alias', asy
   }
 });
 
-test('Vite 8.0.16 build/preview stay green with no esbuild fetch or activation', async ({
+test('Vite 8.0.16 base "./" build/preview stay green with no esbuild fetch or activation', async ({
   context,
   page,
 }) => {
@@ -1428,7 +1481,10 @@ test('Vite 8.0.16 build/preview stay green with no esbuild fetch or activation',
       files: {
         '/index.html': '<div id="app"></div><script type="module" src="/src/main.js"></script>',
         '/src/main.js': "document.getElementById('app').textContent = 'vite8';\n",
-        '/vite.config.js': DEFAULT_VITE8_CONFIG_JS,
+        '/vite.config.js': DEFAULT_VITE8_CONFIG_JS.replace(
+          'export default {',
+          "export default {\n  base: './',",
+        ),
       },
       viteVersion: '8.0.16',
       firstMaterialization: { kind: 'install' },
@@ -1454,7 +1510,8 @@ test('Vite 8.0.16 build/preview stay green with no esbuild fetch or activation',
     expect(distIndex.ok, distIndex.error).toBe(true);
     expect(distIndex.text).toContain('<div id="app"></div>');
     expect(distIndex.text).not.toContain('/src/main.js');
-    const distJsName = /src=["'][^"']*\/assets\/([^"']+\.js)["']/.exec(distIndex.text)?.[1];
+    expect(distIndex.text).not.toMatch(/(?:src|href)=["']\.assets\//);
+    const distJsName = /src=["']\.\/assets\/([^"']+\.js)["']/.exec(distIndex.text)?.[1];
     expect(distJsName, distIndex.text).toBeDefined();
     if (!distJsName) throw new Error('Vite 8 build emitted no hashed JavaScript asset');
     const distJs = await readOwnerFile(page, `/scratch/dist/assets/${distJsName}`);
@@ -1469,7 +1526,7 @@ test('Vite 8.0.16 build/preview stay green with no esbuild fetch or activation',
     expect(servers.preview.out).toContain('Local');
     expect(servers.preview.status).toBe(200);
     expect(servers.preview.body).toContain('<div id="app"></div>');
-    expect(servers.preview.body).toContain(`/assets/${distJsName}`);
+    expect(servers.preview.body).toContain(`./assets/${distJsName}`);
     expect(servers.preview.source).toBe('preview');
     expect(servers.preview.renderedText).toBe('vite8');
 

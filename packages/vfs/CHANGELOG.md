@@ -12,6 +12,12 @@
 
 ### Changed
 
+- **OPFS persist watchdog queue lifetime (#247).** FIFO wait no longer consumes
+  an operation's 30-second I/O budget. `flush()` captures a sequence watermark
+  and waits for real settlement in healthy queues; a genuinely timed-out head
+  reports every blocked operation dirty without reordering, and late success
+  still heals the per-path ledger.
+
 - **OPFS persist watchdog (2026-07-13).** `OpfsFsSync.flush()` now reports a
   never-settling write/mkdir/rm/rename as dirty within 30 seconds while the
   uncancellable browser operation remains on the real FIFO tail. Later flushes

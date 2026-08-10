@@ -9,7 +9,7 @@ Date: 2026-05-30
 > transform hook stand; references below to the vendored WASI binding describe
 > the retired proof provider, not a current product path.
 
-> Correction 2026-08-10 (ADR-0346): the TS-aware extension list remains the
+> Correction 2026-08-10 (ADR-0348): the TS-aware extension list remains the
 > import resolver's deliberate deviation. Node 24 synchronous `require(ESM)`
 > splits out Node's `.js`/`.json`/`.node` legacy fallback; `.mjs`, `.cjs`, and
 > TS-family files require an explicit suffix on the require path.

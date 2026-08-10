@@ -77,7 +77,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0339 | Node eval script launch over node-entry v3 |
 | 0342 | Release pending eval drain ownership when server branch wins |
 | 0345 | Expose exact Node 24.0.0 process.release identity |
-| 0346 | Synchronous require(ESM) on Node 24 |
+| 0348 | Synchronous require(ESM) on Node 24 |
 
 ### runtime-wasi
 
@@ -195,6 +195,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0327 | Installed nodemon owns the Workbench Node-server dev loop |
 | 0329 | Authority-owned project Save rebinds exact installed-tree trust |
 | 0336 | Exact Vite 8 projects pin the proven Rolldown WASI runtime |
+| 0346 | Baked dependency snapshots carry replay tarball cache |
 
 ### toolchain-build
 
@@ -333,9 +334,9 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
-| 0004 `require(ESM)` hard-error clause | 0346 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |
-| 0009 unconditional async-wrapper assumption | 0346 / note 2026-08-10 | one AST transform feeds async import and synchronous require evaluators |
-| 0053 shared JS/TS extension-fallback clause | 0346 / note 2026-08-10 | TS-aware fallback stays on import; require uses Node's legacy suffix set |
+| 0004 `require(ESM)` hard-error clause | 0348 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |
+| 0009 unconditional async-wrapper assumption | 0348 / note 2026-08-10 | one AST transform feeds async import and synchronous require evaluators |
+| 0053 shared JS/TS extension-fallback clause | 0348 / note 2026-08-10 | TS-aware fallback stays on import; require uses Node's legacy suffix set |
 | 0032 request-state release / current-version clauses | 0331 / note 2026-07-27 | SyncRpc v3 retains a claimed request through versioned reply consumption |
 | 0084 #17 `inFlight` guard / #18 early release clauses | 0331 / note 2026-07-27 | shared `HANDLING` is sole exchange authority through caller consumption |
 | 0011 worker-exit / raw-output handoff clauses | 0332 / note 2026-07-27 | child seal authenticates exit; runtimes receive semantic output writers |
@@ -363,6 +364,7 @@ superseded.
 | 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
 | 0278 depth-insensitive archive `.git`/`.rifty` exclusion clause | 0286 / note 2026-07-17 | Git and nested ordinary `.rifty` round-trip; root `.rifty` remains private |
+| 0278 snapshot v2 serialized identity / templateId / stale-version proof clauses | 0346 / note 2026-08-10 | snapshotId covers canonical v3 bytes; templateId names v3; stale v2 rejects before effects |
 | 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
 | 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |

@@ -6,6 +6,9 @@
 
 - The synthetic esbuild CommonJS shim declares upstream's static named-export
   surface, preserving native CJS/ESM namespace identities after installation.
+- Snapshot drift validation now requires canonical v3 cache archives; the
+  artifact gate verifies their exact shadow-replay SRI closure before accepting
+  regenerated identities (ADR-0346).
 
 - Sass closure oracle refreshed against the live registry (2026-08-07):
   `readdirp` 5.0.0→5.1.1 (published upstream 2026-08-06 inside chokidar's

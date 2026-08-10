@@ -3,7 +3,7 @@
 Status: Accepted (supersedes the regex-based approach described in ADR 0004 §"ESM loader")
 Date: 2026-05
 
-> Correction 2026-08-10 (ADR-0346): the AST transform remains shared, but its
+> Correction 2026-08-10 (ADR-0348): the AST transform remains shared, but its
 > output is no longer unconditionally wrapped in an async arrow. Synchronous
 > plain-JS graphs required by Node 24 also receive a synchronous evaluator.
 

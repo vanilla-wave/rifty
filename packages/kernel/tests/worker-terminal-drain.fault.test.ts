@@ -192,7 +192,7 @@ class BoundaryWorker implements WorkerLike {
   }
 
   fireError(message: string): void {
-    const event = { message } as unknown as MessageEvent;
+    const event = Object.assign(new MessageEvent('error'), { message });
     for (const listener of [...(this.#listeners.get('error') ?? [])]) listener(event);
   }
 }
@@ -358,7 +358,10 @@ describe('Worker terminal drain fault matrix', () => {
     Atomics.store(words, 1, 1);
 
     expect(subject.handle.kill('SIGTERM')).toBe(true);
-    subject.worker.fire('error', new Error('worker died during output'));
+    subject.worker.fire(
+      'error',
+      Object.assign(new MessageEvent('error'), { message: 'worker died during output' }),
+    );
 
     const winner = await closesWithin(observed.closed);
 

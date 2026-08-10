@@ -15,7 +15,7 @@ import type { ProjectSpec } from '../../../apps/playground/src/templates/project
 
 export interface SealedWorkbenchBootOptions {
   readonly workspaceId: string;
-  readonly template?: 'hidden-empty' | 'typescript' | 'vite';
+  readonly template?: 'hidden-empty' | 'typescript' | 'vite' | 'vite8';
   readonly root?: string;
   readonly slug?: string;
   readonly setup?: 'instant' | 'from-scratch';
@@ -151,8 +151,12 @@ async function templateSpec(
     const url = '/src/templates/typescript.ts';
     return (await import(/* @vite-ignore */ url)).TYPESCRIPT_TEMPLATE;
   }
-  const url = '/src/templates/vite.ts';
-  return (await import(/* @vite-ignore */ url)).VITE_TEMPLATE;
+  if (template === 'vite') {
+    const url = '/src/templates/vite.ts';
+    return (await import(/* @vite-ignore */ url)).VITE_TEMPLATE;
+  }
+  const url = '/src/templates/vite8.ts';
+  return (await import(/* @vite-ignore */ url)).VITE8_TEMPLATE;
 }
 
 async function projectPlan(options: SealedWorkbenchBootOptions): Promise<PlaygroundProjectPlan> {
@@ -373,6 +377,46 @@ export async function executeProjectLine(
       throw new Error(`Project terminal command exited by signal ${String(exit.signal)}`);
     }
     return Object.freeze({ exit: exit.code, out });
+  } finally {
+    detach();
+  }
+}
+
+export async function executeProjectLineOutcome(line: string): Promise<{
+  readonly exitCode: number;
+  readonly exit: ProcessExit;
+  readonly closeExit: ProcessExit;
+  readonly closeShared: boolean;
+  readonly settlements: number;
+  readonly out: string;
+}> {
+  const fixture = requireActive();
+  const terminal = fixture.terminal ?? fixture.project.terminals.open();
+  fixture.terminal = terminal;
+  let out = '';
+  let settlements = 0;
+  const detach = terminal.attach((chunk) => {
+    out += chunk;
+  });
+  try {
+    const run = terminal.run(line);
+    const exited = run.exited.then((exit) => {
+      settlements += 1;
+      return exit;
+    });
+    const [exitCode, exit] = await Promise.all([run.exitCode, exited]);
+    const closing = run.close();
+    const repeatedClose = run.close();
+    const closeExit = await closing;
+    await Promise.resolve();
+    return Object.freeze({
+      exitCode,
+      exit,
+      closeExit,
+      closeShared: closing === repeatedClose,
+      settlements,
+      out,
+    });
   } finally {
     detach();
   }

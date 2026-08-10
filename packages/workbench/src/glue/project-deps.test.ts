@@ -3,7 +3,7 @@ import type { PersistFailureReport } from '@riftydev/vfs';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { createOwnerVfsAuthorityComposition } from '../workers/owner-vfs-authority.ts';
-import { type DepSnapshotV2, buildDepSnapshot } from './dep-snapshot.ts';
+import { type DepSnapshotV3, buildDepSnapshot } from './dep-snapshot.ts';
 import {
   type InstallStampAuthority,
   createInstallStampAuthority,
@@ -67,7 +67,7 @@ function installResult(count: number): InstallResult {
   };
 }
 
-function viteSnapshot(): DepSnapshotV2 {
+function viteSnapshot(): DepSnapshotV3 {
   const fs = new MemoryFsSync();
   fs.mkdirSync(ROOT, { recursive: true });
   fs.writeFileSync(`${ROOT}/package.json`, enc.encode(VITE_PACKAGE_JSON_TEXT));
@@ -382,7 +382,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
         { epoch: foreign.epoch, packages: 1 },
       );
       const snapshot = viteSnapshot();
-      const corrupt: DepSnapshotV2 = {
+      const corrupt: DepSnapshotV3 = {
         ...snapshot,
         nodeModules: {
           ...snapshot.nodeModules,

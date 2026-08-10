@@ -5,7 +5,7 @@ export const sealedWorkbenchFixtureUrl = `/@fs${workspacePath}/tests/browser-uni
 
 export interface BootOwnerOptions {
   readonly workspaceId: string;
-  readonly template?: 'hidden-empty' | 'typescript' | 'vite';
+  readonly template?: 'hidden-empty' | 'typescript' | 'vite' | 'vite8';
   readonly root?: string;
   readonly slug?: string;
   readonly setup?: 'instant' | 'from-scratch';
@@ -17,6 +17,15 @@ export interface BootOwnerOptions {
 
 interface OwnerExecResult {
   readonly exit: number;
+  readonly out: string;
+}
+
+export interface OwnerExecOutcome {
+  readonly exitCode: number;
+  readonly exit: { readonly code: number | null; readonly signal: string | null };
+  readonly closeExit: { readonly code: number | null; readonly signal: string | null };
+  readonly closeShared: boolean;
+  readonly settlements: number;
   readonly out: string;
 }
 
@@ -40,6 +49,16 @@ export function execLine(page: Page, line: string): Promise<OwnerExecResult> {
     async ({ fixtureUrl, command }) => {
       const fixture = await import(/* @vite-ignore */ fixtureUrl);
       return fixture.executeProjectLine(command);
+    },
+    { fixtureUrl: sealedWorkbenchFixtureUrl, command: line },
+  );
+}
+
+export function execLineOutcome(page: Page, line: string): Promise<OwnerExecOutcome> {
+  return page.evaluate(
+    async ({ fixtureUrl, command }) => {
+      const fixture = await import(/* @vite-ignore */ fixtureUrl);
+      return fixture.executeProjectLineOutcome(command);
     },
     { fixtureUrl: sealedWorkbenchFixtureUrl, command: line },
   );

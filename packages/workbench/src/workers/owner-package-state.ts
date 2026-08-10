@@ -18,7 +18,7 @@ import {
 import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import { normalizePath } from '@riftydev/vfs';
 import {
-  type DepSnapshotV2,
+  type DepSnapshotV3,
   fetchVerifiedDepSnapshot,
   prepareDepSnapshotRestore,
 } from '../glue/dep-snapshot.ts';
@@ -364,10 +364,10 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         });
       },
       planSnapshotRestore: async ({ project, snapshot }) => {
-        const payload = snapshot.payload as DepSnapshotV2 | undefined;
+        const payload = snapshot.payload as DepSnapshotV3 | undefined;
         if (!payload) return { status: 'rejected', reason: 'snapshot-payload-missing' };
         try {
-          const prepared = prepareDepSnapshotRestore(options.fsSync, project.root, payload);
+          const prepared = await prepareDepSnapshotRestore(options.fsSync, project.root, payload);
           const config = configFor(project);
           const lockfile =
             payload.lockfile.length === 0

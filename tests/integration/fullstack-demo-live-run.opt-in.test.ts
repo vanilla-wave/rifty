@@ -18,9 +18,10 @@
  *
  * Known harness noise: after all tests pass, vitest's own worker IPC may log
  * "Unable to deserialize cloned data" unhandled rejections — an interplay of
- * `installProcessGlobals()` with vitest's channel, same reason
- * vite-live-run.opt-in runs its smoke in a SPAWNED tsx child. Converting this
- * suite to that pattern is the known fix if the noise ever gates anything.
+ * `installProcessGlobals()` with vitest's channel. The live Vite install smoke
+ * demonstrates spawned-child isolation mechanics but intentionally stops
+ * before runtime-global installation. Converting this suite to that pattern is
+ * the known fix if the noise ever gates anything.
  */
 import '@riftydev/net/register-builtins';
 import '@riftydev/net/sqlite/register-builtins';

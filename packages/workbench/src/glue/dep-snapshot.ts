@@ -1,13 +1,20 @@
 /**
  * Baked dependency snapshot (ADR-0135): a template's fully installed
- * node_modules tree + lockfile, serialized at bake time (`pnpm snapshots:bake`)
+ * node_modules tree + lockfile replay cache, serialized at bake time (`pnpm snapshots:bake`)
  * and shipped as a same-origin gzipped JSON asset. The worker bootstrap
  * restores it on a stampless boot instead of running `install()`; runtime
  * assets follow the separate verified-store contract (ADR-0320).
  *
- * Snapshot v2 carries the exact package.json text and install-artifact identity
- * that produced the tree. Restore compares both byte-for-byte (ADR-0261).
+ * Snapshot v3 carries the exact package.json text, install-artifact identity,
+ * and integrity-verified cache closure that produced the tree (ADR-0346).
  */
+import {
+  TARBALL_CACHE_ROOT,
+  computeIntegrity,
+  parseIntegrityAlgorithm,
+  tarballCachePath,
+} from '@riftydev/npm-client';
+import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
 import { joinPath } from '@riftydev/vfs';
 import { drainByteStreamBounded, fetchAssetBytesBounded } from './bounded-asset-fetch.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
@@ -19,8 +26,8 @@ import {
   prepareWorkspaceArchiveImport,
 } from './workspace-archive.ts';
 
-export interface DepSnapshotV2 {
-  readonly version: 2;
+export interface DepSnapshotV3 {
+  readonly version: 3;
   readonly templateId: string;
   readonly packageJsonText: string;
   readonly installArtifactIdentity: string;
@@ -30,6 +37,8 @@ export interface DepSnapshotV2 {
   readonly packages: number;
   /** package-lock.json text — keeps later explicit installs on the fast path. */
   readonly lockfile: string;
+  /** Exact tarballs required to replay registry-backed shadow substitutions offline. */
+  readonly tarballCache: WorkspaceArchiveV1;
   /** The node_modules subtree (nested copies included). */
   readonly nodeModules: WorkspaceArchiveV1;
 }
@@ -39,11 +48,11 @@ export interface PreparedDepSnapshotRestore {
 }
 
 export type VerifiedDepSnapshot =
-  | { readonly status: 'matched'; readonly snapshot: DepSnapshotV2 }
+  | { readonly status: 'matched'; readonly snapshot: DepSnapshotV3 }
   | { readonly status: 'mismatch' };
 
 /** One byte-stable top-level order for bake and provenance tooling. */
-export function serializeDepSnapshot(snapshot: DepSnapshotV2): string {
+export function serializeDepSnapshot(snapshot: DepSnapshotV3): string {
   return JSON.stringify({
     version: snapshot.version,
     templateId: snapshot.templateId,
@@ -52,6 +61,7 @@ export function serializeDepSnapshot(snapshot: DepSnapshotV2): string {
     packageJsonText: snapshot.packageJsonText,
     installArtifactIdentity: snapshot.installArtifactIdentity,
     lockfile: snapshot.lockfile,
+    tarballCache: snapshot.tarballCache,
     nodeModules: snapshot.nodeModules,
   });
 }
@@ -88,7 +98,7 @@ export function buildDepSnapshot(
     readonly deps: Record<string, string>;
     readonly packages: number;
   },
-): DepSnapshotV2 {
+): DepSnapshotV3 {
   const packageJsonPath = joinPath(root, 'package.json');
   if (!fs.existsSync(packageJsonPath)) {
     throw new Error('Cannot build dep snapshot without package.json');
@@ -98,22 +108,24 @@ export function buildDepSnapshot(
   const lockfile = fs.existsSync(lockfilePath)
     ? new TextDecoder().decode(fs.readFileBytesSync(lockfilePath))
     : '';
+  const tarballCache = buildReplayCacheArchive(fs, lockfile);
   // exclude: [] — the default exclusion list contains 'node_modules', which
   // would silently drop the nested copies nest-on-conflict creates.
   const nodeModules = buildWorkspaceArchive(fs, joinPath(root, 'node_modules'), { exclude: [] });
   return {
-    version: 2,
+    version: 3,
     ...meta,
     packageJsonText,
     installArtifactIdentity,
     lockfile,
+    tarballCache,
     nodeModules,
   };
 }
 
-export function parseDepSnapshot(json: string): DepSnapshotV2 {
-  const parsed = JSON.parse(json) as DepSnapshotV2;
-  if (parsed.version !== 2) {
+export function parseDepSnapshot(json: string): DepSnapshotV3 {
+  const parsed = JSON.parse(json) as DepSnapshotV3;
+  if (parsed.version !== 3) {
     throw new Error(`Unsupported dep snapshot version ${parsed.version}`);
   }
   if (
@@ -134,8 +146,8 @@ export function parseDepSnapshot(json: string): DepSnapshotV2 {
   if (!exactDeps || !depsEqual(parsed.deps, exactDeps)) {
     throw new Error('Malformed dep snapshot: deps do not match packageJsonText');
   }
-  if (typeof parsed.lockfile !== 'string' || !parsed.nodeModules) {
-    throw new Error('Malformed dep snapshot: missing lockfile/nodeModules');
+  if (typeof parsed.lockfile !== 'string' || !parsed.tarballCache || !parsed.nodeModules) {
+    throw new Error('Malformed dep snapshot: missing lockfile/tarballCache/nodeModules');
   }
   return parsed;
 }
@@ -144,20 +156,21 @@ export function parseDepSnapshot(json: string): DepSnapshotV2 {
  * Write the snapshot's tree into `<root>`: node_modules is REPLACED (a stale
  * partial tree must not shadow baked files), the lockfile overwrites.
  */
-export function restoreDepSnapshot(
+export async function restoreDepSnapshot(
   fs: WorkspaceArchiveFs,
   root: string,
-  snapshot: DepSnapshotV2,
-): void {
-  prepareDepSnapshotRestore(fs, root, snapshot).apply();
+  snapshot: DepSnapshotV3,
+): Promise<void> {
+  (await prepareDepSnapshotRestore(fs, root, snapshot)).apply();
 }
 
 /** Decode and validate the complete restore mapping before destination mutation. */
-export function prepareDepSnapshotRestore(
+export async function prepareDepSnapshotRestore(
   fs: WorkspaceArchiveFs,
   root: string,
-  snapshot: DepSnapshotV2,
-): PreparedDepSnapshotRestore {
+  snapshot: DepSnapshotV3,
+): Promise<PreparedDepSnapshotRestore> {
+  await verifyDepSnapshotReplayCache(snapshot);
   const nodeModules = prepareWorkspaceArchiveImport(fs, snapshot.nodeModules, {
     root: joinPath(root, 'node_modules'),
     replace: true,
@@ -165,13 +178,134 @@ export function prepareDepSnapshotRestore(
     // project root (/scratch or /projects/<id>); re-root the relative tree.
     rebase: true,
   });
+  const tarballCache = prepareWorkspaceArchiveImport(fs, snapshot.tarballCache, {
+    root: TARBALL_CACHE_ROOT,
+    replace: false,
+  });
   const lockfile = snapshot.lockfile.length > 0 ? enc.encode(snapshot.lockfile) : null;
   return {
     apply() {
       nodeModules.apply();
+      // The global cache is shared across projects: merge this exact closure;
+      // never replace unrelated warm entries. Publish the lockfile last.
+      tarballCache.apply();
       if (lockfile) fs.writeFileSync(joinPath(root, 'package-lock.json'), lockfile);
     },
   };
+}
+
+interface ReplayCacheRequirement {
+  readonly integrity: string;
+  readonly name: string;
+  readonly path: string;
+  readonly relativePath: string;
+  readonly version: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function replayCacheRequirements(lockfileText: string): readonly ReplayCacheRequirement[] {
+  if (lockfileText.length === 0) return [];
+  const plan = planShadowSubstitutionsFromLockfile(JSON.parse(lockfileText) as unknown);
+  const byPath = new Map<string, ReplayCacheRequirement>();
+  for (const substitution of plan.substitutions) {
+    const acquisition = substitution.acquisition;
+    if (acquisition.kind === 'synthetic') continue;
+    if (parseIntegrityAlgorithm(acquisition.integrity) === null) {
+      throw new Error(`Unsupported dep snapshot cache integrity for ${acquisition.name}`);
+    }
+    const path = tarballCachePath(acquisition.name, acquisition.version, acquisition.integrity);
+    const requirement = {
+      name: acquisition.name,
+      version: acquisition.version,
+      integrity: acquisition.integrity,
+      path,
+      relativePath: path.slice(TARBALL_CACHE_ROOT.length + 1),
+    } satisfies ReplayCacheRequirement;
+    const prior = byPath.get(path);
+    if (prior && prior.integrity !== requirement.integrity) {
+      throw new Error(`Dep snapshot cache key collision at "${path}"`);
+    }
+    byPath.set(path, requirement);
+  }
+  return [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(text: string): Uint8Array {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function buildReplayCacheArchive(fs: WorkspaceArchiveFs, lockfile: string): WorkspaceArchiveV1 {
+  const files = replayCacheRequirements(lockfile).map((requirement) => {
+    if (!fs.existsSync(requirement.path)) {
+      throw new Error(
+        `Cannot build dep snapshot without replay cache ${requirement.name}@${requirement.version}`,
+      );
+    }
+    return {
+      path: requirement.relativePath,
+      encoding: 'base64' as const,
+      content: bytesToBase64(fs.readFileBytesSync(requirement.path)),
+    };
+  });
+  return { version: 1, root: TARBALL_CACHE_ROOT, files };
+}
+
+/** Prove the portable cache is the exact integrity-pinned lockfile closure. */
+export async function verifyDepSnapshotReplayCache(snapshot: DepSnapshotV3): Promise<void> {
+  if (
+    snapshot.tarballCache.version !== 1 ||
+    snapshot.tarballCache.root !== TARBALL_CACHE_ROOT ||
+    !Array.isArray(snapshot.tarballCache.files)
+  ) {
+    throw new Error('Malformed dep snapshot tarball cache archive');
+  }
+  const requirements = replayCacheRequirements(snapshot.lockfile);
+  const files = new Map<string, string>();
+  for (const file of snapshot.tarballCache.files) {
+    if (
+      !isRecord(file) ||
+      typeof file.path !== 'string' ||
+      file.encoding !== 'base64' ||
+      typeof file.content !== 'string' ||
+      files.has(file.path)
+    ) {
+      throw new Error('Malformed dep snapshot tarball cache entry');
+    }
+    files.set(file.path, file.content);
+  }
+  if (files.size !== requirements.length) {
+    throw new Error('Dep snapshot tarball cache does not match its lockfile closure');
+  }
+  for (const requirement of requirements) {
+    const content = files.get(requirement.relativePath);
+    if (content === undefined) {
+      throw new Error(
+        `Dep snapshot is missing replay cache ${requirement.name}@${requirement.version}`,
+      );
+    }
+    const algorithm = parseIntegrityAlgorithm(requirement.integrity);
+    if (algorithm === null) {
+      throw new Error(`Unsupported replay cache integrity for ${requirement.name}`);
+    }
+    const actual = await computeIntegrity(base64ToBytes(content), algorithm);
+    if (actual !== requirement.integrity) {
+      throw new Error(`Dep snapshot replay cache integrity mismatch for ${requirement.name}`);
+    }
+  }
 }
 
 /**
@@ -209,7 +343,7 @@ async function fetchDepSnapshotBytes(url: string): Promise<Uint8Array<ArrayBuffe
   return decoded;
 }
 
-function parseFetchedDepSnapshot(url: string, bytes: Uint8Array): DepSnapshotV2 {
+function parseFetchedDepSnapshot(url: string, bytes: Uint8Array): DepSnapshotV3 {
   try {
     return parseDepSnapshot(new TextDecoder().decode(bytes));
   } catch (error) {
@@ -237,6 +371,6 @@ export async function fetchVerifiedDepSnapshot(
   return { status: 'matched', snapshot: parseFetchedDepSnapshot(url, bytes) };
 }
 
-export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV2> {
+export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV3> {
   return parseFetchedDepSnapshot(url, await fetchDepSnapshotBytes(url));
 }

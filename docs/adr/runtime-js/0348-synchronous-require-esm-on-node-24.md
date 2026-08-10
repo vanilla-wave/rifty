@@ -1,4 +1,4 @@
-# ADR 0346: Synchronous require(ESM) on Node 24
+# ADR 0348: Synchronous require(ESM) on Node 24
 
 Status: Accepted
 Date: 2026-08

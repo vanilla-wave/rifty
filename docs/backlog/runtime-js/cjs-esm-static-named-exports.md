@@ -3,15 +3,15 @@ area: runtime-js
 status: draft
 title: CJS→ESM residual named re-exports and namespace reflection
 created: 2026-07-12
-why: ADR-0346 delivers static CJS names and ordinary re-exports, but ESM-target re-exports stay loud and namespace reflection is not yet exotic
+why: ADR-0348 delivers static CJS names and ordinary re-exports, but ESM-target re-exports stay loud and namespace reflection is not yet exotic
 user_story: As a package author re-exporting or reflecting on CommonJS, I want the remaining cross-format and namespace observables to match Node 24.
-sources: [ADR-0004, ADR-0346, Node-v24.16.0-probe]
+sources: [ADR-0004, ADR-0348, Node-v24.16.0-probe]
 code: [packages/runtime-js/src/module-loader/loader.ts, packages/runtime-js/src/module-loader/interop.ts]
 ---
 
 ## Context
 
-ADR-0346 pins CJS names/re-exports to static analysis, excludes computed runtime
+ADR-0348 pins CJS names/re-exports to static analysis, excludes computed runtime
 keys, snapshots values, and validates ordinary CJS/builtin named edges before
 evaluation. Two residuals remain:
 

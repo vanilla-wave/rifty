@@ -5,6 +5,11 @@ Date: 2026-07
 Supersedes: ADR-0277
 Refines: ADR-0263
 
+> **Correction 2026-08-10 (ADR-0346):** `snapshotId` now covers the exact
+> canonical serialized v3 bytes and `templateId` names snapshot v3. The fault
+> proof rejects stale v2 before effects; the provenance identity semantics
+> otherwise stand.
+
 > TL;DR: the Playground companion accepts exact finite project plans, owns a
 > durable semantic catalog, binds TS/SCM/archive/preview handles to one live
 > Workbench session, and exposes project-rooted terminal state; transports,

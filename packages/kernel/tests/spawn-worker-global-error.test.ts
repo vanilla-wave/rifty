@@ -184,6 +184,7 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
       const ev = {
         type: 'error',
         message: 'Uncaught Error: listen EADDRINUSE: address already in use :::3000',
+        preventDefault: vi.fn(),
       } as unknown as MessageEvent;
       worker()?.fire('error', ev);
       await flushWorkerExit();

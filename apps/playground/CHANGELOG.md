@@ -18,6 +18,11 @@
   `cjs-module-lexer` mid-session and full-reload away the live owner. Rebaked
   TypeScript/Vite snapshots carry the new esbuild recipe identity and refresh
   their ranged closure to `nanoid@3.3.18` and `postcss@8.5.26`.
+- Re-baked every instant dependency asset as snapshot v3 with new exact
+  identities; Vite 8 includes its verified LightningCSS replay tarball while
+  Vite 7 and TypeScript carry an empty shadow-cache closure. The required live
+  rebake also advances the shared floating closure: `nanoid` 3.3.16→3.3.18 and
+  `postcss` 8.5.25→8.5.26 (ADR-0346).
 
 - Preset open no longer paints the "Starting dev server…" loader inside the
   12px splitter track between editor and preview: an always-rendered editor

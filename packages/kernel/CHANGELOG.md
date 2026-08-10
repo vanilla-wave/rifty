@@ -28,6 +28,9 @@
   guarded boundary stays attached for the terminated Worker's lifetime; raw
   diagnostics and ordinary exit 1 mapping remain visible once, while an
   already-admitted terminal outcome stays authoritative.
+- Managed Worker crashes now stay owned by their child process boundary. The
+  kernel still publishes child stderr plus one failure exit, but cancels the
+  browser default that otherwise rethrew the same error into every supervisor.
 
 - A Worker whose federated commit is rejected now rolls back its unpublished
   physical realm and routes synchronously, so owner teardown cannot leak it.
