@@ -64,13 +64,10 @@ export interface CjsLoaderDeps {
   /** Create a require bound to `fromFile`, including the shared extensions table. */
   makeRequire(fromFile: string, parent?: CjsModule): CjsRequire;
   /**
-   * Load any module (CJS or ESM or JSON) by resolved id. Returns the module's
-   * exports namespace. The CJS loader uses this to recursively load deps.
-   *
-   * CJS can only loadSync if the dep is itself CJS/JSON; importing ESM from
-   * CJS requires `import()` (per Node).
+   * Load any module synchronously by resolved id. ESM may return a namespace,
+   * a synthetic default facade, or the exact `"module.exports"` binding.
    */
-  loadSync(resolved: ResolvedModule, parent?: CjsModule): Record<string, unknown>;
+  loadSync(resolved: ResolvedModule, parent?: CjsModule): unknown;
   loadAsync(id: string): Promise<Record<string, unknown>>;
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
 }

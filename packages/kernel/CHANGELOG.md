@@ -17,6 +17,18 @@
 
 ### Fixed
 
+- **Manager PID kill is idempotent during settlement (ADR-0347).** Public
+  `ProcessManager.kill(pid)` now acknowledges an existing local or forwarded
+  target already terminating without sending control twice. Missing and
+  physically refused targets remain `false`; direct `ProcessHandle.kill()`
+  remains a one-shot admission boolean.
+
+- An otherwise unhandled child Worker error now cancels browser default
+  propagation even when the browser queued it before physical termination. The
+  guarded boundary stays attached for the terminated Worker's lifetime; raw
+  diagnostics and ordinary exit 1 mapping remain visible once, while an
+  already-admitted terminal outcome stays authoritative.
+
 - A Worker whose federated commit is rejected now rolls back its unpublished
   physical realm and routes synchronously, so owner teardown cannot leak it.
 

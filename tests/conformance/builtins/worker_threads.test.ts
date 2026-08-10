@@ -1,9 +1,31 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts';
 import { writeFileSync } from '../../../packages/runtime-js/src/builtins/fs.ts';
-import { Worker } from '../../../packages/runtime-js/src/builtins/worker_threads.ts';
+import workerThreadsModule, {
+  Worker,
+} from '../../../packages/runtime-js/src/builtins/worker_threads.ts';
 
 afterEach(() => resetSyncMirror());
+
+describe('worker_threads.MessageChannel', () => {
+  it('is the exact host constructor and delivers through its real port pair', async () => {
+    const messageChannel = workerThreadsModule.MessageChannel;
+
+    expect(messageChannel).toBe(globalThis.MessageChannel);
+
+    const channel = new (messageChannel as typeof MessageChannel)();
+    expect(channel.port1).toBeInstanceOf(globalThis.MessagePort);
+    expect(channel.port2).toBeInstanceOf(globalThis.MessagePort);
+
+    const received = new Promise<unknown>((resolve) => {
+      channel.port1.onmessage = (event) => resolve(event.data);
+    });
+    channel.port2.postMessage({ answer: 42 });
+    await expect(received).resolves.toEqual({ answer: 42 });
+    channel.port1.close();
+    channel.port2.close();
+  });
+});
 
 describe('worker_threads.Worker', () => {
   it('parent receives messages from the child via parentPort.postMessage', async () => {

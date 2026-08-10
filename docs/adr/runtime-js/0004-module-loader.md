@@ -5,6 +5,10 @@ Date: 2026-05
 
 > Note: only the regex ESM-loader is superseded (by ADR-0009). The resolver, module registry, CJS loader, and CJS↔ESM interop remain active.
 
+> Correction 2026-08-10 (ADR-0346): the shared resolver/registry and CJS↔ESM
+> ownership remain; Node 24 replaces the unconditional `require(ESM)` hard error
+> with synchronous graph linking/evaluation and its exact result/error contract.
+
 Decision D-003: CJS and ESM share one resolver and one module registry. ESM is parsed with `es-module-lexer`, rewritten to async-function form, and run via `new Function`.
 
 > TL;DR: CJS and ESM share one Node resolver and registry; ESM is lexed via `es-module-lexer`, rewritten to async-function form, and run through `new Function`

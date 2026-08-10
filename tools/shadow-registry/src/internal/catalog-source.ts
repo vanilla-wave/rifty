@@ -6,6 +6,20 @@ if (esbuild == null) {
   throw new Error('rifty invariant: esbuild runtime slot is not initialized');
 }
 module.exports = esbuild;
+0 && (module.exports = {
+  analyzeMetafile,
+  analyzeMetafileSync,
+  build,
+  buildSync,
+  context,
+  formatMessages,
+  formatMessagesSync,
+  initialize,
+  stop,
+  transform,
+  transformSync,
+  version,
+});
 `;
 
 export const ESBUILD_ALIAS_BIN = `#!/usr/bin/env node

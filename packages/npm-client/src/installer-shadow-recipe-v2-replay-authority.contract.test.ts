@@ -32,12 +32,12 @@ const encoder = new TextEncoder();
 
 const CATALOG = {
   id: 'rifty.shadow-substitutions.builtin.v2',
-  digest: 'beae1cd857dcf1af520842eb1633bf2ba9c390d9835f5552d914b2f7be57d82c',
+  digest: '16169d78ba50a3ded324cee63fe9296dcb4884007e25730dfee78114730395f6',
 } as const;
 
 const ESBUILD_RECIPE = {
   id: 'rifty.shadow-substitution.esbuild.v2',
-  digest: 'e6af53d0b43aa2a4cf83d46818de1b7313f7ad5345cfe0db298b981d3f89368a',
+  digest: 'b17f55f3d5905344b927c47c4b6fc9faacb122829150d603cb73a006bcbcfc28',
   bin: { esbuild: 'bin/esbuild' },
   files: [
     {
@@ -62,9 +62,23 @@ if (esbuild == null) {
   throw new Error('rifty invariant: esbuild runtime slot is not initialized');
 }
 module.exports = esbuild;
+0 && (module.exports = {
+  analyzeMetafile,
+  analyzeMetafileSync,
+  build,
+  buildSync,
+  context,
+  formatMessages,
+  formatMessagesSync,
+  initialize,
+  stop,
+  transform,
+  transformSync,
+  version,
+});
 `,
-      sha256: '961d1a20258b40af980ed63ece45a0f3a2ca7e0df375cb5bfa3a99cde0386cb4',
-      bytes: 175,
+      sha256: 'bd38f603e494f0cf4554d5f73b727e8886b90224f5a043d54d6bf036313576c8',
+      bytes: 382,
     },
     {
       path: 'package.json',

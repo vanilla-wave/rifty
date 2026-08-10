@@ -71,7 +71,7 @@ describe('resolver package.json parse cache (#5, Q-2026-06-06-320)', () => {
     fs.loadFixture({
       // type:commonjs => the sibling .js classifies CJS.
       '/pkg/package.json': JSON.stringify({ name: 'p', type: 'commonjs' }),
-      '/pkg/m.js': "module.exports = 'cjs-loaded';",
+      '/pkg/m.js': "if (typeof module !== 'undefined') module.exports = 'cjs-loaded';",
     });
     const loader = createModuleLoader(fs);
 
@@ -83,12 +83,11 @@ describe('resolver package.json parse cache (#5, Q-2026-06-06-320)', () => {
     fs.loadFixture({ '/pkg/package.json': JSON.stringify({ name: 'p', type: 'module' }) });
     loader.invalidate('/pkg/m.js');
     // After invalidate the package.json cache must be cleared, so the resolver
-    // re-parses and sees type:module => the .js now classifies ESM, and a sync
-    // require() of an ESM module throws the directed UNSUPPORTED_PROTOCOL error.
-    // (A stale cache would keep returning the CJS value 'cjs-loaded'.)
-    expect(() => loader.require('/pkg/m.js', '/pkg/__entry.js')).toThrow(
-      /require\(\) of ES Module/,
-    );
+    // re-parses and sees type:module => sync require returns the empty ESM
+    // namespace. A stale classification would return the CJS string instead.
+    const fresh = loader.require('/pkg/m.js', '/pkg/__entry.js');
+    expect(typeof fresh).toBe('object');
+    expect(Object.keys(fresh as object)).toStrictEqual([]);
   });
 
   it('full invalidate() (no id) also clears the package.json cache', () => {

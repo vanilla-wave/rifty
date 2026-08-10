@@ -9,6 +9,15 @@ import {
 import { hasURLScheme } from '../internal/url-scheme.ts';
 import { ModuleLoadError } from './errors.ts';
 import {
+  type FileDirResolutionOrder,
+  IMPORT_RESOLUTION,
+  type ResolutionCondition,
+  TSCONFIG_RESOLUTION,
+  activeConditions,
+  detectJavaScriptKind,
+  resolutionOrder,
+} from './resolver-profile.ts';
+import {
   type TsconfigPathResolution,
   findNearestTsconfig,
   loadTsconfigPathResolution,
@@ -42,7 +51,7 @@ export interface ResolvedModule {
 export interface ResolveOptions {
   /** The file (or directory) doing the import. Used for relative paths and node_modules walk. */
   readonly fromFile: string;
-  /** ESM (true) or CJS (false) resolution mode — affects conditions chosen for `exports`. */
+  /** ESM (true) or CJS (false) mode — selects conditions and legacy suffix fallback. */
   readonly esm: boolean;
 }
 
@@ -71,39 +80,10 @@ export interface ResolverOptions {
   readonly autoDiscoverTsconfigPaths?: boolean;
 }
 
-// `.ts`/`.tsx` come AFTER the `.js` family (so a plain-Node `foo.js` resolves
-// byte-identically) and BEFORE `.json` (ADR-0053). Deliberate, human-ratified
-// deviation: rifty resolves a bare `.ts` where Node-without-a-stripper would
-// MODULE_NOT_FOUND. The transform side is separable — a resolved `.ts` with no
-// transform hook throws a directed error at execute time (no silent stub).
-const DEFAULT_EXTENSIONS = ['.js', '.mjs', '.cjs', '.ts', '.tsx', '.json'] as const;
-const INDEX_FILES = [
-  'index.js',
-  'index.mjs',
-  'index.cjs',
-  'index.ts',
-  'index.tsx',
-  'index.json',
-] as const;
-// tsconfig `paths`/`baseUrl` are TypeScript-owned resolution, not Node's loader.
-// Keep Node-first order above for normal imports; match TS source priority here.
-const TSCONFIG_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json'] as const;
-const TSCONFIG_INDEX_FILES = [
-  'index.ts',
-  'index.tsx',
-  'index.js',
-  'index.jsx',
-  'index.mjs',
-  'index.cjs',
-  'index.json',
-] as const;
-
 // Declaration files (`.d.ts`/`.d.cts`/`.d.mts`) are types-only — no runnable JS;
 // strip-types would feed them to acorn and throw SYNTAX_ERROR (Node's own
-// strip-types loaders skip them). Since `.d.ts` ends with `.ts` (in
-// DEFAULT_EXTENSIONS, ADR-0053), a `${base}.ts` append or an `exports`/`main`
-// target could match one. Reject at every file-acceptance point so it resolves
-// as MODULE_NOT_FOUND, never as an executable module.
+// strip-types loaders skip them). A `.ts` profile append or package target can
+// match one; reject it before execution rather than feeding it to acorn.
 const DECLARATION_FILE = /\.d\.(?:ts|cts|mts)$/;
 
 /**
@@ -181,7 +161,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       }
       if (opts.esm && hasURLScheme(specifier, 'file')) {
         const filePath = fileUrlToVfsPath(specifier, opts.fromFile);
-        const resolved = resolveAsFileOrDir(vfs, pkgCache, filePath);
+        const resolved = resolveAsFileOrDir(vfs, pkgCache, filePath, IMPORT_RESOLUTION);
         if (resolved === null) {
           throw moduleNotFound(specifier, opts.fromFile, opts.esm);
         }
@@ -362,12 +342,13 @@ function resolveSpecifierToFile(
   fromDir: string,
   esm: boolean,
 ): string | null {
+  const order = resolutionOrder(esm);
   if (isRelativeSpecifier(specifier)) {
     const base = joinPath(fromDir, specifier);
-    return resolveAsFileOrDir(vfs, pkgCache, base);
+    return resolveAsFileOrDir(vfs, pkgCache, base, order);
   }
   if (isAbsolute(specifier)) {
-    return resolveAsFileOrDir(vfs, pkgCache, normalizePath(specifier));
+    return resolveAsFileOrDir(vfs, pkgCache, normalizePath(specifier), order);
   }
   return resolveBareSpecifier(vfs, pkgCache, specifier, fromDir, esm);
 }
@@ -384,16 +365,6 @@ type PathAliasResolution =
   | { readonly status: 'resolved'; readonly path: string }
   | { readonly status: 'matched-miss' }
   | { readonly status: 'no-match' };
-
-interface FileDirResolutionOrder {
-  readonly extensions: readonly string[];
-  readonly indexFiles: readonly string[];
-}
-
-const TSCONFIG_RESOLUTION: FileDirResolutionOrder = {
-  extensions: TSCONFIG_EXTENSIONS,
-  indexFiles: TSCONFIG_INDEX_FILES,
-};
 
 function resolvePathAlias(
   vfs: FsSync,
@@ -477,7 +448,7 @@ function resolveAsFileOrDir(
   vfs: FsSync,
   pkgCache: PkgCache,
   base: string,
-  order?: FileDirResolutionOrder,
+  order: FileDirResolutionOrder = IMPORT_RESOLUTION,
 ): string | null {
   const baseStat = vfs.statSyncOrNull(base);
   const file = resolveAsFile(vfs, base, baseStat?.isFile === true, order);
@@ -490,10 +461,10 @@ function resolveAsFile(
   vfs: FsSync,
   base: string,
   baseIsFile: boolean,
-  order?: FileDirResolutionOrder,
+  order: FileDirResolutionOrder = IMPORT_RESOLUTION,
 ): string | null {
   if (baseIsFile) return isDeclarationFile(base) ? null : base;
-  for (const ext of order?.extensions ?? DEFAULT_EXTENSIONS) {
+  for (const ext of order.extensions) {
     const candidate = `${base}${ext}`;
     if (isDeclarationFile(candidate)) continue;
     if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
@@ -501,8 +472,12 @@ function resolveAsFile(
   return null;
 }
 
-function resolveIndex(vfs: FsSync, dir: string, order?: FileDirResolutionOrder): string | null {
-  for (const idx of order?.indexFiles ?? INDEX_FILES) {
+function resolveIndex(
+  vfs: FsSync,
+  dir: string,
+  order: FileDirResolutionOrder = IMPORT_RESOLUTION,
+): string | null {
+  for (const idx of order.indexFiles) {
     const candidate = joinPath(dir, idx);
     if (isDeclarationFile(candidate)) continue;
     if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
@@ -514,12 +489,12 @@ function resolveAsDirectory(
   vfs: FsSync,
   pkgCache: PkgCache,
   dir: string,
-  order?: FileDirResolutionOrder,
+  order: FileDirResolutionOrder = IMPORT_RESOLUTION,
 ): string | null {
   const pkgPath = joinPath(dir, 'package.json');
   if (vfs.existsSync(pkgPath)) {
     const pkg = readPackageJson(vfs, pkgCache, pkgPath);
-    const main = pickMainEntry(pkg);
+    const main = pickMainEntry(pkg, order.useModuleField);
     if (main) {
       const mainBase = joinPath(dir, main);
       const mainStat = vfs.statSyncOrNull(mainBase);
@@ -539,6 +514,7 @@ function resolveBareSpecifier(
   fromDir: string,
   esm: boolean,
 ): string | null {
+  const order = resolutionOrder(esm);
   const trailingDirectorySegment = hasTrailingDirectorySegment(specifier);
   for (const nodeModulesDir of nodeModulesPaths(fromDir)) {
     const exported = resolvePackageExports(vfs, pkgCache, nodeModulesDir, specifier, esm);
@@ -547,11 +523,11 @@ function resolveBareSpecifier(
     const candidate = joinPath(nodeModulesDir, specifier);
     const candidateStat = vfs.statSyncOrNull(candidate);
     if (!trailingDirectorySegment) {
-      const file = resolveAsFile(vfs, candidate, candidateStat?.isFile === true);
+      const file = resolveAsFile(vfs, candidate, candidateStat?.isFile === true, order);
       if (file !== null) return file;
     }
     if (candidateStat?.isDirectory) {
-      const directory = resolveAsDirectory(vfs, pkgCache, candidate);
+      const directory = resolveAsDirectory(vfs, pkgCache, candidate, order);
       if (directory !== null) return directory;
     }
   }
@@ -620,14 +596,19 @@ function resolvePackageExports(
   }
 
   const targetPath = joinPath(pkgDir, target);
-  if (!isDeclarationFile(targetPath) && vfs.statSyncOrNull(targetPath)?.isFile) {
-    return targetPath;
-  }
+  const exactTarget = resolveExactPackageTarget(vfs, targetPath);
+  if (exactTarget !== null) return exactTarget;
   throw new ModuleLoadError(
     'MODULE_NOT_FOUND',
     specifier,
     `Cannot find module '${targetPath}' exported by ${pkgJsonPath}`,
   );
+}
+
+/** Package-map targets are URLs, not legacy file-or-directory specifiers. */
+function resolveExactPackageTarget(vfs: FsSync, targetPath: string): string | null {
+  if (isDeclarationFile(targetPath)) return null;
+  return vfs.statSyncOrNull(targetPath)?.isFile === true ? targetPath : null;
 }
 
 type ExportsField =
@@ -644,13 +625,6 @@ interface PackageJson {
   module?: string;
   exports?: ExportsField;
   imports?: ExportsField;
-}
-
-const CONDITIONS = ['node', 'default', 'import', 'require'] as const;
-type Condition = (typeof CONDITIONS)[number];
-
-function activeConditions(esm: boolean): readonly Condition[] {
-  return esm ? (['node', 'import', 'default'] as const) : (['node', 'require', 'default'] as const);
 }
 
 /**
@@ -677,10 +651,10 @@ function resolveImportsSpecifier(
         if (resolved !== null) {
           // `imports` targets may be absolute, file-relative, or bare ("lodash").
           if (resolved.startsWith('./') || resolved.startsWith('../')) {
-            return resolveAsFileOrDir(vfs, pkgCache, joinPath(dir, resolved));
+            return resolveExactPackageTarget(vfs, joinPath(dir, resolved));
           }
           if (isAbsolute(resolved)) {
-            return resolveAsFileOrDir(vfs, pkgCache, normalizePath(resolved));
+            return resolveExactPackageTarget(vfs, normalizePath(resolved));
           }
           // Bare specifier — recurse through the normal bare resolver.
           return resolveBareSpecifier(vfs, pkgCache, resolved, dir, esm);
@@ -757,14 +731,18 @@ function resolveConditionTree(node: ExportsField, esm: boolean): string | null {
     return null;
   }
   if (node === null || typeof node !== 'object') return null;
-  for (const cond of activeConditions(esm)) {
-    if (cond in node) {
-      const sub = (node as Record<string, ExportsField | null>)[cond];
-      if (sub === null) return null;
-      if (sub !== undefined) {
-        const r = resolveConditionTree(sub, esm);
-        if (r !== null) return r;
-      }
+  const conditions = activeConditions(esm);
+  const conditional = node as Record<string, ExportsField | null>;
+  // Node walks conditional-object keys in declaration order. `conditions` is a
+  // membership set, not a priority list: an earlier `default` intentionally
+  // shadows a later `module-sync`, and import/require use this same chokepoint.
+  for (const cond of Object.keys(conditional)) {
+    if (!conditions.includes(cond as ResolutionCondition)) continue;
+    const sub = conditional[cond];
+    if (sub === null) return null;
+    if (sub !== undefined) {
+      const r = resolveConditionTree(sub, esm);
+      if (r !== null) return r;
     }
   }
   return null;
@@ -866,9 +844,9 @@ function readPackageJson(vfs: FsSync, pkgCache: PkgCache, path: string): Package
   }
 }
 
-function pickMainEntry(pkg: PackageJson): string | null {
+function pickMainEntry(pkg: PackageJson, useModuleField: boolean): string | null {
   if (pkg.main) return pkg.main;
-  if (pkg.module) return pkg.module;
+  if (useModuleField && pkg.module) return pkg.module;
   return null;
 }
 
@@ -906,10 +884,12 @@ function readResolved(
   _esm: boolean,
 ): ResolvedModule {
   const raw = utf8.decode(vfs.readFileBytesSync(filePath));
+  const compiledSource =
+    raw.charCodeAt(0) === 0x23 && raw.charCodeAt(1) === 0x21 ? raw.replace(/^#![^\n]*/, '') : raw;
   // One scope walk: feed its `type` into detectKind so the `.js`/`.ts`/`.tsx`
   // branch no longer re-walks/re-parses the same package.json (perf #4).
   const scope = findPackageScope(vfs, pkgCache, filePath);
-  const kind = detectKind(filePath, scope?.pkg.type);
+  const kind = detectKind(filePath, scope?.pkg.type, compiledSource);
   // Node strips a leading `#!` shebang before compiling a JS module (CJS
   // `Module._compile` + the ESM loader). Match it for the compiled kinds so a
   // shebang'd entry — `node <script>`, a child_process spawn, or a
@@ -917,10 +897,7 @@ function readResolved(
   // `new Function`/`new AsyncFunction` (which throw on `#!`). Drop only the
   // `#!` line's text, keep its newline so line numbers + source-map offsets
   // past line 1 are unchanged. json/text are not compiled — leave them verbatim.
-  const source =
-    (kind === 'cjs' || kind === 'esm') && raw.charCodeAt(0) === 0x23 && raw.charCodeAt(1) === 0x21
-      ? raw.replace(/^#![^\n]*/, '')
-      : raw;
+  const source = kind === 'cjs' || kind === 'esm' ? compiledSource : raw;
   return {
     id: filePath,
     kind,
@@ -929,7 +906,7 @@ function readResolved(
   };
 }
 
-function detectKind(filePath: string, scopeType: string | undefined): ModuleKind {
+function detectKind(filePath: string, scopeType: string | undefined, source: string): ModuleKind {
   if (safeEndsWith(filePath, '.json')) return 'json';
   for (let index = 0; index < TEXT_EXTENSIONS.length; index += 1) {
     if (safeEndsWith(filePath, TEXT_EXTENSIONS[index] as string)) return 'text';
@@ -945,7 +922,7 @@ function detectKind(filePath: string, scopeType: string | undefined): ModuleKind
     // `.ts`/`.tsx`/`.jsx` mirror the `.js` branch (ADR-0053): ESM under a `type:module`
     // scope, else CJS — as a TS-aware Node loader classifies by package scope.
     // `scopeType` is the SAME findPackageScope result readResolved computed.
-    return scopeType === 'module' ? 'esm' : 'cjs';
+    return detectJavaScriptKind(scopeType, source, safeEndsWith(filePath, '.js'));
   }
   // Unknown extension — assume CJS, matches Node's default for `.js` in non-module packages.
   return 'cjs';

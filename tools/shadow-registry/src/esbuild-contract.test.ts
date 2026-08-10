@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -33,6 +34,60 @@ interface NegativeTextPluginBuild {
     },
   ): void;
 }
+
+describe('synthetic esbuild module surface', () => {
+  it('matches the native package static ESM namespace and CJS identities', () => {
+    const recipe = builtinShadowSubstitutionCatalog.recipes.find(
+      (candidate) => candidate.id === 'rifty.shadow-substitution.esbuild.v2',
+    );
+    const main = recipe?.materialization.files.find((file) => file.path === 'lib/main.cjs');
+    if (!main) throw new Error('esbuild contract: synthetic main is missing');
+    const container = mkdtempSync(join(tmpdir(), '.rifty-esbuild-static-surface-'));
+    try {
+      const shimPath = join(container, 'main.cjs');
+      writeFileSync(shimPath, main.content);
+      const evidence = JSON.parse(
+        execFileSync(
+          process.execPath,
+          [
+            '--input-type=module',
+            '-e',
+            `import { createRequire } from 'node:module';
+             import { pathToFileURL } from 'node:url';
+             const nativePath = process.argv[1];
+             const shimPath = process.argv[2];
+             const require = createRequire(import.meta.url);
+             const cjs = require(nativePath);
+             globalThis.__rifty = { esbuild: cjs };
+             const native = await import(pathToFileURL(nativePath).href);
+             const shim = await import(pathToFileURL(shimPath).href);
+             const keys = Object.keys(native).sort();
+             process.stdout.write(JSON.stringify({
+               keys,
+               shimKeys: Object.keys(shim).sort(),
+               identities: Object.fromEntries(keys.map((key) => [
+                 key,
+                 shim[key] === (key === 'default' || key === 'module.exports' ? cjs : cjs[key]),
+               ])),
+             }));`,
+            require.resolve('esbuild'),
+            shimPath,
+          ],
+          { encoding: 'utf8' },
+        ),
+      ) as {
+        readonly keys: readonly string[];
+        readonly shimKeys: readonly string[];
+        readonly identities: Readonly<Record<string, boolean>>;
+      };
+
+      expect(evidence.shimKeys).toEqual(evidence.keys);
+      expect(Object.values(evidence.identities)).toEqual(evidence.keys.map(() => true));
+    } finally {
+      rmSync(container, { recursive: true, force: true });
+    }
+  });
+});
 
 async function loadCurrentSyntheticPackage(
   runtime: EsbuildContractApi,

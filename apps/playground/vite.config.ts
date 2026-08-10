@@ -93,6 +93,7 @@ export default defineConfig({
     include: [
       '@riftydev/runtime-js > @jitl/quickjs-wasmfile-release-sync',
       '@riftydev/runtime-js > acorn',
+      '@riftydev/runtime-js > cjs-module-lexer',
       '@riftydev/runtime-js > quickjs-emscripten-core',
       '@riftydev/git > isomorphic-git',
       'sql.js',

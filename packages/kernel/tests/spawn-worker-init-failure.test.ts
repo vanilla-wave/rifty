@@ -231,7 +231,10 @@ describe('spawnKernelWorker init transaction', () => {
 
     expect(successfulWorker.postMessage).toHaveBeenCalledTimes(1);
     expect(successfulWorker.terminate).toHaveBeenCalledTimes(1);
-    expect(successfulWorker.removeEventListener).toHaveBeenCalledTimes(3);
+    expect(successfulWorker.removeEventListener.mock.calls.map(([type]) => type)).toEqual([
+      'message',
+      'messageerror',
+    ]);
     expect(dispatcher.getAttachmentCount()).toBe(0);
     expect(dispatcher.getActiveTimerCount()).toBe(0);
     expect(closePort).toHaveBeenCalledTimes(9);

@@ -1419,10 +1419,10 @@ export class ProcessManager {
   }
 
   kill(pid: number, signal = 'SIGTERM'): boolean {
-    const record = this.table.get(pid);
-    if (record !== undefined) return this.killRecordTree(record, signal);
+    const record = this.table.get(pid); // ADR-0347: manager confirms settlement; handles admit once.
+    if (record) return record.terminationRequested || this.killRecordTree(record, signal);
     const route = this.forwardedRoutes.get(pid);
-    if (route?.killRequested !== false) return false;
+    if (route === undefined || route.killRequested) return route !== undefined;
     const owner = this.physicalOwnerHandle(route.ownerPid, route.ownerRoute);
     if (owner?.kind !== 'worker' || !owner.controlKill(pid, signal)) return false;
     route.killRequested = true;

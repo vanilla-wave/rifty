@@ -22,6 +22,7 @@ function source(marker: string): string {
 const api = { transform() { return ${JSON.stringify(marker)}; } };
 api.default = api;
 module.exports = { default: api, transform: api.transform, version: ${JSON.stringify(marker)} };
+module.exports.version = ${JSON.stringify(marker)};
 `;
 }
 
@@ -84,6 +85,83 @@ describe('common CJS→ESM namespace (ADR-0226 D3)', () => {
     const second = await loader.import('esbuild', ENTRY_ID);
 
     expect(second).toBe(first);
+  });
+
+  it('shares the statically imported CJS namespace with a later direct import', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/workspace/c.cjs': `module.exports = { marker: 'cjs' };`,
+      '/workspace/a.mjs': `
+        import * as ns from './c.cjs';
+        export { ns };
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/workspace' });
+
+    const parent = await loader.import('./a.mjs', ENTRY_ID);
+    const direct = await loader.import('./c.cjs', ENTRY_ID);
+
+    expect(parent.ns).toBe(direct);
+    expect(direct.default).toEqual({ marker: 'cjs' });
+
+    loader.invalidate('/workspace/c.cjs');
+    expect(await loader.import('./c.cjs', ENTRY_ID)).not.toBe(direct);
+  });
+
+  it('primes a CJS namespace without evaluating its body before dependency order', async () => {
+    const stateKey = '__riftyPrimedCjsEffects';
+    delete (globalThis as unknown as Record<string, unknown>)[stateKey];
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/workspace/c.cjs': `
+        globalThis.${stateKey} = (globalThis.${stateKey} || 0) + 1;
+        module.exports = { marker: 'loaded' };
+      `,
+      '/workspace/root.mjs': `
+        import { before, effectsBefore, primedShape } from './child.mjs';
+        import * as namespace from './c.cjs';
+        export function readCjs() { return namespace.default; }
+        export function inspectCjs() {
+          return {
+            defaultOwn: Object.hasOwn(namespace, 'default'),
+            markerOwn: Object.hasOwn(namespace, 'module.exports'),
+            defaultValue: namespace.default,
+            markerValue: namespace['module.exports'],
+            nullPrototype: Object.getPrototypeOf(namespace) === null,
+            extensible: Object.isExtensible(namespace),
+          };
+        }
+        export { before, effectsBefore, primedShape };
+        export const after = namespace.default;
+        export const extensibleAfter = Object.isExtensible(namespace);
+      `,
+      '/workspace/child.mjs': `
+        import { inspectCjs, readCjs } from './root.mjs';
+        export const effectsBefore = globalThis.${stateKey} || 0;
+        export const before = readCjs();
+        export const primedShape = inspectCjs();
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/workspace' });
+
+    try {
+      const result = await loader.import('./root.mjs', ENTRY_ID);
+      expect(result.effectsBefore).toBe(0);
+      expect(result.before).toBeUndefined();
+      expect(result.primedShape).toEqual({
+        defaultOwn: true,
+        markerOwn: true,
+        defaultValue: undefined,
+        markerValue: undefined,
+        nullPrototype: true,
+        extensible: true,
+      });
+      expect(result.after).toEqual({ marker: 'loaded' });
+      expect(result.extensibleAfter).toBe(false);
+      expect((globalThis as unknown as Record<string, unknown>)[stateKey]).toBe(1);
+    } finally {
+      delete (globalThis as unknown as Record<string, unknown>)[stateKey];
+    }
   });
 
   it('shares one outer and namespace across require-first and import-first loads', async () => {
@@ -207,6 +285,47 @@ outer.pending = () => pending;
     expect((freshNamespace.default as { marker: string }).marker).toBe('v2');
     expect(freshNamespace).not.toBe(oldNamespace);
   });
+
+  it.each(['targeted', 'full'] as const)(
+    'does not hydrate a new primed namespace after %s invalidation from an issued old import job',
+    async (invalidation) => {
+      const { loader, vfs } = setup();
+      const id = '/node_modules/generation-prime/index.js';
+      const cycleSource = (marker: string) => `
+const outer = { marker: ${JSON.stringify(marker)} };
+module.exports = outer;
+const pending = import('./index.js');
+outer.pending = () => pending;
+`;
+      vfs.loadFixture({
+        '/node_modules/generation-prime/package.json': JSON.stringify({ main: './index.js' }),
+        [id]: cycleSource('v1'),
+        '/workspace/fresh-generation.mjs': `
+import value from 'generation-prime';
+export const marker = value.marker;
+export default value;
+`,
+      });
+      const oldOuter = loader.require('generation-prime', ENTRY_ID) as {
+        marker: string;
+        pending: () => Promise<Record<string, unknown>>;
+      };
+      const oldJob = oldOuter.pending();
+
+      vfs.loadFixture({ [id]: cycleSource('v2') });
+      if (invalidation === 'targeted') loader.invalidate(id);
+      else loader.invalidate();
+      const freshJob = loader.import('./fresh-generation.mjs', ENTRY_ID);
+      const [oldNamespace, freshNamespace] = await Promise.all([oldJob, freshJob]);
+      const repeatedFreshNamespace = await loader.import('./fresh-generation.mjs', ENTRY_ID);
+
+      expect((oldNamespace.default as { marker: string }).marker).toBe('v1');
+      expect(freshNamespace.marker).toBe('v2');
+      expect((freshNamespace.default as { marker: string }).marker).toBe('v2');
+      expect(freshNamespace.default).not.toBe(oldOuter);
+      expect(repeatedFreshNamespace).toBe(freshNamespace);
+    },
+  );
 
   it('caches an import-job error separately from retryable require state', async () => {
     const { loader, vfs } = setup();
@@ -346,16 +465,22 @@ module.exports = { run };
     vfs.loadFixture({
       '/node_modules/getter/package.json': JSON.stringify({ main: './index.js' }),
       '/node_modules/getter/index.js': `
+let getterRuns = 0;
 exports.boom = 1;
 Object.defineProperty(exports, 'boom', {
   enumerable: true,
-  get() { throw new Error('getter-boom'); },
+  get() {
+    getterRuns += 1;
+    throw new Error('getter-boom');
+  },
 });
 const pending = import('./index.js');
 exports.pending = () => pending;
+exports.getterRuns = () => getterRuns;
 `,
     });
     const outer = loader.require('getter', ENTRY_ID) as {
+      getterRuns: () => number;
       pending: () => Promise<Record<string, unknown>>;
     };
 
@@ -367,7 +492,79 @@ exports.pending = () => pending;
     ]);
 
     expect(namespace.default).toBe(outer);
+    expect(Object.hasOwn(namespace, 'boom')).toBe(true);
     expect(namespace.boom).toBeUndefined();
+    expect(outer.getterRuns()).toBe(1);
+  });
+
+  it.each([
+    { name: 'safe then unsafe', safeFirst: true, expected: undefined, getterRuns: 1 },
+    { name: 'unsafe then safe', safeFirst: false, expected: 1, getterRuns: 0 },
+  ])('retains a safe defineProperty export across $name order', async (fixture) => {
+    const { loader, vfs } = setup();
+    const safe = `
+Object.defineProperty(exports, 'x', {
+  value: 1,
+  configurable: true,
+});`;
+    const unsafe = `
+Object.defineProperty(exports, 'x', {
+  enumerable: true,
+  configurable: true,
+  get() {
+    getterRuns += 1;
+    throw new Error('getter-boom');
+  },
+});`;
+    vfs.loadFixture({
+      '/node_modules/descriptor/package.json': JSON.stringify({ main: './index.js' }),
+      '/node_modules/descriptor/index.js': `
+let getterRuns = 0;
+${fixture.safeFirst ? safe + unsafe : unsafe + safe}
+const pending = import('./index.js');
+exports.pending = () => pending;
+exports.getterRuns = () => getterRuns;
+`,
+    });
+    const outer = loader.require('descriptor', ENTRY_ID) as {
+      getterRuns: () => number;
+      pending: () => Promise<Record<string, unknown>>;
+    };
+
+    const namespace = await outer.pending();
+
+    expect(Object.hasOwn(namespace, 'x')).toBe(true);
+    expect(namespace.x).toBe(fixture.expected);
+    expect(outer.getterRuns()).toBe(fixture.getterRuns);
+  });
+
+  it('omits a standalone throwing getter from an in-flight import namespace', async () => {
+    const { loader, vfs } = setup();
+    vfs.loadFixture({
+      '/node_modules/getter-only/package.json': JSON.stringify({ main: './index.js' }),
+      '/node_modules/getter-only/index.js': `
+let getterRuns = 0;
+Object.defineProperty(exports, 'boom', {
+  enumerable: true,
+  get() {
+    getterRuns += 1;
+    throw new Error('getter-boom');
+  },
+});
+const pending = import('./index.js');
+exports.pending = () => pending;
+exports.getterRuns = () => getterRuns;
+`,
+    });
+    const outer = loader.require('getter-only', ENTRY_ID) as {
+      getterRuns: () => number;
+      pending: () => Promise<Record<string, unknown>>;
+    };
+
+    const namespace = await outer.pending();
+
+    expect(Object.hasOwn(namespace, 'boom')).toBe(false);
+    expect(outer.getterRuns()).toBe(0);
   });
 
   it('preserves default and marker when optional named-key reflection throws', async () => {

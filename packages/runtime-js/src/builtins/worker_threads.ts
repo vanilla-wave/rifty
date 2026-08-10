@@ -701,6 +701,7 @@ function decodeWorkerData(encoded: string | undefined): unknown {
 
 const worker_threads: Record<string, unknown> = {
   Worker,
+  MessageChannel: globalThis.MessageChannel,
   markAsUntransferable,
   isMarkedAsUntransferable,
   markAsUncloneable,

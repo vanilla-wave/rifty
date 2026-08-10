@@ -4,6 +4,9 @@
 
 ### Changed
 
+- The synthetic esbuild CommonJS shim declares upstream's static named-export
+  surface, preserving native CJS/ESM namespace identities after installation.
+
 - Sass closure oracle refreshed against the live registry (2026-08-07):
   `readdirp` 5.0.0→5.1.1 (published upstream 2026-08-06 inside chokidar's
   `^5.0.0`), fixture tarball swapped with verified integrity/sha256; the

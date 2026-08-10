@@ -8,6 +8,7 @@ import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
 import {
   type CjsExtensionHook,
   type CjsExtensions,
@@ -17,19 +18,13 @@ import {
 } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
-import { type TransformSourceHook, executeEsm } from './esm.ts';
-import { cjsNamespaceFor } from './interop.ts';
-import {
-  type CjsModule,
-  type ModuleRecord,
-  ModuleRegistry,
-  createModuleRecord,
-} from './registry.ts';
+import { type TransformSourceHook, executeEsm, requireEsm } from './esm-job.ts';
+import { type CjsModule, ModuleRegistry, createModuleRecord } from './registry.ts';
 import type { PathAliases, ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
 import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
 
-export type { TransformSourceHook } from './esm.ts';
+export type { TransformSourceHook } from './esm-job.ts';
 export type { PathAliases } from './resolver.ts';
 
 export interface ModuleLoaderOptions {
@@ -64,7 +59,7 @@ export interface ModuleLoaderOptions {
 }
 
 export interface ModuleLoader {
-  /** Synchronous CJS require — only works for CJS/JSON modules. */
+  /** Synchronous Node require, including fully synchronous plain-JS ESM graphs. */
   require(specifier: string, from?: string): unknown;
   /** Asynchronous import — works for both CJS and ESM. */
   import(specifier: string, from?: string): Promise<Record<string, unknown>>;
@@ -96,6 +91,11 @@ const STUB_FROM_FILE_DEFAULT = '/__entry__';
 const indirectEvalPrimordial = globalThis.eval;
 const objectDefinePropertyPrimordial = Object.defineProperty;
 const reflectApplyPrimordial = Reflect.apply;
+const stringEndsWithPrimordial = String.prototype.endsWith;
+
+function stringEndsWith(value: string, suffix: string): boolean {
+  return reflectApplyPrimordial(stringEndsWithPrimordial, value, [suffix]) as boolean;
+}
 
 export interface NodeEvalScriptRunner {
   readonly registry: ModuleRegistry;
@@ -120,17 +120,6 @@ setSameRealmWorkerModuleImporter(async (vfs, script, cwd) => {
   const loader = createModuleLoader(vfs, { cwd });
   return loader.import(script, script);
 });
-
-type CjsImportJob =
-  | {
-      readonly kind: 'module';
-      readonly promise: Promise<Record<string, unknown>>;
-    }
-  | {
-      readonly kind: 'builtin';
-      readonly outer: Record<string, unknown>;
-      readonly promise: Promise<Record<string, unknown>>;
-    };
 
 /**
  * Load a `node:`-prefixed builtin or throw `MODULE_NOT_FOUND`. Shared by sync
@@ -475,13 +464,37 @@ function installNodeEvalCjsBindings(moduleObject: CjsModule, require: CjsRequire
 
 function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoaderCore {
   const registry = new ModuleRegistry();
+  // Node's replaceable `.js` translator publishes a CJS `require.cache`
+  // projection even when the same file already has an independent ESM job.
+  // Keeping that projection separate prevents import-first ESM records from
+  // bypassing a later custom hook while preserving normal CJS cache identity.
+  const customJsRegistry = new ModuleRegistry();
+  const defaultRequiredEsm = new Set<string>();
   const resolver = createResolver(vfs, {
     paths: opts.paths,
     autoDiscoverTsconfigPaths: opts.autoDiscoverTsconfigPaths,
   });
+  const cjsInterop = createCjsInteropAuthority({
+    registry,
+    resolver,
+    loadBuiltin: loadBuiltinOrThrow,
+  });
   const cjsExtensions = Object.create(null) as CjsExtensions;
+  const loadDefaultEsm = (resolved: ResolvedModule): unknown => {
+    const value = requireEsm(resolved, { ...deps });
+    if (stringEndsWith(resolved.id, '.js')) defaultRequiredEsm.add(resolved.id);
+    return value;
+  };
   const defaultJsExtension: CjsExtensionHook = (module, filename) => {
-    module._compile(readResolvedById(filename).source, filename);
+    const resolved = readResolvedById(filename);
+    if (resolved.kind === 'esm') {
+      // A replaced `.js` hook may delegate to the captured Node default. The
+      // hook's CJS projection stays cached independently while the default
+      // translator enters the primary ESM job.
+      module.exports = requireEsm(resolved, { ...deps }) as Record<string, unknown>;
+      return;
+    }
+    module._compile(resolved.source, filename);
   };
   cjsExtensions['.js'] = defaultJsExtension;
   cjsExtensions['.json'] = (module, filename) => {
@@ -495,12 +508,6 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
   };
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
-  // Node keeps CJS execution records (`require.cache`) and ESM ModuleJobs as
-  // separate state. This job cache owns import concurrency + cached rejection;
-  // the final namespace itself stays on the execution record. Exactly one job
-  // exists per id until coherent invalidation.
-  const cjsImportJobs = new Map<string, CjsImportJob>();
-
   // Strip cache: real transform providers can be expensive, so re-stripping
   // byte-identical `.ts` across repeated loads is wasted work. Keep the cache
   // under the absolute id but validate against the current source text so an
@@ -535,96 +542,6 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
     return out;
   };
 
-  function executeCjsImport(resolved: ResolvedModule): Record<string, unknown> {
-    executeCjs(resolved, { ...deps });
-    const record = registry.get(resolved.id);
-    if (!record || record.state !== 'loaded' || record.kind === 'esm') {
-      throw new Error(`CJS import did not produce a loaded record: ${resolved.id}`);
-    }
-    return cjsNamespaceFor(record);
-  }
-
-  function importCjs(resolved: ResolvedModule): Promise<Record<string, unknown>> {
-    const cachedJob = cjsImportJobs.get(resolved.id);
-    if (cachedJob) return cachedJob.promise;
-
-    const captured = registry.get(resolved.id);
-    let resolveJob!: (namespace: Record<string, unknown>) => void;
-    let rejectJob!: (error: unknown) => void;
-    const promise = new Promise<Record<string, unknown>>((resolve, reject) => {
-      resolveJob = resolve;
-      rejectJob = reject;
-    });
-    cjsImportJobs.set(resolved.id, { kind: 'module', promise });
-
-    const settle = (): void => {
-      try {
-        resolveJob(executeCjsImport(resolved));
-      } catch (error) {
-        rejectJob(error);
-      }
-    };
-
-    if (captured?.state === 'loading' && captured.kind !== 'esm') {
-      // require() is synchronous. One checkpoint lets that exact generation
-      // finish; no polling/spin. Success publishes that record; failure never
-      // re-executes or crosses into a later generation.
-      void Promise.resolve().then(() => {
-        try {
-          if (captured.state === 'loaded') {
-            resolveJob(cjsNamespaceFor(captured));
-            return;
-          }
-          if (captured.state === 'errored') {
-            const currentJob = cjsImportJobs.get(resolved.id);
-            if (currentJob?.promise !== promise) {
-              rejectJob(
-                captured.error ??
-                  new Error(`Invalidated CJS generation failed without an error: ${resolved.id}`),
-              );
-              return;
-            }
-            // TODO(backlog: runtime-js/require-cache-module-record-surface):
-            // Node 24's file translator rejects a self-import from a failed
-            // require with an internal assertion. Never retry the source or
-            // attach this job to a later require generation.
-            rejectJob(new NotImplementedError('module-loader.cjs-import-job-failed-require'));
-            return;
-          }
-          rejectJob(new Error(`CJS record remained loading after evaluation: ${resolved.id}`));
-        } catch (error) {
-          rejectJob(error);
-        }
-      });
-      return promise;
-    }
-
-    settle();
-    return promise;
-  }
-
-  function builtinRecord(id: string, outer: Record<string, unknown>): ModuleRecord {
-    const cached = registry.get(id);
-    if (cached?.kind === 'builtin' && cached.state === 'loaded' && cached.exports === outer) {
-      return cached;
-    }
-    if (cached) registry.invalidate(id);
-    const record = registry.getOrCreate(id, 'builtin');
-    record.exports = outer;
-    record.state = 'loaded';
-    return record;
-  }
-
-  function importBuiltin(id: string): Promise<Record<string, unknown>> {
-    const outer = loadBuiltinOrThrow(id);
-    const cached = cjsImportJobs.get(id);
-    if (cached?.kind === 'builtin' && cached.outer === outer) return cached.promise;
-
-    const promise = Promise.resolve(cjsNamespaceFor(builtinRecord(id, outer)));
-    cjsImportJobs.set(id, { kind: 'builtin', outer, promise });
-    return promise;
-  }
-
   const deps = {
     registry,
     resolver,
@@ -635,19 +552,31 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
     sourceMaps,
     transformSource: cachedTransform,
     transformEsm: cachedTransformEsm,
+    staticImportNames: cjsInterop.staticImportNames,
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
     },
-    loadSync(resolved: ResolvedModule, parent?: CjsModule): Record<string, unknown> {
+    loadSync(resolved: ResolvedModule, parent?: CjsModule): unknown {
       if (resolved.kind === 'builtin') {
         return loadBuiltinOrThrow(resolved.id);
       }
-      if (resolved.kind === 'esm') {
-        throw new ModuleLoadError(
-          'UNSUPPORTED_PROTOCOL',
-          resolved.id,
-          'Synchronous require() of ESM is not supported.',
+      // Node's replaceable `.js` extension owns dispatch before package-type or
+      // syntax detection. Only the loader's default `.js` hook enters ESM; a
+      // caller replacement receives even `type:module` / ESM-syntax `.js`.
+      if (
+        resolved.kind === 'esm' &&
+        stringEndsWith(resolved.id, '.js') &&
+        (customJsRegistry.has(resolved.id) ||
+          (!defaultRequiredEsm.has(resolved.id) && cjsExtensions['.js'] !== defaultJsExtension))
+      ) {
+        return executeCjs(
+          { ...resolved, kind: 'cjs' },
+          { ...deps, registry: customJsRegistry },
+          parent,
         );
+      }
+      if (resolved.kind === 'esm') {
+        return loadDefaultEsm(resolved);
       }
       return executeCjs(
         resolved,
@@ -657,39 +586,36 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
         parent,
       );
     },
+    loadSyncForImport(resolved: ResolvedModule): Record<string, unknown> {
+      return cjsInterop.loadSyncForImport(resolved, () => executeCjs(resolved, { ...deps }));
+    },
+    primeSyncImport(resolved: ResolvedModule): Record<string, unknown> {
+      return cjsInterop.primeSyncImport(resolved);
+    },
     async loadAsync(id: string): Promise<Record<string, unknown>> {
       if (id.startsWith('node:')) {
-        return importBuiltin(id);
+        return cjsInterop.importBuiltin(id);
       }
-      const job = cjsImportJobs.get(id);
-      if (job) return job.promise;
-      const cached = registry.get(id);
-      if (cached?.kind === 'esm' && (cached.state === 'loaded' || cached.state === 'loading')) {
-        return cached.exports;
-      }
+      const job = cjsInterop.importJob(id);
+      if (job) return job;
       // Drop the SECOND resolve+read+scope-walk: carry the already-resolved
       // module (perf #14). The id-only path stays for direct id callers
       // (cjs/interop), which never hold a ResolvedModule.
       return deps.loadAsyncResolved(readResolvedById(id));
     },
     // Async load of an ALREADY-RESOLVED module — skips re-resolving (perf #14).
-    // The registry short-circuit is replicated here (not only in the id path) so
-    // direct callers (import/loadById/esm preload) keep dedup + cycle handling.
+    // ESM job ownership below supplies deduplication and cycle handling.
     async loadAsyncResolved(resolved: ResolvedModule): Promise<Record<string, unknown>> {
       // A `node:` builtin reaches here when an ESM module statically imports it
       // (the preload carries the resolved `{kind:'builtin'}` record). Mirror the
       // id-path's `node:` short-circuit — builtins have no source to execute.
       if (resolved.kind === 'builtin') {
-        return importBuiltin(resolved.id);
+        return cjsInterop.importBuiltin(resolved.id);
       }
       if (resolved.kind === 'esm') {
-        const cached = registry.get(resolved.id);
-        if (cached && (cached.state === 'loaded' || cached.state === 'loading')) {
-          return cached.exports;
-        }
         return executeEsm(resolved, { ...deps });
       }
-      return importCjs(resolved);
+      return cjsInterop.importCjs(resolved, () => executeCjs(resolved, { ...deps }));
     },
   };
 
@@ -705,14 +631,6 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
   function makeRequire(from: string, parent?: CjsModule): CjsRequire {
     const req = ((specifier: string): unknown => {
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: false });
-      if (resolved.kind === 'esm') {
-        throw new ModuleLoadError(
-          'UNSUPPORTED_PROTOCOL',
-          specifier,
-          `require() of ES Module ${resolved.id} from ${from} is not supported. Use dynamic import() instead.`,
-          from,
-        );
-      }
       return deps.loadSync(resolved, parent);
     }) as CjsRequire;
     req.resolve = (specifier: string): string =>
@@ -740,13 +658,6 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
           );
         return builtin;
       }
-      if (resolved.kind === 'esm') {
-        throw new ModuleLoadError(
-          'UNSUPPORTED_PROTOCOL',
-          specifier,
-          `require() of ES Module ${resolved.id} is not supported. Use import() instead.`,
-        );
-      }
       return deps.loadSync(resolved);
     },
     async import(specifier, from = cwd) {
@@ -764,19 +675,21 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
     },
     invalidate(id) {
       registry.invalidate(id);
+      customJsRegistry.invalidate(id);
       // Keep derived caches + future import-job lookup coherent with records.
       // Already-returned job promises retain their captured generation.
       if (id === undefined) {
         transformCache.clear();
         esmAstCache.clear();
         sourceMaps.clear();
-        cjsImportJobs.clear();
+        defaultRequiredEsm.clear();
       } else {
         transformCache.delete(id);
         esmAstCache.delete(id);
         sourceMaps.delete(id);
-        cjsImportJobs.delete(id);
+        defaultRequiredEsm.delete(id);
       }
+      cjsInterop.invalidate(id);
       // Resolver caches (package.json parses #5 + resolution memo #15) are
       // input-keyed and cannot be pruned by module id, so ANY invalidate —
       // full OR targeted — clears them whole. A stale package.json (load-fixture

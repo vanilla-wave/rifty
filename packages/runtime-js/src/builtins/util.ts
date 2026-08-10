@@ -2,7 +2,7 @@
  * Node-compatible `node:util` (subset). `inspect` is backed by our REPL
  * inspector; `format` shims the printf-style %s/%d/%j specifiers.
  */
-import { inspect as inspectImpl } from '../repl/inspect.ts';
+import { type InspectOptions, inspect as inspectImpl } from '../repl/inspect.ts';
 import { deepStrictEqual } from './assert.ts';
 import { NodeProcess, riftyProcess } from './process.ts';
 import { types as utilTypes } from './util-types.ts';
@@ -18,8 +18,27 @@ function activeProcess(): NodeProcess {
 }
 
 export function format(fmt: unknown, ...args: unknown[]): string {
+  return formatWithInspectOptions(undefined, fmt, args);
+}
+
+export function formatWithOptions(inspectOptions: InspectOptions, ...args: unknown[]): string {
+  if (inspectOptions === null || typeof inspectOptions !== 'object') {
+    throw invalidArgType('inspectOptions', 'object', inspectOptions);
+  }
+  if (args.length === 0) return '';
+  const [fmt, ...formatArgs] = args;
+  return formatWithInspectOptions(inspectOptions, fmt, formatArgs);
+}
+
+function formatWithInspectOptions(
+  inspectOptions: InspectOptions | undefined,
+  fmt: unknown,
+  args: unknown[],
+): string {
   if (typeof fmt !== 'string') {
-    return [fmt, ...args].map((a) => (typeof a === 'string' ? a : inspectImpl(a))).join(' ');
+    return [fmt, ...args]
+      .map((a) => (typeof a === 'string' ? a : inspectImpl(a, inspectOptions)))
+      .join(' ');
   }
   let i = 0;
   let result = '';
@@ -46,12 +65,12 @@ export function format(fmt: unknown, ...args: unknown[]): string {
     switch (spec) {
       case 's':
         // Node's `%s`: strings pass through, bigints get the `n` suffix,
-        // non-null objects (incl. arrays) are inspected (Node uses depth 2; our
-        // default depth differs for deeply-nested values), everything else is
-        // `String()`.
+        // non-null objects (incl. arrays) use Node's fixed depth 0; everything
+        // else is `String()`.
         if (typeof arg === 'string') result += arg;
         else if (typeof arg === 'bigint') result += `${arg}n`;
-        else if (arg !== null && typeof arg === 'object') result += inspectImpl(arg);
+        else if (arg !== null && typeof arg === 'object')
+          result += inspectImpl(arg, { ...inspectOptions, depth: 0 });
         else result += String(arg);
         break;
       case 'd':
@@ -69,8 +88,10 @@ export function format(fmt: unknown, ...args: unknown[]): string {
         }
         break;
       case 'o':
+        result += inspectImpl(arg, { ...inspectOptions, depth: 4 });
+        break;
       case 'O':
-        result += inspectImpl(arg);
+        result += inspectImpl(arg, inspectOptions);
         break;
       case 'c':
         // CSS directive: outside a browser console Node CONSUMES the arg (already
@@ -86,7 +107,7 @@ export function format(fmt: unknown, ...args: unknown[]): string {
   // Trailing args get space-appended, like console.log.
   while (i < args.length) {
     const a = args[i++];
-    result += ` ${typeof a === 'string' ? a : inspectImpl(a)}`;
+    result += ` ${typeof a === 'string' ? a : inspectImpl(a, inspectOptions)}`;
   }
   return result;
 }
@@ -296,6 +317,119 @@ export function stripVTControlCharacters(str: unknown): string {
   return str.replace(VT_CONTROL_RE, '');
 }
 
+function isDotEnvSpace(char: string): boolean {
+  return char === ' ' || char === '\t' || char === '\n';
+}
+
+function trimDotEnvSpaces(input: string): string {
+  let start = 0;
+  while (start < input.length && isDotEnvSpace(input.charAt(start))) start++;
+  let end = input.length;
+  while (end > start && isDotEnvSpace(input.charAt(end - 1))) end--;
+  return input.slice(start, end);
+}
+
+function firstDotEnvSeparator(content: string): number {
+  const equals = content.indexOf('=');
+  const newline = content.indexOf('\n');
+  if (equals === -1) return newline;
+  if (newline === -1) return equals;
+  return Math.min(equals, newline);
+}
+
+function compareBytes(left: Uint8Array, right: Uint8Array): number {
+  const sharedLength = Math.min(left.length, right.length);
+  for (let i = 0; i < sharedLength; i++) {
+    const leftByte = left[i]!;
+    const rightByte = right[i]!;
+    if (leftByte !== rightByte) return leftByte - rightByte;
+  }
+  return left.length - right.length;
+}
+
+/** Node's `.env` parser, matching `src/node_dotenv.cc` in Node 24. */
+export function parseEnv(input: unknown): Record<string, string> {
+  if (typeof input !== 'string') throw invalidArgType('content', 'string', input);
+
+  const encoder = new globalThis.TextEncoder();
+  const decoder = new globalThis.TextDecoder('utf-8', { ignoreBOM: true });
+  let content = trimDotEnvSpaces(decoder.decode(encoder.encode(input)).replaceAll('\r', ''));
+  const store = new Map<string, string>();
+
+  while (content.length > 0) {
+    if (content[0] === '\n' || content[0] === '#') {
+      const newline = content.indexOf('\n');
+      content = newline === -1 ? '' : content.slice(newline + 1);
+      continue;
+    }
+
+    const separator = firstDotEnvSeparator(content);
+    if (separator === -1 || content[separator] === '\n') {
+      if (separator === -1) break;
+      content = trimDotEnvSpaces(content.slice(separator + 1));
+      continue;
+    }
+
+    let key = trimDotEnvSpaces(content.slice(0, separator));
+    content = content.slice(separator + 1);
+    if (content.length === 0 || content[0] === '\n') {
+      store.set(key, '');
+      continue;
+    }
+
+    content = trimDotEnvSpaces(content);
+    if (key.length === 0) continue;
+    if (key.startsWith('export ')) key = trimDotEnvSpaces(key.slice(7));
+    if (content.length === 0) {
+      store.set(key, '');
+      break;
+    }
+
+    if (content[0] === '"') {
+      const closingQuote = content.indexOf('"', 1);
+      if (closingQuote !== -1) {
+        const value = content.slice(1, closingQuote).replaceAll('\\n', '\n');
+        store.set(key, value);
+        const newline = content.indexOf('\n', closingQuote + 1);
+        content = newline === -1 ? '' : content.slice(newline + 1);
+        continue;
+      }
+    }
+
+    if (content[0] === "'" || content[0] === '"' || content[0] === '`') {
+      const closingQuote = content.indexOf(content[0], 1);
+      if (closingQuote === -1) {
+        const newline = content.indexOf('\n');
+        if (newline === -1) {
+          store.set(key, content);
+          break;
+        }
+        store.set(key, content.slice(0, newline));
+        content = content.slice(newline + 1);
+      } else {
+        store.set(key, content.slice(1, closingQuote));
+        const newline = content.indexOf('\n', closingQuote + 1);
+        content = newline === -1 ? '' : content.slice(newline + 1);
+        continue;
+      }
+    } else {
+      const newline = content.indexOf('\n');
+      const line = newline === -1 ? content : content.slice(0, newline);
+      const hash = line.indexOf('#');
+      const value = trimDotEnvSpaces(hash === -1 ? line : line.slice(0, hash));
+      store.set(key, value);
+      content = newline === -1 ? '' : content.slice(newline + 1);
+    }
+    content = trimDotEnvSpaces(content);
+  }
+
+  const entries = [...store].map(([key, value]) => ({ key, value, bytes: encoder.encode(key) }));
+  entries.sort((left, right) => compareBytes(left.bytes, right.bytes));
+  const result: Record<string, string> = {};
+  for (const { key, value } of entries) result[key] = value;
+  return result;
+}
+
 export function isDeepStrictEqual(val1: unknown, val2: unknown): boolean {
   try {
     deepStrictEqual(val1, val2);
@@ -386,17 +520,45 @@ export function debuglog(
 /** `util.debug` is an alias of `util.debuglog`. */
 export const debug = debuglog;
 
+const PROMISIFY_CUSTOM = Symbol.for('nodejs.util.promisify.custom');
+
 export function promisify<T extends (...a: unknown[]) => unknown>(
   fn: T,
 ): (...args: unknown[]) => Promise<unknown> {
-  return (...args: unknown[]) =>
+  if (typeof fn !== 'function') throw invalidArgType('original', 'function', fn);
+  const custom = Reflect.get(fn, PROMISIFY_CUSTOM);
+  if (custom) {
+    if (typeof custom !== 'function') {
+      throw invalidArgType('util.promisify.custom', 'function', custom);
+    }
+    Object.defineProperty(custom, PROMISIFY_CUSTOM, {
+      configurable: true,
+      value: custom,
+    });
+    return custom as (...args: unknown[]) => Promise<unknown>;
+  }
+
+  const promisified = (...args: unknown[]): Promise<unknown> =>
     new Promise((resolve, reject) => {
       (fn as unknown as (...a: unknown[]) => void)(...args, (err: unknown, value: unknown) => {
         if (err) reject(err);
         else resolve(value);
       });
     });
+  Object.defineProperties(promisified, {
+    name: { configurable: true, value: (fn as { readonly name?: string }).name ?? '' },
+    length: { configurable: true, value: fn.length },
+    [PROMISIFY_CUSTOM]: { configurable: true, value: promisified },
+  });
+  return promisified;
 }
+
+Object.defineProperty(promisify, 'custom', {
+  configurable: true,
+  enumerable: true,
+  value: PROMISIFY_CUSTOM,
+  writable: true,
+});
 
 export function callbackify<T extends (...a: unknown[]) => Promise<unknown>>(
   fn: T,
@@ -441,8 +603,10 @@ export const TextDecoder = globalThis.TextDecoder;
 const util = {
   inspect,
   format,
+  formatWithOptions,
   styleText,
   stripVTControlCharacters,
+  parseEnv,
   isDeepStrictEqual,
   debuglog,
   debug,

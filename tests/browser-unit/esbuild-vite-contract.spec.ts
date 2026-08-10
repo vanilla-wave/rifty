@@ -1013,11 +1013,11 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
       .toBe('rifty.shadow-substitution.esbuild.v2');
     expect.soft(esbuildRecipe?.catalog, 'real Chromium esbuild catalog identity').toEqual({
       id: 'rifty.shadow-substitutions.builtin.v2',
-      digest: 'beae1cd857dcf1af520842eb1633bf2ba9c390d9835f5552d914b2f7be57d82c',
+      digest: '16169d78ba50a3ded324cee63fe9296dcb4884007e25730dfee78114730395f6',
     });
     expect
       .soft(esbuildRecipe?.recipeDigest, 'real Chromium esbuild recipe digest')
-      .toBe('e6af53d0b43aa2a4cf83d46818de1b7313f7ad5345cfe0db298b981d3f89368a');
+      .toBe('b17f55f3d5905344b927c47c4b6fc9faacb122829150d603cb73a006bcbcfc28');
     expect
       .soft(esbuildRecipe?.materialization, 'real Chromium esbuild materialization identity')
       .toMatchObject({

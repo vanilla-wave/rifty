@@ -14,6 +14,11 @@
 
 ### Fixed
 
+- Node 24 `require(ESM)` no longer makes the playground dev host discover
+  `cjs-module-lexer` mid-session and full-reload away the live owner. Rebaked
+  TypeScript/Vite snapshots carry the new esbuild recipe identity and refresh
+  their ranged closure to `nanoid@3.3.18` and `postcss@8.5.26`.
+
 - Preset open no longer paints the "Starting dev server…" loader inside the
   12px splitter track between editor and preview: an always-rendered editor
   slot pins splitter/preview to their grid tracks while the lazy editor chunk

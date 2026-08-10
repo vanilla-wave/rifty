@@ -66,6 +66,55 @@ function errorFrom(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+type FixtureClosePhase = 'terminal.close' | 'project.close' | 'workbench.close';
+
+interface FixtureCloseFailure {
+  readonly phase: FixtureClosePhase;
+  readonly error: Error;
+}
+
+function serializeError(error: unknown, seen: WeakSet<object>): unknown {
+  if (!(error instanceof Error)) return { value: String(error) };
+  if (seen.has(error)) return { name: error.name, message: error.message, cycle: true };
+  seen.add(error);
+  return {
+    name: error.name,
+    message: error.message,
+    ...(error instanceof AggregateError
+      ? { errors: Array.from(error.errors, (nested) => serializeError(nested, seen)) }
+      : {}),
+    ...('cause' in error && error.cause !== undefined
+      ? { cause: serializeError(error.cause, seen) }
+      : {}),
+    ...(error.stack === undefined ? {} : { stack: error.stack }),
+  };
+}
+
+export function throwSealedWorkbenchFixtureCloseFailures(
+  failures: readonly FixtureCloseFailure[],
+): never {
+  if (failures.length === 0) {
+    throw new TypeError('Sealed Workbench fixture close failure list must not be empty');
+  }
+  const seen = new WeakSet<object>();
+  const message = `Sealed browser-unit Workbench fixture close failed\n${JSON.stringify(
+    failures.map(({ phase, error }) => ({ phase, error: serializeError(error, seen) })),
+  )}`;
+  const errors = failures.map(({ error }) => error);
+  if (errors.length === 1) throw new Error(message, { cause: errors[0] });
+  throw new AggregateError(errors, message);
+}
+
+export function throwDirectWorkbenchCloseFailure(error: unknown): never {
+  const inspected = errorFrom(error);
+  const seen = new WeakSet<object>();
+  const message = `Direct browser-unit Workbench close failed\n${JSON.stringify({
+    phase: 'workbench.close',
+    error: serializeError(inspected, seen),
+  })}`;
+  throw new Error(message, { cause: inspected });
+}
+
 function requireActive(): ActiveFixture {
   if (active === null) throw new Error('No sealed browser-unit Workbench fixture is open');
   return active;
@@ -443,11 +492,15 @@ export function awaitProjectDurability(): Promise<void> {
   return currentSessionTools().awaitDurability();
 }
 
-async function closeOutcome(operation: () => Promise<unknown>, failures: Error[]): Promise<void> {
+async function closeOutcome(
+  phase: FixtureClosePhase,
+  operation: () => Promise<unknown>,
+  failures: FixtureCloseFailure[],
+): Promise<void> {
   try {
     await operation();
   } catch (error) {
-    failures.push(errorFrom(error));
+    failures.push({ phase, error: errorFrom(error) });
   }
 }
 
@@ -455,17 +508,18 @@ export async function closeSealedWorkbenchFixture(): Promise<void> {
   const fixture = active;
   if (fixture === null) return;
   active = null;
-  const failures: Error[] = [];
+  const failures: FixtureCloseFailure[] = [];
   if (fixture.terminal !== null) {
-    await closeOutcome(() => fixture.terminal?.close() ?? Promise.resolve(), failures);
+    await closeOutcome(
+      'terminal.close',
+      () => fixture.terminal?.close() ?? Promise.resolve(),
+      failures,
+    );
   }
-  await closeOutcome(() => fixture.project.close(), failures);
-  await closeOutcome(() => fixture.workbench.close(), failures);
+  await closeOutcome('project.close', () => fixture.project.close(), failures);
+  await closeOutcome('workbench.close', () => fixture.workbench.close(), failures);
   fixture.baseElement.remove();
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1) {
-    throw new AggregateError(failures, 'Sealed browser-unit Workbench fixture close failed');
-  }
+  if (failures.length > 0) throwSealedWorkbenchFixtureCloseFailures(failures);
 }
 
 export function sameExit(left: ProcessExit, right: ProcessExit): boolean {

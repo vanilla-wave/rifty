@@ -175,6 +175,257 @@ describe('CJS extension hooks', () => {
     });
   });
 
+  it('lets a replaced .js hook own files inside a type-module package', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/main.cjs': `
+        const defaultLoader = require.extensions['.js'];
+        require.extensions['.js'] = function (module, filename) {
+          module.exports = {
+            receiver: this === require.extensions,
+            filename: filename.slice(filename.lastIndexOf('/') + 1),
+          };
+        };
+        try {
+          module.exports = require('./typed/target.js');
+        } finally {
+          require.extensions['.js'] = defaultLoader;
+        }
+      `,
+      '/work/typed/package.json': JSON.stringify({ type: 'module' }),
+      '/work/typed/target.js': 'export const mustNotEvaluate = true;',
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    expect(loader.require('./main.cjs', '/work/entry.js')).toEqual({
+      receiver: true,
+      filename: 'target.js',
+    });
+  });
+
+  it('keeps an import-first ESM namespace separate from the custom .js cache', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/main.cjs': `
+        const defaultLoader = require.extensions['.js'];
+        let hookRuns = 0;
+        require.extensions['.js'] = function (module, filename) {
+          hookRuns += 1;
+          module.exports = { source: 'custom', hookRuns };
+        };
+        let first;
+        let second;
+        try {
+          first = require('./typed/target.js');
+          second = require('./typed/target.js');
+        } finally {
+          require.extensions['.js'] = defaultLoader;
+        }
+        const afterRestore = require('./typed/target.js');
+        module.exports = {
+          hookRuns,
+          sameRepeated: first === second,
+          sameAfterRestore: first === afterRestore,
+          first,
+        };
+      `,
+      '/work/typed/package.json': JSON.stringify({ type: 'module' }),
+      '/work/typed/target.js': `export default { source: 'esm' };`,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    const imported = await loader.import('./typed/target.js', '/work/entry.js');
+    expect(loader.require('./main.cjs', '/work/entry.js')).toEqual({
+      hookRuns: 1,
+      sameRepeated: true,
+      sameAfterRestore: true,
+      first: { source: 'custom', hookRuns: 1 },
+    });
+    const importedAgain = await loader.import('./typed/target.js', '/work/entry.js');
+    expect(importedAgain).toBe(imported);
+    expect(importedAgain.default).toEqual({ source: 'esm' });
+  });
+
+  it('keeps a successful default require cached ahead of later .js hooks', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/driver.cjs': `
+        module.exports = () => {
+          const defaultLoader = require.extensions['.js'];
+          let hookRuns = 0;
+          require.extensions['.js'] = function (module) {
+            hookRuns += 1;
+            module.exports = { source: 'custom' };
+          };
+          try {
+            const value = require('./typed/target.js');
+            return { hookRuns, value };
+          } finally {
+            require.extensions['.js'] = defaultLoader;
+          }
+        };
+      `,
+      '/work/typed/package.json': JSON.stringify({ type: 'module' }),
+      '/work/typed/target.js': `export default { source: 'esm' };`,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+    const first = loader.require('./typed/target.js', '/work/entry.js');
+    const load = loader.require('./driver.cjs', '/work/entry.js') as () => {
+      hookRuns: number;
+      value: unknown;
+    };
+
+    const cached = load();
+    expect(cached.hookRuns).toBe(0);
+    expect(cached.value).toBe(first);
+
+    loader.invalidate('/work/typed/target.js');
+    expect(load()).toEqual({ hookRuns: 1, value: { source: 'custom' } });
+  });
+
+  it('runs a custom .js hook while the independent TLA import remains in flight', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/main.cjs': `
+        const defaultLoader = require.extensions['.js'];
+        let hookRuns = 0;
+        require.extensions['.js'] = function (module) {
+          hookRuns += 1;
+          module.exports = { source: 'custom', hookRuns };
+        };
+        try {
+          const first = require('./typed/target.js');
+          const second = require('./typed/target.js');
+          module.exports = { hookRuns, same: first === second, first };
+        } finally {
+          require.extensions['.js'] = defaultLoader;
+        }
+      `,
+      '/work/typed/package.json': JSON.stringify({ type: 'module' }),
+      '/work/typed/target.js': `
+        await Promise.resolve();
+        export default { source: 'esm' };
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    const importPromise = loader.import('./typed/target.js', '/work/entry.js');
+    expect(loader.require('./main.cjs', '/work/entry.js')).toEqual({
+      hookRuns: 1,
+      same: true,
+      first: { source: 'custom', hookRuns: 1 },
+    });
+    await expect(importPromise).resolves.toMatchObject({ default: { source: 'esm' } });
+  });
+
+  it('drops the custom .js projection through coherent loader invalidation', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/driver.cjs': `
+        let hookRuns = 0;
+        module.exports = (label) => {
+          const defaultLoader = require.extensions['.js'];
+          require.extensions['.js'] = function (module) {
+            hookRuns += 1;
+            module.exports = { label, hookRuns };
+          };
+          try {
+            return require('./typed/target.js');
+          } finally {
+            require.extensions['.js'] = defaultLoader;
+          }
+        };
+      `,
+      '/work/typed/package.json': JSON.stringify({ type: 'module' }),
+      '/work/typed/target.js': `export default 'esm';`,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+    const load = loader.require('./driver.cjs', '/work/entry.js') as (label: string) => unknown;
+
+    const first = load('first');
+    expect(load('cached')).toBe(first);
+    loader.invalidate('/work/typed/target.js');
+    expect(load('second')).toEqual({ label: 'second', hookRuns: 2 });
+  });
+
+  it('re-enters an import-first ESM job when a replaced .js hook delegates to default', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/main.cjs': `
+        const defaultLoader = require.extensions['.js'];
+        let hookRuns = 0;
+        require.extensions['.js'] = function (module, filename) {
+          hookRuns += 1;
+          return defaultLoader.call(this, module, filename);
+        };
+        try {
+          const first = require('./typed/target.js');
+          const second = require('./typed/target.js');
+          module.exports = {
+            hookRuns,
+            same: first === second,
+            keys: Object.keys(first),
+            value: first.default,
+          };
+        } finally {
+          require.extensions['.js'] = defaultLoader;
+        }
+      `,
+      '/work/typed/package.json': JSON.stringify({ type: 'module' }),
+      '/work/typed/target.js': 'export default 7;',
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    const imported = await loader.import('./typed/target.js', '/work/entry.js');
+
+    expect(loader.require('./main.cjs', '/work/entry.js')).toEqual({
+      hookRuns: 1,
+      same: true,
+      keys: ['__esModule', 'default'],
+      value: 7,
+    });
+    await expect(loader.import('./typed/target.js', '/work/entry.js')).resolves.toBe(imported);
+  });
+
+  it('retries a custom .js hook that throws after default delegation', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/main.cjs': `
+        const defaultLoader = require.extensions['.js'];
+        const sentinel = new Error('after delegate');
+        let hookRuns = 0;
+        require.extensions['.js'] = function (module, filename) {
+          hookRuns += 1;
+          defaultLoader.call(this, module, filename);
+          if (hookRuns === 1) throw sentinel;
+        };
+        let exact = false;
+        try {
+          require('./typed/target.js');
+        } catch (error) {
+          exact = error === sentinel;
+        }
+        try {
+          const value = require('./typed/target.js');
+          module.exports = { exact, hookRuns, keys: Object.keys(value), value: value.default };
+        } finally {
+          require.extensions['.js'] = defaultLoader;
+        }
+      `,
+      '/work/typed/package.json': JSON.stringify({ type: 'module' }),
+      '/work/typed/target.js': 'export default 7;',
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+    await loader.import('./typed/target.js', '/work/entry.js');
+
+    expect(loader.require('./main.cjs', '/work/entry.js')).toEqual({
+      exact: true,
+      hookRuns: 2,
+      keys: ['__esModule', 'default'],
+      value: 7,
+    });
+  });
+
   it('routes resolver-owned text through the current .js fallback', () => {
     const vfs = new MemoryFsSync();
     vfs.loadFixture({

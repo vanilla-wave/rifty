@@ -28,6 +28,10 @@
 
 ### Changed
 
+- Regenerated install-artifact identity now binds esbuild's static CommonJS
+  named-export recipe, invalidating stale install stamps and baked snapshots
+  before reuse.
+
 - Remove unreachable page-side bin execution and PTY routing classifiers; the
   owner child executor and sealed Workbench protocol remain the runtime owners.
 

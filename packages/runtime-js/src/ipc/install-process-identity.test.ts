@@ -64,6 +64,15 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     expect(proc.title).toBe('rifty');
   });
 
+  it('advertises synchronous require(ESM) on an isolated plain features object', () => {
+    const first = installNodeProcessShim(spec());
+    const second = installNodeProcessShim(spec());
+
+    expect(first.features).toStrictEqual({ require_module: true });
+    expect(Object.getPrototypeOf(first.features)).toBe(Object.prototype);
+    expect(first.features).not.toBe(second.features);
+  });
+
   it('gives each process its own mutable execArgv array', () => {
     const first = installNodeProcessShim(spec()) as ReturnType<typeof installNodeProcessShim> & {
       execArgv: string[];

@@ -12,7 +12,6 @@
  * `Promise.prototype.then` in the realm so every then-callback drains pending
  * nextTicks before firing — gated to Node workers at the pre-entry seam (WASI
  * realms leave `then` native).
- *
  * Limitation: code that captured the original `.then` before our patch (via
  * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
  * real package breaks.
@@ -525,9 +524,9 @@ export class NodeProcess extends EventEmitter {
   readonly version = NODE_PROCESS_IDENTITY.version;
   // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
   // without throwing and doesn't leak across processes (ADR-0150: each
-  // foreground CLI in its own supervised child worker). `Record` (not the narrow
-  // literal) so reads of absent keys (e.g. `versions.electron` — yargs) type-check.
+  // foreground CLI gets an isolated child worker). `Record` keeps absent-key reads type-safe.
   readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
+  readonly features = { require_module: true } as const;
   declare readonly release: NodeProcessRelease;
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
