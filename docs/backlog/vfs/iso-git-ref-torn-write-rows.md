@@ -13,6 +13,8 @@ code: [packages/vfs/src/opfs-sync.ts, packages/git/src]
 
 FIFO queue order (objects enqueued before the ref update) is the only atomicity primitive available — pin it, don't invent rename-atomicity OPFS can't provide. The dangerous states: (a) objects persisted, ref write failed/torn; (b) object write failed, ref persisted (must be impossible under FIFO — prove it); (c) reload with the whole tail un-persisted (commit cleanly absent — the baseline honest case).
 
+Observed mutate-then-flush writer sites (PR #203 review, pre-existing class): `createStarterBaselineFinalizer` amend→flush (`packages/workbench/src/glue/git-initial-baseline.ts`, `packages/workbench/src/workers/workbench-owner-runtime.ts`) and session SCM `settleScmMutation` stage/unstage/commit/discard (`packages/workbench/src/workers/playground-session-tools-owner.ts`) — in-memory Git mutation lands before the durability verdict; rejection is loud today, reload-time divergence is this item's class. Sweep covers them.
+
 ## Acceptance
 
 Fault tests (RED first, injected persist failure / simulated reload between queue entries):
