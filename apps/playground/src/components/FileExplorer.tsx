@@ -1034,7 +1034,7 @@ export function FileExplorer(props: {
         </Show>
 
         <Show when={rows().length === 0}>
-          <p class="rf-explorer__empty">Loading the workspace from the owner…</p>
+          <p class="rf-explorer__empty">No files yet</p>
         </Show>
       </div>
     </div>

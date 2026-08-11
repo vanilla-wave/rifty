@@ -78,6 +78,9 @@ test.describe('M1 - terminal shell', () => {
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
       'Commands run in /;',
     );
+    await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
+      'Use + to open another shell while a program is running.',
+    );
     await expectDefaultViteReady(page);
     await expect(terminalSessionTabs(page)).toHaveCount(1);
     await expect(terminalTab(page, primary)).toHaveAttribute('aria-selected', 'true');

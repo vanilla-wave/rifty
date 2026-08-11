@@ -1333,7 +1333,7 @@ export function App(props: AppProps) {
     const cwd = sessions().find((session) => session.id === activeSessionId())?.cwd ?? '/';
     return {
       label: 'Shell',
-      detail: `Commands run in ${cwd}; running programs own stdin.`,
+      detail: `Commands run in ${cwd}; running programs own stdin. Use + to open another shell while a program is running.`,
     };
   };
 

@@ -63,7 +63,9 @@ test.describe('M0 — Foundation', () => {
   }) => {
     await page.goto('/');
     await expect(page.getByRole('strong').filter({ hasText: 'rifty' })).toBeVisible();
-    await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 30_000 });
+    const launcher = page.locator('[data-testid="launcher"]');
+    await expect(launcher).toBeVisible({ timeout: 30_000 });
+    await expect(launcher.getByText('Node 24 runtime', { exact: true })).toBeVisible();
     await expect(page.locator('[data-testid="terminal"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="editor"]')).toHaveCount(0);
     await expect(editorTab(page, 'main.js')).toHaveCount(0);
