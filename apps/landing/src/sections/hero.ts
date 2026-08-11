@@ -99,7 +99,7 @@ function buildWindow(): HTMLElement {
   }
   const host = document.createElement('span');
   host.className = 'hero-host';
-  host.textContent = '@riftydev/sdk · v0.2';
+  host.textContent = '@riftydev/sdk · v0.3';
   const live = document.createElement('span');
   live.className = 'hero-live';
   const liveDot = document.createElement('span');

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Tagged GitHub releases now version, license, and publish `@riftydev/eddy`
+  alongside the other public packages through npm OIDC trusted publishing.
+
 ### Deployed
 
 - **eddy.rifty.dev bundle store moved to Object Storage** (2026-07-07). The

@@ -1,10 +1,10 @@
 name: Release
 
-# Publishes all 14 @riftydev/* libraries (incl. the @riftydev/sdk umbrella) to npm when a
-# vX.Y.Z tag is pushed — TOKENLESS via npm OIDC trusted publishing (ADR-0070,
-# ADR-0071). There is NO NPM_TOKEN / NODE_AUTH_TOKEN secret anywhere.
+# Publishes all 16 public @riftydev/* packages (incl. @riftydev/sdk + eddy) to npm
+# when a vX.Y.Z tag is pushed — TOKENLESS via npm OIDC trusted publishing
+# (ADR-0070, ADR-0071). There is NO NPM_TOKEN / NODE_AUTH_TOKEN secret anywhere.
 #
-# One-time prerequisites (out of repo — see docs/PUBLISHING.md):
+# One-time prerequisites (out of repo — see docs/public/publishing.md):
 #   1. Own the `@riftydev` org/scope on npmjs.com and bootstrap-publish each of the
 #      names ONCE with a token (OIDC can't create a brand-new name — npm/cli
 #      #8544). After that, every release is tokenless.
@@ -27,6 +27,14 @@ jobs:
       contents: read
       id-token: write # OIDC — load-bearing; without it trusted publishing is skipped
     steps:
+      - name: Validate stable release tag
+        run: |
+          if [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            exit 0
+          fi
+          echo "::error::release tags must be stable SemVer (vX.Y.Z): $GITHUB_REF_NAME"
+          exit 1
+
       - uses: actions/checkout@v4
 
       # pnpm version comes from package.json `packageManager` (pnpm 11.5.2).
@@ -53,7 +61,7 @@ jobs:
 
       - name: Set package versions to the tag
         run: >-
-          pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry"
+          pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" --filter "@riftydev/eddy"
           exec npm version "$RIFTY_VERSION" --no-git-tag-version --allow-same-version
 
       - name: Build libraries
@@ -61,18 +69,18 @@ jobs:
 
       - name: Bundle LICENSE into each package
         run: |
-          for d in packages/*/ tools/shadow-registry/; do
+          for d in packages/*/ tools/shadow-registry/ services/eddy/; do
             cp LICENSE "$d/LICENSE"
           done
 
-      # Publishes ONLY ./packages/* (incl. the umbrella `@riftydev/sdk`) + @riftydev/shadow-
-      # registry — never a bare `pnpm -r publish`, which would also pick up the
-      # non-private integration fixtures under tests/ and tools/. pnpm rewrites
-      # workspace:* to the tag version (createExportableManifest, BEFORE the OIDC
-      # handshake) and applies each package's publishConfig (dist exports). No
-      # NODE_AUTH_TOKEN: pnpm detects the OIDC env and mints a short-lived token
-      # itself; --provenance attests the build (needs this repo to be public).
+      # Publishes ONLY ./packages/* (incl. `@riftydev/sdk`) + shadow-registry + eddy —
+      # never a bare `pnpm -r publish`, which would also pick up non-private
+      # integration fixtures under tests/ and tools/. pnpm rewrites workspace:* to
+      # the tag version (createExportableManifest, BEFORE the OIDC handshake) and
+      # applies each package's publishConfig (dist exports). No NODE_AUTH_TOKEN:
+      # pnpm detects OIDC and mints a short-lived token; --provenance attests the
+      # build (needs this repo to be public).
       - name: Publish to npm (OIDC trusted publishing)
         run: >-
-          pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry"
+          pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" --filter "@riftydev/eddy"
           publish --access public --no-git-checks --provenance
