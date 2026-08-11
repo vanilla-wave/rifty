@@ -69,6 +69,21 @@ const mutations = {
 };
 
 describe('FileExplorer owner-routed file manager affordances', () => {
+  it('labels an admitted empty workspace as empty instead of still loading', () => {
+    const html = renderToString(() =>
+      FileExplorer({
+        vfs: { ...vfs, readdirSync: () => [] },
+        mutations,
+        root: '/workspace',
+        visible: true,
+        onOpenFile: () => {},
+      }),
+    );
+
+    expect(html).toContain('No files yet');
+    expect(html).not.toContain('Loading the workspace');
+  });
+
   it('renders owner-mode create and row mutation controls without exposing snapshot writes', () => {
     const html = renderToString(() =>
       FileExplorer({

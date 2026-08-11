@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { type Page, expect, test } from '@playwright/test';
 import {
   expectViteDevServerReady,
@@ -88,7 +88,7 @@ async function importArchive(page: Page, path: string): Promise<void> {
 test('archive restores Files and editor bytes immediately and survives reload', async ({
   page,
   browserName,
-}) => {
+}, testInfo) => {
   test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
   test.setTimeout(240_000);
 
@@ -177,4 +177,19 @@ test('archive restores Files and editor bytes immediately and survives reload', 
   await expect(page.locator('[data-testid="editor"] .view-lines').first()).not.toContainText(
     mutatedMarker,
   );
+
+  // Empty is a valid admitted archive, not an owner-loading state. Exercise the
+  // real import boundary so the Explorer copy cannot close on an SSR-only fake.
+  await stopProject(page);
+  const emptyArchivePath = testInfo.outputPath('empty-workspace.json');
+  await writeFile(
+    emptyArchivePath,
+    `${JSON.stringify({ version: 1, root: '/', files: [] })}\n`,
+    'utf8',
+  );
+  await importArchive(page, emptyArchivePath);
+  await expect(
+    page.locator('[role="tree"][aria-label="Workspace files"] [role="treeitem"]'),
+  ).toHaveCount(0);
+  await expect(page.locator('.rf-explorer__empty')).toHaveText('No files yet');
 });

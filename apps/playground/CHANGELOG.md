@@ -14,6 +14,14 @@
 
 ### Fixed
 
+- First-run starter claims now stay tied to their real sources: the Project
+  files CSS is an editable imported module instead of an ignored file beside an
+  inline copy, and the server group derives its Node major from runtime identity
+  instead of displaying stale `Node 22` copy. An admitted empty project now says
+  `No files yet` instead of claiming the owner is still loading, and the
+  persistent terminal hint explains that `+` opens a second shell while a
+  program owns stdin.
+
 - Node 24 `require(ESM)` no longer makes the playground dev host discover
   `cjs-module-lexer` mid-session and full-reload away the live owner. Rebaked
   TypeScript/Vite snapshots carry the new esbuild recipe identity and refresh

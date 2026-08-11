@@ -98,7 +98,7 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     expect(pageErrors.join('\n')).not.toMatch(/Unexpected token|SyntaxError/);
   });
 
-  test('editing project files updates the preview iframe text', async ({ page }) => {
+  test('editing project JS and imported CSS updates the preview iframe', async ({ page }) => {
     test.setTimeout(120_000);
     const pageErrors: string[] = [];
     page.on('pageerror', (e) => pageErrors.push(e.message));
@@ -134,6 +134,26 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     await expect(frame.locator('.workspace-shell h1')).toHaveText(marker, {
       timeout: 30_000,
     });
+
+    // The starter advertises workspace.css as part of its module graph. Edit
+    // the visible seeded file through Monaco and require Vite's real CSS HMR
+    // path to update the preview; an unused decorative file cannot pass.
+    const cssTab = page.getByRole('tab', { name: /workspace\.css/ });
+    await expect(cssTab).toBeVisible();
+    await cssTab.click();
+    await expect(editor.locator('.view-lines').first()).toContainText('body');
+    await editorInput.click({ force: true });
+    await expect(editorInput).toBeFocused();
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.keyboard.insertText('body { background: rgb(1, 2, 3) !important; }\n');
+    await expect(editor.locator('.view-lines').first()).toContainText('rgb(1, 2, 3)');
+    await expect
+      .poll(
+        () => frame.locator('body').evaluate((body) => getComputedStyle(body).backgroundColor),
+        { timeout: 30_000 },
+      )
+      .toBe('rgb(1, 2, 3)');
+
     expect(await terminalBuffer(page, 0)).not.toContain('module invalidation failed');
     expect(pageErrors.join('\n')).not.toMatch(/Maximum call stack|Unexpected token|SyntaxError/);
   });

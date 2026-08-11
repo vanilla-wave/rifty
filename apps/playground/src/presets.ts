@@ -62,20 +62,12 @@ export interface Preset {
 
 const PROJECT_FILES_SOURCE = `import project from './project.json';
 import { describeProject, formatFileList } from './project-summary.js';
-
-function ensureStyle() {
-  const styleId = 'rifty-project-files-style';
-  const style = document.getElementById(styleId) ?? document.createElement('style');
-  style.id = styleId;
-  style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:${MONO_FONT_STACK}}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px ${MONO_FONT_STACK};letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px ${MONO_FONT_STACK};letter-spacing:0;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px ${MONO_FONT_STACK};color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px ${MONO_FONT_STACK}}';
-  document.head.append(style);
-}
+import './workspace.css';
 
 export function render() {
   const app = document.getElementById('app');
   if (!app) throw new Error('Missing #app root');
 
-  ensureStyle();
   const fileItems = formatFileList(project.files)
     .map((file) => '<li><code>' + file.path + '</code><span>' + file.reason + '</span></li>')
     .join('');
@@ -334,7 +326,7 @@ const PROJECT_FILES_PRESET: Preset = {
   blurb: 'A small module graph with JS, JSON, CSS, and a README to inspect.',
   glyph: { text: 'JS', color: '#E8D44D' },
   tag: { text: 'instant', tone: 'live' },
-  openFiles: ['src/main.js', 'src/project-summary.js', 'src/project.json'],
+  openFiles: ['src/main.js', 'src/project-summary.js', 'src/project.json', 'src/workspace.css'],
   files: [
     { path: 'src/main.js', content: PROJECT_FILES_SOURCE },
     { path: 'src/project-summary.js', content: PROJECT_SUMMARY_SOURCE },
