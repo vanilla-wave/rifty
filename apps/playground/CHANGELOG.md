@@ -15,8 +15,9 @@
 ### Fixed
 
 - First-run starter claims now stay tied to their real sources: the Project
-  files CSS is an editable imported module instead of an ignored file beside an
-  inline copy, and the server group derives its Node major from runtime identity
+  files and Node worker map CSS is an editable imported module instead of an
+  ignored file beside an inline copy (class-killed for every preset seeding
+  `workspace.css`), and the server group derives its Node major from runtime identity
   instead of displaying stale `Node 22` copy. An admitted empty project now says
   `No files yet` instead of claiming the owner is still loading, and the
   persistent terminal hint explains that `+` opens a second shell while a

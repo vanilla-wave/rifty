@@ -69,6 +69,17 @@ describe('playground presets', () => {
     expect(presetFileContent(projectFiles, 'src/main.js')).not.toContain('ensureStyle');
   });
 
+  it('imports every seeded workspace.css from the entry instead of an inline style copy', () => {
+    const seeded = PRESETS.filter((preset) =>
+      (preset.files ?? []).some((file) => file.path === 'src/workspace.css'),
+    );
+    expect(seeded.map((preset) => preset.id)).toEqual(['project-files', 'node-worker']);
+    for (const preset of seeded) {
+      expect(presetFileContent(preset, 'src/main.js')).toContain("import './workspace.css'");
+      expect(presetText(preset)).not.toContain('ensureStyle');
+    }
+  });
+
   it('keeps preset editor tabs as ordinary seeded files without a separate source field', () => {
     for (const preset of PRESETS) {
       const spec = resolveProjectSpec(preset.templateId ?? 'vite');

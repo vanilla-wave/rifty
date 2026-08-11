@@ -196,7 +196,9 @@ code {
 }
 `;
 
-const NODE_WORKER_SOURCE = `const notesUrl = new URL('src/runtime-notes.js', window.location.href).href;
+const NODE_WORKER_SOURCE = `import './workspace.css';
+
+const notesUrl = new URL('src/runtime-notes.js', window.location.href).href;
 let renderVersion = 0;
 
 function freshUrl(url) {
@@ -205,21 +207,12 @@ function freshUrl(url) {
   return url + separator + 't=' + Date.now() + '-' + renderVersion;
 }
 
-function ensureStyle() {
-  const styleId = 'rifty-node-worker-style';
-  const style = document.getElementById(styleId) ?? document.createElement('style');
-  style.id = styleId;
-  style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:${MONO_FONT_STACK}}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px ${MONO_FONT_STACK};letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px ${MONO_FONT_STACK};letter-spacing:0;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px ${MONO_FONT_STACK};color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px ${MONO_FONT_STACK}}';
-  document.head.append(style);
-}
-
 export async function render() {
   renderVersion += 1;
   const { runtimeNotes, renderRuntimeNotes } = await import(/* @vite-ignore */ freshUrl(notesUrl));
   const app = document.getElementById('app');
   if (!app) throw new Error('Missing #app root');
 
-  ensureStyle();
   app.innerHTML = '<main class="workspace-shell">'
     + '<p class="eyebrow">Node-shaped project</p>'
     + '<h1>Worker runtime map</h1>'
