@@ -132,7 +132,7 @@ export function renderNav(): HTMLElement {
 
   const version = document.createElement('span');
   version.className = 'nav-version';
-  version.textContent = 'v0.2 · M11';
+  version.textContent = 'v0.3 · M11';
 
   const desktopLinks = makeLinks('nav-links');
   const desktopRight = document.createElement('div');

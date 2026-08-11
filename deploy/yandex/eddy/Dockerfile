@@ -10,8 +10,8 @@
 #
 #   docker build -f deploy/yandex/eddy/Dockerfile -t riftydev-eddy .
 #
-# Alternatively, once @riftydev/eddy is published to npm (distribution item),
-# a thin image is just: FROM node:24-alpine; RUN npm i -g @riftydev/eddy; CMD ["eddy"].
+# The published package also supports a thin image:
+# FROM node:24-alpine; RUN npm i -g @riftydev/eddy; CMD ["eddy"].
 
 # Build on the BUILDER's native platform: the artifact is a self-contained JS
 # bundle (platform-independent), so cross-arch image builds (Apple-Silicon

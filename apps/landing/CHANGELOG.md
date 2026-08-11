@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Updated the public release stamps from v0.2 to v0.3.
 - Simplified the landing copy around supported capability classes and reduced the preset gallery
   to three representative workflows: dev server, HTTP app + database, and CLI + project files.
   The complete preset catalog remains in the playground.

@@ -38,7 +38,7 @@ A Yandex Container-Optimized-Image VM PULLS images, so the rifty.dev path uses
 the image-based `docker-compose.coi.yml`; the "Deploy to rifty.dev" section
 below covers the build+push+metadata swap.
 
-Once `@riftydev/eddy` is published to npm, a thin image is just
+The published `@riftydev/eddy` package also supports a thin image:
 `FROM node:24-alpine` + `npm i -g @riftydev/eddy` + `CMD ["eddy"]`.
 
 ## Operator knobs (env)

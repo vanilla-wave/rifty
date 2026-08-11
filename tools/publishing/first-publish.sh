@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
-# One-time FIRST publish of the rifty packages with a token (15: the 14 libs +
-# the @riftydev/eddy service). Pass --only <filter> to bootstrap a single new
-# name later (e.g. --only @riftydev/eddy) without re-publishing the rest.
+# One-time FIRST publish of the rifty packages with a token (16: the 15 libs +
+# the @riftydev/eddy service). The live 16-name set already exists: do not rerun
+# the unfiltered command there. Pass --only <filter> for a future new name.
 #
 # Why a token (just this once): npm OIDC trusted publishing cannot create a
 # package name that does not exist yet (npm/cli#8544). After this initial
 # publish, add a GitHub Actions trusted publisher to each package on npmjs.com
-# (see docs/PUBLISHING.md) and every subsequent release is TOKENLESS via
+# (see docs/public/publishing.md) and every subsequent release is TOKENLESS via
 # .github/workflows/release.yml on a `v*` tag.
 #
-# The publish set: ./packages/* (11, incl. the umbrella `@riftydev/sdk`),
+# The publish set: ./packages/* (14, incl. the umbrella `@riftydev/sdk`),
 # @riftydev/shadow-registry, and the @riftydev/eddy service (services/eddy).
 # apps/playground + test fixtures stay private and are never matched by the
 # filter.
@@ -18,7 +18,7 @@
 # Usage:
 #   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh
 #   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run
-#   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/eddy
+#   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/new-package
 #
 # The token needs publish rights to the @riftydev scope. Since these names don't
 # exist yet, a granular token can't pre-select them — create it with
@@ -36,11 +36,11 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)
       DRY="--dry-run"
-      echo "▶ DRY RUN — packs, contacts no registry, publishes nothing." ;;
+      echo "▶ DRY RUN — packs and publishes nothing." ;;
     --only)
       shift
       ONLY="${1:-}"
-      [ -n "$ONLY" ] || { echo "✗ --only needs a package filter, e.g. --only @riftydev/eddy" >&2; exit 2; } ;;
+      [ -n "$ONLY" ] || { echo "✗ --only needs a package filter, e.g. --only @riftydev/new-package" >&2; exit 2; } ;;
     *)
       echo "✗ unknown argument: $1 (expected --dry-run and/or --only <filter>)" >&2; exit 2 ;;
   esac

@@ -58,9 +58,9 @@ test('serves configured search, sharing, crawl, and pre-JavaScript contracts', a
   await page.goto('/');
 
   await expect(page).toHaveTitle('Open Node-compatible runtime for the browser | rifty');
-  await expect(page.locator('.nav-version')).toHaveText('v0.2 · M11');
-  await expect(page.locator('.hero-host')).toHaveText('@riftydev/sdk · v0.2');
-  await expect(page.locator('.cta-footer-stamp')).toHaveText('v0.2 · M11 active');
+  await expect(page.locator('.nav-version')).toHaveText('v0.3 · M11');
+  await expect(page.locator('.hero-host')).toHaveText('@riftydev/sdk · v0.3');
+  await expect(page.locator('.cta-footer-stamp')).toHaveText('v0.3 · M11 active');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
     'https://site.example.test/',
