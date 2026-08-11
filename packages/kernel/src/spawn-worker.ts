@@ -8,8 +8,8 @@
  * hasn't been called by the host.
  *
  * All spawns share the singleton {@link SyncRpcDispatcher}. On exit/terminate
- * the `removeEventListener`s mirror the `addEventListener`s, so the
- * `WorkerLike` is GC-eligible.
+ * non-error listeners are removed; the guarded error listener stays attached
+ * for the terminated Worker's lifetime to own an already-queued error event.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -221,8 +221,8 @@ export function spawnKernelWorker(
   };
 
   /**
-   * Detach the dispatcher, terminate the worker, and remove every installed
-   * listener. Idempotent. Subscriber arrays are cleared by callers AFTER the
+   * Detach the dispatcher, terminate the worker, and remove non-error
+   * listeners. Idempotent. Subscriber arrays are cleared by callers AFTER the
    * final dispatch so waiters still receive their event.
    */
   function tearDownWorker(): void {
@@ -242,6 +242,9 @@ export function spawnKernelWorker(
         /* the realm may already be gone */
       }
       for (const [type, listener] of lifecycleListeners) {
+        // A browser may dispatch an already-queued error after terminate().
+        // Keep ownership for this Worker's lifetime to prevent default propagation.
+        if (type === 'error') continue;
         try {
           worker.removeEventListener(type, listener);
         } catch {
@@ -281,8 +284,8 @@ export function spawnKernelWorker(
     }
   }
 
-  // Named handlers so `tearDownWorker` can `removeEventListener` them;
-  // anonymous closures would leak per spawn forever.
+  // Named handlers let teardown remove traffic listeners while retaining the
+  // guarded error boundary for events queued before physical termination.
   const onMessage = (ev: MessageEvent): void => {
     const outputSeal = inspectOutputSeal();
     if (outputSeal.diagnostic.length > 0) {
@@ -337,8 +340,8 @@ export function spawnKernelWorker(
   // before the exit-1 dispatch — keeping the diagnostic from vanishing behind
   // the opaque exit 1 (backlog/kernel/worker-global-error-to-stderr).
   const onError = (ev: MessageEvent): void => {
-    // This boundary owns the fatal outcome; do not rethrow it into the creator.
-    ev.preventDefault();
+    // This boundary owns stderr/exit; cancel default propagation into its spawning realm.
+    ev.preventDefault?.();
     if (terminated || uncaughtErrorObserved) return;
     uncaughtErrorObserved = true;
     const e = ev as unknown as { message?: unknown; filename?: unknown; lineno?: unknown };

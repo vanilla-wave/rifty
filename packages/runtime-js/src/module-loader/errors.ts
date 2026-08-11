@@ -1,6 +1,9 @@
 export type ModuleLoadErrorCode =
   | 'MODULE_NOT_FOUND'
   | 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+  | 'ERR_REQUIRE_ASYNC_MODULE'
+  | 'ERR_REQUIRE_CYCLE_MODULE'
+  | 'ERR_REQUIRE_ESM_RACE_CONDITION'
   | 'INVALID_PACKAGE_TARGET'
   | 'UNSUPPORTED_PROTOCOL'
   | 'CIRCULAR_NAMED_IMPORT'
@@ -31,7 +34,9 @@ export class ModuleLoadError extends Error {
   ) {
     super(message);
     this.name =
-      code === 'MODULE_NOT_FOUND' && requireStack !== undefined ? 'Error' : 'ModuleLoadError';
+      (code === 'MODULE_NOT_FOUND' && requireStack !== undefined) || code.startsWith('ERR_REQUIRE_')
+        ? 'Error'
+        : 'ModuleLoadError';
     this.code = code;
     this.specifier = specifier;
     if (importer !== undefined) this.importer = importer;

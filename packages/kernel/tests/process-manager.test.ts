@@ -244,7 +244,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     }
   });
 
-  it('worker exit removes the kernel-side message/error/messageerror listeners on the underlying Worker', async () => {
+  it('worker exit removes non-error listeners and retains error ownership', async () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
       entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
@@ -264,9 +264,9 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     w.fire('message', attestedExitEvent(w, 0));
     await exit;
 
-    // After exit, the kernel must drop its listeners so the Worker GC-able.
+    // Non-error traffic is done; error ownership survives for queued browser dispatch.
     expect(w.listenerCount('message')).toBe(0);
-    expect(w.listenerCount('error')).toBe(0);
+    expect(w.listenerCount('error')).toBe(1);
     expect(w.listenerCount('messageerror')).toBe(0);
     expect(handle.exitCode).toBe(0);
   });

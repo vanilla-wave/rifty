@@ -229,3 +229,32 @@ describe('require() of a .ts module (CJS-scope honesty, feature 02 T4)', () => {
     expect(() => loader.require('./legacy.jsx', '/work/e.js')).toThrow(/require\(\) of .*\.jsx/);
   });
 });
+
+describe('require() of transformed ESM stays synchronous and loud', () => {
+  it.each(['ts', 'tsx', 'jsx'] as const)(
+    'rejects type-module .%s before invoking the async transform hook',
+    (extension) => {
+      const vfs = new MemoryFsSync();
+      vfs.loadFixture({
+        '/work/package.json': JSON.stringify({ type: 'module' }),
+        [`/work/module.${extension}`]:
+          extension === 'ts' ? 'export const value: number = 1;' : 'export const value = <div />;',
+      });
+      const transformSource = vi.fn(async () => 'export const value = 1;');
+      const loader = createModuleLoader(vfs, { cwd: '/work', transformSource });
+
+      let thrown: unknown;
+      try {
+        loader.require(`./module.${extension}`, '/work/entry.cjs');
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(NotImplementedError);
+      expect((thrown as NotImplementedError).feature).toBe(
+        'module-loader.transformed-esm-via-require',
+      );
+      expect(transformSource).not.toHaveBeenCalled();
+    },
+  );
+});

@@ -936,7 +936,7 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
     if (path === '/snapshots/vite-node-modules.json.gz') snapshotRequests.push(request.url());
   });
 
-  const result = await page.evaluate(async () => {
+  const result = await page.evaluate(async (closeDiagnosticsUrl) => {
     type ProcessExit = { readonly code: number | null; readonly signal: string | null };
     type Preview = { readonly port: number; readonly url: string };
     type ProjectDefinition = object;
@@ -1013,6 +1013,9 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
       };
       readonly wasm: { readonly sqlite: string };
     };
+    type CloseDiagnostics = {
+      throwDirectWorkbenchCloseFailure(error: unknown): never;
+    };
 
     const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
       new Promise<T>((resolve, reject) => {
@@ -1034,14 +1037,21 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
 
     const companionEntryUrl = '/src/browser-unit/workbench-playground-entry.ts';
     const mapperUrl = '/src/adapters/playground-project-plan.ts';
-    const [companionModule, mapperModule, presetsModule, starterModule, hostAssetsModule] =
-      await Promise.all([
-        import(/* @vite-ignore */ companionEntryUrl),
-        import(/* @vite-ignore */ mapperUrl),
-        import('/src/presets.ts'),
-        import('/src/glue/starter.ts'),
-        import('/src/browser-unit/workbench-vite-host-assets.ts'),
-      ]);
+    const [
+      companionModule,
+      mapperModule,
+      presetsModule,
+      starterModule,
+      hostAssetsModule,
+      closeDiagnosticsModule,
+    ] = await Promise.all([
+      import(/* @vite-ignore */ companionEntryUrl),
+      import(/* @vite-ignore */ mapperUrl),
+      import('/src/presets.ts'),
+      import('/src/glue/starter.ts'),
+      import('/src/browser-unit/workbench-vite-host-assets.ts'),
+      import(/* @vite-ignore */ closeDiagnosticsUrl),
+    ]);
     const companionEntry = companionModule as unknown as CompanionEntry;
     const toPlaygroundProjectPlan = (
       mapperModule as {
@@ -1072,6 +1082,7 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
 
     const hostAssets = (hostAssetsModule as { readonly workbenchViteHostAssets: HostAssets })
       .workbenchViteHostAssets;
+    const closeDiagnostics = closeDiagnosticsModule as CloseDiagnostics;
     const ownerWorkerUrl = new URL(hostAssets.workers.owner, location.href);
     const ownerWorkerBaseUrl = new URL('.', ownerWorkerUrl);
     const ownerWorkerReference = ownerWorkerUrl.href.slice(ownerWorkerBaseUrl.href.length);
@@ -1133,11 +1144,15 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
       run = null;
       detach();
       detach = null;
-      await withTimeout(
-        workbench.close(),
-        'Playground Workbench close over open Vite session',
-        60_000,
-      );
+      try {
+        await withTimeout(
+          workbench.close(),
+          'Playground Workbench close over open Vite session',
+          60_000,
+        );
+      } catch (error) {
+        closeDiagnostics.throwDirectWorkbenchCloseFailure(error);
+      }
       session = null;
       workbench = null;
 
@@ -1162,7 +1177,7 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
       if (workbench !== null) await workbench.close().catch(() => {});
       baseElement.remove();
     }
-  });
+  }, sealedWorkbenchFixtureUrl);
 
   expect(result.plan.id).toBe('scratch');
   expect(result.plan.port).toBe(5174);

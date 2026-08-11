@@ -19,6 +19,23 @@ describe('node:util.format', () => {
   });
 });
 
+describe('node:util.formatWithOptions', () => {
+  it('threads depth through inspect and shares ordinary format semantics', () => {
+    const value = { outer: { inner: 1 } };
+    expect(util.formatWithOptions({ depth: 0 }, 'value=%O', value)).toBe(
+      'value={ outer: [Object] }',
+    );
+    expect(util.formatWithOptions({ depth: 0 }, value)).toBe(util.inspect(value, { depth: 0 }));
+    expect(util.formatWithOptions({}, '%O', value)).toBe(util.format('%O', value));
+  });
+
+  it('rejects a non-object inspectOptions argument', () => {
+    expect(() => util.formatWithOptions(null as never, 'value')).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+  });
+});
+
 describe('node:util.styleText', () => {
   it('applies ANSI styles when stream validation is disabled', () => {
     expect(util.styleText('red', 'x', { validateStream: false })).toBe('\x1B[31mx\x1B[39m');
@@ -81,6 +98,41 @@ describe('node:util.stripVTControlCharacters', () => {
 
   it('throws a Node-coded error for non-strings', () => {
     expect(() => util.stripVTControlCharacters(null)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+  });
+});
+
+describe('node:util.parseEnv', () => {
+  it('implements Node dotenv quoting, comments, exports, and overwrite order', () => {
+    expect(
+      util.parseEnv(
+        [
+          '# comment',
+          'export ZETA = first',
+          'ALPHA=plain # ignored',
+          'ZETA=last',
+          'DOUBLE="line\\nnext"',
+          "SINGLE='  # kept  '",
+        ].join('\r\n'),
+      ),
+    ).toEqual({
+      ALPHA: 'plain',
+      DOUBLE: 'line\nnext',
+      SINGLE: '  # kept  ',
+      ZETA: 'last',
+    });
+  });
+
+  it('returns an ordinary object without creating an own __proto__ property', () => {
+    const parsed = util.parseEnv('__proto__=ignored\nconstructor=own');
+    expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
+    expect(Object.hasOwn(parsed, '__proto__')).toBe(false);
+    expect(parsed.constructor).toBe('own');
+  });
+
+  it('rejects non-string content with Node error code', () => {
+    expect(() => util.parseEnv(null)).toThrow(
       expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
     );
   });

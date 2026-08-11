@@ -536,7 +536,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(manager.snapshot()).toEqual([{ pid: 1, ppid: 0, command: 'rifty' }]);
   });
 
-  it('keeps an owner-root remote PID published until its physical settle proof', async () => {
+  it('keeps an owner-root remote PID published and kill-idempotent until physical settle proof', async () => {
     const manager = new ProcessManager();
     const worker = new BoundaryWorker();
     setWorkerFactoryForTests(() => worker);
@@ -546,13 +546,31 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     manager.commitRemoteProcess(pid, owner.pid);
 
     expect(manager.kill(pid, 'SIGTERM')).toBe(true);
+    expect(manager.kill(pid, 'SIGTERM')).toBe(true);
     expect(manager.snapshot()).toContainEqual({ pid, ppid: owner.pid, command: 'node' });
     await vi.waitFor(() =>
-      expect(controls).toContainEqual({ kind: 'control:kill-tree', pid, signal: 'SIGTERM' }),
+      expect(controls).toEqual([{ kind: 'control:kill-tree', pid, signal: 'SIGTERM' }]),
     );
 
     manager.settleRemoteProcess(pid, owner.pid, null, 'SIGTERM');
     expect(manager.snapshot()).not.toContainEqual({ pid, ppid: owner.pid, command: 'node' });
+    owner.kill();
+  });
+
+  it('returns false when a published remote PID has no physical Worker control route', () => {
+    const manager = new ProcessManager();
+    const owner = manager.spawn('same-realm-owner', liveUntilKilled);
+    const pid = manager.reserveRemoteProcess('node', owner.pid, '/workspace', owner.pid);
+    manager.commitRemoteProcess(pid, owner.pid);
+
+    expect(manager.kill(pid, 'SIGTERM')).toBe(false);
+    expect(manager.snapshot()).toContainEqual({
+      pid,
+      ppid: owner.pid,
+      command: 'node',
+    });
+
+    manager.settleRemoteProcess(pid, owner.pid, null, 'SIGTERM');
     owner.kill();
   });
 
@@ -1064,6 +1082,12 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
         { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM' },
       ]),
     );
+    expect(manager.kill(42, 'SIGTERM')).toBe(true);
+    expect(manager.kill(41, 'SIGTERM')).toBe(true);
+    expect(controls).toEqual([
+      { kind: 'control:kill-tree', pid: 42, signal: 'SIGTERM' },
+      { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM' },
+    ]);
     expect(owner.signalCode).toBeNull();
     expect(worker.terminate).not.toHaveBeenCalled();
 

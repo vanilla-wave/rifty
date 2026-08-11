@@ -391,4 +391,27 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
       /descendant process authority is already bound/i,
     );
   });
+
+  it('fails loud when descendant authority refuses a still-published target', () => {
+    const ipc = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    bindNodeProcessDescendantAuthority(process, {
+      kill: () => false,
+      snapshot: () => [{ pid: 41 }],
+    });
+    const receive = ipc.port1.onmessage;
+    if (receive === null) throw new Error('process control receiver was not installed');
+
+    expect(() =>
+      receive.call(
+        ipc.port1,
+        new MessageEvent('message', {
+          data: { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM' },
+        }),
+      ),
+    ).toThrow('process control could not kill descendant PID 41');
+  });
 });

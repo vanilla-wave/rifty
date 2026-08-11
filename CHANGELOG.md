@@ -152,6 +152,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Node eval parity isolates host handled-rejection warnings.** The Node Worker
+  adapter consumes its host-only `rejectionHandled` event, so deferred `-p`
+  Promise inspection cannot write `PromiseRejectionHandledWarning` into guest
+  stderr after the process terminal cut; `unhandledRejection` stays authoritative.
+
 - **Node eval oracle CI no longer drifts with floating Node 24 patches.**
   Unit/parity and browser jobs that execute the frozen v24.16.0 oracle now pin
   that exact patch; a job-scoped guard rejects missing, duplicate, or floating

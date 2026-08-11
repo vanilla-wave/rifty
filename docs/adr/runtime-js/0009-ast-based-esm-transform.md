@@ -3,6 +3,10 @@
 Status: Accepted (supersedes the regex-based approach described in ADR 0004 §"ESM loader")
 Date: 2026-05
 
+> Correction 2026-08-10 (ADR-0348): the AST transform remains shared, but its
+> output is no longer unconditionally wrapped in an async arrow. Synchronous
+> plain-JS graphs required by Node 24 also receive a synchronous evaluator.
+
 > TL;DR: ESM rewriter parses with `acorn` and a hand-rolled scope-stack walker so imported bindings shadowed by params/locals stay untouched, replacing the regex zone-scanner
 
 ## Context

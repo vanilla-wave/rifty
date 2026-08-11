@@ -40,6 +40,7 @@ import {
   NodeCliEvalVfsObserver,
   nodeCliEvalTransientSourceCarrierMutations,
 } from './node-cli-eval-vfs-observer.ts';
+import { installNodeHostRejectionEvents } from './node-host-rejection-events.ts';
 import type { NodeCliEvalVfsFault, PhysicalStdioDeliveryFault } from './run-in-rifty.ts';
 
 interface WorkerEnvHarnessData {
@@ -112,7 +113,7 @@ setSyncMirror(vfs);
 
 resetKeepalive();
 installTimerGlobals();
-hostProcess.on('unhandledRejection', (reason) => {
+installNodeHostRejectionEvents(hostProcess, (reason) => {
   if (!beginNodeEvalUnhandled(reason, 'rejection')) recordRejection(reason);
 });
 const onUncaughtException = (error: unknown): void => {

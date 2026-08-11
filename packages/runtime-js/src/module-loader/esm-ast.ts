@@ -16,18 +16,13 @@ import type {
   CatchClause,
   ClassDeclaration,
   ClassExpression,
-  ExportAllDeclaration,
-  ExportDefaultDeclaration,
-  ExportNamedDeclaration,
   ForInStatement,
   ForOfStatement,
   ForStatement,
   Identifier,
-  ImportDeclaration,
   ImportExpression,
   MemberExpression,
   MetaProperty,
-  Node,
   ObjectPattern,
   Pattern,
   Program,
@@ -37,6 +32,24 @@ import type {
 } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { ModuleLoadError } from './errors.ts';
+import {
+  type EsmAstEdit as Edit,
+  type EsmImportBinding as ImportBinding,
+  type LinkedExports,
+  type TransformHelperNames,
+  planEsmDeclarations,
+  renderImportBinding,
+} from './esm-declaration-plan.ts';
+
+export type {
+  LinkedExports,
+  LinkedImportBinding,
+  LinkedImportRequirement,
+  LinkedLocalExport,
+  LinkedNamedReexport,
+  LinkedNamespaceReexport,
+  TransformHelperNames,
+} from './esm-declaration-plan.ts';
 
 /**
  * Mangled binding the generated body uses to reach the REAL global `Object`
@@ -48,33 +61,6 @@ import { ModuleLoadError } from './errors.ts';
  * sync with `esm.ts`, the only consumer.
  */
 export const RUNTIME_OBJECT_BINDING = '__riftyObject';
-
-export interface TransformHelperNames {
-  readonly dynamicImport: string;
-  readonly importStatic: string;
-  readonly slots: string;
-  readonly rebuildExports: string;
-  readonly importMeta: string;
-  readonly importMetaUrl: string;
-  readonly metaDirname: string;
-  readonly metaFilename: string;
-  readonly assetPath: string;
-  readonly metaResolve: string;
-  readonly runtimeObject: string;
-}
-
-interface ImportBinding {
-  /** The synthesized local namespace variable, e.g. `__m0`. */
-  readonly ns: string;
-  /** `'*'` for `import * as ns`, `'default'` for default, or the named binding. */
-  readonly imported: string;
-}
-
-interface Edit {
-  readonly start: number;
-  readonly end: number;
-  readonly text: string;
-}
 
 type Scope = Map<string, true>;
 
@@ -158,10 +144,7 @@ function emitEdit(ctx: Ctx, start: number, end: number, text: string): void {
 }
 
 function replacementFor(b: ImportBinding): string {
-  if (b.imported === '*') return b.ns;
-  if (b.imported === 'default') return `${b.ns}.default`;
-  if (/^[A-Za-z_$][\w$]*$/.test(b.imported)) return `${b.ns}.${b.imported}`;
-  return `${b.ns}[${JSON.stringify(b.imported)}]`;
+  return renderImportBinding(b);
 }
 
 /**
@@ -531,6 +514,14 @@ export interface TransformResult {
   readonly lineMap: readonly number[];
   /** Every static import / re-export specifier — preloaded by the caller. */
   readonly staticImports: readonly string[];
+  /** True when module evaluation itself can suspend (nested functions excluded). */
+  readonly hasTopLevelAwait: boolean;
+  /** Static export graph descriptors consumed by the loader's link phase. */
+  readonly linkedExports: LinkedExports;
+  /** Generator pre-yield declarations: exposes bindings after declaration instantiation. */
+  readonly instantiationBody: string;
+  /** Exported function/var bindings require the shared generator environment before deps run. */
+  readonly needsGeneratorInstantiation: boolean;
   /** Collision-free helper identifiers used by the rewritten body. */
   readonly helpers: TransformHelperNames;
 }
@@ -587,287 +578,26 @@ export function transformEsm(source: string, id: string): TransformResult {
     );
   }
 
-  const edits: Edit[] = [];
-  const staticImports = new Set<string>();
-  /** Map of local binding name (in the original source) → resolved import. */
-  const importedBindings = new Map<string, ImportBinding>();
   const helpers = createHelperNames(source);
   const generatedNames = new Set(Object.values(helpers));
-  let importCounter = 0;
-
-  for (const node of program.body) {
-    if (node.type === 'ImportDeclaration') {
-      if (isFileAttributeImport(node)) {
-        // `import x from "spec" with { type: "file" }` binds the local to the
-        // resolved PATH, not a module. Deliberately NOT in staticImports — the
-        // asset is never evaluated as a module (may be binary, e.g. opencode's
-        // `photon_rs_bg.wasm`).
-        handleFileImport(
-          node,
-          uniqueHelperName(source, generatedNames, `__file${importCounter++}`),
-          edits,
-          helpers,
-        );
-      } else {
-        const ns = uniqueHelperName(source, generatedNames, `__m${importCounter++}`);
-        handleImportDeclaration(node, ns, edits, importedBindings, helpers);
-        staticImports.add(literalString(node.source.value));
-      }
-    } else if (node.type === 'ExportNamedDeclaration') {
-      const sourceLit = node.source ? literalString(node.source.value) : null;
-      if (sourceLit !== null) {
-        const ns = uniqueHelperName(source, generatedNames, `__m${importCounter++}`);
-        handleReExportNamed(node, ns, edits, sourceLit, helpers);
-        staticImports.add(sourceLit);
-      } else {
-        handleExportNamed(node, edits, importedBindings, helpers);
-      }
-    } else if (node.type === 'ExportDefaultDeclaration') {
-      handleExportDefault(node, edits, source, helpers);
-    } else if (node.type === 'ExportAllDeclaration') {
-      const ns = uniqueHelperName(source, generatedNames, `__m${importCounter++}`);
-      const sourceLit = literalString(node.source.value);
-      handleExportAll(node, ns, edits, sourceLit, helpers);
-      staticImports.add(sourceLit);
-    }
-  }
-
-  collectRewrites(program, source, importedBindings, edits, helpers);
+  const declarationPlan = planEsmDeclarations(program, source, helpers, (base) =>
+    uniqueHelperName(source, generatedNames, base),
+  );
+  const edits = declarationPlan.edits;
+  collectRewrites(program, source, declarationPlan.importedBindings, edits, helpers);
 
   const applied = applyEdits(source, edits);
   const body = `${helpers.rebuildExports}();\n${applied.body}`;
   return {
     body,
     lineMap: [0, ...applied.lineMap],
-    staticImports: [...staticImports],
+    staticImports: declarationPlan.staticImports,
+    hasTopLevelAwait: declarationPlan.hasTopLevelAwait,
+    linkedExports: declarationPlan.linkedExports,
+    instantiationBody: declarationPlan.instantiationBody,
+    needsGeneratorInstantiation: declarationPlan.needsGeneratorInstantiation,
     helpers,
   };
-}
-
-/**
- * True for an import carrying the `with { type: "file" }` attribute (esbuild/Bun
- * "file" loader). acorn exposes import attributes as `node.attributes` (older
- * trees: `node.assertions`); each is `{ key, value }` with a string-literal
- * `value`. opencode uses this to import an asset's PATH, e.g.
- * `import photonWasm from "…/photon_rs_bg.wasm" with { type: "file" }`.
- */
-function isFileAttributeImport(node: ImportDeclaration): boolean {
-  const attrs = node.attributes;
-  if (!attrs) return false;
-  for (const a of attrs) {
-    const key = a.key.type === 'Identifier' ? a.key.name : String(a.key.value ?? '');
-    if (key === 'type' && a.value.value === 'file') return true;
-  }
-  return false;
-}
-
-/**
- * Emit a `with { type: "file" }` import as a binding to the asset's resolved
- * absolute PATH. The injected `__assetPath` helper (esm.ts) resolves the
- * specifier to its file id without loading it as a module. Default specifier →
- * the path string; namespace specifier → `{ default: <path> }`. Named specifiers
- * are meaningless for a file asset and are dropped.
- */
-function handleFileImport(
-  node: ImportDeclaration,
-  assetVar: string,
-  edits: Edit[],
-  helpers: TransformHelperNames,
-): void {
-  const spec = literalString(node.source.value);
-  const lines: string[] = [`const ${assetVar} = ${helpers.assetPath}(${JSON.stringify(spec)});`];
-  for (const s of node.specifiers) {
-    if (s.type === 'ImportDefaultSpecifier') {
-      lines.push(`const ${s.local.name} = ${assetVar};`);
-    } else if (s.type === 'ImportNamespaceSpecifier') {
-      lines.push(`const ${s.local.name} = { default: ${assetVar} };`);
-    }
-  }
-  edits.push({ start: node.start, end: node.end, text: lines.join('\n') });
-}
-
-function handleImportDeclaration(
-  node: ImportDeclaration,
-  ns: string,
-  edits: Edit[],
-  importedBindings: Map<string, ImportBinding>,
-  helpers: TransformHelperNames,
-): void {
-  const spec = literalString(node.source.value);
-  const lines: string[] = [`const ${ns} = ${helpers.importStatic}(${JSON.stringify(spec)});`];
-
-  for (const s of node.specifiers) {
-    if (s.type === 'ImportDefaultSpecifier') {
-      importedBindings.set(s.local.name, { ns, imported: 'default' });
-    } else if (s.type === 'ImportNamespaceSpecifier') {
-      importedBindings.set(s.local.name, { ns, imported: '*' });
-    } else {
-      const imported =
-        s.imported.type === 'Identifier' ? s.imported.name : String(s.imported.value ?? '');
-      importedBindings.set(s.local.name, { ns, imported });
-    }
-  }
-
-  edits.push({ start: node.start, end: node.end, text: lines.join('\n') });
-}
-
-function handleReExportNamed(
-  node: ExportNamedDeclaration,
-  ns: string,
-  edits: Edit[],
-  sourceLit: string,
-  helpers: TransformHelperNames,
-): void {
-  const lines: string[] = [
-    `{ const ${ns} = ${helpers.importStatic}(${JSON.stringify(sourceLit)});`,
-  ];
-  for (const s of node.specifiers) {
-    const exported =
-      s.exported.type === 'Identifier' ? s.exported.name : String(s.exported.value ?? '');
-    const local = s.local.type === 'Identifier' ? s.local.name : String(s.local.value ?? '');
-    lines.push(
-      `${helpers.runtimeObject}.defineProperty(${helpers.slots}, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ns}[${JSON.stringify(local)}] });`,
-    );
-  }
-  lines.push(`${helpers.rebuildExports}(); }`);
-  edits.push({ start: node.start, end: node.end, text: lines.join('\n') });
-}
-
-function handleExportNamed(
-  node: ExportNamedDeclaration,
-  edits: Edit[],
-  imports: Map<string, ImportBinding>,
-  helpers: TransformHelperNames,
-): void {
-  if (node.declaration) {
-    const decl = node.declaration;
-    const names = collectDeclarationNames(decl);
-    // Strip `export` so the declaration body stays in place for the walker to
-    // rewrite identifier references inside it.
-    edits.push({ start: node.start, end: decl.start, text: '' });
-    const trailing: string[] = [];
-    for (const n of names) {
-      trailing.push(
-        `${helpers.runtimeObject}.defineProperty(${helpers.slots}, ${JSON.stringify(n)}, { configurable: true, enumerable: true, get: () => ${n} });`,
-      );
-    }
-    trailing.push(`${helpers.rebuildExports}();`);
-    edits.push({ start: decl.end, end: node.end, text: `\n${trailing.join('\n')}` });
-    return;
-  }
-  // export { a, b as c };
-  const lines: string[] = [];
-  for (const s of node.specifiers) {
-    const exported =
-      s.exported.type === 'Identifier' ? s.exported.name : String(s.exported.value ?? '');
-    const local = s.local.type === 'Identifier' ? s.local.name : String(s.local.value ?? '');
-    const ref = referenceFor(local, imports);
-    lines.push(
-      `${helpers.runtimeObject}.defineProperty(${helpers.slots}, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ref} });`,
-    );
-  }
-  lines.push(`${helpers.rebuildExports}();`);
-  edits.push({ start: node.start, end: node.end, text: lines.join('\n') });
-}
-
-function handleExportDefault(
-  node: ExportDefaultDeclaration,
-  edits: Edit[],
-  _source: string,
-  helpers: TransformHelperNames,
-): void {
-  const decl = node.declaration;
-  if ((decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') && decl.id) {
-    const name = decl.id.name;
-    // Strip `export default `, leaving the declaration for the walker to rewrite,
-    // then append a slot write.
-    edits.push({ start: node.start, end: decl.start, text: '' });
-    edits.push({
-      start: decl.end,
-      end: node.end,
-      text: `\n${helpers.slots}.default = ${name};\n${helpers.rebuildExports}();`,
-    });
-    return;
-  }
-  // Anonymous declaration or expression — wrap as an assignment to the default slot,
-  // leaving the body/expr in place for the walker to rewrite refs inside it.
-  edits.push({ start: node.start, end: decl.start, text: `${helpers.slots}.default = (` });
-  edits.push({ start: decl.end, end: node.end, text: `);\n${helpers.rebuildExports}();` });
-}
-
-function referenceFor(local: string, imports: Map<string, ImportBinding>): string {
-  const b = imports.get(local);
-  if (!b) return local;
-  if (b.imported === '*') return b.ns;
-  if (b.imported === 'default') return `${b.ns}.default`;
-  if (/^[A-Za-z_$][\w$]*$/.test(b.imported)) return `${b.ns}.${b.imported}`;
-  return `${b.ns}[${JSON.stringify(b.imported)}]`;
-}
-
-function handleExportAll(
-  node: ExportAllDeclaration,
-  ns: string,
-  edits: Edit[],
-  sourceLit: string,
-  helpers: TransformHelperNames,
-): void {
-  if (node.exported) {
-    const exportedName =
-      node.exported.type === 'Identifier' ? node.exported.name : String(node.exported.value ?? '');
-    const text = `{ const ${ns} = ${helpers.importStatic}(${JSON.stringify(sourceLit)}); ${helpers.runtimeObject}.defineProperty(${helpers.slots}, ${JSON.stringify(exportedName)}, { configurable: true, enumerable: true, get: () => ${ns} }); ${helpers.rebuildExports}(); }`;
-    edits.push({ start: node.start, end: node.end, text });
-    return;
-  }
-  const text = `{ const ${ns} = ${helpers.importStatic}(${JSON.stringify(sourceLit)}); for (const __k of ${helpers.runtimeObject}.keys(${ns})) if (__k !== 'default') ${helpers.runtimeObject}.defineProperty(${helpers.slots}, __k, { configurable: true, enumerable: true, get: ((k) => () => ${ns}[k])(__k) }); ${helpers.rebuildExports}(); }`;
-  edits.push({ start: node.start, end: node.end, text });
-}
-
-function collectDeclarationNames(decl: Node): string[] {
-  const out: string[] = [];
-  if (decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') {
-    const id = (decl as { id?: Identifier | null }).id;
-    if (id) out.push(id.name);
-    return out;
-  }
-  if (decl.type === 'VariableDeclaration') {
-    const varDecl = decl as unknown as { declarations: { id: Pattern }[] };
-    for (const d of varDecl.declarations) collectPatternNames(d.id, out);
-  }
-  return out;
-}
-
-function collectPatternNames(pat: Pattern, out: string[]): void {
-  switch (pat.type) {
-    case 'Identifier':
-      out.push(pat.name);
-      return;
-    case 'ObjectPattern':
-      for (const p of (pat as ObjectPattern).properties) {
-        if (p.type === 'RestElement') collectPatternNames(p.argument, out);
-        else collectPatternNames(p.value, out);
-      }
-      return;
-    case 'ArrayPattern':
-      for (const el of (pat as ArrayPattern).elements) {
-        if (el) collectPatternNames(el, out);
-      }
-      return;
-    case 'RestElement':
-      collectPatternNames((pat as RestElement).argument, out);
-      return;
-    case 'AssignmentPattern':
-      collectPatternNames((pat as AssignmentPattern).left, out);
-      return;
-    default:
-      return;
-  }
-}
-
-function literalString(value: unknown): string {
-  if (typeof value !== 'string') {
-    throw new Error('expected string literal');
-  }
-  return value;
 }
 
 interface AppliedEdits {

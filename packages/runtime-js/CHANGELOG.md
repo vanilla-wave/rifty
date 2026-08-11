@@ -4,6 +4,17 @@
 
 ### Added
 
+- **Node 24 synchronous `require(ESM)` (ADR-0348).** Plain-JS graphs now share
+  one import/require job with Node namespace, `"module.exports"`, TLA, cycle,
+  race, resolver, and statically detected CJS re-export semantics;
+  `process.features.require_module` is `true`.
+- **Vite builtin named imports.** `node:fs/promises` exports its shared
+  `fs.constants`; `node:util` exports `formatWithOptions`, threading the existing
+  inspect-options contract through Node's formatting rules, and Node 24's
+  `parseEnv` with exact dotenv parsing semantics; `node:worker_threads` exports
+  the real host `MessageChannel` constructor with exact global identity;
+  `node:child_process` exports spawn-owned `execFile` with Node callback,
+  error, timeout, `maxBuffer`, encoding, and custom-promisify semantics.
 - **Exact Node v24.0.0 `process.release` identity (ADR-0345).** Every owner and
   spawned process gets an isolated, descriptor-faithful non-LTS release object.
 - **Node 24 CommonJS eval identity (ADR-0339).** `node -e` and `node -p` run

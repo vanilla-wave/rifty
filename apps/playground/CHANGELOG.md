@@ -14,6 +14,10 @@
 
 ### Fixed
 
+- Node 24 `require(ESM)` no longer makes the playground dev host discover
+  `cjs-module-lexer` mid-session and full-reload away the live owner. Rebaked
+  TypeScript/Vite snapshots carry the new esbuild recipe identity and refresh
+  their ranged closure to `nanoid@3.3.18` and `postcss@8.5.26`.
 - Re-baked every instant dependency asset as snapshot v3 with new exact
   identities; Vite 8 includes its verified LightningCSS replay tarball while
   Vite 7 and TypeScript carry an empty shadow-cache closure. The required live

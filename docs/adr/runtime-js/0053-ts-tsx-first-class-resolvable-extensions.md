@@ -9,6 +9,11 @@ Date: 2026-05-30
 > transform hook stand; references below to the vendored WASI binding describe
 > the retired proof provider, not a current product path.
 
+> Correction 2026-08-10 (ADR-0348): the TS-aware extension list remains the
+> import resolver's deliberate deviation. Node 24 synchronous `require(ESM)`
+> splits out Node's `.js`/`.json`/`.node` legacy fallback; `.mjs`, `.cjs`, and
+> TS-family files require an explicit suffix on the require path.
+
 ## Context
 
 opencode (the M12 facade target) is a `.ts` graph: `import { Session } from "@/session/session"` lands on `session.ts`, and the package ships `"exports": { "./*": "./src/*.ts" }` with hundreds of extensionless / `.ts` relative imports. The rifty resolver (ADR-0004) never treated `.ts`/`.tsx` as resolvable: `DEFAULT_EXTENSIONS`/`INDEX_FILES` (`resolver.ts:25-26`) listed only `.js`/`.mjs`/`.cjs`/`.json`, and `detectKind` (`resolver.ts:437`) classified any unknown extension as CJS. So a `.ts` target failed to resolve (`MODULE_NOT_FOUND`), and even if resolved, would be mis-classified CJS.

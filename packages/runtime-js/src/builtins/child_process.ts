@@ -15,7 +15,7 @@
  * no shell. `spawn('node', [script])` runs `script` through our loader.
  */
 
-import { Buffer, EventEmitter, NotImplementedError, Readable, type Writable } from '@riftydev/io';
+import { EventEmitter, NotImplementedError, Readable, type Writable } from '@riftydev/io';
 import {
   type ProcessHandle,
   type ProcessIO,
@@ -32,6 +32,12 @@ import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
+import {
+  type BufferedExecutionCallback,
+  type BufferedExecutionOutput,
+  collectChildProcessOutput,
+  normalizeBufferedExecutionOptions,
+} from './child_process-output.ts';
 import { execSync } from './child_process-sync.ts';
 import {
   type SpawnStdio,
@@ -86,8 +92,20 @@ interface SpawnOptions {
 }
 
 interface ExecOptions extends SpawnOptions {
-  encoding?: string;
+  encoding?: string | null;
+  killSignal?: number | string;
   maxBuffer?: number;
+  timeout?: number;
+}
+
+interface ExecFileOptions extends ExecOptions {
+  argv0?: string;
+  gid?: number;
+  shell?: boolean | string;
+  signal?: AbortSignal;
+  uid?: number;
+  windowsHide?: boolean;
+  windowsVerbatimArguments?: boolean;
 }
 
 class ChildProcess extends EventEmitter {
@@ -447,29 +465,186 @@ function runKill(args: readonly string[]): void {
 
 export function exec(
   cmd: string,
-  optsOrCb?: ExecOptions | ((err: Error | null, stdout: string, stderr: string) => void),
-  cb?: (err: Error | null, stdout: string, stderr: string) => void,
+  optsOrCb?: ExecOptions | BufferedExecutionCallback,
+  cb?: BufferedExecutionCallback,
 ): ChildProcess {
   const opts: ExecOptions = typeof optsOrCb === 'function' ? {} : (optsOrCb ?? {});
   const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) ?? (() => {});
+  const buffered = normalizeBufferedExecutionOptions(opts);
 
   const tokens = cmd.split(/\s+/).filter(Boolean);
   const cmdName = tokens[0] ?? '';
   const child = spawn(cmdName, tokens.slice(1), opts);
-  let stdoutBuf = '';
-  let stderrBuf = '';
-  child.stdout?.on('data', (c) => {
-    stdoutBuf += typeof c === 'string' ? c : Buffer.from(c as Uint8Array).toString();
-  });
-  child.stderr?.on('data', (c) => {
-    stderrBuf += typeof c === 'string' ? c : Buffer.from(c as Uint8Array).toString();
-  });
-  child.on('close', (code) => {
-    const err = code !== 0 ? Object.assign(new Error(`Command failed: ${cmd}`), { code }) : null;
-    cbFinal(err, stdoutBuf, stderrBuf);
-  });
+  collectChildProcessOutput(child, cmd, [], buffered, cbFinal);
   return child;
 }
+
+export function execFile(
+  file: string,
+  argsOrOptions?: string[] | ExecFileOptions | BufferedExecutionCallback | null,
+  optionsOrCallback?: ExecFileOptions | BufferedExecutionCallback | null,
+  callback?: BufferedExecutionCallback | null,
+): ChildProcess {
+  validateExecFileString(file, 'file');
+  if (file.length === 0) {
+    throw Object.assign(new TypeError("The argument 'file' cannot be empty. Received ''"), {
+      code: 'ERR_INVALID_ARG_VALUE',
+    });
+  }
+
+  const normalized = normalizeExecFileArguments(argsOrOptions, optionsOrCallback, callback);
+  for (let index = 0; index < normalized.args.length; index++) {
+    validateExecFileString(normalized.args[index], `args[${index}]`);
+  }
+  validateExecFilePlatformOptions(normalized.options);
+  const buffered = normalizeBufferedExecutionOptions(normalized.options);
+  const child = spawn(file, normalized.args, {
+    cwd: normalized.options.cwd ?? undefined,
+    env: normalized.options.env ?? undefined,
+  });
+  collectChildProcessOutput(
+    child,
+    file,
+    normalized.args,
+    buffered,
+    normalized.callback ?? undefined,
+  );
+  return child;
+}
+
+function normalizeExecFileArguments(
+  argsOrOptions: string[] | ExecFileOptions | BufferedExecutionCallback | null | undefined,
+  optionsOrCallback: ExecFileOptions | BufferedExecutionCallback | null | undefined,
+  callback: BufferedExecutionCallback | null | undefined,
+): {
+  readonly args: string[];
+  readonly options: ExecFileOptions;
+  readonly callback: BufferedExecutionCallback | null | undefined;
+} {
+  let args: string[] = [];
+  let options: ExecFileOptions = {};
+  let resolvedCallback = callback;
+
+  if (Array.isArray(argsOrOptions)) {
+    args = [...argsOrOptions];
+    if (typeof optionsOrCallback === 'function') resolvedCallback = optionsOrCallback;
+    else if (optionsOrCallback !== null && optionsOrCallback !== undefined) {
+      validateExecFileOptions(optionsOrCallback);
+      options = optionsOrCallback;
+    }
+  } else if (typeof argsOrOptions === 'function') {
+    resolvedCallback = argsOrOptions;
+  } else if (argsOrOptions !== null && argsOrOptions !== undefined) {
+    if (typeof argsOrOptions !== 'object') {
+      throw nodeExecFileTypeError('args', 'object', argsOrOptions);
+    }
+    validateExecFileOptions(argsOrOptions);
+    options = argsOrOptions;
+    resolvedCallback =
+      typeof optionsOrCallback === 'function'
+        ? optionsOrCallback
+        : (optionsOrCallback as BufferedExecutionCallback | null | undefined);
+  } else if (typeof optionsOrCallback === 'function') {
+    resolvedCallback = optionsOrCallback;
+  } else if (optionsOrCallback !== null && optionsOrCallback !== undefined) {
+    validateExecFileOptions(optionsOrCallback);
+    options = optionsOrCallback;
+  }
+
+  if (resolvedCallback !== null && resolvedCallback !== undefined) {
+    if (typeof resolvedCallback !== 'function') {
+      throw nodeExecFileTypeError('callback', 'function', resolvedCallback);
+    }
+  }
+  return { args, options, callback: resolvedCallback };
+}
+
+function validateExecFileOptions(value: unknown): asserts value is ExecFileOptions {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw nodeExecFileTypeError('options', 'object', value);
+  }
+}
+
+function validateExecFileString(value: unknown, name: string): asserts value is string {
+  if (typeof value !== 'string') throw nodeExecFileTypeError(name, 'string', value);
+  if (value.includes('\0')) {
+    throw Object.assign(
+      new TypeError(`The argument '${name}' must be a string without null bytes`),
+      {
+        code: 'ERR_INVALID_ARG_VALUE',
+      },
+    );
+  }
+}
+
+function validateExecFilePlatformOptions(options: ExecFileOptions): void {
+  if (options.cwd !== undefined && options.cwd !== null && typeof options.cwd !== 'string') {
+    throw nodeExecFileTypeError('options.cwd', 'string', options.cwd);
+  }
+  if (options.env !== undefined && options.env !== null && typeof options.env !== 'object') {
+    throw nodeExecFileTypeError('options.env', 'object', options.env);
+  }
+  if (options.shell != null && options.shell !== false) {
+    throw new NotImplementedError('child_process.execFile.shell');
+  }
+  for (const [name, value] of [
+    ['argv0', options.argv0],
+    ['gid', options.gid],
+    ['uid', options.uid],
+  ] as const) {
+    if (value != null) throw new NotImplementedError(`child_process.execFile.${name}`);
+  }
+  if (options.signal === null) {
+    throw nodeExecFileTypeError('options.signal', 'AbortSignal', options.signal);
+  }
+  if (options.signal !== undefined) {
+    throw new NotImplementedError('child_process.execFile.signal');
+  }
+}
+
+function nodeExecFileTypeError(name: string, expected: string, value: unknown): TypeError {
+  return Object.assign(
+    new TypeError(
+      `The "${name}" argument must be of type ${expected}. Received type ${typeof value}`,
+    ),
+    { code: 'ERR_INVALID_ARG_TYPE' },
+  );
+}
+
+const PROMISIFY_CUSTOM = Symbol.for('nodejs.util.promisify.custom');
+type ExecFilePromiseResult = {
+  readonly stdout: BufferedExecutionOutput;
+  readonly stderr: BufferedExecutionOutput;
+};
+type ExecFilePromise = Promise<ExecFilePromiseResult> & { child: ChildProcess };
+
+const promisifiedExecFile = (...args: unknown[]): ExecFilePromise => {
+  let resolvePromise!: (value: ExecFilePromiseResult) => void;
+  let rejectPromise!: (reason: unknown) => void;
+  const promise = new Promise<ExecFilePromiseResult>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  }) as ExecFilePromise;
+  const invoke = execFile as unknown as (...invokeArgs: unknown[]) => ChildProcess;
+  promise.child = invoke(
+    ...args,
+    (error: Error | null, stdout: BufferedExecutionOutput, stderr: BufferedExecutionOutput) => {
+      if (error !== null) {
+        Object.assign(error, { stdout, stderr });
+        rejectPromise(error);
+        return;
+      }
+      resolvePromise({ stdout, stderr });
+    },
+  );
+  return promise;
+};
+
+Object.defineProperty(promisifiedExecFile, 'name', { value: 'execFile' });
+Object.defineProperty(execFile, PROMISIFY_CUSTOM, {
+  enumerable: false,
+  value: promisifiedExecFile,
+});
 
 export function fork(
   modulePath: string,
@@ -486,5 +661,5 @@ export { execSync };
 
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, exec, fork, execSync, ChildProcess: ChildProcess_ };
+const child_process = { spawn, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
 export default child_process;

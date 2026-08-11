@@ -196,12 +196,15 @@ describe('CJS — module semantics', () => {
     });
   });
 
-  it('require() of ESM throws helpful error', () => {
+  it('require() of synchronous ESM returns the Node namespace facade', () => {
     const loader = setup({
       '/main.js': "module.exports = require('./esm.mjs');",
       '/esm.mjs': 'export default 1;',
     });
-    expect(() => loader.require('./main.js', '/entry.js')).toThrow(/ES Module/);
+    expect(loader.require('./main.js', '/entry.js')).toMatchObject({
+      __esModule: true,
+      default: 1,
+    });
   });
 });
 
@@ -1875,8 +1878,7 @@ describe('ESM — import / export', () => {
   it('ESM importing CJS gets default export', async () => {
     const loader = setup({
       '/c.js': "module.exports = { name: 'cjs', n: 5 };",
-      '/main.mjs':
-        "import mod from './c.js'; import { n } from './c.js'; export const v = mod.name + ':' + n;",
+      '/main.mjs': "import mod from './c.js'; export const v = mod.name + ':' + mod.n;",
     });
     const ns = await loader.import('./main.mjs', '/entry.mjs');
     expect(ns.v).toBe('cjs:5');
@@ -3706,13 +3708,18 @@ describe('tsconfig path aliases (ADR-0066)', () => {
 // Node resolution order: LOAD_AS_FILE before LOAD_AS_DIRECTORY. A file-with-
 // extension sibling wins over a same-named directory. Verified against Node 24
 // (`require('./foo')` with both `foo.js` and `foo/index.js` resolves `foo.js`).
-// opencode's `./migration` (sibling `migration.ts` barrel + `migration/` SQL-files
-// dir with no index) is the motivating real case.
+// opencode's ESM `./migration` (sibling `migration.ts` barrel + `migration/`
+// SQL-files dir with no index) is the motivating ADR-0053 import-profile case.
 describe('file-before-directory precedence (Node parity)', () => {
-  function resolveId(files: Record<string, string>, specifier: string, fromFile: string): string {
+  function resolveId(
+    files: Record<string, string>,
+    specifier: string,
+    fromFile: string,
+    esm = false,
+  ): string {
     const vfs = new MemoryFsSync();
     vfs.loadFixture(files);
-    return createModuleLoader(vfs).resolver.resolve(specifier, { fromFile, esm: false }).id;
+    return createModuleLoader(vfs).resolver.resolve(specifier, { fromFile, esm }).id;
   }
 
   it('`./foo` with both `foo.js` and `foo/index.js` resolves the file', () => {
@@ -3727,7 +3734,7 @@ describe('file-before-directory precedence (Node parity)', () => {
     expect(id).toBe('/app/foo.js');
   });
 
-  it('`./migration` resolves the `.ts` barrel over a same-named no-index dir', () => {
+  it('ESM `./migration` resolves the `.ts` barrel over a same-named no-index dir', () => {
     const id = resolveId(
       {
         '/pkg/migration.ts': 'export const DatabaseMigration = {};',
@@ -3735,6 +3742,7 @@ describe('file-before-directory precedence (Node parity)', () => {
       },
       './migration',
       '/pkg/database.ts',
+      true,
     );
     expect(id).toBe('/pkg/migration.ts');
   });

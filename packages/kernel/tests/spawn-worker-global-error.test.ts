@@ -17,6 +17,7 @@ import {
   clearWorkerFactoryForTests,
   setKernelWorkerUrl,
   setWorkerFactoryForTests,
+  spawnKernelWorker,
 } from '../src/spawn-worker.ts';
 import { sealWorkerOutput } from '../src/worker-stdio-drain.ts';
 import { attestedExitEvent } from './attested-exit.ts';
@@ -89,7 +90,9 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
       }) as WorkerProcessHandle;
       const stderr = collectStderr(handle);
       let exitCode: number | null = null;
+      let exits = 0;
       handle.on('exit', (code: unknown) => {
+        exits++;
         exitCode = typeof code === 'number' ? code : null;
       });
 
@@ -104,11 +107,51 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
         preventDefault,
       } as unknown as MessageEvent;
       worker()?.fire('error', ev);
+      const duplicatePreventDefault = vi.fn();
+      worker()?.fire('error', {
+        type: 'error',
+        message: 'Uncaught Error: duplicate worker error',
+        preventDefault: duplicatePreventDefault,
+      } as unknown as MessageEvent);
       await flushWorkerExit();
 
       expect(preventDefault).toHaveBeenCalledOnce();
+      expect(duplicatePreventDefault).toHaveBeenCalledOnce();
       expect(stderr.text()).toContain('EADDRINUSE');
+      expect(stderr.text()).not.toContain('duplicate worker error');
       expect(exitCode).toBe(1);
+      expect(exits).toBe(1);
+    });
+  });
+
+  it('still owns an already-queued worker error after physical termination', () => {
+    withFakeWorker((worker) => {
+      const spawned = spawnKernelWorker(
+        {
+          entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+          argv: ['rifty', '/tmp/x.js'],
+          env: {},
+          cwd: '/workspace',
+        },
+        { pid: 200, ppid: 1 },
+      );
+      const uncaught = vi.fn();
+      const exit = vi.fn();
+      spawned.onUncaughtError(uncaught);
+      spawned.onExit(exit);
+
+      spawned.terminate();
+      const preventDefault = vi.fn();
+      worker()?.fire('error', {
+        type: 'error',
+        message: 'Uncaught Error: queued before termination',
+        preventDefault,
+      } as unknown as MessageEvent);
+
+      expect(worker()?.terminated).toBe(true);
+      expect(preventDefault).toHaveBeenCalledOnce();
+      expect(uncaught).not.toHaveBeenCalled();
+      expect(exit).not.toHaveBeenCalled();
     });
   });
 

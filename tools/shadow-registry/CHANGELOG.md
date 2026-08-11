@@ -4,6 +4,8 @@
 
 ### Changed
 
+- The synthetic esbuild CommonJS shim declares upstream's static named-export
+  surface, preserving native CJS/ESM namespace identities after installation.
 - Snapshot drift validation now requires canonical v3 cache archives; the
   artifact gate verifies their exact shadow-replay SRI closure before accepting
   regenerated identities (ADR-0346).

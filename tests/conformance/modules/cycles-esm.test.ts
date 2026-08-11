@@ -12,13 +12,14 @@ describe('ESM cycles', () => {
   it('handles a simple A→B→A cycle (eventual values stable)', async () => {
     const loader = setup({
       '/a.mjs':
-        "import { fromB } from './b.mjs'; export let fromA = 'a'; export const observedB = fromB;",
+        "import { fromB, readA } from './b.mjs'; export let fromA = 'a'; export const observedB = fromB; export { readA };",
       '/b.mjs':
-        "import { fromA } from './a.mjs'; export const fromB = 'b'; export const observedA = fromA;",
+        "import { fromA } from './a.mjs'; export const fromB = 'b'; export function readA() { return fromA; }",
     });
     const a = await loader.import('./a.mjs', '/entry.mjs');
     expect(a.fromA).toBe('a');
     expect(a.observedB).toBe('b');
+    expect((a.readA as () => string)()).toBe('a');
   });
 });
 

@@ -32,6 +32,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0331 | SyncRpc v3 owns one live exchange through reply consumption |
 | 0333 | Descendant settlement barrier preserves recursive teardown ordering |
 | 0340 | Sequenced worker stdio reconstructs cross-port write order |
+| 0347 | Idempotent process-manager kill during settlement |
 
 ### runtime-js
 
@@ -76,6 +77,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0339 | Node eval script launch over node-entry v3 |
 | 0342 | Release pending eval drain ownership when server branch wins |
 | 0345 | Expose exact Node 24.0.0 process.release identity |
+| 0348 | Synchronous require(ESM) on Node 24 |
 
 ### runtime-wasi
 
@@ -332,6 +334,9 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0004 `require(ESM)` hard-error clause | 0348 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |
+| 0009 unconditional async-wrapper assumption | 0348 / note 2026-08-10 | one AST transform feeds async import and synchronous require evaluators |
+| 0053 shared JS/TS extension-fallback clause | 0348 / note 2026-08-10 | TS-aware fallback stays on import; require uses Node's legacy suffix set |
 | 0032 request-state release / current-version clauses | 0331 / note 2026-07-27 | SyncRpc v3 retains a claimed request through versioned reply consumption |
 | 0084 #17 `inFlight` guard / #18 early release clauses | 0331 / note 2026-07-27 | shared `HANDLING` is sole exchange authority through caller consumption |
 | 0011 worker-exit / raw-output handoff clauses | 0332 / note 2026-07-27 | child seal authenticates exit; runtimes receive semantic output writers |
