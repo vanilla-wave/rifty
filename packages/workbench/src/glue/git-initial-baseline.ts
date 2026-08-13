@@ -9,6 +9,8 @@ import type { Vfs } from '@riftydev/vfs';
 
 const INITIAL_COMMIT_MESSAGE = 'Initial commit';
 const GENERATED_BASELINE_FILE = 'package-lock.json';
+const STARTER_HEAD = 'ref: refs/heads/main\n';
+const STARTER_MAIN_REF = 'refs/heads/main';
 
 function initialCommitAuthor(): GitIdentity {
   return {
@@ -19,13 +21,28 @@ function initialCommitAuthor(): GitIdentity {
   };
 }
 
-async function headCommitExists(g: ReturnType<typeof makeGit>): Promise<boolean> {
-  try {
-    await g.resolveRef('HEAD');
-    return true;
-  } catch {
-    return false;
+async function starterHeadOid(
+  vfs: Vfs,
+  root: string,
+  g: ReturnType<typeof makeGit>,
+): Promise<string | null> {
+  const head = await vfs.readFileText(`${root}/.git/HEAD`);
+  if (head === STARTER_HEAD) {
+    const looseRef = `${root}/.git/${STARTER_MAIN_REF}`;
+    if (await vfs.exists(looseRef)) {
+      await vfs.readFile(looseRef);
+    } else {
+      const packedRefs = `${root}/.git/packed-refs`;
+      if (!(await vfs.exists(packedRefs))) return null;
+      await vfs.readFile(packedRefs);
+    }
   }
+  return g.resolveRef('HEAD');
+}
+
+async function preflightLooseObjectRead(vfs: Vfs, root: string, oid: string): Promise<void> {
+  const path = `${root}/.git/objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
+  if (await vfs.exists(path)) await vfs.readFile(path);
 }
 
 function isInsideNodeModules(filepath: string): boolean {
@@ -58,27 +75,26 @@ function isRiftyInitialIdentity(identity: GitIdentity): boolean {
 }
 
 async function matchingRiftyInitialCommit(
+  vfs: Vfs,
+  root: string,
   g: ReturnType<typeof makeGit>,
   expectedOid: string,
 ): Promise<LogEntry | null> {
-  try {
-    const log = await g.log({ depth: 2 });
-    const commit = log[0];
-    if (
-      log.length !== 1 ||
-      commit === undefined ||
-      commit.oid !== expectedOid ||
-      commit.parents.length !== 0 ||
-      commit.message.trim() !== INITIAL_COMMIT_MESSAGE ||
-      !isRiftyInitialIdentity(commit.author) ||
-      !isRiftyInitialIdentity(commit.committer)
-    ) {
-      return null;
-    }
-    return commit;
-  } catch {
+  await preflightLooseObjectRead(vfs, root, expectedOid);
+  const log = await g.log({ depth: 2 });
+  const commit = log[0];
+  if (
+    log.length !== 1 ||
+    commit === undefined ||
+    commit.oid !== expectedOid ||
+    commit.parents.length !== 0 ||
+    commit.message.trim() !== INITIAL_COMMIT_MESSAGE ||
+    !isRiftyInitialIdentity(commit.author) ||
+    !isRiftyInitialIdentity(commit.committer)
+  ) {
     return null;
   }
+  return commit;
 }
 
 function isPackageManifest(filepath: string): boolean {
@@ -86,15 +102,18 @@ function isPackageManifest(filepath: string): boolean {
 }
 
 async function generatedBaselineBlobOid(
+  vfs: Vfs,
+  root: string,
   g: ReturnType<typeof makeGit>,
-  rev: string,
+  treeOid: string,
 ): Promise<string | null> {
-  try {
-    const shown = await g.show(`${rev}:${GENERATED_BASELINE_FILE}`);
-    return shown.type === 'blob' ? shown.oid : null;
-  } catch {
-    return null;
-  }
+  await preflightLooseObjectRead(vfs, root, treeOid);
+  const shown = await g.show(treeOid);
+  if (shown.type !== 'tree') throw new Error('Starter baseline tree OID did not resolve to a tree');
+  const entry = shown.entries.find(({ path }) => path === GENERATED_BASELINE_FILE);
+  if (entry === undefined) return null;
+  if (entry.type !== 'blob') throw new Error('Starter baseline package-lock.json is not a blob');
+  return entry.oid;
 }
 
 /**
@@ -104,7 +123,7 @@ async function generatedBaselineBlobOid(
 export async function ensureStarterInitialCommit(vfs: Vfs, root: string): Promise<string | null> {
   const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
   if (!(await vfs.exists(`${root}/.git/HEAD`))) await g.init();
-  if (await headCommitExists(g)) return null;
+  if ((await starterHeadOid(vfs, root, g)) !== null) return null;
   await resetInterruptedStarterIndex(vfs, root);
 
   const hasChanges = await stageInitialTree(g);
@@ -127,9 +146,9 @@ export async function amendStarterGeneratedBaseline(
 ): Promise<boolean> {
   const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
   if ((await g.currentBranch()) !== 'main') return false;
-  if ((await g.resolveRef('HEAD').catch(() => null)) !== expectedInitialOid) return false;
+  if ((await starterHeadOid(vfs, root, g)) !== expectedInitialOid) return false;
 
-  const initial = await matchingRiftyInitialCommit(g, expectedInitialOid);
+  const initial = await matchingRiftyInitialCommit(vfs, root, g, expectedInitialOid);
   if (initial === null) return false;
 
   const expectedLockOid = await g.hashBlob(lockfile);
@@ -137,7 +156,7 @@ export async function amendStarterGeneratedBaseline(
   if (
     !(await vfs.exists(lockPath)) ||
     (await g.hashBlob(await vfs.readFile(lockPath))) !== expectedLockOid ||
-    (await generatedBaselineBlobOid(g, initial.oid)) !== null
+    (await generatedBaselineBlobOid(vfs, root, g, initial.tree)) !== null
   ) {
     return false;
   }
@@ -157,11 +176,13 @@ export async function amendStarterGeneratedBaseline(
     committer: initial.committer,
     amend: true,
   });
-  const final = await matchingRiftyInitialCommit(g, finalOid);
+  const final = await matchingRiftyInitialCommit(vfs, root, g, finalOid);
+  const finalLockOid =
+    final === null ? null : await generatedBaselineBlobOid(vfs, root, g, final.tree);
   const delta = await g.diff({ kind: 'refs', oldRef: initial.oid, newRef: finalOid });
   if (
     final?.oid !== finalOid ||
-    (await generatedBaselineBlobOid(g, finalOid)) !== expectedLockOid ||
+    finalLockOid !== expectedLockOid ||
     delta.length !== 1 ||
     delta[0]?.filepath !== GENERATED_BASELINE_FILE ||
     delta[0].change !== 'add'

@@ -6,6 +6,8 @@
 
 - Starter Git baselines again use Git's ignore pruning, exclude every nested
   `node_modules` tree, and rebuild an interrupted unborn index before staging.
+  Ref and object read failures now propagate before baseline mutation instead
+  of masquerading as Git absence and risking replacement history.
 
 - Dependency snapshot v3 now carries the exact integrity-pinned cache closure
   required by registry-backed shadow replay, verifies it before mutation, and
