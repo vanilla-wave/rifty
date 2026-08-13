@@ -96,6 +96,10 @@
 
 ### Fixed
 
+- Package-bin collision diagnostics now distinguish same-set first/second
+  owners from prior/current ownership continuity without changing the loud
+  unsupported-reify outcome.
+
 - Registry-backed shadow recipes now reject dependency/bundle projection drift
   before acquisition and validate bundled manifests at the shared fresh,
   replay, and Eddy extraction ingress.

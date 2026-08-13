@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Starter Git baselines again use Git's ignore pruning, exclude every nested
+  `node_modules` tree, and rebuild an interrupted unborn index before staging.
+
 - Dependency snapshot v3 now carries the exact integrity-pinned cache closure
   required by registry-backed shadow replay, verifies it before mutation, and
   merges it before publishing the restored lockfile. The first explicit install

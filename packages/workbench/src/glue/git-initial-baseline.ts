@@ -28,8 +28,19 @@ async function headCommitExists(g: ReturnType<typeof makeGit>): Promise<boolean>
   }
 }
 
+function isInsideNodeModules(filepath: string): boolean {
+  return filepath.split('/').slice(0, -1).includes('node_modules');
+}
+
+async function resetInterruptedStarterIndex(vfs: Vfs, root: string): Promise<void> {
+  // No HEAD means this index is baseline scratch, possibly torn by an earlier open.
+  await vfs.rm(`${root}/.git/index`, { force: true });
+}
+
 async function stageInitialTree(g: ReturnType<typeof makeGit>): Promise<boolean> {
-  const changed = requireSupportedStatusEntries(await g.status());
+  const changed = requireSupportedStatusEntries(
+    (await g.status()).filter((entry) => !isInsideNodeModules(entry.filepath)),
+  );
   for (const entry of changed) {
     if (entry.status === '111') continue;
     if (entry.status === '101' || entry.status === '100') await g.remove(entry.filepath);
@@ -71,8 +82,7 @@ async function matchingRiftyInitialCommit(
 }
 
 function isPackageManifest(filepath: string): boolean {
-  const segments = filepath.split('/');
-  return segments.at(-1) === 'package.json' && !segments.slice(0, -1).includes('node_modules');
+  return filepath.split('/').at(-1) === 'package.json' && !isInsideNodeModules(filepath);
 }
 
 async function generatedBaselineBlobOid(
@@ -89,12 +99,13 @@ async function generatedBaselineBlobOid(
 
 /**
  * Make a freshly-seeded Starter look like a normal project checkout: one real
- * root commit on `main`, clean worktree, generated files left ignored.
+ * root commit on `main`; ignored files and dependency trees stay outside it.
  */
 export async function ensureStarterInitialCommit(vfs: Vfs, root: string): Promise<string | null> {
   const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
   if (!(await vfs.exists(`${root}/.git/HEAD`))) await g.init();
   if (await headCommitExists(g)) return null;
+  await resetInterruptedStarterIndex(vfs, root);
 
   const hasChanges = await stageInitialTree(g);
   if (!hasChanges) return null;
