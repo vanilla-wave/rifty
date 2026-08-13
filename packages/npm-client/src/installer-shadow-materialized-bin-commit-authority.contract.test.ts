@@ -10,7 +10,7 @@ import {
   gzip,
   padToBlock,
 } from './_test-fixtures/tar-builder.ts';
-import { install } from './installer.ts';
+import { install } from './index.ts';
 import type { Packument, VersionManifest } from './registry.ts';
 import { RegistryClient } from './registry.ts';
 
@@ -248,7 +248,7 @@ async function project(): Promise<MemoryVfs> {
   return vfs;
 }
 
-async function expectBinCollision(run: Promise<unknown>): Promise<void> {
+async function expectBinCollision(run: Promise<unknown>): Promise<NotImplementedError> {
   let caught: unknown;
   try {
     await run;
@@ -259,6 +259,10 @@ async function expectBinCollision(run: Promise<unknown>): Promise<void> {
   expect
     .soft((caught as NotImplementedError | undefined)?.feature)
     .toBe('npm-client.bin-collision-reify');
+  if (!(caught instanceof NotImplementedError)) {
+    throw new Error('Expected npm-client.bin-collision-reify');
+  }
+  return caught;
 }
 
 afterEach(() => {
@@ -426,13 +430,16 @@ describe('shadow materialized-bin commit authority', () => {
       const vfs = await project();
       const reports: string[] = [];
 
-      await expectBinCollision(
+      const collision = await expectBinCollision(
         install('fixture', '1.0.0', dependencies, {
           vfs,
           cwd: '/project',
           registry: registry(rival),
           onSubstitution: (line) => reports.push(line),
         }),
+      );
+      expect(collision.message).toBe(
+        'Not implemented: npm-client.bin-collision-reify (invariant=claim-uniqueness claimSet=current nodeModulesDir=node_modules command=esbuild firstOwner=provider-z secondOwner=esbuild)',
       );
 
       expect.soft(reports).toEqual([]);
@@ -465,7 +472,7 @@ describe('shadow materialized-bin commit authority', () => {
       await writeFile(path, data);
     });
 
-    await expectBinCollision(
+    const collision = await expectBinCollision(
       install(
         'fixture',
         '1.0.0',
@@ -477,6 +484,9 @@ describe('shadow materialized-bin commit authority', () => {
           onSubstitution: (line) => reports.push(line),
         },
       ),
+    );
+    expect(collision.message).toBe(
+      'Not implemented: npm-client.bin-collision-reify (invariant=prior-owner-continuity nodeModulesDir=node_modules command=esbuild priorOwner=provider-z currentOwner=esbuild)',
     );
 
     expect.soft(reports).toEqual([]);
@@ -522,7 +532,7 @@ describe('shadow materialized-bin commit authority', () => {
       await writeFile(path, data);
     });
 
-    await expectBinCollision(
+    const collision = await expectBinCollision(
       install(
         'fixture',
         '1.0.0',
@@ -535,6 +545,9 @@ describe('shadow materialized-bin commit authority', () => {
         },
       ),
     );
+    expect(collision.message).toBe(
+      'Not implemented: npm-client.bin-collision-reify (invariant=claim-uniqueness claimSet=prior nodeModulesDir=node_modules command=shared firstOwner=provider-a secondOwner=provider-z)',
+    );
 
     expect.soft(reports).toEqual([]);
     expect.soft(writes).toEqual([]);
@@ -542,6 +555,48 @@ describe('shadow materialized-bin commit authority', () => {
     expect(await vfs.readFileText('/project/node_modules/.bin/shared')).toBe(
       launcher('provider-a', 'bin/a.js'),
     );
+  });
+
+  it('[fault: provenance-lie][fault: sibling-drift] names an npm-recorded prior owner omitted by the current install', async () => {
+    const vfs = await project();
+    const lockPath = '/project/package-lock.json';
+    const priorLock = JSON.stringify(
+      {
+        name: 'fixture',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': { version: '1.0.0' },
+          'node_modules/@grpc/proto-loader': {
+            version: '0.8.0',
+            peer: true,
+            bin: {
+              'proto-loader-gen-types': 'build/bin/proto-loader-gen-types.js',
+            },
+          },
+        },
+      },
+      null,
+      2,
+    );
+    await vfs.writeFile(lockPath, priorLock);
+    const writes: string[] = [];
+    const writeFile = vfs.writeFile.bind(vfs);
+    vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+      if (path.startsWith('/project/node_modules/') || path === lockPath) writes.push(path);
+      await writeFile(path, data);
+    });
+
+    const collision = await expectBinCollision(
+      install('fixture', '1.0.0', {}, { vfs, cwd: '/project', registry: registry() }),
+    );
+
+    expect(collision.message).toBe(
+      'Not implemented: npm-client.bin-collision-reify (invariant=prior-owner-continuity nodeModulesDir=node_modules command=proto-loader-gen-types priorOwner=@grpc/proto-loader currentOwner=<none>)',
+    );
+    expect.soft(writes).toEqual([]);
+    expect(await vfs.readFileText(lockPath)).toBe(priorLock);
   });
 
   it('[fault: provenance-lie] excludes a unique acquired-twin command from disk, result, and acquisition lock entry', async () => {
