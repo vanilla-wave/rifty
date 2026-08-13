@@ -9,7 +9,7 @@
  */
 import { makeGit, vfsToGitFs } from '@riftydev/git';
 import { Shell } from '@riftydev/shell';
-import { asyncVfs, dirname } from '@riftydev/vfs';
+import { VfsError, asyncVfs, dirname } from '@riftydev/vfs';
 import { installMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -19,6 +19,17 @@ import {
 } from './git-initial-baseline.ts';
 
 const FINAL_LOCKFILE = '{"lockfileVersion":3,"packages":{}}\n';
+
+function looseObjectPath(root: string, oid: string): string {
+  return `${root}/.git/objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
+}
+
+async function rejectedValue(run: Promise<unknown>): Promise<unknown> {
+  return run.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+}
 
 describe('starter initial commit ∥ instant-deps restore (fault: concurrent restore churn)', () => {
   it('commits a clean baseline while node_modules + lockfile land mid-walk; amend folds the final lockfile', async () => {
@@ -176,6 +187,57 @@ describe('starter initial commit ∥ instant-deps restore (fault: concurrent res
       resetSyncMirror();
     }
   });
+
+  it('[fault: quota-perm-fail][fault: provenance-lie] preserves existing history and staged state when the main ref read fails', async () => {
+    installMemoryFs();
+    try {
+      const root = '/projects/existing-ref-read-failure';
+      const vfs = asyncVfs();
+      if (!vfs) throw new Error('no async vfs');
+      await vfs.mkdir(`${root}/src`, { recursive: true });
+      await vfs.writeFile(`${root}/src/main.js`, 'console.log("baseline");\n');
+      const initialOid = await ensureStarterInitialCommit(vfs, root);
+      if (initialOid === null) throw new Error('Expected a fresh Starter initial commit');
+      const git = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+      await vfs.writeFile(`${root}/src/main.js`, 'console.log("user commit");\n');
+      await git.add('src/main.js');
+      const identity = {
+        name: 'user',
+        email: 'user@example.test',
+        timestamp: 1_900_000_000,
+        timezoneOffset: 0,
+      };
+      const userOid = await git.commit({
+        message: 'User commit',
+        author: identity,
+        committer: identity,
+      });
+      await vfs.writeFile(`${root}/src/main.js`, 'console.log("staged edit");\n');
+      await git.add('src/main.js');
+      const indexBefore = (await vfs.readFile(`${root}/.git/index`)).slice();
+      const historyBefore = (await git.log()).map(({ oid }) => oid);
+      const failure = new VfsError(
+        'EIO',
+        `${root}/.git/refs/heads/main`,
+        'injected main ref read failure',
+      );
+      const readFile = vfs.readFile.bind(vfs);
+      const read = vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+        if (path === failure.path) throw failure;
+        return await readFile(path);
+      });
+
+      const rejected = await rejectedValue(ensureStarterInitialCommit(vfs, root));
+      read.mockRestore();
+
+      expect.soft(rejected).toBe(failure);
+      expect(await git.resolveRef('HEAD')).toBe(userOid);
+      expect((await git.log()).map(({ oid }) => oid)).toEqual(historyBefore);
+      expect(await vfs.readFile(`${root}/.git/index`)).toEqual(indexBefore);
+    } finally {
+      resetSyncMirror();
+    }
+  });
 });
 
 async function seededStarter(root: string) {
@@ -197,6 +259,120 @@ async function seededStarter(root: string) {
 }
 
 describe('starter baseline finalizer ∥ durability flush (fault: quota-perm-fail, provenance lie)', () => {
+  it('[fault: quota-perm-fail][fault: sibling-drift] propagates a main ref read failure before amend', async () => {
+    installMemoryFs();
+    try {
+      const root = '/projects/amend-ref-read-failure';
+      const { vfs, initialOid } = await seededStarter(root);
+      const git = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+      const indexBefore = (await vfs.readFile(`${root}/.git/index`)).slice();
+      const failure = new VfsError(
+        'EACCES',
+        `${root}/.git/refs/heads/main`,
+        'injected amend ref permission failure',
+      );
+      const readFile = vfs.readFile.bind(vfs);
+      const read = vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+        if (path === failure.path) throw failure;
+        return await readFile(path);
+      });
+
+      const rejected = await rejectedValue(
+        amendStarterGeneratedBaseline(
+          vfs,
+          root,
+          initialOid,
+          new TextEncoder().encode(FINAL_LOCKFILE),
+        ),
+      );
+      read.mockRestore();
+
+      expect.soft(rejected).toBe(failure);
+      expect(await git.resolveRef('HEAD')).toBe(initialOid);
+      expect(await vfs.readFile(`${root}/.git/index`)).toEqual(indexBefore);
+    } finally {
+      resetSyncMirror();
+    }
+  });
+
+  it('[fault: quota-perm-fail][fault: sibling-drift] propagates an initial commit object read failure before amend', async () => {
+    installMemoryFs();
+    try {
+      const root = '/projects/amend-commit-read-failure';
+      const { vfs, initialOid } = await seededStarter(root);
+      const git = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+      const indexBefore = (await vfs.readFile(`${root}/.git/index`)).slice();
+      const failure = new VfsError(
+        'EIO',
+        looseObjectPath(root, initialOid),
+        'injected initial commit object read failure',
+      );
+      const readFile = vfs.readFile.bind(vfs);
+      const read = vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+        if (path === failure.path) throw failure;
+        return await readFile(path);
+      });
+
+      const rejected = await rejectedValue(
+        amendStarterGeneratedBaseline(
+          vfs,
+          root,
+          initialOid,
+          new TextEncoder().encode(FINAL_LOCKFILE),
+        ),
+      );
+      read.mockRestore();
+
+      expect.soft(rejected).toBe(failure);
+      expect(await git.resolveRef('HEAD')).toBe(initialOid);
+      expect(await vfs.readFile(`${root}/.git/index`)).toEqual(indexBefore);
+    } finally {
+      resetSyncMirror();
+    }
+  });
+
+  it('[fault: quota-perm-fail][fault: sibling-drift] propagates an initial tree object read failure before amend', async () => {
+    installMemoryFs();
+    try {
+      const root = '/projects/amend-tree-read-failure';
+      const { vfs, initialOid } = await seededStarter(root);
+      const git = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+      const initial = (await git.log({ depth: 1 }))[0];
+      if (initial === undefined) throw new Error('Expected a Starter initial commit');
+      const indexBefore = (await vfs.readFile(`${root}/.git/index`)).slice();
+      const failure = new VfsError(
+        'EIO',
+        looseObjectPath(root, initial.tree),
+        'injected initial tree object read failure',
+      );
+      const readFile = vfs.readFile.bind(vfs);
+      let injected = false;
+      const read = vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+        if (!injected && path === failure.path) {
+          injected = true;
+          throw failure;
+        }
+        return await readFile(path);
+      });
+
+      const rejected = await rejectedValue(
+        amendStarterGeneratedBaseline(
+          vfs,
+          root,
+          initialOid,
+          new TextEncoder().encode(FINAL_LOCKFILE),
+        ),
+      );
+      read.mockRestore();
+
+      expect.soft(rejected).toBe(failure);
+      expect(await git.resolveRef('HEAD')).toBe(initialOid);
+      expect(await vfs.readFile(`${root}/.git/index`)).toEqual(indexBefore);
+    } finally {
+      resetSyncMirror();
+    }
+  });
+
   it('rejects loud when the flush fails after the real amend; repo stays one valid amended commit', async () => {
     installMemoryFs();
     try {
