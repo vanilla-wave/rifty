@@ -373,6 +373,45 @@ describe('starter baseline finalizer ∥ durability flush (fault: quota-perm-fai
     }
   });
 
+  it('[fault: quota-perm-fail][fault: observable-order] preserves transient ref and object errors between preflight and use', async () => {
+    installMemoryFs();
+    try {
+      for (const kind of ['ref', 'commit', 'tree'] as const) {
+        const root = `/projects/transient-${kind}-read-failure`;
+        const { vfs, initialOid } = await seededStarter(root);
+        const git = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+        const initial = (await git.log({ depth: 1 }))[0];
+        if (initial === undefined) throw new Error('Expected a Starter initial commit');
+        const indexBefore = (await vfs.readFile(`${root}/.git/index`)).slice();
+        const oid = kind === 'tree' ? initial.tree : initialOid;
+        const path = kind === 'ref' ? `${root}/.git/refs/heads/main` : looseObjectPath(root, oid);
+        const failure = new VfsError('EIO', path, `injected transient ${kind} read failure`);
+        const readFile = vfs.readFile.bind(vfs);
+        let matchingReads = 0;
+        const read = vi.spyOn(vfs, 'readFile').mockImplementation(async (candidate) => {
+          if (candidate === path && ++matchingReads === 2) throw failure;
+          return await readFile(candidate);
+        });
+
+        const rejected = await rejectedValue(
+          amendStarterGeneratedBaseline(
+            vfs,
+            root,
+            initialOid,
+            new TextEncoder().encode(FINAL_LOCKFILE),
+          ),
+        );
+        read.mockRestore();
+
+        expect.soft(rejected, kind).toBe(failure);
+        expect.soft(await git.resolveRef('HEAD'), kind).toBe(initialOid);
+        expect.soft(await vfs.readFile(`${root}/.git/index`), kind).toEqual(indexBefore);
+      }
+    } finally {
+      resetSyncMirror();
+    }
+  });
+
   it('rejects loud when the flush fails after the real amend; repo stays one valid amended commit', async () => {
     installMemoryFs();
     try {
