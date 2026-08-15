@@ -89,6 +89,7 @@ mid-drain reopens an honest project (no trusted stamp over an unproven tree);
 
 ## Decisions
 
+- invariants-signoff: 2026-08-15 — user
 - tier: production — the parallel drain rewrites the mechanism inside
   ADR-0187's reload-honesty window; crash/reload e2e proof is contractual, not
   optional (user-confirmed 2026-08-15).
