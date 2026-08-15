@@ -3,15 +3,14 @@
  * playground/restore-mkdir-persist-dedup, issue #256): `quota-perm-fail`,
  * `concurrent-same-key`, and `poisoned-cache` at the Storage boundary,
  * driven through the REAL `applyWorkspaceArchive` /
- * `prepareWorkspaceArchiveImport` over the REAL `OpfsFsSync` — faked only at
- * the OPFS handle boundary (Node has no OPFS). ONE shared disk authority
- * backs both fake surfaces: directories and file bytes live in a single
- * `FakeDisk`, so a recursive removal through EITHER the root handle or the
- * paired surface clears descendants coherently, like real OPFS
- * (sibling-drift guard vs the split-authority fake the attempt-6 review
- * caught).
+ * `prepareWorkspaceArchiveImport` over the REAL `OpfsFsSync` paired with the
+ * REAL `OpfsVfs`. The ONLY fake is the browser FileSystem handle tree —
+ * the unavoidable external boundary in Node (same injection pattern as
+ * `packages/vfs/src/vfs-async-contract.test.ts`) — and BOTH real surfaces
+ * share ONE fake tree, so recursive removals clear directories and bytes
+ * coherently like real OPFS. No sibling rifty package is mocked.
  */
-import { OpfsFsSync } from '@riftydev/vfs';
+import { OpfsFsSync, OpfsVfs } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type WorkspaceArchiveV1,
@@ -26,110 +25,172 @@ class DomError extends Error {
   }
 }
 
-/** ONE disk: dirs + file bytes. Every fake below mutates only this. */
-interface FakeDisk {
-  readonly dirs: Set<string>;
-  readonly files: Map<string, Uint8Array>;
+interface FakeFile {
+  kind: 'file';
+  bytes: Uint8Array;
+}
+interface FakeDir {
+  kind: 'dir';
+  children: Map<string, FakeFile | FakeDir>;
 }
 
-function buildFakeDisk(): FakeDisk {
-  return { dirs: new Set(['/']), files: new Map() };
+interface FaultState {
+  /** Reject create-requested getDirectoryHandle with QuotaExceededError. */
+  failCreates: boolean;
+  /** Fires after a successful file write lands — row (f) injection point. */
+  onWrite?: (path: string) => void;
+  /** Full paths of successfully landed file writes. */
+  readonly writes: string[];
 }
 
-/** Recursive removal of `path` from the ONE disk — dirs AND bytes, exactly
- * like real OPFS `removeEntry(..., {recursive:true})`. */
-function removeSubtreeFromDisk(disk: FakeDisk, path: string): void {
-  for (const dir of [...disk.dirs]) {
-    if (dir === path || dir.startsWith(`${path}/`)) disk.dirs.delete(dir);
+/** ONE disk: a FakeDir tree; both the OpfsFsSync root handle and the real
+ * OpfsVfs operate on handles over this same tree. */
+function buildFakeDisk(): { tree: FakeDir; state: FaultState } {
+  return {
+    tree: { kind: 'dir', children: new Map() },
+    state: { failCreates: false, writes: [] },
+  };
+}
+
+function makeRootHandle(tree: FakeDir, state: FaultState): FileSystemDirectoryHandle {
+  function fileHandle(f: FakeFile, path: string): FileSystemFileHandle {
+    return {
+      kind: 'file',
+      name: path.split('/').pop() ?? '',
+      isSameEntry: () => Promise.resolve(false),
+      getFile: () =>
+        Promise.resolve({
+          size: f.bytes.byteLength,
+          lastModified: 0,
+          arrayBuffer: () =>
+            Promise.resolve(
+              f.bytes.buffer.slice(f.bytes.byteOffset, f.bytes.byteOffset + f.bytes.byteLength),
+            ),
+        } as unknown as File),
+      createWritable: () => {
+        const chunks: Uint8Array[] = [];
+        return Promise.resolve({
+          write: (data: Uint8Array) => {
+            chunks.push(data instanceof Uint8Array ? data.slice() : new Uint8Array(data));
+            return Promise.resolve();
+          },
+          close: () => {
+            const total = chunks.reduce((n, c) => n + c.byteLength, 0);
+            const merged = new Uint8Array(total);
+            let offset = 0;
+            for (const chunk of chunks) {
+              merged.set(chunk, offset);
+              offset += chunk.byteLength;
+            }
+            f.bytes = merged;
+            state.writes.push(path);
+            state.onWrite?.(path);
+            return Promise.resolve();
+          },
+        } as unknown as FileSystemWritableFileStream);
+      },
+    } as unknown as FileSystemFileHandle;
   }
-  for (const file of [...disk.files.keys()]) {
-    if (file === path || file.startsWith(`${path}/`)) disk.files.delete(file);
-  }
-}
 
-/** Minimal injectable OPFS root over the shared disk + quota fault toggle.
- * Boundary decorator per fault-classes.md — one fault, one boundary. */
-function buildInjectableRoot(
-  disk: FakeDisk,
-  state: { failCreates: boolean },
-): FileSystemDirectoryHandle {
-  function makeDir(prefix: string): FileSystemDirectoryHandle {
+  function dirHandle(d: FakeDir, prefix: string): FileSystemDirectoryHandle {
     const handle = {
       kind: 'directory' as const,
-      name: prefix === '/' ? '' : (prefix.split('/').pop() ?? ''),
+      name: prefix === '' ? '' : (prefix.split('/').pop() ?? ''),
       isSameEntry: () => Promise.resolve(false),
-      getFileHandle: () => Promise.reject(new DomError('NotFoundError')),
-      getDirectoryHandle(name: string, options?: { create?: boolean }) {
-        const fullPath = prefix === '/' ? `/${name}` : `${prefix}/${name}`;
-        if (disk.dirs.has(fullPath)) return Promise.resolve(makeDir(fullPath));
+      getDirectoryHandle(child: string, options?: { create?: boolean }) {
+        const node = d.children.get(child);
+        const childPath = `${prefix}/${child}`;
+        if (node) {
+          if (node.kind !== 'dir') return Promise.reject(new DomError('TypeMismatchError'));
+          return Promise.resolve(dirHandle(node, childPath));
+        }
         if (!options?.create) return Promise.reject(new DomError('NotFoundError'));
         if (state.failCreates) return Promise.reject(new DomError('QuotaExceededError'));
-        disk.dirs.add(fullPath);
-        return Promise.resolve(makeDir(fullPath));
+        const created: FakeDir = { kind: 'dir', children: new Map() };
+        d.children.set(child, created);
+        return Promise.resolve(dirHandle(created, childPath));
       },
-      removeEntry(name: string) {
-        const fullPath = prefix === '/' ? `/${name}` : `${prefix}/${name}`;
-        if (!disk.dirs.has(fullPath) && !disk.files.has(fullPath)) {
-          return Promise.reject(new DomError('NotFoundError'));
+      getFileHandle(child: string, options?: { create?: boolean }) {
+        const node = d.children.get(child);
+        const childPath = `${prefix}/${child}`;
+        if (node) {
+          if (node.kind !== 'file') return Promise.reject(new DomError('TypeMismatchError'));
+          return Promise.resolve(fileHandle(node, childPath));
         }
-        removeSubtreeFromDisk(disk, fullPath);
+        if (!options?.create) return Promise.reject(new DomError('NotFoundError'));
+        const created: FakeFile = { kind: 'file', bytes: new Uint8Array() };
+        d.children.set(child, created);
+        return Promise.resolve(fileHandle(created, childPath));
+      },
+      removeEntry(child: string, options?: { recursive?: boolean }) {
+        const node = d.children.get(child);
+        if (!node) return Promise.reject(new DomError('NotFoundError'));
+        if (node.kind === 'dir' && node.children.size > 0 && !options?.recursive) {
+          return Promise.reject(new DomError('InvalidModificationError'));
+        }
+        d.children.delete(child);
         return Promise.resolve();
       },
       resolve: () => Promise.resolve([] as string[]),
       [Symbol.asyncIterator]() {
-        return { next: () => Promise.resolve({ value: undefined, done: true as const }) };
+        const entries = [...d.children.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
+        let i = 0;
+        return {
+          next: (): Promise<IteratorResult<[string, FileSystemHandle]>> => {
+            if (i >= entries.length) return Promise.resolve({ value: undefined, done: true });
+            const [childName, node] = entries[i++] as [string, FakeFile | FakeDir];
+            const childPath = `${prefix}/${childName}`;
+            const childHandle =
+              node.kind === 'dir' ? dirHandle(node, childPath) : fileHandle(node, childPath);
+            return Promise.resolve({
+              value: [childName, childHandle] as [string, FileSystemHandle],
+              done: false,
+            });
+          },
+        };
       },
     };
     return handle as unknown as FileSystemDirectoryHandle;
   }
 
-  return makeDir('/');
+  return dirHandle(tree, '');
 }
 
-/** Paired surface over the SAME disk, honouring real OPFS semantics:
- * writeFile creates NO parents (opfs.ts) — a write into a dir missing on
- * disk fails. Typed structurally: OpfsFsSync's paired-surface parameter
- * accepts this shape (the named type is deliberately not on the vfs public
- * entry). `onWrite` fires after a successful write — the foreign-rm
- * injection point for row (f). */
-function parentCheckingSurface(disk: FakeDisk, onWrite?: (path: string) => void) {
-  const writes: string[] = [];
-  return {
-    writes,
-    readFile: (path: string) => {
-      const bytes = disk.files.get(path);
-      return bytes ? Promise.resolve(bytes.slice()) : Promise.reject(new DomError('NotFoundError'));
-    },
-    writeFile: (path: string, data: Uint8Array) => {
-      const parent = path.slice(0, path.lastIndexOf('/')) || '/';
-      if (!disk.dirs.has(parent)) return Promise.reject(new DomError('NotFoundError'));
-      disk.files.set(path, data.slice());
-      writes.push(path);
-      onWrite?.(path);
-      return Promise.resolve();
-    },
-    rm: (path: string) => {
-      removeSubtreeFromDisk(disk, path);
-      return Promise.resolve();
-    },
-  };
+function diskNode(tree: FakeDir, path: string): FakeFile | FakeDir | undefined {
+  let node: FakeFile | FakeDir = tree;
+  for (const segment of path.split('/').filter(Boolean)) {
+    if (node.kind !== 'dir') return undefined;
+    const next = node.children.get(segment);
+    if (!next) return undefined;
+    node = next;
+  }
+  return node;
+}
+
+/** Foreign realm's recursive rm: dirs AND bytes vanish from the ONE tree. */
+function foreignRm(tree: FakeDir, path: string): void {
+  const segments = path.split('/').filter(Boolean);
+  const leaf = segments.pop();
+  if (!leaf) return;
+  const parent = diskNode(tree, `/${segments.join('/')}`);
+  if (parent?.kind === 'dir') parent.children.delete(leaf);
 }
 
 /** Byte-complete oracle: every archive file's bytes are on the ONE disk,
  * except the explicitly `absent` ones which must NOT be. */
 function expectArchiveOnDisk(
-  disk: FakeDisk,
+  tree: FakeDir,
   archive: WorkspaceArchiveV1,
   absent: readonly string[] = [],
 ): void {
   for (const file of archive.files) {
     const target = `/ws/${file.path}`;
-    const onDisk = disk.files.get(target);
+    const node = diskNode(tree, target);
     if (absent.includes(file.path)) {
-      expect(onDisk, `${target} must be absent`).toBeUndefined();
+      expect(node, `${target} must be absent`).toBeUndefined();
     } else {
-      expect(onDisk, `${target} must be present`).toBeDefined();
-      expect(Buffer.from(onDisk as Uint8Array).toString('base64')).toBe(file.content);
+      expect(node?.kind, `${target} must be a file`).toBe('file');
+      expect(Buffer.from((node as FakeFile).bytes).toString('base64')).toBe(file.content);
     }
   }
 }
@@ -149,20 +210,23 @@ const ARCHIVE: WorkspaceArchiveV1 = {
   ],
 };
 
-describe('workspace archive restore over OpfsFsSync — Storage-boundary fault rows (#256 mkdir-dedup)', () => {
+describe('workspace archive restore over OpfsFsSync + real OpfsVfs — Storage-boundary fault rows (#256 mkdir-dedup)', () => {
   beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
   afterEach(() => vi.restoreAllMocks());
 
-  function freshSetup(onWrite?: (path: string) => void) {
-    const disk = buildFakeDisk();
-    const state = { failCreates: false };
-    const surface = parentCheckingSurface(disk, onWrite);
-    const fs = new OpfsFsSync(buildInjectableRoot(disk, state), surface);
-    return { disk, state, surface, fs };
+  function freshSetup() {
+    const { tree, state } = buildFakeDisk();
+    const rootHandle = makeRootHandle(tree, state);
+    // REAL sibling OpfsVfs over the same fake handle tree (the injection
+    // pattern from vfs-async-contract.test.ts) — init() keeps a pre-set root.
+    const vfs = new OpfsVfs();
+    (vfs as unknown as { root: FileSystemDirectoryHandle }).root = rootHandle;
+    const fs = new OpfsFsSync(rootHandle, vfs);
+    return { tree, state, fs };
   }
 
   it('row a: a quota-struck restore reports dirty — the stamp gate sees the divergence, the mirror stays live', async () => {
-    const { disk, state, fs } = freshSetup();
+    const { tree, state, fs } = freshSetup();
 
     state.failCreates = true;
     applyWorkspaceArchive(fs, ARCHIVE);
@@ -172,12 +236,12 @@ describe('workspace archive restore over OpfsFsSync — Storage-boundary fault r
     expect(dirty.anyFailure?.((path) => path.startsWith('/ws'))).toBe(true);
     // Sync mirror serves the restore regardless — honesty lives in the report.
     expect(fs.existsSync('/ws/a/deep/h1.js')).toBe(true);
-    expect(disk.dirs.has('/ws/a')).toBe(false); // disk really lags
-    expect(disk.files.size).toBe(0); // and no byte pretends otherwise
+    expect(diskNode(tree, '/ws/a')).toBeUndefined(); // disk really lags
+    expect(state.writes.length).toBe(0); // and no byte pretends otherwise
   });
 
   it('row b: re-running the SAME restore after the fault clears heals — I2 heal-on-retry through the dedup', async () => {
-    const { disk, state, fs } = freshSetup();
+    const { tree, state, fs } = freshSetup();
 
     state.failCreates = true;
     applyWorkspaceArchive(fs, ARCHIVE);
@@ -189,16 +253,16 @@ describe('workspace archive restore over OpfsFsSync — Storage-boundary fault r
 
     expect(healed.total).toBe(0);
     expect(healed.failures).toEqual([]);
-    expect(disk.dirs.has('/ws/a/deep')).toBe(true);
-    expect(disk.dirs.has('/ws/b')).toBe(true);
-    expectArchiveOnDisk(disk, ARCHIVE); // byte-complete recovery on the ONE disk
+    expect(diskNode(tree, '/ws/a/deep')?.kind).toBe('dir');
+    expect(diskNode(tree, '/ws/b')?.kind).toBe('dir');
+    expectArchiveOnDisk(tree, ARCHIVE); // byte-complete recovery on the ONE disk
   });
 
   it('row g: ONE prepared import applied, quota-struck, then re-applied heals — dedup state is per-apply, never prepare-scoped', async () => {
     // poisoned-cache × apply lifecycle: a first-seen Set captured at PREPARE
     // scope would suppress every mkdir on the second apply() after the root
     // replacement — writes into never-recreated dirs would fail forever.
-    const { disk, state, fs } = freshSetup();
+    const { tree, state, fs } = freshSetup();
     const prepared = prepareWorkspaceArchiveImport(fs, ARCHIVE);
 
     state.failCreates = true;
@@ -210,8 +274,8 @@ describe('workspace archive restore over OpfsFsSync — Storage-boundary fault r
     const healed = await fs.flush();
 
     expect(healed.total).toBe(0);
-    expect(disk.dirs.has('/ws/a/deep')).toBe(true);
-    expectArchiveOnDisk(disk, ARCHIVE);
+    expect(diskNode(tree, '/ws/a/deep')?.kind).toBe('dir');
+    expectArchiveOnDisk(tree, ARCHIVE);
   });
 
   // Row (f), concurrent-same-key × foreign rm mid-drain. Ground truth first:
@@ -225,13 +289,14 @@ describe('workspace archive restore over OpfsFsSync — Storage-boundary fault r
   // reports dirty — and a user-level restore retry recovers byte-complete.
 
   it('row f, same-dir schedule: foreign rm between two same-dir writes → the dedup reports DIRTY (main silently self-repaired); retry recovers every byte', async () => {
+    const { tree, state, fs } = freshSetup();
     let injected = false;
-    const { disk, fs } = freshSetup((path) => {
+    state.onWrite = (path) => {
       if (path === '/ws/a/f1.js' && !injected) {
         injected = true;
-        removeSubtreeFromDisk(disk, '/ws/a'); // foreign realm: dirs AND bytes
+        foreignRm(tree, '/ws/a'); // foreign realm: dirs AND bytes
       }
-    });
+    };
 
     applyWorkspaceArchive(fs, ARCHIVE);
     const report = await fs.flush();
@@ -243,8 +308,7 @@ describe('workspace archive restore over OpfsFsSync — Storage-boundary fault r
 
     applyWorkspaceArchive(fs, ARCHIVE); // user-level retry: replace + re-apply
     expect((await fs.flush()).total).toBe(0);
-    expect(disk.dirs.has('/ws/a/deep')).toBe(true);
-    expectArchiveOnDisk(disk, ARCHIVE); // byte-complete recovery
+    expectArchiveOnDisk(tree, ARCHIVE); // byte-complete recovery
   });
 
   it('row f, adversarial interleaving: a later distinct-dirname chain recreates the removed parent → end state IDENTICAL to main (clean flush, foreign-removed file absent — the shared main-level hole), retry recovers', async () => {
@@ -262,13 +326,14 @@ describe('workspace archive restore over OpfsFsSync — Storage-boundary fault r
         archiveFile('b/g1.js', 'g1'),
       ],
     };
+    const { tree, state, fs } = freshSetup();
     let injected = false;
-    const { disk, fs } = freshSetup((path) => {
+    state.onWrite = (path) => {
       if (path === '/ws/a/f1.js' && !injected) {
         injected = true;
-        removeSubtreeFromDisk(disk, '/ws/a'); // foreign realm: dirs AND bytes
+        foreignRm(tree, '/ws/a'); // foreign realm: dirs AND bytes
       }
-    });
+    };
 
     applyWorkspaceArchive(fs, archive);
     const report = await fs.flush();
@@ -276,11 +341,11 @@ describe('workspace archive restore over OpfsFsSync — Storage-boundary fault r
     // Main-identical end state: clean report, h1/g1 bytes present, f1 bytes
     // really gone from the ONE disk (not retained by a stale fake).
     expect(report.total).toBe(0);
-    expect(disk.dirs.has('/ws/a')).toBe(true); // recreated by the a/deep chain
-    expectArchiveOnDisk(disk, archive, ['a/f1.js']);
+    expect(diskNode(tree, '/ws/a')?.kind).toBe('dir'); // recreated by the a/deep chain
+    expectArchiveOnDisk(tree, archive, ['a/f1.js']);
 
     applyWorkspaceArchive(fs, archive); // retry recovers the lost byte too
     expect((await fs.flush()).total).toBe(0);
-    expectArchiveOnDisk(disk, archive);
+    expectArchiveOnDisk(tree, archive);
   });
 });

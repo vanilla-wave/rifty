@@ -110,10 +110,17 @@ scenario. Regression pins (stay green):
   binds unchanged — no vfs source change.
 - P4 `flush()` report contract unchanged: `total === 0` ⇔ drained is durable.
 
-New RED targets (failing-test-first): R1 unit full-trace + failure-prefix
-pins (exact deduped call sequence; main issues one mkdir per file), R2
-browser acceptance op-count + durability bounds above. GREEN honest-outcome
-pins committed alongside: fault rows (a), (b), (f).
+New RED targets (failing-test-first): R1 unit full-trace, prepared-reapply
+trace, and failure-prefix pins (exact deduped call sequence; main issues one
+mkdir per file), R2 browser acceptance op-count + durability bounds above,
+R3 fault row (f) same-dir differential (main's silent self-repair must
+become a dirty ledger). GREEN honest-outcome pins committed alongside:
+fault rows (a), (b), (g), and row (f) adversarial (main-identical end
+state). All four rows run through the REAL sibling `OpfsVfs` over one fake
+FileSystem handle tree — the only mocked boundary; in-package doubles of
+the paired-surface port remain legitimate inside `packages/vfs`'s own suite
+(the port is that unit's own seam), cross-package tests use the real
+sibling.
 
 ## Fault matrix
 
@@ -199,8 +206,10 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
     and row (f)'s same-dir differential fails on main's silent self-repair
     (`total` 0 where the dedup must report dirty); rows (a)/(b)/(g), row (f)
     adversarial (main-identical end state), and all pre-existing archive
-    suites GREEN. All fakes share ONE disk authority (dirs + bytes) so
-    recursive removals clear descendants coherently.
+    suites GREEN. The fault carrier pairs the REAL `OpfsVfs` with
+    `OpfsFsSync` over ONE fake FileSystem handle tree (the
+    `vfs-async-contract.test.ts` injection pattern) — no sibling package is
+    mocked; recursive removals clear dirs and bytes coherently.
   - `RIFTY_PLAYGROUND_PORT=5299 npx playwright test --config
     playwright.browser-unit.config.ts -g "restore enqueues"` (Playwright
     1.60.0 Chromium, real OPFS, real applyWorkspaceArchive) → R2 fails:
