@@ -15,6 +15,7 @@ const workerModuleUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/restor
 interface AcceptanceResult {
   readonly fileCount: number;
   readonly dirCount: number;
+  readonly distinctDirnames: number;
   readonly mkdirPersistOps: number;
   readonly writeOps: number;
   readonly reportTotal: number;
@@ -63,8 +64,12 @@ test('restore enqueues at most one mkdir persist per directory, never one per fi
 
   expect(result.fileCount).toBe(3002); // 3000 nested + two nonconsecutive root files
   expect(result.writeOps).toBe(result.fileCount);
-  // I2: ≤ N + D + O(1) total persist ops ⇔ mkdir ops ≤ D + O(1). Pre-dedup
-  // this is ~N + 1 (one persist per mkdirSync call, one call per file).
+  // EXACT gate: one persist per distinct file dirname + apply()'s root mkdir.
+  // A root-duplicate mutant lands at +1 (603 vs 602) and fails; pre-dedup
+  // main is one persist per mkdirSync CALL — ~one per file (3003).
+  expect(result.distinctDirnames).toBe(601); // 600 nested + the ns root once
+  expect(result.mkdirPersistOps).toBe(result.distinctDirnames + 1);
+  // I2's coarse invariant bound also holds: ≤ D + O(1), < N.
   expect(result.mkdirPersistOps).toBeLessThanOrEqual(result.dirCount + 2);
   expect(result.mkdirPersistOps).toBeLessThan(result.fileCount);
   expect(result.reportTotal).toBe(0);

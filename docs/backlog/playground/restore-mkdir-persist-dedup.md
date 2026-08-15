@@ -61,7 +61,9 @@ real `OpfsVfs`, instrumented only by counting wrappers at the real OPFS
 boundary (delegating root-handle wrapper counting `getDirectoryHandle`;
 subclassed `OpfsVfs.writeFile` completion counter — real I/O underneath):
 
-- mkdir persist ops ≤ D + 2 and < N (RED on main: ≈ N + 1, one per file);
+- mkdir persist ops EXACTLY = distinct file dirnames + 1 (the apply-root
+  mkdir) — 602 for this archive; a root-duplicate mutant fails at 603, main
+  fails at ≈ N + 1 (3003); the coarse I2 bound (≤ D + 2, < N) also asserted;
 - file write-through ops = N; `flush().total === 0`;
 - tail file re-read BYTE-EXACT against the archive base64 through a FRESH
   `OpfsVfs` (no text projection — a BOM-prefixed mutation fails);
@@ -241,9 +243,10 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
   - `RIFTY_PLAYGROUND_PORT=5299 npx playwright test --config
     playwright.browser-unit.config.ts -g "restore enqueues"` (Playwright
     1.60.0 Chromium, real OPFS, real applyWorkspaceArchive) → R2 fails:
-    `mkdirPersistOps` Received 3003 vs bound `dirCount + 2` = 703 (N=3002
-    incl. two root files, D=701) — exactly the ~one-persist-per-file regime
-    issue #256 reports.
+    `mkdirPersistOps` Received 3003 vs EXACT gate `distinctDirnames + 1` =
+    602 (N=3002 incl. two root files, 601 distinct dirnames, D=701) —
+    exactly the ~one-persist-per-file regime issue #256 reports; a
+    root-duplicate mutant (603) also fails the equality.
   - `RIFTY_PLAYGROUND_PORT=5299 npx playwright test --config
     playwright.browser-unit.config.ts -g "KILLED mid-drain"` → 1 passed:
     row (c) carrier GREEN on the pre-implementation tree (discriminated

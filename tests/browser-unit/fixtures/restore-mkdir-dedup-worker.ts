@@ -19,6 +19,8 @@ const scope = globalThis as unknown as DedicatedWorkerGlobalScope;
 interface AcceptanceResult {
   readonly fileCount: number;
   readonly dirCount: number;
+  /** Distinct file dirnames in the archive (the ns root counts once). */
+  readonly distinctDirnames: number;
   readonly mkdirPersistOps: number;
   readonly writeOps: number;
   readonly reportTotal: number;
@@ -116,6 +118,12 @@ async function runAcceptance(): Promise<AcceptanceResult> {
   const ns = `/mkdir-dedup-256-${crypto.randomUUID()}`;
   const { archive, fileCount, dirCount, tailRel } = buildArchive();
   const tailContent = archive.files[archive.files.length - 1]?.content ?? '';
+  // Exact expected mkdir persists = one per distinct file dirname ('' = ns
+  // root counts once) + apply()'s own root mkdir. A root-duplicate mutant
+  // lands at +1 and must FAIL the exact-equality gate in the spec.
+  const distinctDirnames = new Set(
+    archive.files.map((file) => file.path.slice(0, file.path.lastIndexOf('/') + 1)),
+  ).size;
 
   const surface = new CountingOpfsVfs();
   await surface.init();
@@ -149,6 +157,7 @@ async function runAcceptance(): Promise<AcceptanceResult> {
   return {
     fileCount,
     dirCount,
+    distinctDirnames,
     mkdirPersistOps: counter.calls,
     writeOps: surface.writes,
     reportTotal: report.total,
