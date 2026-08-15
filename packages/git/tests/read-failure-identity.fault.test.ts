@@ -345,6 +345,71 @@ it('[fault: sibling-drift] a prototype-backed GitFs drives the facade end-to-end
   expect(await rejectedValue(g.resolveRef('HEAD'))).toBe(failure);
 });
 
+it('[fault: observable-order][fault: poisoned-cache] one instance serializes, distinct instances stay independent, and the queue survives a rejection', async () => {
+  const { vfs, g, head } = await seededRepo();
+  const other = await seededRepo('/q');
+  const reads: string[] = [];
+  let releaseHold = (): void => undefined;
+  const hold = new Promise<void>((resolve) => {
+    releaseHold = resolve;
+  });
+  // Hold a loose OBJECT read: unlike ref reads, object reads take no
+  // isomorphic-git GLOBAL per-refname lock, so only THIS instance may stall.
+  const failure = new VfsError('EIO', looseObjectPath('/r', head), 'injected held-op failure');
+  const readFile = vfs.readFile.bind(vfs);
+  vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+    reads.push(path);
+    if (path === failure.path) {
+      await hold;
+      throw failure;
+    }
+    return await readFile(path);
+  });
+
+  const held = rejectedValue(g.log());
+  const follower = g.getConfig('user.name');
+  await expect(other.g.log()).resolves.toHaveLength(1);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  // Same-instance follower makes NO filesystem progress while the head op holds.
+  expect.soft(reads.filter((p) => p === '/r/.git/config')).toEqual([]);
+  releaseHold();
+  expect.soft(await held).toBe(failure);
+  // The queue recovers after a rejection: the follower runs and succeeds.
+  await expect(follower).resolves.toBeUndefined();
+}, 10_000);
+
+it('[fault: torn-state][fault: sibling-drift] every mutating verb fail-stops with the exact latched failure — including undefined/null latches', async () => {
+  for (const latch of [
+    new VfsError('EIO', '/latched', 'latched read failure'),
+    undefined,
+    null,
+  ] as const) {
+    const effects: string[] = [];
+    const carrier = carryExactReadFailures(
+      stubGitFs(
+        () => Promise.reject(latch),
+        (p) => effects.push(p),
+      ),
+    );
+
+    const settled = await settlement(
+      carrier.guard(async () => {
+        await carrier.fs.promises.readFile('/latched').catch(() => undefined);
+        // isomorphic-git style: swallow each verb rejection and keep going.
+        await carrier.fs.promises.writeFile('/w', 'data').catch(() => undefined);
+        await carrier.fs.promises.unlink('/u').catch(() => undefined);
+        await carrier.fs.promises.mkdir('/m').catch(() => undefined);
+        await carrier.fs.promises.rmdir('/d').catch(() => undefined);
+        return 'completed';
+      }),
+    );
+
+    expect.soft(settled.rejected, String(latch)).toBe(true);
+    expect.soft(settled.value, String(latch)).toBe(latch);
+    expect(effects, String(latch)).toEqual([]);
+  }
+});
+
 it('absence stays trustworthy: an unborn HEAD still reports git absence, not a storage failure', async () => {
   const vfs = new MemoryVfs();
   await vfs.mkdir('/r', { recursive: true });

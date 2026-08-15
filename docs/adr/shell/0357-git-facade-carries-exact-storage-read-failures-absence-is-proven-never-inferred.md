@@ -83,3 +83,34 @@ in `makeGit`):
 - Write-side swallows inside isomorphic-git with NO prior read failure (e.g.
   `FileSystem.mkdir` EACCES fall-through) stay uncovered — separate axis:
   `docs/backlog/shell/isogit-write-failure-swallows.md`.
+
+## Corrections (active)
+
+- 2026-08-15 — concurrency decision REPLACED. Original: a latched failure was
+  attributed to every operation in flight ("over-loud beats a lie").
+  Contract+RED attempt 4 on PR #260 blocked it (`observable-order` /
+  `provenance-lie`: an unrelated concurrent call rejected with a sibling's EIO
+  purely by timing). Decision now: per-instance FIFO serialization with exact
+  attribution (Decision bullet above carries the current text). Pinned by
+  `read-failure-identity.fault.test.ts` (same-instance no-progress hold,
+  distinct-instance independence, queue recovery after rejection).
+- 2026-08-15 — coordination-mechanism inventory for the FIFO (AGENTS.md
+  §Architecture new-mechanism rule; fault-classes §Class-kill). Existing
+  serialization authorities and their keys: `playground-session-tools-owner`
+  request tail — orders SCM TOOL REQUESTS per session (protocol-order
+  authority ABOVE the facade, also covers non-git operations);
+  `install-stamp-authority` `enqueue` — orders root-claim stamp state per
+  project root; package-owner serialization — instant-deps restore ∥ Starter
+  baseline. None owns intra-instance git fs-operation windows; the facade FIFO
+  is the single authority for that key (same promise-tail idiom as
+  `install-stamp-authority`). Layering with the session-tools tail is a
+  protocol superset queue above the correctness queue, not a duplicate:
+  removing the upper keeps attribution exact; removing the lower breaks
+  attribution for non-serialized consumers (shell per-command instances,
+  Starter glue).
+- 2026-08-15 — shell absence classifier hardened: `isNotFound` matched
+  `/could not find/i` on MESSAGE TEXT, so a storage failure with
+  NotFound-like wording read as git absence. Classification is now
+  type-first: a `VfsError` is never absence; command probes rethrow storage
+  failures before any absence mapping (fault suite
+  `packages/shell/tests/git-storage-failure.fault.test.ts`).

@@ -92,6 +92,41 @@ it('[fault: quota-perm-fail][fault: provenance-lie] log on an unborn branch surf
   expect(log.err()).not.toContain('does not have any commits yet');
 });
 
+it('[fault: provenance-lie][fault: sibling-drift] every revision/absence probe surfaces a storage failure even when its text mimics git absence', async () => {
+  await seedCommittedRepo();
+  const vfs = vfsOrThrow();
+  const head = (await vfs.readFileText('/repo/.git/refs/heads/main')).trim();
+  expect(await git(['branch', 'feature-x'], makeCtx({ cwd: '/repo', env: ENV }).ctx)).toBe(0);
+  const objectPath = `/repo/.git/objects/${head.slice(0, 2)}/${head.slice(2)}`;
+  const cases = [
+    { args: ['status'], path: objectPath },
+    { args: ['log'], path: objectPath },
+    { args: ['log', 'main'], path: '/repo/.git/refs/heads/main' },
+    { args: ['diff', 'main'], path: '/repo/.git/refs/heads/main' },
+    { args: ['reset', 'main'], path: '/repo/.git/refs/heads/main' },
+    { args: ['checkout', 'feature-x'], path: '/repo/.git/refs/heads/feature-x' },
+    { args: ['switch', 'feature-x'], path: '/repo/.git/refs/heads/feature-x' },
+  ] as const;
+
+  for (const scenario of cases) {
+    // The message deliberately matches the /could not find/i absence heuristic:
+    // a storage failure must never be classified by TEXT into git absence.
+    const failure = new VfsError(
+      'EIO',
+      scenario.path,
+      'Could not find object — injected storage failure',
+    );
+    const readFile = vfs.readFile.bind(vfs);
+    const spy = vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+      if (path === failure.path) throw failure;
+      return await readFile(path);
+    });
+    const run = makeCtx({ cwd: '/repo', env: ENV });
+    await expect(git([...scenario.args], run.ctx), scenario.args.join(' ')).rejects.toBe(failure);
+    spy.mockRestore();
+  }
+});
+
 it('[fault: quota-perm-fail][fault: provenance-lie] checkout surfaces a branch ref read failure instead of "pathspec did not match"', async () => {
   await seedCommittedRepo();
   const vfs = vfsOrThrow();
