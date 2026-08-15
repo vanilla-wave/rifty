@@ -67,11 +67,12 @@ root enqueues exactly ONE mkdir persist op per distinct file dirname (≤ D;
 intermediate ancestors ride their leaf chain's op) + N writes (deterministic
 op-count pin).
 
-Fault rows (a)–(d) below GREEN; existing `opfs-sync.test.ts` suites (mkdir
+Fault rows (a)–(e) below GREEN; existing `opfs-sync.test.ts` suites (mkdir
 error parity, FIFO completion-order pin, persist-failure ledger) untouched and
 green. Approximations rejected: a skip keyed on mirror existence alone FAILS
-rows (a)/(c); dropping the persist for chains with new segments FAILS the
-durability re-read.
+rows (a)/(c)/(d); dropping the persist for chains with new segments FAILS the
+durability re-read; a skip without duplicate coalescing FAILS row (d)'s
+preservation pin.
 
 ## Parity cases
 
@@ -88,26 +89,42 @@ change (regression pins, stay green):
   (ledger suite).
 
 New RED targets (failing-test-first): R1 zero-op skip (fault row b), R2
-chain-ledger no-skip (rows a/c), R3 op-count bounds (unit + browser
-acceptance above).
+op-count bounds (unit + browser acceptance above), R3 in-flight duplicate
+coalesced — no follow-up op after the pending persist SUCCEEDS (row d —
+RED via op-count; the failure-path healing outcome is GREEN on main), R4
+loadFixture retry heals a ledgered fixture dir (row e — RED on main, real
+existing defect: the mirror-existence guard makes the dir unhealable via
+loadFixture for the whole session).
+GREEN preservation pins (pass on main, must survive the skip): rows (a), (c),
+and row (d)'s failure-path outcome — main heals them via the unconditional
+re-persist; the dedup must keep healing them via the ledger check and
+coalescing.
 
 ## Fault matrix
 
 Storage boundary (OPFS), tier production. Reachable axes for this change:
-`quota-perm-fail`, `torn-state`. Excluded here: network/cache axes (no such
-boundary in mkdirSync), `concurrent-same-key` (single Worker owner — the FIFO
-serializes persists; parallel drain is slice 2).
+`quota-perm-fail`, `torn-state`, `observable-order`. Excluded here:
+network/cache axes (no such boundary in mkdirSync).
+`concurrent-same-key` (cross-realm writers on one OPFS — a REAL fault surface
+per the Storage boundary row, NOT physically excluded): pre-existing
+repo-wide class of the sync mirror itself, not created by this change — a
+foreign realm's rm already makes A's reads/stat/exists silently stale on main
+(content cache + warm index), with or without the mkdir re-persist. Product
+serializes workbench owners via the Web Lock
+(`packages/workbench/src/workbench/open-workbench.ts`), and the OpfsFsSync
+header disclaims cross-instance coherence ("Worker owns its filesystem view
+for life"). A mkdir-only guard here would be a partial third mechanism on an
+invariant with no owner (fault-classes §Class-kill) — the class is captured
+as its own draft `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's
+intake) with the reviewer's sweep sites; see Out of scope.
 
 | # | axis × operation | injected fault | honest outcome (fault-test target) |
 |---|---|---|---|
-| a | quota-perm-fail × mkdir persist | mkdir persist of P fails (create rejected), later mkdirSync(P, recursive) retried after fault clears | retry is NOT skipped (ledger entry on chain) → re-persist heals; `flush().total` returns to 0 |
-| b | torn-state × skip decision | none — fully-persisted, ledger-clean chain re-mkdir'd | ZERO new persist ops enqueued; `flush().total === 0`; stamp-gate view (`anyFailure`) unchanged |
-| c | quota-perm-fail × chain check | mkdir persists of A and of A/B BOTH failed (both ledgered, both in mirror); fault clears; mkdirSync(A/B, recursive) retried | retry NOT skipped (chain ledgered) → ONE recursive re-persist heals A/B (direct) and A (ancestor heal); `flush().total` → 0 |
-| d | torn-state × in-flight window | second mkdirSync(P) while P's first persist is in flight; the in-flight op then FAILS | skip is taken (ledger empty at decision time); `flush()` still reports the failure (honest); NEXT mkdirSync(P) or child write heals |
-
-Row (c) sibling: a persisted child WRITE healing ledgered ancestors is already
-pinned in the main suite (`healAncestorPersistFailures`) and must stay green
-with the skip in place.
+| a | quota-perm-fail × mkdir persist | mkdir persist of P fails (create rejected), later mkdirSync(P, recursive) retried after fault clears | retry is NOT skipped (P ledgered) → re-persist heals; `flush().total` returns to 0 — GREEN pin |
+| b | torn-state × skip decision | none — fully-persisted, ledger-clean, no-pending chain re-mkdir'd | ZERO new persist ops enqueued; `flush().total === 0`; stamp-gate view (`anyFailure`) unchanged — RED |
+| c | quota-perm-fail × ledger check | mkdir persists of A and of A/B BOTH failed (both ledgered, both in mirror); fault clears; mkdirSync(A/B, recursive) retried | retry NOT skipped (target ledgered) → ONE recursive re-persist heals A/B (direct) and A (ancestor heal); `flush().total` → 0 — GREEN pin |
+| d | observable-order × in-flight window | first persist of P HELD in flight; second mkdirSync(P, recursive) admitted; fault cleared; first persist then FAILS | duplicate is COALESCED (≤1 extra disk attempt — RED via attempt count), its one-shot follow-up re-persists after the failure → clean `flush()`, P durable on a fresh re-read (healer preserved — GREEN outcome pin, matches main) |
+| e | quota-perm-fail × loadFixture sibling | fixture dir's earlier mkdir persist FAILED (ledgered, dir absent on disk so child writes fail too); fault clears; loadFixture over the same tree retried | retry produces a clean `flush()` and fresh on-disk bytes — RED on main: loadFixture's `!index.has(dir)` guard skips the mkdir CALL on retry, and `OpfsVfs.writeFile` creates no parents, so the dir is never re-persisted and the ledger stays dirty for the whole session. Fix = REMOVE the guard: every fixture dir flows through the mkdirSync chokepoint, whose ledger path re-persists (Class-kill consolidation — zero sibling mirror-existence skips remain) |
 
 ## Out of scope
 
@@ -119,36 +136,65 @@ with the skip in place.
 - Drain progress events — slice 3 (`playground/project-open-durability-progress`).
 - Pack-format storage — rejected for the epic (epic `## Decisions`).
 - rm/rename persist paths — untouched.
+- Cross-realm mirror coherence (`concurrent-same-key` over one OPFS from two
+  Workers/tabs) — pre-existing class of the whole sync-mirror surface
+  (reads/stat/exists already serve stale state on main), owned at product
+  level by the workbench Web Lock; no user-action repro path exists through
+  the product (the lock serializes owners — §Reachability attempt recorded).
+  Captured as draft `vfs/opfs-sync-cross-realm-mirror-coherence` with the
+  sweep sites (runtime-js host/worker-entry OPFS installs, sync-mirror,
+  OpfsVfs, open-workbench Web Lock); this item neither adds a writer nor a
+  partial guard.
 
 ## Decisions
 
-- Skip condition (fork from Context, RESOLVED): skip the persist enqueue iff
-  (1) the mkdirSync call created NO mirror segment, AND (2) the
-  persist-failure ledger has no entry for ANY segment of the normalized path
-  (target + all ancestors). O(1) fast path: ledger empty → condition (2) free.
-  `healAncestorPersistFailures` alone is NOT sufficient — a general-API caller
-  that mkdirs an existing ledgered path with no subsequent child write (empty
-  dir) would leave the entry unhealable forever, `flush().total` stuck > 0,
-  install stamp permanently refused. Ledger check is required; it is cheap
-  (non-empty ledger only after real failures).
-- Ancestor coverage of the chain check (RESOLVED): ancestor-only-dirty with a
-  proven-durable target is UNREACHABLE under the serial FIFO — every persist
-  success under a path heals its ancestors (write/mkdir/rename heal paths,
-  rm clears under) — so today a target-only check is observably equivalent.
-  The chain check is kept because it is what the signed draft prescribed
-  ("no ledger entry covers any of its segments"), it makes the skip locally
-  sound instead of dependent on that cross-path invariant, and slice 2's
-  out-of-order completion is exactly where the invariant becomes fragile
-  (its review lens flags ledger-heal-under-reorder as the failure mode). Not
-  new machinery: 6-line guard over existing state, O(1) on the empty ledger.
-- In-flight window semantics (row d, ACCEPTED): the skip decision reads
-  mirror + ledger synchronously; a failure of an already-in-flight op for the
-  same path lands AFTER the skip. Honesty is preserved by `flush()` reporting
-  the ledger; healing defers to the next explicit retry or descendant write —
-  the same triggers that heal today. The only lost healer is a redundant
-  queued duplicate racing its predecessor's failure; it was never a contract.
-- No new coordination mechanism (epic Budget: 0): the skip is a guard over
-  the existing mirror + ledger; Class-kill inventory unaffected.
+- Skip condition (fork from Context, RESOLVED): on a mkdirSync that created
+  NO mirror segment — (1) target path ledgered → enqueue the persist
+  (heal-on-retry carrier, rows a/c); (2) an UNSETTLED mkdir persist for the
+  same normalized path exists → coalesce: mark that op's one-shot
+  duplicate-intent; if it settles in FAILURE, exactly one follow-up persist
+  re-arms (row d — preserves main's duplicate-healer semantics); (3)
+  otherwise (chain proven: in mirror, not ledgered, no pending same-path op)
+  → skip. Any call that created a segment persists as today.
+- Target-only ledger lookup (RESOLVED; supersedes the draft's "any of its
+  segments" sketch): ancestor-only-dirty with a clean target is UNREACHABLE
+  under the serial FIFO — every persist success under a path heals its
+  ancestors (write/mkdir/rename heal paths, rm clears under) — and where an
+  ancestor-covering op fails, the ledger entry sits at that op's own target,
+  whose own retry is not skipped; the gate's `anyFailure` keeps the subtree
+  dirty meanwhile. An ancestor scan adds no reachable behavior → dropped
+  (§Simplicity). Slice 2 (out-of-order completion) must re-derive this
+  equivalence in its Contract+RED — its item already carries the
+  ledger-heal-under-reorder obligation.
+- `healAncestorPersistFailures` alone is NOT a substitute for the ledger
+  check — a general-API caller that mkdirs an existing ledgered path with no
+  subsequent child write (empty dir) would leave the entry unhealable
+  forever, `flush().total` stuck > 0, install stamp permanently refused.
+- Coalescing over duplicate enqueue (RESOLVED): without coalescing the dedup
+  cannot exist — during a tight restore loop NO op settles between calls, so
+  "enqueue while pending" degenerates back to ~2N ops; and dropping
+  duplicates outright loses the in-flight healer main provides (epic I2
+  "heal-on-retry preserved"). Coalescing delivers both: ≤1 disk attempt per
+  settled outcome, healing equivalent to main (one follow-up vs K duplicates).
+- Class-kill inventory (mechanism check): the duplicate-intent index is a
+  per-path VIEW over the existing FIFO owner's pending mkdir ops plus a
+  one-shot re-arm consumed inside the op's own failure path — no new
+  ordering/authority; OpfsFsSync stays the single OPFS write-through owner.
+  Existing same-boundary mechanisms: pendingTail FIFO, pending-by-sequence
+  map, persist-failure ledger (all one owner, this class). Sibling
+  mirror-existence pre-mkdir guard: `loadFixture` (opfs-sync.ts) — REMOVED by
+  this item (fault row e): the guard is an unsound pre-dedup optimization
+  (child writes create no parents, so a ledgered fixture dir could never heal
+  through loadFixture), and post-dedup an unconditional mkdirSync is an O(1)
+  no-op on the proven path. After this item, the mkdirSync skip is the ONE
+  mirror-existence decision point; zero siblings remain.
+- Epic-level review findings (Contract+RED attempt 1, 2026-08-15) against
+  signed invariants I1/I3, the single-digit scenario wording, and the
+  owner-port-only progress reach are ROUTED TO THE USER, not absorbed here:
+  `invariants-signoff: 2026-08-15 — user` freezes them for agents
+  (AGENTS.md §Data sources; backlog/README §Epic fit "Only the user changes
+  an invariant"), and the progress reach/channel were user-chosen fork
+  resolutions (epic `## Decisions`, rifty-refine 2026-08-15).
 - Evidence: prototype `proto/opfs-flush-speed-256` @ a01870a5f, real 26 811-file
   gravity-ui tree — faithful 48.9/42.1 s vs mkdir-dedup 26.7/31.0 s headed
   (1.4–1.8x), headless 37.6 → 28.5 s (1.3x); run command in RESULTS.md on that
