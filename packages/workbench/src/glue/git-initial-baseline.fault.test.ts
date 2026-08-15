@@ -118,15 +118,13 @@ describe('starter initial commit ∥ instant-deps restore (fault: concurrent res
       expect(
         (await sh.run('git show HEAD:packages/app/node_modules/nested/index.js')).exitCode,
       ).not.toBe(0);
-      const statusLines = (await sh.run('git status --porcelain')).stdout.trim().split('\n');
-      expect(statusLines).toHaveLength(121);
-      expect(
-        statusLines.every(
-          (line) =>
-            line.startsWith('?? node_modules/') ||
-            line === '?? packages/app/node_modules/nested/index.js',
-        ),
-      ).toBe(true);
+      // Tracked set proves exclusion without freezing porcelain shape (native
+      // git collapses wholly-untracked dirs; rifty's per-file rows are a
+      // recorded gap: backlog shell/git-status-porcelain-untracked-dir-collapse).
+      const tracked = await makeGit({ fs: vfsToGitFs(vfs), dir: root }).listFiles();
+      expect.soft(tracked).toContain('src/main.js');
+      expect.soft(tracked).toContain('node_modules-helpers/keep.js');
+      expect(tracked.filter((path) => path.split('/').includes('node_modules'))).toEqual([]);
     } finally {
       resetSyncMirror();
     }

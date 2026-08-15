@@ -9,7 +9,8 @@
 import { MemoryVfs, VfsError } from '@riftydev/vfs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { commitRefusal } from '../src/commit-refusal.ts';
-import { vfsToGitFs } from '../src/fs-adapter.ts';
+import { carryExactReadFailures } from '../src/exact-read-failures.ts';
+import { type GitFs, vfsToGitFs } from '../src/fs-adapter.ts';
 import { makeGit } from '../src/git.ts';
 
 const ID = { name: 'T', email: 't@e.com', timestamp: 1_600_000_000, timezoneOffset: 0 };
@@ -46,6 +47,78 @@ async function rejectedValue(run: Promise<unknown>): Promise<unknown> {
     () => undefined,
     (error: unknown) => error,
   );
+}
+
+/** Distinguishes a resolve from a rejection whose VALUE is undefined/null. */
+async function settlement(run: Promise<unknown>): Promise<{ rejected: boolean; value: unknown }> {
+  return run.then(
+    (value) => ({ rejected: false, value }),
+    (value: unknown) => ({ rejected: true, value }),
+  );
+}
+
+/** Boundary decorator: scripted reads, recorded writes, unused stat verbs. */
+function stubGitFs(read: () => Promise<Uint8Array | string>, onWrite: (p: string) => void): GitFs {
+  const unused = async (): Promise<never> => {
+    throw new Error('unused verb');
+  };
+  return {
+    promises: {
+      readFile: read,
+      writeFile: async (p) => onWrite(p),
+      unlink: async (p) => onWrite(p),
+      readdir: async () => [],
+      mkdir: async (p) => onWrite(p),
+      rmdir: async (p) => onWrite(p),
+      stat: unused,
+      lstat: unused,
+      readlink: unused,
+      symlink: async (_target, p) => onWrite(p),
+      chmod: async () => undefined,
+    },
+  };
+}
+
+/** Every verb on the PROTOTYPE with receiver-bound private state — a valid
+ *  structural GitFs the carrier must not break (no own-property assumptions). */
+class PrototypeGitFsPromises {
+  readonly #inner: GitFs['promises'];
+  constructor(inner: GitFs['promises']) {
+    this.#inner = inner;
+  }
+  readFile(p: string, opts?: { encoding?: 'utf8' } | 'utf8'): Promise<Uint8Array | string> {
+    return this.#inner.readFile(p, opts);
+  }
+  writeFile(p: string, data: Uint8Array | string, opts?: unknown): Promise<void> {
+    return this.#inner.writeFile(p, data, opts);
+  }
+  unlink(p: string): Promise<void> {
+    return this.#inner.unlink(p);
+  }
+  readdir(p: string): Promise<string[]> {
+    return this.#inner.readdir(p);
+  }
+  mkdir(p: string): Promise<void> {
+    return this.#inner.mkdir(p);
+  }
+  rmdir(p: string): Promise<void> {
+    return this.#inner.rmdir(p);
+  }
+  stat(p: string): ReturnType<GitFs['promises']['stat']> {
+    return this.#inner.stat(p);
+  }
+  lstat(p: string): ReturnType<GitFs['promises']['lstat']> {
+    return this.#inner.lstat(p);
+  }
+  readlink(p: string): Promise<string> {
+    return this.#inner.readlink(p);
+  }
+  symlink(target: string, p: string): Promise<void> {
+    return this.#inner.symlink(target, p);
+  }
+  chmod(p: string, mode: number): Promise<void> {
+    return this.#inner.chmod(p, mode);
+  }
 }
 
 afterEach(() => {
@@ -178,6 +251,98 @@ it('[fault: quota-perm-fail][fault: provenance-lie] clone-failure cleanup never 
 
   expect.soft(rejected).toBe(failure);
   expect(await g.resolveRef('HEAD')).toBe(head);
+});
+
+it('[fault: observable-order][fault: provenance-lie] a failure belongs only to its own operation, never to a concurrent one', async () => {
+  const { vfs, g, head } = await seededRepo();
+  const failure = new VfsError(
+    'EIO',
+    looseObjectPath('/r', head),
+    'injected commit object read failure',
+  );
+  // Gate getConfig's read so it is provably in flight while log fails; only
+  // log touches the failed path, so only log may reject.
+  let releaseConfig = (): void => undefined;
+  const configGate = new Promise<void>((resolve) => {
+    releaseConfig = resolve;
+  });
+  const readFile = vfs.readFile.bind(vfs);
+  vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+    if (path === failure.path) throw failure;
+    if (path === '/r/.git/config') await configGate;
+    return await readFile(path);
+  });
+
+  const logRejection = rejectedValue(g.log());
+  const config = g.getConfig('user.name');
+  expect.soft(await logRejection).toBe(failure);
+  releaseConfig();
+  await expect(config).resolves.toBeUndefined();
+});
+
+it('[fault: provenance-lie] latch keeps the identity of an undefined rejection and still fail-stops writes', async () => {
+  const writes: string[] = [];
+  const carrier = carryExactReadFailures(
+    stubGitFs(
+      () => Promise.reject(undefined),
+      (p) => writes.push(p),
+    ),
+  );
+
+  const settled = await settlement(
+    carrier.guard(async () => {
+      // isomorphic-git style: swallow the read, then write over the swallow.
+      await carrier.fs.promises.readFile('/latched').catch(() => undefined);
+      await carrier.fs.promises.writeFile('/w', 'data');
+      return 'ok';
+    }),
+  );
+
+  expect.soft(settled).toEqual({ rejected: true, value: undefined });
+  expect(writes).toEqual([]);
+});
+
+it('[fault: provenance-lie] the FIRST non-absence rejection wins; a later failure never replaces a null latch', async () => {
+  const writes: string[] = [];
+  let reads = 0;
+  const carrier = carryExactReadFailures(
+    stubGitFs(
+      () => Promise.reject(reads++ === 0 ? null : new VfsError('EIO', '/second', 'second failure')),
+      (p) => writes.push(p),
+    ),
+  );
+
+  const settled = await settlement(
+    carrier.guard(async () => {
+      await carrier.fs.promises.readFile('/first').catch(() => undefined);
+      await carrier.fs.promises.readFile('/second').catch(() => undefined);
+      await carrier.fs.promises.writeFile('/w', 'data');
+      return 'ok';
+    }),
+  );
+
+  expect.soft(settled).toEqual({ rejected: true, value: null });
+  expect(writes).toEqual([]);
+});
+
+it('[fault: sibling-drift] a prototype-backed GitFs drives the facade end-to-end with exact failure identity', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/p/src', { recursive: true });
+  const proto: GitFs = { promises: new PrototypeGitFsPromises(vfsToGitFs(vfs).promises) };
+  const g = makeGit({ fs: proto, dir: '/p' });
+  await g.init();
+  await vfs.writeFile('/p/src/a.js', 'x\n');
+  await g.add('src/a.js');
+  const oid = await g.commit({ message: 'm', author: ID, committer: ID });
+  expect.soft(await g.resolveRef('HEAD')).toBe(oid);
+
+  const failure = new VfsError('EIO', '/p/.git/refs/heads/main', 'injected proto ref failure');
+  const readFile = vfs.readFile.bind(vfs);
+  vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+    if (path === failure.path) throw failure;
+    return await readFile(path);
+  });
+  expect(await rejectedValue(g.resolveRef('HEAD'))).toBe(failure);
 });
 
 it('absence stays trustworthy: an unborn HEAD still reports git absence, not a storage failure', async () => {

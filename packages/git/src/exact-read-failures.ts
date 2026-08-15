@@ -91,6 +91,9 @@ export function carryExactReadFailures(base: GitFs): ExactReadFailureCarrier {
           throw error;
         }
       },
+      // Write verbs fail-stop on a latched READ failure only; write-direction
+      // swallows inside isomorphic-git and facade catch-alls are a separate
+      // axis. TODO(backlog: shell/isogit-write-failure-swallows)
       async writeFile(p, data, opts) {
         assertNoLatchedFailure();
         await writeFile(p, data, opts);

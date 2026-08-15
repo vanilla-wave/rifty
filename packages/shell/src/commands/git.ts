@@ -119,7 +119,7 @@ function short(oid: string): string {
   return oid.slice(0, 7);
 }
 
-/** Render `git status --porcelain` v1: one `XY filepath` line per changed file. */
+/** Porcelain v1 per-file rows. TODO(backlog: shell/git-status-porcelain-untracked-dir-collapse) — native -unormal collapses untracked dirs. */
 function renderPorcelain(entries: readonly SupportedStatusEntry[]): string {
   let out = '';
   for (const e of entries) {

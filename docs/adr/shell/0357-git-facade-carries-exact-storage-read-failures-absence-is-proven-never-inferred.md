@@ -45,9 +45,17 @@ in `makeGit`):
   commit and the reset-over-empty-index worktree rewrite). Facade-issued
   workdir writes ride the same gated fs; only the clone-failure cleanup
   (`removeTree`) stays raw, cleanup must not be blocked.
-- concurrency: a failure is attributed to every operation in flight on the
-  instance (over-loud beats a lie; `stat`/`lstat` already propagate honestly in
-  isomorphic-git and are not wrapped).
+- concurrency: operations on one facade instance run SERIALIZED (per-instance
+  FIFO inside `guard`) — a latched failure belongs to exactly the operation
+  whose window observed it, never to a concurrent sibling by timing.
+  `stat`/`lstat` already propagate honestly in isomorphic-git and are not
+  wrapped; the facade's own gitdir-existence probe (clone cleanup arming)
+  classifies absence via the shared classifier and rethrows storage failures.
+- latch sentinel is out-of-band: `undefined`/`null` rejection values keep exact
+  identity; the FIRST non-absence rejection wins.
+- fs wrap delegates verb-by-verb (never spreads `base.promises`): structural
+  GitFs implementations with prototype-carried or receiver-bound methods stay
+  valid.
 - `isGitNotFound` exported: NotFound is now trustworthy absence, so consumers
   map it to null instead of catch-all; `commitRefusal`'s unborn probe adopts it
   (a latched ref failure no longer reads as "nothing to commit").
@@ -58,6 +66,15 @@ in `makeGit`):
   preflight object reads, and HEAD shape-probing for plain `resolveRef` +
   `isGitNotFound`. Fault proof: `packages/git/tests/read-failure-identity.fault.test.ts`
   + existing Starter baseline fault suite unchanged.
+- Shell `git` command probes stop re-collapsing what the facade surfaced: the
+  amend prior-commit read, revision-existence probes, and the unborn-log
+  secondary branch lookup rethrow storage failures (`VfsError`) to the shell's
+  loud generic path instead of emitting "nothing to amend", "pathspec did not
+  match", or a fabricated branch name; absence keeps its native diagnostics.
+  Fault proof: `packages/shell/tests/git-storage-failure.fault.test.ts`.
+- Facade ops serialize per instance: a status issued during a long clone on the
+  SAME instance completes after it — exact attribution outranks intra-instance
+  parallelism; distinct instances stay independent.
 - Over-loud corners accepted: optional isomorphic-git fallbacks (fetch haves,
   push thin-pack) abort on a real storage failure instead of degrading — real
   git errors there too. isomorphic-git's own clone-failure cleanup can be
