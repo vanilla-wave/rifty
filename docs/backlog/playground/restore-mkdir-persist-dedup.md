@@ -169,6 +169,8 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
 
 ## Decisions
 
+ready-verdict: 2026-08-15 — Contract+RED @ 2ffb5e57e
+
 - Carrier re-cut (fault-classes §Contract escalation, RESOLVED): after two
   consecutive Contract+RED blockers on the vfs-skip carrier (attempt 1 @
   16edebbde: in-flight duplicate healer lost, ancestor-scan speculative,
