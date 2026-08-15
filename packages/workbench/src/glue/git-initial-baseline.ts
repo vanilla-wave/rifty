@@ -1,6 +1,7 @@
 import {
   type GitIdentity,
   type LogEntry,
+  isGitNotFound,
   makeGit,
   requireSupportedStatusEntries,
   vfsToGitFs,
@@ -9,13 +10,6 @@ import type { Vfs } from '@riftydev/vfs';
 
 const INITIAL_COMMIT_MESSAGE = 'Initial commit';
 const GENERATED_BASELINE_FILE = 'package-lock.json';
-const STARTER_HEAD = 'ref: refs/heads/main\n';
-const STARTER_MAIN_REF = 'refs/heads/main';
-
-interface StarterGit {
-  readonly api: ReturnType<typeof makeGit>;
-  read<T>(operation: () => Promise<T>): Promise<T>;
-}
 
 function initialCommitAuthor(): GitIdentity {
   return {
@@ -26,61 +20,18 @@ function initialCommitAuthor(): GitIdentity {
   };
 }
 
-function makeStarterGit(vfs: Vfs, root: string): StarterGit {
-  const fs = vfsToGitFs(vfs);
-  const readFile = fs.promises.readFile.bind(fs.promises);
-  let readFailure: unknown;
-  // isomorphic-git maps every read rejection to absence; retain the exact VFS
-  // failure across each semantic probe. Its Promise-FS detection uses no path.
-  fs.promises.readFile = async (path, options) => {
-    try {
-      return await readFile(path, options);
-    } catch (error) {
-      if (
-        path !== undefined &&
-        !(error instanceof Error && 'code' in error && error.code === 'ENOENT')
-      ) {
-        readFailure ??= error;
-      }
-      throw error;
-    }
-  };
-  return {
-    api: makeGit({ fs, dir: root }),
-    async read(operation) {
-      readFailure = undefined;
-      try {
-        const result = await operation();
-        if (readFailure !== undefined) throw readFailure;
-        return result;
-      } catch (error) {
-        if (readFailure !== undefined) throw readFailure;
-        throw error;
-      } finally {
-        readFailure = undefined;
-      }
-    },
-  };
-}
-
-async function starterHeadOid(vfs: Vfs, root: string, git: StarterGit): Promise<string | null> {
-  const head = await vfs.readFileText(`${root}/.git/HEAD`);
-  if (head === STARTER_HEAD) {
-    const looseRef = `${root}/.git/${STARTER_MAIN_REF}`;
-    if (await vfs.exists(looseRef)) {
-      await vfs.readFile(looseRef);
-    } else {
-      const packedRefs = `${root}/.git/packed-refs`;
-      if (!(await vfs.exists(packedRefs))) return null;
-      await vfs.readFile(packedRefs);
-    }
+/**
+ * HEAD's commit OID, or null when HEAD is genuinely unborn. Trustworthy under
+ * ADR-0357: the facade surfaces a storage read failure as the exact `VfsError`,
+ * so git absence is proven, never inferred from a swallowed failure.
+ */
+async function headCommitOid(g: ReturnType<typeof makeGit>): Promise<string | null> {
+  try {
+    return await g.resolveRef('HEAD');
+  } catch (error) {
+    if (isGitNotFound(error)) return null;
+    throw error;
   }
-  return git.read(() => git.api.resolveRef('HEAD'));
-}
-
-async function preflightLooseObjectRead(vfs: Vfs, root: string, oid: string): Promise<void> {
-  const path = `${root}/.git/objects/${oid.slice(0, 2)}/${oid.slice(2)}`;
-  if (await vfs.exists(path)) await vfs.readFile(path);
 }
 
 function isInsideNodeModules(filepath: string): boolean {
@@ -92,10 +43,9 @@ async function resetInterruptedStarterIndex(vfs: Vfs, root: string): Promise<voi
   await vfs.rm(`${root}/.git/index`, { force: true });
 }
 
-async function stageInitialTree(git: StarterGit): Promise<boolean> {
-  const g = git.api;
+async function stageInitialTree(g: ReturnType<typeof makeGit>): Promise<boolean> {
   const changed = requireSupportedStatusEntries(
-    (await git.read(() => g.status())).filter((entry) => !isInsideNodeModules(entry.filepath)),
+    (await g.status()).filter((entry) => !isInsideNodeModules(entry.filepath)),
   );
   for (const entry of changed) {
     if (entry.status === '111') continue;
@@ -114,13 +64,10 @@ function isRiftyInitialIdentity(identity: GitIdentity): boolean {
 }
 
 async function matchingRiftyInitialCommit(
-  vfs: Vfs,
-  root: string,
-  git: StarterGit,
+  g: ReturnType<typeof makeGit>,
   expectedOid: string,
 ): Promise<LogEntry | null> {
-  await preflightLooseObjectRead(vfs, root, expectedOid);
-  const log = await git.read(() => git.api.log({ depth: 2 }));
+  const log = await g.log({ depth: 2 });
   const commit = log[0];
   if (
     log.length !== 1 ||
@@ -141,13 +88,10 @@ function isPackageManifest(filepath: string): boolean {
 }
 
 async function generatedBaselineBlobOid(
-  vfs: Vfs,
-  root: string,
-  git: StarterGit,
+  g: ReturnType<typeof makeGit>,
   treeOid: string,
 ): Promise<string | null> {
-  await preflightLooseObjectRead(vfs, root, treeOid);
-  const shown = await git.read(() => git.api.show(treeOid));
+  const shown = await g.show(treeOid);
   if (shown.type !== 'tree') throw new Error('Starter baseline tree OID did not resolve to a tree');
   const entry = shown.entries.find(({ path }) => path === GENERATED_BASELINE_FILE);
   if (entry === undefined) return null;
@@ -160,13 +104,12 @@ async function generatedBaselineBlobOid(
  * root commit on `main`; ignored files and dependency trees stay outside it.
  */
 export async function ensureStarterInitialCommit(vfs: Vfs, root: string): Promise<string | null> {
-  const git = makeStarterGit(vfs, root);
-  const g = git.api;
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
   if (!(await vfs.exists(`${root}/.git/HEAD`))) await g.init();
-  if ((await starterHeadOid(vfs, root, git)) !== null) return null;
+  if ((await headCommitOid(g)) !== null) return null;
   await resetInterruptedStarterIndex(vfs, root);
 
-  const hasChanges = await stageInitialTree(git);
+  const hasChanges = await stageInitialTree(g);
   if (!hasChanges) return null;
 
   const author = initialCommitAuthor();
@@ -184,12 +127,11 @@ export async function amendStarterGeneratedBaseline(
   expectedInitialOid: string,
   lockfile: Uint8Array,
 ): Promise<boolean> {
-  const git = makeStarterGit(vfs, root);
-  const g = git.api;
-  if ((await git.read(() => g.currentBranch())) !== 'main') return false;
-  if ((await starterHeadOid(vfs, root, git)) !== expectedInitialOid) return false;
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+  if ((await g.currentBranch()) !== 'main') return false;
+  if ((await headCommitOid(g)) !== expectedInitialOid) return false;
 
-  const initial = await matchingRiftyInitialCommit(vfs, root, git, expectedInitialOid);
+  const initial = await matchingRiftyInitialCommit(g, expectedInitialOid);
   if (initial === null) return false;
 
   const expectedLockOid = await g.hashBlob(lockfile);
@@ -197,12 +139,12 @@ export async function amendStarterGeneratedBaseline(
   if (
     !(await vfs.exists(lockPath)) ||
     (await g.hashBlob(await vfs.readFile(lockPath))) !== expectedLockOid ||
-    (await generatedBaselineBlobOid(vfs, root, git, initial.tree)) !== null
+    (await generatedBaselineBlobOid(g, initial.tree)) !== null
   ) {
     return false;
   }
 
-  const status = requireSupportedStatusEntries(await git.read(() => g.status()));
+  const status = requireSupportedStatusEntries(await g.status());
   if (
     status.some((entry) => entry.status[0] !== entry.status[2]) ||
     status.some((entry) => isPackageManifest(entry.filepath) && entry.status !== '111')
@@ -217,12 +159,9 @@ export async function amendStarterGeneratedBaseline(
     committer: initial.committer,
     amend: true,
   });
-  const final = await matchingRiftyInitialCommit(vfs, root, git, finalOid);
-  const finalLockOid =
-    final === null ? null : await generatedBaselineBlobOid(vfs, root, git, final.tree);
-  const delta = await git.read(() =>
-    g.diff({ kind: 'refs', oldRef: initial.oid, newRef: finalOid }),
-  );
+  const final = await matchingRiftyInitialCommit(g, finalOid);
+  const finalLockOid = final === null ? null : await generatedBaselineBlobOid(g, final.tree);
+  const delta = await g.diff({ kind: 'refs', oldRef: initial.oid, newRef: finalOid });
   if (
     final?.oid !== finalOid ||
     finalLockOid !== expectedLockOid ||

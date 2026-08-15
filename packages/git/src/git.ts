@@ -26,8 +26,10 @@ import {
   assertSupportedTransport,
   mapGitNetworkError,
 } from './errors.ts';
+import { carryExactReadFailures, guardSurface } from './exact-read-failures.ts';
 import { riftyGitHttp } from './http-plugin.ts';
 import { lineDiff } from './line-diff.ts';
+import { firstUnmatched, pathspecMatch } from './pathspec.ts';
 import { isGitStatusMatrixCode } from './status.ts';
 import type {
   CheckoutInput,
@@ -64,13 +66,6 @@ export interface CommitArgs {
   amend?: boolean;
 }
 
-/** A pathspec `spec` matches `path` exactly or as a directory prefix (`<spec>/…`). */
-export const pathspecMatch = (path: string, spec: string): boolean => {
-  const normalized = spec.replace(/\/+$/, '');
-  if (normalized === '' || normalized === '.') return true;
-  return path === normalized || path.startsWith(`${normalized}/`);
-};
-
 interface BlobRef {
   filepath: string;
   oid: string;
@@ -86,11 +81,6 @@ function isBinary(bytes: Uint8Array): boolean {
   const n = Math.min(bytes.length, 8000);
   for (let i = 0; i < n; i++) if (bytes[i] === 0) return true;
   return false;
-}
-
-/** First pathspec matching no path in `files` (for the PathspecError message). */
-function firstUnmatched(specs: string[], files: string[]): string {
-  return specs.find((s) => !files.some((p) => pathspecMatch(p, s))) ?? specs[0] ?? '';
 }
 
 /** The facade surface returned by {@link makeGit}. */
@@ -140,10 +130,16 @@ export interface Git {
 }
 
 export function makeGit(opts: MakeGitOptions): Git {
+  // No facade operation settles while hiding a non-absence storage read
+  // failure — reads funnel through the exact-read-failure carrier (ADR-0357).
+  const carrier = carryExactReadFailures(opts.fs);
   // GitFs is a structural PromiseFsClient; isomorphic-git's FsClient is a union
   // of callback/promise shapes its public types don't narrow on. Cast once here
   // (internal), keeping `opts.fs: GitFs` type-safe at the package boundary.
-  const fs = opts.fs as unknown as FsClient;
+  const fs = carrier.fs as unknown as FsClient;
+  // Facade-issued workdir mutations honor the same fail-stop gate; only the
+  // clone-failure cleanup (removeTree) stays raw — cleanup must not be blocked.
+  const gatedFs = carrier.fs.promises;
   const dir = opts.dir;
   // Resolve the network transport once: http plugin, CORS proxy (D-004), and an
   // onAuth bridge from our narrowed GitAuthProvider to isomorphic-git's callback.
@@ -389,7 +385,7 @@ export function makeGit(opts: MakeGitOptions): Git {
     let cur = '';
     for (const part of parts.slice(0, -1)) {
       cur = `${cur}/${part}`;
-      await opts.fs.promises.mkdir(cur).catch(() => undefined);
+      await gatedFs.mkdir(cur).catch(() => undefined);
     }
   };
 
@@ -488,13 +484,13 @@ export function makeGit(opts: MakeGitOptions): Git {
     const targetPaths = new Set(target.map((b) => b.filepath));
     for (const filepath of current) {
       if (!targetPaths.has(filepath)) {
-        await opts.fs.promises.unlink(abs(filepath)).catch(() => undefined);
+        await gatedFs.unlink(abs(filepath)).catch(() => undefined);
       }
     }
     for (const { filepath, oid } of target) {
       const { blob } = await git.readBlob({ fs, dir, oid });
       await ensureParentDirs(filepath);
-      await opts.fs.promises.writeFile(abs(filepath), blob);
+      await gatedFs.writeFile(abs(filepath), blob);
     }
   };
 
@@ -626,7 +622,7 @@ export function makeGit(opts: MakeGitOptions): Git {
       for (const filepath of restored) {
         const { blob } = await git.readBlob({ fs, dir, oid, filepath });
         await ensureParentDirs(filepath);
-        await opts.fs.promises.writeFile(abs(filepath), blob);
+        await gatedFs.writeFile(abs(filepath), blob);
         await git.add({ fs, dir, filepath });
       }
       return { op: 'restore', restored };
@@ -654,7 +650,7 @@ export function makeGit(opts: MakeGitOptions): Git {
     for (const { filepath, oid } of staged) {
       const { blob } = await git.readBlob({ fs, dir, oid });
       await ensureParentDirs(filepath);
-      await opts.fs.promises.writeFile(abs(filepath), blob);
+      await gatedFs.writeFile(abs(filepath), blob);
     }
     return { op: 'restore', restored: staged.map((s) => s.filepath) };
   }
@@ -681,7 +677,7 @@ export function makeGit(opts: MakeGitOptions): Git {
     await preflightTreeUnion([oid, ...commit.parents]);
   };
 
-  return {
+  const api: Git = {
     async init() {
       await git.init({ fs, dir, defaultBranch: 'main' });
     },
@@ -1114,4 +1110,5 @@ export function makeGit(opts: MakeGitOptions): Git {
       }
     },
   };
+  return guardSurface(api, carrier.guard);
 }

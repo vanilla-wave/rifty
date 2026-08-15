@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- Every `makeGit` operation now carries the exact storage read failure instead
+  of isomorphic-git's absence collapse: non-absence `readFile`/`readdir`
+  rejections rethrow as-is (even after an internally swallowed "success") and
+  fail-stop the operation's remaining writes, so an unreadable ref can no
+  longer orphan history or fake an unborn branch; `isGitNotFound` exported as
+  the now-trustworthy absence classifier (ADR-0357).
+
 - Status classification now covers the complete reachable isomorphic-git
   matrix as a closed typed domain. Staged deletion followed by same-path
   recreation (`110`/`120`) preserves both real porcelain rows (`D ` and `??`),

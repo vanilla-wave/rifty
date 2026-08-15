@@ -7,7 +7,9 @@
 - Starter Git baselines again use Git's ignore pruning, exclude every nested
   `node_modules` tree, and rebuild an interrupted unborn index before staging.
   Ref and object read failures now propagate before baseline mutation instead
-  of masquerading as Git absence and risking replacement history.
+  of masquerading as Git absence and risking replacement history; the
+  guarantee lives in the `@riftydev/git` facade (ADR-0357), so the local
+  Starter read-latch and preflight object reads are gone.
 
 - Dependency snapshot v3 now carries the exact integrity-pinned cache closure
   required by registry-backed shadow replay, verifies it before mutation, and
