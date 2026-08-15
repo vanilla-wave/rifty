@@ -7,7 +7,7 @@ why: the globally-serial FIFO drain is the 96%-of-project-open cost on big trees
 user_story: As a developer opening a project with a heavy node_modules, I want the durability flush to finish in seconds, but today the write-through queue drains strictly serially and a 26.8k-file tree takes 40+ seconds
 epic: project-open-drain-latency
 blocked_by: []
-sources: [https://github.com/vanilla-wave/rifty/issues/256, docs/adr/playground/0187-install-stamp-durability-via-write-through-fifo-order-non-blocking-stamp.md, docs/adr/vfs/0072-opfs-sync-content-cache-write-through.md]
+sources: [https://github.com/vanilla-wave/rifty/issues/256, docs/adr/vfs/0358-bounded-per-path-parallel-opfs-write-through-drain-with-ancestor-fencing-and-stamp-barrier.md, docs/adr/vfs/0072-opfs-sync-content-cache-write-through.md]
 code: [packages/vfs/src/opfs-sync.ts, packages/workbench/src/glue/install-stamp-authority.ts]
 ---
 

@@ -165,6 +165,11 @@ bytes stable next-day. Bounded stale reuse remains safe and unchanged.
 This supersedes ADR-0187 only for its command-site "return only when durable"
 clause. Its persist-ledger, checked-drain, FIFO, and pending-boot rules stand.
 
+> Corrected (2026-08-15): ADR-0187 is now fully superseded by ADR-0358 — the
+> FIFO-order clause falls to bounded per-path lanes + an explicit stamp full
+> fence; the persist-ledger, checked-drain, and pending-boot rules continue
+> there unchanged.
+
 ### Learned-pin SWR
 
 - Learned pins are fresh for age `< 1800s`; age `>= 1800s && < 24h` serves

@@ -4,7 +4,7 @@ status: draft
 title: Mirror-existence pre-mkdir guards can never heal a ledgered dir persist
 created: 2026-08-15
 why: sites that guard mkdirSync with "already in the mirror" skip the ONLY call that could re-persist a dir whose OPFS create failed — the ledger stays dirty all session because OpfsVfs.writeFile creates no parents, so child writes into the missing dir fail too instead of healing it
-sources: [Contract+RED attempts 1-2 on vfs/opfs-mkdir-persist-dedup (2026-08-15), docs/adr/playground/0187-install-stamp-durability-via-write-through-fifo-order-non-blocking-stamp.md]
+sources: [Contract+RED attempts 1-2 on vfs/opfs-mkdir-persist-dedup (2026-08-15), docs/adr/vfs/0358-bounded-per-path-parallel-opfs-write-through-drain-with-ancestor-fencing-and-stamp-barrier.md]
 code: [packages/vfs/src/opfs-sync.ts, packages/workbench/src/workers/playground-project-authority.ts]
 ---
 

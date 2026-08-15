@@ -7,7 +7,7 @@ why: the flush phase is 96% of heavy-tree project open and emits nothing observa
 user_story: As a host UI embedding the workbench, I want an honest signal during the durability flush (still working / N of M persisted), but today WorkbenchOwnerHealthEvent carries only fatal-invariant and persistence, so a 40-second flush looks identical to a hang
 epic: project-open-drain-latency
 blocked_by: []
-sources: [https://github.com/vanilla-wave/rifty/issues/256, docs/adr/playground/0187-install-stamp-durability-via-write-through-fifo-order-non-blocking-stamp.md]
+sources: [https://github.com/vanilla-wave/rifty/issues/256, docs/adr/vfs/0358-bounded-per-path-parallel-opfs-write-through-drain-with-ancestor-fencing-and-stamp-barrier.md]
 code: [packages/workbench/src/workbench/workbench-owner-port.ts, packages/workbench/src/glue/install-stamp-authority.ts, packages/vfs/src/opfs-sync.ts]
 ---
 
