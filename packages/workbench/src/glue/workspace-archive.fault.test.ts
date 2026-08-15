@@ -9,9 +9,9 @@
  * the dedup — `OpfsFsSync.mkdirSync` persist semantics are untouched by this
  * item).
  */
-import { OpfsFsSync, type PairedAsyncSurface } from '@riftydev/vfs';
+import { OpfsFsSync } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyWorkspaceArchive, type WorkspaceArchiveV1 } from './workspace-archive.ts';
+import { type WorkspaceArchiveV1, applyWorkspaceArchive } from './workspace-archive.ts';
 
 class DomError extends Error {
   constructor(name: string) {
@@ -64,8 +64,10 @@ function buildInjectableRoot(): {
 }
 
 /** Paired surface honouring real OPFS semantics: writeFile creates NO parents
- * (opfs.ts) — a write into a dir missing on "disk" fails. */
-function parentCheckingSurface(dirs: Set<string>): PairedAsyncSurface & { writes: string[] } {
+ * (opfs.ts) — a write into a dir missing on "disk" fails. Typed structurally:
+ * OpfsFsSync's paired-surface parameter accepts this shape (the named type is
+ * deliberately not on the vfs public entry). */
+function parentCheckingSurface(dirs: Set<string>) {
   const writes: string[] = [];
   return {
     writes,

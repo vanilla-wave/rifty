@@ -1,12 +1,12 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type WorkspaceArchiveFs,
+  type WorkspaceArchiveV1,
   applyWorkspaceArchive,
   buildWorkspaceArchive,
   exportWorkspaceArchive,
   importWorkspaceArchive,
-  type WorkspaceArchiveFs,
-  type WorkspaceArchiveV1,
 } from './workspace-archive.ts';
 
 const enc = new TextEncoder();
@@ -288,10 +288,13 @@ describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir
     expect(read(inner, '/ws/x/y/f.js')).toBe('xy');
   });
 
-  it("every file's dirname mkdir is issued before that file's write (order pin)", () => {
+  it('keeps the per-file interleaving: only DUPLICATE mkdirs vanish, order of survivors is unchanged', () => {
     const { fs, calls } = loggingFs();
     applyWorkspaceArchive(fs, archive);
 
+    // Same pass, first-seen dedup ("no ordering change", epic slice clause):
+    // each file's dirname mkdir — when it survives — immediately precedes
+    // that file's write; no mkdir is batched ahead of unrelated writes.
     for (const file of archive.files) {
       const target = `/ws/${file.path}`;
       const dir = target.slice(0, target.lastIndexOf('/')) || '/ws';
@@ -301,21 +304,31 @@ describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir
       expect(mkdirIndex).toBeGreaterThanOrEqual(0);
       expect(mkdirIndex).toBeLessThan(writeIndex);
     }
+    const firstWrite = calls.findIndex(([kind]) => kind === 'write');
+    const mkdirsBeforeFirstWrite = calls.slice(0, firstWrite).filter(([k]) => k === 'mkdir');
+    // Root mkdir + the FIRST file's dirname only — a batched all-dirs-first
+    // carrier fails here.
+    expect(mkdirsBeforeFirstWrite.length).toBe(2);
   });
 
-  it('final tree and bytes are identical to a per-file-mkdir apply (parity pin P1)', () => {
-    const { fs, inner } = loggingFs();
-    applyWorkspaceArchive(fs, archive);
+  it('a mid-apply write failure leaves the same durable prefix and error as main (observable-order pin)', () => {
+    const { fs, inner, calls } = loggingFs();
+    const failAt = '/ws/root.txt'; // 5th file — after a/b dirs, before b/g2, x/y, a/deep/h2
+    const realWrite = fs.writeFileSync.bind(fs);
+    fs.writeFileSync = (path, data) => {
+      if (path === failAt) throw new Error('disk full');
+      realWrite(path, data);
+    };
 
-    const reference = new MemoryFsSync();
-    reference.mkdirSync('/ws', { recursive: true });
-    for (const file of archive.files) {
-      const target = `/ws/${file.path}`;
-      const dir = target.slice(0, target.lastIndexOf('/')) || '/ws';
-      reference.mkdirSync(dir, { recursive: true });
-      reference.writeFileSync(target, Buffer.from(file.content, 'base64'));
-    }
+    expect(() => applyWorkspaceArchive(fs, archive)).toThrow('disk full');
 
-    expect(exportWorkspaceArchive(inner, '/ws')).toBe(exportWorkspaceArchive(reference, '/ws'));
+    // Files before the failure applied in their original order; nothing
+    // after the failure happened — the same durable prefix main produces.
+    const writes = calls.filter(([kind]) => kind === 'write').map(([, path]) => path);
+    expect(writes).toEqual(['/ws/a/f1.js', '/ws/b/g1.js', '/ws/a/f2.js', '/ws/a/deep/h1.js']);
+    expect(read(inner, '/ws/a/deep/h1.js')).toBe('h1');
+    expect(inner.existsSync('/ws/b/g2.js')).toBe(false);
+    expect(inner.existsSync('/ws/x/y')).toBe(false);
+    expect(inner.existsSync('/ws/a/deep/h2.js')).toBe(false);
   });
 });

@@ -27,10 +27,13 @@ The redundancy source is the caller, not the VFS: `apply()`
 (workspace-archive.ts:230) calls `mkdirSync(dirname(target), {recursive})`
 before EVERY `writeFileSync`, and `OpfsFsSync.mkdirSync` persists each call
 unconditionally (opfs-sync.ts:950 — semantics this item does NOT touch).
-Dedup at the caller: collect the distinct dirnames of the decoded files,
-`mkdirSync` each ONCE (recursive), then run the write loop. Persist ops per
-restore: 1 rm + 1 root mkdir + ≤D dirname mkdirs + N writes = N + D + O(1)
-(epic I2), never ~2N.
+Dedup at the caller, SAME PASS: the write loop keeps its exact shape and
+order; a first-seen `Set` of dirnames merely skips the duplicate `mkdirSync`
+calls ("no ordering change", epic slice clause — surviving mkdirs and every
+write keep their positions and interleaving; a mid-apply failure leaves the
+identical durable prefix main leaves). Persist ops per restore: 1 rm + 1
+root mkdir + one mkdir per distinct dirname (≤ D + 1 incl. a root-dirname
+file) + N writes = N + D + O(1) (epic I2), never ~2N.
 
 Prototype evidence maps DIRECTLY to this carrier: the measured
 `fssync-mkdir-dedup` variant precreated dirs once and then wrote files —
@@ -61,10 +64,18 @@ dirs) through the REAL `applyWorkspaceArchive` over `OpfsFsSync` + real
 - wall-clock apply+flush logged for the PR record (no CI assert — variance).
 
 Unit (Node, the apply loop's own boundary is the `WorkspaceArchiveFs`
-interface): `prepareWorkspaceArchiveImport(...).apply()` over a counting fs
+interface): `prepareWorkspaceArchiveImport(...).apply()` over a logging fs
 issues exactly one `mkdirSync` per distinct file dirname + one for the root
-(RED on main: one per file), one `writeFileSync` per file, and every file's
-dirname `mkdirSync` is issued before that file's write.
+(RED on main: one per file), one `writeFileSync` per file, and:
+
+- interleaving pin — each surviving dirname mkdir immediately precedes its
+  file's write; before the FIRST write only the root mkdir + the first
+  file's dirname mkdir have run (kills a batched all-dirs-first carrier;
+  GREEN on main);
+- failure-prefix pin — a mid-apply `writeFileSync` throw leaves exactly the
+  pre-failure files applied in order and nothing after (observable-order;
+  GREEN on main — the dedup must not change partial side effects or error
+  priority).
 
 Integration (Node, REAL `applyWorkspaceArchive` + REAL `OpfsFsSync` over an
 injectable root — fake only at the OPFS boundary, unavoidable outside a
@@ -77,8 +88,9 @@ Existing suites green and untouched: `workspace-archive.test.ts` (export/
 import/validation semantics), the ADR-0187 FIFO pin, watchdog and
 persist-failure ledger suites in `opfs-sync.test.ts` (zero vfs source
 changes). Approximations rejected: deduping only consecutive repeats fails
-the unit op-count on interleaved dirs; touching `OpfsFsSync.mkdirSync`
-violates this contract's Out of scope.
+the unit op-count on interleaved dirs; batching all mkdirs ahead of the
+writes fails the interleaving pin; touching `OpfsFsSync.mkdirSync` violates
+this contract's Out of scope.
 
 ## Parity cases
 
@@ -86,7 +98,10 @@ Restore-observable behavior must not change; the epic supplies the user
 scenario. Regression pins (stay green):
 
 - P1 final mirror tree and bytes identical to main for the same archive
-  (existing import/export round-trip tests).
+  (existing import/export round-trip tests, which now run through the
+  deduped apply; plus the browser fresh-surface re-read).
+- P5 mid-apply failure leaves main's exact durable prefix and surfaces the
+  same error (failure-prefix pin above).
 - P2 archive validation errors and their order unchanged — decode, unsafe
   path, stamp-claim, collision guards all fire BEFORE any mutation (existing
   tests).
@@ -110,7 +125,7 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
 |---|---|---|---|
 | a | quota-perm-fail × restore mkdir persist | dir creates rejected mid-restore | `flush().total > 0`, `anyFailure` covers the subtree → install stamp refused; sync mirror stays live — GREEN pin (vfs semantics untouched) |
 | b | quota-perm-fail × restore retry | same restore re-run after the fault clears | every distinct dirname is mkdir'd again → unconditional re-persist heals → `flush().total === 0`, dirs durable (I2 heal-on-retry) — GREEN pin |
-| c | torn-state × mid-restore reload | page dies between apply() and a clean flush | pending install stamp is never trusted on boot (ADR-0187, unchanged semantics) — existing proof: `owner-snapshot-restore-exec` reload-survival e2e stays green; no ordering change is introduced (each file's dirname mkdir still precedes its write) |
+| c | torn-state × mid-restore reload | page dies between apply() and a clean flush | pending install stamp is never trusted on boot (ADR-0187, unchanged semantics) — existing proof: `owner-snapshot-restore-exec` reload-survival e2e stays green; the same-pass carrier introduces NO ordering change (interleaving pin + failure-prefix pin above) |
 | d | lossy-aggregate × op counting (test-only boundary) | counting wrapper vs real ops | acceptance counts at the REAL root handle/`OpfsVfs` boundary, never a projection of internal state — the browser test is the artifact |
 
 ## Out of scope
@@ -147,9 +162,23 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
   ADR contradiction (0187/0072 untouched), no new mechanism (a local Set of
   dirnames in one loop is data flow, not coordination) → REVERSIBLE →
   CHANGELOG in packages/workbench.
-- Budget: slice **mkdir-dedup** band 20–80; source insertion ≈ 10 lines in
-  workspace-archive.ts; new coordination mechanisms: 0 — now genuinely
-  satisfied.
+- Same-pass carrier (attempt 3 re-cut, RESOLVED): the reviewer-named minimal
+  core — a first-seen Set inside the EXISTING write loop, skipping only
+  duplicate mkdir calls. The earlier two-phase sketch (collect dirs, then
+  write) was removable machinery AND drifted from the slice clause "no
+  ordering change"; the interleaving + failure-prefix pins now reject it.
+- Budget: slice **mkdir-dedup** band 20–80; source insertion ≈ 8 lines in
+  workspace-archive.ts; new coordination mechanisms: 0 — genuinely
+  satisfied. The RED-carrier volume objection (attempt 3) is answered by the
+  gate's own definition — `check:budget` band counts SOURCE insertions,
+  "tests, docs/backlog/**, generated globs excluded" (backlog/README
+  §Budget) — and the carriers are tier obligations, not scope: browser
+  acceptance is the DoD observable proof (fakes cannot close acceptance)
+  and its worker fixture is harness, the fault file covers matrix rows
+  (a)/(b), and the redundant reference-parity test was removed.
+- Test-only typing (attempt 3 fix): the paired-surface fake is typed
+  STRUCTURALLY — `PairedAsyncSurface` stays off the vfs public entry
+  (public API only via src/index.ts); no vfs source change.
 - Epic-level review findings (attempts 1–2) against signed invariants
   I1/I3, the single-digit scenario wording, and owner-port-only progress
   reach remain ROUTED TO THE USER (invariants-signoff: 2026-08-15 — user;

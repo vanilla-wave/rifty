@@ -20,7 +20,7 @@ flush ran 40.4 s of a 41.9 s open with zero observable output.
 or terminal line exists for the drain (verified: no progress mechanism in
 packages/workbench, 2026-08-15). The maintainer chased a "hang" that was this
 mute phase plus an unrelated bug. Even after the drain speedups
-(`vfs/opfs-mkdir-persist-dedup`, `vfs/opfs-parallel-write-through-drain`) the
+(`playground/restore-mkdir-persist-dedup`, `vfs/opfs-parallel-write-through-drain`) the
 phase remains seconds-long on big trees and timeouts still cannot distinguish
 slow from stuck.
 

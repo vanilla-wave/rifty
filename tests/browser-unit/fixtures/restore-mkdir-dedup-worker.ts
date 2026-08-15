@@ -10,8 +10,8 @@
  */
 import { OpfsFsSync, OpfsVfs } from '@riftydev/vfs';
 import {
-  applyWorkspaceArchive,
   type WorkspaceArchiveV1,
+  applyWorkspaceArchive,
 } from '../../../packages/workbench/src/glue/workspace-archive.ts';
 
 const scope = globalThis as unknown as DedicatedWorkerGlobalScope;
