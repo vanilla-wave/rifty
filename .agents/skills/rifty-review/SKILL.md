@@ -46,13 +46,15 @@ prior local verdict SHAs. Final+GREEN requires the PR and first runs
 
 Never poll or read reviewer stdout — the verdict is the `-o` JSON, liveness is
 the process state. Log is post-mortem: read it only if `verdict.json` is missing.
+`</dev/null` is load-bearing: without a TTY (background shells) codex parks on
+"Reading additional input from stdin..." forever.
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
 codex exec -C "$(git rev-parse --show-toplevel)" -s read-only -c approval_policy="never" \
   --skip-git-repo-check --output-schema tools/review/review-schema.json -o "$RUN/verdict.json" \
   "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, exact Goal-Baseline when declared, current-unit contract, and every changed file. Do not modify files. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations." \
-  >"$RUN/log" 2>&1
+  </dev/null >"$RUN/log" 2>&1
 node tools/review/blockers.mjs "$RUN/verdict.json"  # missing verdict → tail -n 40 "$RUN/log"
 ```
 
