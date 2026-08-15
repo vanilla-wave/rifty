@@ -1734,13 +1734,14 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
     // ~20ms latency + completion log without editing buildFakeRoot.
     const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/a']) });
     const innerGetDir = root.getDirectoryHandle.bind(root);
-    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
-      async (name, options) => {
-        const handle = await innerGetDir(name, options);
-        await new Promise<void>((r) => setTimeout(r, 20));
-        events.push('mkdir-resolved');
-        return handle;
-      };
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = async (name, options) => {
+      const handle = await innerGetDir(name, options);
+      await new Promise<void>((r) => setTimeout(r, 20));
+      events.push('mkdir-resolved');
+      return handle;
+    };
     const surface: PairedAsyncSurface = {
       readFile: () => Promise.resolve(new Uint8Array()),
       writeFile: () => {
@@ -1775,12 +1776,13 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
     // only add completion logging (buildFakeRoot untouched).
     const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/a']) });
     const innerGetDir = root.getDirectoryHandle.bind(root);
-    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
-      async (name, options) => {
-        const handle = await innerGetDir(name, options);
-        events.push(`mkdir /${name}`);
-        return handle;
-      };
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = async (name, options) => {
+      const handle = await innerGetDir(name, options);
+      events.push(`mkdir /${name}`);
+      return handle;
+    };
     const innerRemove = root.removeEntry.bind(root);
     (root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = async (
       name,
@@ -1823,12 +1825,13 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
     // rename's destination dir create both resolve; wrapper logs dir creates.
     const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/a', '/b']) });
     const innerGetDir = root.getDirectoryHandle.bind(root);
-    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
-      async (name, options) => {
-        const handle = await innerGetDir(name, options);
-        events.push(`dir /${name}`);
-        return handle;
-      };
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = async (name, options) => {
+      const handle = await innerGetDir(name, options);
+      events.push(`dir /${name}`);
+      return handle;
+    };
     const fs = new OpfsFsSync(root, surface);
     fs.mkdirSync('/a', { recursive: true });
     fs.writeFileSync('/a/f', new Uint8Array([1])); // slow write INSIDE the soon-moved subtree
@@ -1857,12 +1860,20 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
   // peak is exactly 1 and the `> 1` half fails. Turns green when bounded
   // parallel lanes admit unrelated ops concurrently. The `<= 16` half pins
   // ADR-0358's ~16-lane admission ceiling FOREVER: an unbounded fan-out (one
-  // in-flight boundary per path — 24 here) can never pass this pin. Releases
-  // are schedule-agnostic: every held boundary settles only after ALL 24 ops
-  // are enqueued (macrotask, then release in entry order), so serial and
+  // in-flight boundary per path — 25 ops here) can never pass this pin. The
+  // mix includes a disjoint HELD dir+file RENAME so persistRenameAsync's
+  // multi-path admission obeys the same cap. Accounting: a rename persist is
+  // ONE queued op crossing THREE sequential physical boundaries — destination
+  // dir create (root getDirectoryHandle), file move (surface.writeFile),
+  // source removal (surface.rm) — and the instrumentation counts each
+  // boundary ENTRY into inFlight, exactly as it already counts mkdir-chain
+  // getDirectoryHandle entries; the rename's snapshot surface.readFile hop
+  // stays instant and uncounted like every pin's readFile. Releases are
+  // schedule-agnostic: every held boundary settles only after ALL 25 ops are
+  // enqueued (macrotask, then release in entry order), so serial and
   // parallel drains both observe fully-held boundaries deterministically.
   it('>16 held persists on unrelated paths fan out beyond one lane but never beyond the ~16-lane ceiling', async () => {
-    const TOTAL = 24;
+    const TOTAL = 27; // 24 single-boundary ops + the rename's 3 sequential boundaries
     let inFlight = 0;
     let peak = 0;
     const releases: Array<() => void> = [];
@@ -1881,34 +1892,59 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
     const surface: PairedAsyncSurface = {
       readFile: () => Promise.resolve(new Uint8Array()),
       writeFile: () => heldBoundary(),
-      rm: () => Promise.resolve(),
+      // Only the rename's source-removal leg reaches surface.rm (rmSync
+      // persists via root removeEntry) — held like every other boundary.
+      rm: () => heldBoundary(),
     };
-    // mkdir targets + the rm target pre-exist in the FAKE so every inner call
-    // resolves once released; refreshIndex runs BEFORE the held wrappers go
-    // in and puts '/rm-target' in the mirror so rmSync accepts it.
+    // mkdir targets + the rm target + the rename source tree ('/mv-src' with
+    // one file) pre-exist in the FAKE so every inner call resolves once
+    // released; refreshIndex runs BEFORE the held wrappers go in and puts
+    // '/rm-target' and '/mv-src'(+file) in the mirror so rmSync/renameSync
+    // accept them.
+    const fakeDirs = new Set([
+      '/',
+      '/d0',
+      '/d1',
+      '/d2',
+      '/d3',
+      '/d4',
+      '/d5',
+      '/d6',
+      '/d7',
+      '/mv-src',
+    ]);
     const root = buildFakeRoot({
-      files: new Map([['/rm-target', { bytes: new Uint8Array([1]) }]]),
-      dirs: new Set(['/', '/d0', '/d1', '/d2', '/d3', '/d4', '/d5', '/d6', '/d7']),
+      files: new Map([
+        ['/rm-target', { bytes: new Uint8Array([1]) }],
+        ['/mv-src/f', { bytes: new Uint8Array([7]) }],
+      ]),
+      dirs: fakeDirs,
     });
     const fs = new OpfsFsSync(root, surface);
     await fs.refreshIndex();
+    // '/mv-dst' becomes resolvable in the FAKE only after refreshIndex, so the
+    // mirror never sees it pre-rename (buildFakeRoot reads the live set).
+    fakeDirs.add('/mv-dst');
     const innerGetDir = root.getDirectoryHandle.bind(root);
-    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
-      (name, options) => heldBoundary().then(() => innerGetDir(name, options));
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = (name, options) => heldBoundary().then(() => innerGetDir(name, options));
     const innerRemove = root.removeEntry.bind(root);
     (root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = (
       name,
       options,
     ) => heldBoundary().then(() => innerRemove(name, options));
 
-    // 24 ops on UNRELATED paths, MIXED kinds: 15 surface writes + 8 mkdirs
-    // (root getDirectoryHandle) + 1 rm (root removeEntry).
+    // 25 ops on UNRELATED paths, MIXED kinds: 15 surface writes + 8 mkdirs
+    // (root getDirectoryHandle) + 1 rm (root removeEntry) + 1 dir+file rename
+    // (three held boundaries — accounting note above).
     for (let i = 0; i < 8; i++) fs.writeFileSync(`/w${i}`, new Uint8Array([i]));
     for (let i = 0; i < 8; i++) fs.mkdirSync(`/d${i}`, { recursive: true });
     fs.rmSync('/rm-target');
+    fs.renameSync('/mv-src', '/mv-dst');
     for (let i = 8; i < 15; i++) fs.writeFileSync(`/w${i}`, new Uint8Array([i]));
 
-    // All 24 enqueued; admitted lanes now hold their boundaries open.
+    // All 25 enqueued; admitted lanes now hold their boundaries open.
     await new Promise<void>((r) => setTimeout(r, 0));
     // Macrotask-based wait: one tick drains the full microtask chain between
     // a release and the next boundary entry — schedule-agnostic under both a
@@ -1982,14 +2018,15 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
   it('ledger heal is sequence-ordered, not completion-ordered — a fast child write success clears a slow ancestor mkdir rejection', async () => {
     const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
     const innerGetDir = root.getDirectoryHandle.bind(root);
-    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
-      async (name, options) => {
-        if (name === 'a') {
-          await new Promise<void>((r) => setTimeout(r, 20));
-          throw new DomError('QuotaExceededError'); // '/a' mkdir persist: slow REJECT
-        }
-        return innerGetDir(name, options);
-      };
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = async (name, options) => {
+      if (name === 'a') {
+        await new Promise<void>((r) => setTimeout(r, 20));
+        throw new DomError('QuotaExceededError'); // '/a' mkdir persist: slow REJECT
+      }
+      return innerGetDir(name, options);
+    };
     const surface: PairedAsyncSurface = {
       readFile: () => Promise.resolve(new Uint8Array()),
       writeFile: () => Promise.resolve(), // '/a/f' write persist: resolves ~0ms
@@ -2048,12 +2085,13 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
     // local delegating wrappers only log).
     const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/a']) });
     const innerGetDir = root.getDirectoryHandle.bind(root);
-    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
-      async (name, options) => {
-        const handle = await innerGetDir(name, options);
-        events.push(`dir-resolved /${name}`);
-        return handle;
-      };
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = async (name, options) => {
+      const handle = await innerGetDir(name, options);
+      events.push(`dir-resolved /${name}`);
+      return handle;
+    };
     const innerRemove = root.removeEntry.bind(root);
     (root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = async (
       name,
@@ -2081,14 +2119,23 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
   // GREEN preservation pin (fault row e, poisoned-cache — RENAME sibling of
   // the rm pin above): ADR-0358's drain-scoped dir-handle cache is
   // structurally invalidated on rm AND rename, sweeping cached SOURCE and
-  // DESTINATION ancestors/descendants. persistRenameAsync's observables:
-  // destination dir creates via root getDirectoryHandle chains, file moves
-  // via surface.writeFile at the NEW paths, source removal via surface.rm. A
-  // cached pre-rename source-side handle serving a later persist would land
-  // bytes at the dead '/a/sub' path or resurrect the vacated '/a'
-  // incarnation. GREEN on main (FIFO + no cache); must survive
-  // parallelization.
-  it('a structural rename forces fresh resolution on both sides — post-rename writes resolve the destination after the rename persists and the moved bytes land at the new paths', async () => {
+  // DESTINATION ancestors/descendants. ONE drain end-to-end: warm-up, the
+  // rename, and the post-rename ops enqueue with NO intervening flush, so a
+  // drain-scoped cache built during warm-up is still LIVE when the rename
+  // persists — BOTH sides poisoned in the same drain (a flush between
+  // warm-up and rename would end the cache's lifetime and let a missing
+  // rename invalidation pass unnoticed). Shape: renameSync rejects a
+  // non-empty existing target (ENOTEMPTY — opfs-sync.ts renameSync), so
+  // '/b' cannot be both warmed non-empty and the target; instead '/b'
+  // itself is warmed (mkdir + child write) and '/a/sub' moves to the fresh
+  // '/b/moved' — source parent '/a' AND destination parent '/b' are both
+  // resolved/cached in-drain before the structural op. A cached pre-rename
+  // source or destination handle serving any post-rename persist fails
+  // below: serving the warm '/b' for the rename's destination chain drops
+  // the second root '/b' resolution; serving the warm '/a'/'/a/sub' for the
+  // recreate never returns to the root after the rename's source-rm. GREEN
+  // on main (FIFO + no cache); must survive parallelization.
+  it('a structural rename poisons BOTH warmed sides in ONE drain — the destination chain re-resolves fresh at the root, the recreated source resolves after the source-rm, and moved bytes land byte-exact at the new paths', async () => {
     const events: string[] = [];
     const lastWriteBytes = new Map<string, number[]>();
     const surface: PairedAsyncSurface = {
@@ -2103,63 +2150,74 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
         return Promise.resolve();
       },
     };
-    // Source AND destination trees pre-exist in the FAKE so every
-    // persistDirectoryPath chain resolves (the fake creates nothing); the
-    // local delegating wrapper logs ROOT-level resolutions only
-    // (buildFakeRoot untouched).
+    // Every dir chain pre-exists in the FAKE so persistDirectoryPath resolves
+    // (the fake creates nothing); the local delegating wrapper logs
+    // ROOT-level resolutions only (buildFakeRoot untouched).
     const root = buildFakeRoot({
       files: new Map(),
-      dirs: new Set(['/', '/a', '/a/sub', '/b', '/b/sub']),
+      dirs: new Set(['/', '/a', '/a/sub', '/b', '/b/moved']),
     });
     const innerGetDir = root.getDirectoryHandle.bind(root);
-    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
-      async (name, options) => {
-        const handle = await innerGetDir(name, options);
-        events.push(`dir /${name}`);
-        return handle;
-      };
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = async (name, options) => {
+      const handle = await innerGetDir(name, options);
+      events.push(`dir /${name}`);
+      return handle;
+    };
     const fs = new OpfsFsSync(root, surface);
-    fs.mkdirSync('/a/sub', { recursive: true });
+    // ONE uninterrupted enqueue sequence — no flush until the single final one.
+    fs.mkdirSync('/a/sub', { recursive: true }); // warm SOURCE chain '/a','/a/sub'
     fs.writeFileSync('/a/sub/f', new Uint8Array([1])); // v1 — moves with the subtree
-    await fs.flush(); // pre-rename persists complete
-    const preRenameCount = events.length;
+    fs.mkdirSync('/b', { recursive: true }); // warm DESTINATION parent '/b'…
+    fs.writeFileSync('/b/w', new Uint8Array([9])); // …v9 child: '/b' resolved in-drain
+    fs.renameSync('/a/sub', '/b/moved'); // structural op against WARM handles
+    fs.writeFileSync('/b/moved/g', new Uint8Array([3])); // v3 into the moved destination
+    fs.mkdirSync('/a/sub', { recursive: true }); // recreate the vacated source…
+    fs.writeFileSync('/a/sub/h', new Uint8Array([4])); // …v4 under it
+    const report = await fs.flush(); // ONE final flush
 
-    fs.renameSync('/a', '/b');
-    fs.writeFileSync('/b/sub/g', new Uint8Array([3])); // v3 into the moved DESTINATION
-    fs.mkdirSync('/a', { recursive: true }); // recreate the vacated SOURCE…
-    fs.writeFileSync('/a/h', new Uint8Array([4])); // …v4 under it
-    await fs.flush();
-    const post = events.slice(preRenameCount);
-
-    // (1) Destination side resolves FRESH: the rename's dir-create chains hit
-    // the ROOT ('dir /b' logged), and the post-rename '/b/sub/g' write
-    // completes after EVERY rename leg — no straddle (consistent with the
-    // both-side fence pin).
-    const successorIdx = post.indexOf('write /b/sub/g');
-    expect(successorIdx).toBeGreaterThanOrEqual(0);
-    for (const renameLeg of ['dir /b', 'write /b/sub/f', 'rm /a'] as const) {
-      const legIdx = post.lastIndexOf(renameLeg);
-      expect(legIdx).toBeGreaterThanOrEqual(0);
-      expect(legIdx).toBeLessThan(successorIdx);
-    }
-
-    // (2) Moved bytes land at the NEW paths: v1 followed the subtree,
-    // '/b/sub/g' carries v3. A cached pre-rename source handle would land
-    // bytes at a dead '/a/...' path between the rename legs and the '/b'
-    // writes instead — the ONLY post-rename '/a/...' surface write is the
-    // recreate's '/a/h'.
-    expect(lastWriteBytes.get('/b/sub/f')).toEqual([1]);
-    expect(lastWriteBytes.get('/b/sub/g')).toEqual([3]);
-    expect(post.filter((event) => event.startsWith('write /a/'))).toEqual(['write /a/h']);
-
-    // (3) Source side resolves FRESH: at least one root '/a' resolution
-    // strictly AFTER the rename's surface.rm('/a') — a cached pre-rename
-    // '/a' handle must never serve the recreate — and '/a/h' carries v4.
-    const rmIdx = post.indexOf('rm /a');
+    // Rename leg order (persistRenameAsync): the moved file writes durably
+    // BEFORE the source subtree is removed.
+    const rmIdx = events.indexOf('rm /a/sub');
     expect(rmIdx).toBeGreaterThanOrEqual(0);
-    expect(post.some((event, i) => event === 'dir /a' && i > rmIdx)).toBe(true);
-    expect(post.indexOf('write /a/h')).toBeGreaterThan(rmIdx);
-    expect(lastWriteBytes.get('/a/h')).toEqual([4]);
+    const moveIdx = events.indexOf('write /b/moved/f');
+    expect(moveIdx).toBeGreaterThanOrEqual(0);
+    expect(moveIdx).toBeLessThan(rmIdx);
+
+    // (1) Destination side resolves FRESH where observable at the root
+    // wrapper: warm-up resolves root '/b' exactly once (its mkdir persist);
+    // the rename's destination chain must hit the ROOT for '/b' AGAIN
+    // instead of serving the drain-cached warm handle — two root '/b'
+    // resolutions in total. A cache without rename invalidation yields one.
+    expect(events.filter((event) => event === 'dir /b').length).toBeGreaterThanOrEqual(2);
+
+    // (2) Moved bytes land byte-exact at the NEW paths; the destination
+    // successor completes after the rename's last leg (both-side fence pin
+    // above pins the full no-straddle ordering).
+    expect(lastWriteBytes.get('/b/moved/f')).toEqual([1]);
+    expect(lastWriteBytes.get('/b/moved/g')).toEqual([3]);
+    expect(lastWriteBytes.get('/b/w')).toEqual([9]);
+    expect(events.indexOf('write /b/moved/g')).toBeGreaterThan(rmIdx);
+
+    // (3) NO surface write ever targets the dead source subtree after the
+    // rename's source-rm: the ONLY post-rm '/a/sub/...' write is the
+    // recreate's '/a/sub/h' — a cached pre-rename source handle would land
+    // warm-up bytes at the dead path instead.
+    expect(events.slice(rmIdx + 1).filter((event) => event.startsWith('write /a/sub/'))).toEqual([
+      'write /a/sub/h',
+    ]);
+    expect(events.lastIndexOf('write /a/sub/f')).toBeLessThan(rmIdx);
+
+    // (4) Recreated source resolves after the rename's source-rm: the
+    // recreate's mkdir chain hits the ROOT for '/a' strictly AFTER
+    // 'rm /a/sub' — a cache serving the warm '/a'/'/a/sub' handles would
+    // never return to the root, resurrecting the vacated incarnation.
+    expect(events.some((event, i) => event === 'dir /a' && i > rmIdx)).toBe(true);
+    expect(lastWriteBytes.get('/a/sub/h')).toEqual([4]);
+
+    // (5) Final ledger clean — every persist in the single drain succeeded.
+    expect(report.total).toBe(0);
   });
 });
 
@@ -2216,7 +2274,7 @@ describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
   // the serial FIFO admits one persist at a time and the wedged head admits
   // nothing after it, so peak === 1 and the `> 1` half fails.
   it('a timed-out wedge still occupies a physical lane — sustained mixed-kind backlog across the 30s timeout never exceeds the ~16 ceiling', async () => {
-    const NON_WEDGE_TOTAL = 29; // 19 held across the timeout + 10 enqueued after it
+    const NON_WEDGE_TOTAL = 32; // 19 boundaries held across the timeout + 13 entered after it
     let inFlight = 0;
     let peak = 0;
     const completedAtBoundary: string[] = [];
@@ -2249,22 +2307,47 @@ describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
         }
         return heldBoundary(path);
       },
-      rm: () => Promise.resolve(),
+      // Only the rename's source-removal leg reaches surface.rm (rmSync
+      // persists via root removeEntry) — held + labelled like every boundary.
+      rm: (path: string) => heldBoundary(`rm ${path}`),
     };
-    // mkdir targets + the rm target pre-exist in the FAKE so every inner call
-    // resolves once released; refreshIndex runs BEFORE fake timers and the
-    // held wrappers go in, and puts '/rm-target' in the mirror so rmSync
-    // accepts it.
+    // mkdir targets + the rm target + the rename source tree ('/mv-src' with
+    // one file) pre-exist in the FAKE so every inner call resolves once
+    // released; refreshIndex runs BEFORE fake timers and the held wrappers go
+    // in, and puts '/rm-target' and '/mv-src'(+file) in the mirror so
+    // rmSync/renameSync accept them.
+    const fakeDirs = new Set([
+      '/',
+      '/d0',
+      '/d1',
+      '/d2',
+      '/d3',
+      '/d4',
+      '/d5',
+      '/d6',
+      '/d7',
+      '/d8',
+      '/d9',
+      '/mv-src',
+    ]);
     const root = buildFakeRoot({
-      files: new Map([['/rm-target', { bytes: new Uint8Array([1]) }]]),
-      dirs: new Set(['/', '/d0', '/d1', '/d2', '/d3', '/d4', '/d5', '/d6', '/d7', '/d8', '/d9']),
+      files: new Map([
+        ['/rm-target', { bytes: new Uint8Array([1]) }],
+        ['/mv-src/f', { bytes: new Uint8Array([7]) }],
+      ]),
+      dirs: fakeDirs,
     });
     const fs = new OpfsFsSync(root, surface);
     await fs.refreshIndex();
+    // '/mv-dst' becomes resolvable in the FAKE only after refreshIndex, so the
+    // mirror never sees it pre-rename (buildFakeRoot reads the live set).
+    fakeDirs.add('/mv-dst');
     vi.useFakeTimers();
     const innerGetDir = root.getDirectoryHandle.bind(root);
-    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
-      (name, options) => heldBoundary(`mkdir /${name}`).then(() => innerGetDir(name, options));
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = (name, options) =>
+      heldBoundary(`mkdir /${name}`).then(() => innerGetDir(name, options));
     const innerRemove = root.removeEntry.bind(root);
     (root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = (
       name,
@@ -2284,12 +2367,17 @@ describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
     // held boundary — its own included — is still physically in flight.
     await vi.advanceTimersByTimeAsync(30_000);
 
-    // Phase 2 — the backlog stays non-empty PAST the transition: 10 more held
-    // ops (8 writes + 2 mkdirs) enqueued after the wedge was ledgered. A cap
-    // that freed the wedge's slot back-fills from this backlog and overshoots.
+    // Phase 2 — the backlog stays non-empty PAST the transition: 13 more held
+    // boundaries (8 writes + 2 mkdirs + a disjoint dir+file rename) enqueued
+    // after the wedge was ledgered. The rename is ONE queued op crossing
+    // THREE sequential physical boundaries — dest dir create, file move,
+    // source rm — each counted into inFlight like mkdir-chain entries (same
+    // accounting as the cold ceiling pin). A cap that freed the wedge's slot
+    // back-fills from this backlog and overshoots.
     for (let i = 10; i < 18; i++) fs.writeFileSync(`/w${i}`, new Uint8Array([i]));
     fs.mkdirSync('/d8', { recursive: true });
     fs.mkdirSync('/d9', { recursive: true });
+    fs.renameSync('/mv-src', '/mv-dst');
 
     // Macrotask-based wait under fake timers: each tick advances the fake
     // clock 1ms (nowhere near another watchdog) and drains the full microtask
@@ -2323,6 +2411,11 @@ describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
       ...Array.from({ length: 18 }, (_, i) => `/w${i}`),
       ...Array.from({ length: 10 }, (_, i) => `mkdir /d${i}`),
       'rm /rm-target',
+      // The rename's three boundaries: dest dir create (root wrapper label),
+      // file move (surface.writeFile label), source rm (surface.rm label).
+      'mkdir /mv-dst',
+      '/mv-dst/f',
+      'rm /mv-src',
     ];
     expect([...completedAtBoundary].sort()).toEqual([...expectedBoundaries].sort());
     // …and the final bounded flush ledgers EXACTLY the wedge.

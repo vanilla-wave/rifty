@@ -414,6 +414,7 @@ superseded.
 | 0195 rejected "client-persisted dep-set→hash map" | 0194 §8 | learned pins implement it — a new project in the same profile has no stamp (measured 2026-07-02: full origin POST vs ~0 browser-cache GET); TTL + the same verification gates keep staleness safe |
 | 0182 launch speed quote | 0182 note 2026-07-07 | production `auto` browser benchmark is 1.88x; the older ~6x remains only the Node/sandbox model, and h2/h3 claims stay gated by the transport-matrix item |
 | 0261 "0187 persist-ledger/checked-drain/FIFO/pending-boot rules stand" scope note | 0358 / note 2026-08-15 | ADR-0187 fully superseded; the FIFO clause falls to per-path lanes + explicit stamp fence; ledger, checked-drain, and pending-boot rules continue in 0358 |
+| 0261 whole-tree-rename "removal-before-rename via write-through FIFO" proof | 0358 / note 2026-08-16 | the ordering proof now rides ADR-0358's structural subtree fences (rm/rename fence pins); the removal-before-rename conclusion stands, only its mechanism changed |
 | 0194 §8 learned-pin 30-min hard-TTL clause | 0261 | freshness is SWR: fresh <1800s, stale from 1800s to <24h, dropped at 24h |
 | 0261 every copied project reinstalls consequence | 0329 | ordinary copies stay untrusted; authority-mediated destructive Save rebinds exact trust after destination proof |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |

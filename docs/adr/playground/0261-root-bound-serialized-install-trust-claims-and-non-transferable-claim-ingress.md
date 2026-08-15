@@ -91,6 +91,14 @@ bytes stable next-day. Bounded stale reuse remains safe and unchanged.
   persisted rename implies the removals persisted first. If an adapter cannot
   prove exclusion/removal-before-transfer, it rejects before mutation. A
   post-transfer cleanup is never a safety mechanism.
+
+  > Corrected (2026-08-16, ADR-0358): the global write-through FIFO this
+  > proof leaned on is superseded. The ordering guarantee is now carried by
+  > ADR-0358's structural subtree fences — ops enqueued under a path before
+  > an rm/rename of that path complete before it; a persisted rename still
+  > implies the earlier same-subtree removals persisted first (pinned by the
+  > rm/rename fence carriers in `opfs-sync.test.ts`). The clause's
+  > conclusion stands; only its mechanism changed.
 - Ancestor deletion/reset remains supported: the authority durably revokes
   affected claims before real mutation. Direct access to the reserved file is
   not a Node-parity surface; real Node does not create this Rifty metadata.

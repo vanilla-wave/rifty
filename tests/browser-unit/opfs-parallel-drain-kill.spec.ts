@@ -10,16 +10,28 @@
  * stamp-trust dimension the slice-1 kill carrier
  * (restore-mkdir-dedup.spec.ts row c) explicitly excluded: worker 1 runs
  * the REAL install sequence (demote → tree write → unawaited promote with
- * the real flush seam) and is terminated on a DISCRIMINATED mid-drain ack;
- * worker 2 boots fresh over the torn OPFS, proves the boot path's own
- * check refuses the stamp, then re-runs the full sequence to a trusted
- * stamp, clean ledger, and a FULL-TREE byte-exact verify (all 600 files vs
- * the regenerated procedural spec — a spot check could bless a partial
- * tree). The worker drives the PRODUCTION claimIo composition —
+ * the real flush seam) and is terminated on a PATH-AWARE mid-drain ack;
+ * worker 2 boots fresh over the torn OPFS, proves the surviving on-disk
+ * stamp is EXACTLY the durable pending claim and the boot path's own
+ * check refuses it, then re-runs the full sequence to a trusted stamp,
+ * clean ledger, and a FULL-TREE byte-exact verify (all 600 files vs the
+ * regenerated procedural spec — a spot check could bless a partial tree).
+ *
+ * The discriminator is PATH-AWARE because aggregate counting was a
+ * FIFO-shaped assumption (attempt-4 reviewer finding): `0 < completed <
+ * total` presumed the removed FIFO made the pending stamp + package.json
+ * durable before any tree write, so under parallel lanes the realm could
+ * die with an ABSENT stamp and `not.toBe('trusted')` would accept it —
+ * dropping the strong half of reload honesty (a durable PENDING stamp is
+ * never trusted). The ack now names the durable paths; phase 2 pins
+ * `preStampDurability === 'pending'` exactly.
+ *
+ * The worker drives the PRODUCTION claimIo composition —
  * `createOwnerVfsAuthorityComposition` → `installStampClaims` →
  * `createInstallStampAuthority` (workbench-owner-runtime.ts:244 /
  * owner-package-state.ts:230) — the reviewer-demanded sibling of the
- * raw-fsSync unit pins. See fixtures/opfs-parallel-drain-kill-worker.ts.
+ * raw-fsSync unit pins; both stamp writers are swept. See
+ * fixtures/opfs-parallel-drain-kill-worker.ts.
  */
 import { expect, test } from '@playwright/test';
 import { gotoHarness } from './fixtures.ts';
@@ -29,13 +41,16 @@ const workerModuleUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/opfs-p
 
 interface MidDrainAck {
   readonly phase: 'mid-drain';
-  readonly completed: number;
-  readonly total: number;
+  readonly treeCompleted: number;
+  readonly treeTotal: number;
+  readonly stampDurable: boolean;
+  readonly packageJsonDurable: boolean;
 }
 
 interface RetryResult {
   readonly preTrusted: boolean;
   readonly preCheckStatus: string;
+  readonly preStampDurability: string;
   readonly promoteStatus: string;
   readonly postTrusted: boolean;
   readonly reportTotal: number;
@@ -80,8 +95,9 @@ test('a realm KILLED mid-promote-drain never leaves a trusted stamp: the fresh r
       const victim = new Worker(workerModule.default, { type: 'module' });
       const acked = once<MidDrainAck>(victim);
       victim.postMessage({ phase: 'kill-run', ns: namespace });
-      // The ack itself is discriminated: it only arrives once SOME writes are
-      // durably closed and MOST are still pending (0 < completed < total).
+      // The ack itself is discriminated PATH-AWARE: it only arrives once the
+      // PENDING stamp + package.json writes are durably closed and the tree
+      // is strictly partial (0 < treeCompleted < treeTotal).
       const ack = await acked;
       victim.terminate();
 
@@ -98,17 +114,27 @@ test('a realm KILLED mid-promote-drain never leaves a trusted stamp: the fresh r
   );
 
   console.log(
-    `[pd256-kill] completed=${ack.completed}/${ack.total} preCheck=${retry.preCheckStatus} ` +
-      `promote=${retry.promoteStatus} tree=${retry.treeFiles}/600`,
+    `[pd256-kill] tree=${ack.treeCompleted}/${ack.treeTotal} stampDurable=${ack.stampDurable} ` +
+      `preStamp=${retry.preStampDurability} preCheck=${retry.preCheckStatus} ` +
+      `promote=${retry.promoteStatus} verified=${retry.treeFiles}/600`,
   );
 
-  // Kill really landed mid-drain: past the first durable byte, far from done.
+  // Kill really landed mid-drain, PATH-AWARE (attempt-4): the pending stamp
+  // and package.json are durably closed and the node_modules tree is strictly
+  // partial — an aggregate count would re-encode the removed FIFO's ordering
+  // as a hidden assumption.
   expect(ack.phase).toBe('mid-drain');
-  expect(ack.completed).toBeGreaterThan(0);
-  expect(ack.completed).toBeLessThan(ack.total);
-  // ADR-0358 reload honesty: the boot path's OWN reuse check (authority
-  // check + installArtifactIdentity, owner-package-state.ts transition())
-  // refuses the stamp over the torn tree…
+  expect(ack.stampDurable).toBe(true);
+  expect(ack.packageJsonDurable).toBe(true);
+  expect(ack.treeTotal).toBe(600);
+  expect(ack.treeCompleted).toBeGreaterThan(0);
+  expect(ack.treeCompleted).toBeLessThan(600);
+  // ADR-0358 reload honesty, strong half: the DURABLE pending claim survived
+  // the kill — exactly 'pending' on disk; 'absent' no longer satisfies…
+  expect(retry.preStampDurability).toBe('pending');
+  // …and the boot path's OWN reuse check (authority check +
+  // installArtifactIdentity, owner-package-state.ts transition()) refuses
+  // that stamp over the torn tree…
   expect(retry.preTrusted).toBe(false);
   expect(retry.preCheckStatus).not.toBe('trusted');
   // …and only the full re-run concludes trusted, over a provably clean

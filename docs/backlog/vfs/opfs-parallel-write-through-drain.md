@@ -110,9 +110,13 @@ real install-stamp authority wired as the PRODUCTION claimIo composition
 authority, claimIo: composition.installStampClaims})` + `flush: () =>
 authority.flush()` — mirrors `workbench-owner-runtime.ts:244-294` /
 `owner-package-state.ts:230-234`), demote → tree write → promote() with the
-real flush seam; worker TERMINATED on a DISCRIMINATED mid-drain ack
-(`0 < completed < total` durably-closed writes); fresh realm proves the
-stamp is NOT trusted via the boot path's own check
+real flush seam; worker TERMINATED on a PATH-AWARE discriminated mid-drain ack
+(the PENDING stamp's own write durably closed with `durability:"pending"`
+content + package.json closed + `0 < treeCompleted < 600` tree-only
+writes — aggregate counting was a FIFO-shaped assumption); fresh realm
+proves the surviving stamp is EXACTLY the durable pending claim
+(`preStampDurability === 'pending'`, absent no longer satisfies) and NOT
+trusted via the boot path's own check
 (`stamps.check(...)` + `installArtifactIdentity`, the
 owner-package-state transition predicate), then a full re-run ends trusted
 with a clean ledger and a FULL-TREE byte-exact proof (all 600 files:
@@ -130,13 +134,15 @@ pins"):
 - RED R2 — an op on an unrelated path behind a 30s-timed-out head is
   neither blocked nor ledgered (per-lane watchdog; on main FIFO admission
   wedges it and `reportBlockedPending` ledgers it);
-- RED R4 — admission ceiling: 24 HELD persists on unrelated paths, MIXED
-  kinds (writes + mkdirs + rm), in-flight counted at the persist boundary:
+- RED R4 — admission ceiling: HELD persists on unrelated paths, MIXED
+  kinds (writes + mkdirs + rm + a held RENAME — its three physical legs
+  counted at their boundaries), in-flight counted at the persist boundary:
   `1 < peak <= 16`. On main serial peak === 1 (RED on the `> 1` half); the
   `<= 16` half makes unbounded fan-out unable to ever pass;
 - RED R5 — R4×R2 composition: a never-settling wedge PLUS a sustained
   mixed-kind backlog held ACROSS the 30s watchdog transition (19 held ops,
-  advance 30 000 ms — wedge ledgered — then 10 more), releases entry-order:
+  advance 30 000 ms — wedge ledgered — then more incl. a held RENAME's
+  three legs), releases entry-order:
   `1 < peak <= 16` over the WHOLE run — a cap that frees the timed-out
   op's slot admits a 17th physical persist and fails the `<= 16` half; all
   29 non-wedge ops complete; final bounded ledger EXACTLY '/wedged';
@@ -155,10 +161,13 @@ pins"):
   earlier rejection (row b — kills the heal-then-record inversion a naive
   parallel drain would introduce); structural rm forces FRESH parent
   resolution and the recreated write carries the new bytes; structural
-  RENAME forces fresh resolution on BOTH sides — moved bytes land at the
-  new paths, no write ever targets the dead source subtree, the recreated
-  source resolves fresh after the rename's rm (row e — a drain-scoped
-  dir-handle cache can never serve a pre-rm or pre-rename handle).
+  RENAME poisons BOTH warmed sides in ONE drain (source and destination
+  parents resolved in the same uninterrupted enqueue sequence, no
+  mid-flush): moved bytes land at the new paths byte-exact, no write ever
+  targets the dead source subtree, the destination chain re-resolves
+  fresh, the recreated source resolves after the rename's rm (row e — a
+  drain-scoped dir-handle cache can never serve a pre-rm or pre-rename
+  handle on either side).
 
 Stamp-fence pins (install-stamp-authority.fault.test.ts, committed, GREEN —
 sibling sweep over BOTH production writer branches): a trusted stamp never
@@ -223,9 +232,9 @@ Canonical axes per fault-classes §Axes.
 |---|---|---|---|
 | a | quota-perm-fail × one lane mid-drain | one path's persist rejected while sibling ops are in flight | ledger records EXACTLY the failed path (op 'write', message preserved); `flush().total === 1`, `anyFailure` covers it → stamp refused (guarded scope); both siblings complete; later same-path success heals → total 0 — carrier: committed GREEN pin (concurrent quota rejection), schedule-agnostic |
 | b | quota-perm-fail × ledger heal ordering | ancestor mkdir slow-REJECTS while child write fast-succeeds; same-path slow-reject vs later fast success | heal is SEQUENCE-ordered, not completion-ordered: end ledger clean (`total 0`) in both — a naive parallel drain's heal-then-record inversion leaves a stale entry and fails the pin — carrier: committed GREEN pins (sequence-ordered heal ×2) |
-| c | torn-state × mid-drain realm death with pending stamp | worker killed while promote()'s drain is in flight | fresh realm: stamp NOT trusted (boot-path check); full re-run → trusted, clean ledger, FULL-TREE byte-exact — carrier: kill e2e (committed, GREEN on main, tier obligation) |
+| c | torn-state × mid-drain realm death with pending stamp | worker killed while promote()'s drain is in flight | fresh realm: the durable PENDING claim survived (`preStampDurability === 'pending'`) and is NOT trusted (boot-path check); full re-run → trusted, clean ledger, FULL-TREE byte-exact — carrier: kill e2e (committed, GREEN on main, tier obligation; path-aware ack — the pending claim + package.json durably closed before the kill, tree torn 0<n<600) |
 | d | unbounded-read × wedged persist op | one op held past the 30s report bound; sustained backlog across the timeout | bounded `flush()` ledgers ONLY the wedged path; unrelated lanes complete un-ledgered (R2 RED pin); the trusted-stamp write stays un-durable while the wedge is in flight (P4 fence pins, both writer branches); admission fan-out is capped — `1 < peak <= 16` cold (R4) AND across the watchdog transition with the wedge still occupying its physical lane (R5) |
-| e | poisoned-cache × drain-scoped dir handles | subtree removed+recreated while dir handles could be cached | FRESH parent resolution observed strictly after removeEntry; final surface write carries the post-recreate bytes — carrier: committed GREEN pin (fresh parent resolution); RENAME sibling: committed GREEN pin (fresh resolution both sides — moved bytes at new paths, no dead-source write, recreated source resolves after the rename's rm); the cache's internal stale-handle test extends both in the implementation commit |
+| e | poisoned-cache × drain-scoped dir handles | subtree removed+recreated while dir handles could be cached | FRESH parent resolution observed strictly after removeEntry; final surface write carries the post-recreate bytes — carrier: committed GREEN pin (fresh parent resolution); RENAME sibling: committed GREEN pin (both sides warmed and poisoned in ONE drain, no mid-flush — moved bytes at new paths, destination chain re-resolves fresh, no dead-source write, recreated source resolves after the rename's rm); the cache's internal stale-handle test extends both in the implementation commit |
 | f | concurrent-same-key × foreign realm rm | foreign realm removes persisted subtree mid-drain | not quieter than main on the same schedule — carrier: existing row (f) differential pins in workspace-archive.fault.test.ts stay green (P7); class owned by the cross-realm intake item |
 | g | lossy-aggregate × acceptance oracle | dropped/truncated non-tail op; ratio rounded up at the gate | WHOLE-TREE path equality + BYTE-EXACT reads of ALL 26 811 files (fault-classes exact-bytes); UNROUNDED `speedupRaw` at the gate — carrier: the hardened acceptance spec itself (kill e2e: all 600 files byte-exact) |
 | h | frozen-assumption × serial denominator | per-op-flush baseline silently inflating the ratio | same-run calibration vs the one-final-flush shape, measured 1.0069, committed bound 1.05 multiplying the gate — artifact: `PD256-CALIBRATION` log line + spec constant provenance |
@@ -302,6 +311,18 @@ Canonical axes per fault-classes §Axes.
   sibling of the row-e cache pin committed (fresh resolution both sides,
   sweeping cached source/destination); P6/P7 regression pins now carry
   current-tree command+output artifacts (recorded in Parity cases).
+- Contract+RED attempt 4 (2026-08-16, blockers ANSWERED by re-cut, count
+  carries): a held RENAME (its three physical legs) joins both
+  admission-cap RED mixes (R4/R5 — multi-path rename can no longer bypass
+  the cap unpinned); the rename-cache pin re-cut to poison BOTH warmed
+  sides in ONE drain with no mid-flush (an implementation omitting rename
+  invalidation now fails it); the kill discriminator is PATH-AWARE (durable
+  pending-claim content + package.json + torn tree count — the aggregate
+  count was itself a FIFO-shaped frozen assumption) and phase 2 pins
+  `preStampDurability === 'pending'` exactly; ADR-0261's whole-tree-rename
+  removal-before-rename proof corrected in place to ride ADR-0358's
+  structural subtree fences (dated note + README Corrections row) —
+  active-ADR internal consistency restored.
 - RED evidence (pre-implementation runs on this branch, 2026-08-15/16,
   darwin arm64, node v24.16.0, vitest 2.1.9, Playwright 1.60.0 Chromium):
   - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `4 failed | 76
@@ -324,9 +345,10 @@ Canonical axes per fault-classes §Axes.
     tests/browser-unit/opfs-parallel-drain.spec.ts
     tests/browser-unit/opfs-parallel-drain-kill.spec.ts` → `1 failed, 1
     passed (1.6m)`: acceptance FAILS ONLY the I3 gate — `Expected: >=
-    2.625, Received: 1.4027379500887032`, faithfulMs 41 257 / productMs
-    29 411, both ledgers 0, BOTH whole-tree FULL-BYTE proofs verified
+    2.625, Received: 1.4078375114565986`, faithfulMs 41 399 / productMs
+    29 406, both ledgers 0, BOTH whole-tree FULL-BYTE proofs verified
     (26 811/26 811, mismatch null) — the failure is the ratio, nothing
     else; kill e2e PASSES through the production claimIo composition
-    (discriminated mid-drain kill, fresh realm refuses the stamp, retry
+    (path-aware mid-drain kill — durable pending claim + torn tree; fresh
+    realm reads `durability:"pending"` exactly and refuses trust; retry
     ends trusted + clean ledger + full-tree 600/600 byte-exact).
