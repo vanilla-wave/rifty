@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Snapshot-restore mkdir dedup (#256, epic project-open-drain-latency
+  slice 1).** `prepareWorkspaceArchiveImport().apply()` issues one `mkdirSync`
+  per distinct file dirname instead of one before every write — on OpfsFsSync
+  every call is an async persist op, so a big-tree restore drained ~2 FIFO
+  ops/file. Same-pass first-seen dedup: duplicate mkdir calls
+  disappear by design; surviving-op order, interleaving, partial-failure
+  prefixes, and error identity are byte-identical to before (trace-pinned); ledger heal-on-retry, prepared re-apply, foreign-rm honesty, and
+  mid-drain realm-death recovery are fault-pinned over real OpfsVfs/OPFS.
+  Real-browser acceptance: 3002-file restore enqueues exactly 602 mkdir
+  persists (was 3003).
+
 ### Fixed
 
 - Dependency snapshot v3 now carries the exact integrity-pinned cache closure
