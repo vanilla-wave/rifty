@@ -157,6 +157,29 @@ it('[fault: quota-perm-fail][fault: provenance-lie] commitRefusal surfaces a tra
   expect(await rejectedValue(commitRefusal(g))).toBe(failure);
 });
 
+it('[fault: quota-perm-fail][fault: provenance-lie] clone-failure cleanup never deletes a pre-existing .git over a transient gitdir probe failure', async () => {
+  const { vfs, head } = await seededRepo();
+  // assertPortablePaths arms the clone-failure cleanup path (removeTree .git).
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/r', assertPortablePaths: () => undefined });
+  const failure = new VfsError('EIO', '/r/.git', 'injected gitdir probe failure');
+  const stat = vfs.stat.bind(vfs);
+  let injected = false;
+  vi.spyOn(vfs, 'stat').mockImplementation(async (path) => {
+    if (!injected && path === failure.path) {
+      injected = true;
+      throw failure;
+    }
+    return await stat(path);
+  });
+
+  // Without the absence guard the probe collapses EIO into "no gitdir": the
+  // clone then fails at the network and its cleanup removeTree's the REAL repo.
+  const rejected = await rejectedValue(g.clone({ url: 'http://127.0.0.1:1/x.git' }));
+
+  expect.soft(rejected).toBe(failure);
+  expect(await g.resolveRef('HEAD')).toBe(head);
+});
+
 it('absence stays trustworthy: an unborn HEAD still reports git absence, not a storage failure', async () => {
   const vfs = new MemoryVfs();
   await vfs.mkdir('/r', { recursive: true });
