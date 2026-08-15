@@ -74,7 +74,15 @@ in `makeGit`):
   Fault proof: `packages/shell/tests/git-storage-failure.fault.test.ts`.
 - Facade ops serialize per instance: a status issued during a long clone on the
   SAME instance completes after it — exact attribution outranks intra-instance
-  parallelism; distinct instances stay independent.
+  parallelism; distinct instances stay independent. Head-of-line over a stalled
+  network head (clone/fetch/pull/push) is same-process semantics — one facade
+  instance ≈ one git client; real git in one process also runs one command at a
+  time. Reachable surface unchanged: shell git commands build a fresh instance
+  per command, Starter glue is sequential, and the long-lived owner SCM already
+  serializes at the session-tools protocol tail. Fault suite pins the
+  lifecycle: the queued local op makes no fs progress during the stall, a fresh
+  instance proceeds, and network settlement releases the queue. Bounding the
+  network stall itself is the transport's own axis, not the queue's.
 - Over-loud corners accepted: optional isomorphic-git fallbacks (fetch haves,
   push thin-pack) abort on a real storage failure instead of degrading — real
   git errors there too. isomorphic-git's own clone-failure cleanup can be
@@ -107,7 +115,16 @@ in `makeGit`):
   protocol superset queue above the correctness queue, not a duplicate:
   removing the upper keeps attribution exact; removing the lower breaks
   attribution for non-serialized consumers (shell per-command instances,
-  Starter glue).
+  Starter glue). Dependency-internal mechanisms at the same boundary,
+  classified: isomorphic-git's GLOBAL per-refname `AsyncLock` (`acquireLock`,
+  keyed by ref NAME/`packed-refs` string shared across ALL repos in the realm
+  — couples same-named ref reads across instances only while one such read is
+  in flight; the fault suite's holds ride loose-object reads, which take no
+  such lock, exactly because that coupling is the dependency's, not the
+  carrier's) and `GitIndexManager`'s per-`${gitdir}/index` lock (namespaced,
+  no cross-repo coupling). No lock-order inversion with the FIFO: the queue
+  admits one operation which then acquires dependency locks strictly within
+  its own lifetime; an operation never waits on another instance's queue.
 - 2026-08-15 — shell absence classifier hardened: `isNotFound` matched
   `/could not find/i` on MESSAGE TEXT, so a storage failure with
   NotFound-like wording read as git absence. Classification is now

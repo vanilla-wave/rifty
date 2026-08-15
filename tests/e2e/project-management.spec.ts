@@ -213,8 +213,13 @@ test.describe('starter git baseline', () => {
     ).toMatchObject({
       exists: true,
     });
-    await runTerminalLineSettled(page, 'rm -rf .git .gitignore', 60_000);
+    const wipeLine = 'rm -rf .git .gitignore';
+    await runTerminalLineSettled(page, wipeLine, 60_000);
+    expect(await terminalHistoryExitCode(page, wipeLine)).toBe(0);
     expect(await readActiveProjectText(page, '.gitignore')).toEqual({ exists: false, text: '' });
+    // The baseline under test must be created at REOPEN, never inherited: the
+    // pre-existing Starter HEAD is provably gone before the save.
+    expect(await readActiveProjectText(page, '.git/HEAD')).toEqual({ exists: false, text: '' });
 
     // Save keeps the owner tree. Opening it again is the public boundary that
     // creates the unborn Starter baseline over materialized dependencies.

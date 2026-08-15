@@ -57,6 +57,20 @@ async function settlement(run: Promise<unknown>): Promise<{ rejected: boolean; v
   );
 }
 
+/** Byte-exact recursive snapshot — proves zero mutation of a whole tree. */
+async function snapshotTree(vfs: MemoryVfs, root: string): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const walk = async (dir: string): Promise<void> => {
+    for (const entry of await vfs.readdir(dir)) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory) await walk(path);
+      else out[path] = Array.from(await vfs.readFile(path)).join(',');
+    }
+  };
+  await walk(root);
+  return out;
+}
+
 /** Boundary decorator: scripted reads, recorded writes, unused stat verbs. */
 function stubGitFs(read: () => Promise<Uint8Array | string>, onWrite: (p: string) => void): GitFs {
   const unused = async (): Promise<never> => {
@@ -234,6 +248,9 @@ it('[fault: quota-perm-fail][fault: provenance-lie] clone-failure cleanup never 
   const { vfs, head } = await seededRepo();
   // assertPortablePaths arms the clone-failure cleanup path (removeTree .git).
   const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/r', assertPortablePaths: () => undefined });
+  // Byte-exact .git snapshot: partial deletion (objects, index, config, refs)
+  // must be as loud as losing HEAD.
+  const gitBefore = await snapshotTree(vfs, '/r/.git');
   const failure = new VfsError('EIO', '/r/.git', 'injected gitdir probe failure');
   const stat = vfs.stat.bind(vfs);
   let injected = false;
@@ -248,9 +265,11 @@ it('[fault: quota-perm-fail][fault: provenance-lie] clone-failure cleanup never 
   // Without the absence guard the probe collapses EIO into "no gitdir": the
   // clone then fails at the network and its cleanup removeTree's the REAL repo.
   const rejected = await rejectedValue(g.clone({ url: 'http://127.0.0.1:1/x.git' }));
+  vi.restoreAllMocks();
 
   expect.soft(rejected).toBe(failure);
-  expect(await g.resolveRef('HEAD')).toBe(head);
+  expect.soft(await g.resolveRef('HEAD')).toBe(head);
+  expect(await snapshotTree(vfs, '/r/.git')).toEqual(gitBefore);
 });
 
 it('[fault: observable-order][fault: provenance-lie] a failure belongs only to its own operation, never to a concurrent one', async () => {
@@ -345,10 +364,18 @@ it('[fault: sibling-drift] a prototype-backed GitFs drives the facade end-to-end
   expect(await rejectedValue(g.resolveRef('HEAD'))).toBe(failure);
 });
 
-it('[fault: observable-order][fault: poisoned-cache] one instance serializes, distinct instances stay independent, and the queue survives a rejection', async () => {
+it('[fault: observable-order][fault: poisoned-cache] one instance serializes in FIFO order; the queue key is the instance, not the fs; the queue survives a rejection', async () => {
   const { vfs, g, head } = await seededRepo();
-  const other = await seededRepo('/q');
-  const reads: string[] = [];
+  // Second facade over the SAME MemoryVfs and same GitFs shape: proves the
+  // queue key is the makeGit INSTANCE, not the fs object or a global.
+  await vfs.mkdir('/r2/src', { recursive: true });
+  const g2 = makeGit({ fs: vfsToGitFs(vfs), dir: '/r2' });
+  await g2.init();
+  await vfs.writeFile('/r2/src/other.js', 'x\n');
+  await g2.add('src/other.js');
+  await g2.commit({ message: 'other', author: ID, committer: ID });
+
+  const activity: string[] = [];
   let releaseHold = (): void => undefined;
   const hold = new Promise<void>((resolve) => {
     releaseHold = resolve;
@@ -358,57 +385,131 @@ it('[fault: observable-order][fault: poisoned-cache] one instance serializes, di
   const failure = new VfsError('EIO', looseObjectPath('/r', head), 'injected held-op failure');
   const readFile = vfs.readFile.bind(vfs);
   vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
-    reads.push(path);
+    activity.push(`read:${String(path)}`);
     if (path === failure.path) {
       await hold;
       throw failure;
     }
     return await readFile(path);
   });
+  const readdir = vfs.readdir.bind(vfs);
+  vi.spyOn(vfs, 'readdir').mockImplementation(async (path) => {
+    activity.push(`readdir:${String(path)}`);
+    return await readdir(path);
+  });
 
   const held = rejectedValue(g.log());
-  const follower = g.getConfig('user.name');
-  await expect(other.g.log()).resolves.toHaveLength(1);
+  const follower1 = g.getConfig('user.name').then((value) => {
+    activity.push('settle:config');
+    return value;
+  });
+  const follower2 = g.listBranches().then((value) => {
+    activity.push('settle:branches');
+    return value;
+  });
+  // Same shared fs, same ref NAME (`refs/heads/main`), different instance:
+  // completes while the head op holds — per-instance key + same-lock probe.
+  await expect(g2.log()).resolves.toHaveLength(1);
   await new Promise((resolve) => setTimeout(resolve, 10));
-  // Same-instance follower makes NO filesystem progress while the head op holds.
-  expect.soft(reads.filter((p) => p === '/r/.git/config')).toEqual([]);
+  // NEITHER follower makes filesystem progress (any verb) while the head holds.
+  expect.soft(activity.filter((a) => a === 'read:/r/.git/config')).toEqual([]);
+  expect.soft(activity.filter((a) => a.startsWith('readdir:/r/.git/refs'))).toEqual([]);
   releaseHold();
   expect.soft(await held).toBe(failure);
-  // The queue recovers after a rejection: the follower runs and succeeds.
-  await expect(follower).resolves.toBeUndefined();
+  // The queue recovers after the rejection and preserves FIFO order.
+  expect.soft(await follower1).toBeUndefined();
+  expect.soft(await follower2).toEqual(['main']);
+  const configRead = activity.indexOf('read:/r/.git/config');
+  const branchesRead = activity.findIndex((a) => a.startsWith('readdir:/r/.git/refs'));
+  expect.soft(configRead).toBeGreaterThanOrEqual(0);
+  expect.soft(branchesRead).toBeGreaterThan(configRead);
+  expect(activity.indexOf('settle:config')).toBeLessThan(activity.indexOf('settle:branches'));
 }, 10_000);
 
-it('[fault: torn-state][fault: sibling-drift] every mutating verb fail-stops with the exact latched failure — including undefined/null latches', async () => {
-  for (const latch of [
-    new VfsError('EIO', '/latched', 'latched read failure'),
-    undefined,
-    null,
-  ] as const) {
-    const effects: string[] = [];
-    const carrier = carryExactReadFailures(
-      stubGitFs(
-        () => Promise.reject(latch),
-        (p) => effects.push(p),
-      ),
-    );
+it('[fault: unbounded-read][fault: observable-order] a stalled network head holds only its own instance queue; a fresh instance proceeds; settlement releases the queue', async () => {
+  const { vfs } = await seededRepo();
+  const other = await seededRepo('/q');
+  let releaseNet = (): void => undefined;
+  const netGate = new Promise<void>((resolve) => {
+    releaseNet = resolve;
+  });
+  const activity: string[] = [];
+  const readdir = vfs.readdir.bind(vfs);
+  vi.spyOn(vfs, 'readdir').mockImplementation(async (path) => {
+    activity.push(`readdir:${String(path)}`);
+    return await readdir(path);
+  });
+  const gNet = makeGit({
+    fs: vfsToGitFs(vfs),
+    dir: '/r',
+    http: {
+      async request() {
+        await netGate;
+        throw new Error('injected network stall settled');
+      },
+    },
+  });
 
-    const settled = await settlement(
-      carrier.guard(async () => {
-        await carrier.fs.promises.readFile('/latched').catch(() => undefined);
-        // isomorphic-git style: swallow each verb rejection and keep going.
-        await carrier.fs.promises.writeFile('/w', 'data').catch(() => undefined);
-        await carrier.fs.promises.unlink('/u').catch(() => undefined);
-        await carrier.fs.promises.mkdir('/m').catch(() => undefined);
-        await carrier.fs.promises.rmdir('/d').catch(() => undefined);
-        return 'completed';
-      }),
-    );
+  const cloneRun = rejectedValue(gNet.fetch({ url: 'http://127.0.0.1:9/x.git' }));
+  const queuedStatus = gNet.status();
+  await expect(other.g.log()).resolves.toHaveLength(1);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  // The queued local op makes no workdir progress while the network head stalls
+  // — same-process semantics for ONE instance; other instances proceed.
+  expect.soft(activity.filter((a) => a === 'readdir:/r/src')).toEqual([]);
+  releaseNet();
+  expect.soft(await cloneRun).toBeInstanceOf(Error);
+  const entries = await queuedStatus;
+  expect(entries.every((entry) => entry.kind === 'supported')).toBe(true);
+}, 10_000);
 
-    expect.soft(settled.rejected, String(latch)).toBe(true);
-    expect.soft(settled.value, String(latch)).toBe(latch);
-    expect(effects, String(latch)).toEqual([]);
+// Fail-stop matrix: 4 mutating verbs × 3 latch identities, one INDEPENDENT case
+// each — a red cell never hides the cells after it.
+const FAILSTOP_LATCHES = [
+  ['a VfsError', (): unknown => new VfsError('EIO', '/latched', 'latched read failure')],
+  ['an undefined', (): unknown => undefined],
+  ['a null', (): unknown => null],
+] as const;
+const FAILSTOP_VERBS = ['writeFile', 'unlink', 'mkdir', 'rmdir'] as const;
+for (const [latchName, makeLatch] of FAILSTOP_LATCHES) {
+  for (const verb of FAILSTOP_VERBS) {
+    it(`[fault: torn-state][fault: sibling-drift] ${verb} fail-stops with ${latchName} latch — exact rejection, zero delegate effects`, async () => {
+      const latch = makeLatch();
+      const effects: string[] = [];
+      const carrier = carryExactReadFailures(
+        stubGitFs(
+          () => Promise.reject(latch),
+          (p) => effects.push(p),
+        ),
+      );
+
+      let verbOutcome: unknown = 'NOT-RUN';
+      const settled = await settlement(
+        carrier.guard(async () => {
+          await carrier.fs.promises.readFile('/latched').catch(() => undefined);
+          const run =
+            verb === 'writeFile'
+              ? carrier.fs.promises.writeFile('/w', 'data')
+              : verb === 'unlink'
+                ? carrier.fs.promises.unlink('/u')
+                : verb === 'mkdir'
+                  ? carrier.fs.promises.mkdir('/m')
+                  : carrier.fs.promises.rmdir('/d');
+          verbOutcome = await run.then(
+            () => 'RESOLVED',
+            (error: unknown) => error,
+          );
+          return 'completed';
+        }),
+      );
+
+      expect.soft(verbOutcome).toBe(latch);
+      expect.soft(settled.rejected).toBe(true);
+      expect.soft(settled.value).toBe(latch);
+      expect(effects).toEqual([]);
+    });
   }
-});
+}
 
 it('absence stays trustworthy: an unborn HEAD still reports git absence, not a storage failure', async () => {
   const vfs = new MemoryVfs();
