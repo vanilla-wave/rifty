@@ -15,7 +15,7 @@
  * bounded ~16-lane per-path parallel drain lands inside OpfsFsSync. See
  * fixtures/opfs-parallel-drain-worker.ts for the measured regimes.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { type Page, expect, test } from '@playwright/test';
 import { gotoHarness } from './fixtures.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
