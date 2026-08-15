@@ -127,7 +127,7 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
 | b | quota-perm-fail × restore retry | same restore re-run after the fault clears | every distinct dirname is mkdir'd again → unconditional re-persist heals → `flush().total === 0`, dirs durable (I2 heal-on-retry) — GREEN pin |
 | c | torn-state × mid-restore reload | page dies between apply() and a clean flush | pending install stamp is never trusted on boot (ADR-0187, unchanged semantics) — existing proof: `owner-snapshot-restore-exec` reload-survival e2e stays green; the same-pass carrier introduces NO ordering change (interleaving pin + failure-prefix pin above) |
 | d | lossy-aggregate × op counting (test-only boundary) | counting wrapper vs real ops | acceptance counts at the REAL root handle/`OpfsVfs` boundary, never a projection of internal state — the browser test is the artifact |
-| f | concurrent-same-key × foreign rm mid-drain | another realm removes a restored subtree from disk between two same-dir drain ops | NO provenance lie: a clean `flush()` may only coexist with the tree really present on disk (main self-repairs via its redundant mkdir → clean+present; the dedup surfaces a dirty ledger → stamp refused — both honest); a restore retry recovers either way. Cross-realm coherence itself has no owner at this seam — class captured in `vfs/opfs-sync-cross-realm-mirror-coherence`; all restore modes (import/apply/dep-snapshot) share the ONE `prepareWorkspaceArchiveImport().apply()` chokepoint |
+| f | concurrent-same-key × foreign rm mid-drain | another realm removes a restored subtree (dirs AND file bytes — file-complete disk model) between drain ops | DIFFERENTIAL honest outcome — ground truth: a clean `flush()` cannot attest bytes a foreign realm deleted after their successful persist, ON MAIN TOO (main's redundant mkdir recreates only the PARENT; the removed file is never re-written — clean flush, file absent). The unit owns: the dedup is never QUIETER than main on the same schedule — same-dir schedule: the following same-dir write fails → DIRTY ledger, stamp refused (louder than main's silent self-repair; RED carrier); adversarial interleaving (later distinct-dirname chain recreates the parent): end state byte-identical to main (clean, foreign-removed file absent — the shared main-level hole, class-captured); restore retry recovers BYTE-COMPLETE in both (oracle checks every archive byte on the fake disk). Cross-realm coherence has no owner at this seam — `vfs/opfs-sync-cross-realm-mirror-coherence`; import/apply/dep-snapshot share the ONE `prepareWorkspaceArchiveImport().apply()` chokepoint |
 
 ## Out of scope
 
@@ -191,10 +191,11 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
   (2026-08-15, darwin arm64, node v24.16.0):
   - `npx vitest run packages/workbench/src/glue/workspace-archive.test.ts
     packages/workbench/src/glue/workspace-archive.fault.test.ts` (vitest
-    2.1.9) → 2 failed / 23 passed; the R1 full-trace and failure-prefix pins
-    fail on main's one-mkdir-per-file trace; fault rows (a)/(b)/(f) and all
-    pre-existing archive suites GREEN — preserved semantics, not new
-    behavior.
+    2.1.9) → 3 failed / 23 passed; the R1 full-trace and failure-prefix pins
+    fail on main's one-mkdir-per-file trace, and row (f)'s same-dir
+    differential fails on main's silent self-repair (`total` 0 where the
+    dedup must report dirty); rows (a)/(b), row (f) adversarial
+    (main-identical end state), and all pre-existing archive suites GREEN.
   - `RIFTY_PLAYGROUND_PORT=5299 npx playwright test --config
     playwright.browser-unit.config.ts -g "restore enqueues"` (Playwright
     1.60.0 Chromium, real OPFS, real applyWorkspaceArchive) → R2 fails:

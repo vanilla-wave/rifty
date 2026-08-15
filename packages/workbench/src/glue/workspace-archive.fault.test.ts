@@ -63,19 +63,27 @@ function buildInjectableRoot(): {
   return { root: makeDir('/'), dirs, state };
 }
 
-/** Paired surface honouring real OPFS semantics: writeFile creates NO parents
- * (opfs.ts) — a write into a dir missing on "disk" fails. Typed structurally:
- * OpfsFsSync's paired-surface parameter accepts this shape (the named type is
- * deliberately not on the vfs public entry). `onWrite` fires after a
- * successful write — the foreign-rm injection point for row (f). */
+/** Paired surface honouring real OPFS semantics with a FILE-COMPLETE disk
+ * model: `files` holds the actual on-"disk" bytes, writeFile creates NO
+ * parents (opfs.ts) — a write into a dir missing on disk fails. Typed
+ * structurally: OpfsFsSync's paired-surface parameter accepts this shape
+ * (the named type is deliberately not on the vfs public entry). `onWrite`
+ * fires after a successful write — the foreign-rm injection point for
+ * row (f). */
 function parentCheckingSurface(dirs: Set<string>, onWrite?: (path: string) => void) {
+  const files = new Map<string, Uint8Array>();
   const writes: string[] = [];
   return {
+    files,
     writes,
-    readFile: () => Promise.reject(new DomError('NotFoundError')),
-    writeFile: (path: string) => {
+    readFile: (path: string) => {
+      const bytes = files.get(path);
+      return bytes ? Promise.resolve(bytes.slice()) : Promise.reject(new DomError('NotFoundError'));
+    },
+    writeFile: (path: string, data: Uint8Array) => {
       const parent = path.slice(0, path.lastIndexOf('/')) || '/';
       if (!dirs.has(parent)) return Promise.reject(new DomError('NotFoundError'));
+      files.set(path, data.slice());
       writes.push(path);
       onWrite?.(path);
       return Promise.resolve();
@@ -84,9 +92,46 @@ function parentCheckingSurface(dirs: Set<string>, onWrite?: (path: string) => vo
       for (const dir of [...dirs]) {
         if (dir === path || dir.startsWith(`${path}/`)) dirs.delete(dir);
       }
+      for (const file of [...files.keys()]) {
+        if (file === path || file.startsWith(`${path}/`)) files.delete(file);
+      }
       return Promise.resolve();
     },
   };
+}
+
+/** Removes a subtree from the fake DISK exactly like a foreign realm's
+ * recursive rm: directories AND file bytes under `path` vanish. */
+function foreignRm(
+  fake: { dirs: Set<string> },
+  surface: { files: Map<string, Uint8Array> },
+  path: string,
+): void {
+  for (const dir of [...fake.dirs]) {
+    if (dir === path || dir.startsWith(`${path}/`)) fake.dirs.delete(dir);
+  }
+  for (const file of [...surface.files.keys()]) {
+    if (file === path || file.startsWith(`${path}/`)) surface.files.delete(file);
+  }
+}
+
+/** Byte-complete oracle: every archive file's bytes are on the fake disk,
+ * except the explicitly `absent` ones which must NOT be. */
+function expectArchiveOnDisk(
+  surface: { files: Map<string, Uint8Array> },
+  archive: WorkspaceArchiveV1,
+  absent: readonly string[] = [],
+): void {
+  for (const file of archive.files) {
+    const target = `/ws/${file.path}`;
+    const onDisk = surface.files.get(target);
+    if (absent.includes(file.path)) {
+      expect(onDisk, `${target} must be absent`).toBeUndefined();
+    } else {
+      expect(onDisk, `${target} must be present`).toBeDefined();
+      expect(Buffer.from(onDisk as Uint8Array).toString('base64')).toBe(file.content);
+    }
+  }
 }
 
 function archiveFile(path: string, text: string): WorkspaceArchiveV1['files'][number] {
@@ -146,45 +191,82 @@ describe('workspace archive restore over OpfsFsSync — quota-perm-fail (Storage
     expect(surface.writes).toContain('/ws/b/g1.js');
   });
 
-  it('row f: a FOREIGN rm landing mid-drain is never trusted over — flush is dirty or the tree is really back; retry heals', async () => {
-    // concurrent-same-key at the Storage boundary: another realm removes
-    // '/ws/a' from disk between two same-dir ops. Main self-repairs via its
-    // redundant per-file mkdir persist; the dedup may instead surface a dirty
-    // ledger. BOTH are honest — the pinned invariant is that a clean flush
-    // NEVER coexists with a missing tree (no provenance lie), and a restore
-    // retry recovers. Cross-realm coherence itself has no owner here — class
-    // captured in vfs/opfs-sync-cross-realm-mirror-coherence.
+  // Row (f), concurrent-same-key × foreign rm mid-drain. Ground truth first:
+  // a clean flush CANNOT attest bytes a foreign realm deleted after their
+  // successful persist — that hole exists ON MAIN (the redundant per-file
+  // mkdir recreates the PARENT, nobody re-writes the removed file) and is the
+  // captured cross-realm class (vfs/opfs-sync-cross-realm-mirror-coherence).
+  // The honest outcome this unit owns is DIFFERENTIAL: the dedup is never
+  // QUIETER than main on the same schedule — where main silently self-repairs
+  // the parent and drops the file, the dedup's end state is identical or
+  // reports dirty — and a user-level restore retry recovers byte-complete.
+
+  it('row f, same-dir schedule: foreign rm between two same-dir writes → the dedup reports DIRTY (main silently self-repaired); retry recovers every byte', async () => {
     const fake = buildInjectableRoot();
     let injected = false;
-    const surface = parentCheckingSurface(fake.dirs, (path) => {
-      if (path === '/ws/a/f1.js' && !injected) {
-        injected = true;
-        for (const dir of [...fake.dirs]) {
-          if (dir === '/ws/a' || dir.startsWith('/ws/a/')) fake.dirs.delete(dir);
+    const surface: ReturnType<typeof parentCheckingSurface> = parentCheckingSurface(
+      fake.dirs,
+      (path) => {
+        if (path === '/ws/a/f1.js' && !injected) {
+          injected = true;
+          foreignRm(fake, surface, '/ws/a');
         }
-      }
-    });
+      },
+    );
     const fs = new OpfsFsSync(fake.root, surface);
 
     applyWorkspaceArchive(fs, ARCHIVE);
     const report = await fs.flush();
 
-    const treeFullyOnDisk =
-      fake.dirs.has('/ws/a') &&
-      fake.dirs.has('/ws/a/deep') &&
-      surface.writes.filter((path) => path === '/ws/a/f2.js').length > 0;
-    if (report.total === 0) {
-      // A clean report while the foreign-removed subtree is absent would be
-      // a provenance lie — clean is only legal when the tree really came back.
-      expect(treeFullyOnDisk).toBe(true);
-    } else {
-      expect(report.anyFailure?.((path) => path.startsWith('/ws'))).toBe(true);
-    }
+    // '/ws/a/f2.js' follows in the same dir: without main's redundant mkdir
+    // its write fails on the missing parent — LOUDER than main, never quieter.
+    expect(report.total).toBeGreaterThan(0);
+    expect(report.anyFailure?.((path) => path.startsWith('/ws'))).toBe(true);
 
     applyWorkspaceArchive(fs, ARCHIVE); // user-level retry: replace + re-apply
-    const healed = await fs.flush();
-    expect(healed.total).toBe(0);
+    expect((await fs.flush()).total).toBe(0);
     expect(fake.dirs.has('/ws/a/deep')).toBe(true);
-    expect(fake.dirs.has('/ws/b')).toBe(true);
+    expectArchiveOnDisk(surface, ARCHIVE); // byte-complete recovery
+  });
+
+  it('row f, adversarial interleaving: a later distinct-dirname chain recreates the removed parent → end state IDENTICAL to main (clean flush, foreign-removed file absent — the shared main-level hole), retry recovers', async () => {
+    // Schedule: write a/f1 → foreign rm '/ws/a' → mkdir a/deep (recursive,
+    // recreates '/ws/a') → write a/deep/h1 → ... On MAIN the trace differs
+    // only by no-op duplicate mkdirs: nothing re-writes f1 either, so main
+    // also ends CLEAN with f1 absent. The dedup must match that end state
+    // exactly — no NEW silent loss beyond the captured class.
+    const archive: WorkspaceArchiveV1 = {
+      version: 1,
+      root: '/ws',
+      files: [
+        archiveFile('a/f1.js', 'f1'),
+        archiveFile('a/deep/h1.js', 'h1'),
+        archiveFile('b/g1.js', 'g1'),
+      ],
+    };
+    const fake = buildInjectableRoot();
+    let injected = false;
+    const surface: ReturnType<typeof parentCheckingSurface> = parentCheckingSurface(
+      fake.dirs,
+      (path) => {
+        if (path === '/ws/a/f1.js' && !injected) {
+          injected = true;
+          foreignRm(fake, surface, '/ws/a');
+        }
+      },
+    );
+    const fs = new OpfsFsSync(fake.root, surface);
+
+    applyWorkspaceArchive(fs, archive);
+    const report = await fs.flush();
+
+    // Main-identical end state: clean report, h1/g1 bytes present, f1 gone.
+    expect(report.total).toBe(0);
+    expect(fake.dirs.has('/ws/a')).toBe(true); // recreated by the a/deep chain
+    expectArchiveOnDisk(surface, archive, ['a/f1.js']);
+
+    applyWorkspaceArchive(fs, archive); // retry recovers the lost byte too
+    expect((await fs.flush()).total).toBe(0);
+    expectArchiveOnDisk(surface, archive);
   });
 });

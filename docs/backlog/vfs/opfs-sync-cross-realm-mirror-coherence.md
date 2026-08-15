@@ -29,6 +29,16 @@ workbench Web Lock (`open-workbench.ts`) serializes owners; the reachable
 path is API-level only (an embedder spawning two runtimes over one origin).
 No user-action path found → stays draft with the attempt recorded.
 
+Drain-level manifestation (review 2026-08-15, mkdir-dedup row f): a clean
+`flush()` report cannot attest bytes a foreign realm deleted AFTER their
+successful persist — on main, a foreign recursive rm between two drain ops
+loses the already-persisted file while a later (redundant or distinct-chain)
+mkdir recreates only the parent: `total === 0`, file absent, no ledger
+entry. The ledger's contract covers the drain's own ops; foreign
+interference needs the class owner (epoch/lock/refresh), not per-op guards.
+Differential pin at the restore seam:
+`packages/workbench/src/glue/workspace-archive.fault.test.ts` row (f).
+
 Class-kill inventory (before any fix mechanism): existing coordination near
 this invariant — (1) workbench Web Lock (product-level owner serialization);
 (2) `refreshIndex()` manual reconcile; (3) install-stamp authority per-root
