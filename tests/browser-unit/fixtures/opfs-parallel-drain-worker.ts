@@ -10,7 +10,8 @@
  * whatever the drain internals — so it stays a valid same-run serial
  * baseline after parallelization; its per-op-flush inflation is bounded by
  * the manual 'calibrate' phase (see {@link runCalibration}). Every byte of
- * I/O is real OPFS; durability is proven WHOLE-TREE through a fresh OpfsVfs.
+ * I/O is real OPFS; durability is proven WHOLE-TREE through a fresh OpfsVfs
+ * with a BYTE-EXACT read of every file (fault-classes.md exact-bytes rule).
  */
 import { OpfsFsSync, OpfsVfs, type PersistFailureReport } from '@riftydev/vfs';
 
@@ -78,10 +79,6 @@ interface FileSpec {
  * re-read (fill positions, zeros between them, and length). */
 const FILL_STRIDE = 251;
 
-/** Byte-exact re-read sample: every 97th manifest index + the last file —
- * ~280 fresh-surface reads, deterministic, spread across the whole tree. */
-const SAMPLE_STRIDE = 97;
-
 function buildBytes(fileIndex: number, size: number): Uint8Array {
   const bytes = new Uint8Array(size);
   for (let off = 0; off < size; off += FILL_STRIDE) {
@@ -133,17 +130,18 @@ async function removeNamespace(ns: string): Promise<void> {
   await realRoot.removeEntry(ns.slice(1), { recursive: true }).catch(() => {});
 }
 
-/** WHOLE-TREE fresh-surface proof: enumerate EVERYTHING persisted under `ns`
- * through a FRESH OpfsVfs and demand exact equality with the manifest walk —
- * file count, every path, every size (equal count + every expected path/size
- * present ⇒ no extras, pigeonhole) — plus byte-exact re-reads of the
- * SAMPLE_STRIDE sample vs the in-memory source bytes. OpfsVfs exports no
- * tree walk (walkOpfsTree in packages/vfs/src/opfs-sync.ts:157 is
- * module-internal, absent from the package surface) and readdir dirents
- * carry no size (packages/vfs/src/opfs.ts:123), so sizes come from per-file
- * stat — chunked Promise.all because each stat re-walks handles from the
- * OPFS root (packages/vfs/src/opfs.ts:216). One readdir per dir + one stat
- * per file + ~280 sampled reads — never 26k full reads. */
+/** WHOLE-TREE fresh-surface proof, BYTE-EXACT for ALL files: fault-classes.md
+ * demands exact bytes/digest, and review rejected a sampled oracle —
+ * same-length corruption in an unsampled file must fail. Two passes through a
+ * FRESH OpfsVfs: (1) readdir walk enumerates EVERYTHING persisted under `ns`
+ * — any path outside the manifest is `unexpected:`; (2) chunked concurrent
+ * readFile (Promise.all × 64 — each read re-walks handles from the OPFS root,
+ * packages/vfs/src/opfs.ts:216) of EVERY manifest file, comparing byteLength
+ * to the source size and EVERY byte to the in-memory source array. readFile
+ * bytes ARE the exact stored content, so sizes come from the read — no
+ * separate stat pass. Walk-no-extras + every manifest read succeeding ⇒ the
+ * trees are identical. Read buffers are compared and released per chunk —
+ * never accumulated (26 811 reads would otherwise hold ~167 MB). */
 async function verifyTree(ns: string, specs: ReadonlyArray<FileSpec>): Promise<TreeProof> {
   const surface = new OpfsVfs();
   await surface.init();
@@ -159,56 +157,47 @@ async function verifyTree(ns: string, specs: ReadonlyArray<FileSpec>): Promise<T
     }
   }
 
-  const prefix = `${ns}/`;
-  const actualSizes = new Map<string, number>();
-  const STAT_CHUNK = 64;
-  for (let i = 0; i < filePaths.length; i += STAT_CHUNK) {
-    const chunk = filePaths.slice(i, i + STAT_CHUNK);
-    const sized = await Promise.all(
-      chunk.map(async (abs) => [abs, (await surface.stat(abs)).size] as const),
-    );
-    for (const [abs, size] of sized) actualSizes.set(abs.slice(prefix.length), size);
-  }
-
   const fail = (treeMismatch: string): TreeProof => ({
     treeVerified: false,
-    treeFiles: actualSizes.size,
+    treeFiles: filePaths.length,
     treeMismatch,
   });
 
-  if (actualSizes.size !== specs.length) {
-    return fail(`file count: persisted ${actualSizes.size} !== manifest ${specs.length}`);
+  const prefix = `${ns}/`;
+  const expected = new Set(specs.map((spec) => spec.rel));
+  for (const abs of filePaths) {
+    const rel = abs.slice(prefix.length);
+    if (!expected.has(rel)) return fail(`unexpected: ${rel}`);
   }
-  for (const spec of specs) {
-    const size = actualSizes.get(spec.rel);
-    if (size === undefined) return fail(`missing file: ${spec.rel}`);
-    if (size !== spec.bytes.byteLength) {
-      return fail(`size at ${spec.rel}: persisted ${size} !== source ${spec.bytes.byteLength}`);
-    }
+  if (filePaths.length !== specs.length) {
+    return fail(`file count: persisted ${filePaths.length} !== manifest ${specs.length}`);
   }
 
-  const sample = new Set<number>();
-  for (let i = 0; i < specs.length; i += SAMPLE_STRIDE) sample.add(i);
-  sample.add(specs.length - 1);
-  for (const index of sample) {
-    const spec = specs[index] as FileSpec;
-    const readBack = await surface.readFile(`${ns}/${spec.rel}`).catch(() => null);
-    if (readBack === null) return fail(`sample read failed: ${spec.rel}`);
-    if (readBack.byteLength !== spec.bytes.byteLength) {
-      return fail(
-        `sample length at ${spec.rel}: ${readBack.byteLength} !== ${spec.bytes.byteLength}`,
-      );
-    }
-    for (let i = 0; i < readBack.length; i++) {
-      if (readBack[i] !== spec.bytes[i]) {
-        return fail(
-          `sample byte at ${spec.rel}[${i}]: ${String(readBack[i])} !== ${String(spec.bytes[i])}`,
-        );
+  const READ_CHUNK = 64;
+  for (let base = 0; base < specs.length; base += READ_CHUNK) {
+    const chunk = specs.slice(base, base + READ_CHUNK);
+    const reads = await Promise.all(
+      chunk.map((spec) => surface.readFile(`${ns}/${spec.rel}`).catch(() => null)),
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      const spec = chunk[j] as FileSpec;
+      const readBack = reads[j] ?? null;
+      if (readBack === null) return fail(`missing: ${spec.rel}`);
+      if (readBack.byteLength !== spec.bytes.byteLength) {
+        return fail(`size: ${spec.rel} got=${readBack.byteLength} want=${spec.bytes.byteLength}`);
+      }
+      for (let i = 0; i < readBack.length; i++) {
+        if (readBack[i] !== spec.bytes[i]) {
+          return fail(
+            `bytes: ${spec.rel} @${i} got=${String(readBack[i])} want=${String(spec.bytes[i])}`,
+          );
+        }
       }
     }
+    // Chunk's read buffers drop here — compare-and-release, no accumulation.
   }
 
-  return { treeVerified: true, treeFiles: actualSizes.size, treeMismatch: null };
+  return { treeVerified: true, treeFiles: filePaths.length, treeMismatch: null };
 }
 
 interface VariantOutcome {

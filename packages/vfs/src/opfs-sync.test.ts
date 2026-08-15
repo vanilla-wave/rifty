@@ -2077,6 +2077,90 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
     expect(events.some((event, i) => event === 'dir-resolved /a' && i > rmIdx)).toBe(true);
     expect(afWrites[afWrites.length - 1]).toEqual([2]);
   });
+
+  // GREEN preservation pin (fault row e, poisoned-cache — RENAME sibling of
+  // the rm pin above): ADR-0358's drain-scoped dir-handle cache is
+  // structurally invalidated on rm AND rename, sweeping cached SOURCE and
+  // DESTINATION ancestors/descendants. persistRenameAsync's observables:
+  // destination dir creates via root getDirectoryHandle chains, file moves
+  // via surface.writeFile at the NEW paths, source removal via surface.rm. A
+  // cached pre-rename source-side handle serving a later persist would land
+  // bytes at the dead '/a/sub' path or resurrect the vacated '/a'
+  // incarnation. GREEN on main (FIFO + no cache); must survive
+  // parallelization.
+  it('a structural rename forces fresh resolution on both sides — post-rename writes resolve the destination after the rename persists and the moved bytes land at the new paths', async () => {
+    const events: string[] = [];
+    const lastWriteBytes = new Map<string, number[]>();
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path: string, data: Uint8Array) => {
+        lastWriteBytes.set(path, [...data]);
+        events.push(`write ${path}`);
+        return Promise.resolve();
+      },
+      rm: (path: string) => {
+        events.push(`rm ${path}`);
+        return Promise.resolve();
+      },
+    };
+    // Source AND destination trees pre-exist in the FAKE so every
+    // persistDirectoryPath chain resolves (the fake creates nothing); the
+    // local delegating wrapper logs ROOT-level resolutions only
+    // (buildFakeRoot untouched).
+    const root = buildFakeRoot({
+      files: new Map(),
+      dirs: new Set(['/', '/a', '/a/sub', '/b', '/b/sub']),
+    });
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
+      async (name, options) => {
+        const handle = await innerGetDir(name, options);
+        events.push(`dir /${name}`);
+        return handle;
+      };
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/a/sub', { recursive: true });
+    fs.writeFileSync('/a/sub/f', new Uint8Array([1])); // v1 — moves with the subtree
+    await fs.flush(); // pre-rename persists complete
+    const preRenameCount = events.length;
+
+    fs.renameSync('/a', '/b');
+    fs.writeFileSync('/b/sub/g', new Uint8Array([3])); // v3 into the moved DESTINATION
+    fs.mkdirSync('/a', { recursive: true }); // recreate the vacated SOURCE…
+    fs.writeFileSync('/a/h', new Uint8Array([4])); // …v4 under it
+    await fs.flush();
+    const post = events.slice(preRenameCount);
+
+    // (1) Destination side resolves FRESH: the rename's dir-create chains hit
+    // the ROOT ('dir /b' logged), and the post-rename '/b/sub/g' write
+    // completes after EVERY rename leg — no straddle (consistent with the
+    // both-side fence pin).
+    const successorIdx = post.indexOf('write /b/sub/g');
+    expect(successorIdx).toBeGreaterThanOrEqual(0);
+    for (const renameLeg of ['dir /b', 'write /b/sub/f', 'rm /a'] as const) {
+      const legIdx = post.lastIndexOf(renameLeg);
+      expect(legIdx).toBeGreaterThanOrEqual(0);
+      expect(legIdx).toBeLessThan(successorIdx);
+    }
+
+    // (2) Moved bytes land at the NEW paths: v1 followed the subtree,
+    // '/b/sub/g' carries v3. A cached pre-rename source handle would land
+    // bytes at a dead '/a/...' path between the rename legs and the '/b'
+    // writes instead — the ONLY post-rename '/a/...' surface write is the
+    // recreate's '/a/h'.
+    expect(lastWriteBytes.get('/b/sub/f')).toEqual([1]);
+    expect(lastWriteBytes.get('/b/sub/g')).toEqual([3]);
+    expect(post.filter((event) => event.startsWith('write /a/'))).toEqual(['write /a/h']);
+
+    // (3) Source side resolves FRESH: at least one root '/a' resolution
+    // strictly AFTER the rename's surface.rm('/a') — a cached pre-rename
+    // '/a' handle must never serve the recreate — and '/a/h' carries v4.
+    const rmIdx = post.indexOf('rm /a');
+    expect(rmIdx).toBeGreaterThanOrEqual(0);
+    expect(post.some((event, i) => event === 'dir /a' && i > rmIdx)).toBe(true);
+    expect(post.indexOf('write /a/h')).toBeGreaterThan(rmIdx);
+    expect(lastWriteBytes.get('/a/h')).toEqual([4]);
+  });
 });
 
 describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {

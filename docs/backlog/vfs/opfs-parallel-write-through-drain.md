@@ -94,10 +94,10 @@ executable carrier `tests/browser-unit/opfs-parallel-drain.spec.ts` +
 - Gates: UNROUNDED `speedupRaw >= 2.5 * SERIAL_OVERHEAD_BOUND` (= 2.625; I3
   with the calibration bound; RED on main — measured raw 1.375); both
   `flush().total === 0`; WHOLE-TREE fresh-surface proof per variant: exact
-  path→size map over the persisted namespace EQUALS the manifest for ALL
-  26 811 files (count + every path + every size; first mismatch named) plus
-  byte-exact reads of every 97th manifest file and the tail vs in-memory
-  source bytes — a dropped or truncated non-tail op cannot pass; wall-clock
+  path equality with the manifest walk (unexpected/missing named) plus
+  BYTE-EXACT reads of ALL 26 811 files vs in-memory source bytes
+  (fault-classes exact-bytes — chunked ×64, compare-and-release, outside
+  the timed window; same-length corruption anywhere fails); wall-clock
   logged (`PD256-ACCEPTANCE` JSON) for the PR record, no absolute-time CI
   assert (variance).
 
@@ -154,8 +154,11 @@ pins"):
   slow ancestor-mkdir rejection, fast later same-path success clears a slow
   earlier rejection (row b — kills the heal-then-record inversion a naive
   parallel drain would introduce); structural rm forces FRESH parent
-  resolution and the recreated write carries the new bytes (row e — a
-  drain-scoped dir-handle cache can never serve a pre-rm handle).
+  resolution and the recreated write carries the new bytes; structural
+  RENAME forces fresh resolution on BOTH sides — moved bytes land at the
+  new paths, no write ever targets the dead source subtree, the recreated
+  source resolves fresh after the rename's rm (row e — a drain-scoped
+  dir-handle cache can never serve a pre-rm or pre-rename handle).
 
 Stamp-fence pins (install-stamp-authority.fault.test.ts, committed, GREEN —
 sibling sweep over BOTH production writer branches): a trusted stamp never
@@ -190,12 +193,18 @@ must not move:
   existing persist-failure ledger + watchdog suites in opfs-sync.test.ts
   bind except the two FIFO-shaped pins R1/R2 replace.
 - P6 reload honesty unchanged: pending stamps never trusted (kill e2e
-  above); existing restore e2e pins (`snapshot|archive` specs) and
-  `owner-snapshot-restore-exec` install-survives-reload stay green.
+  above); existing restore e2e pins and `owner-snapshot-restore-exec`
+  install-survives-reload stay green — current-tree artifact (2026-08-16,
+  darwin arm64, Playwright 1.60.0): `npx playwright test -g
+  "snapshot|archive"` -> `3 passed (43.8s)`, exit 0 (includes
+  owner-snapshot-restore-exec "install cowsay + write -> reload").)
 - P7 foreign-rm differential (cross-realm class, ON MAIN): row (f) carriers
   in `workspace-archive.fault.test.ts` stay green — the parallel drain must
   not be quieter than main on the same schedule
-  (`vfs/opfs-sync-cross-realm-mirror-coherence` owns the class).
+  (`vfs/opfs-sync-cross-realm-mirror-coherence` owns the class);
+  current-tree artifact (2026-08-16, node v24.16.0, vitest 2.1.9):
+  `npx vitest run packages/workbench/src/glue/workspace-archive.fault.test.ts`
+  -> `4 passed (4)`, exit 0.
 
 New RED targets (failing-test-first, all committed with this contract):
 R1 cross-path parallel completion, R2 per-lane watchdog liberation,
@@ -216,9 +225,9 @@ Canonical axes per fault-classes §Axes.
 | b | quota-perm-fail × ledger heal ordering | ancestor mkdir slow-REJECTS while child write fast-succeeds; same-path slow-reject vs later fast success | heal is SEQUENCE-ordered, not completion-ordered: end ledger clean (`total 0`) in both — a naive parallel drain's heal-then-record inversion leaves a stale entry and fails the pin — carrier: committed GREEN pins (sequence-ordered heal ×2) |
 | c | torn-state × mid-drain realm death with pending stamp | worker killed while promote()'s drain is in flight | fresh realm: stamp NOT trusted (boot-path check); full re-run → trusted, clean ledger, FULL-TREE byte-exact — carrier: kill e2e (committed, GREEN on main, tier obligation) |
 | d | unbounded-read × wedged persist op | one op held past the 30s report bound; sustained backlog across the timeout | bounded `flush()` ledgers ONLY the wedged path; unrelated lanes complete un-ledgered (R2 RED pin); the trusted-stamp write stays un-durable while the wedge is in flight (P4 fence pins, both writer branches); admission fan-out is capped — `1 < peak <= 16` cold (R4) AND across the watchdog transition with the wedge still occupying its physical lane (R5) |
-| e | poisoned-cache × drain-scoped dir handles | subtree removed+recreated while dir handles could be cached | FRESH parent resolution observed strictly after removeEntry; final surface write carries the post-recreate bytes — carrier: committed GREEN pin (fresh parent resolution); the cache's internal stale-handle test extends it in the implementation commit |
+| e | poisoned-cache × drain-scoped dir handles | subtree removed+recreated while dir handles could be cached | FRESH parent resolution observed strictly after removeEntry; final surface write carries the post-recreate bytes — carrier: committed GREEN pin (fresh parent resolution); RENAME sibling: committed GREEN pin (fresh resolution both sides — moved bytes at new paths, no dead-source write, recreated source resolves after the rename's rm); the cache's internal stale-handle test extends both in the implementation commit |
 | f | concurrent-same-key × foreign realm rm | foreign realm removes persisted subtree mid-drain | not quieter than main on the same schedule — carrier: existing row (f) differential pins in workspace-archive.fault.test.ts stay green (P7); class owned by the cross-realm intake item |
-| g | lossy-aggregate × acceptance oracle | dropped/truncated non-tail op; ratio rounded up at the gate | WHOLE-TREE path+size equality (all 26 811) + sampled byte-exact reads; UNROUNDED `speedupRaw` at the gate — carrier: the hardened acceptance spec itself (kill e2e: all 600 files byte-exact) |
+| g | lossy-aggregate × acceptance oracle | dropped/truncated non-tail op; ratio rounded up at the gate | WHOLE-TREE path equality + BYTE-EXACT reads of ALL 26 811 files (fault-classes exact-bytes); UNROUNDED `speedupRaw` at the gate — carrier: the hardened acceptance spec itself (kill e2e: all 600 files byte-exact) |
 | h | frozen-assumption × serial denominator | per-op-flush baseline silently inflating the ratio | same-run calibration vs the one-final-flush shape, measured 1.0069, committed bound 1.05 multiplying the gate — artifact: `PD256-CALIBRATION` log line + spec constant provenance |
 
 ## Out of scope
@@ -287,10 +296,16 @@ Canonical axes per fault-classes §Axes.
   `FifoPackageAcquisitionAuthority` — per-project COMMAND admission whose
   separate logical authority ADR-0261 already establishes (no
   consolidation with an I/O drain scheduler).
+- Contract+RED attempt 3 (2026-08-16, blockers ANSWERED by re-cut, count
+  carries): acceptance oracle upgraded to BYTE-EXACT reads of ALL files
+  per variant (sampling removed — fault-classes exact-bytes); rename
+  sibling of the row-e cache pin committed (fresh resolution both sides,
+  sweeping cached source/destination); P6/P7 regression pins now carry
+  current-tree command+output artifacts (recorded in Parity cases).
 - RED evidence (pre-implementation runs on this branch, 2026-08-15/16,
   darwin arm64, node v24.16.0, vitest 2.1.9, Playwright 1.60.0 Chromium):
-  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `4 failed | 75
-    passed | 1 skipped (80)`: exactly R1, R2, R4, R5 FAIL as designed (R1:
+  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `4 failed | 76
+    passed | 1 skipped (81)`: exactly R1, R2, R4, R5 FAIL as designed (R1:
     `expected [ '/slow', '/fast' ] to deeply equal [ '/fast', '/slow' ]`;
     R2: `expected [] to deeply equal [ '/other' ]` — '/other' never
     reaches the surface behind the wedged FIFO head; R4 and R5:
@@ -309,8 +324,8 @@ Canonical axes per fault-classes §Axes.
     tests/browser-unit/opfs-parallel-drain.spec.ts
     tests/browser-unit/opfs-parallel-drain-kill.spec.ts` → `1 failed, 1
     passed (1.6m)`: acceptance FAILS ONLY the I3 gate — `Expected: >=
-    2.625, Received: 1.3979309001108522`, faithfulMs 41 505 / productMs
-    29 690, both ledgers 0, BOTH whole-tree proofs verified
+    2.625, Received: 1.4027379500887032`, faithfulMs 41 257 / productMs
+    29 411, both ledgers 0, BOTH whole-tree FULL-BYTE proofs verified
     (26 811/26 811, mismatch null) — the failure is the ratio, nothing
     else; kill e2e PASSES through the production claimIo composition
     (discriminated mid-drain kill, fresh realm refuses the stamp, retry

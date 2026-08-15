@@ -6,8 +6,8 @@
  * than the faithful serial baseline measured in the SAME run — asserted on
  * the RAW unrounded ratio, scaled by the calibrated per-op-flush inflation
  * bound — with a clean flush ledger and a fresh-surface WHOLE-TREE
- * durability proof (exact path→size equality with the manifest walk +
- * byte-exact sampled reads) on both variants.
+ * durability proof (exact path equality with the manifest walk + BYTE-EXACT
+ * reads of ALL files, per fault-classes.md exact-bytes) on both variants.
  *
  * DESIGNED RED on main: enqueuePending chains every op behind pendingTail —
  * the drain is globally serial — so the deduped product drain lands at only
@@ -120,8 +120,8 @@ test('durability drain on a real 26k-file node_modules tree beats the same-run s
   // Clean flush ledger on BOTH variants.
   expect(result.faithfulReportTotal).toBe(0);
   expect(result.productReportTotal).toBe(0);
-  // Fresh-surface WHOLE-TREE durability on BOTH variants: exact path→size
-  // equality with the manifest walk + byte-exact sampled reads.
+  // Fresh-surface WHOLE-TREE durability on BOTH variants: exact path
+  // equality with the manifest walk + byte-exact reads of ALL files.
   expect(result.faithfulTreeVerified, result.faithfulTreeMismatch ?? 'tree clean').toBe(true);
   expect(result.faithfulTreeFiles).toBe(result.files);
   expect(result.productTreeVerified, result.productTreeMismatch ?? 'tree clean').toBe(true);
