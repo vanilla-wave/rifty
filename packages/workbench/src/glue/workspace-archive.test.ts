@@ -7,6 +7,7 @@ import {
   buildWorkspaceArchive,
   exportWorkspaceArchive,
   importWorkspaceArchive,
+  prepareWorkspaceArchiveImport,
 } from './workspace-archive.ts';
 
 const enc = new TextEncoder();
@@ -300,6 +301,22 @@ describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir
     expect(calls).toEqual(DEDUPED_TRACE);
     expect(read(inner, '/ws/a/deep/h2.js')).toBe('h2');
     expect(read(inner, '/ws/x/y/f.js')).toBe('xy');
+  });
+
+  it('a prepared import re-applied emits the FULL deduped trace again — no prepare-scoped dedup state', () => {
+    // poisoned-cache × apply lifecycle: first-seen tracking captured at
+    // PREPARE scope would suppress every mkdir on the second apply() after
+    // the root replacement. The dedup state must be per-apply-invocation.
+    const { fs, inner, calls } = loggingFs();
+    const prepared = prepareWorkspaceArchiveImport(fs, archive);
+
+    prepared.apply();
+    const firstLength = calls.length;
+    prepared.apply();
+
+    expect(calls.slice(0, firstLength)).toEqual(DEDUPED_TRACE);
+    expect(calls.slice(firstLength)).toEqual(DEDUPED_TRACE);
+    expect(read(inner, '/ws/a/deep/h2.js')).toBe('h2');
   });
 
   it('a mid-apply write failure rethrows the ORIGINAL error and leaves exactly the pre-failure trace', () => {
