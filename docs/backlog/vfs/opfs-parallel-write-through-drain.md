@@ -5,7 +5,8 @@ title: Bounded-parallel per-path OPFS write-through drain (supersedes FIFO-order
 created: 2026-08-15
 why: the globally-serial FIFO drain is the 96%-of-project-open cost on big trees; bounded ~16-lane per-path drain measured 4.6-6.1x headed on a real node_modules slepok
 user_story: As a developer opening a project with a heavy node_modules, I want the durability flush to finish in seconds, but today the write-through queue drains strictly serially and a 26.8k-file tree takes 40+ seconds
-blocked_by: []
+epic: project-open-drain-latency
+blocked_by: [vfs/opfs-mkdir-persist-dedup]
 sources: [https://github.com/vanilla-wave/rifty/issues/256, docs/adr/playground/0187-install-stamp-durability-via-write-through-fifo-order-non-blocking-stamp.md, docs/adr/vfs/0072-opfs-sync-content-cache-write-through.md]
 code: [packages/vfs/src/opfs-sync.ts, packages/workbench/src/glue/install-stamp-authority.ts]
 ---
@@ -72,5 +73,5 @@ a big tree (browser-unit lane) showing the drain wall-clock multiple, plus the
 untouched reload-survival e2e — a source grep or unit-only proof does not
 close it.
 
-Candidate shared epic with `vfs/opfs-mkdir-persist-dedup` and
-`playground/project-open-durability-progress`.
+Epic: `project-open-drain-latency` (slice **parallel-drain**, after
+mkdir-dedup).

@@ -5,6 +5,7 @@ title: Skip redundant mkdir persist ops for already-existing paths in OpfsFsSync
 created: 2026-08-15
 why: mkdirSync enqueues a persist op even when every segment already exists; restore paths mkdir before every write → ~2 FIFO ops/file, measured 1.3-1.8x of the whole durability drain
 user_story: As a developer opening a project from a baked dep snapshot, I want the durability flush to not re-persist thousands of already-persisted directories, but today a 26.8k-file tree drains ~2 ops per file and the flush alone takes 40+ seconds
+epic: project-open-drain-latency
 sources: [https://github.com/vanilla-wave/rifty/issues/256, docs/adr/vfs/0072-opfs-sync-content-cache-write-through.md, docs/adr/playground/0187-install-stamp-durability-via-write-through-fifo-order-non-blocking-stamp.md]
 code: [packages/vfs/src/opfs-sync.ts, packages/workbench/src/glue/workspace-archive.ts]
 ---
@@ -41,7 +42,6 @@ still heals (no skip on ledgered path); (b) skip of a truly-persisted dir
 leaves flush report clean and stamp promotion unaffected; (c) mixed: parent
 ledgered, child new → child write-through still heals ancestors.
 
-Candidate shared epic with `vfs/opfs-parallel-write-through-drain` and
-`playground/project-open-durability-progress` (user outcome: heavy-node_modules
-project open 40 s → &lt;10 s with honest progress). REVERSIBLE mechanism-local
-change, but persistence-touching → Review convergence Contract+RED applies.
+Epic: `project-open-drain-latency` (slice **mkdir-dedup**, lands first).
+REVERSIBLE mechanism-local change, but persistence-touching → Review
+convergence Contract+RED applies.
