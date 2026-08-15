@@ -1661,3 +1661,225 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
     expect([...fs.readFileBytesSync('/dst/a.txt')]).toEqual([1]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ADR-0358 replacement pins — the global-FIFO write-through drain is
+// superseded by bounded per-path parallel lanes with ancestor-chain gating and
+// rm/rename subtree fences. Committed at Contract+RED BEFORE implementation:
+// the cross-path pin is RED on main BY DESIGN (main still drains one global
+// FIFO); the rest are GREEN preservation pins that must pass on main AND
+// survive parallelization.
+// ---------------------------------------------------------------------------
+
+describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replacement pins)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => vi.restoreAllMocks());
+
+  // RED on main BY DESIGN: main's global FIFO completes in call order
+  // (['/slow', '/fast']). This pin is ADR-0358's REPLACEMENT for the FIFO pin
+  // above (which the implementation commit deletes) — RED here documents the
+  // superseded contract. Turns green when the drain runs bounded per-path
+  // parallel lanes: unrelated paths drain independently, so the fast write
+  // completes first.
+  it('ops on DIFFERENT paths complete out of call order under inverted latencies (parallel lanes)', async () => {
+    const completed: string[] = [];
+    const delays: Record<string, number> = { '/slow': 30, '/fast': 0 };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: async (path: string) => {
+        await new Promise((r) => setTimeout(r, delays[path] ?? 0));
+        completed.push(path);
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/slow', new Uint8Array([1])); // slow first…
+    fs.writeFileSync('/fast', new Uint8Array([2])); // …fast second
+    await fs.flush();
+    expect(completed).toEqual(['/fast', '/slow']);
+  });
+
+  // GREEN preservation pin: a lane is per-PATH — two writes to the same path
+  // keep enqueue order even when the later one could finish faster. Must pass
+  // on main (global FIFO implies it) and post-parallel (same-path lane order).
+  it('same-path ops complete in call order even when the later write could finish faster', async () => {
+    const completed: string[] = [];
+    let calls = 0;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: async () => {
+        const call = ++calls;
+        await new Promise((r) => setTimeout(r, call === 1 ? 30 : 0)); // 1st slow, 2nd fast
+        completed.push(`call-${call}`);
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/same', new Uint8Array([1]));
+    fs.writeFileSync('/same', new Uint8Array([2]));
+    await fs.flush();
+    expect(completed).toEqual(['call-1', 'call-2']);
+  });
+
+  // GREEN preservation pin: ancestor-chain gating — OpfsVfs.writeFile creates
+  // no parents, so a child write persist must wait for its ancestor mkdir
+  // persist even though the two live on DIFFERENT paths (per-path lanes alone
+  // would race them).
+  it('ancestor mkdir persist completes before its child write persist', async () => {
+    const events: string[] = [];
+    // '/a' pre-exists in the FAKE (not the mirror — no refreshIndex) so the
+    // inner getDirectoryHandle resolves; the local delegating wrapper adds the
+    // ~20ms latency + completion log without editing buildFakeRoot.
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/a']) });
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
+      async (name, options) => {
+        const handle = await innerGetDir(name, options);
+        await new Promise<void>((r) => setTimeout(r, 20));
+        events.push('mkdir-resolved');
+        return handle;
+      };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => {
+        events.push('write-resolved');
+        return Promise.resolve();
+      },
+      rm: () => Promise.resolve(),
+    };
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/a', { recursive: true }); // slow persist (root handle, ~20ms)
+    fs.writeFileSync('/a/f', new Uint8Array([1])); // instant persist (surface)
+    await fs.flush();
+    expect(events).toEqual(['mkdir-resolved', 'write-resolved']);
+  });
+
+  // GREEN preservation pin: subtree fence — a structural rm on '/a' neither
+  // overtakes the slow write under it nor lets the post-rm recreate/write
+  // straddle it (same-path /a order + ancestor gating for /a/f2).
+  it('rm of a subtree neither overtakes nor straddles ops under it', async () => {
+    const events: string[] = [];
+    const delays: Record<string, number> = { '/a/f': 30, '/a/f2': 0 };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: async (path: string) => {
+        await new Promise((r) => setTimeout(r, delays[path] ?? 0));
+        events.push(`write ${path}`);
+      },
+      rm: () => Promise.resolve(),
+    };
+    // '/a' pre-exists in the FAKE so both mkdir persists resolve; the base
+    // root's permissive removeEntry resolves fast. Local delegating wrappers
+    // only add completion logging (buildFakeRoot untouched).
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/a']) });
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
+      async (name, options) => {
+        const handle = await innerGetDir(name, options);
+        events.push(`mkdir /${name}`);
+        return handle;
+      };
+    const innerRemove = root.removeEntry.bind(root);
+    (root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = async (
+      name,
+      options,
+    ) => {
+      await innerRemove(name, options);
+      events.push(`rm /${name}`);
+    };
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/a', { recursive: true });
+    fs.writeFileSync('/a/f', new Uint8Array([1])); // slow write under /a
+    fs.rmSync('/a', { recursive: true }); // fast rm of the whole subtree
+    fs.mkdirSync('/a', { recursive: true }); // recreate…
+    fs.writeFileSync('/a/f2', new Uint8Array([2])); // …and a fast write under it
+    await fs.flush();
+    expect(events).toEqual(['mkdir /a', 'write /a/f', 'rm /a', 'mkdir /a', 'write /a/f2']);
+  });
+
+  // GREEN preservation pin: rename fence — persistRenameAsync's observable
+  // legs (destination dir create via root getDirectoryHandle, file move via
+  // surface.writeFile, source removal via surface.rm) all complete AFTER an
+  // earlier write persist inside the moved subtree: the rename neither
+  // overtakes nor straddles it.
+  it('rename persist completes after an earlier write persist inside the moved subtree', async () => {
+    const events: string[] = [];
+    const delays: Record<string, number> = { '/a/f': 30 };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: async (path: string) => {
+        await new Promise((r) => setTimeout(r, delays[path] ?? 0));
+        events.push(`write ${path}`);
+      },
+      rm: (path: string) => {
+        events.push(`rm ${path}`);
+        return Promise.resolve();
+      },
+    };
+    // '/a' and '/b' pre-exist in the FAKE so the mkdir persist and the
+    // rename's destination dir create both resolve; wrapper logs dir creates.
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/a', '/b']) });
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
+      async (name, options) => {
+        const handle = await innerGetDir(name, options);
+        events.push(`dir /${name}`);
+        return handle;
+      };
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/a', { recursive: true });
+    fs.writeFileSync('/a/f', new Uint8Array([1])); // slow write INSIDE the soon-moved subtree
+    fs.renameSync('/a', '/b');
+    await fs.flush();
+    const writeIdx = events.indexOf('write /a/f');
+    expect(writeIdx).toBeGreaterThanOrEqual(0);
+    // Every rename persist leg completes strictly after the fenced write.
+    for (const renameEvent of ['dir /b', 'write /b/f', 'rm /a'] as const) {
+      expect(events.indexOf(renameEvent)).toBeGreaterThan(writeIdx);
+    }
+  });
+});
+
+describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  // RED on main BY DESIGN: FIFO admission parks '/other' behind the wedged
+  // head until the head's REAL promise settles (never), and the head's
+  // watchdog ledgers every queued successor as blocked-behind-timed-out-head
+  // — so on main '/other' never reaches the surface and the report totals 2.
+  // Turns green when the per-lane watchdog replaces the FIFO-shaped
+  // blocked-pending report: a wedged op times out alone in its own lane while
+  // unrelated lanes drain — '/other' persists and only '/wedged' is ledgered.
+  it('an op on an unrelated path is neither blocked nor ledgered behind a timed-out head', async () => {
+    vi.useFakeTimers();
+    const completed: string[] = [];
+    const wedged = new Promise<void>(() => {}); // never settles
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path: string) => {
+        if (path === '/wedged') return wedged;
+        completed.push(path);
+        return Promise.resolve();
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/wedged', new Uint8Array([1]));
+    fs.writeFileSync('/other', new Uint8Array([2]));
+
+    await Promise.resolve(); // let an already-admitted '/other' lane settle
+    await vi.advanceTimersByTimeAsync(30_000); // per-op report timeout
+    const report = await fs.flush();
+
+    expect(completed).toEqual(['/other']);
+    expect(report.total).toBe(1);
+    expect(report.failures).toEqual([expect.objectContaining({ path: '/wedged', op: 'write' })]);
+  });
+});
