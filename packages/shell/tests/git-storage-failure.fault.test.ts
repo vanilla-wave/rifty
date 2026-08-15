@@ -68,6 +68,14 @@ async function snapshotRepo(vfs: Vfs): Promise<Record<string, string>> {
   return out;
 }
 
+/** Distinguishes a resolve from a rejection whose VALUE is the exact failure. */
+async function settlement(run: Promise<unknown>): Promise<{ rejected: boolean; value: unknown }> {
+  return run.then(
+    (value) => ({ rejected: false, value }),
+    (value: unknown) => ({ rejected: true, value }),
+  );
+}
+
 function failReadsOf(vfs: Vfs, failure: VfsError): void {
   const readFile = vfs.readFile.bind(vfs);
   vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
@@ -101,11 +109,17 @@ it('[fault: quota-perm-fail][fault: provenance-lie] commit --amend surfaces a co
   failReadsOf(vfs, failure);
 
   const amend = makeCtx({ cwd: '/repo', env: ENV });
-  await expect(git(['commit', '--amend', '-m', 'two'], amend.ctx)).rejects.toBe(failure);
+  const outcome = await settlement(git(['commit', '--amend', '-m', 'two'], amend.ctx));
   vi.restoreAllMocks();
 
-  expect.soft(amend.err()).not.toContain('You have nothing to amend.');
-  expect(await snapshotRepo(vfs)).toEqual(before);
+  // Settlement captured FIRST: every assertion executes on the defect too.
+  const after = await snapshotRepo(vfs);
+  expect.soft(outcome.rejected).toBe(true);
+  expect.soft(outcome.value).toBe(failure);
+  // Emit-then-rethrow is still a lie: the command layer writes NOTHING.
+  expect.soft(amend.out()).toBe('');
+  expect.soft(amend.err()).toBe('');
+  expect(after).toEqual(before);
 });
 
 it('[fault: quota-perm-fail][fault: provenance-lie] log on an unborn branch surfaces a HEAD read failure instead of fabricating the branch name', async () => {
@@ -124,11 +138,15 @@ it('[fault: quota-perm-fail][fault: provenance-lie] log on an unborn branch surf
   });
 
   const log = makeCtx({ cwd: '/repo', env: ENV });
-  await expect(git(['log'], log.ctx)).rejects.toBe(failure);
+  const outcome = await settlement(git(['log'], log.ctx));
   vi.restoreAllMocks();
 
-  expect.soft(log.err()).not.toContain('does not have any commits yet');
-  expect(await snapshotRepo(vfs)).toEqual(before);
+  const after = await snapshotRepo(vfs);
+  expect.soft(outcome.rejected).toBe(true);
+  expect.soft(outcome.value).toBe(failure);
+  expect.soft(log.out()).toBe('');
+  expect.soft(log.err()).toBe('');
+  expect(after).toEqual(before);
 });
 
 // Matrix: one INDEPENDENT case per absence-probe catch boundary. The injected
@@ -159,9 +177,16 @@ for (const scenario of PROBE_CASES) {
     failReadsOf(vfs, failure);
 
     const ctx = makeCtx({ cwd: '/repo', env: ENV });
-    await expect(git([...scenario.args], ctx.ctx)).rejects.toBe(failure);
+    const outcome = await settlement(git([...scenario.args], ctx.ctx));
     vi.restoreAllMocks();
 
-    expect(await snapshotRepo(vfs)).toEqual(before);
+    // Settlement captured FIRST: state and output assertions execute on the
+    // defect too; emit-then-rethrow would be caught by the empty-output pins.
+    const after = await snapshotRepo(vfs);
+    expect.soft(outcome.rejected).toBe(true);
+    expect.soft(outcome.value).toBe(failure);
+    expect.soft(ctx.out()).toBe('');
+    expect.soft(ctx.err()).toBe('');
+    expect(after).toEqual(before);
   });
 }

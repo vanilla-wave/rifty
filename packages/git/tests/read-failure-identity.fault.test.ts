@@ -57,11 +57,23 @@ async function settlement(run: Promise<unknown>): Promise<{ rejected: boolean; v
   );
 }
 
-/** Byte-exact recursive snapshot — proves zero mutation of a whole tree. */
+/** Byte-exact recursive snapshot incl. DIRECTORY topology; never throws — a
+ *  missing/unreadable root records as a divergent entry instead of escaping. */
 async function snapshotTree(vfs: MemoryVfs, root: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   const walk = async (dir: string): Promise<void> => {
-    for (const entry of await vfs.readdir(dir)) {
+    let entries: Awaited<ReturnType<MemoryVfs['readdir']>>;
+    try {
+      entries = await vfs.readdir(dir);
+    } catch (error) {
+      out[`${dir}/`] = `UNREADABLE:${String(error)}`;
+      return;
+    }
+    out[`${dir}/`] = entries
+      .map((entry) => entry.name)
+      .sort()
+      .join('|');
+    for (const entry of entries) {
       const path = `${dir}/${entry.name}`;
       if (entry.isDirectory) await walk(path);
       else out[path] = Array.from(await vfs.readFile(path)).join(',');
@@ -72,7 +84,11 @@ async function snapshotTree(vfs: MemoryVfs, root: string): Promise<Record<string
 }
 
 /** Boundary decorator: scripted reads, recorded writes, unused stat verbs. */
-function stubGitFs(read: () => Promise<Uint8Array | string>, onWrite: (p: string) => void): GitFs {
+function stubGitFs(
+  read: () => Promise<Uint8Array | string>,
+  onWrite: (p: string) => void,
+  readdir: () => Promise<string[]> = async () => [],
+): GitFs {
   const unused = async (): Promise<never> => {
     throw new Error('unused verb');
   };
@@ -81,7 +97,7 @@ function stubGitFs(read: () => Promise<Uint8Array | string>, onWrite: (p: string
       readFile: read,
       writeFile: async (p) => onWrite(p),
       unlink: async (p) => onWrite(p),
-      readdir: async () => [],
+      readdir,
       mkdir: async (p) => onWrite(p),
       rmdir: async (p) => onWrite(p),
       stat: unused,
@@ -267,9 +283,12 @@ it('[fault: quota-perm-fail][fault: provenance-lie] clone-failure cleanup never 
   const rejected = await rejectedValue(g.clone({ url: 'http://127.0.0.1:1/x.git' }));
   vi.restoreAllMocks();
 
+  // Settlements captured FIRST so every assertion executes on the defect too.
+  const headAfter = await settlement(g.resolveRef('HEAD'));
+  const gitAfter = await snapshotTree(vfs, '/r/.git');
   expect.soft(rejected).toBe(failure);
-  expect.soft(await g.resolveRef('HEAD')).toBe(head);
-  expect(await snapshotTree(vfs, '/r/.git')).toEqual(gitBefore);
+  expect.soft(headAfter).toEqual({ rejected: false, value: head });
+  expect(gitAfter).toEqual(gitBefore);
 });
 
 it('[fault: observable-order][fault: provenance-lie] a failure belongs only to its own operation, never to a concurrent one', async () => {
@@ -321,6 +340,56 @@ it('[fault: provenance-lie] latch keeps the identity of an undefined rejection a
   expect(writes).toEqual([]);
 });
 
+it('[fault: provenance-lie] the FIRST rejection wins for an undefined latch too: a later failure never replaces it', async () => {
+  const writes: string[] = [];
+  let reads = 0;
+  const carrier = carryExactReadFailures(
+    stubGitFs(
+      () =>
+        Promise.reject(
+          reads++ === 0 ? undefined : new VfsError('EIO', '/second', 'second failure'),
+        ),
+      (p) => writes.push(p),
+    ),
+  );
+
+  const settled = await settlement(
+    carrier.guard(async () => {
+      await carrier.fs.promises.readFile('/first').catch(() => undefined);
+      await carrier.fs.promises.readFile('/second').catch(() => undefined);
+      await carrier.fs.promises.writeFile('/w', 'data');
+      return 'ok';
+    }),
+  );
+
+  expect.soft(settled.rejected).toBe(true);
+  expect.soft(settled.value).toBeUndefined();
+  expect(writes).toEqual([]);
+});
+
+it('[fault: provenance-lie] a readdir undefined rejection latches with exact identity and fail-stops writes', async () => {
+  const writes: string[] = [];
+  const carrier = carryExactReadFailures(
+    stubGitFs(
+      async () => new Uint8Array(),
+      (p) => writes.push(p),
+      () => Promise.reject(undefined),
+    ),
+  );
+
+  const settled = await settlement(
+    carrier.guard(async () => {
+      await carrier.fs.promises.readdir('/latched-dir').catch(() => undefined);
+      await carrier.fs.promises.writeFile('/w', 'data');
+      return 'ok';
+    }),
+  );
+
+  expect.soft(settled.rejected).toBe(true);
+  expect.soft(settled.value).toBeUndefined();
+  expect(writes).toEqual([]);
+});
+
 it('[fault: provenance-lie] the FIRST non-absence rejection wins; a later failure never replaces a null latch', async () => {
   const writes: string[] = [];
   let reads = 0;
@@ -364,10 +433,59 @@ it('[fault: sibling-drift] a prototype-backed GitFs drives the facade end-to-end
   expect(await rejectedValue(g.resolveRef('HEAD'))).toBe(failure);
 });
 
-it('[fault: observable-order][fault: poisoned-cache] one instance serializes in FIFO order; the queue key is the instance, not the fs; the queue survives a rejection', async () => {
+/** Label every reachable VFS verb into `activity` (adapter verbs: exists,
+ *  readFile, readdir, stat, writeFile, rm, mkdir — full-verb no-progress). */
+function instrumentAllVerbs(vfs: MemoryVfs, activity: string[]): void {
+  const exists = vfs.exists.bind(vfs);
+  vi.spyOn(vfs, 'exists').mockImplementation(async (path) => {
+    activity.push(`exists:${String(path)}`);
+    return await exists(path);
+  });
+  const stat = vfs.stat.bind(vfs);
+  vi.spyOn(vfs, 'stat').mockImplementation(async (path) => {
+    activity.push(`stat:${String(path)}`);
+    return await stat(path);
+  });
+  const writeFile = vfs.writeFile.bind(vfs);
+  vi.spyOn(vfs, 'writeFile').mockImplementation(async (path, data) => {
+    activity.push(`write:${String(path)}`);
+    return await writeFile(path, data);
+  });
+  const rm = vfs.rm.bind(vfs);
+  vi.spyOn(vfs, 'rm').mockImplementation(async (path, opts) => {
+    activity.push(`rm:${String(path)}`);
+    return await rm(path, opts);
+  });
+  const mkdir = vfs.mkdir.bind(vfs);
+  vi.spyOn(vfs, 'mkdir').mockImplementation(async (path, opts) => {
+    activity.push(`mkdir:${String(path)}`);
+    return await mkdir(path, opts);
+  });
+  const readdir = vfs.readdir.bind(vfs);
+  vi.spyOn(vfs, 'readdir').mockImplementation(async (path) => {
+    activity.push(`readdir:${String(path)}`);
+    return await readdir(path);
+  });
+}
+
+/** Drain until PROVEN quiescent: no new fs activity across a full macrotask
+ *  turn — stronger than any fixed sleep, nothing in flight can still progress. */
+async function drainUntilQuiet(activity: string[]): Promise<void> {
+  let last = -1;
+  while (activity.length !== last) {
+    last = activity.length;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+it('[fault: observable-order][fault: poisoned-cache] one instance serializes in FIFO order; the queue key is the instance, not the fs or dir; the queue survives a rejection', async () => {
   const { vfs, g, head } = await seededRepo();
-  // Second facade over the SAME MemoryVfs and same GitFs shape: proves the
-  // queue key is the makeGit INSTANCE, not the fs object or a global.
+  // Facade over the EXACT same GitFs object AND same dir: an fs- or dir-keyed
+  // queue would wrongly couple it to `g`.
+  const sharedFs = vfsToGitFs(vfs);
+  const gSameDir = makeGit({ fs: sharedFs, dir: '/r' });
+  // Facade over the same MemoryVfs, different dir, resolving the SAME ref NAME
+  // (`refs/heads/main`) — per-instance key + same-refname-lock probe.
   await vfs.mkdir('/r2/src', { recursive: true });
   const g2 = makeGit({ fs: vfsToGitFs(vfs), dir: '/r2' });
   await g2.init();
@@ -380,23 +498,27 @@ it('[fault: observable-order][fault: poisoned-cache] one instance serializes in 
   const hold = new Promise<void>((resolve) => {
     releaseHold = resolve;
   });
-  // Hold a loose OBJECT read: unlike ref reads, object reads take no
-  // isomorphic-git GLOBAL per-refname lock, so only THIS instance may stall.
+  let signalHeadEntered = (): void => undefined;
+  const headEntered = new Promise<void>((resolve) => {
+    signalHeadEntered = resolve;
+  });
+  // ONE-SHOT hold of a loose OBJECT read: object reads take no isomorphic-git
+  // GLOBAL per-refname lock, so only the holder's own instance may stall; the
+  // same path read by other instances passes through.
   const failure = new VfsError('EIO', looseObjectPath('/r', head), 'injected held-op failure');
   const readFile = vfs.readFile.bind(vfs);
+  let holdTaken = false;
   vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
     activity.push(`read:${String(path)}`);
-    if (path === failure.path) {
+    if (path === failure.path && !holdTaken) {
+      holdTaken = true;
+      signalHeadEntered();
       await hold;
       throw failure;
     }
     return await readFile(path);
   });
-  const readdir = vfs.readdir.bind(vfs);
-  vi.spyOn(vfs, 'readdir').mockImplementation(async (path) => {
-    activity.push(`readdir:${String(path)}`);
-    return await readdir(path);
-  });
+  instrumentAllVerbs(vfs, activity);
 
   const held = rejectedValue(g.log());
   const follower1 = g.getConfig('user.name').then((value) => {
@@ -407,23 +529,33 @@ it('[fault: observable-order][fault: poisoned-cache] one instance serializes in 
     activity.push('settle:branches');
     return value;
   });
-  // Same shared fs, same ref NAME (`refs/heads/main`), different instance:
-  // completes while the head op holds — per-instance key + same-lock probe.
+  const follower3 = g.add('src/main.js').then(() => {
+    activity.push('settle:add');
+  });
+  // Explicit ENTRY barrier: the head op is provably inside its stall.
+  await headEntered;
+  await expect(gSameDir.log()).resolves.toHaveLength(1);
   await expect(g2.log()).resolves.toHaveLength(1);
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  // NEITHER follower makes filesystem progress (any verb) while the head holds.
-  expect.soft(activity.filter((a) => a === 'read:/r/.git/config')).toEqual([]);
-  expect.soft(activity.filter((a) => a.startsWith('readdir:/r/.git/refs'))).toEqual([]);
+  await drainUntilQuiet(activity);
+  // NO follower touches the filesystem through ANY verb while the head holds:
+  // read-only signatures (config read/exists, refs listing) and the mutating
+  // follower's index write are all absent.
+  const followerSignature = (a: string): boolean =>
+    a.endsWith(':/r/.git/config') ||
+    a.endsWith(':/r/.git/refs') ||
+    a.endsWith(':/r/.git/refs/heads') ||
+    a.endsWith(':/r/src/main.js') ||
+    a.startsWith('write:/r/.git/index');
+  expect.soft(activity.filter(followerSignature)).toEqual([]);
   releaseHold();
   expect.soft(await held).toBe(failure);
-  // The queue recovers after the rejection and preserves FIFO order.
+  // The queue recovers after the rejection and preserves FIFO order across
+  // read-only AND mutating followers.
   expect.soft(await follower1).toBeUndefined();
   expect.soft(await follower2).toEqual(['main']);
-  const configRead = activity.indexOf('read:/r/.git/config');
-  const branchesRead = activity.findIndex((a) => a.startsWith('readdir:/r/.git/refs'));
-  expect.soft(configRead).toBeGreaterThanOrEqual(0);
-  expect.soft(branchesRead).toBeGreaterThan(configRead);
-  expect(activity.indexOf('settle:config')).toBeLessThan(activity.indexOf('settle:branches'));
+  expect.soft(await settlement(follower3)).toEqual({ rejected: false, value: undefined });
+  const settleOrder = activity.filter((a) => a.startsWith('settle:'));
+  expect(settleOrder).toEqual(['settle:config', 'settle:branches', 'settle:add']);
 }, 10_000);
 
 it('[fault: unbounded-read][fault: observable-order] a stalled network head holds only its own instance queue; a fresh instance proceeds; settlement releases the queue', async () => {
@@ -433,34 +565,42 @@ it('[fault: unbounded-read][fault: observable-order] a stalled network head hold
   const netGate = new Promise<void>((resolve) => {
     releaseNet = resolve;
   });
-  const activity: string[] = [];
-  const readdir = vfs.readdir.bind(vfs);
-  vi.spyOn(vfs, 'readdir').mockImplementation(async (path) => {
-    activity.push(`readdir:${String(path)}`);
-    return await readdir(path);
+  let signalNetEntered = (): void => undefined;
+  const netEntered = new Promise<void>((resolve) => {
+    signalNetEntered = resolve;
   });
+  const activity: string[] = [];
+  instrumentAllVerbs(vfs, activity);
   const gNet = makeGit({
     fs: vfsToGitFs(vfs),
     dir: '/r',
     http: {
       async request() {
+        signalNetEntered();
         await netGate;
         throw new Error('injected network stall settled');
       },
     },
   });
 
-  const cloneRun = rejectedValue(gNet.fetch({ url: 'http://127.0.0.1:9/x.git' }));
+  // fetch here; clone/pull/push ride the SAME transport + queue (sweep: one
+  // lifecycle pin, ADR-0357 names the sibling heads).
+  const netHead = rejectedValue(gNet.fetch({ url: 'http://127.0.0.1:9/x.git' }));
   const queuedStatus = gNet.status();
+  // Explicit ENTRY barrier: the network head is provably inside its stall.
+  await netEntered;
   await expect(other.g.log()).resolves.toHaveLength(1);
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  // The queued local op makes no workdir progress while the network head stalls
-  // — same-process semantics for ONE instance; other instances proceed.
-  expect.soft(activity.filter((a) => a === 'readdir:/r/src')).toEqual([]);
+  await drainUntilQuiet(activity);
+  // The queued local op makes no WORKDIR progress through ANY verb while the
+  // network head stalls — same-process semantics for ONE instance.
+  expect.soft(activity.filter((a) => a.includes(':/r/src'))).toEqual([]);
   releaseNet();
-  expect.soft(await cloneRun).toBeInstanceOf(Error);
-  const entries = await queuedStatus;
-  expect(entries.every((entry) => entry.kind === 'supported')).toBe(true);
+  expect.soft(await netHead).toBeInstanceOf(Error);
+  const entries = await settlement(queuedStatus);
+  expect.soft(entries.rejected).toBe(false);
+  expect((entries.value as { kind: string }[]).every((entry) => entry.kind === 'supported')).toBe(
+    true,
+  );
 }, 10_000);
 
 // Fail-stop matrix: 4 mutating verbs × 3 latch identities, one INDEPENDENT case

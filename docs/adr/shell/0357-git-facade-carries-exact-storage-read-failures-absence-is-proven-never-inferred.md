@@ -121,10 +121,16 @@ in `makeGit`):
   — couples same-named ref reads across instances only while one such read is
   in flight; the fault suite's holds ride loose-object reads, which take no
   such lock, exactly because that coupling is the dependency's, not the
-  carrier's) and `GitIndexManager`'s per-`${gitdir}/index` lock (namespaced,
-  no cross-repo coupling). No lock-order inversion with the FIFO: the queue
-  admits one operation which then acquires dependency locks strictly within
-  its own lifetime; an operation never waits on another instance's queue.
+  carrier's), `GitIndexManager`'s per-`${gitdir}/index` lock (namespaced, no
+  cross-repo coupling), the workdir/blob `AsyncLock` (`checkAndWriteBlob`,
+  global map keyed by ABSOLUTE workdir file path — naturally namespaced;
+  guards per-file blob materialization during merge/checkout), and
+  `GitShallowManager`'s lock (global object keyed by `join(gitdir,'shallow')`
+  — namespaced per repo). Only the per-refname lock couples repos; every
+  other key embeds an absolute path. No lock-order inversion with the FIFO:
+  the queue admits one operation which then acquires dependency locks
+  strictly within its own lifetime; an operation never waits on another
+  instance's queue, so no cycle can close through a dependency lock.
 - 2026-08-15 — shell absence classifier hardened: `isNotFound` matched
   `/could not find/i` on MESSAGE TEXT, so a storage failure with
   NotFound-like wording read as git absence. Classification is now
