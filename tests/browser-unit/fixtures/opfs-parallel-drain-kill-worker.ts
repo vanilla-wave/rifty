@@ -157,9 +157,7 @@ async function verifyFullTree(
 ): Promise<{ verified: boolean; files: number; firstMismatch: string | null }> {
   const spec = expectedTree(root);
   const stampPath = installStampPath(root);
-  const found = (await listFiles(vfs, `${root}/node_modules`)).filter(
-    (path) => path !== stampPath,
-  );
+  const found = (await listFiles(vfs, `${root}/node_modules`)).filter((path) => path !== stampPath);
   const foundSet = new Set(found);
   let firstMismatch: string | null = null;
   for (const path of found) {
