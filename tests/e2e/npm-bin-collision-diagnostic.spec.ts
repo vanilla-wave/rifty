@@ -48,11 +48,12 @@ test.describe('npm bin-collision diagnostics', () => {
 
     const installLine = 'npm install';
     await runTerminalLineSettled(page, installLine, 120_000);
-    expect(await terminalHistoryExitCode(page, installLine)).toBe(1);
+    // Soft: the duplicate-prior scenario below must still execute on a defect.
+    expect.soft(await terminalHistoryExitCode(page, installLine)).toBe(1);
     const diagnosticLines = commandOutput(await terminalBuffer(page), installLine)
       .split('\n')
       .filter((line) => line.startsWith('npm: install failed:'));
-    expect(diagnosticLines).toEqual([EXPECTED_DIAGNOSTIC]);
+    expect.soft(diagnosticLines).toEqual([EXPECTED_DIAGNOSTIC]);
 
     const duplicateSetupLine =
       'cp .prior-duplicate-package-lock.json package-lock.json && rm .prior-duplicate-package-lock.json';

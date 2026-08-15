@@ -31,6 +31,14 @@ async function rejectedValue(run: Promise<unknown>): Promise<unknown> {
   );
 }
 
+/** Distinguishes a resolve from a rejection whose VALUE is the exact failure. */
+async function settlement(run: Promise<unknown>): Promise<{ rejected: boolean; value: unknown }> {
+  return run.then(
+    (value) => ({ rejected: false, value }),
+    (value: unknown) => ({ rejected: true, value }),
+  );
+}
+
 describe('starter initial commit ∥ instant-deps restore (fault: concurrent restore churn)', () => {
   it('commits a clean baseline while node_modules + lockfile land mid-walk; amend folds the final lockfile', async () => {
     installMemoryFs();
@@ -107,17 +115,21 @@ describe('starter initial commit ∥ instant-deps restore (fault: concurrent res
       const initialOid = await ensureStarterInitialCommit(vfs, root);
       if (initialOid === null) throw new Error('Expected a fresh Starter initial commit');
       const indexWrites = writes.mock.calls.filter(([path]) => path === `${root}/.git/index`);
-      expect(indexWrites.length).toBeLessThanOrEqual(4);
+      expect.soft(indexWrites.length).toBeLessThanOrEqual(4);
 
       const sh = new Shell({ cwd: root });
-      expect((await sh.run('git show HEAD:src/main.js')).stdout).toBe('console.log("baseline");\n');
-      expect((await sh.run('git show HEAD:node_modules-helpers/keep.js')).stdout).toBe(
-        'export {};\n',
-      );
-      expect((await sh.run('git show HEAD:node_modules/pkg-000/index.js')).exitCode).not.toBe(0);
-      expect(
-        (await sh.run('git show HEAD:packages/app/node_modules/nested/index.js')).exitCode,
-      ).not.toBe(0);
+      expect
+        .soft((await sh.run('git show HEAD:src/main.js')).stdout)
+        .toBe('console.log("baseline");\n');
+      expect
+        .soft((await sh.run('git show HEAD:node_modules-helpers/keep.js')).stdout)
+        .toBe('export {};\n');
+      expect
+        .soft((await sh.run('git show HEAD:node_modules/pkg-000/index.js')).exitCode)
+        .not.toBe(0);
+      expect
+        .soft((await sh.run('git show HEAD:packages/app/node_modules/nested/index.js')).exitCode)
+        .not.toBe(0);
       // Tracked set proves exclusion without freezing porcelain shape (native
       // git collapses wholly-untracked dirs; rifty's per-file rows are a
       // recorded gap: backlog shell/git-status-porcelain-untracked-dir-collapse).
@@ -174,12 +186,15 @@ describe('starter initial commit ∥ instant-deps restore (fault: concurrent res
       const git = makeGit({ fs: vfsToGitFs(vfs), dir: root });
       await git.init();
       await git.add('main.js');
-      vi.spyOn(vfs, 'rm').mockRejectedValueOnce(new Error('injected index permission failure'));
+      const resetFailure = new Error('injected index permission failure');
+      vi.spyOn(vfs, 'rm').mockRejectedValueOnce(resetFailure);
 
-      await expect(ensureStarterInitialCommit(vfs, root)).rejects.toThrow(
-        'injected index permission failure',
-      );
-      await expect(git.resolveRef('HEAD')).rejects.toThrow();
+      const outcome = await settlement(ensureStarterInitialCommit(vfs, root));
+      vi.restoreAllMocks();
+      const headProbe = await settlement(git.resolveRef('HEAD'));
+      expect.soft(outcome.rejected).toBe(true);
+      expect.soft(outcome.value).toBe(resetFailure);
+      expect.soft(headProbe.rejected).toBe(true);
       await expect(vfs.readFileText(`${root}/main.js`)).resolves.toBe('console.log("baseline");\n');
     } finally {
       resetSyncMirror();
@@ -228,9 +243,11 @@ describe('starter initial commit ∥ instant-deps restore (fault: concurrent res
       const rejected = await rejectedValue(ensureStarterInitialCommit(vfs, root));
       read.mockRestore();
 
+      const headAfter = await settlement(git.resolveRef('HEAD'));
+      const logAfter = await settlement(git.log().then((l) => l.map(({ oid }) => oid)));
       expect.soft(rejected).toBe(failure);
-      expect(await git.resolveRef('HEAD')).toBe(userOid);
-      expect((await git.log()).map(({ oid }) => oid)).toEqual(historyBefore);
+      expect.soft(headAfter).toEqual({ rejected: false, value: userOid });
+      expect.soft(logAfter).toEqual({ rejected: false, value: historyBefore });
       expect(await vfs.readFile(`${root}/.git/index`)).toEqual(indexBefore);
     } finally {
       resetSyncMirror();
@@ -285,8 +302,9 @@ describe('starter baseline finalizer ∥ durability flush (fault: quota-perm-fai
       );
       read.mockRestore();
 
+      const headAfter = await settlement(git.resolveRef('HEAD'));
       expect.soft(rejected).toBe(failure);
-      expect(await git.resolveRef('HEAD')).toBe(initialOid);
+      expect.soft(headAfter).toEqual({ rejected: false, value: initialOid });
       expect(await vfs.readFile(`${root}/.git/index`)).toEqual(indexBefore);
     } finally {
       resetSyncMirror();
@@ -321,8 +339,9 @@ describe('starter baseline finalizer ∥ durability flush (fault: quota-perm-fai
       );
       read.mockRestore();
 
+      const headAfter = await settlement(git.resolveRef('HEAD'));
       expect.soft(rejected).toBe(failure);
-      expect(await git.resolveRef('HEAD')).toBe(initialOid);
+      expect.soft(headAfter).toEqual({ rejected: false, value: initialOid });
       expect(await vfs.readFile(`${root}/.git/index`)).toEqual(indexBefore);
     } finally {
       resetSyncMirror();
@@ -363,8 +382,9 @@ describe('starter baseline finalizer ∥ durability flush (fault: quota-perm-fai
       );
       read.mockRestore();
 
+      const headAfter = await settlement(git.resolveRef('HEAD'));
       expect.soft(rejected).toBe(failure);
-      expect(await git.resolveRef('HEAD')).toBe(initialOid);
+      expect.soft(headAfter).toEqual({ rejected: false, value: initialOid });
       expect(await vfs.readFile(`${root}/.git/index`)).toEqual(indexBefore);
     } finally {
       resetSyncMirror();
@@ -401,8 +421,9 @@ describe('starter baseline finalizer ∥ durability flush (fault: quota-perm-fai
         );
         read.mockRestore();
 
+        const headAfter = await settlement(git.resolveRef('HEAD'));
         expect.soft(rejected, kind).toBe(failure);
-        expect.soft(await git.resolveRef('HEAD'), kind).toBe(initialOid);
+        expect.soft(headAfter, kind).toEqual({ rejected: false, value: initialOid });
         expect.soft(await vfs.readFile(`${root}/.git/index`), kind).toEqual(indexBefore);
       }
     } finally {

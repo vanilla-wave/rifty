@@ -23,15 +23,17 @@ async function seededRepo(root = '/r'): Promise<{
   vfs: MemoryVfs;
   g: ReturnType<typeof makeGit>;
   head: string;
+  fs: GitFs;
 }> {
   const vfs = new MemoryVfs();
   await vfs.mkdir(`${root}/src`, { recursive: true });
-  const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
+  const fs = vfsToGitFs(vfs);
+  const g = makeGit({ fs, dir: root });
   await g.init();
   await vfs.writeFile(`${root}/src/main.js`, 'console.log("one");\n');
   await g.add('src/main.js');
   const head = await g.commit({ message: 'one', author: ID, committer: ID });
-  return { vfs, g, head };
+  return { vfs, g, head, fs };
 }
 
 function failReadsOf(vfs: MemoryVfs, failure: VfsError): void {
@@ -390,6 +392,30 @@ it('[fault: provenance-lie] a readdir undefined rejection latches with exact ide
   expect(writes).toEqual([]);
 });
 
+it('[fault: provenance-lie] a readdir null rejection wins first; a later distinct failure never replaces it', async () => {
+  const writes: string[] = [];
+  const carrier = carryExactReadFailures(
+    stubGitFs(
+      () => Promise.reject(new VfsError('EIO', '/second', 'second failure')),
+      (p) => writes.push(p),
+      () => Promise.reject(null),
+    ),
+  );
+
+  const settled = await settlement(
+    carrier.guard(async () => {
+      await carrier.fs.promises.readdir('/latched-dir').catch(() => undefined);
+      await carrier.fs.promises.readFile('/second').catch(() => undefined);
+      await carrier.fs.promises.writeFile('/w', 'data');
+      return 'ok';
+    }),
+  );
+
+  expect.soft(settled.rejected).toBe(true);
+  expect.soft(settled.value).toBeNull();
+  expect(writes).toEqual([]);
+});
+
 it('[fault: provenance-lie] the FIRST non-absence rejection wins; a later failure never replaces a null latch', async () => {
   const writes: string[] = [];
   let reads = 0;
@@ -435,7 +461,17 @@ it('[fault: sibling-drift] a prototype-backed GitFs drives the facade end-to-end
 
 /** Label every reachable VFS verb into `activity` (adapter verbs: exists,
  *  readFile, readdir, stat, writeFile, rm, mkdir — full-verb no-progress). */
-function instrumentAllVerbs(vfs: MemoryVfs, activity: string[]): void {
+function instrumentAllVerbs(
+  vfs: MemoryVfs,
+  activity: string[],
+  readFileHook?: (path: string) => Promise<void> | void,
+): void {
+  const readFile = vfs.readFile.bind(vfs);
+  vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+    activity.push(`read:${String(path)}`);
+    if (readFileHook) await readFileHook(String(path));
+    return await readFile(path);
+  });
   const exists = vfs.exists.bind(vfs);
   vi.spyOn(vfs, 'exists').mockImplementation(async (path) => {
     activity.push(`exists:${String(path)}`);
@@ -479,11 +515,10 @@ async function drainUntilQuiet(activity: string[]): Promise<void> {
 }
 
 it('[fault: observable-order][fault: poisoned-cache] one instance serializes in FIFO order; the queue key is the instance, not the fs or dir; the queue survives a rejection', async () => {
-  const { vfs, g, head } = await seededRepo();
-  // Facade over the EXACT same GitFs object AND same dir: an fs- or dir-keyed
+  const { vfs, g, head, fs: repoFs } = await seededRepo();
+  // Facade over the EXACT same GitFs OBJECT and same dir: an fs- or dir-keyed
   // queue would wrongly couple it to `g`.
-  const sharedFs = vfsToGitFs(vfs);
-  const gSameDir = makeGit({ fs: sharedFs, dir: '/r' });
+  const gSameDir = makeGit({ fs: repoFs, dir: '/r' });
   // Facade over the same MemoryVfs, different dir, resolving the SAME ref NAME
   // (`refs/heads/main`) — per-instance key + same-refname-lock probe.
   await vfs.mkdir('/r2/src', { recursive: true });
@@ -506,21 +541,23 @@ it('[fault: observable-order][fault: poisoned-cache] one instance serializes in 
   // GLOBAL per-refname lock, so only the holder's own instance may stall; the
   // same path read by other instances passes through.
   const failure = new VfsError('EIO', looseObjectPath('/r', head), 'injected held-op failure');
-  const readFile = vfs.readFile.bind(vfs);
   let holdTaken = false;
-  vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
-    activity.push(`read:${String(path)}`);
+  instrumentAllVerbs(vfs, activity, async (path) => {
     if (path === failure.path && !holdTaken) {
       holdTaken = true;
       signalHeadEntered();
       await hold;
       throw failure;
     }
-    return await readFile(path);
   });
-  instrumentAllVerbs(vfs, activity);
 
   const held = rejectedValue(g.log());
+  // Explicit ENTRY barrier: the head op is provably inside its stall.
+  await headEntered;
+  await expect(gSameDir.log()).resolves.toHaveLength(1);
+  await expect(g2.log()).resolves.toHaveLength(1);
+  await drainUntilQuiet(activity);
+  const preFollower = activity.length;
   const follower1 = g.getConfig('user.name').then((value) => {
     activity.push('settle:config');
     return value;
@@ -532,21 +569,10 @@ it('[fault: observable-order][fault: poisoned-cache] one instance serializes in 
   const follower3 = g.add('src/main.js').then(() => {
     activity.push('settle:add');
   });
-  // Explicit ENTRY barrier: the head op is provably inside its stall.
-  await headEntered;
-  await expect(gSameDir.log()).resolves.toHaveLength(1);
-  await expect(g2.log()).resolves.toHaveLength(1);
   await drainUntilQuiet(activity);
-  // NO follower touches the filesystem through ANY verb while the head holds:
-  // read-only signatures (config read/exists, refs listing) and the mutating
-  // follower's index write are all absent.
-  const followerSignature = (a: string): boolean =>
-    a.endsWith(':/r/.git/config') ||
-    a.endsWith(':/r/.git/refs') ||
-    a.endsWith(':/r/.git/refs/heads') ||
-    a.endsWith(':/r/src/main.js') ||
-    a.startsWith('write:/r/.git/index');
-  expect.soft(activity.filter(followerSignature)).toEqual([]);
+  // TOTAL zero-activity: after the quiescent baseline only followers could
+  // act (head stalled, probes settled) — no verb, no path projections.
+  expect.soft(activity.length).toBe(preFollower);
   releaseHold();
   expect.soft(await held).toBe(failure);
   // The queue recovers after the rejection and preserves FIFO order across
@@ -586,14 +612,16 @@ it('[fault: unbounded-read][fault: observable-order] a stalled network head hold
   // fetch here; clone/pull/push ride the SAME transport + queue (sweep: one
   // lifecycle pin, ADR-0357 names the sibling heads).
   const netHead = rejectedValue(gNet.fetch({ url: 'http://127.0.0.1:9/x.git' }));
-  const queuedStatus = gNet.status();
   // Explicit ENTRY barrier: the network head is provably inside its stall.
   await netEntered;
   await expect(other.g.log()).resolves.toHaveLength(1);
   await drainUntilQuiet(activity);
-  // The queued local op makes no WORKDIR progress through ANY verb while the
-  // network head stalls — same-process semantics for ONE instance.
-  expect.soft(activity.filter((a) => a.includes(':/r/src'))).toEqual([]);
+  const preStatus = activity.length;
+  const queuedStatus = gNet.status();
+  await drainUntilQuiet(activity);
+  // TOTAL zero-activity: only the queued status could act after the baseline
+  // — same-process semantics for ONE instance; other instances proceed.
+  expect.soft(activity.length).toBe(preStatus);
   releaseNet();
   expect.soft(await netHead).toBeInstanceOf(Error);
   const entries = await settlement(queuedStatus);

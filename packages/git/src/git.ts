@@ -26,7 +26,7 @@ import {
   assertSupportedTransport,
   mapGitNetworkError,
 } from './errors.ts';
-import { carryExactReadFailures, guardSurface } from './exact-read-failures.ts';
+import { absentOnProbe, carryExactReadFailures, guardSurface } from './exact-read-failures.ts';
 import { riftyGitHttp } from './http-plugin.ts';
 import { lineDiff } from './line-diff.ts';
 import { firstUnmatched, pathspecMatch } from './pathspec.ts';
@@ -972,10 +972,10 @@ export function makeGit(opts: MakeGitOptions): Git {
     async clone(args) {
       assertSupportedTransport(args.url);
       assertCorsReachable(args.url, corsProxy);
+      // ADR-0357: a probe storage failure must not arm the cleanup below.
       const gitdirExisted = await opts.fs.promises
         .lstat(abs('.git'))
-        .then(() => true)
-        .catch(() => false);
+        .then(() => true, absentOnProbe);
       try {
         const splitCheckout = opts.assertPortablePaths !== undefined && args.noCheckout !== true;
         await git.clone({

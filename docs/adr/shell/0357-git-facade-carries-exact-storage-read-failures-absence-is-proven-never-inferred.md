@@ -122,12 +122,17 @@ in `makeGit`):
   in flight; the fault suite's holds ride loose-object reads, which take no
   such lock, exactly because that coupling is the dependency's, not the
   carrier's), `GitIndexManager`'s per-`${gitdir}/index` lock (namespaced, no
-  cross-repo coupling), the workdir/blob `AsyncLock` (`checkAndWriteBlob`,
-  global map keyed by ABSOLUTE workdir file path — naturally namespaced;
-  guards per-file blob materialization during merge/checkout), and
+  cross-repo coupling), the workdir/stash `AsyncLock` (`acquireLock$1` —
+  MIXED keys: absolute stash-ref paths (namespaced) AND OBJECT literals that
+  async-lock coerces to the single string `'[object Object]'`, i.e. one
+  shared global slot serializing workdir-blob materialization and stash
+  reflog updates across ALL repos — a second dependency-global coupling like
+  the per-refname lock, held only for the wrapped step), and
   `GitShallowManager`'s lock (global object keyed by `join(gitdir,'shallow')`
-  — namespaced per repo). Only the per-refname lock couples repos; every
-  other key embeds an absolute path. No lock-order inversion with the FIFO:
+  — namespaced per repo). Cross-repo coupling therefore exists at the
+  per-refname keys AND the coerced `'[object Object]'` slot; both are the
+  dependency's, brief, and orthogonal to the carrier. No lock-order
+  inversion with the FIFO:
   the queue admits one operation which then acquires dependency locks
   strictly within its own lifetime; an operation never waits on another
   instance's queue, so no cycle can close through a dependency lock.

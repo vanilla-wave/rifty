@@ -44,11 +44,16 @@ async function seedCommittedRepo(): Promise<void> {
   if ((await run(['commit', '-m', 'one'])) !== 0) throw new Error('seed commit failed');
 }
 
-/** main at commit2, feature-x at commit1 (DIVERGENT), worktree at "two". */
+/** main at commit2, feature-x at commit1 (DIVERGENT), worktree at "two".
+ *  Branch via `checkout -b` — the `branch <name>` CLI silently ignores the
+ *  name (recorded: backlog shell/git-branch-create-silently-ignored). */
 async function seedDivergentRepo(): Promise<void> {
   await seedCommittedRepo();
   const vfs = vfsOrThrow();
-  if ((await run(['branch', 'feature-x'])) !== 0) throw new Error('seed branch failed');
+  if ((await run(['checkout', '-b', 'feature-x'])) !== 0) throw new Error('seed branch failed');
+  if ((await run(['checkout', 'main'])) !== 0) throw new Error('seed switch-back failed');
+  if (!(await vfs.exists('/repo/.git/refs/heads/feature-x')))
+    throw new Error('seed branch ref missing');
   await vfs.writeFile('/repo/a.txt', 'two\n');
   await run(['add', 'a.txt']);
   if ((await run(['commit', '-m', 'two'])) !== 0) throw new Error('seed second commit failed');

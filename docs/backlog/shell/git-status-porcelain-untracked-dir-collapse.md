@@ -4,11 +4,11 @@ status: draft
 title: git status untracked reporting — collapse wholly-untracked directories like native -unormal
 created: 2026-08-15
 why: rifty prints one `??` row per untracked FILE; native git 2.50.1 default (-unormal) collapses a directory with no tracked content to one `dir/` row
-sources: [PR #260 Contract+RED attempt-4 review, https://git-scm.com/docs/git-status]
+sources: [PR #260 Contract+RED attempt-4 review, git-scm.com git-status manual (-unormal default)]
 code: [packages/shell/src/commands/git.ts]
 ---
 
-## Gap
+## Context
 
 `git status --porcelain` (and long status) over a tree with an untracked
 directory: native git default `-unormal` reports `?? node_modules/` — one row

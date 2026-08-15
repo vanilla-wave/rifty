@@ -10,6 +10,10 @@
  * becoming a parentless commit that moves the branch). Absence stays proven:
  * ENOENT/ENOTDIR/EISDIR are POSIX probe outcomes real git treats as "not
  * here", never storage failures.
+ *
+ * Operations on one carrier run SERIALIZED (per-instance FIFO): a latched
+ * failure belongs to exactly the operation whose window observed it — never to
+ * a concurrent sibling by timing. Distinct instances stay independent.
  */
 import type { GitFs } from './fs-adapter.ts';
 
@@ -25,8 +29,17 @@ function isAbsenceProbe(error: unknown): boolean {
   );
 }
 
+/** Probe catch handler: proven absence → false; a storage failure rethrows. */
+export function absentOnProbe(error: unknown): false {
+  if (isAbsenceProbe(error)) return false;
+  throw error;
+}
+
+/** Out-of-band sentinel: `undefined`/`null` rejection VALUES keep identity. */
+const NO_FAILURE = Symbol('no-failure');
+
 interface OperationContext {
-  failure?: unknown;
+  failure: unknown;
 }
 
 export interface ExactReadFailureCarrier {
@@ -52,30 +65,23 @@ export function guardSurface<T extends object>(
 }
 
 export function carryExactReadFailures(base: GitFs): ExactReadFailureCarrier {
-  // One context per in-flight facade operation; a failure is attributed to every
-  // operation whose window it landed in (over-loud beats a provenance lie).
-  const active = new Set<OperationContext>();
+  // Single in-flight context — guard() serializes operations per instance.
+  let current: OperationContext | null = null;
   const capture = (error: unknown): void => {
     if (isAbsenceProbe(error)) return;
-    for (const context of active) context.failure ??= error;
+    if (current !== null && current.failure === NO_FAILURE) current.failure = error;
   };
   const assertNoLatchedFailure = (): void => {
-    for (const context of active) {
-      if (context.failure !== undefined) throw context.failure;
-    }
+    if (current !== null && current.failure !== NO_FAILURE) throw current.failure;
   };
-  const readFile = base.promises.readFile.bind(base.promises);
-  const readdir = base.promises.readdir.bind(base.promises);
-  const writeFile = base.promises.writeFile.bind(base.promises);
-  const unlink = base.promises.unlink.bind(base.promises);
-  const mkdir = base.promises.mkdir.bind(base.promises);
-  const rmdir = base.promises.rmdir.bind(base.promises);
+  const inner = base.promises;
   const fs: GitFs = {
     promises: {
-      ...base.promises,
+      // Verb-by-verb delegation (never a spread): prototype-carried and
+      // receiver-bound GitFs implementations stay valid.
       async readFile(p, opts) {
         try {
-          return await readFile(p, opts);
+          return await inner.readFile(p, opts);
         } catch (error) {
           // isomorphic-git probes `readFile()` with NO path at fs-capability
           // detection (per facade call); that rejection is the designed probe.
@@ -85,7 +91,7 @@ export function carryExactReadFailures(base: GitFs): ExactReadFailureCarrier {
       },
       async readdir(p) {
         try {
-          return await readdir(p);
+          return await inner.readdir(p);
         } catch (error) {
           capture(error);
           throw error;
@@ -96,36 +102,50 @@ export function carryExactReadFailures(base: GitFs): ExactReadFailureCarrier {
       // axis. TODO(backlog: shell/isogit-write-failure-swallows)
       async writeFile(p, data, opts) {
         assertNoLatchedFailure();
-        await writeFile(p, data, opts);
+        await inner.writeFile(p, data, opts);
       },
       async unlink(p) {
         assertNoLatchedFailure();
-        await unlink(p);
+        await inner.unlink(p);
       },
       async mkdir(p) {
         assertNoLatchedFailure();
-        await mkdir(p);
+        await inner.mkdir(p);
       },
       async rmdir(p) {
         assertNoLatchedFailure();
-        await rmdir(p);
+        await inner.rmdir(p);
       },
+      stat: (p) => inner.stat(p),
+      lstat: (p) => inner.lstat(p),
+      readlink: (p) => inner.readlink(p),
+      symlink: (target, p) => inner.symlink(target, p),
+      chmod: (p, mode) => inner.chmod(p, mode),
     },
   };
+  // Per-instance FIFO: the queue key IS the carrier (one per makeGit).
+  let queue: Promise<void> = Promise.resolve();
   return {
     fs,
-    async guard(operation) {
-      const context: OperationContext = {};
-      active.add(context);
-      try {
-        const result = await operation();
-        if (context.failure !== undefined) throw context.failure;
-        return result;
-      } catch (error) {
-        throw context.failure !== undefined ? context.failure : error;
-      } finally {
-        active.delete(context);
-      }
+    guard(operation) {
+      const run = queue.then(async () => {
+        const context: OperationContext = { failure: NO_FAILURE };
+        current = context;
+        try {
+          const result = await operation();
+          if (context.failure !== NO_FAILURE) throw context.failure;
+          return result;
+        } catch (error) {
+          throw context.failure !== NO_FAILURE ? context.failure : error;
+        } finally {
+          current = null;
+        }
+      });
+      queue = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
     },
   };
 }

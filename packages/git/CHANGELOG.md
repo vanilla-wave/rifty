@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- `makeGit` operations serialize per instance with exact failure attribution
+  (never a concurrent sibling's error by timing); the latch keeps
+  `undefined`/`null` rejection identity (first failure wins) and fail-stops all
+  four mutating verbs; the fs wrap delegates verb-by-verb so prototype-backed
+  `GitFs` implementations stay valid; the clone gitdir probe classifies only
+  proven absence — a storage failure there can no longer arm the destructive
+  clone-failure cleanup (ADR-0357 Corrections).
+
 - Every `makeGit` operation now carries the exact storage read failure instead
   of isomorphic-git's absence collapse: non-absence `readFile`/`readdir`
   rejections rethrow as-is (even after an internally swallowed "success") and
