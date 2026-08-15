@@ -303,10 +303,7 @@ describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir
     expect(read(inner, '/ws/x/y/f.js')).toBe('xy');
   });
 
-  it('a prepared import re-applied emits the FULL deduped trace again — no prepare-scoped dedup state', () => {
-    // poisoned-cache × apply lifecycle: first-seen tracking captured at
-    // PREPARE scope would suppress every mkdir on the second apply() after
-    // the root replacement. The dedup state must be per-apply-invocation.
+  it('a prepared import re-applied emits the FULL deduped trace again — no prepare-scoped dedup state (poisoned-cache guard; fault row g proves the heal side)', () => {
     const { fs, inner, calls } = loggingFs();
     const prepared = prepareWorkspaceArchiveImport(fs, archive);
 

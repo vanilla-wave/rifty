@@ -134,7 +134,7 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
 |---|---|---|---|
 | a | quota-perm-fail × restore mkdir persist | dir creates rejected mid-restore | `flush().total > 0`, `anyFailure` covers the subtree → install stamp refused; sync mirror stays live — GREEN pin (vfs semantics untouched) |
 | b | quota-perm-fail × restore retry | same restore re-run after the fault clears | every distinct dirname is mkdir'd again → unconditional re-persist heals → `flush().total === 0`, dirs durable (I2 heal-on-retry) — GREEN pin |
-| c | torn-state × mid-restore reload | page dies between apply() and a clean flush | pending install stamp is never trusted on boot (ADR-0187, unchanged semantics) — existing proof: `owner-snapshot-restore-exec` reload-survival e2e stays green; the same-pass carrier introduces NO ordering change (interleaving pin + failure-prefix pin above) |
+| c | torn-state × mid-restore reload | page dies between apply() and a clean flush | INHERITED from main unchanged: the trace pins prove the carrier alters no enqueue order and no persist semantics, so crash consistency is exactly main's (ADR-0187 pending stamps never trusted on boot). The mid-restore KILL e2e row does not exist on main either — a pre-existing recorded gap OWNED by `playground/reload-crash-consistency-fault-e2e` ("kill mid snapshot-restore" row) and by slice 2's mid-drain-kill tier obligation (epic `## Decisions`); this slice cites the owner instead of silently claiming coverage. Existing post-completion reload e2e (`owner-snapshot-restore-exec`, `workspace-archive.spec`) stay green as regression pins |
 | d | lossy-aggregate × op counting (test-only boundary) | counting wrapper vs real ops | acceptance counts at the REAL root handle/`OpfsVfs` boundary, never a projection of internal state — the browser test is the artifact |
 | g | poisoned-cache × prepared-apply lifecycle | ONE `prepareWorkspaceArchiveImport` result applied, quota-struck, applied AGAIN after the fault clears | the second `apply()` re-runs the FULL mkdir set (dedup state is per-apply-invocation, never prepare-scoped) → heals, byte-complete; unit trace pin: the same prepared import re-applied emits the complete deduped trace twice |
 | f | concurrent-same-key × foreign rm mid-drain | another realm removes a restored subtree (dirs AND file bytes — file-complete disk model) between drain ops | DIFFERENTIAL honest outcome — ground truth: a clean `flush()` cannot attest bytes a foreign realm deleted after their successful persist, ON MAIN TOO (main's redundant mkdir recreates only the PARENT; the removed file is never re-written — clean flush, file absent). The unit owns: the dedup is never QUIETER than main on the same schedule — same-dir schedule: the following same-dir write fails → DIRTY ledger, stamp refused (louder than main's silent self-repair; RED carrier); adversarial interleaving (later distinct-dirname chain recreates the parent): end state byte-identical to main (clean, foreign-removed file absent — the shared main-level hole, class-captured); restore retry recovers BYTE-COMPLETE in both (oracle checks every archive byte on the fake disk). Cross-realm coherence has no owner at this seam — `vfs/opfs-sync-cross-realm-mirror-coherence`; import/apply/dep-snapshot share the ONE `prepareWorkspaceArchiveImport().apply()` chokepoint |
@@ -187,9 +187,29 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
   acceptance is the DoD observable proof (fakes cannot close acceptance)
   and its worker fixture is harness, the fault file covers matrix rows
   (a)/(b), and the redundant reference-parity test was removed.
-- Test-only typing (attempt 3 fix): the paired-surface fake is typed
-  STRUCTURALLY — `PairedAsyncSurface` stays off the vfs public entry
-  (public API only via src/index.ts); no vfs source change.
+- Fault-carrier fidelity (attempts 6–7, RESOLVED): the paired surface in the
+  fault rows is the REAL sibling `OpfsVfs` with its root injected as ONE
+  fake FileSystem handle tree (the `vfs-async-contract.test.ts` pattern) —
+  the handle tree is the only mocked boundary (unavoidable in Node), no
+  sibling rifty package is mocked, and dirs + bytes share one authority so
+  recursive removals are coherent. In-package `PairedAsyncSurface` doubles
+  inside `packages/vfs`'s own suite remain legitimate: the port is that
+  unit's own seam.
+- RED-batch volume (attempts 3 & 8 objection, ANSWERED with named clauses):
+  the 20–80 band is defined by `check:budget` over SOURCE insertions —
+  "tests, docs/backlog/**, generated globs excluded" (backlog/README
+  §Budget) — and the §Budget tripwires bind autonomous source PRs
+  ("Each autonomous source PR selects one epic Budget row. Tripwires: …");
+  no Goal-Baseline is declared here and attempt 7 passed the Budget axis on
+  exactly these facts. The batch is dominated by (i) review-mandated
+  preservation pins from this unit's own checkpoint lineage — per AGENTS.md
+  §PR "Everything the unit discovers commits into its branch … A finding
+  never opens a second PR" — and (ii) the browser acceptance harness, which
+  the DoD binds to the SAME PR as the shipped capability ("shipped
+  capability carries observable acceptance proof (e2e/parity) in the same
+  PR"). Splitting either out detaches required work from the delivery a
+  named rule pins it to; the source diff itself is ≈8 lines, comfortably
+  inside the band.
 - Epic-level review findings (attempts 1–2) against signed invariants
   I1/I3, the single-digit scenario wording, and owner-port-only progress
   reach remain ROUTED TO THE USER (invariants-signoff: 2026-08-15 — user;
@@ -201,7 +221,7 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
   (2026-08-15, darwin arm64, node v24.16.0):
   - `npx vitest run packages/workbench/src/glue/workspace-archive.test.ts
     packages/workbench/src/glue/workspace-archive.fault.test.ts` (vitest
-    2.1.9) → 4 failed / 24 passed; the R1 full-trace, prepared-reapply
+    2.1.9) → 4 failed / 23 passed; the R1 full-trace, prepared-reapply
     trace, and failure-prefix pins fail on main's one-mkdir-per-file trace,
     and row (f)'s same-dir differential fails on main's silent self-repair
     (`total` 0 where the dedup must report dirty); rows (a)/(b)/(g), row (f)

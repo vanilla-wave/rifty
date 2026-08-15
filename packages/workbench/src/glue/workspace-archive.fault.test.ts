@@ -225,7 +225,7 @@ describe('workspace archive restore over OpfsFsSync + real OpfsVfs — Storage-b
     return { tree, state, fs };
   }
 
-  it('row a: a quota-struck restore reports dirty — the stamp gate sees the divergence, the mirror stays live', async () => {
+  it('rows a+b: a quota-struck restore reports dirty (stamp gate honest, mirror live), and re-running it after the fault clears heals byte-complete — I2 heal-on-retry through the dedup', async () => {
     const { tree, state, fs } = freshSetup();
 
     state.failCreates = true;
@@ -238,14 +238,6 @@ describe('workspace archive restore over OpfsFsSync + real OpfsVfs — Storage-b
     expect(fs.existsSync('/ws/a/deep/h1.js')).toBe(true);
     expect(diskNode(tree, '/ws/a')).toBeUndefined(); // disk really lags
     expect(state.writes.length).toBe(0); // and no byte pretends otherwise
-  });
-
-  it('row b: re-running the SAME restore after the fault clears heals — I2 heal-on-retry through the dedup', async () => {
-    const { tree, state, fs } = freshSetup();
-
-    state.failCreates = true;
-    applyWorkspaceArchive(fs, ARCHIVE);
-    expect((await fs.flush()).total).toBeGreaterThan(0);
 
     state.failCreates = false;
     applyWorkspaceArchive(fs, ARCHIVE); // the real retry path: replace + re-apply
