@@ -679,6 +679,60 @@ for (const [latchName, makeLatch] of FAILSTOP_LATCHES) {
   }
 }
 
+it('[fault: observable-order][fault: provenance-lie] an abandoned parallel read never poisons the NEXT operation window', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/r/src', { recursive: true });
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/r' });
+  await g.init();
+  await vfs.writeFile('/r/src/a.js', 'a1\n');
+  await vfs.writeFile('/r/src/b.js', 'b1\n');
+  await g.add('src/a.js');
+  await g.add('src/b.js');
+  const c1 = await g.commit({ message: 'one', author: ID, committer: ID });
+  await vfs.writeFile('/r/src/a.js', 'a2\n');
+  await vfs.writeFile('/r/src/b.js', 'b2\n');
+  await g.add('src/a.js');
+  await g.add('src/b.js');
+  const c2 = await g.commit({ message: 'two', author: ID, committer: ID });
+
+  // diff reads a file's OLD and NEW blobs in one Promise.all: the OLD read
+  // fails immediately and the pending NEW read is ABANDONED — its late
+  // rejection must latch into the window that ISSUED it, never into the next
+  // operation's window.
+  const failureA = new VfsError(
+    'EIO',
+    looseObjectPath('/r', await g.hashBlob('a1\n')),
+    'injected blob A failure',
+  );
+  const failureB = new VfsError(
+    'EIO',
+    looseObjectPath('/r', await g.hashBlob('a2\n')),
+    'injected blob B failure',
+  );
+  let releaseSibling = (): void => undefined;
+  const siblingGate = new Promise<void>((resolve) => {
+    releaseSibling = resolve;
+  });
+  let inStatus = false;
+  const readFile = vfs.readFile.bind(vfs);
+  vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+    if (path === failureA.path) throw failureA;
+    if (path === failureB.path) {
+      // Deliver the sibling rejection INSIDE the next operation's window.
+      await siblingGate;
+      throw failureB;
+    }
+    if (inStatus) releaseSibling();
+    return await readFile(path);
+  });
+
+  const diffRejection = await rejectedValue(g.diff({ kind: 'refs', oldRef: c1, newRef: c2 }));
+  expect.soft([failureA, failureB]).toContain(diffRejection);
+  inStatus = true;
+  const statusAfter = await settlement(g.status());
+  expect(statusAfter.rejected).toBe(false);
+});
+
 it('absence stays trustworthy: an unborn HEAD still reports git absence, not a storage failure', async () => {
   const vfs = new MemoryVfs();
   await vfs.mkdir('/r', { recursive: true });

@@ -67,9 +67,13 @@ export function guardSurface<T extends object>(
 export function carryExactReadFailures(base: GitFs): ExactReadFailureCarrier {
   // Single in-flight context — guard() serializes operations per instance.
   let current: OperationContext | null = null;
-  const capture = (error: unknown): void => {
+  // Latch into the window that ISSUED the read (snapshot at verb entry): a
+  // rejection delivered late by an ABANDONED parallel read (Promise.all
+  // sibling) must never poison the next operation's window. Latching into an
+  // already-settled context is harmless — guard reads only its own context.
+  const capture = (issuer: OperationContext | null, error: unknown): void => {
     if (isAbsenceProbe(error)) return;
-    if (current !== null && current.failure === NO_FAILURE) current.failure = error;
+    if (issuer !== null && issuer.failure === NO_FAILURE) issuer.failure = error;
   };
   const assertNoLatchedFailure = (): void => {
     if (current !== null && current.failure !== NO_FAILURE) throw current.failure;
@@ -80,20 +84,22 @@ export function carryExactReadFailures(base: GitFs): ExactReadFailureCarrier {
       // Verb-by-verb delegation (never a spread): prototype-carried and
       // receiver-bound GitFs implementations stay valid.
       async readFile(p, opts) {
+        const issuer = current;
         try {
           return await inner.readFile(p, opts);
         } catch (error) {
           // isomorphic-git probes `readFile()` with NO path at fs-capability
           // detection (per facade call); that rejection is the designed probe.
-          if (p !== undefined) capture(error);
+          if (p !== undefined) capture(issuer, error);
           throw error;
         }
       },
       async readdir(p) {
+        const issuer = current;
         try {
           return await inner.readdir(p);
         } catch (error) {
-          capture(error);
+          capture(issuer, error);
           throw error;
         }
       },

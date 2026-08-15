@@ -101,7 +101,12 @@ in `makeGit`):
   purely by timing). Decision now: per-instance FIFO serialization with exact
   attribution (Decision bullet above carries the current text). Pinned by
   `read-failure-identity.fault.test.ts` (same-instance no-progress hold,
-  distinct-instance independence, queue recovery after rejection).
+  distinct-instance independence, queue recovery after rejection). A
+  post-implementation verify round found the residual of the same class:
+  a rejection delivered LATE by a `Promise.all`-abandoned read landed in the
+  NEXT window. `capture` now latches into the window that ISSUED the read
+  (context snapshot at verb entry; latching into a settled window is inert) —
+  pinned by the abandoned-parallel-read fault case.
 - 2026-08-15 — coordination-mechanism inventory for the FIFO (AGENTS.md
   §Architecture new-mechanism rule; fault-classes §Class-kill). Existing
   serialization authorities and their keys: `playground-session-tools-owner`
