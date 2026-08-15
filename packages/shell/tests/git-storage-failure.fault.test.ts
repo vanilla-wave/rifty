@@ -154,6 +154,33 @@ it('[fault: quota-perm-fail][fault: provenance-lie] log on an unborn branch surf
   expect(after).toEqual(before);
 });
 
+it('[fault: quota-perm-fail][fault: provenance-lie] reset surfaces an EXECUTION-stage index read failure instead of a semantic fatal', async () => {
+  await seedDivergentRepo();
+  const vfs = vfsOrThrow();
+  const before = await snapshotRepo(vfs);
+  // Skip the preflight's index read; the SECOND one belongs to g.reset's own
+  // execution, where doReset's catch used to collapse the exact VfsError into
+  // `fatal: <msg>` exit 128.
+  const failure = new VfsError('EIO', '/repo/.git/index', 'injected reset index read failure');
+  const readFile = vfs.readFile.bind(vfs);
+  let indexReads = 0;
+  vi.spyOn(vfs, 'readFile').mockImplementation(async (path) => {
+    if (path === failure.path && ++indexReads >= 2) throw failure;
+    return await readFile(path);
+  });
+
+  const ctx = makeCtx({ cwd: '/repo', env: ENV });
+  const outcome = await settlement(git(['reset', 'feature-x'], ctx.ctx));
+  vi.restoreAllMocks();
+
+  const after = await snapshotRepo(vfs);
+  expect.soft(outcome.rejected).toBe(true);
+  expect.soft(outcome.value).toBe(failure);
+  expect.soft(ctx.out()).toBe('');
+  expect.soft(ctx.err()).toBe('');
+  expect(after).toEqual(before);
+});
+
 // Matrix: one INDEPENDENT case per absence-probe catch boundary. The injected
 // message deliberately matches the /could not find/i heuristic: a storage
 // failure must never be classified by TEXT into git absence, and the failing

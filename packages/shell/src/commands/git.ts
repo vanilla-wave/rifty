@@ -1087,6 +1087,7 @@ async function doReset(
     }
     return 0;
   } catch (e) {
+    throwIfStorageFailure(e);
     ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
     return 128;
   }
