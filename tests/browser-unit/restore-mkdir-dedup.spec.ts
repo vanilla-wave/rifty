@@ -54,14 +54,14 @@ test('restore enqueues at most one mkdir persist per directory, never one per fi
           (event) => reject(new Error(event.message || 'mkdir-dedup worker failed')),
           { once: true },
         );
-        worker.postMessage({ run: true });
+        worker.postMessage({ phase: 'acceptance' });
       });
     } finally {
       worker.terminate();
     }
   }, workerModuleUrl);
 
-  expect(result.fileCount).toBe(3000);
+  expect(result.fileCount).toBe(3002); // 3000 nested + two nonconsecutive root files
   expect(result.writeOps).toBe(result.fileCount);
   // I2: ≤ N + D + O(1) total persist ops ⇔ mkdir ops ≤ D + O(1). Pre-dedup
   // this is ~N + 1 (one persist per mkdirSync call, one call per file).
@@ -75,9 +75,16 @@ test('restore enqueues at most one mkdir persist per directory, never one per fi
   );
 });
 
+interface MidDrainAck {
+  readonly phase: 'mid-drain';
+  readonly completed: number;
+  readonly total: number;
+}
+
 interface RetryResult {
   readonly reportTotal: number;
   readonly fileCount: number;
+  readonly preRetryFiles: number;
   readonly verifiedAll: boolean;
 }
 
@@ -95,8 +102,8 @@ test('a worker KILLED mid-drain leaves no lying tree: a fresh realm retries the 
   await gotoHarness(page);
   const ns = `/restore-kill-256-${Date.now().toString(36)}`;
 
-  const retry = await page.evaluate(
-    async ({ moduleUrl, namespace }): Promise<RetryResult> => {
+  const { ack, retry } = await page.evaluate(
+    async ({ moduleUrl, namespace }): Promise<{ ack: MidDrainAck; retry: RetryResult }> => {
       const workerModule = (await import(/* @vite-ignore */ moduleUrl)) as {
         readonly default: string;
       };
@@ -122,18 +129,18 @@ test('a worker KILLED mid-drain leaves no lying tree: a fresh realm retries the 
         });
 
       const victim = new Worker(workerModule.default, { type: 'module' });
-      const applied = once<{ applied: true }>(victim);
+      const acked = once<MidDrainAck>(victim);
       victim.postMessage({ phase: 'apply-no-flush', ns: namespace });
-      await applied;
-      // The serial drain of 3000+ ops takes seconds; terminating now is a
-      // guaranteed mid-drain kill with in-flight I/O.
+      // The ack itself is discriminated: it only arrives once SOME writes are
+      // durably done and MOST are still pending (0 < completed < total).
+      const ack = await acked;
       victim.terminate();
 
       const fresh = new Worker(workerModule.default, { type: 'module' });
       try {
         const result = once<RetryResult>(fresh);
         fresh.postMessage({ phase: 'verify-retry', ns: namespace });
-        return await result;
+        return { ack, retry: await result };
       } finally {
         fresh.terminate();
       }
@@ -141,7 +148,15 @@ test('a worker KILLED mid-drain leaves no lying tree: a fresh realm retries the 
     { moduleUrl: workerModuleUrl, namespace: ns },
   );
 
-  expect(retry.fileCount).toBe(3000);
-  expect(retry.reportTotal).toBe(0); // the retry's own drain is provably durable
-  expect(retry.verifiedAll).toBe(true); // every archive byte, fresh surface
+  // Kill really landed mid-drain: past the first durable byte, far from done.
+  expect(ack.phase).toBe('mid-drain');
+  expect(ack.completed).toBeGreaterThan(0);
+  expect(ack.completed).toBeLessThan(ack.total);
+  // The fresh realm SAW the torn tree before retrying…
+  expect(retry.preRetryFiles).toBeGreaterThan(0);
+  expect(retry.preRetryFiles).toBeLessThan(retry.fileCount);
+  // …and the retry restored it byte-complete with a provably clean drain.
+  expect(retry.fileCount).toBe(3002);
+  expect(retry.reportTotal).toBe(0);
+  expect(retry.verifiedAll).toBe(true);
 });

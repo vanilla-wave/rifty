@@ -28,11 +28,12 @@ interface AcceptanceResult {
 }
 
 class CountingOpfsVfs extends OpfsVfs {
+  /** COMPLETED (durably closed) writes — incremented after the real write. */
   writes = 0;
 
   override async writeFile(path: string, data: Uint8Array | string): Promise<void> {
+    await super.writeFile(path, data);
     this.writes += 1;
-    return super.writeFile(path, data);
   }
 }
 
@@ -61,19 +62,19 @@ function countingRoot(
   return wrapper as unknown as FileSystemDirectoryHandle;
 }
 
-/** Deterministic node_modules-shaped archive: 100 pkgs × 30 files. */
+/** Deterministic node_modules-shaped archive: 100 pkgs × 30 files, plus TWO
+ * nonconsecutive root-level files (the root dirname must dedup too). */
 function buildArchive(): {
   archive: WorkspaceArchiveV1;
   fileCount: number;
   dirCount: number;
   tailRel: string;
-  tailText: string;
 } {
-  const files: Array<{ path: string; encoding: 'base64'; content: string }> = [];
+  const files: Array<{ path: string; encoding: 'base64'; content: string }> = [
+    { path: 'root-first.txt', encoding: 'base64', content: btoa('root-first\n') },
+  ];
   const dirs = new Set<string>();
   const subdirs = ['lib', 'esm', 'internals'];
-  let tailRel = '';
-  let tailText = '';
   for (let p = 0; p < 100; p++) {
     const pkg = `pkg-${String(p).padStart(3, '0')}`;
     for (let f = 0; f < 30; f++) {
@@ -88,22 +89,33 @@ function buildArchive(): {
       const rel = `${dir}/f${String(f).padStart(3, '0')}.js`;
       const text = `export const v_${p}_${f} = ${p * 1000 + f};\n`;
       files.push({ path: rel, encoding: 'base64', content: btoa(text) });
-      tailRel = rel;
-      tailText = text;
     }
   }
+  const tailRel = 'root-last.txt';
+  files.push({ path: tailRel, encoding: 'base64', content: btoa('root-last\n') });
   return {
     archive: { version: 1, root: '/ws', files },
     fileCount: files.length,
     dirCount: dirs.size,
     tailRel,
-    tailText,
   };
+}
+
+/** Byte-EXACT oracle (no text projection — a BOM-prefixed mutation must
+ * fail): decodes the archive's base64 and compares every byte. */
+function bytesEqualBase64(bytes: Uint8Array, base64: string): boolean {
+  const expected = atob(base64);
+  if (bytes.byteLength !== expected.length) return false;
+  for (let i = 0; i < bytes.byteLength; i++) {
+    if (bytes[i] !== expected.charCodeAt(i)) return false;
+  }
+  return true;
 }
 
 async function runAcceptance(): Promise<AcceptanceResult> {
   const ns = `/mkdir-dedup-256-${crypto.randomUUID()}`;
-  const { archive, fileCount, dirCount, tailRel, tailText } = buildArchive();
+  const { archive, fileCount, dirCount, tailRel } = buildArchive();
+  const tailContent = archive.files[archive.files.length - 1]?.content ?? '';
 
   const surface = new CountingOpfsVfs();
   await surface.init();
@@ -125,11 +137,12 @@ async function runAcceptance(): Promise<AcceptanceResult> {
   const report = await fs.flush();
   const flushMs = performance.now() - t1;
 
-  // Durability proven through a FRESH surface, never the writing one.
+  // Durability proven through a FRESH surface, never the writing one —
+  // byte-exact against the archive's base64, no text projection.
   const reopened = new OpfsVfs();
   await reopened.init();
   const tailBytes = await reopened.readFile(`${ns}/${tailRel}`);
-  const tailVerified = new TextDecoder().decode(tailBytes) === tailText;
+  const tailVerified = bytesEqualBase64(tailBytes, tailContent);
 
   await realRoot.removeEntry(ns.slice(1), { recursive: true }).catch(() => {});
 
@@ -145,12 +158,18 @@ async function runAcceptance(): Promise<AcceptanceResult> {
   };
 }
 
-/** Row (c) phase 1: apply the archive and START the drain, then report —
- * WITHOUT awaiting the flush. The page terminates this worker mid-drain
- * (real realm death with in-flight OPFS I/O). */
-async function runApplyNoFlush(ns: string): Promise<{ applied: true }> {
-  const { archive } = buildArchive();
-  const surface = new OpfsVfs();
+/** Row (c) phase 1: apply the archive, start the drain, then acknowledge
+ * only once the drain is OBSERVABLY mid-flight — some writes durably done,
+ * most still pending (`0 < completed < total`). The page terminates this
+ * worker on that discriminated ack: a real realm death with in-flight OPFS
+ * I/O, provably neither before the first byte nor after the last. */
+async function runApplyNoFlush(ns: string): Promise<{
+  readonly phase: 'mid-drain';
+  readonly completed: number;
+  readonly total: number;
+}> {
+  const { archive, fileCount } = buildArchive();
+  const surface = new CountingOpfsVfs();
   await surface.init();
   const storage = (
     navigator as unknown as { storage: { getDirectory(): Promise<FileSystemDirectoryHandle> } }
@@ -158,31 +177,43 @@ async function runApplyNoFlush(ns: string): Promise<{ applied: true }> {
   const fs = new OpfsFsSync(await storage.getDirectory(), surface);
   applyWorkspaceArchive(fs, archive, { root: ns, rebase: true });
   void fs.flush(); // drain keeps running; the page kills us inside it
-  return { applied: true };
+  while (surface.writes === 0) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  const completed = surface.writes;
+  if (completed >= fileCount) throw new Error('drain finished before the kill window');
+  return { phase: 'mid-drain', completed, total: fileCount };
 }
 
-/** Row (c) phase 2: a FRESH realm over the torn OPFS retries the SAME
- * restore and byte-verifies EVERY archive file through a fresh OpfsVfs. */
+/** Row (c) phase 2: a FRESH realm over the torn OPFS first OBSERVES the
+ * partial state the kill left (`0 < filesOnDisk < total`), then retries the
+ * SAME restore and byte-verifies EVERY archive file through a fresh
+ * OpfsVfs — exact bytes, no text projection. */
 async function runVerifyRetry(ns: string): Promise<{
   readonly reportTotal: number;
   readonly fileCount: number;
+  readonly preRetryFiles: number;
   readonly verifiedAll: boolean;
 }> {
   const { archive, fileCount } = buildArchive();
   const surface = new OpfsVfs();
   await surface.init();
   const fs = await OpfsFsSync.init(surface);
+  // Partial-state proof BEFORE the retry: the boot walk indexed the torn tree.
+  let preRetryFiles = 0;
+  for (const file of archive.files) {
+    if (fs.existsSync(`${ns}/${file.path}`)) preRetryFiles += 1;
+  }
+
   applyWorkspaceArchive(fs, archive, { root: ns, rebase: true });
   const report = await fs.flush();
 
   const reopened = new OpfsVfs();
   await reopened.init();
-  const dec = new TextDecoder();
   let verifiedAll = true;
   for (const file of archive.files) {
-    const expected = atob(file.content);
     const bytes = await reopened.readFile(`${ns}/${file.path}`).catch(() => null);
-    if (bytes === null || dec.decode(bytes) !== expected) {
+    if (bytes === null || !bytesEqualBase64(bytes, file.content)) {
       verifiedAll = false;
       break;
     }
@@ -192,17 +223,19 @@ async function runVerifyRetry(ns: string): Promise<{
   ).storage;
   const realRoot = await storage.getDirectory();
   await realRoot.removeEntry(ns.slice(1), { recursive: true }).catch(() => {});
-  return { reportTotal: report.total, fileCount, verifiedAll };
+  return { reportTotal: report.total, fileCount, preRetryFiles, verifiedAll };
 }
 
 scope.addEventListener('message', (event: MessageEvent<{ phase?: string; ns?: string }>) => {
   const { phase, ns } = event.data ?? {};
   const run =
-    phase === 'apply-no-flush' && ns
-      ? runApplyNoFlush(ns)
-      : phase === 'verify-retry' && ns
-        ? runVerifyRetry(ns)
-        : runAcceptance();
+    phase === 'acceptance'
+      ? runAcceptance()
+      : phase === 'apply-no-flush' && ns
+        ? runApplyNoFlush(ns)
+        : phase === 'verify-retry' && ns
+          ? runVerifyRetry(ns)
+          : Promise.reject(new Error(`unknown phase: ${String(phase)}`));
   void run
     .then((result) => scope.postMessage({ ok: true, result }))
     .catch((err: unknown) => {

@@ -54,16 +54,24 @@ unchanged.
 ## Acceptance
 
 Browser-unit spec (default lane, real Chromium worker + real OPFS):
-restoring a deterministic node_modules-shaped archive (N=3000 files, D≈700
-dirs) through the REAL `applyWorkspaceArchive` over `OpfsFsSync` + real
-`OpfsVfs`, instrumented only by counting wrappers at the real OPFS boundary
-(delegating root-handle wrapper counting `getDirectoryHandle`; subclassed
-`OpfsVfs.writeFile` counter — real I/O underneath):
+restoring a deterministic node_modules-shaped archive (N=3002 files incl.
+TWO nonconsecutive root-level files — the root dirname must dedup too;
+D≈700 dirs) through the REAL `applyWorkspaceArchive` over `OpfsFsSync` +
+real `OpfsVfs`, instrumented only by counting wrappers at the real OPFS
+boundary (delegating root-handle wrapper counting `getDirectoryHandle`;
+subclassed `OpfsVfs.writeFile` completion counter — real I/O underneath):
 
 - mkdir persist ops ≤ D + 2 and < N (RED on main: ≈ N + 1, one per file);
 - file write-through ops = N; `flush().total === 0`;
-- tail file re-read byte-equal through a FRESH `OpfsVfs` (durability proven);
+- tail file re-read BYTE-EXACT against the archive base64 through a FRESH
+  `OpfsVfs` (no text projection — a BOM-prefixed mutation fails);
 - wall-clock apply+flush logged for the PR record (no CI assert — variance).
+
+Row (c) carrier (same spec): a victim worker acknowledges only a
+DISCRIMINATED mid-drain state (`0 < completed < total` durably-closed
+writes) and is terminated on that ack; the fresh realm proves the torn tree
+(`0 < filesOnDisk < N`) BEFORE retrying, then the retry ends with a clean
+ledger and EVERY archive file byte-exact through a fresh `OpfsVfs`.
 
 Unit (Node, the apply loop's own boundary is the `WorkspaceArchiveFs`
 interface): `prepareWorkspaceArchiveImport(...).apply()` over a logging fs
@@ -233,10 +241,12 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
   - `RIFTY_PLAYGROUND_PORT=5299 npx playwright test --config
     playwright.browser-unit.config.ts -g "restore enqueues"` (Playwright
     1.60.0 Chromium, real OPFS, real applyWorkspaceArchive) → R2 fails:
-    `mkdirPersistOps` Received 3001 vs bound `dirCount + 2` = 703 (N=3000,
-    D=701) — exactly the ~one-persist-per-file regime issue #256 reports.
+    `mkdirPersistOps` Received 3003 vs bound `dirCount + 2` = 703 (N=3002
+    incl. two root files, D=701) — exactly the ~one-persist-per-file regime
+    issue #256 reports.
   - `RIFTY_PLAYGROUND_PORT=5299 npx playwright test --config
-    playwright.browser-unit.config.ts -g "KILLED mid-drain"` → 1 passed
-    (6.6 s): row (c) carrier GREEN on the pre-implementation tree — the
-    mid-drain realm-death recovery it pins is main behavior the dedup must
-    preserve.
+    playwright.browser-unit.config.ts -g "KILLED mid-drain"` → 1 passed:
+    row (c) carrier GREEN on the pre-implementation tree (discriminated
+    mid-drain ack, pre-retry torn-tree observation, byte-exact full
+    verify) — the realm-death recovery it pins is main behavior the dedup
+    must preserve.

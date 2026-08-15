@@ -257,7 +257,9 @@ function loggingFs(): {
 }
 
 describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir-dedup)', () => {
-  // Dirnames interleave on purpose: a consecutive-only dedup fails this.
+  // Dirnames interleave on purpose: a consecutive-only dedup fails this, and
+  // TWO nonconsecutive root-level files pin that the ROOT dirname is deduped
+  // too (an implementation deduping only nested dirs fails on root2.txt).
   const archive: WorkspaceArchiveV1 = {
     version: 1,
     root: '/ws',
@@ -269,6 +271,7 @@ describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir
       archiveFile('root.txt', 'r'),
       archiveFile('b/g2.js', 'g2'),
       archiveFile('x/y/f.js', 'xy'), // '/ws/x' is created by the chain, never a dirname itself
+      archiveFile('root2.txt', 'r2'), // second root file, nonconsecutive with the first
       archiveFile('a/deep/h2.js', 'h2'),
     ],
   };
@@ -276,7 +279,7 @@ describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir
   // The COMPLETE desired trace, in one assert: same-pass first-seen dedup —
   // every surviving mkdir keeps its exact per-file position (epic slice
   // clause "no ordering change"), only duplicate mkdirs vanish. Pre-dedup
-  // RED: main interleaves one mkdir before EVERY write (9 mkdirs, not 6).
+  // RED: main interleaves one mkdir before EVERY write (10 mkdirs, not 6).
   const DEDUPED_TRACE: Array<readonly ['mkdir' | 'write', string]> = [
     ['mkdir', '/ws'],
     ['mkdir', '/ws/a'],
@@ -286,11 +289,12 @@ describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir
     ['write', '/ws/a/f2.js'],
     ['mkdir', '/ws/a/deep'],
     ['write', '/ws/a/deep/h1.js'],
-    ['mkdir', '/ws'], // root.txt's dirname — first-seen tracking, no root special-case
+    ['mkdir', '/ws'], // root.txt's dirname — ONE loop-time root mkdir, first-seen
     ['write', '/ws/root.txt'],
     ['write', '/ws/b/g2.js'],
     ['mkdir', '/ws/x/y'],
     ['write', '/ws/x/y/f.js'],
+    ['write', '/ws/root2.txt'], // root already seen — NO second loop-time root mkdir
     ['write', '/ws/a/deep/h2.js'],
   ];
 
@@ -343,6 +347,7 @@ describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir
     expect(read(inner, '/ws/a/deep/h1.js')).toBe('h1');
     expect(inner.existsSync('/ws/b/g2.js')).toBe(false);
     expect(inner.existsSync('/ws/x/y')).toBe(false);
+    expect(inner.existsSync('/ws/root2.txt')).toBe(false);
     expect(inner.existsSync('/ws/a/deep/h2.js')).toBe(false);
   });
 });
