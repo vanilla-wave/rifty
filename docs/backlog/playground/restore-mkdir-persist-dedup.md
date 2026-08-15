@@ -65,17 +65,16 @@ dirs) through the REAL `applyWorkspaceArchive` over `OpfsFsSync` + real
 
 Unit (Node, the apply loop's own boundary is the `WorkspaceArchiveFs`
 interface): `prepareWorkspaceArchiveImport(...).apply()` over a logging fs
-issues exactly one `mkdirSync` per distinct file dirname + one for the root
-(RED on main: one per file), one `writeFileSync` per file, and:
+is asserted against the COMPLETE desired call trace (RED on main):
 
-- interleaving pin — each surviving dirname mkdir immediately precedes its
-  file's write; before the FIRST write only the root mkdir + the first
-  file's dirname mkdir have run (kills a batched all-dirs-first carrier;
-  GREEN on main);
-- failure-prefix pin — a mid-apply `writeFileSync` throw leaves exactly the
-  pre-failure files applied in order and nothing after (observable-order;
-  GREEN on main — the dedup must not change partial side effects or error
-  priority).
+- full-trace pin — the exact mkdir/write sequence: root mkdir, then per file
+  in archive order a first-seen dirname mkdir (in place, no batching, no
+  root special-case) followed by that file's write — one mkdir per distinct
+  dirname total (main: one per file);
+- failure-prefix pin — a mid-apply `writeFileSync` throw rethrows the
+  ORIGINAL error object (identity, not a wrapped copy) and the call log
+  equals the desired trace truncated exactly at the failing write — no
+  look-ahead, no post-failure effects (observable-order).
 
 Integration (Node, REAL `applyWorkspaceArchive` + REAL `OpfsFsSync` over an
 injectable root — fake only at the OPFS boundary, unavoidable outside a
@@ -109,9 +108,10 @@ scenario. Regression pins (stay green):
   binds unchanged — no vfs source change.
 - P4 `flush()` report contract unchanged: `total === 0` ⇔ drained is durable.
 
-New RED targets (failing-test-first): R1 unit op-count (one mkdirSync per
-distinct dirname; main issues one per file), R2 browser acceptance op-count +
-durability bounds above.
+New RED targets (failing-test-first): R1 unit full-trace + failure-prefix
+pins (exact deduped call sequence; main issues one mkdir per file), R2
+browser acceptance op-count + durability bounds above. GREEN honest-outcome
+pins committed alongside: fault rows (a), (b), (f).
 
 ## Fault matrix
 
@@ -127,6 +127,7 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
 | b | quota-perm-fail × restore retry | same restore re-run after the fault clears | every distinct dirname is mkdir'd again → unconditional re-persist heals → `flush().total === 0`, dirs durable (I2 heal-on-retry) — GREEN pin |
 | c | torn-state × mid-restore reload | page dies between apply() and a clean flush | pending install stamp is never trusted on boot (ADR-0187, unchanged semantics) — existing proof: `owner-snapshot-restore-exec` reload-survival e2e stays green; the same-pass carrier introduces NO ordering change (interleaving pin + failure-prefix pin above) |
 | d | lossy-aggregate × op counting (test-only boundary) | counting wrapper vs real ops | acceptance counts at the REAL root handle/`OpfsVfs` boundary, never a projection of internal state — the browser test is the artifact |
+| f | concurrent-same-key × foreign rm mid-drain | another realm removes a restored subtree from disk between two same-dir drain ops | NO provenance lie: a clean `flush()` may only coexist with the tree really present on disk (main self-repairs via its redundant mkdir → clean+present; the dedup surfaces a dirty ledger → stamp refused — both honest); a restore retry recovers either way. Cross-realm coherence itself has no owner at this seam — class captured in `vfs/opfs-sync-cross-realm-mirror-coherence`; all restore modes (import/apply/dep-snapshot) share the ONE `prepareWorkspaceArchiveImport().apply()` chokepoint |
 
 ## Out of scope
 
@@ -190,9 +191,10 @@ in `vfs/opfs-sync-cross-realm-mirror-coherence` (this PR's intake).
   (2026-08-15, darwin arm64, node v24.16.0):
   - `npx vitest run packages/workbench/src/glue/workspace-archive.test.ts
     packages/workbench/src/glue/workspace-archive.fault.test.ts` (vitest
-    2.1.9) → 1 failed / 24 passed; the R1 op-count test fails
-    "expected 9 to be 6" (main mkdirs once per FILE); order pin, parity pin
-    P1, and fault rows (a)/(b) GREEN — preserved semantics, not new behavior.
+    2.1.9) → 2 failed / 23 passed; the R1 full-trace and failure-prefix pins
+    fail on main's one-mkdir-per-file trace; fault rows (a)/(b)/(f) and all
+    pre-existing archive suites GREEN — preserved semantics, not new
+    behavior.
   - `RIFTY_PLAYGROUND_PORT=5299 npx playwright test --config
     playwright.browser-unit.config.ts -g "restore enqueues"` (Playwright
     1.60.0 Chromium, real OPFS, real applyWorkspaceArchive) → R2 fails:

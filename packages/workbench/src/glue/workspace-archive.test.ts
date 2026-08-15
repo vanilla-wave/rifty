@@ -272,60 +272,60 @@ describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir
     ],
   };
 
-  it('issues exactly one mkdirSync per distinct dirname plus the root — never one per file', () => {
+  // The COMPLETE desired trace, in one assert: same-pass first-seen dedup —
+  // every surviving mkdir keeps its exact per-file position (epic slice
+  // clause "no ordering change"), only duplicate mkdirs vanish. Pre-dedup
+  // RED: main interleaves one mkdir before EVERY write (9 mkdirs, not 6).
+  const DEDUPED_TRACE: Array<readonly ['mkdir' | 'write', string]> = [
+    ['mkdir', '/ws'],
+    ['mkdir', '/ws/a'],
+    ['write', '/ws/a/f1.js'],
+    ['mkdir', '/ws/b'],
+    ['write', '/ws/b/g1.js'],
+    ['write', '/ws/a/f2.js'],
+    ['mkdir', '/ws/a/deep'],
+    ['write', '/ws/a/deep/h1.js'],
+    ['mkdir', '/ws'], // root.txt's dirname — first-seen tracking, no root special-case
+    ['write', '/ws/root.txt'],
+    ['write', '/ws/b/g2.js'],
+    ['mkdir', '/ws/x/y'],
+    ['write', '/ws/x/y/f.js'],
+    ['write', '/ws/a/deep/h2.js'],
+  ];
+
+  it('emits exactly the deduped per-file trace — one mkdir per distinct dirname, in place', () => {
     const { fs, inner, calls } = loggingFs();
     applyWorkspaceArchive(fs, archive);
 
-    const mkdirs = calls.filter(([kind]) => kind === 'mkdir').map(([, path]) => path);
-    const writes = calls.filter(([kind]) => kind === 'write').map(([, path]) => path);
-
-    expect(writes.length).toBe(archive.files.length);
-    // Distinct dirnames: /ws (root.txt) + /ws/a + /ws/b + /ws/a/deep + /ws/x/y,
-    // plus apply()'s own root mkdir. Pre-dedup: one mkdir per FILE (9 calls).
-    expect([...new Set(mkdirs)].sort()).toEqual(['/ws', '/ws/a', '/ws/a/deep', '/ws/b', '/ws/x/y']);
-    expect(mkdirs.length).toBe(6); // root + 5 dirnames, each dirname exactly once
+    expect(calls).toEqual(DEDUPED_TRACE);
     expect(read(inner, '/ws/a/deep/h2.js')).toBe('h2');
     expect(read(inner, '/ws/x/y/f.js')).toBe('xy');
   });
 
-  it('keeps the per-file interleaving: only DUPLICATE mkdirs vanish, order of survivors is unchanged', () => {
-    const { fs, calls } = loggingFs();
-    applyWorkspaceArchive(fs, archive);
-
-    // Same pass, first-seen dedup ("no ordering change", epic slice clause):
-    // each file's dirname mkdir — when it survives — immediately precedes
-    // that file's write; no mkdir is batched ahead of unrelated writes.
-    for (const file of archive.files) {
-      const target = `/ws/${file.path}`;
-      const dir = target.slice(0, target.lastIndexOf('/')) || '/ws';
-      const writeIndex = calls.findIndex(([kind, path]) => kind === 'write' && path === target);
-      const mkdirIndex = calls.findIndex(([kind, path]) => kind === 'mkdir' && path === dir);
-      expect(writeIndex).toBeGreaterThanOrEqual(0);
-      expect(mkdirIndex).toBeGreaterThanOrEqual(0);
-      expect(mkdirIndex).toBeLessThan(writeIndex);
-    }
-    const firstWrite = calls.findIndex(([kind]) => kind === 'write');
-    const mkdirsBeforeFirstWrite = calls.slice(0, firstWrite).filter(([k]) => k === 'mkdir');
-    // Root mkdir + the FIRST file's dirname only — a batched all-dirs-first
-    // carrier fails here.
-    expect(mkdirsBeforeFirstWrite.length).toBe(2);
-  });
-
-  it('a mid-apply write failure leaves the same durable prefix and error as main (observable-order pin)', () => {
+  it('a mid-apply write failure rethrows the ORIGINAL error and leaves exactly the pre-failure trace', () => {
     const { fs, inner, calls } = loggingFs();
     const failAt = '/ws/root.txt'; // 5th file — after a/b dirs, before b/g2, x/y, a/deep/h2
+    const failure = new Error('disk full');
     const realWrite = fs.writeFileSync.bind(fs);
     fs.writeFileSync = (path, data) => {
-      if (path === failAt) throw new Error('disk full');
+      if (path === failAt) throw failure;
       realWrite(path, data);
     };
 
-    expect(() => applyWorkspaceArchive(fs, archive)).toThrow('disk full');
+    let caught: unknown;
+    try {
+      applyWorkspaceArchive(fs, archive);
+    } catch (error) {
+      caught = error;
+    }
 
-    // Files before the failure applied in their original order; nothing
-    // after the failure happened — the same durable prefix main produces.
-    const writes = calls.filter(([kind]) => kind === 'write').map(([, path]) => path);
-    expect(writes).toEqual(['/ws/a/f1.js', '/ws/b/g1.js', '/ws/a/f2.js', '/ws/a/deep/h1.js']);
+    expect(caught).toBe(failure); // identity, not a wrapped copy
+    // The durable prefix is exactly the desired trace truncated at the
+    // failing write — no look-ahead effects, no post-failure effects.
+    const failureIndex = DEDUPED_TRACE.findIndex(
+      ([kind, path]) => kind === 'write' && path === failAt,
+    );
+    expect(calls).toEqual(DEDUPED_TRACE.slice(0, failureIndex));
     expect(read(inner, '/ws/a/deep/h1.js')).toBe('h1');
     expect(inner.existsSync('/ws/b/g2.js')).toBe(false);
     expect(inner.existsSync('/ws/x/y')).toBe(false);

@@ -66,8 +66,9 @@ function buildInjectableRoot(): {
 /** Paired surface honouring real OPFS semantics: writeFile creates NO parents
  * (opfs.ts) — a write into a dir missing on "disk" fails. Typed structurally:
  * OpfsFsSync's paired-surface parameter accepts this shape (the named type is
- * deliberately not on the vfs public entry). */
-function parentCheckingSurface(dirs: Set<string>) {
+ * deliberately not on the vfs public entry). `onWrite` fires after a
+ * successful write — the foreign-rm injection point for row (f). */
+function parentCheckingSurface(dirs: Set<string>, onWrite?: (path: string) => void) {
   const writes: string[] = [];
   return {
     writes,
@@ -76,6 +77,7 @@ function parentCheckingSurface(dirs: Set<string>) {
       const parent = path.slice(0, path.lastIndexOf('/')) || '/';
       if (!dirs.has(parent)) return Promise.reject(new DomError('NotFoundError'));
       writes.push(path);
+      onWrite?.(path);
       return Promise.resolve();
     },
     rm: (path: string) => {
@@ -142,5 +144,47 @@ describe('workspace archive restore over OpfsFsSync — quota-perm-fail (Storage
     expect(fake.dirs.has('/ws/b')).toBe(true);
     expect(surface.writes).toContain('/ws/a/deep/h1.js');
     expect(surface.writes).toContain('/ws/b/g1.js');
+  });
+
+  it('row f: a FOREIGN rm landing mid-drain is never trusted over — flush is dirty or the tree is really back; retry heals', async () => {
+    // concurrent-same-key at the Storage boundary: another realm removes
+    // '/ws/a' from disk between two same-dir ops. Main self-repairs via its
+    // redundant per-file mkdir persist; the dedup may instead surface a dirty
+    // ledger. BOTH are honest — the pinned invariant is that a clean flush
+    // NEVER coexists with a missing tree (no provenance lie), and a restore
+    // retry recovers. Cross-realm coherence itself has no owner here — class
+    // captured in vfs/opfs-sync-cross-realm-mirror-coherence.
+    const fake = buildInjectableRoot();
+    let injected = false;
+    const surface = parentCheckingSurface(fake.dirs, (path) => {
+      if (path === '/ws/a/f1.js' && !injected) {
+        injected = true;
+        for (const dir of [...fake.dirs]) {
+          if (dir === '/ws/a' || dir.startsWith('/ws/a/')) fake.dirs.delete(dir);
+        }
+      }
+    });
+    const fs = new OpfsFsSync(fake.root, surface);
+
+    applyWorkspaceArchive(fs, ARCHIVE);
+    const report = await fs.flush();
+
+    const treeFullyOnDisk =
+      fake.dirs.has('/ws/a') &&
+      fake.dirs.has('/ws/a/deep') &&
+      surface.writes.filter((path) => path === '/ws/a/f2.js').length > 0;
+    if (report.total === 0) {
+      // A clean report while the foreign-removed subtree is absent would be
+      // a provenance lie — clean is only legal when the tree really came back.
+      expect(treeFullyOnDisk).toBe(true);
+    } else {
+      expect(report.anyFailure?.((path) => path.startsWith('/ws'))).toBe(true);
+    }
+
+    applyWorkspaceArchive(fs, ARCHIVE); // user-level retry: replace + re-apply
+    const healed = await fs.flush();
+    expect(healed.total).toBe(0);
+    expect(fake.dirs.has('/ws/a/deep')).toBe(true);
+    expect(fake.dirs.has('/ws/b')).toBe(true);
   });
 });
