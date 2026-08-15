@@ -145,8 +145,65 @@ async function runAcceptance(): Promise<AcceptanceResult> {
   };
 }
 
-scope.addEventListener('message', () => {
-  void runAcceptance()
+/** Row (c) phase 1: apply the archive and START the drain, then report —
+ * WITHOUT awaiting the flush. The page terminates this worker mid-drain
+ * (real realm death with in-flight OPFS I/O). */
+async function runApplyNoFlush(ns: string): Promise<{ applied: true }> {
+  const { archive } = buildArchive();
+  const surface = new OpfsVfs();
+  await surface.init();
+  const storage = (
+    navigator as unknown as { storage: { getDirectory(): Promise<FileSystemDirectoryHandle> } }
+  ).storage;
+  const fs = new OpfsFsSync(await storage.getDirectory(), surface);
+  applyWorkspaceArchive(fs, archive, { root: ns, rebase: true });
+  void fs.flush(); // drain keeps running; the page kills us inside it
+  return { applied: true };
+}
+
+/** Row (c) phase 2: a FRESH realm over the torn OPFS retries the SAME
+ * restore and byte-verifies EVERY archive file through a fresh OpfsVfs. */
+async function runVerifyRetry(ns: string): Promise<{
+  readonly reportTotal: number;
+  readonly fileCount: number;
+  readonly verifiedAll: boolean;
+}> {
+  const { archive, fileCount } = buildArchive();
+  const surface = new OpfsVfs();
+  await surface.init();
+  const fs = await OpfsFsSync.init(surface);
+  applyWorkspaceArchive(fs, archive, { root: ns, rebase: true });
+  const report = await fs.flush();
+
+  const reopened = new OpfsVfs();
+  await reopened.init();
+  const dec = new TextDecoder();
+  let verifiedAll = true;
+  for (const file of archive.files) {
+    const expected = atob(file.content);
+    const bytes = await reopened.readFile(`${ns}/${file.path}`).catch(() => null);
+    if (bytes === null || dec.decode(bytes) !== expected) {
+      verifiedAll = false;
+      break;
+    }
+  }
+  const storage = (
+    navigator as unknown as { storage: { getDirectory(): Promise<FileSystemDirectoryHandle> } }
+  ).storage;
+  const realRoot = await storage.getDirectory();
+  await realRoot.removeEntry(ns.slice(1), { recursive: true }).catch(() => {});
+  return { reportTotal: report.total, fileCount, verifiedAll };
+}
+
+scope.addEventListener('message', (event: MessageEvent<{ phase?: string; ns?: string }>) => {
+  const { phase, ns } = event.data ?? {};
+  const run =
+    phase === 'apply-no-flush' && ns
+      ? runApplyNoFlush(ns)
+      : phase === 'verify-retry' && ns
+        ? runVerifyRetry(ns)
+        : runAcceptance();
+  void run
     .then((result) => scope.postMessage({ ok: true, result }))
     .catch((err: unknown) => {
       scope.postMessage({
