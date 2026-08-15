@@ -63,8 +63,10 @@ mid-drain reopens an honest project (no trusted stamp over an unproven tree);
 
 ## Items
 
-1. `vfs/opfs-mkdir-persist-dedup` — **mkdir-dedup** — serial op-count fix; no
-   ordering change; lands first.
+1. `playground/restore-mkdir-persist-dedup` — **mkdir-dedup** — serial
+   op-count fix in the restore apply loop; no ordering change; lands first.
+   (Re-refined carrier of `vfs/opfs-mkdir-persist-dedup` after two
+   Contract+RED blockers — lineage in the item.)
 2. `vfs/opfs-parallel-write-through-drain` — **parallel-drain** — superseding
    ADR to 0187 (decision subagent), per-path lanes + ancestor fencing + stamp
    barrier + per-lane watchdog + replacement pins; after mkdir-dedup.

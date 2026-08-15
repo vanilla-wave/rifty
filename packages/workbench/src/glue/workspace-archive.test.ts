@@ -1,9 +1,12 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  applyWorkspaceArchive,
   buildWorkspaceArchive,
   exportWorkspaceArchive,
   importWorkspaceArchive,
+  type WorkspaceArchiveFs,
+  type WorkspaceArchiveV1,
 } from './workspace-archive.ts';
 
 const enc = new TextEncoder();
@@ -212,5 +215,107 @@ describe('workspace archive', () => {
 
     expect(() => importWorkspaceArchive(fs, badArchive)).toThrow(/install-stamp claim/);
     expect(read(fs, '/workspace/src/main.ts')).toBe('keep');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Restore mkdir dedup (backlog playground/restore-mkdir-persist-dedup, issue
+// #256 slice mkdir-dedup): apply() issues one mkdirSync per distinct file
+// dirname — never one per file. On OpfsFsSync every mkdirSync call becomes an
+// async persist op, so per-file mkdirs made a big-tree restore drain ~2 FIFO
+// ops per file (epic I2 bounds it at N + D + O(1)).
+// ---------------------------------------------------------------------------
+
+function archiveFile(path: string, text: string): WorkspaceArchiveV1['files'][number] {
+  return { path, encoding: 'base64', content: Buffer.from(text).toString('base64') };
+}
+
+/** Records every mkdir/write in ONE ordered log over a real MemoryFsSync. */
+function loggingFs(): {
+  fs: WorkspaceArchiveFs;
+  inner: MemoryFsSync;
+  calls: Array<readonly ['mkdir' | 'write', string]>;
+} {
+  const inner = new MemoryFsSync();
+  const calls: Array<readonly ['mkdir' | 'write', string]> = [];
+  const fs: WorkspaceArchiveFs = {
+    existsSync: (path) => inner.existsSync(path),
+    readdirSync: (path) => inner.readdirSync(path),
+    readFileBytesSync: (path) => inner.readFileBytesSync(path),
+    writeFileSync: (path, data) => {
+      calls.push(['write', path]);
+      inner.writeFileSync(path, data);
+    },
+    mkdirSync: (path, options) => {
+      calls.push(['mkdir', path]);
+      inner.mkdirSync(path, options);
+    },
+    rmSync: (path, options) => inner.rmSync(path, options),
+  };
+  return { fs, inner, calls };
+}
+
+describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir-dedup)', () => {
+  // Dirnames interleave on purpose: a consecutive-only dedup fails this.
+  const archive: WorkspaceArchiveV1 = {
+    version: 1,
+    root: '/ws',
+    files: [
+      archiveFile('a/f1.js', 'f1'),
+      archiveFile('b/g1.js', 'g1'),
+      archiveFile('a/f2.js', 'f2'),
+      archiveFile('a/deep/h1.js', 'h1'),
+      archiveFile('root.txt', 'r'),
+      archiveFile('b/g2.js', 'g2'),
+      archiveFile('x/y/f.js', 'xy'), // '/ws/x' is created by the chain, never a dirname itself
+      archiveFile('a/deep/h2.js', 'h2'),
+    ],
+  };
+
+  it('issues exactly one mkdirSync per distinct dirname plus the root — never one per file', () => {
+    const { fs, inner, calls } = loggingFs();
+    applyWorkspaceArchive(fs, archive);
+
+    const mkdirs = calls.filter(([kind]) => kind === 'mkdir').map(([, path]) => path);
+    const writes = calls.filter(([kind]) => kind === 'write').map(([, path]) => path);
+
+    expect(writes.length).toBe(archive.files.length);
+    // Distinct dirnames: /ws (root.txt) + /ws/a + /ws/b + /ws/a/deep + /ws/x/y,
+    // plus apply()'s own root mkdir. Pre-dedup: one mkdir per FILE (9 calls).
+    expect([...new Set(mkdirs)].sort()).toEqual(['/ws', '/ws/a', '/ws/a/deep', '/ws/b', '/ws/x/y']);
+    expect(mkdirs.length).toBe(6); // root + 5 dirnames, each dirname exactly once
+    expect(read(inner, '/ws/a/deep/h2.js')).toBe('h2');
+    expect(read(inner, '/ws/x/y/f.js')).toBe('xy');
+  });
+
+  it("every file's dirname mkdir is issued before that file's write (order pin)", () => {
+    const { fs, calls } = loggingFs();
+    applyWorkspaceArchive(fs, archive);
+
+    for (const file of archive.files) {
+      const target = `/ws/${file.path}`;
+      const dir = target.slice(0, target.lastIndexOf('/')) || '/ws';
+      const writeIndex = calls.findIndex(([kind, path]) => kind === 'write' && path === target);
+      const mkdirIndex = calls.findIndex(([kind, path]) => kind === 'mkdir' && path === dir);
+      expect(writeIndex).toBeGreaterThanOrEqual(0);
+      expect(mkdirIndex).toBeGreaterThanOrEqual(0);
+      expect(mkdirIndex).toBeLessThan(writeIndex);
+    }
+  });
+
+  it('final tree and bytes are identical to a per-file-mkdir apply (parity pin P1)', () => {
+    const { fs, inner } = loggingFs();
+    applyWorkspaceArchive(fs, archive);
+
+    const reference = new MemoryFsSync();
+    reference.mkdirSync('/ws', { recursive: true });
+    for (const file of archive.files) {
+      const target = `/ws/${file.path}`;
+      const dir = target.slice(0, target.lastIndexOf('/')) || '/ws';
+      reference.mkdirSync(dir, { recursive: true });
+      reference.writeFileSync(target, Buffer.from(file.content, 'base64'));
+    }
+
+    expect(exportWorkspaceArchive(inner, '/ws')).toBe(exportWorkspaceArchive(reference, '/ws'));
   });
 });

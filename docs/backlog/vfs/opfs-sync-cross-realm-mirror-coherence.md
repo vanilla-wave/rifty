@@ -32,7 +32,7 @@ No user-action path found → stays draft with the attempt recorded.
 Class-kill inventory (before any fix mechanism): existing coordination near
 this invariant — (1) workbench Web Lock (product-level owner serialization);
 (2) `refreshIndex()` manual reconcile; (3) install-stamp authority per-root
-serialized slots; (4) `vfs/trusted-state-primitive` (ready) centralizing
+serialized slots; (4) `vfs/trusted-state-primitive` (draft) centralizing
 trust claims. A fix must name ONE owner (lock tenure / epoch / refresh
 protocol) — per-op guards (e.g. a mkdir-only recreate check) are the partial
 third mechanism §Class-kill forbids; the mkdir-dedup item explicitly declined
